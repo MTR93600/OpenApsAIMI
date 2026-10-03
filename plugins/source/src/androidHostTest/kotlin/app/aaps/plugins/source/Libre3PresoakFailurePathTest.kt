@@ -10,6 +10,7 @@ import androidx.core.app.ServiceCompat
 import app.aaps.core.interfaces.source.PromotionRejectReason
 import app.aaps.core.interfaces.source.PromotionResult
 import app.aaps.core.interfaces.source.StagingState
+import app.aaps.plugins.libre3.identity.Libre3SensorIdentity
 import app.aaps.plugins.libre3.identity.Libre3SensorStore
 import androidx.test.core.app.ApplicationProvider
 import app.aaps.plugins.source.activities.Libre3PresoakAction
@@ -128,6 +129,47 @@ class Libre3PresoakFailurePathTest {
         assertThat(shown).isNotEqualTo("The pre-soak sensor could not be promoted. Nothing was changed.")
     }
 
+    @Test
+    @Config(sdk = [35], qualifiers = "h2000dp")
+    fun `a throw before any promotion result replaces the previous message with the store`() {
+        val store = Libre3SensorStore(ApplicationProvider.getApplicationContext(), null)
+        store.clear()
+        assertThat(store.saveIdentityAndWait(SCREEN_SENSOR)).isTrue()
+        Libre3PresoakAction.clear()
+        Libre3PresoakAction.run { "kept" }
+        assertThat(Libre3PresoakAction.message.value).isEqualTo("kept")
+
+        compose.setContent {
+            MaterialTheme {
+                Libre3StatusScreen(
+                    onBack = {},
+                    onOpenLog = {},
+                    onOpenStart = {},
+                    presoakEnabled = true,
+                    stagingStateFlow = MutableStateFlow(StagingState.READY),
+                    stagingEvidenceFlow = MutableStateFlow(null),
+                    stagingLifecycleFlow = MutableStateFlow(null),
+                    stagingCurveFlow = MutableStateFlow(emptyList()),
+                    formatGlucose = { it.toString() },
+                    formatTime = { it.toString() },
+                    formatAge = { it.toString() },
+                    onPromote = { throw IllegalStateException("screen") },
+                    onCancelStaging = {},
+                    onSensorForgotten = {},
+                    presoakMessageFlow = Libre3PresoakAction.message,
+                    runPresoakAction = { work -> Libre3PresoakAction.run(work) },
+                )
+            }
+        }
+        compose.onNodeWithText("Promote this sensor").performClick()
+        compose.onNodeWithText("Promote", substring = false).performClick()
+        compose.waitForIdle()
+
+        assertThat(Libre3PresoakAction.message.value).isEqualTo(
+            "The promotion failed before it returned a result. Production sensor read from the store: MH0SCREEN.",
+        )
+    }
+
     private fun confirmPromote(onPromote: suspend () -> PromotionResult): String? {
         Libre3SensorStore(ApplicationProvider.getApplicationContext(), null).clear()
         var shown: String? = null
@@ -170,5 +212,16 @@ class Libre3PresoakFailurePathTest {
         private const val NO_IDENTITY_TEXT =
             "A step after the exchange failed, and the production sensor identity is missing. " +
                 "This is not a complete success. Open the Libre 3 status and check which sensor is in use."
+
+        private val SCREEN_SENSOR = Libre3SensorIdentity(
+            serialNumber = "MH0SCREEN",
+            bleAddress = "AA:BB:CC:DD:EE:09",
+            blePin = byteArrayOf(1, 2, 3, 4),
+            receiverId = 9,
+            generation = 0,
+            warmupMinutes = 60,
+            wearDurationMinutes = 14 * 24 * 60,
+            activatedAtMs = 1_777_000_000_000L,
+        )
     }
 }

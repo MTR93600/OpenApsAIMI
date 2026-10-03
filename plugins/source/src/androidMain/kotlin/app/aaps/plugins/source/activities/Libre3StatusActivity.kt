@@ -1,5 +1,6 @@
 package app.aaps.plugins.source.activities
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
@@ -79,6 +80,11 @@ import kotlinx.coroutines.launch
 /**
  * Shows which sensor is stored and what the session is doing.
  *
+ * One card for the sensor, one for the actions. The screen scrolls, which the previous plain
+ * `Column` did not: with a stored sensor and a blocked driver there were enough stacked buttons to
+ * push "Forget this sensor" — the only escape from a sensor that can never connect — off the bottom
+ * of a short screen.
+ *
  * It is also the detail view of a pre-soak: the pre-soak warm-up notification opens this screen.
  */
 class Libre3StatusActivity : MetroAppCompatActivity() {
@@ -93,10 +99,18 @@ class Libre3StatusActivity : MetroAppCompatActivity() {
 
     @Inject lateinit var rh: ResourceHelper
 
+    /**
+     * Whether the pre-soak preference is on, read again on every [onResume].
+     *
+     * Read once it could be stale: the user can switch the preference while this screen waits in
+     * the back stack, and the pre-soak section would then be shown or hidden against the setting.
+     */
     private var presoakEnabled by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Only on a fresh visit, never on a rebuild: the message has to survive a rotation, but an
+        // answer from an hour ago must not greet the user when the screen is opened again.
         if (savedInstanceState == null) Libre3PresoakAction.clear()
         presoakEnabled = preferences.get(Libre3BooleanKey.PresoakEnabled)
         setContent {
@@ -121,8 +135,8 @@ class Libre3StatusActivity : MetroAppCompatActivity() {
                         formatGlucose = { mgdl -> profileUtil.fromMgdlToStringWithUnits(mgdl) },
                         formatTime = { epochMs -> dateUtil.timeString(epochMs) },
                         formatAge = { millis -> dateUtil.age(millis, false, rh) },
-                        // The button calls the function that still returns STAGING_ABSENT. This lot
-                        // does not promote, so the confirm path shows the refusal and changes nothing.
+                        // A pre-soak failure must never take production with it (invariant I9), so
+                        // every staging call from this screen is wrapped here.
                         onPromote = { plugin.promoteStagingToProduction(allowEarly = true) },
                         onCancelStaging = { runCatching { plugin.cancelStaging() } },
                         onSensorForgotten = { plugin.refreshSessionService() },
@@ -141,7 +155,35 @@ class Libre3StatusActivity : MetroAppCompatActivity() {
 }
 
 /**
+ * What the screen says when [onPromote] throws before any [PromotionResult].
+ *
+ * The identity is read from the production store after the throw. A failure of that read is its
+ * own sentence: the screen does not invent a serial, and it does not keep the previous message.
+ */
+private fun promotionThrew(context: Context, store: Libre3SensorStore): String {
+    val read = runCatching { store.loadIdentity()?.serialNumber }
+    return read.fold(
+        onSuccess = { serial ->
+            context.getString(
+                R.string.libre3_presoak_promote_threw,
+                serial ?: context.getString(R.string.libre3_presoak_promote_threw_none),
+            )
+        },
+        onFailure = { context.getString(R.string.libre3_presoak_promote_threw_unreadable) },
+    )
+}
+
+/**
  * Runs the pre-soak actions of the status screen and keeps the message the last one ended with.
+ *
+ * Promoting swaps the sensor that feeds the loop. A scope taken with `rememberCoroutineScope` is
+ * cancelled the moment the composition goes away, so turning the phone while a promotion ran would
+ * cut the swap in half and leave the user with no answer at all — on the one action that changes
+ * where their insulin decisions come from. The work therefore runs here, outside the screen, and
+ * the message is kept here too so a rebuilt screen shows it again.
+ *
+ * Process wide on purpose: anything owned by the activity dies with the activity, which is exactly
+ * the problem. `Libre3StatusActivity.onCreate` empties it when the screen is opened fresh.
  *
  * A throw leaves the message untouched. The `runCatching` is the reference `Libre3PresoakAction.run`
  * (`dev_OAPSAIMI` @ `3dd0ca64772`).
@@ -151,12 +193,22 @@ internal object Libre3PresoakAction {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val state = MutableStateFlow<String?>(null)
 
+    /** What the last finished action left to say, or null when there is nothing. */
     val message: StateFlow<String?> = state.asStateFlow()
 
+    /** Forgets the last message. */
     fun clear() {
         state.value = null
     }
 
+    /**
+     * Runs one pre-soak action and publishes the message it returns.
+     *
+     * @param work does the work and returns the sentence to show. A throw leaves the message
+     *   untouched instead of reaching the default handler: this scope outlives every screen, so an
+     *   escaping error here would take the whole app down, and a pre-soak must never do that
+     *   (invariant I9).
+     */
     fun run(work: suspend () -> String) {
         scope.launch {
             runCatching { work() }.getOrNull()?.let { state.value = it }
@@ -400,6 +452,7 @@ internal fun Libre3StatusScreen(
         )
     }
 
+    // Promotion swaps the sensor that feeds the loop, so it is never one tap away.
     if (askingToPromote) {
         AlertDialog(
             onDismissRequest = { askingToPromote = false },
@@ -409,17 +462,22 @@ internal fun Libre3StatusScreen(
                 TextButton(
                     onClick = {
                         askingToPromote = false
+                        // Run outside the composition, so turning the phone during the swap
+                        // neither cuts it in half nor swallows the answer.
                         runPresoakAction {
-                            when (val result = onPromote()) {
-                                PromotionResult.Ok                 -> promoteOk
-                                PromotionResult.OkBoundFailed      -> promoteBoundFailed
+                            // A throw before any PromotionResult must not keep the previous message.
+                            // The sentence is the failure, then the production identity read afterwards.
+                            when (val result = runCatching { onPromote() }.getOrNull()) {
+                                PromotionResult.Ok                  -> promoteOk
+                                PromotionResult.OkBoundFailed       -> promoteBoundFailed
                                 is PromotionResult.OkFollowUpFailed ->
                                     if (result.productionIdentityPresent) promoteCheckState
                                     else promoteFollowUpNoIdentity
-                                is PromotionResult.Rejected        -> when (result.reason) {
+                                is PromotionResult.Rejected         -> when (result.reason) {
                                     PromotionRejectReason.STAGING_ABSENT -> promoteRejectedAbsent
                                     else                                 -> promoteRejectedOther
                                 }
+                                null                                -> promotionThrew(context, store)
                             }
                         }
                     }

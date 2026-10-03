@@ -20,7 +20,9 @@ import app.aaps.core.interfaces.source.PromotionResult
 import app.aaps.core.interfaces.source.StagingState
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.libre3.Libre3CgmDriverStub
 import app.aaps.plugins.libre3.Libre3CgmDrivers
+import app.aaps.plugins.libre3.Libre3LogMarkers
 import app.aaps.plugins.libre3.Libre3GlucoseSample
 import app.aaps.plugins.libre3.identity.Libre3SensorIdentity
 import app.aaps.plugins.libre3.identity.Libre3SensorStore
@@ -158,8 +160,11 @@ class Libre3PromotionTest : TestBase() {
         runBlocking {
             verify(activeCalibration, never()).ignoreEntriesBefore(any())
             verify(persistenceLayer, never()).insertCgmSourceData(any(), any(), any(), anyOrNull())
+            verify(preferences, never()).put(Libre3BooleanKey.UseRealSkeleton, true)
         }
         assertThat(productionPrefs.all).isEqualTo(productionBefore)
+        assertThat(Libre3CgmDrivers.useRealSkeleton).isFalse()
+        assertThat(Libre3CgmDrivers.default()).isSameInstanceAs(Libre3CgmDriverStub.instance)
     }
 
     @Test
@@ -309,11 +314,14 @@ class Libre3PromotionTest : TestBase() {
             .thenReturn(BOUND_FAILED_TEXT)
         val cutoff = ThrowingCutoff()
         val logger = RecordingLogger()
+        val alerts = mutableListOf<String>()
         plugin = newPlugin(logger = logger, calibration = cutoff)
+        plugin.promotionAlerter = { alerts += it }
         startPresoak()
 
         assertThat(plugin.promoteStagingToProduction()).isEqualTo(PromotionResult.OkBoundFailed)
 
+        assertThat(alerts).contains(BOUND_FAILED_TEXT)
         assertThat(cutoff.calls).isEqualTo(1)
         assertThat(cutoff.storedTimestamp).isNull()
         assertThat(logger.errors).contains(BOUND_FAILED_TEXT)
@@ -332,6 +340,7 @@ class Libre3PromotionTest : TestBase() {
         whenever(rh.gs(app.aaps.plugins.source.R.string.libre3_presoak_promote_check_state)).thenReturn("check")
         val cutoff = StoringCutoff()
         plugin = newPlugin(logger = PromoteDoneFailsLogger(), calibration = cutoff)
+        plugin.promotionAlerter = {}
         startPresoak()
 
         val result = plugin.promoteStagingToProduction()
@@ -347,6 +356,71 @@ class Libre3PromotionTest : TestBase() {
         verify(persistenceLayer, timeout(SLOW_INSERT_MS)).insertCgmSourceData(
             eq(Sources.Libre3Native), eq(emptyList()), eq(emptyList()), eq(stagedActivatedAtMs),
         )
+    }
+
+    @Test
+    fun `a thrown sensor-change insert during promotion is logged and the result matches the store`() = runTest {
+        whenever(preferences.get(BooleanKey.BgSourceCreateSensorChange)).thenReturn(true)
+        runBlocking {
+            whenever(persistenceLayer.insertCgmSourceData(anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+                .thenThrow(IllegalStateException("insert"))
+        }
+        val logger = RecordingLogger()
+        plugin = newPlugin(logger = logger)
+        plugin.promotionAlerter = {}
+        startPresoak()
+
+        val result = plugin.promoteStagingToProduction()
+
+        assertThat(result).isEqualTo(PromotionResult.Ok)
+        assertThat(Libre3SensorStore(context, null).loadIdentity()!!.serialNumber).isEqualTo(staged.serialNumber)
+        val deadline = System.currentTimeMillis() + SLOW_INSERT_MS
+        while (logger.errors.none { it.contains("background work failed") } && System.currentTimeMillis() < deadline) {
+            Thread.sleep(20)
+        }
+        assertThat(logger.errors.single()).contains("${Libre3LogMarkers.ERROR}: background work failed, insert")
+    }
+
+    @Test
+    fun `a thrown bound and a thrown follow-up keep the swap and report the bound`() = runTest {
+        whenever(preferences.get(BooleanKey.BgSourceCreateSensorChange)).thenReturn(true)
+        whenever(rh.gs(app.aaps.plugins.source.R.string.libre3_presoak_promote_bound_failed)).thenReturn(BOUND_FAILED_TEXT)
+        whenever(rh.gs(app.aaps.plugins.source.R.string.libre3_presoak_promote_check_state)).thenReturn("check")
+        val logger = RecordingLogger(PromoteDoneFailsLogger())
+        val alerts = mutableListOf<String>()
+        plugin = newPlugin(logger = logger, calibration = ThrowingCutoff())
+        plugin.promotionAlerter = { alerts += it }
+        startPresoak()
+
+        val result = plugin.promoteStagingToProduction()
+
+        assertThat(result).isEqualTo(PromotionResult.OkBoundFailed)
+        assertThat(Libre3SensorStore(context, null).loadIdentity()!!.serialNumber).isEqualTo(staged.serialNumber)
+        assertThat(logger.errors).containsAtLeast(BOUND_FAILED_TEXT, "check")
+        assertThat(alerts).containsAtLeast(BOUND_FAILED_TEXT, "check")
+    }
+
+    @Test
+    fun `a follow-up failure with no readable production identity is not a success`() = runTest {
+        whenever(rh.gs(app.aaps.plugins.source.R.string.libre3_presoak_promote_follow_up_no_identity)).thenReturn("missing")
+        val gated = GatedPreferences(productionPrefs)
+        whenever(context.getSharedPreferences(PRODUCTION_PREFS_NAME, Context.MODE_PRIVATE)).thenReturn(gated)
+        val logger = PromoteDoneFailsLogger()
+        plugin = newPlugin(
+            logger = object : AAPSLogger by logger {
+                override fun info(tag: LTag, message: String) {
+                    if (message.contains("promote done")) gated.throwOnSerial = true
+                    logger.info(tag, message)
+                }
+            },
+        )
+        plugin.promotionAlerter = {}
+        startPresoak()
+
+        val result = plugin.promoteStagingToProduction()
+
+        assertThat(result).isEqualTo(PromotionResult.OkFollowUpFailed(productionIdentityPresent = false))
+        assertThat(gated.throwOnSerial).isTrue()
     }
 
     private class GatedPreferences(

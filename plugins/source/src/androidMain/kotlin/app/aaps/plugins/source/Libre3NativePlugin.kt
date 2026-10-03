@@ -52,6 +52,7 @@ import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.IntKey
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.binding
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -111,7 +112,23 @@ class Libre3NativePlugin @Inject constructor(
     config,
 ), BgSource, Libre3GlucoseWatcher, CgmSensorStatusProvider {
 
-    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    /** The constructor argument, kept as [ResourceHelper] so string ids do not need a cast. */
+    private val resourceHelper: ResourceHelper = rh
+
+    /**
+     * Where every database write and every wait of this plugin runs.
+     *
+     * The handler is not decoration. Without one, anything thrown inside an `ioScope.launch` walks
+     * up to the default handler of the process and takes the whole app down. The promotion is the
+     * worst moment for that: it would leave one sensor written into both slot files and the loop
+     * with no sensor at all on the next launch. A Bluetooth or database failure has to cost a log
+     * line, never the app.
+     */
+    private val ioScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, t ->
+            aapsLogger.error(LTag.BGSOURCE, "${Libre3LogMarkers.ERROR}: background work failed, ${t.message}", t)
+        },
+    )
 
     /**
      * Ties "this sample was accepted" to "this is still the sensor that feeds the loop".
@@ -184,6 +201,11 @@ class Libre3NativePlugin @Inject constructor(
 
     /** The status bar message, so the user can leave the warm-up screen and still see progress. */
     private val warmupNotification by lazy { Libre3WarmupNotification(context) }
+
+    /**
+     * Posts the promotion problem on the status bar. Tests replace it. The default is the real alert.
+     */
+    internal var promotionAlerter: (String) -> Unit = { message -> warmupNotification.alert(message) }
 
     /**
      * The same message for the pre-soak slot, with its own id and its own title.
@@ -401,8 +423,7 @@ class Libre3NativePlugin @Inject constructor(
             activePlugin.activeCalibration.ignoreEntriesBefore(System.currentTimeMillis())
             null
         } catch (thrown: Throwable) {
-            val notice = (rh as ResourceHelper).gs(R.string.libre3_presoak_promote_bound_failed)
-            aapsLogger.error(LTag.BGSOURCE, notice, thrown)
+            notifyPromotionProblem(R.string.libre3_presoak_promote_bound_failed, thrown)
             thrown
         }
         // Steps after the bound. A throw here is [PromotionResult.OkFollowUpFailed], with the
@@ -436,16 +457,23 @@ class Libre3NativePlugin @Inject constructor(
             thrown
         }
         if (followUpFailure != null) {
-            val identityPresent = sensorStore.loadIdentity() != null
-            val notice = (rh as ResourceHelper).gs(
+            val identityPresent = runCatching { sensorStore.loadIdentity() }.getOrNull() != null
+            notifyPromotionProblem(
                 if (identityPresent) R.string.libre3_presoak_promote_check_state
                 else R.string.libre3_presoak_promote_follow_up_no_identity,
+                followUpFailure,
             )
-            aapsLogger.error(LTag.BGSOURCE, notice, followUpFailure)
             if (boundFailure != null) return PromotionResult.OkBoundFailed
             return PromotionResult.OkFollowUpFailed(productionIdentityPresent = identityPresent)
         }
         return if (boundFailure != null) PromotionResult.OkBoundFailed else PromotionResult.Ok
+    }
+
+    /** Error log plus the status-bar alert. Does not roll the exchange back. */
+    private fun notifyPromotionProblem(textId: Int, error: Throwable) {
+        val message = resourceHelper.gs(textId)
+        aapsLogger.error(LTag.BGSOURCE, message, error)
+        promotionAlerter(message)
     }
 
     /**

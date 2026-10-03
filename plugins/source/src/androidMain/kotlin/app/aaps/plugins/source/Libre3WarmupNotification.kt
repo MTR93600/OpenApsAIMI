@@ -107,6 +107,27 @@ class Libre3WarmupNotification(
         }
     }
 
+    /**
+     * One-shot alert. Not ongoing: the user must be able to dismiss it after reading the action.
+     *
+     * Its id is not the warm-up id, so the alert does not replace the countdown, and it is not
+     * 8932, which the ONE+ session service already uses.
+     */
+    fun alert(text: String) {
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(CoreUiR.drawable.notif_icon)
+            .setContentTitle(context.getString(R.string.libre3_native))
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setAutoCancel(true)
+            .setOngoing(false)
+        try {
+            NotificationManagerCompat.from(context).notify(ALERT_ID, builder.build())
+        } catch (_: SecurityException) {
+            // POST_NOTIFICATIONS denied. The status screen still shows the promotion result.
+        }
+    }
+
     fun cancel() {
         try {
             NotificationManagerCompat.from(context).cancel(notificationId)
@@ -163,5 +184,8 @@ class Libre3WarmupNotification(
 
         /** The pre-soak's own id: both messages may be on screen at the same time. */
         private const val NOTIFICATION_ID_STAGING = 4472
+
+        /** Promotion problem. Distinct from 4471, 4472, 4473 and from the ONE+ id 8932. */
+        private const val ALERT_ID = 4474
     }
 }

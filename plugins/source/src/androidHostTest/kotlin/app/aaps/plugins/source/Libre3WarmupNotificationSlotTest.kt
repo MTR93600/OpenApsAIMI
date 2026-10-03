@@ -1,6 +1,7 @@
 package app.aaps.plugins.source
 
 import android.app.Application
+import android.app.Notification
 import android.app.NotificationManager
 import app.aaps.core.interfaces.source.SensorSlot
 import app.aaps.plugins.libre3.Libre3WarmupState
@@ -34,5 +35,23 @@ class Libre3WarmupNotificationSlotTest {
         val ids = manager.activeNotifications.map { it.id }.toSet()
         assertThat(ids).contains(4471)
         assertThat(ids).contains(4472)
+    }
+
+    @Test
+    fun `a promotion problem is posted under id 4474 and does not reuse the warm-up ids`() {
+        val text = application.getString(R.string.libre3_presoak_promote_bound_failed)
+
+        Libre3WarmupNotification(application).alert(text)
+
+        val manager = application.getSystemService(NotificationManager::class.java)
+        val posted = manager.activeNotifications.single()
+        assertThat(posted.id).isEqualTo(4474)
+        assertThat(posted.id).isNotEqualTo(4471)
+        assertThat(posted.id).isNotEqualTo(4472)
+        assertThat(posted.id).isNotEqualTo(4473)
+        assertThat(posted.id).isNotEqualTo(8932)
+        val shown = posted.notification.extras.getCharSequence(Notification.EXTRA_BIG_TEXT).toString()
+        assertThat(shown).isEqualTo(text)
+        assertThat(shown).contains("old calibration entries could not be ignored")
     }
 }

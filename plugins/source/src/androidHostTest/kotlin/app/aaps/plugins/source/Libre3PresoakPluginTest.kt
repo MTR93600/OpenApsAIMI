@@ -6,6 +6,8 @@ import app.aaps.core.data.ue.Sources
 import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.source.PromotionRejectReason
@@ -15,14 +17,20 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.libre3.Libre3CgmDriverReal
 import app.aaps.plugins.libre3.Libre3CgmDrivers
 import app.aaps.plugins.libre3.Libre3GlucoseSample
+import app.aaps.plugins.libre3.Libre3LogMarkers
+import app.aaps.shared.tests.AAPSLoggerTest
 import app.aaps.plugins.libre3.identity.Libre3SensorIdentity
 import app.aaps.plugins.libre3.identity.Libre3SensorStore
 import app.aaps.plugins.source.keys.Libre3BooleanKey
 import app.aaps.shared.tests.SharedPreferencesMock
 import app.aaps.shared.tests.TestBase
 import com.google.common.truth.Truth.assertThat
+import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -329,6 +337,44 @@ class Libre3PresoakPluginTest : TestBase() {
         whenever(preferences.get(Libre3BooleanKey.KeepSessionAlive)).thenThrow(IllegalStateException("prefs"))
 
         plugin.refreshSessionService()
+    }
+
+    @Test
+    fun `an exception launched on ioScope is logged and does not escape`() = runBlocking {
+        // Reference ioScope (Libre3NativePlugin.kt L116–120 @ 3dd0ca64772) carries a
+        // CoroutineExceptionHandler. Without it a throw inside launch reaches the process handler.
+        val logger = RecordingLogger()
+        val watched = newPlugin(logger)
+        val scope = watched.javaClass.getDeclaredField("ioScope").apply { isAccessible = true }
+            .get(watched) as CoroutineScope
+        val escaped = AtomicReference<Throwable?>(null)
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { _, thrown -> escaped.set(thrown) }
+        try {
+            val job = scope.launch { throw IllegalStateException("boom") }
+            withTimeout(5_000) { job.join() }
+            assertThat(escaped.get()).isNull()
+            assertThat(logger.errors.single()).contains("${Libre3LogMarkers.ERROR}: background work failed, boom")
+            assertThat(logger.throwables.single()).isInstanceOf(IllegalStateException::class.java)
+        } finally {
+            Thread.setDefaultUncaughtExceptionHandler(previous)
+            scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
+        }
+    }
+
+    private fun newPlugin(logger: AAPSLogger) = Libre3NativePlugin(
+        rh, logger, preferences, config, context, persistenceLayer, availabilityProvider, bleRadioPriority, activePlugin,
+    )
+
+    private class RecordingLogger : AAPSLogger by AAPSLoggerTest() {
+
+        val errors = mutableListOf<String>()
+        val throwables = mutableListOf<Throwable>()
+
+        override fun error(tag: LTag, message: String, throwable: Throwable) {
+            errors += message
+            throwables += throwable
+        }
     }
 
     companion object {

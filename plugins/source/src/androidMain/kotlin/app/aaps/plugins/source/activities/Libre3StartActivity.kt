@@ -68,7 +68,8 @@ import javax.inject.Inject
  * size is the honest layout here — the value of the redesign is that the screen scrolls, that the
  * help folds away, and that the current step is always named.
  *
- * With the pre-soak switched on the screen also asks which slot the scan is for. See [slot].
+ * With the pre-soak switched on the screen also asks **which slot** the scan is for, and that is
+ * the most safety relevant line of this whole feature. See [slot].
  */
 class Libre3StartActivity : MetroAppCompatActivity() {
 
@@ -81,12 +82,20 @@ class Libre3StartActivity : MetroAppCompatActivity() {
     /**
      * Which slot the next scan writes into.
      *
-     * The store the NFC step writes is chosen from this value. Writing a pre-soak sensor into the
-     * production file would throw the running sensor's keys away. The pre-soak slot must always
-     * land in its own file.
+     * ⚠️ This is what protects the sensor that feeds the loop. The store the NFC step writes is
+     * chosen from this value, and `Libre3SensorStore.saveIdentityAndWait` drops the pairing key,
+     * `k_enc` and `iv_enc` of the file it writes as soon as the serial changes. Writing a pre-soak
+     * sensor into the production file would therefore throw the running sensor's keys away, and a
+     * running Libre 3 refuses a fresh first pairing — the sensor on the arm would be lost for good.
+     * The pre-soak slot must always land in its own file. That is invariant I2 of
+     * `docs/LIBRE3_PRESOAK_PLAN.md`.
      *
-     * It is written to the saved instance state by [onSaveInstanceState] and read back in
-     * [onCreate], instead of living in memory only.
+     * Because of that it is written to the saved instance state by [onSaveInstanceState] and read
+     * back in [onCreate], instead of living in memory only. Android rebuilds this activity for a
+     * rotation, a dark mode flip, a font size change, split screen, and after killing the app in
+     * the background. A slot that quietly fell back to production on any of those would send the
+     * next scan into the production file, and the user would have no way of noticing: the picker
+     * simply jumps back one button.
      */
     private var slot by mutableStateOf(SensorSlot.PRODUCTION)
 
@@ -102,8 +111,10 @@ class Libre3StartActivity : MetroAppCompatActivity() {
         super.onCreate(savedInstanceState)
         slot = readSlot(savedInstanceState)
         presoakEnabled = preferences.get(Libre3BooleanKey.PresoakEnabled)
-        // The reader is built once. The store follows the slot through the supplier, so the toggle
-        // does not rebuild the reader. The veto stops a scan of a sensor the other slot already holds.
+        // The reader is built once and never rebuilt on a slot change: it owns an executor and it
+        // registers reader mode on this activity, and only one reader mode may be on at a time. The
+        // store follows the slot through the supplier instead, so the toggle costs nothing. The
+        // veto stops a scan of a sensor the other slot already holds.
         val nfcReader = Libre3NfcReader(
             Libre3NfcSession(
                 { Libre3SensorStore(this, Libre3CgmDrivers.storeNamespace(slot)) },
