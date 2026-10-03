@@ -37,6 +37,9 @@
     <!-- Instara App -->
     <string name="instara_app">Instara</string>
     <string name="description_source_instara_app">Recevoir des valeurs de glycémie depuis l\'application Instara.</string>
+    <string name="dexcom_oneplus_staging_promote_bound_failed">"Capteur promu, mais les anciennes entrées de calibration n'ont pas pu être ignorées. Retirez les glycémies capillaires prises avant cet échange, puis recalibrez si besoin."</string>
+    <string name="dexcom_oneplus_staging_promote_follow_up_failed">"Capteur promu, mais la reprise a échoué. Le capteur de production est celui qui vient d'être promu. Ouvrez l'écran d'état ONE+ et rapprochez le capteur. Ce n'est pas un succès complet."</string>
+    <string name="dexcom_oneplus_staging_promote_follow_up_failed_no_identity">"Une étape après l'échange a échoué, et l'identité du capteur de production est absente. Ce n'est pas un succès complet. Ouvrez l'écran d'état ONE+ et vérifiez quel capteur est en service."</string>
     <!-- Instara preferences -->
     <string name="pref_title_instara_history_request">Demande de données historiques d\'Instara</string>
     <string name="pref_summary_instara_history_request">Demander des données historiques manquantes en arrière-plan</string>
@@ -56,4 +59,34 @@
     <string name="aidex_sensor_stabilizing">Le capteur est en cours de stabilisation, veuillez patienter…</string>
     <string name="aidex_sensor_replace">Remplacement du capteur requis, veuillez le remplacer par un nouveau capteur dès que possible</string>
     <string name="aidex_signal_lost">Signal capteur perdu, veuillez vérifier la connexion</string>
+    <string name="dexcom_oneplus_send_calibration_to_sensor">Envoyer la calibration au capteur (ingénierie)</string>
+    <string name="dexcom_oneplus_send_calibration_to_sensor_summary">Désactivé : une glycémie capillaire sert à corriger les lectures dans l’application, et peut être retirée plus tard. Activé : la valeur est envoyée au capteur lui-même. Le capteur la conserve définitivement, elle ne peut être ni modifiée ni supprimée, ce capteur n’indique pas clairement s’il a pris la valeur, et l’application cesse de corriger les lectures de son côté.</string>
+    <string name="dexcom_oneplus_repair_missing_sensor_change">Réparer un changement de capteur manquant (ingénierie)</string>
+    <string name="dexcom_oneplus_repair_missing_sensor_change_summary">Désactivé par défaut. Quand il est activé, et que « Enreg. changement de capteur » l’est aussi, un SENSOR_CHANGE manquant pour la session ONE+ en cours est écrit une seule fois. Il ne remplace pas un événement que vous avez supprimé après cette écriture.</string>
+    <string name="dexcom_oneplus_anchor_session_to_manual_sensor_change">Ancrer la session sur un changement de capteur manuel (ingénierie)</string>
+    <string name="dexcom_oneplus_anchor_session_to_manual_sensor_change_summary">Désactivé par défaut. Désactivé, une nouvelle session ONE+ garde l’heure du démarrage ou de la première lecture, et un changement de capteur noté plus tôt ne sert pas à reculer cette heure. Activé, un changement de capteur des dernières 24 heures, plus tôt que cette heure automatique, devient le début de session.</string>
+    <string name="dexcom_oneplus_correct_sensor_start">Corriger la date d’insertion (ingénierie)</string>
+    <string name="dexcom_oneplus_correct_sensor_start_summary">Désactivé par défaut. Quand il est activé, l’écran d’état peut déplacer l’heure d’insertion de ce capteur. Cela invalide les événements SENSOR_CHANGE de la fenêtre. Les entrées de calibration ne sont pas supprimées.</string>
+    <string name="dexcom_oneplus_correct_insertion_date">Corriger la date d’insertion</string>
+    <string name="dexcom_oneplus_insertion_date_future" comment="%1$s=heure de départ actuelle du capteur. Exemple : 14:05">Un capteur ne peut pas être inséré dans le futur. Le capteur démarre toujours à %1$s.</string>
+    <string name="dexcom_oneplus_insertion_date_too_old" comment="%1$s=heure de départ actuelle du capteur. Exemple : 14:05">Cette date est plus ancienne qu’une vie complète de capteur, elle appartient donc à un autre capteur. Le capteur démarre toujours à %1$s.</string>
+    <string name="dexcom_oneplus_insertion_date_no_session" comment="%1$s=heure de départ actuelle du capteur. Exemple : 14:05">Aucune session de capteur n’est en cours, il n’y a donc pas de date à corriger.</string>
+    <string name="dexcom_oneplus_calibration_not_sent">La valeur n’a pas pu être envoyée au capteur. Le capteur est peut-être hors de portée, encore en préchauffage, ou une autre valeur est peut-être encore en route.</string>
+    <string name="dexcom_oneplus_calibration_heading">Calibration du capteur</string>
+    <string name="dexcom_oneplus_calibration_none">Aucune glycémie capillaire n’a encore été envoyée à ce capteur.</string>
+    <string name="dexcom_oneplus_calibration_waiting">Votre valeur attend d’être envoyée au capteur. Elle part à la prochaine conversation entre l’application et le capteur, en général dans quelques minutes.</string>
+    <string name="dexcom_oneplus_calibration_accepted">Le capteur indique qu’il a pris votre valeur.</string>
+    <string name="dexcom_oneplus_calibration_refused">Le capteur indique qu’il n’a pas pris votre valeur. Votre lecture n’a pas été modifiée.</string>
+    <string name="dexcom_oneplus_calibration_unknown">Le capteur a répondu quelque chose que cette application ne sait pas lire, il est donc impossible de dire si votre valeur a été utilisée. C’est ce qu’un Dexcom ONE+ répond en temps normal. Ce n’est pas une erreur de l’application et ce n’est pas un succès. Comparez le capteur à une glycémie capillaire dans l’heure qui suit avant de vous fier à ses lectures, et demandez à votre équipe soignante en cas de doute.</string>
+    <string name="dexcom_oneplus_calibration_detail" comment="%1$s=réponse du capteur, en une courte ligne technique, souvent des octets bruts.">Réponse du capteur : %1$s</string>
+    <string name="dexcom_oneplus_calibration_state_needs">Le capteur demande une calibration.</string>
+    <string name="dexcom_oneplus_calibration_state_needs_first">Le capteur demande sa première calibration.</string>
+    <string name="dexcom_oneplus_calibration_state_needs_second">Le capteur demande une seconde calibration.</string>
+    <string name="dexcom_oneplus_calibration_state_sent">Le capteur signale qu’une calibration lui est parvenue.</string>
+    <string name="libre3_presoak_promote_bound_failed">Le capteur est promu, mais les anciennes entrées de calibration n\'ont pas pu être ignorées. Vérifiez avec une glycémie capillaire avant de faire confiance à la boucle, et calibrez de nouveau si ces anciennes entrées s\'appliquent encore.</string>
+    <string name="libre3_presoak_promote_check_state">Le capteur semble promu, mais la promotion ne s\'est pas terminée correctement. Vérifiez l\'état Libre 3 pour voir quel capteur alimente la boucle avant de lui faire confiance.</string>
+    <string name="libre3_presoak_promote_follow_up_no_identity">Une étape après l\'échange a échoué, et l\'identité du capteur de production est absente. Ce n\'est pas un succès complet. Ouvrez l\'état Libre 3 et vérifiez quel capteur est en service.</string>
+    <string name="libre3_presoak_promote_threw">La promotion a échoué avant de renvoyer un résultat. Capteur de production lu dans le store : %1$s.</string>
+    <string name="libre3_presoak_promote_threw_none">aucun</string>
+    <string name="libre3_presoak_promote_threw_unreadable">La promotion a échoué avant de renvoyer un résultat. Le store du capteur de production n\'a pas pu être lu.</string>
 </resources>

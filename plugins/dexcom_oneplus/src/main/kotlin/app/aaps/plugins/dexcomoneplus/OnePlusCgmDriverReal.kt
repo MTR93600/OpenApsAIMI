@@ -10,6 +10,7 @@ import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusStoredSession
 import app.aaps.plugins.dexcomoneplus.oem.DeviceProfileRegistry
 import app.aaps.plugins.dexcomoneplus.oem.OemDeviceProfile
+import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrateRx
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScanner
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScannerAndroid
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScannerStub
@@ -19,12 +20,14 @@ import app.aaps.plugins.dexcomoneplus.scan.OnePlusScanResult
 import app.aaps.plugins.dexcomoneplus.session.OnePlusBleSession
 import app.aaps.plugins.dexcomoneplus.session.OnePlusMacArbiter
 import app.aaps.plugins.dexcomoneplus.session.OnePlusBleSessionSkeleton
+import app.aaps.plugins.dexcomoneplus.session.OnePlusCalibrationQueue
 import app.aaps.plugins.dexcomoneplus.session.OnePlusConnectPrep
 import app.aaps.plugins.dexcomoneplus.session.OnePlusSessionAuthKeks
 import app.aaps.plugins.dexcomoneplus.session.OnePlusSessionStart
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 
 internal object OnePlusCgmDriverResumePolicy {
     fun canResume(storedSession: OnePlusStoredSession?): Boolean =
@@ -49,10 +52,34 @@ internal object OnePlusCgmDriverResumePolicy {
  *   original single-sensor file; "staging" = the pre-soak second sensor). Lets two driver instances
  *   run concurrently without sharing identity / MAC / KEKS key / ingest markers.
  */
-class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlusCgmDriver {
+class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
 
-    /** `prod` / `staging` — logged on every marker so a dual-sensor trace is attributable. */
+    /**
+     * Which preferences file this instance's sessions read and write.
+     *
+     * A `var` and not a constructor `val`: a promotion hands a **live link** from the staging slot
+     * over to production, and the link must not be dropped — but from that moment every new session
+     * this instance opens has to read and write the production file. See [rebindStore].
+     */
+    @Volatile
+    private var storeNamespace: String? = storeNamespace
+
+    /**
+     * `prod` / `staging` — logged on every marker so a dual-sensor trace is attributable.
+     *
+     * Fixed for the whole life of the instance, even after a promotion, so a bug report stays
+     * readable across the swap: a promoted instance is production but still calls itself "staging"
+     * in the log.
+     */
     private val slot: String = OnePlusLogMarkers.slotOf(storeNamespace)
+
+    /**
+     * [OnePlusMacArbiter] owner token for this instance: unique for its whole life, unlike [slot]
+     * which the next staging instance reuses. Keying the arbiter on [slot] would let that next
+     * pre-soak's claim silently release the promoted instance's claim on the sensor still feeding
+     * the loop — see [OnePlusMacArbiter]'s warning.
+     */
+    private val arbiterOwner: String = "$slot#${nextInstance.incrementAndGet()}"
 
     private val watchers = CopyOnWriteArrayList<OnePlusGlucoseWatcher>()
     private val lifecycleLock = Any()
@@ -97,6 +124,64 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
     @Volatile
     private var radioBackOff = false
 
+    /**
+     * Fingersticks waiting to be handed to the sensor, for this instance's sessions.
+     *
+     * One queue per driver instance, so a pre-soak sensor cannot receive the calibration meant for
+     * the sensor that feeds the loop. [offerCalibration] refuses outright on a staging slot, and a
+     * promoted instance keeps calling itself "staging" in the log but is production from the
+     * arbiter's point of view — which is why the check below is on [storeNamespace], read live,
+     * rather than on the fixed [slot] label.
+     */
+    private val calibrationQueue = OnePlusCalibrationQueue()
+
+    /** Last answer a sensor gave to a calibration, for the status screen. Null = nothing sent yet. */
+    @Volatile
+    private var lastCalibrationResult: OnePlusCalibrationOutcome? = null
+
+    override fun offerCalibration(glucoseMgdl: Int, bloodAtMs: Long): Boolean {
+        if (storeNamespace != null) {
+            OnePlusLog.w(
+                "${OnePlusLogMarkers.SESSION}: [$slot] calibration refused — a pre-soak sensor is never calibrated",
+            )
+            return false
+        }
+        if (session?.isUp() != true) {
+            OnePlusLog.w("${OnePlusLogMarkers.SESSION}: [$slot] calibration refused — no session up")
+            return false
+        }
+        val accepted = calibrationQueue.offer(glucoseMgdl, bloodAtMs, System.currentTimeMillis())
+        OnePlusLog.i(
+            "${OnePlusLogMarkers.SESSION}: [$slot] calibration queued=$accepted glucose=$glucoseMgdl",
+        )
+        if (accepted) lastCalibrationResult = OnePlusCalibrationOutcome.Pending
+        return accepted
+    }
+
+    override fun lastCalibrationOutcome(): OnePlusCalibrationOutcome? = lastCalibrationResult
+
+    /**
+     * Turn what came back on the wire into something the user can be told.
+     *
+     * A null reply means the write itself failed, or nothing came back before the loop gave up. It
+     * is [OnePlusCalibrationOutcome.Unknown] and not a refusal: the packet may well have reached a
+     * sensor that simply did not answer, and this firmware is not known to answer in a readable way
+     * at all.
+     */
+    private fun onCalibrationAnswered(reply: OnePlusCalibrateRx?) {
+        lastCalibrationResult = when (reply?.outcome()) {
+            OnePlusCalibrateRx.Outcome.ACCEPTED -> OnePlusCalibrationOutcome.Accepted(reply.message())
+            OnePlusCalibrateRx.Outcome.REFUSED  -> OnePlusCalibrationOutcome.Refused(reply.message())
+            OnePlusCalibrateRx.Outcome.UNKNOWN  -> OnePlusCalibrationOutcome.Unknown(reply.message())
+            null                                -> OnePlusCalibrationOutcome.Unknown("The sensor did not answer")
+        }
+        OnePlusLog.i(
+            "${OnePlusLogMarkers.SESSION}: [$slot] calibration outcome = $lastCalibrationResult",
+        )
+    }
+
+    override fun calibrationPending(): Boolean = calibrationQueue.peek() != null
+
     override fun setContext(context: Context) {
         val app = context.applicationContext
         this.context = app
@@ -108,9 +193,46 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
 
     fun sensorStore(): OnePlusSensorStore? = sensorStore
 
+    /**
+     * Points this instance at another slot's preferences file, without dropping a running link.
+     *
+     * Used once, by a promotion. The running Control/EGV loop must follow the new file at once: it
+     * reconnects itself every few minutes and never ends before an app restart, and the promotion
+     * clears the staging file right after this call. So the session reads `sensorStore` on every
+     * call instead of keeping it in a local (see `createSession`).
+     */
+    fun rebindStore(namespace: String?) {
+        storeNamespace = namespace
+        context?.let { sensorStore = OnePlusSensorStore(it, namespace) }
+    }
+
     fun saveIdentity(identity: OnePlusSensorIdentity) {
         sensorStore?.saveIdentity(identity)
         (scanner as? OnePlusBleScannerAndroid)?.sessionHint = sensorStore?.load()
+    }
+
+    /**
+     * KEKS key of the slot this instance owns **right now**, for the running session's short auth.
+     *
+     * Read through the live field, never through a captured store: a promotion rebinds this instance
+     * under its own running link (see [rebindStore]).
+     */
+    fun savedSharedKey(): ByteArray? = sensorStore?.load()?.sharedKey
+
+    /** Persist the MAC / KEKS key of a successful auth into the slot this instance owns right now. */
+    fun onAuthSucceeded(address: String, key: ByteArray) {
+        val store = sensorStore
+        store?.saveLastMac(address)
+        store?.saveSharedKey(key)
+        pendingDeviceName?.let { store?.saveLastDeviceName(it) }
+        (scanner as? OnePlusBleScannerAndroid)?.sessionHint = store?.load()
+    }
+
+    /** Forget the stored KEKS key of the slot this instance owns right now (auth refused it). */
+    fun onAuthInvalidated() {
+        val store = sensorStore
+        store?.clearSharedKey()
+        (scanner as? OnePlusBleScannerAndroid)?.sessionHint = store?.load()
     }
 
     override fun addWatcher(watcher: OnePlusGlucoseWatcher) {
@@ -138,7 +260,7 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
         // The transmitter has one owner — see OnePlusMacArbiter. Refused means the other slot is on
         // this sensor, and opening a second session would corrupt both KEKS handshakes. Nothing is
         // written to the store on a refusal: the slot must stay exactly as it was.
-        if (!OnePlusMacArbiter.claim(deviceAddress, slot)) {
+        if (!OnePlusMacArbiter.claim(deviceAddress, arbiterOwner)) {
             watchers.forEach {
                 it.onError("ONEPLUS_SESSION: sensor already in use by the other slot", false)
             }
@@ -226,7 +348,7 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
         val deviceAddress = stored?.lastMac ?: return false
         // The path that reproduced the collision on every plugin start for an install whose two
         // stores already held the same MAC. Claim before queueing anything.
-        if (!OnePlusMacArbiter.claim(deviceAddress, slot)) {
+        if (!OnePlusMacArbiter.claim(deviceAddress, arbiterOwner)) {
             OnePlusLog.w(
                 "${OnePlusLogMarkers.SESSION}: [$slot] auto-resume skipped — the other slot owns this sensor",
             )
@@ -326,7 +448,7 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
             session.also { session = null }
         }
         previousSession?.stop("disconnect")
-        OnePlusMacArbiter.release(slot)
+        OnePlusMacArbiter.release(arbiterOwner)
     }
 
     override fun shutdown() {
@@ -350,7 +472,7 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
         }
         watchers.clear()
         previousExecutor.shutdownNow()
-        OnePlusMacArbiter.release(slot)
+        OnePlusMacArbiter.release(arbiterOwner)
         OnePlusLog.i("${OnePlusLogMarkers.SESSION}: [$slot] shutdown")
     }
 
@@ -389,7 +511,6 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
         // The lease may have been taken while this session was being built.
         if (radioBackOff) gatt.setLowPower(true)
         val auth = OnePlusSessionAuthKeks(gatt)
-        val store = sensorStore
         val created = OnePlusBleSessionSkeleton(
             gatt = gatt,
             auth = auth,
@@ -417,19 +538,19 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
             // Auto-resume always passes false; only an explicit new-sensor connect may start.
             requestNewSensorStart = requestNewSensorStart,
             beforeConnect = { address, attempt, scanMs -> prepareConnect(address, attempt, scanMs) },
-            savedSharedKeyProvider = { store?.load()?.sharedKey },
+            // Read `sensorStore` on every call, never through a captured local: a promotion calls
+            // [rebindStore] under a LIVE link, and that link then runs for the rest of the session.
+            // A captured store would keep reading the cleared staging file (no PIN -> load() null ->
+            // a full re-pair on every reconnect) and would write the new key back into it.
+            savedSharedKeyProvider = { savedSharedKey() },
             onAuthSuccess = { address, key ->
                 ifCurrentOperation(generation) {
-                    store?.saveLastMac(address)
-                    store?.saveSharedKey(key)
-                    pendingDeviceName?.let { store?.saveLastDeviceName(it) }
-                    (scanner as? OnePlusBleScannerAndroid)?.sessionHint = store?.load()
+                    onAuthSucceeded(address, key)
                 }
             },
             onAuthInvalidate = {
                 ifCurrentOperation(generation) {
-                    store?.clearSharedKey()
-                    (scanner as? OnePlusBleScannerAndroid)?.sessionHint = store?.load()
+                    onAuthInvalidated()
                     OnePlusLog.i(
                         "${OnePlusLogMarkers.SESSION}: [$slot] cleared persisted KEKS shared key",
                     )
@@ -437,6 +558,10 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
             },
             appContext = ctx,
             slot = slot,
+            // Read at session creation from the live field: a promotion rebinds this instance to
+            // the production store, and only a session opened after that rebind may carry a queue.
+            calibrationQueue = if (storeNamespace == null) calibrationQueue else null,
+            onCalibrationResult = { reply -> onCalibrationAnswered(reply) },
         )
         return created
     }
@@ -555,5 +680,8 @@ class OnePlusCgmDriverReal(private val storeNamespace: String? = null) : OnePlus
          * be quiet and a direct connect would miss the window.
          */
         const val ADV_HANDOFF_FRESH_MS = 6_000L
+
+        /** Process-wide counter so every instance's [arbiterOwner] is unique — see its doc comment. */
+        val nextInstance = AtomicInteger(0)
     }
 }

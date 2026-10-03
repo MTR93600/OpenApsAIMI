@@ -32,6 +32,73 @@ enum class DexcomOnePlusBooleanKey(
         summaryResId = R.string.dexcom_oneplus_use_real_skeleton_summary,
         engineeringModeOnly = true,
         exportable = false,
+    ),
+
+    /**
+     * Send a fingerstick to the sensor instead of correcting its readings inside the phone.
+     *
+     * Off by default, and engineering only. A sensor keeps a calibration it accepts for good — it
+     * cannot be edited or deleted — and a Dexcom ONE+ does not answer in a way anyone has decoded,
+     * so the app cannot tell the user whether the value was taken. Owner decision 7 is unsettled:
+     * the code is ported and the switch stays off.
+     *
+     * Provenance: ref `DexcomOnePlusBooleanKey.SendCalibrationToSensor` at `3dd0ca64772`.
+     */
+    SendCalibrationToSensor(
+        key = "dexcom_oneplus_send_calibration_to_sensor",
+        defaultValue = false,
+        titleResId = R.string.dexcom_oneplus_send_calibration_to_sensor,
+        summaryResId = R.string.dexcom_oneplus_send_calibration_to_sensor_summary,
+        engineeringModeOnly = true,
+        exportable = false,
+    ),
+
+    /**
+     * Put a missing SENSOR_CHANGE back for the running ONE+ session.
+     *
+     * The reference does this whenever "create sensor change" is on. That choice is not
+     * settled, so this stays off. While it is off, a refresh writes no therapy event.
+     * Turning it on still writes nothing when "create sensor change" is off.
+     */
+    RepairMissingSensorChange(
+        key = "dexcom_oneplus_repair_missing_sensor_change",
+        defaultValue = false,
+        titleResId = R.string.dexcom_oneplus_repair_missing_sensor_change,
+        summaryResId = R.string.dexcom_oneplus_repair_missing_sensor_change_summary,
+        engineeringModeOnly = true,
+        exportable = false,
+    ),
+
+    /**
+     * Let the Status screen move the insertion time of the sensor that feeds the loop.
+     *
+     * Off by default. The owner has not confirmed that invalidating SENSOR_CHANGE events
+     * for this correction is wanted. While it is off the action is hidden and the function
+     * returns before any invalidation or any write. Calibration rows are never removed.
+     */
+    CorrectSensorStart(
+        key = "dexcom_oneplus_correct_sensor_start",
+        defaultValue = false,
+        titleResId = R.string.dexcom_oneplus_correct_sensor_start,
+        summaryResId = R.string.dexcom_oneplus_correct_sensor_start_summary,
+        engineeringModeOnly = true,
+        exportable = false,
+    ),
+
+    /**
+     * Replace the automatic session start with a SENSOR_CHANGE the user already logged.
+     *
+     * The reference does this on every start and on the first accepted reading. That rolls
+     * the stored start back by up to 24 hours. The owner asked for the same code behind a
+     * switch that stays off, so a start keeps the time it had before this lot.
+     */
+    AnchorSessionToManualSensorChange(
+        key = "dexcom_oneplus_anchor_session_to_manual_sensor_change",
+        defaultValue = false,
+        titleResId = R.string.dexcom_oneplus_anchor_session_to_manual_sensor_change,
+        summaryResId = R.string.dexcom_oneplus_anchor_session_to_manual_sensor_change_summary,
+        engineeringModeOnly = true,
+        exportable = false,
     )
     ;
 

@@ -40,14 +40,22 @@ import app.aaps.core.interfaces.source.PromotionResult
 import app.aaps.core.interfaces.source.StagingState
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.LocalPreferences
 import app.aaps.core.ui.compose.MetroAppCompatActivity
+import app.aaps.core.ui.compose.dialogs.DatePickerModal
+import app.aaps.core.ui.compose.dialogs.TimePickerModal
+import app.aaps.core.ui.compose.stringResource as coreStringResource
+import app.aaps.plugins.dexcomoneplus.OnePlusCalibrationOutcome
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers
+import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrationState
 import app.aaps.plugins.source.DexcomOnePlusPlugin
+import app.aaps.plugins.source.DexcomOnePlusSensorStartCorrection
 import app.aaps.plugins.source.DexcomOnePlusStaging
 import app.aaps.plugins.source.R
+import app.aaps.plugins.source.keys.DexcomOnePlusBooleanKey
 import app.aaps.plugins.source.compose.CgmCard
 import app.aaps.plugins.source.compose.CgmCardHeader
 import app.aaps.plugins.source.compose.CgmCardTone
@@ -64,6 +72,8 @@ import javax.inject.Inject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import java.util.Calendar
+import java.util.TimeZone
 
 /**
  * Daily status of the native Dexcom ONE+ / G7 source.
@@ -112,6 +122,7 @@ class DexcomOnePlusStatusActivity : MetroAppCompatActivity() {
                         lastGlucose = { persistenceLayer.getLastGlucoseValue() },
                         onCancelStaging = { dexcomOnePlusPlugin.cancelStaging() },
                         onPromote = { allowEarly -> dexcomOnePlusPlugin.promoteStagingToProduction(allowEarly) },
+                        onCorrectSensorStart = { startMs -> dexcomOnePlusPlugin.correctProductionSensorStart(startMs) },
                     )
                 }
             }
@@ -121,6 +132,37 @@ class DexcomOnePlusStatusActivity : MetroAppCompatActivity() {
 
 /** How often the screen goes back to the database for the newest reading. */
 private const val GLUCOSE_REFRESH_MILLIS = 30_000L
+
+/**
+ * Text shown after Promote. Refusal means nothing was written. [PromotionResult.OkBoundFailed]
+ * means the exchange is kept and the calibration bound threw. [PromotionResult.OkFollowUpFailed]
+ * means a later step threw; the wording follows [PromotionResult.OkFollowUpFailed.productionIdentityPresent],
+ * which the plugin read from the production store.
+ */
+internal fun dexcomOnePlusPromotionMessage(
+    result: PromotionResult,
+    ok: String,
+    boundFailed: String,
+    followUpIdentityPresent: String,
+    followUpIdentityMissing: String,
+    rejectedAbsent: String,
+    rejectedNotSettled: String,
+    rejectedNoGlucose: String,
+    rejectedNoRecentGlucose: String,
+    rejectedLoopBusy: String,
+): String = when (result) {
+    PromotionResult.Ok -> ok
+    PromotionResult.OkBoundFailed -> boundFailed
+    is PromotionResult.OkFollowUpFailed ->
+        if (result.productionIdentityPresent) followUpIdentityPresent else followUpIdentityMissing
+    is PromotionResult.Rejected -> when (result.reason) {
+        PromotionRejectReason.STAGING_ABSENT -> rejectedAbsent
+        PromotionRejectReason.STAGING_NOT_SETTLED -> rejectedNotSettled
+        PromotionRejectReason.STAGING_NO_VALID_GLUCOSE -> rejectedNoGlucose
+        PromotionRejectReason.STAGING_NO_RECENT_GLUCOSE -> rejectedNoRecentGlucose
+        PromotionRejectReason.LOOP_BUSY -> rejectedLoopBusy
+    }
+}
 
 @Composable
 private fun DexcomOnePlusStatusScreen(
@@ -137,11 +179,24 @@ private fun DexcomOnePlusStatusScreen(
     lastGlucose: suspend () -> GV?,
     onCancelStaging: () -> Unit,
     onPromote: suspend (Boolean) -> PromotionResult,
+    onCorrectSensorStart: suspend (Long) -> DexcomOnePlusSensorStartCorrection.Verdict,
 ) {
-    val driver = remember { OnePlusCgmDrivers.default() }
-    var state by remember { mutableStateOf(driver.warmupState()) }
-    var sessionUp by remember { mutableStateOf(driver.isSessionUp()) }
+    // Not `remember`-ed: a promotion swaps which driver instance `default()` hands out (see
+    // OnePlusCgmDrivers.promoteStagingInstance), and a `remember`-ed reference kept polling the
+    // retired instance for the rest of this screen's life, showing a status stuck at whatever
+    // phase it had before the promotion.
+    var state by remember { mutableStateOf(OnePlusCgmDrivers.default().warmupState()) }
+    var sessionUp by remember { mutableStateOf(OnePlusCgmDrivers.default().isSessionUp()) }
     var newestGlucose by remember { mutableStateOf<GV?>(null) }
+    var calibrationOutcome by remember { mutableStateOf<OnePlusCalibrationOutcome?>(null) }
+    var calibrationWaiting by remember { mutableStateOf(false) }
+    // The card exists only while values are sent to the sensor. With the setting off the value
+    // never leaves the phone, so there is nothing to report. The switch defaults to false.
+    val preferences = LocalPreferences.current
+    val sendCalibrationToSensor = remember(preferences) {
+        preferences.get(DexcomOnePlusBooleanKey.SendCalibrationToSensor)
+    }
+    val correctSensorStartEnabled = preferences.get(DexcomOnePlusBooleanKey.CorrectSensorStart)
     val stagingState by stagingStateFlow.collectAsState()
     val stagingEvidence by stagingEvidenceFlow.collectAsState()
     val lifecycle by lifecycleFlow.collectAsState()
@@ -159,6 +214,9 @@ private fun DexcomOnePlusStatusScreen(
 
     // Promotion result → user message (resolved here so the coroutine has no Composable context).
     val promoteOk = stringResource(R.string.dexcom_oneplus_staging_promote_ok)
+    val promoteBoundFailed = stringResource(R.string.dexcom_oneplus_staging_promote_bound_failed)
+    val promoteFollowUpFailed = stringResource(R.string.dexcom_oneplus_staging_promote_follow_up_failed)
+    val promoteFollowUpNoIdentity = stringResource(R.string.dexcom_oneplus_staging_promote_follow_up_failed_no_identity)
     val promoteRejectedAbsent = stringResource(R.string.dexcom_oneplus_staging_promote_rejected_absent)
     val promoteRejectedNotSettled = stringResource(R.string.dexcom_oneplus_staging_promote_rejected_not_settled)
     val promoteRejectedNoGlucose = stringResource(R.string.dexcom_oneplus_staging_promote_rejected_no_glucose)
@@ -167,8 +225,11 @@ private fun DexcomOnePlusStatusScreen(
 
     LaunchedEffect(Unit) {
         while (true) {
+            val driver = OnePlusCgmDrivers.default()
             state = driver.warmupState()
             sessionUp = driver.isSessionUp()
+            calibrationOutcome = driver.lastCalibrationOutcome()
+            calibrationWaiting = driver.calibrationPending()
             now = System.currentTimeMillis()
             delay(1_000L)
         }
@@ -206,7 +267,18 @@ private fun DexcomOnePlusStatusScreen(
                     formatGlucose = formatGlucose,
                     formatTime = formatTime,
                     formatAge = formatAge,
+                    correctSensorStartEnabled = correctSensorStartEnabled,
+                    onCorrectSensorStart = onCorrectSensorStart,
                 )
+            }
+            if (sendCalibrationToSensor) {
+                item(key = "sensorCalibration") {
+                    SensorCalibrationCard(
+                        outcome = calibrationOutcome,
+                        waiting = calibrationWaiting,
+                        driverMessage = state.message,
+                    )
+                }
             }
             // Prompt for a pre-soak exactly when it is useful: the sensor in use is near its end and
             // no replacement is warming up yet.
@@ -294,16 +366,18 @@ private fun DexcomOnePlusStatusScreen(
                         showPromoteConfirm = false
                         val allowEarly = promoteEarly
                         scope.launch {
-                            promoteResultText = when (val result = onPromote(allowEarly)) {
-                                is PromotionResult.Ok       -> promoteOk
-                                is PromotionResult.Rejected -> when (result.reason) {
-                                    PromotionRejectReason.STAGING_ABSENT            -> promoteRejectedAbsent
-                                    PromotionRejectReason.STAGING_NOT_SETTLED       -> promoteRejectedNotSettled
-                                    PromotionRejectReason.STAGING_NO_VALID_GLUCOSE  -> promoteRejectedNoGlucose
-                                    PromotionRejectReason.STAGING_NO_RECENT_GLUCOSE -> promoteRejectedNoRecentGlucose
-                                    PromotionRejectReason.LOOP_BUSY                 -> promoteRejectedLoopBusy
-                                }
-                            }
+                            promoteResultText = dexcomOnePlusPromotionMessage(
+                                result = onPromote(allowEarly),
+                                ok = promoteOk,
+                                boundFailed = promoteBoundFailed,
+                                followUpIdentityPresent = promoteFollowUpFailed,
+                                followUpIdentityMissing = promoteFollowUpNoIdentity,
+                                rejectedAbsent = promoteRejectedAbsent,
+                                rejectedNotSettled = promoteRejectedNotSettled,
+                                rejectedNoGlucose = promoteRejectedNoGlucose,
+                                rejectedNoRecentGlucose = promoteRejectedNoRecentGlucose,
+                                rejectedLoopBusy = promoteRejectedLoopBusy,
+                            )
                         }
                     },
                 ) {
@@ -331,6 +405,8 @@ private fun ProductionCard(
     formatGlucose: (Double) -> String,
     formatTime: (Long) -> String,
     formatAge: (Long) -> String,
+    correctSensorStartEnabled: Boolean,
+    onCorrectSensorStart: suspend (Long) -> DexcomOnePlusSensorStartCorrection.Verdict,
 ) {
     CgmCard(accent = true) {
         CgmCardHeader(stringResource(R.string.dexcom_oneplus_production_heading)) {
@@ -373,6 +449,171 @@ private fun ProductionCard(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        // Hidden while the engineering switch is off. The function also refuses before any write.
+        if (correctSensorStartEnabled) {
+            lifecycle?.startedAtEpochMs?.let { startedAt ->
+                CorrectInsertionDateAction(
+                    currentStartMs = startedAt,
+                    formatTime = formatTime,
+                    onCorrectSensorStart = onCorrectSensorStart,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * "The sensor went in earlier than the app thinks."
+ *
+ * Shown only while [DexcomOnePlusBooleanKey.CorrectSensorStart] is on. Ref action at
+ * `DexcomOnePlusStatusActivity` L523 (`3dd0ca64772`).
+ */
+@Composable
+private fun CorrectInsertionDateAction(
+    currentStartMs: Long,
+    formatTime: (Long) -> String,
+    onCorrectSensorStart: suspend (Long) -> DexcomOnePlusSensorStartCorrection.Verdict,
+) {
+    val scope = rememberCoroutineScope()
+    var showDatePicker by remember { mutableStateOf(false) }
+    var pickedDateMs by remember { mutableStateOf<Long?>(null) }
+    var refusal by remember { mutableStateOf<DexcomOnePlusSensorStartCorrection.Verdict?>(null) }
+
+    OutlinedButton(onClick = { showDatePicker = true }) {
+        Text(stringResource(R.string.dexcom_oneplus_correct_insertion_date))
+    }
+
+    if (showDatePicker) {
+        DatePickerModal(
+            initialDateMillis = currentStartMs,
+            onDateSelected = { pickedDateMs = it },
+            onDismiss = { showDatePicker = false },
+        )
+    }
+    pickedDateMs?.let { dayMs ->
+        val current = remember(currentStartMs) { Calendar.getInstance().apply { timeInMillis = currentStartMs } }
+        TimePickerModal(
+            initialHour = current.get(Calendar.HOUR_OF_DAY),
+            initialMinute = current.get(Calendar.MINUTE),
+            onTimeSelected = { hour, minute ->
+                val day = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = dayMs }
+                val chosen = Calendar.getInstance().apply {
+                    set(day.get(Calendar.YEAR), day.get(Calendar.MONTH), day.get(Calendar.DAY_OF_MONTH), hour, minute, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
+                scope.launch {
+                    val verdict = onCorrectSensorStart(chosen.timeInMillis)
+                    if (verdict != DexcomOnePlusSensorStartCorrection.Verdict.Accepted) refusal = verdict
+                }
+            },
+            onDismiss = { pickedDateMs = null },
+        )
+    }
+    refusal?.let { verdict ->
+        AlertDialog(
+            onDismissRequest = { refusal = null },
+            title = { Text(stringResource(R.string.dexcom_oneplus_correct_insertion_date)) },
+            text = {
+                Text(
+                    stringResource(
+                        when (verdict) {
+                            DexcomOnePlusSensorStartCorrection.Verdict.InFuture ->
+                                R.string.dexcom_oneplus_insertion_date_future
+                            DexcomOnePlusSensorStartCorrection.Verdict.TooOld ->
+                                R.string.dexcom_oneplus_insertion_date_too_old
+                            DexcomOnePlusSensorStartCorrection.Verdict.Accepted,
+                            DexcomOnePlusSensorStartCorrection.Verdict.NoSession,
+                            DexcomOnePlusSensorStartCorrection.Verdict.Disabled,
+                            -> R.string.dexcom_oneplus_insertion_date_no_session
+                        },
+                        formatTime(currentStartMs),
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { refusal = null }) { Text(coreStringResource(CoreUiStrings.ok)) }
+            },
+        )
+    }
+}
+
+/**
+ * What became of a finger prick value handed to the sensor itself.
+ *
+ * On screen only while [DexcomOnePlusBooleanKey.SendCalibrationToSensor] is on. That switch
+ * defaults to false, so this card is not shown unless someone turns it on.
+ *
+ * [OnePlusCalibrationOutcome.Unknown] is not softened: a Dexcom ONE+ answers with four bytes
+ * nobody has decoded, so it is neither a failure of the app nor a success.
+ */
+@Composable
+private fun SensorCalibrationCard(
+    outcome: OnePlusCalibrationOutcome?,
+    waiting: Boolean,
+    driverMessage: String?,
+) {
+    val tone = if (outcome is OnePlusCalibrationOutcome.Refused) CgmCardTone.Warning else CgmCardTone.Neutral
+    CgmCard(tone = tone) {
+        CgmCardHeader(stringResource(R.string.dexcom_oneplus_calibration_heading))
+        sensorCalibrationRequest(driverMessage)?.let { request ->
+            Text(
+                text = request,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        Text(
+            text = when {
+                waiting || outcome is OnePlusCalibrationOutcome.Pending ->
+                    stringResource(R.string.dexcom_oneplus_calibration_waiting)
+
+                outcome is OnePlusCalibrationOutcome.Accepted ->
+                    stringResource(R.string.dexcom_oneplus_calibration_accepted)
+
+                outcome is OnePlusCalibrationOutcome.Refused ->
+                    stringResource(R.string.dexcom_oneplus_calibration_refused)
+
+                outcome is OnePlusCalibrationOutcome.Unknown ->
+                    stringResource(R.string.dexcom_oneplus_calibration_unknown)
+
+                else ->
+                    stringResource(R.string.dexcom_oneplus_calibration_none)
+            },
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        val detail = when (outcome) {
+            is OnePlusCalibrationOutcome.Accepted -> outcome.detail
+            is OnePlusCalibrationOutcome.Refused -> outcome.detail
+            is OnePlusCalibrationOutcome.Unknown -> outcome.detail
+            else -> null
+        }
+        detail?.takeIf { it.isNotBlank() }?.let { text ->
+            Text(
+                text = stringResource(R.string.dexcom_oneplus_calibration_detail, text),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/**
+ * What the sensor itself is asking for, read back out of the driver status line.
+ *
+ * Null when the line is about something else, which it is most of the time.
+ */
+@Composable
+private fun sensorCalibrationRequest(driverMessage: String?): String? {
+    val state = OnePlusCalibrationState.entries.firstOrNull { it.name == driverMessage } ?: return null
+    return when (state) {
+        OnePlusCalibrationState.NeedsCalibration ->
+            stringResource(R.string.dexcom_oneplus_calibration_state_needs)
+        OnePlusCalibrationState.NeedsFirstCalibration ->
+            stringResource(R.string.dexcom_oneplus_calibration_state_needs_first)
+        OnePlusCalibrationState.NeedsSecondCalibration ->
+            stringResource(R.string.dexcom_oneplus_calibration_state_needs_second)
+        OnePlusCalibrationState.CalibrationSent ->
+            stringResource(R.string.dexcom_oneplus_calibration_state_sent)
+        else -> null
     }
 }
 

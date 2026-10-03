@@ -60,4 +60,13 @@ object AapsSpacing {
 
     /** Largest CGM warm-up ring, so it does not swallow a tablet pane. */
     val warmupRingMax = 240.dp
+
+    /** Tall enough to read a trend, short enough to leave the card it sits in scannable. */
+    val chartHeight = 140.dp
+
+    /** The trace itself. */
+    val chartLineStroke = 2.dp
+
+    /** A guide line behind the trace. Thin on purpose, so it never competes with the trace. */
+    val chartGuideStroke = 1.dp
 }

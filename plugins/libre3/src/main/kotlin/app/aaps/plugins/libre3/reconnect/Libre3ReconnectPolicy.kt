@@ -1,5 +1,7 @@
 package app.aaps.plugins.libre3.reconnect
 
+import app.aaps.core.interfaces.source.SensorSlot
+
 /** What the driver should do after a session attempt failed. */
 enum class Libre3RecoveryAction {
 
@@ -41,13 +43,28 @@ object Libre3ReconnectPolicy {
     /** How many quick attempts are made before the slow pace takes over. */
     const val MAX_ATTEMPTS = 6
 
+    /** The pre-soak slot never retries faster than this. */
+    const val STAGING_MIN_RETRY_MS = 20_000L
+
+    /** Added to the pre-soak slot's wait, so the two slots do not knock at the same instant. */
+    const val STAGING_RETRY_OFFSET_MS = 7_000L
+
     /**
      * @param attempt how many attempts already failed, starting at 1 for the first failure.
+     * @param slot which slot is retrying. The pre-soak slot is slower on purpose: it has hours to
+     *   succeed, and it must never push the sensor that feeds the loop out of the scan budget, see
+     *   [Libre3ScanBudget]. The production slot gets exactly the pace it always had.
      */
-    fun nextDelayMs(attempt: Int): Long {
-        if (attempt <= 1) return FIRST_RETRY_MS
-        if (attempt >= MAX_ATTEMPTS) return SLOW_RETRY_MS
-        return (FIRST_RETRY_MS * attempt).coerceAtMost(MAX_DELAY_MS)
+    fun nextDelayMs(attempt: Int, slot: SensorSlot = SensorSlot.PRODUCTION): Long {
+        val base = when {
+            attempt <= 1            -> FIRST_RETRY_MS
+            attempt >= MAX_ATTEMPTS -> SLOW_RETRY_MS
+            else                    -> (FIRST_RETRY_MS * attempt).coerceAtMost(MAX_DELAY_MS)
+        }
+        return when (slot) {
+            SensorSlot.PRODUCTION -> base
+            SensorSlot.STAGING    -> (base + STAGING_RETRY_OFFSET_MS).coerceAtLeast(STAGING_MIN_RETRY_MS)
+        }
     }
 
     /**
