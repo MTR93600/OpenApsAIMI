@@ -20,50 +20,60 @@ import app.aaps.plugins.dexcomoneplus.OnePlusLogMarkers
  * above — that reproduced the collision on every launch with no UI involved. A claim taken where the
  * connection is actually made covers those paths, and the ones not written yet.
  *
- * A slot may re-claim what it already holds: reconnects and repairs inside one slot are normal, and
- * claiming a different MAC releases the slot's previous claim.
+ * An owner may re-claim what it already holds: reconnects and repairs inside one slot are normal, and
+ * claiming a different MAC releases the owner's previous claim.
+ *
+ * ⚠️ The owner token must **not** be the driver's slot name ("prod" / "staging"). `OnePlusCgmDriverReal`
+ * keeps its slot name for the whole life of the instance, on purpose, so a bug report stays readable
+ * across a promotion — a promoted instance is production but still calls itself "staging" in the log.
+ * Keying the map on that name would let the next pre-soak's `claim` remove the promoted instance's own
+ * claim (see the "moving to another releases the old one" rule below), silently dropping the arbiter's
+ * protection on the sensor that is still feeding the loop. Each driver instance passes a token of its
+ * own instead — see `OnePlusCgmDriverReal.arbiterOwner`.
  */
 object OnePlusMacArbiter {
 
     private val lock = Any()
 
-    /** Normalised MAC → the slot that owns it. At most one owner per transmitter. */
+    /** Normalised MAC → the token of the driver instance that owns it. At most one owner per transmitter. */
     private val owners = mutableMapOf<String, String>()
 
     private fun normalize(mac: String): String = mac.trim().uppercase()
 
     /**
-     * Take ownership of [mac] for [slot].
+     * Take ownership of [mac] for [owner].
      *
-     * @return true when the slot may connect. false means the other slot holds this transmitter and
-     *   the caller must not open a session on it.
+     * @param owner a token that belongs to one driver instance and never changes — see the note on
+     *   promotion above.
+     * @return true when that driver may connect. false means another driver instance holds this
+     *   transmitter and the caller must not open a session on it.
      */
-    fun claim(mac: String, slot: String): Boolean {
+    fun claim(mac: String, owner: String): Boolean {
         val key = normalize(mac).takeIf { it.isNotEmpty() } ?: return false
         synchronized(lock) {
-            val owner = owners[key]
-            if (owner != null && owner != slot) {
+            val current = owners[key]
+            if (current != null && current != owner) {
                 OnePlusLog.w(
-                    "${OnePlusLogMarkers.SESSION}: [$slot] MAC claim refused — ***${key.takeLast(5)} " +
-                        "is held by [$owner]; two sessions on one sensor corrupt the KEKS handshake",
+                    "${OnePlusLogMarkers.SESSION}: [$owner] MAC claim refused — ***${key.takeLast(5)} " +
+                        "is held by [$current]; two sessions on one sensor corrupt the KEKS handshake",
                 )
                 return false
             }
-            // A slot owns one transmitter at a time: moving to another releases the old one.
-            owners.entries.removeAll { it.value == slot && it.key != key }
-            owners[key] = slot
+            // One driver instance holds one transmitter at a time: moving to another releases the old one.
+            owners.entries.removeAll { it.value == owner && it.key != key }
+            owners[key] = owner
             return true
         }
     }
 
-    /** Give up whatever [slot] holds. Safe when it holds nothing. */
-    fun release(slot: String) {
+    /** Give up whatever [owner] holds. Safe when it holds nothing. */
+    fun release(owner: String) {
         synchronized(lock) {
-            owners.entries.removeAll { it.value == slot }
+            owners.entries.removeAll { it.value == owner }
         }
     }
 
-    /** Which slot owns [mac], or null when nobody does. */
+    /** Which owner holds [mac], or null when nobody does. */
     fun ownerOf(mac: String): String? {
         val key = normalize(mac).takeIf { it.isNotEmpty() } ?: return null
         return synchronized(lock) { owners[key] }
