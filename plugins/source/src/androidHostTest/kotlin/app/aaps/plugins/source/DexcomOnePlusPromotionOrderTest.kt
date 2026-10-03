@@ -100,65 +100,71 @@ class DexcomOnePlusPromotionOrderTest : TestBase() {
 
     @Test
     fun `absent staging writes nothing irreversible`() = runTest {
+        val stagingBefore = stagingPrefs.all.toMap()
         val result = plugin.promoteStagingToProduction(allowEarly = true)
 
         assertThat(result).isEqualTo(PromotionResult.Rejected(PromotionRejectReason.STAGING_ABSENT))
-        assertNothingIrreversible()
+        assertNothingIrreversible(stagingBefore)
     }
 
     @Test
     fun `fewer than six readings writes nothing irreversible`() = runTest {
         setPrivate("stagingPresent", true)
         setPrivate("stagingValidEgvCount", 5)
+        val stagingBefore = stagingPrefs.all.toMap()
 
         val result = plugin.promoteStagingToProduction(allowEarly = true)
 
         assertThat(result).isEqualTo(PromotionResult.Rejected(PromotionRejectReason.STAGING_NO_VALID_GLUCOSE))
-        assertNothingIrreversible()
+        assertNothingIrreversible(stagingBefore)
     }
 
     @Test
     fun `a missing soak clock writes nothing irreversible`() = runTest {
         setPrivate("stagingPresent", true)
         setPrivate("stagingValidEgvCount", 6)
+        val stagingBefore = stagingPrefs.all.toMap()
 
         val result = plugin.promoteStagingToProduction(allowEarly = false)
 
         assertThat(result).isEqualTo(PromotionResult.Rejected(PromotionRejectReason.STAGING_NOT_SETTLED))
-        assertNothingIrreversible()
+        assertNothingIrreversible(stagingBefore)
     }
 
     @Test
     fun `an early promotion without a recent reading writes nothing irreversible`() = runTest {
         readyStaging(mac = "AA:BB:CC:DD:EE:21", ageMs = 60_000L)
         setPrivate("stagingLastValueAtMs", System.currentTimeMillis() - 30L * 60L * 1000L)
+        val stagingBefore = stagingPrefs.all.toMap()
 
         val result = plugin.promoteStagingToProduction(allowEarly = true)
 
         assertThat(result).isEqualTo(PromotionResult.Rejected(PromotionRejectReason.STAGING_NO_RECENT_GLUCOSE))
-        assertNothingIrreversible()
+        assertNothingIrreversible(stagingBefore)
     }
 
     @Test
     fun `a soak shorter than twelve hours writes nothing irreversible`() = runTest {
         readyStaging(mac = "AA:BB:CC:DD:EE:22", ageMs = 60_000L)
         setStagingState(StagingState.READY)
+        val stagingBefore = stagingPrefs.all.toMap()
 
         val result = plugin.promoteStagingToProduction(allowEarly = false)
 
         assertThat(result).isEqualTo(PromotionResult.Rejected(PromotionRejectReason.STAGING_NOT_SETTLED))
-        assertNothingIrreversible()
+        assertNothingIrreversible(stagingBefore)
     }
 
     @Test
     fun `a long soak that is not READY writes nothing irreversible`() = runTest {
         readyStaging(mac = "AA:BB:CC:DD:EE:23", ageMs = 13L * 60L * 60L * 1000L)
         setStagingState(StagingState.WARMUP)
+        val stagingBefore = stagingPrefs.all.toMap()
 
         val result = plugin.promoteStagingToProduction(allowEarly = false)
 
         assertThat(result).isEqualTo(PromotionResult.Rejected(PromotionRejectReason.STAGING_NOT_SETTLED))
-        assertNothingIrreversible()
+        assertNothingIrreversible(stagingBefore)
     }
 
     @Test
@@ -409,7 +415,7 @@ class DexcomOnePlusPromotionOrderTest : TestBase() {
         assertThat(promoted.sensorStore()?.load()?.identity?.pin).isEqualTo("1234")
     }
 
-    private suspend fun assertNothingIrreversible() {
+    private suspend fun assertNothingIrreversible(stagingBefore: Map<String, *>) {
         verify(activeCalibration, never()).ignoreEntriesBefore(any())
         verify(persistenceLayer, never()).insertCgmSourceData(any(), any(), any(), anyOrNull())
         verify(preferences, never()).put(DexcomOnePlusBooleanKey.UseRealSkeleton, true)
@@ -417,6 +423,8 @@ class DexcomOnePlusPromotionOrderTest : TestBase() {
         assertThat(productionPrefs.getString(KEY_MAC, null)).isNull()
         assertThat(OnePlusCgmDrivers.useRealSkeleton).isFalse()
         assertThat(OnePlusCgmDrivers.default()).isSameInstanceAs(OnePlusCgmDriverStub.instance)
+        // getAll() is the live map. The copy taken before promote must still match.
+        assertThat(stagingPrefs.all.toMap()).isEqualTo(stagingBefore)
     }
 
     private fun readyStaging(mac: String, ageMs: Long, startMs: Long = System.currentTimeMillis() - ageMs) {
