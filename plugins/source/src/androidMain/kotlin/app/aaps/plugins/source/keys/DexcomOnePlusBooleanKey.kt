@@ -32,6 +32,25 @@ enum class DexcomOnePlusBooleanKey(
         summaryResId = R.string.dexcom_oneplus_use_real_skeleton_summary,
         engineeringModeOnly = true,
         exportable = false,
+    ),
+
+    /**
+     * Send a fingerstick to the sensor instead of correcting its readings inside the phone.
+     *
+     * Off by default, and engineering only. A sensor keeps a calibration it accepts for good — it
+     * cannot be edited or deleted — and a Dexcom ONE+ does not answer in a way anyone has decoded,
+     * so the app cannot tell the user whether the value was taken. Owner decision 7 is unsettled:
+     * the code is ported and the switch stays off.
+     *
+     * Provenance: ref `DexcomOnePlusBooleanKey.SendCalibrationToSensor` at `3dd0ca64772`.
+     */
+    SendCalibrationToSensor(
+        key = "dexcom_oneplus_send_calibration_to_sensor",
+        defaultValue = false,
+        titleResId = R.string.dexcom_oneplus_send_calibration_to_sensor,
+        summaryResId = R.string.dexcom_oneplus_send_calibration_to_sensor_summary,
+        engineeringModeOnly = true,
+        exportable = false,
     )
     ;
 
