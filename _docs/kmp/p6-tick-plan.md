@@ -85,13 +85,17 @@ Objet déjà isolé, trois fonctions : `projectedBg`, `isAnticipatedRise`, `deci
 
 Les gardes de la ref sont les branches du `decide` : BG sous 110, delta négatif (fragile), learner &lt; 0.75 sans résistance autosens, COB, repas lourd, montée persistante, one-shot advisor, montée confirmée, montée anticipée (delta, delta combiné, plancher 90, projection 30 min au-dessus de cible + 20). Elles sont toutes évaluées dans la fonction pure, avant toute écriture de plafond. L’écriture (`maxSMB = 0`) reste dans le wrapper android et ne s’exécute que si `decision.active`.
 
-### Tranche 2 — seuils spiral, purs, déjà identiques à la ref
+### Tranche 2 — faite : arrondis `Math.round` et fonctions pures voisines
 
-`tightSpiralSmbCapEnergyThresholdU`, `tightSpiralSmbCapIobThresholdU` et leurs constantes (L1284–L1318). Aujourd’hui `private` au fichier. Le passage en `internal` est le seul changement de visibilité, pour que le tick et `commonTest` les voient. Ne pas cherry-pick `a5f53cdfae`.
+Ne pas cherry-pick `a5f53cdfae` (patch-id `bbd5183e2114582e83bbe915c35be0bda9bccad6`, cherry `+`) ni `f87d25e024` (patch-id `900f60438eac56659a00f5f71667b0efbe0e0940`, cherry `+`). Les corps déplacés sont identiques à `dev_OAPSAIMI` @ `3dd0ca64772`, sauf les commentaires de `adjustBasalForMealHyper` (le facteur 10 / 8 est le même) et `aimiMathRoundToLong`, qui reproduit l’algorithme OpenJDK de `Math.round(double)` pour compiler sur iOS. Un test JVM compare cet algorithme à `java.lang.Math.round` sur les demis, les extrêmes et une grille. `round(): Int` reste dans le tick : il écrit `consoleError`.
 
-### Tranche 3 — autres calculs purs relus
+Destination : `commonMain/.../math/AimiTickPolicyMath.kt`. Le tick android garde la signature et délègue. `isDriftTerminatorCondition` reste android : son texte utilise `"%.1f".format`, qui n’est pas dans le stdlib commun.
 
-Fermés sur leurs paramètres, encore dans la classe :
+### Tranche 3 — formatage `aimiFmt*` (lot suivant)
+
+Les fonctions listées plus bas dans l’ancienne tranche 3 sont déjà dans `AimiTickPolicyMath` (tranche 2), sauf `round(): Int`. Le lot suivant remplace les motifs qui ont un équivalent commun exact (`aimiFmt0/1/2/4`, `aimiCsvTimestamp`). Un motif sans équivalent exact reste android.
+
+Ancienne liste, absorbée par la tranche 2 :
 
 - `round(value, digits)` L13202 et `roundBasal` L12551. Garder la sémantique `Math.round` (demi vers +∞). `round(): Int` L13212 écrit `consoleError` : pas cette tranche.
 - `adjustDIAForIOB` L12722

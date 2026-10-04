@@ -16,11 +16,15 @@ Recounted with `find … -name '*.kt' | wc -l` and `xargs wc -l` on
 | When | Commit | androidMain files | commonMain files | androidMain lines | commonMain lines |
 |---|---|---:|---:|---:|---:|
 | Before P6.1 | `7c13732990` | 88 | 441 | 45 371 | 69 850 |
-| After P6.1 (`BasalFirstPolicyMath` only) | this branch | 88 | 442 | 45 255 | 69 968 |
+| After P6.1 (`BasalFirstPolicyMath` only) | `32ca1afae9` | 88 | 442 | 45 255 | 69 968 |
+| After P6.2 (rounding and neighbouring pure helpers) | this branch | 88 | 443 | 44 965 | 70 471 |
 
 P6.1 moves the pure object out of `DetermineBasalAIMI2.kt` (20 109 → 19 993 lines) into
-`commonMain/.../basal/BasalFirstPolicyMath.kt` (118 lines, package line included). The android
-file count stays 88. The diary sections below keep their historical counts.
+`commonMain/.../basal/BasalFirstPolicyMath.kt` (118 lines, package line included). P6.2 moves
+the rounding helpers (`Math.round` semantics, negative halves toward +∞) and the neighbouring
+pure functions into `commonMain/.../math/AimiTickPolicyMath.kt` (503 lines). The tick keeps
+one-line delegates. `DetermineBasalAIMI2.kt` is 19 703 lines. The android file count stays 88.
+The diary sections below keep their historical counts.
 
 Updated 2026-09-02, on `kmp-aimi-migration-study` at `1f6ca62fe8` (the second `kmp` merge).
 **Was** “read this first” until 2026-09-06. Keep it for the lot history only.
