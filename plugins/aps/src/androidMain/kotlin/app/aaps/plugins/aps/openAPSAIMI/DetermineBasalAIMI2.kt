@@ -202,6 +202,8 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.decideMealAdvisorOrReturn
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideT3cBrittleMode
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT3cBypassCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideT3cBrittleBypass
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiHarmoniaRampCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideHarmoniaProductionRamp
 import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
@@ -7446,159 +7448,80 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun planHarmoniaProductionBranch(
         b: AimiPostBasalEngineFinalizeBundle,
     ): HarmoniaProductionApplyPlan? {
-        val simulation = lastHarmoniaDecision ?: return null
-        val rbtSnapshot = lastRecursiveBeliefSnapshot
-        val rbtHarmonia = rbtSnapshot?.resolutions?.harmoniaBasalFirst
-        if (rbtSnapshot != null) {
-            if (rbtSnapshot.resolutions.basalFirstChannel != BasalFirstChannel.HARMONIA_PRODUCTION_BASAL_FIRST) {
-                val blocker = rbtHarmonia?.dominantBlocker?.lowercase(Locale.US)
-                    ?: "rbt_no_harmonia_channel"
-                return blockHarmoniaProduction(simulation, blocker)
-            }
-            if (rbtHarmonia == null) {
-                return blockHarmoniaProduction(simulation, "rbt_missing_harmonia_state")
-            }
-            if (!rbtHarmonia.eligible) {
-                val blocker = rbtHarmonia.dominantBlocker?.lowercase(Locale.US)
-                    ?: "rbt_harmonia_ineligible"
-                return blockHarmoniaProduction(simulation, blocker)
-            }
-        }
-
-        val sourceAction = simulation.action
-        if (!simulation.eligible) {
-            val blocker = simulation.blockers.firstOrNull()?.lowercase(Locale.US) ?: "simulation_ineligible"
-            return blockHarmoniaProduction(simulation, blocker)
-        }
-        if (
-            sourceAction != HarmoniaAction.BASAL_FIRST &&
-            sourceAction != HarmoniaAction.MEAL_SUPPORT &&
-            sourceAction != HarmoniaAction.PROTECTIVE_REDUCTION &&
-            sourceAction != HarmoniaAction.STABILIZE
-        ) {
-            return blockHarmoniaProduction(simulation, "no_production_action")
-        }
-        if (!simulation.targetBasalUph.isFinite()) {
-            return blockHarmoniaProduction(simulation, "invalid_basal_demand")
-        }
-        val effectiveAuthority = lastRecursiveAuthorityGateDecision?.effectiveAuthority
-        if (effectiveAuthority != null && effectiveAuthority != ReleaseAuthority.NONE) {
-            // Mirror RBT soft-meal basal exception: DIGESTION MEAL_SUPPORT may own basal under SOFT
-            // so production is not starved by smb_authority_active while SMB caps crush delivery.
-            val softMealBasalException =
-                effectiveAuthority == ReleaseAuthority.SOFT &&
-                    sourceAction == HarmoniaAction.MEAL_SUPPORT &&
-                    simulation.branch == "DIGESTION_ACTIVE"
-            if (!softMealBasalException) {
-                return blockHarmoniaProduction(simulation, "smb_authority_active")
-            }
-        }
-        if ((b.rT.units ?: 0.0) > 0.0 || (b.rT.insulinReq ?: 0.0) > 0.0) {
-            return blockHarmoniaProduction(simulation, "smb_already_requested")
-        }
-        if (basalChannelSafetyGuardsActive() && smbZeroedBySafetyThisTick()) {
-            basalChannelGuardBlockedHarmoniaCount++
-            return blockHarmoniaProduction(simulation, "smb_zeroed_by_safety")
-        }
-        if (exerciseInsulinLockoutActive) {
-            return blockHarmoniaProduction(simulation, "exercise_lockout")
-        }
-        if (lastPostHypoDeliveryAuthority.active) {
-            return blockHarmoniaProduction(simulation, "post_hypo_guard")
-        }
-        if (harmoniaCriticalMealConflict()) {
-            return blockHarmoniaProduction(simulation, "meal_conflict")
-        }
-        if (lastPhysiologicalTreeSnapshot?.trunk?.riskLevel == PhysiologicalRiskLevel.CRITICAL) {
-            return blockHarmoniaProduction(simulation, "critical_physio_risk")
-        }
-        if (resolveIobForGate() > maxIob) {
-            return blockHarmoniaProduction(simulation, "max_iob")
-        }
-        if (lastInsulinStackingEvaluation?.kind == InsulinStackingStance.Kind.SURVEILLANCE_IOB) {
-            return blockHarmoniaProduction(simulation, "stacking_cap")
-        }
-
-        val hypoGuard = HypoThresholdMath.computeHypoThreshold(
-            minBg = b.profile.min_bg,
-            lgsThreshold = b.profile.lgsThreshold,
-        )
-        val mealContext = MealSafetyContext(
-            mealModeActive = mealTime || lunchTime || dinnerTime || snackTime || highCarbTime || bfastTime,
-            manualBolusAgeMin = internalLastSmbMillis.takeIf { it > 0L }?.let { (dateUtil.now() - it) / 60000.0 },
-            inferredMealSignal = inferredMealSafetyIntent(),
-        )
-        val (hypoPredForLgs, hypoEventualForLgs) = sanitizedHypoGuardPredictedEventual(
+        val ramp = decideHarmoniaProductionRamp(
             rT = b.rT,
-            predictedBg = predictedBg.toDouble(),
-            eventualBg = eventualBG,
-        )
-        val (minPredCurve, ignoreMinPredCurve) = resolveLgsMinPredictedCurve(b.rT)
-        val lgsReason = HypoLgsBlockReason.detect(
-            bgNow = bg,
-            predicted = hypoPredForLgs,
-            eventual = hypoEventualForLgs,
-            minPredictedCurve = minPredCurve,
-            hypo = hypoGuard,
-            delta = delta.toDouble(),
-            mealContext = mealContext,
-            ignoreMinPredictedCurve = ignoreMinPredCurve,
-        )
-        if (lgsReason != null) {
-            return blockHarmoniaProduction(
-                simulation,
-                "final_hypo_${lgsReason.name.lowercase(Locale.US)}",
-            )
-        }
-
-        val profileMaxBasal = b.profile.max_basal.coerceAtLeast(b.profile.current_basal)
-        val envMaxBasal = simulation.environment.maxBasalUph.takeIf { it.isFinite() && it > 0.0 }
-            ?: profileMaxBasal
-        val hardCap = minOf(envMaxBasal, profileMaxBasal).coerceAtLeast(0.0)
-        val requestedRate = simulation.targetBasalUph.coerceIn(0.0, hardCap)
-        val previousRate = if (b.ctx.currentTemp.duration > 0) b.ctx.currentTemp.rate else b.profile.current_basal
-        val fragility = lastPatientState?.eventMemory?.correctionFragilityScore ?: 0.0
-        val maxStepUp = when {
-            fragility >= 0.68 -> max(0.15, previousRate * 0.10)
-            fragility >= 0.55 -> max(0.20, previousRate * 0.15)
-            else -> max(0.30, previousRate * 0.20)
-        }
-        val rampedRate = if (requestedRate > previousRate) {
-            min(requestedRate, previousRate + maxStepUp)
-        } else {
-            requestedRate
-        }
-        val finalRate = capBasalRateForCorrectionAggression(
-            requestedRateUph = rampedRate,
-            profileBasalUph = b.profile.current_basal,
-            source = "HARMONIA_PRODUCTION_BASAL_FIRST",
-        ).coerceIn(0.0, hardCap)
-        if (finalRate <= 0.0) {
-            return blockHarmoniaProduction(simulation, "no_basal_demand")
-        }
-
-        recordHarmoniaProductionDecision(
-            mode = HarmoniaProductionMode.READY,
-            selectedForProduction = true,
-            requestedRateUph = simulation.targetBasalUph,
-            boundedRateUph = finalRate,
-            appliedRateUph = null,
-            appliedDurationMin = null,
-            runtimeBlocker = null,
-            safetyBlockers = emptyList(),
-            sourceAction = sourceAction,
-            branch = simulation.branch,
-            reason = "production_basal_first_ready",
-        )
-        consoleLog.add(
-            "🌿 HARMONIA_PROD: ready action=${sourceAction.name} rate=${aimiFmt2(finalRate)}U/h " +
-                "requested=${aimiFmt2(simulation.targetBasalUph)}U/h",
-        )
+            profileMinBg = b.profile.min_bg,
+            profileMaxBasal = b.profile.max_basal,
+            profileCurrentBasal = b.profile.current_basal,
+            profileLgsThreshold = b.profile.lgsThreshold,
+            currentTempDuration = b.ctx.currentTemp.duration,
+            currentTempRate = b.ctx.currentTemp.rate,
+            consoleLog = consoleLog,
+            calls = object : AimiHarmoniaRampCalls {
+                override fun harmoniaDecision() = lastHarmoniaDecision
+                override fun beliefSnapshot() = lastRecursiveBeliefSnapshot
+                override fun block(simulation: HarmoniaDecision, blocker: String) {
+                    blockHarmoniaProduction(simulation, blocker)
+                }
+                override fun effectiveAuthority() = lastRecursiveAuthorityGateDecision?.effectiveAuthority
+                override fun basalChannelGuardsActive() = basalChannelSafetyGuardsActive()
+                override fun smbZeroedBySafety() = smbZeroedBySafetyThisTick()
+                override fun noteBasalChannelBlockedHarmonia() {
+                    basalChannelGuardBlockedHarmoniaCount++
+                }
+                override fun exerciseLockout() = exerciseInsulinLockoutActive
+                override fun postHypoGuardActive() = lastPostHypoDeliveryAuthority.active
+                override fun criticalMealConflict() = harmoniaCriticalMealConflict()
+                override fun physioRisk() = lastPhysiologicalTreeSnapshot?.trunk?.riskLevel
+                override fun iobForGate() = resolveIobForGate()
+                override fun maxIob() = this@DetermineBasalaimiSMB2.maxIob
+                override fun stackingKind() = lastInsulinStackingEvaluation?.kind
+                override fun mealModeActive() =
+                    mealTime || lunchTime || dinnerTime || snackTime || highCarbTime || bfastTime
+                override fun manualBolusAgeMin() =
+                    internalLastSmbMillis.takeIf { it > 0L }?.let { (dateUtil.now() - it) / 60000.0 }
+                override fun inferredMealIntent() = inferredMealSafetyIntent()
+                override fun predictedBg() = this@DetermineBasalaimiSMB2.predictedBg
+                override fun eventualBg() = this@DetermineBasalaimiSMB2.eventualBG
+                override fun sanitizedHypoTerminals(predictedBg: Double, eventualBg: Double) =
+                    sanitizedHypoGuardPredictedEventual(b.rT, predictedBg, eventualBg)
+                override fun lgsMinPredictedCurve(rT: RT) = resolveLgsMinPredictedCurve(rT)
+                override fun bg() = this@DetermineBasalaimiSMB2.bg
+                override fun delta() = this@DetermineBasalaimiSMB2.delta
+                override fun correctionFragility() =
+                    lastPatientState?.eventMemory?.correctionFragilityScore ?: 0.0
+                override fun capForCorrectionAggression(
+                    requestedRateUph: Double,
+                    profileBasalUph: Double,
+                    source: String,
+                ) = capBasalRateForCorrectionAggression(requestedRateUph, profileBasalUph, source)
+                override fun recordReady(
+                    requestedRateUph: Double,
+                    boundedRateUph: Double,
+                    sourceAction: HarmoniaAction,
+                    branch: String,
+                ) {
+                    recordHarmoniaProductionDecision(
+                        mode = HarmoniaProductionMode.READY,
+                        selectedForProduction = true,
+                        requestedRateUph = requestedRateUph,
+                        boundedRateUph = boundedRateUph,
+                        appliedRateUph = null,
+                        appliedDurationMin = null,
+                        runtimeBlocker = null,
+                        safetyBlockers = emptyList(),
+                        sourceAction = sourceAction,
+                        branch = branch,
+                        reason = "production_basal_first_ready",
+                    )
+                }
+            },
+        ) ?: return null
         return HarmoniaProductionApplyPlan(
-            rateUph = finalRate,
-            requestedRateUph = simulation.targetBasalUph,
-            sourceAction = sourceAction,
-            branch = simulation.branch,
+            rateUph = ramp.rateUph,
+            requestedRateUph = ramp.requestedRateUph,
+            sourceAction = ramp.sourceAction,
+            branch = ramp.branch,
         )
     }
 
