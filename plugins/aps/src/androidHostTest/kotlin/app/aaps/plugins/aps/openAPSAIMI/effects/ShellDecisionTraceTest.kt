@@ -95,6 +95,8 @@ import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryGuard
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryMetrics
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryModulation
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryType
+import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryWarning
+import app.aaps.plugins.aps.openAPSAIMI.trajectory.WarningSeverity
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import app.aaps.plugins.aps.openAPSAIMI.validation.PumpCapabilityValidator
@@ -1356,6 +1358,50 @@ class ShellDecisionTraceTest {
         val maxSmb = getField(tick, "maxSMB") as Double
         assertEquals(trace, 1.0, maxSmb, 0.001)
         assertEquals(TRAJECTORY_SMB_TRACE, trace)
+    }
+
+    @Test
+    fun trajectoryNotificationFailureStaysVisible() {
+        val prefs = recordingPreferences(doubles = emptyMap(), bools = mapOf(BooleanKey.OApsAIMITrajectoryGuardEnabled to true))
+        setField(tick, "preferences", prefs)
+        setField(tick, "maxSMB", 2.0)
+        setField(tick, "maxSMBHB", 2.0)
+        holdRefresh("effectiveProfileRefreshInFlight")
+        holdRefresh("trajectoryHistoryRefreshInFlight")
+        val notifications = mock(NotificationManager::class.java, Answer { inv ->
+            if (inv.method.name == "post") throw RuntimeException("boom") else null
+        })
+        setField(tick, "notificationManager", notifications)
+        val analysis = TrajectoryAnalysis(
+            classification = TrajectoryType.STABLE_ORBIT,
+            metrics = TrajectoryMetrics(0.0, 0.0, 0.0, 0.0, 0.0),
+            modulation = TrajectoryModulation(0.50, 1.0, 0.5, 1.0, 1.0, "damped"),
+            warnings = listOf(
+                TrajectoryWarning(
+                    severity = WarningSeverity.CRITICAL,
+                    type = "critical",
+                    message = "spiral",
+                    suggestedAction = "look",
+                ),
+            ),
+            stableOrbitDistance = 0.0,
+            predictedConvergenceTime = null,
+        )
+        val guard = mock(TrajectoryGuard::class.java)
+        whenever(guard.analyzeTrajectory(any(), any())).thenReturn(analysis)
+        setField(tick, "trajectoryGuard", guard)
+        val profile = profileStub()
+        val trace = capture {
+            invokeNamed(
+                "applyTrajectoryAnalysis",
+                listOf(
+                    now, 120.0, 0.0, 0.0, 0.0, 1.0f, InsulinActionState.default(),
+                    30.0, 0.0f, 100.0, profile, RT(runningDynamicIsf = false), mock(UiInteraction::class.java), 1.0,
+                ),
+            )
+        }
+        assertEquals(1.0, getField(tick, "maxSMB") as Double, 0.001)
+        assertTrue(trace.contains("Trajectory notification failed (RuntimeException): boom — post skipped"))
     }
 
     @Test
