@@ -121,19 +121,37 @@ Pas purs, malgré l’air de l’être : `costFunction` (lit la cinétique du ti
 
 `Calendar.getInstance()` (heure, minute, seconde, jour de semaine) et `LocalTime.now().hour` passent par `aimiCivilClock` / `aimiLocalHour`. Le bloc circadien capture un seul `aimiWallClockMs()`. `SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)` devient `aimiCsvTimestamp`, et `"yyyy-MM-dd HH:mm"` devient `aimiCsvTimestampMinute`. La fenêtre 00:05–00:10 et le midi de la veille (`LocalDate` / `ZoneId`) passent par le même instant.
 
-Restent android, parce qu’un remplacement changerait un texte visible : `SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())` (un calendrier bouddhiste écrit l’année 2569, pas 2026) et les deux `dateUtil.dateAndTimeString(...).format(DateTimeFormatter)`, où le formateur n’est pas appliqué — `String.format` ignore l’argument en trop, et la colonne CSV reste la date localisée (12 h possible). `java.util.Date` des logs debug n’est pas touché.
+Deux sites d’horloge restent dans le tick, **identiques à la ref, et ne sont pas corrigés par le portage**. Ce sont des bugs de la ref. L’utilisateur tranchera plus tard.
+
+1. Nom de sauvegarde CSV, `backupFileFor` : `SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())`. `Locale.US` serait grégorien. `Locale.getDefault()` suit le calendrier de la locale. Mesuré pour Bangkok `2026-10-04 12:34:56Z` : un `Calendar` thaï (`th-TH`) écrit l’année 2569, donc `25691004_193456`, alors que l’année grégorienne est 2026. Le portage garde `Locale.getDefault()`.
+2. Colonne date des CSV, `logDataMLToCsv` et `logDataToCsv` : `dateUtil.dateAndTimeString(dateUtil.now()).format(DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm"))`. `dateAndTimeString` renvoie déjà une `String` (date courte localisée + heure). `String.format` ignore l’argument `DateTimeFormatter` en trop, donc le motif `MM/dd/yyyy HH:mm` n’est pas appliqué. La colonne reste la date localisée, y compris en 12 h quand l’appareil n’est pas en 24 h. Remplacer par un motif US fixe changerait la colonne. Le portage garde l’appel tel quel.
+
+`java.util.Date` des logs debug n’est pas touché.
 
 Un test JVM compare l’heure, la minute, la seconde, le jour `Calendar` (y compris locale `th-TH`), les deux tampons et le midi de la veille à `java.time` sur UTC, Prague, New York, Bangkok et Auckland, y compris les transitions d’heure d’été.
 
-### Tranche 5 — caches async
+### Tranche 5 — hypo, SMB finalize, legacy cap (faite sur `cursor/p65-tick-smb-cap-math-da40`)
+
+Blocs entiers, entrées et sorties immuables, le tick android ne garde que les lectures (préférences, observateur d’insuline, thyroïde, trace de binding, export).
+
+- `AimiHypoSmbSafety` : ajustement de sécurité, DIA, hystérésis hypo, intervalle SMB, sport, ajustements spécifiques, plancher SMB, agressivité repas, conditions critiques, délai, effet insuline, tendance, pic dynamique.
+- `AimiSmbFinalizeMath` : chaîne de `finalizeAndCapSMB` (priorité repas, réfractaire, absorption, prédiction manquante, throttle, surveillance IOB, `capSmbDose`, tapis rouge, plancher HTR, plafond de contexte, effort, plafond de montée).
+- `AimiLegacySmbCapMath` : le relief MaxIOB et le tapis rouge de `runPkpdGuardEndoDampenRedCarpetAndCapSmb`. Ce n’est pas la même formule que la finalize (seuil `<=`, MaxIOB de débridage). Les deux sont gardées telles quelles.
+- `AimiPostHypoClassifier` : fenêtre 45 min / repas 30 min. `targetBg` est le membre du tick, passé en argument. La confiance UAM reste une lambda lue seulement dans la branche de récupération.
+
+Quirk de la ref, conservé : `calculateInsulinEffect` passe les pas du membre `recentSteps180Minutes` au facteur de délai, et le paramètre `recentSteps180Min` seulement au facteur d’activité.
+
+Le `%2f`.format du log de throttle PKPD reste un lambda fourni par le tick : `String.format` suit la locale de l’appareil. Les deux sites d’horloge de la tranche 4 ne sont pas touchés.
+
+### Tranche 6 — caches async
 
 `AtomicBoolean` / `AtomicReference`, `determineIoScope` sur `Dispatchers.IO`, les `refresh*Async`. Seam : `AapsLock` + `aapsIoDispatcher`. Ces fonctions lisent `PersistenceLayer`. Elles ne bougent pas avec le calcul.
 
-### Tranche 6 — fichiers CSV
+### Tranche 7 — fichiers CSV
 
 `appendCsvToFile`, `RandomAccessFile`, `storageHelper.getAimiFile` qui renvoie encore un `java.io.File`. `AimiStorage` couvre le journal JSONL, pas encore cette lecture. Pas de dose.
 
-### Tranche 7 — orchestrateur
+### Tranche 8 — orchestrateur
 
 `determine_basal` et les étapes `run*`. Reste `androidMain` : constructeur Metro, notifications, TFLite/SMB trainer, 238 lectures de préférences. `OpenAPSAIMIPlugin.kt` (2 602 lignes) est un lot à part. Le moteur `:plugins:aimi-engine` reste `Hold` tant qu’un `evaluate()` de replay n’existe pas.
 
