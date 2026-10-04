@@ -39,6 +39,7 @@ import app.aaps.plugins.aps.openAPSAIMI.autodrive.safety.AutoDriveGater
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController
 import app.aaps.plugins.aps.openAPSAIMI.learning.BasalNeuralLearner
+import app.aaps.plugins.aps.openAPSAIMI.model.PumpCaps
 import app.aaps.plugins.aps.openAPSAIMI.effects.RbtLiveCommitResult
 import app.aaps.plugins.aps.openAPSAIMI.patient.GlobalPhysiologicalState
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaAction
@@ -1405,6 +1406,66 @@ class ShellDecisionTraceTest {
     }
 
     @Test
+    fun mealAdvisorOneShotRaisesTheSmbCeiling() {
+        val prefs = recordingPreferences(
+            doubles = emptyMap(),
+            bools = mapOf(BooleanKey.OApsAIMIMealAdvisorTrigger to true),
+        )
+        setField(tick, "preferences", prefs)
+        setField(tick, "maxSMB", 0.5)
+        setField(tick, "maxSMBHB", 0.5)
+        setField(tick, "predictedSMB", 0.0f)
+        val profile = profileStub()
+        val rT = RT(runningDynamicIsf = false, insulinReq = 1.5)
+        val glucose = GlucoseStatusAIMI(glucose = 180.0, delta = 2.0, shortAvgDelta = 1.0, longAvgDelta = 1.0, date = now, combinedDelta = 2.0)
+        val trace = capture {
+            invokeNamed(
+                "runSmbDecisionLogAdvisorOneShotAndExecuteInstruction",
+                listOf(
+                    tickContext(profile, 180.0),
+                    profile,
+                    rT,
+                    glucose,
+                    180.0,
+                    2.0f,
+                    1.0f,
+                    1.0f,
+                    180.0f,
+                    180.0,
+                    50.0,
+                    75.0,
+                    50.0f,
+                    100.0,
+                    1.0f,
+                    1.0,
+                    false,
+                    12,
+                    false, false, false, false, false, false, false,
+                    false,
+                    0L,
+                    70.0,
+                    30,
+                    5,
+                    PumpCaps(0.05, 0.05, 30, 3.0, 3.0),
+                    false,
+                    0.0f,
+                    null,
+                    1.0f,
+                    0.0f,
+                    1.0,
+                    false,
+                    false,
+                    2.0f,
+                    true,
+                    180.0,
+                ),
+            )
+        }
+        assertEquals(30.0, getField(tick, "maxSMB") as Double, 0.001)
+        assertEquals(SMB_ONESHOT_TRACE, trace)
+    }
+
+    @Test
     fun legacyBrittleBypassSetsThePiBasal() {
         val prefs = recordingPreferences(
             doubles = mapOf(
@@ -2489,6 +2550,14 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
             READ key=BooleanKey.OApsAIMIPeakGovernorEnabled value=false
             READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
+        """.trimIndent()
+
+        private val SMB_ONESHOT_TRACE = """
+            READ key=BooleanKey.OApsAIMIMealAdvisorTrigger value=true
+            WRITE key=BooleanKey.OApsAIMIMealAdvisorTrigger value=false
+            LOG 🚀 MEAL ADVISOR ONE-SHOT: Forcing Aggression. MaxSMB raised to 30U.
+            LOG SMB Decision: BG=180, Delta=2.0, IOB=1.00, HasPred=true, HyperKicker=true, UAM=0.00, Proposed=0.00
+            LOG AUTODRIVE_V3_AUTHORITATIVE: SMB 1.50 U from V3 (legacy blender skipped)
         """.trimIndent()
 
         private val TRAJECTORY_SMB_TRACE = """
