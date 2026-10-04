@@ -1567,6 +1567,88 @@ class ShellDecisionTraceTest {
         assertTrue("rate=${rT.rate}\n$trace", trace.contains("T3C physioTree failed (RuntimeException): boom — deploy skipped"))
     }
 
+    @Test
+    fun rbtLiveTickLiftsTheV3Smb() {
+        val prefs = recordingPreferences(
+            doubles = mapOf(DoubleKey.OApsAIMIHighBg to 140.0),
+            bools = mapOf(
+                BooleanKey.OApsAIMIRecursiveBeliefShadow to true,
+                BooleanKey.OApsAIMIautoDriveActive to true,
+                BooleanKey.OApsAIMIHyperTrajectoryRelease to true,
+            ),
+        )
+        setField(tick, "preferences", prefs)
+        setField(tick, "bg", 226.0)
+        setField(tick, "delta", 20.0f)
+        setField(tick, "shortAvgDelta", 18.0f)
+        setField(tick, "targetBg", 100.0f)
+        setField(tick, "iob", 1.0f)
+        setField(tick, "maxIob", 10.0)
+        setField(tick, "maxSMB", 2.0)
+        setField(tick, "maxSMBHB", 2.0)
+        setField(tick, "eventualBG", 401.0)
+        setField(tick, "hourOfDay", 12)
+        setField(tick, "sleepTime", false)
+        val curves = AdvancedPredictionCurves(
+            iob = listOf(226.0, 200.0),
+            cob = listOf(226.0),
+            uam = listOf(226.0),
+            zt = listOf(226.0),
+            hybrid = listOf(226.0, 200.0),
+        )
+        val floor = ScenarioProjectionCurve(
+            kind = ScenarioProjectionKind.CLINICAL_FLOOR,
+            pointsMgdl = listOf(226, 147),
+            terminalMgdl = 147.0,
+            pathMinMgdl = 147.0,
+            pathMinHitFloor = false,
+        )
+        setField(
+            tick,
+            "lastScenarioProjection",
+            ScenarioProjectionPair(
+                clinicalFloor = floor,
+                scenarioBest = floor.copy(
+                    kind = ScenarioProjectionKind.SCENARIO_BEST,
+                    terminalMgdl = 401.0,
+                    pointsMgdl = listOf(226, 401),
+                ),
+                contributors = emptyList(),
+                cobPointsMgdl = listOf(226),
+                ztPointsMgdl = listOf(226),
+            ),
+        )
+        setField(tick, "lastAdvancedPredictionCurves", curves)
+        val profile = profileStub()
+        val rT = RT(runningDynamicIsf = false)
+        var returned: Any? = null
+        val trace = capture {
+            returned = invokeNamed(
+                "resolveAndWireRbtLiveTick",
+                listOf(
+                    tickContext(profile, 226.0),
+                    profile,
+                    rT,
+                    20.0f,
+                    55.0,
+                    0.40,
+                    0,
+                    0,
+                    false,
+                    null,
+                    null,
+                ),
+            )
+        }.replace(Regex("(?<![A-Za-z])ts=\\d+"), "ts=<clock>")
+        val commit = returned as RbtLiveCommitResult
+        assertEquals(0.40, commit.effectiveHtr.v3SmbBeforeU, 1e-9)
+        assertEquals(2.0, commit.effectiveHtr.v3SmbAfterU, 1e-9)
+        assertEquals(2.0, commit.effectiveHtr.smbFloorU, 1e-9)
+        assertEquals(true, commit.effectiveHtr.active)
+        assertEquals(false, commit.rbtAuthority)
+        assertEquals(RBT_LIVE_TICK_TRACE, trace)
+    }
+
     private fun invokeNamed(name: String, args: List<Any?>): Any? {
         val method = tick.javaClass.declaredMethods.first {
             it.name == name && it.parameterCount == args.size
@@ -2603,6 +2685,71 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
             READ key=BooleanKey.OApsAIMIPeakGovernorEnabled value=false
             READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
+        """.trimIndent()
+
+        private val RBT_LIVE_TICK_TRACE = """
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefShadow value=true
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefAuthority value=false
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefWavelet value=false
+            READ key=BooleanKey.OApsAIMIMealHyperBypassEnabled value=false
+            READ key=BooleanKey.OApsAIMITreeMealRiseFrontLoad value=false
+            READ key=BooleanKey.OApsAIMIautoDriveActive value=true
+            READ key=BooleanKey.OApsAIMIHyperTrajectoryRelease value=true
+            READ key=BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive value=false
+            READ key=DoubleKey.OApsAIMIHyperEstablishedDevMgdl value=0.00
+            READ key=DoubleKey.OApsAIMIHyperDeepDevMgdl value=0.00
+            READ key=DoubleKey.OApsAIMIHighBg value=140.00
+            READ key=DoubleKey.OApsAIMIHighBg value=140.00
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefShadow value=true
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefAuthority value=false
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefWavelet value=false
+            READ key=BooleanKey.OApsAIMIMealHyperBypassEnabled value=false
+            READ key=BooleanKey.OApsAIMITreeMealRiseFrontLoad value=false
+            READ key=DoubleKey.OApsAIMIHighBg value=140.00
+            READ key=DoubleKey.OApsAIMIHyperEstablishedDevMgdl value=0.00
+            READ key=DoubleKey.OApsAIMIHyperDeepDevMgdl value=0.00
+            READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+            READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+            READ key=BooleanKey.OApsAIMIIobSurveillanceGuard value=false
+            READ key=DoubleKey.OApsAIMIT3cAnticipationStrength value=0.00
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
+            READ key=IntKey.OApsAIMINightGrowthAgeYears value=0
+            READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
+            READ key=StringKey.OApsAIMINightGrowthStart value=
+            READ key=StringKey.OApsAIMINightGrowthEnd value=
+            READ key=DoubleKey.OApsAIMINightGrowthMaxIobExtra value=0.00
+            READ key=BooleanKey.AimiEndometriosisEnable value=false
+            LOG 😴 SLEEP_LIVE: wearable steps15=0 hr=72/rhr=60 conf=0.57 conf=0.57
+            READ key=DoubleKey.OApsAIMISmbTailDamping value=0.00
+            READ key=StringKey.AimiTuningContextSelection value=
+            READ key=BooleanKey.OApsAIMIContextEnabled value=false
+            READ key=DoubleKey.OApsAIMIHighBg value=140.00
+            READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.00
+            READ key=DoubleKey.OApsAIMIMaxSMB value=0.00
+            READ key=BooleanKey.OApsAIMISensorConfidenceCgmFirst value=false
+            READ key=BooleanKey.OApsAIMIEffortActivityProtection value=false
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
+            READ key=StringKey.AimiTuningContextSelection value=
+            READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+            READ key=DoubleKey.autodriveMaxBasal value=0.00
+            LOG TREE_DEPLOYED trunk=SENSOR_UNCERTAIN conf=0.90 risk=CRITICAL kinetics=NO_STAGE
+            LOG Tree: sensor uncertain | conf 90% | risk critical | sensor uncertain
+            LOG MEAL_CERTAINTY level=NONE tree=NONE rise=OK terminals=OK effortVeto=false
+            LOG Harmonia sim: blocked SENSOR_UNCERTAIN | sensor_uncertain,critical_risk
+            LOG 🫀 PATIENT_MODE: mode=ABSORPTION_UNCERTAIN conf=0.95 strat=PKPD_REASSESS mealBias=0.30 protect=0.86 reasons=CAUSAL_ABSORPTION_UNCERTAIN
+            READ key=DoubleKey.OApsAIMIHighBg value=140.00
+            READ key=DoubleKey.OApsAIMIweight value=0.00
+            LOG 🌳 RBT: auth=NONE smb=0.40U tbr×1.00 paradoxes=0 τ*=60 LG=FULL g=1.00shadow
+            LOG 🚀 POST_HYPO_AGGRESSIVE_RISE_EXIT: bg=226 ≥ target+30 (130) Δ=20.0 > 15 → act normally
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefShadow value=true
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefAuthority value=false
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefWavelet value=false
+            READ key=BooleanKey.OApsAIMIMealHyperBypassEnabled value=false
+            READ key=BooleanKey.OApsAIMITreeMealRiseFrontLoad value=false
+            LOG 🔌 RBT_WIRE: hypo=FULL meal=NORMAL auth=NONE chaos=0.10
+            LOG 🪜 RBT_GATE: req=NONE eff=NONE score=0.21 blend=0.00 reasons=PREF_OFF
         """.trimIndent()
 
         private val SMB_ONESHOT_TRACE = """
