@@ -353,6 +353,48 @@ class ShellDecisionTraceTest {
     }
 
     @Test
+    fun finalizeCapCutsAProposedSmbDownToMaxSmb() {
+        val prefs = recordingPreferences(emptyMap())
+        setField(tick, "preferences", prefs)
+        setField(tick, "bg", 180.0)
+        setField(tick, "delta", 2.0f)
+        setField(tick, "shortAvgDelta", 1.0f)
+        setField(tick, "targetBg", 100.0f)
+        setField(tick, "iob", 1.0f)
+        setField(tick, "maxIob", 10.0)
+        setField(tick, "maxSMB", 0.5)
+        setField(tick, "maxSMBHB", 0.5)
+        setField(tick, "eventualBG", 180.0)
+        setField(tick, "lastBolusAgeMinutes", 999.0)
+        val rT = RT(runningDynamicIsf = false)
+        val trace = capture {
+            invokeFinalize(rT, proposedUnits = 3.0)
+        }.replace(Regex("(?<![A-Za-z])ts=\\d+"), "ts=<clock>")
+        assertEquals(0.5, rT.units ?: -1.0, 0.0)
+        assertEquals(FINALIZE_CAP_TRACE, trace)
+    }
+
+    private fun invokeFinalize(rT: RT, proposedUnits: Double) {
+        val method = tick.javaClass.declaredMethods.first {
+            it.name == "finalizeAndCapSMB" && it.parameterCount == 10
+        }
+        method.isAccessible = true
+        method.invoke(
+            tick,
+            rT,
+            proposedUnits,
+            "micro",
+            MealData(mealCOB = 0.0),
+            70.0,
+            false,
+            "GlobalAIMI",
+            false,
+            0.0,
+            false,
+        )
+    }
+
+    @Test
     fun engagedHypoWithMealContextRecordsTheEngineCommand() {
         val (trace, applied) = autodriveTrace(
             glucose = 54.0,
@@ -744,6 +786,8 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val FINALIZE_CAP_TRACE = "PENDING_FINALIZE_CAP"
+
         private val MEAL_ADVISOR_TRACE = """
 READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=40.00
 READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=<clock>
