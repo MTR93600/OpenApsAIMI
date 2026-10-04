@@ -236,7 +236,7 @@ Vert :
 
 Mesuré sur `DetermineBasalAIMI2.kt` après le déplacement de la tête T3C : **17 518 lignes**, **325 fonctions**. Le corps de `executeT3cBrittleMode` est `decideT3cBrittleMode` en `commonMain`. La coquille fait 88 lignes : elle ne calcule plus, elle branche les ports.
 
-Déjà décidées dans `commonMain`, coquille réduite : `applyLegacyMealModes` (47), `buildRbtExtendedSignals` (110), `runAutodriveV3MultiVariableBranch` (166), `executeT3cBrittleMode` (88), `finalizeAndCapSMB` (174), `runRecursiveBeliefResolve`.
+Déjà décidées dans `commonMain`, coquille réduite : `applyLegacyMealModes` (47), `buildRbtExtendedSignals` (110), `runAutodriveV3MultiVariableBranch` (166), `executeT3cBrittleMode` (88), `finalizeAndCapSMB` (174), `runRecursiveBeliefResolve`, `resolveMealHyperBasalBoostOutcome`.
 
 Hors de cette série, par consigne : `setTempBasal` (357), `runDetermineBasalTickInner` (884), les learners (`applyBasalNeuralLearningAndTraining` 66, `logLearnersHealth` 54, `neuralnetwork5` 51, les `refresh*Async`), l’export (`runAimiSnapshotMedicalJsonAndHormonitorExportStage` 504) et `toMedicalJson` (754).
 
