@@ -41,6 +41,8 @@ import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEffectProbe
+import app.aaps.plugins.aps.openAPSAIMI.effects.cfrdHrInflammationBoostOf
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalHistoryUtils
@@ -3407,7 +3409,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return rT
     }
 
-    private data class AutodriveV3BranchResult(
+    internal data class AutodriveV3BranchResult(
         /** V3 or HTR delivered any pump command (TBR and/or SMB) this tick. */
         val appliedAction: Boolean,
         val skipLegacySmbBlender: Boolean,
@@ -4075,7 +4077,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return floorTerminal to bestTerminal
     }
 
-    private fun buildRbtExtendedSignals(
+    internal fun buildRbtExtendedSignals(
         rT: RT,
         profile: OapsProfileAimi,
         htr: HyperTrajectoryReleaseResult,
@@ -5319,6 +5321,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      */
     private fun applySmbUnits(rT: RT, requestedU: Double, owner: String) {
         val requested = if (requestedU.isFinite()) requestedU.coerceAtLeast(0.0) else 0.0
+        AimiEffectProbe.noteSmb(requested, owner)
         val current = rT.units ?: 0.0
         if (!smbTerminalSealed || requested <= current + 1e-9) {
             rT.units = requested
@@ -5457,7 +5460,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         stageDisengagedTrainingRow(ctx, observed)
     }
 
-    private fun runAutodriveV3MultiVariableBranch(
+    internal fun runAutodriveV3MultiVariableBranch(
         ctx: AimiTickContext,
         profile: OapsProfileAimi,
         rT: RT,
@@ -12039,6 +12042,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             if (nowMs - firedAtMs < LEGACY_PREBOLUS_CONFIRM_DELAY_MS) return false
             return lastSmbConfirmedMs == null || lastSmbConfirmedMs < firedAtMs
         }
+
+        /** Clears the static prebolus latch so a trace test starts from an empty memory. */
+        internal fun resetLegacyPrebolusMemoryForTrace() {
+            legacyPrebolusFiredAtMem.clear()
+            legacyPrebolusMissAlertedAtMem.clear()
+            lastSmbTimestampMem = 0L
+            lastLegacyPrebolusTimestampMem = 0L
+            lastCarryRetryFireMillis = 0L
+            pendingLegacyPrebolusUnitMem = 0f
+            pendingLegacyPrebolusExpiryMem = 0L
+        }
         /** Glycémie (mg/dL) au-dessus de laquelle la basale peut corriger malgré sport / contexte activité (SMB toujours off). */
         const val EXERCISE_BASAL_RESUME_BG_MGDL: Double = 220.0
 
@@ -13090,6 +13104,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         allowPartialSafetyTbr: Boolean = false,
         mealContext: MealSafetyContext? = null,
     ): RT {
+        if (AimiEffectProbe.captureSetTbr(
+                rateUph = _rate,
+                durationMin = duration,
+                overrideSafetyLimits = overrideSafetyLimits,
+                forceExact = forceExact,
+                adaptiveMultiplier = adaptiveMultiplier,
+            )
+        ) {
+            return rT
+        }
         // Upstream parity (`DetermineBasalSMB.setTempBasal`, non-finite hardening merged 2026-08-08):
         // a non-finite rate slips through every clamp below, because every comparison with NaN is
         // false, and then lands in rT.rate, which DetermineBasalResult turns into a real pump command.
@@ -15779,7 +15803,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
     }
 
-    private fun applyLegacyMealModes(profile: OapsProfileAimi, rT: RT, currenttemp: CurrentTemp, modeTbrLimit: Double): RT? {
+    internal fun applyLegacyMealModes(profile: OapsProfileAimi, rT: RT, currenttemp: CurrentTemp, modeTbrLimit: Double): RT? {
         fun rbf(key: DoubleKey) = preferences.get(key)
 
         // 🔒 ONE-SHOT LATCH PAR TAG (remplace l'ancien lockout temps + le test de valeur lastBolusSMBUnit).
@@ -18273,19 +18297,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // HR-based inflammation signal: elevated resting-corrected HR indicates
         // active pulmonary exacerbation / systemic inflammation → insulin resistance.
         val cfrdHrInflammationBoost: Double = if (cfrdMode) {
-            runCatching {
-                val snap = physioAdapter.getLatestSnapshot()
-                val hrNow = snap.hrNow
-                val rhr   = snap.rhrResting
-                if (hrNow > 0 && rhr > 0) {
-                    when ((hrNow - rhr).coerceAtLeast(0)) {
-                        in 25..Int.MAX_VALUE -> 0.35   // strong inflammation
-                        in 15..24            -> 0.20   // moderate
-                        in 8..14             -> 0.10   // mild
-                        else                 -> 0.0
-                    }
-                } else 0.0
-            }.getOrDefault(0.0)
+            val snapshot = try {
+                physioAdapter.getLatestSnapshot()
+            } catch (e: Exception) {
+                consoleLog.add(
+                    "🫁 T3c CFRD: hr snapshot failed (${e::class.simpleName ?: "Exception"}) — boost 0.00",
+                )
+                null
+            }
+            if (snapshot == null) 0.0 else cfrdHrInflammationBoostOf(snapshot.hrNow, snapshot.rhrResting)
         } else 0.0
 
         if (cfrdMode) {
