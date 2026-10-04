@@ -439,6 +439,52 @@ class ShellDecisionTraceTest {
         assertEquals(RBT_RESOLVE_TRACE, trace)
     }
 
+    @Test
+    fun mealHyperFastingForcesBasalFromThePositiveDelta() {
+        val prefs = recordingPreferences(emptyMap())
+        setField(tick, "preferences", prefs)
+        setField(tick, "fastingTime", true)
+        setField(tick, "bg", 110.0)
+        setField(tick, "delta", 2.0f)
+        setField(tick, "targetBg", 100.0f)
+        setField(tick, "cob", 0.0f)
+        val profile = profileStub()
+        val ctx = tickContext(profile, 110.0)
+        val rT = RT(runningDynamicIsf = false)
+        var returned: Any? = null
+        val trace = capture {
+            returned = invokeMealHyper(ctx, profile, rT, targetBg = 100.0)
+        }
+        val rate = returned!!.javaClass.getDeclaredField("rate").apply { isAccessible = true }.get(returned) as Double?
+        assertEquals(2.0, rate ?: -1.0, 1e-6)
+        assertEquals("0m@1.00 AI Force basal because fastingTime", rT.reason.toString())
+        assertEquals(MEAL_HYPER_FASTING_TRACE, trace)
+    }
+
+    private fun invokeMealHyper(
+        ctx: AimiTickContext,
+        profile: OapsProfileAimi,
+        rT: RT,
+        targetBg: Double,
+    ): Any? {
+        val method = tick.javaClass.declaredMethods.first {
+            it.name == "resolveMealHyperBasalBoostOutcome" && it.parameterCount == 9
+        }
+        method.isAccessible = true
+        return method.invoke(
+            tick,
+            ctx,
+            profile,
+            rT,
+            1.0,
+            1.0,
+            false,
+            targetBg,
+            Double.MAX_VALUE,
+            0.0,
+        )
+    }
+
     private fun invokeRbtResolve(rT: RT, profile: OapsProfileAimi): Any? {
         val method = tick.javaClass.declaredMethods.first {
             it.name == "runRecursiveBeliefResolve" && it.parameterCount == 13
@@ -886,6 +932,8 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val MEAL_HYPER_FASTING_TRACE = "READ key=DoubleKey.meal_modes_MaxBasal value=0.00"
+
         private val RBT_RESOLVE_TRACE = """
 READ key=BooleanKey.OApsAIMIRecursiveBeliefShadow value=true
 READ key=BooleanKey.OApsAIMIRecursiveBeliefAuthority value=false
