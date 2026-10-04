@@ -161,6 +161,13 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT9PumpAge
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT9State
 import app.aaps.plugins.aps.openAPSAIMI.effects.decidePkpdGuardEndoDampenRedCarpetAndCapSmb
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideT9PhysioEarlyPkpd
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiDecisionBootstrapState
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiDecisionContextFactory
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiDecisionLearnersHealth
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiDecisionLocalHour
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiDecisionRtBootstrap
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiDecisionStudyExporter
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideDecisionContextInitRtSosAndFlatShadow
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideMealAdvisorOrReturn
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideT3cBrittleMode
 import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
@@ -1391,16 +1398,6 @@ private data class AimiDetermineBasalEarlyTickState(
     val tdd7Days: Double
 )
 
-/**
- * Decision transparency context, initial loop [RT], and **shadowed** flat-BG flag after delta override.
- * @see DetermineBasalaimiSMB2.buildDecisionContextInitRtSosAndFlatShadow
- */
-private data class AimiTickDecisionRtBootstrap(
-    val decisionCtx: AimiDecisionContext,
-    val rT: RT,
-    val flatBGsDetected: Boolean,
-)
-
 /** IOB action profile scalars + PKPD insulin observer state after realtime physio hook. */
 private data class AimiRealtimePhysioIobBootstrap(
     val iobTotal: Double,
@@ -2281,7 +2278,45 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * Phase 2 (P2): [AimiDecisionContext], initial [RT], CONTEXT telemetry phase, SOS evaluation,
      * learner health log, WCycle / lastProfile reset, flat-BG shadow from delta override.
      */
-    private fun buildDecisionContextInitRtSosAndFlatShadow(ctx: AimiTickContext): AimiTickDecisionRtBootstrap {
+    private fun buildDecisionContextInitRtSosAndFlatShadow(ctx: AimiTickContext): AimiDecisionRtBootstrap<AimiDecisionContext> =
+        decideDecisionContextInitRtSosAndFlatShadow(
+            ctx = ctx,
+            preferences = preferences,
+            consoleLog = consoleLog,
+            consoleError = consoleError,
+            aapsLogger = aapsLogger,
+            nowMs = dateUtil.now(),
+            hour = AimiDecisionLocalHour { aimiLocalHour() },
+            state = object : AimiDecisionBootstrapState<AimiDecisionContext> {
+                override fun resetPerTickShadow(nowMs: Long) = resetDecisionShadow(nowMs)
+                override fun lastBgRiseFastNightMs() = this@DetermineBasalaimiSMB2.lastBgRiseFastNightMs
+                override fun setLastBgRiseFastNightMs(epochMs: Long) {
+                    lastBgRiseFastNightMs = epochMs
+                }
+                override fun rememberAuditor(state: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorProfileTickState) {
+                    auditorProfileTick = state
+                }
+                override fun forgetWCycle() {
+                    wCycleInfoForRun = null
+                    wCycleReasonLogged = false
+                    lastWCycleBelief = null
+                }
+                override fun rememberProfile(profile: OapsProfileAimi) {
+                    lastProfile = profile
+                }
+                override fun rememberPending(decisionCtx: AimiDecisionContext) {
+                    pendingDecisionCtxForExport = decisionCtx
+                }
+            },
+            contexts = AimiDecisionContextFactory { trigger, eventId ->
+                decisionContextForTrigger(ctx, trigger, eventId)
+            },
+            sos = emergencySos,
+            learners = AimiDecisionLearnersHealth { logLearnersHealth(it) },
+            study = AimiDecisionStudyExporter { hormonitorStudyExporter },
+        )
+
+    private fun resetDecisionShadow(nowMs: Long) {
         lastIobSurveillanceExport = null
         lastIobReleaseExport = null
         tickIobEffectiveU = null
@@ -2291,7 +2326,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastSmbProposed = 0.0
         lastSmbCapped = 0.0
         lastSmbFinal = 0.0
-        lastSmbBindingTraceDraft = SmbBindingTrace.Draft(timestampMs = ctx.currentTime)
+        lastSmbBindingTraceDraft = SmbBindingTrace.Draft(timestampMs = nowMs)
         // The maxSMB ladder runs later in the tick, and a tick can abort before it. Without this
         // reset the export would stamp the previous tick's branch tag and slope onto an otherwise
         // empty trace, and a reader could not tell. Null means "the ladder did not run this tick".
@@ -2348,31 +2383,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // sur les deux qui appellent explicitement le stage. On repart d'un état non exporté à chaque tick.
         aimiDecisionExportedThisTick = false
         pendingDecisionCtxForExport = null
-        val decisionCtx = AimiDecisionContext(
-            event_id = "evt_${ctx.currentTime}".also { currentTickDecisionEventId = it },
+    }
+
+    private fun decisionContextForTrigger(
+        ctx: AimiTickContext,
+        trigger: String,
+        eventId: String,
+    ): AimiDecisionContext {
+        return AimiDecisionContext(
+            event_id = eventId.also { currentTickDecisionEventId = it },
             timestamp = ctx.currentTime,
-            trigger = run {
-                val iobNow = ctx.iobDataArray.firstOrNull()?.iob ?: 0.0
-                val bgNow = ctx.glucoseStatus.glucose
-                val hour = aimiLocalHour()
-                val isNight = hour >= 22 || hour <= 7
-                val isBgRiseFast = ctx.glucoseStatus.delta > 5
-                val nightBangBangBlock = isNight && isBgRiseFast && iobNow > 2.0 && bgNow < 100.0 &&
-                    (ctx.currentTime - lastBgRiseFastNightMs) < 15 * 60_000L
-                if (isBgRiseFast && isNight && iobNow > 2.0 && bgNow < 100.0) {
-                    if (lastBgRiseFastNightMs == 0L || (ctx.currentTime - lastBgRiseFastNightMs) >= 15 * 60_000L) {
-                        lastBgRiseFastNightMs = ctx.currentTime
-                    }
-                }
-                when {
-                    nightBangBangBlock -> {
-                        consoleLog.add("🚫 T6 NIGHT_RATE_LIMIT: BG_Rise_Fast bloqué (IOB=${aimiFmt2(iobNow)}U > 2.0 ET BG=${bgNow.toInt()} < 100 la nuit)")
-                        "Routine_Cycle"
-                    }
-                    isBgRiseFast -> "BG_Rise_Fast"
-                    else -> "Routine_Cycle"
-                }
-            },
+            trigger = trigger,
             baseline_state = AimiDecisionContext.BaselineState(
                 profile_isf_mgdl = ctx.profile.sens,
                 profile_basal_uph = ctx.profile.current_basal,
@@ -2410,64 +2431,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 htr_ra_floor_mgdl_per_min = null
             )
         )
-        // ISF and target levels of this tick for the auditor and the JSONL. Read once, here, where
-        // `baseline_state` reads the same numbers, so the rest of the tick works from this object
-        // instead of reading the telemetry singletons again. The gestational and thyroid modules
-        // have already changed `profile.sens` above, so these are the values the tick really uses.
-        // The working target is added later, where the basal schedule sets it.
-        auditorProfileTick = AuditorProfileTickState().apply {
-            profileStaticIsfMgdl = IsfSourceTelemetry.lastProfileStaticMgdl
-            dynamicIsfMgdl = ctx.profile.variable_sens
-            commandIsfMgdl = ctx.profile.sens
-            commandPreFloorIsfMgdl = CommandedIsf.lastPreFloorMgdlPerU
-            commandFloorMultiplier = IsfSourceTelemetry.lastCommandFloorMultiplier
-            profileTargetMgdl = ctx.profile.target_bg
-            tempTargetActive = ctx.profile.temptargetSet
-            keyOn = preferences.get(BooleanKey.OApsAIMIAuditorProfileFactors)
-            // Read once per tick, so every later step of the tick judges the same proposal even if
-            // a new answer lands from the auditor coroutine in the middle of the tick.
-            //
-            // Turning the auditor itself off drops whatever it had already proposed. The key
-            // dependency only hides the factor switch in the settings, it does not clear it, so
-            // without this a user who switches the auditor off would keep dosing on a cached
-            // proposal until it expired.
-            if (!preferences.get(BooleanKey.AimiAuditorEnabled)) AuditorProfileFactorCache.clear()
-            proposal = AuditorProfileFactorCache.latest()
-        }
-        val rT = RT(
-            algorithm = APSResult.Algorithm.AIMI,
-            runningDynamicIsf = ctx.dynIsfMode,
-            timestamp = ctx.currentTime,
-            consoleLog = consoleLog,
-            consoleError = consoleError
-        )
-        AimiLoopTelemetry.enterPhase(AimiLoopPhase.CONTEXT, hormonitorStudyExporter)
-        if (ctx.extraDebug.isNotEmpty()) {
-            rT.reason.append("${ctx.extraDebug}\n")
-        }
-        // ⚠️ ASYNC IMPACT: SOS may launch IO work (location + SMS) on a process-scoped scope.
-        emergencySos.evaluate(
-            aapsLogger = aapsLogger,
-            bg = ctx.glucoseStatus.glucose,
-            delta = ctx.glucoseStatus.delta,
-            iob = ctx.iobDataArray.firstOrNull()?.iob ?: 0.0,
-            preferences = this.preferences,
-            nowMs = dateUtil.now()
-        )
-        logLearnersHealth(rT)
-        wCycleInfoForRun = null
-        wCycleReasonLogged = false
-        lastWCycleBelief = null
-        lastProfile = ctx.profile
-        val flatBGsDetected = if (ctx.flatBGsDetected && abs(ctx.glucoseStatus.delta) > 3.0) {
-            consoleLog.add("⚠️ FLAT OVERRIDE: Delta=${ctx.glucoseStatus.delta} > 3.0 -> Sensor ALIVE.")
-            false
-        } else {
-            ctx.flatBGsDetected
-        }
-        pendingDecisionCtxForExport = decisionCtx
-        return AimiTickDecisionRtBootstrap(decisionCtx, rT, flatBGsDetected)
     }
+
 
     /**
      * Realtime steps/HR log, maxSMB reset, physio snapshot → [decisionCtx] physio branch,

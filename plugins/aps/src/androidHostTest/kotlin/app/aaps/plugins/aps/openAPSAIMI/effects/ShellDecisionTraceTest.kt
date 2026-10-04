@@ -20,6 +20,7 @@ import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.aps.openAPSAIMI.AimiDecisionContext
 import app.aaps.plugins.aps.openAPSAIMI.AimiUamHandler
 import app.aaps.plugins.aps.openAPSAIMI.DetermineBasalaimiSMB2
 import app.aaps.plugins.aps.openAPSAIMI.GlucoseStatusCalculatorAimi
@@ -33,6 +34,7 @@ import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController
 import app.aaps.plugins.aps.openAPSAIMI.learning.BasalNeuralLearner
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiTickContext
 import app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR
+import app.aaps.plugins.aps.openAPSAIMI.physio.HormonitorStudyExporterProvider
 import app.aaps.plugins.aps.openAPSAIMI.physio.CircadianMealProfileStore
 import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionMemory
@@ -57,12 +59,14 @@ import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionPair
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiAutonomyMode
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorRuntimeProfile
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiAuditor
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiEmergencySos
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiBehaviorProfileSource
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiHealthContext
 import app.aaps.plugins.aps.openAPSAIMI.recursive.RbtExtendedSignals
 import app.aaps.plugins.aps.openAPSAIMI.recursive.RecursiveBeliefSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryGuard
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import app.aaps.plugins.aps.openAPSAIMI.validation.PumpCapabilityValidator
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.ThyroidStatus
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.VerneuilStatus
@@ -763,6 +767,51 @@ class ShellDecisionTraceTest {
         assertEquals(PKPD_GUARD_ACTIVE_TRACE, trace)
     }
 
+    @Test
+    fun decisionContextRiseOverridesAFlatSensorAndArmsTheAuditor() {
+        val prefs = recordingPreferences(emptyMap())
+        setField(tick, "preferences", prefs)
+        val storage = mock(AimiStorageHelper::class.java)
+        whenever(storage.getHealthReport()).thenReturn("ok")
+        setField(tick, "storageHelper", storage)
+        val learner = getField(tick, "basalLearner") as app.aaps.plugins.aps.openAPSAIMI.learning.BasalLearner
+        whenever(learner.getMultiplier()).thenReturn(1.0)
+        setField(tick, "emergencySos", mock(AimiEmergencySos::class.java))
+        val provider = mock(HormonitorStudyExporterProvider::class.java)
+        whenever(provider.exporter()).thenReturn(null)
+        setField(tick, "hormonitorStudyExporterProvider", provider)
+        val profile = profileStub()
+        whenever(profile.variable_sens).thenReturn(40.0)
+        val ctx = tickContext(profile, 160.0).copy(
+            glucoseStatus = GlucoseStatusAIMI(glucose = 160.0, delta = 6.0, date = now),
+            flatBGsDetected = true,
+            extraDebug = "extra-line",
+            currentTime = now,
+        )
+        var returned: Any? = null
+        val trace = capture {
+            returned = invokeDecisionContext(ctx)
+        }
+        val stage = returned!!
+        fun field(name: String): Any? = stage.javaClass.getDeclaredField(name).apply { isAccessible = true }.get(stage)
+        val decision = field("decisionCtx") as AimiDecisionContext
+        val rT = field("rT") as RT
+        assertEquals("BG_Rise_Fast", decision.trigger)
+        assertEquals("evt_$now", decision.event_id)
+        assertEquals(false, field("flatBGsDetected") as Boolean)
+        assertTrue(rT.reason.toString().contains("extra-line"))
+        assertTrue(rT.learnersInfo.toString().contains("100%"))
+        assertEquals(DECISION_CONTEXT_RISE_TRACE, trace)
+    }
+
+    private fun invokeDecisionContext(ctx: AimiTickContext): Any? {
+        val method = tick.javaClass.declaredMethods.first {
+            it.name == "buildDecisionContextInitRtSosAndFlatShadow" && it.parameterCount == 1
+        }
+        method.isAccessible = true
+        return method.invoke(tick, ctx)
+    }
+
     private fun preOnsetRuntime(): PkPdRuntime = PkPdRuntime(
         params = PkPdParams(diaHrs = 5.0, peakMin = 75.0),
         tailFraction = 0.0,
@@ -1429,6 +1478,19 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val DECISION_CONTEXT_RISE_TRACE = """
+            READ key=BooleanKey.OApsAIMIAuditorProfileFactors value=false
+            READ key=BooleanKey.AimiAuditorEnabled value=false
+            LOG ═══════════════════════════════
+            LOG 🛡️ AIMI LEARNERS HEALTH
+            LOG Storage: ok
+            LOG UnifiedReactivity: factor=1.000
+            LOG BasalLearner: multiplier=1.000
+            LOG PkPdEstimator: runtime-only
+            LOG ═══════════════════════════════
+            LOG ⚠️ FLAT OVERRIDE: Delta=6.0 > 3.0 -> Sensor ALIVE.
+        """.trimIndent()
+
         private val T9_ACTIVE_TRACE = """
             READ key=BooleanKey.AimiPhysioAssistantEnable value=true
             LOG 🏥 PHYSIO: ISF×1.100 Basal×1.050 SMB×1.080 Conf=80%

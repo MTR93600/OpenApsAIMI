@@ -119,6 +119,7 @@ LOG <ligne console existante>
 35. `runSmbDecisionLogAdvisorOneShotAndExecuteInstruction`
 36. `applySmbAdvisorExecutionToTickStateAndLog`
 37. `runPkpdGuardEndoDampenRedCarpetAndCapSmb`
+38. `buildDecisionContextInitRtSosAndFlatShadow`
 38. `runMealHyperBasalBoostTickStage` puis `applyMealHyperBasalBoostOverlayIfNeeded`
 39. `runWCycleIcCsfClampCiAndCarbImpactLogs`
 40. `runCarbsAdvisorEnableSmbSafetyAndHardHypoBasalStopOrReturn`
@@ -255,5 +256,7 @@ Hypo engagée : BG 54, `mealTime`, delta 0,4, commande moteur sûre 2,40 U/h et 
 `runT9PhysioEarlyPkpdAndTubeBootstrap` décide dans `commonMain` (`decideT9PhysioEarlyPkpd`). Le calcul PKPD, les prédictions et l’ajusteur d’inflammation restent des ports. Le `try/catch` du nom de classe G6 garde le repli faux. L’échec est `RBT g6Sensor failed (<type>): <message> — value null`. L’erreur de l’adaptateur physio et l’échec du runtime PKPD gardent leurs lignes déjà écrites (`aapsLogger`, `consoleError`). BG 110, delta 0, assistant physio éteint, PKPD éteint : prédiction **110 mg/dL**, multiplicateurs neutres.
 
 `runPkpdGuardEndoDampenRedCarpetAndCapSmb` décide dans `commonMain` (`decidePkpdGuardEndoDampenRedCarpetAndCapSmb`). `applyPkpdAbsorptionGuardOncePerTick`, `resolveMealCorrectionContext`, `authoritativeEventualBg`, `authoritativeMinPredBg` et `minPredictedBgForRbtWiring` restent des ports appelés à la ligne. Le relief MaxIOB et le tapis rouge restent `AimiLegacySmbCapMath`. Cette tête n’a pas de `try/catch` avalé. SMB 0, runtime PKPD null, relief éteint, BG 110 : SMB **0**, intervalle 4, raison vide, étapes de trace `PKPD_GUARD` puis `LEGACY_RED_CARPET_MAX_SMB_IOB`.
+
+`buildDecisionContextInitRtSosAndFlatShadow` décide dans `commonMain` (`decideDecisionContextInitRtSosAndFlatShadow`). `aimiLocalHour`, le reset d’ombre, l’assemblage de `AimiDecisionContext`, SOS, `logLearnersHealth` et l’exporteur d’étude restent des ports appelés à la ligne. Pas de `try/catch` avalé. BG 160, delta +6, capteur annoncé plat : déclencheur `BG_Rise_Fast`, drapeau plat **faux**, bannière learners, clés auditeur lues.
 
 Les traces golden restent, octet pour octet : mode repas (TBR puis prébolus), récupération d’hypo, hypo sévère avec autorité post-hypo, plafond MaxIOB, Autodrive éteint, montée de repas engagée (`ShellDecisionTraceTest`, TBR 2,40 U/h demandée, SMB moteur non déposé tant que RBT est éteint), et le chemin UAM de `buildRbtExtendedSignals` (ordinal post-hypo 2, confiance 0,70). Si une trace diverge, on s’arrête.
