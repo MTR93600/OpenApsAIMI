@@ -236,22 +236,17 @@ Vert :
 
 Mesuré sur `DetermineBasalAIMI2.kt` après le déplacement de la tête T3C : **17 518 lignes**, **325 fonctions**. Le corps de `executeT3cBrittleMode` est `decideT3cBrittleMode` en `commonMain`. La coquille fait 88 lignes : elle ne calcule plus, elle branche les ports.
 
-Déjà décidées dans `commonMain`, coquille réduite : `applyLegacyMealModes` (47), `buildRbtExtendedSignals` (110), `runAutodriveV3MultiVariableBranch` (166), `executeT3cBrittleMode` (88), `finalizeAndCapSMB` (174), `runRecursiveBeliefResolve`, `resolveMealHyperBasalBoostOutcome`, `runTickClockMaxSmbTirCarbAndGlucoseCopy`, `runT9PhysioEarlyPkpdAndTubeBootstrap`, `runPkpdGuardEndoDampenRedCarpetAndCapSmb`, `buildDecisionContextInitRtSosAndFlatShadow`, `refineRbtMergeAfterDoseSnapshot`, `basalFirstAdaptiveMultiplier`, `runBasalAimiTddCarbLimitsTirEarlyBasalAndPaiIsf`, `runPostSafetyMealFirst30NgrHeadroomBasalSmbStage`, `runInsulinReqActivityRelaxAndMicrobolusStage`, `runCoreDecisionMaxIobExceededTempBasalGate`, `applySafetyPrecautions` (94).
+Déjà décidées dans `commonMain`, coquille réduite : `applyLegacyMealModes` (47), `buildRbtExtendedSignals` (110), `runAutodriveV3MultiVariableBranch` (166), `executeT3cBrittleMode` (88), `finalizeAndCapSMB` (174), `runRecursiveBeliefResolve`, `resolveMealHyperBasalBoostOutcome`, `runTickClockMaxSmbTirCarbAndGlucoseCopy`, `runT9PhysioEarlyPkpdAndTubeBootstrap`, `runPkpdGuardEndoDampenRedCarpetAndCapSmb`, `buildDecisionContextInitRtSosAndFlatShadow`, `refineRbtMergeAfterDoseSnapshot`, `basalFirstAdaptiveMultiplier`, `runBasalAimiTddCarbLimitsTirEarlyBasalAndPaiIsf`, `runPostSafetyMealFirst30NgrHeadroomBasalSmbStage`, `runInsulinReqActivityRelaxAndMicrobolusStage`, `runCoreDecisionMaxIobExceededTempBasalGate`, `applySafetyPrecautions` (94), `runAdvancedPredictionsAndPredPipePrep` (98), `runPredPipelineSafetyHaltOrReturn` (84), `runT3cBrittleBypassOrReturn` (102), `planHarmoniaProductionBranch` (77), `buildGlobalAimiBasalScheduleBootstrap` (35), `runPostBasalBootstrapIobTickStepsAndHeartRate` (62).
 
 Hors de cette série, par consigne, tailles au brace sur le fichier actuel : `setTempBasal` (353), `runDetermineBasalTickInner` (797), les learners (`applyBasalNeuralLearningAndTraining` 39, `logLearnersHealth` 53, `neuralnetwork5` 50, `runPostBasalEngineLearnersRtInstrumentationAndAuditorStage` 618, les `refresh*Async`), l’export (`runAimiSnapshotMedicalJsonAndHormonitorExportStage` 503) et `toMedicalJson` (354).
 
 Le tableau ci-dessous remplace celui d’après T3C. Les tailles sont le corps réel (accolade ouvrante jusqu’à l’accolade fermante, ou l’expression jusqu’à la ligne blanche), pas « jusqu’à la fonction suivante ». Cette ancienne mesure comptait les champs posés entre deux fonctions : `isAutodriveEngaged` y faisait 123 lignes et n’en fait plus qu’une ; `toMedicalJson` y faisait 754 lignes et son corps en fait 354. `tryMealAdvisor` n’existe plus : le conseiller est `runMealAdvisorDecisionOrReturn` (39 lignes, déjà en `commonMain`). `executeSmbInstruction` (96) ne choisit plus : il appelle `SmbInstructionExecutor.execute`.
 
-Têtes qui choisissent encore un débit, un SMB ou un plafond, 40 lignes et plus, mesurées après le déplacement de `applySafetyPrecautions`. `DetermineBasalAIMI2.kt` fait **16 342 lignes**, **325 fonctions** membres.
+Têtes qui choisissent encore un débit, un SMB ou un plafond, 40 lignes et plus. Le tableau d’après `applySafetyPrecautions` en comptait 31, sur un fichier de **16 342 lignes**. Six d’entre elles sont en `commonMain` depuis. `DetermineBasalAIMI2.kt` fait **15 979 lignes**, **325 fonctions** membres. Il en reste **25**.
 
 | Lignes | Fonction |
 |---:|---|
-| 170 | `runAdvancedPredictionsAndPredPipePrep` |
-| 166 | `runT3cBrittleBypassOrReturn` |
 | 161 | `runPkpdPredictionsBgiDeviationAndNoisyTargetsStage` |
-| 160 | `runPostBasalBootstrapIobTickStepsAndHeartRate` |
-| 158 | `planHarmoniaProductionBranch` |
-| 151 | `buildGlobalAimiBasalScheduleBootstrap` |
 | 149 | `runSignalPreparationPkpdRuntimePhase` |
 | 139 | `applyTrajectoryAnalysis` |
 | 136 | `resolveAndWireRbtLiveTick` |
@@ -261,7 +256,6 @@ Têtes qui choisissent encore un débit, un SMB ou un plafond, 40 lignes et plus
 | 103 | `runUamModelCalHypoGuardPostHypoAndSetPredictedSmb` |
 | 102 | `mergeRbtHyperTrajectoryRelease` |
 | 102 | `runTherapyHydrateClocksAndExerciseLockoutGate` |
-| 101 | `runPredPipelineSafetyHaltOrReturn` |
 | 95 | `applyPkpdAbsorptionGuardOncePerTick` |
 | 94 | `publishDoseTerminalAuthorityAndSnapshot` |
 | 91 | `runBasalDecisionEngineDecideStage` |
@@ -280,7 +274,7 @@ Têtes qui choisissent encore un débit, un SMB ou un plafond, 40 lignes et plus
 
 En dessous de 40 lignes : le reste des 325, des helpers d’horloge, de log et de lecture. Les compter une par PR gonflerait le chiffre sans avancer le moteur.
 
-`HoldAimiEngine.evaluate` renvoie encore `Hold("ENGINE_NOT_EXTRACTED")`. Le remplacer demande que `runDetermineBasalTickInner` appelle ces têtes depuis `commonMain`, avec `setTempBasal`, la persistance, les notifications, les fichiers et TFLite derrière des ports. Au rythme d’une tête (ou d’une paire couverte par la même trace) par PR, le tableau d’après T3C faisait environ **15 PR**. L’inner tick et le branchement du moteur en font **4 à 6** de plus. Ce décompte a été tenu plus bas, tête par tête. Le tableau remesuré plus haut en montre encore 31 : le décompte « 4 restantes » ne les avait pas retirées.
+`HoldAimiEngine.evaluate` renvoie encore `Hold("ENGINE_NOT_EXTRACTED")`. Le remplacer demande que `runDetermineBasalTickInner` appelle ces têtes depuis `commonMain`, avec `setTempBasal`, la persistance, les notifications, les fichiers et TFLite derrière des ports. Au rythme d’une tête (ou d’une paire couverte par la même trace) par PR, le tableau d’après T3C faisait environ **15 PR**. L’inner tick et le branchement du moteur en font **4 à 6** de plus. Ce décompte a été tenu plus bas, tête par tête. Cette remesure en montrait encore 31 : le décompte « 4 restantes » ne les avait pas retirées. Le tableau courant, plus haut, en garde 25.
 
 Le tableau est pris juste après T3C, avant le conseiller repas. `tryMealAdvisor` et `runMealAdvisorDecisionOrReturn` sont ensuite passés en `commonMain`. Le fichier android retombe à **17 342 lignes**. Ces deux lignes du tableau ne sont plus des corps de décision. Le compte de PR restantes baisse d’une.
 
@@ -312,11 +306,25 @@ Le tableau est pris juste après T3C, avant le conseiller repas. `tryMealAdvisor
 
 `applySafetyPrecautions` (131 dans l’ancien tableau) est ensuite passé en `commonMain` (`decideSafetyPrecautions`). Les poids de repas, la condition critique, le drapeau sport, le cycle, les ajustements, la garde PKPD, le plancher et les plafonds restent des ports appelés à la ligne. `exerciseFlag` et `suspectedLateFatMeal` restent sur la signature Android : le corps ne les lit pas. Cette tête n’avale pas d’exception. Le zéro sport pose toujours `criticalSafetyZeroedThisTick`, pour que le tapis rouge ne rende pas ces unités. Sport et repas, SMB 2,00, dépassement de cible 80 mg/dL : l’échelle de garde 0,70 puis le boost repas 1,10 donnent **1,54 U**. La coquille fait 94 lignes. `DetermineBasalAIMI2.kt` retombe à **16 342 lignes**.
 
-Les quatre têtes que le décompte courant appelait restantes (repas 0–30, insulinReq, gate MAX_IOB, garde sport) sont en `commonMain`. Le tableau remesuré ci-dessus en garde **31** qui choisissent encore un débit, un SMB ou un plafond. Ce ne sont pas les 4 à 6 PR de l’inner tick. Elles restent Android, appelées à la ligne, jusqu’à leurs propres PR. Le prochain code est la section 9, et seulement la section 9.
+Les quatre têtes que le décompte courant appelait restantes (repas 0–30, insulinReq, gate MAX_IOB, garde sport) sont en `commonMain`. Le tableau remesuré juste après elles en gardait **31**. Ce ne sont pas les 4 à 6 PR de l’inner tick.
+
+`runAdvancedPredictionsAndPredPipePrep` (170 dans le tableau) et `runPredPipelineSafetyHaltOrReturn` (101) sont ensuite passés en `commonMain` (`decideAdvancedPredictionsAndPredPipePrep`, corps 157 lignes ; `decidePredPipelineSafetyHalt`, corps 92). Une même trace les couvre. BG 100, activité IOB 0,20, sensibilité 50 : plancher 39, meilleur terminal environ 43,78, seuil LGS 70, TBR **0,25 U/h** pendant 30 min. L’échec de joignabilité pompe garde le repli faux et ajoute `PRED_PIPE pump reachability failed (<type>): <message> — value false`. La scène verrouillée ne lance pas ce chemin. La halte de sécurité n’avale pas d’exception. Les coquilles font 98 et 84 lignes. `DetermineBasalAIMI2.kt` retombe à **16 286 lignes**.
+
+`runT3cBrittleBypassOrReturn` (166 dans le tableau) est ensuite passé en `commonMain` (`decideT3cBrittleBypass`, corps 154 lignes). Les lectures de champs qui peuvent changer après les prédictions restent des ports à la ligne. Le déploiement physio de l’arbre reste un `runCatching` dans la coquille, avec `aapsLogger.error` `T3C physio/tree deploy failed`. BG 180, basale profil 1,00, max 3,00 : l’arbre critique limite le pas, TBR **1,30 U/h** pendant 30 min, `units` null. La coquille fait 102 lignes. `DetermineBasalAIMI2.kt` retombe à **16 245 lignes**.
+
+`planHarmoniaProductionBranch` (158 dans le tableau) est ensuite passé en `commonMain` (`decideHarmoniaProductionRamp`, corps 162 lignes). Les bloqueurs et l’enregistrement du mode restent des ports. Cette tête n’avale pas d’exception. Demande 2,00 U/h, débit précédent 1,00 : rampe **1,30 U/h**. La coquille fait 77 lignes. `DetermineBasalAIMI2.kt` retombe à **16 168 lignes**.
+
+`buildGlobalAimiBasalScheduleBootstrap` (151 dans le tableau) et `runPostBasalBootstrapIobTickStepsAndHeartRate` (160) sont ensuite passés en `commonMain` (`decideBasalSchedule`, corps 137 lignes ; `decideHeartRateIsf`, corps 125). Une même trace les couvre. Autosens 0,5 sur une basale profil 1,00 : basale **2,00 U/h**. FC 110 sur 10 min, moyenne 60 min 88 : ISF 50 × 0,90 = **45**. Le `catch` de la fenêtre FC garde 80 bpm, `baselineReal` faux, la ligne `aapsLogger` déjà là, et ajoute `HR windows failed (<type>): <message> — averages 80, baseline not real`. La scène verrouillée ne lance pas ce chemin. L’horaire n’avale pas d’exception. Les coquilles font 35 et 62 lignes. `DetermineBasalAIMI2.kt` retombe à **15 979 lignes**.
+
+Métrique, en plus de la longueur du fichier. Les coquilles restent dans `DetermineBasalAIMI2.kt` et masquent l’avancement : ce run retire 363 lignes du fichier pour **827** lignes de décision posées en `commonMain`. Le compte est le corps de chaque `decide*`, accolade ouvrante jusqu’à accolade fermante, le même mètre que le tableau. Ce run : 157 + 92 + 154 + 162 + 137 + 125 = **827**. Cumul des 22 fonctions `decide*` : **2 914** lignes de corps. Têtes du tableau encore Android : **25**.
+
+`runPkpdPredictionsBgiDeviationAndNoisyTargetsStage` (161) et `computePkpdPredictions` (85) ont une trace déjà verrouillée sur le corps Android : BG 180, cible profil 100, max 120, cible de travail **80**, correction **2,00 U**. Elles sont les prochaines par taille. Ce run ne les déplace pas. L’orchestre de la section 9 commence après les 25 têtes restantes.
 
 ## 9. Plan de `runDetermineBasalTickInner` et de `HoldAimiEngine`
 
-Ce plan est écrit avant tout déplacement de l’inner tick. Le run qui l’écrit ne le commence pas. `HoldAimiEngine.evaluate` continue de renvoyer `Hold("ENGINE_NOT_EXTRACTED")`. `IosClientConfig.APS` reste `false`.
+Ce plan est accepté, avec une correction d’ordre. Les têtes de dose du tableau passent en `commonMain` avant l’orchestre. Si l’orchestre bougeait pendant que ces têtes restent des ports Android, le moteur commun n’aurait aucune implémentation sur iOS, et `HoldAimiEngine` ne pourrait déléguer qu’en Android. Il reste **25** têtes. Le découpage en 6 PR ci-dessous commence quand elles sont décidées dans le commun.
+
+Ce plan est écrit avant tout déplacement de l’inner tick. Aucun run ne le commence tant que le tableau n’est pas vide. `HoldAimiEngine.evaluate` continue de renvoyer `Hold("ENGINE_NOT_EXTRACTED")`. `IosClientConfig.APS` reste `false`.
 
 `runDetermineBasalTickInner` fait 797 lignes (14849–15645). C’est l’orchestre. Il appelle déjà les têtes extraites. Le déplacer ne change pas une formule de dose. Chaque PR verrouille la trace sur le corps Android du parent, déplace une seule tranche, et rejoue. Si la trace diverge, on s’arrête. Les nombres de dose ne changent pas.
 
@@ -332,7 +340,7 @@ Ce plan est écrit avant tout déplacement de l’inner tick. Le run qui l’éc
 
 5. **Boost repas, arrêt hypo, repas 0–30, MAX_IOB, insulinReq.** De `runMealHyperBasalBoostTickStage` à `runInsulinReqActivityRelaxAndMicrobolusStage` (15426–15572). Scènes : repas 0–30 (TBR **2,00 U/h**, 30 min, override vrai) et gate MAX_IOB (TBR **2,00 U/h**). L’arrêt basal hypo de `runCarbsAdvisorEnableSmbSafetyAndHardHypoBasalStopOrReturn` est l’autre scène hypo si la PR 2 n’a pas de retour.
 
-6. **Moteur basal, coquille learners/export, puis `HoldAimiEngine`.** `runBasalDecisionEngineDecideStage` entre dans l’orchestre. `runPostBasalEngineLearnersRtInstrumentationAndAuditorStage` et `runAimiSnapshotMedicalJsonAndHormonitorExportStage` restent des ports : ils ne bougent pas. Cette PR rejoue les sept scènes de bout en bout sur `runDetermineBasalTick`, pas seulement la tranche. Ensuite seulement, `HoldAimiEngine` délègue.
+6. **Moteur basal, coquille learners/export, puis `HoldAimiEngine`.** `runBasalDecisionEngineDecideStage` entre dans l’orchestre. `runPostBasalEngineLearnersRtInstrumentationAndAuditorStage` et `runAimiSnapshotMedicalJsonAndHormonitorExportStage` restent des ports : ils ne bougent pas. Cette PR rejoue les sept scènes de bout en bout sur `runDetermineBasalTick`, pas seulement la tranche. `HoldAimiEngine` délègue seulement après cette PR, et seulement si les 25 têtes restantes sont déjà en `commonMain`.
 
 ### Ce qui reste dans la coquille Android
 
@@ -349,9 +357,9 @@ Ceux qui existent restent appelés à la ligne : `AimiEffectSink`, chaque `decid
 
 Ports nouveaux de l’orchestre, chacun à l’appel actuel, pas hissés au début de la tranche :
 
-- préfixe : `runEarlyDetermineBasalStages`, `bootstrapPhysiologyAfterEarlyTick`, `runRealtimePhysioIobProfilerAndInsulinObserver`, `ensureWCycleAndLoadGlucoseStatusOrAbort`, `runCombinedDeltaByodaAndDynamicPeak`, `buildPreTherapyAutodriveByodaBootstrap`, `refreshPostHypoDeliveryAuthorityForTick`, `decideAuditorIsfFactorForTick`, `runManualMealModesAfterTherapyGate`, `runT3cBrittleBypassOrReturn` (166 lignes, toujours Android) ;
-- milieu : `runSignalPreparationPkpdRuntimePhase`, `runTrajectoryContextModuleTddIsfAndDynamicPbolusPrep`, `physioAdapter.getLatestSnapshot` (le `catch (Exception)` qui retombe sur `HealthContextSnapshot()` reste à la ligne ; s’il est déplacé, l’échec est journalisé, le repli ne change pas), `runAdvancedPredictionsAndPredPipePrep`, `runPredPipelineSafetyHaltOrReturn`, `runHardBrakeLyraOrReturn`, `runPostAutodrivePostHypoClassification`, `publishDoseTerminalAuthorityAndSnapshot`, `resolveTdd24hForExport`, `resolveAndWireRbtLiveTick`, `applyPendingTrajSpiralBasalIfNotSuppressed`, `runPostHypoCompressionAndDriftTerminatorOrReturn` ;
-- SMB : `buildGlobalAimiBasalScheduleBootstrap`, `runPostBasalBootstrapIobTickStepsAndHeartRate`, `applyEndoAndActivityAdjustments`, `applyIsfBoundsAndPhysioMultipliersAfterEndoActivity`, `decideAuditorTargetFactorForTick`, le plafond spiral, `runPkpdPredictionsBgiDeviationAndNoisyTargetsStage`, `runUamModelCalHypoGuardPostHypoAndSetPredictedSmb`, `runSmbDecisionLogAdvisorOneShotAndExecuteInstruction`, `applySmbAdvisorExecutionToTickStateAndLog` ;
+- préfixe : `runEarlyDetermineBasalStages`, `bootstrapPhysiologyAfterEarlyTick`, `runRealtimePhysioIobProfilerAndInsulinObserver`, `ensureWCycleAndLoadGlucoseStatusOrAbort`, `runCombinedDeltaByodaAndDynamicPeak`, `buildPreTherapyAutodriveByodaBootstrap`, `refreshPostHypoDeliveryAuthorityForTick`, `decideAuditorIsfFactorForTick`, `runManualMealModesAfterTherapyGate`, `runT3cBrittleBypassOrReturn` (coquille ; la décision est `decideT3cBrittleBypass`) ;
+- milieu : `runSignalPreparationPkpdRuntimePhase`, `runTrajectoryContextModuleTddIsfAndDynamicPbolusPrep`, `physioAdapter.getLatestSnapshot` (le `catch (Exception)` qui retombe sur `HealthContextSnapshot()` reste à la ligne ; s’il est déplacé, l’échec est journalisé, le repli ne change pas), `runAdvancedPredictionsAndPredPipePrep` (coquille ; `decideAdvancedPredictionsAndPredPipePrep`), `runPredPipelineSafetyHaltOrReturn` (coquille ; `decidePredPipelineSafetyHalt`), `runHardBrakeLyraOrReturn`, `runPostAutodrivePostHypoClassification`, `publishDoseTerminalAuthorityAndSnapshot`, `resolveTdd24hForExport`, `resolveAndWireRbtLiveTick`, `applyPendingTrajSpiralBasalIfNotSuppressed`, `runPostHypoCompressionAndDriftTerminatorOrReturn` ;
+- SMB : `buildGlobalAimiBasalScheduleBootstrap` (coquille ; `decideBasalSchedule`), `runPostBasalBootstrapIobTickStepsAndHeartRate` (coquille ; `decideHeartRateIsf`), `applyEndoAndActivityAdjustments`, `applyIsfBoundsAndPhysioMultipliersAfterEndoActivity`, `decideAuditorTargetFactorForTick`, le plafond spiral, `runPkpdPredictionsBgiDeviationAndNoisyTargetsStage`, `runUamModelCalHypoGuardPostHypoAndSetPredictedSmb`, `runSmbDecisionLogAdvisorOneShotAndExecuteInstruction`, `applySmbAdvisorExecutionToTickStateAndLog` ;
 - fin de dose : `runMealHyperBasalBoostTickStage`, `applyMealHyperBasalBoostOverlayIfNeeded`, `runWCycleIcCsfClampCiAndCarbImpactLogs`, `runCarbsAdvisorEnableSmbSafetyAndHardHypoBasalStopOrReturn`, `runBasalDecisionEngineDecideStage` ;
 - queue non déplacée : la phase learners et la phase export.
 
@@ -368,7 +376,7 @@ Verrouillées sur le parent Android, rejouées après le déplacement, octet pou
 | UAM | le SMB prédit par `runUamModelCalHypoGuardPostHypoAndSetPredictedSmb` | PR 4 |
 | nuit | un débit avec `nightbis` vrai, sans affirmer l’heure murale | PR 5, drapeau déjà fixé |
 | exercice | le verrou exercice retourne avant T3C | PR 1 |
-| brittle | le retour T3C, débit déjà verrouillé à 2,00 U/h sur la tête | PR 1 |
+| brittle | le retour du bypass T3C, TBR **1,30 U/h** pendant 30 min. L'arbre critique limite le pas à 0,30 au-dessus de la basale 1,00. `executeT3cBrittleMode` reste la tête déjà verrouillée à 2,00 U/h | PR 1 |
 | capteur plat | `flatBGsDetected` change la suite par rapport à une montée | tick complet, PR 6 |
 
 ### `HoldAimiEngine` sans activer `APS` sur iOS
@@ -384,3 +392,19 @@ iOS lie déjà `:plugins:aps` et `:plugins:aimi-engine` (`ios/shell/build.gradle
 `AimiTherapyCommand` garde les trois variantes déjà dans `aimi-contracts` : `Hold`, `Smb`, `TempBasal`. La traduction de `RT` vers cette commande se fait dans la coquille, après le retour de l’orchestre, pas dans le calcul de dose.
 
 Sans sink, `evaluate` renvoie encore `Hold`. Il ne construit pas un `DetermineBasalaimiSMB2`.
+
+### Dépendances encore sans implémentation iOS
+
+Une fois les têtes de dose en `commonMain`, ces dépendances restent des ports. Le moteur commun, en mode commande seule, a besoin pour chacune d’une valeur neutre documentée ou d’une implémentation commune. `IosClientConfig.APS` reste `false`. Rien ici ne branche une pompe.
+
+**TFLite et `neuralnetwork5`.** `AimiModelHandler.ensureInterpreter` retourne null et journalise `model_missing` quand `Documents/AAPS/ml/modelUAM.tflite` est absent. `predictSmbUam` rend alors **0 U** (`uam_unavailable`). `AimiSmbTrainer.refine` rend le SMB candidat inchangé quand aucun modèle n’est en mémoire (`No pre-trained model found`). `maybeTrainAsync` ne doit rien écrire. Mode commande seule : ne pas ouvrir de `.tflite`, ne pas entraîner. Le neutre est le chemin déjà codé pour un fichier manquant : UAM à 0 U, `refine` identité, pas de CSV. `neuralnetwork5` garde ensuite son mélange `0,7 * raffiné + 0,3 * predictedSMB`.
+
+**Persistance.** `refreshStepsAsync` et `refreshHeartRatesAsync` posent une liste vide dans le `catch (Exception)`. Les références de cache (`stepsSnapshotRef`, `heartRatesSnapshotRef`, et les caches bolus du même modèle) partent déjà vides. Mode commande seule : ne pas ouvrir de base. Le neutre est cette liste vide, le même repli qu’une lecture ratée.
+
+**Notifications.** Trois appels à `notificationManager.post` dans le fichier Android. Mode commande seule : le port ne poste rien et ne lance pas. Le neutre est un no-op.
+
+**Fichiers.** `AimiStorage`, le CSV d’entraînement SMB, `externalDir`, le chemin du modèle. Mode commande seule : `exists` est faux, les lectures sont nulles ou vides, les écritures n’ont pas d’effet. On ne touche pas au système de fichiers.
+
+**`AimiDecisionContext`.** `internal data class` encore dans `DetermineBasalAIMI2.kt`. Le moteur commun ne peut pas la construire sur iOS. Il lui faut un instantané commun, avec les champs que l’orchestre lit, ou une fabrique qui le rend. Mode commande seule : identifiant vide, horodatage du tick, déclencheur vide, baseline à zéro, ajustements par défaut, `outcome` null. Tant que cet instantané n’est pas commun, le type reste Android et iOS ne l’instancie pas.
+
+**Learners.** `BasalLearner`, `BasalNeuralLearner` et `UnifiedReactivityLearner` sont déjà en `commonMain`. Leur départ à froid dépend d’un fichier (`aimi_basal_learner.json`, état du réseau, CSV). Mode commande seule : ne pas appeler `process`, `updateLearning`, `processIfNeeded` ni l’entraînement, et ne pas charger ces fichiers. Le neutre est l’état du constructeur sans fichier : multiplicateurs basal **1,0** (`getMultiplier()` 1,0), facteurs neuraux **1,0**, gouvernance **`WARMUP`**, `sampleCount` 0, confiance 0, raison `Warmup`, `globalFactor` **1,0**. `KEEP` arrive seulement après assez d’échantillons. Il n’est pas le départ à froid.

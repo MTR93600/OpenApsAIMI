@@ -57,6 +57,12 @@ Les ports sont minces et portent le nom de l’appel de la référence. Pas de b
 | `AimiMaxIobGateState` | exportateur d’étude, contexte d’activité, `adaptiveMult`, format sans zéros | la coquille, lus à la ligne |
 | `AimiMaxIobTempBasal` | `setTempBasal` du gate MAX_IOB | la coquille, le corps pompe reste Android |
 | `AimiSafetyPrecautionsCalls` | poids repas, critique, sport, cycle, ajustements, garde PKPD, plancher, plafonds | la coquille, appelés à la ligne |
+| `AimiPredPipeCalls` | courbes, phase, absorption, cible, prédiction publiée, joignabilité pompe | la coquille, appelés à la ligne |
+| `AimiSafetyHaltCalls` | contexte repas, COB, phase, départ de sécurité, TBR de halte, log final | la coquille, appelés à la ligne |
+| `AimiT3cBypassCalls` | lectures de champs, ombre Autodrive, prédictions, arbre physio, `executeT3c` | la coquille, lus à la ligne |
+| `AimiHarmoniaRampCalls` | décision, croyance, bloqueurs, autorité, enregistrement du mode | la coquille, appelés à la ligne |
+| `AimiBasalScheduleCalls` | pas pompe, validation basale, pas récents, cible | la coquille, lus à la ligne |
+| `AimiHeartRateIsfCalls` | pas, fenêtres FC, moyennes, échec de fenêtre, échelle ISF | la coquille, appelés à la ligne |
 
 Les membres du tick déjà calculés (glycémie, IOB, drapeaux de mode) sont passés à la fonction. Ce ne sont pas des lectures de préférences. Une préférence lue seulement sur une branche l’est encore seulement sur cette branche, à la même ligne.
 
@@ -281,5 +287,17 @@ Hypo engagée : BG 54, `mealTime`, delta 0,4, commande moteur sûre 2,40 U/h et 
 `runCoreDecisionMaxIobExceededTempBasalGate` décide dans `commonMain` (`decideMaxIobExceededTempBasal`). `setTempBasal`, `comparator.compare` et `logDecisionFinal` restent des ports. L’exportateur d’étude, le contexte d’activité et `adaptiveMult` sont lus à la ligne. Pas de `try/catch` avalé. IOB 5 U, plafond 2 U, repas relax éteint, BG 160, delta +2, basale 2,00 : demande TBR **2,00 U/h** pendant 30 min, override faux.
 
 `applySafetyPrecautions` décide dans `commonMain` (`decideSafetyPrecautions`). Les poids de repas, la condition critique, le sport, le cycle endocrinien, les ajustements, la garde PKPD, le plancher et les plafonds SMB restent des ports appelés à la ligne. Pas de `try/catch` avalé. Sport et repas, SMB 2,00, dépassement 80 mg/dL : échelle 0,70 puis boost 1,10, SMB **1,54 U**. Le zéro sport pose `criticalSafetyZeroedThisTick`.
+
+`runAdvancedPredictionsAndPredPipePrep` décide dans `commonMain` (`decideAdvancedPredictionsAndPredPipePrep`). Les courbes, la phase, l’absorption, la cible et la prédiction publiée restent des ports à la ligne. Le `catch` de joignabilité pompe garde le repli faux et écrit `PRED_PIPE pump reachability failed (<type>): <message> — value false`. BG 100, activité 0,20, sensibilité 50 : plancher 39, meilleur terminal environ 43,78, seuil 70.
+
+`runPredPipelineSafetyHaltOrReturn` décide dans `commonMain` (`decidePredPipelineSafetyHalt`). Le départ de sécurité, le COB et le TBR de halte restent des ports. Pas de `try/catch` avalé dans cette tête. La même scène demande un TBR **0,25 U/h** pendant 30 min, `overrideSafetyLimits` vrai.
+
+`runT3cBrittleBypassOrReturn` décide dans `commonMain` (`decideT3cBrittleBypass`). Les champs qui bougent après les prédictions sont lus à la ligne. Le déploiement de l’arbre reste un `runCatching` dans la coquille (`T3C physio/tree deploy failed`). BG 180, basale 1,00, max 3,00 : TBR **1,30 U/h** pendant 30 min, `units` null.
+
+`planHarmoniaProductionBranch` décide dans `commonMain` (`decideHarmoniaProductionRamp`). Les bloqueurs restent des ports. Pas de `try/catch` avalé. Demande 2,00 U/h, débit précédent 1,00 : rampe **1,30 U/h**.
+
+`buildGlobalAimiBasalScheduleBootstrap` décide dans `commonMain` (`decideBasalSchedule`). Le pas pompe, la validation et les pas récents sont lus à la ligne. Pas de `try/catch` avalé. Autosens 0,5, basale profil 1,00 : basale **2,00 U/h**.
+
+`runPostBasalBootstrapIobTickStepsAndHeartRate` décide dans `commonMain` (`decideHeartRateIsf`). Les fenêtres de pas et de FC restent des ports. Le `catch` de la fenêtre FC pose 80 bpm, `baselineReal` faux, et `HR windows failed (<type>): <message> — averages 80, baseline not real`. FC 110 / moyenne 88 : ISF **45**.
 
 Les traces golden restent, octet pour octet : mode repas (TBR puis prébolus), récupération d’hypo, hypo sévère avec autorité post-hypo, plafond MaxIOB, Autodrive éteint, montée de repas engagée (`ShellDecisionTraceTest`, TBR 2,40 U/h demandée, SMB moteur non déposé tant que RBT est éteint), et le chemin UAM de `buildRbtExtendedSignals` (ordinal post-hypo 2, confiance 0,70). Si une trace diverge, on s’arrête.
