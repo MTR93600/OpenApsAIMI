@@ -58,6 +58,22 @@ class RbtOptionalReadTest {
     }
 
     @Test
+    fun customFailureLineKeepsTheNullFallback() {
+        val log = mutableListOf<String>()
+        val read = readRbtOptional(
+            source = "t3cHrSnapshot",
+            consoleLog = log,
+            failureLine = { type, _ -> "🫁 T3c CFRD: hr snapshot failed ($type) — boost 0.00" },
+        ) { throw IllegalStateException("wearable") }
+        assertIs<OptionalSignal.Failed>(read)
+        assertEquals(null, read.valueOrNull())
+        assertEquals(
+            listOf("🫁 T3c CFRD: hr snapshot failed (IllegalStateException) — boost 0.00"),
+            log,
+        )
+    }
+
+    @Test
     fun errorIsNotSwallowed() {
         val log = mutableListOf<String>()
         assertFailsWith<NotImplementedError> {

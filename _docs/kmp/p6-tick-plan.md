@@ -231,3 +231,69 @@ Vert :
 - `AimiCivilClockJvmParityTest` : `tests="1" skipped="0" failures="0" errors="0"`, horodatage `2026-10-04T14:22:25.875Z`
 
 `:plugins:aps:compileAndroidMain`, `compileKotlinIosArm64`, `compileKotlinIosSimulatorArm64`, `compileTestKotlinIosSimulatorArm64` et `:app:assembleFullDebug` : `BUILD SUCCESSFUL in 1m 12s`, `GRADLE_EXIT=0`. Journal `/tmp/p64-gates.log`.
+
+## 8. Ce qui reste dans le tick après `executeT3cBrittleMode`
+
+Mesuré sur `DetermineBasalAIMI2.kt` après le déplacement de la tête T3C : **17 518 lignes**, **325 fonctions**. Le corps de `executeT3cBrittleMode` est `decideT3cBrittleMode` en `commonMain`. La coquille fait 88 lignes : elle ne calcule plus, elle branche les ports.
+
+Déjà décidées dans `commonMain`, coquille réduite : `applyLegacyMealModes` (47), `buildRbtExtendedSignals` (110), `runAutodriveV3MultiVariableBranch` (166), `executeT3cBrittleMode` (88).
+
+Hors de cette série, par consigne : `setTempBasal` (357), `runDetermineBasalTickInner` (884), les learners (`applyBasalNeuralLearningAndTraining` 66, `logLearnersHealth` 54, `neuralnetwork5` 51, les `refresh*Async`), l’export (`runAimiSnapshotMedicalJsonAndHormonitorExportStage` 504) et `toMedicalJson` (754).
+
+Têtes qui choisissent encore un débit, un SMB ou un plafond, 40 lignes et plus :
+
+| Lignes | Fonction |
+|---:|---|
+| 377 | `finalizeAndCapSMB` |
+| 254 | `runRecursiveBeliefResolve` |
+| 233 | `resolveMealHyperBasalBoostOutcome` |
+| 204 | `runTickClockMaxSmbTirCarbAndGlucoseCopy` |
+| 198 | `runT9PhysioEarlyPkpdAndTubeBootstrap` |
+| 197 | `runPkpdGuardEndoDampenRedCarpetAndCapSmb` |
+| 192 | `buildDecisionContextInitRtSosAndFlatShadow` |
+| 185 | `refineRbtMergeAfterDoseSnapshot` |
+| 185 | `basalFirstAdaptiveMultiplier` |
+| 180 | `runBasalAimiTddCarbLimitsTirEarlyBasalAndPaiIsf` |
+| 175 | `runAdvancedPredictionsAndPredPipePrep` |
+| 174 | `runPostBasalBootstrapIobTickStepsAndHeartRate` |
+| 172 | `runT3cBrittleBypassOrReturn` |
+| 168 | `runPkpdPredictionsBgiDeviationAndNoisyTargetsStage` |
+| 167 | `applyTrajectoryAnalysis` |
+| 163 | `buildGlobalAimiBasalScheduleBootstrap` |
+| 159 | `planHarmoniaProductionBranch` |
+| 156 | `runSignalPreparationPkpdRuntimePhase` |
+| 150 | `runInsulinReqActivityRelaxAndMicrobolusStage` |
+| 146 | `runPostSafetyMealFirst30NgrHeadroomBasalSmbStage` |
+| 137 | `resolveAndWireRbtLiveTick` |
+| 131 | `applySafetyPrecautions` |
+| 129 | `runSmbDecisionLogAdvisorOneShotAndExecuteInstruction` |
+| 123 | `isAutodriveEngaged` |
+| 120 | `runCarbsAdvisorEnableSmbBasalHistoryAndSafetyStage` |
+| 117 | `tryMealAdvisor` |
+| 114 | `runUamModelCalHypoGuardPostHypoAndSetPredictedSmb` |
+| 113 | `runTrajectoryTightSpiralSafetyBridge` |
+| 112 | `planT3cBasalFirstProduction` |
+| 108 | `runBasalDecisionEngineDecideStage` |
+| 107 | `runTherapyHydrateClocksAndExerciseLockoutGate` |
+| 106 | `buildRaObservationState` |
+| 106 | `runPredPipelineSafetyHaltOrReturn` |
+| 103 | `mergeRbtHyperTrajectoryRelease` |
+| 101 | `runCoreDecisionMaxIobExceededTempBasalGate` |
+| 99 | `publishDoseTerminalAuthorityAndSnapshot` |
+| 97 | `executeSmbInstruction` |
+| 96 | `applyPkpdAbsorptionGuardOncePerTick` |
+| 91 | `applyContextModule` |
+| 89 | `applyTubeAdvisorFromDoseSnapshot` |
+| 88 | `enablesmb` |
+| 86 | `runPostHypoCompressionAndDriftTerminatorOrReturn` |
+| 86 | `computePkpdPredictions` |
+| 78 | `runMealAdvisorDecisionOrReturn` |
+| 76 | `updatePhysioLatentState` |
+| 73 | `runTrajectoryContextModuleTddIsfAndDynamicPbolusPrep` |
+| 72 | `applyAdvancedPredictions` |
+| 70 | `runEarlyDetermineBasalStages` |
+| 70 | `refreshMealAbsorptionPhase` |
+
+En dessous de 40 lignes : le reste des 325, des helpers d’horloge, de log et de lecture. Les compter une par PR gonflerait le chiffre sans avancer le moteur.
+
+`HoldAimiEngine.evaluate` renvoie encore `Hold("ENGINE_NOT_EXTRACTED")`. Le remplacer demande que `runDetermineBasalTickInner` appelle ces têtes depuis `commonMain`, avec `setTempBasal`, la persistance, les notifications, les fichiers et TFLite derrière des ports. Au rythme d’une tête (ou d’une paire couverte par la même trace) par PR, les têtes du tableau font environ **15 PR**. L’inner tick et le branchement du moteur en font **4 à 6** de plus. Total honnête avant que `HoldAimiEngine` puisse déléguer au vrai moteur commun : **une vingtaine de PR**. Pas deux ou trois.

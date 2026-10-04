@@ -85,7 +85,11 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AutodriveV3BranchResult
 import app.aaps.plugins.aps.openAPSAIMI.effects.AutodriveV3TickState
 import app.aaps.plugins.aps.openAPSAIMI.effects.RbtLiveCommitResult
 import app.aaps.plugins.aps.openAPSAIMI.effects.runAutodriveV3MultiVariableBranch as decideAutodriveV3
-import app.aaps.plugins.aps.openAPSAIMI.effects.cfrdHrInflammationBoostOf
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT3cAdaptiveFactor
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT3cHrSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT3cLookbacks
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT3cTickTail
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideT3cBrittleMode
 import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
@@ -17424,7 +17428,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
     }
 
-    private fun executeT3cBrittleMode(
+    internal fun executeT3cBrittleMode(
         bg: Double,
         delta: Float,
         shortAvgDelta: Double,
@@ -17441,256 +17445,70 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         eventualBg: Double,
         rT: RT,
         trajectoryContext: T3cTrajectoryContext? = null,
-        cgmNoise: Double = 0.0,
+        @Suppress("UNUSED_PARAMETER") cgmNoise: Double = 0.0,
         autodriveBasalProposal: AutodriveEngine.BasalOnlyTbrProposal? = null,
-    ): RT {
-        rT.reason = StringBuilder("")
-        rT.deliverAt = aimiWallClockMs()
-        // maxSMB = 0.0 is enforced: this function ONLY sets TBR, never rT.units
-        // rT.units is preserved for pre-bolus from applyLegacyMealModes
-
-        if (exerciseInsulinLockoutActive && bg > EXERCISE_BASAL_RESUME_BG_MGDL) {
-            consoleLog.add(
-                "🏃 T3c + exercice: BG ${bg.toInt()} > ${EXERCISE_BASAL_RESUME_BG_MGDL.toInt()} → basale PI activee, SMB=0"
+    ): RT = decideT3cBrittleMode(
+        bg = bg,
+        delta = delta,
+        shortAvgDelta = shortAvgDelta,
+        longAvgDelta = longAvgDelta,
+        accel = accel,
+        duraISFminutes = duraISFminutes,
+        duraISFaverage = duraISFaverage,
+        profile = profile,
+        currenttemp = currenttemp,
+        iob = iob,
+        targetBg = targetBg,
+        variableSensitivity = variableSensitivity,
+        maxIob = maxIob,
+        eventualBg = eventualBg,
+        rT = rT,
+        trajectoryContext = trajectoryContext,
+        autodriveBasalProposal = autodriveBasalProposal,
+        exerciseInsulinLockoutActive = exerciseInsulinLockoutActive,
+        exerciseBasalResumeBgMgdl = EXERCISE_BASAL_RESUME_BG_MGDL,
+        adaptiveMult = adaptiveMult,
+        tree = lastPhysiologicalTreeSnapshot,
+        effortSmbFactor = lastEffortAssessment?.smbFactor,
+        ngrBasalMultiplier = lastNgrBasalMultiplier,
+        preferences = preferences,
+        consoleLog = consoleLog,
+        adaptiveFactor = object : AimiT3cAdaptiveFactor {
+            override fun factor(
+                bg: Double,
+                basal: Double,
+                accel: Double,
+                duraMin: Double,
+                duraAvg: Double,
+                iob: Double,
+            ): Double = basalNeuralLearner.getT3cAdaptiveFactor(
+                bg = bg,
+                basal = basal,
+                accel = accel,
+                duraMin = duraMin,
+                duraAvg = duraAvg,
+                iob = iob,
+                physioFeatures = currentBasalPhysioFeatures(),
             )
-            rT.reason.append(
-                "🏃 Exercice : BG>${EXERCISE_BASAL_RESUME_BG_MGDL.toInt()} → basale T3c pour freiner l'hyper (SMB=0).\n"
-            )
-        }
+        },
+        hrSnapshot = AimiT3cHrSnapshot { physioAdapter.getLatestSnapshot() },
+        lookbacks = object : AimiT3cLookbacks {
+            override fun postHypoRecoveryActive(): Boolean =
+                this@DetermineBasalaimiSMB2.postHypoRecoveryActive()
 
-        val baseBasal = profile.current_basal
-
-        // Fetch T3C Preferences
-        val activationThreshold = preferences.get(DoubleKey.OApsAIMIT3cActivationThreshold)
-
-        // Rise-management / Autodrive fusion ceiling. Tree unlock (below) can open riseCap + aggressive ramp.
-        // Never affects SMB (T3C = TBR only).
-        val steadyBasalCap = profile.max_basal.coerceAtLeast(baseBasal)
-        val riseHardCeiling = preferences.get(DoubleKey.autodriveMaxBasal).coerceAtLeast(steadyBasalCap)
-        val riseBasalCap = preferences.get(DoubleKey.meal_modes_MaxBasal).coerceIn(steadyBasalCap, riseHardCeiling)
-
-        // ── CFRD (Cystic Fibrosis-Related Diabetes) adaptations ─────────────────
-        val cfrdMode       = preferences.get(BooleanKey.OApsAIMIT3cCfrdMode)
-        val cfrdExac       = cfrdMode && preferences.get(BooleanKey.OApsAIMIT3cCfrdExacerbationMode)
-        val cfrdLgsFloor   = if (cfrdMode) preferences.get(DoubleKey.OApsAIMIT3cCfrdLgsFloorMgdl) else 70.0
-        val cfrdCobDelaySteps = if (cfrdMode) {
-            (preferences.get(DoubleKey.OApsAIMIT3cCfrdCobDelayMin) / T3cAnticipation.PREDICTION_STEP_MINUTES)
-                .toInt().coerceIn(0, 18)
-        } else 0
-        // HR-based inflammation signal: elevated resting-corrected HR indicates
-        // active pulmonary exacerbation / systemic inflammation → insulin resistance.
-        val cfrdHrInflammationBoost: Double = if (cfrdMode) {
-            val snapshot = try {
-                physioAdapter.getLatestSnapshot()
-            } catch (e: Exception) {
-                consoleLog.add(
-                    "🫁 T3c CFRD: hr snapshot failed (${e::class.simpleName ?: "Exception"}) — boost 0.00",
-                )
-                null
+            override fun minBgInLastMinutes(lookbackMinutes: Int): Double =
+                this@DetermineBasalaimiSMB2.minBgInLastMinutes(lookbackMinutes)
+        },
+        tail = object : AimiT3cTickTail {
+            override fun applyBasalNeuralLearning(rT: RT, tbrUph: Double) {
+                applyBasalNeuralLearningAndTraining(rT, tbrUph, govTag = "T3C")
             }
-            if (snapshot == null) 0.0 else cfrdHrInflammationBoostOf(snapshot.hrNow, snapshot.rhrResting)
-        } else 0.0
 
-        if (cfrdMode) {
-            consoleLog.add(
-                "🫁 T3c CFRD: lgsFloor=${cfrdLgsFloor.toInt()} " +
-                    "cobDelay=${cfrdCobDelaySteps * T3cAnticipation.PREDICTION_STEP_MINUTES}m " +
-                    "exac=$cfrdExac hrBoost=${aimiFmt2(cfrdHrInflammationBoost)}"
-            )
-        }
-
-        // ── [ML ALIGNMENT] Option 2: Fuse adaptiveMult into aggressiveness ──────
-        // adaptiveMult encodes the Universal Adaptive Basal scaling learned from
-        // hyper/hypo episodes (hMult × nMult). By blending it here we give the
-        // T3C PI controller the same resistance/sensitivity awareness as the
-        // standard AIMI path — without exposing it to the raw learner values.
-        val rawAggressiveness = basalNeuralLearner.getT3cAdaptiveFactor(
-            bg = bg,
-            basal = baseBasal,
-            accel = accel,
-            duraMin = duraISFminutes,
-            duraAvg = duraISFaverage,
-            iob = iob.iob,
-            physioFeatures = currentBasalPhysioFeatures()
-        )
-        // Clamp the blend so adaptiveMult never turns T3C hyper-aggressive:
-        //  - Resistance (adaptiveMult > 1.0): amplify up to 40% extra
-        //  - Sensitivity (adaptiveMult < 1.0): allow full reduction (safety first)
-        val adaptiveBoost = if (adaptiveMult > 1.0) {
-            (adaptiveMult - 1.0).coerceAtMost(0.40) // max +40%
-        } else {
-            adaptiveMult - 1.0 // full reduction
-        }
-        // CFRD: exacerbation (manual) and HR-based inflammation both signal acute
-        // insulin resistance — raise the aggressiveness ceiling accordingly.
-        val cfrdResistanceBoost = (cfrdHrInflammationBoost + if (cfrdExac) 0.45 else 0.0).coerceAtMost(0.65)
-        val baseAggressivenessCap = if (cfrdMode && (cfrdExac || cfrdHrInflammationBoost >= 0.20)) 3.0 else 2.0
-
-        // ── Physio-informed T3C (workstream C): the physiological tree + activity belief shape the BASAL
-        // aggressiveness (never SMB — SMB stays 0). Fail-safe: disabled / tree unavailable → unchanged.
-        // The tree is a SAFETY GATE (riskLevel is NOT directional): the ceiling is raised toward the user's
-        // configured aggressiveness ONLY when the tree says risk is LOW/MODERATE AND BG is clearly high AND the
-        // projection is upward. Activity is reduce-only + bounded: exertion → gentler basal to avoid hypo.
-        val physioInformed = preferences.get(BooleanKey.OApsAIMIT3cPhysioInformedEnabled)
-        val treeRisk = lastPhysiologicalTreeSnapshot?.trunk?.riskLevel
-        val physioPermitsHigherAggression = physioInformed &&
-            (treeRisk == PhysiologicalRiskLevel.LOW || treeRisk == PhysiologicalRiskLevel.MODERATE) &&
-            bg > activationThreshold + 20.0 &&
-            (eventualBg <= 0.0 || eventualBg > targetBg)
-        val configuredAggressiveness = preferences.get(DoubleKey.OApsAIMIT3cAggressiveness).coerceIn(0.3, 3.0)
-        val aggressivenessCap = if (physioPermitsHigherAggression)
-            maxOf(baseAggressivenessCap, configuredAggressiveness) else baseAggressivenessCap
-        val activityDampen = if (physioInformed) (lastEffortAssessment?.smbFactor?.coerceIn(0.5, 1.0) ?: 1.0) else 1.0
-        val aggressiveness = (rawAggressiveness * (1.0 + adaptiveBoost + cfrdResistanceBoost) * activityDampen)
-            .coerceIn(0.3, aggressivenessCap)
-        if (physioInformed && (physioPermitsHigherAggression || activityDampen < 1.0)) {
-            consoleLog.add(
-                "🌳 T3c physio: risk=${treeRisk?.name ?: "—"} capRaised=$physioPermitsHigherAggression " +
-                    "cap=${aimiFmt1(aggressivenessCap)} activityDampen=${aimiFmt2(activityDampen)}"
-            )
-        }
-
-        // CFRD: enforce higher LGS floor before feeding the anticipation engine
-        val lgsForAnticipation = kotlin.math.min(
-            90.0,
-            (profile.lgsThreshold?.toDouble() ?: 70.0).coerceAtLeast(cfrdLgsFloor)
-        )
-        val anticipationStrength = preferences.get(DoubleKey.OApsAIMIT3cAnticipationStrength)
-        val t3cAnticipationHints = T3cAnticipation.buildHints(
-            predictions = rT.predBGs,
-            bgNow = bg,
-            lgsThresholdMgdl = lgsForAnticipation,
-            lgsFloorMgdl = cfrdLgsFloor,
-            cobDelaySteps = cfrdCobDelaySteps,
-            activationThreshold = activationThreshold,
-            eventualBg = if (eventualBg > 0) eventualBg else null,
-            strengthRaw = anticipationStrength
-        )
-        if (anticipationStrength > 0.01) {
-            consoleLog.add(
-                "🔮 T3cANT str=${aimiFmt2(anticipationStrength)} " +
-                    "tSoftHypo=${t3cAnticipationHints.minutesToSoftHypo?.toString() ?: "—"}m " +
-                    "nadir=${t3cAnticipationHints.defensiveNadirBg?.let { aimiFmt0(it) } ?: "—"} " +
-                    "tHyperBand=${t3cAnticipationHints.minutesToHyperExcursion?.toString() ?: "—"}m"
-            )
-        }
-
-        // Tree unlock: opens rise ceiling + aggressive ramp when resistance/meal/hyper evidence is present.
-        // Anticipatory: gate on the projected BG (where it's heading) so the ramp engages at rise onset.
-        val unlockProjectedBg = DynamicBasalController.projectBg(bg, delta, shortAvgDelta, accel)
-        val treeUnlock = T3cAutodriveBasalBridge.evaluateTreeUnlock(
-            tree = lastPhysiologicalTreeSnapshot,
-            bg = bg,
-            delta = delta,
-            activationThreshold = activationThreshold,
-            postHypoActive = postHypoRecoveryActive(),
-            eventualBg = eventualBg.takeIf { it > 0 },
-            targetBg = targetBg,
-            projectedBg = unlockProjectedBg,
-        )
-        val maxBasalCapForPi = if (treeUnlock.unlock) riseBasalCap else steadyBasalCap
-
-        // 🧠 Predictive PI Controller — curve-augmented when anticipation strength > 0
-        val computedRate = DynamicBasalController.computeT3c(
-            bg = bg,
-            targetBg = targetBg,
-            delta = delta,
-            shortAvgDelta = shortAvgDelta,
-            longAvgDelta = longAvgDelta,
-            accel = accel,
-            iob = iob.iob,
-            maxIob = maxIob,
-            profileBasal = baseBasal,
-            isf = variableSensitivity.coerceAtLeast(10.0),
-            duraISFminutes = duraISFminutes,
-            duraISFaverage = duraISFaverage,
-            eventualBg = if (eventualBg > 0) eventualBg else null,
-            activationThreshold = activationThreshold,
-            aggressiveness = aggressiveness,
-            maxBasalCap = maxBasalCapForPi,
-            trajectory = trajectoryContext,
-            anticipationHints = t3cAnticipationHints
-        )
-
-        val prevRate = if (currenttemp.duration > 0) currenttemp.rate else baseBasal
-        val fusion = T3cAutodriveBasalBridge.fuse(
-            piUph = computedRate,
-            adTbrUph = autodriveBasalProposal?.tbrUph,
-            strippedSmbU = autodriveBasalProposal?.strippedSmbU ?: 0.0,
-            profileBasalUph = baseBasal,
-            steadyCapUph = steadyBasalCap,
-            riseCapUph = riseBasalCap,
-            previousRateUph = prevRate,
-            unlock = treeUnlock,
-        )
-        consoleLog.add(fusion.toLogLine())
-        if (autodriveBasalProposal != null && autodriveBasalProposal.strippedSmbU > 0.0) {
-            consoleLog.add(
-                "T3C_AD_BASAL: smb stripped ${aimiFmt2(autodriveBasalProposal.strippedSmbU)}U " +
-                    "(reason=${autodriveBasalProposal.reason.take(80)})"
-            )
-        }
-        val maxBasalCap = fusion.maxBasalCapUph
-        val targetRate = fusion.fusedTargetUph
-        val maxStepUp = fusion.maxStepUpUph
-        val safeRate = T3cAutodriveBasalBridge.applyRamp(prevRate, targetRate, maxStepUp)
-
-        // ── [ML ALIGNMENT] Option 1: Apply adaptiveMult to final T3C rate ───────
-        // This mirrors what setTempBasal() does on the standard path (L.1475-1478)
-        // but is applied *after* the progressive ramp so the safety ramp stays intact.
-        // NGR nocturnal basal boost reaches the T3C basal here (T3C dependency). Self-gating: lastNgrBasalMultiplier
-        // is 1.0 unless NGR is enabled AND in its night window AND rise conditions are met (refreshPatientStateRuntime).
-        // Boost-only [1.0, 2.0], gated by the physio-informed toggle, always re-clamped to maxBasalCap. Never SMB.
-        val ngrBasalMult = if (physioInformed) lastNgrBasalMultiplier.coerceIn(1.0, 2.0) else 1.0
-        val t3cRateMult = adaptiveMult * ngrBasalMult
-        val t3cFinalRate = if (safeRate > 0.0 && Math.abs(t3cRateMult - 1.0) > 0.01) {
-            (safeRate * t3cRateMult).coerceIn(0.0, maxBasalCap)
-        } else {
-            safeRate
-        }
-        if (physioInformed && ngrBasalMult > 1.0) {
-            consoleLog.add("🌙 T3c NGR nocturnal basal boost ×${aimiFmt2(ngrBasalMult)} → ${aimiFmt2(t3cFinalRate)}U/h")
-        }
-
-        // ── T3C Hyper basal floor ───────────────────────────────────────────────
-        // Installed-hyper protection: when BG has stayed at/above the hyper level for a sustained
-        // window, CGM-noise down-ticks must not collapse the basal to ~0 (the observed whipsaw). Hold
-        // the basal at the user's configured Max basal (profile.max_basal — tunable via the standard
-        // Max basal preference), bounded by the active cap. Basal-only. Releases automatically once BG
-        // drops back below the level. Fail-safe: on by default (opt-out) AND a sustained-dwell
-        // requirement (minBg over the window ≥ level) so a single noise spike cannot trigger it.
-        val hyperFloorBgMgdl = 160.0   // "hyper installed" level (user-requested)
-        val hyperFloorDwellMin = 20    // sustained minutes required — makes the trigger noise-robust
-        val hyperFloorApplies = preferences.get(BooleanKey.OApsAIMIT3cHyperBasalFloor) &&
-            bg >= hyperFloorBgMgdl &&
-            minBgInLastMinutes(hyperFloorDwellMin) >= hyperFloorBgMgdl
-        val hyperFloorUph = if (hyperFloorApplies) profile.max_basal.coerceIn(0.0, maxBasalCap) else 0.0
-        val t3cFlooredRate = t3cFinalRate.coerceAtLeast(hyperFloorUph)
-        if (hyperFloorApplies && t3cFlooredRate > t3cFinalRate + 0.01) {
-            consoleLog.add(
-                "🧱 T3c hyper floor: BG≥${hyperFloorBgMgdl.toInt()} for ≥${hyperFloorDwellMin}m → basal held at maxBasal " +
-                    "${aimiFmt2(hyperFloorUph)}U/h (was ${aimiFmt2(t3cFinalRate)})"
-            )
-        }
-
-        rT.rate = t3cFlooredRate
-        rT.duration = 30
-        rT.reason.append(
-            "🛡️T3c | Thresh: ${activationThreshold.toInt()} | Agg: ${aimiFmt1(aggressiveness)} (raw=${aimiFmt1(rawAggressiveness)} AML=${aimiFmt2(adaptiveMult)}) | " +
-                "ANT:${aimiFmt2(anticipationStrength)} | unlock=${fusion.unlock} | " +
-                "PI/AD: ${aimiFmt2(t3cFlooredRate)}U/h (target=${aimiFmt2(targetRate)} cap=${aimiFmt2(maxBasalCap)} stepUp=${aimiFmt2(maxStepUp)})"
-        )
-
-        // 🧬 Adaptive Learning Update — learn from the actually delivered rate (post hyper-floor).
-        applyBasalNeuralLearningAndTraining(
-            rT = rT,
-            tbrUph = t3cFlooredRate,
-            govTag = "T3C",
-        )
-        consoleLog.add(rT.reason.toString())
-        markFinalLoopDecisionFromRT(rT, currenttemp)
-        return rT
-    }
+            override fun markFinalLoopDecision(rT: RT, currentTemp: CurrentTemp) {
+                markFinalLoopDecisionFromRT(rT, currentTemp)
+            }
+        },
+    )
 }
 
 enum class AutodriveState {
