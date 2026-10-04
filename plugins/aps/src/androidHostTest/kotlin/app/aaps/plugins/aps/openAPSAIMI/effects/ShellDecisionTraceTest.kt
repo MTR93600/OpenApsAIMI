@@ -1236,6 +1236,41 @@ class ShellDecisionTraceTest {
     }
 
     @Test
+    fun fragileGlucoseDisablesSmbAfterPkpdRuntime() {
+        val integration = mock(app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdIntegration::class.java, Answer { inv ->
+            if (inv.method.name == "computeRuntime") preOnsetRuntime() else null
+        })
+        setField(tick, "pkpdIntegration", integration)
+        val provider = mock(HormonitorStudyExporterProvider::class.java)
+        whenever(provider.exporter()).thenReturn(null)
+        setField(tick, "hormonitorStudyExporterProvider", provider)
+        setField(tick, "bg", 100.0)
+        setField(tick, "delta", -1.0f)
+        setField(tick, "shortAvgDelta", -1.0f)
+        setField(tick, "longAvgDelta", -1.0f)
+        setField(tick, "iob", 1.0f)
+        setField(tick, "cob", 0.0f)
+        setField(tick, "maxSMB", 2.0)
+        setField(tick, "targetBg", 100.0f)
+        setField(tick, "predictedBg", 100.0f)
+        holdRefresh("bolusRefreshInFlight")
+        val profile = profileStub()
+        val autosens = mock(AutosensResult::class.java)
+        whenever(autosens.ratio).thenReturn(1.0)
+        val ctx = tickContext(profile, 100.0).copy(autosensData = autosens)
+        val glucose = GlucoseStatusAIMI(glucose = 100.0, delta = -1.0, shortAvgDelta = -1.0, longAvgDelta = -1.0, date = now, combinedDelta = -1.0)
+        val trace = capture {
+            invokeNamed(
+                "runSignalPreparationPkpdRuntimePhase",
+                listOf(ctx, profile, RT(runningDynamicIsf = false), glucose, -1.0f, 30.0, false, false, null),
+            )
+        }
+        val maxSmb = getField(tick, "maxSMB") as Double
+        assertEquals(0.0, maxSmb, 0.001)
+        assertEquals(SIGNAL_PREP_TRACE, trace)
+    }
+
+    @Test
     fun legacyBrittleBypassSetsThePiBasal() {
         val prefs = recordingPreferences(
             doubles = mapOf(
@@ -2320,6 +2355,22 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
             READ key=BooleanKey.OApsAIMIPeakGovernorEnabled value=false
             READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
+        """.trimIndent()
+
+        private val SIGNAL_PREP_TRACE = """
+            READ key=DoubleKey.OApsAIMIautodrivesmallPrebolus value=0.00
+            READ key=DoubleKey.OApsAIMIautodrivePrebolus value=0.00
+            LOG 📦 CACHE TDD24H_PKPD=MISSING reason=tdd24h_missing
+            READ key=AimiLongKey.LastPrebolusTime value=0
+            READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
+            READ key=DoubleKey.OApsAIMIweight value=0.00
+            READ key=BooleanKey.OApsAIMIIntelligenceSingleLearnPath value=false
+            LOG 📊 PKPD_LEARNER:
+            LOG   │ DIA (learned): 5.00h
+            LOG   │ Peak (learned): 75min
+            LOG   │ fusedISF: 50.0 mg/dL/U
+            LOG 🛡️ BASAL-FIRST ACTIVE: Fragile BG (<110 & falling) -> SMB DISABLED
+            LOG   └ adaptiveMode: ACTIVE
         """.trimIndent()
 
         private val PKPD_TARGET_TRACE = """
