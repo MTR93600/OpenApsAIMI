@@ -23,6 +23,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.AimiDecisionContext
 import app.aaps.plugins.aps.openAPSAIMI.AimiUamHandler
 import app.aaps.plugins.aps.openAPSAIMI.DetermineBasalaimiSMB2
+import app.aaps.plugins.aps.openAPSAIMI.NGRConfig
 import app.aaps.plugins.aps.openAPSAIMI.GlucoseStatusCalculatorAimi
 import app.aaps.plugins.aps.openAPSAIMI.advisor.gestation.GestationalAutopilot
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
@@ -75,6 +76,7 @@ import app.aaps.plugins.aps.openAPSAIMI.recursive.RecursiveBeliefAuthorityGate
 import app.aaps.plugins.aps.openAPSAIMI.recursive.RecursiveBeliefSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.recursive.ReleaseAuthority
 import app.aaps.plugins.aps.openAPSAIMI.safety.InsulinStackingStance
+import app.aaps.plugins.aps.openAPSAIMI.safety.SafetyDecision
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryGuard
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
@@ -84,6 +86,7 @@ import app.aaps.plugins.aps.openAPSAIMI.wcycle.VerneuilStatus
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleFacade
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleLearner
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCyclePreferences
+import kotlinx.datetime.LocalTime
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -939,6 +942,57 @@ class ShellDecisionTraceTest {
         assertEquals(BASAL_TDD_PAI_TRACE, trace)
     }
 
+    @Test
+    fun mealFirstThirtyMinutesForcesATempBasal() {
+        setField(tick, "mealTime", true)
+        setField(tick, "mealruntime", 10L)
+        setField(tick, "adaptiveMult", 1.0)
+        val profile = profileStub()
+        val rT = RT(runningDynamicIsf = false)
+        var kind = ""
+        val trace = capture { kind = invokeMealFirst(profile, rT).javaClass.simpleName }
+        assertEquals("EarlyTempBasal", kind)
+        assertEquals(MEAL_FIRST_30_TRACE, trace)
+    }
+
+    private fun invokeMealFirst(profile: OapsProfileAimi, rT: RT): Any {
+        val method = tick.javaClass.declaredMethods.first {
+            it.name == "runPostSafetyMealFirst30NgrHeadroomBasalSmbStage" && it.parameterCount == 15
+        }
+        method.isAccessible = true
+        return method.invoke(
+            tick,
+            profile,
+            tickContext(profile),
+            rT,
+            NGRConfig(
+                enabled = false,
+                pediatricAgeYears = 0,
+                nightStart = LocalTime(0, 0),
+                nightEnd = LocalTime(6, 0),
+                minRiseSlope = 0.0,
+                minDurationMin = 0,
+                minEventualOverTarget = 0,
+                allowSMBBoostFactor = 1.0,
+                allowBasalBoostFactor = 1.0,
+                maxSMBClampU = 1.0,
+                extraIobPer30Min = 0.0,
+                decayMinutes = 0,
+            ),
+            SafetyDecision(stopBasal = false, bolusFactor = 1.0, reason = "", basalLS = false),
+            2.0,
+            10.0,
+            0.5,
+            0.2f,
+            160.0,
+            4.0f,
+            1.0f,
+            1.0f,
+            180.0,
+            100.0,
+        )!!
+    }
+
     private fun invokeBasalPai(glucose: GlucoseStatusAIMI, profile: OapsProfileAimi) {
         val method = tick.javaClass.declaredMethods.first {
             it.name == "runBasalAimiTddCarbLimitsTirEarlyBasalAndPaiIsf" && it.parameterCount == 17
@@ -1669,6 +1723,10 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val MEAL_FIRST_30_TRACE = """
+            EFFECT SetTbr rate=2.00 dur=30 override=true forceExact=false adaptive=1.00
+        """.trimIndent()
+
         private val BASAL_TDD_PAI_TRACE = """
             READ key=DoubleKey.OApsAIMIweight value=70.00
             READ key=DoubleKey.OApsAIMICHO value=15.00
