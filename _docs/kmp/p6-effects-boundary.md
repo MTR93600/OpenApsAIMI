@@ -56,6 +56,7 @@ Les ports sont minces et portent le nom de l’appel de la référence. Pas de b
 | `AimiInsulinReqFinalize` | `finalizeAndCapSMB` | la coquille |
 | `AimiMaxIobGateState` | exportateur d’étude, contexte d’activité, `adaptiveMult`, format sans zéros | la coquille, lus à la ligne |
 | `AimiMaxIobTempBasal` | `setTempBasal` du gate MAX_IOB | la coquille, le corps pompe reste Android |
+| `AimiSafetyPrecautionsCalls` | poids repas, critique, sport, cycle, ajustements, garde PKPD, plancher, plafonds | la coquille, appelés à la ligne |
 
 Les membres du tick déjà calculés (glycémie, IOB, drapeaux de mode) sont passés à la fonction. Ce ne sont pas des lectures de préférences. Une préférence lue seulement sur une branche l’est encore seulement sur cette branche, à la même ligne.
 
@@ -278,5 +279,7 @@ Hypo engagée : BG 54, `mealTime`, delta 0,4, commande moteur sûre 2,40 U/h et 
 `runInsulinReqActivityRelaxAndMicrobolusStage` décide dans `commonMain` (`decideInsulinReqActivityRelaxAndMicrobolus`). La protection activité, `maxSMB` et le plancher HTR sont lus à la ligne. `calculateSMBInterval` et `finalizeAndCapSMB` restent des ports. Pas de `try/catch` avalé. Protection activité, maxSMB 1,00, demande 2,00 U, amortissement repas-IOB 0,50, microbolus interdit : insulinReq **0,25 U**, journal `SMB capped by Activity/Recovery (Limit: 0.50)`.
 
 `runCoreDecisionMaxIobExceededTempBasalGate` décide dans `commonMain` (`decideMaxIobExceededTempBasal`). `setTempBasal`, `comparator.compare` et `logDecisionFinal` restent des ports. L’exportateur d’étude, le contexte d’activité et `adaptiveMult` sont lus à la ligne. Pas de `try/catch` avalé. IOB 5 U, plafond 2 U, repas relax éteint, BG 160, delta +2, basale 2,00 : demande TBR **2,00 U/h** pendant 30 min, override faux.
+
+`applySafetyPrecautions` décide dans `commonMain` (`decideSafetyPrecautions`). Les poids de repas, la condition critique, le sport, le cycle endocrinien, les ajustements, la garde PKPD, le plancher et les plafonds SMB restent des ports appelés à la ligne. Pas de `try/catch` avalé. Sport et repas, SMB 2,00, dépassement 80 mg/dL : échelle 0,70 puis boost 1,10, SMB **1,54 U**. Le zéro sport pose `criticalSafetyZeroedThisTick`.
 
 Les traces golden restent, octet pour octet : mode repas (TBR puis prébolus), récupération d’hypo, hypo sévère avec autorité post-hypo, plafond MaxIOB, Autodrive éteint, montée de repas engagée (`ShellDecisionTraceTest`, TBR 2,40 U/h demandée, SMB moteur non déposé tant que RBT est éteint), et le chemin UAM de `buildRbtExtendedSignals` (ordinal post-hypo 2, confiance 0,70). Si une trace diverge, on s’arrête.
