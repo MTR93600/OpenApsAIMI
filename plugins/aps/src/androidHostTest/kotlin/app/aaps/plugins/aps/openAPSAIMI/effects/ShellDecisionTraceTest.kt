@@ -440,6 +440,42 @@ class ShellDecisionTraceTest {
     }
 
     @Test
+    fun tickClockKeepsTheStandardMaxSmbAtAFlat110() {
+        val prefs = recordingPreferences(
+            doubles = mapOf(
+                DoubleKey.ApsSmbMaxIob to 10.0,
+                DoubleKey.OApsAIMIMaxSMB to 0.50,
+                DoubleKey.OApsAIMIHighBGMaxSMB to 1.20,
+            ),
+        )
+        setField(tick, "preferences", prefs)
+        setField(tick, "bg", 180.0)
+        setField(tick, "now", now)
+        val profile = profileStub()
+        val glucose = GlucoseStatusAIMI(glucose = 110.0, delta = 0.0, shortAvgDelta = 0.0, date = now)
+        val rT = RT(runningDynamicIsf = false)
+        val trace = capture {
+            invokeTickClock(tickContext(profile, 110.0), glucose, rT, combinedDelta = 0.0f)
+        }.replace(Regex("(?<![A-Za-z])ts=\\d+"), "ts=<clock>")
+        assertEquals(0.50, getField(tick, "maxSMB") as Double, 1e-6)
+        assertEquals("phrase", rT.reason.toString())
+        assertEquals(TICK_CLOCK_TRACE, trace)
+    }
+
+    private fun invokeTickClock(
+        ctx: AimiTickContext,
+        glucose: GlucoseStatusAIMI,
+        rT: RT,
+        combinedDelta: Float,
+    ) {
+        val method = tick.javaClass.declaredMethods.first {
+            it.name == "runTickClockMaxSmbTirCarbAndGlucoseCopy" && it.parameterCount == 4
+        }
+        method.isAccessible = true
+        method.invoke(tick, ctx, glucose, rT, combinedDelta)
+    }
+
+    @Test
     fun mealHyperFastingForcesBasalFromThePositiveDelta() {
         val prefs = recordingPreferences(emptyMap())
         setField(tick, "preferences", prefs)
@@ -932,6 +968,25 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val TICK_CLOCK_TRACE = """
+            READ key=BooleanKey.OApsAIMIhoneymoon value=false
+            READ key=AimiLongKey.LastPrebolusTime value=0
+            READ key=AimiLongKey.PendingLegacyPrebolusUnitMilli value=0
+            READ key=AimiLongKey.PendingLegacyPrebolusUnitMilli value=0
+            READ key=DoubleKey.ApsSmbMaxIob value=10.00
+            LOG MAX_IOB_STATIC: Pref=10.0 (Dynamic disabled by request)
+            READ key=DoubleKey.OApsAIMIMaxSMB value=0.50
+            READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=1.20
+            READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=1.20
+            LOG MAXSMB_STANDARD BG=110 -> 0.50U
+            READ key=DoubleKey.OApsAIMIMaxSMB value=0.50
+            READ key=IntKey.OApsAIMINightGrowthAgeYears value=0
+            READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
+            READ key=StringKey.OApsAIMINightGrowthStart value=
+            READ key=StringKey.OApsAIMINightGrowthEnd value=
+            READ key=DoubleKey.OApsAIMINightGrowthMaxIobExtra value=0.00
+        """.trimIndent()
+
         private val MEAL_HYPER_FASTING_TRACE = "READ key=DoubleKey.meal_modes_MaxBasal value=0.00"
 
         private val RBT_RESOLVE_TRACE = """
