@@ -171,6 +171,10 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRbtHtrMerge
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRbtRefineState
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideDecisionContextInitRtSosAndFlatShadow
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiBasalFirstAdaptiveState
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiBasalPaiState
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiSmoothBasalRate
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiUnifiedReactivityFactor
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideBasalAimiTddCarbLimitsTirEarlyBasalAndPaiIsf
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideBasalFirstAdaptiveMultiplier
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideRefineRbtMergeAfterDoseSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideMealAdvisorOrReturn
@@ -5520,148 +5524,46 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         iobActivityIn30Min: Double,
         iobActivityNow: Double,
     ): AimiBasalAimiThroughPaiStageSnapshot {
-        if (tdd7Days.toFloat() != 0.0f) {
-            // [FIX] Use raw TDD-based basal for the decision loop to avoid double-scaling in setTempBasal
-            // but use it here for the internal 'basalaimi' reference.
-            basalaimi = (tdd7Days / preferences.get(DoubleKey.OApsAIMIweight)).toFloat()
-        } else {
-            basalaimi = profileCurrentBasal.toFloat()
-            consoleLog.add("TDDis 0 -> Baseline Basal: ${basalaimi}U/h")
-        }
-        this.basalaimi = basalDecisionEngine.smoothBasalRate(tdd7P.toFloat(), tdd7Days.toFloat(), basalaimi)
-        if (tdd7Days.toFloat() != 0.0f) {
-            this.ci = (450 / tdd7Days).toFloat()
-            // 🎯 Update carb limit using the harmonized learner (Unified Scaling)
-            val learnedBasalForLimit = basalaimi * adaptiveMult
-            this.aimilimit = (preferences.get(DoubleKey.OApsAIMICHO) / (450 / tdd7Days)).toFloat() * adaptiveMult.toFloat()
-        }
-
-        val choKey = preferences.get(DoubleKey.OApsAIMICHO)
-        this.aimilimit = when {
-            ci != 0.0f && ci.isFinite() -> (choKey / ci).toFloat()
-            else -> (choKey / profile.carb_ratio).toFloat()
-        }
-
-        // 🎯 Apply Harmonized Adaptive Multiplier to carb limits
-        if (adaptiveMult != 1.0) {
-            this.aimilimit *= adaptiveMult.toFloat()
-        }
-        val timenowCaptured = aimiLocalHour()
-        val sixAMHourCaptured = 6
-
-        val pregnancyEnableCaptured = preferences.get(BooleanKey.OApsAIMIpregnancy)
-
-        if (tirbasal3B != null && pregnancyEnableCaptured && tirbasal3IR != null) {
-            // 🎯 UnifiedReactivityLearner is now used exclusively
-            val useUnified = preferences.get(BooleanKey.OApsAIMIUnifiedReactivityEnabled)
-
-            this.basalaimi = when {
-                tirbasalhAP != null && tirbasalhAP >= 5           -> (basalaimi * 2.0).toFloat()
-                lastHourTIRAbove != null && lastHourTIRAbove >= 2 -> (basalaimi * 1.8).toFloat()
-
-                timenowCaptured < sixAMHourCaptured                               -> {
-                    val multiplier = if (honeymoon) 1.2 else 1.4
-                    val reactivity = if (useUnified) {
-                        unifiedReactivityLearner.globalFactor
-                    } else {
-                        1.0  // Fallback to neutral if disabled
-                    }
-                    consoleLog.add("Reactivity (< 6AM): enabled=$useUnified, factor=${aimiFmt3(reactivity)}")
-                    (basalaimi * multiplier * reactivity).toFloat()
-                }
-
-                timenowCaptured > sixAMHourCaptured                               -> {
-                    val multiplier = if (honeymoon) 1.4 else 1.6
-                    val reactivity = if (useUnified) {
-                        unifiedReactivityLearner.globalFactor
-                    } else {
-                        1.0  // Fallback to neutral if disabled
-                    }
-                    consoleLog.add("Reactivity (> 6AM): enabled=$useUnified, factor=${aimiFmt3(reactivity)}")
-                    (basalaimi * multiplier * reactivity).toFloat()
-                }
-
-                tirbasal3B <= 5 && tirbasal3IR in 70.0..80.0      -> (basalaimi * 1.1).toFloat()
-                tirbasal3B <= 5 && tirbasal3IR <= 70              -> (basalaimi * 1.3).toFloat()
-                tirbasal3B > 5 && tirbasal3A!! < 5                -> (basalaimi * 0.85).toFloat()
-                else                                              -> basalaimi
-            }
-        }
-
-        this.basalaimi = if (honeymoon && basalaimi > profileCurrentBasal * 2) (profileCurrentBasal.toFloat() * 2) else basalaimi
-
-        this.basalaimi = if (basalaimi < 0.0f) 0.0f else basalaimi
-        val deltaAcceleration = glucoseStatus.delta - glucoseStatus.shortAvgDelta
-        if (deltaAcceleration > 1.5 && bg > 130) {
-            // Si la glycémie accélère (+1.5mg/dL/5min par rapport à la moyenne), on augmente le basal
-            val boostFactor = 1.2f // Boost de 20%
-            this.basalaimi = (this.basalaimi * boostFactor).coerceAtMost(profile.max_basal.toFloat())
-            consoleLog.add("Basal boosté (+20%) pour accélération BG.")
-        } else if (bg in 80.0..115.0 && glucoseStatus.delta > 1.0) {
-            // 🚀 EARLY BASAL: Réactivité précoce pour les montées douces (80-115 mg/dL)
-            // L'objectif est de ne pas attendre 130 mg/dL pour réagir.
-
-            var earlyFactor = 1.0f
-            if (deltaAcceleration > 0.5) {
-                // Accélération détectée (même faible)
-                earlyFactor = 1.25f // +25%
-                consoleLog.add("Early Basal: Accélération détectée en zone basse (+25%)")
-            } else {
-                // Montée linéaire simple
-                earlyFactor = 1.15f // +15%
-                consoleLog.add("Early Basal: Montée progressive (+15%)")
-            }
-
-            // Application sécurisée : Max 1.5x le profil (restons modérés en zone basse)
-            val safeCap = (profileCurrentBasal * 1.5).toFloat()
-            this.basalaimi = (this.basalaimi * earlyFactor).coerceAtMost(safeCap)
-        }
-        var newVariableSensitivity = paiBaseSensitivity // fused base ISF before PAI adjustment
-
-        // PAI: proactive ISF vs BG rise and IOB peak / fade (InsulinActionProfiler signals).
-        consoleLog.add("PAI Logic: Base ISF=${aimiFmt1(paiBaseSensitivity)}")
-
-        // Rising BG + high: urgency factor from IOB peak timing.
-        if (delta > 1.5 && bg > 120) {
-            val urgencyFactor = when {
-                // Le pic est loin (>45min) OU le pic est déjà bien passé (<-30min) -> URGENCE
-                iobPeakMinutes > 45 || iobPeakMinutes < -30 -> {
-                    consoleLog.add("PAI: BG rising & IOB badly timed. AGGRESSIVE.")
-                    0.60 // ISF réduit de 40%
-                }
-                // L'activité de l'insuline va diminuer. On anticipe.
-                iobActivityIn30Min < iobActivityNow * 0.9 -> {
-                    consoleLog.add("PAI: BG rising & IOB activity will drop. PROACTIVE.")
-                    0.90 // ISF réduit de 10%
-                }
-                // Le pic est dans un avenir proche (0-45min). On peut être patient.
-                iobPeakMinutes in 0.0..45.0 -> {
-                    consoleLog.add("PAI: BG rising but IOB peak is coming. PATIENT.")
-                    1.0 // Pas de changement
-                }
-                else -> 1.0 // Cas par défaut
-            }
-            newVariableSensitivity *= urgencyFactor
-            if (urgencyFactor != 1.0) {
-                consoleLog.add("PAI: Urgency factor ${aimiFmt2(urgencyFactor)} applied. New ISF=${aimiFmt1(newVariableSensitivity)}")
-            }
-        }
-
-        // High BG, flat/slow drift: slight aggressiveness if IOB will fade (anti-rebound).
-        if (delta in -1.0..1.5 && bg > 140) {
-            // Si l'activité de l'insuline va chuter, on risque un rebond.
-            if (iobActivityIn30Min < iobActivityNow * 0.8) {
-                consoleLog.add("PAI: BG high/stable but IOB will fade. Anti-rebound.")
-                newVariableSensitivity *= 0.95 // On est 5% plus agressif
-            }
-        }
-
-        this.variableSensitivity = newVariableSensitivity.toFloat()
-
+        val stage = decideBasalAimiTddCarbLimitsTirEarlyBasalAndPaiIsf(
+            glucoseStatus = glucoseStatus,
+            profile = profile,
+            profileCurrentBasal = profileCurrentBasal,
+            bg = bg,
+            delta = delta,
+            tdd7Days = tdd7Days,
+            tdd7P = tdd7P,
+            paiBaseSensitivity = paiBaseSensitivity,
+            honeymoon = honeymoon,
+            tirbasal3B = tirbasal3B,
+            tirbasal3IR = tirbasal3IR,
+            tirbasal3A = tirbasal3A,
+            tirbasalhAP = tirbasalhAP,
+            lastHourTIRAbove = lastHourTIRAbove,
+            iobPeakMinutes = iobPeakMinutes,
+            iobActivityIn30Min = iobActivityIn30Min,
+            iobActivityNow = iobActivityNow,
+            preferences = preferences,
+            consoleLog = consoleLog,
+            state = object : AimiBasalPaiState {
+                override fun basalAimi() = this@DetermineBasalaimiSMB2.basalaimi
+                override fun setBasalAimi(value: Float) { basalaimi = value }
+                override fun ci() = this@DetermineBasalaimiSMB2.ci
+                override fun setCi(value: Float) { ci = value }
+                override fun aimiLimit() = aimilimit
+                override fun setAimiLimit(value: Float) { aimilimit = value }
+                override fun adaptiveMult() = this@DetermineBasalaimiSMB2.adaptiveMult
+                override fun setVariableSensitivity(value: Float) { variableSensitivity = value }
+            },
+            smooth = AimiSmoothBasalRate { tddRecent, tddPrevious, currentBasalRate ->
+                basalDecisionEngine.smoothBasalRate(tddRecent, tddPrevious, currentBasalRate)
+            },
+            hour = AimiDecisionLocalHour { aimiLocalHour() },
+            reactivity = AimiUnifiedReactivityFactor { unifiedReactivityLearner.globalFactor },
+        )
         return AimiBasalAimiThroughPaiStageSnapshot(
-            timenowHour = timenowCaptured,
-            sixAMHour = sixAMHourCaptured,
-            pregnancyEnable = pregnancyEnableCaptured,
+            timenowHour = stage.timenowHour,
+            sixAMHour = stage.sixAMHour,
+            pregnancyEnable = stage.pregnancyEnable,
         )
     }
 
