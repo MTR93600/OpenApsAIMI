@@ -292,10 +292,6 @@ import java.io.File
 import java.io.RandomAccessFile
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
-import java.time.Instant
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Calendar
 import java.util.Date
@@ -1406,7 +1402,7 @@ private data class AimiTickClockTirCarbGlucoseBootstrap(
     val tirbasal3B: Double?,
     val tirbasal3A: Double?,
     val tirbasalhAP: Double?,
-    /** Minute/second from the same `Calendar.getInstance()` tick as `hourOfDay` (circadian math later). */
+    /** Minute/second from the same [aimiCivilClock] snapshot as `hourOfDay` (circadian math later). */
     val circadianMinute: Int,
     val circadianSecond: Int,
     val bgAcceleration: Float,
@@ -2280,7 +2276,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             trigger = run {
                 val iobNow = ctx.iobDataArray.firstOrNull()?.iob ?: 0.0
                 val bgNow = ctx.glucoseStatus.glucose
-                val hour = java.util.Calendar.getInstance()[java.util.Calendar.HOUR_OF_DAY]
+                val hour = aimiLocalHour()
                 val isNight = hour >= 22 || hour <= 7
                 val isBgRiseFast = ctx.glucoseStatus.delta > 5
                 val nightBangBangBlock = isNight && isBgRiseFast && iobNow > 2.0 && bgNow < 100.0 &&
@@ -2800,11 +2796,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         combinedDelta: Float,
     ): AimiTickClockTirCarbGlucoseBootstrap {
         val profile = ctx.profile
-        val calendarInstance = Calendar.getInstance()
-        this.hourOfDay = calendarInstance[Calendar.HOUR_OF_DAY]
-        val circadianMinute = calendarInstance[Calendar.MINUTE]
-        val circadianSecond = calendarInstance[Calendar.SECOND]
-        val dayOfWeek = calendarInstance[Calendar.DAY_OF_WEEK]
+        val civilNow = aimiCivilClock(aimiWallClockMs())
+        this.hourOfDay = civilNow.hour
+        val circadianMinute = civilNow.minute
+        val circadianSecond = civilNow.second
+        val dayOfWeek = civilNow.calendarDayOfWeek
         val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
         this.bg = glucoseStatus.glucose
         this.tickCombinedDelta = combinedDelta
@@ -6339,8 +6335,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (adaptiveMult != 1.0) {
             this.aimilimit *= adaptiveMult.toFloat()
         }
-        val timenowCaptured = LocalTime.now().hour
-        val sixAMHourCaptured = LocalTime.of(6, 0).hour
+        val timenowCaptured = aimiLocalHour()
+        val sixAMHourCaptured = 6
 
         val pregnancyEnableCaptured = preferences.get(BooleanKey.OApsAIMIpregnancy)
 
@@ -9017,7 +9013,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val iob_data = b.ctx.iobDataArray[0]
 
         // --- Update Learners BEFORE building final result ---
-        val currentHour = LocalTime.now().hour
+        val currentHour = aimiLocalHour()
         val anyMealActive = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime
         val isNight = currentHour >= 22 || currentHour <= 6
 
@@ -9043,7 +9039,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // 📊 Expose UnifiedReactivityLearner state in rT for visibility
         unifiedReactivityLearner.lastAnalysis?.let { analysis ->
-            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
             consoleLog.add("📊 REACTIVITY_LEARNER:")
             consoleLog.add("  │ globalFactor: ${aimiFmt3(analysis.globalFactor)}")
             consoleLog.add("  │ shortTermFactor: ${aimiFmt3(analysis.shortTermFactor)}")
@@ -9058,7 +9053,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 consoleLog.add("  │ floorLock: RELEASED progressively")
             }
             consoleLog.add("  │ Reason: ${analysis.adjustmentReason}")
-            consoleLog.add("  └ Analyzed at: ${sdf.format(Date(analysis.timestamp))}")
+            consoleLog.add("  └ Analyzed at: ${aimiCsvTimestamp(analysis.timestamp)}")
         }
 
         // 🔮 WCycle Active Learning
@@ -9721,13 +9716,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // -dBG / absorbed insulin over clean falls, outside the ISF chain. No dosing decision reads
         // it: it only reaches baseline_state, next to command_isf_mgdl, so the two can be compared.
         runCatching {
-            val tickCalendar = Calendar.getInstance()
-            tickCalendar.timeInMillis = decisionCtx.timestamp
             val runningTempForMeter = ctx.currentTemp
             observedSensitivityMeter.observe(
                 ObservedSensitivityMeter.Sample(
                     timestampMs = decisionCtx.timestamp,
-                    localHourOfDay = tickCalendar.get(Calendar.HOUR_OF_DAY),
+                    localHourOfDay = aimiLocalHour(decisionCtx.timestamp),
                     bgMgdl = decisionCtx.baseline_state.current_bg_mgdl,
                     // Net of the profile basal: it goes negative when the loop cuts the basal for a
                     // long time, which is why the basal integral below is needed.
@@ -12343,7 +12336,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             smbFinal: Double,
             audit: PkpdPort.DampingAudit?
         ) {
-            val dateStr  = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date(ctx.nowEpochMillis))
+            val dateStr = aimiCsvTimestampMinute(ctx.nowEpochMillis)
             val epochMin = TimeUnit.MILLISECONDS.toMinutes(ctx.nowEpochMillis)
             PkPdCsvLogger.append(
                 PkPdLogRow(
@@ -13465,7 +13458,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val isMealMode = therapy.snackTime || therapy.highCarbTime || therapy.mealTime
             || therapy.lunchTime || therapy.dinnerTime || therapy.bfastTime
 
-        val hour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
+        val hour = aimiLocalHour()
         val night = hour <= 7 // (OK tel quel, utilisé pour l’autodrive)
         val predDelta = predictedDelta(getRecentDeltas()).toFloat()
         val isAutodriveV3Local = preferences.get(BooleanKey.OApsAIMIautoDriveActive)
@@ -13926,21 +13919,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Only when the time in range of the last day is under 85 %.
         if (tir1DAYIR < 85) {
             // Only between 00:05 and 00:10, local time.
-            val currentTime = LocalTime.now()
-            val start = LocalTime.of(0, 5)
-            val end = LocalTime.of(0, 10)
-
-            if (currentTime.isAfter(start) && currentTime.isBefore(end)) {
+            val deletionNowMs = aimiWallClockMs()
+            if (aimiStrictlyInsideLocalWindow(deletionNowMs, 0, 5, 0, 10)) {
                 // The day that has just ended, in the phone's own time zone, which is both the zone
                 // the window above is read in and the zone the rows were dated in. Midday is used
                 // rather than midnight because in a few time zones a day starts without a midnight
                 // when the clocks change.
-                val yesterdayMiddayMs = LocalDate.now()
-                    .minusDays(1)
-                    .atTime(12, 0)
-                    .atZone(ZoneId.systemDefault())
-                    .toInstant()
-                    .toEpochMilli()
+                val yesterdayMiddayMs = aimiYesterdayMiddayEpochMs(deletionNowMs)
                 // The very text the row writer put in column 0 for that day.
                 val dateToRemove = dateUtil.dateString(yesterdayMiddayMs)
 
@@ -15265,7 +15250,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         snackTime: Boolean,
         reason: StringBuilder,
     ): AimiPostAutodrivePostHypoBundle {
-        val localHour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
+        val localHour = aimiLocalHour()
         val estimatedCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
         val estimatedCarbsTimeDouble = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime)
         val estimatedCarbsTime = estimatedCarbsTimeDouble.toLong()
@@ -15798,7 +15783,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         // 8) Nuit (optionnelle) : on permet un peu plus de réactivité
-        val currentHour = LocalTime.now().hour
+        val currentHour = aimiLocalHour()
         if (preferences.get(BooleanKey.OApsAIMInight) &&
             currentHour == 23 &&
             delta < 10f &&
@@ -15896,7 +15881,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🚀 BYPASS: If explicitly triggered by user (Meal Advisor), skip soft reductions
         if (ignoreSafetyRestrictions) return smbAmount
 
-        val currentHour = LocalTime.now().hour
+        val currentHour = aimiLocalHour()
         val honeymoon   = preferences.get(BooleanKey.OApsAIMIhoneymoon)
 
         // 2) 🔧 AJUSTEMENT “falling decelerating” (soft)
@@ -16110,7 +16095,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         averageBeatsPerMinute: Float,
         averageBeatsPerMinute10: Float
     ): Float {
-        val currentHour = LocalTime.now().hour
+        val currentHour = aimiLocalHour()
         val highBgOverrideThreshold = normalBgThreshold + 40f
         val severeHighBgThreshold = normalBgThreshold + 80f
 
@@ -16206,7 +16191,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         } else if (bg > normalBgThreshold) {
             insulinEffect *= 1.2f
         }
-        val currentHour = LocalTime.now().hour
+        val currentHour = aimiLocalHour()
         if (currentHour in 0..5) {
             insulinEffect *= 0.8f
         }
