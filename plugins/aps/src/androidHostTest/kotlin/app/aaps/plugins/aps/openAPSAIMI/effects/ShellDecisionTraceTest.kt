@@ -317,6 +317,42 @@ class ShellDecisionTraceTest {
     }
 
     @Test
+    fun mealAdvisorWithFreshCarbsRecordsTheTbrAndTheSmb() {
+        val carbTime = System.currentTimeMillis().toDouble()
+        val prefs = recordingPreferences(
+            doubles = mapOf(
+                DoubleKey.OApsAIMILastEstimatedCarbs to 40.0,
+                DoubleKey.OApsAIMILastEstimatedCarbTime to carbTime,
+                DoubleKey.meal_modes_MaxBasal to 2.0,
+            ),
+        )
+        setField(tick, "preferences", prefs)
+        setField(tick, "adaptiveMult", 1.0)
+        val profile = profileStub()
+        whenever(profile.carb_ratio).thenReturn(10.0)
+        val rT = RT(runningDynamicIsf = false)
+        val trace = capture {
+            val returned = tick.runMealAdvisorDecisionOrReturn(
+                ctx = tickContext(profile, glucose = 160.0),
+                profile = profile,
+                rT = rT,
+                bg = 160.0,
+                delta = 2.0f,
+                iobData = IobTotal(time = now, iob = 1.0),
+                modesCondition = true,
+                isExplicitAdvisorRun = false,
+                lastBolusTimeMs = 0L,
+                autodriveDisplay = "off",
+                hasRecentBolus45m = false,
+            )
+            assertEquals(rT, returned)
+        }.replace(Regex("(?<![A-Za-z])ts=\\d+"), "ts=<clock>")
+            .replace(Regex("DoubleKey\\.OApsAIMILastEstimatedCarbTime value=[0-9.]+"), "DoubleKey.OApsAIMILastEstimatedCarbTime value=<clock>")
+        assertEquals(3.3, rT.units ?: 0.0, 0.0)
+        assertEquals(MEAL_ADVISOR_TRACE, trace)
+    }
+
+    @Test
     fun engagedHypoWithMealContextRecordsTheEngineCommand() {
         val (trace, applied) = autodriveTrace(
             glucose = 54.0,
@@ -708,6 +744,36 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val MEAL_ADVISOR_TRACE = """
+READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=40.00
+READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=<clock>
+READ key=DoubleKey.meal_modes_MaxBasal value=2.00
+LOG ADVISOR_CALC carbs=40g IC=10.0 → 4.00U
+LOG ADVISOR_CALC IOB_raw=1.00U × discount=0.7 → IOB_effective=0.70U
+LOG ADVISOR_CALC minimumGuaranteed=1.00U (25% of carb need)
+LOG ADVISOR_CALC calculated=3.30U → netSMB=3.30U (max of calculated and minimum)
+LOG ADVISOR_CALC TBR=2.0U/h (will deliver 1.00U over 30min as complement)
+LOG ADVISOR_CALC TOTAL delivery: SMB 3.30U + TBR 1.00U = 4.30U delta=2.0 modesOK=true
+LOG MEAL_ADVISOR_APPLIED source=MealAdvisor bolus=3.3
+EFFECT SetTbr rate=2.00 dur=30 override=true forceExact=false adaptive=1.00
+EFFECT Smb units=3.30 owner=MealAdvisor
+LOG 🍱 MEAL_ADVISOR_DIRECT_SEND (Auto) Pushed=3.30U (Limits Bypassed)
+WRITE key=AimiLongKey.LastPrebolusTime value=1700000000000
+LOG DECISION_FINAL[MEAL_ADVISOR]: smb=0.00U tbr=0.00U/h dur=0m bg=160 Δ=2.0 reason=📸 Meal Advisor: 40g -> 3.30U + TBR 2.0U/hphrase | 
+LOG 📦 CACHE TDD24H=MISSING reason=tdd24h_missing
+LOG 🧭 BASAL_GOV[FINAL]: action=KEEP conf=0.00 n=0 hypo=0.00 hypoG=0.00 hypoAdj=0.00 ant=0.00 wMean=1.00 high=0.00 mae=0.0 latch=false floorB=- floorA=- wBolus=3.30U wCob=?g reason=trace
+LOG TICK ts=<clock> bg=160 d=2.0 iob=0.00 act=0.000 th=0.188 cob=0.0 mode=None autodriveState=IDLE pred=N(sz=0 ev=0) safety=NONE ref=NO maxIOB=0.00 maxSMB=0.50 smb=0.00->3.30->3.30 tbr=0.00 src=AIMI
+READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
+READ key=BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled value=false
+READ key=BooleanKey.OApsAIMIUnifiedReactivityEnabled value=false
+READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
+READ key=BooleanKey.OApsAIMIautoDriveActive value=false
+READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
+READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
+READ key=BooleanKey.OApsAIMIPeakGovernorEnabled value=false
+READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
+""".trimIndent()
+
         private val BRITTLE_ACTIVE_TRACE = """
 READ key=DoubleKey.OApsAIMIT3cActivationThreshold value=140.00
 READ key=DoubleKey.autodriveMaxBasal value=3.00

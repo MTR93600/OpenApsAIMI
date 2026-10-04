@@ -297,3 +297,5 @@ Têtes qui choisissent encore un débit, un SMB ou un plafond, 40 lignes et plus
 En dessous de 40 lignes : le reste des 325, des helpers d’horloge, de log et de lecture. Les compter une par PR gonflerait le chiffre sans avancer le moteur.
 
 `HoldAimiEngine.evaluate` renvoie encore `Hold("ENGINE_NOT_EXTRACTED")`. Le remplacer demande que `runDetermineBasalTickInner` appelle ces têtes depuis `commonMain`, avec `setTempBasal`, la persistance, les notifications, les fichiers et TFLite derrière des ports. Au rythme d’une tête (ou d’une paire couverte par la même trace) par PR, les têtes du tableau font environ **15 PR**. L’inner tick et le branchement du moteur en font **4 à 6** de plus. Total honnête avant que `HoldAimiEngine` puisse déléguer au vrai moteur commun : **une vingtaine de PR**. Pas deux ou trois.
+
+Le tableau est pris juste après T3C, avant le conseiller repas. `tryMealAdvisor` et `runMealAdvisorDecisionOrReturn` sont ensuite passés en `commonMain`. Le fichier android retombe à **17 342 lignes**. Ces deux lignes du tableau ne sont plus des corps de décision. Le compte de PR restantes baisse d’une.

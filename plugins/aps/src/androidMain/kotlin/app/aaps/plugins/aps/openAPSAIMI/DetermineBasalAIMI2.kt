@@ -89,6 +89,7 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT3cAdaptiveFactor
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT3cHrSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT3cLookbacks
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT3cTickTail
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideMealAdvisorOrReturn
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideT3cBrittleMode
 import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
@@ -1275,36 +1276,6 @@ internal data class AimiDecisionContext(
         } catch (_: Exception) { "{ \"error\": \"JSON Generation Failed\" }" }
     }
 }
-
-// Meal Advisor: IOB discount and minimum carb coverage (see const KDocs below).
-/**
- * IOB Discount Factor for Meal Advisor
- *
- * When calculating SMB for a confirmed meal (via photo), we discount the current IOB
- * by this factor to account for uncertainty:
- * - IOB may be from a previous unlogged meal (e.g., soup)
- * - IOB action diminishes over time
- * - User confirmation signals "new meal coming" that will raise BG
- *
- * Value of 0.7 means we only subtract 70% of actual IOB, giving a 30% safety margin.
- */
-private const val MEAL_ADVISOR_IOB_DISCOUNT_FACTOR = 0.7
-
-/** Meal Advisor estimates older than this are cleared (prefs can survive months otherwise). */
-private const val MEAL_ADVISOR_STALE_ESTIMATE_MAX_MIN = 24.0 * 60.0
-
-/**
- * Minimum Carb Coverage for Meal Advisor
- *
- * Guarantees that at least this percentage of calculated insulin for carbs
- * is delivered as SMB, even if IOB calculation would suggest zero.
- *
- * This ensures a prebolus is ALWAYS sent when user confirms a meal,
- * since the meal WILL raise BG regardless of current IOB.
- *
- * Value of 0.25 means at least 25% of carb insulin requirement is delivered.
- */
-private const val MEAL_ADVISOR_MIN_CARB_COVERAGE = 0.25
 
 /**
  * When [TrajectoryType.TIGHT_SPIRAL] is active with high trajectory energy and IOB already elevated,
@@ -3355,7 +3326,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * **Placement:** caller must run [trySafetyStart] first and only invoke this when safety did not apply.
      * @return [rT] when the advisor applied a decision; **null** when falling through to later pipeline stages.
      */
-    private fun runMealAdvisorDecisionOrReturn(
+    internal fun runMealAdvisorDecisionOrReturn(
         ctx: AimiTickContext,
         profile: OapsProfileAimi,
         rT: RT,
@@ -3367,65 +3338,33 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastBolusTimeMs: Long?,
         autodriveDisplay: String,
         hasRecentBolus45m: Boolean,
-    ): RT? {
-        val advisorRes = tryMealAdvisor(
-            bg = bg,
-            delta = delta,
-            iobData = iobData,
-            profile = profile,
-            lastBolusTime = lastBolusTimeMs ?: 0L,
-            modesCondition = modesCondition,
-            isExplicitTrigger = isExplicitAdvisorRun,
-            hasRecentBolus45m = hasRecentBolus45m,
-        )
-        if (advisorRes !is DecisionResult.Applied) return null
-
-        consoleLog.add("MEAL_ADVISOR_APPLIED source=${advisorRes.source} bolus=${advisorRes.bolusU}")
-        aapsLogger.debug(
-            app.aaps.core.interfaces.logging.LTag.APS,
-            "MEAL_ADVISOR_TRACE applied source=${advisorRes.source} explicit=$isExplicitAdvisorRun bolusU=${advisorRes.bolusU} tbrUph=${advisorRes.tbrUph}"
-        )
-
-        if (advisorRes.tbrUph != null) {
-            setTempBasal(advisorRes.tbrUph, advisorRes.tbrMin ?: 30, profile, rT, ctx.currentTemp, overrideSafetyLimits = true, adaptiveMultiplier = adaptiveMult)
-        }
-
-        // Declared hypo recovery suppresses the auto meal-advisor SMB (this path bypasses
-        // finalizeAndCapSMB); an explicit user-triggered advisor run is still honoured.
-        val hypoSuppressAdvisorSmb = lastContextSnapshot?.hasHypoRecovery == true && !isExplicitAdvisorRun
-        if (hypoSuppressAdvisorSmb && (advisorRes.bolusU ?: 0.0) > 0.0) {
-            consoleLog.add("🍬 CTX_HYPO_RECOVERY: meal advisor auto-SMB suppressed (intent=${aimiFmt2(advisorRes.bolusU ?: 0.0)}U)")
-        }
-        val bolusIntent = if (hypoSuppressAdvisorSmb) 0.0 else (advisorRes.bolusU ?: 0.0).toDouble()
-
-        // Direct send for all Meal Advisor results — bypass finalizeAndCapSMB (refractory + min carb coverage inside advisor).
-        if (bolusIntent > 0) {
-            val safeIntent = kotlin.math.min(bolusIntent, 30.0)
-            applySmbUnits(rT, safeIntent, "MealAdvisor")
-            rT.reason.append(advisorRes.reason)
-
-            val triggerType = if (isExplicitAdvisorRun) "Explicit" else "Auto"
-            consoleLog.add("🍱 MEAL_ADVISOR_DIRECT_SEND ($triggerType) Pushed=${aimiFmt2(safeIntent)}U (Limits Bypassed)")
-
-            if (safeIntent > 0) {
-                internalLastSmbMillis = dateUtil.now()
-                lastSmbCapped = safeIntent
-                lastSmbFinal = safeIntent
-            }
-        } else {
-            rT.reason.append(advisorRes.reason)
-        }
-
-        rT.reason.appendLine(rh.gs(ApsStrings.autodrive_status, autodriveDisplay, "Meal Advisor"))
-        logDecisionFinal("MEAL_ADVISOR", rT, bg, delta)
-        aapsLogger.debug(
-            app.aaps.core.interfaces.logging.LTag.APS,
-            "MEAL_ADVISOR_TRACE final_return rT.units=${rT.units} insulinReq=${rT.insulinReq} reasonTail=${rT.reason.takeLast(120)}"
-        )
-        // Once applied, return immediately so later SMB/TBR stages cannot override prebolus intent (same as explicit meal modes).
-        markFinalLoopDecisionFromRT(rT, ctx.currentTemp)
-        return rT
-    }
+    ): RT? = decideMealAdvisorOrReturn(
+        bg = bg,
+        delta = delta,
+        iobData = iobData,
+        profile = profile,
+        lastBolusTimeMs = lastBolusTimeMs,
+        modesCondition = modesCondition,
+        isExplicitAdvisorRun = isExplicitAdvisorRun,
+        hasRecentBolus45m = hasRecentBolus45m,
+        autodriveDisplay = autodriveDisplay,
+        rT = rT,
+        currentTemp = ctx.currentTemp,
+        preferences = preferences,
+        consoleLog = consoleLog,
+        logger = aapsLogger,
+        effects = legacyEffectSink,
+        hasHypoRecovery = lastContextSnapshot?.hasHypoRecovery == true,
+        adaptiveMult = adaptiveMult,
+        statusLine = { display -> rh.gs(ApsStrings.autodrive_status, display, "Meal Advisor") },
+        onSmbDelivered = { units ->
+            internalLastSmbMillis = dateUtil.now()
+            lastSmbCapped = units
+            lastSmbFinal = units
+        },
+        logFinal = { decided -> logDecisionFinal("MEAL_ADVISOR", decided, bg, delta) },
+        markFinal = { decided, temp -> markFinalLoopDecisionFromRT(decided, temp) },
+    )
 
     /**
      * Lyra **Hard Brake**: falling + decelerating glycemia near target → zero TBR 30m, then finalize.
@@ -17186,121 +17125,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return resolution
     }
 
-    private fun tryMealAdvisor(
-        bg: Double,
-        delta: Float,
-        iobData: IobTotal,
-        profile: OapsProfileAimi,
-        lastBolusTime: Long,
-        modesCondition: Boolean,
-        isExplicitTrigger: Boolean,
-        hasRecentBolus45m: Boolean,
-    ): DecisionResult {
-        var estimatedCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
-        val estimatedCarbsTime = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()
-        val timeSinceEstimateMin = if (estimatedCarbsTime > 0L) {
-            (aimiWallClockMs() - estimatedCarbsTime) / 60000.0
-        } else {
-            Double.POSITIVE_INFINITY
-        }
-        if (estimatedCarbs > 0.0 && timeSinceEstimateMin > MEAL_ADVISOR_STALE_ESTIMATE_MAX_MIN) {
-            preferences.put(DoubleKey.OApsAIMILastEstimatedCarbs, 0.0)
-            preferences.put(DoubleKey.OApsAIMILastEstimatedCarbTime, 0.0)
-            aapsLogger.debug(
-                LTag.APS,
-                "MEAL_ADVISOR_TRACE cleared stale estimate carbs=$estimatedCarbs ageMin=${aimiFmt0(timeSinceEstimateMin)}",
-            )
-            estimatedCarbs = 0.0
-        }
-
-        // 🛡️ CRITICAL FIX (Zombie Meal Bug):
-        // We limit the "Passive" window to 20 minutes (was 120).
-        // If > 20 mins, we assume the meal is either consumed or handled by standard COB logic.
-        // Re-calculating "Carbs/IC - IOB" after 90 mins with decayed IOB causes massive dangerous boluses.
-        val maxPassiveWindow = if (isExplicitTrigger) 120.0 else 20.0
-        aapsLogger.debug(
-            app.aaps.core.interfaces.logging.LTag.APS,
-            "MEAL_ADVISOR_TRACE gate carbs=${aimiFmt1(estimatedCarbs)} timeSinceMin=${aimiFmt1(timeSinceEstimateMin)} maxWindow=$maxPassiveWindow bg=${aimiFmt1(bg)} explicit=$isExplicitTrigger modesCondition=$modesCondition"
-        )
-
-        if (estimatedCarbs > 10.0 && timeSinceEstimateMin in 0.0..maxPassiveWindow && bg >= 60) {
-            // Refractory Check (Safety)
-            // 🚀 BYPASS if Explicit Trigger (User clicked Snap&Go)
-            if (!isExplicitTrigger && hasRecentBolus45m) {
-                aapsLogger.debug(
-                    app.aaps.core.interfaces.logging.LTag.APS,
-                    "MEAL_ADVISOR_TRACE blocked refractory=true explicit=$isExplicitTrigger lastBolusTime=$lastBolusTime"
-                )
-                return DecisionResult.Fallthrough("Advisor Refractory (Recent Bolus <45m)")
-            }
-
-            // FIX: Removed delta > 0.0 condition - Meal Advisor should work even if BG is stable/falling
-            // The refractory check, BG floor (>=60), and time window (120min/20min) are sufficient safety
-            if (modesCondition || isExplicitTrigger) {
-                val maxBasalPref = preferences.get(DoubleKey.meal_modes_MaxBasal)
-                val safeMax = if (maxBasalPref > 0.1) maxBasalPref else profile.max_basal
-
-
-
-                // FIX: TBR Coverage Calculation
-                // ORIGINAL logic subtracted coveredByBasal from SMB, causing netNeeded to become 0
-                // NEW logic: TBR is a COMPLEMENT to SMB, not a replacement
-                // - SMB provides immediate prebolus action
-                // - TBR provides continuous aggressive support
-
-                // INTELLIGENT IOB HANDLING (Fix 2025-12-19)
-                // Problem: User may have elevated IOB from previous unlogged meal (soup, snack)
-                // Solution: Discount IOB + guarantee minimum coverage for confirmed new meal
-                val insulinForCarbs = estimatedCarbs / profile.carb_ratio
-
-                // Apply IOB discount to account for uncertainty
-                val effectiveIOB = iobData.iob * MEAL_ADVISOR_IOB_DISCOUNT_FACTOR
-
-                // Guarantee minimum coverage (user confirmed meal = BG WILL rise)
-                val minimumRequired = insulinForCarbs * MEAL_ADVISOR_MIN_CARB_COVERAGE
-
-                // Calculate need with discounted IOB, then apply minimum guarantee
-                val calculatedNeed = insulinForCarbs - effectiveIOB
-                val netNeeded = max(calculatedNeed, minimumRequired).coerceAtLeast(0.0)
-
-                // For reference, calculate what TBR will deliver (not subtracted from SMB)
-                val tbrCoverage = safeMax * 0.5  // 30min = 0.5h
-
-                // DEBUG: Log all calculation steps with detailed breakdown
-                consoleLog.add("ADVISOR_CALC carbs=${estimatedCarbs.toInt()}g IC=${profile.carb_ratio} → ${aimiFmt2(insulinForCarbs)}U")
-                consoleLog.add("ADVISOR_CALC IOB_raw=${aimiFmt2(iobData.iob)}U × discount=$MEAL_ADVISOR_IOB_DISCOUNT_FACTOR → IOB_effective=${aimiFmt2(effectiveIOB)}U")
-                consoleLog.add("ADVISOR_CALC minimumGuaranteed=${aimiFmt2(minimumRequired)}U (${(MEAL_ADVISOR_MIN_CARB_COVERAGE * 100).toInt()}% of carb need)")
-                consoleLog.add("ADVISOR_CALC calculated=${aimiFmt2(calculatedNeed)}U → netSMB=${aimiFmt2(netNeeded)}U (max of calculated and minimum)")
-                consoleLog.add("ADVISOR_CALC TBR=${aimiFmt1(safeMax)}U/h (will deliver ${aimiFmt2(tbrCoverage)}U over 30min as complement)")
-                consoleLog.add("ADVISOR_CALC TOTAL delivery: SMB ${aimiFmt2(netNeeded)}U + TBR ${aimiFmt2(tbrCoverage)}U = ${aimiFmt2(netNeeded + tbrCoverage)}U delta=$delta modesOK=true")
-
-                // 🚀 If explicit trigger, consume the flag NOW to prevent loop
-                if (isExplicitTrigger) {
-                    preferences.put(BooleanKey.OApsAIMIMealAdvisorTrigger, false)
-                    consoleLog.add("🚀 MEAL ADVISOR: Trigger Consumed.")
-                }
-
-                     return DecisionResult.Applied(
-                        source = "MealAdvisor",
-                        bolusU = netNeeded,
-                        tbrUph = safeMax,
-                        tbrMin = 30,
-                        reason = "📸 Meal Advisor: ${estimatedCarbs.toInt()}g -> ${aimiFmt2(netNeeded)}U + TBR ${aimiFmt1(safeMax)}U/h"
-                    )
-            } else {
-                consoleLog.add("ADVISOR_SKIP reason=modesCondition_false (legacy mode active)")
-                aapsLogger.debug(
-                    app.aaps.core.interfaces.logging.LTag.APS,
-                    "MEAL_ADVISOR_TRACE blocked modesCondition=false"
-                )
-            }
-        }
-        aapsLogger.debug(
-            app.aaps.core.interfaces.logging.LTag.APS,
-            "MEAL_ADVISOR_TRACE fallthrough no_active_request carbs=${aimiFmt1(estimatedCarbs)} timeSinceMin=${aimiFmt1(timeSinceEstimateMin)} bg=${aimiFmt1(bg)}"
-        )
-        return DecisionResult.Fallthrough("No active Meal Advisor request")
-    }
 
     /** Hydrate [MealData.mealCOB] from prefs when advisor triggered and DB COB still zero (latency bypass). */
     private fun hydrateMealDataIfTriggered(mealData: MealData) {
