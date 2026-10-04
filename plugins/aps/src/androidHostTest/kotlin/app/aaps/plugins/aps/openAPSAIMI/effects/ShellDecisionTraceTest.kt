@@ -37,16 +37,25 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.CircadianMealProfileStore
 import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionMemory
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioContextMTR
+import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioMultipliersMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisId
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.AdvancedPredictionCurves
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityState
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityWindow
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLearnedState
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdParams
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.SmbDamping
 import app.aaps.plugins.aps.openAPSAIMI.release.HyperSeverityTier
 import app.aaps.plugins.aps.openAPSAIMI.smb.SmbInstructionExecutor
 import app.aaps.plugins.aps.openAPSAIMI.release.HyperTrajectoryReleaseResult
 import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionCurve
 import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionKind
 import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionPair
+import app.aaps.plugins.aps.openAPSAIMI.compose.AimiAutonomyMode
+import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorRuntimeProfile
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiAuditor
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiBehaviorProfileSource
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiHealthContext
@@ -70,7 +79,10 @@ import org.junit.runner.RunWith
 import org.mockito.Mockito.mock
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.whenever
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import org.mockito.stubbing.Answer
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -443,6 +455,93 @@ class ShellDecisionTraceTest {
     }
 
     @Test
+    fun recursiveBeliefResolveWithShadowAndActiveHtrDemandsSmb() {
+        val prefs = recordingPreferences(
+            doubles = mapOf(
+                DoubleKey.OApsAIMIMaxSMB to 2.0,
+                DoubleKey.OApsAIMIHighBGMaxSMB to 2.0,
+            ),
+            bools = mapOf(BooleanKey.OApsAIMIRecursiveBeliefShadow to true),
+        )
+        setField(tick, "preferences", prefs)
+        setField(tick, "bg", 180.0)
+        setField(tick, "delta", 2.0f)
+        setField(tick, "shortAvgDelta", 1.0f)
+        setField(tick, "targetBg", 100.0f)
+        setField(tick, "iob", 1.0f)
+        setField(tick, "maxIob", 10.0)
+        setField(tick, "maxSMB", 2.0)
+        setField(tick, "maxSMBHB", 2.0)
+        setField(tick, "eventualBG", 180.0)
+        setField(tick, "hourOfDay", 12)
+        setField(tick, "sleepTime", false)
+        setField(
+            tick,
+            "physioAdapter",
+            mock(AIMIInsulinDecisionAdapterMTR::class.java, Answer { inv: InvocationOnMock ->
+                when (inv.method.name) {
+                    "getLatestSnapshot" -> HealthContextSnapshot(
+                        hrNow = 90,
+                        rhrResting = 60,
+                        stepsLast15m = 80,
+                        stepsLast5m = 20,
+                    )
+                    "getEffectiveContext" -> PhysioContextMTR.NEUTRAL
+                    else -> null
+                }
+            }),
+        )
+        val curves = AdvancedPredictionCurves(
+            iob = listOf(180.0, 170.0),
+            cob = listOf(180.0),
+            uam = listOf(180.0),
+            zt = listOf(180.0),
+            hybrid = listOf(180.0, 170.0),
+        )
+        val floor = ScenarioProjectionCurve(
+            kind = ScenarioProjectionKind.CLINICAL_FLOOR,
+            pointsMgdl = listOf(180, 170),
+            terminalMgdl = 170.0,
+            pathMinMgdl = 170.0,
+            pathMinHitFloor = false,
+        )
+        setField(
+            tick,
+            "lastScenarioProjection",
+            ScenarioProjectionPair(
+                clinicalFloor = floor,
+                scenarioBest = floor.copy(kind = ScenarioProjectionKind.SCENARIO_BEST),
+                contributors = emptyList(),
+                cobPointsMgdl = listOf(180),
+                ztPointsMgdl = listOf(180),
+            ),
+        )
+        setField(tick, "lastAdvancedPredictionCurves", curves)
+        val profile = profileStub()
+        val rT = RT(runningDynamicIsf = false)
+        val htr = HyperTrajectoryReleaseResult(
+            active = true,
+            tier = HyperSeverityTier.ESTABLISHED,
+            severityWeight = 0.80,
+            smbFloorU = 1.20,
+            v3SmbBeforeU = 0.40,
+            v3SmbAfterU = 1.20,
+            absorptionOffsetMgdl = 12.0,
+            suppressTrajBasalShift = false,
+            hypoMinPredIgnored = false,
+            reason = "established-rise",
+        )
+        var returned: Any? = null
+        val trace = capture {
+            returned = invokeRbtResolve(rT, profile, htr)
+        }.replace(Regex("(?<![A-Za-z])ts=\\d+"), "ts=<clock>")
+        val snap = returned as RecursiveBeliefSnapshot
+        assertEquals(1.20, snap.resolutions.smbDemandU, 1e-6)
+        assertFalse(snap.resolutions.reasonCodes.contains("OFF_ASLEEP_LIVE"))
+        assertEquals(RBT_ACTIVE_HTR_TRACE, trace)
+    }
+
+    @Test
     fun t9WithPhysioAssistantOffKeepsNeutralMultipliers() {
         val prefs = recordingPreferences(emptyMap())
         setField(tick, "preferences", prefs)
@@ -500,6 +599,192 @@ class ShellDecisionTraceTest {
         assertEquals(PKPD_GUARD_FLAT_TRACE, trace)
     }
 
+    @Test
+    fun tickClockRiseUsesHighCeilingAndCachedTirAndCarbs() {
+        val prefs = recordingPreferences(
+            doubles = mapOf(
+                DoubleKey.ApsSmbMaxIob to 10.0,
+                DoubleKey.OApsAIMIMaxSMB to 0.50,
+                DoubleKey.OApsAIMIHighBGMaxSMB to 1.20,
+            ),
+        )
+        setField(tick, "preferences", prefs)
+        setField(tick, "cob", 0.0f)
+        setField(tick, "now", now)
+        holdRefresh("tirWarmupRefreshInFlight")
+        holdRefresh("carbContextRefreshInFlight")
+        setAtomic(
+            "tirWarmupSnapshotRef",
+            privateData(
+                "TirWarmupSnapshot",
+                listOf(18.0, 72.0, 4.0, 70.0, 26.0, 3.0, 22.0, 5.0, 11.0, 30.0, 68.0, 6.0, 26.0, 14.0),
+            ),
+        )
+        setAtomic(
+            "carbContextSnapshotRef",
+            privateData(
+                "CarbContextSnapshot",
+                listOf(now - 8L * 60_000L, 8, 12.0f, 25.0f, emptyList<Any>()),
+            ),
+        )
+        val profile = profileStub()
+        val ctx = tickContext(profile, 180.0)
+        ctx.mealData.slopeFromMinDeviation = 2.0
+        ctx.mealData.lastCarbTime = now - 8L * 60_000L
+        val glucose = GlucoseStatusAIMI(
+            glucose = 180.0,
+            delta = 4.0,
+            shortAvgDelta = 3.0,
+            longAvgDelta = 1.0,
+            date = now,
+        )
+        val rT = RT(runningDynamicIsf = false)
+        var returned: Any? = null
+        val trace = capture {
+            returned = invokeTickClock(ctx, glucose, rT, combinedDelta = 3.0f)
+        }.replace(Regex("(?<![A-Za-z])ts=\\d+"), "ts=<clock>")
+        val stage = returned!!
+        fun field(name: String): Any? = stage.javaClass.getDeclaredField(name).apply { isAccessible = true }.get(stage)
+        assertEquals(1.20, getField(tick, "maxSMB") as Double, 1e-6)
+        assertEquals(72.0, field("tir1DAYIR") as Double, 1e-6)
+        assertEquals(22.0, field("lastHourTIRAbove") as Double, 1e-6)
+        assertEquals(8, getField(tick, "lastCarbAgeMin") as Int)
+        assertEquals(12.0f, getField(tick, "futureCarbs") as Float, 0.0f)
+        assertEquals(25.0f, getField(tick, "cob") as Float, 0.0f)
+        assertEquals(TICK_CLOCK_RISE_TRACE, trace)
+    }
+
+    @Test
+    fun t9WithPhysioAndPkpdOnScalesTheCeiling() {
+        val prefs = recordingPreferences(
+            doubles = mapOf(
+                DoubleKey.OApsAIMIweight to 70.0,
+                DoubleKey.OApsAIMIPkpdStateDiaH to 5.0,
+                DoubleKey.OApsAIMIPkpdStatePeakMin to 75.0,
+                DoubleKey.OApsAIMIPkpdBoundsDiaMinH to 3.0,
+                DoubleKey.OApsAIMIPkpdBoundsDiaMaxH to 8.0,
+                DoubleKey.OApsAIMIPkpdBoundsPeakMinMin to 30.0,
+                DoubleKey.OApsAIMIPkpdBoundsPeakMinMax to 180.0,
+                DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH to 0.50,
+                DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin to 10.0,
+                DoubleKey.OApsAIMIIsfFusionMinFactor to 0.70,
+                DoubleKey.OApsAIMIIsfFusionMaxFactor to 1.30,
+                DoubleKey.OApsAIMIIsfFusionMaxChangePerTick to 0.05,
+                DoubleKey.OApsAIMISmbTailDamping to 0.50,
+                DoubleKey.OApsAIMISmbTailThreshold to 0.25,
+                DoubleKey.OApsAIMISmbExerciseDamping to 0.60,
+                DoubleKey.OApsAIMISmbLateFatDamping to 0.70,
+                DoubleKey.OApsAIMIPkpdAnchorDiaH to 5.0,
+                DoubleKey.OApsAIMIPkpdAnchorPeakMin to 75.0,
+            ),
+            bools = mapOf(
+                BooleanKey.AimiPhysioAssistantEnable to true,
+                BooleanKey.OApsAIMIPkpdEnabled to true,
+            ),
+        )
+        tick = newTick(prefs, learnedState = PkPdLearnedState())
+        armShell()
+        val behavior = getField(tick, "behaviorProfileSource") as AimiBehaviorProfileSource
+        whenever(behavior.read(any())).thenReturn(
+            AimiBehaviorRuntimeProfile(
+                protectionLevel = 1,
+                mealCaptureLevel = 1,
+                stabilityLevel = 1,
+                physioLevel = 1,
+                autonomyMode = AimiAutonomyMode.Observation,
+            ),
+        )
+        setField(tick, "maxSMB", 1.0)
+        setField(tick, "maxSMBHB", 1.20)
+        setField(tick, "cachedPumpAgeDays", 3.5f)
+        holdRefresh("pumpAgeRefreshInFlight")
+        val plugin = mock(app.aaps.core.interfaces.plugin.ActivePlugin::class.java)
+        whenever(plugin.activeBgSource).thenReturn(mock(app.aaps.core.interfaces.source.BgSource::class.java))
+        setField(tick, "activePlugin", plugin)
+        val cycle = getField(tick, "wCyclePreferences") as WCyclePreferences
+        whenever(cycle.verneuil()).thenReturn(VerneuilStatus.NONE)
+        whenever(cycle.thyroid()).thenReturn(ThyroidStatus.EUTHYROID)
+        val physio = mock(AIMIInsulinDecisionAdapterMTR::class.java)
+        whenever(physio.getMultipliers(any(), any(), anyOrNull(), any(), any())).thenReturn(
+            PhysioMultipliersMTR(isfFactor = 1.10, basalFactor = 1.05, smbFactor = 1.08, confidence = 0.80),
+        )
+        whenever(physio.getDetailedLogString()).thenReturn("physio-detail")
+        setField(tick, "physioAdapter", physio)
+        val profile = profileStub()
+        val glucose = GlucoseStatusAIMI(glucose = 160.0, delta = 4.0, date = now)
+        val ctx = tickContext(profile, 160.0)
+        val rT = RT(runningDynamicIsf = false)
+        var pumpAge = -1f
+        var multipliersNeutral = true
+        val trace = capture {
+            val returned = invokeT9(ctx, glucose, rT, iobTotal = 1.5)
+            pumpAge = returned.javaClass.getDeclaredField("pumpAgeDays").apply { isAccessible = true }.get(returned) as Float
+            val multipliers = returned.javaClass.getDeclaredField("physioMultipliers").apply { isAccessible = true }.get(returned) as PhysioMultipliersMTR
+            multipliersNeutral = multipliers.isNeutral()
+        }
+        assertEquals(3.5f, pumpAge, 0.0f)
+        assertFalse(multipliersNeutral)
+        assertEquals(1.08, getField(tick, "maxSMB") as Double, 1e-6)
+        assertTrue(getField(tick, "cachedPkpdRuntime") != null)
+        assertEquals(T9_ACTIVE_TRACE, trace)
+    }
+
+    @Test
+    fun pkpdGuardCutsThenEndoDampensAndTheRedCarpetRestores() {
+        val prefs = recordingPreferences(emptyMap())
+        setField(tick, "preferences", prefs)
+        setField(tick, "bg", 160.0)
+        setField(tick, "delta", 2.0f)
+        setField(tick, "shortAvgDelta", 2.0f)
+        setField(tick, "targetBg", 100.0f)
+        setField(tick, "predictedBg", 170.0f)
+        setField(tick, "eventualBG", 170.0)
+        setField(tick, "maxSMB", 5.0)
+        setField(tick, "maxSMBHB", 5.0)
+        setField(tick, "maxIob", 10.0)
+        setField(tick, "iob", 1.0f)
+        setField(tick, "endoSmbMult", 0.50)
+        setField(tick, "pkpdAbsorptionGuardAppliedThisTick", false)
+        val profile = profileStub()
+        val ctx = tickContext(profile, 160.0)
+        ctx.mealData.slopeFromMinDeviation = 2.0
+        val rT = RT(runningDynamicIsf = false)
+        var returned: Any? = null
+        val trace = capture {
+            returned = invokePkpdGuardActive(ctx, rT, preOnsetRuntime())
+        }
+        val stage = returned!!
+        val smb = stage.javaClass.getDeclaredField("smbToGive").apply { isAccessible = true }.get(stage) as Float
+        assertEquals(2.0f, smb, 0.0f)
+        assertTrue(trace.contains("SMB_GUARDED"))
+        assertTrue(trace.contains("SMB_ENDO_DAMPEN"))
+        assertTrue(trace.contains("RED CARPET"))
+        assertTrue(trace.contains("MEAL_FORCE_EXECUTED"))
+        assertEquals(PKPD_GUARD_ACTIVE_TRACE, trace)
+    }
+
+    private fun preOnsetRuntime(): PkPdRuntime = PkPdRuntime(
+        params = PkPdParams(diaHrs = 5.0, peakMin = 75.0),
+        tailFraction = 0.0,
+        fusedIsf = 50.0,
+        profileIsf = 50.0,
+        tddIsf = 50.0,
+        pkpdScale = 1.0,
+        weightKineticFactor = 1.0,
+        physioAbsorptionFactor = 1.0,
+        physioSiFactor = 1.0,
+        damping = SmbDamping(),
+        activity = InsulinActivityState(
+            window = InsulinActivityWindow(onsetMin = 15.0, peakMin = 75.0, offsetMin = 180.0, diaMin = 300.0),
+            relativeActivity = 0.10,
+            normalizedPosition = 0.0,
+            postWindowFraction = 0.0,
+            anticipationWeight = 1.0,
+            minutesUntilOnset = 10.0,
+            stage = InsulinActivityStage.PRE_ONSET,
+        ),
+    )
+
     private fun invokePkpdGuard(ctx: AimiTickContext, rT: RT): Any? {
         val method = tick.javaClass.declaredMethods.first {
             it.name == "runPkpdGuardEndoDampenRedCarpetAndCapSmb" && it.parameterCount == 24
@@ -536,6 +821,46 @@ class ShellDecisionTraceTest {
             0,
             4,
             0.0f,
+            1.0f,
+        )
+    }
+
+    private fun invokePkpdGuardActive(ctx: AimiTickContext, rT: RT, runtime: PkPdRuntime): Any? {
+        val method = tick.javaClass.declaredMethods.first {
+            it.name == "runPkpdGuardEndoDampenRedCarpetAndCapSmb" && it.parameterCount == 24
+        }
+        method.isAccessible = true
+        return method.invoke(
+            tick,
+            ctx,
+            rT,
+            runtime,
+            SmbInstructionExecutor.Result(
+                predictedSmb = 2f,
+                basal = 1.0,
+                finalSmb = 2f,
+                highBgOverrideUsed = false,
+                newSmbInterval = null,
+            ),
+            false,
+            false,
+            true,
+            160.0,
+            2.0f,
+            2.0f,
+            170.0f,
+            170.0,
+            100.0,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            0,
+            3,
+            2.0f,
             1.0f,
         )
     }
@@ -581,12 +906,12 @@ class ShellDecisionTraceTest {
         glucose: GlucoseStatusAIMI,
         rT: RT,
         combinedDelta: Float,
-    ) {
+    ): Any? {
         val method = tick.javaClass.declaredMethods.first {
             it.name == "runTickClockMaxSmbTirCarbAndGlucoseCopy" && it.parameterCount == 4
         }
         method.isAccessible = true
-        method.invoke(tick, ctx, glucose, rT, combinedDelta)
+        return method.invoke(tick, ctx, glucose, rT, combinedDelta)
     }
 
     @Test
@@ -635,12 +960,10 @@ class ShellDecisionTraceTest {
         )
     }
 
-    private fun invokeRbtResolve(rT: RT, profile: OapsProfileAimi): Any? {
-        val method = tick.javaClass.declaredMethods.first {
-            it.name == "runRecursiveBeliefResolve" && it.parameterCount == 13
-        }
-        method.isAccessible = true
-        val htr = HyperTrajectoryReleaseResult(
+    private fun invokeRbtResolve(
+        rT: RT,
+        profile: OapsProfileAimi,
+        htr: HyperTrajectoryReleaseResult = HyperTrajectoryReleaseResult(
             active = false,
             tier = HyperSeverityTier.OFF,
             severityWeight = 0.0,
@@ -651,7 +974,12 @@ class ShellDecisionTraceTest {
             suppressTrajBasalShift = false,
             hypoMinPredIgnored = false,
             reason = "off",
-        )
+        ),
+    ): Any? {
+        val method = tick.javaClass.declaredMethods.first {
+            it.name == "runRecursiveBeliefResolve" && it.parameterCount == 13
+        }
+        method.isAccessible = true
         return method.invoke(
             tick,
             0.0,
@@ -973,6 +1301,7 @@ class ShellDecisionTraceTest {
     private fun newTick(
         preferences: Preferences,
         engine: AutodriveEngine = mock(AutodriveEngine::class.java),
+        learnedState: PkPdLearnedState = mock(PkPdLearnedState::class.java),
     ): DetermineBasalaimiSMB2 {
         val rh = mock(TextResolver::class.java, Answer { inv: InvocationOnMock ->
             if (inv.method.name == "gs") "phrase" else null
@@ -981,7 +1310,7 @@ class ShellDecisionTraceTest {
             profileUtil = mock(ProfileUtil::class.java),
             fabricPrivacy = mock(FabricPrivacy::class.java),
             preferences = preferences,
-            pkPdLearnedState = mock(PkPdLearnedState::class.java),
+            pkPdLearnedState = learnedState,
             gestationalAutopilot = mock(GestationalAutopilot::class.java),
             auditorOrchestrator = mock(AimiAuditor::class.java),
             behaviorProfileSource = mock(AimiBehaviorProfileSource::class.java),
@@ -1059,6 +1388,24 @@ class ShellDecisionTraceTest {
         error("no field $name")
     }
 
+    private fun holdRefresh(name: String) {
+        (getField(tick, name) as AtomicBoolean).set(true)
+    }
+
+    private fun setAtomic(name: String, value: Any?) {
+        @Suppress("UNCHECKED_CAST")
+        (getField(tick, name) as AtomicReference<Any?>).set(value)
+    }
+
+    private fun privateData(simpleName: String, args: List<Any?>): Any {
+        val clazz = tick.javaClass.declaredClasses.first { it.simpleName == simpleName }
+        val ctor = clazz.declaredConstructors
+            .filter { ctor -> ctor.parameterTypes.none { it.name.contains("DefaultConstructorMarker") } }
+            .maxBy { it.parameterCount }
+        ctor.isAccessible = true
+        return ctor.newInstance(*args.toTypedArray())
+    }
+
     private fun setField(target: Any, name: String, value: Any?) {
         var type: Class<*>? = target.javaClass
         while (type != null) {
@@ -1082,6 +1429,81 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val T9_ACTIVE_TRACE = """
+            READ key=BooleanKey.AimiPhysioAssistantEnable value=true
+            LOG 🏥 PHYSIO: ISF×1.100 Basal×1.050 SMB×1.080 Conf=80%
+            READ key=BooleanKey.OApsAIMIIntelligenceSingleLearnPath value=false
+            READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=5.00
+            READ key=DoubleKey.OApsAIMIweight value=70.00
+            READ key=BooleanKey.OApsAIMIPkpdEnabled value=true
+            READ key=DoubleKey.OApsAIMIPkpdBoundsDiaMinH value=3.00
+            READ key=DoubleKey.OApsAIMIPkpdBoundsDiaMaxH value=8.00
+            READ key=DoubleKey.OApsAIMIPkpdBoundsPeakMinMin value=30.00
+            READ key=DoubleKey.OApsAIMIPkpdBoundsPeakMinMax value=180.00
+            READ key=DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH value=0.50
+            READ key=DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin value=10.00
+            READ key=DoubleKey.OApsAIMIIsfFusionMinFactor value=0.70
+            READ key=DoubleKey.OApsAIMIIsfFusionMaxFactor value=1.30
+            READ key=DoubleKey.OApsAIMIIsfFusionMaxChangePerTick value=0.05
+            READ key=DoubleKey.OApsAIMISmbTailDamping value=0.50
+            READ key=DoubleKey.OApsAIMISmbTailThreshold value=0.25
+            READ key=DoubleKey.OApsAIMISmbExerciseDamping value=0.60
+            READ key=DoubleKey.OApsAIMISmbLateFatDamping value=0.70
+            READ key=DoubleKey.OApsAIMIPkpdAnchorDiaH value=5.00
+            READ key=DoubleKey.OApsAIMIPkpdAnchorPeakMin value=75.00
+            READ key=LongNonKey.OApsAIMIPkpdLearnedStateGeneration value=0
+            READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=5.00
+            READ key=DoubleKey.OApsAIMIPkpdStatePeakMin value=75.00
+            LOG PKPD_FAMILY: prot=1 meal=1 stab=1 phys=1 auto=0 mealF=1.00 physBlend=0.73
+            LOG Debug: computePkpdPredictions called with delta=4.0
+            LOG PKPD_PRED_MOD: src=runtime sens=73.50 ins=1.07 carb=1.00 uam=1.00 hyb=0.96 decay=1.03 meal=0.00 nonMeal=0.00 suppress=false
+            READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
+            READ key=BooleanKey.OApsAIMIPkpdHyperReversion value=false
+            READ key=BooleanKey.OApsAIMIPkpdStackAwareGuardB value=false
+            READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
+            LOG PKPD_SOFT_FLOOR: raw=160 soft=160 hybT=227 hitFloor=false applied=false endo=false fallSuppressed=false reason=endo_reversion_disabled
+            LOG PKPD predictions → eventual=228 mg/dL from 49 steps uamT=231 pathMinRaw=160 pathMinClamp=160
+            LOG 🏥 PHYSIO APPLIED: MaxSMB=1.08 MaxBasal=1.00
+            READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
+            READ key=AimiStringKey.OApsAIMIPkpdLastPeakGovLogLine value=
+        """.trimIndent()
+
+        private val TICK_CLOCK_RISE_TRACE = """
+            READ key=BooleanKey.OApsAIMIhoneymoon value=false
+            READ key=AimiLongKey.LastPrebolusTime value=0
+            READ key=AimiLongKey.PendingLegacyPrebolusUnitMilli value=0
+            READ key=AimiLongKey.PendingLegacyPrebolusUnitMilli value=0
+            READ key=DoubleKey.ApsSmbMaxIob value=10.00
+            LOG MAX_IOB_STATIC: Pref=10.0 (Dynamic disabled by request)
+            READ key=DoubleKey.OApsAIMIMaxSMB value=0.50
+            READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=1.20
+            READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=1.20
+            LOG MAXSMB_SLOPE_HIGH BG=180 slope=2.00 Δ=3.0 -> maxSMBHB=1.20U (confirmed rise)
+            READ key=DoubleKey.OApsAIMIMaxSMB value=0.50
+            READ key=IntKey.OApsAIMINightGrowthAgeYears value=0
+            READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
+            READ key=StringKey.OApsAIMINightGrowthStart value=
+            READ key=StringKey.OApsAIMINightGrowthEnd value=
+            READ key=DoubleKey.OApsAIMINightGrowthMaxIobExtra value=0.00
+        """.trimIndent()
+
+        private val PKPD_GUARD_ACTIVE_TRACE = """
+            READ key=BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled value=false
+            READ key=DoubleKey.OApsAIMIRedCarpetRestoreThreshold value=0.00
+            READ key=DoubleKey.OApsAIMIPriorityMaxIobFactor value=0.00
+            READ key=DoubleKey.OApsAIMIPriorityMaxIobExtraU value=0.00
+            READ key=BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled value=false
+            READ key=DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor value=0.00
+            LOG INTERVAL_ADJUSTED: +2m → 3m total
+            LOG SMB_GUARDED: 2.00U → 1.60U
+            LOG SMB_ENDO_DAMPEN: 1.60U → 0.80U (x0.50)
+            READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+            READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+            READ key=BooleanKey.OApsAIMIIobSurveillanceGuard value=false
+            LOG ✨ RED CARPET: Restoring meal bolus blocked by minor safety (Proposed=2.00 vs Gated=0.80)
+            LOG 🍱 MEAL_FORCE_EXECUTED (MealMode): 2.00 U (Overrides minor safety checks)
+        """.trimIndent()
+
         private val PKPD_GUARD_FLAT_TRACE = """
             READ key=BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled value=false
             READ key=DoubleKey.OApsAIMIRedCarpetRestoreThreshold value=0.00
@@ -1149,6 +1571,49 @@ class ShellDecisionTraceTest {
         """.trimIndent()
 
         private val MEAL_HYPER_FASTING_TRACE = "READ key=DoubleKey.meal_modes_MaxBasal value=0.00"
+
+        private val RBT_ACTIVE_HTR_TRACE = """
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefShadow value=true
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefAuthority value=false
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefWavelet value=false
+            READ key=BooleanKey.OApsAIMIMealHyperBypassEnabled value=false
+            READ key=BooleanKey.OApsAIMITreeMealRiseFrontLoad value=false
+            READ key=DoubleKey.OApsAIMIHighBg value=0.00
+            READ key=DoubleKey.OApsAIMIHyperEstablishedDevMgdl value=0.00
+            READ key=DoubleKey.OApsAIMIHyperDeepDevMgdl value=0.00
+            READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+            READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+            READ key=BooleanKey.OApsAIMIIobSurveillanceGuard value=false
+            READ key=DoubleKey.OApsAIMIT3cAnticipationStrength value=0.00
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
+            READ key=IntKey.OApsAIMINightGrowthAgeYears value=0
+            READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
+            READ key=StringKey.OApsAIMINightGrowthStart value=
+            READ key=StringKey.OApsAIMINightGrowthEnd value=
+            READ key=DoubleKey.OApsAIMINightGrowthMaxIobExtra value=0.00
+            READ key=BooleanKey.AimiEndometriosisEnable value=false
+            READ key=DoubleKey.OApsAIMISmbTailDamping value=0.00
+            READ key=StringKey.AimiTuningContextSelection value=
+            READ key=BooleanKey.OApsAIMIContextEnabled value=false
+            READ key=DoubleKey.OApsAIMIHighBg value=0.00
+            READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=2.00
+            READ key=DoubleKey.OApsAIMIMaxSMB value=2.00
+            READ key=BooleanKey.OApsAIMISensorConfidenceCgmFirst value=false
+            READ key=BooleanKey.OApsAIMIEffortActivityProtection value=false
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
+            READ key=StringKey.AimiTuningContextSelection value=
+            READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+            READ key=DoubleKey.autodriveMaxBasal value=0.00
+            LOG TREE_DEPLOYED trunk=SENSOR_UNCERTAIN conf=0.90 risk=CRITICAL kinetics=NO_STAGE
+            LOG Tree: sensor uncertain | conf 90% | risk critical | sensor uncertain
+            LOG MEAL_CERTAINTY level=NONE tree=NONE rise=OK terminals=OK effortVeto=false
+            LOG Harmonia sim: blocked SENSOR_UNCERTAIN | sensor_uncertain,critical_risk
+            LOG 🫀 PATIENT_MODE: mode=ABSORPTION_UNCERTAIN conf=0.94 strat=PKPD_REASSESS mealBias=0.30 protect=0.86 reasons=CAUSAL_ABSORPTION_UNCERTAIN
+            READ key=DoubleKey.OApsAIMIHighBg value=0.00
+            READ key=DoubleKey.OApsAIMIweight value=0.00
+        """.trimIndent()
 
         private val RBT_RESOLVE_TRACE = """
 READ key=BooleanKey.OApsAIMIRecursiveBeliefShadow value=true
