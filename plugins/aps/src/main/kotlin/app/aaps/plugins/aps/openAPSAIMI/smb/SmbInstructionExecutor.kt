@@ -99,7 +99,8 @@ object SmbInstructionExecutor {
         val runtimeToMinutes: (Long?) -> Int,
         val computeHypoThreshold: (Double, Int?) -> Double,
         val isBelowHypo: (Double, Double, Double, Double, Double) -> Boolean,
-        val logDataMl: (Float, Float) -> Unit,
+        /** Stages the training row of this tick. The label is NOT passed: it is stamped at the tick tail. */
+        val logDataMl: (Float) -> Unit,
         val logData: (Float, Float) -> Unit,
         val roundBasal: (Double) -> Double,
         val roundDouble: (Double, Int) -> Double
@@ -591,7 +592,7 @@ object SmbInstructionExecutor {
             )
         }
 
-        hooks.logDataMl(predictedSmb, finalSmb)
+        hooks.logDataMl(predictedSmb)
         hooks.logData(predictedSmb, finalSmb)
 
         input.pkpdRuntime?.let { runtime ->

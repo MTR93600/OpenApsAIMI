@@ -45,6 +45,13 @@ enum class ApsIntentKey(
         preferenceType = PreferenceType.ACTIVITY,
     ),
 
+    AimiSettingsAudit(
+        key = "aimi_settings_audit_compose",
+        titleResId = R.string.aimi_settings_audit_entry_title,
+        summaryResId = R.string.aimi_settings_audit_entry_summary,
+        preferenceType = PreferenceType.ACTIVITY,
+    ),
+
     HormonitorViewer(
         key = "aimi_hormonitor_viewer_compose",
         titleResId = R.string.aimi_hormonitor_viewer_title,

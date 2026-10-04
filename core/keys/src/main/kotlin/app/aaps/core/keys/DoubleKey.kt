@@ -349,7 +349,18 @@ enum class DoubleKey(
     ),
     OApsAIMIIsfFusionMinFactor("aimi_isf_fusion_min_factor", 0.75, 0.3, 1.0),
     OApsAIMIIsfFusionMaxFactor("aimi_isf_fusion_max_factor", 2.0, 1.0, 2.0),
-    OApsAIMIIsfFusionMaxChangePerTick("aimi_isf_fusion_max_change_per_tick", 0.4, 0.0, 0.5),
+    /**
+     * Slew budget of the PKPD ISF fusion, as a fraction of the previous value, per 5-minute tick.
+     *
+     * The default is the same number the algorithm itself declares (the `maxChangePer5Min` default
+     * of `IsfFusionBounds` in `:plugins:aps`), so the preference and the code agree. It used to be
+     * 0.4, which allowed about +41 % up and -55 % down in one tick: two neighbour ticks could sit
+     * 3.1x apart and the dose-facing sensitivity swung between 16 and 135 mg/dL/U over one day.
+     *
+     * This default change makes the loop more stable (less swing) for every user who never touched
+     * the setting. The range is unchanged, so anyone who set a wider value on purpose keeps it.
+     */
+    OApsAIMIIsfFusionMaxChangePerTick("aimi_isf_fusion_max_change_per_tick", 0.03, 0.0, 0.5),
     /** Max relative DynISF change from trajectory tuning when a tick qualifies (rise or fall). */
     OApsAIMIDynIsfTrajectoryMaxFraction(
         key = "aimi_dyn_isf_trajectory_max_fraction",
@@ -423,7 +434,22 @@ enum class DoubleKey(
     OApsAIMIActivityBasalCapFactor("key_aimi_activity_basal_cap_factor", 1.3, 0.5, 3.0),
 
     // --- AIMI Adaptive Basal ---
-    OApsAIMIHighBg(key = "OApsAIMIHighBg", 180.0, 140.0, 250.0), // seuil haut déclenchant les corrections plateau
+    /**
+     * Glucose level, in mg/dL, that AIMI treats as the start of a high reading.
+     *
+     * Several dosing paths read this value: the high-glucose correction logic, the plateau
+     * detector and the meal-rise gates. It had no settings screen; see
+     * `AimiSettingsManifest.REACHABILITY_DEBT` for the reachability guarantee this closes.
+     */
+    OApsAIMIHighBg(
+        key = "OApsAIMIHighBg",
+        defaultValue = 180.0,
+        min = 140.0,
+        max = 250.0,
+        titleResId = R.string.pref_title_aimi_high_bg,
+        summaryResId = R.string.pref_summary_aimi_high_bg,
+        unitType = UnitType.MGDL,
+    ), // seuil haut déclenchant les corrections plateau
     OApsAIMIHyperEstablishedDevMgdl(
         key = "key_aimi_hyper_established_dev_mgdl",
         defaultValue = 0.0,
@@ -444,7 +470,20 @@ enum class DoubleKey(
     ),
     OApsAIMIPlateauBandAbs(key = "OApsAIMIPlateauBandAbs", 2.5, 0.5, 6.0), // bande de tolérance du plateau (|Δ| ≤ X mg/dL/5m)
     OApsAIMIR2Confident(key = "OApsAIMIR2Confident", 0.7, 0.3, 0.95), // seuil de confiance du fit quadratique
-    OApsAIMIMaxMultiplier(key = "OApsAIMIMaxMultiplier", 1.6, 1.0,2.5), // plafond multiplicatif de la basale (× profil)
+    /**
+     * Ceiling of the adaptive basal feature, as a multiple of the profile basal rate.
+     *
+     * Several adaptive-basal dosing paths read this value. It had no settings screen; see
+     * `AimiSettingsManifest.REACHABILITY_DEBT` for the reachability guarantee this closes.
+     */
+    OApsAIMIMaxMultiplier(
+        key = "OApsAIMIMaxMultiplier",
+        defaultValue = 1.6,
+        min = 1.0,
+        max = 2.5,
+        titleResId = R.string.pref_title_aimi_max_multiplier,
+        summaryResId = R.string.pref_summary_aimi_max_multiplier,
+    ), // plafond multiplicatif de la basale (× profil)
     OApsAIMIKickerStep(key = "OApsAIMIKickerStep", 0.15, 0.05, 0.5), // intensité du “kicker” plateau (incrément multiplicatif)
     OApsAIMIKickerMinUph(key = "OApsAIMIKickerMinUph", 0.2,0.05, 1.0), // plancher absolu U/h pour les kicks très bas
     OApsAIMIZeroResumeFrac(key = "OApsAIMIZeroResumeFrac", 0.25, 0.05, 0.8), // fraction du basal profil pour la micro-reprise

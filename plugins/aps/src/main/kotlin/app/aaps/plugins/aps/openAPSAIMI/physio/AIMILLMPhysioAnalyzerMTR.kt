@@ -14,6 +14,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import app.aaps.plugins.aps.openAPSAIMI.llm.claude.ClaudeModelResolver
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -54,6 +56,13 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
     companion object {
         private const val TAG = "LLMPhysioAnalyzer"
         private const val TIMEOUT_MS = 10_000L
+
+        // Claude and Gemini Pro think before they answer. This takes more time, so they get a longer limit.
+        // The call runs in the background, so a longer wait does not block the loop.
+        private const val THINKING_TIMEOUT_MS = 60_000L
+
+        private fun timeoutFor(provider: String): Long =
+            if (provider == "claude" || provider == "gemini") THINKING_TIMEOUT_MS else TIMEOUT_MS
 
         private val SYSTEM_ROLE_NARRATIVE: String = buildString {
             append(
@@ -101,10 +110,10 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
     private fun executeGeminiRequest(apiKey: String, prompt: String, modelId: String): String {
         val url = geminiResolver.getGenerateContentUrl(modelId, apiKey)
         val requestBody = JSONObject().apply {
-            put("contents", org.json.JSONArray().apply {
+            put("contents", JSONArray().apply {
                 put(JSONObject().apply {
                     put("role", "user")
-                    put("parts", org.json.JSONArray().apply {
+                    put("parts", JSONArray().apply {
                         put(JSONObject().apply {
                             put("text", prompt)
                         })
@@ -112,14 +121,14 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
                 })
             })
             put("generationConfig", JSONObject().apply {
-                put("maxOutputTokens", 150)
+                put("maxOutputTokens", 2000) // Gemini Pro always thinks; thinking tokens count in this limit
                 put("temperature", 0.3)
             })
         }
         
         val response = makeAPICall(url, requestBody.toString(), mapOf(
             "Content-Type" to "application/json"
-        ))
+        ), THINKING_TIMEOUT_MS)
         
         return parseGeminiResponse(response)
     }
@@ -161,7 +170,7 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
         if (!analysisInFlight.compareAndSet(false, true)) return
         ioScope.launch {
             try {
-                val result = withTimeout(TIMEOUT_MS) {
+                val result = withTimeout(timeoutFor(provider)) {
                     withContext(Dispatchers.IO) {
                         when (provider) {
                             "gpt4" -> analyzeWithGPT(features, baseline, context, apiKey)
@@ -200,7 +209,7 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
         
         val requestBody = JSONObject().apply {
             put("model", "gpt-4")
-            put("messages", org.json.JSONArray().apply {
+            put("messages", JSONArray().apply {
                 put(JSONObject().apply {
                     put("role", "system")
                     put("content", SYSTEM_ROLE_NARRATIVE)
@@ -259,7 +268,7 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
     }
     
     // ═══════════════════════════════════════════════════════════════════════
-    // CLAUDE 3.5 INTEGRATION
+    // CLAUDE INTEGRATION
     // ═══════════════════════════════════════════════════════════════════════
     
     private fun analyzeWithClaude(
@@ -271,10 +280,17 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
         
         val prompt = buildPrompt(features, baseline, context)
         
+        val model = ClaudeModelResolver.current()
         val requestBody = JSONObject().apply {
-            put("model", "claude-3-5-sonnet-20241022")
-            put("max_tokens", 150)
-            put("messages", org.json.JSONArray().apply {
+            put("model", model)
+            // Thinking tokens count in this limit on newer Claude models.
+            // The prompt keeps the text short, not this limit.
+            put("max_tokens", 2000)
+            // Low effort: a short text does not need deep thinking. Haiku 4.5 rejects this field.
+            if (ClaudeModelResolver.supportsEffort(model)) {
+                put("output_config", JSONObject().apply { put("effort", "low") })
+            }
+            put("messages", JSONArray().apply {
                 put(JSONObject().apply {
                     put("role", "user")
                     put("content", prompt)
@@ -286,7 +302,7 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
             "x-api-key" to apiKey,
             "anthropic-version" to "2023-06-01",
             "Content-Type" to "application/json"
-        ))
+        ), THINKING_TIMEOUT_MS)
         
         return parseClaudeResponse(response)
     }
@@ -294,10 +310,7 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
     private fun parseClaudeResponse(response: String): String {
         return try {
             val json = JSONObject(response)
-            json.getJSONArray("content")
-                .getJSONObject(0)
-                .getString("text")
-                .trim()
+            ClaudeModelResolver.extractText(json)
         } catch (e: Exception) {
             aapsLogger.warn(LTag.APS, "[$TAG] Failed to parse Claude response", e)
             ""
@@ -319,7 +332,7 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
         
         val requestBody = JSONObject().apply {
             put("model", "deepseek-chat")
-            put("messages", org.json.JSONArray().apply {
+            put("messages", JSONArray().apply {
                 put(JSONObject().apply {
                     put("role", "system")
                     put("content", SYSTEM_ROLE_NARRATIVE)
@@ -392,14 +405,14 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
     // HTTP CLIENT
     // ═══════════════════════════════════════════════════════════════════════
     
-    private fun makeAPICall(url: String, body: String, headers: Map<String, String>): String {
+    private fun makeAPICall(url: String, body: String, headers: Map<String, String>, timeoutMs: Long = TIMEOUT_MS): String {
         val connection = URL(url).openConnection() as HttpURLConnection
         
         try {
             connection.requestMethod = "POST"
             connection.doOutput = true
-            connection.connectTimeout = TIMEOUT_MS.toInt()
-            connection.readTimeout = TIMEOUT_MS.toInt()
+            connection.connectTimeout = timeoutMs.toInt()
+            connection.readTimeout = timeoutMs.toInt()
             
             headers.forEach { (key, value) ->
                 connection.setRequestProperty(key, value)

@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.pkpd
 
+import app.aaps.core.keys.DoubleKey
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
@@ -108,20 +109,20 @@ class IsfFusionTest {
     }
 
     @Test
-    fun `default settings reproduce the historical single tick envelope`() {
+    fun `legacy wide settings reproduce the historical single tick envelope`() {
         // Upper bound: 50 * 1.40
-        val up = anchoredAt50(maxChangePerTick = DEFAULT_MAX_CHANGE_PER_TICK)
+        val up = anchoredAt50(maxChangePerTick = LEGACY_WIDE_MAX_CHANGE_PER_TICK)
         assertEquals(70.0, up.fused(200.0, 200.0, 1.0, nowMs = T0 + TICK_MS, authoritative = true), 0.01)
 
         // Lower bound: 50 * 0.45
-        val down = anchoredAt50(maxChangePerTick = DEFAULT_MAX_CHANGE_PER_TICK)
+        val down = anchoredAt50(maxChangePerTick = LEGACY_WIDE_MAX_CHANGE_PER_TICK)
         assertEquals(22.5, down.fused(10.0, 10.0, 1.0, nowMs = T0 + TICK_MS, authoritative = true), 0.01)
     }
 
     @Test
     fun `max down branch limits the fall to the configured budget in one nominal tick`() {
         val fusion = IsfFusion(
-            IsfFusionBounds(minFactor = 0.5, maxFactor = 1.5, maxChangePer5Min = DEFAULT_MAX_CHANGE_PER_TICK)
+            IsfFusionBounds(minFactor = 0.5, maxFactor = 1.5, maxChangePer5Min = LEGACY_WIDE_MAX_CHANGE_PER_TICK)
         )
         assertEquals(100.0, fusion.fused(100.0, 100.0, 1.0, nowMs = T0, authoritative = true), 0.01)
 
@@ -136,12 +137,62 @@ class IsfFusionTest {
         assertEquals(200.0, fusion.fused(200.0, 200.0, 1.0, nowMs = T0, authoritative = true), 0.01)
     }
 
+    // ---------------------------------------------------------------------------------------
+    // FIX A — the preference default must say the same thing as the algorithm it drives.
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * Pins the two defaults together so they cannot drift apart again. The preference used to ship
+     * at 0.4 while the code asked for 0.03, and the device ran the preference.
+     */
+    @Test
+    fun `preference default equals the IsfFusion bounds default`() {
+        assertEquals(
+            IsfFusionBounds().maxChangePer5Min,
+            DoubleKey.OApsAIMIIsfFusionMaxChangePerTick.defaultValue,
+            1e-9,
+        )
+    }
+
+    @Test
+    fun `shipped default budget allows only a small step in one tick`() {
+        val shipped = DoubleKey.OApsAIMIIsfFusionMaxChangePerTick.defaultValue
+
+        // Up: 50 * (1 + 0.03) = 51.5
+        val up = anchoredAt(50.0, maxChangePerTick = shipped)
+        assertEquals(51.5, up.fused(200.0, 200.0, 1.0, nowMs = T0 + TICK_MS, authoritative = true), 0.01)
+
+        // Down: the budget is multiplied by DOWN_SLEW_GAIN 1.375 ONCE, so 0.03 -> 4.125 %,
+        // i.e. 50 * 0.95875 = 47.94. (The spec's "-5.6 %" applies the gain twice.)
+        val down = anchoredAt(50.0, maxChangePerTick = shipped)
+        assertEquals(47.9375, down.fused(10.0, 10.0, 1.0, nowMs = T0 + TICK_MS, authoritative = true), 0.01)
+    }
+
+    /**
+     * The measured 2026-10-01 23:59 step, 29.1 -> 50.5 mg/dL/U in one tick.
+     *
+     * Neither budget permits that step on its own: even the old wide 0.4 stops at 40.74, which is
+     * why the measurement also needed the unlimited factors downstream of the fusion. What the new
+     * default does change is the size of what the fusion can contribute: 0.87 instead of 11.64.
+     */
+    @Test
+    fun `shipped default bounds the measured 29_1 to 50_5 step much harder than the old one`() {
+        val legacy = anchoredAt(29.1, maxChangePerTick = LEGACY_WIDE_MAX_CHANGE_PER_TICK)
+        assertEquals(40.74, legacy.fused(50.5, 50.5, 1.0, nowMs = T0 + TICK_MS, authoritative = true), 0.01)
+
+        val shipped = anchoredAt(29.1, maxChangePerTick = DoubleKey.OApsAIMIIsfFusionMaxChangePerTick.defaultValue)
+        assertEquals(29.973, shipped.fused(50.5, 50.5, 1.0, nowMs = T0 + TICK_MS, authoritative = true), 0.01)
+    }
+
     /** Fresh fusion whose anchor is set to 50 at [T0], with wide min/max factors so only the slew limiter binds. */
-    private fun anchoredAt50(maxChangePerTick: Double): IsfFusion {
+    private fun anchoredAt50(maxChangePerTick: Double): IsfFusion = anchoredAt(50.0, maxChangePerTick)
+
+    /** Fresh fusion whose anchor is set to [isf] at [T0], with wide min/max factors so only the slew limiter binds. */
+    private fun anchoredAt(isf: Double, maxChangePerTick: Double): IsfFusion {
         val fusion = IsfFusion(
             IsfFusionBounds(minFactor = 0.5, maxFactor = 1.5, maxChangePer5Min = maxChangePerTick)
         )
-        assertEquals(50.0, fusion.fused(50.0, 50.0, 1.0, nowMs = T0, authoritative = true), 0.01)
+        assertEquals(isf, fusion.fused(isf, isf, 1.0, nowMs = T0, authoritative = true), 0.01)
         return fusion
     }
 
@@ -150,7 +201,11 @@ class IsfFusionTest {
         const val T0 = 1_000_000L
         const val TICK_MS = 300_000L
 
-        /** Default of the user preference OApsAIMIIsfFusionMaxChangePerTick. */
-        const val DEFAULT_MAX_CHANGE_PER_TICK = 0.4
+        /**
+         * The OLD default of the user preference `OApsAIMIIsfFusionMaxChangePerTick`, kept so the
+         * historical one-tick envelope stays pinned. The shipped default is now the code default,
+         * [IsfFusionBounds.maxChangePer5Min].
+         */
+        const val LEGACY_WIDE_MAX_CHANGE_PER_TICK = 0.4
     }
 }

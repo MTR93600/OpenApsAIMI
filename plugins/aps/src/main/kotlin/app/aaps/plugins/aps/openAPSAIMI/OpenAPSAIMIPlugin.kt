@@ -139,11 +139,15 @@ import kotlin.math.abs
 import kotlin.math.exp
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiAdvisorService
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiControlCenterScreen
+import app.aaps.plugins.aps.openAPSAIMI.compose.AimiSettingsAuditScreen
+import app.aaps.plugins.aps.openAPSAIMI.compose.AimiSettingsScreens
+import app.aaps.plugins.aps.openAPSAIMI.compose.AimiSettingsSectionId
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiPkpdSettingsScreen
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer
 import kotlinx.coroutines.withContext
 import app.aaps.plugins.aps.openAPSAIMI.learning.AimiMlTrainingScheduler
+import app.aaps.plugins.aps.openAPSAIMI.llm.claude.ClaudeModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.hormonitor.viewer.HormonitorViewerScreen
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiBackupManager
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
@@ -246,6 +250,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         EndogenousPhaseHysteresis.reset()
         InsulinSlopePreserveHysteresis.reset()
         migrateClassicAutodriveToV3()
+        ClaudeModelResolver.bind(preferences)
         preferences.registerPreferences(app.aaps.plugins.aps.openAPSAIMI.keys.AimiLongKey::class.java)
         preferences.registerPreferences(app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey::class.java)
 
@@ -1969,6 +1974,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     StringKey.AimiAdvisorGeminiKey,
                     StringKey.AimiAdvisorDeepSeekKey,
                     StringKey.AimiAdvisorClaudeKey,
+                    AimiStringKey.AimiAdvisorClaudeModel,
                     BooleanKey.OApsAIMIAdvisorPersonalOrefMl,
                     BooleanKey.OApsAIMIAdvisorLlmRichOref,
                 ),
@@ -1984,6 +1990,16 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     AimiControlCenterScreen(
                         preferences = preferences,
                         tpoOrchestrator = tpoOrchestrator,
+                        onBack = onBack,
+                    )
+                },
+            ),
+        )
+        add(
+            ApsIntentKey.AimiSettingsAudit.withCompose(
+                ComposeScreenContent { onBack ->
+                    AimiSettingsAuditScreen(
+                        preferences = preferences,
                         onBack = onBack,
                     )
                 },
@@ -2087,10 +2103,10 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         PreferenceSubScreenDef(
             key = "aimi_compose_tpo",
             titleResId = R.string.aimi_tpo_prefs_subscreen_title,
-            items = listOf(
-                BooleanKey.OApsAIMITpoEnabled,
-                BooleanKey.OApsAIMITpoLlmConfirmEnabled,
-                BooleanKey.OApsAIMITpoNotifyOnApply,
+            // Key list declared in AimiSettingsScreens, so a test can prove it is reachable.
+            items = AimiSettingsScreens.preferenceKeysOf(
+                AimiSettingsSectionId.TpoEnable,
+                AimiSettingsSectionId.TpoOptions,
             ),
         )
 
@@ -2130,6 +2146,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 add(aimiComposeHormonitorViewerItem())
                 add(DoubleKey.OApsAIMIMaxSMB)
                 add(DoubleKey.OApsAIMIHighBGMaxSMB)
+                // Added so a clinician-level value read by a dozen dosing paths has a screen home.
+                add(DoubleKey.OApsAIMIHighBg)
                 add(aimiComposePkpdSubScreen())
                 add(aimiComposeAdaptiveBasalSubScreen())
                 add(aimiComposeT3cSubScreen())
@@ -2146,49 +2164,27 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         PreferenceSubScreenDef(
             key = "aimi_compose_adaptive_basal",
             titleResId = R.string.oaps_aimi_adaptive_basal_title,
-            items = buildList {
-                add(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled)
-                add(BooleanKey.OApsAIMIBasalSlewLimitEnabled)
-                add(BooleanKey.OApsAIMIBasalChannelSafetyGuards)
-                add(BooleanKey.OApsAIMIBasalTerminalInvariants)
-                add(BooleanKey.OApsAIMIBasalProjectedError)
-                add(DoubleKey.OApsAIMIAdaptiveBasalMaxScaling)
-                add(DoubleKey.OApsAIMIGovernanceHypoRateEnter)
-                add(DoubleKey.OApsAIMIGovernanceHypoRateExit)
-                add(DoubleKey.OApsAIMIGovernanceHypoBgMgdl)
-                add(DoubleKey.OApsAIMIGovernanceSevereHypoBgMgdl)
-                add(DoubleKey.OApsAIMIGovernanceHoldBasalFloorRate)
-                add(DoubleKey.OApsAIMIGovernanceHoldBasalDecayRate)
-                add(DoubleKey.OApsAIMIGovernanceHoldAggFloorRate)
-                add(DoubleKey.OApsAIMIGovernanceHoldAggDecayRate)
-                add(DoubleKey.OApsAIMIGovernanceHoldBasalFloorSevere)
-                add(DoubleKey.OApsAIMIGovernanceHoldBasalDecaySevere)
-                add(DoubleKey.OApsAIMIGovernanceHoldAggFloorSevere)
-                add(DoubleKey.OApsAIMIGovernanceHoldAggDecaySevere)
-                add(DoubleKey.OApsAIMIGovernanceAnticipationLookbackSamples)
-                add(DoubleKey.OApsAIMIGovernanceAnticipationMarginMgdl)
-                add(DoubleKey.OApsAIMIGovernanceAnticipationHypoDamp)
-                add(DoubleKey.OApsAIMIGovernanceAnticipationDecayBlendMax)
-            },
+            // Key list declared in AimiSettingsScreens, so a test can prove it is reachable.
+            items = AimiSettingsScreens.preferenceKeysOf(
+                AimiSettingsSectionId.AdaptiveBasalEnable,
+                AimiSettingsSectionId.AdaptiveBasalExpert,
+                // Appended, not inserted, so the existing two keep their screen position.
+                AimiSettingsSectionId.AdaptiveBasalLimits,
+            ),
         )
 
     private fun aimiComposeT3cSubScreen(): PreferenceSubScreenDef =
         PreferenceSubScreenDef(
             key = "aimi_compose_t3c",
             titleResId = R.string.aimi_t3c_settings_title,
-            items = listOf(
-                BooleanKey.OApsAIMIT3cBrittleMode,
-                BooleanKey.OApsAIMIT3cAutodriveBasalAuthority,
-                BooleanKey.OApsAIMIT3cHyperBasalFloor,
-                BooleanKey.OApsAIMIT3cCfrdMode,
-                BooleanKey.OApsAIMIT3cCfrdExacerbationMode,
-                DoubleKey.OApsAIMIT3cCfrdLgsFloorMgdl,
-                DoubleKey.OApsAIMIT3cCfrdCobDelayMin,
-                DoubleKey.OApsAIMIT3cActivationThreshold,
-                DoubleKey.OApsAIMIT3cAggressiveness,
-                DoubleKey.OApsAIMIT3cAnticipationStrength,
-                BooleanKey.OApsAIMIUndeclaredCobEnabled,
-                DoubleKey.OApsAIMIUndeclaredCobMaxG,
+            // Key list declared in AimiSettingsScreens, so a test can prove it is reachable.
+            items = AimiSettingsScreens.preferenceKeysOf(
+                AimiSettingsSectionId.T3cMode,
+                AimiSettingsSectionId.T3cAutodriveAuthority,
+                AimiSettingsSectionId.T3cBehaviour,
+                AimiSettingsSectionId.T3cCfrdLgsFloor,
+                AimiSettingsSectionId.T3cCfrdCobDelay,
+                AimiSettingsSectionId.T3cAnticipation,
             ),
         )
 
@@ -2199,6 +2195,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             items = buildList {
                 add(BooleanKey.OApsAIMITrajectoryGuardEnabled)
                 add(BooleanKey.OApsAIMIStraightLineTubeAdvisorEnabled)
+                // Sits next to the advisor it changes. Off by default, and the only setting in this
+                // screen that can raise a dose, which its own summary says in the first person.
+                add(BooleanKey.OApsAIMITubeVetoIgnoreFloorArtefact)
                 add(
                     PreferenceSubScreenDef(
                         key = "aimi_compose_tube_mpc",
@@ -2295,12 +2294,10 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         PreferenceSubScreenDef(
             key = "aimi_compose_ngr",
             titleResId = R.string.oaps_aimi_ngr_title,
-            items = listOf(
-                BooleanKey.OApsAIMINightGrowthEnabled,
-                IntKey.OApsAIMINightGrowthAgeYears,
-                StringKey.OApsAIMINightGrowthStart,
-                StringKey.OApsAIMINightGrowthEnd,
-                DoubleKey.OApsAIMINightGrowthMaxIobExtra,
+            // Key list declared in AimiSettingsScreens, so a test can prove it is reachable.
+            items = AimiSettingsScreens.preferenceKeysOf(
+                AimiSettingsSectionId.NightGrowthIntent,
+                AimiSettingsSectionId.NightGrowthBudget,
             ),
         )
 
@@ -2314,80 +2311,49 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     PreferenceSubScreenDef(
                         key = "aimi_compose_mode_breakfast",
                         titleResId = R.string.training_ml_breakfast_modes_preferences,
-                        items = listOf(
-                            DoubleKey.OApsAIMIBFPrebolus,
-                            DoubleKey.OApsAIMIBFPrebolus2,
-                            DoubleKey.OApsAIMIBFFactor,
-                            IntKey.OApsAIMIBFinterval,
-                        ),
+                        items = AimiSettingsScreens.preferenceKeysOf(AimiSettingsSectionId.ModeBreakfast),
                     )
                 )
                 add(
                     PreferenceSubScreenDef(
                         key = "aimi_compose_mode_lunch",
                         titleResId = R.string.training_ml_lunch_modes_preferences,
-                        items = listOf(
-                            DoubleKey.OApsAIMILunchPrebolus,
-                            DoubleKey.OApsAIMILunchPrebolus2,
-                            DoubleKey.OApsAIMILunchFactor,
-                            IntKey.OApsAIMILunchinterval,
-                        ),
+                        items = AimiSettingsScreens.preferenceKeysOf(AimiSettingsSectionId.ModeLunch),
                     )
                 )
                 add(
                     PreferenceSubScreenDef(
                         key = "aimi_compose_mode_dinner",
                         titleResId = R.string.training_ml_dinner_modes_preferences,
-                        items = listOf(
-                            DoubleKey.OApsAIMIDinnerPrebolus,
-                            DoubleKey.OApsAIMIDinnerPrebolus2,
-                            DoubleKey.OApsAIMIDinnerFactor,
-                            IntKey.OApsAIMIDinnerinterval,
-                        ),
+                        items = AimiSettingsScreens.preferenceKeysOf(AimiSettingsSectionId.ModeDinner),
                     )
                 )
                 add(
                     PreferenceSubScreenDef(
                         key = "aimi_compose_mode_highcarb",
                         titleResId = R.string.training_ml_high_carb_modes_preferences,
-                        items = listOf(
-                            DoubleKey.OApsAIMIHighCarbPrebolus,
-                            DoubleKey.OApsAIMIHighCarbPrebolus2,
-                            DoubleKey.OApsAIMIHCFactor,
-                            IntKey.OApsAIMIHCinterval,
-                        ),
+                        items = AimiSettingsScreens.preferenceKeysOf(AimiSettingsSectionId.ModeHighCarb),
                     )
                 )
                 add(
                     PreferenceSubScreenDef(
                         key = "aimi_compose_mode_snack",
                         titleResId = R.string.training_ml_snack_modes_preferences,
-                        items = listOf(
-                            DoubleKey.OApsAIMISnackPrebolus,
-                            DoubleKey.OApsAIMISnackFactor,
-                            IntKey.OApsAIMISnackinterval,
-                        ),
+                        items = AimiSettingsScreens.preferenceKeysOf(AimiSettingsSectionId.ModeSnack),
                     )
                 )
                 add(
                     PreferenceSubScreenDef(
                         key = "aimi_compose_mode_meal",
                         titleResId = R.string.training_ml_generic_meal_modes_preferences,
-                        items = listOf(
-                            DoubleKey.OApsAIMIMealPrebolus,
-                            DoubleKey.OApsAIMIMealFactor,
-                            IntKey.OApsAIMImealinterval,
-                        ),
+                        items = AimiSettingsScreens.preferenceKeysOf(AimiSettingsSectionId.ModeMeal),
                     )
                 )
                 add(
                     PreferenceSubScreenDef(
                         key = "aimi_compose_mode_sleep",
                         titleResId = R.string.training_ml_sleep_modes_preferences,
-                        items = listOf(
-                            DoubleKey.OApsAIMIsleepFactor,
-                            IntKey.OApsAIMISleepinterval,
-                        ),
+                        items = AimiSettingsScreens.preferenceKeysOf(AimiSettingsSectionId.ModeSleep),
                     )
                 )
             },
@@ -2425,10 +2391,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     PreferenceSubScreenDef(
                         key = "aimi_compose_autodrive_prebolus_vars",
                         titleResId = R.string.autodrive_prebolus_variables,
-                        items = listOf(
-                            IntKey.OApsAIMIAutodriveBG,
-                            DoubleKey.OApsAIMIcombinedDelta,
-                            DoubleKey.OApsAIMIAutodriveDeviation,
+                        items = AimiSettingsScreens.preferenceKeysOf(
+                            AimiSettingsSectionId.AutodrivePrebolusVariables,
                         ),
                     )
                 )

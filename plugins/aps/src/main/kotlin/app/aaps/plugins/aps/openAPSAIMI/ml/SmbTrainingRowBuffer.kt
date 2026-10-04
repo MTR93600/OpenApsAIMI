@@ -29,14 +29,26 @@ internal class SmbTrainingRowBuffer(
 ) {
 
     /**
-     * One CSV row waiting for its origin stamp and its outcome.
+     * One CSV row waiting for its label, its origin stamp and its outcome.
      *
-     * [valuesPrefix] is the row exactly as the old code wrote it, without the new columns and
-     * without the trailing newline.
+     * The row is stored in two halves because the label sits between them and is bound late. See
+     * [deliveredUnits]. [valuesHead] is everything up to but not including the label, [valuesTail]
+     * everything after it; neither carries the trailing newline.
      */
     internal data class PendingRow(
         val timestampMs: Long,
-        val valuesPrefix: String,
+        val valuesHead: String,
+        val valuesTail: String,
+        /**
+         * The dose really delivered on this tick, in U, stamped at the end of the tick.
+         *
+         * This is the training label. It used to be written when the row was built, inside the SMB
+         * executor, which is BEFORE every floor, cap and guard has run — so the column named "the
+         * dose that was really delivered" held the value before capping. `null` until stamped, and
+         * an unstamped row is rendered with an empty label rather than a zero: an empty cell is
+         * dropped by the trainer, a zero would teach it that nothing was given.
+         */
+        var deliveredUnits: Double? = null,
         var smbModelU: Double? = null,
         var smbFloorU: Double? = null,
         var bindingStage: String? = null,
@@ -51,9 +63,22 @@ internal class SmbTrainingRowBuffer(
 
     /** Adds the row of the current tick. Oldest rows are dropped if the queue grows past its cap. */
     @Synchronized
-    fun enqueue(timestampMs: Long, valuesPrefix: String) {
-        pending.addLast(PendingRow(timestampMs = timestampMs, valuesPrefix = valuesPrefix))
+    fun enqueue(timestampMs: Long, valuesHead: String, valuesTail: String) {
+        pending.addLast(PendingRow(timestampMs = timestampMs, valuesHead = valuesHead, valuesTail = valuesTail))
         while (pending.size > maxPendingRows) pending.removeFirst()
+    }
+
+    /**
+     * Writes the training label on the row queued by the tick [tickKey].
+     *
+     * Called once per tick from the tick tail, where the delivered dose is final. Matching is on the
+     * tick key for the same reason [stampOrigin] does it: a tick that queued no row of its own must
+     * label nothing rather than label someone else's row.
+     */
+    @Synchronized
+    fun stampDeliveredUnits(tickKey: Long, deliveredUnits: Double?) {
+        val row = pending.lastOrNull { it.timestampMs == tickKey && it.deliveredUnits == null } ?: return
+        row.deliveredUnits = deliveredUnits
     }
 
     /**
@@ -123,9 +148,11 @@ internal class SmbTrainingRowBuffer(
     @Synchronized
     fun pendingCount(): Int = pending.size
 
-    /** Renders one row: the original prefix, then the six new fields, empty when unknown. */
+    /** Renders one row: the head, the late-bound label, the tail, then the six new fields. */
     internal fun render(row: PendingRow): String =
-        row.valuesPrefix +
+        row.valuesHead +
+            "," + formatUnits(row.deliveredUnits) +
+            "," + row.valuesTail +
             "," + formatUnits(row.smbModelU) +
             "," + formatUnits(row.smbFloorU) +
             "," + formatText(row.bindingStage) +

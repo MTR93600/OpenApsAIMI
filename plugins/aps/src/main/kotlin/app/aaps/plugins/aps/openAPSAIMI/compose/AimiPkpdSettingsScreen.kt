@@ -124,27 +124,27 @@ fun AimiPkpdSettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
 
-                    PrimaryTabRow(
-                        selectedTabIndex = when (selectedLevel) {
-                            PkpdSettingsLevel.SIMPLE -> 0
-                            PkpdSettingsLevel.ADVANCED, PkpdSettingsLevel.EXPERT -> 1
-                        },
-                    ) {
-                        Tab(
-                            selected = selectedLevel == PkpdSettingsLevel.SIMPLE,
-                            onClick = { selectedLevel = PkpdSettingsLevel.SIMPLE },
-                            text = { Text(stringResource(R.string.aimi_pkpd_level_simple)) },
-                        )
-                        Tab(
-                            selected = selectedLevel == PkpdSettingsLevel.ADVANCED ||
-                                selectedLevel == PkpdSettingsLevel.EXPERT,
-                            onClick = { selectedLevel = PkpdSettingsLevel.ADVANCED },
-                            text = { Text(stringResource(R.string.aimi_pkpd_level_advanced)) },
-                        )
+                    // One tab per level declared in AimiSettingsScreens.pkpdLevels. Every level
+                    // must have a tab here and a branch below, or its sections become
+                    // unreachable, which is what hid the ISF fusion slope slider for months.
+                    val levels = AimiSettingsScreens.pkpdLevels
+                    PrimaryTabRow(selectedTabIndex = levels.indexOf(selectedLevel).coerceAtLeast(0)) {
+                        levels.forEach { level ->
+                            Tab(
+                                selected = selectedLevel == level,
+                                onClick = { selectedLevel = level },
+                                text = { Text(stringResource(pkpdLevelTabTitleResId(level))) },
+                            )
+                        }
                     }
 
-                    when (selectedLevel) {
-                        PkpdSettingsLevel.SIMPLE -> PkpdSimpleSettingsContent(
+                    // The level does NOT pick the content here. `pkpdContentByLevel` does, and this
+                    // `when` only says which composable draws a content. That split is the point: the
+                    // defect this screen is fixing was a `when` on the level that sent EXPERT to the
+                    // advanced content, and no test could see it because no test could read a `when`.
+                    // Now a test reads the map, and breaking the map breaks the screen.
+                    when (AimiSettingsScreens.pkpdContentByLevel[selectedLevel]) {
+                        AimiSettingsContentId.PkpdSimple -> PkpdSimpleSettingsContent(
                             preferences = preferences,
                             profileDiaHours = profileDiaHours,
                             profilePeakMin = profilePeakMin,
@@ -166,16 +166,30 @@ fun AimiPkpdSettingsScreen(
                             snackbarHostState = snackbarHostState,
                             scope = scope,
                         )
-                        PkpdSettingsLevel.ADVANCED, PkpdSettingsLevel.EXPERT -> PkpdAdvancedSettingsContent(
+                        AimiSettingsContentId.PkpdAdvanced -> PkpdAdvancedSettingsContent(
                             preferences = preferences,
                             preferenceRevision = preferenceRevision,
                             onPreferenceRevisionBump = { preferenceRevision++ },
                             snackbarHostState = snackbarHostState,
                             scope = scope,
                         )
+                        AimiSettingsContentId.PkpdExpert -> PkpdExpertSettingsContent(
+                            preferenceRevision = preferenceRevision,
+                        )
+                        // A level with no content, or a content this screen does not draw, shows
+                        // nothing rather than guessing. `AimiSettingsManifestTest` makes that
+                        // unreachable: every PK/PD level must map to one of the three above.
+                        else -> Unit
                     }
                 }
             }
         }
     }
+}
+
+/** Tab label of one PK/PD level. */
+private fun pkpdLevelTabTitleResId(level: PkpdSettingsLevel): Int = when (level) {
+    PkpdSettingsLevel.SIMPLE   -> R.string.aimi_pkpd_level_simple
+    PkpdSettingsLevel.ADVANCED -> R.string.aimi_pkpd_level_advanced
+    PkpdSettingsLevel.EXPERT   -> R.string.aimi_pkpd_level_expert
 }

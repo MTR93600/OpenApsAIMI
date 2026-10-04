@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
+import app.aaps.plugins.aps.openAPSAIMI.llm.claude.ClaudeModelResolver
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -47,7 +48,7 @@ class AuditorAIService @Inject constructor(
         OPENAI("openai", "ChatGPT (GPT-5.2)"),
         GEMINI("gemini", "Gemini (3.0 Flash)"),
         DEEPSEEK("deepseek", "DeepSeek (Chat)"),
-        CLAUDE("claude", "Claude (3.5 Sonnet)")
+        CLAUDE("claude", "Claude (model chosen in settings)")
     }
     
     /**
@@ -323,7 +324,8 @@ class AuditorAIService @Inject constructor(
      * Call Claude API
      */
     private fun callClaude(apiKey: String, prompt: String, useHighPerf: Boolean): String {
-        val model = if (useHighPerf) "claude-3-5-sonnet-20241022" else "claude-3-haiku-20240307"
+        // One user-selected model for every audit (useHighPerf no longer switches tiers for Claude).
+        val model = ClaudeModelResolver.current()
         val url = URL(CLAUDE_URL)
         val connection = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
@@ -332,13 +334,12 @@ class AuditorAIService @Inject constructor(
             setRequestProperty("x-api-key", apiKey)
             setRequestProperty("anthropic-version", "2023-06-01")
             connectTimeout = 15_000 // Reduced per audit
-            readTimeout = DEFAULT_TIMEOUT_MS.toInt()   // Reduced per audit
+            readTimeout = 90_000            // larger Claude models (Sonnet 5 / Fable 5.1) need more time; the verdict is async anyway
         }
         
         val requestBody = JSONObject().apply {
             put("model", model)
-            put("max_tokens", 2048)
-            put("temperature", 0.3)
+            put("max_tokens", 8192) // thinking tokens count in this limit on newer Claude models
             put("messages", JSONArray().apply {
                 put(JSONObject().apply {
                     put("role", "user")
@@ -423,9 +424,7 @@ class AuditorAIService @Inject constructor(
                     .getString("text")
             }
             Provider.CLAUDE                    -> {
-                root.getJSONArray("content")
-                    .getJSONObject(0)
-                    .getString("text")
+                ClaudeModelResolver.extractText(root)
             }
         }
 

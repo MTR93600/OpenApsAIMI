@@ -626,6 +626,10 @@
     <string name="pref_summary_aimi_hyper_established_dev">0 = TDD-scaled default (~80). Deviation above target for ESTABLISHED tier.</string>
     <string name="pref_title_aimi_hyper_deep_dev">HTR deep deviation (mg/dL above target)</string>
     <string name="pref_summary_aimi_hyper_deep_dev">0 = TDD-scaled default (~120). Deviation above target for DEEP plateau tier.</string>
+    <string name="pref_title_aimi_high_bg">High glucose threshold (mg/dL)</string>
+    <string name="pref_summary_aimi_high_bg">Glucose level above which AIMI treats the reading as high and switches to its high-glucose dosing paths, such as extra correction and plateau handling. Default 180 mg/dL.</string>
+    <string name="pref_title_aimi_max_multiplier">Adaptive basal: maximum basal ceiling</string>
+    <string name="pref_summary_aimi_max_multiplier">Largest basal rate the adaptive basal feature may use, as a multiple of your profile basal rate. For example, 1.6 means up to 1.6 times your profile basal.</string>
     <string name="aimi_tube_advanced_title">Straight-line tube (tuning)</string>
     <string name="aimi_tube_hypo_floor_title">Tube: minimum predicted BG floor (mg/dL)</string>
     <string name="aimi_tube_hypo_floor_summary">Robust hypo constraint: SMB cap scale is only allowed if min predicted BG minus estimated SMB effect stays at or above this value.</string>
@@ -690,5 +694,9 @@
     <string name="pref_summary_aimi_basal_projected_error">Size the temp basal on where glucose is heading over the insulin action window, as a single distance from target, instead of adding a separate trend term that outweighed the distance term 36 to 1. Unchanged when glucose is steady; a rise no longer alone drives several times profile basal.</string>
     <string name="pref_title_aimi_basal_terminal_invariants">Basal channel: final safety limits</string>
     <string name="pref_summary_aimi_basal_terminal_invariants">Re-check three limits on the temp basal after every multiplier has been applied, instead of before them: hold at profile basal when both glucose and the prediction are below target, while post-hypo recovery is active, or when insulin on board is negative without a rise. Can only lower the rate, never raise it. Manual meal modes are exempt.</string>
+    <string name="pref_title_aimi_traj_bridge_basal_survives">Basal channel: keep the trajectory bridge cut</string>
+    <string name="pref_summary_aimi_traj_bridge_basal_survives">When the trajectory safety bridge asks for a lower temp basal, apply that request again after the basal schedule has run, so the schedule can no longer write over it. Can only lower the rate, never raise it, and does nothing on a loop run where the bridge did not ask for anything. Off by default; the request is recorded either way.</string>
+    <string name="pref_title_aimi_tube_veto_ignore_floor_artefact">Bolus channel: ignore a veto built on a floored prediction</string>
+    <string name="pref_summary_aimi_tube_veto_ignore_floor_artefact">The dose feasibility check refuses every bolus when the predicted lowest glucose sits under the hypo floor. That prediction cannot go below 39 mg/dL, so a curve that reached its own limit looks like a coming low. With this on, the bolus limit is released only while glucose is high and flat, never during exercise, never after a low and never while glucose is falling. This is the only setting here that can raise a dose. Off by default; the case is recorded either way, so you can count how often it happens first.</string>
 </resources>
 

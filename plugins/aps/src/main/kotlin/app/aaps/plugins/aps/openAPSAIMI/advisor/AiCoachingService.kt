@@ -2,6 +2,7 @@ package app.aaps.plugins.aps.openAPSAIMI.advisor
 
 import android.content.Context
 import org.json.JSONArray
+import app.aaps.plugins.aps.openAPSAIMI.llm.claude.ClaudeModelResolver
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -43,9 +44,7 @@ class AiCoachingService @Inject constructor() {
         private const val DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
         private const val DEEPSEEK_MODEL = "deepseek-chat"
         
-        // Claude Haiku (Fast & Cheap) — current GA fast tier (claude-3-haiku-20240307 was retired).
         private const val CLAUDE_URL = "https://api.anthropic.com/v1/messages"
-        private const val CLAUDE_MODEL = "claude-haiku-4-5"
     }
 
     /**
@@ -455,9 +454,8 @@ class AiCoachingService @Inject constructor() {
         val connection = url.openConnection() as HttpURLConnection
 
         val jsonBody = JSONObject()
-        jsonBody.put("model", CLAUDE_MODEL)
-        jsonBody.put("max_tokens", 4096)
-        jsonBody.put("temperature", 0.7)
+        jsonBody.put("model", ClaudeModelResolver.current())
+        jsonBody.put("max_tokens", 8192) // thinking tokens count in this limit on newer Claude models
 
         // Claude expects messages array with role/content
         val messages = JSONArray()
@@ -474,7 +472,7 @@ class AiCoachingService @Inject constructor() {
             setRequestProperty("anthropic-version", "2023-06-01")
             doOutput = true
             connectTimeout = 15000
-            readTimeout = 60000
+            readTimeout = 120000 // Sonnet 5 / Fable 5.1 can take more than 60 s on long coaching prompts
         }
 
         val writer = OutputStreamWriter(connection.outputStream)
@@ -504,8 +502,7 @@ class AiCoachingService @Inject constructor() {
     private fun parseClaudeResponse(jsonStr: String): String {
         return try {
             val root = JSONObject(jsonStr)
-            val content = root.getJSONArray("content")
-            content.getJSONObject(0).getString("text").trim()
+            ClaudeModelResolver.extractText(root)
         } catch (e: Exception) {
             "Erreur lecture Claude."
         }

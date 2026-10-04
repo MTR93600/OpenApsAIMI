@@ -700,6 +700,51 @@ enum class BooleanKey(
         titleResId = R.string.pref_title_aimi_basal_terminal_invariants,
         summaryResId = R.string.pref_summary_aimi_basal_terminal_invariants,
     ),
+    /**
+     * Let the Traj-Bridge basal reduction survive the basal schedule (opt-in, off by default).
+     *
+     * The trajectory safety bridge asks for a lower basal rate, but the basal schedule runs after it
+     * and writes its own rate over the request. Measured on 2026-10-02: the bridge asked 0.13 U/h and
+     * the pump got 4.84 U/h; 30 of 34 bridge ticks ended far above the request.
+     *
+     * When ON, the request is applied again at the last point where the rate can still be bound,
+     * just before the terminal invariants, and only as `min(scheduled, request)`. It can only lower
+     * the rate, never raise it, and it does nothing on a tick where the bridge did not fire.
+     * When OFF, the behaviour is exactly as before; the request is still written to
+     * `AIMI_Decisions.jsonl` (`adjustments.traj_bridge`) so the effect can be counted first.
+     */
+    OApsAIMITrajBridgeBasalSurvives(
+        "key_aimi_traj_bridge_basal_survives", false,
+        titleResId = R.string.pref_title_aimi_traj_bridge_basal_survives,
+        summaryResId = R.string.pref_summary_aimi_traj_bridge_basal_survives,
+    ),
+
+    /**
+     * Stop the straight-line tube advisor from vetoing on a railed prediction (opt-in, off by default).
+     *
+     * The advisor refuses every dose rung when the predicted minimum sits under the hypoglycaemia
+     * floor. That minimum comes from curves clamped at 39 mg/dL, so a curve that hit its own floor
+     * reads as "a low is coming". Measured on 2026-10-02 between 21:09 and 21:19: glucose 142, 140 and
+     * 144 mg/dL, flat, predicted minimum 40.97, 40.22 and 39.00, and the bolus channel was held at
+     * 0.05 U for fifteen minutes.
+     *
+     * **This is the one gesture here that can RAISE a dose.** When ON, the bolus cap is released only
+     * while glucose is high and flat, never during sport, never after a low, and never on a fall — the
+     * same conditions the plateau floor-artefact lift already uses, including its 160 mg/dL band. The
+     * basal trim the advisor asked for is kept. When OFF, nothing changes, and both the strict case and
+     * the wider case below that band are written to `AIMI_Decisions.jsonl` so the frequency can be
+     * measured before anyone arms this.
+     *
+     * To be exact about what "released" means: this veto only fires when even a dose of zero is
+     * infeasible, so the advisor never produced a graded answer that could be used instead. The cap
+     * therefore returns to the value it had BEFORE the advisor ran — not to a smaller graded one. Every
+     * limit downstream still applies, in particular the maximum bolus and the maximum insulin on board.
+     */
+    OApsAIMITubeVetoIgnoreFloorArtefact(
+        "key_aimi_tube_veto_ignore_floor_artefact", false,
+        titleResId = R.string.pref_title_aimi_tube_veto_ignore_floor_artefact,
+        summaryResId = R.string.pref_summary_aimi_tube_veto_ignore_floor_artefact,
+    ),
     // 🩸 pkpd predictions: shape the insulin-activity curves on the LEARNED DIA/peak, not the static profile
     OApsAIMIPkpdPredictionKinetics(
         "key_aimi_pkpd_prediction_kinetics", true,

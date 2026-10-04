@@ -104,7 +104,7 @@ class SmbInstructionExecutorTest {
             runtimeToMinutes = { 0 },
             computeHypoThreshold = { _, _ -> 70.0 },
             isBelowHypo = { _, _, _, _, _ -> false },
-            logDataMl = { _, _ -> },
+            logDataMl = { _ -> },
             logData = { _, _ -> },
             roundBasal = { it },
             roundDouble = { v, _ -> v }

@@ -1348,7 +1348,13 @@
     <string name="aimi_prefs_provider_openai">OpenAI (GPT-5.2)</string>
     <string name="aimi_prefs_provider_gemini">Gemini (2.5 Flash)</string>
     <string name="aimi_prefs_provider_deepseek">DeepSeek (Chat)</string>
-    <string name="aimi_prefs_provider_claude">Claude (3.5 Sonnet)</string>
+    <string name="aimi_prefs_provider_claude">Claude (model chosen in settings)</string>
+    <string name="aimi_prefs_claude_model_title">Claude model</string>
+    <string name="aimi_prefs_claude_model_summary">Used by AI Coach, AI Auditor, TPO confirmation, Context, Meal vision and Physio when their provider is Claude (Physio uses its own provider setting).</string>
+    <string name="aimi_prefs_claude_model_sonnet5">Claude Sonnet 5 (recommended)</string>
+    <string name="aimi_prefs_claude_model_fable51">Claude Fable 5.1 (strongest, most expensive)</string>
+    <string name="aimi_prefs_claude_model_opus55">Claude Opus 5.5</string>
+    <string name="aimi_prefs_claude_model_haiku45">Claude Haiku 4.5 (fastest, cheapest)</string>
     <string name="aimi_prefs_openai_key_title">OpenAI API Key</string>
     <string name="aimi_prefs_openai_key_summary">Enter your OpenAI API Key (sk-...)</string>
     <string name="aimi_prefs_gemini_key_title">Gemini API Key</string>
@@ -1593,6 +1599,27 @@
     <string name="aimi_pkpd_guided_title">PKPD assistant</string>
     <string name="aimi_patient_context_title">Patient context and body declarations</string>
     <string name="aimi_lab_title">AIMI Lab</string>
+    <string name="aimi_settings_audit_entry_title">Settings audit</string>
+    <string name="aimi_settings_audit_entry_summary">See which of your settings are not what the app ships, and who changed them.</string>
+    <string name="aimi_settings_audit_title">Settings audit</string>
+    <string name="aimi_settings_audit_summary" comment="%1$s=number of settings that differ, %2$s=total number of settings checked. Example: 3 of 230 settings differ from their shipped default.">%1$s of %2$s settings differ from their shipped default.</string>
+    <string name="aimi_settings_audit_empty">Every setting matches what the app ships.</string>
+    <string name="aimi_settings_audit_row_tags" comment="%1$s=level such as Advanced, %2$s=family such as Protection. Example: Advanced · Protection">%1$s · %2$s</string>
+    <string name="aimi_settings_audit_changed_by_loop">Changed by the loop</string>
+    <string name="aimi_settings_audit_changed_by_slider">Set by a slider</string>
+    <string name="aimi_settings_audit_changed_by_preset">From a preset</string>
+    <string name="aimi_settings_audit_changed_by_user">Changed by you</string>
+    <string name="aimi_settings_audit_stored_label">Current value</string>
+    <string name="aimi_settings_audit_default_label">Shipped default</string>
+    <string name="aimi_settings_audit_secret_set">Set</string>
+    <string name="aimi_settings_audit_secret_not_set">Not set</string>
+    <string name="aimi_settings_audit_reset_button">Reset to default</string>
+    <string name="aimi_settings_audit_reset_done">Setting reset to its shipped default.</string>
+    <string name="aimi_settings_audit_stored_ignored">Stored, but not used: the loop is running on the shipped default. Turn off simple mode to make this value count.</string>
+    <string name="aimi_settings_audit_runtime_state">The loop keeps this value itself. It is shown here so you can see it, and cannot be reset by hand.</string>
+    <string name="aimi_settings_audit_reset_confirm_title">Reset this setting?</string>
+    <string name="aimi_settings_audit_reset_confirm_message" comment="%1$s=setting name, %2$s=the value that will be written. Example: Body weight will be set back to 50.">%1$s will be set back to %2$s. This changes how the loop doses.</string>
+    <string name="aimi_settings_audit_reset_confirm_message_secret" comment="%1$s=setting name. Example: Oura access token will be cleared.">%1$s will be cleared. You will have to enter it again.</string>
     <string name="aimi_control_center_title">AIMI Control Center</string>
     <string name="aimi_control_center_intro_title">Current AIMI behavior, grouped by intention</string>
     <string name="aimi_control_center_intro">This screen reads your current AIMI settings and translates them into behavior families. It is a migration view only: no value is changed here.</string>

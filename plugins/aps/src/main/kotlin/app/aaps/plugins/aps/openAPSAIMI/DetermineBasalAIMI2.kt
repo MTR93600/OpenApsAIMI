@@ -186,6 +186,8 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternSnaps
 import app.aaps.plugins.aps.openAPSAIMI.safety.EffectiveIobReleaseAuthority
 import app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoAggressiveRiseExit
 import app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoDeliveryAuthority
+import app.aaps.plugins.aps.openAPSAIMI.safety.TrajBridgeSurvival
+import app.aaps.plugins.aps.openAPSAIMI.safety.TubeFloorArtefactRule
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionBasalCap
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
 import app.aaps.plugins.aps.openAPSAIMI.safety.HypoGuard
@@ -818,6 +820,14 @@ internal data class AimiDecisionContext(
         /** Lot 2 — invariants terminaux du canal basal: taux avant/apres et invariant liant. */
         var basal_terminal: org.json.JSONObject? = null,
         /**
+         * What the Traj-Bridge asked for, and what the opt-in re-apply would do about it.
+         *
+         * Written on every tick, key on or off. With the key off `traj_bridge_survived` is always
+         * false and no dose reads this block; it exists so the frequency and the size of the
+         * reduction can be counted before the key is armed.
+         */
+        var traj_bridge: JSONObject? = null,
+        /**
          * Universal Adaptive Basal scaling for this tick: heuristic, learned head, and the blend.
          *
          * Carries `n_raw`, the learned value BEFORE the runtime clamp. Only the blended result used to
@@ -1307,6 +1317,13 @@ internal data class AimiDecisionContext(
             }
             adjustments.control_barrier?.let { cb ->
                 adj.put("control_barrier", cb)
+            }
+            // Written on every tick the bridge is reached, key armed or not: this block is the only
+            // way to count how often the basal schedule overwrites the bridge's reduction, and that
+            // count is what the decision to arm `OApsAIMITrajBridgeBasalSurvives` rests on. It was
+            // built and then never serialised, so the counter could not reach a support package.
+            adjustments.traj_bridge?.let { bridge ->
+                adj.put("traj_bridge", bridge)
             }
             adjustments.tube_advisor?.let { tube ->
                 adj.put("tube_advisor", tube)
@@ -2435,6 +2452,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // holdTicks every loop and made 15–20 min holds dead on arrival. reset() belongs in
         // tests / plugin restart only.
         pendingTrajSpiralBasal = null
+        // What the Traj-Bridge asked for belongs to this tick only. A null here is the honest answer
+        // for a tick where the bridge never fired, and it is what keeps the opt-in re-apply in
+        // setTempBasal inert on such a tick.
+        lastTrajBridgeRequest = null
+        trajBridgeSurvivedThisTick = false
+        trajBridgeWouldReduceToUph = null
+        // Same reason: a floor-artefact verdict belongs to the tick that produced it. Without this a
+        // tick whose tube advisor never ran would export the previous tick's answer.
+        lastTubeFloorArtefactStrict = false
+        lastTubeFloorArtefactWide = false
         // 🔭 Lot 0 — l'export JSONL doit avoir lieu sur TOUS les chemins de sortie du tick, pas seulement
         // sur les deux qui appellent explicitement le stage. On repart d'un état non exporté à chaque tick.
         aimiDecisionExportedThisTick = false
@@ -5247,6 +5274,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         val tbrFrac = lastRecursiveBeliefSnapshot?.resolutions?.tbrDemandFraction ?: 1.0
         rT.rate = pending.proactiveBasalUph * tbrFrac
+        // Keep the request for the end of setTempBasal, where the basal schedule can no longer write
+        // over it. Only a finite request is kept: a broken number must never reach a rate decision.
+        lastTrajBridgeRequest = rT.rate?.takeIf { it.isFinite() && it >= 0.0 }?.let { requested ->
+            TrajBridgeRequest(requestedUph = requested, tag = pending.tag, durationMin = pending.durationMin)
+        }
         rT.duration = pending.durationMin
         rT.reason.append(" | 🌀 Traj-Bridge: ${pending.reason}")
         lastSafetySource = pending.safetyTierLabel
@@ -7289,6 +7321,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         assignLocalBasalFromExecution: (Double) -> Unit,
     ): Float {
         predictedSMB = smbExecution.predictedSmb
+        // Both branches above converge here, including the Autodrive-authoritative one that skips
+        // the executor, so this is the one place that sees the model output on every dosing tick.
+        predictedSmbForTrainingThisTick = smbExecution.predictedSmb
         assignLocalBasalFromExecution(smbExecution.basal)
         highBgOverrideUsed = smbExecution.highBgOverrideUsed
         smbExecution.newSmbInterval?.let { intervalsmb = it }
@@ -10155,6 +10190,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         decisionCtx.adjustments.tube_advisor = lastTubeAdvisorTrace
         decisionCtx.adjustments.pkpd_soft_floor = lastPkpdSoftFloorTelemetry?.toJsonObject()
         decisionCtx.adjustments.basal_terminal = lastBasalTerminalTelemetry
+        decisionCtx.adjustments.traj_bridge = buildTrajBridgeTelemetry()
         decisionCtx.adjustments.adaptive_basal = lastAdaptiveBasalTrace
         decisionCtx.adjustments.harmonia_simulation = lastHarmoniaDecision?.toJsonObject()
         decisionCtx.adjustments.harmonia_production = lastHarmoniaProductionDecision?.toJsonObject()
@@ -10615,6 +10651,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         val proactiveBasal = profile.current_basal * effectiveFraction
         val cgateNote = if (cgateAmplified) " [CGate ISF↑ → amplification]" else ""
+        val spiralTag = when {
+            hyperTrajectorySpiral -> "HTR_HYPER_SPIRAL"
+            mealPriorityAlign -> "MEAL_PRIORITY_RELAX"
+            stackingSpiral -> "STACKING_SPIRAL"
+            else -> ""
+        }
         val spiralNote = when {
             hyperTrajectorySpiral -> " [HTR_HYPER_SPIRAL tier=${bridgeHyperTier.name}]"
             mealPriorityAlign -> " [MEAL_PRIORITY_RELAX]"
@@ -10630,6 +10672,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             durationMin = if (energy > 3.5) 30 else 15,
             reason = reason,
             safetyTierLabel = "TrajBridge_Tier${when { energy > 3.5 -> 1; energy > 2.5 -> 2; else -> 3 }}",
+            tag = spiralTag,
         )
         applyTrajectoryTightSpiralStandardSmbCapIfNeeded(
             energy = energy,
@@ -11526,7 +11569,43 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     eventualBgMgdl = snap.eventualMgdl,
                 ),
             )
-            if (!tubeOut.feasible) {
+            // 📐 Is this veto resting on a railed prediction?
+            //
+            // The advisor refuses every rung when `minPredictedBg` sits under the hypo floor. That
+            // number comes from curves clamped at `DoseTerminalSnapshot.NUMERIC_FLOOR_MGDL` (39), so a
+            // railed curve reads as "a low is coming" when it only means "the curve hit its floor".
+            // Measured 2026-10-02 21:09-21:19: BG 142/140/144 and flat, min-pred 40.97/40.22/39.00,
+            // and the SMB channel was held at 0.05 U for fifteen minutes.
+            //
+            // `strict` uses the conditions `DoseTerminalSnapshot.shouldLiftPlateauFloorArtefact`
+            // already encodes, including its 160 mg/dL plateau band. `wide` is the same test WITHOUT
+            // that band — it is never applied, only exported, because the ticks above sat at 142 and
+            // the band would have refused them. Measure first, decide later.
+            val tubeFloorArtefact = tubeVetoFloorArtefact(tubeOut, snap)
+            lastTubeFloorArtefactStrict = tubeFloorArtefact.strict
+            lastTubeFloorArtefactWide = tubeFloorArtefact.wide
+            val liftTubeVeto = tubeFloorArtefact.strict &&
+                preferences.get(BooleanKey.OApsAIMITubeVetoIgnoreFloorArtefact)
+            if (!tubeOut.feasible && liftTubeVeto) {
+                // The SMB cap is released because the prediction behind it is an artefact. The basal
+                // trim the advisor asked for is KEPT: it is protective, and releasing it as well would
+                // turn one lifted veto into two raised channels.
+                //
+                // "Released" means back to the pre-advisor baseline, not to a smaller graded cap: this
+                // veto only fires when even a dose of zero is infeasible, so the advisor never computed
+                // a graded answer there is anything to fall back on. `clampSmbToMaxSmbAndMaxIob` still
+                // bounds the result, exactly as it bounds every other branch.
+                if (tubeOut.basalCapScale < 0.999) {
+                    profile.current_basal = baseline.currentBasal * tubeOut.basalCapScale
+                    profile.max_daily_basal = baseline.maxDailyBasal * tubeOut.basalCapScale
+                }
+                consoleLog.add(
+                    "📐 TUBE-LINE-D4[$stageTag]: veto lifted, min-pred %.1f is a floor artefact".format(
+                        Locale.US, tubeFloorArtefact.minPredUsedMgdl,
+                    )
+                )
+                noteTubeAdvisorTrace(tubeOut, snap, stageTag, baseline)
+            } else if (!tubeOut.feasible) {
                 this.maxSMB = 0.05
                 this.maxSMBHB = 0.05
                 lastTubeAdvisorSmbCapScale = 0.0
@@ -11589,6 +11668,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             outcome.minPredUsedMgdl?.let { put("min_pred_used_mgdl", it) }
             put("eventual_used_mgdl", snapshot.eventualMgdl)
             put("snapshot_source_used", snapshot.source)
+            // Was this veto resting on a prediction that hit its own 39 mg/dL floor? `_strict` keeps
+            // the 160 mg/dL plateau band and is the only one the opt-in key can act on; `_wide` drops
+            // that band and is exported only, so the ticks below it can be counted before anyone
+            // decides to widen the band. See `OApsAIMITubeVetoIgnoreFloorArtefact`.
+            put("veto_on_floor_artefact_strict", lastTubeFloorArtefactStrict)
+            put("veto_on_floor_artefact_wide", lastTubeFloorArtefactWide)
+            put("veto_lift_key_armed", preferences.get(BooleanKey.OApsAIMITubeVetoIgnoreFloorArtefact))
             put("hypo_floor_mgdl", outcome.hypoFloorMgdl)
             put("kappa_mgdl_per_u", outcome.kappaMgdlPerU)
             // The dose-facing sensitivity the tube reasoned with. kappa cannot stand in for it: the
@@ -11803,7 +11889,73 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val durationMin: Int,
         val reason: String,
         val safetyTierLabel: String,
+        /** Short name of the branch that sized the request, for the JSONL (`traj_bridge_tag`). */
+        val tag: String,
     )
+
+    /**
+     * What the Traj-Bridge asked for on this tick, after the TBR demand fraction.
+     *
+     * Written only when [applyPendingTrajSpiralBasalIfNotSuppressed] really applied the request, so
+     * a suppressed bridge and a bridge that never fired both leave it null. Read once, at the end of
+     * `setTempBasal`, where the opt-in re-apply can still lower the rate.
+     */
+    private data class TrajBridgeRequest(
+        val requestedUph: Double,
+        val tag: String,
+        val durationMin: Int,
+    )
+
+    private var lastTrajBridgeRequest: TrajBridgeRequest? = null
+
+    /** True when the opt-in re-apply really lowered the delivered rate on this tick. */
+    private var trajBridgeSurvivedThisTick: Boolean = false
+
+    /** The rate the re-apply would have produced, whether or not the key let it through. */
+    private var trajBridgeWouldReduceToUph: Double? = null
+
+    /** True when the tube veto fired on a railed min-pred AND the plateau band accepted the tick. */
+    private var lastTubeFloorArtefactStrict: Boolean = false
+
+    /** Same test without the 160 mg/dL plateau band. Exported only, never applied. */
+    private var lastTubeFloorArtefactWide: Boolean = false
+
+    /** Reads the tick's own numbers into the pure `TubeFloorArtefactRule`. */
+    private fun tubeVetoFloorArtefact(
+        tubeOut: StraightLineTubeAdvisor.Outcome,
+        snap: DoseTerminalSnapshot,
+    ): TubeFloorArtefactRule.Verdict = TubeFloorArtefactRule.evaluate(
+        feasible = tubeOut.feasible,
+        minPredUsedMgdl = tubeOut.minPredUsedMgdl ?: snap.minPredMgdl,
+        bgMgdl = bg.toDouble(),
+        deltaMgdl5m = delta.toDouble(),
+        sportActive = sportTime,
+        postHypoActive = lastPostHypoDeliveryAuthority.active,
+    )
+
+    /**
+     * The `adjustments.traj_bridge` block, written on every tick whether the key is armed or not.
+     *
+     * `would_reduce_to_uph` is the number the re-apply would have produced, so the frequency and the
+     * size of the reduction can be counted from a support package before the key is ever armed.
+     * `survived` is true only when the re-apply really lowered the delivered rate on this tick, so a
+     * shadow tick and an armed tick can never be mistaken for one another.
+     *
+     * Every number is guarded: a non-finite value becomes JSON null instead of making
+     * `toMedicalJson` throw and turning the whole tick record into an error object.
+     */
+    private fun buildTrajBridgeTelemetry(): JSONObject? {
+        val request = lastTrajBridgeRequest
+        if (request == null && trajBridgeWouldReduceToUph == null) return null
+        return JSONObject().apply {
+            put("requested_uph", request?.requestedUph?.takeIf { it.isFinite() } ?: JSONObject.NULL)
+            put("tag", request?.tag?.takeIf { it.isNotEmpty() } ?: JSONObject.NULL)
+            put("duration_min", request?.durationMin ?: JSONObject.NULL)
+            put("would_reduce_to_uph", trajBridgeWouldReduceToUph?.takeIf { it.isFinite() } ?: JSONObject.NULL)
+            put("survived", trajBridgeSurvivedThisTick)
+            put("key_armed", preferences.get(BooleanKey.OApsAIMITrajBridgeBasalSurvives))
+        }
+    }
     private var tags60to120minAgo = ""
     private var tags120to180minAgo = ""
     private var tags180to240minAgo = ""
@@ -12163,6 +12315,30 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * would not match.
      */
     private var smbTrainingRowTickKey: Long = 0L
+
+    /** True once this tick has staged its training row, so the tick tail does not stage a second one. */
+    private var smbTrainingRowEnqueuedThisTick: Boolean = false
+
+    /**
+     * The model output of this tick, or `null` when the SMB stage never ran.
+     *
+     * Not read from [predictedSMB]: that field keeps the previous tick's value on a tick that
+     * returns early, and writing a stale model output next to a fresh label would be worse than
+     * writing a zero.
+     */
+    private var predictedSmbForTrainingThisTick: Float? = null
+
+    /** Header of the training CSV, kept from the last row built so the tail can flush without rebuilding it. */
+    private var trainingCsvHeaderRow: String? = null
+
+    /**
+     * Name of the file whose presence says the censored corpus has already been moved aside.
+     *
+     * A marker file rather than a preference: the thing it guards is a file, it must survive a
+     * preference reset, and it is visible to anyone looking at the folder.
+     */
+    private val trainingCorpusRestartMarker: String = "oapsaimiML2_corpus_restart_v1"
+
     /** Cross-tick effort-load memory for [EffortActivityBelief]; intentionally NOT reset per tick. */
     private var lastEffortMemory = EffortActivityBelief.Memory()
     private var lastEffortAssessment: EffortActivityBelief.Assessment? = null
@@ -13911,6 +14087,30 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
         }
 
+        // 🌀 Traj-Bridge survival — the bridge wrote its rate before the basal schedule ran, so the
+        // schedule overwrote it (measured: asked 0.13 U/h, pump got 4.84 U/h). Re-apply the request
+        // here, where nothing else can raise the rate again. Reduction only, and only on a tick where
+        // the bridge really fired. Off by default; the shadow below is written in both states.
+        lastTrajBridgeRequest?.let { bridge ->
+            val survival = TrajBridgeSurvival.resolve(
+                scheduledUph = rate,
+                requestedUph = bridge.requestedUph,
+                keyArmed = preferences.get(BooleanKey.OApsAIMITrajBridgeBasalSurvives),
+            )
+            trajBridgeWouldReduceToUph = survival.wouldReduceToUph
+            trajBridgeSurvivedThisTick = survival.survived
+            if (survival.survived) {
+                consoleLog.add(
+                    "🌀 TRAJ_BRIDGE_SURVIVES[${bridge.tag}] " +
+                        "${"%.2f".format(rate)}→${"%.2f".format(survival.rateUph)}U/h",
+                )
+                rT.reason.append(
+                    " [TRAJ_BRIDGE:${bridge.tag} ${"%.2f".format(rate)}→${"%.2f".format(survival.rateUph)}U/h]",
+                )
+                rate = survival.rateUph
+            }
+        }
+
         // 🔒 Lot 2 — invariants terminaux : dernier point où le taux peut encore être borné. Tout ce qui
         // précède (DynamicBasalController ×[0..10], AdaptiveBasal, ampli endocrine) a déjà été appliqué,
         // donc un plafond posé ici ne peut plus être écrasé. Réduction seule.
@@ -13994,7 +14194,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
 
-    private fun logDataMLToCsv(predictedSMB: Float, smbToGive: Float) {
+    /**
+     * Stages this tick's SMB training row.
+     *
+     * The label is NOT passed in. It is stamped at the end of the tick by
+     * [SmbTrainingRowBuffer.stampDeliveredUnits], because the dose is only final after
+     * `finalizeAndCapSMB`, and this function used to run well before that.
+     */
+    private fun logDataMLToCsv(predictedSMB: Float) {
         val usFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm")
         val dateStr = dateUtil.dateAndTimeString(dateUtil.now()).format(usFormatter)
         val latentFeatures = SmbRefinementFeatureSchema.latentFeatureValues(lastPhysioLatentState)
@@ -14016,22 +14223,102 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             "${behaviorProfile.protectionLevel},${behaviorProfile.mealCaptureLevel},${behaviorProfile.stabilityLevel}," +
             "${behaviorProfile.physioLevel},${behaviorProfile.autonomyLevel}," +
             "${eventMemory.postHyperExhaustionScore},${eventMemory.correctionFragilityScore},$decisionConflictFlags," +
-            "$predictedSMB,$smbToGive," +
-            "$peakintermediaire,$latestAdjustedDia"
-        // The row is queued, not written. Its four origin fields are only complete at the end of the
-        // tick, and its realised glucose only about half an hour later, so it leaves the queue once
-        // its outcome window has closed. This delays when a row appears in the CSV; it does not
-        // change the row itself, the label, or anything the pump is asked to do.
+            "$predictedSMB"
+        val valuesTail = "$peakintermediaire,$latestAdjustedDia"
+        // The row is queued, not written. Its label is only final at the end of the tick, its four
+        // origin fields likewise, and its realised glucose only about half an hour later, so it
+        // leaves the queue once its outcome window has closed. This delays when a row appears in the
+        // CSV; it does not change the row itself or anything the pump is asked to do.
         val nowMs = smbTrainingRowTickKey.takeIf { it > 0L } ?: dateUtil.now()
         smbTrainingRowBuffer.fillRealisedOutcomes(nowMs = nowMs, observedBg = bg)
-        smbTrainingRowBuffer.enqueue(timestampMs = nowMs, valuesPrefix = valuesToRecord)
-        smbTrainingRowBuffer.drainWritableRows(nowMs).forEach { readyRow ->
+        smbTrainingRowBuffer.enqueue(timestampMs = nowMs, valuesHead = valuesToRecord, valuesTail = valuesTail)
+        smbTrainingRowEnqueuedThisTick = true
+        trainingCsvHeaderRow = headerRow
+    }
+
+    /**
+     * One training row per tick, labelled with the dose that was really delivered, then flushed.
+     *
+     * This is the catch-all the CSV never had. The file has a single writer, reachable only through
+     * the SMB executor, and two kinds of tick walk past it: the Autodrive-authoritative branch,
+     * which builds its result by hand when V3 has already delivered, and the early returns that dose
+     * and leave before the SMB stage (the manual meal modes with the FCL prebolus, and the Meal
+     * Advisor). Both are the big-dose paths, so the exclusion rule for the corpus was, in effect,
+     * "a bolus was given" — measured on a real 24h package, not one of the 21 ticks that delivered
+     * 0.3 U or more had a row. The JSONL export was given exactly this kind of catch-all for exactly
+     * this reason; the CSV never was.
+     *
+     * A row staged here carries empty origin columns, because [SmbTrainingRowBuffer.stampOrigin]
+     * already ran earlier in the tick and found nothing to stamp. An empty cell is the honest answer
+     * and the trainer drops it; inventing an origin would be worse.
+     *
+     * Observation only: it stages, labels and writes a file. It asks nothing of the pump.
+     */
+    private fun stageAndFlushSmbTrainingRow(ctx: AimiTickContext, finalResult: RT?) {
+        // A tick that aborted before reading glucose has no features worth keeping.
+        if (!smbTrainingRowEnqueuedThisTick && bg > 0.0) {
+            logDataMLToCsv(predictedSmbForTrainingThisTick ?: 0f)
+        }
+        smbTrainingRowBuffer.stampDeliveredUnits(
+            tickKey = smbTrainingRowTickKey,
+            deliveredUnits = finalResult?.units,
+        )
+        flushWritableTrainingRows(ctx.currentTime)
+    }
+
+    /**
+     * Writes out every staged row whose outcome window has closed. Called once per tick from the
+     * tick tail.
+     *
+     * It used to be called from inside [logDataMLToCsv], which meant a run of ticks that staged no
+     * row also flushed nothing: during the heaviest dosing episodes the queue simply froze. Draining
+     * from the tail makes the flush independent of whether this tick had a row of its own.
+     */
+    private fun flushWritableTrainingRows(nowMs: Long) {
+        val rows = smbTrainingRowBuffer.drainWritableRows(nowMs)
+        if (rows.isEmpty()) return
+        val headerRow = trainingCsvHeaderRow ?: (SmbRefinementFeatureSchema.trainingCsvHeaderLine() + "\n")
+        archiveCensoredTrainingCorpusOnce()
+        rows.forEach { readyRow ->
             appendCsvSafely(
                 primaryFile = csvfile,
                 fallbackFileName = "oapsaimiML2_records.csv",
                 headerRow = headerRow,
                 valuesRow = readyRow,
             )
+        }
+    }
+
+    /**
+     * Moves the pre-fix training corpus aside, once, and lets collection restart on a clean file.
+     *
+     * Every row collected before this build is unusable as a label set: the only writer of the file
+     * was skipped on exactly the ticks that delivered a bolus, so the corpus holds almost nothing but
+     * ticks where nothing was given, and the few labels it does hold were read before capping. A
+     * model trained on it learns to ask for zero.
+     *
+     * The old file is RENAMED, never deleted — it is still a valid feature history, and it is the
+     * evidence for the defect. A marker file next to it makes this a one-time move: once the marker
+     * exists, this returns immediately.
+     */
+    private fun archiveCensoredTrainingCorpusOnce() {
+        runCatching {
+            val marker = File(csvfile.parentFile, trainingCorpusRestartMarker)
+            if (marker.exists()) return@runCatching
+            val stamp = dateUtil.now()
+            // Both files, not just the primary: when shared storage is denied the rows go to the
+            // app-scoped fallback instead, and that copy carries the same censored history.
+            listOf(csvfile, File(appExternalFallbackDir, "oapsaimiML2_records.csv")).forEach { old ->
+                if (!old.exists() || old.length() <= 0L) return@forEach
+                val archived = File(old.parentFile, "oapsaimiML2_records_archive_$stamp.csv")
+                if (old.renameTo(archived)) {
+                    consoleLog.add("SMB corpus archived to ${archived.name}; collection restarts clean")
+                    aapsLogger.info(LTag.APS, "SMB training corpus archived to ${archived.name}")
+                }
+            }
+            marker.writeText(trainingCorpusRestartMarker)
+        }.onFailure { e ->
+            aapsLogger.error(LTag.APS, "SMB training corpus archive failed", e)
         }
     }
 
@@ -17162,7 +17449,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 isBelowHypo = { bgNow, predictedValue, eventualValue, hypo, deltaValue ->
                     HypoGuard.isBelowHypoThreshold(bgNow, predictedValue, eventualValue, hypo, deltaValue)
                 },
-                logDataMl = { predicted, given -> logDataMLToCsv(predicted, given) },
+                // Only the model output: the label is stamped at the end of the tick, where the
+                // dose is final. See `logDataMLToCsv`.
+                logDataMl = { predicted -> logDataMLToCsv(predicted) },
                 logData = { predicted, given -> logDataToCsv(predicted, given) },
                 roundBasal = { value -> roundBasal(value) },
                 roundDouble = { value, digits -> round(value, digits) }
@@ -18178,8 +18467,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         raNetCombinedDelta = shortAvgDelta
         raNetShortAvgDeltaAdj = shortAvgDelta
         smbTrainingRowTickKey = ctx.currentTime
+        smbTrainingRowEnqueuedThisTick = false
+        predictedSmbForTrainingThisTick = null
+        var innerResult: RT? = null
         val result = try {
             val inner = runDetermineBasalTickInner(ctx)
+            innerResult = inner
             observeRaIfNotAlreadyRun(
                 ctx = ctx,
                 combinedDelta = raNetCombinedDelta,
@@ -18202,6 +18495,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // `observeRaIfNotAlreadyRun` returns early on exactly those ticks — flushing from inside
             // it would drop every engaged row.
             runCatching { autodriveEngine.flushTickRow(ctx.currentTime) }
+            runCatching { stageAndFlushSmbTrainingRow(ctx, innerResult) }
         }
         exportAimiDecisionIfNotYetExported(ctx, result)
         return result
