@@ -278,6 +278,10 @@ class LegacyMealEffectTraceTest {
                 AimiEffectProbe.add(aimiTraceWrite(label, traceValue(inv.arguments.getOrNull(1))))
                 null
             }
+            "getIfExists" -> {
+                AimiEffectProbe.add(aimiTraceRead(label, "null"))
+                null
+            }
             else -> zeroFor(inv)
         }
     })

@@ -34,7 +34,7 @@ tick's hour, minute, second and weekday through `AimiCivilClock.kt` (69 lines) a
 two `Locale.US` patterns with `aimiCsvTimestamp` / `aimiCsvTimestampMinute`.
 `DetermineBasalAIMI2.kt` is 19 688 lines. P6.5 moves the hypo/SMB safety cluster,
 the finalize chain, the legacy red-carpet cap and the post-hypo classifier into
-`commonMain/.../safety/`. `DetermineBasalAIMI2.kt` is 18 497 lines. The android file count stays 88. P6.6 does not move a dosing block. It records the effect boundary, locks shell traces (meal mode, hypo, MaxIOB ceiling, Autodrive off), and replaces the CFRD `runCatching` around the heart-rate snapshot with an explicit result. `DetermineBasalAIMI2.kt` is 18 517 lines.
+`commonMain/.../safety/`. `DetermineBasalAIMI2.kt` is 18 497 lines. The android file count stays 88. P6.6 does not move a dosing block. It records the effect boundary, locks shell traces (meal mode, hypo, MaxIOB ceiling, Autodrive off, engaged meal rise, UAM), and replaces the CFRD `runCatching` around the heart-rate snapshot with an explicit result. `DetermineBasalAIMI2.kt` is 18 517 lines.
 The diary sections below keep their historical counts.
 
 Updated 2026-09-02, on `kmp-aimi-migration-study` at `1f6ca62fe8` (the second `kmp` merge).

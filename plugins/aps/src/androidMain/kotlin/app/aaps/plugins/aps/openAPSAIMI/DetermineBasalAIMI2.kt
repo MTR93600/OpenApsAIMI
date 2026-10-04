@@ -4077,7 +4077,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return floorTerminal to bestTerminal
     }
 
-    private fun buildRbtExtendedSignals(
+    internal fun buildRbtExtendedSignals(
         rT: RT,
         profile: OapsProfileAimi,
         htr: HyperTrajectoryReleaseResult,

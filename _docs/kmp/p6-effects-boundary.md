@@ -101,28 +101,34 @@ Comparé au même commit de la référence, le corps actuel ne diffère que par 
 
 ### `runAutodriveV3MultiVariableBranch`
 
-Lectures, dans l’ordre de la référence :
+Lectures de tête, dans l’ordre de la référence :
 
 1. `BooleanKey.OApsAIMIautoDriveActive`. Si faux : observation Ra (`autodrive_off`) et retour. Pas de TBR, pas de SMB.
 2. `DoubleKey.OApsAIMILastEstimatedCarbs`, puis `DoubleKey.OApsAIMILastEstimatedCarbTime`.
-3. Plus loin, seulement si la porte est engagée et qu’une commande sûre a produit un plancher : `DoubleKey.OApsAIMIweight` (poids patient, avant le tick moteur), puis `DoubleKey.OApsAIMIautodrivesmallPrebolus` et `DoubleKey.OApsAIMIautodrivePrebolus`.
+3. Si la porte est engagée : le poids `DoubleKey.OApsAIMIweight` est lu avant le tick moteur. Après une commande sûre, le plancher agressif lit `BooleanKey.OApsAIMIautodriveAggressiveSmbFloor`, puis la trace de liaison lit `OApsAIMIautodrivesmallPrebolus` et `OApsAIMIautodrivePrebolus` même si le plancher vaut 0.
 4. Si un SMB a été déposé : `BooleanKey.OApsAIMIautoDriveAuthoritative`.
 
-Écriture pompe : un `setTempBasal` de 30 min, limites de sécurité outrepassées, quand la commande V3 est sûre et demande une TBR. Le SMB part par `deliverV3SmbFromRbt`, pas par `applySmbUnits` direct. Les deux restent dans la coquille.
+La porte engagée lit aussi, au passage, les préférences HTR, le haut de glycémie, le contexte d’accord, et les cinq clés RBT. L’ordre complet est celui de `ShellDecisionTraceTest`, pas une liste raccourcie.
+
+Écriture pompe : un `setTempBasal` de 30 min, limites de sécurité outrepassées, quand la commande V3 est sûre et demande une TBR. Le SMB part par `deliverV3SmbFromRbt`, et seulement si une libération HTR existe. RBT éteint et pas d’HTR préalable : la commande SMB du moteur n’est pas déposée. Les deux écritures restent dans la coquille.
+
+Trace verrouillée (mode repas, BG 160, delta 3, commande moteur sûre 2,40 U/h et 0,80 U) : `EFFECT SetTbr rate=2.40 dur=30 override=true forceExact=false adaptive=1.00`, puis le journal `actual=0.0`. Pendant la capture, la sonde retourne avant le corps de `setTempBasal`, donc `DECISION_FINAL` voit encore `tbr=0.00`. C’est le contrat de la sonde, pas la dose demandée. La ligne `TICK` contient `aimiWallClockMs()` ; le test remplace `ts=<chiffres>` par `ts=<clock>`. Le reste de la ligne est octet pour octet.
 
 ### `buildRbtExtendedSignals`
 
-Lectures, toutes avant l’assemblage, dans cet ordre :
+Lectures directes, dans cet ordre :
 
 1. `DoubleKey.OApsAIMIT3cAnticipationStrength`
 2. `BooleanKey.OApsAIMIT3cBrittleMode`
 3. `DoubleKey.OApsAIMILastEstimatedCarbs`
 4. `DoubleKey.OApsAIMILastEstimatedCarbTime`
-5. `DoubleKey.OApsAIMIT3cActivationThreshold`
-6. `DoubleKey.OApsAIMISmbTailDamping`
-7. `StringKey.AimiTuningContextSelection`
+5. `DoubleKey.OApsAIMIT3cActivationThreshold` — seulement si le mode brittle est vrai
+6. puis, via la config de croissance nocturne : âge, `getIfExists` de `OApsAIMINightGrowthEnabled`, début, fin, IOB extra
+7. `BooleanKey.AimiEndometriosisEnable` si l’ajusteur endo s’exécute
+8. `DoubleKey.OApsAIMISmbTailDamping`
+9. `StringKey.AimiTuningContextSelection`
 
-Écritures d’état du tick (pas des préférences) : `lastPostHypoOrdinal`, `lastNgrBasalMultiplier`. Pas de `setTempBasal`. La classification post-hypo (UAM compris) est appelée ici ; la confiance UAM reste une lambda lue seulement dans la branche de récupération, comme en tranche 5.
+Écritures d’état du tick (pas des préférences) : `lastPostHypoOrdinal`, `lastNgrBasalMultiplier`. Pas de `setTempBasal`. La classification post-hypo appelle la confiance UAM seulement dans la fenêtre de récupération. La trace UAM (BG récents avec un point sous 70, confiance UAM 0,70, brittle éteint) donne `postHypoOrdinal=2` et ne lit pas le seuil d’activation T3c.
 
 ### `applyLegacyMealModes`
 
@@ -149,4 +155,4 @@ Bandes, inchangées : hausse corrigée du repos ≥ 25 bpm → 0.35, 15..24 → 
 
 `setTempBasal`, `runDetermineBasalTickInner`, les learners, l’export, `toMedicalJson`. Les deux sites d’horloge de la tranche 4 non plus.
 
-Les traces golden de ce lot couvrent, sur le code Android actuel : mode repas (TBR puis prébolus), récupération d’hypo, hypo sévère avec autorité post-hypo, plafond MaxIOB, et Autodrive éteint (une lecture, aucune dose). La montée de repas engagée et le chemin UAM de `buildRbtExtendedSignals` dépendent du moteur, du learner et de la persistance. Leurs traces sont prises sur le corps actuel au moment où ces fonctions sont ouvertes, avant de remplacer la décision, avec le même encodeur. Si une trace diverge, on s’arrête.
+Les traces golden de ce lot couvrent, sur le code Android actuel : mode repas (TBR puis prébolus), récupération d’hypo, hypo sévère avec autorité post-hypo, plafond MaxIOB, Autodrive éteint, montée de repas engagée (`ShellDecisionTraceTest`, TBR 2,40 U/h demandée, SMB moteur non déposé tant que RBT est éteint), et le chemin UAM de `buildRbtExtendedSignals` (ordinal post-hypo 2, confiance 0,70). Si une trace diverge, on s’arrête.
