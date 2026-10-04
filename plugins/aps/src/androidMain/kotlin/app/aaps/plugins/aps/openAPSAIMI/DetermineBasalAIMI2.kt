@@ -208,6 +208,10 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiBasalScheduleCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiHeartRateIsfCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideBasalSchedule
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideHeartRateIsf
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPkpdCurveCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPkpdTargetCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideComputePkpdPredictions
+import app.aaps.plugins.aps.openAPSAIMI.effects.decidePkpdPredictionsAndNoisyTargets
 import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
@@ -5614,149 +5618,99 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         targetBg: Double,
         maxBg: Double,
     ): AimiPkpdBgiDeviationAndTargetsStage {
-        val effectiveSens = sens * ctx.autosensData.ratio
-        val pkpdPredictions = computePkpdPredictions(
-            currentBg = bg,
-            iobArray = ctx.pkpdIobDataArray ?: ctx.iobDataArray,
-            finalSensitivity = effectiveSens,
-            cobG = ctx.mealData.mealCOB,
+        val stage = decidePkpdPredictionsAndNoisyTargets(
+            ctx = ctx,
             profile = profile,
             rT = rT,
-            delta = delta.toDouble(),
+            glucoseStatus = glucoseStatus,
             pkpdRuntime = pkpdRuntime,
-            mealAbsorptionOutput = lastMealAbsorptionOutput,
-            hypothesisState = lastUamHypothesisState,
-            latentState = lastPhysioLatentState,
-            uamConfidence = AimiUamHandler.confidenceOrZero(),
-        )
-        this.eventualBG = pkpdPredictions.eventual
-        this.predictedBg = pkpdPredictions.eventual.toFloat()
-        rT.eventualBG = pkpdPredictions.eventual
-        // Audit instrumentation (log + JSONL export, no behaviour impact): divergence between the
-        // PKPD eventual consumed by the SMB gates and the physio-enriched scenario terminal
-        // computed earlier in this tick.
-        run {
-            val divergenceAudit = PredictionDivergenceAuditor.audit(
-                bgMgdl = bg,
-                pkpdEventualMgdl = pkpdPredictions.eventual,
-                scenarioBestMgdl = lastScenarioProjection?.scenarioBest?.terminalMgdl,
-            )
-            val physioPhaseName = lastPhysiologicalPhaseOutput?.phase?.name
-            val mealPhaseName = lastMealAbsorptionOutput?.phase?.name
-            consoleLog.add(PredictionDivergenceAuditor.formatLogLine(divergenceAudit, physioPhaseName, mealPhaseName))
-            lastPredDivergenceExport = PredictionDivergenceAuditor.toJsonObject(divergenceAudit, physioPhaseName, mealPhaseName)
-        }
-        val iobConsensus = IobConsensus.resolve(
-            aapsIobUnits = iobData.iob,
-            pkpdIobUnits = pkpdIntegration.reconstructedIobUnits().takeIf { cachedPkpdRuntime != null },
-        )
-        if (iobConsensus.source == IobDecisionSource.PKPD_WHEN_AAPS_NEGATIVE) {
-            consoleLog.add(
-                "🛡️ IOB_CONSENSUS_PKPD: AAPS=${aimiFmt2(iobConsensus.aapsIobUnits)} → " +
-                    "PKPD=${aimiFmt2(iobConsensus.pkpdIobUnits)} (Δ=${aimiFmt2(iobConsensus.deltaUnits)})"
-            )
-        }
-        val bgi = round((-iobData.activity * effectiveSens * 5), 2)
-        var deviation = round(30 / 5 * (minDelta - bgi))
-        if (deviation < 0) {
-            deviation = round((30 / 5) * (minAvgDelta - bgi))
-            if (deviation < 0) {
-                deviation = round((30 / 5) * (glucoseStatus.longAvgDelta - bgi))
-            }
-        }
-        val naiveEbgResolution = NaiveEventualBgSignGuard.resolve(
-            bgMgdl = bg,
-            iobUnits = iobConsensus.decisionIobUnits,
-            sensMgDlPerU = sens,
-            pkpdRelativeActivity = cachedPkpdRuntime?.activity?.relativeActivity,
-            pkpdStage = cachedPkpdRuntime?.activity?.stage,
-            minBgLookback75mMgdl = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
-        )
-        if (naiveEbgResolution.signGuardApplied) {
-            consoleLog.add(
-                "🛡️ NAIVE_EBG_SIGN_GUARD: ${naiveEbgResolution.collapseReason} " +
-                    "→ collapse naive ebg ${naiveEbgResolution.rawNaiveRoundedMgdl.toInt()} → ${bg.toInt()}"
-            )
-        }
-        val naiveEventualBg = naiveEbgResolution.naiveEventualBgMgdl
-        val legacyEventual = naiveEventualBg + deviation
-        // Late PKPD refine of the dose snapshot (early publish already ran before RBT/V3).
-        val pkpdPredTerminalBefore = minPredictedAcrossCurves(rT.predBGs) ?: pkpdPredictions.eventual
-        publishDoseTerminalAuthorityAndSnapshot(
-            rT = rT,
-            profile = profile,
-            mealData = ctx.mealData,
-            pkpdEventualMgdl = pkpdPredictions.eventual,
-            pkpdPredTerminalMgdl = pkpdPredTerminalBefore,
-            targetBgMgdl = targetBg.toDouble(),
-            stageTag = "late_pkpd",
-        )
-        refineRbtMergeAfterDoseSnapshot(rT)
-        val decisionPrediction = checkNotNull(lastDecisionPredictionAuthority) {
-            "Dose terminal snapshot publish must set lastDecisionPredictionAuthority"
-        }
-
-        val projectionInput = correctionAggressionProjectionInput(
-            targetBgValue = targetBg,
-            cobValue = cob.toDouble(),
-            combinedDeltaValue = glucoseStatus.combinedDelta.toFloat(),
-        )
-        val snapForEnvelope = lastDoseTerminalSnapshot
-        cachedRiskEnvelopeDecision = AimiRiskEnvelopeBuilder.buildDecision(
+            iobData = iobData,
             bg = bg,
             delta = delta,
-            predTerminal = snapForEnvelope?.minPredMgdl ?: pkpdPredictions.eventual,
-            eventualTerminal = snapForEnvelope?.eventualMgdl ?: pkpdPredictions.eventual,
-            pathBounds = pkpdPredictions.pathBounds,
-            aapsIobUnits = iobData.iob,
-            iobConsensus = iobConsensus,
-            lgsThreshold = profile.lgsThreshold,
-            naiveEbgSignGuardApplied = naiveEbgResolution.signGuardApplied,
-            predictionAuthority = decisionPrediction,
-            mealSafetyContext = buildMealSafetyContext(isExplicitAdvisorRun = false, iobData = iobData),
-            mealAbsorptionPhase = lastMealAbsorptionOutput?.phase ?: MealAbsorptionPhase.NONE,
-            targetBgMgdl = projectionInput.targetBg,
-            minBgLookback75m = projectionInput.minBgLookback75m,
-            hasIndependentMealEvidence = CorrectionAggressionGate.hasIndependentMealEvidence(projectionInput),
-            mealCertainty = lastMealCertainty,
+            sens = sens,
+            minDelta = minDelta,
+            minAvgDelta = minAvgDelta,
+            minBg = minBg,
+            targetBg = targetBg,
+            maxBg = maxBg,
+            preferences = preferences,
+            consoleLog = consoleLog,
+            texts = rh,
+            calls = object : AimiPkpdTargetCalls {
+                override fun mealAbsorptionOutput() = lastMealAbsorptionOutput
+                override fun uamHypothesis() = lastUamHypothesisState
+                override fun latentState() = lastPhysioLatentState
+                override fun uamConfidence() = AimiUamHandler.confidenceOrZero()
+                override fun setAdvancedCurves(curves: AdvancedPredictionCurves) {
+                    lastAdvancedPredictionCurves = curves
+                }
+                override fun recordSoftFloor(curves: AdvancedPredictionCurves) = recordPkpdSoftFloor(curves)
+                override fun setEventualBg(value: Double) {
+                    this@DetermineBasalaimiSMB2.eventualBG = value
+                }
+                override fun eventualBg() = this@DetermineBasalaimiSMB2.eventualBG
+                override fun setPredictedBg(value: Float) {
+                    this@DetermineBasalaimiSMB2.predictedBg = value
+                }
+                override fun scenarioBestTerminalMgdl() = lastScenarioProjection?.scenarioBest?.terminalMgdl
+                override fun physioPhaseName() = lastPhysiologicalPhaseOutput?.phase?.name
+                override fun mealPhaseName() = lastMealAbsorptionOutput?.phase?.name
+                override fun setPredDivergenceExport(value: kotlinx.serialization.json.JsonObject) {
+                    lastPredDivergenceExport = value
+                }
+                override fun reconstructedIobUnits() = pkpdIntegration.reconstructedIobUnits()
+                override fun cachedPkpdRuntimePresent() = cachedPkpdRuntime != null
+                override fun pkpdRelativeActivity() = cachedPkpdRuntime?.activity?.relativeActivity
+                override fun pkpdActivityStage() = cachedPkpdRuntime?.activity?.stage
+                override fun minBgInLastMinutes(minutes: Int) = this@DetermineBasalaimiSMB2.minBgInLastMinutes(minutes)
+                override fun roundToIntUnits(value: Double) = round(value)
+                override fun publishDoseTerminal(
+                    rT: RT,
+                    profile: OapsProfileAimi,
+                    mealData: MealData,
+                    pkpdEventualMgdl: Double,
+                    pkpdPredTerminalMgdl: Double,
+                    targetBgMgdl: Double,
+                    stageTag: String,
+                ) {
+                    publishDoseTerminalAuthorityAndSnapshot(
+                        rT, profile, mealData, pkpdEventualMgdl, pkpdPredTerminalMgdl, targetBgMgdl, stageTag,
+                    )
+                }
+                override fun refineAfterDose(rT: RT) {
+                    refineRbtMergeAfterDoseSnapshot(rT)
+                }
+                override fun decisionPrediction() = lastDecisionPredictionAuthority
+                override fun cob() = this@DetermineBasalaimiSMB2.cob
+                override fun projectionInput(
+                    targetBgValue: Double,
+                    cobValue: Double,
+                    combinedDeltaValue: Float,
+                ) = correctionAggressionProjectionInput(targetBgValue, cobValue, combinedDeltaValue)
+                override fun doseSnapshotTerminals(): Pair<Double?, Double?> {
+                    val snap = lastDoseTerminalSnapshot
+                    return snap?.minPredMgdl to snap?.eventualMgdl
+                }
+                override fun mealSafetyContext(iobData: IobTotal) =
+                    buildMealSafetyContext(isExplicitAdvisorRun = false, iobData = iobData)
+                override fun mealCertainty() = lastMealCertainty
+                override fun setRiskEnvelope(envelope: AimiRiskEnvelope) {
+                    cachedRiskEnvelopeDecision = envelope
+                }
+                override fun reconcileSafetyRisk() {
+                    reconcileSafetyRiskWithDecisionEnvelope()
+                }
+                override fun logError(line: String) {
+                    consoleError.add(line)
+                }
+            },
         )
-        consoleLog.add(AimiRiskEnvelopeBuilder.formatLogLine(cachedRiskEnvelopeDecision!!))
-        reconcileSafetyRiskWithDecisionEnvelope()
-
-        var minBgOut = minBg
-        var targetBgOut = targetBg
-        var maxBgOut = maxBg
-
-        if (bg > maxBg && profile.adv_target_adjustments && !profile.temptargetSet) {
-            val adjustedMinBG = round(max(80.0, minBgOut - (bg - minBgOut) / 3.0), 0)
-            val adjustedTargetBG = round(max(80.0, targetBgOut - (bg - targetBgOut) / 3.0), 0)
-            val adjustedMaxBG = round(max(80.0, maxBgOut - (bg - maxBgOut) / 3.0), 0)
-            if (eventualBG > adjustedMinBG && legacyEventual > adjustedMinBG && minBgOut > adjustedMinBG) {
-                consoleLog.add(rh.gs(ApsStrings.console_min_bg_adjusted, minBgOut, adjustedMinBG))
-                minBgOut = adjustedMinBG
-            } else {
-                consoleLog.add(rh.gs(ApsStrings.console_min_bg_unchanged, minBgOut))
-            }
-            if (eventualBG > adjustedTargetBG && legacyEventual > adjustedTargetBG && targetBgOut > adjustedTargetBG) {
-                consoleLog.add(rh.gs(ApsStrings.console_target_bg_adjusted, targetBgOut, adjustedTargetBG))
-                targetBgOut = adjustedTargetBG
-            } else {
-                consoleLog.add(rh.gs(ApsStrings.console_target_bg_unchanged, targetBgOut))
-            }
-            if (eventualBG > adjustedMaxBG && legacyEventual > adjustedMaxBG && maxBgOut > adjustedMaxBG) {
-                consoleError.add(rh.gs(ApsStrings.console_max_bg_adjusted, maxBgOut, adjustedMaxBG))
-                maxBgOut = adjustedMaxBG
-            } else {
-                consoleError.add(rh.gs(ApsStrings.console_max_bg_unchanged, maxBgOut))
-            }
-        }
-
         return AimiPkpdBgiDeviationAndTargetsStage(
-            bgi = bgi,
-            deviation = deviation,
-            minBg = minBgOut,
-            targetBg = targetBgOut,
-            maxBg = maxBgOut,
+            bgi = stage.bgi,
+            deviation = stage.deviation,
+            minBg = stage.minBg,
+            targetBg = stage.targetBg,
+            maxBg = stage.maxBg,
         )
     }
 
@@ -13257,76 +13211,29 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         latentState: PhysioLatentState? = null,
         uamConfidence: Double = 0.0,
     ): PredictionResult {
-        consoleLog.add("Debug: computePkpdPredictions called with delta=$delta")
-        val predictionModulation = PredictionPhysioModulationResolver.resolve(
-            fallbackSensitivityMgdlPerU = finalSensitivity,
+        val predicted = decideComputePkpdPredictions(
+            currentBg = currentBg,
+            iobArray = iobArray,
+            finalSensitivity = finalSensitivity,
+            cobG = cobG,
+            profile = profile,
+            rT = rT,
+            delta = delta,
             pkpdRuntime = pkpdRuntime,
             mealAbsorptionOutput = mealAbsorptionOutput,
             hypothesisState = hypothesisState,
             latentState = latentState,
             uamConfidence = uamConfidence,
-        )
-        if (!predictionModulation.isNeutral() || predictionModulation.falseMealSuppression) {
-            consoleLog.add(PredictionPhysioModulationResolver.formatLogLine(predictionModulation))
-        }
-        val curves = try {
-            AdvancedPredictionEngine.predictCurves(
-                currentBG = currentBg,
-                iobArray = iobArray,
-                finalSensitivity = finalSensitivity,
-                cobG = cobG,
-                profile = profile,
-                delta = delta,
-                modulation = predictionModulation,
-                endogenousReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEndogenousReversion),
-                hyperReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdHyperReversion),
-                stackAwareGuardBEnabled = preferences.get(BooleanKey.OApsAIMIPkpdStackAwareGuardB),
-            )
-        } catch (e: Exception) {
-            consoleLog.add("Error in AdvancedPredictionEngine: ${e.message}")
-            val flat = List(48) { currentBg }
-            AdvancedPredictionCurves(flat, flat, flat, flat, flat)
-        }
-        lastAdvancedPredictionCurves = curves
-        val softFloor = recordPkpdSoftFloor(curves)
-
-        val pathBounds = PredictionPathMath.boundsFromPredictions(
-            Predictions().apply {
-                IOB = curves.iob.map { round(min(401.0, max(39.0, it)), 0).toInt() }
-                COB = curves.cob.map { round(min(401.0, max(39.0, it)), 0).toInt() }
-                UAM = curves.uam.map { round(min(401.0, max(39.0, it)), 0).toInt() }
-                ZT = curves.zt.map { round(min(401.0, max(39.0, it)), 0).toInt() }
+            preferences = preferences,
+            consoleLog = consoleLog,
+            calls = object : AimiPkpdCurveCalls {
+                override fun setAdvancedCurves(curves: AdvancedPredictionCurves) {
+                    lastAdvancedPredictionCurves = curves
+                }
+                override fun recordSoftFloor(curves: AdvancedPredictionCurves) = recordPkpdSoftFloor(curves)
             },
-        ).let { curveBounds ->
-            val rawBounds = PredictionPathMath.boundsFromRawSeries(curves.hybrid)
-            PredictionPathBounds(
-                pathMinRawMgdl = rawBounds.pathMinRawMgdl,
-                pathMinClampedMgdl = curveBounds.pathMinClampedMgdl ?: rawBounds.pathMinClampedMgdl,
-                pathMinHitNumericFloor = rawBounds.pathMinHitNumericFloor || curveBounds.pathMinHitNumericFloor,
-            )
-        }
-        fun sanitizeInts(points: List<Double>): List<Int> =
-            points.map { round(min(401.0, max(39.0, it)), 0).toInt() }
-        val iobInts = applySoftFloorToPredSeries(sanitizeInts(curves.iob), softFloor)
-        val cobInts = applySoftFloorToPredSeries(sanitizeInts(curves.cob), softFloor)
-        val uamInts = applySoftFloorToPredSeries(sanitizeInts(curves.uam), softFloor)
-        val ztInts = applySoftFloorToPredSeries(sanitizeInts(curves.zt), softFloor)
-        val hybridInts = sanitizeInts(curves.hybrid)
-        rT.predBGs = Predictions().apply {
-            IOB = iobInts
-            COB = cobInts
-            ZT = ztInts
-            UAM = uamInts
-        }
-
-        val eventual = hybridInts.lastOrNull()?.toDouble() ?: currentBg
-        consoleLog.add(
-            "PKPD predictions → eventual=${aimiFmt0(eventual)} mg/dL from ${hybridInts.size} steps " +
-                "uamT=${uamInts.lastOrNull() ?: "n/a"} " +
-                "pathMinRaw=${pathBounds.pathMinRawMgdl?.let { aimiFmt0(it) } ?: "n/a"} " +
-                "pathMinClamp=${pathBounds.pathMinClampedMgdl?.let { aimiFmt0(it) } ?: "n/a"}"
         )
-        return PredictionResult(eventual, hybridInts, pathBounds)
+        return PredictionResult(predicted.eventual, predicted.series, predicted.pathBounds)
     }
 
     private fun ensurePredictionFallback(rt: RT, bgNow: Double) {
