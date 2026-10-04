@@ -1514,6 +1514,59 @@ class ShellDecisionTraceTest {
         assertEquals(T3C_BYPASS_TRACE, trace)
     }
 
+    @Test
+    fun t3cTreeDeployFailureStaysVisible() {
+        val prefs = recordingPreferences(
+            doubles = mapOf(
+                DoubleKey.OApsAIMIT3cActivationThreshold to 140.0,
+                DoubleKey.OApsAIMIT3cAggressiveness to 1.0,
+                DoubleKey.autodriveMaxBasal to 3.0,
+                DoubleKey.meal_modes_MaxBasal to 3.0,
+            ),
+            bools = mapOf(BooleanKey.OApsAIMIT3cBrittleMode to true),
+        )
+        setField(tick, "preferences", prefs)
+        setField(tick, "adaptiveMult", 1.0)
+        setField(tick, "lastNgrBasalMultiplier", 1.0)
+        setField(tick, "bg", 180.0)
+        setField(tick, "delta", 4.0f)
+        setField(tick, "iob", 1.0f)
+        setField(tick, "maxIob", 10.0)
+        setField(tick, "maxSMB", 0.5)
+        setField(tick, "variableSensitivity", 50.0f)
+        setField(tick, "hourOfDay", 12)
+        setField(tick, "eventualBG", 180.0)
+        holdRefresh("bolusRefreshInFlight")
+        val physio = mock(AIMIInsulinDecisionAdapterMTR::class.java, Answer { inv: InvocationOnMock ->
+            if (inv.method.name == "getLatestSnapshot") throw RuntimeException("boom")
+            else if (inv.method.name == "getEffectiveContext") PhysioContextMTR.NEUTRAL
+            else null
+        })
+        setField(tick, "physioAdapter", physio)
+        val profile = profileStub()
+        whenever(profile.carb_ratio).thenReturn(10.0)
+        whenever(profile.variable_sens).thenReturn(50.0)
+        val ctx = tickContext(profile, 180.0)
+        val rT = RT(runningDynamicIsf = false)
+        val trace = capture {
+            invokeNamed(
+                "runT3cBrittleBypassOrReturn",
+                listOf(
+                    ctx,
+                    profile,
+                    rT,
+                    profile,
+                    null,
+                    2.0f,
+                    PhysioMultipliersMTR.NEUTRAL,
+                    InsulinActionState.default(),
+                ),
+            )
+        }.replace(Regex("(?<![A-Za-z])ts=\\d+"), "ts=<clock>")
+        assertTrue("rate=${rT.rate} dur=${rT.duration}\n$trace", rT.rate != null && rT.duration != null)
+        assertTrue("rate=${rT.rate}\n$trace", trace.contains("T3C physioTree failed (RuntimeException): boom — deploy skipped"))
+    }
+
     private fun invokeNamed(name: String, args: List<Any?>): Any? {
         val method = tick.javaClass.declaredMethods.first {
             it.name == name && it.parameterCount == args.size
