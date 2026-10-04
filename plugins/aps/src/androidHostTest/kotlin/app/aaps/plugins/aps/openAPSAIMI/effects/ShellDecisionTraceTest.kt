@@ -445,7 +445,9 @@ class ShellDecisionTraceTest {
     fun t9WithPhysioAssistantOffKeepsNeutralMultipliers() {
         val prefs = recordingPreferences(emptyMap())
         setField(tick, "preferences", prefs)
-        setField(tick, "activePlugin", mock(app.aaps.core.interfaces.plugin.ActivePlugin::class.java))
+        val plugin = mock(app.aaps.core.interfaces.plugin.ActivePlugin::class.java)
+        whenever(plugin.activeBgSource).thenReturn(mock(app.aaps.core.interfaces.source.BgSource::class.java))
+        setField(tick, "activePlugin", plugin)
         val cycle = getField(tick, "wCyclePreferences") as WCyclePreferences
         whenever(cycle.verneuil()).thenReturn(VerneuilStatus.NONE)
         whenever(cycle.thyroid()).thenReturn(ThyroidStatus.EUTHYROID)

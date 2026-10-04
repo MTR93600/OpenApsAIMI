@@ -139,6 +139,18 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTirWarmupRead
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTirWarmupView
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickSmbCache
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideTickClockMaxSmb
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT9ConsoleError
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT9EarlyRuntime
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT9G6Lead
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT9G6Source
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT9Inflammation
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT9PhysioDetail
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT9PhysioMultipliers
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT9PhysioPkpdTubeBootstrap
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT9Predictions
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT9PumpAge
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT9State
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideT9PhysioEarlyPkpd
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideMealAdvisorOrReturn
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideT3cBrittleMode
 import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
@@ -1396,11 +1408,6 @@ private sealed class AimiGlucosePackLoadOutcome {
 }
 
 /** T9 / early PKPD / tube stage: pump age for downstream logic + physio multipliers still read later in the tick. */
-private data class AimiT9PhysioPkpdTubeBootstrap(
-    val pumpAgeDays: Float,
-    val physioMultipliers: PhysioMultipliersMTR,
-)
-
 /**
  * Après [applyAdvancedPredictions] : résultat [sanitizePredictionValues], min BG « composite » (BG / pred / eventual),
  * et seuil hypo LGS pour le tick. Réutilisé par [trySafetyStart], Autodrive V3/V2, et [runUamModelCalHypoGuardPostHypoAndSetPredictedSmb] (`minBgHypoComposite`).
@@ -2588,101 +2595,89 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         glucoseStatus: GlucoseStatusAIMI,
         rT: RT,
         iobTotal: Double,
-    ): AimiT9PhysioPkpdTubeBootstrap {
-        val profile = ctx.profile
-        // T9: G6 lead compensation (+25%) so physio, PKPD, LGS, SMB share corrected delta (not only Autodrive V3).
-        val isG6Sensor = try {
-            activePlugin.activeBgSource.javaClass.simpleName.contains("Dexcom", ignoreCase = true) &&
-            activePlugin.activeBgSource.javaClass.simpleName.contains("G6", ignoreCase = true)
-        } catch (e: Exception) { false }
-        val rawVelocityMgdlMin = glucoseStatus.delta / 5.0 // delta mg/dL/5min → mg/dL/min
-        val correctedVelocityMgdlMin = continuousStateEstimator.applyG6LeadCompensation(rawVelocityMgdlMin, isG6Sensor)
-        val correctedDelta = correctedVelocityMgdlMin * 5.0
-        if (isG6Sensor && correctedDelta != glucoseStatus.delta.toDouble()) {
-            consoleLog.add("🌐 T9 G6-Lead: delta_raw=${aimiFmt1(glucoseStatus.delta)} → delta_corr=${aimiFmt1(correctedDelta)} mg/dL/5min")
-        }
-
-        // Physio assistant (MTR): multipliers + trace / status line.
-        val physioMultipliers = if (preferences.get(app.aaps.core.keys.BooleanKey.AimiPhysioAssistantEnable)) {
+    ): AimiT9PhysioPkpdTubeBootstrap = decideT9PhysioEarlyPkpd(
+        profile = ctx.profile,
+        glucoseStatus = glucoseStatus,
+        rT = rT,
+        iobTotal = iobTotal,
+        preferences = preferences,
+        consoleLog = consoleLog,
+        consoleError = AimiT9ConsoleError { consoleError.add(it) },
+        state = object : AimiT9State {
+            override fun setBaseMultipliers(value: PhysioMultipliersMTR) { lastBasePhysioMultipliers = value }
+            override fun setPkpdRuntime(value: PkPdRuntime?) { cachedPkpdRuntime = value }
+            override fun pkpdRuntime() = cachedPkpdRuntime
+            override fun setEventualBg(value: Double) { eventualBG = value }
+            override fun setPredictedBg(value: Float) { predictedBg = value }
+            override fun setVariableSensitivity(value: Float) { variableSensitivity = value }
+            override fun maxSmb() = this@DetermineBasalaimiSMB2.maxSMB
+            override fun setMaxSmb(value: Double) { maxSMB = value }
+            override fun maxSmbHb() = maxSMBHB
+            override fun setMaxSmbHb(value: Double) { maxSMBHB = value }
+            override fun setInflammation(result: app.aaps.plugins.aps.openAPSAIMI.inflammatory.InflammationAdjuster.InflammationResult) {
+                lastInflammationResult = result
+            }
+            override fun causalPosterior() = lastPatientState?.causalPosterior
+        },
+        g6 = AimiT9G6Source {
+            val name = activePlugin.activeBgSource.javaClass.simpleName
+            name.contains("Dexcom", ignoreCase = true) && name.contains("G6", ignoreCase = true)
+        },
+        lead = AimiT9G6Lead { raw, isG6 -> continuousStateEstimator.applyG6LeadCompensation(raw, isG6) },
+        physioMultipliers = AimiT9PhysioMultipliers { bg, delta ->
             try {
-                physioAdapter.getMultipliers(
-                    currentBG = glucoseStatus.glucose,
-                    currentDelta = glucoseStatus.delta
-                    // recentHypoTimestamp will be fetched internally by adapter
-                )
+                physioAdapter.getMultipliers(currentBG = bg, currentDelta = delta)
             } catch (e: Exception) {
                 aapsLogger.error(app.aaps.core.interfaces.logging.LTag.APS, "Physio adapter error - using defaults", e)
                 PhysioMultipliersMTR.NEUTRAL
             }
-        } else {
-            PhysioMultipliersMTR.NEUTRAL
-        }
-        lastBasePhysioMultipliers = physioMultipliers
-
-        // Log physio modulation if active
-        if (!physioMultipliers.isNeutral()) {
-            consoleLog.add(
-                "🏥 PHYSIO: ISF×${aimiFmt3(physioMultipliers.isfFactor)} " +
-                "Basal×${aimiFmt3(physioMultipliers.basalFactor)} " +
-                "SMB×${aimiFmt3(physioMultipliers.smbFactor)} " +
-                "Conf=${(physioMultipliers.confidence * 100).toInt()}%"
-            )
-        }
-
-        // Detailed physio log + optional decision trace (adapter may throw — same as historical).
-        try {
-            val physioLog = physioAdapter.getDetailedLogString()
-            consoleError.add(physioLog)
-            physioAdapter.getLastDecisionTrace()?.let { trace ->
-                consoleLog.add(
-                    "PHYSIO_TRACE state=${trace.physioState} conf=${aimiFmt2(trace.physioConfidence)} " +
-                        "q=${aimiFmt2(trace.physioDataQuality)} " +
-                        "isf=${aimiFmt3(trace.isfFactor)} basal=${aimiFmt3(trace.basalFactor)} " +
-                        "smb=${aimiFmt3(trace.smbFactor)} " +
-                        "inflam=${aimiFmt3(trace.inflammationLatentIndex)}(${trace.inflammationTimescale}) " +
-                        "shadow(smb=${aimiFmt3(trace.shadowBudgetedSmbFactor)} ov=${aimiFmt3(trace.shadowOverlapPenalty)}) " +
-                        "veto=${trace.vetoReason ?: "none"} " +
-                        "loop=${trace.finalLoopDecisionType ?: "pending"}"
-                )
+        },
+        physioDetail = AimiT9PhysioDetail {
+            try {
+                val physioLog = physioAdapter.getDetailedLogString()
+                consoleError.add(physioLog)
+                physioAdapter.getLastDecisionTrace()?.let { trace ->
+                    consoleLog.add(
+                        "PHYSIO_TRACE state=${trace.physioState} conf=${aimiFmt2(trace.physioConfidence)} " +
+                            "q=${aimiFmt2(trace.physioDataQuality)} " +
+                            "isf=${aimiFmt3(trace.isfFactor)} basal=${aimiFmt3(trace.basalFactor)} " +
+                            "smb=${aimiFmt3(trace.smbFactor)} " +
+                            "inflam=${aimiFmt3(trace.inflammationLatentIndex)}(${trace.inflammationTimescale}) " +
+                            "shadow(smb=${aimiFmt3(trace.shadowBudgetedSmbFactor)} ov=${aimiFmt3(trace.shadowOverlapPenalty)}) " +
+                            "veto=${trace.vetoReason ?: "none"} " +
+                            "loop=${trace.finalLoopDecisionType ?: "pending"}"
+                    )
+                }
+            } catch (e: Exception) {
+                consoleError.add("❌ Physio Log Error: ${e.message}")
             }
-        } catch (e: Exception) {
-            consoleError.add("❌ Physio Log Error: ${e.message}")
-        }
-
-        // Early PKPD: predictions before SafetyNet, Meal Advisor, and legacy branches (autosens ratio 1.0 here; refined later in tick).
-        val earlyAutosensRatio = 1.0
-        val earlySens = ctx.profile.sens / earlyAutosensRatio
-
-        val iobForEarlyPkpd = ctx.iobDataArray.firstOrNull()
-        val earlyPkpdWindowSinceDoseMin = if (iobForEarlyPkpd != null && iobForEarlyPkpd.lastBolusTime > 0L) {
-            ((dateUtil.now() - iobForEarlyPkpd.lastBolusTime) / 60000.0).toInt().coerceAtLeast(0)
-        } else {
-            90
-        }
-        val earlyPkpdMealContext = buildPkpdMealContext(
-            mealData = ctx.mealData,
-            predictedBgMgdl = glucoseStatus.glucose,
-            targetBgMgdl = ctx.profile.target_bg,
-        )
-        val singleLearnPath = preferences.get(BooleanKey.OApsAIMIIntelligenceSingleLearnPath)
-        this.cachedPkpdRuntime = try {
+        },
+        runtime = AimiT9EarlyRuntime { earlySens, totalIob, allowLearning ->
+            val iobForEarlyPkpd = ctx.iobDataArray.firstOrNull()
+            val window = if (iobForEarlyPkpd != null && iobForEarlyPkpd.lastBolusTime > 0L) {
+                ((dateUtil.now() - iobForEarlyPkpd.lastBolusTime) / 60000.0).toInt().coerceAtLeast(0)
+            } else {
+                90
+            }
+            val mealContext = buildPkpdMealContext(
+                mealData = ctx.mealData,
+                predictedBgMgdl = glucoseStatus.glucose,
+                targetBgMgdl = ctx.profile.target_bg,
+            )
             pkpdIntegration.setRecentBolusSamples(
-                buildRecentPkpdBolusSamples(
-                    nowMillis = dateUtil.now(),
-                    fallbackWindowMin = earlyPkpdWindowSinceDoseMin
-                )
+                buildRecentPkpdBolusSamples(nowMillis = dateUtil.now(), fallbackWindowMin = window),
             )
             pkpdIntegration.computeRuntime(
                 epochMillis = dateUtil.now(),
                 bg = glucoseStatus.glucose,
                 deltaMgDlPer5 = glucoseStatus.delta,
-                iobU = iobTotal,
+                iobU = totalIob,
                 carbsActiveG = ctx.mealData.mealCOB,
-                windowMin = earlyPkpdWindowSinceDoseMin,
+                windowMin = window,
                 exerciseFlag = sportTime,
                 profileIsf = earlySens,
                 tdd24h = ctx.profile.max_daily_basal * 24.0,
-                mealContext = earlyPkpdMealContext,
+                mealContext = mealContext,
                 consoleLog = consoleLog,
                 combinedDelta = glucoseStatus.combinedDelta,
                 uamConfidence = AimiUamHandler.confidenceOrZero(),
@@ -2691,91 +2686,30 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 estimatedRaMgdlPerMin = continuousStateEstimator.getLastRa().takeIf { it.isFinite() && it > 0.0 },
                 causalStatePosterior = lastPatientState?.causalPosterior,
                 patientEventMemory = lastPatientState?.eventMemory,
-                allowLearning = !singleLearnPath,
-                // Substitute TDD (max basal x 24): read-only for the slew limiter too, otherwise
-                // this call would pin the whole tick on a lower-quality input.
+                allowLearning = allowLearning,
                 isfRateLimitAuthority = false,
             )
-        } catch (e: Exception) {
-            consoleError.add("❌ Early PKPD Runtime init failed: ${e.message}")
-            null
-        }
+        },
+        predictions = AimiT9Predictions { earlySens, pkpdRuntime ->
+            computePkpdPredictions(
+                currentBg = glucoseStatus.glucose,
+                iobArray = ctx.pkpdIobDataArray ?: ctx.iobDataArray,
+                finalSensitivity = earlySens,
+                cobG = ctx.mealData.mealCOB,
+                profile = ctx.profile,
+                rT = rT,
+                delta = glucoseStatus.delta,
+                pkpdRuntime = pkpdRuntime,
+                mealAbsorptionOutput = lastMealAbsorptionOutput,
+                hypothesisState = lastUamHypothesisState,
+                latentState = lastPhysioLatentState,
+                uamConfidence = AimiUamHandler.confidenceOrZero(),
+            ).eventual
+        },
+        inflammation = AimiT9Inflammation { inflammationAdjuster.getAdjustments() },
+        pumpAge = AimiT9PumpAge { pumpAgeDaysCached() },
+    )
 
-        val earlyPkpdPredictions = computePkpdPredictions(
-            currentBg = glucoseStatus.glucose,
-            iobArray = ctx.pkpdIobDataArray ?: ctx.iobDataArray,
-            finalSensitivity = earlySens,
-            cobG = ctx.mealData.mealCOB,
-            profile = ctx.profile,
-            rT = rT,
-            delta = glucoseStatus.delta,
-            pkpdRuntime = this.cachedPkpdRuntime,
-            mealAbsorptionOutput = lastMealAbsorptionOutput,
-            hypothesisState = lastUamHypothesisState,
-            latentState = lastPhysioLatentState,
-            uamConfidence = AimiUamHandler.confidenceOrZero(),
-        )
-
-        this.eventualBG = earlyPkpdPredictions.eventual
-        this.predictedBg = earlyPkpdPredictions.eventual.toFloat()
-        rT.eventualBG = earlyPkpdPredictions.eventual
-
-        var pkpdRuntime = this.cachedPkpdRuntime
-
-        if (!physioMultipliers.isNeutral()) {
-            this.variableSensitivity = (earlySens * physioMultipliers.isfFactor).toFloat()
-            profile.max_daily_basal = profile.max_daily_basal * physioMultipliers.basalFactor
-            this.maxSMB = (this.maxSMB * physioMultipliers.smbFactor).coerceAtLeast(0.1)
-            consoleLog.add("🏥 PHYSIO APPLIED: MaxSMB=${aimiFmt2(this.maxSMB)} MaxBasal=${aimiFmt2(profile.max_daily_basal)}")
-        }
-
-        val inflamResult = inflammationAdjuster.getAdjustments()
-        lastInflammationResult = inflamResult
-        if (inflamResult.basalMultiplier != 1.0 || inflamResult.smbMultiplier != 1.0) {
-            profile.current_basal = profile.current_basal * inflamResult.basalMultiplier
-            profile.max_daily_basal = profile.max_daily_basal * inflamResult.basalMultiplier
-            val prevMaxSMB = this.maxSMB
-            this.maxSMB = (this.maxSMB * inflamResult.smbMultiplier).coerceAtLeast(0.1)
-            this.maxSMBHB = (this.maxSMBHB * inflamResult.smbMultiplier).coerceAtLeast(0.1)
-            consoleLog.add("${inflamResult.reason} -> Basal×${aimiFmt2(inflamResult.basalMultiplier)} SMB: ${aimiFmt2(prevMaxSMB)}->${aimiFmt2(this.maxSMB)}U")
-        }
-
-        val pumpAgeDays: Float = pumpAgeDaysCached()
-        val causalMod = CausalKineticsModulator.modulate(lastPatientState?.causalPosterior)
-        val effectiveDiaH = if (preferences.get(BooleanKey.OApsAIMIDiaGovernorEnabled)) {
-            DiaGovernor.resolve(
-                profileDiaHours = profile.dia,
-                contextualDiaShiftHours = causalMod.diaShiftHours,
-                pkpdLearnedDiaHours = pkpdRuntime?.params?.diaHrs,
-                pkpdEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEnabled),
-                governorEnabled = true,
-                diaMinBound = preferences.get(DoubleKey.OApsAIMIPkpdBoundsDiaMinH),
-                diaMaxBound = preferences.get(DoubleKey.OApsAIMIPkpdBoundsDiaMaxH),
-                learnedBlendWeight = preferences.get(DoubleKey.OApsAIMIDiaGovernorLearnedWeight),
-            ).effectiveDiaHours
-        } else {
-            pkpdRuntime?.params?.diaHrs ?: profile.dia
-        }
-
-        // TAP-G peak governor: echo last log line once per distinct string (clipped).
-        val peakGovLine = preferences.get(app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey.OApsAIMIPkpdLastPeakGovLogLine)
-        if (peakGovLine.isNotBlank()) {
-            val alreadyEchoed =
-                preferences.get(app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey.OApsAIMIPkpdLastPeakGovConsoleEchoed)
-            if (peakGovLine != alreadyEchoed) {
-                val clipped = if (peakGovLine.length > 220) peakGovLine.substring(0, 220) + "..." else peakGovLine
-                consoleLog.add(clipped)
-                preferences.put(
-                    app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey.OApsAIMIPkpdLastPeakGovConsoleEchoed,
-                    peakGovLine,
-                )
-            }
-        }
-
-        // Tube is intentionally NOT applied on early PKPD floors (T9). It runs once from
-        // publishDoseTerminalAuthorityAndSnapshot after gated dose terminals exist.
-        return AimiT9PhysioPkpdTubeBootstrap(pumpAgeDays, physioMultipliers)
-    }
 
     /**
      * Recent deltas → combined delta → G6 BYODA lead on combined/short avg → dynamic peak vs profile peak.
