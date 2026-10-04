@@ -53,6 +53,7 @@ import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleLearner
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCyclePreferences
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -204,6 +205,117 @@ class ShellDecisionTraceTest {
             )
         }
         assertEquals(UAM_TRACE, trace)
+    }
+
+    @Test
+    fun brittleHypoRecordsZeroDemandAndTheActivationThreshold() {
+        val trace = rbtTrace(brittle = true, bg = 50.0, delta = -2f, shortAvg = -1f, adaptive = 1.0, maxBasal = 3.0)
+        assertEquals(BRITTLE_HYPO_TRACE, trace)
+    }
+
+    @Test
+    fun brittleHyperClampsT3cDemandAtMaxBasal() {
+        val recent = listOf(180f, 190f, 200f, 220f)
+        val trace = rbtTrace(
+            brittle = true,
+            bg = 220.0,
+            delta = 8f,
+            shortAvg = 4f,
+            adaptive = 1.0,
+            currentBasal = 1.0,
+            maxBasal = 1.2,
+            eventual = 220.0,
+            recentGlucose = recent,
+        )
+        val open = rbtTrace(
+            brittle = true,
+            bg = 220.0,
+            delta = 8f,
+            shortAvg = 4f,
+            adaptive = 1.0,
+            currentBasal = 1.0,
+            maxBasal = 30.0,
+            eventual = 220.0,
+            recentGlucose = recent,
+        )
+        val openDemand = open.lineSequence().first { it.startsWith("SIGNAL t3cDemand=") }.substringAfter('=').toDouble()
+        assertTrue("uncapped demand should clear the 1.20 ceiling, was $openDemand", openDemand > 1.20)
+        assertEquals(BRITTLE_CEILING_TRACE, trace)
+    }
+
+    private fun rbtTrace(
+        brittle: Boolean,
+        bg: Double,
+        delta: Float,
+        shortAvg: Float,
+        adaptive: Double,
+        maxBasal: Double,
+        currentBasal: Double = maxBasal,
+        eventual: Double = 0.0,
+        recentGlucose: List<Float> = listOf(110f, 100f, 80f, 65f),
+    ): String {
+        val prefs = recordingPreferences(
+            doubles = mapOf(
+                DoubleKey.OApsAIMIT3cAnticipationStrength to 0.40,
+                DoubleKey.OApsAIMILastEstimatedCarbs to 5.0,
+                DoubleKey.OApsAIMISmbTailDamping to 0.25,
+                DoubleKey.OApsAIMIT3cActivationThreshold to 140.0,
+            ),
+            bools = mapOf(BooleanKey.OApsAIMIT3cBrittleMode to brittle),
+        )
+        setField(tick, "preferences", prefs)
+        setField(tick, "bg", bg)
+        setField(tick, "delta", delta)
+        setField(tick, "shortAvgDelta", shortAvg)
+        setField(tick, "targetBg", 90.0f)
+        setField(tick, "hourOfDay", 12)
+        setField(tick, "adaptiveMult", adaptive)
+        setField(tick, "eventualBG", eventual)
+        setField(tick, "iob", 1.0f)
+        setField(tick, "maxIob", 10.0)
+        setField(tick, "variableSensitivity", 50.0f)
+        setField(
+            tick,
+            "lastUamHypothesisState",
+            UamHypothesisState(
+                mealProb = 0.72,
+                dominant = UamHypothesisId.MEAL,
+                dominantConfidence = 0.72,
+            ),
+        )
+        val glucose = mock(GlucoseStatusCalculatorAimi::class.java)
+        whenever(glucose.getRecentGlucose()).thenReturn(recentGlucose)
+        whenever(glucose.getAimiFeatures(true)).thenReturn(null)
+        setField(tick, "glucoseStatusCalculatorAimi", glucose)
+        AimiUamHandler.updateRuntimeConfidence(0.70)
+        val profile = profileStub()
+        whenever(profile.current_basal).thenReturn(currentBasal)
+        whenever(profile.max_basal).thenReturn(maxBasal)
+        val autosens = mock(AutosensResult::class.java)
+        whenever(autosens.ratio).thenReturn(1.0)
+        return captureSignals {
+            tick.buildRbtExtendedSignals(
+                rT = RT(runningDynamicIsf = false),
+                profile = profile,
+                htr = HyperTrajectoryReleaseResult(
+                    active = false,
+                    tier = HyperSeverityTier.OFF,
+                    severityWeight = 0.0,
+                    smbFloorU = 0.0,
+                    v3SmbBeforeU = 0.0,
+                    v3SmbAfterU = 0.0,
+                    absorptionOffsetMgdl = 0.0,
+                    suppressTrajBasalShift = false,
+                    hypoMinPredIgnored = false,
+                    reason = "trace",
+                ),
+                v3SmbU = 0.0,
+                autosens = autosens,
+                glucoseStatus = GlucoseStatusAIMI(glucose = bg),
+                mpcFeedForwardRa = null,
+                cbfShieldDeltaU = null,
+            )
+        }
     }
 
     private fun armShell() {
@@ -535,6 +647,60 @@ SIGNAL ngrBasal=null
 SIGNAL tuning=
 SIGNAL ngrMember=1.00
 """.trimIndent()
+
+        private val BRITTLE_HYPO_TRACE = """
+            READ key=DoubleKey.OApsAIMIT3cAnticipationStrength value=0.40
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=true
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=5.00
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
+            READ key=IntKey.OApsAIMINightGrowthAgeYears value=0
+            READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
+            READ key=StringKey.OApsAIMINightGrowthStart value=
+            READ key=StringKey.OApsAIMINightGrowthEnd value=
+            READ key=DoubleKey.OApsAIMINightGrowthMaxIobExtra value=0.00
+            READ key=BooleanKey.AimiEndometriosisEnable value=false
+            LOG 😴 SLEEP_LIVE: wearable steps15=0 hr=72/rhr=60 conf=0.57 conf=0.57
+            READ key=DoubleKey.OApsAIMIT3cActivationThreshold value=140.00
+            READ key=DoubleKey.OApsAIMISmbTailDamping value=0.25
+            READ key=StringKey.AimiTuningContextSelection value=
+            SIGNAL postHypoOrdinal=2
+            SIGNAL uamDominant=MEAL
+            SIGNAL uamMealProb=0.72
+            SIGNAL uamSuppress=false
+            SIGNAL t3cActive=true
+            SIGNAL t3cDemand=0.00
+            SIGNAL ngrSmb=null
+            SIGNAL ngrBasal=null
+            SIGNAL tuning=
+            SIGNAL ngrMember=1.00
+        """.trimIndent()
+
+        private val BRITTLE_CEILING_TRACE = """
+            READ key=DoubleKey.OApsAIMIT3cAnticipationStrength value=0.40
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=true
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=5.00
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
+            READ key=IntKey.OApsAIMINightGrowthAgeYears value=0
+            READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
+            READ key=StringKey.OApsAIMINightGrowthStart value=
+            READ key=StringKey.OApsAIMINightGrowthEnd value=
+            READ key=DoubleKey.OApsAIMINightGrowthMaxIobExtra value=0.00
+            READ key=BooleanKey.AimiEndometriosisEnable value=false
+            LOG 😴 SLEEP_LIVE: wearable steps15=0 hr=72/rhr=60 conf=0.57 conf=0.57
+            READ key=DoubleKey.OApsAIMIT3cActivationThreshold value=140.00
+            READ key=DoubleKey.OApsAIMISmbTailDamping value=0.25
+            READ key=StringKey.AimiTuningContextSelection value=
+            SIGNAL postHypoOrdinal=0
+            SIGNAL uamDominant=MEAL
+            SIGNAL uamMealProb=0.72
+            SIGNAL uamSuppress=false
+            SIGNAL t3cActive=true
+            SIGNAL t3cDemand=1.20
+            SIGNAL ngrSmb=null
+            SIGNAL ngrBasal=null
+            SIGNAL tuning=
+            SIGNAL ngrMember=1.00
+        """.trimIndent()
     }
 
 }

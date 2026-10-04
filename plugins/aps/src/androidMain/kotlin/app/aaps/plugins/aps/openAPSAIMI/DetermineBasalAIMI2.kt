@@ -48,6 +48,14 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiSmbActionType
 import app.aaps.plugins.aps.openAPSAIMI.effects.LegacyMealTickState
 import app.aaps.plugins.aps.openAPSAIMI.effects.LegacyPrebolusMemory
 import app.aaps.plugins.aps.openAPSAIMI.effects.applyLegacyMealModes as decideLegacyMealModes
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiNightGrowthConfig
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPhysioTick
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPostHypoClassification
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRbtTickWrites
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRecentGlucose
+import app.aaps.plugins.aps.openAPSAIMI.effects.PostHypoState
+import app.aaps.plugins.aps.openAPSAIMI.effects.RbtExtendedTickState
+import app.aaps.plugins.aps.openAPSAIMI.effects.buildRbtExtendedSignals as decideRbtExtendedSignals
 import app.aaps.plugins.aps.openAPSAIMI.effects.cfrdHrInflammationBoostOf
 import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
@@ -4094,338 +4102,103 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         mpcFeedForwardRa: Double?,
         cbfShieldDeltaU: Double?,
     ): RbtExtendedSignals {
-        val pkpd = cachedPkpdRuntime
-        val iobConsensus = IobConsensus.resolve(
-            aapsIobUnits = iob.toDouble(),
-            pkpdIobUnits = pkpdIntegration.reconstructedIobUnits().takeIf { pkpd != null },
-        )
-        val t3cHints = T3cAnticipation.buildHints(
-            predictions = rT.predBGs,
-            bgNow = bg,
-            lgsThresholdMgdl = min(90.0, profile.lgsThreshold?.toDouble() ?: 70.0),
-            activationThreshold = targetBg.toDouble() + 30.0,
-            eventualBg = eventualBG.takeIf { it.isFinite() },
-            strengthRaw = preferences.get(DoubleKey.OApsAIMIT3cAnticipationStrength),
-        )
-        val t3cEnabled = preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
-        val t3cGovernance = basalNeuralLearner.getGovernanceSnapshot()
-        val recentBgs = glucoseStatusCalculatorAimi.getRecentGlucose()
-        val postHypo = classifyPostHypoState(
-            recentBGs = recentBgs,
-            cob = rT.COB?.toDouble() ?: 0.0,
-            explicitMealMode = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime,
-            shortAvgDelta = shortAvgDelta,
-            delta = delta,
-            slopeFromMinDeviation = 0.0,
-            estimatedCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs),
-            estimatedCarbsAgeMs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong(),
-            localHour = hourOfDay,
-            reason = StringBuilder(),
-        )
-        val postHypoOrdinal = when (postHypo) {
-            is PostHypoState.None -> 0
-            is PostHypoState.ReboundSuspected -> 1
-            is PostHypoState.MealConfirmed -> 2
-        }
-        lastPostHypoOrdinal = postHypoOrdinal
-        val ngrConfig = buildNightGrowthResistanceConfig(profile, autosens, glucoseStatus, targetBg.toDouble())
-        val ngrResult = nightGrowthResistanceMode.evaluate(
-            now = KotlinInstant.fromEpochMilliseconds(dateUtil.now()),
+        val state = RbtExtendedTickState(
+            iob = iob,
             bg = bg,
-            delta = delta.toDouble(),
-            shortAvgDelta = shortAvgDelta.toDouble(),
-            longAvgDelta = longAvgDelta.toDouble(),
+            delta = delta,
+            shortAvgDelta = shortAvgDelta,
+            longAvgDelta = longAvgDelta,
             eventualBG = eventualBG,
-            targetBG = targetBg.toDouble(),
-            iob = iob.toDouble(),
-            cob = rT.COB?.toDouble() ?: 0.0,
-            react = bg,
-            isMealActive = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime,
-            config = ngrConfig,
+            targetBg = targetBg,
+            hourOfDay = hourOfDay,
+            adaptiveMult = adaptiveMult,
+            bgacc = bgacc,
+            duraISFminutes = duraISFminutes,
+            duraISFaverage = duraISFaverage,
+            maxIob = maxIob,
+            variableSensitivity = variableSensitivity,
+            maxSMB = maxSMB,
+            maxSMBHB = maxSMBHB,
+            mealTime = mealTime,
+            bfastTime = bfastTime,
+            lunchTime = lunchTime,
+            dinnerTime = dinnerTime,
+            highCarbTime = highCarbTime,
+            snackTime = snackTime,
+            sleepTime = sleepTime,
+            exerciseInsulinLockoutActive = exerciseInsulinLockoutActive,
+            exerciseHyperBasalOverrideActive = exerciseHyperBasalOverrideActive,
+            exerciseBasalResumeBgMgdl = EXERCISE_BASAL_RESUME_BG_MGDL,
+            highBgOverrideUsed = highBgOverrideUsed,
+            mealAdvisorOneShotThisTick = mealAdvisorOneShotThisTick,
+            lastScenarioBestCappedForPhysio = lastScenarioBestCappedForPhysio,
+            lastPhysioLatentState = lastPhysioLatentState,
+            lastUamHypothesisState = lastUamHypothesisState,
+            lastPatientState = lastPatientState,
+            lastPatientModeDecision = lastPatientModeDecision,
+            lastMealAbsorptionOutput = lastMealAbsorptionOutput,
+            lastPhysiologicalPhaseOutput = lastPhysiologicalPhaseOutput,
+            lastPostHypoDeliveryAuthority = lastPostHypoDeliveryAuthority,
+            lastHarmoniaDecision = lastHarmoniaDecision,
+            lastPhysiologicalTreeSnapshot = lastPhysiologicalTreeSnapshot,
+            lastTubeAdvisorSmbCapScale = lastTubeAdvisorSmbCapScale,
+            tickInsulinActionState = tickInsulinActionState,
+            correctionAggressionDecision = correctionAggressionDecision,
+            lastInflammationResult = lastInflammationResult,
+            currentThyroidEffects = currentThyroidEffects,
+            lastMealCertainty = lastMealCertainty,
         )
-        // Expose the NGR nocturnal basal multiplier to the T3C engine (executeT3cBrittleMode consumes it).
-        lastNgrBasalMultiplier = ngrResult.basalMultiplier
-        val endoFactors = try {
-            endoAdjuster.calculateFactors(bg, delta.toDouble())
-        } catch (_: Exception) {
-            null
-        }
-        val physioTrace = physioAdapter.getLastDecisionTrace()
-        val physioCtx = physioAdapter.getEffectiveContext()
-        val wearableSnap = physioAdapter.getLatestSnapshot()
-        val auditorVerdict = try {
-            app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdictCache.get(300_000)?.verdict
-        } catch (_: Exception) {
-            null
-        }
-        val traj = trajectoryGuard.getLastAnalysis()
-        val spiralCap = if (traj?.classification == TrajectoryType.TIGHT_SPIRAL) {
-            max(maxSMBHB, maxSMB) * (1.0 - (traj.metrics.energyBalance / 10.0).coerceIn(0.0, 0.75))
-        } else {
-            null
-        }
-        val latentState = lastPhysioLatentState
-        val hypothesisState = lastUamHypothesisState
-        val patientState = lastPatientState
-        val patientModeDecision = lastPatientModeDecision
-        val clockIsNight = hourOfDay >= 23 || hourOfDay < 6
-        val sleepLive = SleepLiveDetector.evaluate(
-            SleepLiveDetector.Input(
-                therapySleepTime = sleepTime,
-                stepsLast15m = wearableSnap.stepsLast15m,
-                stepsLast5m = wearableSnap.stepsLast5m,
-                hrNowBpm = wearableSnap.hrNow,
-                rhrRestingBpm = wearableSnap.rhrResting,
-                hcSessionActive = wearableSnap.hcSleepSessionActive,
-                clockIsNight = clockIsNight,
-            ),
-        )
-        if (sleepLive.isAsleep) {
-            consoleLog.add("😴 SLEEP_LIVE: ${sleepLive.summary} conf=${aimiFmt2(sleepLive.confidence)}")
-        }
-        val t3cTrajectory = if (t3cEnabled) {
-            val lgsT3c = min(90.0, (profile.lgsThreshold?.toDouble() ?: 70.0).coerceAtLeast(70.0))
-            val minPredT3c = rT.predBGs?.IOB?.minOrNull()?.toDouble() ?: bg
-            val eventualT3c = rT.eventualBG?.takeIf { it.isFinite() } ?: eventualBG.coerceAtLeast(40.0)
-            T3cTrajectoryContext.build(
-                minPredBg = minPredT3c,
-                eventualPredBg = eventualT3c,
-                bg = bg,
-                lgsThresholdMgdl = lgsT3c,
-                trajectoryEnabled = rT.trajectoryEnabled == true,
-                lastAnalysis = traj,
-            )
-        } else {
-            null
-        }
-        val t3cDemandRate = if (t3cEnabled) {
-            val baseBasal = profile.current_basal
-            val maxBasalCap = profile.max_basal.coerceAtLeast(baseBasal)
-            val rawAggressiveness = basalNeuralLearner.getT3cAdaptiveFactor(
-                bg = bg,
-                basal = baseBasal,
-                accel = bgacc,
-                duraMin = duraISFminutes,
-                duraAvg = duraISFaverage,
-                iob = iob.toDouble(),
-                physioFeatures = currentBasalPhysioFeatures(),
-            )
-            val adaptiveBoost = if (adaptiveMult > 1.0) {
-                (adaptiveMult - 1.0).coerceAtMost(0.40)
-            } else {
-                adaptiveMult - 1.0
-            }
-            val aggressiveness = (rawAggressiveness + rawAggressiveness * adaptiveBoost).coerceIn(0.3, 2.0)
-            val computedRate = DynamicBasalController.computeT3c(
-                bg = bg,
-                targetBg = targetBg.toDouble(),
-                delta = delta,
-                shortAvgDelta = shortAvgDelta.toDouble(),
-                longAvgDelta = longAvgDelta.toDouble(),
-                accel = bgacc,
-                iob = iob.toDouble(),
-                maxIob = maxIob,
-                profileBasal = baseBasal,
-                isf = variableSensitivity.toDouble().coerceAtLeast(10.0),
-                duraISFminutes = duraISFminutes,
-                duraISFaverage = duraISFaverage,
-                eventualBg = eventualBG.takeIf { it.isFinite() },
-                activationThreshold = preferences.get(DoubleKey.OApsAIMIT3cActivationThreshold),
-                aggressiveness = aggressiveness,
-                maxBasalCap = maxBasalCap,
-                trajectory = t3cTrajectory,
-                anticipationHints = t3cHints,
-            )
-            if (computedRate > 0.0 && Math.abs(adaptiveMult - 1.0) > 0.01) {
-                (computedRate * adaptiveMult).coerceIn(0.0, maxBasalCap)
-            } else {
-                computedRate
-            }
-        } else {
-            0.0
-        }
-        val t3cMealConflict = t3cEnabled &&
-            lastMealAbsorptionOutput?.mealDeliveryPriority == true &&
-            (
-                hypothesisState?.suppressMealInterpretation == true ||
-                    lastPhysiologicalPhaseOutput?.policy?.suppressMealLikeScenario == true
-                )
-        val t3cPostHypoBlock = t3cEnabled && (
-            postHypoOrdinal > 0 ||
-                (
-                    lastPostHypoDeliveryAuthority.active &&
-                        lastPostHypoDeliveryAuthority.forceMealInterpretationSuppressed
-                    )
-            )
-        val t3cExerciseBlock = t3cEnabled &&
-            exerciseInsulinLockoutActive &&
-            !exerciseHyperBasalOverrideActive &&
-            bg <= EXERCISE_BASAL_RESUME_BG_MGDL
-        val t3cHardSafetyBlock = t3cEnabled && (
-            bg < (profile.lgsThreshold?.toDouble() ?: 70.0) ||
-                t3cExerciseBlock
-            )
-        val t3cBlockReason = when {
-            !t3cEnabled -> null
-            bg < (profile.lgsThreshold?.toDouble() ?: 70.0) -> "HYPO_TERMINAL"
-            t3cExerciseBlock -> "EXERCISE_LOCKOUT"
-            t3cPostHypoBlock -> "POST_HYPO"
-            t3cMealConflict -> "MEAL_CONFLICT"
-            t3cDemandRate <= 0.0 -> "NO_BASAL_DEMAND"
-            else -> null
-        }
-        val harmoniaDecision = lastHarmoniaDecision
-        val harmoniaActive = harmoniaDecision != null
-        val harmoniaMealConflict = harmoniaActive &&
-            lastMealAbsorptionOutput?.mealDeliveryPriority == true &&
-            (
-                hypothesisState?.suppressMealInterpretation == true ||
-                    lastPhysiologicalPhaseOutput?.policy?.suppressMealLikeScenario == true
-                )
-        // Aggressive post-hypo rise: do not keep Harmonia in POST_HYPO block once we are acting normally
-        // (same contract as RBT episode/mode bypass). Otherwise eligible MEAL_SUPPORT never reaches
-        // basal-first and ticks log rbt_no_harmonia_channel / post_hypo during the climb.
-        val aggressiveRiseExit = PostHypoAggressiveRiseExit.shouldExit(
-            bgMgdl = bg,
-            targetBgMgdl = targetBg.toDouble(),
-            deltaMgdl5m = delta.toDouble(),
-        )
-        val harmoniaPostHypoBlock = harmoniaActive &&
-            !aggressiveRiseExit &&
-            (
-                postHypoOrdinal > 0 ||
-                    lastPostHypoDeliveryAuthority.active
-                )
-        val harmoniaExerciseBlock = harmoniaActive && exerciseInsulinLockoutActive
-        val harmoniaHardSafetyBlock = harmoniaActive && (
-            bg < (profile.lgsThreshold?.toDouble() ?: 70.0) ||
-                harmoniaExerciseBlock ||
-                lastPhysiologicalTreeSnapshot?.trunk?.riskLevel == PhysiologicalRiskLevel.CRITICAL
-            )
-        val harmoniaProductionAction = harmoniaDecision?.action in setOf(
-            HarmoniaAction.BASAL_FIRST,
-            HarmoniaAction.MEAL_SUPPORT,
-            HarmoniaAction.PROTECTIVE_REDUCTION,
-            HarmoniaAction.STABILIZE,
-        )
-        val harmoniaBlockReason = when {
-            !harmoniaActive -> null
-            bg < (profile.lgsThreshold?.toDouble() ?: 70.0) -> "HYPO_TERMINAL"
-            harmoniaExerciseBlock -> "EXERCISE_LOCKOUT"
-            harmoniaPostHypoBlock -> "POST_HYPO"
-            harmoniaMealConflict -> "MEAL_CONFLICT"
-            harmoniaHardSafetyBlock -> "HARD_SAFETY"
-            harmoniaDecision?.eligible != true -> harmoniaDecision?.blockers?.firstOrNull()?.uppercase(Locale.US)
-                ?: "SIMULATION_INELIGIBLE"
-            !harmoniaProductionAction -> "NO_PRODUCTION_ACTION"
-            (harmoniaDecision?.targetBasalUph ?: 0.0) <= 0.0 -> "NO_BASAL_DEMAND"
-            else -> null
-        }
-        return RbtExtendedSignals(
-            tubeAdvisorCapScale = lastTubeAdvisorSmbCapScale,
-            insulinActivityStageOrdinal = tickInsulinActionState?.activityStage?.ordinal
-                ?: pkpd?.activity?.stage?.ordinal,
-            pkpdTailFactor = pkpd?.tailFraction,
-            compressionImpossibleRise = CompressionReboundGuard.isImpossibleRise(delta),
-            highBgOverrideActive = highBgOverrideUsed,
-            iobConsensusDelta = iobConsensus.deltaUnits,
-            realtimeIobUnits = tickInsulinActionState?.effectiveIob ?: iob.toDouble(),
-            mealAdvisorEstimateU = if (mealAdvisorOneShotThisTick) v3SmbU else null,
+        return decideRbtExtendedSignals(
+            rT = rT,
+            profile = profile,
+            htr = htr,
+            v3SmbU = v3SmbU,
+            autosens = autosens,
+            glucoseStatus = glucoseStatus,
             mpcFeedForwardRa = mpcFeedForwardRa,
             cbfShieldDeltaU = cbfShieldDeltaU,
-            t3cAnticipationStrength = t3cHints.strength,
-            t3cActive = t3cEnabled,
-            t3cBasalDemandRateUph = t3cDemandRate.takeIf { t3cEnabled },
-            t3cBasalMaxRateUph = profile.max_basal.coerceAtLeast(profile.current_basal).takeIf { t3cEnabled },
-            t3cMealConflict = t3cMealConflict,
-            t3cPostHypoBlock = t3cPostHypoBlock,
-            t3cExerciseBlock = t3cExerciseBlock,
-            t3cHardSafetyBlock = t3cHardSafetyBlock,
-            t3cBlockReason = t3cBlockReason,
-            t3cGovernanceBasalFloorUph = t3cGovernance.activeBasalFloor,
-            t3cGovernanceAggressivenessFloor = t3cGovernance.activeAggressivenessFloor,
-            harmoniaActive = harmoniaActive,
-            harmoniaDecisionEligible = harmoniaDecision?.eligible == true,
-            harmoniaAction = harmoniaDecision?.action?.name,
-            harmoniaBranch = harmoniaDecision?.branch,
-            harmoniaBasalDemandRateUph = harmoniaDecision?.targetBasalUph,
-            harmoniaBasalMaxRateUph = harmoniaDecision?.environment?.maxBasalUph
-                ?.coerceAtMost(profile.max_basal.coerceAtLeast(profile.current_basal)),
-            harmoniaSmbDemandU = harmoniaDecision?.targetSmbU,
-            harmoniaSmbMaxU = harmoniaDecision?.environment?.maxSmbU
-                ?.coerceAtMost(maxSMBHB.coerceAtLeast(maxSMB)),
-            harmoniaMealConflict = harmoniaMealConflict,
-            harmoniaPostHypoBlock = harmoniaPostHypoBlock,
-            harmoniaExerciseBlock = harmoniaExerciseBlock,
-            harmoniaHardSafetyBlock = harmoniaHardSafetyBlock,
-            harmoniaBlockReason = harmoniaBlockReason,
-            insulinIntent = lastPhysiologicalTreeSnapshot?.insulinIntent?.name,
-            mealCertaintySupports = lastMealCertainty?.supportsMealSupport == true,
-            riseConfirmed = lastMealCertainty?.riseGeometry == MealRiseGeometry.OK ||
-                (delta >= 1.2f && bg >= 140.0),
-            postHypoDeliverySuppressSmb =
-                lastPostHypoDeliveryAuthority.active && lastPostHypoDeliveryAuthority.suppressMealDelivery,
-            postHypoOrdinal = postHypoOrdinal,
-            trajSpiralCapMaxSmb = spiralCap,
-            pkpdLearnedDiaH = pkpd?.params?.diaHrs,
-            pkpdLearnedPeakMin = pkpd?.params?.peakMin,
-            isfFusionRatio = pkpd?.let { it.fusedIsf / it.profileIsf.coerceAtLeast(1.0) },
-            kalmanIsf = variableSensitivity.toDouble().takeIf { it > 0.0 },
-            pkpdTailDamping = app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSmbTailDamping.effectiveStoredValue(
-                preferences.get(DoubleKey.OApsAIMISmbTailDamping),
-            ),
-            correctionAggressionLevel = correctionAggressionDecision?.tier?.ordinal?.toDouble(),
-            hormonalCapApplied = lastScenarioBestCappedForPhysio,
-            ngrSmbMult = ngrResult.smbMultiplier.takeIf { it != 1.0 },
-            ngrBasalMult = ngrResult.basalMultiplier.takeIf { it != 1.0 },
-            inflammationSmbMult = lastInflammationResult?.smbMultiplier?.takeIf { it != 1.0 },
-            inflammationIsfMult = lastInflammationResult?.isfMultiplier?.takeIf { it != 1.0 },
-            basalAdaptMult = adaptiveMult.takeIf { it != 1.0 },
-            ctxManagerIntentCount = rT.contextIntentCount,
-            endometriosisFactor = endoFactors?.basalMult?.takeIf { it != 1.0 },
-            thyroidIsfMult = currentThyroidEffects.isfMultiplier.takeIf { it != 1.0 },
-            thyroidDiaMult = currentThyroidEffects.diaMultiplier.takeIf { it != 1.0 },
-            thyroidGuardActive = currentThyroidEffects.status ==
-                app.aaps.plugins.aps.openAPSAIMI.physio.thyroid.ThyroidStatus.NORMALIZING,
-            basalLearnerShortMult = basalLearner.shortTermMultiplier,
-            basalLearnerMedMult = basalLearner.mediumTermMultiplier,
-            basalLearnerLongMult = basalLearner.longTermMultiplier,
-            shadowAuditorConfidence = auditorVerdict?.confidence,
-            shadowSentinelVerdictLabel = auditorVerdict?.verdict?.name,
-            shadowOrchestratorActive = physioTrace?.shadowOrchestratorEnabled == true,
-            tuningContextLabel = preferences.get(StringKey.AimiTuningContextSelection),
-            htrLeafSmbFloorU = htr.smbFloorU,
-            sleepDebtMinutes = wearableSnap.sleepDebtMinutes.toDouble().takeIf { it > 0 },
-            latentMealProb = latentState?.mealProb,
-            latentEndogenousGlucoseDrive = latentState?.endogenousGlucoseDrive,
-            latentCircadianSiFactor = latentState?.circadianSiFactor,
-            latentTransientResistanceProb = latentState?.transientResistanceProb,
-            latentSleepDebtScore = latentState?.sleepDebtScore,
-            latentSensorConfidence = latentState?.sensorConfidence,
-            uamHypothesisDominant = hypothesisState?.dominant?.name,
-            uamMealProb = hypothesisState?.mealProb,
-            uamEndogenousProb = hypothesisState?.dawnEndogenousProb,
-            uamStressProb = hypothesisState?.stressProb,
-            uamPostHypoProb = hypothesisState?.postHypoProb,
-            uamLateFatProb = hypothesisState?.lateFatProb,
-            uamSuppressMealInterpretation = hypothesisState?.suppressMealInterpretation == true,
-            patientMode = patientModeDecision?.mode?.name,
-            patientModeConfidence = patientModeDecision?.confidence,
-            patientStrategyHint = patientModeDecision?.strategyHint?.name,
-            patientModeMealBias = patientModeDecision?.mealBias,
-            patientModeProtectionBias = patientModeDecision?.protectionBias,
-            causalDominantState = patientState?.causalPosterior?.dominant?.name,
-            causalDominantConfidence = patientState?.causalPosterior?.dominantConfidence,
-            causalMealConfidence = patientState?.causalPosterior?.mealConfidence,
-            causalProtectiveConfidence = patientState?.causalPosterior?.protectiveConfidence,
-            causalLearningQuality = patientState?.causalPosterior?.learningQuality,
-            contextIntentDominant = patientState?.userIntent?.dominantIntent,
-            contextIntentConfidence = patientModeDecision?.userIntentConfidence,
-            physioMtrStateOrdinal = physioCtx.state.ordinal,
-            hrvDeviationZ = physioCtx.hrvDeviationZ.takeIf { physioCtx.confidence > 0.0 },
-            sleepQualityScore = physioCtx.features?.sleepQualityScore,
-            sleepLiveConfidence = sleepLive.confidence,
-            sleepLiveSource = sleepLive.source.name,
+            preferences = preferences,
+            dateUtil = dateUtil,
+            consoleLog = consoleLog,
+            state = state,
+            pkpd = cachedPkpdRuntime,
+            pkpdIntegration = pkpdIntegration,
+            basalNeuralLearner = basalNeuralLearner,
+            basalLearner = basalLearner,
+            nightGrowthResistanceMode = nightGrowthResistanceMode,
+            trajectoryGuard = trajectoryGuard,
+            endoAdjuster = endoAdjuster,
+            recentGlucose = AimiRecentGlucose { glucoseStatusCalculatorAimi.getRecentGlucose() },
+            postHypoClassification = AimiPostHypoClassification { recentBGs, cob, explicitMealMode, shortAvgDelta, delta, slopeFromMinDeviation, estimatedCarbs, estimatedCarbsAgeMs, localHour, reason ->
+                classifyPostHypoState(
+                    recentBGs = recentBGs,
+                    cob = cob,
+                    explicitMealMode = explicitMealMode,
+                    shortAvgDelta = shortAvgDelta,
+                    delta = delta,
+                    slopeFromMinDeviation = slopeFromMinDeviation,
+                    estimatedCarbs = estimatedCarbs,
+                    estimatedCarbsAgeMs = estimatedCarbsAgeMs,
+                    localHour = localHour,
+                    reason = reason,
+                )
+            },
+            nightGrowthConfig = AimiNightGrowthConfig { ngrProfile, ngrAutosens, ngrGlucose, ngrTarget ->
+                buildNightGrowthResistanceConfig(ngrProfile, ngrAutosens, ngrGlucose, ngrTarget)
+            },
+            physio = object : AimiPhysioTick {
+                override fun getLastDecisionTrace() = physioAdapter.getLastDecisionTrace()
+                override fun getEffectiveContext() = physioAdapter.getEffectiveContext()
+                override fun getLatestSnapshot() = physioAdapter.getLatestSnapshot()
+            },
+            tickWrites = object : AimiRbtTickWrites {
+                override fun setLastPostHypoOrdinal(ordinal: Int) {
+                    lastPostHypoOrdinal = ordinal
+                }
+                override fun setLastNgrBasalMultiplier(multiplier: Double) {
+                    lastNgrBasalMultiplier = multiplier
+                }
+            },
         )
     }
 
@@ -14435,12 +14208,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      *   ReboundSuspected  → hypo récente, pas de repas détecté → SMB=0, TBR bridge
      *   MealConfirmed     → hypo récente MAIS repas confirmé   → SMB cappé 50%
      */
-    private sealed class PostHypoState {
-        object None : PostHypoState()
-        data class ReboundSuspected(val sinceMs: Long) : PostHypoState()
-        data class MealConfirmed(val sinceMs: Long) : PostHypoState()
-    }
-
     /**
      * [classifyPostHypoState] + prefs carbs réutilisées plus bas (`timeSinceEstimateMin`, [resolveMealHyperBasalBoostOutcome]).
      */
