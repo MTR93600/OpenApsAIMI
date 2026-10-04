@@ -2161,7 +2161,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val nMult = nDecision?.multiplier ?: 1.0
         adaptiveMult = BasalAdaptiveMultiplier.combine(hMult, nMult)
         if (Math.abs(adaptiveMult - 1.0) > 0.01) {
-            consoleLog.add("🛡️ BASAL_UNIFIED_SCALING: H=${"%.2f".format(hMult)}x / N=${"%.2f".format(nMult)}x -> Applied=${"%.2f".format(adaptiveMult)}x")
+            consoleLog.add("🛡️ BASAL_UNIFIED_SCALING: H=${aimiFmt2(hMult)}x / N=${aimiFmt2(nMult)}x -> Applied=${aimiFmt2(adaptiveMult)}x")
         }
         lastAdaptiveBasalTrace = buildAdaptiveBasalTrace(hMultRaw, hMult, nDecision, adaptiveMult)
         val isConfirmedHighRiseLocal =
@@ -2292,7 +2292,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 }
                 when {
                     nightBangBangBlock -> {
-                        consoleLog.add("🚫 T6 NIGHT_RATE_LIMIT: BG_Rise_Fast bloqué (IOB=${"%.2f".format(iobNow)}U > 2.0 ET BG=${bgNow.toInt()} < 100 la nuit)")
+                        consoleLog.add("🚫 T6 NIGHT_RATE_LIMIT: BG_Rise_Fast bloqué (IOB=${aimiFmt2(iobNow)}U > 2.0 ET BG=${bgNow.toInt()} < 100 la nuit)")
                         "Routine_Cycle"
                     }
                     isBgRiseFast -> "BG_Rise_Fast"
@@ -2429,9 +2429,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         iobActivityNow = iobActionProfile.activityNow
         val iobActivityIn30Min = iobActionProfile.activityIn30Min
         consoleLog.add(
-            "PAI: Peak in ${"%.0f".format(iobPeakMinutes)}m | " +
-                "Activity Now=${"%.0f".format(iobActivityNow * 100)}%, " +
-                "in 30m=${"%.0f".format(iobActivityIn30Min * 100)}%"
+            "PAI: Peak in ${aimiFmt0(iobPeakMinutes)}m | " +
+                "Activity Now=${aimiFmt0(iobActivityNow * 100)}%, " +
+                "in 30m=${aimiFmt0(iobActivityIn30Min * 100)}%"
         )
         val observerDiaHours = ctx.effectiveDiaHours?.takeIf { it.isFinite() && it > 0.0 } ?: ctx.profile.dia
         // Wave2 F1: minutes-to-peak from profiler (signed); never absolute effective peak.
@@ -2542,7 +2542,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val correctedVelocityMgdlMin = continuousStateEstimator.applyG6LeadCompensation(rawVelocityMgdlMin, isG6Sensor)
         val correctedDelta = correctedVelocityMgdlMin * 5.0
         if (isG6Sensor && correctedDelta != glucoseStatus.delta.toDouble()) {
-            consoleLog.add("🌐 T9 G6-Lead: delta_raw=${String.format("%.1f", glucoseStatus.delta)} → delta_corr=${String.format("%.1f", correctedDelta)} mg/dL/5min")
+            consoleLog.add("🌐 T9 G6-Lead: delta_raw=${aimiFmt1(glucoseStatus.delta)} → delta_corr=${aimiFmt1(correctedDelta)} mg/dL/5min")
         }
 
         // Physio assistant (MTR): multipliers + trace / status line.
@@ -2565,9 +2565,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Log physio modulation if active
         if (!physioMultipliers.isNeutral()) {
             consoleLog.add(
-                "🏥 PHYSIO: ISF×${String.format("%.3f", physioMultipliers.isfFactor)} " +
-                "Basal×${String.format("%.3f", physioMultipliers.basalFactor)} " +
-                "SMB×${String.format("%.3f", physioMultipliers.smbFactor)} " +
+                "🏥 PHYSIO: ISF×${aimiFmt3(physioMultipliers.isfFactor)} " +
+                "Basal×${aimiFmt3(physioMultipliers.basalFactor)} " +
+                "SMB×${aimiFmt3(physioMultipliers.smbFactor)} " +
                 "Conf=${(physioMultipliers.confidence * 100).toInt()}%"
             )
         }
@@ -2578,12 +2578,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleError.add(physioLog)
             physioAdapter.getLastDecisionTrace()?.let { trace ->
                 consoleLog.add(
-                    "PHYSIO_TRACE state=${trace.physioState} conf=${String.format("%.2f", trace.physioConfidence)} " +
-                        "q=${String.format("%.2f", trace.physioDataQuality)} " +
-                        "isf=${String.format("%.3f", trace.isfFactor)} basal=${String.format("%.3f", trace.basalFactor)} " +
-                        "smb=${String.format("%.3f", trace.smbFactor)} " +
-                        "inflam=${String.format("%.3f", trace.inflammationLatentIndex)}(${trace.inflammationTimescale}) " +
-                        "shadow(smb=${String.format("%.3f", trace.shadowBudgetedSmbFactor)} ov=${String.format("%.3f", trace.shadowOverlapPenalty)}) " +
+                    "PHYSIO_TRACE state=${trace.physioState} conf=${aimiFmt2(trace.physioConfidence)} " +
+                        "q=${aimiFmt2(trace.physioDataQuality)} " +
+                        "isf=${aimiFmt3(trace.isfFactor)} basal=${aimiFmt3(trace.basalFactor)} " +
+                        "smb=${aimiFmt3(trace.smbFactor)} " +
+                        "inflam=${aimiFmt3(trace.inflammationLatentIndex)}(${trace.inflammationTimescale}) " +
+                        "shadow(smb=${aimiFmt3(trace.shadowBudgetedSmbFactor)} ov=${aimiFmt3(trace.shadowOverlapPenalty)}) " +
                         "veto=${trace.vetoReason ?: "none"} " +
                         "loop=${trace.finalLoopDecisionType ?: "pending"}"
                 )
@@ -2669,7 +2669,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             this.variableSensitivity = (earlySens * physioMultipliers.isfFactor).toFloat()
             profile.max_daily_basal = profile.max_daily_basal * physioMultipliers.basalFactor
             this.maxSMB = (this.maxSMB * physioMultipliers.smbFactor).coerceAtLeast(0.1)
-            consoleLog.add("🏥 PHYSIO APPLIED: MaxSMB=${"%.2f".format(this.maxSMB)} MaxBasal=${"%.2f".format(profile.max_daily_basal)}")
+            consoleLog.add("🏥 PHYSIO APPLIED: MaxSMB=${aimiFmt2(this.maxSMB)} MaxBasal=${aimiFmt2(profile.max_daily_basal)}")
         }
 
         val inflamResult = inflammationAdjuster.getAdjustments()
@@ -2680,7 +2680,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val prevMaxSMB = this.maxSMB
             this.maxSMB = (this.maxSMB * inflamResult.smbMultiplier).coerceAtLeast(0.1)
             this.maxSMBHB = (this.maxSMBHB * inflamResult.smbMultiplier).coerceAtLeast(0.1)
-            consoleLog.add("${inflamResult.reason} -> Basal×${"%.2f".format(inflamResult.basalMultiplier)} SMB: ${"%.2f".format(prevMaxSMB)}->${"%.2f".format(this.maxSMB)}U")
+            consoleLog.add("${inflamResult.reason} -> Basal×${aimiFmt2(inflamResult.basalMultiplier)} SMB: ${aimiFmt2(prevMaxSMB)}->${aimiFmt2(this.maxSMB)}U")
         }
 
         val pumpAgeDays: Float = pumpAgeDaysCached()
@@ -2888,25 +2888,25 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         consoleLog.add(
             when (ladder.branch) {
                 MaxSmbLadder.LADDER_PLATEAU_CRITICAL     ->
-                    "MAXSMB_PLATEAU_CRITICAL BG=${bg.roundToInt()} Δ=${String.format("%.1f", combinedDelta)} slope=${String.format("%.2f", ctx.mealData.slopeFromMinDeviation)} -> maxSMBHB=${String.format("%.2f", maxSMBHB)}U (plateau)"
+                    "MAXSMB_PLATEAU_CRITICAL BG=${bg.roundToInt()} Δ=${aimiFmt1(combinedDelta)} slope=${aimiFmt2(ctx.mealData.slopeFromMinDeviation)} -> maxSMBHB=${aimiFmt2(maxSMBHB)}U (plateau)"
 
                 MaxSmbLadder.LADDER_CONFIRMED_RISE_HIGH  ->
-                    "MAXSMB_SLOPE_HIGH BG=${bg.roundToInt()} slope=${String.format("%.2f", ctx.mealData.slopeFromMinDeviation)} Δ=${String.format("%.1f", combinedDelta)} -> maxSMBHB=${String.format("%.2f", maxSMBHB)}U (confirmed rise)"
+                    "MAXSMB_SLOPE_HIGH BG=${bg.roundToInt()} slope=${aimiFmt2(ctx.mealData.slopeFromMinDeviation)} Δ=${aimiFmt1(combinedDelta)} -> maxSMBHB=${aimiFmt2(maxSMBHB)}U (confirmed rise)"
 
                 MaxSmbLadder.LADDER_CONFIRMED_RISE_HIGH_BY_DELTA ->
-                    "MAXSMB_DELTA_HIGH BG=${bg.roundToInt()} shortAvgDelta=${String.format("%.2f", glucoseStatus.shortAvgDelta)} slope=${String.format("%.2f", ctx.mealData.slopeFromMinDeviation)} Δ=${String.format("%.1f", combinedDelta)} -> maxSMBHB=${String.format("%.2f", maxSMBHB)}U (confirmed rise by delta)"
+                    "MAXSMB_DELTA_HIGH BG=${bg.roundToInt()} shortAvgDelta=${aimiFmt2(glucoseStatus.shortAvgDelta)} slope=${aimiFmt2(ctx.mealData.slopeFromMinDeviation)} Δ=${aimiFmt1(combinedDelta)} -> maxSMBHB=${aimiFmt2(maxSMBHB)}U (confirmed rise by delta)"
 
                 MaxSmbLadder.LADDER_SENSITIVE_85         ->
-                    "MAXSMB_SLOPE_SENSITIVE BG=${bg.roundToInt()} slope=${String.format("%.2f", ctx.mealData.slopeFromMinDeviation)} Δ=${String.format("%.1f", combinedDelta)} -> ${String.format("%.2f", ladder.ceilingU)}U (85% maxSMBHB - confirmed rise)"
+                    "MAXSMB_SLOPE_SENSITIVE BG=${bg.roundToInt()} slope=${aimiFmt2(ctx.mealData.slopeFromMinDeviation)} Δ=${aimiFmt1(combinedDelta)} -> ${aimiFmt2(ladder.ceilingU)}U (85% maxSMBHB - confirmed rise)"
 
                 MaxSmbLadder.LADDER_PLATEAU_MODERATE_75  ->
-                    "MAXSMB_PLATEAU_MODERATE BG=${bg.roundToInt()} Δ=${String.format("%.1f", combinedDelta)} -> ${String.format("%.2f", ladder.ceilingU)}U (75% maxSMBHB)"
+                    "MAXSMB_PLATEAU_MODERATE BG=${bg.roundToInt()} Δ=${aimiFmt1(combinedDelta)} -> ${aimiFmt2(ladder.ceilingU)}U (75% maxSMBHB)"
 
                 MaxSmbLadder.LADDER_FALLING_60           ->
-                    "MAXSMB_FALLING BG=${bg.roundToInt()} Δ=${String.format("%.1f", combinedDelta)} -> ${String.format("%.2f", ladder.ceilingU)}U (60% maxSMBHB)"
+                    "MAXSMB_FALLING BG=${bg.roundToInt()} Δ=${aimiFmt1(combinedDelta)} -> ${aimiFmt2(ladder.ceilingU)}U (60% maxSMBHB)"
 
                 else                                     ->
-                    "MAXSMB_STANDARD BG=${bg.roundToInt()} -> ${String.format("%.2f", ladder.ceilingU)}U"
+                    "MAXSMB_STANDARD BG=${bg.roundToInt()} -> ${aimiFmt2(ladder.ceilingU)}U"
             }
         )
         this.maxSMB = ladder.ceilingU
@@ -2930,7 +2930,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                  MaxSmbLadder.LADDER_FALLING_60          -> MaxSmbLadder.LADDER_FALLING_60_CLAMPED
                  else                                    -> MaxSmbLadder.LADDER_STANDARD
              }
-             consoleLog.add("🔒 STRICT CLAMP: BG<120 -> Forced Standard MaxSMB (${String.format("%.2f", stdMaxSMB)}U)")
+             consoleLog.add("🔒 STRICT CLAMP: BG<120 -> Forced Standard MaxSMB (${aimiFmt2(stdMaxSMB)}U)")
         }
         val ngrConfig = buildNightGrowthResistanceConfig(ctx.profile, ctx.autosensData, glucoseStatus, targetBg.toDouble())
         var tir1DAYIR = 0.0
@@ -3180,7 +3180,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // internalLastSmbMillis + lastBolusSMBUnit for legacy prebolus: see [markLegacyMealDecision] (async SMB cache can lag).
         } else {
             val reason = when {
-                iobSafetyBlock -> "IOB_LIMIT (${"%.2f".format(iob)}U > MaxIOB)"
+                iobSafetyBlock -> "IOB_LIMIT (${aimiFmt2(iob)}U > MaxIOB)"
                 internalBlock -> "INTERNAL_LOCKOUT (${timeSinceInternalSmbMs/60000}m < 20m)"
                 else -> "DB_CAP ($recentBolusCount boluses in 20min)"
             }
@@ -3254,7 +3254,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         consoleLog.add(
             "🛡️ T3c predict+traj: min=${minPredT3c.toInt()} ev=${eventualT3c.toInt()} LGS=${lgsT3c.toInt()} " +
-                "traj=${t3cTrajCtx.trajectoryTypeName ?: "—"} E=${t3cTrajCtx.energyBalance?.let { String.format("%.1f", it) } ?: "—"}"
+                "traj=${t3cTrajCtx.trajectoryTypeName ?: "—"} E=${t3cTrajCtx.energyBalance?.let { aimiFmt1(it) } ?: "—"}"
         )
 
         // T3C dependency guarantee (B): deploy the physiological tree + activity belief for the T3C decision,
@@ -3343,7 +3343,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // finalizeAndCapSMB); an explicit user-triggered advisor run is still honoured.
         val hypoSuppressAdvisorSmb = lastContextSnapshot?.hasHypoRecovery == true && !isExplicitAdvisorRun
         if (hypoSuppressAdvisorSmb && (advisorRes.bolusU ?: 0.0) > 0.0) {
-            consoleLog.add("🍬 CTX_HYPO_RECOVERY: meal advisor auto-SMB suppressed (intent=${"%.2f".format(Locale.US, advisorRes.bolusU ?: 0.0)}U)")
+            consoleLog.add("🍬 CTX_HYPO_RECOVERY: meal advisor auto-SMB suppressed (intent=${aimiFmt2(advisorRes.bolusU ?: 0.0)}U)")
         }
         val bolusIntent = if (hypoSuppressAdvisorSmb) 0.0 else (advisorRes.bolusU ?: 0.0).toDouble()
 
@@ -3354,7 +3354,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT.reason.append(advisorRes.reason)
 
             val triggerType = if (isExplicitAdvisorRun) "Explicit" else "Auto"
-            consoleLog.add("🍱 MEAL_ADVISOR_DIRECT_SEND ($triggerType) Pushed=${"%.2f".format(safeIntent)}U (Limits Bypassed)")
+            consoleLog.add("🍱 MEAL_ADVISOR_DIRECT_SEND ($triggerType) Pushed=${aimiFmt2(safeIntent)}U (Limits Bypassed)")
 
             if (safeIntent > 0) {
                 internalLastSmbMillis = dateUtil.now()
@@ -3539,9 +3539,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             HormonalScenarioTerminalCap.capBestTerminalMgdl(bg, rawBestT, policy) < rawBestT - 0.5
         if (!fused.multipliers.isNeutral() || policy.phase != PhysiologicalPhase.OFF) {
             consoleLog.add(
-                "🌅 PHYSIO_FUSE: phase=${policy.phase.name} SMB×${"%.3f".format(fused.multipliers.smbFactor)} " +
-                    "react×${"%.3f".format(fused.multipliers.reactivityFactor)} " +
-                    "basal×${"%.3f".format(fused.multipliers.basalFactor)} (${policy.reason})",
+                "🌅 PHYSIO_FUSE: phase=${policy.phase.name} SMB×${aimiFmt3(fused.multipliers.smbFactor)} " +
+                    "react×${aimiFmt3(fused.multipliers.reactivityFactor)} " +
+                    "basal×${aimiFmt3(fused.multipliers.basalFactor)} (${policy.reason})",
             )
         }
         return fused.multipliers
@@ -3610,7 +3610,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastMealAbsorptionOutput = output
         if (output.phase.isActive) {
             consoleLog.add(
-                "🍽️ MEAL_ABSORPTION: ${output.phase.name} B=${"%.2f".format(output.belief)} " +
+                "🍽️ MEAL_ABSORPTION: ${output.phase.name} B=${aimiFmt2(output.belief)} " +
                     "pri=${output.mealDeliveryPriority} waves=${output.waveCount} (${output.reason})",
             )
         }
@@ -3954,7 +3954,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             physiologicalTree?.let { tree ->
                 consoleLog.add(
                     "TREE_DEPLOYED trunk=${tree.trunk.globalState.name} " +
-                        "conf=${"%.2f".format(tree.trunk.confidence)} " +
+                        "conf=${aimiFmt2(tree.trunk.confidence)} " +
                         "risk=${tree.trunk.riskLevel.name} " +
                         "kinetics=${bodyKinetics.reason}",
                 )
@@ -4171,7 +4171,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             ),
         )
         if (sleepLive.isAsleep) {
-            consoleLog.add("😴 SLEEP_LIVE: ${sleepLive.summary} conf=${"%.2f".format(sleepLive.confidence)}")
+            consoleLog.add("😴 SLEEP_LIVE: ${sleepLive.summary} conf=${aimiFmt2(sleepLive.confidence)}")
         }
         val t3cTrajectory = if (t3cEnabled) {
             val lgsT3c = min(90.0, (profile.lgsThreshold?.toDouble() ?: 70.0).coerceAtLeast(70.0))
@@ -4590,8 +4590,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         patternSnapshot.dominant?.let { dominant ->
             consoleLog.add(
-                "🧬 PATTERN: dominant=$dominant conf=${"%.2f".format(patternSnapshot.dominantConfidence)} " +
-                    "cap=${patternSnapshot.smbCapU?.let { "%.2f".format(it) + "U" } ?: "none"}" +
+                "🧬 PATTERN: dominant=$dominant conf=${aimiFmt2(patternSnapshot.dominantConfidence)} " +
+                    "cap=${patternSnapshot.smbCapU?.let { aimiFmt2(it) + "U" } ?: "none"}" +
                     "${patternSnapshot.smbCapKind?.let { "/$it" } ?: ""} " +
                     "mealSupp=${patternSnapshot.suppressMealInterpretation} " +
                     "hyperSupp=${patternSnapshot.suppressHyperRelease} | ${patternSnapshot.reasonSummary}",
@@ -4766,8 +4766,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         if (aggressiveRiseExit) {
             consoleLog.add(
-                "🚀 POST_HYPO_AGGRESSIVE_RISE_EXIT: bg=${"%.0f".format(bg)} " +
-                    "≥ target+30 (${"%.0f".format(targetForPostHypoExit + 30.0)}) Δ=${"%.1f".format(delta)} > 15 → act normally"
+                "🚀 POST_HYPO_AGGRESSIVE_RISE_EXIT: bg=${aimiFmt0(bg)} " +
+                    "≥ target+30 (${aimiFmt0(targetForPostHypoExit + 30.0)}) Δ=${aimiFmt1(delta)} > 15 → act normally"
             )
         }
         RbtEpisodeMemory.tick(
@@ -4784,8 +4784,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         activeEpisode?.let {
             consoleLog.add(
-                "📖 RBT_EPISODE: ${it.kind.name} age=${"%.0f".format(it.ageMinutes(dateUtil.now()))}min " +
-                    "peak=${"%.2f".format(it.peakScore)} ticks=${it.tickCount}" +
+                "📖 RBT_EPISODE: ${it.kind.name} age=${aimiFmt0(it.ageMinutes(dateUtil.now()))}min " +
+                    "peak=${aimiFmt2(it.peakScore)} ticks=${it.tickCount}" +
                     if (it.deepHypo) " deep" else " light",
             )
         }
@@ -4852,10 +4852,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         val softPatternProposalU = lastPhysiologicalPatternSnapshot?.softProposedCapU()
         if (patternCapHold.holding && patternCapU != null) {
-            consoleLog.add("🧷 Pattern cap hold: keeping HARD ${"%.2f".format(patternCapU)}U during rise (pattern flapped)")
+            consoleLog.add("🧷 Pattern cap hold: keeping HARD ${aimiFmt2(patternCapU)}U during rise (pattern flapped)")
         }
         if (softPatternProposalU != null) {
-            consoleLog.add("🍽️ Pattern soft proposal ${"%.2f".format(softPatternProposalU)}U (Harmonia may lift within maxSMBHB)")
+            consoleLog.add("🍽️ Pattern soft proposal ${aimiFmt2(softPatternProposalU)}U (Harmonia may lift within maxSMBHB)")
         }
         consoleLog.add("🪜 RBT_GATE: ${authorityGate.summary()}")
         val rbtAuthority = authorityGate.effectiveAuthority != ReleaseAuthority.NONE
@@ -4969,7 +4969,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 hyperReleaseFloorU = if (effectiveHtr.active) effectiveHtr.smbFloorU else 0.0,
             )
         } else if (effectiveHtr.active) {
-            consoleLog.add("🚀 HTR active but lifted SMB=0 (IOB/headroom); floor=${"%.2f".format(effectiveHtr.smbFloorU)}U")
+            consoleLog.add("🚀 HTR active but lifted SMB=0 (IOB/headroom); floor=${aimiFmt2(effectiveHtr.smbFloorU)}U")
         }
     }
 
@@ -5325,15 +5325,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         if (owner in smbPostSealRaiseAllowedOwners) {
             smbSealAllowedRaiseCount++
-            consoleLog.add("🔓 SMB_SEAL_EXCEPTION[$owner]: ${"%.2f".format(current)} -> ${"%.2f".format(requested)} U")
+            consoleLog.add("🔓 SMB_SEAL_EXCEPTION[$owner]: ${aimiFmt2(current)} -> ${aimiFmt2(requested)} U")
             rT.units = requested
             return
         }
         smbSealRefusedCount++
         smbSealRefusedTotalU += requested - current
         consoleError.add(
-            "🔒 SMB_SEAL_REFUSED[$owner]: tentative ${"%.2f".format(current)} -> ${"%.2f".format(requested)} U " +
-                "apres le terminal ; la dose reste a ${"%.2f".format(current)} U"
+            "🔒 SMB_SEAL_REFUSED[$owner]: tentative ${aimiFmt2(current)} -> ${aimiFmt2(requested)} U " +
+                "apres le terminal ; la dose reste a ${aimiFmt2(current)} U"
         )
     }
 
@@ -5452,7 +5452,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val observed = runCatching {
             continuousStateEstimator.updateAndPredict(state, tickId = raObservationId(ctx))
         }.getOrNull() ?: state
-        consoleLog.add("🍽️ RA_OBSERVE[$reason]: Ra=${"%.2f".format(continuousStateEstimator.getLastRa())}")
+        consoleLog.add("🍽️ RA_OBSERVE[$reason]: Ra=${aimiFmt2(continuousStateEstimator.getLastRa())}")
         stageDisengagedTrainingRow(ctx, observed)
     }
 
@@ -5633,7 +5633,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
             if (physioPolicy != null && physioPolicy.capsHtrRelease()) {
                 consoleLog.add(
-                    "🌅 PHYSIO_RISK: ${physioPolicy.phase.name} conf=${"%.2f".format(lastPhysiologicalPhaseOutput?.confidence)} " +
+                    "🌅 PHYSIO_RISK: ${physioPolicy.phase.name} conf=${aimiFmt2(lastPhysiologicalPhaseOutput?.confidence)} " +
                         "${physioPolicy.reason}",
                 )
             }
@@ -5694,8 +5694,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     )
                     if (v3AdaptiveMult > adaptiveMult + 0.001) {
                         consoleLog.add(
-                            "🚀 AUTODRIVE_V3_CAP_KEEP: adaptive ${"%.2f".format(adaptiveMult)}x -> " +
-                                "${"%.2f".format(v3AdaptiveMult)}x at BG=${"%.0f".format(bg)}",
+                            "🚀 AUTODRIVE_V3_CAP_KEEP: adaptive ${aimiFmt2(adaptiveMult)}x -> " +
+                                "${aimiFmt2(v3AdaptiveMult)}x at BG=${aimiFmt0(bg)}",
                         )
                     }
                     val cappedV3Tbr = capBasalRateForCorrectionAggression(
@@ -5769,8 +5769,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
             if (v3SmbFloor > v3SmbModel + 1e-6) {
                 consoleLog.add(
-                    "🚀 AUTODRIVE_AGGR_SMB_FLOOR: model=${"%.2f".format(v3SmbModel)} → " +
-                        "floor=${"%.2f".format(v3SmbFloor)} U",
+                    "🚀 AUTODRIVE_AGGR_SMB_FLOOR: model=${aimiFmt2(v3SmbModel)} → " +
+                        "floor=${aimiFmt2(v3SmbFloor)} U",
                 )
             }
             val v3Smb = lastPostHypoDeliveryAuthority.capSmbU(v3SmbRaw)
@@ -5786,7 +5786,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             if (v3Smb < v3SmbRaw - 1e-6) {
                 consoleLog.add(
                     "${PostHypoDeliveryAuthority.LOG_PREFIX}: v3_smb " +
-                        "${"%.2f".format(v3SmbRaw)}→${"%.2f".format(v3Smb)} U",
+                        "${aimiFmt2(v3SmbRaw)}→${aimiFmt2(v3Smb)} U",
                 )
             }
             val cbfShieldDeltaU = adCommand?.scheduledMicroBolus?.takeIf { !v3CommandSafe && it > 0.01 }
@@ -5926,7 +5926,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 this.maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
                 if (this.maxSMB < 0.1) this.maxSMB = 0.5
                 reason.append(" [Drift Override]")
-                consoleLog.add("⚡ DriftTerminator: Overrode Basal-First block (MaxSMB 0.0 -> ${"%.2f".format(this.maxSMB)})")
+                consoleLog.add("⚡ DriftTerminator: Overrode Basal-First block (MaxSMB 0.0 -> ${aimiFmt2(this.maxSMB)})")
             }
 
             reason.append("→ Drift Terminator (Trigger +${terminatorThresholdAdd}): Micro-Tap ${terminatortap}U\n")
@@ -6359,7 +6359,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     } else {
                         1.0  // Fallback to neutral if disabled
                     }
-                    consoleLog.add("Reactivity (< 6AM): enabled=$useUnified, factor=${"%.3f".format(reactivity)}")
+                    consoleLog.add("Reactivity (< 6AM): enabled=$useUnified, factor=${aimiFmt3(reactivity)}")
                     (basalaimi * multiplier * reactivity).toFloat()
                 }
 
@@ -6370,7 +6370,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     } else {
                         1.0  // Fallback to neutral if disabled
                     }
-                    consoleLog.add("Reactivity (> 6AM): enabled=$useUnified, factor=${"%.3f".format(reactivity)}")
+                    consoleLog.add("Reactivity (> 6AM): enabled=$useUnified, factor=${aimiFmt3(reactivity)}")
                     (basalaimi * multiplier * reactivity).toFloat()
                 }
 
@@ -6412,7 +6412,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         var newVariableSensitivity = paiBaseSensitivity // fused base ISF before PAI adjustment
 
         // PAI: proactive ISF vs BG rise and IOB peak / fade (InsulinActionProfiler signals).
-        consoleLog.add("PAI Logic: Base ISF=${"%.1f".format(paiBaseSensitivity)}")
+        consoleLog.add("PAI Logic: Base ISF=${aimiFmt1(paiBaseSensitivity)}")
 
         // Rising BG + high: urgency factor from IOB peak timing.
         if (delta > 1.5 && bg > 120) {
@@ -6436,7 +6436,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
             newVariableSensitivity *= urgencyFactor
             if (urgencyFactor != 1.0) {
-                consoleLog.add("PAI: Urgency factor ${"%.2f".format(urgencyFactor)} applied. New ISF=${"%.1f".format(newVariableSensitivity)}")
+                consoleLog.add("PAI: Urgency factor ${aimiFmt2(urgencyFactor)} applied. New ISF=${aimiFmt1(newVariableSensitivity)}")
             }
         }
 
@@ -6750,8 +6750,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         if (iobConsensus.source == IobDecisionSource.PKPD_WHEN_AAPS_NEGATIVE) {
             consoleLog.add(
-                "🛡️ IOB_CONSENSUS_PKPD: AAPS=${"%.2f".format(iobConsensus.aapsIobUnits)} → " +
-                    "PKPD=${"%.2f".format(iobConsensus.pkpdIobUnits)} (Δ=${"%.2f".format(iobConsensus.deltaUnits)})"
+                "🛡️ IOB_CONSENSUS_PKPD: AAPS=${aimiFmt2(iobConsensus.aapsIobUnits)} → " +
+                    "PKPD=${aimiFmt2(iobConsensus.pkpdIobUnits)} (Δ=${aimiFmt2(iobConsensus.deltaUnits)})"
             )
         }
         val bgi = round((-iobData.activity * effectiveSens * 5), 2)
@@ -6934,10 +6934,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             if (fallbackActive) {
                 finalModelSmb = modelcal * 0.5f
                 rT.reason.appendLine(
-                    "Hyper fallback active: SMB unblocked (50% damped) despite missing prediction. UAM: ${"%.2f".format(modelcal)} -> ${"%.2f".format(finalModelSmb)}"
+                    "Hyper fallback active: SMB unblocked (50% damped) despite missing prediction. UAM: ${aimiFmt2(modelcal)} -> ${aimiFmt2(finalModelSmb)}"
                 )
             } else {
-                rT.reason.appendLine("💉 SMB (UAM): ${"%.2f".format(modelcal)} U")
+                rT.reason.appendLine("💉 SMB (UAM): ${aimiFmt2(modelcal)} U")
             }
 
             when (postHypoState) {
@@ -6948,16 +6948,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     rT.rate = bridgeTbr
                     rT.duration = 5
                     consoleLog.add(
-                        "🛡️ POST_HYPO_REBOUND: SMB=0 → TBR bridge ${"%.2f".format(bridgeTbr)} U/h " +
-                            "(${postHypoState.sinceMs / 60_000}min depuis BG<70, COB=${"%.1f".format(cob)}g)"
+                        "🛡️ POST_HYPO_REBOUND: SMB=0 → TBR bridge ${aimiFmt2(bridgeTbr)} U/h " +
+                            "(${postHypoState.sinceMs / 60_000}min depuis BG<70, COB=${aimiFmt1(cob)}g)"
                     )
                 }
                 is PostHypoState.MealConfirmed -> {
                     val maxSmbPref = preferences.get(DoubleKey.OApsAIMIMaxSMB).toFloat()
                     finalModelSmb = (finalModelSmb * 0.5f).coerceAtMost(maxSmbPref * 0.5f)
                     consoleLog.add(
-                        "🍽️ POST_HYPO_MEAL: SMB capped 50% → ${"%.2f".format(finalModelSmb)} U " +
-                            "(COB=${"%.1f".format(cob)}g, ${postHypoState.sinceMs / 60_000}min post-hypo)"
+                        "🍽️ POST_HYPO_MEAL: SMB capped 50% → ${aimiFmt2(finalModelSmb)} U " +
+                            "(COB=${aimiFmt1(cob)}g, ${postHypoState.sinceMs / 60_000}min post-hypo)"
                     )
                 }
                 PostHypoState.None -> { /* flux normal */ }
@@ -7063,7 +7063,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val v3SmbUnits = (rT.insulinReq ?: 0.0).coerceAtLeast(0.0)
             rT.reason.appendLine(rh.gs(ApsStrings.reason_autodrive_v3_authoritative_blender_skipped))
             consoleLog.add(
-                "AUTODRIVE_V3_AUTHORITATIVE: SMB ${"%.2f".format(v3SmbUnits)} U from V3 (legacy blender skipped)"
+                "AUTODRIVE_V3_AUTHORITATIVE: SMB ${aimiFmt2(v3SmbUnits)} U from V3 (legacy blender skipped)"
             )
             SmbInstructionExecutor.Result(
                 predictedSmb = predictedSMB,
@@ -7263,20 +7263,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog.add("PKPD_GUARD_SKIP: already applied this tick (e.g. Autodrive V3 finalize)")
         } else if (pkpdGuardApply.multiplicationApplied) {
             pkpdGuardApply.guard?.let { pkpdGuard ->
-                rT.reason.append(" | ${pkpdGuard.reason} x${"%.2f".format(pkpdGuardApply.effectiveFactor)}")
+                rT.reason.append(" | ${pkpdGuard.reason} x${aimiFmt2(pkpdGuardApply.effectiveFactor)}")
             }
         }
         if (isAggressivePriorityContext && pkpdReliefEnabled) {
             if (effectiveMaxIobForPriority > this.maxIob) {
                 consoleLog.add(
-                    "MAXIOB_RELIEF: ${"%.2f".format(this.maxIob)} -> ${"%.2f".format(effectiveMaxIobForPriority)} " +
+                    "MAXIOB_RELIEF: ${aimiFmt2(this.maxIob)} -> ${aimiFmt2(effectiveMaxIobForPriority)} " +
                         "(priority context)"
                 )
             }
             if (effectiveMaxIobForDebridage > effectiveMaxIobForPriority + 0.01) {
                 consoleLog.add(
-                    "MEAL_DEBRIDAGE_MAXIOB: ${"%.2f".format(effectiveMaxIobForPriority)} -> ${"%.2f".format(effectiveMaxIobForDebridage)} " +
-                        "(target=${iobTargetU?.let { "%.2f".format(it) } ?: "n/a"}U, BG=${"%.0f".format(bg)}, Δ=${"%.1f".format(delta)})"
+                    "MEAL_DEBRIDAGE_MAXIOB: ${aimiFmt2(effectiveMaxIobForPriority)} -> ${aimiFmt2(effectiveMaxIobForDebridage)} " +
+                        "(target=${iobTargetU?.let { aimiFmt2(it) } ?: "n/a"}U, BG=${aimiFmt0(bg)}, Δ=${aimiFmt1(delta)})"
                 )
             }
         }
@@ -7292,8 +7292,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 kind = "DAMPEN",
             )
             if (smbToGiveLocal < beforeEndo) {
-                consoleLog.add("SMB_ENDO_DAMPEN: ${"%.2f".format(beforeEndo)}U → ${"%.2f".format(smbToGiveLocal)}U (x${"%.2f".format(endoSmbMult)})")
-                rT.reason.append(" | EndoDampen x${"%.2f".format(endoSmbMult)}")
+                consoleLog.add("SMB_ENDO_DAMPEN: ${aimiFmt2(beforeEndo)}U → ${aimiFmt2(smbToGiveLocal)}U (x${aimiFmt2(endoSmbMult)})")
+                rT.reason.append(" | EndoDampen x${aimiFmt2(endoSmbMult)}")
             }
         }
 
@@ -7345,7 +7345,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             if (implicitMealCorrection.redCarpetEligible && !anyMealModeForGuard && !isExplicitAction) {
                 consoleLog.add(
                     "🍽️ IMPLICIT_MEAL_REDCARPET ${implicitMealCorrection.summary().ifBlank { "signals" }} " +
-                        "(BG=${"%.0f".format(bg)} Δ=${"%.1f".format(delta)} sΔ=${"%.1f".format(shortAvgDelta)})"
+                        "(BG=${aimiFmt0(bg)} Δ=${aimiFmt1(delta)} sΔ=${aimiFmt1(shortAvgDelta)})"
                 )
             }
             val baseRestoreThreshold = 0.60f
@@ -7359,7 +7359,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val candidateUnits = if (gatedUnits <= proposedUnits * restoreThreshold) {
                 when {
                     criticalSafetyZeroedThisTick -> {
-                        consoleLog.add("⛔ RED_CARPET_DENIED: vital hypo safety zeroed SMB this tick — no restore (Proposed=${"%.2f".format(proposedUnits)} Gated=${"%.2f".format(gatedUnits)})")
+                        consoleLog.add("⛔ RED_CARPET_DENIED: vital hypo safety zeroed SMB this tick — no restore (Proposed=${aimiFmt2(proposedUnits)} Gated=${aimiFmt2(gatedUnits)})")
                         gatedUnits
                     }
                     suppressRedCarpetRestoreV3 -> {
@@ -7367,7 +7367,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         gatedUnits
                     }
                     else -> {
-                        consoleLog.add("✨ RED CARPET: Restoring meal bolus blocked by minor safety (Proposed=${"%.2f".format(proposedUnits)} vs Gated=${"%.2f".format(gatedUnits)})")
+                        consoleLog.add("✨ RED CARPET: Restoring meal bolus blocked by minor safety (Proposed=${aimiFmt2(proposedUnits)} vs Gated=${aimiFmt2(gatedUnits)})")
                         proposedUnits
                     }
                 }
@@ -7381,7 +7381,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val iobSpace = (effectiveMaxIobForDebridage - this.iob).coerceAtLeast(0.0)
 
             if (mealBolus > iobSpace.toFloat()) {
-                consoleLog.add("🛡️ RED CARPET: Clamped by MaxIOB (Need=${"%.2f".format(mealBolus)}, Space=${"%.2f".format(iobSpace)})")
+                consoleLog.add("🛡️ RED CARPET: Clamped by MaxIOB (Need=${aimiFmt2(mealBolus)}, Space=${aimiFmt2(iobSpace)})")
                 mealBolus = iobSpace.toFloat()
             }
 
@@ -7396,7 +7396,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     implicitMealCorrection.redCarpetEligible -> "ImplicitMeal:${implicitMealCorrection.summary().ifBlank { "signals" }}"
                     else -> "MealMode"
                 }
-                consoleLog.add("🍱 MEAL_FORCE_EXECUTED ($reason): ${"%.2f".format(smbToGiveLocal)} U (Overrides minor safety checks)")
+                consoleLog.add("🍱 MEAL_FORCE_EXECUTED ($reason): ${aimiFmt2(smbToGiveLocal)} U (Overrides minor safety checks)")
             }
         } else {
             smbToGiveLocal = capSmbDose(
@@ -7408,7 +7408,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
         }
         if (smbToGiveLocal < beforeCap) {
-            rT.reason.append(" | 🛡️ Cap: ${"%.2f".format(beforeCap)} → ${"%.2f".format(smbToGiveLocal)}")
+            rT.reason.append(" | 🛡️ Cap: ${aimiFmt2(beforeCap)} → ${aimiFmt2(smbToGiveLocal)}")
         }
         lastSmbBindingTraceDraft = lastSmbBindingTraceDraft.copy(
             safetyNetBaseLimitU = lastSmbBindingTraceDraft.safetyNetBaseLimitU ?: currentMaxSmb,
@@ -7554,7 +7554,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 )
                 consoleLog.add(
                     "${CorrectionAggressionGate.LOG_PREFIX}: rebound basal bridge " +
-                        "${"%.2f".format(bridgeRate)} U/h (no Global Hyper Kicker)"
+                        "${aimiFmt2(bridgeRate)} U/h (no Global Hyper Kicker)"
                 )
                 AimiMealHyperBasalBoostOutcome.ContinueWithOptionalRate(
                     if (bridgeRate > profileCurrentBasal * 1.05) bridgeRate else null
@@ -7599,7 +7599,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 }
                 consoleLog.add(
                     "🍽️ MEAL_ABSORPTION_BASAL: phase=${lastMealAbsorptionOutput?.phase?.name} " +
-                        "rate=${optionalRate?.let { r -> "%.2f".format(r) } ?: "skip"}",
+                        "rate=${optionalRate?.let { r -> aimiFmt2(r) } ?: "skip"}",
                 )
                 AimiMealHyperBasalBoostOutcome.ContinueWithOptionalRate(optionalRate)
             }
@@ -7627,8 +7627,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     )
                 }
                 consoleLog.add(
-                    "🌅 ENDOGENOUS_BRIDGE: rate=${optionalRate?.let { r -> "%.2f".format(r) } ?: "skip"} " +
-                        "ISF=${"%.1f".format(profile.sens)} profileBasal=${"%.2f".format(profileCurrentBasal)}",
+                    "🌅 ENDOGENOUS_BRIDGE: rate=${optionalRate?.let { r -> aimiFmt2(r) } ?: "skip"} " +
+                        "ISF=${aimiFmt1(profile.sens)} profileBasal=${aimiFmt2(profileCurrentBasal)}",
                 )
                 AimiMealHyperBasalBoostOutcome.ContinueWithOptionalRate(optionalRate)
             }
@@ -7767,8 +7767,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT.rate = overlayRate.coerceAtLeast(0.0)
             rT.deliverAt = deliverAt
             rT.duration = 30
-            consoleLog.add("BOOST_BASAL_APPLIED source=${basalBoostSource ?: "Unknown"} rate=${"%.2f".format(Locale.US, overlayRate)}U/h")
-            rT.reason.append("BasalBoost: ${basalBoostSource ?: "?"} ${"%.2f".format(Locale.US, overlayRate)}U/h. ")
+            consoleLog.add("BOOST_BASAL_APPLIED source=${basalBoostSource ?: "Unknown"} rate=${aimiFmt2(overlayRate)}U/h")
+            rT.reason.append("BasalBoost: ${basalBoostSource ?: "?"} ${aimiFmt2(overlayRate)}U/h. ")
         }
         return AimiMealHyperBasalOverlayState(basalBoostApplied, basalBoostSource)
     }
@@ -8306,7 +8306,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             if (insulinReq > safetyMax) {
                 insulinReq = safetyMax
                 rT.reason.append(rh.gs(ApsStrings.reason_activity_cap, safetyMax))
-                consoleLog.add("SMB capped by Activity/Recovery (Limit: ${"%.2f".format(safetyMax)})")
+                consoleLog.add("SMB capped by Activity/Recovery (Limit: ${aimiFmt2(safetyMax)})")
             }
         }
 
@@ -8340,9 +8340,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT.reason.append(". ")
 
             val smbInterval = calculateSMBInterval()
-            val intervalStr = String.format(java.util.Locale.US, "%.1f", smbInterval.toDouble())
-            val lastBolusStr = String.format(java.util.Locale.US, "%.1f", lastBolusAge)
-            val deltaStr = String.format(java.util.Locale.US, "%.1f", delta.toDouble())
+            val intervalStr = aimiFmt1(smbInterval.toDouble())
+            val lastBolusStr = aimiFmt1(lastBolusAge)
+            val deltaStr = aimiFmt1(delta.toDouble())
             rT.reason.append(" [SMB interval=")
             rT.reason.append(intervalStr)
             rT.reason.append(" min, lastBolusAge=")
@@ -8732,8 +8732,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         consoleLog.add(
-            "🌳 T3C_NATIVE: ready rate=${"%.2f".format(Locale.US, finalRate)}U/h " +
-                "demand=${"%.2f".format(Locale.US, t3cState.boundedRateUph)}U/h",
+            "🌳 T3C_NATIVE: ready rate=${aimiFmt2(finalRate)}U/h " +
+                "demand=${aimiFmt2(t3cState.boundedRateUph)}U/h",
         )
         markT3cRuntimeOwnership("NATIVE_READY", "native_rbt_owner")
         return T3cBasalFirstApplyPlan(
@@ -8951,8 +8951,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             reason = "production_basal_first_ready",
         )
         consoleLog.add(
-            "🌿 HARMONIA_PROD: ready action=${sourceAction.name} rate=${"%.2f".format(Locale.US, finalRate)}U/h " +
-                "requested=${"%.2f".format(Locale.US, simulation.targetBasalUph)}U/h",
+            "🌿 HARMONIA_PROD: ready action=${sourceAction.name} rate=${aimiFmt2(finalRate)}U/h " +
+                "requested=${aimiFmt2(simulation.targetBasalUph)}U/h",
         )
         return HarmoniaProductionApplyPlan(
             rateUph = finalRate,
@@ -8994,7 +8994,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         consoleLog.add(
             if (runtimeBlocker == null) {
-                "🌿 HARMONIA_PROD: applied ${"%.2f".format(Locale.US, appliedRate)}U/h for ${appliedDuration}m"
+                "🌿 HARMONIA_PROD: applied ${aimiFmt2(appliedRate)}U/h for ${appliedDuration}m"
             } else {
                 "🌿 HARMONIA_PROD: blocked after setTempBasal ($runtimeBlocker)"
             },
@@ -9033,10 +9033,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // 📊 Expose BasalLearner state in rT for visibility
         consoleLog.add("📊 BASAL_LEARNER:")
-        consoleLog.add("  │ shortTerm: ${"%.3f".format(Locale.US, basalLearner.shortTermMultiplier)}")
-        consoleLog.add("  │ mediumTerm: ${"%.3f".format(Locale.US, basalLearner.mediumTermMultiplier)}")
-        consoleLog.add("  │ longTerm: ${"%.3f".format(Locale.US, basalLearner.longTermMultiplier)}")
-        consoleLog.add("  └ combined: ${"%.3f".format(Locale.US, basalLearner.getMultiplier())}")
+        consoleLog.add("  │ shortTerm: ${aimiFmt3(basalLearner.shortTermMultiplier)}")
+        consoleLog.add("  │ mediumTerm: ${aimiFmt3(basalLearner.mediumTermMultiplier)}")
+        consoleLog.add("  │ longTerm: ${aimiFmt3(basalLearner.longTermMultiplier)}")
+        consoleLog.add("  └ combined: ${aimiFmt3(basalLearner.getMultiplier())}")
 
         // 🎯 Process UnifiedReactivityLearner
         unifiedReactivityLearner.processIfNeeded()
@@ -9045,10 +9045,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         unifiedReactivityLearner.lastAnalysis?.let { analysis ->
             val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
             consoleLog.add("📊 REACTIVITY_LEARNER:")
-            consoleLog.add("  │ globalFactor: ${"%.3f".format(Locale.US, analysis.globalFactor)}")
-            consoleLog.add("  │ shortTermFactor: ${"%.3f".format(Locale.US, analysis.shortTermFactor)}")
-            consoleLog.add("  │ segmentFactor (${analysis.segmentDaypart.name}): ${"%.3f".format(Locale.US, analysis.segmentFactor)}")
-            consoleLog.add("  │ combinedFactor: ${"%.3f".format(Locale.US, unifiedReactivityLearner.getCombinedFactor(hourOfDay))}")
+            consoleLog.add("  │ globalFactor: ${aimiFmt3(analysis.globalFactor)}")
+            consoleLog.add("  │ shortTermFactor: ${aimiFmt3(analysis.shortTermFactor)}")
+            consoleLog.add("  │ segmentFactor (${analysis.segmentDaypart.name}): ${aimiFmt3(analysis.segmentFactor)}")
+            consoleLog.add("  │ combinedFactor: ${aimiFmt3(unifiedReactivityLearner.getCombinedFactor(hourOfDay))}")
             consoleLog.add("  │ TIR 70-180: ${analysis.tir70_180.toInt()}%")
             consoleLog.add("  │ CV%: ${analysis.cv_percent.toInt()}%")
             consoleLog.add("  │ Hypo count (24h): ${analysis.hypo_count}")
@@ -9137,9 +9137,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 consoleLog.add("│ ETA: %-27s│".format(etaText))
                 consoleLog.add("│                                 │")
                 consoleLog.add("│ Metrics:                        │")
-                consoleLog.add("│ ├─ Curvature:    %-15s│".format("%.2f".format(metrics.curvature)))
+                consoleLog.add("│ ├─ Curvature:    %-15s│".format(aimiFmt2(metrics.curvature)))
                 consoleLog.add("│ ├─ Convergence:  %-15s│".format("%+.2f".format(metrics.convergenceVelocity)))
-                consoleLog.add("│ ├─ Coherence:    %-15s│".format("%.2f".format(metrics.coherence)))
+                consoleLog.add("│ ├─ Coherence:    %-15s│".format(aimiFmt2(metrics.coherence)))
                 consoleLog.add("│ ├─ Energy:       %-15s│".format("%+.1f".format(metrics.energyBalance)))
 
                 try {
@@ -9167,7 +9167,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val learnersParts = mutableListOf<String>()
         val basalMult = basalLearner.getMultiplier()
         if (kotlin.math.abs(basalMult - 1.0) > 0.01) {
-            learnersParts.add("Basal×" + String.format(Locale.US, "%.2f", basalMult))
+            learnersParts.add("Basal×" + aimiFmt2(basalMult))
         }
         b.pkpdRuntime?.let { runtime ->
             val profileIsf = b.profile.sens
@@ -9177,7 +9177,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         val reactivityFactor = unifiedReactivityLearner.getCombinedFactor(hourOfDay)
         if (kotlin.math.abs(reactivityFactor - 1.0) > 0.01) {
-            learnersParts.add("React×" + String.format(Locale.US, "%.2f", reactivityFactor))
+            learnersParts.add("React×" + aimiFmt2(reactivityFactor))
         }
         val learnersSummary = learnersParts.joinToString(", ")
 
@@ -9281,7 +9281,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     Locale.US, finalProposedRate, damped, factor, lastEffortAssessment?.state?.name,
                 )
             )
-            b.rT.reason.append("; 🏃EFFORT×${"%.2f".format(factor)}")
+            b.rT.reason.append("; 🏃EFFORT×${aimiFmt2(factor)}")
             finalProposedRate = damped
         }
 
@@ -9326,7 +9326,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                             AnticipationBasalFloor.WINDOW_MINUTES, anticipruntime,
                         )
                     )
-                    b.rT.reason.append("; 🍽️anticip ${"%.2f".format(Locale.US, floorUph)}U/h")
+                    b.rT.reason.append("; 🍽️anticip ${aimiFmt2(floorUph)}U/h")
                     finalProposedRate = floorUph
                 }
             }
@@ -9356,7 +9356,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         Locale.US, finalProposedRate, floorUph, b.profile.target_bg, fclruntime,
                     )
                 )
-                b.rT.reason.append("; 🍽️FCL ${"%.2f".format(Locale.US, floorUph)}U/h")
+                b.rT.reason.append("; 🍽️FCL ${aimiFmt2(floorUph)}U/h")
                 finalProposedRate = floorUph
                 // The same bypass the declared meal modes already use, so FCL is "lunch without the
                 // prebolus" and not a weaker version of it. It lifts one clamp only — the daily-safety
@@ -9395,7 +9395,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
             consoleLog.add(
                 if (runtimeBlocker == null) {
-                    "🌳 T3C_NATIVE: applied ${"%.2f".format(Locale.US, appliedRate)}U/h for ${appliedDuration}m"
+                    "🌳 T3C_NATIVE: applied ${aimiFmt2(appliedRate)}U/h for ${appliedDuration}m"
                 } else {
                     "🌳 T3C_NATIVE: blocked after setTempBasal ($runtimeBlocker)"
                 },
@@ -9589,7 +9589,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         is DecisionResult.Applied -> {
                             consoleLog.add(sanitizeForJson("🧠 AI Auditor: ✅ APPLIED - ${result.reason}"))
                             if (verdict != null) {
-                                consoleLog.add(sanitizeForJson("   Verdict: ${verdict.verdict}, Conf: ${"%.2f".format(verdict.confidence)}"))
+                                consoleLog.add(sanitizeForJson("   Verdict: ${verdict.verdict}, Conf: ${aimiFmt2(verdict.confidence)}"))
                             }
                             applySmbUnits(finalResult, result.bolusU ?: 0.0, "AiAuditor")
                             if (result.tbrUph != null) {
@@ -9822,7 +9822,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     add(AimiDecisionContext.Modifier(
                         source = "Autosensitivity",
                         factor = 1.0 / ctx.autosensData.ratio,
-                        clinical_reason = "Rolling avg sensitivity: ${"%.2f".format(ctx.autosensData.ratio)}"
+                        clinical_reason = "Rolling avg sensitivity: ${aimiFmt2(ctx.autosensData.ratio)}"
                     ))
                 }
                 val autosensAdjIsf = snapshotProfileIsf * (1.0 / ctx.autosensData.ratio)
@@ -10321,10 +10321,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (capRelaxContext) {
             if (wouldCap) {
                 consoleLog.add(
-                    "🌀🛡️ TRAJ_SPIRAL SMB-cap: skipped (MEAL_PRIORITY_ALIGN) E=${"%.1f".format(Locale.US, energy)}U " +
-                        "(>${"%.1f".format(Locale.US, energyTh)}) IOB=${"%.1f".format(Locale.US, iobNow)}U " +
-                        "(>${"%.1f".format(Locale.US, iobTh)}) Δ=${"%.1f".format(Locale.US, deltaValue.toDouble())} " +
-                        "sΔ=${"%.1f".format(Locale.US, shortAvgDeltaValue.toDouble())} TDD24h=${"%.1f".format(Locale.US, tdd24hU)}U"
+                    "🌀🛡️ TRAJ_SPIRAL SMB-cap: skipped (MEAL_PRIORITY_ALIGN) E=${aimiFmt1(energy)}U " +
+                        "(>${aimiFmt1(energyTh)}) IOB=${aimiFmt1(iobNow)}U " +
+                        "(>${aimiFmt1(iobTh)}) Δ=${aimiFmt1(deltaValue.toDouble())} " +
+                        "sΔ=${aimiFmt1(shortAvgDeltaValue.toDouble())} TDD24h=${aimiFmt1(tdd24hU)}U"
                 )
             }
             return
@@ -10345,12 +10345,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (maxSMB == prevMb && maxSMBHB == prevHb) return
         val modeNote = if (sharp) " [SOFT_HB]" else ""
         consoleLog.add(
-            "🌀🛡️ TRAJ_SPIRAL SMB-cap$modeNote: E=${"%.1f".format(Locale.US, energy)}U (>${"%.1f".format(Locale.US, energyTh)}) " +
-                "IOB=${"%.1f".format(Locale.US, iobNow)}U (>${"%.1f".format(Locale.US, iobTh)}) " +
-                "TDD24h=${"%.1f".format(Locale.US, tdd24hU)}U w=${"%.0f".format(Locale.US, weightKg)}kg " +
-                "maxSMB ${"%.2f".format(Locale.US, prevMb)}→${"%.2f".format(Locale.US, maxSMB)}U " +
-                "maxSMBHB ${"%.2f".format(Locale.US, prevHb)}→${"%.2f".format(Locale.US, maxSMBHB)}U " +
-                "(≤OApsAIMIMaxSMB ${"%.2f".format(Locale.US, stdMaxSMB)}U)"
+            "🌀🛡️ TRAJ_SPIRAL SMB-cap$modeNote: E=${aimiFmt1(energy)}U (>${aimiFmt1(energyTh)}) " +
+                "IOB=${aimiFmt1(iobNow)}U (>${aimiFmt1(iobTh)}) " +
+                "TDD24h=${aimiFmt1(tdd24hU)}U w=${aimiFmt0(weightKg)}kg " +
+                "maxSMB ${aimiFmt2(prevMb)}→${aimiFmt2(maxSMB)}U " +
+                "maxSMBHB ${aimiFmt2(prevHb)}→${aimiFmt2(maxSMBHB)}U " +
+                "(≤OApsAIMIMaxSMB ${aimiFmt2(stdMaxSMB)}U)"
         )
     }
 
@@ -10430,7 +10430,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             stackingSpiral -> " [STACKING_SPIRAL]"
             else -> ""
         }
-        val reason = "TRAJ_TIGHT_SPIRAL: E=${String.format("%.1f", energy)}U κ=${String.format("%.2f", curvature)} IOB=${String.format("%.2f", iobNow)}U → Basale proactive ${(effectiveFraction * 100).toInt()}%$cgateNote$spiralNote"
+        val reason = "TRAJ_TIGHT_SPIRAL: E=${aimiFmt1(energy)}U κ=${aimiFmt2(curvature)} IOB=${aimiFmt2(iobNow)}U → Basale proactive ${(effectiveFraction * 100).toInt()}%$cgateNote$spiralNote"
 
         consoleLog.add("🌀🛡️ TRAJECTORY_SAFETY_BRIDGE (deferred): $reason")
 
@@ -10506,7 +10506,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         variableSensitivity = sens.toFloat()
 
         if (fusedSensitivity != null) {
-            consoleError.add("ISF fusionné=${"%.1f".format(fusedSensitivity)} dynISF=${"%.1f".format(dynSensitivity)} → appliqué=${"%.1f".format(sens)}")
+            consoleError.add("ISF fusionné=${aimiFmt1(fusedSensitivity)} dynISF=${aimiFmt1(dynSensitivity)} → appliqué=${aimiFmt1(sens)}")
             try {
                 IsfTddProvider.set(fusedSensitivity)
             } catch (e: Exception) {
@@ -10638,9 +10638,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
 
             consoleLog.add("📊 PKPD_LEARNER:")
-            consoleLog.add("  │ DIA (learned): ${"%.2f".format(Locale.US, pkpdRuntime.params.diaHrs)}h")
-            consoleLog.add("  │ Peak (learned): ${"%.0f".format(Locale.US, pkpdRuntime.params.peakMin)}min")
-            consoleLog.add("  │ fusedISF: ${"%.1f".format(Locale.US, pkpdRuntime.fusedIsf)} mg/dL/U")
+            consoleLog.add("  │ DIA (learned): ${aimiFmt2(pkpdRuntime.params.diaHrs)}h")
+            consoleLog.add("  │ Peak (learned): ${aimiFmt0(pkpdRuntime.params.peakMin)}min")
+            consoleLog.add("  │ fusedISF: ${aimiFmt1(pkpdRuntime.fusedIsf)} mg/dL/U")
 
             applyBasalFirstPolicy(
                 bg = bg, delta = delta.toFloat(), combinedDelta = combinedDelta.toFloat(),
@@ -10903,7 +10903,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             false
         }
         consoleLog.add(
-            "PRED_PIPE: bg=${bg.roundToInt()} delta=${"%.1f".format(delta)} bestT=${sanity.predBg.roundToInt()} " +
+            "PRED_PIPE: bg=${bg.roundToInt()} delta=${aimiFmt1(delta)} bestT=${sanity.predBg.roundToInt()} " +
                 "floorT=${scenario.clinicalFloor.terminalMgdl.toInt()} floorMin=${scenario.clinicalFloor.pathMinMgdl.toInt()} " +
                 "min=${minBg.roundToInt()} th=${threshold.toInt()} " +
                 "noise=${glucoseStatus.noise} dataAge=${minAgo}m pumpReachable=$pumpReachable sanity=${sanity.label}",
@@ -11041,7 +11041,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         consoleLog.add(
             "RISK_SAFETY_RECONCILE: earlyComposite=${early.compositeMinMgdl.toInt()} " +
-                "decisionComposite=${decision.compositeMinMgdl.toInt()} Δ=${"%.0f".format(deltaComposite)} " +
+                "decisionComposite=${decision.compositeMinMgdl.toInt()} Δ=${aimiFmt0(deltaComposite)} " +
                 "earlyGate=${early.safetyGate} pathFloorHit=${if (decision.pathMinHitNumericFloor) 1 else 0}",
         )
     }
@@ -11365,8 +11365,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     profile.max_daily_basal = baseline.maxDailyBasal * tubeOut.basalCapScale
                 }
                 consoleLog.add(
-                    "📐 TUBE-LINE-D4[$stageTag]: maxSMB=${"%.2f".format(this.maxSMB)} " +
-                        "basal×${"%.3f".format(tubeOut.basalCapScale)} | ${tubeOut.reason}",
+                    "📐 TUBE-LINE-D4[$stageTag]: maxSMB=${aimiFmt2(this.maxSMB)} " +
+                        "basal×${aimiFmt3(tubeOut.basalCapScale)} | ${tubeOut.reason}",
                 )
                 noteTubeAdvisorTrace(tubeOut, snap, stageTag, baseline)
             }
@@ -11560,8 +11560,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (abs(refreshed.effectiveHtr.v3SmbAfterU - prev.effectiveHtr.v3SmbAfterU) > 0.02) {
             consoleLog.add(
                 "RBT_REFINE_AFTER_DOSE_SNAPSHOT: " +
-                    "${"%.2f".format(prev.effectiveHtr.v3SmbAfterU)}→" +
-                    "${"%.2f".format(refreshed.effectiveHtr.v3SmbAfterU)}U " +
+                    "${aimiFmt2(prev.effectiveHtr.v3SmbAfterU)}→" +
+                    "${aimiFmt2(refreshed.effectiveHtr.v3SmbAfterU)}U " +
                     "ev=${snap.eventualMgdl.toInt()} minPred=${snap.minPredMgdl.toInt()}",
             )
         }
@@ -11808,7 +11808,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         if (kept < 1.0) {
             consoleLog.add(
-                "🛡️ BASAL_FIRST_GOV: adaptiveMult conservé à ${"%.2f".format(Locale.US, kept)}x (legacy forçait 1.00x)"
+                "🛡️ BASAL_FIRST_GOV: adaptiveMult conservé à ${aimiFmt2(kept)}x (legacy forçait 1.00x)"
             )
         }
         return kept
@@ -12231,7 +12231,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun sanitizeForJson(input: String): String =
         AimiTickPolicyMath.sanitizeForJson(input)
 
-    private fun Double.toFixed2(): String = "%.2f".format(Locale.US, this)
+    private fun Double.toFixed2(): String = aimiFmt2(this)
     // kotlinx, because NGRConfig in commonMain is typed with kotlinx.datetime.LocalTime. Its
     // `parse` reads "HH:mm" without a formatter, so `ngrTimeFormatter` is no longer needed here.
     // The failure path is unchanged: anything unparseable falls back, exactly as before.
@@ -13023,15 +13023,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         stepCount: Int?,
         heartRate: Double?
     ) {
-        val bgStr = "%.0f".format(bg)
-        val deltaStr = "%.1f".format(delta)
-        val peakStr = "%.1f".format(peakTime)
+        val bgStr = aimiFmt0(bg)
+        val deltaStr = aimiFmt1(delta)
+        val peakStr = aimiFmt1(peakTime)
 
 //  reason.append("  → 🕒 PeakTime=$peakStr min | BG=$bgStr Δ$deltaStr")
         reason.append(rh.gs(ApsStrings.peak_time, peakStr, bgStr, deltaStr))
         stepCount?.let { reason.append(rh.gs(ApsStrings.steps, it)) }
         //  heartRate?.let { reason.append(" | HR=$it bpm") }
-        heartRate?.let { reason.append(rh.gs(ApsStrings.heart_rate, if (it.isNaN()) "--" else "%.0f".format(it))) }
+        heartRate?.let { reason.append(rh.gs(ApsStrings.heart_rate, if (it.isNaN()) "--" else aimiFmt0(it))) }
         reason.append("\n")
     }
 
@@ -13054,7 +13054,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rh.gs(ApsStrings.autodrive_status, autodriveDisplay, activeModeName),
         )
         rT.reason.appendLine(
-            "📊 TIR: <70: ${"%.1f".format(currentTIRLow)}% | 70–180: ${"%.1f".format(currentTIRRange)}% | >180: ${"%.1f".format(currentTIRAbove)}%",
+            "📊 TIR: <70: ${aimiFmt1(currentTIRLow)}% | 70–180: ${aimiFmt1(currentTIRRange)}% | >180: ${aimiFmt1(currentTIRAbove)}%",
         )
         appendCompactLog(reasonAimi, tp, bg, delta, recentSteps5Minutes, averageBeatsPerMinute)
         rT.reason.append(reasonAimi.toString())
@@ -13358,7 +13358,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 || therapy.lunchTime || therapy.dinnerTime || therapy.bfastTime
             when {
                 bg <= floor -> {
-                    rT.reason.append(rh.gs(ApsStrings.lgs_triggered, "%.0f".format(bg), "%.0f".format(hypoGuard)))
+                    rT.reason.append(rh.gs(ApsStrings.lgs_triggered, aimiFmt0(bg), aimiFmt0(hypoGuard)))
                     rT.duration = maxOf(duration, 30)
                     rT.rate = 0.0
                     recordBasalActionType("suspend")
@@ -13408,19 +13408,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             if (lgsReason != null) {
                 val lgsLine = when (lgsReason) {
                     HypoLgsBlockReason.BG_NOW ->
-                        rh.gs(ApsStrings.lgs_triggered, "%.0f".format(bg), "%.0f".format(hypoGuard))
+                        rh.gs(ApsStrings.lgs_triggered, aimiFmt0(bg), aimiFmt0(hypoGuard))
                     HypoLgsBlockReason.PREDICTED_MIN_CURVE ->
                         rh.gs(
                             ApsStrings.lgs_triggered_min_pred,
-                            "%.0f".format(minPredCurve ?: hypoPredForLgs),
-                            "%.0f".format(hypoGuard),
+                            aimiFmt0(minPredCurve ?: hypoPredForLgs),
+                            aimiFmt0(hypoGuard),
                         )
                     HypoLgsBlockReason.PREDICTED_AND_EVENTUAL, HypoLgsBlockReason.FAST_FALL ->
                         rh.gs(
                             ApsStrings.lgs_triggered_predicted,
-                            "%.0f".format(hypoPredForLgs),
-                            "%.0f".format(hypoEventualForLgs),
-                            "%.0f".format(hypoGuard),
+                            aimiFmt0(hypoPredForLgs),
+                            aimiFmt0(hypoEventualForLgs),
+                            aimiFmt0(hypoGuard),
                         )
                 }
                 rT.reason.append(lgsLine)
@@ -13489,10 +13489,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // Log the math for debugging and transparency
         consoleLog.add(
-            "DYNAMIC_BASAL P-Err=${"%.1f".format(dynamicState.errorP)} " +
-            "D-Err=${"%.1f".format(dynamicState.errorD)} " +
-            "Total=${"%.2f".format(dynamicState.totalError)} " +
-            "Mult=${"%.2f".format(dynamicState.sigmoidMultiplier)}x " +
+            "DYNAMIC_BASAL P-Err=${aimiFmt1(dynamicState.errorP)} " +
+            "D-Err=${aimiFmt1(dynamicState.errorD)} " +
+            "Total=${aimiFmt2(dynamicState.totalError)} " +
+            "Mult=${aimiFmt2(dynamicState.sigmoidMultiplier)}x " +
             "Brake=${dynamicState.isBraking}"
         )
 
@@ -13501,7 +13501,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (pkpdPreferTbrBoost > 1.0 && !isMealMode) {
             val originalRate = rateAdjustment
             rateAdjustment = (rateAdjustment * pkpdPreferTbrBoost).coerceAtLeast(0.0)
-            consoleLog.add("PKPD_TBR_BOOST original=${"%.2f".format(originalRate)} boost=${"%.2f".format(pkpdPreferTbrBoost)} → ${"%.2f".format(rateAdjustment)}U/h")
+            consoleLog.add("PKPD_TBR_BOOST original=${aimiFmt2(originalRate)} boost=${aimiFmt2(pkpdPreferTbrBoost)} → ${aimiFmt2(rateAdjustment)}U/h")
         }
 
         // 4) Limites de sécurité
@@ -13526,7 +13526,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             !isMealMode && !isLgsEnabled -> {
                  val baseFloor = profile.current_basal * 0.5
                  val adaptiveFloor = baseFloor * adaptiveMultiplier
-                 rT.reason.append(" [BASAL_FLOOR: ${"%.2f".format(adaptiveFloor)}U/h (ML:${"%.2f".format(adaptiveMultiplier)}x)] ")
+                 rT.reason.append(" [BASAL_FLOOR: ${aimiFmt2(adaptiveFloor)}U/h (ML:${aimiFmt2(adaptiveMultiplier)}x)] ")
                  adaptiveFloor
             }
             bypassSafety       -> rateAdjustment.coerceIn(0.0, profile.max_basal)
@@ -13551,14 +13551,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     val iobNow = iobNet
                     val braked = InsulinLoadGovernor.iobBudgetBrakedMultiplier(adaptiveMultiplier, iobNow, budgetU)
                     rT.reason.append(
-                        " | 🧬AdaptiveBasal IOB-budget ${"%.1f".format(iobNow)}/${"%.1f".format(budgetU)}U: ${"%.2f".format(adaptiveMultiplier)}x→${"%.2f".format(braked)}x"
+                        " | 🧬AdaptiveBasal IOB-budget ${aimiFmt1(iobNow)}/${aimiFmt1(budgetU)}U: ${aimiFmt2(adaptiveMultiplier)}x→${aimiFmt2(braked)}x"
                     )
                     braked
                 } else {
                     adaptiveMultiplier
                 }
             rate = (rate * effectiveMultiplier).coerceAtMost(if (bypassSafety) profile.max_basal else maxSafe)
-            rT.reason.append(" | 🧬AdaptiveBasal: ${"%.2f".format(effectiveMultiplier)}x (${"%.2f".format(originalBeforeScaling)}->${"%.2f".format(rate)}U/h)")
+            rT.reason.append(" | 🧬AdaptiveBasal: ${aimiFmt2(effectiveMultiplier)}x (${aimiFmt2(originalBeforeScaling)}->${aimiFmt2(rate)}U/h)")
         }
 
         // 6) Endocrine governor (production) — skip if Harmonia basal-first already embedded amp in rate
@@ -13647,11 +13647,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }.build()
         if (terminal.boundBy != null) {
             consoleLog.add("🔒 BASAL_TERMINAL[${terminal.boundBy}] ${terminal.trace}")
-            rT.reason.append(" [BASAL_TERMINAL:${terminal.boundBy} ${"%.2f".format(rate)}→${"%.2f".format(terminal.rateUph)}U/h]")
+            rT.reason.append(" [BASAL_TERMINAL:${terminal.boundBy} ${aimiFmt2(rate)}→${aimiFmt2(terminal.rateUph)}U/h]")
         }
         rate = terminal.rateUph
 
-        rT.reason.append(rh.gs(ApsStrings.temp_basal_pose, "%.2f".format(rate), duration))
+        rT.reason.append(rh.gs(ApsStrings.temp_basal_pose, aimiFmt2(rate), duration))
         rT.duration = duration
         rT.rate = rate
         val decisionType = when {
@@ -13992,8 +13992,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val effectiveProposed = proposedUnits * (lastRbtAppliedHints?.waitBiasMultiplier ?: 1.0)
         lastRbtAppliedHints?.takeIf { it.waitBiasMultiplier < 0.99 }?.let {
             consoleLog.add(
-                "⏳ RBT wait_bias: ${"%.2f".format(proposedUnits)}→${"%.2f".format(effectiveProposed)}U " +
-                    "(×${"%.2f".format(it.waitBiasMultiplier)})",
+                "⏳ RBT wait_bias: ${aimiFmt2(proposedUnits)}→${aimiFmt2(effectiveProposed)}U " +
+                    "(×${aimiFmt2(it.waitBiasMultiplier)})",
             )
         }
 
@@ -14048,17 +14048,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val smbDeliveryPriorityContext = mealPriorityContext || hyperTrajectoryPriorityContext
         if (mealPriorityContext) {
             consoleLog.add(
-                "🍽️ MEAL_PRIORITY_CONTEXT ON (BG=${"%.0f".format(this.bg)} Δ=${"%.1f".format(this.delta)} " +
-                    "sΔ=${"%.1f".format(this.shortAvgDelta)} COB=${"%.1f".format(mealData.mealCOB)} " +
-                    "UAM=${"%.2f".format(uamConfidence)} phase=${mealAbsorption?.phase?.name ?: "legacy"} " +
-                    "IOB=${"%.2f".format(this.iob)}/${"%.2f".format(this.maxIob)} " +
+                "🍽️ MEAL_PRIORITY_CONTEXT ON (BG=${aimiFmt0(this.bg)} Δ=${aimiFmt1(this.delta)} " +
+                    "sΔ=${aimiFmt1(this.shortAvgDelta)} COB=${aimiFmt1(mealData.mealCOB)} " +
+                    "UAM=${aimiFmt2(uamConfidence)} phase=${mealAbsorption?.phase?.name ?: "legacy"} " +
+                    "IOB=${aimiFmt2(this.iob)}/${aimiFmt2(this.maxIob)} " +
                     "implicit=${mealCorrectionContext.summary().ifBlank { "none" }})"
             )
         }
         if (hyperTrajectoryPriorityContext && !mealPriorityContext) {
             consoleLog.add(
-                "🚀 HTR_PRIORITY_CONTEXT ON (BG=${"%.0f".format(this.bg)} Δ=${"%.1f".format(this.delta)} " +
-                    "floor=${"%.2f".format(hyperReleaseFloorU)}U IOB=${"%.2f".format(this.iob)}/${"%.2f".format(this.maxIob)})",
+                "🚀 HTR_PRIORITY_CONTEXT ON (BG=${aimiFmt0(this.bg)} Δ=${aimiFmt1(this.delta)} " +
+                    "floor=${aimiFmt2(hyperReleaseFloorU)}U IOB=${aimiFmt2(this.iob)}/${aimiFmt2(this.maxIob)})",
             )
         }
         // Cascade D4: SafetyNet + stacking drink the single dose terminal snapshot.
@@ -14180,7 +14180,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                  kind = "CAP",
              )
          if (safetyCappedUnits < proposedFloat) {
-              consoleLog.add("Safety Precautions reduced SMB: $proposedFloat -> $safetyCappedUnits (BaseLimit=${"%.2f".format(baseLimit)})")
+              consoleLog.add("Safety Precautions reduced SMB: $proposedFloat -> $safetyCappedUnits (BaseLimit=${aimiFmt2(baseLimit)})")
          }
 
          // 🔧 FIX 3: Enhanced refractory if prediction absent
@@ -14233,19 +14233,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 val relaxFactor = (0.35 + 0.35 * refractoryProgress).coerceIn(0.35, 0.70)
                 gatedUnits = (gatedUnits * relaxFactor.toFloat()).coerceAtLeast(0f)
                 consoleLog.add(
-                    "⏸️➡️ REFRACTORY_RELAX_MEAL_PRIORITY sinceBolus=${"%.1f".format(sinceBolus)}m " +
-                        "window=${"%.1f".format(refractoryWindow)}m progress=${"%.2f".format(refractoryProgress)} " +
-                        "factor=${"%.2f".format(relaxFactor)} SMB ${"%.2f".format(before)}→${"%.2f".format(gatedUnits)}U"
+                    "⏸️➡️ REFRACTORY_RELAX_MEAL_PRIORITY sinceBolus=${aimiFmt1(sinceBolus)}m " +
+                        "window=${aimiFmt1(refractoryWindow)}m progress=${aimiFmt2(refractoryProgress)} " +
+                        "factor=${aimiFmt2(relaxFactor)} SMB ${aimiFmt2(before)}→${aimiFmt2(gatedUnits)}U"
                 )
             } else {
                 gatedUnits = 0f
-                consoleLog.add("⏸️ REFRACTORY_BLOCK sinceBolus=${"%.1f".format(sinceBolus)}m window=${"%.1f".format(refractoryWindow)}m (SMB blocked)")
+                consoleLog.add("⏸️ REFRACTORY_BLOCK sinceBolus=${aimiFmt1(sinceBolus)}m window=${aimiFmt1(refractoryWindow)}m (SMB blocked)")
             }
          } else if (sinceBolus < refractoryWindow && (isExplicitUserAction || bypassSmbRefractory)) {
              val bypassLabel = if (bypassSmbRefractory) "Classic autodrive prebolus" else "Meal mode override"
              consoleLog.add(
-                 "✅ REFRACTORY_BYPASS sinceBolus=${"%.1f".format(sinceBolus)}m " +
-                     "window=${"%.1f".format(refractoryWindow)}m ($bypassLabel)",
+                 "✅ REFRACTORY_BYPASS sinceBolus=${aimiFmt1(sinceBolus)}m " +
+                     "window=${aimiFmt1(refractoryWindow)}m ($bypassLabel)",
              )
          }
         chainAfterRefractory = gatedUnits
@@ -14322,7 +14322,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
              // Log
             if (effectiveSmbFactor < 1.0 || throttle.preferTbr) {
                 consoleLog.add(
-                    "PKPD_THROTTLE smbFactor=${"%.2f".format(effectiveSmbFactor)} intervalAdd=${effectiveIntervalAdd} " +
+                    "PKPD_THROTTLE smbFactor=${aimiFmt2(effectiveSmbFactor)} intervalAdd=${effectiveIntervalAdd} " +
                         "preferTbr=${throttle.preferTbr} reason=${throttle.reason}" +
                         when {
                             hyperTrajectoryPriorityContext -> " [HTR_PRIORITY_RELAX]"
@@ -14331,7 +14331,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         },
                 )
                  if (originalGated > 0f && gatedUnits < originalGated * 0.6f) {
-                     consoleLog.add("  ⚠️ SMB reduced ${"%2f".format(originalGated)} → ${"%.2f".format(gatedUnits)}U (PKPD throttle)")
+                     consoleLog.add("  ⚠️ SMB reduced ${"%2f".format(originalGated)} → ${aimiFmt2(gatedUnits)}U (PKPD throttle)")
                  }
              }
 
@@ -14371,7 +14371,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             pkpdPreferTbrBoost = max(pkpdPreferTbrBoost, stackingEval.tbrBoostFloor)
             if (beforeSurv > gatedUnits + 0.02f) {
                 consoleLog.add(
-                    "🧭 IOB_SURVEILLANCE SMB ${"%.2f".format(beforeSurv)}→${"%.2f".format(gatedUnits)} | ${stackingEval.summary}"
+                    "🧭 IOB_SURVEILLANCE SMB ${aimiFmt2(beforeSurv)}→${aimiFmt2(gatedUnits)} | ${stackingEval.summary}"
                 )
                 rT.reason.append(" | ")
                 rT.reason.append(rh.gs(ApsStrings.aimi_iob_surveillance_applied))
@@ -14432,7 +14432,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             if (isAimiContextMeal && !isMealModeCondition()) {
                 consoleLog.add(
                     "🍽️ IMPLICIT_MEAL_REDCARPET ${mealCorrectionContext.summary().ifBlank { "signals" }} " +
-                        "(BG=${"%.0f".format(this.bg)} Δ=${"%.1f".format(this.delta)} sΔ=${"%.1f".format(this.shortAvgDelta)})"
+                        "(BG=${aimiFmt0(this.bg)} Δ=${aimiFmt1(this.delta)} sΔ=${aimiFmt1(this.shortAvgDelta)})"
                 )
             }
 
@@ -14443,10 +14443,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // aux hard caps, pas aux sécurités mineures.
             val candidateUnits = if (gatedUnits < proposedUnits.toFloat() * 0.6f) {
                 if (criticalSafetyZeroedThisTick) {
-                    consoleLog.add("⛔ RED_CARPET_DENIED: vital hypo safety zeroed SMB this tick — no restore (Proposed=${"%.2f".format(proposedUnits)} Gated=${"%.2f".format(gatedUnits)})")
+                    consoleLog.add("⛔ RED_CARPET_DENIED: vital hypo safety zeroed SMB this tick — no restore (Proposed=${aimiFmt2(proposedUnits)} Gated=${aimiFmt2(gatedUnits)})")
                     gatedUnits
                 } else {
-                    consoleLog.add("✨ RED CARPET: Restoring meal bolus blocked by minor safety (Proposed=${"%.2f".format(proposedUnits)} vs Gated=${"%.2f".format(gatedUnits)})")
+                    consoleLog.add("✨ RED CARPET: Restoring meal bolus blocked by minor safety (Proposed=${aimiFmt2(proposedUnits)} vs Gated=${aimiFmt2(gatedUnits)})")
                     proposedUnits.toFloat()
                 }
             } else {
@@ -14463,10 +14463,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val iobSpace = (this.maxIob - this.iob).coerceAtLeast(0.0)
 
             // DEBUG TRACE (MTR Audit)
-            consoleLog.add("MEAL_DEBUG Need=${"%.2f".format(candidateUnits)} MaxSMB=${"%.2f".format(baseLimit)} MaxSMBHB=${"%.2f".format(maxSMBHB)} Cap=${"%.2f".format(maxSmbCap)} MaxIOB=${"%.2f".format(this.maxIob)} IOB=${"%.2f".format(this.iob)} Space=${"%.2f".format(iobSpace)}")
+            consoleLog.add("MEAL_DEBUG Need=${aimiFmt2(candidateUnits)} MaxSMB=${aimiFmt2(baseLimit)} MaxSMBHB=${aimiFmt2(maxSMBHB)} Cap=${aimiFmt2(maxSmbCap)} MaxIOB=${aimiFmt2(this.maxIob)} IOB=${aimiFmt2(this.iob)} Space=${aimiFmt2(iobSpace)}")
 
             if (mealBolus > iobSpace.toFloat()) {
-                consoleLog.add("🛡️ RED CARPET: Clamped by MaxIOB (Need=${"%.2f".format(mealBolus)}, Space=${"%.2f".format(iobSpace)})")
+                consoleLog.add("🛡️ RED CARPET: Clamped by MaxIOB (Need=${aimiFmt2(mealBolus)}, Space=${aimiFmt2(iobSpace)})")
                 mealBolus = iobSpace.toFloat()
             }
 
@@ -14483,7 +14483,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     isAimiContextMeal -> "ImplicitMeal:${mealCorrectionContext.summary().ifBlank { "signals" }}"
                     else -> "MealMode/Context"
                 }
-                consoleLog.add("🍱 MEAL_FORCE_EXECUTED ($reason): ${"%.2f".format(finalUnits)} U (Overrides minor safety checks)")
+                consoleLog.add("🍱 MEAL_FORCE_EXECUTED ($reason): ${aimiFmt2(finalUnits)} U (Overrides minor safety checks)")
             }
 
         } else {
@@ -14506,8 +14506,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val floorCap = minOf(hyperReleaseFloorU, iobSpace, baseLimit)
             if (finalUnits + 0.02 < floorCap) {
                 consoleLog.add(
-                    "🚀 HTR finalize floor: ${"%.2f".format(finalUnits)}→${"%.2f".format(floorCap)}U " +
-                        "(hyperReleaseFloor=${"%.2f".format(hyperReleaseFloorU)}U)",
+                    "🚀 HTR finalize floor: ${aimiFmt2(finalUnits)}→${aimiFmt2(floorCap)}U " +
+                        "(hyperReleaseFloor=${aimiFmt2(hyperReleaseFloorU)}U)",
                 )
                 finalUnits = floorCap
             }
@@ -14519,14 +14519,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         var chargeSlowCarbBudget = false // set here, charged AFTER the effort reduction (actual delivered)
         if (!isExplicitUserAction && finalUnits > 0.0) {
             if (lastContextSuppressSmb) {
-                consoleLog.add("🍬 CTX_HYPO_RECOVERY: SMB off (was ${"%.2f".format(Locale.US, finalUnits)}U)")
+                consoleLog.add("🍬 CTX_HYPO_RECOVERY: SMB off (was ${aimiFmt2(finalUnits)}U)")
                 rT.reason.append("🍬hypoRecovery SMB off ")
                 finalUnits = 0.0
             } else {
                 lastContextSmbCeilingU?.let { ceil ->
                     if (finalUnits > ceil) {
-                        consoleLog.add("🍕 CTX_SMB_CEILING: ${"%.2f".format(Locale.US, finalUnits)}→${"%.2f".format(Locale.US, ceil)}U")
-                        rT.reason.append("🍕slowCarb cap${"%.1f".format(Locale.US, ceil)} ")
+                        consoleLog.add("🍕 CTX_SMB_CEILING: ${aimiFmt2(finalUnits)}→${aimiFmt2(ceil)}U")
+                        rT.reason.append("🍕slowCarb cap${aimiFmt1(ceil)} ")
                         finalUnits = ceil.coerceAtLeast(0.0)
                     }
                 }
@@ -14544,7 +14544,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     }
                     val remaining = (slowCarbEarlyBudgetU - slowCarbBudgetDeliveredU).coerceAtLeast(0.0)
                     if (finalUnits > remaining) {
-                        consoleLog.add("🍕 CTX_SLOWCARB_BUDGET: ${"%.2f".format(Locale.US, finalUnits)}→${"%.2f".format(Locale.US, remaining)}U (used ${"%.2f".format(Locale.US, slowCarbBudgetDeliveredU)}/${"%.1f".format(Locale.US, slowCarbEarlyBudgetU)}U)")
+                        consoleLog.add("🍕 CTX_SLOWCARB_BUDGET: ${aimiFmt2(finalUnits)}→${aimiFmt2(remaining)}U (used ${aimiFmt2(slowCarbBudgetDeliveredU)}/${aimiFmt1(slowCarbEarlyBudgetU)}U)")
                         rT.reason.append("🍕slowCarb budget ")
                         finalUnits = remaining
                     }
@@ -14577,12 +14577,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             lastEffortSmbAfterU = finalUnits
             val floored = confirmedMeal && effortFactor > rawEffortFactor + 1e-9
             consoleLog.add(
-                "🏃 EFFORT_PROTECT_SMB ×${"%.2f".format(Locale.US, effortFactor)} " +
-                    "${"%.2f".format(Locale.US, beforeEffort)}→${"%.2f".format(Locale.US, finalUnits)}U " +
+                "🏃 EFFORT_PROTECT_SMB ×${aimiFmt2(effortFactor)} " +
+                    "${aimiFmt2(beforeEffort)}→${aimiFmt2(finalUnits)}U " +
                     "[${lastEffortAssessment?.state?.name}/${lastEffortAssessment?.posture?.name}]" +
-                    if (floored) " (floored from ×${"%.2f".format(Locale.US, rawEffortFactor)}, meal certainty HIGH)" else "",
+                    if (floored) " (floored from ×${aimiFmt2(rawEffortFactor)}, meal certainty HIGH)" else "",
             )
-            rT.reason.append("🏃effort×${"%.2f".format(Locale.US, effortFactor)} ")
+            rT.reason.append("🏃effort×${aimiFmt2(effortFactor)} ")
         }
         // 🧱 Rise ceiling guard — see [app.aaps.plugins.aps.openAPSAIMI.smb.RiseCeilingGuard].
         // The verdict is ALWAYS computed and exported, so the gesture can be measured in production
@@ -14625,7 +14625,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
         ) {
             consoleLog.add(
-                "🧱 RISE_CEILING_GUARD: ${"%.2f".format(Locale.US, finalUnits)}→0.00U (${riseCeilingVerdict.reason})",
+                "🧱 RISE_CEILING_GUARD: ${aimiFmt2(finalUnits)}→0.00U (${riseCeilingVerdict.reason})",
             )
             rT.reason.append("🧱rise ceiling ")
             finalUnits = 0.0
@@ -14676,11 +14676,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         if (mealPriorityContext) {
             val chainLine =
-                "🍽️ MEAL_PRIORITY_CHAIN proposed=${"%.2f".format(proposedFloat)} " +
-                    "baseLimit=${"%.2f".format(chainBaseLimit)} safety=${"%.2f".format(chainSafetyCapped)} " +
-                    "refr=${"%.2f".format(chainAfterRefractory)} throttle=${"%.2f".format(chainAfterThrottle)} " +
-                    "tf=${"%.2f".format(chainThrottleFactor)} iAdd=+${chainIntervalAdd} " +
-                    "final=${"%.2f".format(chainFinal)}"
+                "🍽️ MEAL_PRIORITY_CHAIN proposed=${aimiFmt2(proposedFloat)} " +
+                    "baseLimit=${aimiFmt2(chainBaseLimit)} safety=${aimiFmt2(chainSafetyCapped)} " +
+                    "refr=${aimiFmt2(chainAfterRefractory)} throttle=${aimiFmt2(chainAfterThrottle)} " +
+                    "tf=${aimiFmt2(chainThrottleFactor)} iAdd=+${chainIntervalAdd} " +
+                    "final=${aimiFmt2(chainFinal)}"
             consoleLog.add(chainLine)
             rT.reason.append(" | $chainLine")
         }
@@ -14748,10 +14748,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      */
     private fun logSmbGateExplain(audit: SmbGateAudit, proposed: Float, gated: Float, final: Float, activityThreshold: Double) {
         val refractoryLine =
-            "GATE_REFRACTORY sinceLastBolus=${"%.1f".format(audit.sinceBolus)}m window=${"%.1f".format(audit.refractoryWindow)}"
-        val maxIobLine = "GATE_MAXIOB allowed=${"%.2f".format(audit.maxIobLimit)} current=${"%.2f".format(iob)}"
-        val maxSmbLine = "GATE_MAXSMB cap=${"%.2f".format(audit.maxSmbLimit)} proposed=${"%.2f".format(proposed)}"
-        val absorptionLine = "GATE_ABSORPTION activity=${"%.3f".format(iobActivityNow)} threshold=${"%.3f".format(activityThreshold)} factor=${"%.2f".format(audit.absorptionFactor)}"
+            "GATE_REFRACTORY sinceLastBolus=${aimiFmt1(audit.sinceBolus)}m window=${aimiFmt1(audit.refractoryWindow)}"
+        val maxIobLine = "GATE_MAXIOB allowed=${aimiFmt2(audit.maxIobLimit)} current=${aimiFmt2(iob)}"
+        val maxSmbLine = "GATE_MAXSMB cap=${aimiFmt2(audit.maxSmbLimit)} proposed=${aimiFmt2(proposed)}"
+        val absorptionLine = "GATE_ABSORPTION activity=${aimiFmt3(iobActivityNow)} threshold=${aimiFmt3(activityThreshold)} factor=${aimiFmt2(audit.absorptionFactor)}"
         val predLine = "GATE_PRED_MISSING fallback=${if (audit.predMissing) "ON" else "OFF"}"
 
         if (final > 0f || gated == 0f || final == 0f) {
@@ -14874,21 +14874,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             when (logChannel) {
                 PkpdGuardLogChannel.PIPELINE -> {
                     consoleError.add(guard.toLogString())
-                    consoleLog.add("SMB_GUARDED: ${"%.2f".format(beforeGuard)}U → ${"%.2f".format(smbOut)}U")
+                    consoleLog.add("SMB_GUARDED: ${aimiFmt2(beforeGuard)}U → ${aimiFmt2(smbOut)}U")
                     if (aggressivePriority && effectiveFactor > guard.factor) {
                         consoleLog.add(
-                            "PKPD_RELIEF: factor ${"%.2f".format(guard.factor)} -> ${"%.2f".format(effectiveFactor)} " +
+                            "PKPD_RELIEF: factor ${aimiFmt2(guard.factor)} -> ${aimiFmt2(effectiveFactor)} " +
                                 "(meal/advisor/high-rise priority)"
                         )
                     }
                 }
                 PkpdGuardLogChannel.FINALIZE -> {
                     reason?.appendLine(
-                        "🛡️ PKPD Guard (${guard.reason}): ${"%.2f".format(beforeGuard)} → ${"%.2f".format(smbOut)} U"
+                        "🛡️ PKPD Guard (${guard.reason}): ${aimiFmt2(beforeGuard)} → ${aimiFmt2(smbOut)} U"
                     )
                     if (aggressivePriority && effectiveFactor > guard.factor) {
                         consoleLog.add(
-                            "PKPD_RELIEF_FINALIZE: factor ${"%.2f".format(guard.factor)} -> ${"%.2f".format(effectiveFactor)} " +
+                            "PKPD_RELIEF_FINALIZE: factor ${aimiFmt2(guard.factor)} -> ${aimiFmt2(effectiveFactor)} " +
                                 "(meal/high-rise priority, finalizeAndCapSMB)"
                         )
                     }
@@ -14983,7 +14983,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val beforeAdj = smbToGive
         smbToGive = applySpecificAdjustments(smbToGive, ignoreSafetyRestrictions = ignoreSafetyConditions)
         if (smbToGive != beforeAdj) {
-            //reason?.appendLine("🎛️ Ajustements: ${"%.2f".format(beforeAdj)} → ${"%.2f".format(smbToGive)} U")
+            //reason?.appendLine("🎛️ Ajustements: ${aimiFmt2(beforeAdj)} → ${aimiFmt2(smbToGive)} U")
             reason?.appendLine(rh.gs(ApsStrings.adjustments_smb, beforeAdj, smbToGive))
         }
         if (mealWeights.active && mealWeights.boostFactor > 1.0 && smbToGive > 0f) {
@@ -15022,7 +15022,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val beforeFinalize = smbToGive
         smbToGive = finalizeSmbToGive(smbToGive)
         if (smbToGive != beforeFinalize) {
-            //reason?.appendLine("🧩 Finalisation: ${"%.2f".format(beforeFinalize)} → ${"%.2f".format(smbToGive)} U")
+            //reason?.appendLine("🧩 Finalisation: ${aimiFmt2(beforeFinalize)} → ${aimiFmt2(smbToGive)} U")
             reason?.appendLine(rh.gs(ApsStrings.finalization_smb, beforeFinalize, smbToGive))
         }
 
@@ -15030,7 +15030,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val beforeLimits = smbToGive
         smbToGive = clampSmbToMaxSmbAndMaxIob(smbToGive, maxSMB, maxIob, iob)
         if (smbToGive != beforeLimits) {
-            //reason?.appendLine("🧱 Limites: ${"%.2f".format(beforeLimits)} → ${"%.2f".format(smbToGive)} U")
+            //reason?.appendLine("🧱 Limites: ${aimiFmt2(beforeLimits)} → ${aimiFmt2(smbToGive)} U")
             reason?.appendLine(rh.gs(ApsStrings.limits_smb, beforeLimits, smbToGive))
         }
         smbToGive = smbToGive.coerceAtLeast(0f)
@@ -15091,7 +15091,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 4. No recent bolus activity (Clean slate)
         if (lastBolusVolume > 0.1) return false
 
-        reason.append("🧹 Drift Terminator: Plateau detected (Δ${"%.1f".format(delta)} Avg${"%.1f".format(avgDelta)} Dev${"%.0f".format(minDeviation)}) -> ENGAGED\n")
+        reason.append("🧹 Drift Terminator: Plateau detected (Δ${aimiFmt1(delta)} Avg${aimiFmt1(avgDelta)} Dev${aimiFmt0(minDeviation)}) -> ENGAGED\n")
         return true
     }
 
@@ -15197,8 +15197,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (PostHypoAggressiveRiseExit.shouldExit(bgNow, targetNow, delta.toDouble())) {
             lastHypoBelow70At = 0L
             reason.append(
-                "🚀 POST_HYPO_AGGRESSIVE_RISE_EXIT: bg=${"%.0f".format(bgNow)} " +
-                    "target+30=${"%.0f".format(targetNow + 30.0)} Δ=${"%.1f".format(delta)} → normal\n"
+                "🚀 POST_HYPO_AGGRESSIVE_RISE_EXIT: bg=${aimiFmt0(bgNow)} " +
+                    "target+30=${aimiFmt0(targetNow + 30.0)} Δ=${aimiFmt1(delta)} → normal\n"
             )
             return PostHypoState.None
         }
@@ -15231,14 +15231,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 lastHypoBelow70At = 0L
                 return PostHypoState.None
             }
-            reason.append("🍽️ POST_HYPO_MEAL: Repas confirmé post-hypo (COB=${"%.1f".format(cob)}g slope=${"%.1f".format(slopeFromMinDeviation)})\n")
+            reason.append("🍽️ POST_HYPO_MEAL: Repas confirmé post-hypo (COB=${aimiFmt1(cob)}g slope=${aimiFmt1(slopeFromMinDeviation)})\n")
             PostHypoState.MealConfirmed(sinceHypoMs)
         } else {
             if (sinceHypoMs > 30 * 60_000L) {
                 lastHypoBelow70At = 0L
                 return PostHypoState.None
             }
-            reason.append("🛡️ POST_HYPO_REBOUND: Rebond suspecté (${sinceHypoMs / 60_000}min depuis BG<70, COB=${"%.1f".format(cob)}g noMeal)\n")
+            reason.append("🛡️ POST_HYPO_REBOUND: Rebond suspecté (${sinceHypoMs / 60_000}min depuis BG<70, COB=${aimiFmt1(cob)}g noMeal)\n")
             PostHypoState.ReboundSuspected(sinceHypoMs)
         }
     }
@@ -16358,10 +16358,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         val eventual = hybridInts.lastOrNull()?.toDouble() ?: currentBg
         consoleLog.add(
-            "PKPD predictions → eventual=${"%.0f".format(eventual)} mg/dL from ${hybridInts.size} steps " +
+            "PKPD predictions → eventual=${aimiFmt0(eventual)} mg/dL from ${hybridInts.size} steps " +
                 "uamT=${uamInts.lastOrNull() ?: "n/a"} " +
-                "pathMinRaw=${pathBounds.pathMinRawMgdl?.let { "%.0f".format(it) } ?: "n/a"} " +
-                "pathMinClamp=${pathBounds.pathMinClampedMgdl?.let { "%.0f".format(it) } ?: "n/a"}"
+                "pathMinRaw=${pathBounds.pathMinRawMgdl?.let { aimiFmt0(it) } ?: "n/a"} " +
+                "pathMinClamp=${pathBounds.pathMinClampedMgdl?.let { aimiFmt0(it) } ?: "n/a"}"
         )
         return PredictionResult(eventual, hybridInts, pathBounds)
     }
@@ -16563,7 +16563,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // 🔚 Clamp entre 35 et 120
         val finalPeak = dynamicPeakTime.coerceIn(35.0, 120.0)
 //  reasonBuilder.append("  → Résultat PeakTime final : $finalPeak\n")
-        //reasonBuilder.append("  → Picco insulina dinamico : ${"%.0f".format(finalPeak)}\n")
+        //reasonBuilder.append("  → Picco insulina dinamico : ${aimiFmt0(finalPeak)}\n")
         return finalPeak
     }
 
@@ -16633,8 +16633,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             "═══════════════════════════════",
             "🛡️ AIMI LEARNERS HEALTH",
             "Storage: $storageReport",
-            "UnifiedReactivity: factor=${"%.3f".format(reactivityFactor)}",
-            "BasalLearner: multiplier=${"%.3f".format(basalMultiplier)}",
+            "UnifiedReactivity: factor=${aimiFmt3(reactivityFactor)}",
+            "BasalLearner: multiplier=${aimiFmt3(basalMultiplier)}",
             "PkPdEstimator: runtime-only",
             "═══════════════════════════════"
         )
@@ -16656,7 +16656,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // ✅ Populate rT.learnersInfo for UI section display (like "Profil :", "Données repas :", etc.)
         rT.learnersInfo = buildString {
             appendLine("UnifiedReactivity: $reactivityPct% ($reactivityTrend)")
-            appendLine("BasalLearner: ×${String.format("%.2f", basalMultiplier)} ($basalTrend)")
+            appendLine("BasalLearner: ×${aimiFmt2(basalMultiplier)} ($basalTrend)")
             appendLine("PkPdEstimator: ℹ️ runtime-only")
             append("Storage: $storageReport")
         }
@@ -16671,8 +16671,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         aapsLogger.info(LTag.APS, "║ 📦 AIMI SYSTEM HEALTH                          ║")
         aapsLogger.info(LTag.APS, "╠═══════════════════════════════════════════════╣")
         aapsLogger.info(LTag.APS, "║ Storage: $storageReport")
-        aapsLogger.info(LTag.APS, "║ UnifiedReactivity: ✅ factor=${"%.3f".format(reactivityFactor)}")
-        aapsLogger.info(LTag.APS, "║ BasalLearner: ✅ multiplier=${"%.3f".format(basalMultiplier)}")
+        aapsLogger.info(LTag.APS, "║ UnifiedReactivity: ✅ factor=${aimiFmt3(reactivityFactor)}")
+        aapsLogger.info(LTag.APS, "║ BasalLearner: ✅ multiplier=${aimiFmt3(basalMultiplier)}")
         aapsLogger.info(LTag.APS, "║ PkPdEstimator: ℹ️ runtime-only")
         aapsLogger.info(LTag.APS, "╚═══════════════════════════════════════════════╝")
     }
@@ -16702,8 +16702,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
                         aapsLogger.debug(LTag.APS, "🤰 Pregnancy Mode Active: Week ${gState.gestationalWeek} (${gState.description}) -> Basal*${factorBasal}, ISF*${factorISF}")
                         consoleLog.add("🤰 GESTATION ACTIVE: ${gState.gestationalWeek.toInt()} SA (${gState.description})")
-                        consoleLog.add("   └ Factors: Basal x${"%.2f".format(factorBasal)} | ISF x${"%.2f".format(factorISF)} | CR x${"%.2f".format(factorCR)}")
-                        consoleLog.add("   └ Adjusted: Basal ${"%.2f".format(oldBasal)}->${"%.2f".format(profile.current_basal)} | ISF ${oldISF.toInt()}->${profile.sens.toInt()}")
+                        consoleLog.add("   └ Factors: Basal x${aimiFmt2(factorBasal)} | ISF x${aimiFmt2(factorISF)} | CR x${aimiFmt2(factorCR)}")
+                        consoleLog.add("   └ Adjusted: Basal ${aimiFmt2(oldBasal)}->${aimiFmt2(profile.current_basal)} | ISF ${oldISF.toInt()}->${profile.sens.toInt()}")
                     } catch (e: Exception) {
                         aapsLogger.error(LTag.APS, "Error parsing pregnancy due date: $dueDateString", e)
                     }
@@ -16887,26 +16887,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             this.maxSMB = 0.0; this.maxSMBHB = 0.0
             val reason = when (decision.reason) {
                 BasalFirstPolicyMath.Reason.FRAGILE_BG       -> "Fragile BG (<110 & falling)"
-                BasalFirstPolicyMath.Reason.LEARNER_PRUDENCE -> "Learner Prudence (Factor=${"%.2f".format(learnerFactor)})"
+                BasalFirstPolicyMath.Reason.LEARNER_PRUDENCE -> "Learner Prudence (Factor=${aimiFmt2(learnerFactor)})"
                 else                                         -> "Unknown Safety Trigger"
             }
             consoleLog.add("🛡️ BASAL-FIRST ACTIVE: $reason -> SMB DISABLED")
             rT.reason.append(" [Basal-First: SMB OFF]")
         } else {
             if (autosensResistance && learnerFactor < 0.75)
-                consoleLog.add("⚡ RESISTANCE EXEMPTION: Autosens ${"%.2f".format(autosens_data.ratio)} < 0.8")
+                consoleLog.add("⚡ RESISTANCE EXEMPTION: Autosens ${aimiFmt2(autosens_data.ratio)} < 0.8")
             if (isLearnerPrudent && basalFirstMealActive)
-                consoleLog.add("🍕 MEAL EXEMPTION: COB=${"%.1f".format(mealData.mealCOB)}g")
+                consoleLog.add("🍕 MEAL EXEMPTION: COB=${aimiFmt1(mealData.mealCOB)}g")
             if (isLearnerPrudent && isPersistentRise)
-                consoleLog.add("📈 RISE EXEMPTION: CombinedDelta=${"%.1f".format(combinedDelta)}")
+                consoleLog.add("📈 RISE EXEMPTION: CombinedDelta=${aimiFmt1(combinedDelta)}")
             if (isFragileBg && basalFirstHeavyMeal)
-                consoleLog.add("🍔 HEAVY MEAL EXEMPTION: COB=${"%.1f".format(mealData.mealCOB)}g")
+                consoleLog.add("🍔 HEAVY MEAL EXEMPTION: COB=${aimiFmt1(mealData.mealCOB)}g")
             if (decision.anticipatedRise) {
                 consoleLog.add(
-                    "🚀 ANTICIPATED RISE EXEMPTION: Δ=${"%.1f".format(delta)} combΔ=${"%.1f".format(combinedDelta)} " +
-                        "BG=${"%.0f".format(bg)} proj30=${"%.0f".format(decision.projectedBgMgdl)} " +
-                        "> target+${"%.0f".format(BasalFirstPolicyMath.ANTICIPATED_RISE_TARGET_MARGIN_MGDL)} " +
-                        "(${"%.0f".format(targetBg)}) -> SMB ceiling kept"
+                    "🚀 ANTICIPATED RISE EXEMPTION: Δ=${aimiFmt1(delta)} combΔ=${aimiFmt1(combinedDelta)} " +
+                        "BG=${aimiFmt0(bg)} proj30=${aimiFmt0(decision.projectedBgMgdl)} " +
+                        "> target+${aimiFmt0(BasalFirstPolicyMath.ANTICIPATED_RISE_TARGET_MARGIN_MGDL)} " +
+                        "(${aimiFmt0(targetBg)}) -> SMB ceiling kept"
                 )
                 rT.reason.append(" [Basal-First: rise exemption]")
             }
@@ -16971,7 +16971,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 rh.gs(InterfacesStrings.format_insulin_units, requestedU),
             )
             consoleLog.add(
-                "⚠️ PREBOLUS_NOT_DELIVERED tag=$tag requested=${"%.2f".format(Locale.US, requestedU)}U " +
+                "⚠️ PREBOLUS_NOT_DELIVERED tag=$tag requested=${aimiFmt2(requestedU)}U " +
                     "firedAt=${dateUtil.timeString(firedAt)} lastSmbConfirmed=${lastSmbConfirmedMs?.let { dateUtil.timeString(it) } ?: "none"}"
             )
             rT.reason.append(" | ").append(msg)
@@ -17034,7 +17034,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
             // 🛡️ IOB guard (sécurité anti-surdosage) : pas de prébolus si l'IOB dépasse déjà MaxIOB.
             if (iob > this.maxIob) {
-                consoleLog.add("🛡️ LEGACY prebolus tag=$logTag: IOB ${"%.2f".format(Locale.US, iob)}U > MaxIOB — TBR seul")
+                consoleLog.add("🛡️ LEGACY prebolus tag=$logTag: IOB ${aimiFmt2(iob)}U > MaxIOB — TBR seul")
                 rT.units = 0.0
                 return
             }
@@ -17046,7 +17046,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
             // Declared hypo recovery suppresses the legacy meal prebolus (this path bypasses finalizeAndCapSMB).
             if (lastContextSnapshot?.hasHypoRecovery == true) {
-                consoleLog.add("🍬 CTX_HYPO_RECOVERY: legacy prebolus suppressed tag=$logTag (was ${"%.2f".format(Locale.US, units)}U)")
+                consoleLog.add("🍬 CTX_HYPO_RECOVERY: legacy prebolus suppressed tag=$logTag (was ${aimiFmt2(units)}U)")
                 rT.units = 0.0
                 return
             }
@@ -17072,7 +17072,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 forceExact = true,
                 adaptiveMultiplier = 1.0
             )
-            consoleLog.add("MEAL_TBR_MANUAL[$logTag] rate=${"%.2f".format(rateUh)}U/h dur=30m rt=${runtimeMin}m")
+            consoleLog.add("MEAL_TBR_MANUAL[$logTag] rate=${aimiFmt2(rateUh)}U/h dur=30m rt=${runtimeMin}m")
         }
 
         // Option A : contrôle a posteriori de la délivrance des prébolus déjà demandés (alerte seule,
@@ -17109,7 +17109,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 // sans elle une confirmation lente re-demanderait le montant complet tick après tick
                 // quelle que soit la montée d'IOB entre-temps.
                 if (iob > this.maxIob) {
-                    consoleLog.add("🛡️ LEGACY_PB1_PRIORITY_CARRY: IOB ${"%.2f".format(Locale.US, iob)}U > MaxIOB — TBR seul")
+                    consoleLog.add("🛡️ LEGACY_PB1_PRIORITY_CARRY: IOB ${aimiFmt2(iob)}U > MaxIOB — TBR seul")
                     rT.units = 0.0
                     return rT
                 }
@@ -17133,7 +17133,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             manualMealModeTbr(mealruntime, "MEAL_P1", overrideSafetyLimits = false)
             setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIMealPrebolus), "MEAL_P1", mealruntime) { u ->
                 rT.reason.append(rh.gs(ApsStrings.manual_meal_prebolus, u))
-                consoleLog.add("🍱 LEGACY_MODE_MEAL P1=${"%.2f".format(u)}U")
+                consoleLog.add("🍱 LEGACY_MODE_MEAL P1=${aimiFmt2(u)}U")
             }
             markLegacyMealDecision()
             return rT
@@ -17142,7 +17142,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             manualMealModeTbr(bfastruntime, "BF_P1", overrideSafetyLimits = false)
             setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIBFPrebolus), "BF_P1", bfastruntime) { u ->
                 rT.reason.append(rh.gs(ApsStrings.reason_prebolus_bfast1, u))
-                consoleLog.add("🍱 LEGACY_MODE_BFAST P1=${"%.2f".format(u)}U")
+                consoleLog.add("🍱 LEGACY_MODE_BFAST P1=${aimiFmt2(u)}U")
             }
             markLegacyMealDecision()
             return rT
@@ -17151,7 +17151,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             manualMealModeTbr(bfastruntime, "BF_P2", overrideSafetyLimits = false)
             setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIBFPrebolus2), "BF_P2", bfastruntime) { u ->
                 rT.reason.append(rh.gs(ApsStrings.reason_prebolus_bfast2, u))
-                consoleLog.add("🍱 LEGACY_MODE_BFAST P2=${"%.2f".format(u)}U")
+                consoleLog.add("🍱 LEGACY_MODE_BFAST P2=${aimiFmt2(u)}U")
             }
             markLegacyMealDecision()
             return rT
@@ -17160,7 +17160,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             manualMealModeTbr(lunchruntime, "LUNCH_P1", overrideSafetyLimits = false)
             setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMILunchPrebolus), "LUNCH_P1", lunchruntime) { u ->
                 rT.reason.append(rh.gs(ApsStrings.reason_prebolus_lunch1, u))
-                consoleLog.add("🍱 LEGACY_MODE_LUNCH P1=${"%.2f".format(u)}U")
+                consoleLog.add("🍱 LEGACY_MODE_LUNCH P1=${aimiFmt2(u)}U")
             }
             markLegacyMealDecision()
             return rT
@@ -17169,7 +17169,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             manualMealModeTbr(lunchruntime, "LUNCH_P2", overrideSafetyLimits = false)
             setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMILunchPrebolus2), "LUNCH_P2", lunchruntime) { u ->
                 rT.reason.append(rh.gs(ApsStrings.reason_prebolus_lunch2, u))
-                consoleLog.add("🍱 LEGACY_MODE_LUNCH P2=${"%.2f".format(u)}U")
+                consoleLog.add("🍱 LEGACY_MODE_LUNCH P2=${aimiFmt2(u)}U")
             }
             markLegacyMealDecision()
             return rT
@@ -17178,7 +17178,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             manualMealModeTbr(dinnerruntime, "DINNER_P1", overrideSafetyLimits = false)
             setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIDinnerPrebolus), "DINNER_P1", dinnerruntime) { u ->
                 rT.reason.append(rh.gs(ApsStrings.reason_prebolus_dinner1, u))
-                consoleLog.add("🍱 LEGACY_MODE_DINNER P1=${"%.2f".format(u)}U")
+                consoleLog.add("🍱 LEGACY_MODE_DINNER P1=${aimiFmt2(u)}U")
             }
             markLegacyMealDecision()
             return rT
@@ -17187,7 +17187,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             manualMealModeTbr(dinnerruntime, "DINNER_P2", overrideSafetyLimits = false)
             setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIDinnerPrebolus2), "DINNER_P2", dinnerruntime) { u ->
                 rT.reason.append(rh.gs(ApsStrings.reason_prebolus_dinner2, u))
-                consoleLog.add("🍱 LEGACY_MODE_DINNER P2=${"%.2f".format(u)}U")
+                consoleLog.add("🍱 LEGACY_MODE_DINNER P2=${aimiFmt2(u)}U")
             }
             markLegacyMealDecision()
             return rT
@@ -17196,7 +17196,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             manualMealModeTbr(highCarbrunTime, "HC_P1", overrideSafetyLimits = false)
             setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIHighCarbPrebolus), "HC_P1", highCarbrunTime) { u ->
                 rT.reason.append(rh.gs(ApsStrings.reason_prebolus_highcarb, u))
-                consoleLog.add("🍱 LEGACY_MODE_HIGHCARB P1=${"%.2f".format(u)}U")
+                consoleLog.add("🍱 LEGACY_MODE_HIGHCARB P1=${aimiFmt2(u)}U")
             }
             markLegacyMealDecision()
             return rT
@@ -17205,7 +17205,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             manualMealModeTbr(highCarbrunTime, "HC_P2", overrideSafetyLimits = false)
             setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIHighCarbPrebolus2), "HC_P2", highCarbrunTime) { u ->
                 rT.reason.append(rh.gs(ApsStrings.reason_prebolus_highcarb, u))
-                consoleLog.add("🍱 LEGACY_MODE_HIGHCARB P2=${"%.2f".format(u)}U")
+                consoleLog.add("🍱 LEGACY_MODE_HIGHCARB P2=${aimiFmt2(u)}U")
             }
             markLegacyMealDecision()
             return rT
@@ -17214,7 +17214,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             manualMealModeTbr(snackrunTime, "SNACK_P1", overrideSafetyLimits = false)
             setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMISnackPrebolus), "SNACK_P1", snackrunTime) { u ->
                 rT.reason.append(rh.gs(ApsStrings.reason_prebolus_snack, u))
-                consoleLog.add("🍱 LEGACY_MODE_SNACK P1=${"%.2f".format(u)}U")
+                consoleLog.add("🍱 LEGACY_MODE_SNACK P1=${aimiFmt2(u)}U")
             }
             markLegacyMealDecision()
             return rT
@@ -17234,7 +17234,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             manualMealModeTbr(fclruntime, "FCL_P1", overrideSafetyLimits = false)
             setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIautodrivePrebolus), "FCL_P1", fclruntime) { u ->
                 rT.reason.append(rh.gs(ApsStrings.fcl_prebolus, u))
-                consoleLog.add("🍽️ FCL_PREBOLUS P1=${"%.2f".format(Locale.US, u)}U rt=${fclruntime}m")
+                consoleLog.add("🍽️ FCL_PREBOLUS P1=${aimiFmt2(u)}U rt=${fclruntime}m")
             }
             markLegacyMealDecision()
             return rT
@@ -17279,7 +17279,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             avgHr = averageBeatsPerMinute, avgHrResting = averageBeatsPerMinute60
         )
         if (activityContext.state != app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.REST || activityContext.isRecovery) {
-            consoleLog.add("Activity: ${activityContext.description} → ISF x${"%.2f".format(activityContext.isfMultiplier)}")
+            consoleLog.add("Activity: ${activityContext.description} → ISF x${aimiFmt2(activityContext.isfMultiplier)}")
         }
         this.variableSensitivity *= activityContext.isfMultiplier.toFloat()
         if (activityContext.protectionMode) consoleLog.add("Activity Protection Mode Active (Recovery/Intense)")
@@ -17302,15 +17302,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
             if (resolved != basalFactor) {
                 consoleLog.add(
-                    "🏃 HYPER_EXERCISE_OVERRIDE: basal x${"%.2f".format(basalFactor)} → x${"%.2f".format(resolved)} " +
-                        "(BG=${bg.toInt()} Δ=${"%.1f".format(delta)})"
+                    "🏃 HYPER_EXERCISE_OVERRIDE: basal x${aimiFmt2(basalFactor)} → x${aimiFmt2(resolved)} " +
+                        "(BG=${bg.toInt()} Δ=${aimiFmt1(delta)})"
                 )
                 basalFactor = resolved
             }
         }
         if (basalFactor != 1.0f) {
             this.basalaimi *= basalFactor
-            consoleLog.add("Basal Activity Redux: x${"%.2f".format(basalFactor)} -> ${"%.2f".format(this.basalaimi)}U/h")
+            consoleLog.add("Basal Activity Redux: x${aimiFmt2(basalFactor)} -> ${aimiFmt2(this.basalaimi)}U/h")
         }
     }
 
@@ -17342,8 +17342,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 .isHyperRisingDuringExercise(policyInput)
         if (exerciseHyperBasalOverrideActive) {
             consoleLog.add(
-                "🏃 HYPER_EXERCISE_OVERRIDE active: BG=${bg.toInt()} Δ=${"%.1f".format(delta)} " +
-                    "combΔ=${"%.1f".format(tickCombinedDelta)} thyroidEGP=${"%.2f".format(currentThyroidEffects.egpMultiplier)}"
+                "🏃 HYPER_EXERCISE_OVERRIDE active: BG=${bg.toInt()} Δ=${aimiFmt1(delta)} " +
+                    "combΔ=${aimiFmt1(tickCombinedDelta)} thyroidEGP=${aimiFmt2(currentThyroidEffects.egpMultiplier)}"
             )
         }
     }
@@ -17407,7 +17407,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (assessment.smbFactor < 1.0) {
             consoleLog.add(
                 "🏃 EFFORT_BELIEF[${assessment.state.name}/${assessment.posture.name}] " +
-                    "SMB ×${"%.2f".format(Locale.US, assessment.smbFactor)} (applied at SMB finalize) " +
+                    "SMB ×${aimiFmt2(assessment.smbFactor)} (applied at SMB finalize) " +
                     assessment.reasons.joinToString(","),
             )
         }
@@ -17596,7 +17596,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         mealData: MealData, profile: OapsProfileAimi, rT: RT
     ) {
         try {
-            consoleError.add("🔮 PREDICT INIT: BG=$bg Delta=$delta Sens=${"%.1f".format(sens)} IOB=${iob_data_array.firstOrNull()?.iob}")
+            consoleError.add("🔮 PREDICT INIT: BG=$bg Delta=$delta Sens=${aimiFmt1(sens)} IOB=${iob_data_array.firstOrNull()?.iob}")
             val advisorTime = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()
             val advisorCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
             val isFreshAdvisor = (dateUtil.now() - advisorTime) < 60 * 60000
@@ -17659,7 +17659,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleError.add("🔮 PREDICT ERROR: ${e.message}")
             e.printStackTrace()
         }
-        consoleLog.add("Prédiction avancée avec ISF final de ${"%.1f".format(sens)} (Avancé)")
+        consoleLog.add("Prédiction avancée avec ISF final de ${aimiFmt1(sens)} (Avancé)")
     }
 
     private fun applyTrajectoryAnalysis(
@@ -17701,12 +17701,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     val statusEmoji = analysis.classification.emoji()
                     val typeDesc = analysis.classification.description()
 
-                    consoleLog.add("🌀 Trajectory: $statusEmoji $typeDesc | κ=${"%.2f".format(analysis.metrics.curvature)} conv=${"%.1f".format(analysis.metrics.convergenceVelocity)} health=${"%.0f".format(analysis.metrics.healthScore*100)}%")
+                    consoleLog.add("🌀 Trajectory: $statusEmoji $typeDesc | κ=${aimiFmt2(analysis.metrics.curvature)} conv=${aimiFmt1(analysis.metrics.convergenceVelocity)} health=${aimiFmt0(analysis.metrics.healthScore*100)}%")
 
                     // Display Visual Insights
                     val artLines = analysis.classification.asciiArt().split("\n")
                     artLines.forEach { line -> consoleLog.add("  $line") }
-                    consoleLog.add("  📊 Metrics: Coherence=${"%.2f".format(analysis.metrics.coherence)} Energy=${"%.1f".format(analysis.metrics.energyBalance)}U Openness=${"%.2f".format(analysis.metrics.openness)}")
+                    consoleLog.add("  📊 Metrics: Coherence=${aimiFmt2(analysis.metrics.coherence)} Energy=${aimiFmt1(analysis.metrics.energyBalance)}U Openness=${aimiFmt2(analysis.metrics.openness)}")
 
                     // 3. Apply Modulation (The "Safety" Gate)
                     // We only modify insulin delivery if relevance is sufficient (> 0.4)
@@ -17729,17 +17729,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         }
                         if (strongMealRiseContext && (effectiveSmbDamping != mod.smbDamping || effectiveIntervalStretch != mod.intervalStretch)) {
                             consoleLog.add(
-                                "  🚀 TRAJ_RELAX meal-rise: SMB×${"%.2f".format(mod.smbDamping)}→${"%.2f".format(effectiveSmbDamping)} " +
-                                    "Int×${"%.2f".format(mod.intervalStretch)}→${"%.2f".format(effectiveIntervalStretch)} " +
-                                    "(BG=${"%.0f".format(bg)} Δ=${"%.1f".format(delta)} COB=${"%.1f".format(cob)} UAM=${"%.2f".format(uamConfidence)})"
+                                "  🚀 TRAJ_RELAX meal-rise: SMB×${aimiFmt2(mod.smbDamping)}→${aimiFmt2(effectiveSmbDamping)} " +
+                                    "Int×${aimiFmt2(mod.intervalStretch)}→${aimiFmt2(effectiveIntervalStretch)} " +
+                                    "(BG=${aimiFmt0(bg)} Δ=${aimiFmt1(delta)} COB=${aimiFmt1(cob)} UAM=${aimiFmt2(uamConfidence)})"
                             )
                         }
-                        consoleLog.add("  🎛 Modulation: SMB×${"%.2f".format(effectiveSmbDamping)} Int×${"%.2f".format(effectiveIntervalStretch)} (${mod.reason})")
+                        consoleLog.add("  🎛 Modulation: SMB×${aimiFmt2(effectiveSmbDamping)} Int×${aimiFmt2(effectiveIntervalStretch)} (${mod.reason})")
 
                         if (kotlin.math.abs(effectiveSmbDamping - 1.0) > 0.05) {
                             val orig = maxSMB
                             maxSMB *= effectiveSmbDamping; maxSMBHB *= effectiveSmbDamping
-                            consoleLog.add("    → SMB: ${"%.2f".format(orig)}U → ${"%.2f".format(maxSMB)}U")
+                            consoleLog.add("    → SMB: ${aimiFmt2(orig)}U → ${aimiFmt2(maxSMB)}U")
                         }
                         if (kotlin.math.abs(effectiveIntervalStretch - 1.0) > 0.05) {
                             val orig = intervalsmb
@@ -17754,11 +17754,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                             maxIob = max(candidate, floor)
 
                             if (maxIob < beforeMod) {
-                                consoleLog.add("    → MaxIOB Modulation: ${"%.2f".format(beforeMod)}U → ${"%.2f".format(maxIob)}U (Floor=${"%.2f".format(floor)}U)")
+                                consoleLog.add("    → MaxIOB Modulation: ${aimiFmt2(beforeMod)}U → ${aimiFmt2(maxIob)}U (Floor=${aimiFmt2(floor)}U)")
                             }
                         }
                     } else if (relevanceScore <= 0.4) {
-                        consoleLog.add("  ⏸ Modulation Gated (Relevance ${"%.2f".format(relevanceScore)} <= 0.4)")
+                        consoleLog.add("  ⏸ Modulation Gated (Relevance ${aimiFmt2(relevanceScore)} <= 0.4)")
                     }
 
                     // Warning Propagation
@@ -18887,9 +18887,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val smbUnits = rT.units ?: 0.0
         val tbr = (rT.rate ?: 0.0).coerceAtLeast(0.0)
         val dur = rT.duration ?: 0
-        val builder = StringBuilder("DECISION_FINAL[$tag]: smb=${"%.2f".format(Locale.US, smb)}U tbr=${"%.2f".format(Locale.US, tbr)}U/h dur=${dur}m")
+        val builder = StringBuilder("DECISION_FINAL[$tag]: smb=${aimiFmt2(smb)}U tbr=${aimiFmt2(tbr)}U/h dur=${dur}m")
         if (bg != null) builder.append(" bg=${bg.roundToInt()}")
-        if (delta != null) builder.append(" Δ=${"%.1f".format(Locale.US, delta)}")
+        if (delta != null) builder.append(" Δ=${aimiFmt1(delta)}")
         val reasonText = rT.reason.toString().replace("\n", " | ")
         builder.append(" reason=${reasonText.take(180)}")
         consoleLog.add(builder.toString())
@@ -18959,15 +18959,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         triggerBasalMlTrainingIfNeeded()
         val gov = basalNeuralLearner.getGovernanceSnapshot()
         consoleLog.add(
-            "🧭 BASAL_GOV[$govTag]: action=${gov.action} conf=${"%.2f".format(Locale.US, gov.confidence)} " +
-                "n=${gov.sampleCount} hypo=${"%.2f".format(Locale.US, gov.hypoRate)} hypoG=${"%.2f".format(Locale.US, gov.hypoRateGovernance)} " +
-                "hypoAdj=${"%.2f".format(Locale.US, gov.hypoGovernanceAdjusted)} ant=${"%.2f".format(Locale.US, gov.anticipationRelief)} " +
-                "wMean=${"%.2f".format(Locale.US, gov.meanGovernanceWeight)} high=${"%.2f".format(Locale.US, gov.highRate)} " +
-                "mae=${"%.1f".format(Locale.US, gov.meanAbsTargetError)} latch=${gov.hypoHoldLatched} " +
-                "floorB=${gov.activeBasalFloor?.let { "%.2f".format(Locale.US, it) } ?: "-"} " +
-                "floorA=${gov.activeAggressivenessFloor?.let { "%.2f".format(Locale.US, it) } ?: "-"} " +
-                "wBolus=${if (windowBolusU.isFinite()) "%.2f".format(Locale.US, windowBolusU) else "?"}U " +
-                "wCob=${if (windowCobG.isFinite()) "%.0f".format(Locale.US, windowCobG) else "?"}g " +
+            "🧭 BASAL_GOV[$govTag]: action=${gov.action} conf=${aimiFmt2(gov.confidence)} " +
+                "n=${gov.sampleCount} hypo=${aimiFmt2(gov.hypoRate)} hypoG=${aimiFmt2(gov.hypoRateGovernance)} " +
+                "hypoAdj=${aimiFmt2(gov.hypoGovernanceAdjusted)} ant=${aimiFmt2(gov.anticipationRelief)} " +
+                "wMean=${aimiFmt2(gov.meanGovernanceWeight)} high=${aimiFmt2(gov.highRate)} " +
+                "mae=${aimiFmt1(gov.meanAbsTargetError)} latch=${gov.hypoHoldLatched} " +
+                "floorB=${gov.activeBasalFloor?.let { aimiFmt2(it) } ?: "-"} " +
+                "floorA=${gov.activeAggressivenessFloor?.let { aimiFmt2(it) } ?: "-"} " +
+                "wBolus=${if (windowBolusU.isFinite()) aimiFmt2(windowBolusU) else "?"}U " +
+                "wCob=${if (windowCobG.isFinite()) aimiFmt0(windowCobG) else "?"}g " +
                 "reason=${gov.reason}"
         )
     }
@@ -19044,11 +19044,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private fun appendDecisionFinalTickLine(diag: DecisionFinalDiagSnapshot, activityThreshold: Double) {
         val tickLine =
-            "TICK ts=${aimiWallClockMs()} bg=${diag.bgValue.roundToInt()} d=${"%.1f".format(Locale.US, diag.deltaValue)} iob=${"%.2f".format(Locale.US, iob)} act=${"%.3f".format(Locale.US, iobActivityNow)} th=${"%.3f".format(Locale.US, activityThreshold)} " +
-                "cob=${"%.1f".format(Locale.US, cob)} mode=${diag.modeLabel} autodriveState=$lastAutodriveState pred=${diag.predChunk} " +
-                "safety=$lastSafetySource ref=${diag.refractoryStatus} maxIOB=${"%.2f".format(Locale.US, maxIob)} maxSMB=${"%.2f".format(Locale.US, maxSMB)} " +
-                "smb=${"%.2f".format(Locale.US, lastSmbProposed)}->${"%.2f".format(Locale.US, lastSmbCapped)}->${"%.2f".format(Locale.US, diag.smbFinal)} " +
-                "tbr=${"%.2f".format(Locale.US, diag.tbrUph)} src=$lastDecisionSource"
+            "TICK ts=${aimiWallClockMs()} bg=${diag.bgValue.roundToInt()} d=${aimiFmt1(diag.deltaValue)} iob=${aimiFmt2(iob)} act=${aimiFmt3(iobActivityNow)} th=${aimiFmt3(activityThreshold)} " +
+                "cob=${aimiFmt1(cob)} mode=${diag.modeLabel} autodriveState=$lastAutodriveState pred=${diag.predChunk} " +
+                "safety=$lastSafetySource ref=${diag.refractoryStatus} maxIOB=${aimiFmt2(maxIob)} maxSMB=${aimiFmt2(maxSMB)} " +
+                "smb=${aimiFmt2(lastSmbProposed)}->${aimiFmt2(lastSmbCapped)}->${aimiFmt2(diag.smbFinal)} " +
+                "tbr=${aimiFmt2(diag.tbrUph)} src=$lastDecisionSource"
         consoleLog.add(tickLine)
     }
 
@@ -19203,7 +19203,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             preferences.put(DoubleKey.OApsAIMILastEstimatedCarbTime, 0.0)
             aapsLogger.debug(
                 LTag.APS,
-                "MEAL_ADVISOR_TRACE cleared stale estimate carbs=$estimatedCarbs ageMin=${"%.0f".format(timeSinceEstimateMin)}",
+                "MEAL_ADVISOR_TRACE cleared stale estimate carbs=$estimatedCarbs ageMin=${aimiFmt0(timeSinceEstimateMin)}",
             )
             estimatedCarbs = 0.0
         }
@@ -19215,7 +19215,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val maxPassiveWindow = if (isExplicitTrigger) 120.0 else 20.0
         aapsLogger.debug(
             app.aaps.core.interfaces.logging.LTag.APS,
-            "MEAL_ADVISOR_TRACE gate carbs=${"%.1f".format(estimatedCarbs)} timeSinceMin=${"%.1f".format(timeSinceEstimateMin)} maxWindow=$maxPassiveWindow bg=${"%.1f".format(bg)} explicit=$isExplicitTrigger modesCondition=$modesCondition"
+            "MEAL_ADVISOR_TRACE gate carbs=${aimiFmt1(estimatedCarbs)} timeSinceMin=${aimiFmt1(timeSinceEstimateMin)} maxWindow=$maxPassiveWindow bg=${aimiFmt1(bg)} explicit=$isExplicitTrigger modesCondition=$modesCondition"
         )
 
         if (estimatedCarbs > 10.0 && timeSinceEstimateMin in 0.0..maxPassiveWindow && bg >= 60) {
@@ -19262,12 +19262,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 val tbrCoverage = safeMax * 0.5  // 30min = 0.5h
 
                 // DEBUG: Log all calculation steps with detailed breakdown
-                consoleLog.add("ADVISOR_CALC carbs=${estimatedCarbs.toInt()}g IC=${profile.carb_ratio} → ${String.format("%.2f", insulinForCarbs)}U")
-                consoleLog.add("ADVISOR_CALC IOB_raw=${String.format("%.2f", iobData.iob)}U × discount=$MEAL_ADVISOR_IOB_DISCOUNT_FACTOR → IOB_effective=${String.format("%.2f", effectiveIOB)}U")
-                consoleLog.add("ADVISOR_CALC minimumGuaranteed=${String.format("%.2f", minimumRequired)}U (${(MEAL_ADVISOR_MIN_CARB_COVERAGE * 100).toInt()}% of carb need)")
-                consoleLog.add("ADVISOR_CALC calculated=${String.format("%.2f", calculatedNeed)}U → netSMB=${String.format("%.2f", netNeeded)}U (max of calculated and minimum)")
-                consoleLog.add("ADVISOR_CALC TBR=${String.format("%.1f", safeMax)}U/h (will deliver ${String.format("%.2f", tbrCoverage)}U over 30min as complement)")
-                consoleLog.add("ADVISOR_CALC TOTAL delivery: SMB ${String.format("%.2f", netNeeded)}U + TBR ${String.format("%.2f", tbrCoverage)}U = ${String.format("%.2f", netNeeded + tbrCoverage)}U delta=$delta modesOK=true")
+                consoleLog.add("ADVISOR_CALC carbs=${estimatedCarbs.toInt()}g IC=${profile.carb_ratio} → ${aimiFmt2(insulinForCarbs)}U")
+                consoleLog.add("ADVISOR_CALC IOB_raw=${aimiFmt2(iobData.iob)}U × discount=$MEAL_ADVISOR_IOB_DISCOUNT_FACTOR → IOB_effective=${aimiFmt2(effectiveIOB)}U")
+                consoleLog.add("ADVISOR_CALC minimumGuaranteed=${aimiFmt2(minimumRequired)}U (${(MEAL_ADVISOR_MIN_CARB_COVERAGE * 100).toInt()}% of carb need)")
+                consoleLog.add("ADVISOR_CALC calculated=${aimiFmt2(calculatedNeed)}U → netSMB=${aimiFmt2(netNeeded)}U (max of calculated and minimum)")
+                consoleLog.add("ADVISOR_CALC TBR=${aimiFmt1(safeMax)}U/h (will deliver ${aimiFmt2(tbrCoverage)}U over 30min as complement)")
+                consoleLog.add("ADVISOR_CALC TOTAL delivery: SMB ${aimiFmt2(netNeeded)}U + TBR ${aimiFmt2(tbrCoverage)}U = ${aimiFmt2(netNeeded + tbrCoverage)}U delta=$delta modesOK=true")
 
                 // 🚀 If explicit trigger, consume the flag NOW to prevent loop
                 if (isExplicitTrigger) {
@@ -19280,7 +19280,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         bolusU = netNeeded,
                         tbrUph = safeMax,
                         tbrMin = 30,
-                        reason = "📸 Meal Advisor: ${estimatedCarbs.toInt()}g -> ${"%.2f".format(netNeeded)}U + TBR ${"%.1f".format(safeMax)}U/h"
+                        reason = "📸 Meal Advisor: ${estimatedCarbs.toInt()}g -> ${aimiFmt2(netNeeded)}U + TBR ${aimiFmt1(safeMax)}U/h"
                     )
             } else {
                 consoleLog.add("ADVISOR_SKIP reason=modesCondition_false (legacy mode active)")
@@ -19292,7 +19292,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         aapsLogger.debug(
             app.aaps.core.interfaces.logging.LTag.APS,
-            "MEAL_ADVISOR_TRACE fallthrough no_active_request carbs=${"%.1f".format(estimatedCarbs)} timeSinceMin=${"%.1f".format(timeSinceEstimateMin)} bg=${"%.1f".format(bg)}"
+            "MEAL_ADVISOR_TRACE fallthrough no_active_request carbs=${aimiFmt1(estimatedCarbs)} timeSinceMin=${aimiFmt1(timeSinceEstimateMin)} bg=${aimiFmt1(bg)}"
         )
         return DecisionResult.Fallthrough("No active Meal Advisor request")
     }
@@ -19498,7 +19498,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog.add(
                 "🫁 T3c CFRD: lgsFloor=${cfrdLgsFloor.toInt()} " +
                     "cobDelay=${cfrdCobDelaySteps * T3cAnticipation.PREDICTION_STEP_MINUTES}m " +
-                    "exac=$cfrdExac hrBoost=${"%.2f".format(cfrdHrInflammationBoost)}"
+                    "exac=$cfrdExac hrBoost=${aimiFmt2(cfrdHrInflammationBoost)}"
             )
         }
 
@@ -19549,7 +19549,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (physioInformed && (physioPermitsHigherAggression || activityDampen < 1.0)) {
             consoleLog.add(
                 "🌳 T3c physio: risk=${treeRisk?.name ?: "—"} capRaised=$physioPermitsHigherAggression " +
-                    "cap=${"%.1f".format(aggressivenessCap)} activityDampen=${"%.2f".format(activityDampen)}"
+                    "cap=${aimiFmt1(aggressivenessCap)} activityDampen=${aimiFmt2(activityDampen)}"
             )
         }
 
@@ -19571,9 +19571,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         if (anticipationStrength > 0.01) {
             consoleLog.add(
-                "🔮 T3cANT str=${"%.2f".format(anticipationStrength)} " +
+                "🔮 T3cANT str=${aimiFmt2(anticipationStrength)} " +
                     "tSoftHypo=${t3cAnticipationHints.minutesToSoftHypo?.toString() ?: "—"}m " +
-                    "nadir=${t3cAnticipationHints.defensiveNadirBg?.let { "%.0f".format(it) } ?: "—"} " +
+                    "nadir=${t3cAnticipationHints.defensiveNadirBg?.let { aimiFmt0(it) } ?: "—"} " +
                     "tHyperBand=${t3cAnticipationHints.minutesToHyperExcursion?.toString() ?: "—"}m"
             )
         }
@@ -19629,7 +19629,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         consoleLog.add(fusion.toLogLine())
         if (autodriveBasalProposal != null && autodriveBasalProposal.strippedSmbU > 0.0) {
             consoleLog.add(
-                "T3C_AD_BASAL: smb stripped ${"%.2f".format(Locale.US, autodriveBasalProposal.strippedSmbU)}U " +
+                "T3C_AD_BASAL: smb stripped ${aimiFmt2(autodriveBasalProposal.strippedSmbU)}U " +
                     "(reason=${autodriveBasalProposal.reason.take(80)})"
             )
         }
@@ -19652,7 +19652,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             safeRate
         }
         if (physioInformed && ngrBasalMult > 1.0) {
-            consoleLog.add("🌙 T3c NGR nocturnal basal boost ×${"%.2f".format(ngrBasalMult)} → ${"%.2f".format(t3cFinalRate)}U/h")
+            consoleLog.add("🌙 T3c NGR nocturnal basal boost ×${aimiFmt2(ngrBasalMult)} → ${aimiFmt2(t3cFinalRate)}U/h")
         }
 
         // ── T3C Hyper basal floor ───────────────────────────────────────────────
@@ -19672,16 +19672,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (hyperFloorApplies && t3cFlooredRate > t3cFinalRate + 0.01) {
             consoleLog.add(
                 "🧱 T3c hyper floor: BG≥${hyperFloorBgMgdl.toInt()} for ≥${hyperFloorDwellMin}m → basal held at maxBasal " +
-                    "${"%.2f".format(hyperFloorUph)}U/h (was ${"%.2f".format(t3cFinalRate)})"
+                    "${aimiFmt2(hyperFloorUph)}U/h (was ${aimiFmt2(t3cFinalRate)})"
             )
         }
 
         rT.rate = t3cFlooredRate
         rT.duration = 30
         rT.reason.append(
-            "🛡️T3c | Thresh: ${activationThreshold.toInt()} | Agg: ${"%.1f".format(aggressiveness)} (raw=${"%.1f".format(rawAggressiveness)} AML=${"%.2f".format(adaptiveMult)}) | " +
-                "ANT:${"%.2f".format(anticipationStrength)} | unlock=${fusion.unlock} | " +
-                "PI/AD: ${"%.2f".format(t3cFlooredRate)}U/h (target=${"%.2f".format(targetRate)} cap=${"%.2f".format(maxBasalCap)} stepUp=${"%.2f".format(maxStepUp)})"
+            "🛡️T3c | Thresh: ${activationThreshold.toInt()} | Agg: ${aimiFmt1(aggressiveness)} (raw=${aimiFmt1(rawAggressiveness)} AML=${aimiFmt2(adaptiveMult)}) | " +
+                "ANT:${aimiFmt2(anticipationStrength)} | unlock=${fusion.unlock} | " +
+                "PI/AD: ${aimiFmt2(t3cFlooredRate)}U/h (target=${aimiFmt2(targetRate)} cap=${aimiFmt2(maxBasalCap)} stepUp=${aimiFmt2(maxStepUp)})"
         )
 
         // 🧬 Adaptive Learning Update — learn from the actually delivered rate (post hyper-floor).
