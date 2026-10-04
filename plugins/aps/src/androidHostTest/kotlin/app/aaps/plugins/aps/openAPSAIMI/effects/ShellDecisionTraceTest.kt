@@ -39,7 +39,13 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionMemory
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioContextMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisId
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.AdvancedPredictionCurves
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLearnedState
+import app.aaps.plugins.aps.openAPSAIMI.release.HyperSeverityTier
+import app.aaps.plugins.aps.openAPSAIMI.release.HyperTrajectoryReleaseResult
+import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionCurve
+import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionKind
+import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionPair
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiAuditor
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiBehaviorProfileSource
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiHealthContext
@@ -372,6 +378,92 @@ class ShellDecisionTraceTest {
         }.replace(Regex("(?<![A-Za-z])ts=\\d+"), "ts=<clock>")
         assertEquals(0.15, rT.units ?: -1.0, 1e-6)
         assertEquals(FINALIZE_CAP_TRACE, trace)
+    }
+
+    @Test
+    fun recursiveBeliefResolveWithAFlatScenarioRecordsTheReads() {
+        val prefs = recordingPreferences(
+            bools = mapOf(BooleanKey.OApsAIMIRecursiveBeliefShadow to true),
+        )
+        setField(tick, "preferences", prefs)
+        setField(tick, "bg", 180.0)
+        setField(tick, "delta", 2.0f)
+        setField(tick, "shortAvgDelta", 1.0f)
+        setField(tick, "targetBg", 100.0f)
+        setField(tick, "iob", 1.0f)
+        setField(tick, "maxIob", 10.0)
+        setField(tick, "maxSMB", 0.5)
+        setField(tick, "maxSMBHB", 0.5)
+        setField(tick, "eventualBG", 180.0)
+        setField(tick, "hourOfDay", 12)
+        val curves = AdvancedPredictionCurves(
+            iob = listOf(180.0, 170.0),
+            cob = listOf(180.0),
+            uam = listOf(180.0),
+            zt = listOf(180.0),
+            hybrid = listOf(180.0, 170.0),
+        )
+        val floor = ScenarioProjectionCurve(
+            kind = ScenarioProjectionKind.CLINICAL_FLOOR,
+            pointsMgdl = listOf(180, 170),
+            terminalMgdl = 170.0,
+            pathMinMgdl = 170.0,
+            pathMinHitFloor = false,
+        )
+        setField(
+            tick,
+            "lastScenarioProjection",
+            ScenarioProjectionPair(
+                clinicalFloor = floor,
+                scenarioBest = floor.copy(kind = ScenarioProjectionKind.SCENARIO_BEST),
+                contributors = emptyList(),
+                cobPointsMgdl = listOf(180),
+                ztPointsMgdl = listOf(180),
+            ),
+        )
+        setField(tick, "lastAdvancedPredictionCurves", curves)
+        val profile = profileStub()
+        val rT = RT(runningDynamicIsf = false)
+        var snapshot: Any? = "missing"
+        val trace = capture {
+            snapshot = invokeRbtResolve(rT, profile)
+        }.replace(Regex("(?<![A-Za-z])ts=\\d+"), "ts=<clock>")
+        assertEquals("snap=$snapshot\n$RBT_RESOLVE_TRACE", "snap=$snapshot\n$trace")
+    }
+
+    private fun invokeRbtResolve(rT: RT, profile: OapsProfileAimi): Any? {
+        val method = tick.javaClass.declaredMethods.first {
+            it.name == "runRecursiveBeliefResolve" && it.parameterCount == 13
+        }
+        method.isAccessible = true
+        val htr = HyperTrajectoryReleaseResult(
+            active = false,
+            tier = HyperSeverityTier.OFF,
+            severityWeight = 0.0,
+            smbFloorU = 0.0,
+            v3SmbBeforeU = 0.0,
+            v3SmbAfterU = 0.0,
+            absorptionOffsetMgdl = 0.0,
+            suppressTrajBasalShift = false,
+            hypoMinPredIgnored = false,
+            reason = "off",
+        )
+        return method.invoke(
+            tick,
+            0.0,
+            htr,
+            rT,
+            2.0f,
+            30.0,
+            profile,
+            mock(AutosensResult::class.java),
+            GlucoseStatusAIMI(glucose = 180.0, date = now),
+            0,
+            0,
+            false,
+            null,
+            null,
+        )
     }
 
     private fun invokeFinalize(rT: RT, proposedUnits: Double) {
@@ -786,6 +878,8 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val RBT_RESOLVE_TRACE = "PENDING_RBT_RESOLVE"
+
         private val FINALIZE_CAP_TRACE = """
 READ key=DoubleKey.OApsAIMIHighBg value=0.00
 READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
