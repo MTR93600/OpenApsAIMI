@@ -1,6 +1,10 @@
 package app.aaps.plugins.aps.openAPSAIMI.effects
 
+import app.aaps.core.data.model.HR
+import app.aaps.core.data.pump.defs.PumpDescription
 import app.aaps.core.interfaces.aps.AutosensDataStore
+import app.aaps.core.interfaces.plugin.ActivePlugin
+import app.aaps.core.interfaces.pump.PumpWithConcentration
 import app.aaps.core.interfaces.aps.AutosensResult
 import app.aaps.core.interfaces.aps.CurrentTemp
 import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
@@ -21,6 +25,7 @@ import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.AimiDecisionContext
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.AimiUamHandler
 import app.aaps.plugins.aps.openAPSAIMI.DetermineBasalaimiSMB2
 import app.aaps.plugins.aps.openAPSAIMI.NGRConfig
@@ -35,6 +40,12 @@ import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController
 import app.aaps.plugins.aps.openAPSAIMI.learning.BasalNeuralLearner
 import app.aaps.plugins.aps.openAPSAIMI.effects.RbtLiveCommitResult
+import app.aaps.plugins.aps.openAPSAIMI.patient.GlobalPhysiologicalState
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaAction
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecision
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecisionBasis
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecisionEnvironment
+import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalRiskLevel
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiTickContext
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.DoseTerminalSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR
@@ -47,6 +58,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioMultipliersMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisId
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.AdvancedPredictionCurves
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActionState
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityState
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityWindow
@@ -1019,6 +1031,309 @@ class ShellDecisionTraceTest {
         assertEquals(SPORT_MEAL_SMB_TRACE, trace)
     }
 
+    @Test
+    fun lowPredictionRequestsAQuarterBasal() {
+        armPump()
+        setField(tick, "targetBg", 100.0f)
+        val profile = profileStub()
+        whenever(profile.carb_ratio).thenReturn(10.0)
+        val iob = IobTotal(time = aimiWallClockMs(), iob = 2.0, activity = 0.20)
+        val ctx = tickContext(profile, 100.0).copy(
+            iobDataArray = arrayOf(iob),
+            glucoseStatus = GlucoseStatusAIMI(glucose = 100.0, delta = 0.0, date = now),
+        )
+        val rT = RT(runningDynamicIsf = false)
+        val glucose = GlucoseStatusAIMI(glucose = 100.0, delta = 0.0, date = now)
+        var best = Double.NaN
+        var floorT = Double.NaN
+        var threshold = Double.NaN
+        val trace = capture {
+            val prep = invokeNamed(
+                "runAdvancedPredictionsAndPredPipePrep",
+                listOf(
+                    ctx, profile, rT, 100.0, 0.0f, 50.0, 100.0f, glucose, 1.0, false,
+                    PhysioMultipliersMTR.NEUTRAL, iob, 0, 72, 60, 0.0f,
+                ),
+            )
+            val scenario = prep!!.javaClass.getDeclaredField("scenario").apply { isAccessible = true }.get(prep) as ScenarioProjectionPair
+            best = scenario.scenarioBest.terminalMgdl
+            floorT = scenario.clinicalFloor.terminalMgdl
+            threshold = prep.javaClass.getDeclaredField("threshold").apply { isAccessible = true }.get(prep) as Double
+            invokeSafetyHalt(profile, ctx, rT, glucose, scenario)
+        }.replace(Regex("ts=\\d+"), "ts=<clock>")
+        assertEquals(43.78040816326531, best, 1e-6)
+        assertEquals(39.0, floorT, 1e-9)
+        assertEquals(70.0, threshold, 1e-9)
+        assertEquals(LOW_PREDICTION_TBR_TRACE, trace)
+    }
+
+    @Test
+    fun harmoniaRampsATwoUnitRequest() {
+        val profile = profileStub()
+        whenever(profile.min_bg).thenReturn(90.0)
+        whenever(profile.max_bg).thenReturn(140.0)
+        setField(tick, "bg", 180.0)
+        setField(tick, "delta", 2.0f)
+        setField(tick, "predictedBg", 180.0f)
+        setField(tick, "eventualBG", 180.0)
+        setField(tick, "targetBg", 100.0f)
+        setField(tick, "iob", 1.0f)
+        setField(tick, "maxIob", 10.0)
+        setField(tick, "maxSMB", 1.0)
+        val decision = HarmoniaDecision(
+            timestampMs = now,
+            branch = "STABLE",
+            action = HarmoniaAction.BASAL_FIRST,
+            eligible = true,
+            targetBasalUph = 2.0,
+            targetSmbU = 0.0,
+            basalFactor = 1.0,
+            smbFactor = 1.0,
+            environment = HarmoniaDecisionEnvironment(
+                currentBgMgdl = 180.0,
+                deltaMgdl5m = 2.0,
+                iobU = 1.0,
+                cobG = 0.0,
+                currentBasalUph = 1.0,
+                maxBasalUph = 3.0,
+                maxSmbU = 1.0,
+                maxIobU = 10.0,
+            ),
+            capsApplied = emptyList(),
+            blockers = emptyList(),
+            rationale = emptyList(),
+            compactSummary = "ready",
+            decisionBasis = HarmoniaDecisionBasis(
+                trunkState = GlobalPhysiologicalState.STABLE,
+                trunkConfidence = 0.8,
+                trunkRisk = PhysiologicalRiskLevel.LOW,
+                primaryReason = "test",
+                contributingBranches = emptyList(),
+                actionCoherentWithTrunk = true,
+            ),
+        )
+        setField(tick, "lastHarmoniaDecision", decision)
+        val ctx = tickContext(profile, 180.0)
+        val rT = RT(runningDynamicIsf = false)
+        val bundle = privateData(
+            "AimiPostBasalEngineFinalizeBundle",
+            listOf(
+                ctx,
+                profile,
+                profile,
+                rT,
+                BasalDecisionEngine.Decision(rate = 1.0, duration = 30, overrideSafety = false),
+                false,
+                null,
+                35.0,
+                4,
+            ),
+        )
+        var rate = Double.NaN
+        val trace = capture {
+            val plan = invokeNamed("planHarmoniaProductionBranch", listOf(bundle))
+            rate = if (plan == null) Double.NaN else plan.javaClass.getDeclaredField("rateUph").apply { isAccessible = true }.get(plan) as Double
+        }
+        assertEquals(1.3, rate, 0.001)
+        assertEquals(HARMONIA_RAMP_TRACE, trace)
+    }
+
+    @Test
+    fun autosensHalfDoublesScheduledBasalAndRestingHeartRateStrengthensIsf() {
+        val prefs = recordingPreferences(
+            doubles = emptyMap(),
+            bools = mapOf(BooleanKey.OApsAIMIEnableStepsFromWatch to true),
+        )
+        setField(tick, "preferences", prefs)
+        val profile = profileStub()
+        whenever(profile.min_bg).thenReturn(80.0)
+        whenever(profile.max_bg).thenReturn(120.0)
+        whenever(profile.autosens_max).thenReturn(1.5)
+        whenever(profile.half_basal_exercise_target).thenReturn(160)
+        whenever(profile.carb_ratio).thenReturn(10.0)
+        whenever(profile.adv_target_adjustments).thenReturn(false)
+        armPump()
+        val autosens = mock(AutosensResult::class.java)
+        whenever(autosens.ratio).thenReturn(0.5)
+        val ctx = tickContext(profile, 140.0).copy(autosensData = autosens)
+        val rT = RT(runningDynamicIsf = false)
+        val glucose = GlucoseStatusAIMI(glucose = 140.0, delta = 1.0, shortAvgDelta = 1.0, longAvgDelta = 1.0, date = now, combinedDelta = 1.0)
+        setField(tick, "hourOfDay", 15)
+        setField(tick, "iob", 1.0f)
+        setField(tick, "delta", 2.0f)
+        setField(tick, "variableSensitivity", 50.0f)
+        setField(tick, "maxIob", 10.0)
+        holdRefresh("stepsRefreshInFlight")
+        holdRefresh("heartRatesRefreshInFlight")
+        setAtomic("stepsSnapshotRef", emptyList<Any>())
+        val wall = aimiWallClockMs()
+        setAtomic(
+            "heartRatesSnapshotRef",
+            listOf(
+                HR(duration = 60_000L, timestamp = wall - 40 * 60_000L, beatsPerMinute = 80.0, device = "watch"),
+                HR(duration = 60_000L, timestamp = wall - 30 * 60_000L, beatsPerMinute = 80.0, device = "watch"),
+                HR(duration = 60_000L, timestamp = wall - 20 * 60_000L, beatsPerMinute = 80.0, device = "watch"),
+                HR(duration = 60_000L, timestamp = wall - 2 * 60_000L, beatsPerMinute = 110.0, device = "watch"),
+            ),
+        )
+        var basal = Double.NaN
+        val trace = capture {
+            val schedule = invokeNamed(
+                "buildGlobalAimiBasalScheduleBootstrap",
+                listOf(ctx, profile, rT, glucose, null, 140.0, 140.0f, 1.0f, 1.0, now, now, false, false, 0, 0),
+            )
+            basal = schedule!!.javaClass.getDeclaredField("basal").apply { isAccessible = true }.get(schedule) as Double
+            invokeNamed(
+                "runPostBasalBootstrapIobTickStepsAndHeartRate",
+                listOf(glucose, profile, IobTotal(time = now, iob = 1.0), 160.0),
+            )
+        }
+        val isf = getField(tick, "variableSensitivity") as Float
+        assertEquals(2.0, basal, 0.001)
+        assertEquals(45.0f, isf, 0.001f)
+        assertEquals(AUTOSENS_HR_TRACE, trace)
+    }
+
+    @Test
+    fun highGlucoseLowersTheWorkingTarget() {
+        val profile = profileStub()
+        whenever(profile.adv_target_adjustments).thenReturn(true)
+        whenever(profile.min_bg).thenReturn(90.0)
+        whenever(profile.max_bg).thenReturn(120.0)
+        whenever(profile.carb_ratio).thenReturn(10.0)
+        setField(tick, "bg", 180.0)
+        setField(tick, "delta", 2.0f)
+        setField(tick, "cob", 0.0f)
+        setField(tick, "targetBg", 100.0f)
+        setField(tick, "maxIob", 10.0)
+        setField(tick, "iob", 1.0f)
+        val ctx = tickContext(profile, 180.0)
+        val rT = RT(runningDynamicIsf = false)
+        val glucose = GlucoseStatusAIMI(
+            glucose = 180.0,
+            delta = 2.0,
+            shortAvgDelta = 1.0,
+            longAvgDelta = 1.0,
+            date = now,
+            combinedDelta = 2.0,
+        )
+        var target = Double.NaN
+        val trace = capture {
+            val stage = invokeNamed(
+                "runPkpdPredictionsBgiDeviationAndNoisyTargetsStage",
+                listOf(
+                    ctx, profile, rT, glucose, null,
+                    IobTotal(time = now, iob = 1.0),
+                    180.0, 2.0f, 50.0, 1.0, 1.0, 90.0, 100.0, 120.0,
+                ),
+            )
+            target = stage!!.javaClass.getDeclaredField("targetBg").apply { isAccessible = true }.get(stage) as Double
+        }
+        val correctionU = (180.0 - target) / 50.0
+        assertEquals(80.0, target, 0.001)
+        assertEquals(2.0, correctionU, 0.001)
+        assertEquals(PKPD_TARGET_TRACE, trace)
+    }
+
+    @Test
+    fun legacyBrittleBypassSetsThePiBasal() {
+        val prefs = recordingPreferences(
+            doubles = mapOf(
+                DoubleKey.OApsAIMIT3cActivationThreshold to 140.0,
+                DoubleKey.OApsAIMIT3cAggressiveness to 1.0,
+                DoubleKey.autodriveMaxBasal to 3.0,
+                DoubleKey.meal_modes_MaxBasal to 3.0,
+            ),
+            bools = mapOf(BooleanKey.OApsAIMIT3cBrittleMode to true),
+        )
+        setField(tick, "preferences", prefs)
+        setField(tick, "adaptiveMult", 1.0)
+        setField(tick, "lastNgrBasalMultiplier", 1.0)
+        setField(tick, "bg", 180.0)
+        setField(tick, "delta", 4.0f)
+        setField(tick, "iob", 1.0f)
+        setField(tick, "maxIob", 10.0)
+        setField(tick, "maxSMB", 0.5)
+        setField(tick, "variableSensitivity", 50.0f)
+        setField(tick, "hourOfDay", 12)
+        setField(tick, "eventualBG", 180.0)
+        holdRefresh("bolusRefreshInFlight")
+        val profile = profileStub()
+        whenever(profile.carb_ratio).thenReturn(10.0)
+        whenever(profile.variable_sens).thenReturn(50.0)
+        val ctx = tickContext(profile, 180.0)
+        val rT = RT(runningDynamicIsf = false)
+        val trace = capture {
+            invokeNamed(
+                "runT3cBrittleBypassOrReturn",
+                listOf(
+                    ctx,
+                    profile,
+                    rT,
+                    profile,
+                    null,
+                    2.0f,
+                    PhysioMultipliersMTR.NEUTRAL,
+                    InsulinActionState.default(),
+                ),
+            )
+        }.replace(Regex("(?<![A-Za-z])ts=\\d+"), "ts=<clock>")
+        assertEquals(1.3, rT.rate!!, 0.001)
+        assertEquals(null, rT.units)
+        assertEquals(30, rT.duration)
+        assertEquals(T3C_BYPASS_TRACE, trace)
+    }
+
+    private fun invokeNamed(name: String, args: List<Any?>): Any? {
+        val method = tick.javaClass.declaredMethods.first {
+            it.name == name && it.parameterCount == args.size
+        }
+        method.isAccessible = true
+        return try {
+            method.invoke(tick, *args.toTypedArray())
+        } catch (e: java.lang.reflect.InvocationTargetException) {
+            throw e.cause ?: e
+        }
+    }
+
+    private fun invokeSafetyHalt(
+        profile: OapsProfileAimi,
+        ctx: AimiTickContext,
+        rT: RT,
+        glucose: GlucoseStatusAIMI,
+        scenario: ScenarioProjectionPair,
+    ): Any? = invokeNamed(
+        "runPredPipelineSafetyHaltOrReturn",
+        listOf(
+            ctx,
+            profile,
+            rT,
+            glucose.glucose,
+            glucose.delta.toFloat(),
+            glucose.delta.toFloat(),
+            IobTotal(time = now, iob = 1.0),
+            glucose,
+            scenario,
+            false,
+        ),
+    )
+
+    private fun armPump() {
+        val pump = mock(PumpWithConcentration::class.java)
+        val desc = PumpDescription()
+        desc.basalStep = 0.05
+        desc.bolusStep = 0.05
+        whenever(pump.pumpDescription).thenReturn(desc)
+        whenever(pump.isInitialized()).thenReturn(true)
+        whenever(pump.isConnected()).thenReturn(true)
+        val plugin = mock(ActivePlugin::class.java)
+        whenever(plugin.activePump).thenReturn(pump)
+        setField(tick, "activePlugin", plugin)
+        val validator = mock(PumpCapabilityValidator::class.java)
+        whenever(validator.validateBasal(any(), any())).thenAnswer { it.arguments[0] as Double }
+        setField(tick, "pumpCapabilityValidator", validator)
+    }
+
     private fun invokeSafetySmb(): Float {
         val method = tick.javaClass.declaredMethods.first {
             it.name == "applySafetyPrecautions" && it.parameterCount == 9
@@ -1869,6 +2184,177 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMIMealAdvisorTrigger value=false
             READ key=BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled value=false
             READ key=DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor value=0.00
+        """.trimIndent()
+
+        private val AUTOSENS_HR_TRACE = """
+            LOG phrase
+            LOG phrase
+            READ key=BooleanKey.OApsAIMIEnableStepsFromWatch value=true
+            LOG 💓 HR_TREND_ISF x0.90 (hr10 110 / hr60 88, steps10 0)
+        """.trimIndent()
+
+        private val LOW_PREDICTION_TBR_TRACE = """
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
+            READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
+            READ key=BooleanKey.OApsAIMIPkpdHyperReversion value=false
+            READ key=BooleanKey.OApsAIMIPkpdStackAwareGuardB value=false
+            READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
+            LOG PKPD_SOFT_FLOOR: raw=39 soft=39 hybT=39 hitFloor=true applied=false endo=false fallSuppressed=false reason=endo_reversion_disabled
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
+            READ key=AimiLongKey.LastPrebolusTime value=0
+            READ key=DoubleKey.OApsAIMITDD7 value=0.00
+            READ key=BooleanKey.OApsAIMIautoDriveActive value=false
+            READ key=BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive value=false
+            READ key=DoubleKey.OApsAIMIHyperEstablishedDevMgdl value=0.00
+            READ key=DoubleKey.OApsAIMIHyperDeepDevMgdl value=0.00
+            READ key=DoubleKey.OApsAIMIHighBg value=0.00
+            READ key=DoubleKey.OApsAIMIHighBg value=0.00
+            READ key=DoubleKey.OApsAIMIHighBg value=0.00
+            READ key=DoubleKey.OApsAIMITDD7 value=0.00
+            READ key=BooleanKey.OApsAIMIautoDriveActive value=false
+            READ key=BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive value=false
+            READ key=DoubleKey.OApsAIMIHyperEstablishedDevMgdl value=0.00
+            READ key=DoubleKey.OApsAIMIHyperDeepDevMgdl value=0.00
+            READ key=DoubleKey.OApsAIMIHighBg value=0.00
+            READ key=DoubleKey.OApsAIMIHighBg value=0.00
+            READ key=DoubleKey.OApsAIMIHighBg value=0.00
+            READ key=BooleanKey.OApsAIMIContextEnabled value=false
+            READ key=BooleanKey.OApsAIMISensorConfidenceCgmFirst value=false
+            READ key=BooleanKey.OApsAIMIEffortActivityProtection value=false
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
+            READ key=StringKey.AimiTuningContextSelection value=
+            READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+            READ key=DoubleKey.autodriveMaxBasal value=0.00
+            LOG TREE_DEPLOYED trunk=SENSOR_UNCERTAIN conf=0.90 risk=CRITICAL kinetics=NO_STAGE
+            LOG Tree: sensor uncertain | conf 90% | risk critical | sensor uncertain
+            LOG MEAL_CERTAINTY level=NONE tree=NONE rise=WEAK terminals=HYPO_CONFLICT effortVeto=false
+            LOG Harmonia sim: blocked SENSOR_UNCERTAIN | sensor_uncertain,low_or_falling_bg,max_iob_pressure,critical_risk
+            LOG SCENARIO: floorT=39 bestT=43 floorMin=39 bestMin=39 gap=4 contrib=[PKPD_IOB_FLOOR,TARGET_BLEND]
+            LOG PRED_PIPE: bg=100 delta=0.0 bestT=44 floorT=39 floorMin=39 min=44 th=70 noise=0.0 dataAge=1.0m pumpReachable=true sanity=ok
+            LOG RISK_EARLY: compositeMin=39 hypoTh=70 predT=39 evT=43 pathRaw=n/a pathClamp=n/a
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
+            READ key=AimiLongKey.LastPrebolusTime value=0
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
+            LOG RISK_SAFETY_EARLY: compositeMin=39 predT=39 evT=39 bestT=43 floorT=39 mealRise=false suppressed=false
+            LOG 🟠 SAFETY_LGS_TIER2 LGS_PRED_LOW: pred=39 <= Th=70 (BG actuel=100 OK) — Basale réduite 25%
+            LOG SAFETY_APPLIED_TBR intent=0.25 haltPipeline=false
+            EFFECT SetTbr rate=0.25 dur=30 override=true forceExact=false adaptive=1.00
+        """.trimIndent()
+
+        private val T3C_BYPASS_TRACE = """
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=true
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=true
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=true
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefShadow value=false
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefAuthority value=false
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefWavelet value=false
+            READ key=BooleanKey.OApsAIMIMealHyperBypassEnabled value=false
+            READ key=BooleanKey.OApsAIMITreeMealRiseFrontLoad value=false
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=true
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefShadow value=false
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefAuthority value=false
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefWavelet value=false
+            READ key=BooleanKey.OApsAIMIMealHyperBypassEnabled value=false
+            READ key=BooleanKey.OApsAIMITreeMealRiseFrontLoad value=false
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=true
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=true
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefShadow value=false
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefAuthority value=false
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefWavelet value=false
+            READ key=BooleanKey.OApsAIMIMealHyperBypassEnabled value=false
+            READ key=BooleanKey.OApsAIMITreeMealRiseFrontLoad value=false
+            LOG ⚡ T3c Brittle Mode Active: Bypassing standard AIMI algorithm.
+            READ key=AimiLongKey.LastPrebolusTime value=0
+            READ key=BooleanKey.OApsAIMIT3cAutodriveBasalAuthority value=false
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
+            READ key=BooleanKey.OApsAIMISensorConfidenceCgmFirst value=false
+            READ key=BooleanKey.OApsAIMIEffortActivityProtection value=false
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=true
+            READ key=StringKey.AimiTuningContextSelection value=
+            READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+            READ key=DoubleKey.autodriveMaxBasal value=3.00
+            LOG TREE_DEPLOYED trunk=SENSOR_UNCERTAIN conf=0.90 risk=CRITICAL kinetics=NO_STAGE
+            LOG Tree: sensor uncertain | conf 90% | risk critical | sensor uncertain
+            LOG MEAL_CERTAINTY level=NONE tree=NONE rise=OK terminals=OK effortVeto=false
+            LOG Harmonia sim: blocked SENSOR_UNCERTAIN | sensor_uncertain,critical_risk
+            READ key=DoubleKey.OApsAIMIweight value=0.00
+            LOG 👻 [T3c_SHADOW] DataLake tick fired for V3 ML continuity.
+            READ key=AimiLongKey.LastPrebolusTime value=0
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
+            READ key=BooleanKey.OApsAIMIUndeclaredCobEnabled value=false
+            READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
+            READ key=BooleanKey.OApsAIMIPkpdHyperReversion value=false
+            READ key=BooleanKey.OApsAIMIPkpdStackAwareGuardB value=false
+            READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
+            LOG PKPD_SOFT_FLOOR: raw=180 soft=180 hybT=229 hitFloor=false applied=false endo=false fallSuppressed=false reason=endo_reversion_disabled
+            LOG PRED_SET size=49 eventual=229 min=180 uamT=229 source=AdvancedCurves
+            LOG Prédiction avancée avec ISF final de 12.5 (Avancé)
+            READ key=BooleanKey.OApsAIMITrajectoryGuardEnabled value=false
+            LOG 🌀 Trajectory: ⏸ Disabled
+            READ key=BooleanKey.OApsAIMIT3cCfrdMode value=false
+            LOG 🛡️ T3c predict+traj: min=180 ev=229 LGS=70 traj=— E=—
+            READ key=BooleanKey.OApsAIMIT3cAutodriveBasalAuthority value=false
+            READ key=DoubleKey.OApsAIMIT3cActivationThreshold value=140.00
+            READ key=DoubleKey.autodriveMaxBasal value=3.00
+            READ key=DoubleKey.meal_modes_MaxBasal value=3.00
+            READ key=BooleanKey.OApsAIMIT3cCfrdMode value=false
+            READ key=BooleanKey.OApsAIMIT3cPhysioInformedEnabled value=false
+            READ key=DoubleKey.OApsAIMIT3cAggressiveness value=1.00
+            READ key=DoubleKey.OApsAIMIT3cAnticipationStrength value=0.00
+            LOG T3C_AD_BASAL: pi=2.06 ad=— fused=2.06 unlock=false (tree_critical) cap=3.00 step=0.30 smbStripped=0.00
+            READ key=BooleanKey.OApsAIMIT3cHyperBasalFloor value=false
+            LOG 🧭 BASAL_GOV[T3C]: action=KEEP conf=0.00 n=0 hypo=0.00 hypoG=0.00 hypoAdj=0.00 ant=0.00 wMean=1.00 high=0.00 mae=0.0 latch=false floorB=- floorA=- wBolus=0.00U wCob=?g reason=trace
+            LOG 🛡️T3c | Thresh: 140 | Agg: 0.3 (raw=0.0 AML=1.00) | ANT:0.00 | unlock=false | PI/AD: 1.30U/h (target=2.06 cap=3.00 stepUp=0.30)
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=true
+            READ key=BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled value=false
+            READ key=BooleanKey.OApsAIMIUnifiedReactivityEnabled value=false
+            READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
+            READ key=BooleanKey.OApsAIMIautoDriveActive value=false
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=true
+            READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
+            READ key=BooleanKey.OApsAIMIPeakGovernorEnabled value=false
+            READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
+        """.trimIndent()
+
+        private val PKPD_TARGET_TRACE = """
+            LOG Debug: computePkpdPredictions called with delta=2.0
+            LOG PKPD_PRED_MOD: src=fallback sens=0.00 ins=1.00 carb=1.00 uam=1.00 hyb=0.96 decay=1.03 meal=0.00 nonMeal=0.00 suppress=false
+            READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
+            READ key=BooleanKey.OApsAIMIPkpdHyperReversion value=false
+            READ key=BooleanKey.OApsAIMIPkpdStackAwareGuardB value=false
+            READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
+            LOG PKPD_SOFT_FLOOR: raw=180 soft=180 hybT=195 hitFloor=false applied=false endo=false fallSuppressed=false reason=endo_reversion_disabled
+            LOG PKPD predictions → eventual=195 mg/dL from 49 steps uamT=196 pathMinRaw=180 pathMinClamp=180
+            LOG PRED_DIVERGENCE: bg=180 evPkpd=195 bestScn=- Δ=- phase=- meal=- clampPkpd=false clampScn=-
+            READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+            READ key=BooleanKey.OApsAIMIPredictionAuthorityShadow value=false
+            READ key=BooleanKey.OApsAIMIMealConfirmedEarlyRelease value=false
+            LOG PRED_AUTHORITY: src=PKPD_ONLY predT=195 evT=195 pkpd=195 best=- mealSupp=false uplift=false no_scenario_projection [late_pkpd]
+            LOG DOSE_TERMINAL_SNAPSHOT: ev=195 minPred=180 src=PKPD_RAW auth=false clamp=false plateauLift=false curves=false [late_pkpd]
+            READ key=BooleanKey.OApsAIMIStraightLineTubeAdvisorEnabled value=false
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
+            READ key=AimiLongKey.LastPrebolusTime value=0
+            LOG RISK_DECISION: compositeMin=180 hypoTh=110 predT=195 evT=195 pathRaw=180 pathClamp=180 iob=1.00→1.00(AAPS_DEFAULT) src=PKPD_ONLY pkpd=195
+            LOG phrase
+            LOG phrase
+        """.trimIndent()
+
+        private val HARMONIA_RAMP_TRACE = """
+            READ key=BooleanKey.OApsAIMIBasalChannelSafetyGuards value=false
+            READ key=BooleanKey.OApsAIMIEffectiveIobReleaseEnabled value=false
+            READ key=AimiLongKey.LastPrebolusTime value=0
+            READ key=DoubleKey.OApsAIMIHighBg value=0.00
+            READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+            LOG 🌿 HARMONIA_PROD: ready action=BASAL_FIRST rate=1.30U/h requested=2.00U/h
         """.trimIndent()
 
         private val MAX_IOB_TBR_TRACE = """
