@@ -215,6 +215,8 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.decidePkpdPredictionsAndNoisyTar
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiSignalPrepPkpd
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiSignalPrepPkpdCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideSignalPreparationPkpdRuntime
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTrajectoryCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideTrajectoryAnalysis
 import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
@@ -14180,139 +14182,74 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         rT: RT, uiInteraction: UiInteraction,
         relevanceScore: Double = 0.0 // 🌀 Relevance from Cosine Gate
     ) {
-        val trajectoryFlagEnabled = preferences.get(BooleanKey.OApsAIMITrajectoryGuardEnabled)
-
-        rT.trajectoryRelevanceScore = relevanceScore
-
-        if (trajectoryFlagEnabled) {
-            try {
-                val effectiveProfileForTrajectory: EffectiveProfile? = effectiveProfileCached(currentTime)
-                val trajectoryHistory = trajectoryHistoryCached(
-                    currentTime = currentTime,
-                    bg = bg,
-                    delta = delta,
-                    bgacc = bgacc,
-                    iobActivityNow = iobActivityNow,
-                    iob = iob,
-                    insulinActionState = insulinActionState,
-                    lastBolusAgeMinutes = lastBolusAgeMinutes,
-                    cob = cob,
-                    profile = profile,
-                )
-
-                // 2. Run Trajectory Analysis (The "Insight" Gate)
-                val stableOrbit = app.aaps.plugins.aps.openAPSAIMI.trajectory.StableOrbit.fromProfile(targetBg, profile.current_basal)
-                val traj = trajectoryGuard.analyzeTrajectory(trajectoryHistory, stableOrbit)
-
-                if (traj == null) {
-                    consoleLog.add("🌀 Trajectory: ⏳ Warming up (${trajectoryHistory.size}/4 states, need 20min)")
-                    rT.trajectoryEnabled = false
-                } else {
-                    val analysis = traj
-                    val statusEmoji = analysis.classification.emoji()
-                    val typeDesc = analysis.classification.description()
-
-                    consoleLog.add("🌀 Trajectory: $statusEmoji $typeDesc | κ=${aimiFmt2(analysis.metrics.curvature)} conv=${aimiFmt1(analysis.metrics.convergenceVelocity)} health=${aimiFmt0(analysis.metrics.healthScore*100)}%")
-
-                    // Display Visual Insights
-                    val artLines = analysis.classification.asciiArt().split("\n")
-                    artLines.forEach { line -> consoleLog.add("  $line") }
-                    consoleLog.add("  📊 Metrics: Coherence=${aimiFmt2(analysis.metrics.coherence)} Energy=${aimiFmt1(analysis.metrics.energyBalance)}U Openness=${aimiFmt2(analysis.metrics.openness)}")
-
-                    // 3. Apply Modulation (The "Safety" Gate)
-                    // We only modify insulin delivery if relevance is sufficient (> 0.4)
-                    val mod = analysis.modulation
-                    val uamConfidence = AimiUamHandler.confidenceOrZero()
-                    val strongMealRiseContext =
-                        bg >= 145.0 &&
-                            delta >= 1.8 &&
-                            (cob >= 6.0 || uamConfidence >= 0.45)
-                    if (relevanceScore > 0.4 && mod.isSignificant()) {
-                        val effectiveSmbDamping = if (strongMealRiseContext) {
-                            mod.smbDamping.coerceAtLeast(0.70)
-                        } else {
-                            mod.smbDamping
-                        }
-                        val effectiveIntervalStretch = if (strongMealRiseContext) {
-                            mod.intervalStretch.coerceAtMost(1.10)
-                        } else {
-                            mod.intervalStretch
-                        }
-                        if (strongMealRiseContext && (effectiveSmbDamping != mod.smbDamping || effectiveIntervalStretch != mod.intervalStretch)) {
-                            consoleLog.add(
-                                "  🚀 TRAJ_RELAX meal-rise: SMB×${aimiFmt2(mod.smbDamping)}→${aimiFmt2(effectiveSmbDamping)} " +
-                                    "Int×${aimiFmt2(mod.intervalStretch)}→${aimiFmt2(effectiveIntervalStretch)} " +
-                                    "(BG=${aimiFmt0(bg)} Δ=${aimiFmt1(delta)} COB=${aimiFmt1(cob)} UAM=${aimiFmt2(uamConfidence)})"
-                            )
-                        }
-                        consoleLog.add("  🎛 Modulation: SMB×${aimiFmt2(effectiveSmbDamping)} Int×${aimiFmt2(effectiveIntervalStretch)} (${mod.reason})")
-
-                        if (kotlin.math.abs(effectiveSmbDamping - 1.0) > 0.05) {
-                            val orig = maxSMB
-                            maxSMB *= effectiveSmbDamping; maxSMBHB *= effectiveSmbDamping
-                            consoleLog.add("    → SMB: ${aimiFmt2(orig)}U → ${aimiFmt2(maxSMB)}U")
-                        }
-                        if (kotlin.math.abs(effectiveIntervalStretch - 1.0) > 0.05) {
-                            val orig = intervalsmb
-                            intervalsmb = (intervalsmb * effectiveIntervalStretch).toInt().coerceIn(1, 20)
-                            consoleLog.add("    → Interval: ${orig}min → ${intervalsmb}min")
-                        }
-                        if (kotlin.math.abs(mod.safetyMarginExpand - 1.0) > 0.05) {
-                            val origLimit = preferences.get(app.aaps.core.keys.DoubleKey.ApsSmbMaxIob)
-                            val floor = if (delta > 0.3) origLimit * 0.5 else 0.0
-                            val candidate = maxIob * mod.safetyMarginExpand
-                            val beforeMod = maxIob
-                            maxIob = max(candidate, floor)
-
-                            if (maxIob < beforeMod) {
-                                consoleLog.add("    → MaxIOB Modulation: ${aimiFmt2(beforeMod)}U → ${aimiFmt2(maxIob)}U (Floor=${aimiFmt2(floor)}U)")
-                            }
-                        }
-                    } else if (relevanceScore <= 0.4) {
-                        consoleLog.add("  ⏸ Modulation Gated (Relevance ${aimiFmt2(relevanceScore)} <= 0.4)")
-                    }
-
-                    // Warning Propagation
-                    analysis.warnings.filter { it.severity >= app.aaps.plugins.aps.openAPSAIMI.trajectory.WarningSeverity.HIGH }.forEach { w ->
-                        consoleLog.add("  🚨 ${w.severity.emoji()} ${w.message}")
-                        if (w.severity == app.aaps.plugins.aps.openAPSAIMI.trajectory.WarningSeverity.CRITICAL) {
-                            try {
-                                notificationManager.post(
-                                    id = app.aaps.core.interfaces.notifications.NotificationId.AUTOMATION_MESSAGE,
-                                    text = w.message
-                                )
-                            } catch (e: Exception) {}
-                        }
-                    }
-                    analysis.predictedConvergenceTime?.let {
-                        consoleLog.add("  ⏱ Est. convergence: ${it}min")
-                    }
-
-                    // 4. Populate RT for UI (Always if traj exists)
-                    rT.trajectoryEnabled = true
-                    rT.trajectoryType = analysis.classification.name
-                    // Note: rT.trajectoryRelevanceScore is already set to the Cosine relevanceScore at start
-                    rT.trajectoryCurvature = analysis.metrics.curvature
-                    rT.trajectoryConvergence = analysis.metrics.convergenceVelocity
-                    rT.trajectoryCoherence = analysis.metrics.coherence
-                    rT.trajectoryEnergy = analysis.metrics.energyBalance
-                    rT.trajectoryOpenness = analysis.metrics.openness
-                    rT.trajectoryHealth = (analysis.metrics.healthScore * 100).toInt()
-                    rT.trajectoryModulationActive = relevanceScore > 0.4 && analysis.modulation.isSignificant()
-                    rT.trajectoryWarningsCount = analysis.warnings.size
-                    rT.trajectoryConvergenceETA = analysis.predictedConvergenceTime
+        decideTrajectoryAnalysis(
+            currentTime = currentTime,
+            bg = bg,
+            delta = delta,
+            bgacc = bgacc,
+            iobActivityNow = iobActivityNow,
+            iob = iob,
+            insulinActionState = insulinActionState,
+            lastBolusAgeMinutes = lastBolusAgeMinutes,
+            cob = cob,
+            targetBg = targetBg,
+            profile = profile,
+            rT = rT,
+            relevanceScore = relevanceScore,
+            preferences = preferences,
+            consoleLog = consoleLog,
+            calls = object : AimiTrajectoryCalls {
+                override fun refreshEffectiveProfile(currentTime: Long) {
+                    effectiveProfileCached(currentTime)
                 }
-            } catch (e: Exception) {
-                consoleLog.add("🌀 Trajectory: ❌ Error (${e.message})")
-                aapsLogger.error(LTag.APS, "Trajectory Guard failed", e)
-                rT.trajectoryEnabled = false
-            }
-        } else {
-            consoleLog.add("🌀 Trajectory: ⏸ Disabled")
-            rT.trajectoryEnabled = false
-        }
+                override fun trajectoryHistory(
+                    currentTime: Long,
+                    bg: Double,
+                    delta: Double,
+                    bgacc: Double,
+                    iobActivityNow: Double,
+                    iob: Float,
+                    insulinActionState: app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActionState,
+                    lastBolusAgeMinutes: Double,
+                    cob: Float,
+                    profile: OapsProfileAimi,
+                ) = trajectoryHistoryCached(
+                    currentTime, bg, delta, bgacc, iobActivityNow, iob, insulinActionState,
+                    lastBolusAgeMinutes, cob, profile,
+                )
+                override fun analyze(
+                    history: List<app.aaps.plugins.aps.openAPSAIMI.trajectory.PhaseSpaceState>,
+                    orbit: app.aaps.plugins.aps.openAPSAIMI.trajectory.StableOrbit,
+                ) = trajectoryGuard.analyzeTrajectory(history, orbit)
+                override fun uamConfidence() = AimiUamHandler.confidenceOrZero()
+                override fun maxSmb() = this@DetermineBasalaimiSMB2.maxSMB
+                override fun setMaxSmb(value: Double) {
+                    this@DetermineBasalaimiSMB2.maxSMB = value
+                }
+                override fun maxSmbHb() = this@DetermineBasalaimiSMB2.maxSMBHB
+                override fun setMaxSmbHb(value: Double) {
+                    this@DetermineBasalaimiSMB2.maxSMBHB = value
+                }
+                override fun intervalSmb() = this@DetermineBasalaimiSMB2.intervalsmb
+                override fun setIntervalSmb(value: Int) {
+                    this@DetermineBasalaimiSMB2.intervalsmb = value
+                }
+                override fun maxIob() = this@DetermineBasalaimiSMB2.maxIob
+                override fun setMaxIob(value: Double) {
+                    this@DetermineBasalaimiSMB2.maxIob = value
+                }
+                override fun postTrajectoryWarning(message: String) {
+                    notificationManager.post(
+                        id = app.aaps.core.interfaces.notifications.NotificationId.AUTOMATION_MESSAGE,
+                        text = message,
+                    )
+                }
+                override fun logTrajectoryFailure(error: Exception) {
+                    aapsLogger.error(LTag.APS, "Trajectory Guard failed", error)
+                }
+            },
+        )
     }
-
 
     /**
      * Corps du tick AIMI — ordre figé § **Carte P3a** (`orchestration/AIMI_ORCHESTRATION_ROADMAP.md`).
