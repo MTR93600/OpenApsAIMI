@@ -89,11 +89,19 @@ Les gardes de la ref sont les branches du `decide` : BG sous 110, delta négatif
 
 Ne pas cherry-pick `a5f53cdfae` (patch-id `bbd5183e2114582e83bbe915c35be0bda9bccad6`, cherry `+`) ni `f87d25e024` (patch-id `900f60438eac56659a00f5f71667b0efbe0e0940`, cherry `+`). Les corps déplacés sont identiques à `dev_OAPSAIMI` @ `3dd0ca64772`, sauf les commentaires de `adjustBasalForMealHyper` (le facteur 10 / 8 est le même) et `aimiMathRoundToLong`, qui reproduit l’algorithme OpenJDK de `Math.round(double)` pour compiler sur iOS. Un test JVM compare cet algorithme à `java.lang.Math.round` sur les demis, les extrêmes et une grille. `round(): Int` reste dans le tick : il écrit `consoleError`.
 
-Destination : `commonMain/.../math/AimiTickPolicyMath.kt`. Le tick android garde la signature et délègue. `isDriftTerminatorCondition` reste android : son texte utilise `"%.1f".format`, qui n’est pas dans le stdlib commun.
+Destination : `commonMain/.../math/AimiTickPolicyMath.kt`. Le tick android garde la signature et délègue. `isDriftTerminatorCondition` appelle maintenant `aimiFmt1` / `aimiFmt0` ; il reste dans le tick pour cette tranche (il n’a pas été déplacé).
 
-### Tranche 3 — formatage `aimiFmt*` (lot suivant)
+### Tranche 3 — formatage `aimiFmt*` (faite sur `cursor/p63-tick-aimi-fmt-da40`)
 
-Les fonctions listées plus bas dans l’ancienne tranche 3 sont déjà dans `AimiTickPolicyMath` (tranche 2), sauf `round(): Int`. Le lot suivant remplace les motifs qui ont un équivalent commun exact (`aimiFmt0/1/2/4`, `aimiCsvTimestamp`). Un motif sans équivalent exact reste android.
+465 appels à une seule valeur (`"%.Nf".format`, `String.format("%.Nf", …)`, y compris `Locale.US`) passent par `aimiFmt0/1/2/3`. `aimiFmt3` est nouveau. `Float` est promu en `Double` avant l’arrondi, comme le formateur Java. Un `Double?` nul imprime le mot `null` tronqué à N caractères (`%.2f` → `nu`), ce que `String.format` fait vraiment.
+
+`DecimalFormat` half-up de la valeur binaire exacte ne reproduit pas `String.format` : `1.2345` à trois décimales donne `1.234` d’un côté et `1.235` de l’autre. `aimiFmt*` arrondit le décimal le plus court de `Double.toString`, demi loin de zéro, et garde le signe d’un zéro négatif (`%.0f` de `-0.25` est `-0`). Le test JVM compare les deux sur une grille qui inclut ces cas.
+
+Restent dans le tick, faute d’équivalent exact : les `String.format` à plusieurs arguments (L7052, L7135), `%+.1f` / `%+.2f`, `%2f`, `DecimalFormat("0.##")`, et les `SimpleDateFormat` (tranche horloge).
+
+### Tranche 3 — liste absorbée par la tranche 2 (historique)
+
+Les fonctions listées plus bas étaient l’ancienne tranche 3. Elles sont dans `AimiTickPolicyMath` (tranche 2), sauf `round(): Int`.
 
 Ancienne liste, absorbée par la tranche 2 :
 
@@ -109,23 +117,19 @@ Ancienne liste, absorbée par la tranche 2 :
 
 Pas purs, malgré l’air de l’être : `costFunction` (lit la cinétique du tick), `detectMealOnset` (appelle `effortSuppressesUndeclaredMeal()`), `isMealPriorityAlignedForSpiralSmbCap` (appelle `AimiUamHandler.confidenceOrZero()`), `calculateBasalRate` (appelle `roundBasal` puis c’est bon), `finalizeSmbToGive` (lit `iob`, `bg`, `delta`, `lateFatRiseFlag`).
 
-### Tranche 4 — formatage
-
-`String.format` / `"%.Nf".format` / `DecimalFormat` / `SimpleDateFormat` / `Locale.US` vers `aimiFmt*` et `aimiCsvTimestamp`. Écart à couvrir par un test rouge si un arrondi half-even remplaçait half-up : `AimiFmt.kt` le documente déjà (`0.25` à une décimale).
-
-### Tranche 5 — horloge
+### Tranche 4 — horloge (lot suivant)
 
 `LocalTime.now()`, `Calendar.getInstance()`, `ZoneId.systemDefault()`, `Date` vers `kotlinx.datetime` et un instant passé en argument. Ne pas lire l’horloge au milieu d’une fonction déplacée : le tick capture `now` une fois.
 
-### Tranche 6 — caches async
+### Tranche 5 — caches async
 
 `AtomicBoolean` / `AtomicReference`, `determineIoScope` sur `Dispatchers.IO`, les `refresh*Async`. Seam : `AapsLock` + `aapsIoDispatcher`. Ces fonctions lisent `PersistenceLayer`. Elles ne bougent pas avec le calcul.
 
-### Tranche 7 — fichiers CSV
+### Tranche 6 — fichiers CSV
 
 `appendCsvToFile`, `RandomAccessFile`, `storageHelper.getAimiFile` qui renvoie encore un `java.io.File`. `AimiStorage` couvre le journal JSONL, pas encore cette lecture. Pas de dose.
 
-### Tranche 8 — orchestrateur
+### Tranche 7 — orchestrateur
 
 `determine_basal` et les étapes `run*`. Reste `androidMain` : constructeur Metro, notifications, TFLite/SMB trainer, 238 lectures de préférences. `OpenAPSAIMIPlugin.kt` (2 602 lignes) est un lot à part. Le moteur `:plugins:aimi-engine` reste `Hold` tant qu’un `evaluate()` de replay n’existe pas.
 
@@ -165,3 +169,23 @@ Compilations après le déplacement, tas Gradle plafonné à 3 Go (le premier `:
 - `HoldAimiEngine.evaluate` renvoie toujours `Hold("ENGINE_NOT_EXTRACTED")`.
 - Les 18 échecs Glunovo/Intelligo ne sont pas touchés.
 - Les 27 `runCatching` existants ne sont ni étendus ni « réparés ».
+
+## 6. Exécution de la tranche 3
+
+Aucun commit de `dev_OAPSAIMI` n’est rejoué : la ref écrit encore `String.format` / `"%.Nf".format` dans le tick. Le seam est `aimiFmt*`, déjà dans `commonMain`, complété par `aimiFmt3` et par l’arrondi du décimal le plus court.
+
+Avant le code, `:plugins:aps:compileTestKotlinJvm` sur `AimiFmtHalfUpTest` : `GRADLE_EXIT=1`, `Unresolved reference 'aimiFmt3'`. Pas de XML. Journal `/tmp/p63-fmt-red-compile.log`.
+
+Rouge, `aimiFmt3` bouchon qui renvoie `""` :
+
+- XML `TEST-app.aaps.plugins.aps.openAPSAIMI.AimiFmtHalfUpTest.xml`, horodatage `2026-10-04T14:02:40.570Z`
+- `tests="3" skipped="0" failures="1" errors="0"` (les deux cas déjà couverts par `aimiFmt0/1` passent ; les trois décimales échouent)
+
+Un second rouge, avec `NumberFormat.withDecimalsHalfUp(3)`, échoue encore : `1.2345` s’imprime `1.234` au lieu de `1.235`. Journal `/tmp/p63-fmt-compile2.log`, 7 tests, 2 échecs.
+
+Vert, après l’arrondi calqué sur `String.format` :
+
+- `AimiFmtHalfUpTest` : `tests="6" skipped="0" failures="0" errors="0"`, horodatage `2026-10-04T14:14:03.204Z`
+- `AimiFmtStringFormatParityTest` (JVM, oracle `String.format(Locale.US, …)`) : `tests="2" skipped="0" failures="0" errors="0"`, horodatage `2026-10-04T14:14:03.195Z`
+
+`:plugins:aps:compileAndroidMain`, `compileKotlinIosArm64`, `compileKotlinIosSimulatorArm64`, `compileTestKotlinIosSimulatorArm64` et `:app:assembleFullDebug` : `BUILD SUCCESSFUL in 1m 10s`, `GRADLE_EXIT=0`. Journal `/tmp/p63-gates.log`.
