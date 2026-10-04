@@ -35,6 +35,7 @@ import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiTickContext
 import app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.CircadianMealProfileStore
 import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionMemory
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioContextMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisId
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
@@ -53,6 +54,7 @@ import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleLearner
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCyclePreferences
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -84,6 +86,7 @@ class ShellDecisionTraceTest {
     @Before
     fun setUp() {
         DetermineBasalaimiSMB2.resetLegacyPrebolusMemoryForTrace()
+        MealAbsorptionMemory.reset()
         dateUtil = mock(DateUtil::class.java)
         whenever(dateUtil.now()).thenReturn(now)
         tick = newTick(recordingPreferences(emptyMap()))
@@ -95,6 +98,7 @@ class ShellDecisionTraceTest {
         AimiEffectProbe.lines.remove()
         DetermineBasalaimiSMB2.resetLegacyPrebolusMemoryForTrace()
         CircadianMealProfileStore.resetForTests()
+        MealAbsorptionMemory.reset()
         AimiUamHandler.updateRuntimeConfidence(null)
     }
 
@@ -148,6 +152,35 @@ class ShellDecisionTraceTest {
             )
         }.replace(Regex("ts=\\d+"), "ts=<clock>")
         assertEquals(MEAL_RISE_TRACE, trace)
+    }
+
+    @Test
+    fun autodriveOnWithTheGateClosedEmitsNoDose() {
+        val (trace, applied) = autodriveTrace(glucose = 110.0, delta = 0.2f, shortAvg = 0.1f, meal = false)
+        assertFalse(applied)
+        assertEquals(GATE_CLOSED_TRACE, trace)
+    }
+
+    @Test
+    fun autodriveOnDuringHypoWithAWeakRiseEmitsNoDose() {
+        // BG 54 and a flat delta miss every open threshold, so the real gater stays shut.
+        // The disengaged path does not log the glucose, so the bytes match the closed gate.
+        val (trace, applied) = autodriveTrace(glucose = 54.0, delta = 0.0f, shortAvg = -0.2f, meal = false)
+        assertFalse(applied)
+        assertEquals(GATE_CLOSED_TRACE, trace)
+    }
+
+    @Test
+    fun autodriveOnHitsTheActivityBasalCeiling() {
+        val (trace, _) = autodriveTrace(
+            glucose = 160.0,
+            delta = 3.0f,
+            shortAvg = 2.0f,
+            meal = true,
+            activityLockout = true,
+            activityFactor = 1.3,
+        )
+        assertEquals(ACTIVITY_CEILING_TRACE, trace)
     }
 
     @Test
@@ -318,6 +351,68 @@ class ShellDecisionTraceTest {
         }
     }
 
+    private fun autodriveTrace(
+        glucose: Double,
+        delta: Float,
+        shortAvg: Float,
+        meal: Boolean,
+        activityLockout: Boolean = false,
+        activityFactor: Double? = null,
+    ): Pair<String, Boolean> {
+        val doubles = mutableMapOf(
+            DoubleKey.OApsAIMIweight to 70.0,
+            DoubleKey.OApsAIMIautodrivesmallPrebolus to 0.50,
+            DoubleKey.OApsAIMIautodrivePrebolus to 1.50,
+        )
+        if (activityFactor != null) doubles[DoubleKey.OApsAIMIActivityBasalCapFactor] = activityFactor
+        val prefs = recordingPreferences(
+            doubles = doubles,
+            bools = mapOf(BooleanKey.OApsAIMIautoDriveActive to true),
+        )
+        val engine = mock(AutodriveEngine::class.java, Answer { inv: InvocationOnMock ->
+            if (inv.method.name == "tick") {
+                AutoDriveCommand(
+                    scheduledMicroBolus = 0.80,
+                    temporaryBasalRate = 2.40,
+                    isSafe = true,
+                    reason = "meal-rise",
+                )
+            } else if (inv.method.returnType == Void.TYPE) {
+                null
+            } else {
+                zeroFor(inv)
+            }
+        })
+        tick = newTick(prefs, engine)
+        armShell()
+        setField(tick, "mealTime", meal)
+        setField(tick, "bg", glucose)
+        setField(tick, "delta", delta)
+        setField(tick, "shortAvgDelta", shortAvg)
+        setField(tick, "iob", 1.0f)
+        setField(tick, "maxIob", 10.0)
+        setField(tick, "maxSMB", 2.0)
+        setField(tick, "hourOfDay", 12)
+        setField(tick, "variableSensitivity", 50.0f)
+        setField(tick, "targetBg", 100.0f)
+        setField(tick, "exerciseInsulinLockoutActive", activityLockout)
+        val profile = profileStub()
+        var applied = true
+        val trace = capture {
+            applied = tick.runAutodriveV3MultiVariableBranch(
+                ctx = tickContext(profile, glucose),
+                profile = profile,
+                rT = RT(runningDynamicIsf = false),
+                bg = glucose,
+                combinedDelta = delta,
+                shortAvgDeltaAdj = shortAvg,
+                hypoThresholdMgdl = 70.0,
+                pkpdRuntime = null,
+            ).appliedAction
+        }.replace(Regex("ts=\\d+"), "ts=<clock>")
+        return trace to applied
+    }
+
     private fun armShell() {
         setField(tick, "dateUtil", dateUtil)
         setField(tick, "consoleLog", ProbingLog())
@@ -398,8 +493,8 @@ class ShellDecisionTraceTest {
         return profile
     }
 
-    private fun tickContext(profile: OapsProfileAimi): AimiTickContext = AimiTickContext(
-        glucoseStatus = GlucoseStatusAIMI(glucose = 160.0, date = now),
+    private fun tickContext(profile: OapsProfileAimi, glucose: Double = 160.0): AimiTickContext = AimiTickContext(
+        glucoseStatus = GlucoseStatusAIMI(glucose = glucose, date = now),
         currentTemp = CurrentTemp(duration = 0, rate = 1.0, minutesrunning = 0),
         iobDataArray = arrayOf(IobTotal(time = now, iob = 1.0)),
         profile = profile,
@@ -561,6 +656,14 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val GATE_CLOSED_TRACE = """
+READ key=BooleanKey.OApsAIMIautoDriveActive value=true
+READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
+READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
+READ key=DoubleKey.OApsAIMIweight value=70.00
+LOG 🍽️ RA_OBSERVE[gate_disengaged]: Ra=0.40
+""".trimIndent()
+
         private val MEAL_RISE_TRACE = """
 READ key=BooleanKey.OApsAIMIautoDriveActive value=true
 READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
@@ -598,6 +701,69 @@ READ key=DoubleKey.OApsAIMIweight value=70.00
 LOG 🧠 ATTN_MASK: auto=0.17 inflam=0.00 hormonal=0.00
 LOG 🧠 LATENT: meal=0.92 endo=0.00 siCirc=1.00 resist=0.12 sleep=0.00 sensor=0.11
 EFFECT SetTbr rate=2.40 dur=30 override=true forceExact=false adaptive=1.00
+READ key=BooleanKey.OApsAIMIautodriveAggressiveSmbFloor value=false
+READ key=DoubleKey.OApsAIMIautodrivesmallPrebolus value=0.50
+READ key=DoubleKey.OApsAIMIautodrivePrebolus value=1.50
+READ key=StringKey.AimiTuningContextSelection value=
+READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+READ key=DoubleKey.autodriveMaxBasal value=0.00
+READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+READ key=BooleanKey.OApsAIMIPredictionAuthorityShadow value=false
+READ key=BooleanKey.OApsAIMIMealConfirmedEarlyRelease value=false
+LOG PRED_AUTHORITY: src=PKPD_ONLY predT=160 evT=160 pkpd=160 best=- mealSupp=false uplift=false no_scenario_projection [pre_v3_rbt]
+LOG DOSE_TERMINAL_SNAPSHOT: ev=160 minPred=160 src=PKPD_RAW auth=false clamp=false plateauLift=false curves=false [pre_v3_rbt]
+READ key=BooleanKey.OApsAIMIStraightLineTubeAdvisorEnabled value=false
+READ key=BooleanKey.OApsAIMIRecursiveBeliefShadow value=false
+READ key=BooleanKey.OApsAIMIRecursiveBeliefAuthority value=false
+READ key=BooleanKey.OApsAIMIRecursiveBeliefWavelet value=false
+READ key=BooleanKey.OApsAIMIMealHyperBypassEnabled value=false
+READ key=BooleanKey.OApsAIMITreeMealRiseFrontLoad value=false
+LOG 🚀 🚀 V3 ENGAGED [Meal-aware rise] (BG=160.0, Trend=3.0, COB=0.0, UAM=0.0) intent=0.8 actual=0.0 tbr=2.4
+LOG DECISION_FINAL[AUTODRIVE_V3]: smb=0.00U tbr=0.00U/h dur=0m bg=160 Δ=3.0 reason=
+LOG 📦 CACHE TDD24H=MISSING reason=tdd24h_not_ready
+LOG 🧭 BASAL_GOV[FINAL]: action=KEEP conf=0.00 n=0 hypo=0.00 hypoG=0.00 hypoAdj=0.00 ant=0.00 wMean=1.00 high=0.00 mae=0.0 latch=false floorB=- floorA=- wBolus=0.00U wCob=?g reason=trace
+LOG TICK ts=<clock> bg=160 d=3.0 iob=1.00 act=0.000 th=0.188 cob=0.0 mode=Meal autodriveState=ENGAGED pred=N(sz=0 ev=160) safety=NONE ref=NO maxIOB=10.00 maxSMB=2.00 smb=0.00->0.00->0.00 tbr=0.00 src=AIMI
+""".trimIndent()
+
+        private val ACTIVITY_CEILING_TRACE = """
+READ key=BooleanKey.OApsAIMIautoDriveActive value=true
+READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
+READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
+READ key=DoubleKey.OApsAIMITDD7 value=0.00
+READ key=BooleanKey.OApsAIMIautoDriveActive value=true
+READ key=BooleanKey.OApsAIMIHyperTrajectoryRelease value=false
+READ key=BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive value=false
+READ key=DoubleKey.OApsAIMIHyperEstablishedDevMgdl value=0.00
+READ key=DoubleKey.OApsAIMIHyperDeepDevMgdl value=0.00
+READ key=DoubleKey.OApsAIMIHighBg value=0.00
+READ key=DoubleKey.OApsAIMIHighBg value=0.00
+READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
+READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
+READ key=AimiLongKey.LastPrebolusTime value=0
+READ key=DoubleKey.OApsAIMIHighBg value=0.00
+LOG 🍽️ MEAL_ABSORPTION: FIRST_WAVE B=0.72 pri=true waves=1 (FIRST_WAVE B=0.72 π=0.85 K=0.50 T=0.00 P=0.35)
+READ key=BooleanKey.OApsAIMISensorConfidenceCgmFirst value=false
+READ key=BooleanKey.OApsAIMIEffortActivityProtection value=false
+READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
+READ key=StringKey.AimiTuningContextSelection value=
+READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+READ key=DoubleKey.autodriveMaxBasal value=0.00
+LOG TREE_DEPLOYED trunk=SENSOR_UNCERTAIN conf=0.90 risk=CRITICAL kinetics=NO_STAGE
+LOG Tree: sensor uncertain | conf 90% | risk critical | sensor uncertain
+LOG MEAL_CERTAINTY level=MED tree=NONE rise=OK terminals=UNKNOWN effortVeto=false
+LOG Harmonia sim: blocked SENSOR_UNCERTAIN | sensor_uncertain,critical_risk
+READ key=BooleanKey.OApsAIMIautoDriveActive value=true
+READ key=BooleanKey.OApsAIMIHyperTrajectoryRelease value=false
+READ key=BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive value=false
+READ key=DoubleKey.OApsAIMIHyperEstablishedDevMgdl value=0.00
+READ key=DoubleKey.OApsAIMIHyperDeepDevMgdl value=0.00
+READ key=DoubleKey.OApsAIMIHighBg value=0.00
+READ key=DoubleKey.OApsAIMIweight value=70.00
+LOG 🧠 ATTN_MASK: auto=0.17 inflam=0.00 hormonal=0.00
+LOG 🧠 LATENT: meal=0.92 endo=0.00 siCirc=1.00 resist=0.12 sleep=0.00 sensor=0.11
+READ key=DoubleKey.OApsAIMIActivityBasalCapFactor value=1.30
+LOG 🏃 ACTIVITY_BASAL_CAP[AUTODRIVE_V3_DIRECT]: 2.40→1.30 U/h (≤ 1.30× profile 1.00)
+EFFECT SetTbr rate=1.30 dur=30 override=true forceExact=false adaptive=1.00
 READ key=BooleanKey.OApsAIMIautodriveAggressiveSmbFloor value=false
 READ key=DoubleKey.OApsAIMIautodrivesmallPrebolus value=0.50
 READ key=DoubleKey.OApsAIMIautodrivePrebolus value=1.50

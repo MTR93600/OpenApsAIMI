@@ -56,6 +56,35 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRecentGlucose
 import app.aaps.plugins.aps.openAPSAIMI.effects.PostHypoState
 import app.aaps.plugins.aps.openAPSAIMI.effects.RbtExtendedTickState
 import app.aaps.plugins.aps.openAPSAIMI.effects.buildRbtExtendedSignals as decideRbtExtendedSignals
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiAggressiveRiseFloor
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiAutodriveDebug
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiAutodriveGater
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEstimatedRa
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiAutodriveTickWrites
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiBasalCap
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiDecisionLog
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiDoseTerminal
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiFclDeclared
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiHtrExport
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiHtrTerminals
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiHyperSeverity
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMealAbsorption
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMealSafety
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMinBgLookback
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPatientStateRefresh
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPhysioLatentUpdate
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPhysiologicalPhase
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPostHypoRecovery
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRaObservation
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRbtLive
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRiseFloorNote
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTdd24h
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiUamConfidence
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiV3SmbDelivery
+import app.aaps.plugins.aps.openAPSAIMI.effects.AutodriveV3BranchResult
+import app.aaps.plugins.aps.openAPSAIMI.effects.AutodriveV3TickState
+import app.aaps.plugins.aps.openAPSAIMI.effects.RbtLiveCommitResult
+import app.aaps.plugins.aps.openAPSAIMI.effects.runAutodriveV3MultiVariableBranch as decideAutodriveV3
 import app.aaps.plugins.aps.openAPSAIMI.effects.cfrdHrInflammationBoostOf
 import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
@@ -3424,12 +3453,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return rT
     }
 
-    internal data class AutodriveV3BranchResult(
-        /** V3 or HTR delivered any pump command (TBR and/or SMB) this tick. */
-        val appliedAction: Boolean,
-        val skipLegacySmbBlender: Boolean,
-    )
-
     private fun updateHyperDwellAboveHighBgClock(nowMs: Long = aimiWallClockMs()) {
         val highBgPref = preferences.get(DoubleKey.OApsAIMIHighBg)
         val band = HyperTrajectoryHypoCredibility.highBgBandMgdl(targetBg.toDouble(), highBgPref)
@@ -4469,12 +4492,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
     }
 
-    private data class RbtLiveCommitResult(
-        val baselineHtr: HyperTrajectoryReleaseResult,
-        val effectiveHtr: HyperTrajectoryReleaseResult,
-        val rbtAuthority: Boolean,
-    )
-
     /**
      * Resolve RBT + physio gate + wiring once per loop tick (dedup-guarded).
      */
@@ -5250,400 +5267,151 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         hypoThresholdMgdl: Double,
         pkpdRuntime: PkPdRuntime?,
     ): AutodriveV3BranchResult {
-        if (!preferences.get(BooleanKey.OApsAIMIautoDriveActive)) {
-            // Autodrive off: without this the meal model would stay frozen for the life of the
-            // install, while getLastRa() still feeds the absorption phase, the correction-aggression
-            // gate, the undeclared-COB estimate and the exports.
-            observeRaIfNotAlreadyRun(ctx, combinedDelta, shortAvgDeltaAdj, pkpdRuntime, false, "autodrive_off")
-            return AutodriveV3BranchResult(
-                appliedAction = false,
-                skipLegacySmbBlender = false,
-            )
-        }
-        raNetCombinedDelta = combinedDelta
-        raNetShortAvgDeltaAdj = shortAvgDeltaAdj
-        var v3AppliedAction = false
-        var skipLegacySmbBlender = false
-        val recentEstimateCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
-        val recentEstimateTime = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()
-        val estimateAgeMinutes = if (recentEstimateTime > 0L) {
-            (aimiWallClockMs() - recentEstimateTime) / 60000.0
-        } else {
-            Double.MAX_VALUE
-        }
-        val hasRecentMealEstimate = recentEstimateCarbs > 10.0 && estimateAgeMinutes in 0.0..45.0
-
-        val gate = autodriveGater.shouldEngageV3(
-            bg = ctx.glucoseStatus.glucose,
-            combinedDelta = combinedDelta.toDouble(),
-            cob = ctx.mealData.mealCOB,
-            uamConfidence = AimiUamHandler.confidenceOrZero(),
-            // FCL is a declared meal too. Without it `implicitMealContext` is false at COB 0, so
-            // `isMealRising` (delta > 0.25) is dead and the gate falls back to the glycaemic
-            // thresholds — which under 120 mg/dL need delta > 2.0 AND no low in the last 75 min.
-            // Eating at ~100 with the target at 80, neither holds. Measured over 1443 ticks of the
-            // 2026-09-16/17 export: GateKind.MEAL_AWARE_RISE never fired once.
-            explicitMealMode = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime ||
-                snackTime || fclDeclaredThisTick(profile),
-            hasRecentMealEstimate = hasRecentMealEstimate,
-            minBgLookback75m = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
-            estimatedRa = continuousStateEstimator.getLastRa(),
+        val state = AutodriveV3TickState(
+            mealTime = mealTime,
+            bfastTime = bfastTime,
+            lunchTime = lunchTime,
+            dinnerTime = dinnerTime,
+            highCarbTime = highCarbTime,
+            snackTime = snackTime,
+            variableSensitivity = variableSensitivity,
+            hourOfDay = hourOfDay,
+            exerciseInsulinLockoutActive = exerciseInsulinLockoutActive,
+            adaptiveMult = adaptiveMult,
+            maxIob = maxIob,
+            iob = iob,
+            maxSmb = maxSMB,
+            maxSmbHb = maxSMBHB,
+            postHypo = lastPostHypoDeliveryAuthority,
             mealChannelHint = lastRbtAppliedHints?.mealChannel,
+            basePhysioMultipliers = lastBasePhysioMultipliers,
+            eventualBg = eventualBG,
+            targetBg = targetBg,
+            delta = delta,
+            smbBindingDraft = lastSmbBindingTraceDraft,
         )
-
-        // Observation only — recorded for both outcomes, before the branch. The engaged path already
-        // logged its reason to the console; the disengaged path threw it away, so two thirds of a day
-        // had no explanation at all. Nothing dose-facing reads these fields.
-        pendingDecisionCtxForExport?.baseline_state?.let { baseline ->
-            baseline.autodrive_gate_engaged = gate.engage
-            baseline.autodrive_gate_kind = gate.kind.name
-            baseline.autodrive_gate_reason = gate.reason
-        }
-
-        if (!gate.engage) {
-            // Estimation is unconditional; actuation is gated. Nothing inside the engaged branch
-            // below is touched, so engaged ticks stay bit-identical by construction rather than by
-            // argument. See `docs/adr/0008-isf-decision-architecture.md`.
-            observeRaIfNotAlreadyRun(
-                ctx, combinedDelta, shortAvgDeltaAdj, pkpdRuntime, hasRecentMealEstimate, "gate_disengaged",
-            )
-        }
-
-        if (gate.engage) {
-            lastAutodriveState = AutodriveState.ENGAGED
-            aapsLogger.debug(app.aaps.core.interfaces.logging.LTag.APS, "🚦 [AUTODRIVE V3] ${gate.reason} - Engaging Control Loop...")
-
-            val snapshot = physioAdapter.getLatestSnapshot()
-            val canonicalSI = if (pkpdRuntime != null) {
-                pkpdRuntime.fusedIsf / 10000.0
-            } else {
-                variableSensitivity.toDouble() / 10000.0
-            }
-
-            val autodriveMealSignals = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime ||
-                ctx.mealData.mealCOB >= 0.1 || hasRecentMealEstimate
-            val applyHypoRecoveryRaDampening = postHypoRecoveryActive() && !autodriveMealSignals
-
-            val tdd24hForHtr = resolveTdd24hForExport()
-                ?: (profile.max_daily_basal * 24.0).coerceAtLeast(1.0)
-            val isNightAutodrive = hourOfDay >= 23 || hourOfDay < 6
-            refreshPhysiologicalPhase(
-                rT = rT,
-                combinedDelta = combinedDelta,
-                stepsLast15m = snapshot.stepsLast15m,
-                heartRateBpm = snapshot.hrNow,
-                restingHeartRateBpm = snapshot.rhrResting,
-                basePhysioMultipliers = lastBasePhysioMultipliers,
-            )
-            val autodriveMealContext = buildMealSafetyContext(
-                isExplicitAdvisorRun = false,
-                iobData = ctx.iobDataArray.firstOrNull() ?: IobTotal(ctx.currentTime),
-            )
-            refreshMealAbsorptionPhase(
-                combinedDelta = combinedDelta,
-                stepsLast15m = snapshot.stepsLast15m,
-                heartRateBpm = snapshot.hrNow,
-                restingHeartRateBpm = snapshot.rhrResting,
-                mealContext = autodriveMealContext,
-                lastBolusTimeMs = ctx.iobDataArray.firstOrNull()?.lastBolusTime?.takeIf { it > 0L },
-                nowMs = dateUtil.now(),
-            )
-            val physioLatentState = updatePhysioLatentState(
-                snapshot = snapshot,
-                sourceSensor = ctx.glucoseStatus.sourceSensor,
-            )
-            val physioPolicy = lastPhysiologicalPhaseOutput?.policy
-            val htrClassification = classifyHyperSeverityForTick(
-                rT = rT,
-                combinedDelta = combinedDelta,
-                tdd24hU = tdd24hForHtr,
-            )
-            val (_, bestTerminalForMpc) = resolveHtrScenarioTerminals(rT)
-            val mpcHints = HyperTrajectoryMpcFeedForward.hintsFromClassification(
-                classification = htrClassification,
-                bgMgdl = bg,
-                bestTerminalMgdl = bestTerminalForMpc,
-                isNight = isNightAutodrive,
-                exerciseLockout = exerciseInsulinLockoutActive,
-            )
-            // The floor now reaches the MPC, through `tick(mpcRaFloorMgdlPerMin = …)` below.
-            //
-            // It used to be passed as `AutoDriveState.estimatedRa` and silently dropped:
-            // `AutodriveEngine.kt:165` overwrote the field with `stateEstimator.getLastRa()` before the
-            // estimator ran, so the only consumer it ever reached was the recursive belief tree, as
-            // `mpcFeedForwardRa`. Passing it explicitly keeps that route and adds the one its producer
-            // is named after.
-            //
-            // The barrier shield deliberately keeps the estimator's honest Ra — see the parameter doc
-            // on `AutodriveEngine.tick`. `htr_ra_floor_mgdl_per_min` is exported next to
-            // `estimated_ra_mgdl_per_min` so the gap between the two is visible per tick.
-            val estimatedRaForMpc = HyperTrajectoryMpcFeedForward.blendEstimatedRa(
-                baseRa = continuousStateEstimator.getLastRa(),
-                hints = mpcHints,
-            )
-            lastHtrRaFloorMgdlPerMin = mpcHints.estimatedRaFloorMgdlPerMin.takeIf { it > 0.0 }
-
-            val adState = app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState.createSafe(
-                bg = ctx.glucoseStatus.glucose,
-                bgVelocity = (shortAvgDeltaAdj.toDouble() / 5.0),
-                iob = ctx.iobDataArray.firstOrNull()?.iob ?: 0.0,
-                cob = ctx.mealData.mealCOB,
-                estimatedSI = canonicalSI,
-                estimatedRa = estimatedRaForMpc,
-                patientWeightKg = preferences.get(DoubleKey.OApsAIMIweight),
-                physiologicalStressMask = physioLatentState.toAttentionMask(),
-                isNight = isNightAutodrive,
-                hour = hourOfDay,
-                steps = snapshot.stepsLast15m,
-                hr = snapshot.hrNow,
-                rhr = snapshot.rhrResting,
-                sourceSensor = ctx.glucoseStatus.sourceSensor,
-                maxIOB = this.maxIob,
-                maxSMB = this.maxSMB,
-                highBgMaxSMB = this.maxSMBHB,
-                combinedDelta = combinedDelta.toDouble(),
-                uamConfidence = AimiUamHandler.confidenceOrZero(),
-                applyHypoRecoveryRaDampening = applyHypoRecoveryRaDampening,
-                htrTierOrdinal = mpcHints.tierOrdinal,
-                htrProjectedDevMgdl = mpcHints.projectedDevMgdl,
-                htrProjectionLeadMgdl = mpcHints.projectionLeadMgdl,
-                physioExtendedDawnGuard = physioPolicy?.extendedDawnGuard == true,
-            )
-
-            if (physioLatentState.isActive()) {
-                consoleLog.add("🧠 ATTN_MASK: ${physioLatentState.toAttentionDebugString()}")
-                consoleLog.add("🧠 LATENT: ${physioLatentState.toDebugString()}")
-            }
-
-            if (physioPolicy != null && physioPolicy.capsHtrRelease()) {
-                consoleLog.add(
-                    "🌅 PHYSIO_RISK: ${physioPolicy.phase.name} conf=${aimiFmt2(lastPhysiologicalPhaseOutput?.confidence)} " +
-                        "${physioPolicy.reason}",
+        return decideAutodriveV3(
+            ctx = ctx,
+            profile = profile,
+            rT = rT,
+            bg = bg,
+            combinedDelta = combinedDelta,
+            shortAvgDeltaAdj = shortAvgDeltaAdj,
+            hypoThresholdMgdl = hypoThresholdMgdl,
+            pkpdRuntime = pkpdRuntime,
+            preferences = preferences,
+            dateUtil = dateUtil,
+            consoleLog = consoleLog,
+            gater = AimiAutodriveGater { bg, combined, cob, uamConfidence, explicitMeal, recentMeal, minBg75, ra, mealChannel ->
+                autodriveGater.shouldEngageV3(
+                    bg = bg,
+                    combinedDelta = combined,
+                    cob = cob,
+                    uamConfidence = uamConfidence,
+                    explicitMealMode = explicitMeal,
+                    hasRecentMealEstimate = recentMeal,
+                    minBgLookback75m = minBg75,
+                    estimatedRa = ra,
+                    mealChannelHint = mealChannel,
                 )
-            }
-
-            if (adState.sourceSensor == SourceSensor.DEXCOM_G6_NATIVE) {
-                consoleLog.add("🤖 SENSOR_AWARE: G6 Detected -> Engaging Lead Compensator (UKF +50% Vel).")
-            } else if (adState.sourceSensor == SourceSensor.DEXCOM_ONEPLUS_NATIVE) {
-                consoleLog.add("🤖 SENSOR_AWARE: One+ Detected -> Fast Sensor, Real-Time Maths Engaged (no G6 lead).")
-            } else if (adState.sourceSensor == SourceSensor.DEXCOM_G7_NATIVE) {
-                consoleLog.add("🤖 SENSOR_AWARE: G7 Detected -> Fast Sensor, Real-Time Maths Engaged.")
-            } else if (adState.sourceSensor == SourceSensor.LIBRE_3_NATIVE) {
-                consoleLog.add("🤖 SENSOR_AWARE: Libre 3 native Detected -> Fast Sensor, Real-Time Maths Engaged (no G6 lead).")
-            }
-
-            autodriveEngine.setShadowMode(false)
-            autodriveEngine.setIsActive(true)
-
-            val adCommand = autodriveEngine.tick(
-                currentState = adState,
-                profileBasal = profile.current_basal,
-                profileIsf = profile.sens,
-                lgsThreshold = min(90.0, hypoThresholdMgdl),
-                hour = hourOfDay,
-                steps = snapshot.stepsLast15m,
-                hr = snapshot.hrNow,
-                rhr = snapshot.rhrResting,
-                mpcRaFloorMgdlPerMin = mpcHints.estimatedRaFloorMgdlPerMin,
-                tickId = ctx.currentTime,
-                observationId = raObservationId(ctx),
-                engaged = true,
-                // Diagnostic only: the caller passes `profile.sens` (dynamic ISF). The flag is
-                // copied into `control_barrier.anchor_is_dynamic_isf`. The anchor itself stays
-                // `profile.sens` — moving it would change the dose.
-                profileIsfIsDynamic = true,
-            )
-
-            // Called here, after `tick`, and not before it. The barrier fields this reads
-            // (`lastProfileIsfSeen`, `lastCbfPermittedU`, `lastBarrierDiagnostics`, the two control
-            // coefficients) are written inside `tick`. Read before the call, they still held the
-            // previous tick's values, so the whole `control_barrier` block and
-            // `cbf_profile_isf_mgdl` were exported one tick late. Measured on three support
-            // packages: `cbf_profile_isf_mgdl` matched the previous tick's `command_isf_mgdl` on
-            // 75/89, 96/105 and 116/127 ticks, and the current tick's on 13/90, 17/106 and 28/127.
-            // Both arguments are computed above and are not touched in between, so the two Ra
-            // fields keep exactly the values they had before.
-            markHtrRaFloorForExport(lastHtrRaFloorMgdlPerMin, estimatedRaForMpc)
-
-            val v3CommandSafe = adCommand != null && adCommand.isSafe
-            if (v3CommandSafe) {
-                val v3TbrRate = adCommand!!.temporaryBasalRate
-                if (v3TbrRate != null && v3TbrRate >= 0.0) {
-                    val v3AdaptiveMult = AutodriveBasalPolicy.adaptiveMultiplierForDirectTbr(
-                        requestedRateUph = v3TbrRate,
-                        bgMgdl = bg,
-                        targetBgMgdl = ctx.profile.target_bg.toDouble(),
-                        profileMaxBasalUph = profile.max_basal.toDouble(),
-                        learnedAdaptiveMultiplier = adaptiveMult,
-                    )
-                    if (v3AdaptiveMult > adaptiveMult + 0.001) {
-                        consoleLog.add(
-                            "🚀 AUTODRIVE_V3_CAP_KEEP: adaptive ${aimiFmt2(adaptiveMult)}x -> " +
-                                "${aimiFmt2(v3AdaptiveMult)}x at BG=${aimiFmt0(bg)}",
-                        )
-                    }
-                    val cappedV3Tbr = capBasalRateForCorrectionAggression(
-                        requestedRateUph = v3TbrRate,
-                        profileBasalUph = profile.current_basal,
-                        source = "AUTODRIVE_V3_DIRECT",
-                    )
-                    setTempBasal(
-                        cappedV3Tbr,
-                        30,
-                        profile,
-                        rT,
-                        ctx.currentTemp,
-                        overrideSafetyLimits = true,
-                        adaptiveMultiplier = v3AdaptiveMult,
-                        mealContext = autodriveMealContext,
-                    )
+            },
+            estimatedRa = AimiEstimatedRa { continuousStateEstimator.getLastRa() },
+            debug = AimiAutodriveDebug { message -> aapsLogger.debug(LTag.APS, message) },
+            engine = autodriveEngine,
+            physio = object : AimiPhysioTick {
+                override fun getLastDecisionTrace() = physioAdapter.getLastDecisionTrace()
+                override fun getEffectiveContext() = physioAdapter.getEffectiveContext()
+                override fun getLatestSnapshot() = physioAdapter.getLatestSnapshot()
+            },
+            effects = legacyEffectSink,
+            state = state,
+            writes = object : AimiAutodriveTickWrites {
+                override fun setRaNetDeltas(combinedDelta: Float, shortAvgDeltaAdj: Float) {
+                    raNetCombinedDelta = combinedDelta
+                    raNetShortAvgDeltaAdj = shortAvgDeltaAdj
                 }
-            } else {
-                consoleLog.add("🧘 [AUTODRIVE V3] Command not safe — HTR may still lift SMB (${adCommand?.reason ?: "null"})")
-                aapsLogger.debug(app.aaps.core.interfaces.logging.LTag.APS, "🛑 [AUTODRIVE V3] Unsafe or null command")
-            }
-
-            val v3SmbModel = if (v3CommandSafe) adCommand!!.scheduledMicroBolus ?: 0.0 else 0.0
-            val iobHeadroomForFloor = (maxIob - iob).coerceAtLeast(0.0)
-            // The maxSMB ladder above already decided whether this tick earns the high-BG ceiling.
-            // The rise floor must not overrule that decision, so it stops at the ceiling the ladder
-            // actually chose. Using `max(maxSMB, maxSMBHB)` here handed the floor the high-BG ceiling
-            // even on ticks where the ladder had refused it.
-            val smbCeilingForFloor = maxSMB.coerceAtLeast(0.0)
-            val v3SmbFloor = if (v3CommandSafe) {
-                aggressiveRiseSmbFloorU(bg, combinedDelta, shortAvgDeltaAdj)
-                    .coerceAtMost(minOf(smbCeilingForFloor, iobHeadroomForFloor))
-            } else {
-                0.0
-            }
-            val v3SmbRaw = maxOf(v3SmbModel, v3SmbFloor)
-            // Only what the floor added on top of the model spends its budget.
-            noteRiseFloorContribution(v3SmbRaw - v3SmbModel)
-            val smallPrebolusPref = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
-            val largePrebolusPref = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
-            val v3FloorTier = when {
-                v3SmbFloor <= 0.0 -> "OFF"
-                combinedDelta >= 5.0f && shortAvgDeltaAdj >= 3.0f -> "LARGE"
-                else -> "SMALL"
-            }
-            lastSmbBindingTraceDraft = lastSmbBindingTraceDraft.copy(
-                originOwner = "AutodriveV3",
-                modelOutputU = v3SmbModel,
-                mpcOutputU = v3SmbModel,
-                // Read here and not earlier: `lastMpcRawSmbU` is written inside `tick()`, exactly
-                // like the barrier fields read by `markHtrRaFloorForExport` a few lines above. Read
-                // before the call it would still hold the previous tick's request. Ticks that do
-                // not engage Autodrive never reach this line, so the field stays null there —
-                // "not known", which is what the barrier-zero case needs to be told apart from.
-                mpcRequestedU = autodriveEngine.lastMpcRawSmbU.takeIf { it.isFinite() },
-                tier = v3FloorTier,
-                smallPrebolusPrefU = smallPrebolusPref,
-                largePrebolusPrefU = largePrebolusPref,
-                autodriveFloorU = v3SmbFloor,
-                maxSmbU = maxSMB,
-                maxSmbHighBgU = maxSMBHB,
-                iobHeadroomU = iobHeadroomForFloor,
-            ).appendStage(
-                name = "AUTODRIVE_FLOOR",
-                beforeU = v3SmbModel,
-                afterU = v3SmbRaw,
-                referenceU = v3SmbFloor,
-                phase = "AUTODRIVE_PRE_TERMINAL",
-                kind = "FLOOR",
-            )
-            if (v3SmbFloor > v3SmbModel + 1e-6) {
-                consoleLog.add(
-                    "🚀 AUTODRIVE_AGGR_SMB_FLOOR: model=${aimiFmt2(v3SmbModel)} → " +
-                        "floor=${aimiFmt2(v3SmbFloor)} U",
+                override fun noteAutodriveGate(engaged: Boolean, kindName: String, reason: String) {
+                    pendingDecisionCtxForExport?.baseline_state?.let { baseline ->
+                        baseline.autodrive_gate_engaged = engaged
+                        baseline.autodrive_gate_kind = kindName
+                        baseline.autodrive_gate_reason = reason
+                    }
+                }
+                override fun setAutodriveEngaged() {
+                    lastAutodriveState = AutodriveState.ENGAGED
+                }
+                override fun setLastHtrRaFloorMgdlPerMin(floor: Double?) {
+                    lastHtrRaFloorMgdlPerMin = floor
+                }
+                override fun setSmbBindingDraft(draft: SmbBindingTrace.Draft) {
+                    lastSmbBindingTraceDraft = draft
+                }
+                override fun setPostHypoSmbBeforeCapU(units: Double) {
+                    lastPostHypoSmbBeforeCapU = units
+                }
+                override fun setPostHypoSmbAfterCapU(units: Double) {
+                    lastPostHypoSmbAfterCapU = units
+                }
+            },
+            uam = AimiUamConfidence { AimiUamHandler.confidenceOrZero() },
+            fcl = AimiFclDeclared { fclProfile -> fclDeclaredThisTick(fclProfile) },
+            minBg = AimiMinBgLookback { lookback -> minBgInLastMinutes(lookback) },
+            postHypoRecovery = AimiPostHypoRecovery { postHypoRecoveryActive() },
+            tdd24h = AimiTdd24h { resolveTdd24hForExport() },
+            phase = AimiPhysiologicalPhase { rt, deltaNow, steps, hr, rhr, base ->
+                refreshPhysiologicalPhase(rt, deltaNow, steps, hr, rhr, base)
+                lastPhysiologicalPhaseOutput
+            },
+            mealSafety = AimiMealSafety { explicit, iobData -> buildMealSafetyContext(explicit, iobData) },
+            absorption = AimiMealAbsorption { deltaNow, steps, hr, rhr, mealContext, lastBolus, nowMs ->
+                refreshMealAbsorptionPhase(deltaNow, steps, hr, rhr, mealContext, lastBolus, nowMs)
+            },
+            latent = AimiPhysioLatentUpdate { snapshot, source -> updatePhysioLatentState(snapshot, source) },
+            hyper = AimiHyperSeverity { rt, deltaNow, tdd -> classifyHyperSeverityForTick(rt, deltaNow, tdd) },
+            htrTerminals = AimiHtrTerminals { rt -> resolveHtrScenarioTerminals(rt) },
+            basalCap = AimiBasalCap { requested, basal, source ->
+                capBasalRateForCorrectionAggression(requested, basal, source)
+            },
+            riseFloor = AimiAggressiveRiseFloor { bgMgdl, rise, shortAvg ->
+                aggressiveRiseSmbFloorU(bgMgdl, rise, shortAvg)
+            },
+            riseNote = AimiRiseFloorNote { contributed -> noteRiseFloorContribution(contributed) },
+            patient = AimiPatientStateRefresh { nowMs, health, source, refreshSource ->
+                refreshPatientStateRuntime(
+                    nowMs = nowMs,
+                    healthSnapshot = health,
+                    sourceSensor = source,
+                    refreshSource = refreshSource,
                 )
-            }
-            val v3Smb = lastPostHypoDeliveryAuthority.capSmbU(v3SmbRaw)
-            lastPostHypoSmbBeforeCapU = v3SmbRaw
-            lastPostHypoSmbAfterCapU = v3Smb
-            lastSmbBindingTraceDraft = lastSmbBindingTraceDraft.appendStage(
-                name = "POST_HYPO_CAP",
-                beforeU = v3SmbRaw,
-                afterU = v3Smb,
-                phase = "AUTODRIVE_PRE_TERMINAL",
-                kind = "CAP",
-            )
-            if (v3Smb < v3SmbRaw - 1e-6) {
-                consoleLog.add(
-                    "${PostHypoDeliveryAuthority.LOG_PREFIX}: v3_smb " +
-                        "${aimiFmt2(v3SmbRaw)}→${aimiFmt2(v3Smb)} U",
+            },
+            terminal = AimiDoseTerminal { rt, doseProfile, mealData, eventual, pred, target, stage ->
+                publishDoseTerminalAuthorityAndSnapshot(rt, doseProfile, mealData, eventual, pred, target, stage)
+            },
+            rbt = AimiRbtLive { tickCtx, rbtProfile, rt, deltaNow, tdd, smb, steps, hr, gateOpen, ra, shield ->
+                resolveAndWireRbtLiveTick(
+                    ctx = tickCtx,
+                    profile = rbtProfile,
+                    rT = rt,
+                    combinedDelta = deltaNow,
+                    tdd24hU = tdd,
+                    v3SmbU = smb,
+                    stepsLast15m = steps,
+                    heartRateBpm = hr,
+                    autodriveGateOpen = gateOpen,
+                    mpcFeedForwardRa = ra,
+                    cbfShieldDeltaU = shield,
                 )
-            }
-            val cbfShieldDeltaU = adCommand?.scheduledMicroBolus?.takeIf { !v3CommandSafe && it > 0.01 }
-            // V3 refreshed meal/physio after the tick-level pre_rbt publish — rebuild MealCertainty
-            // and re-publish gated terminals so RBT stacking + deliver see post-refresh evidence.
-            refreshPatientStateRuntime(
-                nowMs = dateUtil.now(),
-                healthSnapshot = snapshot,
-                sourceSensor = ctx.glucoseStatus.sourceSensor,
-                refreshSource = PatientRefreshSource.PHYSIO_SIGNAL,
-            )
-            val preV3Eventual =
-                this.eventualBG.takeIf { it.isFinite() && it > 1.0 }
-                    ?: rT.eventualBG?.takeIf { it.isFinite() && it > 1.0 }
-                    ?: bg
-            val preV3MinPred = minPredictedAcrossCurves(rT.predBGs) ?: preV3Eventual
-            publishDoseTerminalAuthorityAndSnapshot(
-                rT = rT,
-                profile = profile,
-                mealData = ctx.mealData,
-                pkpdEventualMgdl = preV3Eventual,
-                pkpdPredTerminalMgdl = preV3MinPred,
-                targetBgMgdl = targetBg.toDouble(),
-                stageTag = "pre_v3_rbt",
-            )
-            val rbtCommit = resolveAndWireRbtLiveTick(
-                ctx = ctx,
-                profile = profile,
-                rT = rT,
-                combinedDelta = combinedDelta,
-                tdd24hU = tdd24hForHtr,
-                v3SmbU = v3Smb,
-                stepsLast15m = snapshot.stepsLast15m,
-                heartRateBpm = snapshot.hrNow,
-                autodriveGateOpen = v3CommandSafe,
-                mpcFeedForwardRa = estimatedRaForMpc,
-                cbfShieldDeltaU = cbfShieldDeltaU,
-            )
-            deliverV3SmbFromRbt(
-                ctx = ctx,
-                profile = profile,
-                rT = rT,
-                hypoThresholdMgdl = hypoThresholdMgdl,
-                v3CommandSafe = v3CommandSafe,
-                adCommandReason = adCommand?.reason,
-                rbtCommit = rbtCommit,
-            )
-            val effectiveHtr = rbtCommit?.effectiveHtr
-
-            val effectiveSmbUnits = rT.units ?: 0.0
-            val effectiveTbr = rT.rate ?: profile.current_basal
-            val effectiveDuration = rT.duration ?: 0
-            val v3SmbDelivered = effectiveSmbUnits > 0.01
-            val v3TbrDelivered =
-                effectiveDuration > 0 && kotlin.math.abs(effectiveTbr - profile.current_basal) > 0.01
-            if (v3CommandSafe) {
-                v3AppliedAction = v3SmbDelivered || v3TbrDelivered
-                val v3TbrRate = adCommand!!.temporaryBasalRate
-                consoleLog.add("🚀 ${gate.reason} intent=$v3Smb actual=$effectiveSmbUnits tbr=$v3TbrRate")
-                logDecisionFinal("AUTODRIVE_V3", rT, bg, delta)
-            } else if (effectiveHtr?.active == true && v3SmbDelivered) {
-                v3AppliedAction = true
-                consoleLog.add("🚀 HTR-only SMB after unsafe V3: actual=$effectiveSmbUnits U")
-                logDecisionFinal("AUTODRIVE_V3+HTR", rT, bg, delta)
-            }
-            if (v3SmbDelivered && preferences.get(BooleanKey.OApsAIMIautoDriveAuthoritative)) {
-                skipLegacySmbBlender = true
-                consoleLog.add("AUTODRIVE_V3_AUTHORITATIVE: Legacy MPC/PI blender will be skipped this tick")
-            }
-        }
-        return AutodriveV3BranchResult(
-            appliedAction = v3AppliedAction,
-            skipLegacySmbBlender = skipLegacySmbBlender,
+            },
+            smbDelivery = AimiV3SmbDelivery { tickCtx, smbProfile, rt, hypo, safe, reason, commit ->
+                deliverV3SmbFromRbt(tickCtx, smbProfile, rt, hypo, safe, reason, commit)
+            },
+            raObserve = AimiRaObservation { tickCtx, deltaNow, shortAvg, pkpd, recentMeal, reason ->
+                observeRaIfNotAlreadyRun(tickCtx, deltaNow, shortAvg, pkpd, recentMeal, reason)
+            },
+            htrExport = AimiHtrExport { floor, ra -> markHtrRaFloorForExport(floor, ra) },
+            decisionLog = AimiDecisionLog { tag, rt, loggedBg, loggedDelta ->
+                logDecisionFinal(tag, rt, loggedBg, loggedDelta)
+            },
         )
     }
 
@@ -12776,6 +12544,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             overrideSafetyLimits: Boolean,
             forceExact: Boolean,
             adaptiveMultiplier: Double,
+            mealContext: MealSafetyContext?,
         ): RT = this@DetermineBasalaimiSMB2.setTempBasal(
             rate,
             durationMin,
@@ -12785,6 +12554,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             overrideSafetyLimits = overrideSafetyLimits,
             forceExact = forceExact,
             adaptiveMultiplier = adaptiveMultiplier,
+            mealContext = mealContext,
         )
 
         override fun applySmbUnits(rT: RT, requestedU: Double, owner: String) {
