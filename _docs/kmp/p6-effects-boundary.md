@@ -6,18 +6,27 @@ La décision clinique reste celle de `dev_OAPSAIMI` @ `3dd0ca647722db854fc844eb3
 
 ## 1. Principe
 
-Un cœur fonctionnel commun, une coquille Android impérative.
+Un cœur fonctionnel commun, une coquille Android impérative. L’instantané unique pré-lu est abandonné : il avancerait les lectures conditionnelles et casserait les traces.
 
-- La coquille lit les préférences, l’horloge, les membres du tick et les collaborateurs (moteur, learners, pompe) **dans l’ordre de la référence**, et construit un instantané immuable.
-- Le commun reçoit cet instantané. Il renvoie une décision et une liste ordonnée d’effets. Il n’appelle ni `Preferences`, ni `setTempBasal`, ni un learner, ni l’export.
-- La coquille exécute les effets dans l’ordre reçu, avec les mêmes fonctions qu’aujourd’hui (`setTempBasal`, `applySmbUnits`, `preferences.put`, mise à jour de learner).
-- Aucun effet ne part du commun. Une lecture conditionnelle non plus : si la référence ne lit une clé que sur une branche, la coquille la lit au même moment. Le commun peut demander la prochaine lecture (`Read`) ; la coquille l’effectue, puis rappelle le commun avec la valeur. L’ordre des lignes `READ` reste celui de la référence.
+Le commun n’a pas d’instantané de préférences. Il appelle des ports injectés **au moment exact** où la référence lit ou appelle. Les implémentations restent en `androidMain` et délèguent au code actuel. Rien de ces implémentations ne passe en `commonMain`. Il n’y a pas d’implémentation iOS de l’effect sink : `IosClientConfig.APS` reste `false`.
+
+Les ports sont minces et portent le nom de l’appel de la référence. Pas de bus générique. On n’introduit un port que lorsque la fonction portée fait réellement l’appel.
+
+| port | ce que la référence appelle | qui l’implémente |
+|---|---|---|
+| `Preferences` | `get` / `put` | le stockage déjà injecté |
+| `AimiEffectSink` | `setTempBasal`, `applySmbUnits` | la coquille, qui délègue aux fonctions actuelles |
+| `AimiSmbActionType` | `setSmbActionType`, `finalLoopDecisionType`, `setFinalLoopDecisionType` | `physioAdapter` |
+| `AimiLatestSmbCached` | `latestSmbCached` | le cache SMB de la coquille |
+| phase physio, absorption, état latent, Harmonia, publication du terminal | les méthodes du même nom, quand la fonction portée les appelle | la coquille, plus tard |
+
+Les membres du tick déjà calculés (glycémie, IOB, drapeaux de mode) sont passés à la fonction. Ce ne sont pas des lectures de préférences. Une préférence lue seulement sur une branche l’est encore seulement sur cette branche, à la même ligne.
 
 Les lectures ne sont pas des effets. Elles sont dans la trace, parce qu’un déplacement qui les avance ou les saute change le comportement observable.
 
 ## 2. Types d’effets
 
-`AimiTickEffect` (`effects/AimiTickEffect.kt`) :
+Le commun n’empile pas une liste que la coquille rejouerait. Il appelle `AimiEffectSink` sur place. `AimiTickEffect` (`effects/AimiTickEffect.kt`) reste le format de la trace :
 
 | effet | ce que la coquille fait |
 |---|---|
@@ -153,6 +162,8 @@ Bandes, inchangées : hausse corrigée du repos ≥ 25 bpm → 0.35, 15..24 → 
 
 ## 6. Ce qui ne bouge pas dans ce lot
 
-`setTempBasal`, `runDetermineBasalTickInner`, les learners, l’export, `toMedicalJson`. Les deux sites d’horloge de la tranche 4 non plus.
+`setTempBasal`, `runDetermineBasalTickInner`, les learners, l’export, `toMedicalJson`. Les deux sites d’horloge de la tranche 4 non plus. Le corps de `setTempBasal` n’est pas modifié : le sink l’appelle.
 
-Les traces golden de ce lot couvrent, sur le code Android actuel : mode repas (TBR puis prébolus), récupération d’hypo, hypo sévère avec autorité post-hypo, plafond MaxIOB, Autodrive éteint, montée de repas engagée (`ShellDecisionTraceTest`, TBR 2,40 U/h demandée, SMB moteur non déposé tant que RBT est éteint), et le chemin UAM de `buildRbtExtendedSignals` (ordinal post-hypo 2, confiance 0,70). Si une trace diverge, on s’arrête.
+`applyLegacyMealModes` décide dans `commonMain` et appelle les ports ci-dessus. Cette fonction ne consulte pas la porte Autodrive. Les traces hypo (récupération et hypo sévère) et le plafond MaxIOB sont déjà verrouillées. La porte Autodrive ouverte et fermée se verrouille au portage de `runAutodriveV3MultiVariableBranch`.
+
+Les traces golden restent, octet pour octet : mode repas (TBR puis prébolus), récupération d’hypo, hypo sévère avec autorité post-hypo, plafond MaxIOB, Autodrive éteint, montée de repas engagée (`ShellDecisionTraceTest`, TBR 2,40 U/h demandée, SMB moteur non déposé tant que RBT est éteint), et le chemin UAM de `buildRbtExtendedSignals` (ordinal post-hypo 2, confiance 0,70). Si une trace diverge, on s’arrête.

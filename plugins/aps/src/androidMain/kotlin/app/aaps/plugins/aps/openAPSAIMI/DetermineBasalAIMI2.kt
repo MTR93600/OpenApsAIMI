@@ -42,7 +42,14 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEffectProbe
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEffectSink
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiLatestSmbCached
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiSmbActionType
+import app.aaps.plugins.aps.openAPSAIMI.effects.LegacyMealTickState
+import app.aaps.plugins.aps.openAPSAIMI.effects.LegacyPrebolusMemory
+import app.aaps.plugins.aps.openAPSAIMI.effects.applyLegacyMealModes as decideLegacyMealModes
 import app.aaps.plugins.aps.openAPSAIMI.effects.cfrdHrInflammationBoostOf
+import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalHistoryUtils
@@ -11948,8 +11955,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     // 🛡️ PERSISTENT PREBOLUS LOCKOUT (MTR Safety Patch)
     // Survives instance re-creations and app restarts by combining Memory + SharedPreferences.
         companion object {
-        private var lastSmbTimestampMem: Long = 0L
-
         /**
          * Lookback (minutes) used to report the non-basal insulin of one basal-learning row. Slightly
          * longer than the 5-minute loop tick, so a bolus written a few seconds late is still reported.
@@ -11966,32 +11971,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         private const val EFFORT_MEAL_SUPPRESS_CONF = 0.30       // confiance mini de la croyance d'effort
         private const val EFFORT_MEAL_SUPPRESS_MAX_COB_G = 12.0  // au-delà = vrai repas (COB) → pas de veto
         /**
-         * Verrou one-shot par tag prébolus (LUNCH_P1, LUNCH_P2, …). Statique = survit aux ticks (comme
-         * [lastSmbTimestampMem]), car l'instance determine_basal peut être recréée à chaque cycle.
-         * Mappe tag → instant (ms) du dernier tir. Voir [applyLegacyMealModes]. Non persisté : au pire un
-         * redémarrage process en pleine fenêtre repas re-tire une fois (risque identique à l'ancien lockout).
+         * Décision pure du verrou one-shot par tag. Le calcul vit avec la décision repas, dans
+         * [app.aaps.plugins.aps.openAPSAIMI.effects.legacyPrebolusLatchBlocks].
          */
-        private val legacyPrebolusFiredAtMem = HashMap<String, Long>()
-
-        /**
-         * Alerte « prébolus non délivré » déjà émise pour ce tag (Option A — détection seule).
-         * Même sémantique d'activation que [legacyPrebolusFiredAtMem] : une seule alerte par tag
-         * et par activation de mode, détectée via [legacyPrebolusLatchBlocks].
-         */
-        private val legacyPrebolusMissAlertedAtMem = HashMap<String, Long>()
-
-        /**
-         * Décision pure du verrou one-shot par tag (testable). Renvoie true si ce tag a déjà tiré pour la
-         * MÊME activation → à bloquer. [firedAtMs] = instant du dernier tir (null si jamais), [nowMs] = maintenant,
-         * [runtimeMin] = minutes depuis l'activation du mode (redémarre à ~0 à chaque nouvelle activation).
-         * Même activation ⇔ (now − firedAt) < runtime + marge : le tir précédent est postérieur à l'activation
-         * courante. Nouvelle activation ⇒ runtime petit ⇒ (now − firedAt) ≫ runtime ⇒ false ⇒ tir autorisé.
-         */
-        internal fun legacyPrebolusLatchBlocks(firedAtMs: Long?, nowMs: Long, runtimeMin: Long): Boolean {
-            if (firedAtMs == null) return false
-            val activationWindowMs = runtimeMin.coerceAtLeast(0) * 60_000L + 90_000L
-            return (nowMs - firedAtMs) < activationWindowMs
-        }
+        internal fun legacyPrebolusLatchBlocks(firedAtMs: Long?, nowMs: Long, runtimeMin: Long): Boolean =
+            app.aaps.plugins.aps.openAPSAIMI.effects.legacyPrebolusLatchBlocks(firedAtMs, nowMs, runtimeMin)
 
         /**
          * Limiteur de pente MONTANTE de la basale (anti-whiplash, testable). La cascade de règles produisait des
@@ -12014,44 +11998,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         /**
          * Délai minimal (ms) après un tir prébolus avant de pouvoir conclure « non délivré ».
-         * Doit rester inférieur à [LEGACY_PREBOLUS_DELIVERY_TTL_MS] (30 min) pour laisser au
+         * Doit rester inférieur au TTL de délivrance (30 min) pour laisser au
          * carry-forward le temps de retenter (cooldown 6 min) avant d'alerter l'utilisateur —
          * un délai trop court (ex. 6,5 min) déclenchait l'alerte Option A pendant que le carry
          * retentait encore, souvent avec succès quelques minutes plus tard.
          */
-        internal const val LEGACY_PREBOLUS_CONFIRM_DELAY_MS = 1_500_000L // 25 min
+        internal const val LEGACY_PREBOLUS_CONFIRM_DELAY_MS = LegacyPrebolusMemory.CONFIRM_DELAY_MS
 
-        /**
-         * Détection pure « prébolus demandé mais jamais confirmé par la pompe » (Option A — information
-         * seule, aucune re-délivrance : le verrou one-shot [legacyPrebolusLatchBlocks] reste intact).
-         * Renvoie true si le tag a tiré pour l'activation COURANTE ([firedAtMs] dans la fenêtre
-         * d'activation, même règle que le latch), que [LEGACY_PREBOLUS_CONFIRM_DELAY_MS] s'est écoulé
-         * depuis le tir, et qu'aucun bolus SMB confirmé pompe ([lastSmbConfirmedMs], timestamp du
-         * dernier BS.Type.SMB en base) n'existe depuis le tir.
-         */
         internal fun legacyPrebolusMissedDelivery(
             firedAtMs: Long?,
             lastSmbConfirmedMs: Long?,
             nowMs: Long,
             runtimeMin: Long,
-        ): Boolean {
-            if (firedAtMs == null) return false
-            // Tir d'une activation précédente → hors sujet pour ce tick.
-            if (!legacyPrebolusLatchBlocks(firedAtMs, nowMs, runtimeMin)) return false
-            // Trop tôt pour conclure : le cache SMB asynchrone peut avoir un tick de retard.
-            if (nowMs - firedAtMs < LEGACY_PREBOLUS_CONFIRM_DELAY_MS) return false
-            return lastSmbConfirmedMs == null || lastSmbConfirmedMs < firedAtMs
-        }
+        ): Boolean = app.aaps.plugins.aps.openAPSAIMI.effects.legacyPrebolusMissedDelivery(
+            firedAtMs,
+            lastSmbConfirmedMs,
+            nowMs,
+            runtimeMin,
+        )
 
         /** Clears the static prebolus latch so a trace test starts from an empty memory. */
         internal fun resetLegacyPrebolusMemoryForTrace() {
-            legacyPrebolusFiredAtMem.clear()
-            legacyPrebolusMissAlertedAtMem.clear()
-            lastSmbTimestampMem = 0L
-            lastLegacyPrebolusTimestampMem = 0L
-            lastCarryRetryFireMillis = 0L
-            pendingLegacyPrebolusUnitMem = 0f
-            pendingLegacyPrebolusExpiryMem = 0L
+            LegacyPrebolusMemory.reset()
         }
         /** Glycémie (mg/dL) au-dessus de laquelle la basale peut corriger malgré sport / contexte activité (SMB toujours off). */
         const val EXERCISE_BASAL_RESUME_BG_MGDL: Double = 220.0
@@ -12060,7 +12028,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
          * Plancher hypo sévère (mg/dL, ≈ 3.0 mmol/L) : seul cas où un repas explicitement déclaré
          * (mode legacy actif ou insuline validée Meal Advisor) ne reçoit PAS son prebolus malgré la priorité repas.
          */
-        const val SEVERE_HYPO_MEAL_OVERRIDE_MGDL: Double = 54.0
+        const val SEVERE_HYPO_MEAL_OVERRIDE_MGDL: Double =
+            app.aaps.plugins.aps.openAPSAIMI.effects.SEVERE_HYPO_MEAL_OVERRIDE_MGDL
 
         /** Fenêtre pour [minBgInLastMinutes] : min BG &lt; 70 dans cette durée → amortissement Ra post-hypo (AutoDrive V3). */
         private const val AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES = 75
@@ -12068,85 +12037,33 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         /** Seuil et fenêtre de l'hyperglycémie « persistante » qui entraîne le [BasalLearner] à la hausse. */
         private const val PERSISTENT_HYPER_BG_MGDL = 180.0
         private const val PERSISTENT_HYPER_LOOKBACK_MINUTES = 60
-
-        /**
-         * Durée (ms) pendant laquelle une demande de prébolus legacy est considérée « en vol ».
-         * Si la pompe (ex. Medtrum BLE) était injoignable et que le bolus a été silencieusement perdu,
-         * l'état pending expire après ce délai — le carry-forward cesse alors de re-proposer le montant.
-         */
-        private const val LEGACY_PREBOLUS_DELIVERY_TTL_MS = 30 * 60 * 1000L
-
-        /**
-         * Carry-forward retry cooldown. Its only job is to bridge the delivery→DB-write latency (a real SMB is
-         * recorded in the treatments DB within seconds), so we don't re-propose a prebolus that was just delivered
-         * but not yet confirmed (the pending is cleared on that confirmation — see the pending-clear path). It must
-         * stay SHORT so that when the first fire is NOT delivered (e.g. the bundled TBR command didn't succeed at the
-         * LoopPlugin gate, or a bolus was already queued) the carry-forward re-proposes it on the very next loop tick
-         * instead of waiting minutes. 90 s < the ~5-min loop cadence → next-tick retry on normal cadence, while still
-         * blocking a rapid re-invoke (pull-to-refresh) within the delivery/DB window → no double-send.
-         */
-        private const val CARRY_RETRY_COOLDOWN_MS = 90 * 1000L
-
-        /** Timestamp mémoire du dernier prébolus legacy demandé (voir [internalLastLegacyPrebolusMillis]). */
-        private var lastLegacyPrebolusTimestampMem: Long = 0L
-
-        /**
-         * Cooldown du re-tir carry-forward, volontairement séparé de [internalLastLegacyPrebolusMillis] :
-         * ce dernier est la référence du tir P1 d'origine et ne doit PAS être repoussé à chaque retry,
-         * sinon les fenêtres aval (P2) seraient décalées. Ce timer ne limite que la fréquence du carry.
-         */
-        private var lastCarryRetryFireMillis: Long = 0L
-
-        /**
-         * État « pending » du prébolus legacy (montant demandé + expiration TTL). Positionné au tir dans
-         * markLegacyMealDecision, effacé quand la base confirme la délivrance ou à l'expiration du TTL.
-         * Statique + Preferences : l'instance determine_basal peut être recréée entre deux cycles.
-         */
-        private var pendingLegacyPrebolusUnitMem: Float = 0.0f
-        private var pendingLegacyPrebolusExpiryMem: Long = 0L
     }
 
     private var internalLastSmbMillis: Long
-        get() = Math.max(lastSmbTimestampMem, preferences.get(AimiLongKey.LastPrebolusTime))
+        get() = LegacyPrebolusMemory.lastSmbMillis(preferences)
         set(value) {
-            lastSmbTimestampMem = value
-            preferences.put(AimiLongKey.LastPrebolusTime, value)
+            LegacyPrebolusMemory.setLastSmbMillis(preferences, value)
         }
 
     /** Référence du dernier prébolus legacy demandé — sert d'origine à la recherche de confirmation en base. */
     private var internalLastLegacyPrebolusMillis: Long
-        get() {
-            val stored = preferences.get(AimiLongKey.LastLegacyPrebolusTime)
-            // Un timestamp > 24 h ne peut pas correspondre à un prébolus encore actif.
-            val validStored = if (stored > 0L && (dateUtil.now() - stored) < 24 * 3_600_000L) stored else 0L
-            return Math.max(lastLegacyPrebolusTimestampMem, validStored)
-        }
+        get() = LegacyPrebolusMemory.lastLegacyPrebolusMillis(preferences, dateUtil.now())
         set(value) {
-            lastLegacyPrebolusTimestampMem = value
-            preferences.put(AimiLongKey.LastLegacyPrebolusTime, value)
+            LegacyPrebolusMemory.setLastLegacyPrebolusMillis(preferences, value)
         }
 
     /** Montant (U) du prébolus legacy demandé mais pas encore confirmé en base. 0 si rien en vol. */
     private var pendingLegacyPrebolusUnit: Float
-        get() {
-            if (pendingLegacyPrebolusUnitMem > 0.0f) return pendingLegacyPrebolusUnitMem
-            // Stocké en milli-unités (Long) pour réutiliser AimiLongKey sans clé Float dédiée.
-            return preferences.get(AimiLongKey.PendingLegacyPrebolusUnitMilli) / 1000.0f
-        }
+        get() = LegacyPrebolusMemory.pendingUnit(preferences)
         set(value) {
-            pendingLegacyPrebolusUnitMem = value
-            preferences.put(AimiLongKey.PendingLegacyPrebolusUnitMilli, (value * 1000).toLong())
+            LegacyPrebolusMemory.setPendingUnit(preferences, value)
         }
 
-    /** Expiration (ms epoch) de l'état pending — voir [LEGACY_PREBOLUS_DELIVERY_TTL_MS]. */
+    /** Expiration (ms epoch) de l'état pending. */
     private var pendingLegacyPrebolusExpiry: Long
-        get() {
-            if (pendingLegacyPrebolusExpiryMem > 0L) return pendingLegacyPrebolusExpiryMem
-            return preferences.get(AimiLongKey.PendingLegacyPrebolusExpiry)
-        }
+        get() = LegacyPrebolusMemory.pendingExpiry(preferences)
         set(value) {
-            pendingLegacyPrebolusExpiryMem = value
-            preferences.put(AimiLongKey.PendingLegacyPrebolusExpiry, value)
+            LegacyPrebolusMemory.setPendingExpiry(preferences, value)
         }
     private val nightGrowthResistanceMode = NightGrowthResistanceMode()
     private val ngrTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
@@ -12740,14 +12657,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
     }
 
-    private fun legacyPrebolusBlockedByPostHypo(logTag: String): Boolean {
-        val postHypo = lastPostHypoDeliveryAuthority
-        if (!postHypo.active || !postHypo.suppressMealDelivery) return false
-        consoleLog.add(PostHypoDeliveryAuthority.formatLogLine(postHypo))
-        consoleLog.add("${PostHypoDeliveryAuthority.LOG_PREFIX}: legacy_prebolus_blocked tag=$logTag")
-        return true
-    }
-
     private fun mapPostHypoToAggressionHint(state: PostHypoState): CorrectionAggressionGate.PostHypoHint =
         when (state) {
             is PostHypoState.ReboundSuspected -> CorrectionAggressionGate.PostHypoHint.REBOUND_SUSPECTED
@@ -13084,12 +12993,49 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
     }
 
-    private fun recordSmbActionType(decisionType: String) {
-        physioAdapter.setSmbActionType(decisionType)
-        val currentFinal = physioAdapter.getLastDecisionTrace()?.finalLoopDecisionType
-        if (decisionType != "none" || currentFinal.isNullOrBlank() || currentFinal == "pending") {
+    private val legacyEffectSink = object : AimiEffectSink {
+        override fun setTempBasal(
+            rate: Double,
+            durationMin: Int,
+            profile: OapsProfileAimi,
+            rT: RT,
+            currenttemp: CurrentTemp,
+            overrideSafetyLimits: Boolean,
+            forceExact: Boolean,
+            adaptiveMultiplier: Double,
+        ): RT = this@DetermineBasalaimiSMB2.setTempBasal(
+            rate,
+            durationMin,
+            profile,
+            rT,
+            currenttemp,
+            overrideSafetyLimits = overrideSafetyLimits,
+            forceExact = forceExact,
+            adaptiveMultiplier = adaptiveMultiplier,
+        )
+
+        override fun applySmbUnits(rT: RT, requestedU: Double, owner: String) {
+            this@DetermineBasalaimiSMB2.applySmbUnits(rT, requestedU, owner)
+        }
+    }
+
+    private val legacySmbAction = object : AimiSmbActionType {
+        override fun setSmbActionType(decisionType: String) {
+            physioAdapter.setSmbActionType(decisionType)
+        }
+
+        override fun finalLoopDecisionType(): String? =
+            physioAdapter.getLastDecisionTrace()?.finalLoopDecisionType
+
+        override fun setFinalLoopDecisionType(decisionType: String) {
             physioAdapter.setFinalLoopDecisionType(decisionType)
         }
+    }
+
+    private val legacyLatestSmb = AimiLatestSmbCached { latestSmbCached()?.timestamp }
+
+    private fun recordSmbActionType(decisionType: String) {
+        recordSmbActionTypeOn(legacySmbAction, decisionType)
     }
 
     fun setTempBasal(
@@ -15731,352 +15677,52 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
     }
 
-    /**
-     * Option A — vérification de délivrance des prébolus legacy (information seule, aucune re-délivrance).
-     * Pour le mode manuel actif, compare le latch de tir [legacyPrebolusFiredAtMem] au dernier bolus SMB
-     * confirmé pompe (BS.Type.SMB en base via [latestSmbCached]). Si un prébolus a été demandé pour cette
-     * activation mais qu'aucun SMB n'a été confirmé depuis le tir (délai de confirmation écoulé, voir
-     * [legacyPrebolusMissedDelivery]), alerte UNE fois par tag/activation : console + rT.reason + notification.
-     * Le verrou one-shot n'est jamais modifié — le tag reste consommé pour l'activation.
-     * Limite connue : un autre SMB délivré après le tir masquerait le manque (en T3C brittle les SMB
-     * autonomes sont coupés, le prébolus est le seul SMB attendu dans sa fenêtre).
-     */
-    private fun checkLegacyPrebolusDeliveryAndAlert(rT: RT) {
-        val activeModeTags: Pair<Long, List<Pair<String, DoubleKey>>> = when {
-            mealTime && mealruntime in 0..29 -> mealruntime to listOf(
-                "MEAL_P1" to DoubleKey.OApsAIMIMealPrebolus,
-            )
-
-            bfastTime && bfastruntime in 0..29 -> bfastruntime to listOf(
-                "BF_P1" to DoubleKey.OApsAIMIBFPrebolus,
-                "BF_P2" to DoubleKey.OApsAIMIBFPrebolus2,
-            )
-
-            lunchTime && lunchruntime in 0..29 -> lunchruntime to listOf(
-                "LUNCH_P1" to DoubleKey.OApsAIMILunchPrebolus,
-                "LUNCH_P2" to DoubleKey.OApsAIMILunchPrebolus2,
-            )
-
-            dinnerTime && dinnerruntime in 0..29 -> dinnerruntime to listOf(
-                "DINNER_P1" to DoubleKey.OApsAIMIDinnerPrebolus,
-                "DINNER_P2" to DoubleKey.OApsAIMIDinnerPrebolus2,
-            )
-
-            highCarbTime && highCarbrunTime in 0..29 -> highCarbrunTime to listOf(
-                "HC_P1" to DoubleKey.OApsAIMIHighCarbPrebolus,
-                "HC_P2" to DoubleKey.OApsAIMIHighCarbPrebolus2,
-            )
-
-            snackTime && snackrunTime in 0..29 -> snackrunTime to listOf(
-                "SNACK_P1" to DoubleKey.OApsAIMISnackPrebolus,
-            )
-
-            else -> return
-        }
-        val (runtimeMin, tags) = activeModeTags
-        val lastSmbConfirmedMs = latestSmbCached()?.timestamp
-        val now = dateUtil.now()
-        for ((tag, prefKey) in tags) {
-            val firedAt = legacyPrebolusFiredAtMem[tag] ?: continue
-            // Une seule alerte par tag et par activation (même sémantique que le latch de tir).
-            if (legacyPrebolusLatchBlocks(legacyPrebolusMissAlertedAtMem[tag], now, runtimeMin)) continue
-            if (!legacyPrebolusMissedDelivery(firedAt, lastSmbConfirmedMs, now, runtimeMin)) continue
-            legacyPrebolusMissAlertedAtMem[tag] = now
-            val requestedU = preferences.get(prefKey)
-            val msg = rh.gs(
-                ApsStrings.aimi_prebolus_not_delivered,
-                tag,
-                rh.gs(InterfacesStrings.format_insulin_units, requestedU),
-            )
-            consoleLog.add(
-                "⚠️ PREBOLUS_NOT_DELIVERED tag=$tag requested=${aimiFmt2(requestedU)}U " +
-                    "firedAt=${dateUtil.timeString(firedAt)} lastSmbConfirmed=${lastSmbConfirmedMs?.let { dateUtil.timeString(it) } ?: "none"}"
-            )
-            rT.reason.append(" | ").append(msg)
-            try {
-                notificationManager.post(
-                    id = NotificationId.AUTOMATION_MESSAGE,
-                    text = msg,
-                )
-            } catch (_: Exception) {
-            }
-        }
-    }
-
     internal fun applyLegacyMealModes(profile: OapsProfileAimi, rT: RT, currenttemp: CurrentTemp, modeTbrLimit: Double): RT? {
-        fun rbf(key: DoubleKey) = preferences.get(key)
-
-        // 🔒 ONE-SHOT LATCH PAR TAG (remplace l'ancien lockout temps + le test de valeur lastBolusSMBUnit).
-        // Chaque phase (LUNCH_P1, LUNCH_P2, …) ne peut tirer qu'UNE fois par activation du mode :
-        //  - le tir est enregistré dans [legacyPrebolusFiredAtMem] (statique → survit aux ticks) ;
-        //  - un nouveau tir du même tag est refusé tant qu'on est dans la MÊME activation, détectée via le
-        //    runtime : si le dernier tir date de moins de « runtime + marge », c'est la même activation.
-        //  - une nouvelle activation remet le runtime à ~0 → (now - dernierTir) ≫ runtime → tir autorisé.
-        // Avantages vs l'ancien : P1 part au 1er tick de sa fenêtre (plus de fenêtre onset < 5 trop étroite),
-        // pas de sur-blocage par coïncidence de valeur (le bug P1-ne-part-pas), pas de double sur capteur rapide.
-        fun prebolusAlreadyFiredThisActivation(tag: String, runtimeMin: Long): Boolean =
-            legacyPrebolusLatchBlocks(legacyPrebolusFiredAtMem[tag], dateUtil.now(), runtimeMin)
-
-        fun markLegacyMealDecision() {
-            recordSmbActionType(if ((rT.units ?: 0.0) > 0.0) "smb" else "none")
-            val units = rT.units ?: 0.0
-            if (units > 0.0) {
-                lastBolusSMBUnit = units.toFloat()
-                lastSmbCapped = units
-                lastSmbFinal = units
-                internalLastSmbMillis = dateUtil.now()
-                // Arme le suivi de délivrance : le pending reste actif jusqu'à confirmation en base
-                // (bootstrap) ou expiration du TTL — le carry-forward re-propose le montant entre-temps.
-                pendingLegacyPrebolusUnit = units.toFloat()
-                pendingLegacyPrebolusExpiry = dateUtil.now() + LEGACY_PREBOLUS_DELIVERY_TTL_MS
-                internalLastLegacyPrebolusMillis = dateUtil.now()
-                // Seed the carry cooldown (short — see [CARRY_RETRY_COOLDOWN_MS]): guards a rapid re-invoke from
-                // double-sending while the initial delivery reaches the DB, WITHOUT blocking the next loop tick — so
-                // a first fire that wasn't enacted (bundled TBR command failed at the Loop gate, or bolus queued) is
-                // re-proposed on the next tick instead of waiting minutes.
-                lastCarryRetryFireMillis = dateUtil.now()
-            }
-        }
-
-        fun setLegacyPrebolusUnits(
-            units: Double,
-            logTag: String,
-            runtimeMin: Long,
-            onAllowed: (Double) -> Unit,
-        ) {
-            // 🔒 Latch : ce tag a-t-il déjà été délivré pour CETTE activation ? → un seul tir par phase.
-            if (prebolusAlreadyFiredThisActivation(logTag, runtimeMin)) {
-                consoleLog.add("🔒 LEGACY prebolus tag=$logTag déjà délivré cette activation — TBR seul")
-                rT.units = 0.0
-                return
-            }
-            // 🛡️ IOB guard (sécurité anti-surdosage) : pas de prébolus si l'IOB dépasse déjà MaxIOB.
-            if (iob > this.maxIob) {
-                consoleLog.add("🛡️ LEGACY prebolus tag=$logTag: IOB ${aimiFmt2(iob)}U > MaxIOB — TBR seul")
-                rT.units = 0.0
-                return
-            }
-            // 🍱 Exception repas : à l'intérieur d'un mode legacy explicite, le blocage post-hypo ne s'applique
-            // plus que sous hypo sévère (BG ≤ [SEVERE_HYPO_MEAL_OVERRIDE_MGDL]). Au-dessus, le prebolus prime.
-            if (bg <= SEVERE_HYPO_MEAL_OVERRIDE_MGDL && legacyPrebolusBlockedByPostHypo(logTag)) {
-                rT.units = 0.0
-                return
-            }
-            // Declared hypo recovery suppresses the legacy meal prebolus (this path bypasses finalizeAndCapSMB).
-            if (lastContextSnapshot?.hasHypoRecovery == true) {
-                consoleLog.add("🍬 CTX_HYPO_RECOVERY: legacy prebolus suppressed tag=$logTag (was ${aimiFmt2(units)}U)")
-                rT.units = 0.0
-                return
-            }
-            applySmbUnits(rT, units, "LegacyMealModes")
-            rT.deliverAt = dateUtil.now()
-            legacyPrebolusFiredAtMem[logTag] = dateUtil.now() // 🔒 arme le latch au tir effectif
-            onAllowed(units)
-        }
-
-        // TBR legacy repas : taux = plafond mode manuel ([DoubleKey.meal_modes_MaxBasal] vs profil, voir [runManualMealModesAfterTherapyGate]),
-        // durée 30 min, pendant les 30 premières minutes du mode — réaffirmée à chaque tick P1/P2,
-        // et via les tags *_MAINT ci‑dessous quand aucun prébolus ne matche (p.ex. minutes 8–14 ou 23–29).
-        fun manualMealModeTbr(runtimeMin: Long, logTag: String, overrideSafetyLimits: Boolean) {
-            if (runtimeMin < 0 || runtimeMin >= 30) return
-            val rateUh = modeTbrLimit.coerceAtLeast(0.05)
-            setTempBasal(
-                rateUh,
-                30,
-                profile,
-                rT,
-                currenttemp,
-                overrideSafetyLimits = overrideSafetyLimits,
-                forceExact = true,
-                adaptiveMultiplier = 1.0
-            )
-            consoleLog.add("MEAL_TBR_MANUAL[$logTag] rate=${aimiFmt2(rateUh)}U/h dur=30m rt=${runtimeMin}m")
-        }
-
-        // Option A : contrôle a posteriori de la délivrance des prébolus déjà demandés (alerte seule,
-        // ne modifie ni le latch ni la décision de ce tick). Doit tourner AVANT les branches P1/P2/MAINT
-        // car à runtime 8-14 la branche P1 n'est plus exécutée.
-        // 🍽️ FCL takes part in the two mechanisms below — the delivery carry-forward and the one-shot
-        // latch — but NOT in the `legacyMealMaint` block further down: that one ends the tick for
-        // thirty minutes on a bare TBR, and FCL must leave the bolus channel alive.
-        val fclDeclared = fclDeclaredThisTick(profile)
-
-        checkLegacyPrebolusDeliveryAndAlert(rT)
-
-        // 🍱 Carry-forward (garantie de délivrance) : un prébolus demandé mais jamais confirmé en base
-        // (pending actif, TTL non expiré — ex. déconnexion BLE au tick du tir) est re-proposé tant qu'un
-        // mode repas est actif. Le latch one-shot n'est PAS réarmé : c'est la même demande, re-émise.
-        // Return early ⇒ tant que le pending est actif, les branches P1/P2 ne sont pas évaluées.
-        if (pendingLegacyPrebolusUnit > 0.0f && dateUtil.now() < pendingLegacyPrebolusExpiry) {
-            val activeModeRuntime = when {
-                mealTime     -> mealruntime
-                bfastTime    -> bfastruntime
-                lunchTime    -> lunchruntime
-                dinnerTime   -> dinnerruntime
-                highCarbTime -> highCarbrunTime
-                snackTime    -> snackrunTime
-                // The delivery guarantee is exactly the anti-redundancy mechanism FCL needs: while a
-                // requested prebolus is still unconfirmed, no insulin has landed, so the same amount
-                // is re-proposed instead of an SMB being stacked on top of an unknown outcome.
-                fclDeclared  -> fclruntime
-                else         -> null
-            }
-            if (activeModeRuntime != null) {
-                manualMealModeTbr(activeModeRuntime, "MAINT_PB1_PRIORITY", overrideSafetyLimits = false)
-                // 🛡️ Même garde MaxIOB que setLegacyPrebolusUnits : ce chemin pose rT.units directement,
-                // sans elle une confirmation lente re-demanderait le montant complet tick après tick
-                // quelle que soit la montée d'IOB entre-temps.
-                if (iob > this.maxIob) {
-                    consoleLog.add("🛡️ LEGACY_PB1_PRIORITY_CARRY: IOB ${aimiFmt2(iob)}U > MaxIOB — TBR seul")
-                    rT.units = 0.0
-                    return rT
-                }
-                // Throttle des retries avec un timer DÉDIÉ : ne pas réutiliser internalLastLegacyPrebolusMillis
-                // (référence du tir P1 d'origine) sous peine de décaler les fenêtres P2 à chaque retry.
-                val timeSinceLastCarryRetry = dateUtil.now() - lastCarryRetryFireMillis
-                val carryOnCooldown = lastCarryRetryFireMillis > 0L && timeSinceLastCarryRetry < CARRY_RETRY_COOLDOWN_MS
-                if (!carryOnCooldown) {
-                    applySmbUnits(rT, pendingLegacyPrebolusUnit.toDouble(), "LegacyPrebolus")
-                    rT.deliverAt = dateUtil.now()
-                    lastCarryRetryFireMillis = dateUtil.now()
-                    consoleLog.add("🍱 LEGACY_PB1_PRIORITY_CARRY: re-propose ${pendingLegacyPrebolusUnit}U (non confirmé en base)")
-                } else {
-                    consoleLog.add("⏳ LEGACY_PB1_PRIORITY_CARRY: cooldown (retry il y a ${timeSinceLastCarryRetry / 1000}s)")
-                }
-                return rT
-            }
-        }
-
-        if (isMealModeCondition()) {
-            manualMealModeTbr(mealruntime, "MEAL_P1", overrideSafetyLimits = false)
-            setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIMealPrebolus), "MEAL_P1", mealruntime) { u ->
-                rT.reason.append(rh.gs(ApsStrings.manual_meal_prebolus, u))
-                consoleLog.add("🍱 LEGACY_MODE_MEAL P1=${aimiFmt2(u)}U")
-            }
-            markLegacyMealDecision()
-            return rT
-        }
-        if (isbfastModeCondition()) {
-            manualMealModeTbr(bfastruntime, "BF_P1", overrideSafetyLimits = false)
-            setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIBFPrebolus), "BF_P1", bfastruntime) { u ->
-                rT.reason.append(rh.gs(ApsStrings.reason_prebolus_bfast1, u))
-                consoleLog.add("🍱 LEGACY_MODE_BFAST P1=${aimiFmt2(u)}U")
-            }
-            markLegacyMealDecision()
-            return rT
-        }
-        if (isbfast2ModeCondition()) {
-            manualMealModeTbr(bfastruntime, "BF_P2", overrideSafetyLimits = false)
-            setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIBFPrebolus2), "BF_P2", bfastruntime) { u ->
-                rT.reason.append(rh.gs(ApsStrings.reason_prebolus_bfast2, u))
-                consoleLog.add("🍱 LEGACY_MODE_BFAST P2=${aimiFmt2(u)}U")
-            }
-            markLegacyMealDecision()
-            return rT
-        }
-        if (isLunchModeCondition()) {
-            manualMealModeTbr(lunchruntime, "LUNCH_P1", overrideSafetyLimits = false)
-            setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMILunchPrebolus), "LUNCH_P1", lunchruntime) { u ->
-                rT.reason.append(rh.gs(ApsStrings.reason_prebolus_lunch1, u))
-                consoleLog.add("🍱 LEGACY_MODE_LUNCH P1=${aimiFmt2(u)}U")
-            }
-            markLegacyMealDecision()
-            return rT
-        }
-        if (isLunch2ModeCondition()) {
-            manualMealModeTbr(lunchruntime, "LUNCH_P2", overrideSafetyLimits = false)
-            setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMILunchPrebolus2), "LUNCH_P2", lunchruntime) { u ->
-                rT.reason.append(rh.gs(ApsStrings.reason_prebolus_lunch2, u))
-                consoleLog.add("🍱 LEGACY_MODE_LUNCH P2=${aimiFmt2(u)}U")
-            }
-            markLegacyMealDecision()
-            return rT
-        }
-        if (isDinnerModeCondition()) {
-            manualMealModeTbr(dinnerruntime, "DINNER_P1", overrideSafetyLimits = false)
-            setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIDinnerPrebolus), "DINNER_P1", dinnerruntime) { u ->
-                rT.reason.append(rh.gs(ApsStrings.reason_prebolus_dinner1, u))
-                consoleLog.add("🍱 LEGACY_MODE_DINNER P1=${aimiFmt2(u)}U")
-            }
-            markLegacyMealDecision()
-            return rT
-        }
-        if (isDinner2ModeCondition()) {
-            manualMealModeTbr(dinnerruntime, "DINNER_P2", overrideSafetyLimits = false)
-            setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIDinnerPrebolus2), "DINNER_P2", dinnerruntime) { u ->
-                rT.reason.append(rh.gs(ApsStrings.reason_prebolus_dinner2, u))
-                consoleLog.add("🍱 LEGACY_MODE_DINNER P2=${aimiFmt2(u)}U")
-            }
-            markLegacyMealDecision()
-            return rT
-        }
-        if (isHighCarbModeCondition()) {
-            manualMealModeTbr(highCarbrunTime, "HC_P1", overrideSafetyLimits = false)
-            setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIHighCarbPrebolus), "HC_P1", highCarbrunTime) { u ->
-                rT.reason.append(rh.gs(ApsStrings.reason_prebolus_highcarb, u))
-                consoleLog.add("🍱 LEGACY_MODE_HIGHCARB P1=${aimiFmt2(u)}U")
-            }
-            markLegacyMealDecision()
-            return rT
-        }
-        if (isHighCarb2ModeCondition()) {
-            manualMealModeTbr(highCarbrunTime, "HC_P2", overrideSafetyLimits = false)
-            setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIHighCarbPrebolus2), "HC_P2", highCarbrunTime) { u ->
-                rT.reason.append(rh.gs(ApsStrings.reason_prebolus_highcarb, u))
-                consoleLog.add("🍱 LEGACY_MODE_HIGHCARB P2=${aimiFmt2(u)}U")
-            }
-            markLegacyMealDecision()
-            return rT
-        }
-        if (issnackModeCondition()) {
-            manualMealModeTbr(snackrunTime, "SNACK_P1", overrideSafetyLimits = false)
-            setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMISnackPrebolus), "SNACK_P1", snackrunTime) { u ->
-                rT.reason.append(rh.gs(ApsStrings.reason_prebolus_snack, u))
-                consoleLog.add("🍱 LEGACY_MODE_SNACK P1=${aimiFmt2(u)}U")
-            }
-            markLegacyMealDecision()
-            return rT
-        }
-        // 🍽️ FCL: ONE prebolus per activation, and then the tick flows normally for the rest of the
-        // window so SMB and Autodrive stay alive. Three things make that true:
-        //  - the 0..7 window, the same one every other P1 phase uses;
-        //  - the one-shot latch, checked HERE and not only inside setLegacyPrebolusUnits, because this
-        //    branch returns and would otherwise end the tick on all eight of those minutes;
-        //  - the absence of FCL from `legacyMealMaint` below.
-        // The amount is the Autodrive prebolus the person already set, so there is nothing new to
-        // configure. The Autodrive aggressive-rise floor is NOT used for this: it has no per-episode
-        // budget by design (removed 2026-08-10 after a measured hyperglycaemia), so it would fire on
-        // every tick of the window — the documented bolus-storm mechanism. One shot behind a latch
-        // instead.
-        if (fclDeclared && fclruntime in 0..7 && !prebolusAlreadyFiredThisActivation("FCL_P1", fclruntime)) {
-            manualMealModeTbr(fclruntime, "FCL_P1", overrideSafetyLimits = false)
-            setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIautodrivePrebolus), "FCL_P1", fclruntime) { u ->
-                rT.reason.append(rh.gs(ApsStrings.fcl_prebolus, u))
-                consoleLog.add("🍽️ FCL_PREBOLUS P1=${aimiFmt2(u)}U rt=${fclruntime}m")
-            }
-            markLegacyMealDecision()
-            return rT
-        }
-
-        // Même priorité que les blocs prébolus ci‑dessus : premier mode actif dans les 30 premières minutes gagne.
-        val legacyMealMaint = when {
-            mealTime && mealruntime in 0..29 -> mealruntime to "MEAL_MAINT"
-            bfastTime && bfastruntime in 0..29 -> bfastruntime to "BF_MAINT"
-            lunchTime && lunchruntime in 0..29 -> lunchruntime to "LUNCH_MAINT"
-            dinnerTime && dinnerruntime in 0..29 -> dinnerruntime to "DINNER_MAINT"
-            highCarbTime && highCarbrunTime in 0..29 -> highCarbrunTime to "HC_MAINT"
-            snackTime && snackrunTime in 0..29 -> snackrunTime to "SNACK_MAINT"
-            else -> null
-        }
-        if (legacyMealMaint != null) {
-            manualMealModeTbr(legacyMealMaint.first, legacyMealMaint.second, overrideSafetyLimits = false)
-            rT.units = null
-            consoleLog.add("🍱 LEGACY_MEAL_TBR_MAINT[${legacyMealMaint.second}] rt=${legacyMealMaint.first}m (no prebolus this tick)")
-            return rT
-        }
-        return null
+        val state = LegacyMealTickState(
+            mealTime = mealTime,
+            mealRuntimeMin = mealruntime,
+            bfastTime = bfastTime,
+            bfastRuntimeMin = bfastruntime,
+            lunchTime = lunchTime,
+            lunchRuntimeMin = lunchruntime,
+            dinnerTime = dinnerTime,
+            dinnerRuntimeMin = dinnerruntime,
+            highCarbTime = highCarbTime,
+            highCarbRuntimeMin = highCarbrunTime,
+            snackTime = snackTime,
+            snackRuntimeMin = snackrunTime,
+            fclTime = fclTime,
+            sportTime = sportTime,
+            fclRuntimeMin = fclruntime,
+            iob = iob,
+            maxIob = maxIob,
+            bg = bg,
+            hasHypoRecovery = lastContextSnapshot?.hasHypoRecovery == true,
+            postHypo = lastPostHypoDeliveryAuthority,
+            lastBolusSmbUnit = lastBolusSMBUnit,
+            lastSmbCapped = lastSmbCapped,
+            lastSmbFinal = lastSmbFinal,
+        )
+        val result = decideLegacyMealModes(
+            profile = profile,
+            rT = rT,
+            currenttemp = currenttemp,
+            modeTbrLimit = modeTbrLimit,
+            preferences = preferences,
+            dateUtil = dateUtil,
+            texts = rh,
+            notifications = notificationManager,
+            effects = legacyEffectSink,
+            smbAction = legacySmbAction,
+            latestSmb = legacyLatestSmb,
+            log = consoleLog,
+            state = state,
+        )
+        lastBolusSMBUnit = state.lastBolusSmbUnit
+        lastSmbCapped = state.lastSmbCapped
+        lastSmbFinal = state.lastSmbFinal
+        return result
     }
-
 
     private fun applyEndoAndActivityAdjustments(
         bg: Double, delta: Float,
