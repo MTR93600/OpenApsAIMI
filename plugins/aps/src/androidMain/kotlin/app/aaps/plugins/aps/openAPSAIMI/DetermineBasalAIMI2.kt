@@ -121,6 +121,11 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRbtResolveWrites
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRbtTrajectory
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRbtWCycleEnsure
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideRecursiveBeliefResolve
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMealHyperBasalBoostOutcome
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMealHyperClock
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMealHyperFields
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMealHyperTempBasal
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideMealHyperBasalBoost
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideMealAdvisorOrReturn
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideT3cBrittleMode
 import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
@@ -6769,11 +6774,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      *
      * Reads therapy flags + runtimes + [bg]/[delta]/[shortAvgDelta] from instance state like the inlined `when` did.
      */
-    private sealed class AimiMealHyperBasalBoostOutcome {
-        data class ContinueWithOptionalRate(val rate: Double?) : AimiMealHyperBasalBoostOutcome()
-        data class CompleteWithTempBasal(val rT: RT) : AimiMealHyperBasalBoostOutcome()
-    }
-
     @SuppressLint("DefaultLocale")
     private fun resolveMealHyperBasalBoostOutcome(
         ctx: AimiTickContext,
@@ -6786,206 +6786,59 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         timeSinceEstimateMin: Double,
         estimatedCarbs: Double,
     ): AimiMealHyperBasalBoostOutcome {
-        val mealModesMaxBasal = preferences.get(DoubleKey.meal_modes_MaxBasal)
-        val aggressionDecision = correctionAggressionDecision
-        return when {
-            isMealAdvisorOneShot -> {
-                val safeMax = if (mealModesMaxBasal > 0.1) mealModesMaxBasal else profile.max_basal
-                val rawRate = calculateRate(basal, safeMax, 1.3, "Meal Advisor Trigger (One-Shot)", ctx.currentTemp, rT, overrideSafety = true)
-                // REBOUND_GUARD cap: a recognized post-hypo context must never receive meal_modes_MaxBasal
-                // even when a meal/advisor flag is active simultaneously — same principle as V3/V2/Harmonia paths.
-                val boostedRate = capBasalRateForCorrectionAggression(rawRate, profileCurrentBasal, "MealAdvisorOneShot")
-                AimiMealHyperBasalBoostOutcome.CompleteWithTempBasal(setTempBasal(boostedRate, 30, profile, rT, ctx.currentTemp, overrideSafetyLimits = true, adaptiveMultiplier = 1.0))
-            }
-            snackTime && snackrunTime in 0..30 && delta < 15 -> {
-                val rawRate = calculateRate(basal, profileCurrentBasal, 4.0, "AI Force basal because Snack Time $snackrunTime.", ctx.currentTemp, rT, overrideSafety = true)
-                val boostedRate = capBasalRateForCorrectionAggression(rawRate, profileCurrentBasal, "SnackTimeBoost")
-                AimiMealHyperBasalBoostOutcome.CompleteWithTempBasal(setTempBasal(boostedRate, 30, profile, rT, ctx.currentTemp, overrideSafetyLimits = true, adaptiveMultiplier = 1.0))
-            }
-
-            (mealTime || lunchTime || dinnerTime || highCarbTime || bfastTime) && (listOf(mealruntime, lunchruntime, dinnerruntime, highCarbrunTime, bfastruntime).maxOrNull() ?: 0) in 0..30 -> {
-                val safeMax = if (mealModesMaxBasal > 0.1) mealModesMaxBasal else profileCurrentBasal * 5.0
-                val rawRate = calculateRate(basal, safeMax, 1.0, "Meal Boost 30min (Force MaxBasal)", ctx.currentTemp, rT, overrideSafety = true)
-                val boostedRate = capBasalRateForCorrectionAggression(rawRate, profileCurrentBasal, "MealBoost30m")
-                AimiMealHyperBasalBoostOutcome.CompleteWithTempBasal(setTempBasal(boostedRate, 30, profile, rT, ctx.currentTemp, overrideSafetyLimits = true, adaptiveMultiplier = 1.0))
-            }
-
-            (mealTime || lunchTime || dinnerTime || highCarbTime || bfastTime || snackTime || (timeSinceEstimateMin <= 120 && estimatedCarbs > 10.0)) -> {
-                val runTime = listOf(mealruntime, lunchruntime, dinnerruntime, highCarbrunTime, bfastruntime, snackrunTime).maxOrNull() ?: timeSinceEstimateMin.toInt()
-                val target = targetBg
-                val rocketStart = delta > 5.0f || bg > targetBg + 40
-                val safeMax = if (rocketStart) profile.max_basal else if (mealModesMaxBasal > 0) mealModesMaxBasal else profileCurrentBasal * 2.0
-
-                val boostedRate = adjustBasalForMealHyper(
-                    suggestedBasalUph = profileCurrentBasal,
-                    bg = bg,
-                    targetBg = target,
-                    delta = delta.toDouble(),
-                    shortAvgDelta = shortAvgDelta.toDouble(),
-                    isMealModeActive = true,
-                    minutesSinceMealStart = runTime.toInt(),
-                    mealMaxBasalUph = safeMax
-                )
-
-                val optionalRate = if (boostedRate > profileCurrentBasal * 1.05) {
-                    calculateRate(basal, profileCurrentBasal, boostedRate / profileCurrentBasal, "Post-Meal Boost active ($runTime m)", ctx.currentTemp, rT)
-                } else {
-                    null
-                }
-                AimiMealHyperBasalBoostOutcome.ContinueWithOptionalRate(optionalRate)
-            }
-
-            aggressionDecision?.tier == CorrectionAggressionGate.Tier.REBOUND_GUARD &&
-                aggressionDecision.allowGlobalHyperKicker == false &&
-                bg < targetBg + CorrectionAggressionGate.REBOUND_BG_MARGIN_MGDL &&
-                delta >= 0.0f -> {
-                val bridgeRate = calculateRate(
-                    basal,
-                    profileCurrentBasal,
-                    1.5,
-                    "${CorrectionAggressionGate.LOG_PREFIX}: post-hypo TBR bridge (REBOUND_GUARD)",
-                    ctx.currentTemp,
+        return decideMealHyperBasalBoost(
+            profile = profile,
+            rT = rT,
+            basal = basal,
+            profileCurrentBasal = profileCurrentBasal,
+            isMealAdvisorOneShot = isMealAdvisorOneShot,
+            targetBg = targetBg,
+            timeSinceEstimateMin = timeSinceEstimateMin,
+            estimatedCarbs = estimatedCarbs,
+            currentTemp = ctx.currentTemp,
+            preferences = preferences,
+            consoleLog = consoleLog,
+            fields = object : AimiMealHyperFields {
+                override fun snackTime() = this@DetermineBasalaimiSMB2.snackTime
+                override fun snackRunTime() = snackrunTime
+                override fun delta() = this@DetermineBasalaimiSMB2.delta
+                override fun mealTime() = this@DetermineBasalaimiSMB2.mealTime
+                override fun lunchTime() = this@DetermineBasalaimiSMB2.lunchTime
+                override fun dinnerTime() = this@DetermineBasalaimiSMB2.dinnerTime
+                override fun highCarbTime() = this@DetermineBasalaimiSMB2.highCarbTime
+                override fun bfastTime() = this@DetermineBasalaimiSMB2.bfastTime
+                override fun mealRuntime() = mealruntime
+                override fun lunchRuntime() = lunchruntime
+                override fun dinnerRuntime() = dinnerruntime
+                override fun highCarbRunTime() = highCarbrunTime
+                override fun bfastRuntime() = bfastruntime
+                override fun bg() = this@DetermineBasalaimiSMB2.bg
+                override fun shortAvgDelta() = this@DetermineBasalaimiSMB2.shortAvgDelta.toDouble()
+                override fun mealAbsorption() = lastMealAbsorptionOutput
+                override fun cob() = cob
+                override fun phase() = lastPhysiologicalPhaseOutput?.phase
+                override fun hyperReleaseActive() = lastHyperTrajectoryRelease?.active == true
+                override fun aggression() = correctionAggressionDecision
+                override fun basalFirstActive() = cachedBasalFirstActive
+                override fun fragileBg() = cachedIsFragileBg
+                override fun fastingTime() = this@DetermineBasalaimiSMB2.fastingTime
+            },
+            basalCap = AimiBasalCap { requested, profileBasal, source ->
+                capBasalRateForCorrectionAggression(requested, profileBasal, source)
+            },
+            tempBasal = AimiMealHyperTempBasal { rate, durationMin, profile, rT, currentTemp, overrideSafetyLimits, adaptiveMultiplier ->
+                setTempBasal(
+                    rate,
+                    durationMin,
+                    profile,
                     rT,
+                    currentTemp,
+                    overrideSafetyLimits = overrideSafetyLimits,
+                    adaptiveMultiplier = adaptiveMultiplier,
                 )
-                consoleLog.add(
-                    "${CorrectionAggressionGate.LOG_PREFIX}: rebound basal bridge " +
-                        "${aimiFmt2(bridgeRate)} U/h (no Global Hyper Kicker)"
-                )
-                AimiMealHyperBasalBoostOutcome.ContinueWithOptionalRate(
-                    if (bridgeRate > profileCurrentBasal * 1.05) bridgeRate else null
-                )
-            }
-
-            lastMealAbsorptionOutput?.phase?.isActive == true &&
-                (
-                    lastMealAbsorptionOutput?.phase == MealAbsorptionPhase.FIRST_WAVE ||
-                        lastMealAbsorptionOutput?.phase == MealAbsorptionPhase.SECOND_WAVE ||
-                        lastMealAbsorptionOutput?.phase == MealAbsorptionPhase.INTER_WAVE ||
-                        lastMealAbsorptionOutput?.phase == MealAbsorptionPhase.PEAK_CORRECTION
-                    ) -> {
-                val runTime: Int = MealAbsorptionMemory.lastActiveAtMs.takeIf { it > 0L }?.let {
-                    ((dateUtil.now() - it) / 60_000L).toInt().coerceAtLeast(0)
-                } ?: listOf(mealruntime, lunchruntime, dinnerruntime, highCarbrunTime, bfastruntime, snackrunTime)
-                    .maxOrNull()?.toInt() ?: 0
-                val target = targetBg
-                val rocketStart = delta > 5.0f || bg > targetBg + 40
-                val safeMax = if (rocketStart) profile.max_basal else if (mealModesMaxBasal > 0) mealModesMaxBasal else profileCurrentBasal * 2.0
-                val boostedRate = adjustBasalForMealHyper(
-                    suggestedBasalUph = profileCurrentBasal,
-                    bg = bg,
-                    targetBg = target,
-                    delta = delta.toDouble(),
-                    shortAvgDelta = shortAvgDelta.toDouble(),
-                    isMealModeActive = true,
-                    minutesSinceMealStart = runTime,
-                    mealMaxBasalUph = safeMax,
-                )
-                val optionalRate = if (boostedRate > profileCurrentBasal * 1.05) {
-                    calculateRate(
-                        basal,
-                        profileCurrentBasal,
-                        boostedRate / profileCurrentBasal,
-                        "Meal absorption ${lastMealAbsorptionOutput?.phase?.name} ($runTime m)",
-                        ctx.currentTemp,
-                        rT,
-                    )
-                } else {
-                    null
-                }
-                consoleLog.add(
-                    "🍽️ MEAL_ABSORPTION_BASAL: phase=${lastMealAbsorptionOutput?.phase?.name} " +
-                        "rate=${optionalRate?.let { r -> aimiFmt2(r) } ?: "skip"}",
-                )
-                AimiMealHyperBasalBoostOutcome.ContinueWithOptionalRate(optionalRate)
-            }
-
-            lastPhysiologicalPhaseOutput?.phase == PhysiologicalPhase.ENDOGENOUS_COUNTER_REGULATORY &&
-                cob < 1.0f &&
-                estimatedCarbs < 1.0 -> {
-                val autodriveMaxBasal = preferences.get(DoubleKey.autodriveMaxBasal)
-                val safeMax = if (autodriveMaxBasal > 0.1) autodriveMaxBasal else profile.max_basal
-                val bridge = EndogenousBasalBridgePolicy.computeBridgeRateUph(
-                    bgMgdl = bg.toDouble(),
-                    targetBgMgdl = targetBg,
-                    isfMgdlPerU = profile.sens,
-                    profileBasalUph = profileCurrentBasal,
-                    maxBasalUph = safeMax,
-                )
-                val optionalRate = bridge?.let {
-                    calculateRate(
-                        basal,
-                        profileCurrentBasal,
-                        it / profileCurrentBasal,
-                        "Endogenous basal bridge (R_HGP)",
-                        ctx.currentTemp,
-                        rT,
-                    )
-                }
-                consoleLog.add(
-                    "🌅 ENDOGENOUS_BRIDGE: rate=${optionalRate?.let { r -> aimiFmt2(r) } ?: "skip"} " +
-                        "ISF=${aimiFmt1(profile.sens)} profileBasal=${aimiFmt2(profileCurrentBasal)}",
-                )
-                AimiMealHyperBasalBoostOutcome.ContinueWithOptionalRate(optionalRate)
-            }
-
-            run {
-                val aggression = correctionAggressionDecision
-                val htrActive = lastHyperTrajectoryRelease?.active == true
-                val endogenousActive =
-                    lastPhysiologicalPhaseOutput?.phase == PhysiologicalPhase.ENDOGENOUS_COUNTER_REGULATORY
-                val allowHyper = aggression?.allowGlobalHyperKicker == true &&
-                    (delta >= 0.3 || shortAvgDelta >= 0.2) &&
-                    !htrActive &&
-                    !endogenousActive
-                if (htrActive && aggression?.allowGlobalHyperKicker == true) {
-                    consoleLog.add("🚀 HTR: Global Hyper Kicker skipped (trajectory SMB release active)")
-                }
-                allowHyper
-            } -> {
-                val autodriveMaxBasal = preferences.get(DoubleKey.autodriveMaxBasal)
-                val safeMax = if (autodriveMaxBasal > 0.1) autodriveMaxBasal else profile.max_basal
-                val scaleCap = correctionAggressionDecision?.maxBasalScaleCap ?: 10.0
-
-                val boostedRate = adjustBasalForGeneralHyper(
-                    suggestedBasalUph = profileCurrentBasal,
-                    bg = bg,
-                    targetBg = targetBg,
-                    delta = delta.toDouble(),
-                    shortAvgDelta = shortAvgDelta.toDouble(),
-                    maxBasalConfig = safeMax,
-                    maxScaleCap = scaleCap,
-                )
-
-                val tag = correctionAggressionDecision?.tier?.name ?: "n/a"
-                val optionalRate = if (boostedRate > profileCurrentBasal * 1.1) {
-                    calculateRate(
-                        basal,
-                        profileCurrentBasal,
-                        boostedRate / profileCurrentBasal,
-                        "Global Hyper Kicker ($tag / ${CorrectionAggressionGate.LOG_PREFIX})",
-                        ctx.currentTemp,
-                        rT,
-                        overrideSafety = true,
-                    )
-                } else {
-                    null
-                }
-                AimiMealHyperBasalBoostOutcome.ContinueWithOptionalRate(optionalRate)
-            }
-
-            cachedBasalFirstActive && !cachedIsFragileBg && bg > targetBg -> {
-                val autodriveMaxBasal = preferences.get(DoubleKey.autodriveMaxBasal)
-                val safeMax = if (autodriveMaxBasal > 0.1) autodriveMaxBasal else profile.max_basal
-                AimiMealHyperBasalBoostOutcome.ContinueWithOptionalRate(
-                    calculateRate(basal, safeMax, 1.4, "Prudent Compensation (SMB blocked)", ctx.currentTemp, rT)
-                )
-            }
-
-            fastingTime -> AimiMealHyperBasalBoostOutcome.ContinueWithOptionalRate(
-                calculateRate(profileCurrentBasal, profileCurrentBasal, delta.coerceAtLeast(0.0f).toDouble(), "AI Force basal because fastingTime", ctx.currentTemp, rT)
-            )
-            else -> AimiMealHyperBasalBoostOutcome.ContinueWithOptionalRate(null)
-        }
+            },
+            clock = AimiMealHyperClock { dateUtil.now() },
+        )
     }
 
     /**
