@@ -32,7 +32,9 @@ import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveCommand
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.safety.AutoDriveGater
 import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController
 import app.aaps.plugins.aps.openAPSAIMI.learning.BasalNeuralLearner
+import app.aaps.plugins.aps.openAPSAIMI.effects.RbtLiveCommitResult
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiTickContext
+import app.aaps.plugins.aps.openAPSAIMI.orchestration.DoseTerminalSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.HormonitorStudyExporterProvider
 import app.aaps.plugins.aps.openAPSAIMI.physio.CircadianMealProfileStore
@@ -62,8 +64,16 @@ import app.aaps.plugins.aps.openAPSAIMI.ports.AimiAuditor
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiEmergencySos
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiBehaviorProfileSource
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiHealthContext
+import app.aaps.plugins.aps.openAPSAIMI.recursive.AutodriveModeHint
+import app.aaps.plugins.aps.openAPSAIMI.recursive.BasalFirstChannel
+import app.aaps.plugins.aps.openAPSAIMI.recursive.DoseChannelResolution
+import app.aaps.plugins.aps.openAPSAIMI.recursive.HypoGuardMode
+import app.aaps.plugins.aps.openAPSAIMI.recursive.MealChannelHint
 import app.aaps.plugins.aps.openAPSAIMI.recursive.RbtExtendedSignals
+import app.aaps.plugins.aps.openAPSAIMI.recursive.RecursiveBeliefAuthorityGate
 import app.aaps.plugins.aps.openAPSAIMI.recursive.RecursiveBeliefSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.recursive.ReleaseAuthority
+import app.aaps.plugins.aps.openAPSAIMI.safety.InsulinStackingStance
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryGuard
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
@@ -804,6 +814,106 @@ class ShellDecisionTraceTest {
         assertEquals(DECISION_CONTEXT_RISE_TRACE, trace)
     }
 
+    @Test
+    fun rbtRefineAfterDoseSnapshotCutsTheLiftWithSurveillance() {
+        val prefs = recordingPreferences(
+            emptyMap(),
+            bools = mapOf(BooleanKey.OApsAIMIIobSurveillanceGuard to true),
+        )
+        setField(tick, "preferences", prefs)
+        setField(tick, "bg", 180.0)
+        setField(tick, "delta", 1.0f)
+        setField(tick, "shortAvgDelta", 1.0f)
+        setField(tick, "targetBg", 100.0f)
+        setField(tick, "iob", 4.0f)
+        setField(tick, "maxIob", 10.0)
+        setField(tick, "rbtResolvedThisTick", true)
+        val baseline = htr(before = 0.40, after = 0.40, reason = "baseline")
+        val previous = htr(before = 0.40, after = 1.20, reason = "already-lifted")
+        setField(
+            tick,
+            "lastRbtLiveCommitResult",
+            RbtLiveCommitResult(baselineHtr = baseline, effectiveHtr = previous, rbtAuthority = true),
+        )
+        setField(
+            tick,
+            "lastRecursiveAuthorityGateDecision",
+            RecursiveBeliefAuthorityGate.Decision(
+                requestedAuthority = ReleaseAuthority.HARD,
+                maxAllowedAuthority = ReleaseAuthority.HARD,
+                effectiveAuthority = ReleaseAuthority.HARD,
+                readinessScore = 0.80,
+                liftBlend = 1.0,
+                reasonCodes = listOf("READY"),
+            ),
+        )
+        setField(
+            tick,
+            "lastDoseTerminalSnapshot",
+            DoseTerminalSnapshot(
+                eventualMgdl = 160.0,
+                minPredMgdl = 150.0,
+                source = "test",
+                authorityApplied = false,
+                clampReconciled = false,
+                clampReason = null,
+                predBGsRemapped = false,
+            ),
+        )
+        setField(
+            tick,
+            "lastRecursiveBeliefSnapshot",
+            RecursiveBeliefSnapshot(
+                scales = emptyList(),
+                tensions = emptyList(),
+                paradoxes = emptyList(),
+                resolutions = DoseChannelResolution(
+                    smbDemandU = 1.50,
+                    tbrDemandFraction = 1.0,
+                    waitBias = 0.0,
+                    dominantScaleMinutes = 30,
+                    releaseAuthority = ReleaseAuthority.HARD,
+                    hypoGuardMode = HypoGuardMode.FULL,
+                    autodriveModeHint = AutodriveModeHint.V3,
+                    mealChannel = MealChannelHint.NORMAL,
+                    suppressTrajBasalShift = false,
+                    hypoMinPredIgnored = false,
+                    reasonCodes = listOf("DEMAND"),
+                ),
+                mr7Trace = emptyList(),
+            ),
+        )
+        val rT = RT(runningDynamicIsf = false)
+        val trace = capture { invokeRbtRefine(rT) }
+        val stacking = getField(tick, "lastInsulinStackingEvaluation") as InsulinStackingStance.Evaluation
+        val commit = getField(tick, "lastRbtLiveCommitResult") as RbtLiveCommitResult
+        assertEquals(InsulinStackingStance.Kind.SURVEILLANCE_IOB, stacking.kind)
+        assertEquals(0.38, stacking.smbAbsoluteCapU, 1e-9)
+        assertEquals(0.38, commit.effectiveHtr.v3SmbAfterU, 1e-9)
+        assertEquals(RBT_REFINE_ACTIVE_TRACE, trace)
+    }
+
+    private fun htr(before: Double, after: Double, reason: String) = HyperTrajectoryReleaseResult(
+        active = after > before + 0.02,
+        tier = HyperSeverityTier.OFF,
+        severityWeight = 0.0,
+        smbFloorU = after,
+        v3SmbBeforeU = before,
+        v3SmbAfterU = after,
+        absorptionOffsetMgdl = 0.0,
+        suppressTrajBasalShift = false,
+        hypoMinPredIgnored = false,
+        reason = reason,
+    )
+
+    private fun invokeRbtRefine(rT: RT) {
+        val method = tick.javaClass.declaredMethods.first {
+            it.name == "refineRbtMergeAfterDoseSnapshot" && it.parameterCount == 1
+        }
+        method.isAccessible = true
+        method.invoke(tick, rT)
+    }
+
     private fun invokeDecisionContext(ctx: AimiTickContext): Any? {
         val method = tick.javaClass.declaredMethods.first {
             it.name == "buildDecisionContextInitRtSosAndFlatShadow" && it.parameterCount == 1
@@ -1478,6 +1588,12 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val RBT_REFINE_ACTIVE_TRACE = """
+            READ key=BooleanKey.OApsAIMIIobSurveillanceGuard value=true
+            LOG 🪜 RBT_GATE: req=HARD eff=HARD score=0.80 blend=1.00 reasons=READY
+            LOG RBT_REFINE_AFTER_DOSE_SNAPSHOT: 1.20→0.38U ev=160 minPred=150
+        """.trimIndent()
+
         private val DECISION_CONTEXT_RISE_TRACE = """
             READ key=BooleanKey.OApsAIMIAuditorProfileFactors value=false
             READ key=BooleanKey.AimiAuditorEnabled value=false
