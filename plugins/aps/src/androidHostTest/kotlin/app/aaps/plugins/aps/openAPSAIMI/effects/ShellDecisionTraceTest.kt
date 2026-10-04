@@ -54,6 +54,8 @@ import app.aaps.plugins.aps.openAPSAIMI.recursive.RecursiveBeliefSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryGuard
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import app.aaps.plugins.aps.openAPSAIMI.validation.PumpCapabilityValidator
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.ThyroidStatus
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.VerneuilStatus
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleFacade
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleLearner
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCyclePreferences
@@ -437,6 +439,40 @@ class ShellDecisionTraceTest {
         assertEquals("FULL", resolution.hypoGuardMode.toString())
         assertEquals(listOf("P2_SOFT", "HARMONIA_SMB_ACCEPT", "OFF_ASLEEP_LIVE"), resolution.reasonCodes)
         assertEquals(RBT_RESOLVE_TRACE, trace)
+    }
+
+    @Test
+    fun t9WithPhysioAssistantOffKeepsNeutralMultipliers() {
+        val prefs = recordingPreferences(emptyMap())
+        setField(tick, "preferences", prefs)
+        setField(tick, "activePlugin", mock(app.aaps.core.interfaces.plugin.ActivePlugin::class.java))
+        val cycle = getField(tick, "wCyclePreferences") as WCyclePreferences
+        whenever(cycle.verneuil()).thenReturn(VerneuilStatus.NONE)
+        whenever(cycle.thyroid()).thenReturn(ThyroidStatus.EUTHYROID)
+        val profile = profileStub()
+        val glucose = GlucoseStatusAIMI(glucose = 110.0, delta = 0.0, date = now)
+        val ctx = tickContext(profile, 110.0)
+        val rT = RT(runningDynamicIsf = false)
+        var pumpAge = -1f
+        val trace = capture {
+            val returned = invokeT9(ctx, glucose, rT, iobTotal = 1.0)
+            pumpAge = returned.javaClass.getDeclaredField("pumpAgeDays").apply { isAccessible = true }.get(returned) as Float
+        }
+        assertTrue(pumpAge >= 0f)
+        assertEquals(T9_NEUTRAL_TRACE, trace)
+    }
+
+    private fun invokeT9(
+        ctx: AimiTickContext,
+        glucose: GlucoseStatusAIMI,
+        rT: RT,
+        iobTotal: Double,
+    ): Any {
+        val method = tick.javaClass.declaredMethods.first {
+            it.name == "runT9PhysioEarlyPkpdAndTubeBootstrap" && it.parameterCount == 4
+        }
+        method.isAccessible = true
+        return method.invoke(tick, ctx, glucose, rT, iobTotal)
     }
 
     @Test
@@ -968,6 +1004,41 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val T9_NEUTRAL_TRACE = """
+            READ key=BooleanKey.AimiPhysioAssistantEnable value=false
+            READ key=BooleanKey.OApsAIMIIntelligenceSingleLearnPath value=false
+            READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
+            READ key=DoubleKey.OApsAIMIweight value=0.00
+            READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
+            READ key=DoubleKey.OApsAIMIPkpdBoundsDiaMinH value=0.00
+            READ key=DoubleKey.OApsAIMIPkpdBoundsDiaMaxH value=0.00
+            READ key=DoubleKey.OApsAIMIPkpdBoundsPeakMinMin value=0.00
+            READ key=DoubleKey.OApsAIMIPkpdBoundsPeakMinMax value=0.00
+            READ key=DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH value=0.00
+            READ key=DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin value=0.00
+            READ key=DoubleKey.OApsAIMIIsfFusionMinFactor value=0.00
+            READ key=DoubleKey.OApsAIMIIsfFusionMaxFactor value=0.00
+            READ key=DoubleKey.OApsAIMIIsfFusionMaxChangePerTick value=0.00
+            READ key=DoubleKey.OApsAIMISmbTailDamping value=0.00
+            READ key=DoubleKey.OApsAIMISmbTailThreshold value=0.00
+            READ key=DoubleKey.OApsAIMISmbExerciseDamping value=0.00
+            READ key=DoubleKey.OApsAIMISmbLateFatDamping value=0.00
+            READ key=DoubleKey.OApsAIMIPkpdAnchorDiaH value=0.00
+            READ key=DoubleKey.OApsAIMIPkpdAnchorPeakMin value=0.00
+            READ key=LongNonKey.OApsAIMIPkpdLearnedStateGeneration value=0
+            LOG PKPD Debug: Config ENABLED is FALSE. Check OApsAIMIPkpdEnabled preference.
+            LOG Debug: computePkpdPredictions called with delta=0.0
+            LOG PKPD_PRED_MOD: src=fallback sens=50.00 ins=1.00 carb=1.00 uam=1.00 hyb=0.96 decay=1.03 meal=0.00 nonMeal=0.00 suppress=false
+            READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
+            READ key=BooleanKey.OApsAIMIPkpdHyperReversion value=false
+            READ key=BooleanKey.OApsAIMIPkpdStackAwareGuardB value=false
+            READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
+            LOG PKPD_SOFT_FLOOR: raw=110 soft=110 hybT=110 hitFloor=false applied=false endo=false fallSuppressed=false reason=endo_reversion_disabled
+            LOG PKPD predictions → eventual=110 mg/dL from 49 steps uamT=110 pathMinRaw=110 pathMinClamp=110
+            READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
+            READ key=AimiStringKey.OApsAIMIPkpdLastPeakGovLogLine value=
+        """.trimIndent()
+
         private val TICK_CLOCK_TRACE = """
             READ key=BooleanKey.OApsAIMIhoneymoon value=false
             READ key=AimiLongKey.LastPrebolusTime value=0
