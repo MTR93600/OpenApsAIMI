@@ -893,6 +893,28 @@ class ShellDecisionTraceTest {
         assertEquals(RBT_REFINE_ACTIVE_TRACE, trace)
     }
 
+    @Test
+    fun basalFirstKeepsAReductionWhenTheGuardIsOn() {
+        val prefs = recordingPreferences(
+            emptyMap(),
+            bools = mapOf(BooleanKey.OApsAIMIBasalChannelSafetyGuards to true),
+        )
+        setField(tick, "preferences", prefs)
+        setField(tick, "adaptiveMult", 0.70)
+        var multiplier = 0.0
+        val trace = capture { multiplier = invokeBasalFirst() }
+        assertEquals(0.70, multiplier, 1e-9)
+        assertEquals(BASAL_FIRST_REDUCTION_TRACE, trace)
+    }
+
+    private fun invokeBasalFirst(): Double {
+        val method = tick.javaClass.declaredMethods.first {
+            it.name == "basalFirstAdaptiveMultiplier" && it.parameterCount == 0
+        }
+        method.isAccessible = true
+        return method.invoke(tick) as Double
+    }
+
     private fun htr(before: Double, after: Double, reason: String) = HyperTrajectoryReleaseResult(
         active = after > before + 0.02,
         tier = HyperSeverityTier.OFF,
@@ -1588,6 +1610,11 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val BASAL_FIRST_REDUCTION_TRACE = """
+            READ key=BooleanKey.OApsAIMIBasalChannelSafetyGuards value=true
+            LOG 🛡️ BASAL_FIRST_GOV: adaptiveMult conservé à 0.70x (legacy forçait 1.00x)
+        """.trimIndent()
+
         private val RBT_REFINE_ACTIVE_TRACE = """
             READ key=BooleanKey.OApsAIMIIobSurveillanceGuard value=true
             LOG 🪜 RBT_GATE: req=HARD eff=HARD score=0.80 blend=1.00 reasons=READY
