@@ -180,7 +180,7 @@ Re-verified on `ce138481`.
 |---|---|---|
 | Host plugins | `DexcomOnePlusPlugin.kt` `@IntKey(446)`, `Libre3NativePlugin.kt` `@IntKey(447)` — present on **both** tips | Re-port inside an AIMI math lot |
 | Driver modules | `:plugins:dexcom_oneplus`, `:plugins:libre3`, `:plugins:libkeks` still `alias(libs.plugins.android.library)` | Flip with `android-module-dependencies` (kmp-module-flip forbids it) |
-| GATT / NFC | Stay platform | Pretend they are `commonMain` |
+| GATT / NFC | Stay platform. **2026-10-03 : remplacé sur ce point par ADR G1** ([`adr-g1-ios-kmp-natif.md`](../../_docs/kmp/adr-g1-ios-kmp-natif.md)) pour le transport iOS (`iosMain`). Le protocole vise `commonMain`. | Pretend the whole Android driver is already `commonMain` |
 | iOS drivers | None in these modules | Claim One+/Libre3 on iPhone from this study branch |
 | `:plugins:source` | KMP (`kotlin("multiplatform")`) + `includeDagger()` in `plugins/source/build.gradle.kts`. **7** activity files still `import javax.inject.Inject` (recount 2026-09-24). The gradle comment still says 14 | Copy AIMI-parent `com.android.library` + Hilt gradle |
 | Calibration policy | **Not this track.** See C5 | Mix driver BLE with `entriesForFit` |
@@ -188,6 +188,8 @@ Re-verified on `ce138481`.
 ADR G0: first CGM is **Dexcom ONE+ / G7**. Libre 3 is **wave 2**.
 
 ### T1 — iOS pumps via Trio
+
+> **2026-10-03.** L'hôte Trio et l'interdiction de placer la pile BLE dans `iosMain` sont **remplacé sur ce point par ADR G1** ([`adr-g1-ios-kmp-natif.md`](../../_docs/kmp/adr-g1-ios-kmp-natif.md)). Le tableau ci-dessous n'est pas réécrit.
 
 | Item | Decision / leftover | Source |
 |---|---|---|
