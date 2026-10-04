@@ -50,8 +50,6 @@ import app.aaps.plugins.aps.openAPSAIMI.ports.AimiAuditor
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiBehaviorProfileSource
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiHealthContext
 import app.aaps.plugins.aps.openAPSAIMI.recursive.RbtExtendedSignals
-import app.aaps.plugins.aps.openAPSAIMI.release.HyperSeverityTier
-import app.aaps.plugins.aps.openAPSAIMI.release.HyperTrajectoryReleaseResult
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryGuard
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import app.aaps.plugins.aps.openAPSAIMI.validation.PumpCapabilityValidator
@@ -383,6 +381,7 @@ class ShellDecisionTraceTest {
     @Test
     fun recursiveBeliefResolveWithAFlatScenarioRecordsTheReads() {
         val prefs = recordingPreferences(
+            doubles = emptyMap(),
             bools = mapOf(BooleanKey.OApsAIMIRecursiveBeliefShadow to true),
         )
         setField(tick, "preferences", prefs)
