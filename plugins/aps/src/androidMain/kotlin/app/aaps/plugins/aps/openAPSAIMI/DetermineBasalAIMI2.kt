@@ -187,8 +187,11 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMaxIobGateStage
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMaxIobGateState
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMaxIobTempBasal
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideInsulinReqActivityRelaxAndMicrobolus
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiSafetyGuardApply
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiSafetyPrecautionsCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideMaxIobExceededTempBasal
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideMealFirst30NgrHeadroomBasalSmb
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideSafetyPrecautions
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideRefineRbtMergeAfterDoseSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideMealAdvisorOrReturn
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideT3cBrittleMode
@@ -12738,6 +12741,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
     }
 
+    /**
+     * Garde sport, repas, endocrine, ajustements, PKPD, plancher et plafonds SMB.
+     * La décision est [decideSafetyPrecautions]. Cette coquille appelle les méthodes à la ligne.
+     * `exerciseFlag` et `suspectedLateFatMeal` restent sur la signature : le corps ne les lit pas.
+     */
     private fun applySafetyPrecautions(
         mealData: MealData,
         smbToGiveParam: Float,
@@ -12749,49 +12757,33 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         isConfirmedHighRise: Boolean = false,
         ignoreSafetyConditions: Boolean = false
     ): Float {
-        var smbToGive = smbToGiveParam
-        val mealWeights = computeMealAggressionWeights(mealData, hypoThreshold)
-
-        val (isCrit, critMsg) = isCriticalSafetyCondition(mealData, hypoThreshold)
-        if (isCrit && !ignoreSafetyConditions) {
-            criticalSafetyZeroedThisTick = true // sécurité VITALE : interdit le restore Red Carpet ce tick
-            reason?.appendLine("🛑 $critMsg → SMB=0")
-            consoleLog.add("SMB forced to 0 by critical safety: $critMsg")
-            return 0f
-        }
-
-        if (isSportSafetyCondition()) {
-            if (mealWeights.guardScale > 0.0 && smbToGive > 0f) {
-                val before = smbToGive
-                smbToGive = (smbToGive * mealWeights.guardScale.toFloat()).coerceAtLeast(0f)
-                reason?.appendLine(
-                    rh.gs(ApsStrings.reason_safety_sport_meal_reduction, before, smbToGive)
-                )
-            } else {
-                // Sport is a vital safety, not a minor one, so Red Carpet must not put this back.
-                // Without this flag the zero below counted as a minor cut: measured 2026-08-18, the
-                // sport guard zeroed four ticks between 19:32 and 19:57 and Red Carpet restored
-                // 6.52 U, which took BG from 168.8 down to 50.6 after a three hour hike.
-                criticalSafetyZeroedThisTick = true
-                reason?.appendLine(rh.gs(ApsStrings.safety_sport_smb_zero))
-                consoleLog.add("SMB forced to 0 by sport safety guard")
-                return 0f
-            }
-        }
-        val wCycleInfo = ensureWCycleInfo()
-        if (wCycleInfo != null) {
-            val endocrineSmbAmp = EndocrineAmplitudeGovernor.productionAmp(
-                lastWCycleBelief,
-                EndocrineAmpAxis.SMB,
-            )
-            if (endocrineSmbAmp != 1.0) {
-                val pre = smbToGive
-                smbToGive = (smbToGive * endocrineSmbAmp.toFloat()).coerceAtLeast(0f)
-                val need = if (pre > 0f) (smbToGive / pre).toDouble() else null
-                updateWCycleLearner(null, need)
-
-                val profile = lastProfile
-                if (profile != null) {
+        return decideSafetyPrecautions(
+            mealData = mealData,
+            smbToGiveParam = smbToGiveParam,
+            hypoThreshold = hypoThreshold,
+            reason = reason,
+            pkpdRuntime = pkpdRuntime,
+            isConfirmedHighRise = isConfirmedHighRise,
+            ignoreSafetyConditions = ignoreSafetyConditions,
+            preferences = preferences,
+            texts = rh,
+            consoleLog = consoleLog,
+            calls = object : AimiSafetyPrecautionsCalls {
+                override fun mealWeights(mealData: MealData, hypoThreshold: Double) =
+                    computeMealAggressionWeights(mealData, hypoThreshold)
+                override fun critical(mealData: MealData, hypoThreshold: Double) =
+                    isCriticalSafetyCondition(mealData, hypoThreshold)
+                override fun markCriticalSafetyZeroed() {
+                    criticalSafetyZeroedThisTick = true
+                }
+                override fun sportSafety() = isSportSafetyCondition()
+                override fun ensureWCycleInfo() = this@DetermineBasalaimiSMB2.ensureWCycleInfo()
+                override fun wCycleBelief() = lastWCycleBelief
+                override fun updateWCycleLearner(needSmbScale: Double?) {
+                    this@DetermineBasalaimiSMB2.updateWCycleLearner(null, needSmbScale)
+                }
+                override fun logEndocrineSmb(need: Double?, endocrineSmbAmp: Double) {
+                    val profile = lastProfile ?: return
                     wCycleFacade.infoAndLog(
                         mapOf(
                             "trackingMode" to wCyclePreferences.trackingMode().name,
@@ -12809,64 +12801,44 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         )
                     )
                 }
-            }
-        }
-        // Ajustements spécifiques
-        val beforeAdj = smbToGive
-        smbToGive = applySpecificAdjustments(smbToGive, ignoreSafetyRestrictions = ignoreSafetyConditions)
-        if (smbToGive != beforeAdj) {
-            //reason?.appendLine("🎛️ Ajustements: ${aimiFmt2(beforeAdj)} → ${aimiFmt2(smbToGive)} U")
-            reason?.appendLine(rh.gs(ApsStrings.adjustments_smb, beforeAdj, smbToGive))
-        }
-        if (mealWeights.active && mealWeights.boostFactor > 1.0 && smbToGive > 0f) {
-            val beforeBoost = smbToGive
-            smbToGive = (smbToGive * mealWeights.boostFactor.toFloat()).coerceAtLeast(0f)
-            reason?.appendLine(
-                rh.gs(
-                    ApsStrings.reason_meal_aggression_boost,
-                    beforeBoost,
-                    smbToGive,
-                    mealWeights.boostFactor
-                )
-            )
-        }
-        // 🛡️ PKPD Guard — shared with [runPkpdGuardEndoDampenRedCarpetAndCapSmb] (once per tick)
-        val anyMealModeForGuard = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime
-        val confirmedHighRiseForGuard = isConfirmedHighRise || isConfirmedHighRiseThisTick
-        val mealAdvisorForGuard = mealAdvisorOneShotThisTick ||
-            preferences.get(BooleanKey.OApsAIMIMealAdvisorTrigger)
-        val pkpdGuardApply = applyPkpdAbsorptionGuardOncePerTick(
-            smbIn = smbToGive,
-            pkpdRuntime = pkpdRuntime,
-            windowSinceLastDoseMin = windowSinceLastPkpdDoseMin(),
-            anyMealModeForGuard = anyMealModeForGuard,
-            isConfirmedHighRise = confirmedHighRiseForGuard,
-            mealAdvisorOneShot = mealAdvisorForGuard,
-            reason = reason,
-            logChannel = PkpdGuardLogChannel.FINALIZE,
+                override fun specificAdjustments(smbAmount: Float, ignoreSafetyRestrictions: Boolean) =
+                    applySpecificAdjustments(smbAmount, ignoreSafetyRestrictions)
+                override fun mealTime() = this@DetermineBasalaimiSMB2.mealTime
+                override fun bfastTime() = this@DetermineBasalaimiSMB2.bfastTime
+                override fun lunchTime() = this@DetermineBasalaimiSMB2.lunchTime
+                override fun dinnerTime() = this@DetermineBasalaimiSMB2.dinnerTime
+                override fun highCarbTime() = this@DetermineBasalaimiSMB2.highCarbTime
+                override fun snackTime() = this@DetermineBasalaimiSMB2.snackTime
+                override fun confirmedHighRiseThisTick() = isConfirmedHighRiseThisTick
+                override fun mealAdvisorOneShotThisTick() = this@DetermineBasalaimiSMB2.mealAdvisorOneShotThisTick
+                override fun windowSinceLastPkpdDoseMin() = this@DetermineBasalaimiSMB2.windowSinceLastPkpdDoseMin()
+                override fun applyPkpdGuard(
+                    smbIn: Float,
+                    pkpdRuntime: PkPdRuntime?,
+                    windowSinceLastDoseMin: Double,
+                    anyMealModeForGuard: Boolean,
+                    isConfirmedHighRise: Boolean,
+                    mealAdvisorOneShot: Boolean,
+                    reason: StringBuilder?,
+                ): AimiSafetyGuardApply {
+                    val applied = applyPkpdAbsorptionGuardOncePerTick(
+                        smbIn = smbIn,
+                        pkpdRuntime = pkpdRuntime,
+                        windowSinceLastDoseMin = windowSinceLastDoseMin,
+                        anyMealModeForGuard = anyMealModeForGuard,
+                        isConfirmedHighRise = isConfirmedHighRise,
+                        mealAdvisorOneShot = mealAdvisorOneShot,
+                        reason = reason,
+                        logChannel = PkpdGuardLogChannel.FINALIZE,
+                    )
+                    return AimiSafetyGuardApply(applied.smbOut, applied.skippedDuplicate)
+                }
+                override fun finalizeSmb(smbToGive: Float) = finalizeSmbToGive(smbToGive)
+                override fun maxSMB() = this@DetermineBasalaimiSMB2.maxSMB
+                override fun maxIob() = this@DetermineBasalaimiSMB2.maxIob
+                override fun iob() = this@DetermineBasalaimiSMB2.iob
+            },
         )
-        smbToGive = pkpdGuardApply.smbOut
-        if (pkpdGuardApply.skippedDuplicate) {
-            consoleLog.add("PKPD_GUARD_SKIP_FINALIZE: guard already applied earlier this tick")
-        }
-
-        // Finalisation
-        val beforeFinalize = smbToGive
-        smbToGive = finalizeSmbToGive(smbToGive)
-        if (smbToGive != beforeFinalize) {
-            //reason?.appendLine("🧩 Finalisation: ${aimiFmt2(beforeFinalize)} → ${aimiFmt2(smbToGive)} U")
-            reason?.appendLine(rh.gs(ApsStrings.finalization_smb, beforeFinalize, smbToGive))
-        }
-
-        // Limites max
-        val beforeLimits = smbToGive
-        smbToGive = clampSmbToMaxSmbAndMaxIob(smbToGive, maxSMB, maxIob, iob)
-        if (smbToGive != beforeLimits) {
-            //reason?.appendLine("🧱 Limites: ${aimiFmt2(beforeLimits)} → ${aimiFmt2(smbToGive)} U")
-            reason?.appendLine(rh.gs(ApsStrings.limits_smb, beforeLimits, smbToGive))
-        }
-        smbToGive = smbToGive.coerceAtLeast(0f)
-        return smbToGive
     }
     // Helper to check for recent bolus activity (prevent double dosing)
     private fun hasReceivedRecentBolus(minutes: Int, lastBolusTimeMs: Long): Boolean {

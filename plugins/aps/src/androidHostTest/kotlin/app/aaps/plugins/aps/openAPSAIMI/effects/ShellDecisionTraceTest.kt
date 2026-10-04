@@ -998,6 +998,46 @@ class ShellDecisionTraceTest {
         assertEquals(MAX_IOB_TBR_TRACE, trace)
     }
 
+    @Test
+    fun sportMealGuardScalesTheSmb() {
+        setField(tick, "sportTime", true)
+        setField(tick, "mealTime", true)
+        setField(tick, "bg", 180.0)
+        setField(tick, "delta", 4.0f)
+        setField(tick, "shortAvgDelta", 2.0f)
+        setField(tick, "longAvgDelta", 1.0f)
+        setField(tick, "targetBg", 100.0f)
+        setField(tick, "predictedBg", 180.0f)
+        setField(tick, "iob", 1.0f)
+        setField(tick, "maxSMB", 2.0)
+        setField(tick, "maxIob", 10.0)
+        setField(tick, "eventualBG", 180.0)
+        var smb = -1f
+        val trace = capture { smb = invokeSafetySmb() }
+        assertEquals(1.54f, smb, 0.001f)
+        assertEquals(false, getField(tick, "criticalSafetyZeroedThisTick"))
+        assertEquals(SPORT_MEAL_SMB_TRACE, trace)
+    }
+
+    private fun invokeSafetySmb(): Float {
+        val method = tick.javaClass.declaredMethods.first {
+            it.name == "applySafetyPrecautions" && it.parameterCount == 9
+        }
+        method.isAccessible = true
+        return method.invoke(
+            tick,
+            MealData(mealCOB = 0.0),
+            2.0f,
+            70.0,
+            StringBuilder(),
+            null,
+            false,
+            false,
+            false,
+            false,
+        ) as Float
+    }
+
     private fun invokeMaxIobGate(profile: OapsProfileAimi, ctx: AimiTickContext, rT: RT): Any {
         val method = tick.javaClass.declaredMethods.first {
             it.name == "runCoreDecisionMaxIobExceededTempBasalGate" && it.parameterCount == 14
@@ -1822,6 +1862,15 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val SPORT_MEAL_SMB_TRACE = """
+            READ key=BooleanKey.OApsAIMIhoneymoon value=false
+            READ key=BooleanKey.OApsAIMIHyperDroppingExemptEnabled value=false
+            READ key=BooleanKey.OApsAIMIhoneymoon value=false
+            READ key=BooleanKey.OApsAIMIMealAdvisorTrigger value=false
+            READ key=BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled value=false
+            READ key=DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor value=0.00
+        """.trimIndent()
+
         private val MAX_IOB_TBR_TRACE = """
             EFFECT SetTbr rate=2.00 dur=30 override=false forceExact=false adaptive=1.00
             LOG DECISION_FINAL[MAX_IOB]: smb=0.00U tbr=0.00U/h dur=0m bg=160 Δ=2.0 reason=phrasephrase
