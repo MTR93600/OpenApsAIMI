@@ -200,6 +200,8 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.decidePredPipelineSafetyHalt
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideRefineRbtMergeAfterDoseSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideMealAdvisorOrReturn
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideT3cBrittleMode
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT3cBypassCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideT3cBrittleBypass
 import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
@@ -3048,163 +3050,120 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         shortAvgDeltaAdj: Float,
         physioMultipliers: PhysioMultipliersMTR,
         insulinActionState: InsulinActionState,
-    ): RT? {
-        if (!preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)) return null
-        if (!legacyT3cBypassAllowed()) {
-            lastT3cHistoricalBypassNeutralizedThisTick = true
-            markT3cRuntimeOwnership("LEGACY_SKIPPED", "native_rbt_owner")
-            consoleLog.add("🌳 T3C_NATIVE: legacy bypass skipped (native RBT owns T3C)")
-            return null
-        }
-        markT3cRuntimeOwnership("LEGACY_FALLBACK", "rbt_authority_off")
-        lastDecisionSource = "T3C_LEGACY_BYPASS"
-        consoleLog.add("⚡ T3c Brittle Mode Active: Bypassing standard AIMI algorithm.")
-
-        // 🛡️ T3c Pre-bolus Safety Guard
-        // Without robust one-shot guards, lag in database persistence can cause a 24U+ runaway (4U every 5min).
-        // We now use a triple-layer safety net:
-        // 1. Database History (including manual boluses)
-        // 2. Internal Memory (last suggested SMB time - lag-free)
-        // 3. Absolute IOB Cap (Emergency fallback)
-
-        val t3cCapWindowMs = 20 * 60 * 1000L
-        val t3cCapCutoff   = aimiWallClockMs() - t3cCapWindowMs
-
-        // 1. Check Database (Harden: count ALL bolus types, not just SMB)
-        val recentBolusCount = getBolusesFromTimeCached(t3cCapCutoff, true)
-            .count { it.type == BS.Type.SMB || it.type == BS.Type.NORMAL }
-
-        // 2. Check Internal Memory (Ensures 1 tick = 1 dose max even if DB is slow)
-        val timeSinceInternalSmbMs = aimiWallClockMs() - internalLastSmbMillis
-        val internalBlock = timeSinceInternalSmbMs < t3cCapWindowMs
-
-        // 3. Absolute IOB Guard (Safety Floor)
-        // 🔒 Respect the USER'S maxIob setting. No hardcoded limits.
-        val iobSafetyBlock = iob > maxIob
-
-        if (recentBolusCount < 2 && !internalBlock && !iobSafetyBlock) {
-            // 🍱 Legacy Meal Prebolus Support for T3c (Already handled by top-level call above)
-            // internalLastSmbMillis + lastBolusSMBUnit for legacy prebolus: see [markLegacyMealDecision] (async SMB cache can lag).
-        } else {
-            val reason = when {
-                iobSafetyBlock -> "IOB_LIMIT (${aimiFmt2(iob)}U > MaxIOB)"
-                internalBlock -> "INTERNAL_LOCKOUT (${timeSinceInternalSmbMs/60000}m < 20m)"
-                else -> "DB_CAP ($recentBolusCount boluses in 20min)"
+    ): RT? = decideT3cBrittleBypass(
+        ctx = ctx,
+        profile = profile,
+        rT = rT,
+        originalProfile = originalProfile,
+        pkpdRuntime = pkpdRuntime,
+        shortAvgDeltaAdj = shortAvgDeltaAdj,
+        physioMultipliers = physioMultipliers,
+        insulinActionState = insulinActionState,
+        preferences = preferences,
+        consoleLog = consoleLog,
+        calls = object : AimiT3cBypassCalls {
+            override fun legacyBypassAllowed() = legacyT3cBypassAllowed()
+            override fun markHistoricalBypassNeutralized() {
+                lastT3cHistoricalBypassNeutralizedThisTick = true
             }
-            consoleLog.add("🛡️ T3c pre-bolus BLOCKED: $reason — skipping applyLegacyMealModes")
-        }
-
-        // Autodrive under T3C: when basal-authority fusion is ON, the proposal runs inside
-        // executeT3cBrittleMode (TBR fused, SMB stripped). Otherwise keep DataLake shadow only.
-        if (!preferences.get(BooleanKey.OApsAIMIT3cAutodriveBasalAuthority)) {
-            runT3cAutodriveShadowTick(ctx, profile, shortAvgDeltaAdj)
-        }
-
-        // 🔮 T3c + trajectory / advanced predictions (isolated path — same engines as main loop)
-        val iobRowT3c = ctx.iobDataArray.firstOrNull() ?: IobTotal(ctx.currentTime)
-        val lastBolusAgeT3c = if (iobRowT3c.lastBolusTime > 0L || internalLastSmbMillis > 0L) {
-            val tEff = kotlin.math.max(iobRowT3c.lastBolusTime, internalLastSmbMillis)
-            ((ctx.currentTime - tEff) / 60000.0).coerceAtLeast(0.0)
-        } else {
-            0.0
-        }
-        val dynSensT3c = profile.variable_sens.takeIf { it > 0.0 } ?: profile.sens
-        val fusedT3c = pkpdRuntime?.fusedIsf
-        val sensForT3cPred = (
-            when {
-                fusedT3c != null && dynSensT3c > 0.0 -> kotlin.math.min(fusedT3c, dynSensT3c)
-                fusedT3c != null -> fusedT3c
-                else -> dynSensT3c
-            }.coerceAtLeast(10.0) * ctx.autosensData.ratio.coerceIn(0.25, 4.0)
-            )
-        applyAdvancedPredictions(
-            bg = bg,
-            delta = delta,
-            sens = sensForT3cPred,
-            iob_data_array = ctx.iobDataArray,
-            mealData = ctx.mealData,
-            profile = ctx.profile,
-            rT = rT
-        )
-        applyTrajectoryAnalysis(
-            currentTime = ctx.currentTime,
-            bg = bg,
-            delta = delta.toDouble(),
-            bgacc = bgacc,
-            iobActivityNow = iobActivityNow,
-            iob = iob,
-            insulinActionState = insulinActionState,
-            lastBolusAgeMinutes = lastBolusAgeT3c,
-            cob = cob,
-            targetBg = originalProfile.target_bg,
-            profile = profile,
-            rT = rT,
-            uiInteraction = ctx.uiInteraction,
-            relevanceScore = physioMultipliers.trajectoryRelevanceScore
-        )
-        // CFRD: enforce the higher LGS floor on the trajectory context as well
-        val cfrdLgsFloorForTraj = if (preferences.get(BooleanKey.OApsAIMIT3cCfrdMode))
-            preferences.get(DoubleKey.OApsAIMIT3cCfrdLgsFloorMgdl) else 70.0
-        val lgsT3c = kotlin.math.min(
-            90.0,
-            (profile.lgsThreshold?.toDouble() ?: 70.0).coerceAtLeast(cfrdLgsFloorForTraj)
-        )
-        val minPredT3c = rT.predBGs?.IOB?.minOrNull()?.toDouble() ?: bg
-        val eventualT3c = rT.eventualBG?.takeIf { it.isFinite() } ?: this.eventualBG.coerceAtLeast(40.0)
-        val t3cTrajCtx = T3cTrajectoryContext.build(
-            minPredBg = minPredT3c,
-            eventualPredBg = eventualT3c,
-            bg = bg,
-            lgsThresholdMgdl = lgsT3c,
-            trajectoryEnabled = rT.trajectoryEnabled == true,
-            lastAnalysis = trajectoryGuard.getLastAnalysis()
-        )
-        consoleLog.add(
-            "🛡️ T3c predict+traj: min=${minPredT3c.toInt()} ev=${eventualT3c.toInt()} LGS=${lgsT3c.toInt()} " +
-                "traj=${t3cTrajCtx.trajectoryTypeName ?: "—"} E=${t3cTrajCtx.energyBalance?.let { aimiFmt1(it) } ?: "—"}"
-        )
-
-        // T3C dependency guarantee (B): deploy the physiological tree + activity belief for the T3C decision,
-        // same as the standard path — even when the autodrive shadow tick above didn't run (autodriveEngine null).
-        // Guarded so we never rebuild twice per tick. SMB stays 0 (enforced in executeT3cBrittleMode); this only
-        // makes the BASAL decision physio-informed (consumed in executeT3cBrittleMode, workstream C).
-        if (lastPhysiologicalTreeSnapshot == null) {
-            runCatching {
+            override fun markRuntimeOwnership(mode: String, reason: String) {
+                markT3cRuntimeOwnership(mode, reason)
+            }
+            override fun setDecisionSource(source: String) {
+                lastDecisionSource = source
+            }
+            override fun bolusesSince(startMs: Long, ascending: Boolean) =
+                getBolusesFromTimeCached(startMs, ascending)
+            override fun internalLastSmbMillis() = this@DetermineBasalaimiSMB2.internalLastSmbMillis
+            override fun iob() = this@DetermineBasalaimiSMB2.iob
+            override fun maxIob() = this@DetermineBasalaimiSMB2.maxIob
+            override fun runAutodriveShadow(ctx: AimiTickContext, profile: OapsProfileAimi, shortAvgDeltaAdj: Float) {
+                runT3cAutodriveShadowTick(ctx, profile, shortAvgDeltaAdj)
+            }
+            override fun bg() = this@DetermineBasalaimiSMB2.bg
+            override fun delta() = this@DetermineBasalaimiSMB2.delta
+            override fun applyAdvancedPredictions(
+                bg: Double,
+                delta: Float,
+                sens: Double,
+                iobDataArray: Array<IobTotal>,
+                mealData: MealData,
+                profile: OapsProfileAimi,
+                rT: RT,
+            ) {
+                this@DetermineBasalaimiSMB2.applyAdvancedPredictions(
+                    bg, delta, sens, iobDataArray, mealData, profile, rT,
+                )
+            }
+            override fun bgacc() = this@DetermineBasalaimiSMB2.bgacc
+            override fun iobActivityNow() = this@DetermineBasalaimiSMB2.iobActivityNow
+            override fun cob() = this@DetermineBasalaimiSMB2.cob
+            override fun applyTrajectoryAnalysis(
+                currentTime: Long,
+                bg: Double,
+                delta: Double,
+                bgacc: Double,
+                iobActivityNow: Double,
+                iob: Float,
+                insulinActionState: InsulinActionState,
+                lastBolusAgeMinutes: Double,
+                cob: Float,
+                targetBg: Double,
+                profile: OapsProfileAimi,
+                rT: RT,
+                uiInteraction: UiInteraction,
+                relevanceScore: Double,
+            ) {
+                this@DetermineBasalaimiSMB2.applyTrajectoryAnalysis(
+                    currentTime, bg, delta, bgacc, iobActivityNow, iob, insulinActionState,
+                    lastBolusAgeMinutes, cob, targetBg, profile, rT, uiInteraction, relevanceScore,
+                )
+            }
+            override fun eventualBg() = this@DetermineBasalaimiSMB2.eventualBG
+            override fun lastTrajectoryAnalysis() = trajectoryGuard.getLastAnalysis()
+            override fun treeSnapshotMissing() = lastPhysiologicalTreeSnapshot == null
+            override fun deployPhysioTree(sourceSensor: SourceSensor?) {
                 updatePhysioLatentState(
                     snapshot = physioAdapter.getLatestSnapshot(),
-                    sourceSensor = ctx.glucoseStatus.sourceSensor,
+                    sourceSensor = sourceSensor,
                 )
-            }.onFailure { aapsLogger.error(LTag.APS, "T3C physio/tree deploy failed", it) }
-        }
-
-        val adBasalProposal = proposeT3cAutodriveBasalOnly(
-            ctx = ctx,
-            profile = profile,
-            shortAvgDeltaAdj = shortAvgDeltaAdj,
-            lgsThresholdMgdl = lgsT3c,
-        )
-
-        return executeT3cBrittleMode(
-            bg = ctx.glucoseStatus.glucose,
-            delta = ctx.glucoseStatus.delta.toFloat(),
-            shortAvgDelta = ctx.glucoseStatus.shortAvgDelta,
-            longAvgDelta = ctx.glucoseStatus.longAvgDelta,
-            accel = ctx.glucoseStatus.bgAcceleration,
-            duraISFminutes = ctx.glucoseStatus.duraISFminutes,
-            duraISFaverage = ctx.glucoseStatus.duraISFaverage,
-            profile = profile,
-            currenttemp = ctx.currentTemp,
-            iob = ctx.iobDataArray.firstOrNull() ?: IobTotal(aimiWallClockMs()),
-            targetBg = originalProfile.target_bg,
-            variableSensitivity = variableSensitivity.toDouble(),
-            maxIob = maxIob,
-            eventualBg = eventualT3c.coerceAtLeast(40.0),
-            rT = rT,
-            trajectoryContext = t3cTrajCtx,
-            cgmNoise = ctx.glucoseStatus.noise,
-            autodriveBasalProposal = adBasalProposal,
-        )
-    }
+            }
+            override fun logPhysioDeployFailure(error: Throwable) {
+                aapsLogger.error(LTag.APS, "T3C physio/tree deploy failed", error)
+            }
+            override fun proposeAutodriveBasal(
+                ctx: AimiTickContext,
+                profile: OapsProfileAimi,
+                shortAvgDeltaAdj: Float,
+                lgsThresholdMgdl: Double,
+            ) = proposeT3cAutodriveBasalOnly(ctx, profile, shortAvgDeltaAdj, lgsThresholdMgdl)
+            override fun variableSensitivity() = this@DetermineBasalaimiSMB2.variableSensitivity
+            override fun executeT3c(
+                bg: Double,
+                delta: Float,
+                shortAvgDelta: Double,
+                longAvgDelta: Double,
+                accel: Double,
+                duraISFminutes: Double,
+                duraISFaverage: Double,
+                profile: OapsProfileAimi,
+                currentTemp: CurrentTemp,
+                iob: IobTotal,
+                targetBg: Double,
+                variableSensitivity: Double,
+                maxIob: Double,
+                eventualBg: Double,
+                rT: RT,
+                trajectoryContext: T3cTrajectoryContext?,
+                cgmNoise: Double,
+                autodriveBasalProposal: AutodriveEngine.BasalOnlyTbrProposal?,
+            ) = executeT3cBrittleMode(
+                bg, delta, shortAvgDelta, longAvgDelta, accel, duraISFminutes, duraISFaverage,
+                profile, currentTemp, iob, targetBg, variableSensitivity, maxIob, eventualBg, rT,
+                trajectoryContext, cgmNoise, autodriveBasalProposal,
+            )
+        },
+    )
 
     /**
      * Meal Advisor: [tryMealAdvisor] and, if applied, TBR + direct-send bolus, telemetry, and final [RT].
