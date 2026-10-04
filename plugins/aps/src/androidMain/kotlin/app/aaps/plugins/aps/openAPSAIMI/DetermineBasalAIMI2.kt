@@ -4151,9 +4151,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         clock = AimiRbtResolveClock { dateUtil.now() },
     )
 
-    /**
-     * Resolve RBT + physio gate + wiring once per loop tick (dedup-guarded).
-     */
     private fun resolveAndWireRbtLiveTick(
         ctx: AimiTickContext,
         profile: OapsProfileAimi,
@@ -4166,130 +4163,99 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         autodriveGateOpen: Boolean = false,
         mpcFeedForwardRa: Double? = null,
         cbfShieldDeltaU: Double? = null,
-    ): RbtLiveCommitResult? {
-        if (rbtResolvedThisTick) {
-            return lastRbtLiveCommitResult
-        }
-        val rbtPrefsEarly = RecursiveBeliefPreferences.from(preferences)
-        if (!RecursiveBeliefPreferences.isActive(rbtPrefsEarly)) return null
-        rbtResolvedThisTick = true
-        val htr = evaluateHyperTrajectoryRelease(
-            v3SmbU = v3SmbU,
-            rT = rT,
-            combinedDelta = combinedDelta,
-            tdd24hU = tdd24hU,
-            rbtLeafOnly = rbtPrefsEarly.authorityEnabled,
-        )
-        val rbtSnapshot = runRecursiveBeliefResolve(
-            v3SmbU = v3SmbU,
-            htr = htr,
-            rT = rT,
-            combinedDelta = combinedDelta,
-            tdd24hU = tdd24hU,
-            profile = profile,
-            autosens = ctx.autosensData,
-            glucoseStatus = ctx.glucoseStatus,
-            stepsLast15m = stepsLast15m,
-            heartRateBpm = heartRateBpm,
-            autodriveGateOpen = autodriveGateOpen,
-            mpcFeedForwardRa = mpcFeedForwardRa,
-            cbfShieldDeltaU = cbfShieldDeltaU,
-        )
-        lastRecursiveBeliefSnapshot = rbtSnapshot
-        rbtSnapshot?.let { snap ->
-            snap.loadGovernor?.let { lg ->
-                lastLoadGovernorMultiplierG = lg.multiplierG
-                if (lg.applied || lg.multiplierG < 0.99) {
-                    consoleLog.add("⚖️ ${lg.summary}${if (lg.applied) "" else " [pref-off]"}")
-                }
+    ): RbtLiveCommitResult? = decideRbtLiveTick(
+        ctx = ctx,
+        profile = profile,
+        rT = rT,
+        combinedDelta = combinedDelta,
+        tdd24hU = tdd24hU,
+        v3SmbU = v3SmbU,
+        stepsLast15m = stepsLast15m,
+        heartRateBpm = heartRateBpm,
+        autodriveGateOpen = autodriveGateOpen,
+        mpcFeedForwardRa = mpcFeedForwardRa,
+        cbfShieldDeltaU = cbfShieldDeltaU,
+        preferences = preferences,
+        consoleLog = consoleLog,
+        calls = object : AimiRbtLiveTickCalls {
+            override fun alreadyResolved() = rbtResolvedThisTick
+            override fun lastCommit() = lastRbtLiveCommitResult
+            override fun markResolved() {
+                rbtResolvedThisTick = true
             }
-            consoleLog.add(UnfoldExporter.formatLogLine(snap))
-        }
-        val chaosEval = rbtSnapshot?.let { snap ->
-            RbtChaosEvaluator.evaluate(
-                RbtChaosEvaluator.Input(
-                    snapshot = snap,
-                    trajectoryUncertain = trajectoryGuard.getLastAnalysis()?.classification == TrajectoryType.UNCERTAIN,
-                    patternCapFlapping = patternCapHold.holding,
-                ),
+            override fun evaluateHtr(
+                v3SmbU: Double,
+                rT: RT,
+                combinedDelta: Float,
+                tdd24hU: Double,
+                rbtLeafOnly: Boolean,
+            ) = this@DetermineBasalaimiSMB2.evaluateHyperTrajectoryRelease(
+                v3SmbU, rT, combinedDelta, tdd24hU, rbtLeafOnly,
             )
-        }
-        lastRbtChaosEvaluation = chaosEval
-        val targetForPostHypoExit = profile.target_bg.takeIf { it > 0.0 }
-            ?: targetBg.toDouble().takeIf { it > 0.0 }
-            ?: 100.0
-        val aggressiveRiseExit = PostHypoAggressiveRiseExit.shouldExit(
-            bgMgdl = bg,
-            targetBgMgdl = targetForPostHypoExit,
-            deltaMgdl5m = delta.toDouble(),
-        )
-        if (aggressiveRiseExit) {
-            consoleLog.add(
-                "🚀 POST_HYPO_AGGRESSIVE_RISE_EXIT: bg=${aimiFmt0(bg)} " +
-                    "≥ target+30 (${aimiFmt0(targetForPostHypoExit + 30.0)}) Δ=${aimiFmt1(delta)} > 15 → act normally"
+            override fun resolveBelief(
+                v3SmbU: Double,
+                htr: HyperTrajectoryReleaseResult,
+                rT: RT,
+                combinedDelta: Float,
+                tdd24hU: Double,
+                profile: OapsProfileAimi,
+                autosens: AutosensResult,
+                glucoseStatus: GlucoseStatusAIMI?,
+                stepsLast15m: Int,
+                heartRateBpm: Int,
+                autodriveGateOpen: Boolean,
+                mpcFeedForwardRa: Double?,
+                cbfShieldDeltaU: Double?,
+            ) = this@DetermineBasalaimiSMB2.runRecursiveBeliefResolve(
+                v3SmbU, htr, rT, combinedDelta, tdd24hU, profile, autosens, glucoseStatus,
+                stepsLast15m, heartRateBpm, autodriveGateOpen, mpcFeedForwardRa, cbfShieldDeltaU,
             )
-        }
-        RbtEpisodeMemory.tick(
-            nowMs = dateUtil.now(),
-            postHypoReboundProb = lastPhysioLatentState?.postHypoReboundProb ?: 0.0,
-            chaosScore = chaosEval?.score ?: 0.0,
-            mealProb = lastPhysioLatentState?.mealProb ?: 0.0,
-            recentNadirBgMgdl = minBgInLastMinutes(45),
-            aggressiveRiseExit = aggressiveRiseExit,
-        )
-        val activeEpisode = RbtEpisodeMemory.activeEpisode(dateUtil.now())
-        chaosEval?.takeIf { it.active || it.caution }?.let {
-            consoleLog.add("🌪️ RBT_CHAOS: ${it.summary()}")
-        }
-        activeEpisode?.let {
-            consoleLog.add(
-                "📖 RBT_EPISODE: ${it.kind.name} age=${aimiFmt0(it.ageMinutes(dateUtil.now()))}min " +
-                    "peak=${aimiFmt2(it.peakScore)} ticks=${it.tickCount}" +
-                    if (it.deepHypo) " deep" else " light",
-            )
-        }
-        val rbtPrefs = RecursiveBeliefPreferences.from(preferences)
-        val authorityGate = RecursiveBeliefAuthorityGate.evaluate(
-            RecursiveBeliefAuthorityGate.Input(
-                authorityEnabled = rbtPrefs.authorityEnabled,
-                requestedAuthority = rbtSnapshot?.resolutions?.releaseAuthority ?: ReleaseAuthority.NONE,
-                predictionAvailable = lastPredictionAvailable,
-                phaseOutput = lastPhysiologicalPhaseOutput,
-                patternSnapshot = lastPhysiologicalPatternSnapshot,
-                latentState = lastPhysioLatentState,
-                hypothesisState = lastUamHypothesisState,
-                patientState = lastPatientState,
-                patientModeDecision = lastPatientModeDecision,
-                safetyRiskExport = lastSafetyRiskExport,
-                chaos = chaosEval,
-                episode = activeEpisode,
-                bgMgdl = bg,
-                targetBgMgdl = targetForPostHypoExit,
-                deltaMgdl5m = delta.toDouble(),
-                mealHyperBypassEnabled = rbtPrefs.mealHyperBypassEnabled,
-                treeInsulinIntent = lastPhysiologicalTreeSnapshot?.insulinIntent ?: InsulinIntent.NONE,
-                treeInsulinUrgency = lastPhysiologicalTreeSnapshot?.insulinUrgency ?: 0.0,
-                treeMealRiseFrontLoadEnabled = rbtPrefs.treeMealRiseFrontLoadEnabled,
-            ),
-        )
-        lastRecursiveAuthorityGateDecision = authorityGate
-        lastRbtAppliedHints = RbtResolutionBridge.apply(
-            resolution = rbtSnapshot?.resolutions,
-            effectiveAuthority = authorityGate.effectiveAuthority,
-            chaos = chaosEval,
-            episode = activeEpisode,
-            defaultMealPriority = lastMealAbsorptionOutput?.mealDeliveryPriority == true,
-        )
-        consoleLog.add("🔌 RBT_WIRE: ${lastRbtAppliedHints?.summary ?: "inactive"}")
-        val result = mergeRbtHyperTrajectoryRelease(
-            htr = htr,
-            rbtSnapshot = rbtSnapshot,
-            authorityGate = authorityGate,
-            rT = rT,
-        )
-        lastRbtLiveCommitResult = result
-        return result
-    }
+            override fun storeSnapshot(snapshot: RecursiveBeliefSnapshot?) {
+                lastRecursiveBeliefSnapshot = snapshot
+            }
+            override fun storeLoadGovernor(multiplierG: Double) {
+                lastLoadGovernorMultiplierG = multiplierG
+            }
+            override fun trajectoryUncertain() =
+                trajectoryGuard.getLastAnalysis()?.classification == TrajectoryType.UNCERTAIN
+            override fun patternCapFlapping() = patternCapHold.holding
+            override fun storeChaos(chaos: RbtChaosEvaluator.Result?) {
+                lastRbtChaosEvaluation = chaos
+            }
+            override fun targetBg() = this@DetermineBasalaimiSMB2.targetBg
+            override fun bg() = this@DetermineBasalaimiSMB2.bg
+            override fun delta() = this@DetermineBasalaimiSMB2.delta
+            override fun nowMs() = dateUtil.now()
+            override fun latentState() = lastPhysioLatentState
+            override fun recentNadir(minutes: Int) = this@DetermineBasalaimiSMB2.minBgInLastMinutes(minutes)
+            override fun predictionAvailable() = lastPredictionAvailable
+            override fun phaseOutput() = lastPhysiologicalPhaseOutput
+            override fun patternSnapshot() = lastPhysiologicalPatternSnapshot
+            override fun hypothesisState() = lastUamHypothesisState
+            override fun patientState() = lastPatientState
+            override fun patientModeDecision() = lastPatientModeDecision
+            override fun safetyRisk() = lastSafetyRiskExport
+            override fun treeInsulinIntent() = lastPhysiologicalTreeSnapshot?.insulinIntent ?: InsulinIntent.NONE
+            override fun treeInsulinUrgency() = lastPhysiologicalTreeSnapshot?.insulinUrgency ?: 0.0
+            override fun mealDeliveryPriority() = lastMealAbsorptionOutput?.mealDeliveryPriority == true
+            override fun storeAuthority(decision: RecursiveBeliefAuthorityGate.Decision) {
+                lastRecursiveAuthorityGateDecision = decision
+            }
+            override fun storeHints(hints: RbtResolutionBridge.AppliedHints) {
+                lastRbtAppliedHints = hints
+            }
+            override fun appliedHints() = lastRbtAppliedHints
+            override fun merge(
+                htr: HyperTrajectoryReleaseResult,
+                rbtSnapshot: RecursiveBeliefSnapshot?,
+                authorityGate: RecursiveBeliefAuthorityGate.Decision,
+                rT: RT,
+            ) = mergeRbtHyperTrajectoryRelease(htr, rbtSnapshot, authorityGate, rT)
+            override fun storeCommit(result: RbtLiveCommitResult) {
+                lastRbtLiveCommitResult = result
+            }
+        },
+    )
 
     private fun mergeRbtHyperTrajectoryRelease(
         htr: HyperTrajectoryReleaseResult,
