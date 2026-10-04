@@ -180,6 +180,27 @@ La décision est dans `commonMain`. Les appels qui restent dans la coquille pass
 
 Cette fonction n’appelle pas la porte Autodrive. Porte ouverte et porte fermée se verrouillent avec `runAutodriveV3MultiVariableBranch`.
 
+### Lectures optionnelles endométriose et cache auditeur
+
+La référence (`dev_OAPSAIMI` @ `3dd0ca64772`, `DetermineBasalAIMI2.kt` L4321 et L4329) avale déjà l’erreur :
+
+```kotlin
+val endoFactors = try {
+    endoAdjuster.calculateFactors(bg, delta.toDouble())
+} catch (_: Exception) {
+    null
+}
+val auditorVerdict = try {
+    AuditorVerdictCache.get(300_000)?.verdict
+} catch (_: Exception) {
+    null
+}
+```
+
+Le repli de valeur reste `null`. `endometriosisFactor`, `shadowAuditorConfidence` et `shadowSentinelVerdictLabel` sont donc les mêmes qu’avant sur le chemin qui réussit, et absents quand la lecture échoue. L’écart avec la référence : l’échec n’est plus silencieux. `readRbtOptional` renvoie `OptionalSignal.Failed` (source, type, message) et ajoute à `consoleLog` la ligne `RBT <source> failed (<type>): <message> — value null`. Un `Error` n’est pas attrapé, comme dans la référence. Un cache auditeur vide (`get` renvoie null) reste `Ready(null)`, pas un échec.
+
+`RbtOptionalReadTest`, bouchon qui renvoyait encore `Ready` sans ligne de log : XML `tests="5" failures="2"`, horodatage `2026-10-04T18:57:45.129Z`. Après le résultat typé et le log : `tests="5" failures="0"`, horodatage `2026-10-04T18:58:17.274Z`. Les traces verrouillées ne lancent pas ces lectures en échec, donc leurs octets ne bougent pas.
+
 Trace hypo brittle : BG 50, brittle vrai, seuil 140. Le seuil est lu, `t3cActive=true`, `t3cDemand=0.00`.
 
 Trace plafond : BG 220, delta 8, moyenne courte 4, eventual 220, basal courante 1,00 U/h, max basal 1,20 U/h. `t3cDemand=1.20`. Le même scénario avec un max basal de 30 U/h donne 16,12 U/h : 1,20 est le clamp de `computeT3c`, pas une dose inventée. Un eventual à 0 faisait croire que le plafond était inatteignable, parce que le frein de trajectoire lit cet eventual comme une hypo (garde à 40 mg/dL) et coupe la demande avant le clamp.

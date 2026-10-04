@@ -177,19 +177,15 @@ internal fun buildRbtExtendedSignals(
     )
     // Expose the NGR nocturnal basal multiplier to the T3C engine (executeT3cBrittleMode consumes it).
     tickWrites.setLastNgrBasalMultiplier(ngrResult.basalMultiplier)
-    val endoFactors = try {
+    val endoFactors = readRbtOptional("endometriosis", consoleLog) {
         endoAdjuster.calculateFactors(state.bg, state.delta.toDouble())
-    } catch (_: Exception) {
-        null
-    }
+    }.valueOrNull()
     val physioTrace = physio.getLastDecisionTrace()
     val physioCtx = physio.getEffectiveContext()
     val wearableSnap = physio.getLatestSnapshot()
-    val auditorVerdict = try {
+    val auditorVerdict = readRbtOptional("auditorCache", consoleLog) {
         app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdictCache.get(300_000)?.verdict
-    } catch (_: Exception) {
-        null
-    }
+    }.valueOrNull()
     val traj = trajectoryGuard.getLastAnalysis()
     val spiralCap = if (traj?.classification == TrajectoryType.TIGHT_SPIRAL) {
         max(state.maxSMBHB, state.maxSMB) * (1.0 - (traj.metrics.energyBalance / 10.0).coerceIn(0.0, 0.75))
