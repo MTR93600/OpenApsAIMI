@@ -236,7 +236,7 @@ Vert :
 
 Mesuré sur `DetermineBasalAIMI2.kt` après le déplacement de la tête T3C : **17 518 lignes**, **325 fonctions**. Le corps de `executeT3cBrittleMode` est `decideT3cBrittleMode` en `commonMain`. La coquille fait 88 lignes : elle ne calcule plus, elle branche les ports.
 
-Déjà décidées dans `commonMain`, coquille réduite : `applyLegacyMealModes` (47), `buildRbtExtendedSignals` (110), `runAutodriveV3MultiVariableBranch` (166), `executeT3cBrittleMode` (88).
+Déjà décidées dans `commonMain`, coquille réduite : `applyLegacyMealModes` (47), `buildRbtExtendedSignals` (110), `runAutodriveV3MultiVariableBranch` (166), `executeT3cBrittleMode` (88), `finalizeAndCapSMB` (174).
 
 Hors de cette série, par consigne : `setTempBasal` (357), `runDetermineBasalTickInner` (884), les learners (`applyBasalNeuralLearningAndTraining` 66, `logLearnersHealth` 54, `neuralnetwork5` 51, les `refresh*Async`), l’export (`runAimiSnapshotMedicalJsonAndHormonitorExportStage` 504) et `toMedicalJson` (754).
 
@@ -299,3 +299,5 @@ En dessous de 40 lignes : le reste des 325, des helpers d’horloge, de log et d
 `HoldAimiEngine.evaluate` renvoie encore `Hold("ENGINE_NOT_EXTRACTED")`. Le remplacer demande que `runDetermineBasalTickInner` appelle ces têtes depuis `commonMain`, avec `setTempBasal`, la persistance, les notifications, les fichiers et TFLite derrière des ports. Au rythme d’une tête (ou d’une paire couverte par la même trace) par PR, les têtes du tableau font environ **15 PR**. L’inner tick et le branchement du moteur en font **4 à 6** de plus. Total honnête avant que `HoldAimiEngine` puisse déléguer au vrai moteur commun : **une vingtaine de PR**. Pas deux ou trois.
 
 Le tableau est pris juste après T3C, avant le conseiller repas. `tryMealAdvisor` et `runMealAdvisorDecisionOrReturn` sont ensuite passés en `commonMain`. Le fichier android retombe à **17 342 lignes**. Ces deux lignes du tableau ne sont plus des corps de décision. Le compte de PR restantes baisse d’une.
+
+`finalizeAndCapSMB` (377 dans le tableau) est ensuite passé en `commonMain`. La coquille fait 174 lignes. `DetermineBasalAIMI2.kt` retombe à **17 129 lignes**. Le compte baisse encore d’une : environ **13 PR** pour les têtes restantes, plus **4 à 6** pour l’inner tick. **Environ 18 PR** avant que `HoldAimiEngine` puisse déléguer.
