@@ -217,6 +217,9 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiSignalPrepPkpdCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideSignalPreparationPkpdRuntime
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTrajectoryCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideTrajectoryAnalysis
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiSmbExecution
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiSmbOneShotCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideSmbAdvisorOneShot
 import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
@@ -5883,84 +5886,168 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         skipLegacySmbBlender: Boolean,
         minBgLookbackMgdl: Double,
     ): AimiSmbAdvisorLogAndExecutionStage {
-        val hasPred = predictedBg > 20
-        val hyperKicker = (bg > targetBg + 30 && (delta >= 0.3 || shortAvgDelta >= 0.2))
-
-        val isMealAdvisorOneShot = preferences.get(BooleanKey.OApsAIMIMealAdvisorTrigger)
-        mealAdvisorOneShotThisTick = isMealAdvisorOneShot
-        // 🍱 Exception repas : l'insuline validée par le Meal Advisor prime sur le lockout exercice/activité,
-        // sauf hypo sévère (BG ≤ [SEVERE_HYPO_MEAL_OVERRIDE_MGDL]).
-        val advisorMealPriority = bg > SEVERE_HYPO_MEAL_OVERRIDE_MGDL
-        if (isMealAdvisorOneShot && (!exerciseInsulinLockoutActive || advisorMealPriority)) {
-            preferences.put(BooleanKey.OApsAIMIMealAdvisorTrigger, false)
-
-            this.maxSMB = Math.max(this.maxSMB, 30.0)
-            this.maxSMBHB = Math.max(this.maxSMBHB, 30.0)
-
-            if (exerciseInsulinLockoutActive) {
-                consoleLog.add("🚀 MEAL ADVISOR ONE-SHOT: priorité repas — lockout exercice/activité contourné. MaxSMB raised to 30U.")
-            } else {
-                consoleLog.add("🚀 MEAL ADVISOR ONE-SHOT: Forcing Aggression. MaxSMB raised to 30U.")
-            }
-            rT.reason.append("🚀 Advisor Trigger: MaxSMB Bypass Active. ")
-        } else if (isMealAdvisorOneShot && exerciseInsulinLockoutActive) {
-            preferences.put(BooleanKey.OApsAIMIMealAdvisorTrigger, false)
-            consoleLog.add("🚀 MEAL ADVISOR ONE-SHOT ignoré (hypo sévère sous sport / contexte activité).")
-            rT.reason.append("🚀 Advisor Trigger ignoré (hypo sévère / exercice). ")
-        }
-
-        consoleLog.add(
-            String.format(
-                java.util.Locale.US,
-                "SMB Decision: BG=%.0f, Delta=%.1f, IOB=%.2f, HasPred=%s, HyperKicker=%s, UAM=%.2f, Proposed=%.2f",
-                bg, delta, iob, hasPred, hyperKicker, modelcal, this.predictedSMB
-            )
+        val decided = decideSmbAdvisorOneShot(
+            ctx = ctx,
+            profile = profile,
+            rT = rT,
+            glucoseStatus = glucoseStatus,
+            bg = bg,
+            delta = delta,
+            iob = iob,
+            shortAvgDelta = shortAvgDelta,
+            predictedBg = predictedBg,
+            eventualBg = eventualBG,
+            sens = sens,
+            tp = tp,
+            variableSensitivity = variableSensitivity,
+            targetBg = targetBg,
+            basalAimi = basalaimi,
+            basal = basal,
+            honeymoon = honeymoon,
+            hourOfDay = hourOfDay,
+            mealTime = mealTime,
+            bfastTime = bfastTime,
+            lunchTime = lunchTime,
+            dinnerTime = dinnerTime,
+            highCarbTime = highCarbTime,
+            snackTime = snackTime,
+            sportTime = sportTime,
+            lateFatRiseFlag = lateFatRiseFlag,
+            highCarbRuntime = highCarbrunTime,
+            threshold = threshold,
+            windowSinceDoseInt = windowSinceDoseInt,
+            intervalSmb = intervalsmb,
+            insulinStep = pumpCaps.bolusStep.toFloat(),
+            highBgOverrideUsed = highBgOverrideUsed,
+            cob = cob,
+            pkpdRuntime = pkpdRuntime,
+            pumpAgeDays = pumpAgeDays,
+            modelCal = modelcal,
+            profileCurrentBasal = profileCurrentBasal,
+            isConfirmedHighRise = isConfirmedHighRiseLocal,
+            exerciseInsulinLockout = exerciseInsulinLockoutActive,
+            combinedDelta = combinedDelta,
+            skipLegacySmbBlender = skipLegacySmbBlender,
+            minBgLookbackMgdl = minBgLookbackMgdl,
+            preferences = preferences,
+            consoleLog = consoleLog,
+            calls = object : AimiSmbOneShotCalls {
+                override fun setMealAdvisorOneShot(value: Boolean) {
+                    mealAdvisorOneShotThisTick = value
+                }
+                override fun maxSmb() = this@DetermineBasalaimiSMB2.maxSMB
+                override fun setMaxSmb(value: Double) {
+                    this@DetermineBasalaimiSMB2.maxSMB = value
+                }
+                override fun maxSmbHb() = this@DetermineBasalaimiSMB2.maxSMBHB
+                override fun setMaxSmbHb(value: Double) {
+                    this@DetermineBasalaimiSMB2.maxSMBHB = value
+                }
+                override fun predictedSmb() = this@DetermineBasalaimiSMB2.predictedSMB
+                override fun logSmbDecision(
+                    bg: Double,
+                    delta: Float,
+                    iob: Float,
+                    hasPred: Boolean,
+                    hyperKicker: Boolean,
+                    modelCal: Float,
+                    proposed: Float,
+                ) {
+                    consoleLog.add(
+                        String.format(
+                            java.util.Locale.US,
+                            "SMB Decision: BG=%.0f, Delta=%.1f, IOB=%.2f, HasPred=%s, HyperKicker=%s, UAM=%.2f, Proposed=%.2f",
+                            bg, delta, iob, hasPred, hyperKicker, modelCal, proposed,
+                        )
+                    )
+                }
+                override fun authoritativePhrase() =
+                    rh.gs(ApsStrings.reason_autodrive_v3_authoritative_blender_skipped)
+                override fun executeLegacy(
+                    bg: Double,
+                    delta: Float,
+                    iob: Float,
+                    basalAimi: Float,
+                    basal: Double,
+                    honeymoon: Boolean,
+                    hourOfDay: Int,
+                    mealTime: Boolean,
+                    bfastTime: Boolean,
+                    lunchTime: Boolean,
+                    dinnerTime: Boolean,
+                    highCarbTime: Boolean,
+                    snackTime: Boolean,
+                    sens: Double,
+                    tp: Float,
+                    variableSensitivity: Float,
+                    targetBg: Double,
+                    predictedBg: Float,
+                    eventualBg: Double,
+                    isMealAdvisorOneShot: Boolean,
+                    mealData: MealData,
+                    pkpdRuntime: PkPdRuntime?,
+                    sportTime: Boolean,
+                    lateFatRiseFlag: Boolean,
+                    highCarbRuntime: Long,
+                    threshold: Double,
+                    currentTime: Long,
+                    windowSinceDoseInt: Int,
+                    intervalSmb: Int,
+                    insulinStep: Float,
+                    highBgOverrideUsed: Boolean,
+                    cob: Float,
+                    pkpdDiaMinutesOverride: Double?,
+                    profile: OapsProfileAimi,
+                    rT: RT,
+                    combinedDelta: Float,
+                    glucoseStatus: GlucoseStatusAIMI,
+                    pumpAgeDays: Float,
+                    modelCal: Double,
+                    profileCurrentBasal: Double,
+                    isConfirmedHighRise: Boolean,
+                    exerciseInsulinLockout: Boolean,
+                    minBgLookbackMgdl: Double,
+                ) = executeSmbInstruction(
+                    bg = bg, delta = delta, iob = iob, basalaimi = basalAimi, basal = basal,
+                    honeymoon = honeymoon, hourOfDay = hourOfDay,
+                    mealTime = mealTime, bfastTime = bfastTime, lunchTime = lunchTime,
+                    dinnerTime = dinnerTime, highCarbTime = highCarbTime, snackTime = snackTime,
+                    sens = sens, tp = tp, variableSensitivity = variableSensitivity,
+                    target_bg = targetBg, predictedBg = predictedBg, eventualBG = eventualBg,
+                    isMealAdvisorOneShot = isMealAdvisorOneShot, mealData = mealData,
+                    pkpdRuntime = pkpdRuntime, sportTime = sportTime, lateFatRiseFlag = lateFatRiseFlag,
+                    highCarbrunTime = highCarbRuntime, threshold = threshold,
+                    currentTime = currentTime, windowSinceDoseInt = windowSinceDoseInt,
+                    intervalsmb = intervalSmb, insulinStep = insulinStep,
+                    highBgOverrideUsed = highBgOverrideUsed, cob = cob,
+                    pkpdDiaMinutesOverride = pkpdDiaMinutesOverride,
+                    profile = profile, rT = rT,
+                    combinedDeltaLocal = combinedDelta, glucoseStatusLocal = glucoseStatus,
+                    pumpAgeDaysLocal = pumpAgeDays, modelcalLocal = modelCal,
+                    profileCurrentBasalLocal = profileCurrentBasal,
+                    isConfirmedHighRise = isConfirmedHighRise,
+                    exerciseInsulinLockout = exerciseInsulinLockout,
+                    minBgLookbackMgdl = minBgLookbackMgdl,
+                ).let { executed ->
+                    AimiSmbExecution(
+                        predictedSmb = executed.predictedSmb,
+                        basal = executed.basal,
+                        finalSmb = executed.finalSmb,
+                        highBgOverrideUsed = executed.highBgOverrideUsed,
+                        newSmbInterval = executed.newSmbInterval,
+                    )
+                }
+            },
         )
-        val pkpdDiaMinutesOverride: Double? = pkpdRuntime?.params?.diaHrs?.let { it * 60.0 }
-        @Suppress("UNUSED_VARIABLE")
-        val useLegacyDynamicsdia = pkpdDiaMinutesOverride == null
-
-        val smbExecution = if (skipLegacySmbBlender) {
-            val v3SmbUnits = (rT.insulinReq ?: 0.0).coerceAtLeast(0.0)
-            rT.reason.appendLine(rh.gs(ApsStrings.reason_autodrive_v3_authoritative_blender_skipped))
-            consoleLog.add(
-                "AUTODRIVE_V3_AUTHORITATIVE: SMB ${aimiFmt2(v3SmbUnits)} U from V3 (legacy blender skipped)"
-            )
-            SmbInstructionExecutor.Result(
-                predictedSmb = predictedSMB,
-                basal = basal,
-                finalSmb = v3SmbUnits.toFloat(),
-                highBgOverrideUsed = highBgOverrideUsed,
-                newSmbInterval = intervalsmb,
-            )
-        } else {
-            executeSmbInstruction(
-                bg = bg, delta = delta, iob = iob, basalaimi = basalaimi, basal = basal,
-                honeymoon = honeymoon, hourOfDay = hourOfDay,
-                mealTime = mealTime, bfastTime = bfastTime, lunchTime = lunchTime,
-                dinnerTime = dinnerTime, highCarbTime = highCarbTime, snackTime = snackTime,
-                sens = sens, tp = tp.toFloat(), variableSensitivity = variableSensitivity,
-                target_bg = targetBg, predictedBg = predictedBg, eventualBG = eventualBG,
-                isMealAdvisorOneShot = isMealAdvisorOneShot, mealData = ctx.mealData,
-                pkpdRuntime = pkpdRuntime, sportTime = sportTime, lateFatRiseFlag = lateFatRiseFlag,
-                highCarbrunTime = highCarbrunTime, threshold = threshold,
-                currentTime = ctx.currentTime, windowSinceDoseInt = windowSinceDoseInt,
-                intervalsmb = intervalsmb, insulinStep = pumpCaps.bolusStep.toFloat(),
-                highBgOverrideUsed = highBgOverrideUsed, cob = cob,
-                pkpdDiaMinutesOverride = pkpdDiaMinutesOverride,
-                profile = profile, rT = rT,
-                combinedDeltaLocal = combinedDelta, glucoseStatusLocal = glucoseStatus,
-                pumpAgeDaysLocal = pumpAgeDays, modelcalLocal = modelcal.toDouble(),
-                profileCurrentBasalLocal = profileCurrentBasal,
-                isConfirmedHighRise = isConfirmedHighRiseLocal,
-                exerciseInsulinLockout = exerciseInsulinLockoutActive,
-                minBgLookbackMgdl = minBgLookbackMgdl,
-            )
-        }
-
         return AimiSmbAdvisorLogAndExecutionStage(
-            smbExecution = smbExecution,
-            isMealAdvisorOneShot = isMealAdvisorOneShot,
+            smbExecution = SmbInstructionExecutor.Result(
+                predictedSmb = decided.smbExecution.predictedSmb,
+                basal = decided.smbExecution.basal,
+                finalSmb = decided.smbExecution.finalSmb,
+                highBgOverrideUsed = decided.smbExecution.highBgOverrideUsed,
+                newSmbInterval = decided.smbExecution.newSmbInterval,
+            ),
+            isMealAdvisorOneShot = decided.isMealAdvisorOneShot,
         )
     }
 
