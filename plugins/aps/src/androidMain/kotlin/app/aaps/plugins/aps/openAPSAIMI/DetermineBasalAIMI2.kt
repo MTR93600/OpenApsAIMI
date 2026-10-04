@@ -167,7 +167,10 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiDecisionLearnersHealth
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiDecisionLocalHour
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiDecisionRtBootstrap
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiDecisionStudyExporter
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRbtHtrMerge
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRbtRefineState
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideDecisionContextInitRtSosAndFlatShadow
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideRefineRbtMergeAfterDoseSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideMealAdvisorOrReturn
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideT3cBrittleMode
 import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
@@ -10385,49 +10388,46 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * Re-merge RBT HTR after late PKPD snapshot for finalize/SafetyNet consumers.
      * Does not re-deliver V3 SMB (pump path already used pre_v3_rbt / pre_rbt terminals).
      */
-    private fun refineRbtMergeAfterDoseSnapshot(rT: RT) {
-        if (!rbtResolvedThisTick) return
-        val prev = lastRbtLiveCommitResult ?: return
-        val gate = lastRecursiveAuthorityGateDecision ?: return
-        val snap = lastDoseTerminalSnapshot ?: return
-        val endogenousCounterRegulatory =
-            lastPhysiologicalPhaseOutput?.phase == PhysiologicalPhase.ENDOGENOUS_COUNTER_REGULATORY
-        val stackingEval = InsulinStackingStance.evaluate(
-            bg = bg,
-            delta = delta.toDouble(),
-            shortAvgDelta = shortAvgDelta.toDouble(),
-            targetBg = targetBg.toDouble(),
-            iob = iob.toDouble(),
-            maxIob = maxIob,
-            eventualBg = snap.eventualMgdl.takeIf { it.isFinite() },
-            minPredBg = minPredictedBgForRbtWiring(snap.minPredMgdl),
-            trajectoryEnergy = rT.trajectoryEnergy,
-            isExplicitUserAction = false,
-            enabled = preferences.get(BooleanKey.OApsAIMIIobSurveillanceGuard),
-            mealPriorityContext =
-                lastMealAbsorptionOutput?.mealDeliveryPriority == true &&
-                    lastUamHypothesisState?.suppressMealInterpretation != true,
-            endogenousCounterRegulatory = endogenousCounterRegulatory,
-            mealAbsorptionPhase = lastMealAbsorptionOutput?.phase ?: MealAbsorptionPhase.NONE,
-            mealModeActive = mealTime || bfastTime || lunchTime || dinnerTime || snackTime || highCarbTime,
-        )
-        lastInsulinStackingEvaluation = stackingEval
-        val refreshed = mergeRbtHyperTrajectoryRelease(
-            htr = prev.baselineHtr,
-            rbtSnapshot = lastRecursiveBeliefSnapshot,
-            authorityGate = gate,
+    private fun refineRbtMergeAfterDoseSnapshot(rT: RT) =
+        decideRefineRbtMergeAfterDoseSnapshot(
             rT = rT,
+            preferences = preferences,
+            consoleLog = consoleLog,
+            state = object : AimiRbtRefineState {
+                override fun resolvedThisTick() = rbtResolvedThisTick
+                override fun previousCommit() = lastRbtLiveCommitResult
+                override fun authorityGate() = lastRecursiveAuthorityGateDecision
+                override fun doseSnapshot() = lastDoseTerminalSnapshot
+                override fun physiologicalPhase() = lastPhysiologicalPhaseOutput?.phase
+                override fun bg() = this@DetermineBasalaimiSMB2.bg
+                override fun delta() = this@DetermineBasalaimiSMB2.delta
+                override fun shortAvgDelta() = this@DetermineBasalaimiSMB2.shortAvgDelta
+                override fun targetBg() = this@DetermineBasalaimiSMB2.targetBg
+                override fun iob() = this@DetermineBasalaimiSMB2.iob
+                override fun maxIob() = this@DetermineBasalaimiSMB2.maxIob
+                override fun mealDeliveryPriority() = lastMealAbsorptionOutput?.mealDeliveryPriority == true
+                override fun suppressMealInterpretation() =
+                    lastUamHypothesisState?.suppressMealInterpretation == true
+                override fun mealAbsorptionPhase() = lastMealAbsorptionOutput?.phase
+                override fun mealTime() = this@DetermineBasalaimiSMB2.mealTime
+                override fun bfastTime() = this@DetermineBasalaimiSMB2.bfastTime
+                override fun lunchTime() = this@DetermineBasalaimiSMB2.lunchTime
+                override fun dinnerTime() = this@DetermineBasalaimiSMB2.dinnerTime
+                override fun snackTime() = this@DetermineBasalaimiSMB2.snackTime
+                override fun highCarbTime() = this@DetermineBasalaimiSMB2.highCarbTime
+                override fun setStackingEvaluation(value: InsulinStackingStance.Evaluation) {
+                    lastInsulinStackingEvaluation = value
+                }
+                override fun beliefSnapshot() = lastRecursiveBeliefSnapshot
+                override fun setLiveCommit(value: RbtLiveCommitResult) {
+                    lastRbtLiveCommitResult = value
+                }
+            },
+            minPred = AimiMinPredWiring { rawMinPred -> minPredictedBgForRbtWiring(rawMinPred) },
+            merge = AimiRbtHtrMerge { htr, rbtSnapshot, authorityGate, rt ->
+                mergeRbtHyperTrajectoryRelease(htr, rbtSnapshot, authorityGate, rt)
+            },
         )
-        if (abs(refreshed.effectiveHtr.v3SmbAfterU - prev.effectiveHtr.v3SmbAfterU) > 0.02) {
-            consoleLog.add(
-                "RBT_REFINE_AFTER_DOSE_SNAPSHOT: " +
-                    "${aimiFmt2(prev.effectiveHtr.v3SmbAfterU)}→" +
-                    "${aimiFmt2(refreshed.effectiveHtr.v3SmbAfterU)}U " +
-                    "ev=${snap.eventualMgdl.toInt()} minPred=${snap.minPredMgdl.toInt()}",
-            )
-        }
-        lastRbtLiveCommitResult = refreshed
-    }
     private var lastAdvancedPredictionCurves: AdvancedPredictionCurves? = null
     /** Wave4 H3 — last soft-floor path-min telemetry (JSON study + production curves). */
     private var lastPkpdSoftFloorTelemetry: PkpdSoftFloorTelemetry? = null
