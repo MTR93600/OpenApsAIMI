@@ -63,6 +63,7 @@ import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionPair
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiAutonomyMode
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorRuntimeProfile
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiAuditor
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiSmbComparison
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiEmergencySos
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiBehaviorProfileSource
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiHealthContext
@@ -976,6 +977,51 @@ class ShellDecisionTraceTest {
         assertEquals(INSULIN_REQ_ACTIVITY_TRACE, trace)
     }
 
+    @Test
+    fun maxIobWithoutMealRelaxSetsATempBasal() {
+        setField(tick, "adaptiveMult", 1.0)
+        setField(tick, "comparator", mock(AimiSmbComparison::class.java))
+        val provider = mock(HormonitorStudyExporterProvider::class.java)
+        whenever(provider.exporter()).thenReturn(null)
+        setField(tick, "hormonitorStudyExporterProvider", provider)
+        val profile = profileStub()
+        val ctx = tickContext(profile, 160.0).copy(
+            glucoseStatus = GlucoseStatusAIMI(glucose = 160.0, delta = 2.0, shortAvgDelta = 1.0, date = now),
+            currentTemp = CurrentTemp(duration = 0, rate = 1.0, minutesrunning = 0),
+        )
+        val rT = RT(runningDynamicIsf = false)
+        var kind = ""
+        val trace = capture {
+            kind = invokeMaxIobGate(profile, ctx, rT).javaClass.simpleName
+        }.replace(Regex("ts=\\d+"), "ts=<clock>")
+        assertEquals("ReturnTempBasal", kind)
+        assertEquals(MAX_IOB_TBR_TRACE, trace)
+    }
+
+    private fun invokeMaxIobGate(profile: OapsProfileAimi, ctx: AimiTickContext, rT: RT): Any {
+        val method = tick.javaClass.declaredMethods.first {
+            it.name == "runCoreDecisionMaxIobExceededTempBasalGate" && it.parameterCount == 14
+        }
+        method.isAccessible = true
+        return method.invoke(
+            tick,
+            profile,
+            ctx,
+            rT,
+            profile,
+            false,
+            false,
+            2.0,
+            SafetyDecision(stopBasal = false, bolusFactor = 1.0, reason = "", basalLS = false),
+            2.0,
+            160.0,
+            2.0f,
+            180.0,
+            100.0,
+            5.0,
+        )!!
+    }
+
     private fun invokeInsulinReq(
         ctx: AimiTickContext,
         rT: RT,
@@ -1776,6 +1822,14 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val MAX_IOB_TBR_TRACE = """
+            EFFECT SetTbr rate=2.00 dur=30 override=false forceExact=false adaptive=1.00
+            LOG DECISION_FINAL[MAX_IOB]: smb=0.00U tbr=0.00U/h dur=0m bg=160 Δ=2.0 reason=phrasephrase
+            LOG 📦 CACHE TDD24H=MISSING reason=tdd24h_missing
+            LOG 🧭 BASAL_GOV[FINAL]: action=KEEP conf=0.00 n=0 hypo=0.00 hypoG=0.00 hypoAdj=0.00 ant=0.00 wMean=1.00 high=0.00 mae=0.0 latch=false floorB=- floorA=- wBolus=0.00U wCob=?g reason=trace
+            LOG TICK ts=<clock> bg=160 d=2.0 iob=0.00 act=0.000 th=0.188 cob=0.0 mode=None autodriveState=IDLE pred=N(sz=0 ev=0) safety=NONE ref=NO maxIOB=0.00 maxSMB=0.50 smb=0.00->0.00->0.00 tbr=0.00 src=AIMI
+        """.trimIndent()
+
         private val INSULIN_REQ_ACTIVITY_TRACE = """
             LOG SMB capped by Activity/Recovery (Limit: 0.50)
         """.trimIndent()
