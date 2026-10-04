@@ -106,8 +106,9 @@ internal interface AimiT3cBypassCalls {
  *
  * When the legacy brittle bypass is allowed, predictions and the trajectory guard run, then
  * the PI basal is returned. In the locked scene that basal is 1.30 U/h for 30 minutes.
- * The physio deploy still catches every [Throwable], logs it, and continues, as before.
- * The shadow tick and the basal proposal keep their own logs inside the Android ports.
+ * The physio deploy still catches every [Throwable] and continues without a tree, as before.
+ * The failure is an [OptionalSignal.Failed] plus a console line, and the Android port still
+ * writes `aapsLogger.error`. The shadow tick and the basal proposal keep their own logs.
  */
 internal fun decideT3cBrittleBypass(
     ctx: AimiTickContext,
@@ -242,9 +243,25 @@ internal fun decideT3cBrittleBypass(
     // Guarded so we never rebuild twice per tick. SMB stays 0 (enforced in executeT3cBrittleMode); this only
     // makes the BASAL decision physio-informed (consumed in executeT3cBrittleMode, workstream C).
     if (calls.treeSnapshotMissing()) {
-        runCatching {
+        val deployed: OptionalSignal<Unit> = runCatching {
             calls.deployPhysioTree(ctx.glucoseStatus.sourceSensor)
-        }.onFailure { calls.logPhysioDeployFailure(it) }
+        }.fold(
+            onSuccess = { OptionalSignal.Ready(Unit) },
+            onFailure = { error ->
+                calls.logPhysioDeployFailure(error)
+                val failed = OptionalSignal.Failed(
+                    source = "physioTree",
+                    errorType = error::class.simpleName ?: "Throwable",
+                    message = error.message,
+                )
+                consoleLog.add(
+                    "T3C physioTree failed (${failed.errorType}): ${failed.message.orEmpty()} — deploy skipped",
+                )
+                failed
+            },
+        )
+        // Null keeps the reference fallback: the tick continues with no tree deployed.
+        deployed.valueOrNull()
     }
 
     val adBasalProposal = calls.proposeAutodriveBasal(
