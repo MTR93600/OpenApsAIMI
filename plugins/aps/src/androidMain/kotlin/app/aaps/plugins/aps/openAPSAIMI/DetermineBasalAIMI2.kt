@@ -183,7 +183,11 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.decideBasalFirstAdaptiveMultipli
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiInsulinReqFinalize
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiInsulinReqSmbInterval
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiInsulinReqState
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMaxIobGateStage
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMaxIobGateState
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMaxIobTempBasal
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideInsulinReqActivityRelaxAndMicrobolus
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideMaxIobExceededTempBasal
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideMealFirst30NgrHeadroomBasalSmb
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideRefineRbtMergeAfterDoseSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideMealAdvisorOrReturn
@@ -6919,8 +6923,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     /**
-     * Repas-montée IOB relax ([computeMealHighIobDecision]) → phase CORE_DECISION → si IOB > plafond et pas relax,
-     * même branche TBR/comparateur/log MAX_IOB qu’historiquement ; sinon retourne flags pour le chemin SMB/basal aval.
+     * Repas-montée IOB relax puis gate MAX_IOB. La décision est [decideMaxIobExceededTempBasal].
+     * Cette coquille lit les champs à la ligne.
      */
     private fun runCoreDecisionMaxIobExceededTempBasalGate(
         profile: OapsProfileAimi,
@@ -6938,81 +6942,55 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         targetBgSchedule: Double,
         loopIob: Double,
     ): AimiCoreDecisionMaxIobGateResult {
-        val mealHighIobDecision = computeMealHighIobDecision(
-            mealModeActive,
-            bg,
-            delta.toDouble(),
-            eventualBG,
-            targetBgSchedule,
-            loopIob,
-            maxIobLimit
+        val stage = decideMaxIobExceededTempBasal(
+            profile = profile,
+            ctx = ctx,
+            rT = rT,
+            originalProfile = originalProfile,
+            flatBGsDetected = flatBGsDetected,
+            mealModeActive = mealModeActive,
+            maxIobLimit = maxIobLimit,
+            safetyDecision = safetyDecision,
+            basal = basal,
+            bg = bg,
+            delta = delta,
+            eventualBG = eventualBG,
+            targetBgSchedule = targetBgSchedule,
+            loopIob = loopIob,
+            texts = rh,
+            state = object : AimiMaxIobGateState {
+                override fun studyExporter() = hormonitorStudyExporter
+                override fun activityContext() =
+                    cachedActivityContext ?: app.aaps.plugins.aps.openAPSAIMI.activity.ActivityContext()
+                override fun adaptiveMult() = this@DetermineBasalaimiSMB2.adaptiveMult
+                override fun withoutZeros(value: Double) = value.withoutZeros()
+            },
+            effects = AimiMaxIobTempBasal { rate, durationMin, profile, rT, currenttemp, overrideSafetyLimits, forceExact, adaptiveMultiplier ->
+                setTempBasal(
+                    rate,
+                    durationMin,
+                    profile,
+                    rT,
+                    currenttemp,
+                    overrideSafetyLimits = overrideSafetyLimits,
+                    forceExact = forceExact,
+                    adaptiveMultiplier = adaptiveMultiplier,
+                )
+            },
+            comparison = comparator,
+            decisionLog = AimiDecisionLog { tag, result, bg, delta ->
+                logDecisionFinal(tag, result, bg, delta)
+            },
         )
-        val allowMealHighIob = mealHighIobDecision.relax
-        val mealHighIobDamping = mealHighIobDecision.damping
-        AimiLoopTelemetry.enterPhase(AimiLoopPhase.CORE_DECISION, hormonitorStudyExporter)
-
-        if (loopIob > maxIobLimit && !allowMealHighIob) {
-            rT.reason.append(rh.gs(ApsStrings.reason_iob_max, round(loopIob, 2), round(maxIobLimit, 2)))
-            val finalResult = if (delta < 0) {
-                val floorRate = applyBasalFloor(
-                    0.0,
-                    profile.current_basal,
-                    safetyDecision,
-                    cachedActivityContext ?: app.aaps.plugins.aps.openAPSAIMI.activity.ActivityContext(),
-                    bg,
-                    delta.toDouble(),
-                    ctx.glucoseStatus.shortAvgDelta.toDouble(),
-                    eventualBG.toDouble(),
-                    mealModeActive,
-                    HypoThresholdMath.getLgsThresholdSafe(profile)
+        return when (stage) {
+            is AimiMaxIobGateStage.ReturnTempBasal ->
+                AimiCoreDecisionMaxIobGateResult.ReturnTempBasal(stage.rt)
+            is AimiMaxIobGateStage.ContinueSMBPath ->
+                AimiCoreDecisionMaxIobGateResult.ContinueSMBPath(
+                    allowMealHighIob = stage.allowMealHighIob,
+                    mealHighIobDamping = stage.mealHighIobDamping,
                 )
-
-                if (floorRate > 0.0) {
-                    rT.reason.append(rh.gs(ApsStrings.reason_bg_dropping_floor, delta, floorRate))
-                    setTempBasal(floorRate, 30, profile, rT, ctx.currentTemp, overrideSafetyLimits = false, adaptiveMultiplier = adaptiveMult)
-                } else {
-                    rT.reason.append(rh.gs(ApsStrings.reason_bg_dropping, delta))
-                    setTempBasal(0.0, 30, profile, rT, ctx.currentTemp, overrideSafetyLimits = false, adaptiveMultiplier = adaptiveMult)
-                }
-            } else if (ctx.currentTemp.duration > 15 && (roundBasal(basal) == roundBasal(ctx.currentTemp.rate))) {
-                rT.reason.append(", temp ${ctx.currentTemp.rate} ~ req ${round(basal, 2).withoutZeros()}U/hr. ")
-                rT
-            } else {
-                val safeBasal = applyBasalFloor(
-                    basal,
-                    profile.current_basal,
-                    safetyDecision,
-                    cachedActivityContext ?: app.aaps.plugins.aps.openAPSAIMI.activity.ActivityContext(),
-                    bg,
-                    delta.toDouble(),
-                    ctx.glucoseStatus.shortAvgDelta.toDouble(),
-                    eventualBG.toDouble(),
-                    mealModeActive,
-                    HypoThresholdMath.getLgsThresholdSafe(profile)
-                )
-                rT.reason.append(rh.gs(ApsStrings.reason_set_temp_basal, round(safeBasal, 2)))
-                setTempBasal(safeBasal, 30, profile, rT, ctx.currentTemp, overrideSafetyLimits = false, adaptiveMultiplier = adaptiveMult)
-            }
-            comparator.compare(
-                aimiResult = finalResult,
-                glucoseStatus = ctx.glucoseStatus,
-                currentTemp = ctx.currentTemp,
-                iobData = ctx.iobDataArray,
-                profileAimi = originalProfile,
-                autosens = ctx.autosensData,
-                mealData = ctx.mealData,
-                microBolusAllowed = ctx.microBolusAllowed,
-                currentTime = ctx.currentTime,
-                flatBGsDetected = flatBGsDetected,
-                dynIsfMode = ctx.dynIsfMode
-            )
-            logDecisionFinal("MAX_IOB", finalResult, bg, delta)
-            return AimiCoreDecisionMaxIobGateResult.ReturnTempBasal(finalResult)
         }
-        return AimiCoreDecisionMaxIobGateResult.ContinueSMBPath(
-            allowMealHighIob = allowMealHighIob,
-            mealHighIobDamping = mealHighIobDamping,
-        )
     }
 
     /**
