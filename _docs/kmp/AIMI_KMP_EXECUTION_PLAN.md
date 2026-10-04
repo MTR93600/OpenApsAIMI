@@ -11,6 +11,7 @@
 
 > **Use this file to code.** The blueprint stays the architecture bible.  
 > **ADR:** [`adr-g0-defaults.md`](adr-g0-defaults.md)  
+> **2026-10-03.** Hôte iOS et pile BLE/NFC : **remplacé sur ce point par ADR G1** ([`adr-g1-ios-kmp-natif.md`](adr-g1-ios-kmp-natif.md)). Le reste de ce plan n'est pas réécrit.
 > **AIMI freeze:** `aimi-baseline-2026-08-26` = `origin/dev_OAPSAIMI` @ `1ae418e106`  
 > **This branch:** `kmp-aimi-migration-study`  
 > **Date:** 2026-08-26  

@@ -3,7 +3,8 @@
 > **Status:** accepted 2026-08-28.  
 > **Parent:** [`adr-g0-defaults.md`](adr-g0-defaults.md) (D2 pump was open: Dana-i or Medtrum).  
 > **Branch:** `kmp-aimi-migration-study`.  
-> **Change rule:** same as G0. Therapy behaviour is unchanged. This only names the iOS pump.
+> **Change rule:** same as G0. Therapy behaviour is unchanged. This only names the iOS pump.  
+> **2026-10-03.** The Trio host, iOS `MedtrumKit`, and « do not put `:pump:medtrum` in `iosMain` » are **remplacé sur ce point par ADR G1** ([`adr-g1-ios-kmp-natif.md`](adr-g1-ios-kmp-natif.md)). The rest of this ADR is unchanged.
 
 ## Context
 
