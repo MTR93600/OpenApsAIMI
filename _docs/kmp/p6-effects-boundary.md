@@ -51,6 +51,9 @@ Les ports sont minces et portent le nom de l’appel de la référence. Pas de b
 | `AimiMealFirstNgrState` | drapeaux et runtimes de repas, `adaptiveMult`, `maxSMB`, écriture `maxIob` | les champs du tick, lus à la ligne |
 | `AimiMealFirstTempBasal` | `setTempBasal` du repas 0–30 min | la coquille, le corps pompe reste Android |
 | `AimiNightGrowthEvaluate` | `nightGrowthResistanceMode.evaluate` | la coquille |
+| `AimiInsulinReqState` | protection activité, `maxSMB`, plancher HTR | les champs du tick, lus à la ligne |
+| `AimiInsulinReqSmbInterval` | `calculateSMBInterval` | la coquille, l’heure et les intervalles restent Android |
+| `AimiInsulinReqFinalize` | `finalizeAndCapSMB` | la coquille |
 
 Les membres du tick déjà calculés (glycémie, IOB, drapeaux de mode) sont passés à la fonction. Ce ne sont pas des lectures de préférences. Une préférence lue seulement sur une branche l’est encore seulement sur cette branche, à la même ligne.
 
@@ -269,5 +272,7 @@ Hypo engagée : BG 54, `mealTime`, delta 0,4, commande moteur sûre 2,40 U/h et 
 `runBasalAimiTddCarbLimitsTirEarlyBasalAndPaiIsf` décide dans `commonMain` (`decideBasalAimiTddCarbLimitsTirEarlyBasalAndPaiIsf`). `smoothBasalRate`, `aimiLocalHour` et `unifiedReactivityLearner.globalFactor` restent des ports appelés à la ligne. Pas de `try/catch` avalé. TDD 35 U, poids 70 kg, grossesse allumée, TIR dernière heure ≥ 5, accélération de glycémie, pic d’IOB à 60 min, multiplicateur 0,80 : basale **1,20 U/h** (0,50 puis ×2 TIR puis +20 %), ISF PAI **30**, plafond glucidique à l’échelle 0,80.
 
 `runPostSafetyMealFirst30NgrHeadroomBasalSmbStage` décide dans `commonMain` (`decideMealFirst30NgrHeadroomBasalSmb`). `setTempBasal` et `nightGrowthResistanceMode.evaluate` restent des ports appelés à la ligne. Les drapeaux de repas, les runtimes, `adaptiveMult` et `maxSMB` sont lus à la ligne. Pas de `try/catch` avalé. Mode repas, runtime 10 min, débit forcé 2,00 U/h, temp courante 1,00 U/h sur 0 min : TBR **2,00 U/h** pendant 30 min, override vrai.
+
+`runInsulinReqActivityRelaxAndMicrobolusStage` décide dans `commonMain` (`decideInsulinReqActivityRelaxAndMicrobolus`). La protection activité, `maxSMB` et le plancher HTR sont lus à la ligne. `calculateSMBInterval` et `finalizeAndCapSMB` restent des ports. Pas de `try/catch` avalé. Protection activité, maxSMB 1,00, demande 2,00 U, amortissement repas-IOB 0,50, microbolus interdit : insulinReq **0,25 U**, journal `SMB capped by Activity/Recovery (Limit: 0.50)`.
 
 Les traces golden restent, octet pour octet : mode repas (TBR puis prébolus), récupération d’hypo, hypo sévère avec autorité post-hypo, plafond MaxIOB, Autodrive éteint, montée de repas engagée (`ShellDecisionTraceTest`, TBR 2,40 U/h demandée, SMB moteur non déposé tant que RBT est éteint), et le chemin UAM de `buildRbtExtendedSignals` (ordinal post-hypo 2, confiance 0,70). Si une trace diverge, on s’arrête.

@@ -180,6 +180,10 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMealFirstTempBasal
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiNightGrowthEvaluate
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideBasalAimiTddCarbLimitsTirEarlyBasalAndPaiIsf
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideBasalFirstAdaptiveMultiplier
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiInsulinReqFinalize
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiInsulinReqSmbInterval
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiInsulinReqState
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideInsulinReqActivityRelaxAndMicrobolus
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideMealFirst30NgrHeadroomBasalSmb
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideRefineRbtMergeAfterDoseSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideMealAdvisorOrReturn
@@ -7012,12 +7016,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     /**
-     * Chemin **insulinReq** après le gate MAX_IOB : clamp activité (champs instance **`activityProtectionMode`** /
-     * **`activityStateIntense`** + **`maxSMB`**), atténuation repas-IOB élevé, **`safetyDecision.bolusFactor`**,
-     * journal SMB / intervalle, **`finalizeAndCapSMB`** si éligible.
-     *
-     * **Downstream** : seul **`rT.insulinReq`** (et raison) est consommé plus bas ; pas de `return` local.
-     * **`basalBoostApplied`** / **`basalBoostSource`** : `val` du tick (overlay basal), passés explicitement — pas des membres.
+     * Chemin **insulinReq** après le gate MAX_IOB. La décision est
+     * [decideInsulinReqActivityRelaxAndMicrobolus]. Cette coquille lit les champs à la ligne.
      */
     private fun runInsulinReqActivityRelaxAndMicrobolusStage(
         ctx: AimiTickContext,
@@ -7037,90 +7037,47 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         basalBoostApplied: Boolean,
         basalBoostSource: String?,
     ) {
-        var insulinReq = smbToGive.toDouble()
-
-        if (activityProtectionMode || activityStateIntense) {
-            val safetyMax = maxSMB * 0.5
-            if (insulinReq > safetyMax) {
-                insulinReq = safetyMax
-                rT.reason.append(rh.gs(ApsStrings.reason_activity_cap, safetyMax))
-                consoleLog.add("SMB capped by Activity/Recovery (Limit: ${aimiFmt2(safetyMax)})")
-            }
-        }
-
-        if (allowMealHighIob) {
-            insulinReq *= mealHighIobDamping
-            rT.reason.append(
-                rh.gs(
-                    ApsStrings.reason_meal_high_iob_relaxed,
-                    round(iobTotal.iob, 2),
-                    round(maxIobLimit, 2),
-                    (mealHighIobDamping * 100).roundToInt()
+        decideInsulinReqActivityRelaxAndMicrobolus(
+            ctx = ctx,
+            rT = rT,
+            iobTotal = iobTotal,
+            smbToGive = smbToGive,
+            allowMealHighIob = allowMealHighIob,
+            mealHighIobDamping = mealHighIobDamping,
+            maxIobLimit = maxIobLimit,
+            safetyDecision = safetyDecision,
+            enableSMB = enableSMB,
+            isMealActive = isMealActive,
+            bg = bg,
+            delta = delta,
+            hypoThresholdMgdl = hypoThresholdMgdl,
+            systemTime = systemTime,
+            basalBoostApplied = basalBoostApplied,
+            basalBoostSource = basalBoostSource,
+            texts = rh,
+            consoleLog = consoleLog,
+            state = object : AimiInsulinReqState {
+                override fun activityProtectionMode() = this@DetermineBasalaimiSMB2.activityProtectionMode
+                override fun activityStateIntense() = this@DetermineBasalaimiSMB2.activityStateIntense
+                override fun maxSMB() = this@DetermineBasalaimiSMB2.maxSMB
+                override fun hyperReleaseFloorU(): Double =
+                    lastHyperTrajectoryRelease?.takeIf { it.active }?.smbFloorU ?: 0.0
+            },
+            smbIntervalPort = AimiInsulinReqSmbInterval { calculateSMBInterval() },
+            finalize = AimiInsulinReqFinalize { rT, proposedUnits, reasonHeader, mealData, hypoThreshold, isExplicitUserAction, decisionSource, isMealActive, hyperReleaseFloorU ->
+                finalizeAndCapSMB(
+                    rT = rT,
+                    proposedUnits = proposedUnits,
+                    reasonHeader = reasonHeader,
+                    mealData = mealData,
+                    hypoThreshold = hypoThreshold,
+                    isExplicitUserAction = isExplicitUserAction,
+                    decisionSource = decisionSource,
+                    isMealActive = isMealActive,
+                    hyperReleaseFloorU = hyperReleaseFloorU,
                 )
-            )
-        }
-
-        insulinReq = insulinReq * safetyDecision.bolusFactor
-        insulinReq = round(insulinReq, 3)
-        rT.insulinReq = insulinReq
-        val lastBolusAge = round((systemTime - iobTotal.lastBolusTime) / 60000.0, 1)
-
-        if (basalBoostApplied) {
-            consoleLog.add("SMB_FLOW_CONTINUES afterBasalBoost=true source=${basalBoostSource ?: "?"}")
-        }
-
-        if (ctx.microBolusAllowed && enableSMB) {
-            val microBolus = insulinReq
-            rT.reason.append(rh.gs(ApsStrings.reason_insulin_required, insulinReq))
-            if (microBolus >= maxSMB) {
-                rT.reason.append(rh.gs(ApsStrings.reason_max_smb, maxSMB))
-            }
-            rT.reason.append(". ")
-
-            val smbInterval = calculateSMBInterval()
-            val intervalStr = aimiFmt1(smbInterval.toDouble())
-            val lastBolusStr = aimiFmt1(lastBolusAge)
-            val deltaStr = aimiFmt1(delta.toDouble())
-            rT.reason.append(" [SMB interval=")
-            rT.reason.append(intervalStr)
-            rT.reason.append(" min, lastBolusAge=")
-            rT.reason.append(lastBolusStr)
-            rT.reason.append(" min, Δ=")
-            rT.reason.append(deltaStr)
-            rT.reason.append(", BG=")
-            rT.reason.append(bg.toInt().toString())
-            rT.reason.append("] ")
-
-            val nextBolusMins = round(smbInterval - lastBolusAge, 0)
-            val nextBolusSeconds = round((smbInterval - lastBolusAge) * 60, 0) % 60
-            if (lastBolusAge > smbInterval) {
-                if (microBolus > 0) {
-                    val htrFloorU = lastHyperTrajectoryRelease
-                        ?.takeIf { it.active }
-                        ?.smbFloorU
-                        ?: 0.0
-                    finalizeAndCapSMB(
-                        rT = rT,
-                        proposedUnits = microBolus,
-                        reasonHeader = rh.gs(ApsStrings.reason_microbolus, microBolus),
-                        mealData = ctx.mealData,
-                        hypoThreshold = hypoThresholdMgdl,
-                        isExplicitUserAction = false,
-                        decisionSource = "GlobalAIMI",
-                        isMealActive = isMealActive,
-                        hyperReleaseFloorU = htrFloorU,
-                    )
-                }
-            } else {
-                rT.reason.append(
-                    rh.gs(
-                        ApsStrings.reason_wait_microbolus,
-                        nextBolusMins,
-                        nextBolusSeconds
-                    )
-                )
-            }
-        }
+            },
+        )
     }
 
     /**
