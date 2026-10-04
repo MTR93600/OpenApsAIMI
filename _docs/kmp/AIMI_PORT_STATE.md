@@ -8,6 +8,20 @@
 > This file is still the best diary of lots 0–6i (how the tick and plugin landed). Do not
 > use its file counts, “2 files from commonMain”, or “330 tests” as today’s truth.
 
+## Live metric — openAPSAIMI source sets
+
+Recounted with `find … -name '*.kt' | wc -l` and `xargs wc -l` on
+`plugins/aps/src/{common,android}Main/kotlin/app/aaps/plugins/aps/openAPSAIMI`.
+
+| When | Commit | androidMain files | commonMain files | androidMain lines | commonMain lines |
+|---|---|---:|---:|---:|---:|
+| Before P6.1 | `7c13732990` | 88 | 441 | 45 371 | 69 850 |
+| After P6.1 (`BasalFirstPolicyMath` only) | this branch | 88 | 442 | 45 255 | 69 968 |
+
+P6.1 moves the pure object out of `DetermineBasalAIMI2.kt` (20 109 → 19 993 lines) into
+`commonMain/.../basal/BasalFirstPolicyMath.kt` (118 lines, package line included). The android
+file count stays 88. The diary sections below keep their historical counts.
+
 Updated 2026-09-02, on `kmp-aimi-migration-study` at `1f6ca62fe8` (the second `kmp` merge).
 **Was** “read this first” until 2026-09-06. Keep it for the lot history only.
 

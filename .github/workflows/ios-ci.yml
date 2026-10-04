@@ -125,6 +125,7 @@ jobs:
           ./gradlew --console=plain --no-daemon \
             :core:data:iosSimulatorArm64Test :core:nssdk:iosSimulatorArm64Test :core:keys:iosSimulatorArm64Test \
             :implementation:iosSimulatorArm64Test :ios:shell:iosSimulatorArm64Test \
+            :plugins:aps:iosSimulatorArm64Test \
             | tee test.log
 
       # Every module that HAS iOS tests is checked by name. A module added to the run above but not
@@ -154,6 +155,7 @@ jobs:
           check ":core:data" core/data
           check ":implementation" implementation
           check ":ios:shell" ios/shell
+          check ":plugins:aps" plugins/aps
           exit $fail
 
       - name: Upload test results
@@ -165,4 +167,5 @@ jobs:
             core/*/build/test-results/iosSimulatorArm64Test/**
             implementation/build/test-results/iosSimulatorArm64Test/**
             ios/shell/build/test-results/iosSimulatorArm64Test/**
+            plugins/aps/build/test-results/iosSimulatorArm64Test/**
           if-no-files-found: warn
