@@ -30,6 +30,7 @@ import app.aaps.plugins.aps.openAPSAIMI.autodrive.AutodriveEngine
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.estimator.ContinuousStateEstimator
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveCommand
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.safety.AutoDriveGater
+import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController
 import app.aaps.plugins.aps.openAPSAIMI.learning.BasalNeuralLearner
 import app.aaps.plugins.aps.openAPSAIMI.effects.RbtLiveCommitResult
@@ -907,6 +908,64 @@ class ShellDecisionTraceTest {
         assertEquals(BASAL_FIRST_REDUCTION_TRACE, trace)
     }
 
+    @Test
+    fun basalTddDoublesOnHighTirThenBoostsAndCutsIsf() {
+        val prefs = recordingPreferences(
+            doubles = mapOf(
+                DoubleKey.OApsAIMIweight to 70.0,
+                DoubleKey.OApsAIMICHO to 15.0,
+            ),
+            bools = mapOf(BooleanKey.OApsAIMIpregnancy to true),
+        )
+        setField(tick, "preferences", prefs)
+        setField(tick, "adaptiveMult", 0.80)
+        val engine = mock(BasalDecisionEngine::class.java, Answer { inv: InvocationOnMock ->
+            if (inv.method.name == "smoothBasalRate") inv.arguments[2] else null
+        })
+        setField(tick, "basalDecisionEngine", engine)
+        val profile = profileStub()
+        val glucose = GlucoseStatusAIMI(glucose = 160.0, delta = 4.0, shortAvgDelta = 1.0, date = now)
+        val trace = capture {
+            invokeBasalPai(
+                glucose = glucose,
+                profile = profile,
+            )
+        }
+        val ci = (450.0 / 35.0).toFloat()
+        val expectedLimit = (15.0 / ci).toFloat() * 0.80f
+        assertEquals(1.2f, getField(tick, "basalaimi") as Float, 0f)
+        assertEquals(30f, getField(tick, "variableSensitivity") as Float, 0.001f)
+        assertEquals(expectedLimit, getField(tick, "aimilimit") as Float, 0f)
+        assertEquals(BASAL_TDD_PAI_TRACE, trace)
+    }
+
+    private fun invokeBasalPai(glucose: GlucoseStatusAIMI, profile: OapsProfileAimi) {
+        val method = tick.javaClass.declaredMethods.first {
+            it.name == "runBasalAimiTddCarbLimitsTirEarlyBasalAndPaiIsf" && it.parameterCount == 17
+        }
+        method.isAccessible = true
+        method.invoke(
+            tick,
+            glucose,
+            profile,
+            1.0,
+            160.0,
+            4.0f,
+            35.0,
+            35.0,
+            50.0,
+            false,
+            10.0,
+            50.0,
+            null,
+            6.0,
+            null,
+            60.0,
+            0.2,
+            0.5,
+        )
+    }
+
     private fun invokeBasalFirst(): Double {
         val method = tick.javaClass.declaredMethods.first {
             it.name == "basalFirstAdaptiveMultiplier" && it.parameterCount == 0
@@ -1610,6 +1669,18 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val BASAL_TDD_PAI_TRACE = """
+            READ key=DoubleKey.OApsAIMIweight value=70.00
+            READ key=DoubleKey.OApsAIMICHO value=15.00
+            READ key=DoubleKey.OApsAIMICHO value=15.00
+            READ key=BooleanKey.OApsAIMIpregnancy value=true
+            READ key=BooleanKey.OApsAIMIUnifiedReactivityEnabled value=false
+            LOG Basal boosté (+20%) pour accélération BG.
+            LOG PAI Logic: Base ISF=50.0
+            LOG PAI: BG rising & IOB badly timed. AGGRESSIVE.
+            LOG PAI: Urgency factor 0.60 applied. New ISF=30.0
+        """.trimIndent()
+
         private val BASAL_FIRST_REDUCTION_TRACE = """
             READ key=BooleanKey.OApsAIMIBasalChannelSafetyGuards value=true
             LOG 🛡️ BASAL_FIRST_GOV: adaptiveMult conservé à 0.70x (legacy forçait 1.00x)
