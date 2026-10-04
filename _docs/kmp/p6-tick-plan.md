@@ -151,6 +151,8 @@ Le `%2f`.format du log de throttle PKPD reste un lambda fourni par le tick : `St
 
 `appendCsvToFile`, `RandomAccessFile`, `storageHelper.getAimiFile` qui renvoie encore un `java.io.File`. `AimiStorage` couvre le journal JSONL, pas encore cette lecture. Pas de dose.
 
+La frontière effet / lecture est dans [`p6-effects-boundary.md`](p6-effects-boundary.md). Le commun renvoie une décision ; la coquille Android exécute `setTempBasal`, les SMB, les préférences, les learners et l’export, dans l’ordre de la référence.
+
 ### Tranche 8 — orchestrateur
 
 `determine_basal` et les étapes `run*`. Reste `androidMain` : constructeur Metro, notifications, TFLite/SMB trainer, 238 lectures de préférences. `OpenAPSAIMIPlugin.kt` (2 602 lignes) est un lot à part. Le moteur `:plugins:aimi-engine` reste `Hold` tant qu’un `evaluate()` de replay n’existe pas.
