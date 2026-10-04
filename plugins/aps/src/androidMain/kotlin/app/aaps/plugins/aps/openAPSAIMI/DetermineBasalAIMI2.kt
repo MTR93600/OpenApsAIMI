@@ -212,6 +212,9 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPkpdCurveCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPkpdTargetCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideComputePkpdPredictions
 import app.aaps.plugins.aps.openAPSAIMI.effects.decidePkpdPredictionsAndNoisyTargets
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiSignalPrepPkpd
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiSignalPrepPkpdCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideSignalPreparationPkpdRuntime
 import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
@@ -8856,143 +8859,163 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         isConfirmedHighRiseLocal: Boolean,
         pkpdRuntimeIn: PkPdRuntime?,
     ): AimiSignalPreparationPkpdOutcome {
-        val modesCondition = (!mealTime || mealruntime > 30) && (!lunchTime || lunchruntime > 30) && (!bfastTime || bfastruntime > 30) && (!dinnerTime || dinnerruntime > 30) && !sportTime && (!snackTime || snackrunTime > 30) && (!highCarbTime || highCarbrunTime > 30) && !sleepTime && !lowCarbTime
-        val pbolusAS: Double = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
-        val pbolusA: Double = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
-        val reason = StringBuilder()
-        val recentBGs = getRecentBGs()
-
-        val oneHourAgo = now - (60 * 60 * 1000L)
-        val bolusesHistory = getBolusesFromTimeCached(oneHourAgo, true)
-        val totalBolusLastHour = bolusesHistory.sumOf { it.amount }
-
-        calculateBgTrend(recentBGs, reason)
-
-        val autosensRatio = if (ctx.autosensData.ratio != 1.0) ctx.autosensData.ratio else 1.0
-
-        val systemTime = ctx.currentTime
-        val iobArray = ctx.iobDataArray
-        val iob_data = iobArray[0]
-        val mealFlags = MealFlags(mealTime, bfastTime, lunchTime, dinnerTime, highCarbTime)
-        AimiLoopTelemetry.enterPhase(AimiLoopPhase.SIGNAL_PREPARATION, hormonitorStudyExporter)
-
-        val lastBolusTimeMs: Long? = iob_data.lastBolusTime.takeIf { it > 0L }
-
-        val lateFatRiseFlag = isLateFatProteinRise(
-            bg = bg,
-            predictedBg = predictedBg.toDouble(),
-            delta = delta.toDouble(),
-            shortAvgDelta = shortAvgDelta.toDouble(),
-            longAvgDelta = longAvgDelta.toDouble(),
-            iob = iob.toDouble(),
-            cob = cob.toDouble(),
-            maxSMB = maxSMB,
-            lastBolusTimeMs = lastBolusTimeMs,
-            mealFlags = mealFlags
-        )
-        lateFatRiseFlagForExport = lateFatRiseFlag
-        val tdd24hStateForPkpd = determineBasalInvocationCaches.getTdd24hTotalAmountState(tddCalculator)
-        logInvocationCacheState("TDD24H_PKPD", tdd24hStateForPkpd)
-        var tdd24Hrs = tdd24hStateForPkpd.valueOrNull()?.toFloat() ?: 0.0f
-        if (tdd24Hrs == 0.0f) tdd24Hrs = tdd7P.toFloat()
-        val bgTime = glucoseStatus.date
-        val minAgo = round((systemTime - bgTime) / 60.0 / 1000.0, 1)
-
-        if (minAgo > 12.0) {
-            reason.append("⚠️ Data Stale (${minAgo.toInt()}m) -> Logic Paused\n")
-            consoleError.add("Data Stale (${minAgo}m) -> Logic Paused")
-            logDecisionFinal("STALE_DATA", rT, bg, delta)
-            return AimiSignalPreparationPkpdOutcome.StaleAbort(
-                rT.also {
-                    ensurePredictionFallback(it, bg)
-                    markFinalLoopDecisionFromRT(it)
+        val decided = decideSignalPreparationPkpdRuntime(
+            ctx = ctx,
+            profile = profile,
+            rT = rT,
+            glucoseStatus = glucoseStatus,
+            combinedDelta = combinedDelta,
+            tdd7P = tdd7P,
+            isExplicitAdvisorRun = isExplicitAdvisorRun,
+            isConfirmedHighRiseLocal = isConfirmedHighRiseLocal,
+            pkpdRuntimeIn = pkpdRuntimeIn,
+            pkpdIntegration = pkpdIntegration,
+            preferences = preferences,
+            consoleLog = consoleLog,
+            calls = object : AimiSignalPrepPkpdCalls {
+                override fun mealTime() = this@DetermineBasalaimiSMB2.mealTime
+                override fun mealRuntime() = this@DetermineBasalaimiSMB2.mealruntime
+                override fun lunchTime() = this@DetermineBasalaimiSMB2.lunchTime
+                override fun lunchRuntime() = this@DetermineBasalaimiSMB2.lunchruntime
+                override fun bfastTime() = this@DetermineBasalaimiSMB2.bfastTime
+                override fun bfastRuntime() = this@DetermineBasalaimiSMB2.bfastruntime
+                override fun dinnerTime() = this@DetermineBasalaimiSMB2.dinnerTime
+                override fun dinnerRuntime() = this@DetermineBasalaimiSMB2.dinnerruntime
+                override fun sportTime() = this@DetermineBasalaimiSMB2.sportTime
+                override fun snackTime() = this@DetermineBasalaimiSMB2.snackTime
+                override fun snackRuntime() = this@DetermineBasalaimiSMB2.snackrunTime
+                override fun highCarbTime() = this@DetermineBasalaimiSMB2.highCarbTime
+                override fun highCarbRuntime() = this@DetermineBasalaimiSMB2.highCarbrunTime
+                override fun sleepTime() = this@DetermineBasalaimiSMB2.sleepTime
+                override fun lowCarbTime() = this@DetermineBasalaimiSMB2.lowCarbTime
+                override fun recentBgs() = getRecentBGs()
+                override fun nowMs() = now
+                override fun bolusesSince(startMs: Long, ascending: Boolean) = getBolusesFromTimeCached(startMs, ascending)
+                override fun calculateBgTrend(recentBGs: List<Float>, reason: StringBuilder) {
+                    this@DetermineBasalaimiSMB2.calculateBgTrend(recentBGs, reason)
                 }
+                override fun studyExporter() = hormonitorStudyExporter
+                override fun bg() = this@DetermineBasalaimiSMB2.bg
+                override fun predictedBg() = this@DetermineBasalaimiSMB2.predictedBg
+                override fun delta() = this@DetermineBasalaimiSMB2.delta
+                override fun shortAvgDelta() = this@DetermineBasalaimiSMB2.shortAvgDelta
+                override fun longAvgDelta() = this@DetermineBasalaimiSMB2.longAvgDelta
+                override fun iob() = this@DetermineBasalaimiSMB2.iob
+                override fun cob() = this@DetermineBasalaimiSMB2.cob
+                override fun maxSmb() = this@DetermineBasalaimiSMB2.maxSMB
+                override fun targetBg() = this@DetermineBasalaimiSMB2.targetBg
+                override fun lateFatProteinRise(
+                    bg: Double,
+                    predictedBg: Double,
+                    delta: Double,
+                    shortAvgDelta: Double,
+                    longAvgDelta: Double,
+                    iob: Double,
+                    cob: Double,
+                    maxSmb: Double,
+                    lastBolusTimeMs: Long?,
+                    mealTime: Boolean,
+                    bfastTime: Boolean,
+                    lunchTime: Boolean,
+                    dinnerTime: Boolean,
+                    highCarbTime: Boolean,
+                ) = isLateFatProteinRise(
+                    bg = bg,
+                    predictedBg = predictedBg,
+                    delta = delta,
+                    shortAvgDelta = shortAvgDelta,
+                    longAvgDelta = longAvgDelta,
+                    iob = iob,
+                    cob = cob,
+                    maxSMB = maxSmb,
+                    lastBolusTimeMs = lastBolusTimeMs,
+                    mealFlags = MealFlags(mealTime, bfastTime, lunchTime, dinnerTime, highCarbTime),
+                )
+                override fun setLateFatRiseFlag(value: Boolean) {
+                    lateFatRiseFlagForExport = value
+                }
+                override fun tdd24hState() = determineBasalInvocationCaches.getTdd24hTotalAmountState(tddCalculator)
+                override fun noteStaleData(minAgo: Double) {
+                    consoleError.add("Data Stale (${minAgo}m) -> Logic Paused")
+                }
+                override fun logDecisionFinal(tag: String, rT: RT, bg: Double, delta: Float) {
+                    this@DetermineBasalaimiSMB2.logDecisionFinal(tag, rT, bg, delta)
+                }
+                override fun ensurePredictionFallback(rT: RT, bg: Double) {
+                    this@DetermineBasalaimiSMB2.ensurePredictionFallback(rT, bg)
+                }
+                override fun markFinalLoopDecision(rT: RT) {
+                    markFinalLoopDecisionFromRT(rT)
+                }
+                override fun internalLastSmbMillis() = this@DetermineBasalaimiSMB2.internalLastSmbMillis
+                override fun setLastBolusAgeMinutes(minutes: Double) {
+                    lastBolusAgeMinutes = minutes
+                }
+                override fun pkpdMealContext(mealData: MealData, predictedBgMgdl: Double, targetBgMgdl: Double) =
+                    buildPkpdMealContext(mealData, predictedBgMgdl, targetBgMgdl)
+                override fun recentPkpdBolusSamples(nowMillis: Long, fallbackWindowMin: Int) =
+                    buildRecentPkpdBolusSamples(nowMillis, fallbackWindowMin)
+                override fun uamConfidence() = AimiUamHandler.confidenceOrZero()
+                override fun physioLatentState() = lastPhysioLatentState
+                override fun lastRa() = continuousStateEstimator.getLastRa()
+                override fun causalPosterior() = lastPatientState?.causalPosterior
+                override fun eventMemory() = lastPatientState?.eventMemory
+                override fun logPkpdRuntimeFailure(error: Exception) {
+                    consoleError.add("❌ PKPD runtime failed: ${error.message}")
+                    aapsLogger.error(LTag.APS, "PKPD computeRuntime failed", error)
+                    consoleLog.add(
+                        "PKPD runtime failed (${error::class.simpleName}): ${error.message.orEmpty()} — value null",
+                    )
+                }
+                override fun setCachedPkpdRuntime(runtime: PkPdRuntime) {
+                    cachedPkpdRuntime = runtime
+                }
+                override fun applyBasalFirst(
+                    bg: Double,
+                    delta: Float,
+                    combinedDelta: Float,
+                    mealData: MealData,
+                    autosens: AutosensResult,
+                    isMealAdvisorOneShot: Boolean,
+                    targetBg: Double,
+                    rT: RT,
+                    isConfirmedHighRise: Boolean,
+                ) {
+                    applyBasalFirstPolicy(
+                        bg = bg,
+                        delta = delta,
+                        combinedDelta = combinedDelta,
+                        mealData = mealData,
+                        autosens_data = autosens,
+                        isMealAdvisorOneShot = isMealAdvisorOneShot,
+                        targetBg = targetBg,
+                        rT = rT,
+                        isConfirmedHighRise = isConfirmedHighRise,
+                    )
+                }
+            },
+        )
+        return when (decided) {
+            is AimiSignalPrepPkpd.StaleAbort -> AimiSignalPreparationPkpdOutcome.StaleAbort(decided.rT)
+            is AimiSignalPrepPkpd.Continue -> AimiSignalPreparationPkpdOutcome.Continue(
+                AimiSignalPreparationPkpdContinue(
+                    modesCondition = decided.data.modesCondition,
+                    pbolusAS = decided.data.pbolusAS,
+                    pbolusA = decided.data.pbolusA,
+                    reason = decided.data.reason,
+                    recentBGs = decided.data.recentBGs,
+                    totalBolusLastHour = decided.data.totalBolusLastHour,
+                    autosensRatio = decided.data.autosensRatio,
+                    iob_data = decided.data.iobData,
+                    lastBolusTimeMs = decided.data.lastBolusTimeMs,
+                    lateFatRiseFlag = decided.data.lateFatRiseFlag,
+                    tdd24Hrs = decided.data.tdd24Hrs,
+                    minAgo = decided.data.minAgo,
+                    windowSinceDoseInt = decided.data.windowSinceDoseInt,
+                    pkpdRuntime = decided.data.pkpdRuntime,
+                )
             )
         }
-        val windowSinceDoseMin = if (iob_data.lastBolusTime > 0 || internalLastSmbMillis > 0) {
-            val effectiveLastBolusTime = kotlin.math.max(iob_data.lastBolusTime, internalLastSmbMillis)
-            ((systemTime - effectiveLastBolusTime) / 60000.0).coerceAtLeast(0.0)
-        } else 0.0
-        val windowSinceDoseInt = windowSinceDoseMin.toInt()
-        lastBolusAgeMinutes = windowSinceDoseMin
-        val carbsActiveG = ctx.mealData.mealCOB.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
-        val pkpdMealContext = buildPkpdMealContext(
-            mealData = ctx.mealData,
-            predictedBgMgdl = predictedBg.toDouble(),
-            targetBgMgdl = targetBg.toDouble(),
-        )
-        pkpdIntegration.setRecentBolusSamples(
-            buildRecentPkpdBolusSamples(
-                nowMillis = ctx.currentTime,
-                fallbackWindowMin = windowSinceDoseInt
-            )
-        )
-        val pkpdRuntimeTemp = try {
-            pkpdIntegration.computeRuntime(
-                epochMillis = ctx.currentTime,
-                bg = bg,
-                deltaMgDlPer5 = delta.toDouble(),
-                iobU = iob.toDouble(),
-                carbsActiveG = carbsActiveG,
-                windowMin = windowSinceDoseInt,
-                exerciseFlag = sportTime,
-                profileIsf = profile.sens,
-                tdd24h = tdd24Hrs.toDouble(),
-                mealContext = pkpdMealContext,
-                consoleLog = consoleLog,
-                combinedDelta = combinedDelta.toDouble(),
-                uamConfidence = AimiUamHandler.confidenceOrZero(),
-                patientWeightKg = preferences.get(DoubleKey.OApsAIMIweight),
-                physioLatentState = lastPhysioLatentState,
-                estimatedRaMgdlPerMin = continuousStateEstimator.getLastRa().takeIf { it.isFinite() && it > 0.0 },
-                causalStatePosterior = lastPatientState?.causalPosterior,
-                patientEventMemory = lastPatientState?.eventMemory,
-                allowLearning = true,
-            )
-        } catch (e: Exception) {
-            consoleError.add("❌ PKPD runtime failed: ${e.message}")
-            aapsLogger.error(LTag.APS, "PKPD computeRuntime failed", e)
-            null
-        }
-
-        var pkpdRuntime = pkpdRuntimeIn
-        if (pkpdRuntimeTemp != null) {
-            pkpdRuntime = pkpdRuntimeTemp
-            if (preferences.get(BooleanKey.OApsAIMIIntelligenceSingleLearnPath)) {
-                this.cachedPkpdRuntime = pkpdRuntimeTemp
-            }
-
-            consoleLog.add("📊 PKPD_LEARNER:")
-            consoleLog.add("  │ DIA (learned): ${aimiFmt2(pkpdRuntime.params.diaHrs)}h")
-            consoleLog.add("  │ Peak (learned): ${aimiFmt0(pkpdRuntime.params.peakMin)}min")
-            consoleLog.add("  │ fusedISF: ${aimiFmt1(pkpdRuntime.fusedIsf)} mg/dL/U")
-
-            applyBasalFirstPolicy(
-                bg = bg, delta = delta.toFloat(), combinedDelta = combinedDelta.toFloat(),
-                mealData = ctx.mealData, autosens_data = ctx.autosensData, isMealAdvisorOneShot = isExplicitAdvisorRun,
-                targetBg = targetBg.toDouble(), rT = rT, isConfirmedHighRise = isConfirmedHighRiseLocal
-            )
-            consoleLog.add("  └ adaptiveMode: ${if (pkpdRuntime.params.diaHrs != 4.0 || pkpdRuntime.params.peakMin != 75.0) "ACTIVE" else "DEFAULT"}")
-        }
-
-        return AimiSignalPreparationPkpdOutcome.Continue(
-            AimiSignalPreparationPkpdContinue(
-                modesCondition = modesCondition,
-                pbolusAS = pbolusAS,
-                pbolusA = pbolusA,
-                reason = reason,
-                recentBGs = recentBGs,
-                totalBolusLastHour = totalBolusLastHour,
-                autosensRatio = autosensRatio,
-                iob_data = iob_data,
-                lastBolusTimeMs = lastBolusTimeMs,
-                lateFatRiseFlag = lateFatRiseFlag,
-                tdd24Hrs = tdd24Hrs,
-                minAgo = minAgo,
-                windowSinceDoseInt = windowSinceDoseInt,
-                pkpdRuntime = pkpdRuntime,
-            )
-        )
     }
 
     /**
