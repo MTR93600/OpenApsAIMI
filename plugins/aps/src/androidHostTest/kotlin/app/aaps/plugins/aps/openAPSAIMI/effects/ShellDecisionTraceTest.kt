@@ -42,6 +42,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.AdvancedPredictionCurves
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLearnedState
 import app.aaps.plugins.aps.openAPSAIMI.release.HyperSeverityTier
+import app.aaps.plugins.aps.openAPSAIMI.smb.SmbInstructionExecutor
 import app.aaps.plugins.aps.openAPSAIMI.release.HyperTrajectoryReleaseResult
 import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionCurve
 import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionKind
@@ -462,6 +463,81 @@ class ShellDecisionTraceTest {
         }
         assertTrue(pumpAge >= 0f)
         assertEquals(T9_NEUTRAL_TRACE, trace)
+    }
+
+    @Test
+    fun pkpdGuardAtAFlat110KeepsZeroSmb() {
+        val prefs = recordingPreferences(emptyMap())
+        setField(tick, "preferences", prefs)
+        setField(tick, "bg", 110.0)
+        setField(tick, "delta", 0.0f)
+        setField(tick, "shortAvgDelta", 0.0f)
+        setField(tick, "targetBg", 100.0f)
+        setField(tick, "predictedBg", 110.0f)
+        setField(tick, "eventualBG", 110.0)
+        setField(tick, "maxSMB", 0.50)
+        setField(tick, "maxSMBHB", 1.20)
+        setField(tick, "maxIob", 10.0)
+        setField(tick, "iob", 1.0f)
+        val profile = profileStub()
+        val rT = RT(runningDynamicIsf = false)
+        var returned: Any? = null
+        val trace = capture {
+            returned = invokePkpdGuard(tickContext(profile, 110.0), rT)
+        }
+        val stage = returned
+        val smb = stage!!.javaClass.getDeclaredField("smbToGive").apply { isAccessible = true }.get(stage) as Float
+        val interval = stage.javaClass.getDeclaredField("intervalsmb").apply { isAccessible = true }.get(stage) as Int
+        assertEquals(0.0f, smb, 0.0f)
+        assertEquals(4, interval)
+        assertEquals("", rT.reason.toString())
+        val draft = getField(tick, "lastSmbBindingTraceDraft")!!
+        val stages = draft.javaClass.getDeclaredField("stages").apply { isAccessible = true }.get(draft) as List<*>
+        val names = stages.map { stage ->
+            stage!!.javaClass.getDeclaredField("name").apply { isAccessible = true }.get(stage) as String
+        }
+        assertEquals(listOf("PKPD_GUARD", "LEGACY_RED_CARPET_MAX_SMB_IOB"), names)
+        assertEquals(PKPD_GUARD_FLAT_TRACE, trace)
+    }
+
+    private fun invokePkpdGuard(ctx: AimiTickContext, rT: RT): Any? {
+        val method = tick.javaClass.declaredMethods.first {
+            it.name == "runPkpdGuardEndoDampenRedCarpetAndCapSmb" && it.parameterCount == 24
+        }
+        method.isAccessible = true
+        return method.invoke(
+            tick,
+            ctx,
+            rT,
+            null,
+            SmbInstructionExecutor.Result(
+                predictedSmb = 0f,
+                basal = 1.0,
+                finalSmb = 0f,
+                highBgOverrideUsed = false,
+                newSmbInterval = null,
+            ),
+            false,
+            false,
+            false,
+            110.0,
+            0.0f,
+            0.0f,
+            110.0f,
+            110.0,
+            100.0,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            0,
+            4,
+            0.0f,
+            1.0f,
+        )
     }
 
     private fun invokeT9(
@@ -1006,6 +1082,18 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val PKPD_GUARD_FLAT_TRACE = """
+            READ key=BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled value=false
+            READ key=DoubleKey.OApsAIMIRedCarpetRestoreThreshold value=0.00
+            READ key=DoubleKey.OApsAIMIPriorityMaxIobFactor value=0.00
+            READ key=DoubleKey.OApsAIMIPriorityMaxIobExtraU value=0.00
+            READ key=BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled value=false
+            READ key=DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor value=0.00
+            READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+            READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+            READ key=BooleanKey.OApsAIMIIobSurveillanceGuard value=false
+        """.trimIndent()
+
         private val T9_NEUTRAL_TRACE = """
             READ key=BooleanKey.AimiPhysioAssistantEnable value=false
             READ key=BooleanKey.OApsAIMIIntelligenceSingleLearnPath value=false
