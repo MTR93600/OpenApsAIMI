@@ -19,7 +19,8 @@ Recounted with `find … -name '*.kt' | wc -l` and `xargs wc -l` on
 | After P6.1 (`BasalFirstPolicyMath` only) | `32ca1afae9` | 88 | 442 | 45 255 | 69 968 |
 | After P6.2 (rounding and neighbouring pure helpers) | `a257792849` | 88 | 443 | 44 965 | 70 471 |
 | After P6.3 (`aimiFmt*` on the tick) | `a91c7054ac` | 88 | 443 | 44 965 | 70 564 |
-| After P6.4 (civil clock) | this branch | 88 | 444 | 44 950 | 70 647 |
+| After P6.4 (civil clock) | `c1a47e6677` | 88 | 444 | 44 950 | 70 647 |
+| After P6.5 (hypo / SMB cap math) | this branch | 88 | 448 | 43 759 | 72 163 |
 
 P6.1 moves the pure object out of `DetermineBasalAIMI2.kt` (20 109 → 19 993 lines) into
 `commonMain/.../basal/BasalFirstPolicyMath.kt` (118 lines, package line included). P6.2 moves
@@ -30,7 +31,9 @@ one-line delegates. `DetermineBasalAIMI2.kt` is 19 703 lines. P6.3 rewrites 465 
 `AimiFmt.kt` the Java `String.format` digit rule, including `aimiFmt3`. P6.4 reads the
 tick's hour, minute, second and weekday through `AimiCivilClock.kt` (69 lines) and stamps
 two `Locale.US` patterns with `aimiCsvTimestamp` / `aimiCsvTimestampMinute`.
-`DetermineBasalAIMI2.kt` is 19 688 lines. The android file count stays 88.
+`DetermineBasalAIMI2.kt` is 19 688 lines. P6.5 moves the hypo/SMB safety cluster,
+the finalize chain, the legacy red-carpet cap and the post-hypo classifier into
+`commonMain/.../safety/`. `DetermineBasalAIMI2.kt` is 18 497 lines. The android file count stays 88.
 The diary sections below keep their historical counts.
 
 Updated 2026-09-02, on `kmp-aimi-migration-study` at `1f6ca62fe8` (the second `kmp` merge).
