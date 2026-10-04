@@ -174,8 +174,13 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiBasalFirstAdaptiveState
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiBasalPaiState
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiSmoothBasalRate
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiUnifiedReactivityFactor
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMealFirstNgrStage
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMealFirstNgrState
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMealFirstTempBasal
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiNightGrowthEvaluate
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideBasalAimiTddCarbLimitsTirEarlyBasalAndPaiIsf
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideBasalFirstAdaptiveMultiplier
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideMealFirst30NgrHeadroomBasalSmb
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideRefineRbtMergeAfterDoseSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideMealAdvisorOrReturn
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideT3cBrittleMode
@@ -6803,7 +6808,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     /**
      * Repas 0–30 min (TBR forcée éventuelle) → **NGR** (evaluate + headroom IOB + boost basal/SMB).
-     * Ordre et effets identiques au bloc historique ; [mealModeRuntimeToNullableMinutes] pour les runtimes nullable.
+     * La décision est [decideMealFirst30NgrHeadroomBasalSmb]. Cette coquille lit les champs à la ligne.
      */
     private fun runPostSafetyMealFirst30NgrHeadroomBasalSmbStage(
         profile: OapsProfileAimi,
@@ -6822,121 +6827,83 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         eventualBG: Double,
         targetBgSchedule: Double,
     ): AimiPostSafetyMealNgrStageResult {
-        val (isMealActive, runtimeMinLabel, runtimeMinValue) = when {
-            mealTime -> Triple(true, "meal", mealModeRuntimeToNullableMinutes(mealruntime))
-            bfastTime -> Triple(true, "bfast", mealModeRuntimeToNullableMinutes(bfastruntime))
-            lunchTime -> Triple(true, "lunch", mealModeRuntimeToNullableMinutes(lunchruntime))
-            dinnerTime -> Triple(true, "dinner", mealModeRuntimeToNullableMinutes(dinnerruntime))
-            highCarbTime -> Triple(true, "highcarb", mealModeRuntimeToNullableMinutes(highCarbrunTime))
-            else -> Triple(false, "", Int.MAX_VALUE)
-        }
-
-        if (isMealActive && runtimeMinValue in 0..30) {
-            val forced = forcedBasalmealmodes.coerceAtLeast(0.05)
-            val alreadyForced = abs(ctx.currentTemp.rate - forced) < 0.05 && ctx.currentTemp.duration >= 25
-            if (!alreadyForced) {
-                rT.reason.append(
-                    rh.gs(
-                        ApsStrings.meal_mode_first_30,
-                        "$runtimeMinLabel($runtimeMinValue)",
-                        forced
-                    )
-                )
-                return AimiPostSafetyMealNgrStageResult.EarlyTempBasal(
-                    setTempBasal(
-                        forced, 30, profile, rT, ctx.currentTemp,
-                        overrideSafetyLimits = true,
-                        adaptiveMultiplier = adaptiveMult
-                    )
-                )
-            }
-        }
-
-        val systemTime = ctx.currentTime
-        val iobTotal = ctx.iobDataArray[0]
-        val ngrResult = nightGrowthResistanceMode.evaluate(
-            now = KotlinInstant.fromEpochMilliseconds(systemTime),
+        val stage = decideMealFirst30NgrHeadroomBasalSmb(
+            profile = profile,
+            ctx = ctx,
+            rT = rT,
+            ngrConfig = ngrConfig,
+            safetyDecision = safetyDecision,
+            forcedBasalmealmodes = forcedBasalmealmodes,
+            maxIobLimitIn = maxIobLimitIn,
+            basalIn = basalIn,
+            smbToGiveIn = smbToGiveIn,
             bg = bg,
-            delta = delta.toDouble(),
-            shortAvgDelta = shortAvgDelta.toDouble(),
-            longAvgDelta = longAvgDelta.toDouble(),
+            delta = delta,
+            shortAvgDelta = shortAvgDelta,
+            longAvgDelta = longAvgDelta,
             eventualBG = eventualBG,
-            targetBG = targetBgSchedule,
-            iob = iobTotal.iob,
-            cob = ctx.mealData.mealCOB,
-            react = bg,
-            isMealActive = isMealActive,
-            config = ngrConfig
+            targetBgSchedule = targetBgSchedule,
+            preferences = preferences,
+            texts = rh,
+            consoleLog = consoleLog,
+            state = object : AimiMealFirstNgrState {
+                override fun mealTime() = this@DetermineBasalaimiSMB2.mealTime
+                override fun mealRuntime() = mealruntime
+                override fun bfastTime() = this@DetermineBasalaimiSMB2.bfastTime
+                override fun bfastRuntime() = bfastruntime
+                override fun lunchTime() = this@DetermineBasalaimiSMB2.lunchTime
+                override fun lunchRuntime() = lunchruntime
+                override fun dinnerTime() = this@DetermineBasalaimiSMB2.dinnerTime
+                override fun dinnerRuntime() = dinnerruntime
+                override fun highCarbTime() = this@DetermineBasalaimiSMB2.highCarbTime
+                override fun highCarbRuntime() = highCarbrunTime
+                override fun adaptiveMult() = this@DetermineBasalaimiSMB2.adaptiveMult
+                override fun maxSMB() = this@DetermineBasalaimiSMB2.maxSMB
+                override fun setMaxIob(value: Double) {
+                    this@DetermineBasalaimiSMB2.maxIob = value
+                }
+            },
+            effects = AimiMealFirstTempBasal { rate, durationMin, profile, rT, currenttemp, overrideSafetyLimits, forceExact, adaptiveMultiplier ->
+                setTempBasal(
+                    rate,
+                    durationMin,
+                    profile,
+                    rT,
+                    currenttemp,
+                    overrideSafetyLimits = overrideSafetyLimits,
+                    forceExact = forceExact,
+                    adaptiveMultiplier = adaptiveMultiplier,
+                )
+            },
+            ngr = AimiNightGrowthEvaluate { now, bg, delta, shortAvgDelta, longAvgDelta, eventualBG, targetBG, iob, cob, react, isMealActive, config ->
+                nightGrowthResistanceMode.evaluate(
+                    now = now,
+                    bg = bg,
+                    delta = delta,
+                    shortAvgDelta = shortAvgDelta,
+                    longAvgDelta = longAvgDelta,
+                    eventualBG = eventualBG,
+                    targetBG = targetBG,
+                    iob = iob,
+                    cob = cob,
+                    react = react,
+                    isMealActive = isMealActive,
+                    config = config,
+                )
+            },
         )
-        if (ngrResult.reason.isNotEmpty()) {
-            rT.reason.appendLine(ngrResult.reason)
-            consoleLog.add(ngrResult.reason)
-        }
-        val lowTempTarget = profile.temptargetSet && targetBgSchedule <= profile.target_bg
-        var maxIobLimit = maxIobLimitIn
-        val originalMaxIobLimit = maxIobLimit
-        if (!lowTempTarget && ngrResult.extraIOBHeadroomU > 0.0) {
-            val slotBudget = ngrConfig.extraIobPer30Min * ngrConfig.headroomSlotCap
-            val absoluteMaxIob = preferences.get(DoubleKey.ApsSmbMaxIob) + slotBudget
-            val candidate = maxIobLimit + ngrResult.extraIOBHeadroomU
-            val updatedLimit = min(candidate, absoluteMaxIob)
-            if (updatedLimit > originalMaxIobLimit + 0.01) {
-                maxIobLimit = updatedLimit
-                this.maxIob = maxIobLimit
-                val headroomMessage = rh.gs(
-                    ApsStrings.oaps_aimi_ngr_headroom,
-                    round(maxIobLimit - originalMaxIobLimit, 2),
-                    round(maxIobLimit, 2)
+        return when (stage) {
+            is AimiMealFirstNgrStage.EarlyTempBasal ->
+                AimiPostSafetyMealNgrStageResult.EarlyTempBasal(stage.rt)
+            is AimiMealFirstNgrStage.Continue ->
+                AimiPostSafetyMealNgrStageResult.Continue(
+                    isMealActive = stage.isMealActive,
+                    runtimeMinValue = stage.runtimeMinValue,
+                    maxIobLimit = stage.maxIobLimit,
+                    basal = stage.basal,
+                    smbToGive = stage.smbToGive,
                 )
-                rT.reason.appendLine(headroomMessage)
-                consoleLog.add(headroomMessage)
-            }
         }
-        this.maxIob = maxIobLimit
-        val safeBgThreshold = max(110.0, targetBgSchedule)
-        var basal = basalIn
-        val originalBasal = basal
-        val shouldApplyBasalBoost = ngrResult.basalMultiplier > 1.0001 && !lowTempTarget && delta > 0 && shortAvgDelta > 0 && bg > targetBgSchedule
-        if (shouldApplyBasalBoost && originalBasal > 0.0) {
-            val boostedBasal = roundBasal((originalBasal * ngrResult.basalMultiplier).coerceAtLeast(0.05))
-            if (boostedBasal > originalBasal + 0.01) {
-                basal = boostedBasal
-                val basalMessage = rh.gs(
-                    ApsStrings.oaps_aimi_ngr_basal_applied,
-                    boostedBasal / originalBasal,
-                    round(boostedBasal, 2)
-                )
-                rT.reason.appendLine(basalMessage)
-                consoleLog.add(basalMessage)
-            }
-        }
-        var smbToGive = smbToGiveIn
-        val originalSmb = smbToGive.toDouble()
-        val shouldApplySmbBoost = ngrResult.smbMultiplier > 1.0001 && !lowTempTarget && safetyDecision.bolusFactor >= 1.0 && eventualBG > targetBgSchedule && delta > 0 && bg >= safeBgThreshold
-        if (shouldApplySmbBoost && originalSmb > 0.0) {
-            val boosted = originalSmb * ngrResult.smbMultiplier
-            val smbClamp = min(ngrConfig.maxSMBClampU, maxSMB)
-            val finalSmb = boosted.coerceAtMost(smbClamp)
-            val appliedMultiplier = finalSmb / originalSmb
-            if (appliedMultiplier > 1.0001) {
-                smbToGive = finalSmb.toFloat()
-                val smbMessage = rh.gs(
-                    ApsStrings.oaps_aimi_ngr_smb_applied,
-                    appliedMultiplier,
-                    round(finalSmb, 3),
-                    round(smbClamp, 3)
-                )
-                rT.reason.appendLine(smbMessage)
-                consoleLog.add(smbMessage)
-            }
-        }
-        return AimiPostSafetyMealNgrStageResult.Continue(
-            isMealActive = isMealActive,
-            runtimeMinValue = runtimeMinValue,
-            maxIobLimit = maxIobLimit,
-            basal = basal,
-            smbToGive = smbToGive,
-        )
     }
 
     private sealed class AimiCoreDecisionMaxIobGateResult {

@@ -48,6 +48,9 @@ Les ports sont minces et portent le nom de l’appel de la référence. Pas de b
 | `AimiHtrExport` | `markHtrRaFloorForExport` | la coquille, l'export n'est pas déplacé |
 | `AimiDecisionLog` | `logDecisionFinal` | la coquille, les learners qu'il appelle restent |
 | `AimiAutodriveTickWrites` | deltas Ra, note de porte, état engagé, plancher HTR, trace SMB, caps post-hypo | les champs du tick |
+| `AimiMealFirstNgrState` | drapeaux et runtimes de repas, `adaptiveMult`, `maxSMB`, écriture `maxIob` | les champs du tick, lus à la ligne |
+| `AimiMealFirstTempBasal` | `setTempBasal` du repas 0–30 min | la coquille, le corps pompe reste Android |
+| `AimiNightGrowthEvaluate` | `nightGrowthResistanceMode.evaluate` | la coquille |
 
 Les membres du tick déjà calculés (glycémie, IOB, drapeaux de mode) sont passés à la fonction. Ce ne sont pas des lectures de préférences. Une préférence lue seulement sur une branche l’est encore seulement sur cette branche, à la même ligne.
 
@@ -264,5 +267,7 @@ Hypo engagée : BG 54, `mealTime`, delta 0,4, commande moteur sûre 2,40 U/h et 
 `basalFirstAdaptiveMultiplier` décide dans `commonMain` (`decideBasalFirstAdaptiveMultiplier`). La préférence `OApsAIMIBasalChannelSafetyGuards` et les six drapeaux de repas manuel sont lus à la ligne. Pas de `try/catch` avalé. Garde-fous allumés, aucun mode repas, multiplicateur 0,70 : le tick conserve **0,70x** et journalise `BASAL_FIRST_GOV`.
 
 `runBasalAimiTddCarbLimitsTirEarlyBasalAndPaiIsf` décide dans `commonMain` (`decideBasalAimiTddCarbLimitsTirEarlyBasalAndPaiIsf`). `smoothBasalRate`, `aimiLocalHour` et `unifiedReactivityLearner.globalFactor` restent des ports appelés à la ligne. Pas de `try/catch` avalé. TDD 35 U, poids 70 kg, grossesse allumée, TIR dernière heure ≥ 5, accélération de glycémie, pic d’IOB à 60 min, multiplicateur 0,80 : basale **1,20 U/h** (0,50 puis ×2 TIR puis +20 %), ISF PAI **30**, plafond glucidique à l’échelle 0,80.
+
+`runPostSafetyMealFirst30NgrHeadroomBasalSmbStage` décide dans `commonMain` (`decideMealFirst30NgrHeadroomBasalSmb`). `setTempBasal` et `nightGrowthResistanceMode.evaluate` restent des ports appelés à la ligne. Les drapeaux de repas, les runtimes, `adaptiveMult` et `maxSMB` sont lus à la ligne. Pas de `try/catch` avalé. Mode repas, runtime 10 min, débit forcé 2,00 U/h, temp courante 1,00 U/h sur 0 min : TBR **2,00 U/h** pendant 30 min, override vrai.
 
 Les traces golden restent, octet pour octet : mode repas (TBR puis prébolus), récupération d’hypo, hypo sévère avec autorité post-hypo, plafond MaxIOB, Autodrive éteint, montée de repas engagée (`ShellDecisionTraceTest`, TBR 2,40 U/h demandée, SMB moteur non déposé tant que RBT est éteint), et le chemin UAM de `buildRbtExtendedSignals` (ordinal post-hypo 2, confiance 0,70). Si une trace diverge, on s’arrête.
