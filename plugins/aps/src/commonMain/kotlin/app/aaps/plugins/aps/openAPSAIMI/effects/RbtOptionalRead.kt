@@ -28,6 +28,9 @@ internal fun <T> OptionalSignal<T>.valueOrNull(): T? = when (this) {
 internal fun <T> readRbtOptional(
     source: String,
     consoleLog: MutableList<String>,
+    failureLine: (errorType: String, message: String?) -> String = { errorType, message ->
+        "RBT $source failed ($errorType): ${message.orEmpty()} — value null"
+    },
     block: () -> T,
 ): OptionalSignal<T> {
     return try {
@@ -35,7 +38,7 @@ internal fun <T> readRbtOptional(
     } catch (e: Exception) {
         val errorType = e::class.simpleName ?: "Exception"
         val message = e.message
-        consoleLog.add("RBT $source failed ($errorType): ${message.orEmpty()} — value null")
+        consoleLog.add(failureLine(errorType, message))
         OptionalSignal.Failed(source, errorType, message)
     }
 }

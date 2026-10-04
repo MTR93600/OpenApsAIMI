@@ -224,7 +224,7 @@ Dans `executeT3cBrittleMode`, la référence et le tick actuel faisaient :
 runCatching { physioAdapter.getLatestSnapshot(); /* bandes FC */ }.getOrDefault(0.0)
 ```
 
-Tout throwable, y compris `Error`, devenait un boost 0.0 sans log. La fonction n’est pas déplacée. Le calcul des bandes est `cfrdHrInflammationBoostOf` (pur, testé). La coquille lit l’instantané dans un `try/catch (Exception)`, journalise `T3c CFRD: hr snapshot failed`, et utilise 0.0. La dose sur échec reste 0.0. Un `Error` n’est plus avalé : c’est l’écart documenté avec la référence.
+Tout throwable, y compris `Error`, devenait un boost 0.0 sans log. Le calcul des bandes est `cfrdHrInflammationBoostOf` (pur, testé). `decideT3cBrittleMode` lit l’instantané seulement si le mode CFRD est vrai, via `readRbtOptional`. L’échec est `OptionalSignal.Failed` et la ligne déjà en place `🫁 T3c CFRD: hr snapshot failed (<type>) — boost 0.00`. Le boost reste 0.0. Un `Error` n’est pas attrapé, comme dans la référence.
 
 Bandes, inchangées : hausse corrigée du repos ≥ 25 bpm → 0.35, 15..24 → 0.20, 8..14 → 0.10, sinon 0. FC absente (l’une des deux ≤ 0) → 0.
 
@@ -236,6 +236,10 @@ Bandes, inchangées : hausse corrigée du repos ≥ 25 bpm → 0.35, 15..24 → 
 
 `buildRbtExtendedSignals` décide dans `commonMain`. Hypo brittle (`t3cDemand=0.00`) et plafond (`t3cDemand=1.20` sous un max basal de 1,20 U/h, 16,12 U/h sans ce plafond) sont verrouillées.
 
-`runAutodriveV3MultiVariableBranch` décide dans `commonMain`. Porte ouverte (TBR 2,40), porte fermée, hypo plate (mêmes octets que la porte fermée, pas de dose) et plafond d’activité (TBR 1,30 sous un facteur 1,30) sont verrouillées. Le SMB moteur 0,80 U n’est toujours pas déposé tant que RBT est éteint.
+`runAutodriveV3MultiVariableBranch` décide dans `commonMain`. Porte ouverte (TBR 2,40), porte fermée, hypo plate (mêmes octets que la porte fermée, pas de dose), hypo engagée avec repas et commande moteur, et plafond d’activité (TBR 1,30 sous un facteur 1,30) sont verrouillées. Le SMB moteur 0,80 U n’est toujours pas déposé tant que RBT est éteint.
+
+Hypo engagée : BG 54, `mealTime`, delta 0,4, commande moteur sûre 2,40 U/h et 0,80 U. La porte s’ouvre (`Meal-aware rise`, delta > 0,25). `EFFECT SetTbr rate=2.40`. `appliedAction` reste faux : la sonde retourne avant le corps de `setTempBasal`, donc `rT.rate` n’est pas écrit. Le `Trend=` de la ligne d’engagement imprime le `Float` 0,4 tel que Kotlin le convertit (`0.4000000059604645`). C’est le texte actuel. La dose demandée n’a pas été changée.
+
+`executeT3cBrittleMode` décide dans `commonMain` (`decideT3cBrittleMode`). La coquille passe l’arbre, le facteur d’effort, le multiplicateur NGR, et appelle au même moment le facteur adaptatif (learner + `currentBasalPhysioFeatures`), l’instantané FC, `postHypoRecoveryActive`, `minBgInLastMinutes`, puis l’apprentissage basal et `markFinalLoopDecisionFromRT`. Trace brittle actif : BG 180, seuil 140, basal profil 1,00, max 3,00. Le stub du learner renvoie 0, donc l’agressivité est le plancher 0,3. Débit 2,00 U/h, durée 30, `units` inchangé (null). Pas de SMB.
 
 Les traces golden restent, octet pour octet : mode repas (TBR puis prébolus), récupération d’hypo, hypo sévère avec autorité post-hypo, plafond MaxIOB, Autodrive éteint, montée de repas engagée (`ShellDecisionTraceTest`, TBR 2,40 U/h demandée, SMB moteur non déposé tant que RBT est éteint), et le chemin UAM de `buildRbtExtendedSignals` (ordinal post-hypo 2, confiance 0,70). Si une trace diverge, on s’arrête.

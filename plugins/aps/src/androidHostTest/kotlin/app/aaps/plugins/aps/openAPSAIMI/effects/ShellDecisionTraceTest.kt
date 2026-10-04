@@ -276,6 +276,58 @@ class ShellDecisionTraceTest {
         assertEquals(BRITTLE_CEILING_TRACE, trace)
     }
 
+    @Test
+    fun brittleActiveRecordsThePiBasal() {
+        val prefs = recordingPreferences(
+            doubles = mapOf(
+                DoubleKey.OApsAIMIT3cActivationThreshold to 140.0,
+                DoubleKey.OApsAIMIT3cAggressiveness to 1.0,
+                DoubleKey.autodriveMaxBasal to 3.0,
+                DoubleKey.meal_modes_MaxBasal to 3.0,
+            ),
+        )
+        setField(tick, "preferences", prefs)
+        setField(tick, "adaptiveMult", 1.0)
+        setField(tick, "lastNgrBasalMultiplier", 1.0)
+        val profile = profileStub()
+        val rT = RT(runningDynamicIsf = false)
+        val trace = capture {
+            tick.executeT3cBrittleMode(
+                bg = 180.0,
+                delta = 4.0f,
+                shortAvgDelta = 2.0,
+                longAvgDelta = 1.0,
+                accel = 0.2,
+                duraISFminutes = 0.0,
+                duraISFaverage = 180.0,
+                profile = profile,
+                currenttemp = CurrentTemp(duration = 0, rate = 1.0, minutesrunning = 0),
+                iob = IobTotal(time = now, iob = 1.0),
+                targetBg = 100.0,
+                variableSensitivity = 50.0,
+                maxIob = 10.0,
+                eventualBg = 180.0,
+                rT = rT,
+            )
+        }
+        assertEquals(2.0, rT.rate ?: 0.0, 0.0)
+        assertEquals(null, rT.units)
+        assertEquals(30, rT.duration)
+        assertEquals(BRITTLE_ACTIVE_TRACE, trace)
+    }
+
+    @Test
+    fun engagedHypoWithMealContextRecordsTheEngineCommand() {
+        val (trace, applied) = autodriveTrace(
+            glucose = 54.0,
+            delta = 0.4f,
+            shortAvg = 0.3f,
+            meal = true,
+        )
+        assertFalse(applied)
+        assertEquals(HYPO_MEAL_ENGINE_TRACE, trace)
+    }
+
     private fun rbtTrace(
         brittle: Boolean,
         bg: Double,
@@ -656,6 +708,89 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val BRITTLE_ACTIVE_TRACE = """
+READ key=DoubleKey.OApsAIMIT3cActivationThreshold value=140.00
+READ key=DoubleKey.autodriveMaxBasal value=3.00
+READ key=DoubleKey.meal_modes_MaxBasal value=3.00
+READ key=BooleanKey.OApsAIMIT3cCfrdMode value=false
+READ key=BooleanKey.OApsAIMIT3cPhysioInformedEnabled value=false
+READ key=DoubleKey.OApsAIMIT3cAggressiveness value=1.00
+READ key=DoubleKey.OApsAIMIT3cAnticipationStrength value=0.00
+LOG T3C_AD_BASAL: pi=3.00 ad=— fused=3.00 unlock=true (rise_no_tree) cap=3.00 step=1.00 smbStripped=0.00
+READ key=BooleanKey.OApsAIMIT3cHyperBasalFloor value=false
+LOG 🧭 BASAL_GOV[T3C]: action=KEEP conf=0.00 n=0 hypo=0.00 hypoG=0.00 hypoAdj=0.00 ant=0.00 wMean=1.00 high=0.00 mae=0.0 latch=false floorB=- floorA=- wBolus=0.00U wCob=?g reason=trace
+LOG 🛡️T3c | Thresh: 140 | Agg: 0.3 (raw=0.0 AML=1.00) | ANT:0.00 | unlock=true | PI/AD: 2.00U/h (target=3.00 cap=3.00 stepUp=1.00)
+READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
+READ key=BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled value=false
+READ key=BooleanKey.OApsAIMIUnifiedReactivityEnabled value=false
+READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
+READ key=BooleanKey.OApsAIMIautoDriveActive value=false
+READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
+READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
+READ key=BooleanKey.OApsAIMIPeakGovernorEnabled value=false
+READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
+""".trimIndent()
+
+        private val HYPO_MEAL_ENGINE_TRACE = """
+READ key=BooleanKey.OApsAIMIautoDriveActive value=true
+READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
+READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
+READ key=DoubleKey.OApsAIMITDD7 value=0.00
+READ key=BooleanKey.OApsAIMIautoDriveActive value=true
+READ key=BooleanKey.OApsAIMIHyperTrajectoryRelease value=false
+READ key=BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive value=false
+READ key=DoubleKey.OApsAIMIHyperEstablishedDevMgdl value=0.00
+READ key=DoubleKey.OApsAIMIHyperDeepDevMgdl value=0.00
+READ key=DoubleKey.OApsAIMIHighBg value=0.00
+READ key=DoubleKey.OApsAIMIHighBg value=0.00
+READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
+READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
+READ key=AimiLongKey.LastPrebolusTime value=0
+READ key=DoubleKey.OApsAIMIHighBg value=0.00
+READ key=BooleanKey.OApsAIMISensorConfidenceCgmFirst value=false
+READ key=BooleanKey.OApsAIMIEffortActivityProtection value=false
+READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
+READ key=StringKey.AimiTuningContextSelection value=
+READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+READ key=DoubleKey.autodriveMaxBasal value=0.00
+LOG TREE_DEPLOYED trunk=SENSOR_UNCERTAIN conf=0.90 risk=CRITICAL kinetics=NO_STAGE
+LOG Tree: sensor uncertain | conf 90% | risk critical | sensor uncertain
+LOG MEAL_CERTAINTY level=NONE tree=NONE rise=WEAK terminals=UNKNOWN effortVeto=false
+LOG Harmonia sim: blocked SENSOR_UNCERTAIN | sensor_uncertain,critical_risk
+READ key=BooleanKey.OApsAIMIautoDriveActive value=true
+READ key=BooleanKey.OApsAIMIHyperTrajectoryRelease value=false
+READ key=BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive value=false
+READ key=DoubleKey.OApsAIMIHyperEstablishedDevMgdl value=0.00
+READ key=DoubleKey.OApsAIMIHyperDeepDevMgdl value=0.00
+READ key=DoubleKey.OApsAIMIHighBg value=0.00
+READ key=DoubleKey.OApsAIMIweight value=70.00
+LOG 🧠 ATTN_MASK: auto=0.17 inflam=0.00 hormonal=0.00
+LOG 🧠 LATENT: meal=0.00 endo=0.00 siCirc=1.00 resist=0.12 sleep=0.00 sensor=0.11
+EFFECT SetTbr rate=2.40 dur=30 override=true forceExact=false adaptive=1.00
+READ key=BooleanKey.OApsAIMIautodriveAggressiveSmbFloor value=false
+READ key=DoubleKey.OApsAIMIautodrivesmallPrebolus value=0.50
+READ key=DoubleKey.OApsAIMIautodrivePrebolus value=1.50
+READ key=StringKey.AimiTuningContextSelection value=
+READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+READ key=DoubleKey.autodriveMaxBasal value=0.00
+READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+READ key=BooleanKey.OApsAIMIPredictionAuthorityShadow value=false
+READ key=BooleanKey.OApsAIMIMealConfirmedEarlyRelease value=false
+LOG PRED_AUTHORITY: src=PKPD_ONLY predT=54 evT=54 pkpd=54 best=- mealSupp=true uplift=false no_scenario_projection [pre_v3_rbt]
+LOG DOSE_TERMINAL_SNAPSHOT: ev=54 minPred=54 src=PKPD_RAW auth=false clamp=false plateauLift=false curves=false [pre_v3_rbt]
+READ key=BooleanKey.OApsAIMIStraightLineTubeAdvisorEnabled value=false
+READ key=BooleanKey.OApsAIMIRecursiveBeliefShadow value=false
+READ key=BooleanKey.OApsAIMIRecursiveBeliefAuthority value=false
+READ key=BooleanKey.OApsAIMIRecursiveBeliefWavelet value=false
+READ key=BooleanKey.OApsAIMIMealHyperBypassEnabled value=false
+READ key=BooleanKey.OApsAIMITreeMealRiseFrontLoad value=false
+LOG 🚀 🚀 V3 ENGAGED [Meal-aware rise] (BG=54.0, Trend=0.4000000059604645, COB=0.0, UAM=0.0) intent=0.8 actual=0.0 tbr=2.4
+LOG DECISION_FINAL[AUTODRIVE_V3]: smb=0.00U tbr=0.00U/h dur=0m bg=54 Δ=0.4 reason=
+LOG 📦 CACHE TDD24H=MISSING reason=tdd24h_not_ready
+LOG 🧭 BASAL_GOV[FINAL]: action=KEEP conf=0.00 n=0 hypo=0.00 hypoG=0.00 hypoAdj=0.00 ant=0.00 wMean=1.00 high=0.00 mae=0.0 latch=false floorB=- floorA=- wBolus=0.00U wCob=?g reason=trace
+LOG TICK ts=<clock> bg=54 d=0.4 iob=1.00 act=0.000 th=0.188 cob=0.0 mode=Meal autodriveState=ENGAGED pred=N(sz=0 ev=54) safety=NONE ref=NO maxIOB=10.00 maxSMB=2.00 smb=0.00->0.00->0.00 tbr=0.00 src=AIMI
+""".trimIndent()
+
         private val GATE_CLOSED_TRACE = """
 READ key=BooleanKey.OApsAIMIautoDriveActive value=true
 READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
