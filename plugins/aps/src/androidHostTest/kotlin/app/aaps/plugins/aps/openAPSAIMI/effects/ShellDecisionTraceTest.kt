@@ -1271,6 +1271,42 @@ class ShellDecisionTraceTest {
     }
 
     @Test
+    fun pkpdRuntimeFailureKeepsTheSmbCeiling() {
+        val integration = mock(app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdIntegration::class.java, Answer { inv ->
+            if (inv.method.name == "computeRuntime") throw RuntimeException("boom") else null
+        })
+        setField(tick, "pkpdIntegration", integration)
+        val provider = mock(HormonitorStudyExporterProvider::class.java)
+        whenever(provider.exporter()).thenReturn(null)
+        setField(tick, "hormonitorStudyExporterProvider", provider)
+        setField(tick, "bg", 100.0)
+        setField(tick, "delta", -1.0f)
+        setField(tick, "shortAvgDelta", -1.0f)
+        setField(tick, "longAvgDelta", -1.0f)
+        setField(tick, "iob", 1.0f)
+        setField(tick, "cob", 0.0f)
+        setField(tick, "maxSMB", 2.0)
+        setField(tick, "targetBg", 100.0f)
+        setField(tick, "predictedBg", 100.0f)
+        holdRefresh("bolusRefreshInFlight")
+        val profile = profileStub()
+        val autosens = mock(AutosensResult::class.java)
+        whenever(autosens.ratio).thenReturn(1.0)
+        val ctx = tickContext(profile, 100.0).copy(autosensData = autosens)
+        val glucose = GlucoseStatusAIMI(glucose = 100.0, delta = -1.0, shortAvgDelta = -1.0, longAvgDelta = -1.0, date = now, combinedDelta = -1.0)
+        val trace = capture {
+            invokeNamed(
+                "runSignalPreparationPkpdRuntimePhase",
+                listOf(ctx, profile, RT(runningDynamicIsf = false), glucose, -1.0f, 30.0, false, false, null),
+            )
+        }
+        val maxSmb = getField(tick, "maxSMB") as Double
+        assertEquals(2.0, maxSmb, 0.001)
+        assertTrue(trace.contains("PKPD runtime failed (RuntimeException): boom — value null"))
+        assertFalse(trace.contains("BASAL-FIRST"))
+    }
+
+    @Test
     fun legacyBrittleBypassSetsThePiBasal() {
         val prefs = recordingPreferences(
             doubles = mapOf(
