@@ -126,6 +126,19 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMealHyperClock
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMealHyperFields
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMealHyperTempBasal
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideMealHyperBasalBoost
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiBadDayDeletion
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiCarbContextRead
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiCarbContextView
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiCachedSmb
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiLegacyPrebolusDelivered
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMaxIobPhrase
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiNoteTags
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickClockState
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickClockTirCarbGlucoseBootstrap
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTirWarmupRead
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTirWarmupView
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickSmbCache
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideTickClockMaxSmb
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideMealAdvisorOrReturn
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideT3cBrittleMode
 import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
@@ -1456,21 +1469,6 @@ private data class AimiPreTherapyAutodriveByodaBootstrap(
  * Hour/minute context, SMB ceilings from prefs + slope/plateau logic, NGR config, TIR snapshot,
  * carb context, tags, and glucose deltas copied onto members. Runs **before** `Therapy` / meal mode clocks.
  */
-private data class AimiTickClockTirCarbGlucoseBootstrap(
-    val honeymoon: Boolean,
-    val ngrConfig: NGRConfig,
-    val tir1DAYIR: Double,
-    val lastHourTIRAbove: Double?,
-    val tirbasal3IR: Double?,
-    val tirbasal3B: Double?,
-    val tirbasal3A: Double?,
-    val tirbasalhAP: Double?,
-    /** Minute/second from the same [aimiCivilClock] snapshot as `hourOfDay` (circadian math later). */
-    val circadianMinute: Int,
-    val circadianSecond: Int,
-    val bgAcceleration: Float,
-)
-
 /** [Continue] keeps the tick alive with [nightbis]; [ReturnEarly] is the same `return` as the historical inline branches. */
 private sealed class AimiTherapyExerciseGate {
     data class Continue(
@@ -2857,205 +2855,116 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         glucoseStatus: GlucoseStatusAIMI,
         rT: RT,
         combinedDelta: Float,
-    ): AimiTickClockTirCarbGlucoseBootstrap {
-        val profile = ctx.profile
-        val civilNow = aimiCivilClock(aimiWallClockMs())
-        this.hourOfDay = civilNow.hour
-        val circadianMinute = civilNow.minute
-        val circadianSecond = civilNow.second
-        val dayOfWeek = civilNow.calendarDayOfWeek
-        val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
-        this.bg = glucoseStatus.glucose
-        this.tickCombinedDelta = combinedDelta
-        val getlastBolusSMB = latestSmbCached()
-        val cacheSmbTimestamp = getlastBolusSMB?.timestamp ?: 0L
-        // latestSmbCached() triggers async refresh — cache can lag one or more loop ticks after a legacy prebolus.
-        // If DB/cache is older than [internalLastSmbMillis], do not overwrite [lastBolusSMBUnit] (set synchronously in markLegacyMealDecision),
-        // or legacy meal prebolus can fire twice within the same runtime window.
-        if (cacheSmbTimestamp >= internalLastSmbMillis) {
-            this.lastBolusSMBUnit = getlastBolusSMB?.amount?.toFloat() ?: 0.0F
-            val diff = abs(now - cacheSmbTimestamp)
-            this.lastsmbtime = (diff / (60 * 1000)).toInt()
-        } else {
-            val diff = abs(now - internalLastSmbMillis)
-            this.lastsmbtime = (diff / (60 * 1000)).toInt()
-        }
-        // ── Suivi de délivrance du prébolus legacy (carry-forward) ─────────────
-        // TTL expiré sans confirmation : on abandonne l'état pending (le carry cesse de re-proposer).
-        if (pendingLegacyPrebolusUnit > 0.0f && now > pendingLegacyPrebolusExpiry) {
-            pendingLegacyPrebolusUnit = 0.0f
-            pendingLegacyPrebolusExpiry = 0L
-        }
-        // Clear du pending dès qu'un bolus correspondant apparaît en base. Seuil 35 % du montant demandé
-        // pour absorber le capping AAPS (ex. 7.5 U demandés → 3.75 U délivrés via maxSMBBasalMinutes).
-        if (pendingLegacyPrebolusUnit > 0.0f && internalLastLegacyPrebolusMillis > 0L) {
-            val prebolusDelivered = try {
-                runBlocking {
-                    persistenceLayer
-                        .getBolusesFromTime(internalLastLegacyPrebolusMillis, true)
-                        .any {
-                            (it.type == BS.Type.NORMAL || it.type == BS.Type.SMB) &&
-                                it.amount >= pendingLegacyPrebolusUnit * 0.35f
-                        }
+    ): AimiTickClockTirCarbGlucoseBootstrap = decideTickClockMaxSmb(
+        profile = ctx.profile,
+        autosens = ctx.autosensData,
+        glucoseStatus = glucoseStatus,
+        mealLastCarbTime = ctx.mealData.lastCarbTime,
+        mealSlope = ctx.mealData.slopeFromMinDeviation,
+        rT = rT,
+        combinedDelta = combinedDelta,
+        preferences = preferences,
+        consoleLog = consoleLog,
+        state = object : AimiTickClockState {
+            override fun nowMs() = now
+            override fun setNow(ms: Long) { now = ms }
+            override fun setHourOfDay(hour: Int) { hourOfDay = hour }
+            override fun setBg(bg: Double) { this@DetermineBasalaimiSMB2.bg = bg }
+            override fun bg() = this@DetermineBasalaimiSMB2.bg
+            override fun setTickCombinedDelta(delta: Float) { tickCombinedDelta = delta }
+            override fun internalLastSmbMillis() = this@DetermineBasalaimiSMB2.internalLastSmbMillis
+            override fun setLastBolusSmbUnit(unit: Float) { lastBolusSMBUnit = unit }
+            override fun setLastSmbTime(minutes: Int) { lastsmbtime = minutes }
+            override fun pendingLegacyPrebolusUnit() = this@DetermineBasalaimiSMB2.pendingLegacyPrebolusUnit
+            override fun setPendingLegacyPrebolusUnit(unit: Float) { pendingLegacyPrebolusUnit = unit }
+            override fun pendingLegacyPrebolusExpiry() = this@DetermineBasalaimiSMB2.pendingLegacyPrebolusExpiry
+            override fun setPendingLegacyPrebolusExpiry(ms: Long) { pendingLegacyPrebolusExpiry = ms }
+            override fun internalLastLegacyPrebolusMillis() = this@DetermineBasalaimiSMB2.internalLastLegacyPrebolusMillis
+            override fun setMaxIob(value: Double) { maxIob = value }
+            override fun maxIob() = this@DetermineBasalaimiSMB2.maxIob
+            override fun setMaxSmb(value: Double) { maxSMB = value }
+            override fun maxSmb() = maxSMB
+            override fun setMaxSmbHb(value: Double) { maxSMBHB = value }
+            override fun maxSmbHb() = maxSMBHB
+            override fun targetBg() = this@DetermineBasalaimiSMB2.targetBg.toDouble()
+            override fun cob() = this@DetermineBasalaimiSMB2.cob
+            override fun setCob(value: Float) { cob = value }
+            override fun setLastSlope(value: Double?) { lastSlopeFromMinDeviation = value }
+            override fun setLastShortAvg(value: Double?) { lastShortAvgDeltaAtLadder = value }
+            override fun setLadderBranch(branch: String?) { lastMaxSmbLadderBranch = branch }
+            override fun ladderBranch() = lastMaxSmbLadderBranch
+            override fun setTir1DayAbove(value: Double) { tir1DAYabove = value }
+            override fun setCurrentTirLow(value: Double) { currentTIRLow = value }
+            override fun setCurrentTirRange(value: Double) { currentTIRRange = value }
+            override fun setCurrentTirAbove(value: Double) { currentTIRAbove = value }
+            override fun setLastHourTirLow(value: Double) { lastHourTIRLow = value }
+            override fun setLastHourTirLow100(value: Double) { lastHourTIRLow100 = value }
+            override fun setLastHourTirAbove170(value: Double) { lastHourTIRabove170 = value }
+            override fun setLastHourTirAbove120(value: Double) { lastHourTIRabove120 = value }
+            override fun setWeekend(value: Int) { weekend = value }
+            override fun setLastCarbAgeMin(value: Int) { lastCarbAgeMin = value }
+            override fun lastCarbAgeMin() = this@DetermineBasalaimiSMB2.lastCarbAgeMin
+            override fun setFutureCarbs(value: Float) { futureCarbs = value }
+            override fun setRecentNotes(notes: List<UE>?) { recentNotes = notes }
+            override fun setTags0to60(value: String) { tags0to60minAgo = value }
+            override fun setTags60to120(value: String) { tags60to120minAgo = value }
+            override fun setTags120to180(value: String) { tags120to180minAgo = value }
+            override fun setTags180to240(value: String) { tags180to240minAgo = value }
+            override fun setDelta(value: Float) { this@DetermineBasalaimiSMB2.delta = value }
+            override fun setShortAvgDelta(value: Float) { shortAvgDelta = value }
+            override fun setLongAvgDelta(value: Float) { longAvgDelta = value }
+            override fun setBgAcc(value: Double) { bgacc = value }
+        },
+        smbCache = AimiTickSmbCache {
+            latestSmbCached()?.let { AimiCachedSmb(it.timestamp, it.amount) }
+        },
+        prebolus = AimiLegacyPrebolusDelivered { since, minAmount ->
+            runBlocking {
+                persistenceLayer.getBolusesFromTime(since, true).any {
+                    (it.type == BS.Type.NORMAL || it.type == BS.Type.SMB) && it.amount >= minAmount
                 }
-            } catch (_: Exception) {
-                false
             }
-            if (prebolusDelivered) {
-                consoleLog.add("🍱 PREBOLUS_DELIVERED_CONFIRMED: clearing pending ${pendingLegacyPrebolusUnit}U")
-                pendingLegacyPrebolusUnit = 0.0f
-                pendingLegacyPrebolusExpiry = 0L
-            }
-        }
-        this.maxIob = preferences.get(DoubleKey.ApsSmbMaxIob)
-// Tarciso Dynamic Max IOB
-        // [FIX] User Request: Strict MaxIOB Limit (Preference Only).
-        // Dynamic calculations removed to prevent "dangerous variations".
-        this.maxIob = maxIob
-        rT.reason.append(rh.gs(ApsStrings.reason_max_iob, maxIob))
-        consoleLog.add("MAX_IOB_STATIC: Pref=$maxIob (Dynamic disabled by request)")
-        this.maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
-        this.maxSMBHB = preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB)
-        // 🔒 STRICT LIMITS: User preferences are HARD CAPS.
-        // Dynamic Autodrive boosting removed to prevent overriding user settings.
-        val enableUAM = profile.enableUAM
-        this.maxSMBHB = preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB)
+        },
+        maxIobPhrase = AimiMaxIobPhrase { target, maxIob ->
+            target.reason.append(rh.gs(ApsStrings.reason_max_iob, maxIob))
+        },
+        nightGrowth = AimiNightGrowthConfig { profile, autosens, glucose, targetBg ->
+            buildNightGrowthResistanceConfig(profile, autosens, glucose, targetBg)
+        },
+        tir = AimiTirWarmupRead {
+            val snapshot = latestTirWarmupSnapshot()
+            AimiTirWarmupView(
+                tir1DayAbove = snapshot.tir1DayAbove,
+                tir1DayInRange = snapshot.tir1DayInRange,
+                currentTirLow = snapshot.currentTirLow,
+                currentTirRange = snapshot.currentTirRange,
+                currentTirAbove = snapshot.currentTirAbove,
+                lastHourTirLow = snapshot.lastHourTirLow,
+                lastHourTirAbove = snapshot.lastHourTirAbove,
+                lastHourTirLow100 = snapshot.lastHourTirLow100,
+                lastHourTirAbove170 = snapshot.lastHourTirAbove170,
+                lastHourTirAbove120 = snapshot.lastHourTirAbove120,
+                tirBasal3InRange = snapshot.tirBasal3InRange,
+                tirBasal3Below = snapshot.tirBasal3Below,
+                tirBasal3Above = snapshot.tirBasal3Above,
+                tirBasalHourAbove = snapshot.tirBasalHourAbove,
+            )
+        },
+        badDay = AimiBadDayDeletion { automateDeletionIfBadDay(it) },
+        carbs = AimiCarbContextRead { nowMs, lastCarb, cobNow ->
+            val snapshot = latestCarbContextSnapshot(nowMs, lastCarb, cobNow)
+            AimiCarbContextView(
+                lastCarbTimestamp = snapshot.lastCarbTimestamp,
+                lastCarbAgeMin = snapshot.lastCarbAgeMin,
+                futureCarbs = snapshot.futureCarbs,
+                effectiveCob = snapshot.effectiveCob,
+                recentNotes = snapshot.recentNotes,
+            )
+        },
+        notes = AimiNoteTags { start, end -> parseNotes(start, end) },
+    )
 
-        // 🔧 ENHANCED MaxSMB Selection: Plateau OR Slope logic
-        // Addresses critical edge case: BG stuck high (270-300) with small deltas → slope < 1.0
-        // Solution: Use maxSMBHB if EITHER:
-        //   1. Active rise detected (slope >= 1.0) - Original logic
-        //   2. High plateau (BG >= 250) - NEW, regardless of slope
-        // The rise floor obeys whichever ceiling this ladder picks, so remember the branch and both
-        // rise signals it read. All three go out in `smb_binding_trace` so the next package can say
-        // whether the ladder we now trust is reading the rise correctly.
-        this.lastSlopeFromMinDeviation = ctx.mealData.slopeFromMinDeviation.takeIf { it.isFinite() }
-        this.lastShortAvgDeltaAtLadder = glucoseStatus.shortAvgDelta.takeIf { it.isFinite() }
-        // Trap: `this.shortAvgDelta` is only copied from `glucoseStatus` further down this method,
-        // so reading the bare member here would read the PREVIOUS tick. Always pass
-        // `glucoseStatus.shortAvgDelta`.
-        val ladder = MaxSmbLadder.decide(
-            bgMgdl = bg,
-            combinedDelta = combinedDelta.toDouble(),
-            slopeFromMinDeviation = ctx.mealData.slopeFromMinDeviation,
-            shortAvgDeltaMgdl5m = glucoseStatus.shortAvgDelta,
-            honeymoon = honeymoon,
-            maxSmb = this.maxSMB,
-            maxSmbHighBg = this.maxSMBHB,
-        )
-        this.lastMaxSmbLadderBranch = ladder.branch
-        consoleLog.add(
-            when (ladder.branch) {
-                MaxSmbLadder.LADDER_PLATEAU_CRITICAL     ->
-                    "MAXSMB_PLATEAU_CRITICAL BG=${bg.roundToInt()} Δ=${aimiFmt1(combinedDelta)} slope=${aimiFmt2(ctx.mealData.slopeFromMinDeviation)} -> maxSMBHB=${aimiFmt2(maxSMBHB)}U (plateau)"
 
-                MaxSmbLadder.LADDER_CONFIRMED_RISE_HIGH  ->
-                    "MAXSMB_SLOPE_HIGH BG=${bg.roundToInt()} slope=${aimiFmt2(ctx.mealData.slopeFromMinDeviation)} Δ=${aimiFmt1(combinedDelta)} -> maxSMBHB=${aimiFmt2(maxSMBHB)}U (confirmed rise)"
-
-                MaxSmbLadder.LADDER_CONFIRMED_RISE_HIGH_BY_DELTA ->
-                    "MAXSMB_DELTA_HIGH BG=${bg.roundToInt()} shortAvgDelta=${aimiFmt2(glucoseStatus.shortAvgDelta)} slope=${aimiFmt2(ctx.mealData.slopeFromMinDeviation)} Δ=${aimiFmt1(combinedDelta)} -> maxSMBHB=${aimiFmt2(maxSMBHB)}U (confirmed rise by delta)"
-
-                MaxSmbLadder.LADDER_SENSITIVE_85         ->
-                    "MAXSMB_SLOPE_SENSITIVE BG=${bg.roundToInt()} slope=${aimiFmt2(ctx.mealData.slopeFromMinDeviation)} Δ=${aimiFmt1(combinedDelta)} -> ${aimiFmt2(ladder.ceilingU)}U (85% maxSMBHB - confirmed rise)"
-
-                MaxSmbLadder.LADDER_PLATEAU_MODERATE_75  ->
-                    "MAXSMB_PLATEAU_MODERATE BG=${bg.roundToInt()} Δ=${aimiFmt1(combinedDelta)} -> ${aimiFmt2(ladder.ceilingU)}U (75% maxSMBHB)"
-
-                MaxSmbLadder.LADDER_FALLING_60           ->
-                    "MAXSMB_FALLING BG=${bg.roundToInt()} Δ=${aimiFmt1(combinedDelta)} -> ${aimiFmt2(ladder.ceilingU)}U (60% maxSMBHB)"
-
-                else                                     ->
-                    "MAXSMB_STANDARD BG=${bg.roundToInt()} -> ${aimiFmt2(ladder.ceilingU)}U"
-            }
-        )
-        this.maxSMB = ladder.ceilingU
-
-        // 🔒 SAFETY CLAMP: Force Standard MaxSMB if < 120
-        // User Rule: "lowbg when < 120". No bypass allowed.
-        val stdMaxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
-        if (bg < 120.0 && this.maxSMB > stdMaxSMB) {
-             this.maxSMB = stdMaxSMB
-             // The exported branch tag must show that the clamp won, otherwise the tag reports a
-             // promotion that never reached the dose.
-             this.lastMaxSmbLadderBranch = when (this.lastMaxSmbLadderBranch) {
-                 MaxSmbLadder.LADDER_PLATEAU_CRITICAL    -> MaxSmbLadder.LADDER_PLATEAU_CRITICAL_CLAMPED
-                 MaxSmbLadder.LADDER_CONFIRMED_RISE_HIGH -> MaxSmbLadder.LADDER_CONFIRMED_RISE_HIGH_CLAMPED
-
-                 MaxSmbLadder.LADDER_CONFIRMED_RISE_HIGH_BY_DELTA ->
-                     MaxSmbLadder.LADDER_CONFIRMED_RISE_HIGH_BY_DELTA_CLAMPED
-
-                 MaxSmbLadder.LADDER_SENSITIVE_85        -> MaxSmbLadder.LADDER_SENSITIVE_85_CLAMPED
-                 MaxSmbLadder.LADDER_PLATEAU_MODERATE_75 -> MaxSmbLadder.LADDER_PLATEAU_MODERATE_75_CLAMPED
-                 MaxSmbLadder.LADDER_FALLING_60          -> MaxSmbLadder.LADDER_FALLING_60_CLAMPED
-                 else                                    -> MaxSmbLadder.LADDER_STANDARD
-             }
-             consoleLog.add("🔒 STRICT CLAMP: BG<120 -> Forced Standard MaxSMB (${aimiFmt2(stdMaxSMB)}U)")
-        }
-        val ngrConfig = buildNightGrowthResistanceConfig(ctx.profile, ctx.autosensData, glucoseStatus, targetBg.toDouble())
-        var tir1DAYIR = 0.0
-        var lastHourTIRAbove: Double? = null
-        var tirbasal3IR: Double? = null
-        var tirbasal3B: Double? = null
-        var tirbasal3A: Double? = null
-        var tirbasalhAP: Double? = null
-        val tirSnapshot = latestTirWarmupSnapshot()
-        this.tir1DAYabove = tirSnapshot.tir1DayAbove
-        tir1DAYIR = tirSnapshot.tir1DayInRange
-        this.currentTIRLow = tirSnapshot.currentTirLow
-        this.currentTIRRange = tirSnapshot.currentTirRange
-        this.currentTIRAbove = tirSnapshot.currentTirAbove
-        this.lastHourTIRLow = tirSnapshot.lastHourTirLow
-        lastHourTIRAbove = tirSnapshot.lastHourTirAbove
-        this.lastHourTIRLow100 = tirSnapshot.lastHourTirLow100
-        this.lastHourTIRabove170 = tirSnapshot.lastHourTirAbove170
-        this.lastHourTIRabove120 = tirSnapshot.lastHourTirAbove120
-        tirbasal3IR = tirSnapshot.tirBasal3InRange
-        tirbasal3B = tirSnapshot.tirBasal3Below
-        tirbasal3A = tirSnapshot.tirBasal3Above
-        tirbasalhAP = tirSnapshot.tirBasalHourAbove
-        //this.enablebasal = preferences.get(BooleanKey.OApsAIMIEnableBasal)
-        this.now = aimiWallClockMs()
-        automateDeletionIfBadDay(tir1DAYIR.toInt())
-
-        this.weekend = if (dayOfWeek == Calendar.SUNDAY || dayOfWeek == Calendar.SATURDAY) 1 else 0
-        var lastCarbTimestamp = ctx.mealData.lastCarbTime
-        val carbSnapshot = latestCarbContextSnapshot(nowMs = now, mealDataLastCarbTime = lastCarbTimestamp, cobNow = cob)
-        lastCarbTimestamp = carbSnapshot.lastCarbTimestamp
-        this.lastCarbAgeMin = carbSnapshot.lastCarbAgeMin
-        this.futureCarbs = carbSnapshot.futureCarbs
-        if (this.lastCarbAgeMin < 15 && cob == 0.0f) {
-            this.cob = carbSnapshot.effectiveCob
-        }
-        this.recentNotes = carbSnapshot.recentNotes
-
-        this.tags0to60minAgo = parseNotes(0, 60)
-        this.tags60to120minAgo = parseNotes(60, 120)
-        this.tags120to180minAgo = parseNotes(120, 180)
-        this.tags180to240minAgo = parseNotes(180, 240)
-        this.delta = glucoseStatus.delta.toFloat()
-        this.shortAvgDelta = glucoseStatus.shortAvgDelta.toFloat()
-        this.longAvgDelta = glucoseStatus.longAvgDelta.toFloat()
-        val bgAcceleration = glucoseStatus.bgAcceleration.toFloat()
-        this.bgacc = bgAcceleration.toDouble()
-        return AimiTickClockTirCarbGlucoseBootstrap(
-            honeymoon = honeymoon,
-            ngrConfig = ngrConfig,
-            tir1DAYIR = tir1DAYIR,
-            lastHourTIRAbove = lastHourTIRAbove,
-            tirbasal3IR = tirbasal3IR,
-            tirbasal3B = tirbasal3B,
-            tirbasal3A = tirbasal3A,
-            tirbasalhAP = tirbasalhAP,
-            circadianMinute = circadianMinute,
-            circadianSecond = circadianSecond,
-            bgAcceleration = bgAcceleration,
-        )
-    }
-
-    /**
-     * `Therapy` hydration (meal clocks, runtimes), trend flags, exercise SMB lockout, T3c/non-T3c exercise early return.
-     * Stops **before** manual `applyLegacyMealModes` so prebolus priority is unchanged.
-     */
     private fun runTherapyHydrateClocksAndExerciseLockoutGate(
         ctx: AimiTickContext,
         profile: OapsProfileAimi,
