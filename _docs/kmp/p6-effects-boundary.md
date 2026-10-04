@@ -23,7 +23,31 @@ Les ports sont minces et portent le nom de l’appel de la référence. Pas de b
 | `AimiNightGrowthConfig` | `buildNightGrowthResistanceConfig` | la coquille, lectures nocturnes et learner compris |
 | `AimiPhysioTick` | `getLastDecisionTrace`, `getEffectiveContext`, `getLatestSnapshot` | `physioAdapter` |
 | `AimiRbtTickWrites` | `lastPostHypoOrdinal`, `lastNgrBasalMultiplier` | les champs du tick |
-| phase physio, absorption, état latent, Harmonia, publication du terminal | les méthodes du même nom, quand la fonction portée les appelle | la coquille, au portage Autodrive |
+| `AimiAutodriveGater` | `shouldEngageV3` | `autodriveGater`, lu seulement à l'appel |
+| `AimiEstimatedRa` | `getLastRa` | `continuousStateEstimator`, lu seulement à l'appel |
+| `AimiAutodriveDebug` | `aapsLogger.debug` | le journal, seulement dans la branche engagée |
+| `AimiUamConfidence` | `confidenceOrZero` | `AimiUamHandler` |
+| `AimiFclDeclared` | `fclDeclaredThisTick` | la coquille |
+| `AimiMinBgLookback` | `minBgInLastMinutes` | la coquille |
+| `AimiPostHypoRecovery` | `postHypoRecoveryActive` | la coquille |
+| `AimiTdd24h` | `resolveTdd24hForExport` | la coquille, l'export n'est pas déplacé |
+| `AimiRaObservation` | `observeRaIfNotAlreadyRun` | la coquille |
+| `AimiPhysiologicalPhase` | `refreshPhysiologicalPhase` | la coquille |
+| `AimiMealSafety` | `buildMealSafetyContext` | la coquille |
+| `AimiMealAbsorption` | `refreshMealAbsorptionPhase` | la coquille |
+| `AimiPhysioLatentUpdate` | `updatePhysioLatentState` | la coquille |
+| `AimiHyperSeverity` | `classifyHyperSeverityForTick` | la coquille |
+| `AimiHtrTerminals` | `resolveHtrScenarioTerminals` | la coquille |
+| `AimiBasalCap` | `capBasalRateForCorrectionAggression` | la coquille |
+| `AimiAggressiveRiseFloor` | `aggressiveRiseSmbFloorU` | la coquille |
+| `AimiRiseFloorNote` | `noteRiseFloorContribution` | la coquille |
+| `AimiPatientStateRefresh` | `refreshPatientStateRuntime` | la coquille |
+| `AimiDoseTerminal` | `publishDoseTerminalAuthorityAndSnapshot` | la coquille |
+| `AimiRbtLive` | `resolveAndWireRbtLiveTick` | la coquille |
+| `AimiV3SmbDelivery` | `deliverV3SmbFromRbt` | la coquille |
+| `AimiHtrExport` | `markHtrRaFloorForExport` | la coquille, l'export n'est pas déplacé |
+| `AimiDecisionLog` | `logDecisionFinal` | la coquille, les learners qu'il appelle restent |
+| `AimiAutodriveTickWrites` | deltas Ra, note de porte, état engagé, plancher HTR, trace SMB, caps post-hypo | les champs du tick |
 
 Les membres du tick déjà calculés (glycémie, IOB, drapeaux de mode) sont passés à la fonction. Ce ne sont pas des lectures de préférences. Une préférence lue seulement sur une branche l’est encore seulement sur cette branche, à la même ligne.
 
@@ -126,6 +150,14 @@ La porte engagée lit aussi, au passage, les préférences HTR, le haut de glyc�
 
 Écriture pompe : un `setTempBasal` de 30 min, limites de sécurité outrepassées, quand la commande V3 est sûre et demande une TBR. Le SMB part par `deliverV3SmbFromRbt`, et seulement si une libération HTR existe. RBT éteint et pas d’HTR préalable : la commande SMB du moteur n’est pas déposée. Les deux écritures restent dans la coquille.
 
+La décision est dans `commonMain`. Chaque appel privé de la coquille est un port du même nom, invoqué à la même ligne. `shouldEngageV3`, `getLastRa` et `aapsLogger.debug` ne sont pas lus avant le test de `OApsAIMIautoDriveActive` : le chemin éteint ne touche pas ces `lateinit`. Le sink transmet `mealContext` à `setTempBasal` ; le corps de `setTempBasal` n’est pas modifié. `logDecisionFinal` reste dans la coquille, learners compris.
+
+Porte fermée (préférence vraie, pas de mode repas, BG 110, delta 0,2, gater réel) : pas d’`EFFECT`. Lectures `OApsAIMIautoDriveActive`, les deux clés d’estimation de glucides, puis `OApsAIMIweight` dans `observeRaIfNotAlreadyRun` (`gate_disengaged`, `Ra=0.40`). Le compteur d’estimation du test vaut `-1`, comme `raEstimatorRunCountAtTickStart`, donc l’observation part.
+
+Hypo plate (BG 54, delta 0, pas de mode repas) : la porte réelle reste fermée (`RISE_TOO_WEAK`). Le chemin désengagé ne journalise pas la glycémie, donc les octets sont ceux de la porte fermée. Aucune dose n’est inventée. Une hypo engagée demanderait un contexte repas (delta > 0,25) et une commande moteur choisie : ce n’est pas ce scénario.
+
+Plafond d’activité : même montée de repas, `exerciseInsulinLockoutActive`, facteur `OApsAIMIActivityBasalCapFactor` 1,30 (le défaut de la clé), basal de profil 1,00 U/h, commande moteur 2,40 U/h. `capBasalRateForCorrectionAggression` coupe à 1,30. `EFFECT SetTbr rate=1.30`. Le journal `tbr=2.4` reste le débit demandé par le moteur, pas le débit plafonné : c’est le texte actuel, pas une correction.
+
 Trace verrouillée (mode repas, BG 160, delta 3, commande moteur sûre 2,40 U/h et 0,80 U) : `EFFECT SetTbr rate=2.40 dur=30 override=true forceExact=false adaptive=1.00`, puis le journal `actual=0.0`. Pendant la capture, la sonde retourne avant le corps de `setTempBasal`, donc `DECISION_FINAL` voit encore `tbr=0.00`. C’est le contrat de la sonde, pas la dose demandée. La ligne `TICK` contient `aimiWallClockMs()` ; le test remplace `ts=<chiffres>` par `ts=<clock>`. Le reste de la ligne est octet pour octet.
 
 ### `buildRbtExtendedSignals`
@@ -181,6 +213,8 @@ Bandes, inchangées : hausse corrigée du repos ≥ 25 bpm → 0.35, 15..24 → 
 
 `applyLegacyMealModes` décide dans `commonMain` et appelle les ports du repas. Cette fonction ne consulte pas la porte Autodrive. Les traces hypo (récupération et hypo sévère) et le plafond MaxIOB sont déjà verrouillées.
 
-`buildRbtExtendedSignals` décide dans `commonMain`. Hypo brittle (`t3cDemand=0.00`) et plafond (`t3cDemand=1.20` sous un max basal de 1,20 U/h, 16,12 U/h sans ce plafond) sont verrouillées. La porte Autodrive ouverte et fermée se verrouille au portage de `runAutodriveV3MultiVariableBranch`.
+`buildRbtExtendedSignals` décide dans `commonMain`. Hypo brittle (`t3cDemand=0.00`) et plafond (`t3cDemand=1.20` sous un max basal de 1,20 U/h, 16,12 U/h sans ce plafond) sont verrouillées.
+
+`runAutodriveV3MultiVariableBranch` décide dans `commonMain`. Porte ouverte (TBR 2,40), porte fermée, hypo plate (mêmes octets que la porte fermée, pas de dose) et plafond d’activité (TBR 1,30 sous un facteur 1,30) sont verrouillées. Le SMB moteur 0,80 U n’est toujours pas déposé tant que RBT est éteint.
 
 Les traces golden restent, octet pour octet : mode repas (TBR puis prébolus), récupération d’hypo, hypo sévère avec autorité post-hypo, plafond MaxIOB, Autodrive éteint, montée de repas engagée (`ShellDecisionTraceTest`, TBR 2,40 U/h demandée, SMB moteur non déposé tant que RBT est éteint), et le chemin UAM de `buildRbtExtendedSignals` (ordinal post-hypo 2, confiance 0,70). Si une trace diverge, on s’arrête.

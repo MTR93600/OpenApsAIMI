@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.effects
 import app.aaps.core.interfaces.aps.CurrentTemp
 import app.aaps.core.interfaces.aps.OapsProfileAimi
 import app.aaps.core.interfaces.aps.RT
+import app.aaps.plugins.aps.openAPSAIMI.safety.MealSafetyContext
 
 /**
  * Dose effects the common decision is allowed to ask for, at the moment the reference
@@ -21,6 +22,7 @@ internal interface AimiEffectSink {
         overrideSafetyLimits: Boolean,
         forceExact: Boolean,
         adaptiveMultiplier: Double,
+        mealContext: MealSafetyContext? = null,
     ): RT
 
     fun applySmbUnits(rT: RT, requestedU: Double, owner: String)

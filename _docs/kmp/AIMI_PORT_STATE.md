@@ -23,7 +23,8 @@ Recounted with `find … -name '*.kt' | wc -l` and `xargs wc -l` on
 | After P6.5 (hypo / SMB cap math) | `4ab230c71f` | 88 | 448 | 43 759 | 72 163 |
 | After P6.6 (effect boundary, traces) | `6868783d00` | 89 | 450 | 43 823 | 72 238 |
 | After P6.7 (`applyLegacyMealModes` via ports) | `8e4a7825e2` | 89 | 455 | 43 469 | 72 771 |
-| After P6.8 (`buildRbtExtendedSignals` via ports) | this branch | 89 | 458 | 43 236 | 73 304 |
+| After P6.8 (`buildRbtExtendedSignals` via ports) | `602aa4813e` | 89 | 458 | 43 236 | 73 304 |
+| After P6.9 (`runAutodriveV3MultiVariableBranch` via ports) | this branch | 89 | 460 | 43 006 | 73 994 |
 
 P6.1 moves the pure object out of `DetermineBasalAIMI2.kt` (20 109 → 19 993 lines) into
 `commonMain/.../basal/BasalFirstPolicyMath.kt` (118 lines, package line included). P6.2 moves
@@ -36,7 +37,7 @@ tick's hour, minute, second and weekday through `AimiCivilClock.kt` (69 lines) a
 two `Locale.US` patterns with `aimiCsvTimestamp` / `aimiCsvTimestampMinute`.
 `DetermineBasalAIMI2.kt` is 19 688 lines. P6.5 moves the hypo/SMB safety cluster,
 the finalize chain, the legacy red-carpet cap and the post-hypo classifier into
-`commonMain/.../safety/`. `DetermineBasalAIMI2.kt` is 18 497 lines. The android file count stays 88. P6.6 does not move a dosing block. It records the effect boundary, locks shell traces (meal mode, hypo, MaxIOB ceiling, Autodrive off, engaged meal rise, UAM), and replaces the CFRD `runCatching` around the heart-rate snapshot with an explicit result. `DetermineBasalAIMI2.kt` is 18 517 lines. P6.7 moves the `applyLegacyMealModes` decision into `commonMain` behind thin ports (`Preferences`, `AimiEffectSink`, `AimiSmbActionType`, `AimiLatestSmbCached`). The Android method delegates. `setTempBasal` is unchanged. `DetermineBasalAIMI2.kt` is 18 163 lines. P6.8 moves the `buildRbtExtendedSignals` decision into `commonMain`. The shell still owns `getRecentGlucose`, `classifyPostHypoState`, `buildNightGrowthResistanceConfig` and the three `physioAdapter` reads, called at the same lines. Learners stay put. `DetermineBasalAIMI2.kt` is 17 930 lines.
+`commonMain/.../safety/`. `DetermineBasalAIMI2.kt` is 18 497 lines. The android file count stays 88. P6.6 does not move a dosing block. It records the effect boundary, locks shell traces (meal mode, hypo, MaxIOB ceiling, Autodrive off, engaged meal rise, UAM), and replaces the CFRD `runCatching` around the heart-rate snapshot with an explicit result. `DetermineBasalAIMI2.kt` is 18 517 lines. P6.7 moves the `applyLegacyMealModes` decision into `commonMain` behind thin ports (`Preferences`, `AimiEffectSink`, `AimiSmbActionType`, `AimiLatestSmbCached`). The Android method delegates. `setTempBasal` is unchanged. `DetermineBasalAIMI2.kt` is 18 163 lines. P6.8 moves the `buildRbtExtendedSignals` decision into `commonMain`. The shell still owns `getRecentGlucose`, `classifyPostHypoState`, `buildNightGrowthResistanceConfig` and the three `physioAdapter` reads, called at the same lines. Learners stay put. `DetermineBasalAIMI2.kt` is 17 930 lines. P6.9 moves the `runAutodriveV3MultiVariableBranch` decision into `commonMain`. The shell still owns the physio, absorption, latent, terminal, RBT, SMB delivery and learner log calls, invoked at the same lines. `setTempBasal` is unchanged. `DetermineBasalAIMI2.kt` is 17 700 lines.
 The diary sections below keep their historical counts.
 
 Updated 2026-09-02, on `kmp-aimi-migration-study` at `1f6ca62fe8` (the second `kmp` merge).
