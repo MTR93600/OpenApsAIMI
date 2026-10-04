@@ -139,6 +139,15 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTirWarmupRead
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTirWarmupView
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickSmbCache
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideTickClockMaxSmb
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiAuthoritativeEventual
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiAuthoritativeMinPred
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMealCorrectionContext
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMealCorrectionView
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMinPredWiring
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPkpdAbsorptionGuard
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPkpdGuardApply
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPkpdGuardEndoRedCarpetSmbStage
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPkpdGuardState
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT9ConsoleError
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT9EarlyRuntime
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT9G6Lead
@@ -150,6 +159,7 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT9PhysioPkpdTubeBootstrap
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT9Predictions
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT9PumpAge
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT9State
+import app.aaps.plugins.aps.openAPSAIMI.effects.decidePkpdGuardEndoDampenRedCarpetAndCapSmb
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideT9PhysioEarlyPkpd
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideMealAdvisorOrReturn
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideT3cBrittleMode
@@ -6373,11 +6383,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * PKPD absorption guard (relief + meal debridage maxIOB), endo SMB dampen, red carpet vs [capSmbDose], cap reason line.
      * Mutates [rT.reason], [intervalsmb] via returned value; reads [endoSmbMult], [maxSMB]/[maxSMBHB], [iob], [maxIob] membres.
      */
-    private data class AimiPkpdGuardEndoRedCarpetSmbStage(
-        val smbToGive: Float,
-        val intervalsmb: Int,
-    )
-
     @SuppressLint("DefaultLocale")
     private fun runPkpdGuardEndoDampenRedCarpetAndCapSmb(
         ctx: AimiTickContext,
@@ -6404,173 +6409,76 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         intervalsmb: Int,
         smbToGive: Float,
         iob: Float,
-    ): AimiPkpdGuardEndoRedCarpetSmbStage {
-        var smbToGiveLocal = smbToGive
-        var intervalsmbLocal = intervalsmb
-
-        val anyMealModeForGuard = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime
-        val isAggressivePriorityContext = isMealAdvisorOneShot || anyMealModeForGuard || isConfirmedHighRiseLocal
-        val pkpdReliefEnabled = preferences.get(BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled)
-        val redCarpetRestoreThresholdPref = preferences.get(DoubleKey.OApsAIMIRedCarpetRestoreThreshold).coerceIn(0.50, 0.95).toFloat()
-        val currentMaxSmb = AimiLegacySmbCapMath.currentMaxSmb(
-            isExplicitAdvisorRun = isExplicitAdvisorRun,
-            bg = bg,
-            honeymoon = honeymoon,
-            slopeFromMinDeviation = ctx.mealData.slopeFromMinDeviation,
-            mealLunchDinnerOrHc = mealTime || lunchTime || dinnerTime || highCarbTime,
-            maxSmb = maxSMB,
-            maxSmbHb = maxSMBHB,
-        )
-        val iobRelief = AimiLegacySmbCapMath.iobRelief(
-            pkpdReliefEnabled = pkpdReliefEnabled,
-            isAggressivePriorityContext = isAggressivePriorityContext,
-            maxIob = this.maxIob,
-            priorityMaxIobFactor = preferences.get(DoubleKey.OApsAIMIPriorityMaxIobFactor).coerceIn(1.0, 1.6),
-            priorityMaxIobExtraU = preferences.get(DoubleKey.OApsAIMIPriorityMaxIobExtraU).coerceIn(0.0, 5.0),
-            bg = bg,
-            delta = delta.toDouble(),
-            shortAvgDelta = shortAvgDelta.toDouble(),
-            predictedBg = predictedBg.toDouble(),
-            eventualBg = eventualBG,
-        )
-        val effectiveMaxIobForPriority = iobRelief.effectiveMaxIobForPriority
-        val effectiveMaxIobForDebridage = iobRelief.effectiveMaxIobForDebridage
-        val pkpdGuardInput = smbToGiveLocal
-        val pkpdGuardApply = applyPkpdAbsorptionGuardOncePerTick(
-            smbIn = smbToGiveLocal,
-            pkpdRuntime = pkpdRuntime,
-            windowSinceLastDoseMin = windowSinceLastPkpdDoseMin(windowSinceDoseInt),
-            anyMealModeForGuard = anyMealModeForGuard,
-            isConfirmedHighRise = isConfirmedHighRiseLocal,
-            mealAdvisorOneShot = isMealAdvisorOneShot,
-            reason = rT.reason,
-            logChannel = PkpdGuardLogChannel.PIPELINE,
-        )
-        smbToGiveLocal = pkpdGuardApply.smbOut
-        lastSmbBindingTraceDraft = if (pkpdGuardApply.skippedDuplicate) {
-            lastSmbBindingTraceDraft.appendStage(
-                "PKPD_GUARD_SKIPPED_DUPLICATE",
-                pkpdGuardInput.toDouble(),
-                pkpdGuardInput.toDouble(),
-                phase = "LEGACY_GUARD",
-                kind = "OBSERVATION",
+    ): AimiPkpdGuardEndoRedCarpetSmbStage = decidePkpdGuardEndoDampenRedCarpetAndCapSmb(
+        ctx = ctx,
+        rT = rT,
+        finalSmb = smbExecution.finalSmb,
+        isExplicitAdvisorRun = isExplicitAdvisorRun,
+        isMealAdvisorOneShot = isMealAdvisorOneShot,
+        isConfirmedHighRiseLocal = isConfirmedHighRiseLocal,
+        bg = bg,
+        delta = delta,
+        shortAvgDelta = shortAvgDelta,
+        predictedBg = predictedBg,
+        eventualBG = eventualBG,
+        targetBg = targetBg,
+        honeymoon = honeymoon,
+        mealTime = mealTime,
+        bfastTime = bfastTime,
+        lunchTime = lunchTime,
+        dinnerTime = dinnerTime,
+        highCarbTime = highCarbTime,
+        snackTime = snackTime,
+        intervalsmb = intervalsmb,
+        smbToGive = smbToGive,
+        iob = iob,
+        preferences = preferences,
+        consoleLog = consoleLog,
+        state = object : AimiPkpdGuardState {
+            override fun maxSmb() = this@DetermineBasalaimiSMB2.maxSMB
+            override fun maxSmbHb() = maxSMBHB
+            override fun maxIob() = this@DetermineBasalaimiSMB2.maxIob
+            override fun memberIob() = this@DetermineBasalaimiSMB2.iob.toDouble()
+            override fun endoSmbMult() = this@DetermineBasalaimiSMB2.endoSmbMult
+            override fun bindingDraft() = lastSmbBindingTraceDraft
+            override fun setBindingDraft(value: SmbBindingTrace.Draft) { lastSmbBindingTraceDraft = value }
+            override fun criticalSafetyZeroed() = criticalSafetyZeroedThisTick
+            override fun endogenousCounterRegulatory() =
+                lastPhysiologicalPhaseOutput?.phase == PhysiologicalPhase.ENDOGENOUS_COUNTER_REGULATORY
+            override fun mealAbsorptionPhase() = lastMealAbsorptionOutput?.phase ?: MealAbsorptionPhase.NONE
+        },
+        absorptionGuard = AimiPkpdAbsorptionGuard { smbIn, reason ->
+            val applied = applyPkpdAbsorptionGuardOncePerTick(
+                smbIn = smbIn,
+                pkpdRuntime = pkpdRuntime,
+                windowSinceLastDoseMin = windowSinceLastPkpdDoseMin(windowSinceDoseInt),
+                anyMealModeForGuard = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime,
+                isConfirmedHighRise = isConfirmedHighRiseLocal,
+                mealAdvisorOneShot = isMealAdvisorOneShot,
+                reason = reason,
+                logChannel = PkpdGuardLogChannel.PIPELINE,
             )
-        } else {
-            lastSmbBindingTraceDraft.copy(
-                pkpdBeforeU = lastSmbBindingTraceDraft.pkpdBeforeU ?: pkpdGuardInput.toDouble(),
-                pkpdAfterU = lastSmbBindingTraceDraft.pkpdAfterU ?: smbToGiveLocal.toDouble(),
-            ).appendStage(
-                "PKPD_GUARD",
-                pkpdGuardInput.toDouble(),
-                smbToGiveLocal.toDouble(),
-                phase = "LEGACY_GUARD",
-                kind = "GUARD",
+            AimiPkpdGuardApply(
+                smbOut = applied.smbOut,
+                skippedDuplicate = applied.skippedDuplicate,
+                multiplicationApplied = applied.multiplicationApplied,
+                guardReason = applied.guard?.reason,
+                effectiveFactor = applied.effectiveFactor,
             )
-        }
-        intervalsmbLocal = intervalsmb
-        if (pkpdGuardApply.skippedDuplicate) {
-            consoleLog.add("PKPD_GUARD_SKIP: already applied this tick (e.g. Autodrive V3 finalize)")
-        } else if (pkpdGuardApply.multiplicationApplied) {
-            pkpdGuardApply.guard?.let { pkpdGuard ->
-                rT.reason.append(" | ${pkpdGuard.reason} x${aimiFmt2(pkpdGuardApply.effectiveFactor)}")
-            }
-        }
-        iobRelief.logs.forEach { consoleLog.add(it) }
-
-        if (endoSmbMult < 1.0) {
-            val beforeEndo = smbToGiveLocal
-            smbToGiveLocal = (smbToGiveLocal * endoSmbMult.toFloat()).coerceAtLeast(0f)
-            lastSmbBindingTraceDraft = lastSmbBindingTraceDraft.appendStage(
-                "ENDO_DAMPEN",
-                beforeEndo.toDouble(),
-                smbToGiveLocal.toDouble(),
-                phase = "LEGACY_GUARD",
-                kind = "DAMPEN",
+        },
+        mealCorrection = AimiMealCorrectionContext { mealData, bgMgdl, deltaMgdl, shortAvg ->
+            val out = resolveMealCorrectionContext(
+                mealData = mealData,
+                bgMgdl = bgMgdl,
+                deltaMgdlPer5 = deltaMgdl,
+                shortAvgDeltaMgdlPer5 = shortAvg,
             )
-            if (smbToGiveLocal < beforeEndo) {
-                consoleLog.add("SMB_ENDO_DAMPEN: ${aimiFmt2(beforeEndo)}U → ${aimiFmt2(smbToGiveLocal)}U (x${aimiFmt2(endoSmbMult)})")
-                rT.reason.append(" | EndoDampen x${aimiFmt2(endoSmbMult)}")
-            }
-        }
-
-        val beforeCap = smbToGiveLocal
-
-        val isExplicitAction = isMealAdvisorOneShot
-        val implicitMealCorrection = resolveMealCorrectionContext(
-            mealData = ctx.mealData,
-            bgMgdl = bg,
-            deltaMgdlPer5 = delta.toDouble(),
-            shortAvgDeltaMgdlPer5 = shortAvgDelta.toDouble(),
-        )
-        val proposedUnits = smbExecution.finalSmb.toFloat()
-
-        // F1-bis : cette copie V3 ignorait le frein IOB-surveillance que le site legacy
-        // (finalizeAndCapSMB) consulte déjà. Même évaluation (fonction pure), même sémantique.
-        val stackingEvalV3 = InsulinStackingStance.evaluate(
-            bg = bg,
-            delta = delta.toDouble(),
-            shortAvgDelta = shortAvgDelta.toDouble(),
-            targetBg = targetBg,
-            iob = iob.toDouble(),
-            maxIob = this.maxIob,
-            eventualBg = authoritativeEventualBg(eventualBG).takeIf { it > 1.0 && it.isFinite() },
-            minPredBg = minPredictedBgForRbtWiring(
-                authoritativeMinPredBg(rT, minPredictedAcrossCurves(rT.predBGs)),
-            ),
-            trajectoryEnergy = rT.trajectoryEnergy,
-            isExplicitUserAction = isExplicitAction,
-            enabled = preferences.get(BooleanKey.OApsAIMIIobSurveillanceGuard),
-            mealPriorityContext = isAggressivePriorityContext,
-            endogenousCounterRegulatory = lastPhysiologicalPhaseOutput?.phase == PhysiologicalPhase.ENDOGENOUS_COUNTER_REGULATORY,
-            mealAbsorptionPhase = lastMealAbsorptionOutput?.phase ?: MealAbsorptionPhase.NONE,
-            mealModeActive = mealTime || bfastTime || lunchTime || dinnerTime || snackTime || highCarbTime,
-        )
-        val carpet = AimiLegacySmbCapMath.redCarpetOrCap(
-            smbAfterGuards = smbToGiveLocal,
-            proposedUnits = proposedUnits,
-            finalSmb = smbExecution.finalSmb.toDouble(),
-            isExplicitAction = isExplicitAction,
-            anyMealMode = anyMealModeForGuard,
-            redCarpetEligible = implicitMealCorrection.redCarpetEligible,
-            mealSummary = implicitMealCorrection.summary(),
-            isConfirmedHighRise = isConfirmedHighRiseLocal,
-            mealCob = ctx.mealData.mealCOB,
-            delta = delta.toDouble(),
-            bg = bg,
-            shortAvgDelta = shortAvgDelta.toDouble(),
-            pkpdReliefEnabled = pkpdReliefEnabled,
-            isAggressivePriorityContext = isAggressivePriorityContext,
-            restoreThresholdPref = redCarpetRestoreThresholdPref,
-            criticalSafetyZeroed = criticalSafetyZeroedThisTick,
-            suppressRedCarpet = stackingEvalV3.suppressRedCarpetRestore,
-            suppressSummary = stackingEvalV3.summary,
-            currentMaxSmb = currentMaxSmb,
-            maxSmbHb = maxSMBHB,
-            effectiveMaxIob = effectiveMaxIobForDebridage,
-            iobForCap = iob.toDouble(),
-            memberIob = this.iob.toDouble(),
-        )
-        smbToGiveLocal = carpet.units
-        carpet.logs.forEach { consoleLog.add(it) }
-        carpet.reasonCap?.let { rT.reason.append(it) }
-        lastSmbBindingTraceDraft = lastSmbBindingTraceDraft.copy(
-            safetyNetBaseLimitU = lastSmbBindingTraceDraft.safetyNetBaseLimitU ?: currentMaxSmb,
-            redCarpetBeforeU = lastSmbBindingTraceDraft.redCarpetBeforeU ?: beforeCap.toDouble(),
-            redCarpetAfterU = lastSmbBindingTraceDraft.redCarpetAfterU ?: smbToGiveLocal.toDouble(),
-        ).appendStage(
-            "LEGACY_RED_CARPET_MAX_SMB_IOB",
-            beforeCap.toDouble(),
-            smbToGiveLocal.toDouble(),
-            currentMaxSmb,
-            phase = "LEGACY_GUARD",
-            kind = "COMPOSITE",
-        )
-
-        return AimiPkpdGuardEndoRedCarpetSmbStage(
-            smbToGive = smbToGiveLocal,
-            intervalsmb = intervalsmbLocal,
-        )
-    }
+            AimiMealCorrectionView(out.redCarpetEligible, out.summary())
+        },
+        eventual = AimiAuthoritativeEventual { fallback -> authoritativeEventualBg(fallback) },
+        minPred = AimiAuthoritativeMinPred { rt, raw -> authoritativeMinPredBg(rt, raw) },
+        minPredWiring = AimiMinPredWiring { raw -> minPredictedBgForRbtWiring(raw) },
+    )
 
     /**
      * Snapshot `reason` / command slots / `predBGs`, blank [rT] for a clean enactment slice, apply delivery metadata,
