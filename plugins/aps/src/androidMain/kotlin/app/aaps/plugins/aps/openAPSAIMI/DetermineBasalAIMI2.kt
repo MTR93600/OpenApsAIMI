@@ -204,6 +204,10 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT3cBypassCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideT3cBrittleBypass
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiHarmoniaRampCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideHarmoniaProductionRamp
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiBasalScheduleCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiHeartRateIsfCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideBasalSchedule
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideHeartRateIsf
 import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
@@ -5167,138 +5171,38 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         circadianMinute: Int,
         circadianSecond: Int,
     ): GlobalAimiBasalScheduleBootstrap {
-        rT.reason.append(rh.gs(ApsStrings.reason_maxsmb, maxSMB))
-        var nowMinutes = hourOfDay + circadianMinute / 60.0 + circadianSecond / 3600.0
-        nowMinutes = (kotlin.math.round(nowMinutes * 100) / 100)
-        val circadianSensitivity = circadianSensitivityHourly(nowMinutes)
-        val deliverAt = ctx.currentTime
-
-        val pumpDesc = activePlugin.activePump.pumpDescription
-        val pumpCaps = PumpCaps(
-            basalStep = if (pumpDesc.basalStep > 0) pumpDesc.basalStep else 0.05,
-            bolusStep = if (pumpDesc.bolusStep > 0) pumpDesc.bolusStep else 0.05,
-            minDurationMin = 30,
-            maxBasal = profile.max_basal,
-            maxSmb = 3.0
+        val schedule = decideBasalSchedule(
+            ctx, profile, rT, glucoseStatus, contextTargetOverride, bg, predictedBg, combinedDelta,
+            minAgo, systemTime, bgTime, flatBGsDetected, honeymoon, circadianMinute, circadianSecond,
+            rh, consoleLog,
+            calls = object : AimiBasalScheduleCalls {
+                override fun maxSmb() = this@DetermineBasalaimiSMB2.maxSMB
+                override fun hourOfDay() = this@DetermineBasalaimiSMB2.hourOfDay
+                override fun pumpSteps(): Pair<Double, Double> {
+                    val desc = activePlugin.activePump.pumpDescription
+                    return desc.basalStep to desc.bolusStep
+                }
+                override fun validateBasal(rate: Double, caps: PumpCaps) =
+                    pumpCapabilityValidator.validateBasal(rate, caps)
+                override fun maxIob() = this@DetermineBasalaimiSMB2.maxIob
+                override fun recentSteps5() = recentSteps5Minutes
+                override fun recentSteps10() = recentSteps10Minutes
+                override fun recentSteps30() = recentSteps30Minutes
+                override fun recentSteps180() = recentSteps180Minutes
+                override fun setTargetBg(value: Float) { targetBg = value }
+                override fun targetBg() = this@DetermineBasalaimiSMB2.targetBg
+            },
         )
-        val profileCurrentBasal = pumpCapabilityValidator.validateBasal(profile.current_basal, pumpCaps)
-        var basal: Double
-
-        val noise = glucoseStatus.noise
-        if (bg <= 10 || bg == 38.0 || noise >= 3) {
-            rT.reason.append(rh.gs(ApsStrings.reason_cgm_calibrating))
-        }
-        if (minAgo > 12 || minAgo < -5) {
-            rT.reason.append(rh.gs(ApsStrings.reason_bg_data_old, systemTime, minAgo, bgTime))
-        } else if (bg > 60 && flatBGsDetected) {
-            rT.reason.append(rh.gs(ApsStrings.reason_cgm_flat))
-        }
-
-        val maxIobLimit = maxIob
-        var targetBgLocal = (profile.min_bg + profile.max_bg) / 2
-        var minBgLocal = profile.min_bg
-        var maxBgLocal = profile.max_bg
-
-        if (contextTargetOverride != null) {
-            val override = contextTargetOverride
-            if (minBgLocal < override) minBgLocal = override
-            if (maxBgLocal < override) maxBgLocal = override
-        }
-
-        var sensitivityRatioLocal = 0.0
-        val highTemptargetRaisesSensitivity = profile.exercise_mode || profile.high_temptarget_raises_sensitivity
-        val normalTarget = if (honeymoon) 130 else 100
-        val halfBasalTarget = profile.half_basal_exercise_target
-
-        when {
-            !profile.temptargetSet && recentSteps5Minutes >= 0 && (recentSteps30Minutes >= 500 || recentSteps180Minutes > 1500) && recentSteps10Minutes > 0 && predictedBg < 140 -> {
-                this.targetBg = 130.0f
-            }
-
-            !profile.temptargetSet && predictedBg >= 120 && combinedDelta > 3 -> {
-                var baseTarget = if (honeymoon) 110.0 else 70.0
-                if (hourOfDay in 0..11 || hourOfDay in 15..19 || hourOfDay >= 22) {
-                    baseTarget = if (honeymoon) 110.0 else 90.0
-                }
-                var hyperTarget = max(baseTarget, profile.target_bg - (bg - profile.target_bg) / 3).toInt()
-                hyperTarget = (hyperTarget * min(circadianSensitivity, 1.0)).toInt()
-                hyperTarget = max(hyperTarget, baseTarget.toInt())
-
-                this.targetBg = hyperTarget.toFloat()
-                targetBgLocal = hyperTarget.toDouble()
-                val c = (halfBasalTarget - normalTarget).toDouble()
-                sensitivityRatioLocal = c / (c + targetBgLocal - normalTarget)
-                sensitivityRatioLocal = min(sensitivityRatioLocal, profile.autosens_max)
-                sensitivityRatioLocal = round(sensitivityRatioLocal, 2)
-                consoleLog.add(rh.gs(ApsStrings.sensitivity_ratio_temp_target, sensitivityRatioLocal, targetBgLocal))
-            }
-
-            !profile.temptargetSet && combinedDelta <= 0 && predictedBg < 120 -> {
-                val baseHypoTarget = if (honeymoon) 130.0 else 110.0
-                val hypoTarget = baseHypoTarget * max(1.0, circadianSensitivity)
-                this.targetBg = min(hypoTarget.toFloat(), 166.0f)
-                targetBgLocal = targetBg.toDouble()
-                val c = (halfBasalTarget - normalTarget).toDouble()
-                sensitivityRatioLocal = c / (c + targetBgLocal - normalTarget)
-                sensitivityRatioLocal = min(sensitivityRatioLocal, profile.autosens_max)
-                sensitivityRatioLocal = round(sensitivityRatioLocal, 2)
-                consoleLog.add(rh.gs(ApsStrings.sensitivity_ratio_temp_target, sensitivityRatioLocal, targetBgLocal))
-            }
-
-            else -> {
-                val defaultTarget = profile.target_bg
-                this.targetBg = defaultTarget.toFloat()
-                targetBgLocal = targetBg.toDouble()
-            }
-        }
-        if (highTemptargetRaisesSensitivity && profile.temptargetSet && targetBgLocal > normalTarget
-            || profile.low_temptarget_lowers_sensitivity && profile.temptargetSet && targetBgLocal < normalTarget
-        ) {
-            val c = (halfBasalTarget - normalTarget).toDouble()
-            sensitivityRatioLocal = c / (c + targetBgLocal - normalTarget)
-            sensitivityRatioLocal = min(sensitivityRatioLocal, profile.autosens_max)
-            sensitivityRatioLocal = round(sensitivityRatioLocal, 2)
-            consoleLog.add(rh.gs(ApsStrings.sensitivity_ratio_temp_target, sensitivityRatioLocal, targetBgLocal))
-        } else {
-            sensitivityRatioLocal = ctx.autosensData.ratio
-            consoleLog.add(rh.gs(ApsStrings.autosens_ratio_log, sensitivityRatioLocal))
-        }
-        basal = profile.current_basal / sensitivityRatioLocal
-        // Endocrine amp applied once in setTempBasal / Harmonia production — not here (avoids double scale).
-        basal = roundBasal(basal)
-        if (basal != profileCurrentBasal) {
-            consoleLog.add(rh.gs(ApsStrings.console_adjust_basal, profileCurrentBasal, basal))
-        } else {
-            consoleLog.add(rh.gs(ApsStrings.console_basal_unchanged, basal))
-        }
-
-        if (profile.temptargetSet) {
-            consoleLog.add(rh.gs(ApsStrings.console_temp_target_set))
-        } else {
-            if (profile.sensitivity_raises_target && ctx.autosensData.ratio > 1 || profile.resistance_lowers_target && ctx.autosensData.ratio < 1) {
-                minBgLocal = round((minBgLocal - 60) * ctx.autosensData.ratio, 0) + 60
-                maxBgLocal = round((maxBgLocal - 60) * ctx.autosensData.ratio, 0) + 60
-                var newTargetBg = round((targetBgLocal - 60) * ctx.autosensData.ratio, 0) + 60
-                newTargetBg = max(80.0, newTargetBg)
-                if (targetBgLocal == newTargetBg) {
-                    consoleLog.add(rh.gs(ApsStrings.console_target_bg_unchanged, newTargetBg))
-                } else {
-                    consoleLog.add(rh.gs(ApsStrings.console_target_bg_changed, targetBgLocal, newTargetBg))
-                }
-                targetBgLocal = newTargetBg
-            }
-        }
-
         return GlobalAimiBasalScheduleBootstrap(
-            pumpCaps = pumpCaps,
-            profileCurrentBasal = profileCurrentBasal,
-            basal = basal,
-            targetBg = targetBgLocal,
-            minBg = minBgLocal,
-            maxBg = maxBgLocal,
-            sensitivityRatio = sensitivityRatioLocal,
-            deliverAt = deliverAt,
-            maxIobLimit = maxIobLimit,
+            pumpCaps = schedule.pumpCaps,
+            profileCurrentBasal = schedule.profileCurrentBasal,
+            basal = schedule.basal,
+            targetBg = schedule.targetBg,
+            minBg = schedule.minBg,
+            maxBg = schedule.maxBg,
+            sensitivityRatio = schedule.sensitivityRatio,
+            deliverAt = schedule.deliverAt,
+            maxIobLimit = schedule.maxIobLimit,
         )
     }
 
@@ -5319,159 +5223,66 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         iobData: IobTotal,
         bg: Double,
     ): AimiPostBasalBootstrapActivityVitals {
-        if (abs(this.iob - iobData.iob.toFloat()) > 1.0) {
-            consoleLog.add("⚠️ IOB Mismatch: Profiler=${this.iob} vs System=${iobData.iob}")
-        }
-
-        val tick: String = if (glucoseStatus.delta > -0.5) {
-            "+" + round(glucoseStatus.delta)
-        } else {
-            round(glucoseStatus.delta).toString()
-        }
-        val minDelta = min(glucoseStatus.delta, glucoseStatus.shortAvgDelta)
-        val minAvgDelta = min(glucoseStatus.shortAvgDelta, glucoseStatus.longAvgDelta)
-
-        consoleError.add("CR:${profile.carb_ratio}")
-
-        val now = aimiWallClockMs()
-        val timeMillis5 = now - 5 * 60 * 1000
-        val timeMillis10 = now - 10 * 60 * 1000
-        val timeMillis15 = now - 15 * 60 * 1000
-        val timeMillis30 = now - 30 * 60 * 1000
-        val timeMillis60 = now - 60 * 60 * 1000
-        val timeMillis180 = now - 180 * 60 * 1000
-
-        if (preferences.get(BooleanKey.OApsAIMIEnableStepsFromWatch)) {
-            val stepsSearchStart = now - 210 * 60 * 1000
-            val allStepsCounts = stepsCountsCached(now)
-
-            if (allStepsCounts.isNotEmpty()) {
-                val lastSteps = allStepsCounts.maxByOrNull { it.timestamp }
-                aapsLogger.debug(LTag.APS, "Steps Data: Found ${allStepsCounts.size} records. Last: ${lastSteps?.steps5min} steps @ ${java.util.Date(lastSteps?.timestamp ?: 0)}")
-            } else {
-                aapsLogger.debug(LTag.APS, "Steps Data: No records found in last 210 mins")
-            }
-
-            val valid5 = allStepsCounts.filter { it.timestamp >= timeMillis5 }.maxByOrNull { it.timestamp }
-            val fallbackRecord = if (valid5 == null) {
-                allStepsCounts.filter { it.timestamp >= (now - 30 * 60 * 1000) }.maxByOrNull { it.timestamp }
-            } else null
-
-            this.recentSteps5Minutes = valid5?.steps5min ?: fallbackRecord?.steps5min ?: 0
-
-            this.recentSteps10Minutes = allStepsCounts.filter { it.timestamp >= timeMillis10 }
-                .maxByOrNull { it.timestamp }?.steps10min ?: 0
-
-            this.recentSteps15Minutes = allStepsCounts.filter { it.timestamp >= timeMillis15 }
-                .maxByOrNull { it.timestamp }?.steps15min ?: 0
-
-            this.recentSteps30Minutes = allStepsCounts.filter { it.timestamp >= timeMillis30 }
-                .maxByOrNull { it.timestamp }?.steps30min ?: 0
-
-            this.recentSteps60Minutes = allStepsCounts.filter { it.timestamp >= timeMillis60 }
-                .maxByOrNull { it.timestamp }?.steps60min ?: 0
-
-            this.recentSteps180Minutes = allStepsCounts.filter { it.timestamp >= timeMillis180 }
-                .maxByOrNull { it.timestamp }?.steps180min ?: 0
-        } else {
-            this.recentSteps5Minutes = StepService.getRecentStepCount5Min()
-            this.recentSteps10Minutes = StepService.getRecentStepCount10Min()
-            this.recentSteps15Minutes = StepService.getRecentStepCount15Min()
-            this.recentSteps30Minutes = StepService.getRecentStepCount30Min()
-            this.recentSteps60Minutes = StepService.getRecentStepCount60Min()
-            this.recentSteps180Minutes = StepService.getRecentStepCount180Min()
-        }
-
-        try {
-            val allHeartRates = heartRatesCached(now)
-
-            if (allHeartRates.isNotEmpty()) {
-                val lastHR = allHeartRates.maxByOrNull { it.timestamp }
-                aapsLogger.debug(LTag.APS, "HR Data: Found ${allHeartRates.size} records. Last: ${lastHR?.beatsPerMinute} @ ${java.util.Date(lastHR?.timestamp ?: 0)}")
-            } else {
-                aapsLogger.debug(LTag.APS, "HR Data: No records found in last 200 mins")
-            }
-
-            fun getRateForWindow(windowMillis: Long): List<HR> {
-                val windowStart = now - windowMillis
-                return allHeartRates.filter {
-                    val end = it.timestamp + it.duration
-                    end >= windowStart
+        val vitals = decideHeartRateIsf(
+            glucoseStatus, profile, iobData, bg, preferences, consoleLog, consoleError,
+            calls = object : AimiHeartRateIsfCalls {
+                override fun iob() = this@DetermineBasalaimiSMB2.iob
+                override fun roundDisplay(value: Double) = round(value)
+                override fun stepsCached(now: Long) = stepsCountsCached(now)
+                override fun logSteps(samples: List<SC>) {
+                    if (samples.isNotEmpty()) {
+                        val lastSteps = samples.maxByOrNull { it.timestamp }
+                        aapsLogger.debug(LTag.APS, "Steps Data: Found ${samples.size} records. Last: ${lastSteps?.steps5min} steps @ ${java.util.Date(lastSteps?.timestamp ?: 0)}")
+                    } else {
+                        aapsLogger.debug(LTag.APS, "Steps Data: No records found in last 210 mins")
+                    }
                 }
-            }
-
-            val hr5List = getRateForWindow(5 * 60 * 1000)
-            this.averageBeatsPerMinute = if (hr5List.isNotEmpty()) {
-                hr5List.map { it.beatsPerMinute.toInt() }.average()
-            } else {
-                val partialFallback = allHeartRates.filter { (it.timestamp + it.duration) >= (now - 30 * 60 * 1000) }
-                val lastKnown = partialFallback.maxByOrNull { it.timestamp }
-                if (lastKnown != null) {
-                    lastKnown.beatsPerMinute
-                } else {
-                    Double.NaN
+                override fun setRecentSteps(steps5: Int, steps10: Int, steps15: Int, steps30: Int, steps60: Int, steps180: Int) {
+                    recentSteps5Minutes = steps5
+                    recentSteps10Minutes = steps10
+                    recentSteps15Minutes = steps15
+                    recentSteps30Minutes = steps30
+                    recentSteps60Minutes = steps60
+                    recentSteps180Minutes = steps180
                 }
-            }
-
-            val hr10List = getRateForWindow(10 * 60 * 1000)
-            this.averageBeatsPerMinute10 = if (hr10List.isNotEmpty()) {
-                hr10List.map { it.beatsPerMinute.toInt() }.average()
-            } else {
-                this.averageBeatsPerMinute
-            }
-
-            val hr60List = getRateForWindow(60 * 60 * 1000)
-            // The 80.0 below is a substitute, not a measurement. It stays because other readers
-            // (ActivityManager's avgHrResting) depend on a non-zero number, but anything that
-            // STRENGTHENS a dose must know the difference — see [HeartRateTrendIsf].
-            this.heartRateBaselineIsReal = hr60List.isNotEmpty()
-            this.averageBeatsPerMinute60 = if (hr60List.isNotEmpty()) {
-                hr60List.map { it.beatsPerMinute.toInt() }.average()
-            } else {
-                80.0
-            }
-
-            val hr180List = getRateForWindow(180 * 60 * 1000)
-            this.averageBeatsPerMinute180 = if (hr180List.isNotEmpty()) {
-                hr180List.map { it.beatsPerMinute.toInt() }.average()
-            } else {
-                80.0
-            }
-        } catch (e: Exception) {
-            aapsLogger.error(LTag.APS, "Error processing Heart Rate data", e)
-            averageBeatsPerMinute = 80.0
-            averageBeatsPerMinute10 = 80.0
-            averageBeatsPerMinute60 = 80.0
-            averageBeatsPerMinute180 = 80.0
-            heartRateBaselineIsReal = false
-        }
-        // 💓 Heart-rate trend — the ONE heart-rate path that strengthens a dose. It now stands down
-        // during a fast rise, where an elevated heart rate is a consequence of the rise rather than
-        // information about its cause, and on a baseline that was substituted rather than measured.
-        // See [HeartRateTrendIsf].
-        val heartRateTrendMultiplier = HeartRateTrendIsf.multiplier(
-            steps10m = recentSteps10Minutes,
-            avgBpm10 = averageBeatsPerMinute10,
-            avgBpm60 = averageBeatsPerMinute60,
-            baselineIsReal = heartRateBaselineIsReal,
-            bgMgdl = bg.toDouble(),
-            deltaMgdl5m = delta.toDouble(),
+                override fun phoneSteps5() = StepService.getRecentStepCount5Min()
+                override fun phoneSteps10() = StepService.getRecentStepCount10Min()
+                override fun phoneSteps15() = StepService.getRecentStepCount15Min()
+                override fun phoneSteps30() = StepService.getRecentStepCount30Min()
+                override fun phoneSteps60() = StepService.getRecentStepCount60Min()
+                override fun phoneSteps180() = StepService.getRecentStepCount180Min()
+                override fun heartRatesCached(now: Long) = this@DetermineBasalaimiSMB2.heartRatesCached(now)
+                override fun logHeartRates(samples: List<HR>) {
+                    if (samples.isNotEmpty()) {
+                        val lastHR = samples.maxByOrNull { it.timestamp }
+                        aapsLogger.debug(LTag.APS, "HR Data: Found ${samples.size} records. Last: ${lastHR?.beatsPerMinute} @ ${java.util.Date(lastHR?.timestamp ?: 0)}")
+                    } else {
+                        aapsLogger.debug(LTag.APS, "HR Data: No records found in last 200 mins")
+                    }
+                }
+                override fun setAverageBpm(value: Double) { averageBeatsPerMinute = value }
+                override fun averageBpm() = averageBeatsPerMinute
+                override fun setAverageBpm10(value: Double) { averageBeatsPerMinute10 = value }
+                override fun setAverageBpm60(value: Double) { averageBeatsPerMinute60 = value }
+                override fun setAverageBpm180(value: Double) { averageBeatsPerMinute180 = value }
+                override fun setBaselineReal(value: Boolean) { heartRateBaselineIsReal = value }
+                override fun logHeartRateFailure(error: Exception) {
+                    aapsLogger.error(LTag.APS, "Error processing Heart Rate data", error)
+                    consoleLog.add(
+                        "HR windows failed (${error::class.simpleName}): ${error.message.orEmpty()} — averages 80, baseline not real",
+                    )
+                }
+                override fun recentSteps10() = recentSteps10Minutes
+                override fun averageBpm10() = averageBeatsPerMinute10
+                override fun averageBpm60() = averageBeatsPerMinute60
+                override fun baselineReal() = heartRateBaselineIsReal
+                override fun delta() = this@DetermineBasalaimiSMB2.delta
+                override fun scaleVariableSensitivity(factor: Float) {
+                    variableSensitivity *= factor
+                }
+            },
         )
-        if (heartRateTrendMultiplier < 1.0) {
-            this.variableSensitivity *= heartRateTrendMultiplier.toFloat()
-            consoleLog.add(
-                "💓 HR_TREND_ISF x%.2f (hr10 %.0f / hr60 %.0f, steps10 %d)".format(
-                    Locale.US, heartRateTrendMultiplier,
-                    averageBeatsPerMinute10, averageBeatsPerMinute60, recentSteps10Minutes,
-                )
-            )
-        }
-
-        return AimiPostBasalBootstrapActivityVitals(
-            tick = tick,
-            minDelta = minDelta,
-            minAvgDelta = minAvgDelta,
-        )
+        return AimiPostBasalBootstrapActivityVitals(vitals.tick, vitals.minDelta, vitals.minAvgDelta)
     }
 
     /** Hour snapshot + pregnancy pref captured after `aimilimit` adjust (historical position) for downstream [BasalDecisionEngine.Input]. */
