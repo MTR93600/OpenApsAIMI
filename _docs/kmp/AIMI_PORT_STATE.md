@@ -18,7 +18,8 @@ Recounted with `find … -name '*.kt' | wc -l` and `xargs wc -l` on
 | Before P6.1 | `7c13732990` | 88 | 441 | 45 371 | 69 850 |
 | After P6.1 (`BasalFirstPolicyMath` only) | `32ca1afae9` | 88 | 442 | 45 255 | 69 968 |
 | After P6.2 (rounding and neighbouring pure helpers) | `a257792849` | 88 | 443 | 44 965 | 70 471 |
-| After P6.3 (`aimiFmt*` on the tick) | this branch | 88 | 443 | 44 965 | 70 564 |
+| After P6.3 (`aimiFmt*` on the tick) | `a91c7054ac` | 88 | 443 | 44 965 | 70 564 |
+| After P6.4 (civil clock) | this branch | 88 | 444 | 44 950 | 70 647 |
 
 P6.1 moves the pure object out of `DetermineBasalAIMI2.kt` (20 109 → 19 993 lines) into
 `commonMain/.../basal/BasalFirstPolicyMath.kt` (118 lines, package line included). P6.2 moves
@@ -26,8 +27,10 @@ the rounding helpers (`Math.round` semantics, negative halves toward +∞) and t
 pure functions into `commonMain/.../math/AimiTickPolicyMath.kt` (503 lines). The tick keeps
 one-line delegates. `DetermineBasalAIMI2.kt` is 19 703 lines. P6.3 rewrites 465 single-value
 `%.0f`–`%.3f` calls in that file to `aimiFmt0/1/2/3` (the line count stays 19 703) and teaches
-`AimiFmt.kt` the Java `String.format` digit rule, including `aimiFmt3`. The android file count
-stays 88.
+`AimiFmt.kt` the Java `String.format` digit rule, including `aimiFmt3`. P6.4 reads the
+tick's hour, minute, second and weekday through `AimiCivilClock.kt` (69 lines) and stamps
+two `Locale.US` patterns with `aimiCsvTimestamp` / `aimiCsvTimestampMinute`.
+`DetermineBasalAIMI2.kt` is 19 688 lines. The android file count stays 88.
 The diary sections below keep their historical counts.
 
 Updated 2026-09-02, on `kmp-aimi-migration-study` at `1f6ca62fe8` (the second `kmp` merge).

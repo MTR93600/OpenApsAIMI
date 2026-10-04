@@ -117,9 +117,13 @@ Ancienne liste, absorbée par la tranche 2 :
 
 Pas purs, malgré l’air de l’être : `costFunction` (lit la cinétique du tick), `detectMealOnset` (appelle `effortSuppressesUndeclaredMeal()`), `isMealPriorityAlignedForSpiralSmbCap` (appelle `AimiUamHandler.confidenceOrZero()`), `calculateBasalRate` (appelle `roundBasal` puis c’est bon), `finalizeSmbToGive` (lit `iob`, `bg`, `delta`, `lateFatRiseFlag`).
 
-### Tranche 4 — horloge (lot suivant)
+### Tranche 4 — horloge (faite sur `cursor/p64-tick-kotlinx-clock-da40`)
 
-`LocalTime.now()`, `Calendar.getInstance()`, `ZoneId.systemDefault()`, `Date` vers `kotlinx.datetime` et un instant passé en argument. Ne pas lire l’horloge au milieu d’une fonction déplacée : le tick capture `now` une fois.
+`Calendar.getInstance()` (heure, minute, seconde, jour de semaine) et `LocalTime.now().hour` passent par `aimiCivilClock` / `aimiLocalHour`. Le bloc circadien capture un seul `aimiWallClockMs()`. `SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)` devient `aimiCsvTimestamp`, et `"yyyy-MM-dd HH:mm"` devient `aimiCsvTimestampMinute`. La fenêtre 00:05–00:10 et le midi de la veille (`LocalDate` / `ZoneId`) passent par le même instant.
+
+Restent android, parce qu’un remplacement changerait un texte visible : `SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())` (un calendrier bouddhiste écrit l’année 2569, pas 2026) et les deux `dateUtil.dateAndTimeString(...).format(DateTimeFormatter)`, où le formateur n’est pas appliqué — `String.format` ignore l’argument en trop, et la colonne CSV reste la date localisée (12 h possible). `java.util.Date` des logs debug n’est pas touché.
+
+Un test JVM compare l’heure, la minute, la seconde, le jour `Calendar` (y compris locale `th-TH`), les deux tampons et le midi de la veille à `java.time` sur UTC, Prague, New York, Bangkok et Auckland, y compris les transitions d’heure d’été.
 
 ### Tranche 5 — caches async
 
@@ -189,3 +193,21 @@ Vert, après l’arrondi calqué sur `String.format` :
 - `AimiFmtStringFormatParityTest` (JVM, oracle `String.format(Locale.US, …)`) : `tests="2" skipped="0" failures="0" errors="0"`, horodatage `2026-10-04T14:14:03.195Z`
 
 `:plugins:aps:compileAndroidMain`, `compileKotlinIosArm64`, `compileKotlinIosSimulatorArm64`, `compileTestKotlinIosSimulatorArm64` et `:app:assembleFullDebug` : `BUILD SUCCESSFUL in 1m 10s`, `GRADLE_EXIT=0`. Journal `/tmp/p63-gates.log`.
+
+## 7. Exécution de la tranche 4
+
+Aucun commit de `dev_OAPSAIMI` n’est rejoué. La ref lit encore `Calendar` et `java.time`. Le seam est `kotlinx.datetime`, et un test JVM compare les champs à ce JDK.
+
+Avant le code, `:plugins:aps:compileTestKotlinJvm` et `compileTestKotlinIosSimulatorArm64` : `BUILD FAILED in 11s`, `GRADLE_EXIT=1`, références non résolues (`aimiCivilClock`, `aimiCsvTimestampMinute`, `aimiStrictlyInsideLocalWindow`, `aimiYesterdayMiddayEpochMs`) et trop d’arguments pour `aimiCsvTimestamp`. Pas de XML. Journal `/tmp/p64-red-compile.log`.
+
+Rouge, bouchon qui renvoie 0 / `""` / hors fenêtre :
+
+- `AimiCivilClockTest` : `tests="5" skipped="0" failures="5" errors="0"`, horodatage `2026-10-04T14:20:25.374Z`
+- `AimiCivilClockJvmParityTest` : `tests="1" skipped="0" failures="1" errors="0"`, horodatage `2026-10-04T14:20:25.313Z`
+
+Vert :
+
+- `AimiCivilClockTest` : `tests="5" skipped="0" failures="0" errors="0"`, horodatage `2026-10-04T14:22:25.880Z`
+- `AimiCivilClockJvmParityTest` : `tests="1" skipped="0" failures="0" errors="0"`, horodatage `2026-10-04T14:22:25.875Z`
+
+`:plugins:aps:compileAndroidMain`, `compileKotlinIosArm64`, `compileKotlinIosSimulatorArm64`, `compileTestKotlinIosSimulatorArm64` et `:app:assembleFullDebug` : `BUILD SUCCESSFUL in 1m 12s`, `GRADLE_EXIT=0`. Journal `/tmp/p64-gates.log`.
