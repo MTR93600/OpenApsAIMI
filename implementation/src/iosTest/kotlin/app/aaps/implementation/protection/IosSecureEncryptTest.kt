@@ -2,6 +2,9 @@ package app.aaps.implementation.protection
 
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import dev.whyoleg.cryptography.CryptographyProvider
+import dev.whyoleg.cryptography.DelicateCryptographyApi
+import dev.whyoleg.cryptography.algorithms.SHA256
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -121,17 +124,44 @@ class IosSecureEncryptTest {
      *
      * The last two hex digits are one ciphertext byte. Writing "ff" over them leaves the
      * string unchanged when that byte is already 0xFF, which is 1 in 256 for a fresh GCM
-     * tag, and the hash then still matches. Flip one hex digit so the body always changes:
-     * a header check that stops rejecting tampered bodies still fails here. No retry.
+     * tag, and the hash then still matches. XOR 0x01 on that byte always changes it.
+     * A header check that stops rejecting a changed body still fails here. No retry.
      */
     @Test
     fun `a tampered body no longer validates`() {
         val encrypted = secure.encrypt("secret", "alias1")
-        val tampered = encrypted.dropLast(1) + if (encrypted.last() == '0') "1" else "0"
+        val tampered = tamperSecureEnvelope(encrypted)
 
         assertNotEquals(encrypted, tampered)
         assertFalse(secure.isValidDataString(tampered))
         assertEquals("", secure.decrypt(tampered))
+    }
+
+    /**
+     * The collision the random IV hides: a ciphertext that already ends in `ff`.
+     * The header is a real SHA-256 of that body, so the un-tampered string validates.
+     */
+    @Test
+    fun `a ciphertext that already ends in ff no longer validates`() {
+        val body = "alias1:" + "11".repeat(12) + ":" + "ab".repeat(16) + "ff"
+        val encrypted = sha256Hex(body) + ":" + body
+        val tampered = tamperSecureEnvelope(encrypted)
+
+        assertTrue(encrypted.endsWith("ff"))
+        assertTrue(secure.isValidDataString(encrypted))
+        assertNotEquals(encrypted, tampered)
+        assertTrue(tampered.endsWith("fe"))
+        assertFalse(secure.isValidDataString(tampered))
+        assertEquals("", secure.decrypt(tampered))
+    }
+
+    @OptIn(DelicateCryptographyApi::class)
+    private fun sha256Hex(value: String): String {
+        val digest = CryptographyProvider.Default.get(SHA256).hasher().hashBlocking(value.encodeToByteArray())
+        val hex = "0123456789abcdef"
+        return digest.joinToString("") { b ->
+            hex[(b.toInt() shr 4) and 0xF].toString() + hex[b.toInt() and 0xF]
+        }
     }
 
     // ---- keys ------------------------------------------------------------------------------------
