@@ -242,15 +242,10 @@ Hors de cette série, par consigne, tailles au brace sur le fichier actuel : `se
 
 Le tableau ci-dessous remplace celui d’après T3C. Les tailles sont le corps réel (accolade ouvrante jusqu’à l’accolade fermante, ou l’expression jusqu’à la ligne blanche), pas « jusqu’à la fonction suivante ». Cette ancienne mesure comptait les champs posés entre deux fonctions : `isAutodriveEngaged` y faisait 123 lignes et n’en fait plus qu’une ; `toMedicalJson` y faisait 754 lignes et son corps en fait 354. `tryMealAdvisor` n’existe plus : le conseiller est `runMealAdvisorDecisionOrReturn` (39 lignes, déjà en `commonMain`). `executeSmbInstruction` (96) ne choisit plus : il appelle `SmbInstructionExecutor.execute`.
 
-Têtes qui choisissent encore un débit, un SMB ou un plafond, 40 lignes et plus. Le tableau d’après `applySafetyPrecautions` en comptait 31, sur un fichier de **16 342 lignes**. Six d’entre elles sont en `commonMain` depuis. `DetermineBasalAIMI2.kt` fait **15 979 lignes**, **325 fonctions** membres. Il en reste **25**.
+Têtes qui choisissent encore un débit, un SMB ou un plafond, 40 lignes et plus. Le tableau d’après `applySafetyPrecautions` en comptait 31, sur un fichier de **16 342 lignes**. Douze d’entre elles sont en `commonMain` depuis ce run. `DetermineBasalAIMI2.kt` fait **15 935 lignes**. Il en reste **19**.
 
 | Lignes | Fonction |
 |---:|---|
-| 161 | `runPkpdPredictionsBgiDeviationAndNoisyTargetsStage` |
-| 149 | `runSignalPreparationPkpdRuntimePhase` |
-| 139 | `applyTrajectoryAnalysis` |
-| 136 | `resolveAndWireRbtLiveTick` |
-| 124 | `runSmbDecisionLogAdvisorOneShotAndExecuteInstruction` |
 | 111 | `planT3cBasalFirstProduction` |
 | 111 | `runCarbsAdvisorEnableSmbBasalHistoryAndSafetyStage` |
 | 103 | `runUamModelCalHypoGuardPostHypoAndSetPredictedSmb` |
@@ -261,7 +256,6 @@ Têtes qui choisissent encore un débit, un SMB ou un plafond, 40 lignes et plus
 | 91 | `runBasalDecisionEngineDecideStage` |
 | 91 | `runTrajectoryTightSpiralSafetyBridge` |
 | 86 | `enablesmb` |
-| 85 | `computePkpdPredictions` |
 | 84 | `applyContextModule` |
 | 75 | `updatePhysioLatentState` |
 | 74 | `applyTubeAdvisorFromDoseSnapshot` |
@@ -274,7 +268,7 @@ Têtes qui choisissent encore un débit, un SMB ou un plafond, 40 lignes et plus
 
 En dessous de 40 lignes : le reste des 325, des helpers d’horloge, de log et de lecture. Les compter une par PR gonflerait le chiffre sans avancer le moteur.
 
-`HoldAimiEngine.evaluate` renvoie encore `Hold("ENGINE_NOT_EXTRACTED")`. Le remplacer demande que `runDetermineBasalTickInner` appelle ces têtes depuis `commonMain`, avec `setTempBasal`, la persistance, les notifications, les fichiers et TFLite derrière des ports. Au rythme d’une tête (ou d’une paire couverte par la même trace) par PR, le tableau d’après T3C faisait environ **15 PR**. L’inner tick et le branchement du moteur en font **4 à 6** de plus. Ce décompte a été tenu plus bas, tête par tête. Cette remesure en montrait encore 31 : le décompte « 4 restantes » ne les avait pas retirées. Le tableau courant, plus haut, en garde 25.
+`HoldAimiEngine.evaluate` renvoie encore `Hold("ENGINE_NOT_EXTRACTED")`. Le remplacer demande que `runDetermineBasalTickInner` appelle ces têtes depuis `commonMain`, avec `setTempBasal`, la persistance, les notifications, les fichiers et TFLite derrière des ports. Au rythme d’une tête (ou d’une paire couverte par la même trace) par PR, le tableau d’après T3C faisait environ **15 PR**. L’inner tick et le branchement du moteur en font **4 à 6** de plus. Ce décompte a été tenu plus bas, tête par tête. Cette remesure en montrait encore 31 : le décompte « 4 restantes » ne les avait pas retirées. Le tableau courant, plus haut, en garde 19.
 
 Le tableau est pris juste après T3C, avant le conseiller repas. `tryMealAdvisor` et `runMealAdvisorDecisionOrReturn` sont ensuite passés en `commonMain`. Le fichier android retombe à **17 342 lignes**. Ces deux lignes du tableau ne sont plus des corps de décision. Le compte de PR restantes baisse d’une.
 
@@ -310,19 +304,29 @@ Les quatre têtes que le décompte courant appelait restantes (repas 0–30, ins
 
 `runAdvancedPredictionsAndPredPipePrep` (170 dans le tableau) et `runPredPipelineSafetyHaltOrReturn` (101) sont ensuite passés en `commonMain` (`decideAdvancedPredictionsAndPredPipePrep`, corps 157 lignes ; `decidePredPipelineSafetyHalt`, corps 92). Une même trace les couvre. BG 100, activité IOB 0,20, sensibilité 50 : plancher 39, meilleur terminal environ 43,78, seuil LGS 70, TBR **0,25 U/h** pendant 30 min. L’échec de joignabilité pompe garde le repli faux et ajoute `PRED_PIPE pump reachability failed (<type>): <message> — value false`. La scène verrouillée ne lance pas ce chemin. La halte de sécurité n’avale pas d’exception. Les coquilles font 98 et 84 lignes. `DetermineBasalAIMI2.kt` retombe à **16 286 lignes**.
 
-`runT3cBrittleBypassOrReturn` (166 dans le tableau) est ensuite passé en `commonMain` (`decideT3cBrittleBypass`, corps 154 lignes). Les lectures de champs qui peuvent changer après les prédictions restent des ports à la ligne. Le déploiement physio de l’arbre reste un `runCatching` dans la coquille, avec `aapsLogger.error` `T3C physio/tree deploy failed`. BG 180, basale profil 1,00, max 3,00 : l’arbre critique limite le pas, TBR **1,30 U/h** pendant 30 min, `units` null. La coquille fait 102 lignes. `DetermineBasalAIMI2.kt` retombe à **16 245 lignes**.
+`runT3cBrittleBypassOrReturn` (166 dans le tableau) est ensuite passé en `commonMain` (`decideT3cBrittleBypass`, corps 154 lignes). Les lectures de champs qui peuvent changer après les prédictions restent des ports à la ligne. Le déploiement physio de l’arbre reste un `runCatching` qui attrape tout `Throwable` et continue sans arbre. L’échec est un `OptionalSignal.Failed` plus la ligne `T3C physioTree failed (<type>): <message> — deploy skipped`, et le port Android garde `aapsLogger.error` `T3C physio/tree deploy failed`. Un instantané qui lance laisse le débit. BG 180, basale profil 1,00, max 3,00 : l’arbre critique limite le pas, TBR **1,30 U/h** pendant 30 min, `units` null. La scène verrouillée ne lance pas ce chemin. La coquille fait 102 lignes. `DetermineBasalAIMI2.kt` retombe à **16 245 lignes**.
 
 `planHarmoniaProductionBranch` (158 dans le tableau) est ensuite passé en `commonMain` (`decideHarmoniaProductionRamp`, corps 162 lignes). Les bloqueurs et l’enregistrement du mode restent des ports. Cette tête n’avale pas d’exception. Demande 2,00 U/h, débit précédent 1,00 : rampe **1,30 U/h**. La coquille fait 77 lignes. `DetermineBasalAIMI2.kt` retombe à **16 168 lignes**.
 
 `buildGlobalAimiBasalScheduleBootstrap` (151 dans le tableau) et `runPostBasalBootstrapIobTickStepsAndHeartRate` (160) sont ensuite passés en `commonMain` (`decideBasalSchedule`, corps 137 lignes ; `decideHeartRateIsf`, corps 125). Une même trace les couvre. Autosens 0,5 sur une basale profil 1,00 : basale **2,00 U/h**. FC 110 sur 10 min, moyenne 60 min 88 : ISF 50 × 0,90 = **45**. Le `catch` de la fenêtre FC garde 80 bpm, `baselineReal` faux, la ligne `aapsLogger` déjà là, et ajoute `HR windows failed (<type>): <message> — averages 80, baseline not real`. La scène verrouillée ne lance pas ce chemin. L’horaire n’avale pas d’exception. Les coquilles font 35 et 62 lignes. `DetermineBasalAIMI2.kt` retombe à **15 979 lignes**.
 
-Métrique, en plus de la longueur du fichier. Les coquilles restent dans `DetermineBasalAIMI2.kt` et masquent l’avancement : ce run retire 363 lignes du fichier pour **827** lignes de décision posées en `commonMain`. Le compte est le corps de chaque `decide*`, accolade ouvrante jusqu’à accolade fermante, le même mètre que le tableau. Ce run : 157 + 92 + 154 + 162 + 137 + 125 = **827**. Cumul des 22 fonctions `decide*` : **2 914** lignes de corps. Têtes du tableau encore Android : **25**.
+Métrique, en plus de la longueur du fichier. Les coquilles restent dans `DetermineBasalAIMI2.kt` et masquent l’avancement : le run d’avant retire 363 lignes du fichier pour **827** lignes de décision posées en `commonMain`. Le compte est le corps de chaque `decide*`, accolade ouvrante jusqu’à accolade fermante, le même mètre que le tableau. Ce run-là : 157 + 92 + 154 + 162 + 137 + 125 = **827**. Cumul des 22 fonctions `decide*` à ce point : **2 914** lignes de corps. Têtes du tableau encore Android à ce point : **25**.
 
-`runPkpdPredictionsBgiDeviationAndNoisyTargetsStage` (161) et `computePkpdPredictions` (85) ont une trace déjà verrouillée sur le corps Android : BG 180, cible profil 100, max 120, cible de travail **80**, correction **2,00 U**. Elles sont les prochaines par taille. Ce run ne les déplace pas. L’orchestre de la section 9 commence après les 25 têtes restantes.
+`runPkpdPredictionsBgiDeviationAndNoisyTargetsStage` (161) et `computePkpdPredictions` (85) sont ensuite passés en `commonMain` (`decidePkpdPredictionsAndNoisyTargets`, corps 147 lignes ; `decideComputePkpdPredictions`, corps 72). Une même trace les couvre. BG 180, cible profil 100, max 120 : cible de travail **80**, correction **2,00 U**, eventual 195. Les deux têtes n’avalent pas d’exception. `DetermineBasalAIMI2.kt` reste autour de **15 886 lignes** après ce déplacement : les coquilles compensent le corps retiré.
+
+`runSignalPreparationPkpdRuntimePhase` (149) est ensuite passé en `commonMain` (`decideSignalPreparationPkpdRuntime`, corps 155 lignes). BG 100 en baisse, COB 0, DIA appris 5,00 h, pic 75, fusedISF 50 : plafond SMB **2,00 U → 0,00 U** (BASAL-FIRST fragile). Un `computeRuntime` qui lance garde le plafond et continue avec un runtime null, avec la ligne `PKPD runtime failed (<type>): <message> — value null`. La scène verrouillée ne lance pas ce chemin.
+
+`applyTrajectoryAnalysis` (139) est ensuite passé en `commonMain` (`decideTrajectoryAnalysis`, corps 128 lignes). Garde allumée, pertinence 1,0, amortissement SMB 0,50 : plafond **2,00 U → 1,00 U**. Le `catch` vide de la notification critique devient `Trajectory notification failed (<type>): <message> — post skipped`. La scène verrouillée ne lance pas ce chemin. Le `catch` extérieur garde `🌀 Trajectory: ❌ Error`.
+
+`runSmbDecisionLogAdvisorOneShotAndExecuteInstruction` (124) est ensuite passé en `commonMain` (`decideSmbAdvisorOneShot`, corps 94 lignes). Déclencheur repas, pas de verrou d’exercice, blender legacy sauté, insulinReq 1,50 : plafond SMB **30 U**, SMB livré **1,50 U**. `String.format` reste dans le port Android. Cette tête n’avale pas d’exception.
+
+`resolveAndWireRbtLiveTick` (136) est ensuite passé en `commonMain` (`decideRbtLiveTick`, corps 126 lignes). HTR, le résolveur et `mergeRbtHyperTrajectoryRelease` restent des ports à la ligne. Les lectures qui peuvent changer (`bg`, `delta`, l’état latent, l’horloge `dateUtil.now()`) sont relues à la ligne. Cette tête n’avale pas d’exception. Ombre allumée, autorité éteinte, HTR allumé, BG 226 en forte hausse : SMB V3 **0,40 U → 2,00 U**. `DetermineBasalAIMI2.kt` fait **15 935 lignes**.
+
+Métrique de ce run. Corps ajoutés : 147 + 72 + 155 + 128 + 94 + 126 = **722**. Le corps déjà commun de `decideT3cBrittleBypass` passe de 154 à **170** pour la ligne d’échec de l’arbre. Cumul des **28** fonctions `decide*` : **3 652** lignes de corps. Têtes du tableau encore Android : **19**. L’orchestre de la section 9 commence après ces 19 têtes.
 
 ## 9. Plan de `runDetermineBasalTickInner` et de `HoldAimiEngine`
 
-Ce plan est accepté, avec une correction d’ordre. Les têtes de dose du tableau passent en `commonMain` avant l’orchestre. Si l’orchestre bougeait pendant que ces têtes restent des ports Android, le moteur commun n’aurait aucune implémentation sur iOS, et `HoldAimiEngine` ne pourrait déléguer qu’en Android. Il reste **25** têtes. Le découpage en 6 PR ci-dessous commence quand elles sont décidées dans le commun.
+Ce plan est accepté, avec une correction d’ordre. Les têtes de dose du tableau passent en `commonMain` avant l’orchestre. Si l’orchestre bougeait pendant que ces têtes restent des ports Android, le moteur commun n’aurait aucune implémentation sur iOS, et `HoldAimiEngine` ne pourrait déléguer qu’en Android. Il reste **19** têtes. Le découpage en 6 PR ci-dessous commence quand elles sont décidées dans le commun.
 
 Ce plan est écrit avant tout déplacement de l’inner tick. Aucun run ne le commence tant que le tableau n’est pas vide. `HoldAimiEngine.evaluate` continue de renvoyer `Hold("ENGINE_NOT_EXTRACTED")`. `IosClientConfig.APS` reste `false`.
 
@@ -394,6 +398,8 @@ iOS lie déjà `:plugins:aps` et `:plugins:aimi-engine` (`ios/shell/build.gradle
 Sans sink, `evaluate` renvoie encore `Hold`. Il ne construit pas un `DetermineBasalaimiSMB2`.
 
 ### Dépendances encore sans implémentation iOS
+
+Le mode commande seule donnera des doses différentes d’Android pour la même scène. Ce n’est pas une parité. Il ne doit pas être activé tant que l’utilisateur ne l’a pas décidé. Rien de ce mode n’est implémenté ici.
 
 Une fois les têtes de dose en `commonMain`, ces dépendances restent des ports. Le moteur commun, en mode commande seule, a besoin pour chacune d’une valeur neutre documentée ou d’une implémentation commune. `IosClientConfig.APS` reste `false`. Rien ici ne branche une pompe.
 
