@@ -170,6 +170,8 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiDecisionStudyExporter
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRbtHtrMerge
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRbtRefineState
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideDecisionContextInitRtSosAndFlatShadow
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiBasalFirstAdaptiveState
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideBasalFirstAdaptiveMultiplier
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideRefineRbtMergeAfterDoseSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideMealAdvisorOrReturn
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideT3cBrittleMode
@@ -10661,19 +10663,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * amortisseur qui liait encore. Règle pure dans
      * [app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards.basalFirstAdaptiveMultiplier].
      */
-    private fun basalFirstAdaptiveMultiplier(): Double {
-        val kept = BasalChannelSafetyGuards.basalFirstAdaptiveMultiplier(
-            guardsEnabled = basalChannelSafetyGuardsActive(),
-            adaptiveMult = adaptiveMult,
-            mealModeActive = manualMealModeActive(),
+    private fun basalFirstAdaptiveMultiplier(): Double =
+        decideBasalFirstAdaptiveMultiplier(
+            preferences = preferences,
+            consoleLog = consoleLog,
+            state = object : AimiBasalFirstAdaptiveState {
+                override fun adaptiveMult() = this@DetermineBasalaimiSMB2.adaptiveMult
+                override fun mealTime() = this@DetermineBasalaimiSMB2.mealTime
+                override fun lunchTime() = this@DetermineBasalaimiSMB2.lunchTime
+                override fun dinnerTime() = this@DetermineBasalaimiSMB2.dinnerTime
+                override fun snackTime() = this@DetermineBasalaimiSMB2.snackTime
+                override fun highCarbTime() = this@DetermineBasalaimiSMB2.highCarbTime
+                override fun bfastTime() = this@DetermineBasalaimiSMB2.bfastTime
+            },
         )
-        if (kept < 1.0) {
-            consoleLog.add(
-                "🛡️ BASAL_FIRST_GOV: adaptiveMult conservé à ${aimiFmt2(kept)}x (legacy forçait 1.00x)"
-            )
-        }
-        return kept
-    }
 
     private var correctionAggressionDecision: CorrectionAggressionGate.Decision? = null
     private var lastPostHypoDeliveryAuthority: PostHypoDeliveryAuthority.Decision =
