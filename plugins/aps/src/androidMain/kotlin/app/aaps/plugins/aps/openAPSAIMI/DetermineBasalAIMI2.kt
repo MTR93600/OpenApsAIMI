@@ -108,6 +108,19 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiFinalizeTdd
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiFinalizeThrottle
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiFinalizeThyroid
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideFinalizeAndCapSmb
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRbtContextSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRbtDeltaPrev
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRbtDwell
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRbtExtendedBuild
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRbtResolveClock
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRbtResolveDoseBg
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRbtResolveFields
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRbtResolveLatent
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRbtResolvePhysio
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRbtResolveWrites
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRbtTrajectory
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRbtWCycleEnsure
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideRecursiveBeliefResolve
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideMealAdvisorOrReturn
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideT3cBrittleMode
 import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
@@ -4217,242 +4230,94 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         autodriveGateOpen: Boolean = false,
         mpcFeedForwardRa: Double? = null,
         cbfShieldDeltaU: Double? = null,
-    ): RecursiveBeliefSnapshot? {
-        val rbtPrefs = RecursiveBeliefPreferences.from(preferences)
-        if (!RecursiveBeliefPreferences.isActive(rbtPrefs)) return null
-        val scenario = lastScenarioProjection ?: return null
-        val curves = lastAdvancedPredictionCurves ?: return null
-        val (floorTerminal, bestTerminal) = resolveHtrScenarioTerminals(rT)
-        val htrClass = HyperSeverityClassifier.classify(
-            HyperSeverityClassifier.Input(
-                bgMgdl = bg,
-                targetBgMgdl = targetBg.toDouble(),
-                highBgPreferenceMgdl = preferences.get(DoubleKey.OApsAIMIHighBg),
-                deltaMgdlPer5 = delta.toDouble(),
-                shortAvgDeltaMgdlPer5 = shortAvgDelta.toDouble(),
-                combinedDeltaMgdlPer5 = combinedDelta.toDouble(),
-                floorTerminalMgdl = floorTerminal,
-                bestTerminalMgdl = bestTerminal,
-                tdd24hU = tdd24hU,
-                dwellAboveHighBgMinutes = dwellAboveHighBgMinutes(),
-                trajectoryType = trajectoryGuard.getLastAnalysis()?.classification,
-                establishedDevOverrideMgdl = preferences.get(DoubleKey.OApsAIMIHyperEstablishedDevMgdl),
-                deepDevOverrideMgdl = preferences.get(DoubleKey.OApsAIMIHyperDeepDevMgdl),
-                mealAbsorptionPhase = lastMealAbsorptionOutput?.phase ?: MealAbsorptionPhase.NONE,
-                gapPrevMgdl = MealAbsorptionMemory.lastGapMgdl,
-            ),
-        )
-        val bgHistory = glucoseStatusCalculatorAimi.getRecentGlucose().map { it.toDouble() }
-        val bgDerivShort = if (bgHistory.size >= 3) {
-            bgHistory.takeLast(3).let { it.last() - it.first() } / 2.0
-        } else {
-            null
-        }
-        val rawMinPred = minPredictedAcrossCurves(rT.predBGs)
-        val hypoIgnored = htr.hypoMinPredIgnored
-        // Dose snapshot / Authority terminals (published pre_rbt or pre_v3_rbt before this resolve).
-        val previewMinPred = authoritativeMinPredBg(rT, rawMinPred)
-        val minPredForStacking = if (hypoIgnored && previewMinPred != null) {
-            val dev = bg - targetBg
-            max(previewMinPred, bg - HyperTrajectoryHypoCredibility.hypoCredibilityDropMgdl(dev))
-        } else {
-            previewMinPred
-        }
-        val endogenousCounterRegulatory =
-            lastPhysiologicalPhaseOutput?.phase == PhysiologicalPhase.ENDOGENOUS_COUNTER_REGULATORY
-        val stackingEval = InsulinStackingStance.evaluate(
-            bg = bg,
-            delta = delta.toDouble(),
-            shortAvgDelta = shortAvgDelta.toDouble(),
-            targetBg = targetBg.toDouble(),
-            iob = iob.toDouble(),
-            maxIob = maxIob,
-            eventualBg = authoritativeEventualBg(eventualBG).takeIf { it.isFinite() },
-            minPredBg = minPredForStacking,
-            trajectoryEnergy = rT.trajectoryEnergy,
-            isExplicitUserAction = false,
-            enabled = preferences.get(BooleanKey.OApsAIMIIobSurveillanceGuard),
-            mealPriorityContext =
-                lastMealAbsorptionOutput?.mealDeliveryPriority == true &&
-                    lastUamHypothesisState?.suppressMealInterpretation != true,
-            endogenousCounterRegulatory = endogenousCounterRegulatory,
-            mealAbsorptionPhase = lastMealAbsorptionOutput?.phase ?: MealAbsorptionPhase.NONE,
-            mealModeActive = mealTime || bfastTime || lunchTime || dinnerTime || snackTime || highCarbTime,
-        )
-        lastInsulinStackingEvaluation = stackingEval
-        ensureWCycleInfo()
-        val extended = buildRbtExtendedSignals(
-            rT = rT,
-            profile = profile,
-            htr = htr,
-            v3SmbU = v3SmbU,
-            autosens = autosens,
-            glucoseStatus = glucoseStatus,
-            mpcFeedForwardRa = mpcFeedForwardRa,
-            cbfShieldDeltaU = cbfShieldDeltaU,
-        )
-        val physioContext = physioAdapter.getEffectiveContext()
-        val wearableSnap = physioAdapter.getLatestSnapshot()
-        val contextSnap = try {
-            if (preferences.get(BooleanKey.OApsAIMIContextEnabled)) {
-                contextManager.getSnapshot(dateUtil.now())
-            } else {
-                null
+    ): RecursiveBeliefSnapshot? = decideRecursiveBeliefResolve(
+        v3SmbU = v3SmbU,
+        htr = htr,
+        rT = rT,
+        combinedDelta = combinedDelta,
+        tdd24hU = tdd24hU,
+        profile = profile,
+        autosens = autosens,
+        glucoseStatus = glucoseStatus,
+        stepsLast15m = stepsLast15m,
+        heartRateBpm = heartRateBpm,
+        autodriveGateOpen = autodriveGateOpen,
+        mpcFeedForwardRa = mpcFeedForwardRa,
+        cbfShieldDeltaU = cbfShieldDeltaU,
+        preferences = preferences,
+        consoleLog = consoleLog,
+        fields = object : AimiRbtResolveFields {
+            override fun scenario() = lastScenarioProjection
+            override fun curves() = lastAdvancedPredictionCurves
+            override fun bg() = this@DetermineBasalaimiSMB2.bg
+            override fun targetBg() = this@DetermineBasalaimiSMB2.targetBg.toDouble()
+            override fun delta() = this@DetermineBasalaimiSMB2.delta.toDouble()
+            override fun shortAvgDelta() = this@DetermineBasalaimiSMB2.shortAvgDelta.toDouble()
+            override fun mealAbsorption() = lastMealAbsorptionOutput
+            override fun phaseOutput() = lastPhysiologicalPhaseOutput
+            override fun uamHypothesis() = lastUamHypothesisState
+            override fun iob() = this@DetermineBasalaimiSMB2.iob.toDouble()
+            override fun maxIob() = this@DetermineBasalaimiSMB2.maxIob
+            override fun eventualBg() = eventualBG
+            override fun mealModeActive() =
+                this@DetermineBasalaimiSMB2.mealTime || bfastTime || lunchTime || dinnerTime || snackTime || highCarbTime
+            override fun hourOfDay() = this@DetermineBasalaimiSMB2.hourOfDay
+            override fun exerciseLockout() = exerciseInsulinLockoutActive
+            override fun sportTime() = this@DetermineBasalaimiSMB2.sportTime
+            override fun sleepTime() = this@DetermineBasalaimiSMB2.sleepTime
+            override fun trajectoryRelevance() =
+                lastFusedPhysioMultipliers?.trajectoryRelevanceScore?.toDouble()
+                    ?: lastBasePhysioMultipliers.trajectoryRelevanceScore.toDouble()
+            override fun maxSmbEffective() = maxSMBHB.coerceAtLeast(maxSMB)
+            override fun barrierPermittedU() = autodriveEngine.lastCbfPermittedU.takeIf { it.isFinite() && it >= 0.0 }
+            override fun insulinActivity() = tickInsulinActionState
+            override fun loadGovernorMultiplierG() = lastLoadGovernorMultiplierG
+            override fun safetyTerminals() = lastSafetyTerminalsForRbt
+            override fun riskEnvelope() = cachedRiskEnvelopeEarly
+            override fun contextActivityActive() = aimiContextActivityActive
+            override fun trajBridgePending() = pendingTrajSpiralBasal != null
+            override fun fusedMultipliers() = lastFusedPhysioMultipliers
+            override fun wCycleBelief() = lastWCycleBelief
+            override fun patientMode() = lastPatientModeDecision
+            override fun contextIntentCount() = lastContextSnapshot?.intentCount ?: 0
+        },
+        htrTerminals = AimiHtrTerminals { resolveHtrScenarioTerminals(it) },
+        doseBg = object : AimiRbtResolveDoseBg {
+            override fun authoritativeMinPredBg(rT: RT, rawMinPred: Double?) =
+                this@DetermineBasalaimiSMB2.authoritativeMinPredBg(rT, rawMinPred)
+            override fun authoritativeEventualBg(fallback: Double) =
+                this@DetermineBasalaimiSMB2.authoritativeEventualBg(fallback)
+        },
+        dwell = AimiRbtDwell { dwellAboveHighBgMinutes() },
+        trajectory = AimiRbtTrajectory { trajectoryGuard.getLastAnalysis() },
+        recentGlucose = AimiRecentGlucose { glucoseStatusCalculatorAimi.getRecentGlucose() },
+        uamConfidence = AimiUamConfidence { AimiUamHandler.confidenceOrZero() },
+        wCycle = AimiRbtWCycleEnsure { ensureWCycleInfo() },
+        extendedBuild = AimiRbtExtendedBuild { rT, profile, htr, v3SmbU, autosens, glucoseStatus, mpcFeedForwardRa, cbfShieldDeltaU ->
+            buildRbtExtendedSignals(rT, profile, htr, v3SmbU, autosens, glucoseStatus, mpcFeedForwardRa, cbfShieldDeltaU)
+        },
+        physio = object : AimiRbtResolvePhysio {
+            override fun getEffectiveContext() = physioAdapter.getEffectiveContext()
+            override fun getLatestSnapshot() = physioAdapter.getLatestSnapshot()
+        },
+        contextSnapshot = AimiRbtContextSnapshot { contextManager.getSnapshot(it) },
+        writes = object : AimiRbtResolveWrites {
+            override fun setStacking(evaluation: InsulinStackingStance.Evaluation) {
+                lastInsulinStackingEvaluation = evaluation
             }
-        } catch (_: Exception) {
-            null
-        }
-        val patternInput = PhysiologicalPatternInputBuilder.build(
-            bgMgdl = bg,
-            targetBgMgdl = targetBg.toDouble(),
-            highBgPreferenceMgdl = preferences.get(DoubleKey.OApsAIMIHighBg),
-            deltaMgdlPer5 = delta.toDouble(),
-            shortAvgDeltaMgdlPer5 = shortAvgDelta.toDouble(),
-            combinedDeltaMgdlPer5 = combinedDelta.toDouble(),
-            mealCobG = rT.COB?.toDouble() ?: 0.0,
-            hourOfDay = hourOfDay,
-            stepsLast15m = stepsLast15m,
-            heartRateBpm = heartRateBpm,
-            restingHeartRateBpm = wearableSnap.rhrResting,
-            iobU = iob.toDouble(),
-            maxIobU = maxIob,
-            bestTerminalMgdl = bestTerminal,
-            floorTerminalMgdl = floorTerminal,
-            phaseOutput = lastPhysiologicalPhaseOutput,
-            physioContext = physioContext,
-            sleepDebtMinutes = wearableSnap.sleepDebtMinutes,
-            sleepEfficiency = wearableSnap.sleepEfficiency,
-            mealAbsorption = lastMealAbsorptionOutput,
-            stackingEval = stackingEval,
-            endogenousCounterRegulatory = endogenousCounterRegulatory,
-            postHypoOrdinal = extended.postHypoOrdinal,
-            exerciseLockout = exerciseInsulinLockoutActive,
-            sportTime = sportTime,
-            sleepTime = sleepTime,
-            contextSnapshot = contextSnap,
-            compressionImpossibleRise = extended.compressionImpossibleRise,
-            dwellAboveHighBgMinutes = dwellAboveHighBgMinutes(),
-            trajectoryRelevanceScore = lastFusedPhysioMultipliers?.trajectoryRelevanceScore?.toDouble()
-                ?: lastBasePhysioMultipliers.trajectoryRelevanceScore.toDouble(),
-            nowMs = dateUtil.now(),
-            // The catalogue reduces the user's own ceiling instead of imposing absolute units.
-            //
-            // ⚠️ The **configured** ceiling, not `this.maxSMBHB`. That field is reassigned during the
-            // tick and ramps with glucose (0.88 → 1.12 → 1.36 → 1.60 on the dinner of 2026-08-10), so
-            // multiplying a fraction by it applies the reduction twice: the cap fell to 0.66 U at
-            // BG 111 where it should have been 1.20 — 45 % tighter at the start of a meal, exactly
-            // when the prebolus matters. The catalogue reduces a *setting*, and the tick's own
-            // maxSMB/maxSMBHB selection still bounds the dose afterwards.
-            maxSmbHbU = maxOf(
-                preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB),
-                preferences.get(DoubleKey.OApsAIMIMaxSMB),
-            ),
-        )
-        val patternSnapshot = PhysiologicalPatternDetector.detect(patternInput)
-        lastPhysiologicalPatternSnapshot = patternSnapshot
-        lastContextSnapshot = contextSnap
-        updatePhysioLatentState(
-            snapshot = wearableSnap,
-            sourceSensor = glucoseStatus?.sourceSensor,
-            patternSnapshot = patternSnapshot,
-        )
-        patternSnapshot.dominant?.let { dominant ->
-            consoleLog.add(
-                "🧬 PATTERN: dominant=$dominant conf=${aimiFmt2(patternSnapshot.dominantConfidence)} " +
-                    "cap=${patternSnapshot.smbCapU?.let { aimiFmt2(it) + "U" } ?: "none"}" +
-                    "${patternSnapshot.smbCapKind?.let { "/$it" } ?: ""} " +
-                    "mealSupp=${patternSnapshot.suppressMealInterpretation} " +
-                    "hyperSupp=${patternSnapshot.suppressHyperRelease} | ${patternSnapshot.reasonSummary}",
-            )
-        }
-        lastPatientModeDecision?.takeIf {
-            it.mode != PatientMode.STABLE_BASELINE ||
-                it.confidence >= 0.60 ||
-                (lastContextSnapshot?.intentCount ?: 0) > 0
-        }?.let { modeDecision ->
-            consoleLog.add("🫀 PATIENT_MODE: ${modeDecision.summary()}")
-        }
-        val ctx = RecursiveBeliefTickContext(
-            bgMgdl = bg,
-            targetBgMgdl = targetBg.toDouble(),
-            highBgPreferenceMgdl = preferences.get(DoubleKey.OApsAIMIHighBg),
-            deltaMgdlPer5 = delta.toDouble(),
-            shortAvgDeltaMgdlPer5 = shortAvgDelta.toDouble(),
-            combinedDeltaMgdlPer5 = combinedDelta.toDouble(),
-            iobU = iob.toDouble(),
-            maxIobU = maxIob,
-            maxSmbEffectiveU = maxSMBHB.coerceAtLeast(maxSMB),
-            barrierPermittedU = autodriveEngine.lastCbfPermittedU.takeIf { it.isFinite() && it >= 0.0 },
-            tdd24hU = tdd24hU,
-            patientWeightKg = preferences.get(DoubleKey.OApsAIMIweight),
-            deltaPrevMgdlPer5 = mealAbsorptionDeltaPrevOfTick(),
-            eventualBgMgdl = eventualBG.takeIf { it.isFinite() },
-            insulinActivityNow = tickInsulinActionState?.activityNow,
-            lastLoadGovernorMultiplierG = lastLoadGovernorMultiplierG,
-            curves = curves,
-            scenario = scenario,
-            mealAbsorption = lastMealAbsorptionOutput,
-            physioPhase = lastPhysiologicalPhaseOutput,
-            behavioralRisk = lastPhysiologicalPhaseOutput?.policy,
-            physioContext = physioContext,
-            physiologicalPatterns = patternSnapshot,
-            trajectoryAnalysis = trajectoryGuard.getLastAnalysis(),
-            trajectoryRelevanceScore = lastFusedPhysioMultipliers?.trajectoryRelevanceScore?.toDouble()
-                ?: lastBasePhysioMultipliers.trajectoryRelevanceScore.toDouble(),
-            safetyTerminals = lastSafetyTerminalsForRbt,
-            riskEnvelope = cachedRiskEnvelopeEarly,
-            stackingStance = stackingEval,
-            uamConfidence = AimiUamHandler.confidenceOrZero(),
-            contextSmbFactor = rT.contextModulation.takeIf { rT.contextEnabled }?.toFloat() ?: 1.0f,
-            contextActivityActive = aimiContextActivityActive,
-            stepsLast15m = stepsLast15m,
-            heartRateBpm = heartRateBpm,
-            isNight = hourOfDay >= 23 || hourOfDay < 6,
-            exerciseLockout = exerciseInsulinLockoutActive,
-            asleepLiveConfidence = extended.sleepLiveConfidence ?: 0.0,
-            hypoMinPredIgnored = hypoIgnored,
-            minPredictedBgMgdl = rawMinPred,
-            dwellAboveHighBgMinutes = dwellAboveHighBgMinutes(),
-            trajBridgePending = pendingTrajSpiralBasal != null,
-            tubeAdvisorCapScale = extended.tubeAdvisorCapScale,
-            v3SmbU = v3SmbU,
-            htrResult = htr,
-            htrClassification = htrClass,
-            tier1Hypo = bg < (profile.lgsThreshold ?: 70),
-            bgHistoryMgdl = bgHistory,
-            physioMultipliers = lastFusedPhysioMultipliers,
-            wCycleBasalMult = EndocrineAmplitudeGovernor.productionAmp(lastWCycleBelief, EndocrineAmpAxis.BASAL)
-                .takeIf { it != 1.0 },
-            wCycleSmbMult = EndocrineAmplitudeGovernor.productionAmp(lastWCycleBelief, EndocrineAmpAxis.SMB)
-                .takeIf { it != 1.0 },
-            wCycleHypoLoad = lastWCycleBelief?.hypoLoad,
-            bgDerivShort = bgDerivShort,
-            insulinActivityStageOrdinal = extended.insulinActivityStageOrdinal,
-            autodriveV3GateOpen = autodriveGateOpen,
-            endogenousCounterRegulatory = endogenousCounterRegulatory,
-            pkpdTailDamping = extended.pkpdTailDamping,
-            correctionAggressionLevel = extended.correctionAggressionLevel,
-            ngrSmbMult = extended.ngrSmbMult,
-            shadowAuditorConfidence = extended.shadowAuditorConfidence,
-            shadowOrchestratorActive = extended.shadowOrchestratorActive,
-            tuningContextLabel = extended.tuningContextLabel,
-            replaceHtrRelease = rbtPrefs.authorityEnabled,
-            extended = extended,
-        )
-        val scales = RecursiveBeliefEngine.build(
-            ctx = ctx,
-            nowMs = dateUtil.now(),
-            waveletEnabled = rbtPrefs.waveletEnabled,
-            includeShadowLeaves = rbtPrefs.shadowEnabled,
-        )
-        return RecursiveBeliefResolver.resolve(
-            RecursiveBeliefResolver.Input(
-                ctx = ctx,
-                scales = scales,
-                authorityEnabled = rbtPrefs.authorityEnabled,
-            ),
-        )
-    }
+            override fun setPattern(snapshot: PhysiologicalPatternSnapshot) {
+                lastPhysiologicalPatternSnapshot = snapshot
+            }
+            override fun setContext(snapshot: ContextSnapshot?) {
+                lastContextSnapshot = snapshot
+            }
+        },
+        latent = AimiRbtResolveLatent { snapshot, sourceSensor, patternSnapshot ->
+            updatePhysioLatentState(snapshot, sourceSensor, patternSnapshot)
+        },
+        deltaPrev = AimiRbtDeltaPrev { mealAbsorptionDeltaPrevOfTick() },
+        clock = AimiRbtResolveClock { dateUtil.now() },
+    )
 
     /**
      * Resolve RBT + physio gate + wiring once per loop tick (dedup-guarded).

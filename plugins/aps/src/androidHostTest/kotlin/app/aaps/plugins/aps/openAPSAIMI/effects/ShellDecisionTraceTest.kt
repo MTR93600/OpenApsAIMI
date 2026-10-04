@@ -39,13 +39,18 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionMemory
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioContextMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisId
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.AdvancedPredictionCurves
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLearnedState
+import app.aaps.plugins.aps.openAPSAIMI.release.HyperSeverityTier
+import app.aaps.plugins.aps.openAPSAIMI.release.HyperTrajectoryReleaseResult
+import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionCurve
+import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionKind
+import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionPair
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiAuditor
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiBehaviorProfileSource
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiHealthContext
 import app.aaps.plugins.aps.openAPSAIMI.recursive.RbtExtendedSignals
-import app.aaps.plugins.aps.openAPSAIMI.release.HyperSeverityTier
-import app.aaps.plugins.aps.openAPSAIMI.release.HyperTrajectoryReleaseResult
+import app.aaps.plugins.aps.openAPSAIMI.recursive.RecursiveBeliefSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryGuard
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import app.aaps.plugins.aps.openAPSAIMI.validation.PumpCapabilityValidator
@@ -372,6 +377,101 @@ class ShellDecisionTraceTest {
         }.replace(Regex("(?<![A-Za-z])ts=\\d+"), "ts=<clock>")
         assertEquals(0.15, rT.units ?: -1.0, 1e-6)
         assertEquals(FINALIZE_CAP_TRACE, trace)
+    }
+
+    @Test
+    fun recursiveBeliefResolveWithAFlatScenarioRecordsTheReads() {
+        val prefs = recordingPreferences(
+            doubles = emptyMap(),
+            bools = mapOf(BooleanKey.OApsAIMIRecursiveBeliefShadow to true),
+        )
+        setField(tick, "preferences", prefs)
+        setField(tick, "bg", 180.0)
+        setField(tick, "delta", 2.0f)
+        setField(tick, "shortAvgDelta", 1.0f)
+        setField(tick, "targetBg", 100.0f)
+        setField(tick, "iob", 1.0f)
+        setField(tick, "maxIob", 10.0)
+        setField(tick, "maxSMB", 0.5)
+        setField(tick, "maxSMBHB", 0.5)
+        setField(tick, "eventualBG", 180.0)
+        setField(tick, "hourOfDay", 12)
+        val curves = AdvancedPredictionCurves(
+            iob = listOf(180.0, 170.0),
+            cob = listOf(180.0),
+            uam = listOf(180.0),
+            zt = listOf(180.0),
+            hybrid = listOf(180.0, 170.0),
+        )
+        val floor = ScenarioProjectionCurve(
+            kind = ScenarioProjectionKind.CLINICAL_FLOOR,
+            pointsMgdl = listOf(180, 170),
+            terminalMgdl = 170.0,
+            pathMinMgdl = 170.0,
+            pathMinHitFloor = false,
+        )
+        setField(
+            tick,
+            "lastScenarioProjection",
+            ScenarioProjectionPair(
+                clinicalFloor = floor,
+                scenarioBest = floor.copy(kind = ScenarioProjectionKind.SCENARIO_BEST),
+                contributors = emptyList(),
+                cobPointsMgdl = listOf(180),
+                ztPointsMgdl = listOf(180),
+            ),
+        )
+        setField(tick, "lastAdvancedPredictionCurves", curves)
+        val profile = profileStub()
+        val rT = RT(runningDynamicIsf = false)
+        var returned: Any? = null
+        val trace = capture {
+            returned = invokeRbtResolve(rT, profile)
+        }.replace(Regex("(?<![A-Za-z])ts=\\d+"), "ts=<clock>")
+        val snap = returned as RecursiveBeliefSnapshot
+        val resolution = snap.resolutions
+        assertEquals(0.0, resolution.smbDemandU, 0.0)
+        assertEquals(1.0, resolution.tbrDemandFraction, 0.0)
+        assertEquals(0.15, resolution.waitBias, 1e-9)
+        assertEquals("NONE", resolution.releaseAuthority.toString())
+        assertEquals("FULL", resolution.hypoGuardMode.toString())
+        assertEquals(listOf("P2_SOFT", "HARMONIA_SMB_ACCEPT", "OFF_ASLEEP_LIVE"), resolution.reasonCodes)
+        assertEquals(RBT_RESOLVE_TRACE, trace)
+    }
+
+    private fun invokeRbtResolve(rT: RT, profile: OapsProfileAimi): Any? {
+        val method = tick.javaClass.declaredMethods.first {
+            it.name == "runRecursiveBeliefResolve" && it.parameterCount == 13
+        }
+        method.isAccessible = true
+        val htr = HyperTrajectoryReleaseResult(
+            active = false,
+            tier = HyperSeverityTier.OFF,
+            severityWeight = 0.0,
+            smbFloorU = 0.0,
+            v3SmbBeforeU = 0.0,
+            v3SmbAfterU = 0.0,
+            absorptionOffsetMgdl = 0.0,
+            suppressTrajBasalShift = false,
+            hypoMinPredIgnored = false,
+            reason = "off",
+        )
+        return method.invoke(
+            tick,
+            0.0,
+            htr,
+            rT,
+            2.0f,
+            30.0,
+            profile,
+            mock(AutosensResult::class.java),
+            GlucoseStatusAIMI(glucose = 180.0, date = now),
+            0,
+            0,
+            false,
+            null,
+            null,
+        )
     }
 
     private fun invokeFinalize(rT: RT, proposedUnits: Double) {
@@ -786,6 +886,50 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val RBT_RESOLVE_TRACE = """
+READ key=BooleanKey.OApsAIMIRecursiveBeliefShadow value=true
+READ key=BooleanKey.OApsAIMIRecursiveBeliefAuthority value=false
+READ key=BooleanKey.OApsAIMIRecursiveBeliefWavelet value=false
+READ key=BooleanKey.OApsAIMIMealHyperBypassEnabled value=false
+READ key=BooleanKey.OApsAIMITreeMealRiseFrontLoad value=false
+READ key=DoubleKey.OApsAIMIHighBg value=0.00
+READ key=DoubleKey.OApsAIMIHyperEstablishedDevMgdl value=0.00
+READ key=DoubleKey.OApsAIMIHyperDeepDevMgdl value=0.00
+READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+READ key=BooleanKey.OApsAIMIIobSurveillanceGuard value=false
+READ key=DoubleKey.OApsAIMIT3cAnticipationStrength value=0.00
+READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
+READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
+READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
+READ key=IntKey.OApsAIMINightGrowthAgeYears value=0
+READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
+READ key=StringKey.OApsAIMINightGrowthStart value=
+READ key=StringKey.OApsAIMINightGrowthEnd value=
+READ key=DoubleKey.OApsAIMINightGrowthMaxIobExtra value=0.00
+READ key=BooleanKey.AimiEndometriosisEnable value=false
+LOG 😴 SLEEP_LIVE: wearable steps15=0 hr=72/rhr=60 conf=0.57 conf=0.57
+READ key=DoubleKey.OApsAIMISmbTailDamping value=0.00
+READ key=StringKey.AimiTuningContextSelection value=
+READ key=BooleanKey.OApsAIMIContextEnabled value=false
+READ key=DoubleKey.OApsAIMIHighBg value=0.00
+READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.00
+READ key=DoubleKey.OApsAIMIMaxSMB value=0.00
+READ key=BooleanKey.OApsAIMISensorConfidenceCgmFirst value=false
+READ key=BooleanKey.OApsAIMIEffortActivityProtection value=false
+READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
+READ key=StringKey.AimiTuningContextSelection value=
+READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+READ key=DoubleKey.autodriveMaxBasal value=0.00
+LOG TREE_DEPLOYED trunk=SENSOR_UNCERTAIN conf=0.90 risk=CRITICAL kinetics=NO_STAGE
+LOG Tree: sensor uncertain | conf 90% | risk critical | sensor uncertain
+LOG MEAL_CERTAINTY level=NONE tree=NONE rise=OK terminals=OK effortVeto=false
+LOG Harmonia sim: blocked SENSOR_UNCERTAIN | sensor_uncertain,critical_risk
+LOG 🫀 PATIENT_MODE: mode=ABSORPTION_UNCERTAIN conf=0.95 strat=PKPD_REASSESS mealBias=0.30 protect=0.86 reasons=CAUSAL_ABSORPTION_UNCERTAIN
+READ key=DoubleKey.OApsAIMIHighBg value=0.00
+READ key=DoubleKey.OApsAIMIweight value=0.00
+""".trimIndent()
+
         private val FINALIZE_CAP_TRACE = """
 READ key=DoubleKey.OApsAIMIHighBg value=0.00
 READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
