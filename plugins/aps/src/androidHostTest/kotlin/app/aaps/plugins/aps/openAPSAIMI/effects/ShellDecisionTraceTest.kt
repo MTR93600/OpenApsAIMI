@@ -353,6 +353,48 @@ class ShellDecisionTraceTest {
     }
 
     @Test
+    fun finalizeCapCutsAProposedSmbDownToMaxSmb() {
+        val prefs = recordingPreferences(emptyMap())
+        setField(tick, "preferences", prefs)
+        setField(tick, "bg", 180.0)
+        setField(tick, "delta", 2.0f)
+        setField(tick, "shortAvgDelta", 1.0f)
+        setField(tick, "targetBg", 100.0f)
+        setField(tick, "iob", 1.0f)
+        setField(tick, "maxIob", 10.0)
+        setField(tick, "maxSMB", 0.5)
+        setField(tick, "maxSMBHB", 0.5)
+        setField(tick, "eventualBG", 180.0)
+        setField(tick, "lastBolusAgeMinutes", 999.0)
+        val rT = RT(runningDynamicIsf = false)
+        val trace = capture {
+            invokeFinalize(rT, proposedUnits = 3.0)
+        }.replace(Regex("(?<![A-Za-z])ts=\\d+"), "ts=<clock>")
+        assertEquals(0.15, rT.units ?: -1.0, 1e-6)
+        assertEquals(FINALIZE_CAP_TRACE, trace)
+    }
+
+    private fun invokeFinalize(rT: RT, proposedUnits: Double) {
+        val method = tick.javaClass.declaredMethods.first {
+            it.name == "finalizeAndCapSMB" && it.parameterCount == 10
+        }
+        method.isAccessible = true
+        method.invoke(
+            tick,
+            rT,
+            proposedUnits,
+            "micro",
+            MealData(mealCOB = 0.0),
+            70.0,
+            false,
+            "GlobalAIMI",
+            false,
+            0.0,
+            false,
+        )
+    }
+
+    @Test
     fun engagedHypoWithMealContextRecordsTheEngineCommand() {
         val (trace, applied) = autodriveTrace(
             glucose = 54.0,
@@ -744,6 +786,42 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val FINALIZE_CAP_TRACE = """
+READ key=DoubleKey.OApsAIMIHighBg value=0.00
+READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+READ key=BooleanKey.OApsAIMIhoneymoon value=false
+READ key=BooleanKey.OApsAIMIHyperDroppingExemptEnabled value=false
+READ key=BooleanKey.OApsAIMIhoneymoon value=false
+READ key=BooleanKey.OApsAIMIMealAdvisorTrigger value=false
+READ key=BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled value=false
+READ key=DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor value=0.00
+LOG Safety Precautions reduced SMB: 3.0 -> 0.5 (BaseLimit=0.50)
+READ key=BooleanKey.OApsAIMIhoneymoon value=false
+READ key=BooleanKey.OApsAIMInight value=false
+READ key=IntKey.OApsAIMISnackinterval value=0
+READ key=IntKey.OApsAIMImealinterval value=0
+READ key=IntKey.OApsAIMIBFinterval value=0
+READ key=IntKey.OApsAIMILunchinterval value=0
+READ key=IntKey.OApsAIMIDinnerinterval value=0
+READ key=IntKey.OApsAIMISleepinterval value=0
+READ key=IntKey.OApsAIMIHCinterval value=0
+READ key=IntKey.OApsAIMIHighBGinterval value=0
+LOG 📦 CACHE TDD24H=MISSING reason=tdd24h_missing
+READ key=BooleanKey.OApsAIMIRiseCeilingGuard value=false
+READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+READ key=BooleanKey.OApsAIMIIobSurveillanceGuard value=false
+LOG PKPD_THROTTLE smbFactor=0.60 intervalAdd=3 preferTbr=true reason=Onset unconfirmed, rising BG → TBR priority
+WRITE key=AimiLongKey.LastPrebolusTime value=1700000000000
+LOG GATE_REFRACTORY sinceLastBolus=999.0m window=5.0
+LOG GATE_MAXIOB allowed=10.00 current=1.00
+LOG GATE_MAXSMB cap=0.50 proposed=3.00
+LOG GATE_ABSORPTION activity=0.000 threshold=0.188 factor=1.00
+LOG GATE_PRED_MISSING fallback=ON
+LOG SMB_CAP: Proposed=3.0 Allowed=0.15 Reason=micro
+LOG   -> Limits: MaxSMB=0.5 MaxIOB=10.0 IOB=1.0
+READ key=BooleanKey.OApsAIMIIobSurveillanceGuard value=false
+""".trimIndent()
+
         private val MEAL_ADVISOR_TRACE = """
 READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=40.00
 READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=<clock>
