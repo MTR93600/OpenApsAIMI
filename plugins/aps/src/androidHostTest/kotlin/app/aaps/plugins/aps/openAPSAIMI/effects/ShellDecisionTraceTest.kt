@@ -955,6 +955,59 @@ class ShellDecisionTraceTest {
         assertEquals(MEAL_FIRST_30_TRACE, trace)
     }
 
+    @Test
+    fun activityCapThenMealIobDampingCutsInsulinReq() {
+        setField(tick, "activityProtectionMode", true)
+        setField(tick, "activityStateIntense", false)
+        setField(tick, "maxSMB", 1.0)
+        val profile = profileStub()
+        val rT = RT(runningDynamicIsf = false)
+        val ctx = tickContext(profile).copy(microBolusAllowed = false)
+        val trace = capture {
+            invokeInsulinReq(
+                ctx = ctx,
+                rT = rT,
+                smbToGive = 2f,
+                allowMealHighIob = true,
+                mealHighIobDamping = 0.50,
+            )
+        }
+        assertEquals(0.25, rT.insulinReq!!, 1e-9)
+        assertEquals(INSULIN_REQ_ACTIVITY_TRACE, trace)
+    }
+
+    private fun invokeInsulinReq(
+        ctx: AimiTickContext,
+        rT: RT,
+        smbToGive: Float,
+        allowMealHighIob: Boolean,
+        mealHighIobDamping: Double,
+    ) {
+        val method = tick.javaClass.declaredMethods.first {
+            it.name == "runInsulinReqActivityRelaxAndMicrobolusStage" && it.parameterCount == 16
+        }
+        method.isAccessible = true
+        method.invoke(
+            tick,
+            ctx,
+            rT,
+            IobTotal(time = now, iob = 4.0),
+            smbToGive,
+            allowMealHighIob,
+            mealHighIobDamping,
+            2.0,
+            SafetyDecision(stopBasal = false, bolusFactor = 1.0, reason = "", basalLS = false),
+            true,
+            false,
+            180.0,
+            4.0f,
+            70.0,
+            now,
+            false,
+            null,
+        )
+    }
+
     private fun invokeMealFirst(profile: OapsProfileAimi, rT: RT): Any {
         val method = tick.javaClass.declaredMethods.first {
             it.name == "runPostSafetyMealFirst30NgrHeadroomBasalSmbStage" && it.parameterCount == 15
@@ -1723,6 +1776,10 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val INSULIN_REQ_ACTIVITY_TRACE = """
+            LOG SMB capped by Activity/Recovery (Limit: 0.50)
+        """.trimIndent()
+
         private val MEAL_FIRST_30_TRACE = """
             EFFECT SetTbr rate=2.00 dur=30 override=true forceExact=false adaptive=1.00
         """.trimIndent()
