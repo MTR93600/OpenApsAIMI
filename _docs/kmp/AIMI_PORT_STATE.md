@@ -8,6 +8,38 @@
 > This file is still the best diary of lots 0–6i (how the tick and plugin landed). Do not
 > use its file counts, “2 files from commonMain”, or “330 tests” as today’s truth.
 
+## Live metric — openAPSAIMI source sets
+
+Recounted with `find … -name '*.kt' | wc -l` and `xargs wc -l` on
+`plugins/aps/src/{common,android}Main/kotlin/app/aaps/plugins/aps/openAPSAIMI`.
+
+| When | Commit | androidMain files | commonMain files | androidMain lines | commonMain lines |
+|---|---|---:|---:|---:|---:|
+| Before P6.1 | `7c13732990` | 88 | 441 | 45 371 | 69 850 |
+| After P6.1 (`BasalFirstPolicyMath` only) | `32ca1afae9` | 88 | 442 | 45 255 | 69 968 |
+| After P6.2 (rounding and neighbouring pure helpers) | `a257792849` | 88 | 443 | 44 965 | 70 471 |
+| After P6.3 (`aimiFmt*` on the tick) | `a91c7054ac` | 88 | 443 | 44 965 | 70 564 |
+| After P6.4 (civil clock) | `c1a47e6677` | 88 | 444 | 44 950 | 70 647 |
+| After P6.5 (hypo / SMB cap math) | `4ab230c71f` | 88 | 448 | 43 759 | 72 163 |
+| After P6.6 (effect boundary, traces) | `6868783d00` | 89 | 450 | 43 823 | 72 238 |
+| After P6.7 (`applyLegacyMealModes` via ports) | `8e4a7825e2` | 89 | 455 | 43 469 | 72 771 |
+| After P6.8 (`buildRbtExtendedSignals` via ports) | `602aa4813e` | 89 | 458 | 43 236 | 73 304 |
+| After P6.9 (`runAutodriveV3MultiVariableBranch` via ports) | this branch | 89 | 460 | 43 006 | 73 994 |
+
+P6.1 moves the pure object out of `DetermineBasalAIMI2.kt` (20 109 → 19 993 lines) into
+`commonMain/.../basal/BasalFirstPolicyMath.kt` (118 lines, package line included). P6.2 moves
+the rounding helpers (`Math.round` semantics, negative halves toward +∞) and the neighbouring
+pure functions into `commonMain/.../math/AimiTickPolicyMath.kt` (503 lines). The tick keeps
+one-line delegates. `DetermineBasalAIMI2.kt` is 19 703 lines. P6.3 rewrites 465 single-value
+`%.0f`–`%.3f` calls in that file to `aimiFmt0/1/2/3` (the line count stays 19 703) and teaches
+`AimiFmt.kt` the Java `String.format` digit rule, including `aimiFmt3`. P6.4 reads the
+tick's hour, minute, second and weekday through `AimiCivilClock.kt` (69 lines) and stamps
+two `Locale.US` patterns with `aimiCsvTimestamp` / `aimiCsvTimestampMinute`.
+`DetermineBasalAIMI2.kt` is 19 688 lines. P6.5 moves the hypo/SMB safety cluster,
+the finalize chain, the legacy red-carpet cap and the post-hypo classifier into
+`commonMain/.../safety/`. `DetermineBasalAIMI2.kt` is 18 497 lines. The android file count stays 88. P6.6 does not move a dosing block. It records the effect boundary, locks shell traces (meal mode, hypo, MaxIOB ceiling, Autodrive off, engaged meal rise, UAM), and replaces the CFRD `runCatching` around the heart-rate snapshot with an explicit result. `DetermineBasalAIMI2.kt` is 18 517 lines. P6.7 moves the `applyLegacyMealModes` decision into `commonMain` behind thin ports (`Preferences`, `AimiEffectSink`, `AimiSmbActionType`, `AimiLatestSmbCached`). The Android method delegates. `setTempBasal` is unchanged. `DetermineBasalAIMI2.kt` is 18 163 lines. P6.8 moves the `buildRbtExtendedSignals` decision into `commonMain`. The shell still owns `getRecentGlucose`, `classifyPostHypoState`, `buildNightGrowthResistanceConfig` and the three `physioAdapter` reads, called at the same lines. Learners stay put. `DetermineBasalAIMI2.kt` is 17 930 lines. P6.9 moves the `runAutodriveV3MultiVariableBranch` decision into `commonMain`. The shell still owns the physio, absorption, latent, terminal, RBT, SMB delivery and learner log calls, invoked at the same lines. `setTempBasal` is unchanged. `DetermineBasalAIMI2.kt` is 17 700 lines.
+The diary sections below keep their historical counts.
+
 Updated 2026-09-02, on `kmp-aimi-migration-study` at `1f6ca62fe8` (the second `kmp` merge).
 **Was** “read this first” until 2026-09-06. Keep it for the lot history only.
 

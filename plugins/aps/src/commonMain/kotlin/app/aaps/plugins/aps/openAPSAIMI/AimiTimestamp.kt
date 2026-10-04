@@ -20,6 +20,20 @@ private val aimiCsvStamp = LocalDateTime.Format {
     hour(); char(':'); minute(); char(':'); second()
 }
 
+private val aimiCsvStampMinute = LocalDateTime.Format {
+    year(); char('-'); monthNumber(); char('-'); day()
+    char(' ')
+    hour(); char(':'); minute()
+}
+
 /** Wall-clock stamp for AIMI CSV rows. Do not use `SimpleDateFormat` in commonMain. */
-internal fun aimiCsvTimestamp(epochMs: Long = aimiWallClockMs()): String =
-    aimiCsvStamp.format(Instant.fromEpochMilliseconds(epochMs).toLocalDateTime(TimeZone.currentSystemDefault()))
+internal fun aimiCsvTimestamp(
+    epochMs: Long = aimiWallClockMs(),
+    zone: TimeZone = TimeZone.currentSystemDefault(),
+): String = aimiCsvStamp.format(Instant.fromEpochMilliseconds(epochMs).toLocalDateTime(zone))
+
+/** `yyyy-MM-dd HH:mm`, same calendar and zone rules as [aimiCsvTimestamp]. */
+internal fun aimiCsvTimestampMinute(
+    epochMs: Long,
+    zone: TimeZone = TimeZone.currentSystemDefault(),
+): String = aimiCsvStampMinute.format(Instant.fromEpochMilliseconds(epochMs).toLocalDateTime(zone))
