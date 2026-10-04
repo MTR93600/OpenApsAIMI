@@ -18,7 +18,12 @@ Les ports sont minces et portent le nom de l’appel de la référence. Pas de b
 | `AimiEffectSink` | `setTempBasal`, `applySmbUnits` | la coquille, qui délègue aux fonctions actuelles |
 | `AimiSmbActionType` | `setSmbActionType`, `finalLoopDecisionType`, `setFinalLoopDecisionType` | `physioAdapter` |
 | `AimiLatestSmbCached` | `latestSmbCached` | le cache SMB de la coquille |
-| phase physio, absorption, état latent, Harmonia, publication du terminal | les méthodes du même nom, quand la fonction portée les appelle | la coquille, plus tard |
+| `AimiRecentGlucose` | `getRecentGlucose` | le calculateur de glycémie |
+| `AimiPostHypoClassification` | `classifyPostHypoState` | la coquille, qui met à jour `lastHypoBelow70At` |
+| `AimiNightGrowthConfig` | `buildNightGrowthResistanceConfig` | la coquille, lectures nocturnes et learner compris |
+| `AimiPhysioTick` | `getLastDecisionTrace`, `getEffectiveContext`, `getLatestSnapshot` | `physioAdapter` |
+| `AimiRbtTickWrites` | `lastPostHypoOrdinal`, `lastNgrBasalMultiplier` | les champs du tick |
+| phase physio, absorption, état latent, Harmonia, publication du terminal | les méthodes du même nom, quand la fonction portée les appelle | la coquille, au portage Autodrive |
 
 Les membres du tick déjà calculés (glycémie, IOB, drapeaux de mode) sont passés à la fonction. Ce ne sont pas des lectures de préférences. Une préférence lue seulement sur une branche l’est encore seulement sur cette branche, à la même ligne.
 
@@ -131,13 +136,23 @@ Lectures directes, dans cet ordre :
 2. `BooleanKey.OApsAIMIT3cBrittleMode`
 3. `DoubleKey.OApsAIMILastEstimatedCarbs`
 4. `DoubleKey.OApsAIMILastEstimatedCarbTime`
-5. `DoubleKey.OApsAIMIT3cActivationThreshold` — seulement si le mode brittle est vrai
-6. puis, via la config de croissance nocturne : âge, `getIfExists` de `OApsAIMINightGrowthEnabled`, début, fin, IOB extra
-7. `BooleanKey.AimiEndometriosisEnable` si l’ajusteur endo s’exécute
+5. via `buildNightGrowthResistanceConfig` : âge, `getIfExists` de `OApsAIMINightGrowthEnabled`, début, fin, IOB extra. `t3cModeEnabled()` ne relit pas BrittleMode quand l’âge est sous 18 et que le drapeau nocturne est absent.
+6. `BooleanKey.AimiEndometriosisEnable` dans `endoAdjuster.calculateFactors`
+7. `DoubleKey.OApsAIMIT3cActivationThreshold` — seulement si le mode brittle est vrai
 8. `DoubleKey.OApsAIMISmbTailDamping`
 9. `StringKey.AimiTuningContextSelection`
 
-Écritures d’état du tick (pas des préférences) : `lastPostHypoOrdinal`, `lastNgrBasalMultiplier`. Pas de `setTempBasal`. La classification post-hypo appelle la confiance UAM seulement dans la fenêtre de récupération. La trace UAM (BG récents avec un point sous 70, confiance UAM 0,70, brittle éteint) donne `postHypoOrdinal=2` et ne lit pas le seuil d’activation T3c.
+Écritures d’état du tick (pas des préférences) : `lastPostHypoOrdinal`, `lastNgrBasalMultiplier`, à la ligne de l’affectation. Pas de `setTempBasal`. La classification post-hypo appelle la confiance UAM seulement dans la fenêtre de récupération. La trace UAM (BG récents avec un point sous 70, confiance UAM 0,70, brittle éteint) donne `postHypoOrdinal=2` et ne lit pas le seuil d’activation T3c.
+
+La décision est dans `commonMain`. Les appels qui restent dans la coquille passent par des ports du même nom : `getRecentGlucose`, `classifyPostHypoState`, `buildNightGrowthResistanceConfig`, `getLastDecisionTrace`, `getEffectiveContext`, `getLatestSnapshot`. Les learners, l’ajusteur endo et `AuditorVerdictCache` sont déjà communs : le commun les appelle, il ne les déplace pas. `pkpdIntegration.reconstructedIobUnits()` est appelé même quand le runtime PKPD est nul, puis filtré, comme la référence.
+
+Cette fonction n’appelle pas la porte Autodrive. Porte ouverte et porte fermée se verrouillent avec `runAutodriveV3MultiVariableBranch`.
+
+Trace hypo brittle : BG 50, brittle vrai, seuil 140. Le seuil est lu, `t3cActive=true`, `t3cDemand=0.00`.
+
+Trace plafond : BG 220, delta 8, moyenne courte 4, eventual 220, basal courante 1,00 U/h, max basal 1,20 U/h. `t3cDemand=1.20`. Le même scénario avec un max basal de 30 U/h donne 16,12 U/h : 1,20 est le clamp de `computeT3c`, pas une dose inventée. Un eventual à 0 faisait croire que le plafond était inatteignable, parce que le frein de trajectoire lit cet eventual comme une hypo (garde à 40 mg/dL) et coupe la demande avant le clamp.
+
+Le libellé de blocage Harmonia passe par `uppercase()` sans locale. Les identifiants (`sensor_uncertain`, `critical_risk`, …) sont ASCII : le résultat est le même qu’avec `Locale.US`, qui n’existe pas en `commonMain`.
 
 ### `applyLegacyMealModes`
 
@@ -164,6 +179,8 @@ Bandes, inchangées : hausse corrigée du repos ≥ 25 bpm → 0.35, 15..24 → 
 
 `setTempBasal`, `runDetermineBasalTickInner`, les learners, l’export, `toMedicalJson`. Les deux sites d’horloge de la tranche 4 non plus. Le corps de `setTempBasal` n’est pas modifié : le sink l’appelle.
 
-`applyLegacyMealModes` décide dans `commonMain` et appelle les ports ci-dessus. Cette fonction ne consulte pas la porte Autodrive. Les traces hypo (récupération et hypo sévère) et le plafond MaxIOB sont déjà verrouillées. La porte Autodrive ouverte et fermée se verrouille au portage de `runAutodriveV3MultiVariableBranch`.
+`applyLegacyMealModes` décide dans `commonMain` et appelle les ports du repas. Cette fonction ne consulte pas la porte Autodrive. Les traces hypo (récupération et hypo sévère) et le plafond MaxIOB sont déjà verrouillées.
+
+`buildRbtExtendedSignals` décide dans `commonMain`. Hypo brittle (`t3cDemand=0.00`) et plafond (`t3cDemand=1.20` sous un max basal de 1,20 U/h, 16,12 U/h sans ce plafond) sont verrouillées. La porte Autodrive ouverte et fermée se verrouille au portage de `runAutodriveV3MultiVariableBranch`.
 
 Les traces golden restent, octet pour octet : mode repas (TBR puis prébolus), récupération d’hypo, hypo sévère avec autorité post-hypo, plafond MaxIOB, Autodrive éteint, montée de repas engagée (`ShellDecisionTraceTest`, TBR 2,40 U/h demandée, SMB moteur non déposé tant que RBT est éteint), et le chemin UAM de `buildRbtExtendedSignals` (ordinal post-hypo 2, confiance 0,70). Si une trace diverge, on s’arrête.
