@@ -236,7 +236,7 @@ Vert :
 
 Mesuré sur `DetermineBasalAIMI2.kt` après le déplacement de la tête T3C : **17 518 lignes**, **325 fonctions**. Le corps de `executeT3cBrittleMode` est `decideT3cBrittleMode` en `commonMain`. La coquille fait 88 lignes : elle ne calcule plus, elle branche les ports.
 
-Déjà décidées dans `commonMain`, coquille réduite : `applyLegacyMealModes` (47), `buildRbtExtendedSignals` (110), `runAutodriveV3MultiVariableBranch` (166), `executeT3cBrittleMode` (88), `finalizeAndCapSMB` (174), `runRecursiveBeliefResolve`.
+Déjà décidées dans `commonMain`, coquille réduite : `applyLegacyMealModes` (47), `buildRbtExtendedSignals` (110), `runAutodriveV3MultiVariableBranch` (166), `executeT3cBrittleMode` (88), `finalizeAndCapSMB` (174), `runRecursiveBeliefResolve`, `resolveMealHyperBasalBoostOutcome`.
 
 Hors de cette série, par consigne : `setTempBasal` (357), `runDetermineBasalTickInner` (884), les learners (`applyBasalNeuralLearningAndTraining` 66, `logLearnersHealth` 54, `neuralnetwork5` 51, les `refresh*Async`), l’export (`runAimiSnapshotMedicalJsonAndHormonitorExportStage` 504) et `toMedicalJson` (754).
 
@@ -303,3 +303,5 @@ Le tableau est pris juste après T3C, avant le conseiller repas. `tryMealAdvisor
 `finalizeAndCapSMB` (377 dans le tableau) est ensuite passé en `commonMain`. La coquille fait 174 lignes. `DetermineBasalAIMI2.kt` retombe à **17 129 lignes**. Le compte baisse encore d’une : environ **13 PR** pour les têtes restantes, plus **4 à 6** pour l’inner tick. **Environ 18 PR** avant que `HoldAimiEngine` puisse déléguer.
 
 `runRecursiveBeliefResolve` (254 dans le tableau) est ensuite passé en `commonMain` (`decideRecursiveBeliefResolve`). La coquille lit les champs au moment de l’appel. `DetermineBasalAIMI2.kt` retombe à **16 994 lignes**. Le `try/catch` de `contextManager.getSnapshot` garde le repli null et journalise l’échec (`readRbtOptional`, source `contextSnapshot`). Environ **12 PR** pour les têtes restantes, plus **4 à 6** pour l’inner tick. **Environ 17 PR** avant que `HoldAimiEngine` puisse déléguer.
+
+`resolveMealHyperBasalBoostOutcome` (233 dans le tableau) est ensuite passé en `commonMain` (`decideMealHyperBasalBoost`). `setTempBasal` reste un port. `DetermineBasalAIMI2.kt` retombe à **16 847 lignes**. Environ **11 PR** pour les têtes restantes, plus **4 à 6** pour l’inner tick. **Environ 16 PR** avant que `HoldAimiEngine` puisse déléguer.
