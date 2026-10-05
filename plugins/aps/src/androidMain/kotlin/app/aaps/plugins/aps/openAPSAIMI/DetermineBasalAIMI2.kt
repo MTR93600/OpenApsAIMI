@@ -222,6 +222,9 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiSmbOneShotCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideSmbAdvisorOneShot
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRbtLiveTickCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideRbtLiveTick
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPkpdAbsorptionGuardCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPkpdGuardLogChannel
+import app.aaps.plugins.aps.openAPSAIMI.effects.decidePkpdAbsorptionGuardOncePerTick
 import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
@@ -12293,28 +12296,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun windowSinceLastPkpdDoseMin(fallbackWindowInt: Int = 0): Double =
         if (lastBolusAgeMinutes.isFinite()) lastBolusAgeMinutes else fallbackWindowInt.toDouble()
 
-    private fun isPkpdAggressivePriorityContext(
-        anyMealModeForGuard: Boolean,
-        isConfirmedHighRise: Boolean,
-        mealAdvisorOneShot: Boolean,
-    ): Boolean = mealAdvisorOneShot || anyMealModeForGuard || isConfirmedHighRise
-
-    private fun effectivePkpdGuardFactor(
-        guard: PkpdAbsorptionGuard,
-        aggressivePriority: Boolean,
-    ): Double {
-        val pkpdReliefEnabled = preferences.get(BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled)
-        val pkpdReliefMinFactor = preferences.get(DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor).coerceIn(0.50, 1.0)
-        return if (aggressivePriority && pkpdReliefEnabled) {
-            max(guard.factor, pkpdReliefMinFactor)
-        } else {
-            guard.factor
-        }
-    }
-
     /**
-     * Single PKPD absorption-guard multiply per tick. [runPkpdGuardEndoDampenRedCarpetAndCapSmb] and
-     * [applySafetyPrecautions] must both use this helper so relief, pred BG, and high-rise flags stay aligned.
+     * Single PKPD absorption-guard multiply per tick. The decision is
+     * [decidePkpdAbsorptionGuardOncePerTick]. This shell reads the fields at the line.
      */
     private fun applyPkpdAbsorptionGuardOncePerTick(
         smbIn: Float,
@@ -12326,89 +12310,46 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         reason: StringBuilder?,
         logChannel: PkpdGuardLogChannel,
     ): PkpdAbsorptionGuardApplyResult {
-        if (pkpdAbsorptionGuardAppliedThisTick) {
-            return PkpdAbsorptionGuardApplyResult(
-                smbOut = smbIn,
-                intervalAddMin = 0,
-                guard = null,
-                effectiveFactor = 1.0,
-                multiplicationApplied = false,
-                skippedDuplicate = true,
-            )
-        }
-
-        val guard = PkpdAbsorptionGuard.compute(
+        val decided = decidePkpdAbsorptionGuardOncePerTick(
+            smbIn = smbIn,
             pkpdRuntime = pkpdRuntime,
             windowSinceLastDoseMin = windowSinceLastDoseMin,
-            bg = bg,
-            delta = delta.toDouble(),
-            shortAvgDelta = shortAvgDelta.toDouble(),
-            targetBg = targetBg.toDouble(),
-            predBg = resolvePkpdGuardPredBg(),
-            isMealMode = anyMealModeForGuard,
-            isConfirmedHighRise = isConfirmedHighRise,
-        )
-        pkpdAbsorptionGuardAppliedThisTick = true
-
-        val aggressivePriority = isPkpdAggressivePriorityContext(
             anyMealModeForGuard = anyMealModeForGuard,
             isConfirmedHighRise = isConfirmedHighRise,
             mealAdvisorOneShot = mealAdvisorOneShot,
+            reason = reason,
+            logChannel = when (logChannel) {
+                PkpdGuardLogChannel.PIPELINE -> AimiPkpdGuardLogChannel.PIPELINE
+                PkpdGuardLogChannel.FINALIZE -> AimiPkpdGuardLogChannel.FINALIZE
+            },
+            preferences = preferences,
+            consoleLog = consoleLog,
+            calls = object : AimiPkpdAbsorptionGuardCalls {
+                override fun alreadyApplied() = pkpdAbsorptionGuardAppliedThisTick
+                override fun markApplied() {
+                    pkpdAbsorptionGuardAppliedThisTick = true
+                }
+                override fun predBg() = resolvePkpdGuardPredBg()
+                override fun bg() = bg
+                override fun delta() = delta.toDouble()
+                override fun shortAvgDelta() = shortAvgDelta.toDouble()
+                override fun targetBg() = targetBg.toDouble()
+                override fun intervalSmb() = intervalsmb
+                override fun setIntervalSmb(value: Int) {
+                    intervalsmb = value
+                }
+                override fun logGuardError(line: String) {
+                    consoleError.add(line)
+                }
+            },
         )
-        val effectiveFactor = effectivePkpdGuardFactor(guard, aggressivePriority)
-
-        if (!guard.isActive()) {
-            return PkpdAbsorptionGuardApplyResult(
-                smbOut = smbIn,
-                intervalAddMin = 0,
-                guard = guard,
-                effectiveFactor = effectiveFactor,
-                multiplicationApplied = false,
-                skippedDuplicate = false,
-            )
-        }
-
-        val beforeGuard = smbIn
-        val smbOut = (smbIn * effectiveFactor.toFloat()).coerceAtLeast(0f)
-        if (guard.intervalAddMin > 0) {
-            intervalsmb = (intervalsmb + guard.intervalAddMin).coerceAtMost(10)
-            if (logChannel == PkpdGuardLogChannel.PIPELINE) {
-                consoleLog.add("INTERVAL_ADJUSTED: +${guard.intervalAddMin}m → ${intervalsmb}m total")
-            }
-        }
-        if (smbOut < beforeGuard) {
-            when (logChannel) {
-                PkpdGuardLogChannel.PIPELINE -> {
-                    consoleError.add(guard.toLogString())
-                    consoleLog.add("SMB_GUARDED: ${aimiFmt2(beforeGuard)}U → ${aimiFmt2(smbOut)}U")
-                    if (aggressivePriority && effectiveFactor > guard.factor) {
-                        consoleLog.add(
-                            "PKPD_RELIEF: factor ${aimiFmt2(guard.factor)} -> ${aimiFmt2(effectiveFactor)} " +
-                                "(meal/advisor/high-rise priority)"
-                        )
-                    }
-                }
-                PkpdGuardLogChannel.FINALIZE -> {
-                    reason?.appendLine(
-                        "🛡️ PKPD Guard (${guard.reason}): ${aimiFmt2(beforeGuard)} → ${aimiFmt2(smbOut)} U"
-                    )
-                    if (aggressivePriority && effectiveFactor > guard.factor) {
-                        consoleLog.add(
-                            "PKPD_RELIEF_FINALIZE: factor ${aimiFmt2(guard.factor)} -> ${aimiFmt2(effectiveFactor)} " +
-                                "(meal/high-rise priority, finalizeAndCapSMB)"
-                        )
-                    }
-                }
-            }
-        }
-
         return PkpdAbsorptionGuardApplyResult(
-            smbOut = smbOut,
-            intervalAddMin = guard.intervalAddMin,
-            guard = guard,
-            effectiveFactor = effectiveFactor,
-            multiplicationApplied = smbOut < beforeGuard,
-            skippedDuplicate = false,
+            smbOut = decided.smbOut,
+            intervalAddMin = decided.intervalAddMin,
+            guard = decided.guard,
+            effectiveFactor = decided.effectiveFactor,
+            multiplicationApplied = decided.multiplicationApplied,
+            skippedDuplicate = decided.skippedDuplicate,
         )
     }
 
