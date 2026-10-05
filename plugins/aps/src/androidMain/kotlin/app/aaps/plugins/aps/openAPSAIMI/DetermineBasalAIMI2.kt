@@ -41,6 +41,7 @@ import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideEffortSuppressesUndeclaredMeal
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEffectProbe
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEffectSink
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiLatestSmbCached
@@ -9359,9 +9360,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         private const val BASAL_SLEW_UP_REL_FACTOR = 1.0     // +100 % du taux courant par tick
         private const val BASAL_SLEW_UP_PROFILE_MULT = 2.0   // +2× la basale profil par tick
 
-        // 🏃 Effort → veto de l'interprétation « repas non déclaré » (voir [effortSuppressesUndeclaredMeal]).
-        private const val EFFORT_MEAL_SUPPRESS_CONF = 0.30       // confiance mini de la croyance d'effort
-        private const val EFFORT_MEAL_SUPPRESS_MAX_COB_G = 12.0  // au-delà = vrai repas (COB) → pas de veto
+        // 🏃 Effort veto lives in decideEffortSuppressesUndeclaredMeal.
         /**
          * Décision pure du verrou one-shot par tag. Le calcul vit avec la décision repas, dans
          * [app.aaps.plugins.aps.openAPSAIMI.effects.legacyPrebolusLatchBlocks].
@@ -12824,12 +12823,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * this only suppresses an insulin escalation, never adds insulin. See [detectMealOnset] / [inferredMealSafetyIntent].
      */
     private fun effortSuppressesUndeclaredMeal(): Boolean {
-        val a = lastEffortAssessment ?: return false
-        if (a.posture != EffortActivityBelief.Posture.EXERTION) return false
-        if (a.state != EffortActivityBelief.State.ACTIVE && a.state != EffortActivityBelief.State.RECENT_EFFORT) return false
-        if (a.confidence < EFFORT_MEAL_SUPPRESS_CONF) return false
         val declaredMeal = mealTime || bfastTime || lunchTime || dinnerTime || snackTime || highCarbTime
-        return !declaredMeal && cob.toDouble() < EFFORT_MEAL_SUPPRESS_MAX_COB_G
+        return decideEffortSuppressesUndeclaredMeal(
+            assessment = lastEffortAssessment,
+            declaredMeal = declaredMeal,
+            cobG = cob.toDouble(),
+        )
     }
 
     /**
