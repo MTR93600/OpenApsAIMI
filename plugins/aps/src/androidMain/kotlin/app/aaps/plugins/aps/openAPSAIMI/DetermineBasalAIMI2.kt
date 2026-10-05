@@ -240,6 +240,9 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPublishDoseTerminalCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decidePublishDoseTerminalAuthorityAndSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiBasalDecisionEngineCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideBasalDecisionEngine
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetectMealOnset
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPkpdSoftFloorWrite
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideRecordPkpdSoftFloor
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiContextModuleCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPhysioLatentCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTubeAdvisorCalls
@@ -13001,16 +13004,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      */
     private fun recordPkpdSoftFloor(
         curves: AdvancedPredictionCurves,
-    ): PkpdSoftFloorTelemetry {
-        val endoEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEndogenousReversion)
-        val telemetry = PkpdSoftFloorPathMin.fromCurves(
-            curves = curves,
-            endogenousReversionEnabled = endoEnabled,
-        )
-        lastPkpdSoftFloorTelemetry = telemetry
-        consoleLog.add(PkpdSoftFloorPathMin.formatLogLine(telemetry))
-        return telemetry
-    }
+    ): PkpdSoftFloorTelemetry = decideRecordPkpdSoftFloor(
+        curves = curves,
+        endogenousReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEndogenousReversion),
+        calls = object : AimiPkpdSoftFloorWrite {
+            override fun writeTelemetryAndLog(telemetry: PkpdSoftFloorTelemetry) {
+                lastPkpdSoftFloorTelemetry = telemetry
+                consoleLog.add(PkpdSoftFloorPathMin.formatLogLine(telemetry))
+            }
+        },
+    )
 
     private fun applySoftFloorToPredSeries(
         series: List<Int>,
@@ -13175,27 +13178,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return out.finalPeak
     }
 
-    fun detectMealOnset(delta: Float, predictedDelta: Float, acceleration: Float, predictedBg: Float, targetBg: Float): Boolean {
-        // 🏃 Under effort / post-effort adrenaline (undeclared context), a rise is NOT a meal onset → never trigger
-        // the undeclared-meal escalation (forced meal TBR, meal-onset SMB). Declared meals keep their own paths.
-        if (effortSuppressesUndeclaredMeal()) return false
-        val combinedDelta = (delta + predictedDelta) / 2.0f
-
-        // 1. Existing strict check (Explosive Rise)
-        if (combinedDelta > 3.0f && acceleration > 1.2f) return true
-
-        // 2. Harmonized check (Steady Meal Rise)
-        // Relaxed acceleration req if rise is clearly above noise
-        val normalizedRise = ((predictedBg - targetBg) / 70.0f).coerceIn(0.0f, 1.0f)
-        if (normalizedRise > 0.3f && combinedDelta > 2.0f && acceleration > 0.3f) return true
-
-        // 3. [FIX] Smart Rise Detection (TIR 70-140)
-        // Require acceleration OR sustained high delta, rejecting single-point noise
-        val isHighNoise = (delta > 5.0f && acceleration < 0.0f) // Sharp jump but slowing down
-        if (!isHighNoise && (combinedDelta > 6.0f || (delta > 5.0f && acceleration > 0.5f))) return true
-
-        return false
-    }
+    fun detectMealOnset(delta: Float, predictedDelta: Float, acceleration: Float, predictedBg: Float, targetBg: Float): Boolean =
+        decideDetectMealOnset(
+            delta = delta,
+            predictedDelta = predictedDelta,
+            acceleration = acceleration,
+            predictedBg = predictedBg,
+            targetBg = targetBg,
+            effortSuppressesUndeclaredMeal = effortSuppressesUndeclaredMeal(),
+        )
 
     private fun parseNotes(startMinAgo: Int, endMinAgo: Int): String {
         val olderTimeStamp = now - endMinAgo * 60 * 1000

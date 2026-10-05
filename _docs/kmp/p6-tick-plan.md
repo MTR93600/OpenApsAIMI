@@ -405,6 +405,8 @@ Les traces déjà verrouillées ne sont pas réécrites. Les deux tests nouveaux
 
 `decideDetermineBasalTickEngine` (corps 6) est la sixième tranche. `runBasalDecisionEngineDecideStage` entre dans l’orchestre. `runPostBasalEngineLearnersRtInstrumentationAndAuditorStage` et `runAimiSnapshotMedicalJsonAndHormonitorExportStage` restent des ports appelés à la ligne. `nightMode` reçoit `nightbis`, déjà posé par l’horloge du tick. Le tick de 05:00, qui est le seul des verrous de bout en bout à atteindre le moteur, rejoue sa trace : TBR **1,00 U/h** pendant 30 min, pas d’effet SMB. Les scènes qui retournent avant (exercice TBR **0 U/h**, brittle TBR **1,30 U/h** / 30 min, repas SMB **3,30 U** et TBR **2,00 U/h**, frein TBR **0 U/h**, dérive 14:00 SMB **0,18 U**, test direct de dérive **0,12 U**, repas 0–30 TBR **2,00 U/h** override vrai, MAX_IOB TBR **2,00 U/h**, pont UAM SMB prédit **0 U** et TBR **1,05 U/h** / 5 min) restent identiques. `HoldAimiEngine` ne délègue pas : des helpers (a) sont encore « décision iOS requise ». `IosClientConfig.APS` reste `false`. `DetermineBasalAIMI2.kt` fait **15 902 lignes**. Cumul des **56** fonctions `decide*` : **5 552** lignes de corps.
 
+`decideDetectMealOnset` (corps 14) et `decideRecordPkpdSoftFloor` (corps 8) passent en `commonMain`. Le veto `effortSuppressesUndeclaredMeal(): Boolean` et l’écriture `lastPkpdSoftFloorTelemetry` plus sa ligne de journal restent des ports Android, appelés à la ligne. Deux scènes déjà verrouillées sont rejouées : moteur sport, TBR **1,30 U/h** pendant 30 min (`basalDecisionEngineRaisesSportTemp`, le veto est faux sans assessment) ; prédiction basse, TBR **0,25 U/h** pendant 30 min, journal `PKPD_SOFT_FLOOR: raw=39 soft=39` (`lowPredictionRequestsAQuarterBasal`). La valeur iOS du veto et la relecture du plancher restent ouvertes, dans `_docs/kmp/p6-ios-decisions.md`. `DetermineBasalAIMI2.kt` fait **15 893 lignes**. Cumul des **58** fonctions `decide*` : **5 574** lignes de corps. `HoldAimiEngine` et `IosClientConfig.APS` sont inchangés.
+
 `runDetermineBasalTickInner` fait 797 lignes (14849–15645). C’est l’orchestre. Il appelle déjà les têtes extraites. Le déplacer ne change pas une formule de dose. Chaque PR verrouille la trace sur le corps Android du parent, déplace une seule tranche, et rejoue. Si la trace diverge, on s’arrête. Les nombres de dose ne changent pas.
 
 ### Découpage en 6 PR
@@ -455,9 +457,9 @@ Encore Android. Il faut un port. Pas purs, donc pas déplacés dans ce lot :
 
 | Élément | Taille | Dépendances Android | Passage |
 |---|---|---|---|
-| `detectMealOnset` | 21 | `effortSuppressesUndeclaredMeal` lit `lastEffortAssessment`, les drapeaux de repas et le COB | port du veto d’effort. Bloque `HoldAimiEngine` |
+| `detectMealOnset` | 14, en commun (`decideDetectMealOnset`) | le veto `effortSuppressesUndeclaredMeal(): Boolean` reste Android. Il lit `lastEffortAssessment`, les drapeaux de repas et le COB | port Android en place. La valeur iOS du veto reste ouverte |
 | `estimateUndeclaredVirtualCob` | 38 | préférences, `physioAdapter.getLatestSnapshot`, estimateur continu, journal | port. Bloque `HoldAimiEngine` |
-| `recordPkpdSoftFloor` | 10 | préférence, écriture de `lastPkpdSoftFloorTelemetry`, journal. `PkpdSoftFloorPathMin.fromCurves` est déjà commun | port pour l’écriture et le journal. Bloque `HoldAimiEngine` |
+| `recordPkpdSoftFloor` | 8, en commun (`decideRecordPkpdSoftFloor`) | la préférence est lue à l’appel. L’écriture de `lastPkpdSoftFloorTelemetry` et la ligne de journal restent Android | port Android en place. Relire cette télémétrie sur iOS reste ouvert |
 | `refreshEffortActivityBelief` | 34 | `physioAdapter`, préférences, `dateUtil`, `EffortActivityBelief` | port. Bloque `HoldAimiEngine` |
 | `refreshPatientStateRuntime` | 221 | instantané physio, contexte, moteurs patient, `dateUtil` | port. Bloque `HoldAimiEngine` |
 | session TPO | appel `tpoOrchestrator.onTickStart(dateUtil.now())` | orchestrateur Android, horloge `dateUtil` | port déjà à la ligne. Décision iOS non écrite. Bloque `HoldAimiEngine` |
@@ -471,9 +473,9 @@ Encore Android. Il faut un port. Pas purs, donc pas déplacés dans ce lot :
 
 Proposition, une ligne, pour chaque (a) qui bloque encore `HoldAimiEngine`. Aucun de ces ports n’est implémenté ici : chacun est soit trop grand, soit une valeur iOS qui changerait une dose sans scène verrouillée.
 
-- `detectMealOnset` : port du veto `effortSuppressesUndeclaredMeal(): Boolean`, impl Android seule. La valeur iOS du veto est une décision iOS requise.
+- `detectMealOnset` : le corps est `decideDetectMealOnset`. Le veto `effortSuppressesUndeclaredMeal(): Boolean` a son impl Android. La valeur iOS du veto reste une décision iOS requise.
 - `estimateUndeclaredVirtualCob` : décision iOS requise. Le gramme virtuel dépend du snapshot wearable et de l’estimateur continu.
-- `recordPkpdSoftFloor` : port d’écriture `lastPkpdSoftFloorTelemetry` plus la ligne de journal, impl Android seule. Relire cette télémétrie sur iOS est une décision iOS requise.
+- `recordPkpdSoftFloor` : le corps est `decideRecordPkpdSoftFloor`. Le port d’écriture `lastPkpdSoftFloorTelemetry` et la ligne de journal ont leur impl Android. Relire cette télémétrie sur iOS reste une décision iOS requise.
 - `refreshEffortActivityBelief` : décision iOS requise. Le facteur SMB d’effort est reduce-only, mais le seuil wearable n’est pas tranché.
 - `refreshPatientStateRuntime` : décision iOS requise. 221 lignes, moteurs patient et instantané physio.
 - session TPO : décision iOS requise. L’appel `onTickStart(dateUtil.now())` reste à la ligne.

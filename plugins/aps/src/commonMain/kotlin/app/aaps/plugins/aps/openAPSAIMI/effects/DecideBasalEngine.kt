@@ -20,7 +20,7 @@ import kotlin.math.abs
  * Android reads of the basal-engine stage.
  * Each method is the call that already existed at that line.
  * `calculateRate` forwards to [decideCalculateRate] with `overrideSafety` false.
- * `detectMealOnset` stays Android: the effort veto reads instance state.
+ * `detectMealOnset` is [decideDetectMealOnset]. The Android caller reads the effort veto at the call.
  */
 internal interface AimiBasalDecisionEngineCalls {
     fun snackTime(): Boolean
