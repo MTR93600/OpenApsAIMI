@@ -42,4 +42,16 @@ class SecureEncryptImplTest : TestBase() {
         // Expect test/sample string has valid data
         assertThat(sut.isValidDataString(secretData)).isTrue()
     }
+
+    /** Both reunited mutations fail the header hash. Last byte is #153, middle byte is #237. */
+    @Test fun aTamperedBodyNoLongerValidates() {
+        val middle = tamperSecureEnvelopeMiddleByte(secretData)
+        val last = tamperSecureEnvelopeLastByte(secretData)
+
+        assertThat(middle).isNotEqualTo(secretData)
+        assertThat(last).isNotEqualTo(secretData)
+        assertThat(sut.isValidDataString(secretData)).isTrue()
+        assertThat(sut.isValidDataString(middle)).isFalse()
+        assertThat(sut.isValidDataString(last)).isFalse()
+    }
 }

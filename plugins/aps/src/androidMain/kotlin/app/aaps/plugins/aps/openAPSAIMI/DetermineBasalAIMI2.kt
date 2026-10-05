@@ -41,6 +41,12 @@ import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
+import app.aaps.plugins.aps.openAPSAIMI.effects.basalGovLine
+import app.aaps.plugins.aps.openAPSAIMI.effects.learnerHealthLines
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideEffortSuppressesUndeclaredMeal
+import app.aaps.plugins.aps.openAPSAIMI.effects.OptionalSignal
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideRefreshEffortActivityBelief
+import app.aaps.plugins.aps.openAPSAIMI.effects.readRbtOptional
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEffectProbe
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEffectSink
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiLatestSmbCached
@@ -187,6 +193,7 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMaxIobGateStage
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMaxIobGateState
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMaxIobTempBasal
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideInsulinReqActivityRelaxAndMicrobolus
+import app.aaps.plugins.aps.openAPSAIMI.effects.tpoTickSmbCeiling
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiSafetyGuardApply
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiSafetyPrecautionsCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideMaxIobExceededTempBasal
@@ -240,6 +247,11 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPublishDoseTerminalCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decidePublishDoseTerminalAuthorityAndSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiBasalDecisionEngineCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideBasalDecisionEngine
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideMealOnsetBehindEffortVeto
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideEstimateUndeclaredVirtualCob
+import app.aaps.plugins.aps.openAPSAIMI.effects.undeclaredVirtualCobInput
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPkpdSoftFloorWrite
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideRecordPkpdSoftFloor
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiContextModuleCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPhysioLatentCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTubeAdvisorCalls
@@ -252,12 +264,59 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.decideRefreshMealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPostHypoDriftCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decidePostHypoCompressionAndDriftTerminatorOrReturn
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEarlyTickCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideCalculateRate
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideDriftTerminatorCondition
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEarlyTickOutcome
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPrefixAutodrive
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPrefixCombined
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPrefixGlucose
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPrefixIob
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPrefixStep
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickPrefixCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickPrefixOutcome
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickPredPrep
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickSignalCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickSignalData
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickSignalOutcome
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickSignalStep
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPostHypoClassified
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickPostHypoCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickPostHypoOutcome
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickTrajectoryPrep
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetermineBasalTickPrefix
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetermineBasalTickSignal
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetermineBasalTickPostHypo
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetermineBasalTickSchedule
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetermineBasalTickMealNgr
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetermineBasalTickEngine
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickEngineCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickMealNgrCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickMealNgrOutcome
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickMealHyperStep
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickMealBoost
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickCsf
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickCarbsGate
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickCarbsSafety
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickMealNgrStep
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickMealNgrContinue
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickMaxIobStep
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickScheduleCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiScheduleBootstrap
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiScheduleVitals
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiSchedulePai
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiSchedulePkpdTargets
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiScheduleSmb
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiSchedulePkpdGuard
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideEarlyDetermineBasalStages
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideLateFatProteinRise
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTrajectoryContextPrepCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideTrajectoryContextModuleTddIsfAndDynamicPbolusPrep
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRaObservationCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideBuildRaObservationState
+import app.aaps.plugins.aps.openAPSAIMI.effects.PatientRuntimeCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideRefreshPatientStateRuntime
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideUpdatePhysioLatentState
+import app.aaps.plugins.aps.openAPSAIMI.effects.enrichPatientThermal
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEnableSmbCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideApplyContextModule
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTrajectorySpiralCalls
@@ -280,7 +339,6 @@ import app.aaps.plugins.aps.openAPSAIMI.math.AimiTickPolicyMath
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState
 import app.aaps.plugins.aps.openAPSAIMI.carbs.CarbsAdvisor
 import app.aaps.plugins.aps.openAPSAIMI.ISF.HeartRateTrendIsf
-import app.aaps.plugins.aps.openAPSAIMI.ISF.CommandedIsf
 import app.aaps.plugins.aps.openAPSAIMI.ISF.ObservedSensitivityMeter
 import app.aaps.plugins.aps.openAPSAIMI.ISF.SensitivityRatioEstimator
 import app.aaps.plugins.aps.openAPSAIMI.ISF.WorkingIsf
@@ -552,903 +610,7 @@ import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
-internal data class AimiDecisionContext(
-    val event_id: String,
-    val timestamp: Long,
-    val trigger: String,
-    val baseline_state: BaselineState,
-    val adjustments: Adjustments = Adjustments(),
-    var outcome: Outcome? = null
-) {
-    data class BaselineState(
-        /**
-         * Historical field. Despite its name it carries `profile.sens`, which is the **command**
-         * sensitivity (dynamic ISF x physiological factor), not the profile block value. Kept
-         * populated so existing analysis keeps working; use [command_isf_mgdl] in new work and
-         * [profile_isf_static_mgdl] when a static baseline is needed.
-         * See `docs/adr/0002-sensitivity-three-levels.md`.
-         */
-        val profile_isf_mgdl: Double,
-        val profile_basal_uph: Double,
-        val current_bg_mgdl: Double,
-        val cob_g: Double,
-        val iob_u: Double,
-        /** User profile ISF block for this time of day. Static within the tick. */
-        val profile_isf_static_mgdl: Double? = null,
-        /**
-         * `ctx.profile.sens`, read once at tick bootstrap. Same value as [profile_isf_mgdl] on every
-         * tick, because both are that one read.
-         *
-         * This is **not** the sensitivity the SMB dose used. It reaches two places only: the control
-         * barrier anchor in `AutodriveEngine.profileAnchoredSafetySi`, and the endogenous basal
-         * bridge in `EndogenousBasalBridgePolicy.computeBridgeRateUph`. The delivered SMB is sized
-         * from the fused PKPD sensitivity instead — see [variable_sens_mgdl] for where to read it.
-         *
-         * Even the barrier rarely reads it: `InsulinActionModel.LEGACY_CONTROL_COEFFICIENT` floors
-         * the coefficient at the value for 45 mg/dL/U, and on the 2026-08-15 package the exported
-         * `si_metabolic` sat exactly on that floor on 61 of 72 ticks.
-         */
-        val command_isf_mgdl: Double? = null,
-        /** Which source produced the dynamic value this tick. See [IsfSourceTelemetry]. */
-        val isf_source: String? = null,
-        /** Age (ms) of the cached dynamic entry that was used, when one was used. */
-        val isf_age_ms: Long? = null,
-        /** Key of the cached entry used. Distinguishes two entries sharing a 30-minute bucket. */
-        val isf_cache_key: Long? = null,
-        /** Glucose the cached value was computed for (the key's within-bucket remainder). */
-        val isf_cache_glucose_mgdl: Long? = null,
-        /**
-         * Sensitivity the **outcomes** imply, in mg/dL per U, measured as `-dBG / insulin absorbed`
-         * over clean falls. See `ObservedSensitivityMeter`.
-         *
-         * A fall is counted only when it lasts 30 to 120 minutes, drops at least 25 mg/dL, has no
-         * carbs on board and no meal in the 30 minutes before it, shows a mean rate of glucose
-         * appearance below 0.30 mg/dL/min, and cost at least 0.8 U. The insulin credited is the fall
-         * in IOB, plus the basal above the profile rate, plus the SMBs decided inside the window.
-         *
-         * The median is `null` below three windows, never `0.0`: zero would read as a real
-         * sensitivity of zero. [isf_obs_window_count] says how far the instrument is from being able
-         * to answer.
-         *
-         * These fields are **strictly passive**. Nothing in the dosing chain reads them. They exist
-         * for one purpose: to be compared with [command_isf_mgdl], so that the question "does the ISF
-         * chain estimate the right quantity" can finally be answered from exported data.
-         *
-         * `var`, and written after this object is built, like the fields below.
-         */
-        var isf_obs_median_mgdl: Double? = null,
-        /** Same measure, night windows only (local hour 0 to 8). */
-        var isf_obs_night_median_mgdl: Double? = null,
-        /** Same measure, day windows only. */
-        var isf_obs_day_median_mgdl: Double? = null,
-        /** How many windows the look-back holds. Reported even when the median is `null`. */
-        var isf_obs_window_count: Int? = null,
-        /** How many of them are night windows. */
-        var isf_obs_night_count: Int? = null,
-        /** How many of them are day windows. */
-        var isf_obs_day_count: Int? = null,
-        /** End time of the most recent window, so a reading can be aged. */
-        var isf_obs_last_window_end_ms: Long? = null,
-        /** Sensitivity of that most recent window alone. */
-        var isf_obs_last_window_mgdl: Double? = null,
-        /** Fall of that window, mg/dL. */
-        var isf_obs_last_window_drop_mgdl: Double? = null,
-        /** Insulin credited to that window, U. */
-        var isf_obs_last_window_absorbed_u: Double? = null,
-        /**
-         * Shadow late fat damping window: the late part of an absorption episode while a large
-         * insulin stack is already working. Strictly passive — nothing in the dosing chain reads it.
-         * It exists to be compared with [late_fat_rise_flag] before any wiring is decided.
-         */
-        var late_fat_damping_window: Boolean? = null,
-        /** The old `isLateFatProteinRise` predicate for the same tick, to measure the divergence. */
-        var late_fat_rise_flag: Boolean? = null,
-        /** Minutes since the absorption episode started, `null` when there is no episode. */
-        var late_fat_onset_age_min: Int? = null,
-        /**
-         * Harmonia counterfactual, strictly passive. Nothing in the dosing chain reads these fifteen
-         * fields, and nothing may ever read them: they exist only so that what Harmonia proposed can
-         * be compared, after the fact, with what was really done.
-         *
-         * Harmonia is asked for a plan before the tick knows whether the SMB channel was zeroed for
-         * safety. It is then judged on exactly that verdict, and never told it, nor told that it was
-         * refused. These fields write down the missing message and its price:
-         *
-         *  - `harmonia_cf_*` — what Harmonia would propose if it were told, and whether that differs
-         *    from what it really proposed. [harmonia_cf_changes_proposal] is the whole question.
-         *  - `harmonia_block_*` — the size of the refusal. [harmonia_block_stake_u] is signed:
-         *    negative means the refusal **added** insulin, because it refused an under-dose.
-         *  - `harmonia_verdict_*` — the mirrored safety verdict.
-         *    [harmonia_verdict_known_to_engine] is the witness of inertia: it is written `false`, and
-         *    stays `false` for as long as nothing feeds the verdict back into the decision.
-         *  - `harmonia_prev_*` — what refused the previous tick, and for how many ticks in a row.
-         *  - [harmonia_tree_risk_divergence] — set only when the tree trunk and Harmonia disagree on
-         *    the risk level.
-         *
-         * `var`, and written after this object is built, like the fields above. See
-         * `HarmoniaCounterfactual`.
-         */
-        var harmonia_cf_rule: String? = null,
-        /** Action Harmonia would propose knowing the verdict. */
-        var harmonia_cf_action: String? = null,
-        /** Basal that goes with that action, U/h. */
-        var harmonia_cf_basal_uph: Double? = null,
-        /** `true` only when knowing the verdict would change the proposal. */
-        var harmonia_cf_changes_proposal: Boolean? = null,
-        /** The refused request was above the profile basal by more than one pump step. */
-        var harmonia_block_was_escalation: Boolean? = null,
-        /** Request minus profile basal, U/h, signed. */
-        var harmonia_block_delta_uph: Double? = null,
-        /** Insulin the refusal moved over the applied duration, U, signed. */
-        var harmonia_block_stake_u: Double? = null,
-        /** Applied rate minus requested rate, U/h. */
-        var harmonia_applied_gap_uph: Double? = null,
-        /** Mirrored verdict: a safety rule zeroed the SMB of this tick. */
-        var harmonia_verdict_critical_safety: Boolean? = null,
-        /** Mirrored verdict: the active context suppresses the SMB of this tick. */
-        var harmonia_verdict_context_suppress: Boolean? = null,
-        /** Mirrored verdict: a manual meal mode is declared, which exempts the channel. */
-        var harmonia_verdict_meal_mode: Boolean? = null,
-        /** Witness of inertia. Written `false`: the engine is never told the verdict. */
-        var harmonia_verdict_known_to_engine: Boolean? = null,
-        /** Runtime blocker of the previous tick, `null` when there was none. */
-        var harmonia_prev_blocker: String? = null,
-        /** How many ticks in a row the same blocker has refused Harmonia. */
-        var harmonia_prev_blocked_streak: Int? = null,
-        /** `"tronc=X|harmonia=Y"` when the two risk views differ, `null` when they agree. */
-        var harmonia_tree_risk_divergence: String? = null,
-        /** Fast estimator 1: Kalman-filtered raw ISF. */
-        val isf_kalman_fast_mgdl: Double? = null,
-        /** Fast estimator 2: IsfAdjustmentEngine output. */
-        val isf_adj_engine_mgdl: Double? = null,
-        /** Slow floor: profile/TDD fusion scaled by PKPD. */
-        val isf_fused_slow_mgdl: Double? = null,
-        /** Weight given to the fast estimators in the final blend. */
-        val isf_trust_fast: Double? = null,
-        /** Delta-driven correction factor applied after the blend. */
-        val isf_dynamic_factor: Double? = null,
-        /** AutoISF-style trajectory multiplier (1.0 when the layer did not fire). */
-        val isf_trajectory_multiplier: Double? = null,
-        /** Estimated rate of glucose appearance (mg/dL/min) from the continuous state estimator. */
-        val estimated_ra_mgdl_per_min: Double? = null,
-        /** Physiological ISF factor of the tick, bounds [0.85, 1.15]. Applied once since ADR 0007. */
-        val physio_isf_factor: Double? = null,
-        /**
-         * Commanded sensitivity before the profile-relative floor, mg/dL per U.
-         *
-         * Next to `command_isf_mgdl` it says how much the floor moved this tick, which no exported
-         * field could say while the shadow witness was reading the already-floored value.
-         */
-        val isf_pre_floor_mgdl: Double? = null,
-        /**
-         * Stress-ISF-floor signature of the tick: does it hold, and why.
-         *
-         * Written on every tick whether `BooleanKey.OApsAIMIStressIsfFloor` is armed or not, so the
-         * gesture can be measured before it is armed. See `StressIsfFloor`.
-         */
-        val stress_isf_floor_active: Boolean? = null,
-        val stress_isf_floor_reason: String? = null,
-        /**
-         * Sensitivity commanded with the floor at 1.0 x profile, mg/dL per U.
-         *
-         * Present whenever the signature is active, armed or not. Absent means "the signature does
-         * not hold", not zero.
-         */
-        val stress_isf_floor_isf_mgdl: Double? = null,
-        /**
-         * Awake resting heart rate the signature was measured against, bpm.
-         *
-         * Absent means the gesture stood down for want of data. It is not the same quantity as the
-         * exported `rhr_resting_bpm`, which is the lowest SLEEPING value of the last seven days and
-         * was pinned at 50 on every tick of three packages. See `AwakeRestingHeartRate`.
-         */
-        val stress_floor_awake_resting_bpm: Int? = null,
-        /**
-         * Dose-facing sensitivity before the stress floor, mg/dL per U.
-         *
-         * `var`, and set late: the value only exists once the working sensitivity is finalised,
-         * thousands of lines after this object is built at tick bootstrap. Without these three fields
-         * no support package can say whether the wiring works — `variable_sens_mgdl` is read after
-         * every multiplier and cannot show what the floor moved.
-         */
-        var stress_floor_isf_before_mgdl: Double? = null,
-        /** Dose-facing sensitivity after the stress floor, mg/dL per U. */
-        var stress_floor_isf_after_mgdl: Double? = null,
-        /** True when the floor really raised the dose-facing sensitivity this tick. */
-        var stress_floor_raised_isf: Boolean? = null,
-        /** Shadow: sensitivity an unconditional exit clamp relative to the profile would command. */
-        val isf_profile_relative_shadow_mgdl: Double? = null,
-        /** Shadow: true when that clamp would have changed the value. */
-        val isf_profile_relative_bound_hit: Boolean? = null,
-        /** Shadow: sensitivity ratio measured from outcomes, dimensionless, 1.0 = the profile is right. */
-        val sensitivity_ratio_r: Double? = null,
-        /** Shadow: sensitivity this ratio would command, i.e. profile x ratio, bounded. */
-        val isf_shadow_s_mgdl: Double? = null,
-        /** Shadow: how many closed windows have been folded in so far. */
-        val sensitivity_observations: Int? = null,
-        /**
-         * Hyper-trajectory Ra floor for this tick, in mg/dL/min, or null when no floor applied.
-         *
-         * `var`, and set late: the floor is computed inside the engaged Autodrive branch, thousands of
-         * lines after this object is built at tick bootstrap. As a `val` read at construction it
-         * exported `null` on every tick, for ever — the one instrument added to make the floor
-         * measurable could not measure it. Written through [markHtrRaFloorForExport].
-         */
-        var htr_ra_floor_mgdl_per_min: Double? = null,
-        /**
-         * Ra the controller actually used this tick, in mg/dL/min.
-         *
-         * Same reason for being a `var`: read at bootstrap it carried the **previous** tick's estimate,
-         * which makes the comparison with [htr_ra_floor_mgdl_per_min] meaningless — that comparison is
-         * the entire point of exporting the two side by side.
-         */
-        var estimated_ra_used_mgdl_per_min: Double? = null,
-        /** Diagnostic: how many times the meal filter advanced, and how many calls were replays. */
-        var ra_estimator_advances: Long? = null,
-        var ra_estimator_replayed_calls: Long? = null,
-        /**
-         * Shadow: Ra the filter would report with its insulin term aligned on the controller's.
-         *
-         * Never dosed on. Answers whether aligning `InsulinActionModel.ESTIMATOR_TAU_MIN` would pin Ra
-         * above the 0.6 / 0.7 / 0.8 gates, which is the one thing the medians could not settle.
-         */
-        var ra_aligned_tau_shadow_mgdl_per_min: Double? = null,
-        /**
-         * Writes to the SMB refused after `finalizeAndCapSMB` sealed the tick, and their total size.
-         *
-         * A non-zero count means a component tried to raise the dose past the terminal. That is the
-         * signal `AiAuditor` and the legacy meal paths never produced before the seal existed.
-         */
-        var smb_seal_refused_count: Int? = null,
-        var smb_seal_refused_total_u: Double? = null,
-        /** Post-seal raises allowed because the owner is a user-initiated action (meal advisor). */
-        var smb_seal_allowed_raise_count: Int? = null,
-        /** Coefficient the barrier used, and what it would be with the floor removed. */
-        var cbf_coefficient_used: Double? = null,
-        var cbf_coefficient_unfloored: Double? = null,
-        /** Shadow: insulin the barrier permitted, floored vs unfloored, in U per 5 min. */
-        var cbf_permitted_u: Double? = null,
-        var cbf_permitted_unfloored_u: Double? = null,
-        /** Profile ISF the barrier was handed, so the two above are interpretable. */
-        var cbf_profile_isf_mgdl: Double? = null,
-        /**
-         * Whether the Autodrive gate let the MPC run this tick.
-         *
-         * Everything the barrier exports only exists on engaged ticks. Without this the disengaged
-         * ticks are a blank, and a blank reads as "nothing happened" rather than "the gate was shut".
-         *
-         * Observation only. Nothing dose-facing reads these three fields.
-         */
-        var autodrive_gate_engaged: Boolean? = null,
-        /** Stable token for why the gate opened or stayed shut, for counting. */
-        var autodrive_gate_kind: String? = null,
-        /** The same reason with its live numbers, for reading. */
-        var autodrive_gate_reason: String? = null,
-        /**
-         * Shadow measurement of the rise ceiling guard (`RiseCeilingGuard`).
-         *
-         * Written on every tick that reaches the universal SMB exit, whether
-         * [app.aaps.core.keys.BooleanKey.OApsAIMIRiseCeilingGuard] is on or off. That is the whole
-         * point: the thresholds were chosen after seeing the data, so they need a measurement made
-         * in advance before the gesture is armed.
-         */
-        var rise_ceiling_guard_would_block: Boolean? = null,
-        /** Reason token plus its live numbers (ticks in a row at the ceiling, rise). */
-        var rise_ceiling_guard_reason: String? = null,
-        /** How many ticks in a row the bolus has come out at a ceiling, this tick included. */
-        var rise_ceiling_guard_repeats: Int? = null,
-        /**
-         * Bolus the guard would have refused, U.
-         *
-         * Set only when the verdict is "block", so a tick that did not block leaves the field absent
-         * instead of reporting a zero that means nothing.
-         */
-        var rise_ceiling_guard_withheld_u: Double? = null,
-        /**
-         * Effort SMB reduction, as actually applied at the universal SMB exit.
-         *
-         * `_requested` is what the effort belief asked for, `_applied` is what was used after the
-         * confirmed-meal floor, and the two unit fields bracket the reduction. Before this existed the
-         * multiplier could only be recovered by parsing the narrative, which cost one wrong
-         * attribution (see docs/AIMI_NEXT_SESSION.md Part A-quater).
-         */
-        var effort_smb_factor_requested: Double? = null,
-        var effort_smb_factor_applied: Double? = null,
-        var effort_smb_before_u: Double? = null,
-        var effort_smb_after_u: Double? = null,
-        /** True when the confirmed-meal floor raised the multiplier this tick. */
-        var effort_smb_floored_by_meal: Boolean? = null,
-        /**
-         * Aggressive-rise floor budget state. The episode budget is out of the dose path, but its
-         * accounting still runs, and its absence from the export is why the 2026-08-10 diagnosis
-         * rested on inference.
-         */
-        var rise_floor_spent_u: Double? = null,
-        var rise_floor_minutes_since_contribution: Double? = null,
-        /**
-         * The `variableSensitivity` member, in mg/dL/U, read late in the tick.
-         *
-         * This is a **post-dose** read, not the sensitivity the dose used. It is taken in
-         * `markEstimatorDiagnosticsForExport`, which runs after `applyEndoAndActivityAdjustments`
-         * and `applyIsfBoundsAndPhysioMultipliersAfterEndoActivity` have already multiplied
-         * `variableSensitivity` by the endo, activity and physiological factors, and long after the
-         * MPC and the tube advisor sized the dose.
-         *
-         * The number the delivered dose used is the fused PKPD sensitivity, exported as
-         * `adjustments.intelligence_snapshot_v1.isf.fused_mgdl_per_u`. It is what the MPC reads as
-         * `estimatedSI` and what the tube advisor reports as
-         * `adjustments.tube_advisor.isf_used_mgdl_per_u`. On the 2026-08-15 package the two agreed
-         * on 142 of 160 ticks, while this field agreed with the tube on 0 of 160.
-         *
-         * Do not compare this field with anything dose-related. An earlier note here claimed a 0.70
-         * to 2.65 ratio against [command_isf_mgdl]; that was obtained by inverting the tube's kappa,
-         * which cannot be inverted below about 29.7 mg/dL/U because the curve saturates there. The
-         * direct instruments contradict it.
-         */
-        var variable_sens_mgdl: Double? = null,
-    )
-    data class Adjustments(
-        var dynamic_isf: DynamicIsf? = null,
-        var basal_safety_cap: BasalCap? = null,
-        var physiological_context: PhysioContext? = null,
-        /** IOB surveillance / anti-stacking snapshot for AIMI_Decisions.jsonl analysis */
-        var iob_surveillance: IobSurveillanceExport? = null,
-        /** Effective-IOB release (maxIOB gate) decision snapshot for AIMI_Decisions.jsonl analysis */
-        var iob_release: IobReleaseExport? = null,
-        /** LGS / predictive hypo safety snapshot (Phase 5 export) */
-        var safety_risk: SafetyRiskExport? = null,
-        /** Dual scenario curves (CLINICAL_FLOOR + SCENARIO_BEST) */
-        var scenario_projection: ScenarioProjectionExport? = null,
-        /** Hyper Trajectory Release (projection → SMB floor) */
-        var hyper_trajectory_release: HyperTrajectoryReleaseExport? = null,
-        /** Physiological phase + behavioral risk policy (HTR / MPC / scenario) */
-        var physiological_phase: PhysiologicalPhaseExport? = null,
-        /** Multi-label body-state pattern catalog (RBT meta + HTR caps) */
-        var physiological_patterns: JsonObject? = null,
-        /** Unified meal absorption belief + phase (IOB / HTR / SMB priority) */
-        var meal_absorption_phase: MealAbsorptionPhaseExport? = null,
-        /** PKPD vs scenario eventual-BG divergence audit (PredictionDivergenceAuditor) */
-        var pred_divergence: JsonObject? = null,
-        /** Recursive Belief Tree — full JSON object for AIMI_Decisions.jsonl */
-        var recursive_belief: JsonObject? = null,
-        /** Progressive RBT authority gate decision for shadow -> soft -> hard transitions. */
-        var recursive_authority_gate: JsonObject? = null,
-        /** Replay-oriented quality bridge built from existing guards and shadow channels. */
-        var replay_quality: JsonObject? = null,
-        /** Diagnostic-only ordered SMB cap chain; never consumed by dose calculation. */
-        var smb_binding_trace: JsonObject? = null,
-        /** Shared latent physiological state reused across engines for the tick. */
-        var physio_latent_state: JsonObject? = null,
-        /** Multi-hypothesis UAM interpretation for meal vs endogenous vs stress vs rebound. */
-        var uam_hypotheses: JsonObject? = null,
-        /** Unified patient-state snapshot bridging physiology, meal state and user intent. */
-        var patient_state: JsonObject? = null,
-        /** High-level patient mode and strategy derived from the shared state. */
-        var patient_mode: JsonObject? = null,
-        /** AIMI Harmonia physiological tree — deploys insulin intent; Harmonia arbitrates dose. */
-        var physiological_tree: JsonObject? = null,
-        /** Lot A endocrine belief (WCycle + hypo dampen) — context for tree/Harmonia/forensics. */
-        var endocrine_belief: JsonObject? = null,
-        /** Cascade meal language (Tree→Harmonia→Auditor) — meal_certainty_v1. */
-        var meal_certainty: JsonObject? = null,
-        /** Cascade D4 / C1 — single dose-facing eventual + minPred for the tick. */
-        var dose_terminal_snapshot: JsonObject? = null,
-        /**
-         * Straight-line tube decision that set this tick's SMB ceiling.
-         *
-         * `dose_terminal_snapshot` is republished at `late_pkpd`, after the tube has already frozen
-         * the caps, so the exported snapshot is **not** the input the tube used. This block carries
-         * the inputs of the stage that actually decided, so the two can be compared.
-         */
-        var tube_advisor: JsonObject? = null,
-        /** Wave4 H3 — soft-floor/EGP path-min (production curves + study JSON raw/soft). */
-        var pkpd_soft_floor: JsonObject? = null,
-        /**
-         * What the MPC asked for before the control barrier, and the barrier's own terms.
-         *
-         * Separates "the solver wanted nothing" from "the barrier suspended everything", which
-         * `model_output_u` alone cannot do because it is read after the barrier.
-         */
-        var control_barrier: JsonObject? = null,
-        /** Lot 2 — invariants terminaux du canal basal: taux avant/apres et invariant liant. */
-        var basal_terminal: JsonObject? = null,
-        /**
-         * Universal Adaptive Basal scaling for this tick: heuristic, learned head, and the blend.
-         *
-         * Carries `n_raw`, the learned value BEFORE the runtime clamp. Only the blended result used to
-         * be exported (as free text in the narrative), so a model stuck on one constant and a model
-         * that had really learned the same number were impossible to tell apart in a log.
-         */
-        var adaptive_basal: JsonObject? = null,
-        /** AIMI Harmonia simulated production branch; virtual only, never applied to the real pump. */
-        var harmonia_simulation: JsonObject? = null,
-        /** AIMI Harmonia production owner state; basal-first only and safety-gated. */
-        var harmonia_production: JsonObject? = null,
-        /** Harmonia SMB authority arbitration (ACCEPT / LIFT_WITHIN_ENVELOPE / REDUCE). */
-        var harmonia_smb_authority: JsonObject? = null,
-        /** Unified intelligence snapshot (kinetics, causal, ISF, predictions) — intelligence_snapshot_v1. */
-        var intelligence_snapshot: JsonObject? = null,
-        /** Runtime ownership of T3C for this tick: native RBT, legacy fallback, or safety terminal. */
-        var t3c_runtime_ownership: T3cRuntimeOwnershipExport? = null,
-        /** Loop vs auditor binding for this tick (sync disposition; follow-up may arrive async). */
-        var auditor_tick: JsonObject? = null,
-        /**
-         * ISF and target of this tick at every level, plus the state of the auditor profile-factor
-         * key. Written on every tick, key on or off. Observation only; no dose reads it.
-         */
-        var auditor_profile_factors: JsonObject? = null,
-        /**
-         * Post-hypo delivery authority for this tick: whether it applied, which condition declined
-         * it, and the SMB before / after its cap. See `docs/adr/0006-autodrive-consumes-authority.md`.
-         */
-        var post_hypo_delivery: JsonObject? = null,
-        /**
-         * Running share of the delivered insulin the model actually asked for, against the share the
-         * floors added. Observation only; no dose reads it. See `InsulinOriginMeter`.
-         */
-        var insulin_origin: JsonObject? = null,
-    )
 
-    data class T3cRuntimeOwnershipExport(
-        val mode: String,
-        val native_owner_active: Boolean,
-        val legacy_fallback_allowed: Boolean,
-        val reason: String,
-    )
-
-    data class MealAbsorptionPhaseExport(
-        val phase: String,
-        val belief: Double,
-        val reason: String,
-        val memory_active: Boolean,
-        val wave_count: Int,
-        val meal_delivery_priority: Boolean,
-        val chrono_prior: Double,
-        val kinetic_score: Double,
-        val trajectory_score: Double,
-        val physio_score: Double,
-    )
-
-    data class PhysiologicalPhaseExport(
-        val phase: String,
-        val confidence: Double,
-        val behavioral_risk: String,
-        val reason: String,
-        val extended_dawn_guard: Boolean,
-        val scenario_best_capped: Boolean,
-        val max_htr_tier: String,
-        val smb_floor_cap_u: Double?,
-        val physio_smb_factor_fused: Double?,
-        val physio_phase_source: String?,
-    )
-
-    data class HyperTrajectoryReleaseExport(
-        val active: Boolean,
-        val tier: String,
-        val dev_above_target_mgdl: Double,
-        val projected_dev_mgdl: Double,
-        val severity_weight: Double,
-        val absorption_offset_mgdl: Double,
-        val smb_floor_u: Double,
-        val v3_smb_before_u: Double,
-        val v3_smb_after_u: Double,
-        val suppress_traj_basal_shift: Boolean,
-        val hypo_min_pred_ignored: Boolean,
-        val reason: String,
-    )
-
-    data class SafetyRiskExport(
-        val phase: String,
-        val predictive_hypo_suppressed: Boolean,
-        val safety_gate: String,
-        val halt_remaining_pipeline: Boolean,
-        val meal_context_active: Boolean,
-        val meal_rise_confirmed: Boolean,
-        val composite_min_mgdl: Double,
-        val pred_bg_mgdl: Double,
-        val eventual_bg_mgdl: Double,
-        val uam_terminal_mgdl: Double?,
-        val hypo_threshold_mgdl: Double,
-        val decision_composite_min_mgdl: Double?,
-        val decision_hypo_threshold_mgdl: Double?,
-        val reconcile_delta_mgdl: Double?,
-    )
-
-    data class ScenarioProjectionExport(
-        val floor_terminal_mgdl: Double,
-        val floor_path_min_mgdl: Double,
-        val best_terminal_mgdl: Double,
-        val best_path_min_mgdl: Double,
-        /** Pre meal-absorption-lift path-min used by Clamp / DoseTerminal gates. */
-        val best_gate_path_min_mgdl: Double,
-        val best_gate_path_min_hit_floor: Boolean,
-        val terminal_gap_mgdl: Double,
-        val trajectory_type: String?,
-        val contributors: List<String>,
-    )
-
-    /**
-     * Effective-IOB release decision (maxIOB gate) for external analytics. `gate_flips_block_to_allow` marks the
-     * safety-relevant event: the ledger IOB would block production but the hypo-governed release lets it through.
-     */
-    data class IobReleaseExport(
-        val enabled: Boolean,
-        val theta: Double,
-        val iob_ledger_u: Double,
-        val iob_effective_u: Double?,
-        val iob_for_gate_u: Double,
-        val released_u: Double,
-        val gate_flips_block_to_allow: Boolean,
-        val reason: String,
-    )
-
-    /**
-     * One row-friendly snapshot for external analytics (plateau + high IOB + predicted drop).
-     */
-    data class DynamicIsf(
-        var final_value_mgdl: Double = 0.0,
-        val modifiers: MutableList<Modifier> = mutableListOf()
-    )
-    data class Modifier(val source: String, val factor: Double, val clinical_reason: String)
-    data class BasalCap(val status: String, val limit_uph: Double, val safety_reason: String)
-    data class PhysioContext(val hormonal_cycle_phase: String, val physical_activity_mode: String)
-    data class Outcome(val clinical_decision: String, val dosage_u: Double, val target_basal_uph: Double? = null, val narrative_explanation: String)
-
-    fun toMedicalJson(): String {
-        return try {
-            val json = JsonObj()
-            json.put("event_id", event_id)
-            json.put("timestamp", timestamp)
-            json.put("trigger", trigger)
-
-            val base = JsonObj()
-            base.put("profile_isf_mgdl", baseline_state.profile_isf_mgdl)
-            base.put("profile_basal_uph", baseline_state.profile_basal_uph)
-            base.put("current_bg_mgdl", baseline_state.current_bg_mgdl)
-            base.put("cob_g", baseline_state.cob_g)
-            base.put("iob_u", baseline_state.iob_u)
-            base.put("profile_isf_static_mgdl", baseline_state.profile_isf_static_mgdl ?: AimiJson.NULL)
-            base.put("command_isf_mgdl", baseline_state.command_isf_mgdl ?: AimiJson.NULL)
-            base.put("isf_source", baseline_state.isf_source ?: AimiJson.NULL)
-            base.put("isf_age_ms", baseline_state.isf_age_ms ?: AimiJson.NULL)
-            base.put("isf_cache_key", baseline_state.isf_cache_key ?: AimiJson.NULL)
-            base.put("isf_cache_glucose_mgdl", baseline_state.isf_cache_glucose_mgdl ?: AimiJson.NULL)
-            base.put("isf_obs_median_mgdl", baseline_state.isf_obs_median_mgdl ?: AimiJson.NULL)
-            base.put("isf_obs_night_median_mgdl", baseline_state.isf_obs_night_median_mgdl ?: AimiJson.NULL)
-            base.put("isf_obs_day_median_mgdl", baseline_state.isf_obs_day_median_mgdl ?: AimiJson.NULL)
-            base.put("isf_obs_window_count", baseline_state.isf_obs_window_count ?: AimiJson.NULL)
-            base.put("isf_obs_night_count", baseline_state.isf_obs_night_count ?: AimiJson.NULL)
-            base.put("isf_obs_day_count", baseline_state.isf_obs_day_count ?: AimiJson.NULL)
-            base.put("isf_obs_last_window_end_ms", baseline_state.isf_obs_last_window_end_ms ?: AimiJson.NULL)
-            base.put("isf_obs_last_window_mgdl", baseline_state.isf_obs_last_window_mgdl ?: AimiJson.NULL)
-            base.put("isf_obs_last_window_drop_mgdl", baseline_state.isf_obs_last_window_drop_mgdl ?: AimiJson.NULL)
-            base.put("isf_obs_last_window_absorbed_u", baseline_state.isf_obs_last_window_absorbed_u ?: AimiJson.NULL)
-            base.put("late_fat_damping_window", baseline_state.late_fat_damping_window ?: AimiJson.NULL)
-            base.put("late_fat_rise_flag", baseline_state.late_fat_rise_flag ?: AimiJson.NULL)
-            base.put("late_fat_onset_age_min", baseline_state.late_fat_onset_age_min ?: AimiJson.NULL)
-            base.put("harmonia_cf_rule", baseline_state.harmonia_cf_rule ?: AimiJson.NULL)
-            base.put("harmonia_cf_action", baseline_state.harmonia_cf_action ?: AimiJson.NULL)
-            base.put("harmonia_cf_basal_uph", baseline_state.harmonia_cf_basal_uph ?: AimiJson.NULL)
-            base.put("harmonia_cf_changes_proposal", baseline_state.harmonia_cf_changes_proposal ?: AimiJson.NULL)
-            base.put("harmonia_block_was_escalation", baseline_state.harmonia_block_was_escalation ?: AimiJson.NULL)
-            base.put("harmonia_block_delta_uph", baseline_state.harmonia_block_delta_uph ?: AimiJson.NULL)
-            base.put("harmonia_block_stake_u", baseline_state.harmonia_block_stake_u ?: AimiJson.NULL)
-            base.put("harmonia_applied_gap_uph", baseline_state.harmonia_applied_gap_uph ?: AimiJson.NULL)
-            base.put("harmonia_verdict_critical_safety", baseline_state.harmonia_verdict_critical_safety ?: AimiJson.NULL)
-            base.put("harmonia_verdict_context_suppress", baseline_state.harmonia_verdict_context_suppress ?: AimiJson.NULL)
-            base.put("harmonia_verdict_meal_mode", baseline_state.harmonia_verdict_meal_mode ?: AimiJson.NULL)
-            base.put("harmonia_verdict_known_to_engine", baseline_state.harmonia_verdict_known_to_engine ?: AimiJson.NULL)
-            base.put("harmonia_prev_blocker", baseline_state.harmonia_prev_blocker ?: AimiJson.NULL)
-            base.put("harmonia_prev_blocked_streak", baseline_state.harmonia_prev_blocked_streak ?: AimiJson.NULL)
-            base.put("harmonia_tree_risk_divergence", baseline_state.harmonia_tree_risk_divergence ?: AimiJson.NULL)
-            base.put("isf_kalman_fast_mgdl", baseline_state.isf_kalman_fast_mgdl ?: AimiJson.NULL)
-            base.put("isf_adj_engine_mgdl", baseline_state.isf_adj_engine_mgdl ?: AimiJson.NULL)
-            base.put("isf_fused_slow_mgdl", baseline_state.isf_fused_slow_mgdl ?: AimiJson.NULL)
-            base.put("isf_trust_fast", baseline_state.isf_trust_fast ?: AimiJson.NULL)
-            base.put("isf_dynamic_factor", baseline_state.isf_dynamic_factor ?: AimiJson.NULL)
-            base.put("isf_trajectory_multiplier", baseline_state.isf_trajectory_multiplier ?: AimiJson.NULL)
-            base.put("estimated_ra_mgdl_per_min", baseline_state.estimated_ra_mgdl_per_min ?: AimiJson.NULL)
-            base.put("physio_isf_factor", baseline_state.physio_isf_factor ?: AimiJson.NULL)
-            base.put("isf_pre_floor_mgdl", baseline_state.isf_pre_floor_mgdl ?: AimiJson.NULL)
-            base.put("stress_isf_floor_active", baseline_state.stress_isf_floor_active ?: AimiJson.NULL)
-            base.put("stress_isf_floor_reason", baseline_state.stress_isf_floor_reason ?: AimiJson.NULL)
-            base.put("stress_isf_floor_isf_mgdl", baseline_state.stress_isf_floor_isf_mgdl ?: AimiJson.NULL)
-            base.put("stress_floor_awake_resting_bpm", baseline_state.stress_floor_awake_resting_bpm ?: AimiJson.NULL)
-            base.put("stress_floor_isf_before_mgdl", baseline_state.stress_floor_isf_before_mgdl ?: AimiJson.NULL)
-            base.put("stress_floor_isf_after_mgdl", baseline_state.stress_floor_isf_after_mgdl ?: AimiJson.NULL)
-            base.put("stress_floor_raised_isf", baseline_state.stress_floor_raised_isf ?: AimiJson.NULL)
-            base.put("isf_profile_relative_shadow_mgdl", baseline_state.isf_profile_relative_shadow_mgdl ?: AimiJson.NULL)
-            base.put("isf_profile_relative_bound_hit", baseline_state.isf_profile_relative_bound_hit ?: AimiJson.NULL)
-            base.put("sensitivity_ratio_r", baseline_state.sensitivity_ratio_r ?: AimiJson.NULL)
-            base.put("isf_shadow_s_mgdl", baseline_state.isf_shadow_s_mgdl ?: AimiJson.NULL)
-            base.put("sensitivity_observations", baseline_state.sensitivity_observations ?: AimiJson.NULL)
-            base.put("htr_ra_floor_mgdl_per_min", baseline_state.htr_ra_floor_mgdl_per_min ?: AimiJson.NULL)
-            base.put("estimated_ra_used_mgdl_per_min", baseline_state.estimated_ra_used_mgdl_per_min ?: AimiJson.NULL)
-            base.put("ra_estimator_advances", baseline_state.ra_estimator_advances ?: AimiJson.NULL)
-            base.put("ra_estimator_replayed_calls", baseline_state.ra_estimator_replayed_calls ?: AimiJson.NULL)
-            base.put("ra_aligned_tau_shadow_mgdl_per_min", baseline_state.ra_aligned_tau_shadow_mgdl_per_min ?: AimiJson.NULL)
-            base.put("smb_seal_refused_count", baseline_state.smb_seal_refused_count ?: AimiJson.NULL)
-            base.put("smb_seal_refused_total_u", baseline_state.smb_seal_refused_total_u ?: AimiJson.NULL)
-            base.put("smb_seal_allowed_raise_count", baseline_state.smb_seal_allowed_raise_count ?: AimiJson.NULL)
-            base.put("cbf_coefficient_used", baseline_state.cbf_coefficient_used ?: AimiJson.NULL)
-            base.put("cbf_coefficient_unfloored", baseline_state.cbf_coefficient_unfloored ?: AimiJson.NULL)
-            base.put("cbf_permitted_u", baseline_state.cbf_permitted_u ?: AimiJson.NULL)
-            base.put("cbf_permitted_unfloored_u", baseline_state.cbf_permitted_unfloored_u ?: AimiJson.NULL)
-            base.put("cbf_profile_isf_mgdl", baseline_state.cbf_profile_isf_mgdl ?: AimiJson.NULL)
-            base.put("autodrive_gate_engaged", baseline_state.autodrive_gate_engaged ?: AimiJson.NULL)
-            base.put("autodrive_gate_kind", baseline_state.autodrive_gate_kind ?: AimiJson.NULL)
-            base.put("autodrive_gate_reason", baseline_state.autodrive_gate_reason ?: AimiJson.NULL)
-            base.put("rise_ceiling_guard_would_block", baseline_state.rise_ceiling_guard_would_block ?: AimiJson.NULL)
-            base.put("rise_ceiling_guard_reason", baseline_state.rise_ceiling_guard_reason ?: AimiJson.NULL)
-            base.put("rise_ceiling_guard_repeats", baseline_state.rise_ceiling_guard_repeats ?: AimiJson.NULL)
-            base.put("rise_ceiling_guard_withheld_u", baseline_state.rise_ceiling_guard_withheld_u ?: AimiJson.NULL)
-            base.put("effort_smb_factor_requested", baseline_state.effort_smb_factor_requested ?: AimiJson.NULL)
-            base.put("effort_smb_factor_applied", baseline_state.effort_smb_factor_applied ?: AimiJson.NULL)
-            base.put("effort_smb_before_u", baseline_state.effort_smb_before_u ?: AimiJson.NULL)
-            base.put("effort_smb_after_u", baseline_state.effort_smb_after_u ?: AimiJson.NULL)
-            base.put("effort_smb_floored_by_meal", baseline_state.effort_smb_floored_by_meal ?: AimiJson.NULL)
-            base.put("rise_floor_spent_u", baseline_state.rise_floor_spent_u ?: AimiJson.NULL)
-            base.put("variable_sens_mgdl", baseline_state.variable_sens_mgdl ?: AimiJson.NULL)
-            base.put(
-                "rise_floor_minutes_since_contribution",
-                baseline_state.rise_floor_minutes_since_contribution ?: AimiJson.NULL,
-            )
-            json.put("baseline_state", base)
-
-            val adj = JsonObj()
-            adjustments.dynamic_isf?.let { d ->
-                val dJson = JsonObj()
-                dJson.put("final_value_mgdl", d.final_value_mgdl)
-                val modsIdx = JsonArr()
-                d.modifiers.forEach { m ->
-                    val mJson = JsonObj()
-                    mJson.put("source", m.source)
-                    mJson.put("factor", m.factor)
-                    mJson.put("reason", m.clinical_reason)
-                    modsIdx.put(mJson)
-                }
-                dJson.put("modifiers", modsIdx)
-                adj.put("dynamic_isf", dJson)
-            }
-            adjustments.physiological_context?.let { p ->
-                val pJson = JsonObj()
-                pJson.put("cycle_phase", p.hormonal_cycle_phase)
-                pJson.put("activity_mode", p.physical_activity_mode)
-                adj.put("physio_context", pJson)
-            }
-            // Add Basal Cap if present
-            adjustments.basal_safety_cap?.let { c ->
-                val cJson = JsonObj()
-                cJson.put("status", c.status)
-                cJson.put("limit_uph", c.limit_uph)
-                cJson.put("reason", c.safety_reason)
-                adj.put("basal_cap", cJson)
-            }
-            adjustments.iob_surveillance?.let { s ->
-                val sJson = JsonObj()
-                sJson.put("pref_enabled", s.pref_enabled)
-                sJson.put("preference_key", s.preference_key)
-                sJson.put("kind", s.kind)
-                sJson.put("active_reason", s.active_reason ?: AimiJson.NULL)
-                sJson.put("meal_priority_context", s.meal_priority_context)
-                sJson.put("bg_mgdl", s.bg_mgdl)
-                sJson.put("target_bg_mgdl", s.target_bg_mgdl)
-                sJson.put("delta_mgdl_5m", s.delta_mgdl_5m)
-                sJson.put("short_avg_delta_mgdl_5m", s.short_avg_delta_mgdl_5m)
-                sJson.put("iob_u", s.iob_u)
-                sJson.put("max_iob_u", s.max_iob_u)
-                sJson.put("iob_floor_u", s.iob_floor_u)
-                sJson.put("eventual_bg", s.eventual_bg ?: AimiJson.NULL)
-                sJson.put("min_predicted_bg", s.min_predicted_bg ?: AimiJson.NULL)
-                sJson.put("trajectory_energy", s.trajectory_energy ?: AimiJson.NULL)
-                sJson.put("signal_eventual_drop", s.signal_eventual_drop)
-                sJson.put("signal_min_pred_drop", s.signal_min_pred_drop)
-                sJson.put("signal_trajectory_stack", s.signal_trajectory_stack)
-                sJson.put("smb_multiplier", s.smb_multiplier)
-                sJson.put("smb_cap_u", s.smb_cap_u)
-                sJson.put("suppress_red_carpet_restore", s.suppress_red_carpet_restore)
-                sJson.put("tbr_boost_floor", s.tbr_boost_floor)
-                sJson.put("smb_u_after_pkpd_before_stacking", s.smb_u_after_pkpd_before_stacking)
-                sJson.put("smb_u_after_stacking_step", s.smb_u_after_stacking_step)
-                sJson.put("stacking_reduced_smb", s.stacking_reduced_smb)
-                sJson.put("pkpd_tbr_boost_after_finalize", s.pkpd_tbr_boost_after_finalize)
-                sJson.put("smb_u_after_cap_smb_dose", s.smb_u_after_cap_smb_dose)
-                sJson.put("smb_u_final_for_delivery", s.smb_u_final_for_delivery)
-                sJson.put("smb_final_source", s.smb_final_source)
-                sJson.put("summary_line", s.summary_line)
-                sJson.put("tuning_reference", s.tuning_reference)
-                adj.put("iob_surveillance", sJson)
-            }
-            adjustments.iob_release?.let { r ->
-                val rJson = JsonObj()
-                rJson.put("enabled", r.enabled)
-                rJson.put("theta", r.theta)
-                rJson.put("iob_ledger_u", r.iob_ledger_u)
-                rJson.put("iob_effective_u", r.iob_effective_u ?: AimiJson.NULL)
-                rJson.put("iob_for_gate_u", r.iob_for_gate_u)
-                rJson.put("released_u", r.released_u)
-                rJson.put("gate_flips_block_to_allow", r.gate_flips_block_to_allow)
-                rJson.put("reason", r.reason)
-                adj.put("iob_release", rJson)
-            }
-            adjustments.safety_risk?.let { r ->
-                val rJson = JsonObj()
-                rJson.put("phase", r.phase)
-                rJson.put("predictive_hypo_suppressed", r.predictive_hypo_suppressed)
-                rJson.put("safety_gate", r.safety_gate)
-                rJson.put("halt_remaining_pipeline", r.halt_remaining_pipeline)
-                rJson.put("meal_context_active", r.meal_context_active)
-                rJson.put("meal_rise_confirmed", r.meal_rise_confirmed)
-                rJson.put("composite_min_mgdl", r.composite_min_mgdl)
-                rJson.put("pred_bg_mgdl", r.pred_bg_mgdl)
-                rJson.put("eventual_bg_mgdl", r.eventual_bg_mgdl)
-                rJson.put("uam_terminal_mgdl", r.uam_terminal_mgdl ?: AimiJson.NULL)
-                rJson.put("hypo_threshold_mgdl", r.hypo_threshold_mgdl)
-                rJson.put("decision_composite_min_mgdl", r.decision_composite_min_mgdl ?: AimiJson.NULL)
-                rJson.put("decision_hypo_threshold_mgdl", r.decision_hypo_threshold_mgdl ?: AimiJson.NULL)
-                rJson.put("reconcile_delta_mgdl", r.reconcile_delta_mgdl ?: AimiJson.NULL)
-                adj.put("safety_risk", rJson)
-            }
-            adjustments.scenario_projection?.let { s ->
-                val sJson = JsonObj()
-                sJson.put("floor_terminal_mgdl", s.floor_terminal_mgdl)
-                sJson.put("floor_path_min_mgdl", s.floor_path_min_mgdl)
-                sJson.put("best_terminal_mgdl", s.best_terminal_mgdl)
-                sJson.put("best_path_min_mgdl", s.best_path_min_mgdl)
-                sJson.put("best_gate_path_min_mgdl", s.best_gate_path_min_mgdl)
-                sJson.put("best_gate_path_min_hit_floor", s.best_gate_path_min_hit_floor)
-                sJson.put("terminal_gap_mgdl", s.terminal_gap_mgdl)
-                sJson.put("trajectory_type", s.trajectory_type ?: AimiJson.NULL)
-                sJson.put("contributors", JsonArr(s.contributors))
-                adj.put("scenario_projection", sJson)
-            }
-            adjustments.hyper_trajectory_release?.let { h ->
-                val hJson = JsonObj()
-                hJson.put("active", h.active)
-                hJson.put("tier", h.tier)
-                hJson.put("dev_above_target_mgdl", h.dev_above_target_mgdl)
-                hJson.put("projected_dev_mgdl", h.projected_dev_mgdl)
-                hJson.put("severity_weight", h.severity_weight)
-                hJson.put("absorption_offset_mgdl", h.absorption_offset_mgdl)
-                hJson.put("smb_floor_u", h.smb_floor_u)
-                hJson.put("v3_smb_before_u", h.v3_smb_before_u)
-                hJson.put("v3_smb_after_u", h.v3_smb_after_u)
-                hJson.put("suppress_traj_basal_shift", h.suppress_traj_basal_shift)
-                hJson.put("hypo_min_pred_ignored", h.hypo_min_pred_ignored)
-                hJson.put("reason", h.reason)
-                adj.put("hyper_trajectory_release", hJson)
-            }
-            adjustments.physiological_phase?.let { p ->
-                val pJson = JsonObj()
-                pJson.put("phase", p.phase)
-                pJson.put("confidence", p.confidence)
-                pJson.put("behavioral_risk", p.behavioral_risk)
-                pJson.put("reason", p.reason)
-                pJson.put("extended_dawn_guard", p.extended_dawn_guard)
-                pJson.put("scenario_best_capped", p.scenario_best_capped)
-                pJson.put("max_htr_tier", p.max_htr_tier)
-                pJson.put("smb_floor_cap_u", p.smb_floor_cap_u ?: AimiJson.NULL)
-                pJson.put("physio_smb_factor_fused", p.physio_smb_factor_fused ?: AimiJson.NULL)
-                pJson.put("physio_phase_source", p.physio_phase_source ?: AimiJson.NULL)
-                adj.put("physiological_phase", pJson)
-            }
-            adjustments.physiological_patterns?.let { pp ->
-                adj.put("physiological_patterns", pp)
-            }
-            adjustments.meal_absorption_phase?.let { m ->
-                val mJson = JsonObj()
-                mJson.put("phase", m.phase)
-                mJson.put("belief", m.belief)
-                mJson.put("reason", m.reason)
-                mJson.put("memory_active", m.memory_active)
-                mJson.put("wave_count", m.wave_count)
-                mJson.put("meal_delivery_priority", m.meal_delivery_priority)
-                mJson.put("chrono_prior", m.chrono_prior)
-                mJson.put("kinetic_score", m.kinetic_score)
-                mJson.put("trajectory_score", m.trajectory_score)
-                mJson.put("physio_score", m.physio_score)
-                adj.put("meal_absorption_phase", mJson)
-            }
-            adjustments.pred_divergence?.let { pd ->
-                adj.put("pred_divergence", pd)
-            }
-            adjustments.recursive_belief?.let { rb ->
-                adj.put("recursive_belief", rb)
-            }
-            adjustments.recursive_authority_gate?.let { rag ->
-                adj.put("recursive_authority_gate", rag)
-            }
-            adjustments.replay_quality?.let { rq ->
-                adj.put("replay_quality", rq)
-            }
-            adjustments.smb_binding_trace?.let { trace ->
-                adj.put("smb_binding_trace", trace)
-            }
-            adjustments.physio_latent_state?.let { latent ->
-                adj.put("physio_latent_state", latent)
-            }
-            adjustments.uam_hypotheses?.let { hypotheses ->
-                adj.put("uam_hypotheses", hypotheses)
-            }
-            adjustments.patient_state?.let { patientState ->
-                adj.put("patient_state", patientState)
-            }
-            adjustments.patient_mode?.let { patientMode ->
-                adj.put("patient_mode", patientMode)
-            }
-            adjustments.endocrine_belief?.let { endocrine ->
-                adj.put("endocrine_belief", endocrine)
-            }
-            adjustments.physiological_tree?.let { tree ->
-                adj.put("physiological_tree", tree)
-            }
-            adjustments.meal_certainty?.let { mealCertainty ->
-                adj.put("meal_certainty", mealCertainty)
-            }
-            adjustments.dose_terminal_snapshot?.let { doseTerminal ->
-                adj.put("dose_terminal_snapshot", doseTerminal)
-            }
-            adjustments.control_barrier?.let { cb ->
-                adj.put("control_barrier", cb)
-            }
-            adjustments.tube_advisor?.let { tube ->
-                adj.put("tube_advisor", tube)
-            }
-            adjustments.pkpd_soft_floor?.let { softFloor ->
-                adj.put("pkpd_soft_floor", softFloor)
-            }
-            adjustments.basal_terminal?.let { terminal ->
-                adj.put("basal_terminal", terminal)
-            }
-            adjustments.adaptive_basal?.let { adaptiveBasal ->
-                adj.put("adaptive_basal", adaptiveBasal)
-            }
-            adjustments.harmonia_simulation?.let { simulation ->
-                adj.put("harmonia_simulation", simulation)
-            }
-            adjustments.harmonia_production?.let { production ->
-                adj.put("harmonia_production", production)
-            }
-            adjustments.harmonia_smb_authority?.let { smbAuthority ->
-                adj.put("harmonia_smb_authority", smbAuthority)
-            }
-            adjustments.intelligence_snapshot?.let { snapshot ->
-                adj.put("intelligence_snapshot_v1", snapshot)
-            }
-            adjustments.t3c_runtime_ownership?.let { ownership ->
-                val ownershipJson = JsonObj()
-                ownershipJson.put("mode", ownership.mode)
-                ownershipJson.put("native_owner_active", ownership.native_owner_active)
-                ownershipJson.put("legacy_fallback_allowed", ownership.legacy_fallback_allowed)
-                ownershipJson.put("reason", ownership.reason)
-                adj.put("t3c_runtime_ownership", ownershipJson)
-            }
-            adjustments.auditor_tick?.let { auditorTick ->
-                adj.put("auditor_tick", auditorTick)
-            }
-            adjustments.auditor_profile_factors?.let { profileFactors ->
-                adj.put("auditor_profile_factors", profileFactors)
-            }
-            adjustments.post_hypo_delivery?.let { postHypoDelivery ->
-                adj.put("post_hypo_delivery", postHypoDelivery)
-            }
-            adjustments.insulin_origin?.let { insulinOrigin ->
-                adj.put("insulin_origin", insulinOrigin)
-            }
-            json.put("adjustments", adj)
-
-            outcome?.let { o ->
-                val oJson = JsonObj()
-                oJson.put("decision", o.clinical_decision)
-                oJson.put("amount", o.dosage_u)
-                o.target_basal_uph?.let { oJson.put("target_basal_rate_uph", it) }
-                oJson.put("narrative", o.narrative_explanation)
-                json.put("outcome", oJson)
-            }
-            json.toString()
-        } catch (_: Exception) { "{ \"error\": \"JSON Generation Failed\" }" }
-    }
-}
 
 /**
  * When [TrajectoryType.TIGHT_SPIRAL] is active with high trajectory energy and IOB already elevated,
@@ -2278,7 +1440,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 override fun hydrate(mealData: MealData) {
                     hydrateMealDataIfTriggered(mealData)
                 }
-                override fun copyProfile(profile: OapsProfileAimi) = profile.copy()
                 override fun enterBootstrap() {
                     AimiLoopTelemetry.enterPhase(AimiLoopPhase.BOOTSTRAP, hormonitorStudyExporter)
                 }
@@ -2491,46 +1652,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         trigger: String,
         eventId: String,
     ): AimiDecisionContext {
-        return AimiDecisionContext(
-            event_id = eventId.also { currentTickDecisionEventId = it },
+        currentTickDecisionEventId = eventId
+        return decideAimiDecisionContext(
+            eventId = eventId,
             timestamp = ctx.currentTime,
             trigger = trigger,
-            baseline_state = AimiDecisionContext.BaselineState(
-                profile_isf_mgdl = ctx.profile.sens,
-                profile_basal_uph = ctx.profile.current_basal,
-                current_bg_mgdl = ctx.glucoseStatus.glucose,
-                cob_g = ctx.mealData.mealCOB,
-                iob_u = ctx.iobDataArray.firstOrNull()?.iob ?: 0.0,
-                profile_isf_static_mgdl = IsfSourceTelemetry.lastProfileStaticMgdl,
-                command_isf_mgdl = ctx.profile.sens,
-                isf_source = IsfSourceTelemetry.lastSource,
-                isf_age_ms = IsfSourceTelemetry.lastAgeMs,
-                isf_cache_key = IsfSourceTelemetry.lastCacheKey,
-                isf_cache_glucose_mgdl = IsfSourceTelemetry.lastCacheGlucoseMgdl,
-                isf_kalman_fast_mgdl = IsfSourceTelemetry.lastKalmanFastIsf,
-                isf_adj_engine_mgdl = IsfSourceTelemetry.lastIsfAdjEngine,
-                isf_fused_slow_mgdl = IsfSourceTelemetry.lastFusedSlowIsf,
-                isf_trust_fast = IsfSourceTelemetry.lastTrustFast,
-                isf_dynamic_factor = IsfSourceTelemetry.lastDynamicFactor,
-                isf_trajectory_multiplier = IsfSourceTelemetry.lastTrajectoryMultiplier,
-                estimated_ra_mgdl_per_min = runCatching { continuousStateEstimator.getLastRa() }.getOrNull(),
-                physio_isf_factor = IsfSourceTelemetry.lastPhysioIsfFactor,
-                isf_pre_floor_mgdl = CommandedIsf.lastPreFloorMgdlPerU,
-                stress_isf_floor_active = IsfSourceTelemetry.lastStressIsfFloorActive,
-                stress_isf_floor_reason = IsfSourceTelemetry.lastStressIsfFloorReason,
-                stress_isf_floor_isf_mgdl = IsfSourceTelemetry.lastStressIsfFloorIsfMgdl,
-                stress_floor_awake_resting_bpm = IsfSourceTelemetry.lastStressIsfFloorAwakeRestingBpm,
-                isf_profile_relative_shadow_mgdl = IsfSourceTelemetry.lastProfileRelativeShadowMgdl,
-                isf_profile_relative_bound_hit = IsfSourceTelemetry.lastProfileRelativeBoundHit,
-                sensitivity_ratio_r = runCatching { sensitivityRatioEstimator.ratio }.getOrNull(),
-                isf_shadow_s_mgdl = runCatching {
-                    IsfSourceTelemetry.lastProfileStaticMgdl?.let { sensitivityRatioEstimator.sensitivityMgdl(it) }
-                }.getOrNull(),
-                sensitivity_observations = runCatching { sensitivityRatioEstimator.observationCount }.getOrNull(),
-                // Laissé null ici et écrit tard par `markHtrRaFloorForExport` : la valeur n'existe
-                // pas encore au bootstrap du tick.
-                htr_ra_floor_mgdl_per_min = null
-            )
+            profileIsfMgdl = ctx.profile.sens,
+            profileBasalUph = ctx.profile.current_basal,
+            currentBgMgdl = ctx.glucoseStatus.glucose,
+            cobG = ctx.mealData.mealCOB,
+            iobU = ctx.iobDataArray.firstOrNull()?.iob ?: 0.0,
+            estimatedRaMgdlPerMin = runCatching { continuousStateEstimator.getLastRa() }.getOrNull(),
+            sensitivityRatioR = runCatching { sensitivityRatioEstimator.ratio }.getOrNull(),
+            isfShadowSMgdl = runCatching {
+                IsfSourceTelemetry.lastProfileStaticMgdl?.let { sensitivityRatioEstimator.sensitivityMgdl(it) }
+            }.getOrNull(),
+            sensitivityObservations = runCatching { sensitivityRatioEstimator.observationCount }.getOrNull(),
         )
     }
 
@@ -2545,11 +1682,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     ): AimiRealtimePhysioIobBootstrap {
         val rtActivity = physioAdapter.getRealTimeActivity()
         consoleLog.add("PHYSIO_RT Steps=${rtActivity.stepsToday} HR=${rtActivity.heartRate}bpm")
-        if (::tpoOrchestrator.isInitialized) {
-            tpoOrchestrator.onTickStart(dateUtil.now())
-        }
-        this.maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
-        this.maxSMBHB = preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB).coerceAtLeast(this.maxSMB)
+        applyTpoTickSmbCeiling(dateUtil.now())
         val physioSnapshot = physioAdapter.getLatestSnapshot()
         val snsDominance = physioSnapshot.toSNSDominance()
         decisionCtx.adjustments.physiological_context = AimiDecisionContext.PhysioContext(
@@ -2878,6 +2011,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         state = object : AimiTickClockState {
             override fun nowMs() = now
             override fun setNow(ms: Long) { now = ms }
+            override fun epochMs(): Long = injectedTickEpochMs ?: aimiWallClockMs()
             override fun setHourOfDay(hour: Int) { hourOfDay = hour }
             override fun setBg(bg: Double) { this@DetermineBasalaimiSMB2.bg = bg }
             override fun bg() = this@DetermineBasalaimiSMB2.bg
@@ -3551,6 +2685,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
     }
 
+    /**
+     * Session expiry, then the SMB ceiling.
+     *
+     * `onTickStart` reverts an expired session into [preferences]. The two reads afterwards are
+     * [tpoTickSmbCeiling]. [nowMs] is `dateUtil.now()`, the clock this tick already used.
+     */
+    private fun applyTpoTickSmbCeiling(nowMs: Long) {
+        if (::tpoOrchestrator.isInitialized) {
+            tpoOrchestrator.onTickStart(nowMs)
+        }
+        val ceiling = tpoTickSmbCeiling(preferences)
+        this.maxSMB = ceiling.maxSmb
+        this.maxSMBHB = ceiling.maxSmbHb
+    }
+
     private fun updatePhysioLatentState(
         snapshot: HealthContextSnapshot,
         sourceSensor: SourceSensor?,
@@ -3647,16 +2796,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
     }
 
-    private fun enrichThermalSnapshot(snapshot: HealthContextSnapshot): HealthContextSnapshot {
-        val thermalBelief = ThermalBeliefEngine.buildFromCache(
-            hrNowBpm = snapshot.hrNow,
-            rhrRestingBpm = snapshot.rhrResting,
-            sleepDebtMinutes = snapshot.sleepDebtMinutes,
-            hrvRmssd = snapshot.hrvRmssd,
-            wCyclePhase = wCycleInfoForRun?.phase,
-        )
-        return snapshot.copy(thermalBelief = thermalBelief)
-    }
+    private fun enrichThermalSnapshot(snapshot: HealthContextSnapshot): HealthContextSnapshot =
+        enrichPatientThermal(snapshot, wCycleInfoForRun?.phase)
 
     private fun refreshPatientStateRuntime(
         nowMs: Long = dateUtil.now(),
@@ -3665,225 +2806,89 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         sourceSensor: SourceSensor? = lastPatientSourceSensor,
         refreshSource: PatientRefreshSource = PatientRefreshSource.LOOP_TICK,
     ): PatientStateSnapshot {
-        lastContextSnapshot = contextSnapshot
-        if (sourceSensor != null) {
-            lastPatientSourceSensor = sourceSensor
-        }
         val wearableSnap = healthSnapshot ?: try {
             physioAdapter.getLatestSnapshot()
         } catch (_: Exception) {
             HealthContextSnapshot()
         }
-        val enrichedSnap = enrichThermalSnapshot(wearableSnap)
-        val eventMemory = buildPatientEventMemory(
-            currentBgMgdl = bg,
-            latentState = lastPhysioLatentState,
-            thermalBelief = enrichedSnap.thermalBelief,
+        val result = decideRefreshPatientStateRuntime(
             nowMs = nowMs,
+            contextSnapshot = contextSnapshot,
+            healthSnapshot = wearableSnap,
+            sourceSensor = sourceSensor,
+            refreshSource = refreshSource,
+            calls = patientRuntimeCalls(),
         )
-        val patientState = PatientStateEngine.build(
-            timestampMs = nowMs,
-            phaseOutput = lastPhysiologicalPhaseOutput,
-            mealAbsorptionOutput = lastMealAbsorptionOutput,
-            patternSnapshot = lastPhysiologicalPatternSnapshot,
-            latentState = lastPhysioLatentState,
-            hypothesisState = lastUamHypothesisState,
-            contextSnapshot = lastContextSnapshot,
-            thermalBelief = enrichedSnap.thermalBelief,
-            eventMemory = eventMemory,
-        )
-        lastPatientState = patientState
-        val patientModeDecision = PatientModeOrchestrator.evaluate(patientState)
-        lastPatientModeDecision = patientModeDecision
-        val physioLive = PhysioLiveDigest.from(enrichedSnap, nowMs)
-        ensureWCycleInfo()
-        val hypoGuardActive =
+        lastContextSnapshot = contextSnapshot
+        if (sourceSensor != null) {
+            lastPatientSourceSensor = sourceSensor
+        }
+        lastPatientState = result.patientState
+        lastPatientModeDecision = result.patientModeDecision
+        lastWCycleBelief = result.wCycleBelief
+        lastPhysiologicalTreeSnapshot = result.physiologicalTree
+        lastMealCertainty = result.mealCertainty
+        lastHarmoniaDecision = result.harmoniaDecision
+        return result.patientState
+    }
+
+    private fun patientRuntimeCalls(): PatientRuntimeCalls = object : PatientRuntimeCalls {
+        override fun enrichThermal(snapshot: HealthContextSnapshot) =
+            enrichThermalSnapshot(snapshot)
+
+        override fun eventMemory(
+            currentBgMgdl: Double,
+            latentState: app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState?,
+            thermalBelief: app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalBeliefDigest?,
+            nowMs: Long,
+        ) = buildPatientEventMemory(currentBgMgdl, latentState, thermalBelief, nowMs)
+
+        override fun phase() = lastPhysiologicalPhaseOutput
+        override fun mealAbsorption() = lastMealAbsorptionOutput
+        override fun pattern() = lastPhysiologicalPatternSnapshot
+        override fun latent() = lastPhysioLatentState
+        override fun hypothesis() = lastUamHypothesisState
+        override fun ensureWCycle() = ensureWCycleInfo()
+        override fun wCyclePreferences() = wCyclePreferences
+        override fun hourOfDay() = hourOfDay
+        override fun hypoGuardActive() =
             TuningContextEngine.parseContext(preferences.get(StringKey.AimiTuningContextSelection)) ==
                 AimiTuningContext.HYPO_GUARD
-        lastWCycleBelief = EndocrineAmplitudeGovernor.from(
-            info = wCycleInfoForRun,
-            prefs = wCyclePreferences,
-            hypoLoad = eventMemory.recentHypoLoad,
-            hypoGuardActive = hypoGuardActive,
-            hourOfDay = hourOfDay,
-        )
-        // Cascade native (R1): tree always deploys on the dose path. AimiPhysioAssistantEnable only
-        // gates vitals multipliers / assistant extras — never the spine Tree→Harmonia.
-        val bodyKinetics = BodyKineticsDigest.fromTick(
-            effectiveDiaHours = tickEffectiveDiaHours,
-            effectivePeakMinutes = tickEffectivePeakMinutes,
-            insulinActionState = tickInsulinActionState,
-        )
-        var physiologicalTree = PhysiologicalTreeBuilder.build(
-            enabled = true,
-            patientState = patientState,
-            patientModeDecision = patientModeDecision,
-            physioLive = physioLive,
-            thermalBelief = enrichedSnap.thermalBelief,
-            timestampMs = nowMs,
-            currentBgMgdl = bg,
-            deltaMgdl5m = delta.toDouble(),
-            // Effort belief → tree branches: ACTIVE drives `activity`, RECENT_EFFORT (adrenaline memory) drives
-            // `postActivity`, so Harmonia chooses PROTECTIVE_REDUCTION natively during and after effort.
-            effortActiveConfidence = lastEffortAssessment
-                ?.takeIf { it.state == EffortActivityBelief.State.ACTIVE }?.confidence ?: 0.0,
-            effortRecentConfidence = lastEffortAssessment
-                ?.takeIf { it.state == EffortActivityBelief.State.RECENT_EFFORT }?.confidence ?: 0.0,
-            wCycleBelief = lastWCycleBelief,
-            bodyKinetics = bodyKinetics,
-        )
-        lastPhysiologicalTreeSnapshot = physiologicalTree
-        val sensorTelemetry = HarmoniaSensorTelemetry.resolve(
-            cgmNoiseRaw = lastLoopCgmNoise,
-            sensorInsertionMs = resolveSensorInsertionMsCached(nowMs),
-            nowMs = nowMs,
-        )
-        val scenarioBestForMeal = lastScenarioProjection?.scenarioBest
-        val pkpdForMeal =
-            cachedRiskEnvelopeDecision?.eventualTerminalMgdl?.takeIf { it.isFinite() }
-                ?: authoritativeEventualBg(this.eventualBG).takeIf { it.isFinite() && it > 1.0 }
-        // Cascade D3: MealCertainty first — meal_rise_confirmed derives from it (not sticky phase).
-        val mealCertainty = physiologicalTree?.let { tree ->
-            MealCertaintyBuilder.evaluate(
-                MealCertaintyBuilder.Input(
-                    trunkState = tree.trunk.globalState,
-                    mealBranchConfidence = tree.branches.meal.confidence,
-                    digestionDetected = tree.branches.digestion.detected,
-                    absorptionPhase = lastMealAbsorptionOutput?.phase ?: MealAbsorptionPhase.NONE,
-                    bgMgdl = bg,
-                    deltaMgdl5m = delta.toDouble(),
-                    targetBgMgdl = targetBg.toDouble(),
-                    cobG = cob.toDouble(),
-                    mealRiseConfirmedLegacy = false,
-                    effortVeto = effortSuppressesUndeclaredMeal(),
-                    shortAvgDeltaMgdl5m = this.shortAvgDelta.toDouble(),
-                    effortLive = effortIsLiveMovement(),
-                    softCorroboration = MealCertaintyBuilder.softCorroborationFromPhysio(physioLive),
-                    pkpdEventualMgdl = pkpdForMeal,
-                    scenarioTerminalMgdl = scenarioBestForMeal?.terminalMgdl,
-                    scenarioPathMinMgdl = scenarioBestForMeal?.gatePathMinMgdl,
-                    scenarioPathMinHitFloor = scenarioBestForMeal?.gatePathMinHitFloor == true,
-                ),
-            )
+        override fun effectiveDiaHours() = tickEffectiveDiaHours
+        override fun effectivePeakMinutes() = tickEffectivePeakMinutes
+        override fun insulinAction() = tickInsulinActionState
+        override fun effortAssessment() = lastEffortAssessment
+        override fun cgmNoise() = lastLoopCgmNoise
+        override fun sensorInsertionMs(nowMs: Long) = resolveSensorInsertionMsCached(nowMs)
+        override fun scenarioBest() = lastScenarioProjection?.scenarioBest
+        override fun cachedEventualTerminal() = cachedRiskEnvelopeDecision?.eventualTerminalMgdl
+        override fun eventualBg() = eventualBG
+        override fun authoritativeEventual(fallback: Double) = authoritativeEventualBg(fallback)
+        override fun bg() = bg
+        override fun delta() = delta.toDouble()
+        override fun targetBg() = targetBg.toDouble()
+        override fun cob() = cob.toDouble()
+        override fun shortAvgDelta() = shortAvgDelta.toDouble()
+        override fun effortVeto() = effortSuppressesUndeclaredMeal()
+        override fun effortLive() = effortIsLiveMovement()
+        override fun basalUph() = basalaimi
+        override fun autodriveMaxBasal() = preferences.get(DoubleKey.autodriveMaxBasal)
+        override fun maxSmb() = maxSMB
+        override fun maxSmbHb() = maxSMBHB
+        override fun maxIob() = maxIob
+        override fun iob() = iob.toDouble()
+        override fun chaosScore() = lastRbtChaosEvaluation?.score ?: 0.0
+        override fun priorRuntimeBlocker() = harmoniaPrevRuntimeBlocker
+        override fun priorBlockedStreak() = harmoniaBlockedStreak
+        override fun aggression() = correctionAggressionDecision
+        override fun inflammation() = lastInflammationResult
+        override fun physioContext() = physioAdapter.getEffectiveContext()
+        override fun physioTrace() = physioAdapter.getLastDecisionTrace()
+        override fun uamConfidence() = AimiUamHandler.confidenceOrZero()
+        override fun storedSourceSensor() = lastPatientSourceSensor
+        override fun log(line: String) {
+            consoleLog.add(line)
         }
-        lastMealCertainty = mealCertainty
-        // Cascade D3-bis: a confirmed meal (MealCertainty HIGH) outranks the tree's activity veto.
-        // The tree is built first because MealCertainty reads its trunk and branches, so the intent
-        // has to be re-resolved here. Hypo protection is untouched — only the activity gate moves.
-        val treeBeforeMealCertainty = physiologicalTree
-        if (treeBeforeMealCertainty != null && mealCertainty?.supportsMealOverProtective == true) {
-            val revisedTree = PhysiologicalTreeBuilder.withMealCertainty(
-                snapshot = treeBeforeMealCertainty,
-                mealOverridesProtective = true,
-                deltaMgdl5m = delta.toDouble(),
-                currentBgMgdl = bg,
-            )
-            if (revisedTree.insulinIntent != treeBeforeMealCertainty.insulinIntent) {
-                consoleLog.add(
-                    "🌳 TREE_INTENT: ${treeBeforeMealCertainty.insulinIntent} → ${revisedTree.insulinIntent} " +
-                        "(meal certainty HIGH outranks activity veto)",
-                )
-            }
-            physiologicalTree = revisedTree
-            lastPhysiologicalTreeSnapshot = revisedTree
-        }
-        val harmoniaMealRiseConfirmed = mealCertainty?.supportsMealSupport == true
-        val harmoniaEnvironment = physiologicalTree?.let {
-            val currentBasalForSimulation = basalaimi.toDouble().takeIf { basal -> basal.isFinite() && basal > 0.0 } ?: 1.0
-            val maxBasalForSimulation = preferences.get(DoubleKey.autodriveMaxBasal)
-                .takeIf { maxBasal -> maxBasal.isFinite() && maxBasal > 0.1 }
-                ?: maxOf(currentBasalForSimulation * 3.0, currentBasalForSimulation + 2.0, 3.0)
-            HarmoniaDecisionEnvironment(
-                currentBgMgdl = bg,
-                deltaMgdl5m = delta.toDouble(),
-                iobU = iob.toDouble(),
-                cobG = cob.toDouble(),
-                currentBasalUph = currentBasalForSimulation,
-                maxBasalUph = maxBasalForSimulation,
-                maxSmbU = maxOf(maxSMB, maxSMBHB),
-                maxIobU = maxIob,
-                sensorAgeMin = sensorTelemetry.sensorAgeMin,
-                sensorNoise = sensorTelemetry.sensorNoise,
-                mealRiseConfirmed = harmoniaMealRiseConfirmed,
-                targetBgMgdl = targetBg.toDouble(),
-                correctionFragilityScore = eventMemory.correctionFragilityScore,
-                postHyperExhaustionScore = eventMemory.postHyperExhaustionScore,
-                chaoticEpisodeLoad = lastRbtChaosEvaluation?.score ?: 0.0,
-                effectiveDiaHours = tickEffectiveDiaHours,
-                effectivePeakMinutes = tickEffectivePeakMinutes,
-                bodyKinetics = bodyKinetics,
-                endocrineBasalAmp = lastWCycleBelief
-                    ?.takeIf {
-                        it.enabled && it.applicationMode == EndocrineApplicationMode.APPLIED
-                    }
-                    ?.effectiveBasalAmp,
-                // Carried for the export and the counterfactual only. The decision engine does not
-                // read these two, and a test locks that down.
-                priorRuntimeBlocker = harmoniaPrevRuntimeBlocker,
-                priorBlockedStreak = harmoniaBlockedStreak,
-            )
-        }
-        val harmoniaDecision = HarmoniaDecisionEngine.evaluate(
-            tree = physiologicalTree,
-            environment = harmoniaEnvironment,
-            timestampMs = nowMs,
-            mealCertainty = mealCertainty,
-        )
-        lastHarmoniaDecision = harmoniaDecision
-        if (refreshSource == PatientRefreshSource.LOOP_TICK) {
-            physiologicalTree?.let { tree ->
-                consoleLog.add(
-                    "TREE_DEPLOYED trunk=${tree.trunk.globalState.name} " +
-                        "conf=${aimiFmt2(tree.trunk.confidence)} " +
-                        "risk=${tree.trunk.riskLevel.name} " +
-                        "kinetics=${bodyKinetics.reason}",
-                )
-                consoleLog.add(tree.compactSummary)
-            }
-            mealCertainty?.let { mc ->
-                consoleLog.add(
-                    "MEAL_CERTAINTY level=${mc.level.name} tree=${mc.treeState.name} " +
-                        "rise=${mc.riseGeometry.name} terminals=${mc.terminalsAgree.name} " +
-                        "effortVeto=${mc.effortVeto}",
-                )
-            }
-            harmoniaDecision?.let { decision ->
-                consoleLog.add(decision.compactSummary)
-                if (!decision.decisionBasis.actionCoherentWithTrunk) {
-                    consoleLog.add(
-                        "HARMONIA_BRANCH_MISMATCH action=${decision.action.name} " +
-                            "trunk=${decision.decisionBasis.trunkState.name} " +
-                            "reason=${decision.decisionBasis.mismatchReason} " +
-                            "primary=${decision.decisionBasis.primaryReason}",
-                    )
-                }
-            }
-        }
-        val loopCache = PatientStateLoopCache(
-            phaseOutput = lastPhysiologicalPhaseOutput,
-            mealAbsorptionOutput = lastMealAbsorptionOutput,
-            patternSnapshot = lastPhysiologicalPatternSnapshot,
-            contextSnapshot = lastContextSnapshot,
-            sourceSensor = lastPatientSourceSensor,
-            correctionAggressionDecision = correctionAggressionDecision,
-            chronicInflammation = lastInflammationResult,
-            physioContext = physioAdapter.getEffectiveContext(),
-            physioTrace = physioAdapter.getLastDecisionTrace(),
-            hypothesisState = lastUamHypothesisState,
-            uamConfidence = AimiUamHandler.confidenceOrZero(),
-        )
-        PatientStateRuntimeRepository.publish(
-            patientState = patientState,
-            patientModeDecision = patientModeDecision,
-            updatedAtMs = nowMs,
-            physioLive = physioLive,
-            thermalBelief = enrichedSnap.thermalBelief,
-            physiologicalTree = physiologicalTree,
-            harmoniaDecision = harmoniaDecision,
-            loopCache = loopCache,
-            refreshSource = refreshSource,
-        )
-        return patientState
     }
 
     private fun buildPatientEventMemory(
@@ -9816,6 +8821,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var tddPerHour = 0.0f
     private var tdd24HrsPerHour = 0.0f
     private var hourOfDay: Int = 0
+
+    /**
+     * Null in production: the tick clock port calls [aimiWallClockMs], which is `Clock.System`.
+     * Tests set a fixed epoch so `hourOfDay` and `nightbis` do not follow the machine clock.
+     */
+    internal var injectedTickEpochMs: Long? = null
     private var weekend: Int = 0
     private var recentSteps5Minutes: Int = 0
     private var recentSteps10Minutes: Int = 0
@@ -10202,9 +9213,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         private const val BASAL_SLEW_UP_REL_FACTOR = 1.0     // +100 % du taux courant par tick
         private const val BASAL_SLEW_UP_PROFILE_MULT = 2.0   // +2× la basale profil par tick
 
-        // 🏃 Effort → veto de l'interprétation « repas non déclaré » (voir [effortSuppressesUndeclaredMeal]).
-        private const val EFFORT_MEAL_SUPPRESS_CONF = 0.30       // confiance mini de la croyance d'effort
-        private const val EFFORT_MEAL_SUPPRESS_MAX_COB_G = 12.0  // au-delà = vrai repas (COB) → pas de veto
+        // 🏃 Effort veto lives in decideEffortSuppressesUndeclaredMeal.
         /**
          * Décision pure du verrou one-shot par tag. Le calcul vit avec la décision repas, dans
          * [app.aaps.plugins.aps.openAPSAIMI.effects.legacyPrebolusLatchBlocks].
@@ -11053,11 +10062,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         mealMaxBasalUph,
     )
 
-    private fun calculateRate(basal: Double, currentBasal: Double, multiplier: Double, reason: String, currenttemp: CurrentTemp, rT: RT, overrideSafety: Boolean = false): Double {
-        rT.reason.append("${currenttemp.duration}m@${(currenttemp.rate).toFixed2()} $reason")
-        val rawRate = if (overrideSafety || basal == 0.0) currentBasal * multiplier else roundBasal(basal * multiplier)
-        return rawRate.coerceAtLeast(0.0)
-    }
+    private fun calculateRate(basal: Double, currentBasal: Double, multiplier: Double, reason: String, currenttemp: CurrentTemp, rT: RT, overrideSafety: Boolean = false): Double =
+        decideCalculateRate(basal, currentBasal, multiplier, reason, currenttemp, rT, overrideSafety)
     private fun calculateBasalRate(basal: Double, currentBasal: Double, multiplier: Double): Double =
         AimiTickPolicyMath.calculateBasalRate(basal, currentBasal, multiplier)
 
@@ -12251,35 +11257,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         minDeviation: Double,
         lastBolusVolume: Double,
         reason: StringBuilder
-    ): Boolean {
-        // 1. Slow Creep (Target + 15)
-        if (bg <= targetBg + 15) return false
-
-        // 2. Nature of the Drift: Must be Flat or Rising Slow (CONFIRMED BY 15m AVG & DEVIATION)
-        // [FIX] Plateau/Hovering Detection with Deep Analysis:
-        // - Instant Delta must be > -1.5 (Not falling)
-        // - Avg Delta (15m) must be > -1.5 (Sustained not falling)
-        // - Both must be < 6.0 (Not a spike)
-
-        if (delta < -1.5 || avgDelta < -1.5) return false // Falling real (instant or trend)
-        if (delta > 6.0 || avgDelta > 6.0) return false // Rising fast (Not a creep)
-
-        // 3. Confirmation by MinDeviation (Are we stuck *worse* than IOB allows?)
-        // If deviation is positive, it means BG > IOB prediction -> Resistance/Drift
-        // If combinedDelta is also weak (-1 to +2), it confirms the "stuck" nature.
-        val isStuck = minDeviation > 0 && combinedDelta > -1.0 && combinedDelta < 3.0
-
-        if (!isStuck) {
-             // Fallback: If deviation isn't available/positive, ensure delta is strictly flat
-             if (delta < -0.5) return false
-        }
-
-        // 4. No recent bolus activity (Clean slate)
-        if (lastBolusVolume > 0.1) return false
-
-        reason.append("🧹 Drift Terminator: Plateau detected (Δ${aimiFmt1(delta)} Avg${aimiFmt1(avgDelta)} Dev${aimiFmt0(minDeviation)}) -> ENGAGED\n")
-        return true
-    }
+    ): Boolean = decideDriftTerminatorCondition(
+        bg, targetBg, delta, avgDelta, combinedDelta, minDeviation, lastBolusVolume, reason,
+    )
 
     private fun calculateDynamicMicroBolus(
         isf: Double,
@@ -12405,7 +11385,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         snackTime: Boolean,
         reason: StringBuilder,
     ): AimiPostAutodrivePostHypoBundle {
-        val localHour = aimiLocalHour()
+        val localHour = aimiLocalHour(injectedTickEpochMs ?: aimiWallClockMs())
         val estimatedCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
         val estimatedCarbsTimeDouble = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime)
         val estimatedCarbsTime = estimatedCarbsTimeDouble.toLong()
@@ -12751,15 +11731,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastBolusTimeMs: Long?,           // null si inconnu
         mealFlags: MealFlags,
         nowMs: Long = dateUtil.now()      // ou aimiWallClockMs()
-    ): Boolean {
-        val hoursSinceBolus = lastBolusTimeMs?.let { (nowMs - it) / 3_600_000.0 } ?: Double.POSITIVE_INFINITY
-        val rising = delta >= 1.0 && (shortAvgDelta >= 0.5 || longAvgDelta >= 0.3)
-        val highish = bg > 130 || predictedBg > 140
-        val lowIOB  = iob < maxSMB
-        val noMeal  = !(mealFlags.mealTime || mealFlags.bfastTime || mealFlags.lunchTime
-            || mealFlags.dinnerTime || mealFlags.highCarbTime)
-        return noMeal && hoursSinceBolus in 2.0..7.0 && rising && highish && lowIOB && cob <= 1.0
-    }
+    ): Boolean = decideLateFatProteinRise(
+        bg = bg,
+        predictedBg = predictedBg,
+        delta = delta,
+        shortAvgDelta = shortAvgDelta,
+        longAvgDelta = longAvgDelta,
+        iob = iob,
+        cob = cob,
+        maxSMB = maxSMB,
+        lastBolusTimeMs = lastBolusTimeMs,
+        mealTime = mealFlags.mealTime,
+        bfastTime = mealFlags.bfastTime,
+        lunchTime = mealFlags.lunchTime,
+        dinnerTime = mealFlags.dinnerTime,
+        highCarbTime = mealFlags.highCarbTime,
+        nowMs = nowMs,
+    )
 
     /**
      * Damping-only sibling of `isLateFatProteinRise`. SHADOW for now: computed and exported, not
@@ -12972,16 +11960,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      */
     private fun recordPkpdSoftFloor(
         curves: AdvancedPredictionCurves,
-    ): PkpdSoftFloorTelemetry {
-        val endoEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEndogenousReversion)
-        val telemetry = PkpdSoftFloorPathMin.fromCurves(
-            curves = curves,
-            endogenousReversionEnabled = endoEnabled,
-        )
-        lastPkpdSoftFloorTelemetry = telemetry
-        consoleLog.add(PkpdSoftFloorPathMin.formatLogLine(telemetry))
-        return telemetry
-    }
+    ): PkpdSoftFloorTelemetry = decideRecordPkpdSoftFloor(
+        curves = curves,
+        endogenousReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEndogenousReversion),
+        calls = object : AimiPkpdSoftFloorWrite {
+            override fun writeTelemetryAndLog(telemetry: PkpdSoftFloorTelemetry) {
+                lastPkpdSoftFloorTelemetry = telemetry
+                consoleLog.add(PkpdSoftFloorPathMin.formatLogLine(telemetry))
+            }
+        },
+    )
 
     private fun applySoftFloorToPredSeries(
         series: List<Int>,
@@ -13147,25 +12135,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     fun detectMealOnset(delta: Float, predictedDelta: Float, acceleration: Float, predictedBg: Float, targetBg: Float): Boolean {
-        // 🏃 Under effort / post-effort adrenaline (undeclared context), a rise is NOT a meal onset → never trigger
-        // the undeclared-meal escalation (forced meal TBR, meal-onset SMB). Declared meals keep their own paths.
-        if (effortSuppressesUndeclaredMeal()) return false
-        val combinedDelta = (delta + predictedDelta) / 2.0f
-
-        // 1. Existing strict check (Explosive Rise)
-        if (combinedDelta > 3.0f && acceleration > 1.2f) return true
-
-        // 2. Harmonized check (Steady Meal Rise)
-        // Relaxed acceleration req if rise is clearly above noise
-        val normalizedRise = ((predictedBg - targetBg) / 70.0f).coerceIn(0.0f, 1.0f)
-        if (normalizedRise > 0.3f && combinedDelta > 2.0f && acceleration > 0.3f) return true
-
-        // 3. [FIX] Smart Rise Detection (TIR 70-140)
-        // Require acceleration OR sustained high delta, rejecting single-point noise
-        val isHighNoise = (delta > 5.0f && acceleration < 0.0f) // Sharp jump but slowing down
-        if (!isHighNoise && (combinedDelta > 6.0f || (delta > 5.0f && acceleration > 0.5f))) return true
-
-        return false
+        val declaredMeal = mealTime || bfastTime || lunchTime || dinnerTime || snackTime || highCarbTime
+        return decideMealOnsetBehindEffortVeto(
+            delta = delta,
+            predictedDelta = predictedDelta,
+            acceleration = acceleration,
+            predictedBg = predictedBg,
+            targetBg = targetBg,
+            assessment = lastEffortAssessment,
+            declaredMeal = declaredMeal,
+            cobG = cob.toDouble(),
+        )
     }
 
     private fun parseNotes(startMinAgo: Int, endMinAgo: Int): String {
@@ -13207,16 +12187,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val reactivityFactor = safeReactivityFactor // Safety check added
         val basalMultiplier = basalLearner.getMultiplier()
 
-        // Construire le rapport de santé
-        val healthLines = listOf(
-            "═══════════════════════════════",
-            "🛡️ AIMI LEARNERS HEALTH",
-            "Storage: $storageReport",
-            "UnifiedReactivity: factor=${aimiFmt3(reactivityFactor)}",
-            "BasalLearner: multiplier=${aimiFmt3(basalMultiplier)}",
-            "PkPdEstimator: runtime-only",
-            "═══════════════════════════════"
-        )
+        val healthLines = learnerHealthLines(storageReport, reactivityFactor, basalMultiplier)
 
         // 📊 NOUVEAU: Afficher en HAUT de la page AIMI via rT.learnersInfo (section dédiée)
         val reactivityPct = (reactivityFactor * 100).toInt()
@@ -13661,35 +12632,31 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastEffortAssessment = null
         // Dependency: under T3C, activity awareness is required for the physio-informed basal (workstream C).
         // Effort protection is reduce-only, so this never adds insulin.
-        if (!preferences.get(BooleanKey.OApsAIMIEffortActivityProtection) && !t3cModeEnabled()) return
-        val snap = try {
-            physioAdapter.getLatestSnapshot()
-        } catch (_: Exception) {
-            return
+        val protection = preferences.get(BooleanKey.OApsAIMIEffortActivityProtection)
+        val t3c = t3cModeEnabled()
+        if (!protection && !t3c) return
+        val signal = readRbtOptional<HealthContextSnapshot>(
+            source = "wearableSnapshot",
+            consoleLog = consoleLog,
+            failureLine = { errorType, message ->
+                "WEARABLE snapshot failed ($errorType): ${message.orEmpty()} — snapshot empty"
+            },
+        ) { physioAdapter.getLatestSnapshot() }
+        val snapshot = when (signal) {
+            is OptionalSignal.Ready -> signal.value
+            is OptionalSignal.Failed -> null
         }
-        if (!snap.isValid) return // no/stale wearable data → fail open (no reduction)
-        val (assessment, memory) = EffortActivityBelief.assess(
-            EffortActivityBelief.Inputs(
-                nowMs = dateUtil.now(),
-                stepsLast5m = snap.stepsLast5m,
-                stepsLast15m = snap.stepsLast15m,
-                stepsLast60m = snap.stepsLast60m,
-                hrAvg15mBpm = snap.hrAvg15m,
-                hrRestingBpm = snap.rhrResting,
-                hrvDeviationZ = null, // HRV plumbing is a follow-up; steps + HR drive v1
-                stressResistanceProb = lastPhysioLatentState?.transientResistanceProb ?: 0.0,
-            ),
-            lastEffortMemory,
+        val refresh = decideRefreshEffortActivityBelief(
+            protectionEnabled = protection,
+            t3cEnabled = t3c,
+            snapshot = snapshot,
+            nowMs = dateUtil.now(),
+            stressResistanceProb = lastPhysioLatentState?.transientResistanceProb ?: 0.0,
+            prior = lastEffortMemory,
         )
-        lastEffortMemory = memory
-        lastEffortAssessment = assessment
-        if (assessment.smbFactor < 1.0) {
-            consoleLog.add(
-                "🏃 EFFORT_BELIEF[${assessment.state.name}/${assessment.posture.name}] " +
-                    "SMB ×${aimiFmt2(assessment.smbFactor)} (applied at SMB finalize) " +
-                    assessment.reasons.joinToString(","),
-            )
-        }
+        lastEffortMemory = refresh.memory
+        lastEffortAssessment = refresh.assessment
+        refresh.logLine?.let { consoleLog.add(it) }
     }
 
     /**
@@ -13700,12 +12667,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * this only suppresses an insulin escalation, never adds insulin. See [detectMealOnset] / [inferredMealSafetyIntent].
      */
     private fun effortSuppressesUndeclaredMeal(): Boolean {
-        val a = lastEffortAssessment ?: return false
-        if (a.posture != EffortActivityBelief.Posture.EXERTION) return false
-        if (a.state != EffortActivityBelief.State.ACTIVE && a.state != EffortActivityBelief.State.RECENT_EFFORT) return false
-        if (a.confidence < EFFORT_MEAL_SUPPRESS_CONF) return false
         val declaredMeal = mealTime || bfastTime || lunchTime || dinnerTime || snackTime || highCarbTime
-        return !declaredMeal && cob.toDouble() < EFFORT_MEAL_SUPPRESS_MAX_COB_G
+        return decideEffortSuppressesUndeclaredMeal(
+            assessment = lastEffortAssessment,
+            declaredMeal = declaredMeal,
+            cobG = cob.toDouble(),
+        )
     }
 
     /**
@@ -13798,43 +12765,34 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         profile: OapsProfileAimi,
         mealData: MealData,
         declaredOrAdvisorCob: Double,
-    ): Double {
-        if (!preferences.get(BooleanKey.OApsAIMIUndeclaredCobEnabled)) return 0.0
-        // Explicit carbs already drive the curve — do not stack a virtual estimate on top.
-        if (declaredOrAdvisorCob > 0.0) return 0.0
-
+    ): Double = decideEstimateUndeclaredVirtualCob(
+        enabled = preferences.get(BooleanKey.OApsAIMIUndeclaredCobEnabled),
+        declaredOrAdvisorCob = declaredOrAdvisorCob,
+        consoleLog = consoleLog,
+    ) {
+        // Explicit carbs already returned above. These reads are the snapshot and the preferences.
         val snapshot = physioAdapter.getLatestSnapshot()
-        val hrElevation = (snapshot.hrNow - snapshot.rhrResting)
-        val hrInflammationElevated = snapshot.hrNow > 0 && snapshot.rhrResting > 0 && hrElevation >= 15
         val cfrdExacerbationActive =
             preferences.get(BooleanKey.OApsAIMIT3cCfrdMode) &&
                 preferences.get(BooleanKey.OApsAIMIT3cCfrdExacerbationMode)
-        val tdd24h = resolveTdd24hForExport()
-
-        val result = UndeclaredCobEstimator.estimate(
-            UndeclaredCobEstimator.Input(
-                estimatedRaMgdlPerMin = continuousStateEstimator.getLastRa(),
-                isfMgdlPerU = sens,
-                carbRatioGPerU = profile.carb_ratio,
-                bgMgdl = bg,
-                deltaMgdl5m = delta.toDouble(),
-                slopeFromMinDeviation = mealData.slopeFromMinDeviation,
-                patientWeightKg = preferences.get(DoubleKey.OApsAIMIweight),
-                tdd24hU = tdd24h,
-                stepsLast5m = snapshot.stepsLast5m,
-                stepsLast15m = snapshot.stepsLast15m,
-                activityDetected = aimiContextActivityActive || snapshot.activityState != "IDLE",
-                mealProb = lastPhysioLatentState?.mealProb ?: 0.0,
-                falseMealSuppression = lastPhysioLatentState?.falseMealSuppression ?: false,
-                exerciseLockoutActive = exerciseInsulinLockoutActive,
-                postHypoActive = lastPostHypoDeliveryAuthority.active,
-                cfrdExacerbationActive = cfrdExacerbationActive,
-                hrInflammationElevated = hrInflammationElevated,
-                maxGramsPref = preferences.get(DoubleKey.OApsAIMIUndeclaredCobMaxG),
-            )
+        undeclaredVirtualCobInput(
+            snapshot = snapshot,
+            estimatedRaMgdlPerMin = continuousStateEstimator.getLastRa(),
+            isfMgdlPerU = sens,
+            carbRatioGPerU = profile.carb_ratio,
+            bgMgdl = bg,
+            deltaMgdl5m = delta.toDouble(),
+            slopeFromMinDeviation = mealData.slopeFromMinDeviation,
+            patientWeightKg = preferences.get(DoubleKey.OApsAIMIweight),
+            tdd24hU = resolveTdd24hForExport(),
+            activityContextActive = aimiContextActivityActive,
+            mealProb = lastPhysioLatentState?.mealProb ?: 0.0,
+            falseMealSuppression = lastPhysioLatentState?.falseMealSuppression ?: false,
+            exerciseLockoutActive = exerciseInsulinLockoutActive,
+            postHypoActive = lastPostHypoDeliveryAuthority.active,
+            cfrdExacerbationActive = cfrdExacerbationActive,
+            maxGramsPref = preferences.get(DoubleKey.OApsAIMIUndeclaredCobMaxG),
         )
-        consoleLog.add("🍽️ VIRTUAL_COB: ${result.toLogString()}")
-        return result.grams
     }
 
     private fun applyAdvancedPredictions(
@@ -14064,569 +13022,796 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Causal censoring of the basal label needs the carbs of THIS tick, and the basal-learning hook
         // runs on paths that have no access to `ctx`. See [basalLearningCobGrams].
         tickCobGrams = ctx.mealData.mealCOB.takeIf { it.isFinite() && it >= 0.0 } ?: Double.NaN
-        val (
-            originalProfile,
-            isExplicitAdvisorRun,
-            tdd7P,
-            tdd7Days,
-        ) = runEarlyDetermineBasalStages(ctx)
-
-        val isConfirmedHighRiseLocal = bootstrapPhysiologyAfterEarlyTick(ctx, tdd7Days)
-        isConfirmedHighRiseThisTick = isConfirmedHighRiseLocal
-
-        val (
-            decisionCtx,
-            rT,
-            flatBGsDetected,
-        ) = buildDecisionContextInitRtSosAndFlatShadow(ctx)
-
-        val (
-            iobTotal,
-            iobPeakMinutes,
-            iobActivityIn30Min,
-            insulinActionState,
-        ) = runRealtimePhysioIobProfilerAndInsulinObserver(ctx, decisionCtx)
-
-        val (glucoseStatus, f) = when (val gsOutcome = ensureWCycleAndLoadGlucoseStatusOrAbort(ctx, rT)) {
-            is AimiGlucosePackLoadOutcome.Abort -> return gsOutcome.returnValue
-            is AimiGlucosePackLoadOutcome.Continue -> gsOutcome.glucoseStatus to gsOutcome.aimiBgFeatures
+        val continued = when (
+            val prefix = decideDetermineBasalTickPrefix(
+                ctx,
+                profile,
+                object : AimiTickPrefixCalls<AimiDecisionContext> {
+                    override fun earlyStages(ctx: AimiTickContext): AimiEarlyTickOutcome {
+                        val state = runEarlyDetermineBasalStages(ctx)
+                        return AimiEarlyTickOutcome(
+                            originalProfile = state.originalProfile,
+                            isExplicitAdvisorRun = state.isExplicitAdvisorRun,
+                            tdd7P = state.tdd7P,
+                            tdd7Days = state.tdd7Days,
+                        )
+                    }
+                    override fun bootstrapPhysiology(ctx: AimiTickContext, tdd7Days: Double) =
+                        bootstrapPhysiologyAfterEarlyTick(ctx, tdd7Days)
+                    override fun writeConfirmedHighRise(value: Boolean) {
+                        isConfirmedHighRiseThisTick = value
+                    }
+                    override fun decisionContext(ctx: AimiTickContext) =
+                        buildDecisionContextInitRtSosAndFlatShadow(ctx)
+                    override fun realtimePhysio(ctx: AimiTickContext, decisionCtx: AimiDecisionContext): AimiPrefixIob {
+                        val bundle = runRealtimePhysioIobProfilerAndInsulinObserver(ctx, decisionCtx)
+                        return AimiPrefixIob(
+                            bundle.iobTotal,
+                            bundle.iobPeakMinutes,
+                            bundle.iobActivityIn30Min,
+                            bundle.insulinActionState,
+                        )
+                    }
+                    override fun loadGlucose(ctx: AimiTickContext, rT: RT) = when (
+                        val outcome = ensureWCycleAndLoadGlucoseStatusOrAbort(ctx, rT)
+                    ) {
+                        is AimiGlucosePackLoadOutcome.Abort -> AimiPrefixGlucose.Abort(outcome.returnValue)
+                        is AimiGlucosePackLoadOutcome.Continue ->
+                            AimiPrefixGlucose.Continue(outcome.glucoseStatus, outcome.aimiBgFeatures)
+                    }
+                    override fun t9Bootstrap(
+                        ctx: AimiTickContext,
+                        glucoseStatus: GlucoseStatusAIMI,
+                        rT: RT,
+                        iobTotal: Double,
+                    ) = runT9PhysioEarlyPkpdAndTubeBootstrap(ctx, glucoseStatus, rT, iobTotal)
+                    override fun cachedPkpdRuntime() = this@DetermineBasalaimiSMB2.cachedPkpdRuntime
+                    override fun combinedDelta(
+                        ctx: AimiTickContext,
+                        glucoseStatus: GlucoseStatusAIMI,
+                        useLegacyDynamics: Boolean,
+                        reasonAimi: StringBuilder,
+                    ): AimiPrefixCombined {
+                        val tick = runCombinedDeltaByodaAndDynamicPeak(
+                            ctx,
+                            glucoseStatus,
+                            useLegacyDynamics,
+                            reasonAimi,
+                        )
+                        return AimiPrefixCombined(tick.combinedDelta, tick.shortAvgDeltaAdj, tick.tp)
+                    }
+                    override fun autodriveBootstrap(ctx: AimiTickContext): AimiPrefixAutodrive {
+                        val boot = buildPreTherapyAutodriveByodaBootstrap(ctx)
+                        return AimiPrefixAutodrive(boot.isG6Byoda, boot.autodriveEnabled, boot.autodriveDisplay)
+                    }
+                    override fun tickClock(
+                        ctx: AimiTickContext,
+                        glucoseStatus: GlucoseStatusAIMI,
+                        rT: RT,
+                        combinedDelta: Float,
+                    ) = runTickClockMaxSmbTirCarbAndGlucoseCopy(ctx, glucoseStatus, rT, combinedDelta)
+                    override fun therapyGate(ctx: AimiTickContext, profile: OapsProfileAimi, rT: RT): AimiPrefixStep<Boolean> =
+                        when (val gate = runTherapyHydrateClocksAndExerciseLockoutGate(ctx, profile, rT)) {
+                            is AimiTherapyExerciseGate.ReturnEarly -> AimiPrefixStep.Stop(gate.result)
+                            is AimiTherapyExerciseGate.Continue -> AimiPrefixStep.Go(gate.nightbis)
+                        }
+                    override fun recentGlucose() = glucoseStatusCalculatorAimi.getRecentGlucose()
+                    override fun refreshPostHypo(
+                        combinedDelta: Float,
+                        recentBGs: List<Float>,
+                        shortAvgDeltaAdj: Float,
+                        slopeFromMinDeviation: Double,
+                        reason: StringBuilder,
+                    ) = refreshPostHypoDeliveryAuthorityForTick(
+                        combinedDelta = combinedDelta,
+                        recentBGs = recentBGs,
+                        shortAvgDeltaAdj = shortAvgDeltaAdj,
+                        slopeFromMinDeviation = slopeFromMinDeviation,
+                        reason = reason,
+                    )
+                    override fun auditorIsf(ctx: AimiTickContext) = decideAuditorIsfFactorForTick(ctx)
+                    override fun mealModes(ctx: AimiTickContext, profile: OapsProfileAimi, rT: RT): AimiPrefixStep<String> =
+                        when (val gate = runManualMealModesAfterTherapyGate(ctx, profile, rT)) {
+                            is AimiManualMealModesGate.ReturnEarly -> AimiPrefixStep.Stop(gate.rT)
+                            is AimiManualMealModesGate.Continue -> AimiPrefixStep.Go(gate.activeModeName)
+                        }
+                    override fun t3cBrittle(
+                        ctx: AimiTickContext,
+                        profile: OapsProfileAimi,
+                        rT: RT,
+                        originalProfile: OapsProfileAimi,
+                        pkpdRuntime: PkPdRuntime?,
+                        shortAvgDeltaAdj: Float,
+                        physioMultipliers: PhysioMultipliersMTR,
+                        insulinActionState: InsulinActionState,
+                    ) = runT3cBrittleBypassOrReturn(
+                        ctx = ctx,
+                        profile = profile,
+                        rT = rT,
+                        originalProfile = originalProfile,
+                        pkpdRuntime = pkpdRuntime,
+                        shortAvgDeltaAdj = shortAvgDeltaAdj,
+                        physioMultipliers = physioMultipliers,
+                        insulinActionState = insulinActionState,
+                    )
+                },
+            )
+        ) {
+            is AimiTickPrefixOutcome.ReturnEarly -> return prefix.rT
+            is AimiTickPrefixOutcome.T3cReturn -> {
+                // T3C returns early, before the shared decision-export tail. The export stays here.
+                runCatching {
+                    runAimiSnapshotMedicalJsonAndHormonitorExportStage(
+                        ctx,
+                        profile,
+                        prefix.decisionCtx,
+                        prefix.rT,
+                        prefix.pkpdRuntime,
+                    )
+                }.onFailure { aapsLogger.error(LTag.APS, "T3C decision export failed", it) }
+                return prefix.rT
+            }
+            is AimiTickPrefixOutcome.Continue -> prefix
         }
+        val originalProfile = continued.originalProfile
+        val isExplicitAdvisorRun = continued.isExplicitAdvisorRun
+        val tdd7P = continued.tdd7P
+        val tdd7Days = continued.tdd7Days
+        val isConfirmedHighRiseLocal = continued.isConfirmedHighRiseLocal
+        val decisionCtx = continued.decisionCtx
+        val rT = continued.rT
+        val flatBGsDetected = continued.flatBGsDetected
+        val iobTotal = continued.iobTotal
+        val iobPeakMinutes = continued.iobPeakMinutes
+        val iobActivityIn30Min = continued.iobActivityIn30Min
+        val insulinActionState = continued.insulinActionState
+        val glucoseStatus = continued.glucoseStatus
+        val f = continued.features
+        val pumpAgeDays = continued.pumpAgeDays
+        val physioMultipliers = continued.physioMultipliers
+        var pkpdRuntime = continued.pkpdRuntime
+        val reasonAimi = continued.reasonAimi
+        val combinedDelta = continued.combinedDelta
+        val shortAvgDeltaAdj = continued.shortAvgDeltaAdj
+        val tp = continued.tp
+        val isG6Byoda = continued.isG6Byoda
+        val autodrive = continued.autodrive
+        val autodriveDisplay = continued.autodriveDisplay
+        val honeymoon = continued.honeymoon
+        val ngrConfig = continued.ngrConfig
+        val tir1DAYIR = continued.tir1DAYIR
+        val lastHourTIRAbove = continued.lastHourTIRAbove
+        val tirbasal3IR = continued.tirbasal3IR
+        val tirbasal3B = continued.tirbasal3B
+        val tirbasal3A = continued.tirbasal3A
+        val tirbasalhAP = continued.tirbasalhAP
+        val circadianMinute = continued.circadianMinute
+        val circadianSecond = continued.circadianSecond
+        val bgAcceleration = continued.bgAcceleration
+        val nightbis = continued.nightbis
+        val activeModeName = continued.activeModeName
 
-        val (pumpAgeDays, physioMultipliers) = runT9PhysioEarlyPkpdAndTubeBootstrap(ctx, glucoseStatus, rT, iobTotal)
-        var pkpdRuntime = this.cachedPkpdRuntime
-
-        val reasonAimi = StringBuilder()
-
-        val useLegacyDynamics = (pkpdRuntime == null)
-        val (combinedDelta, shortAvgDeltaAdj, tp) = runCombinedDeltaByodaAndDynamicPeak(
-            ctx,
-            glucoseStatus,
-            useLegacyDynamics,
-            reasonAimi,
-        )
-        val adBoot = buildPreTherapyAutodriveByodaBootstrap(ctx)
-        val isG6Byoda = adBoot.isG6Byoda
-        val autodrive = adBoot.autodriveEnabled
-        val autodriveDisplay = adBoot.autodriveDisplay
-
-        val (
-            honeymoon,
-            ngrConfig,
-            tir1DAYIR,
-            lastHourTIRAbove,
-            tirbasal3IR,
-            tirbasal3B,
-            tirbasal3A,
-            tirbasalhAP,
-            circadianMinute,
-            circadianSecond,
-            bgAcceleration,
-        ) = runTickClockMaxSmbTirCarbAndGlucoseCopy(ctx, glucoseStatus, rT, combinedDelta)
-        val nightbis = when (val therapyGate = runTherapyHydrateClocksAndExerciseLockoutGate(ctx, profile, rT)) {
-            is AimiTherapyExerciseGate.ReturnEarly -> return therapyGate.result
-            is AimiTherapyExerciseGate.Continue -> therapyGate.nightbis
-        }
-
-        refreshPostHypoDeliveryAuthorityForTick(
-            combinedDelta = combinedDelta,
-            recentBGs = glucoseStatusCalculatorAimi.getRecentGlucose(),
-            shortAvgDeltaAdj = shortAvgDeltaAdj,
-            slopeFromMinDeviation = ctx.mealData.slopeFromMinDeviation,
-            reason = StringBuilder(),
-        )
-
-        // Judges the auditor's ISF factor against this tick. It changes nothing here: the value is
-        // put on the dose-facing sensitivity later, under its floor. It has to be decided before the
-        // target, because the two factors share one budget and the ISF has priority.
-        decideAuditorIsfFactorForTick(ctx)
-
-        val activeModeName = when (val mealModesGate = runManualMealModesAfterTherapyGate(ctx, profile, rT)) {
-            is AimiManualMealModesGate.ReturnEarly -> return mealModesGate.rT
-            is AimiManualMealModesGate.Continue -> mealModesGate.activeModeName
-        }
-
-        // 🛡️ T3C BRITTLE MODE BRANCH (Moved here to capture `therapy` variables for Prebolus)
-        runT3cBrittleBypassOrReturn(
-            ctx = ctx,
-            profile = profile,
-            rT = rT,
-            originalProfile = originalProfile,
-            pkpdRuntime = pkpdRuntime,
-            shortAvgDeltaAdj = shortAvgDeltaAdj,
-            physioMultipliers = physioMultipliers,
-            insulinActionState = insulinActionState,
-        )?.let { t3cResult ->
-            // T3C returns early, before the shared decision-export tail (runAimiSnapshotMedicalJsonAndHormonitorExportStage,
-            // ~L15442). Run that export here so EVERY T3C tick is recorded in AIMI_Decisions.jsonl (empty JSONL bug).
-            // basal-NN learning already ran inside executeT3cBrittleMode (govTag "T3C") — do NOT re-run it (no logDecisionFinal).
-            runCatching {
-                runAimiSnapshotMedicalJsonAndHormonitorExportStage(ctx, profile, decisionCtx, t3cResult, pkpdRuntime)
-            }.onFailure { aapsLogger.error(LTag.APS, "T3C decision export failed", it) }
-            return t3cResult
-        }
-
-        val spSignalPkpd = when (
-            val outcome = runSignalPreparationPkpdRuntimePhase(
+        val signaled = when (
+            val outcome = decideDetermineBasalTickSignal(
                 ctx = ctx,
                 profile = profile,
                 rT = rT,
                 glucoseStatus = glucoseStatus,
                 combinedDelta = combinedDelta,
                 tdd7P = tdd7P,
+                tdd7Days = tdd7Days,
                 isExplicitAdvisorRun = isExplicitAdvisorRun,
                 isConfirmedHighRiseLocal = isConfirmedHighRiseLocal,
                 pkpdRuntimeIn = pkpdRuntime,
+                physioMultipliers = physioMultipliers,
+                insulinActionState = insulinActionState,
+                autodriveDisplay = autodriveDisplay,
+                consoleLog = consoleLog,
+                calls = object : AimiTickSignalCalls {
+                    override fun signalPrep(
+                        ctx: AimiTickContext,
+                        profile: OapsProfileAimi,
+                        rT: RT,
+                        glucoseStatus: GlucoseStatusAIMI,
+                        combinedDelta: Float,
+                        tdd7P: Double,
+                        isExplicitAdvisorRun: Boolean,
+                        isConfirmedHighRiseLocal: Boolean,
+                        pkpdRuntime: PkPdRuntime?,
+                    ) = when (
+                        val prepared = runSignalPreparationPkpdRuntimePhase(
+                            ctx, profile, rT, glucoseStatus, combinedDelta, tdd7P,
+                            isExplicitAdvisorRun, isConfirmedHighRiseLocal, pkpdRuntime,
+                        )
+                    ) {
+                        is AimiSignalPreparationPkpdOutcome.StaleAbort ->
+                            AimiTickSignalStep.StaleAbort(prepared.rT)
+                        is AimiSignalPreparationPkpdOutcome.Continue -> AimiTickSignalStep.Continue(
+                            AimiTickSignalData(
+                                modesCondition = prepared.data.modesCondition,
+                                pbolusAS = prepared.data.pbolusAS,
+                                pbolusA = prepared.data.pbolusA,
+                                reason = prepared.data.reason,
+                                recentBGs = prepared.data.recentBGs,
+                                totalBolusLastHour = prepared.data.totalBolusLastHour,
+                                autosensRatio = prepared.data.autosensRatio,
+                                iobData = prepared.data.iob_data,
+                                lastBolusTimeMs = prepared.data.lastBolusTimeMs,
+                                lateFatRiseFlag = prepared.data.lateFatRiseFlag,
+                                tdd24Hrs = prepared.data.tdd24Hrs,
+                                minAgo = prepared.data.minAgo,
+                                windowSinceDoseInt = prepared.data.windowSinceDoseInt,
+                                pkpdRuntime = prepared.data.pkpdRuntime,
+                            ),
+                        )
+                    }
+                    override fun trajectoryPrep(
+                        ctx: AimiTickContext,
+                        profile: OapsProfileAimi,
+                        rT: RT,
+                        iobData: IobTotal,
+                        physioMultipliers: PhysioMultipliersMTR,
+                        insulinActionState: InsulinActionState,
+                        pkpdRuntime: PkPdRuntime?,
+                        tdd7Days: Double,
+                        tdd7P: Double,
+                        tdd24Hrs: Float,
+                        pbolusA: Double,
+                        pbolusAS: Double,
+                        reason: StringBuilder,
+                        isExplicitAdvisorRun: Boolean,
+                    ): AimiTickTrajectoryPrep {
+                        val prep = runTrajectoryContextModuleTddIsfAndDynamicPbolusPrep(
+                            ctx, profile, rT, iobData, physioMultipliers, insulinActionState, pkpdRuntime,
+                            tdd7Days, tdd7P, tdd24Hrs, pbolusA, pbolusAS, reason, isExplicitAdvisorRun,
+                        )
+                        return AimiTickTrajectoryPrep(
+                            prep.sens, prep.baseSensitivity, prep.contextTargetOverride, prep.dynamicPbolusSmall,
+                        )
+                    }
+                    override fun wearableSnapshot() = physioAdapter.getLatestSnapshot()
+                    override fun bg() = bg
+                    override fun delta() = delta
+                    override fun predictedBg() = predictedBg
+                    override fun shortAvgDelta() = shortAvgDelta
+                    override fun longAvgDelta() = longAvgDelta
+                    override fun targetBg() = targetBg
+                    override fun advancedPredictions(
+                        ctx: AimiTickContext,
+                        profile: OapsProfileAimi,
+                        rT: RT,
+                        bg: Double,
+                        delta: Float,
+                        sens: Double,
+                        predictedBg: Float,
+                        glucoseStatus: GlucoseStatusAIMI,
+                        minAgo: Double,
+                        isExplicitAdvisorRun: Boolean,
+                        physioMultipliers: PhysioMultipliersMTR,
+                        iobData: IobTotal,
+                        stepsLast15m: Int,
+                        heartRateBpm: Int,
+                        restingHeartRateBpm: Int,
+                        combinedDelta: Float,
+                    ): AimiTickPredPrep {
+                        val prep = runAdvancedPredictionsAndPredPipePrep(
+                            ctx, profile, rT, bg, delta, sens, predictedBg, glucoseStatus, minAgo,
+                            isExplicitAdvisorRun, physioMultipliers, iobData, stepsLast15m, heartRateBpm,
+                            restingHeartRateBpm, combinedDelta,
+                        )
+                        return AimiTickPredPrep(prep.minBg, prep.threshold, prep.scenario)
+                    }
+                    override fun safetyHalt(
+                        ctx: AimiTickContext,
+                        profile: OapsProfileAimi,
+                        rT: RT,
+                        bg: Double,
+                        delta: Float,
+                        combinedDelta: Float,
+                        iobData: IobTotal,
+                        glucoseStatus: GlucoseStatusAIMI,
+                        scenario: ScenarioProjectionPair,
+                        isExplicitAdvisorRun: Boolean,
+                    ) = when (
+                        val gate = runPredPipelineSafetyHaltOrReturn(
+                            ctx, profile, rT, bg, delta, combinedDelta, iobData, glucoseStatus, scenario,
+                            isExplicitAdvisorRun,
+                        )
+                    ) {
+                        is AimiPredPipelineSafetyGate.Halt -> gate.rT
+                        AimiPredPipelineSafetyGate.Continue -> null
+                    }
+                    override fun hasRecentBolus45m(lastBolusTimeMs: Long) =
+                        hasReceivedRecentBolus(45, lastBolusTimeMs)
+                    override fun mealAdvisor(
+                        ctx: AimiTickContext,
+                        profile: OapsProfileAimi,
+                        rT: RT,
+                        bg: Double,
+                        delta: Float,
+                        iobData: IobTotal,
+                        modesCondition: Boolean,
+                        isExplicitAdvisorRun: Boolean,
+                        lastBolusTimeMs: Long?,
+                        autodriveDisplay: String,
+                        hasRecentBolus45m: Boolean,
+                    ) = runMealAdvisorDecisionOrReturn(
+                        ctx, profile, rT, bg, delta, iobData, modesCondition, isExplicitAdvisorRun,
+                        lastBolusTimeMs, autodriveDisplay, hasRecentBolus45m,
+                    )
+                    override fun hardBrake(
+                        ctx: AimiTickContext,
+                        profile: OapsProfileAimi,
+                        rT: RT,
+                        bg: Double,
+                        delta: Float,
+                        shortAvgDelta: Float,
+                        longAvgDelta: Float,
+                        targetBgMgdl: Float,
+                    ) = runHardBrakeLyraOrReturn(
+                        ctx, profile, rT, bg, delta, shortAvgDelta, longAvgDelta, targetBgMgdl,
+                    )
+                },
             )
         ) {
-            is AimiSignalPreparationPkpdOutcome.StaleAbort -> return outcome.rT
-            is AimiSignalPreparationPkpdOutcome.Continue -> outcome.data
+            is AimiTickSignalOutcome.ReturnEarly -> return outcome.rT
+            is AimiTickSignalOutcome.Continue -> outcome
         }
-        val (
-            modesCondition,
-            pbolusAS,
-            pbolusA,
-            reason,
-            recentBGs,
-            totalBolusLastHour,
-            autosensRatio,
-            iob_data,
-            lastBolusTimeMs,
-            lateFatRiseFlag,
-            tdd24Hrs,
-            minAgo,
-            windowSinceDoseInt,
-            pkpdRuntimeSignal,
-        ) = spSignalPkpd
-        pkpdRuntime = pkpdRuntimeSignal
-        val (systemTime, bgTime) = ctx.currentTime to glucoseStatus.date
+        val modesCondition = signaled.modesCondition
+        val reason = signaled.reason
+        val recentBGs = signaled.recentBGs
+        val totalBolusLastHour = signaled.totalBolusLastHour
+        val autosensRatio = signaled.autosensRatio
+        val iob_data = signaled.iobData
+        val lateFatRiseFlag = signaled.lateFatRiseFlag
+        val tdd24Hrs = signaled.tdd24Hrs
+        val minAgo = signaled.minAgo
+        val windowSinceDoseInt = signaled.windowSinceDoseInt
+        pkpdRuntime = signaled.pkpdRuntime
+        val (systemTime, bgTime) = signaled.systemTime to signaled.bgTime
+        var sens = signaled.sens
+        val baseSensitivity = signaled.baseSensitivity
+        val contextTargetOverride = signaled.contextTargetOverride
+        val dynamicPbolusSmall = signaled.dynamicPbolusSmall
+        val wearableSnapshot = signaled.wearableSnapshot
+        val minBg = signaled.minBg
+        val threshold = signaled.threshold
+        val hasRecentBolus45m = signaled.hasRecentBolus45m
 
-        val (
-            sensInit,
-            baseSensitivity,
-            contextTargetOverride,
-            _, // dynamicPbolusLarge — classic autodrive removed; Large-tier prebolus no longer consumed here
-            dynamicPbolusSmall,
-        ) = runTrajectoryContextModuleTddIsfAndDynamicPbolusPrep(
-            ctx = ctx,
-            profile = profile,
-            rT = rT,
-            iobData = iob_data,
-            physioMultipliers = physioMultipliers,
-            insulinActionState = insulinActionState,
-            pkpdRuntime = pkpdRuntime,
-            tdd7Days = tdd7Days,
-            tdd7P = tdd7P,
-            tdd24Hrs = tdd24Hrs,
-            pbolusA = pbolusA,
-            pbolusAS = pbolusAS,
-            reason = reason,
-            isExplicitAdvisorRun = isExplicitAdvisorRun,
-        )
-        var sens = sensInit
-
-        val wearableSnapshot = try {
-            physioAdapter.getLatestSnapshot()
-        } catch (_: Exception) {
-            HealthContextSnapshot()
-        }
-        val (sanity, minBg, threshold, scenario) = runAdvancedPredictionsAndPredPipePrep(
-            ctx = ctx,
-            profile = profile,
-            rT = rT,
-            bg = bg,
-            delta = delta,
-            sens = sens,
-            predictedBg = predictedBg,
-            glucoseStatus = glucoseStatus,
-            minAgo = minAgo,
-            isExplicitAdvisorRun = isExplicitAdvisorRun,
-            physioMultipliers = physioMultipliers,
-            iobData = iob_data,
-            stepsLast15m = wearableSnapshot.stepsLast15m,
-            heartRateBpm = wearableSnapshot.hrNow,
-            restingHeartRateBpm = wearableSnapshot.rhrResting,
-            combinedDelta = combinedDelta,
-        )
-
-        when (
-            val safetyGate = runPredPipelineSafetyHaltOrReturn(
+        val postHypo = when (
+            val outcome = decideDetermineBasalTickPostHypo(
                 ctx = ctx,
                 profile = profile,
                 rT = rT,
-                bg = bg,
-                delta = delta,
-                combinedDelta = combinedDelta,
-                iobData = iob_data,
-                glucoseStatus = glucoseStatus,
-                scenario = scenario,
-                isExplicitAdvisorRun = isExplicitAdvisorRun,
+                recentBGs = recentBGs,
+                reason = reason,
+                tdd24Hrs = tdd24Hrs,
+                wearableSnapshot = wearableSnapshot,
+                threshold = threshold,
+                autosensRatio = autosensRatio,
+                nightbis = nightbis,
+                autodriveEnabledPref = autodrive,
+                modesCondition = modesCondition,
+                hasRecentBolus45m = hasRecentBolus45m,
+                totalBolusLastHour = totalBolusLastHour,
+                dynamicPbolusSmall = dynamicPbolusSmall,
+                pkpdRuntime = pkpdRuntime,
+                preferences = preferences,
+                calls = object : AimiTickPostHypoCalls {
+                    override fun classify(
+                        ctx: AimiTickContext,
+                        recentBGs: List<Float>,
+                        reason: StringBuilder,
+                    ): AimiPostHypoClassified {
+                        val bundle = runPostAutodrivePostHypoClassification(
+                            recentBGs = recentBGs,
+                            cob = cob,
+                            shortAvgDeltaAdj = shortAvgDeltaAdj,
+                            delta = delta,
+                            slopeFromMinDeviation = ctx.mealData.slopeFromMinDeviation,
+                            mealTime = mealTime,
+                            bfastTime = bfastTime,
+                            lunchTime = lunchTime,
+                            dinnerTime = dinnerTime,
+                            highCarbTime = highCarbTime,
+                            snackTime = snackTime,
+                            reason = reason,
+                        )
+                        return AimiPostHypoClassified(
+                            postHypoState = bundle.postHypoState,
+                            estimatedCarbs = bundle.estimatedCarbs,
+                            estimatedCarbsTimeMs = bundle.estimatedCarbsTimeMs,
+                        )
+                    }
+                    override fun refreshPostHypo(
+                        ctx: AimiTickContext,
+                        recentBGs: List<Float>,
+                        reason: StringBuilder,
+                    ) = refreshPostHypoDeliveryAuthorityForTick(
+                        combinedDelta = combinedDelta,
+                        recentBGs = recentBGs,
+                        shortAvgDeltaAdj = shortAvgDeltaAdj,
+                        slopeFromMinDeviation = ctx.mealData.slopeFromMinDeviation,
+                        reason = reason,
+                    )
+                    override fun eventualBg() = eventualBG
+                    override fun bg() = this@DetermineBasalaimiSMB2.bg
+                    override fun targetBg() = this@DetermineBasalaimiSMB2.targetBg.toDouble()
+                    override fun publishDoseTerminal(
+                        ctx: AimiTickContext,
+                        profile: OapsProfileAimi,
+                        rT: RT,
+                        pkpdEventualMgdl: Double,
+                        pkpdPredTerminalMgdl: Double,
+                        targetBgMgdl: Double,
+                    ) = publishDoseTerminalAuthorityAndSnapshot(
+                        rT = rT,
+                        profile = profile,
+                        mealData = ctx.mealData,
+                        pkpdEventualMgdl = pkpdEventualMgdl,
+                        pkpdPredTerminalMgdl = pkpdPredTerminalMgdl,
+                        targetBgMgdl = targetBgMgdl,
+                        stageTag = "pre_rbt",
+                    )
+                    override fun tdd24hForExport() = resolveTdd24hForExport()
+                    override fun wireRbt(
+                        ctx: AimiTickContext,
+                        profile: OapsProfileAimi,
+                        rT: RT,
+                        tdd24hU: Double,
+                        wearableSnapshot: HealthContextSnapshot,
+                    ) {
+                        resolveAndWireRbtLiveTick(
+                            ctx = ctx,
+                            profile = profile,
+                            rT = rT,
+                            combinedDelta = combinedDelta,
+                            tdd24hU = tdd24hU,
+                            v3SmbU = 0.0,
+                            stepsLast15m = wearableSnapshot.stepsLast15m,
+                            heartRateBpm = wearableSnapshot.hrNow,
+                        )
+                    }
+                    override fun autodriveV3(
+                        ctx: AimiTickContext,
+                        profile: OapsProfileAimi,
+                        rT: RT,
+                        hypoThresholdMgdl: Double,
+                        pkpdRuntime: PkPdRuntime?,
+                    ) = runAutodriveV3MultiVariableBranch(
+                        ctx = ctx,
+                        profile = profile,
+                        rT = rT,
+                        bg = bg,
+                        combinedDelta = combinedDelta,
+                        shortAvgDeltaAdj = shortAvgDeltaAdj,
+                        hypoThresholdMgdl = hypoThresholdMgdl,
+                        pkpdRuntime = pkpdRuntime,
+                    )
+                    override fun rbtResolvedThisTick() = rbtResolvedThisTick
+                    override fun applyPendingSpiral(rT: RT) =
+                        applyPendingTrajSpiralBasalIfNotSuppressed(rT = rT, bg = bg, delta = delta)
+                    override fun compressionAndDrift(
+                        ctx: AimiTickContext,
+                        rT: RT,
+                        threshold: Double,
+                        postHypoState: PostHypoState,
+                        autosensRatio: Double,
+                        nightbis: Boolean,
+                        autodriveEnabledPref: Boolean,
+                        modesCondition: Boolean,
+                        hasRecentBolus45m: Boolean,
+                        totalBolusLastHour: Double,
+                        dynamicPbolusSmall: Double,
+                        reason: StringBuilder,
+                    ) = runPostHypoCompressionAndDriftTerminatorOrReturn(
+                        ctx = ctx,
+                        rT = rT,
+                        bg = bg,
+                        delta = delta,
+                        threshold = threshold,
+                        combinedDelta = combinedDelta,
+                        shortAvgDeltaRawForDrift = shortAvgDelta,
+                        targetBgMgdl = targetBg,
+                        postHypoState = postHypoState,
+                        autosensRatio = autosensRatio,
+                        nightbis = nightbis,
+                        autodriveEnabledPref = autodriveEnabledPref,
+                        modesCondition = modesCondition,
+                        hasRecentBolus45m = hasRecentBolus45m,
+                        totalBolusLastHour = totalBolusLastHour,
+                        dynamicPbolusSmall = dynamicPbolusSmall,
+                        exerciseInsulinLockoutActive = exerciseInsulinLockoutActive,
+                        reason = reason,
+                    )
+                },
             )
         ) {
-            is AimiPredPipelineSafetyGate.Halt -> return safetyGate.rT
-            AimiPredPipelineSafetyGate.Continue -> Unit
+            is AimiTickPostHypoOutcome.ReturnEarly -> return outcome.rT
+            is AimiTickPostHypoOutcome.Continue -> outcome
         }
+        val postHypoState = postHypo.postHypoState
+        val estimatedCarbs = postHypo.estimatedCarbs
+        val estimatedCarbsTime = postHypo.estimatedCarbsTimeMs
+        val skipLegacySmbBlender = postHypo.skipLegacySmbBlender
 
-        // PRIORITY 3: Meal Advisor (after safety — see [runMealAdvisorDecisionOrReturn])
-        val hasRecentBolus45m = hasReceivedRecentBolus(45, lastBolusTimeMs ?: 0L)
-        runMealAdvisorDecisionOrReturn(
-            ctx = ctx,
-            profile = profile,
-            rT = rT,
-            bg = bg,
-            delta = delta,
-            iobData = iob_data,
-            modesCondition = modesCondition,
-            isExplicitAdvisorRun = isExplicitAdvisorRun,
-            lastBolusTimeMs = lastBolusTimeMs,
-            autodriveDisplay = autodriveDisplay,
-            hasRecentBolus45m = hasRecentBolus45m,
-        )?.let { return it }
-
-        runHardBrakeLyraOrReturn(
-            ctx = ctx,
-            profile = profile,
-            rT = rT,
-            bg = bg,
-            delta = delta,
-            shortAvgDelta = shortAvgDelta,
-            longAvgDelta = longAvgDelta,
-            targetBgMgdl = targetBg,
-        )?.let { return it }
-
-        val (
-            postHypoState,
-            estimatedCarbs,
-            estimatedCarbsTime,
-        ) = runPostAutodrivePostHypoClassification(
-            recentBGs = recentBGs,
-            cob = cob,
-            shortAvgDeltaAdj = shortAvgDeltaAdj,
-            delta = delta,
-            slopeFromMinDeviation = ctx.mealData.slopeFromMinDeviation,
-            mealTime = mealTime,
-            bfastTime = bfastTime,
-            lunchTime = lunchTime,
-            dinnerTime = dinnerTime,
-            highCarbTime = highCarbTime,
-            snackTime = snackTime,
-            reason = reason,
-        )
-        refreshPostHypoDeliveryAuthorityForTick(
-            combinedDelta = combinedDelta,
-            recentBGs = recentBGs,
-            shortAvgDeltaAdj = shortAvgDeltaAdj,
-            slopeFromMinDeviation = ctx.mealData.slopeFromMinDeviation,
-            reason = reason,
-        )
-
-        // Cascade D4: publish gated dose terminals BEFORE RBT/V3 so stacking/HTR/Tube see
-        // Authority+Clamp truth (not raw PKPD floor). Late PKPD stage re-publishes to refine.
-        val earlyPkpdEventual =
-            this.eventualBG.takeIf { it.isFinite() && it > 1.0 }
-                ?: rT.eventualBG?.takeIf { it.isFinite() && it > 1.0 }
-                ?: bg
-        val earlyPkpdMinPred = minPredictedAcrossCurves(rT.predBGs) ?: earlyPkpdEventual
-        publishDoseTerminalAuthorityAndSnapshot(
-            rT = rT,
-            profile = profile,
-            mealData = ctx.mealData,
-            pkpdEventualMgdl = earlyPkpdEventual,
-            pkpdPredTerminalMgdl = earlyPkpdMinPred,
-            targetBgMgdl = targetBg.toDouble(),
-            stageTag = "pre_rbt",
-        )
-
-        val tdd24hForRbt = resolveTdd24hForExport()
-            ?: tdd24Hrs.takeIf { it > 0f }?.toDouble()
-            ?: (profile.max_daily_basal * 24.0).coerceAtLeast(1.0)
-        if (!preferences.get(BooleanKey.OApsAIMIautoDriveActive)) {
-            resolveAndWireRbtLiveTick(
-                ctx = ctx,
-                profile = profile,
-                rT = rT,
-                combinedDelta = combinedDelta,
-                tdd24hU = tdd24hForRbt,
-                v3SmbU = 0.0,
-                stepsLast15m = wearableSnapshot.stepsLast15m,
-                heartRateBpm = wearableSnapshot.hrNow,
-            )
-        }
-
-        // Autodrive V3 — see [runAutodriveV3MultiVariableBranch]
-        val v3Branch = runAutodriveV3MultiVariableBranch(
-            ctx = ctx,
-            profile = profile,
-            rT = rT,
-            bg = bg,
-            combinedDelta = combinedDelta,
-            shortAvgDeltaAdj = shortAvgDeltaAdj,
-            hypoThresholdMgdl = threshold,
-            pkpdRuntime = pkpdRuntime,
-        )
-        val skipLegacySmbBlender = v3Branch.skipLegacySmbBlender
-        if (preferences.get(BooleanKey.OApsAIMIautoDriveActive) && !rbtResolvedThisTick) {
-            resolveAndWireRbtLiveTick(
-                ctx = ctx,
-                profile = profile,
-                rT = rT,
-                combinedDelta = combinedDelta,
-                tdd24hU = tdd24hForRbt,
-                v3SmbU = 0.0,
-                stepsLast15m = wearableSnapshot.stepsLast15m,
-                heartRateBpm = wearableSnapshot.hrNow,
-            )
-        }
-        applyPendingTrajSpiralBasalIfNotSuppressed(rT = rT, bg = bg, delta = delta)
-
-        runPostHypoCompressionAndDriftTerminatorOrReturn(
-            ctx = ctx,
-            rT = rT,
-            bg = bg,
-            delta = delta,
-            threshold = threshold,
-            combinedDelta = combinedDelta,
-            shortAvgDeltaRawForDrift = shortAvgDelta,
-            targetBgMgdl = targetBg,
+        val schedule = decideDetermineBasalTickSchedule(
+            initialSens = sens,
             postHypoState = postHypoState,
-            autosensRatio = autosensRatio,
-            nightbis = nightbis,
-            autodriveEnabledPref = autodrive,
-            modesCondition = modesCondition,
-            hasRecentBolus45m = hasRecentBolus45m,
-            totalBolusLastHour = totalBolusLastHour,
-            dynamicPbolusSmall = dynamicPbolusSmall,
-            exerciseInsulinLockoutActive = exerciseInsulinLockoutActive,
-            reason = reason,
-        )?.let { return it }
+            calls = object : AimiTickScheduleCalls<SmbInstructionExecutor.Result> {
+                override fun bootstrap(): AimiScheduleBootstrap {
+                    val built = buildGlobalAimiBasalScheduleBootstrap(
+                        ctx = ctx,
+                        profile = profile,
+                        rT = rT,
+                        glucoseStatus = glucoseStatus,
+                        contextTargetOverride = contextTargetOverride,
+                        bg = bg,
+                        predictedBg = predictedBg,
+                        combinedDelta = combinedDelta,
+                        minAgo = minAgo,
+                        systemTime = systemTime,
+                        bgTime = bgTime,
+                        flatBGsDetected = flatBGsDetected,
+                        honeymoon = honeymoon,
+                        circadianMinute = circadianMinute,
+                        circadianSecond = circadianSecond,
+                    )
+                    return AimiScheduleBootstrap(
+                        pumpCaps = built.pumpCaps,
+                        profileCurrentBasal = built.profileCurrentBasal,
+                        basal = built.basal,
+                        targetBg = built.targetBg,
+                        minBg = built.minBg,
+                        maxBg = built.maxBg,
+                        sensitivityRatio = built.sensitivityRatio,
+                        deliverAt = built.deliverAt,
+                        maxIobLimit = built.maxIobLimit,
+                    )
+                }
 
-        val (
-            pumpCaps,
-            profile_current_basal,
-            basalScheduleBasal,
-            basalScheduleTargetBg,
-            basalScheduleMinBg,
-            basalScheduleMaxBg,
-            basalScheduleSensitivityRatio,
-            deliverAt,
-            basalScheduleMaxIobLimit,
-        ) = buildGlobalAimiBasalScheduleBootstrap(
-            ctx = ctx,
-            profile = profile,
-            rT = rT,
-            glucoseStatus = glucoseStatus,
-            contextTargetOverride = contextTargetOverride,
-            bg = bg,
-            predictedBg = predictedBg,
-            combinedDelta = combinedDelta,
-            minAgo = minAgo,
-            systemTime = systemTime,
-            bgTime = bgTime,
-            flatBGsDetected = flatBGsDetected,
-            honeymoon = honeymoon,
-            circadianMinute = circadianMinute,
-            circadianSecond = circadianSecond,
-        )
-        var basal = basalScheduleBasal
-        var target_bg = basalScheduleTargetBg
-        // The target the engine really works with, before any later adjustment. Observation only:
-        // the auditor is told this level next to the profile target. A tick that ends earlier never
-        // reaches this line, and the field then stays null, which is what the JSONL reports.
-        auditorProfileTick.workingTargetMgdl = target_bg
-        // The target decision itself is NOT taken here: it needs the ISF factor's final, floor-
-        // adjusted effective value for the combined bound (see the call below,
-        // `applyIsfBoundsAndPhysioMultipliersAfterEndoActivity` is where that floor is decided), and
-        // that runs later in this same tick. `target_bg`, `threshold` and `minBg` are read there, not
-        // reassigned between here and there, so capturing `workingTargetMgdl` this early is still the
-        // pre-adjustment value the spec asks for.
-        var min_bg = basalScheduleMinBg
-        var max_bg = basalScheduleMaxBg
-        var sensitivityRatio = basalScheduleSensitivityRatio
-        var maxIobLimit = basalScheduleMaxIobLimit
+                override fun setWorkingTargetMgdl(targetBg: Double) {
+                    // Observation only: the auditor is told this level next to the profile target.
+                    // A tick that ends earlier never reaches this line, and the field then stays null.
+                    auditorProfileTick.workingTargetMgdl = targetBg
+                }
 
-        val (tick, minDelta, minAvgDelta) = runPostBasalBootstrapIobTickStepsAndHeartRate(
-            glucoseStatus = glucoseStatus,
-            profile = profile,
-            iobData = iob_data,
-            bg = bg,
-        )
+                override fun activityVitals(): AimiScheduleVitals {
+                    val vitals = runPostBasalBootstrapIobTickStepsAndHeartRate(
+                        glucoseStatus = glucoseStatus,
+                        profile = profile,
+                        iobData = iob_data,
+                        bg = bg,
+                    )
+                    return AimiScheduleVitals(vitals.tick, vitals.minDelta, vitals.minAvgDelta)
+                }
 
-        val (timenow, sixAMHour, pregnancyEnable) = runBasalAimiTddCarbLimitsTirEarlyBasalAndPaiIsf(
-            glucoseStatus = glucoseStatus,
-            profile = profile,
-            profileCurrentBasal = profile_current_basal,
-            bg = bg,
-            delta = delta,
-            tdd7Days = tdd7Days,
-            tdd7P = tdd7P,
-            paiBaseSensitivity = sens,
-            honeymoon = honeymoon,
-            tirbasal3B = tirbasal3B,
-            tirbasal3IR = tirbasal3IR,
-            tirbasal3A = tirbasal3A,
-            tirbasalhAP = tirbasalhAP,
-            lastHourTIRAbove = lastHourTIRAbove,
-            iobPeakMinutes = iobPeakMinutes,
-            iobActivityIn30Min = iobActivityIn30Min,
-            iobActivityNow = iobActivityNow,
-        )
+                override fun pai(profileCurrentBasal: Double, paiBaseSensitivity: Double): AimiSchedulePai {
+                    val stage = runBasalAimiTddCarbLimitsTirEarlyBasalAndPaiIsf(
+                        glucoseStatus = glucoseStatus,
+                        profile = profile,
+                        profileCurrentBasal = profileCurrentBasal,
+                        bg = bg,
+                        delta = delta,
+                        tdd7Days = tdd7Days,
+                        tdd7P = tdd7P,
+                        paiBaseSensitivity = paiBaseSensitivity,
+                        honeymoon = honeymoon,
+                        tirbasal3B = tirbasal3B,
+                        tirbasal3IR = tirbasal3IR,
+                        tirbasal3A = tirbasal3A,
+                        tirbasalhAP = tirbasalhAP,
+                        lastHourTIRAbove = lastHourTIRAbove,
+                        iobPeakMinutes = iobPeakMinutes,
+                        iobActivityIn30Min = iobActivityIn30Min,
+                        iobActivityNow = iobActivityNow,
+                    )
+                    return AimiSchedulePai(stage.timenowHour, stage.sixAMHour, stage.pregnancyEnable)
+                }
 
-        // Endo + activity (ActivityManager); then ISF bounds and physio multipliers.
-        applyEndoAndActivityAdjustments(
-            bg = bg, delta = delta,
-            mealTime = mealTime, bfastTime = bfastTime, lunchTime = lunchTime,
-            dinnerTime = dinnerTime, highCarbTime = highCarbTime, snackTime = snackTime,
-            recentSteps5Minutes = recentSteps5Minutes, recentSteps10Minutes = recentSteps10Minutes,
-            averageBeatsPerMinute = averageBeatsPerMinute.toDouble(), averageBeatsPerMinute60 = averageBeatsPerMinute60
-        )
+                override fun endoAndActivity() {
+                    applyEndoAndActivityAdjustments(
+                        bg = bg, delta = delta,
+                        mealTime = mealTime, bfastTime = bfastTime, lunchTime = lunchTime,
+                        dinnerTime = dinnerTime, highCarbTime = highCarbTime, snackTime = snackTime,
+                        recentSteps5Minutes = recentSteps5Minutes, recentSteps10Minutes = recentSteps10Minutes,
+                        averageBeatsPerMinute = averageBeatsPerMinute.toDouble(), averageBeatsPerMinute60 = averageBeatsPerMinute60,
+                    )
+                }
 
-        sens = applyIsfBoundsAndPhysioMultipliersAfterEndoActivity(
-            profile = profile,
-            physioMultipliers = physioMultipliers,
-            exerciseInsulinLockoutActive = exerciseInsulinLockoutActive,
-        )
-        // Judges the auditor's target factor now, not at the basal-schedule bootstrap: the combined
-        // bound (`AuditorProfileFactorGate.combinedTargetBudgetMgdl`) needs the ISF factor's final
-        // effective value, after the stress floor of `applyIsfBoundsAndPhysioMultipliersAfterEndoActivity`
-        // has had its say — the ISF is applied first and has priority, so the target must see what is
-        // really left, not the pre-floor request. `target_bg`, `threshold` and `minBg` are unchanged
-        // since the basal-schedule bootstrap above, so this is still the tick's raw working target.
-        decideAuditorTargetFactorForTick(
-            ctx = ctx,
-            workingTargetRawMgdl = target_bg,
-            hypoThresholdMgdl = threshold,
-            minPredBgMgdl = minBg,
-        )
-        trajectoryGuard.getLastAnalysis()?.takeIf { it.classification == TrajectoryType.TIGHT_SPIRAL }?.let { analysis ->
-            applyTrajectoryTightSpiralStandardSmbCapIfNeeded(
-                energy = analysis.metrics.energyBalance,
-                iobNow = iob_data.iob,
-                tdd24hU = tdd24Hrs.toDouble(),
-                deltaValue = delta,
-                shortAvgDeltaValue = shortAvgDelta,
-                mealData = ctx.mealData,
-                isExplicitUserAction = isExplicitAdvisorRun,
-                mealClockActiveForSpiralRelax = therapyMealWindowActiveForSpiralAlign(),
-            )
-        }
-        val (
-            bgi,
-            deviation,
-            pkpdTargetsMinBg,
-            pkpdTargetsTargetBg,
-            pkpdTargetsMaxBg,
-        ) = runPkpdPredictionsBgiDeviationAndNoisyTargetsStage(
-            ctx = ctx,
-            profile = profile,
-            rT = rT,
-            glucoseStatus = glucoseStatus,
-            pkpdRuntime = pkpdRuntime,
-            iobData = iob_data,
-            bg = bg,
-            delta = delta,
-            sens = sens,
-            minDelta = minDelta,
-            minAvgDelta = minAvgDelta,
-            minBg = min_bg,
-            targetBg = target_bg,
-            maxBg = max_bg,
-        )
-        min_bg = pkpdTargetsMinBg
-        target_bg = pkpdTargetsTargetBg
-        max_bg = pkpdTargetsMaxBg
-        val modelcal = runUamModelCalHypoGuardPostHypoAndSetPredictedSmb(
-            rT = rT,
-            bg = bg,
-            delta = delta,
-            iob = iob,
-            predictedBg = predictedBg,
-            eventualBg = eventualBG,
-            threshold = threshold,
-            minBgHypoComposite = minBg,
-            targetBg = target_bg,
-            profile = profile,
-            postHypoState = postHypoState,
-            cob = cob,
-        )
+                override fun isfAfterEndo(): Double = applyIsfBoundsAndPhysioMultipliersAfterEndoActivity(
+                    profile = profile,
+                    physioMultipliers = physioMultipliers,
+                    exerciseInsulinLockoutActive = exerciseInsulinLockoutActive,
+                )
 
-        // Detailed logging, meal-advisor one-shot prefs/SMB caps, PKPD DIA override, execute SMB instruction
-        val (smbExecution, isMealAdvisorOneShot) = runSmbDecisionLogAdvisorOneShotAndExecuteInstruction(
-            ctx = ctx,
-            profile = profile,
-            rT = rT,
-            glucoseStatus = glucoseStatus,
-            bg = bg,
-            delta = delta,
-            iob = iob,
-            shortAvgDelta = shortAvgDelta,
-            predictedBg = predictedBg,
-            eventualBG = eventualBG,
-            sens = sens,
-            tp = tp,
-            variableSensitivity = variableSensitivity,
-            // The only SMB site that sees the auditor's target ratio. Every target-relative guard
-            // above still reads the raw `target_bg`.
-            targetBg = auditorDoseTarget(target_bg, AuditorProfileFactorCodes.DOSE_SITE_SMB),
-            basalaimi = basalaimi,
-            basal = basal,
-            honeymoon = honeymoon,
-            hourOfDay = hourOfDay,
-            mealTime = mealTime,
-            bfastTime = bfastTime,
-            lunchTime = lunchTime,
-            dinnerTime = dinnerTime,
-            highCarbTime = highCarbTime,
-            snackTime = snackTime,
-            sportTime = sportTime,
-            lateFatRiseFlag = lateFatRiseFlag,
-            highCarbrunTime = highCarbrunTime,
-            threshold = threshold,
-            windowSinceDoseInt = windowSinceDoseInt,
-            intervalsmb = intervalsmb,
-            pumpCaps = pumpCaps,
-            highBgOverrideUsed = highBgOverrideUsed,
-            cob = cob,
-            pkpdRuntime = pkpdRuntime,
-            pumpAgeDays = pumpAgeDays,
-            modelcal = modelcal,
-            profileCurrentBasal = profile_current_basal,
-            isConfirmedHighRiseLocal = isConfirmedHighRiseLocal,
-            exerciseInsulinLockoutActive = exerciseInsulinLockoutActive,
-            combinedDelta = combinedDelta.toFloat(),
-            skipLegacySmbBlender = skipLegacySmbBlender,
-            minBgLookbackMgdl = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
-        )
+                override fun auditorTarget(workingTargetRawMgdl: Double) {
+                    // The combined bound needs the ISF factor after the stress floor. `threshold` and
+                    // the signal `minBg` are unchanged since the basal-schedule bootstrap.
+                    decideAuditorTargetFactorForTick(
+                        ctx = ctx,
+                        workingTargetRawMgdl = workingTargetRawMgdl,
+                        hypoThresholdMgdl = threshold,
+                        minPredBgMgdl = minBg,
+                    )
+                }
 
-        var smbToGive = applySmbAdvisorExecutionToTickStateAndLog(smbExecution) { basal = it }
+                override fun tightSpiralCapIfNeeded() {
+                    trajectoryGuard.getLastAnalysis()?.takeIf { it.classification == TrajectoryType.TIGHT_SPIRAL }?.let { analysis ->
+                        applyTrajectoryTightSpiralStandardSmbCapIfNeeded(
+                            energy = analysis.metrics.energyBalance,
+                            iobNow = iob_data.iob,
+                            tdd24hU = tdd24Hrs.toDouble(),
+                            deltaValue = delta,
+                            shortAvgDeltaValue = shortAvgDelta,
+                            mealData = ctx.mealData,
+                            isExplicitUserAction = isExplicitAdvisorRun,
+                            mealClockActiveForSpiralRelax = therapyMealWindowActiveForSpiralAlign(),
+                        )
+                    }
+                }
 
-        // 🛡️ PKPD ABSORPTION GUARD + endo dampen + red carpet / capSmbDose — see [runPkpdGuardEndoDampenRedCarpetAndCapSmb]
-        val (pkpdGuardSmbToGive, pkpdGuardIntervalsmb) = runPkpdGuardEndoDampenRedCarpetAndCapSmb(
-            ctx = ctx,
-            rT = rT,
-            pkpdRuntime = pkpdRuntime,
-            smbExecution = smbExecution,
-            isExplicitAdvisorRun = isExplicitAdvisorRun,
-            isMealAdvisorOneShot = isMealAdvisorOneShot,
-            isConfirmedHighRiseLocal = isConfirmedHighRiseLocal,
-            bg = bg,
-            delta = delta,
-            shortAvgDelta = shortAvgDelta,
-            predictedBg = predictedBg,
-            eventualBG = eventualBG,
-            targetBg = target_bg,
-            honeymoon = honeymoon,
-            mealTime = mealTime,
-            bfastTime = bfastTime,
-            lunchTime = lunchTime,
-            dinnerTime = dinnerTime,
-            highCarbTime = highCarbTime,
-            snackTime = snackTime,
-            windowSinceDoseInt = windowSinceDoseInt,
-            intervalsmb = intervalsmb,
-            smbToGive = smbToGive,
-            iob = iob,
+                override fun pkpdTargets(
+                    sens: Double,
+                    minDelta: Double,
+                    minAvgDelta: Double,
+                    minBg: Double,
+                    targetBg: Double,
+                    maxBg: Double,
+                ): AimiSchedulePkpdTargets {
+                    val stage = runPkpdPredictionsBgiDeviationAndNoisyTargetsStage(
+                        ctx = ctx,
+                        profile = profile,
+                        rT = rT,
+                        glucoseStatus = glucoseStatus,
+                        pkpdRuntime = pkpdRuntime,
+                        iobData = iob_data,
+                        bg = bg,
+                        delta = delta,
+                        sens = sens,
+                        minDelta = minDelta,
+                        minAvgDelta = minAvgDelta,
+                        minBg = minBg,
+                        targetBg = targetBg,
+                        maxBg = maxBg,
+                    )
+                    return AimiSchedulePkpdTargets(stage.bgi, stage.deviation, stage.minBg, stage.targetBg, stage.maxBg)
+                }
+
+                override fun uam(targetBg: Double, postHypoState: PostHypoState): Float =
+                    runUamModelCalHypoGuardPostHypoAndSetPredictedSmb(
+                        rT = rT,
+                        bg = bg,
+                        delta = delta,
+                        iob = iob,
+                        predictedBg = predictedBg,
+                        eventualBg = eventualBG,
+                        threshold = threshold,
+                        minBgHypoComposite = minBg,
+                        targetBg = targetBg,
+                        profile = profile,
+                        postHypoState = postHypoState,
+                        cob = cob,
+                    )
+
+                override fun smb(
+                    targetBg: Double,
+                    basal: Double,
+                    sens: Double,
+                    pumpCaps: PumpCaps,
+                    profileCurrentBasal: Double,
+                    modelcal: Float,
+                ): AimiScheduleSmb<SmbInstructionExecutor.Result> {
+                    val stage = runSmbDecisionLogAdvisorOneShotAndExecuteInstruction(
+                        ctx = ctx,
+                        profile = profile,
+                        rT = rT,
+                        glucoseStatus = glucoseStatus,
+                        bg = bg,
+                        delta = delta,
+                        iob = iob,
+                        shortAvgDelta = shortAvgDelta,
+                        predictedBg = predictedBg,
+                        eventualBG = eventualBG,
+                        sens = sens,
+                        tp = tp,
+                        variableSensitivity = variableSensitivity,
+                        // The only SMB site that sees the auditor's target ratio.
+                        targetBg = auditorDoseTarget(targetBg, AuditorProfileFactorCodes.DOSE_SITE_SMB),
+                        basalaimi = basalaimi,
+                        basal = basal,
+                        honeymoon = honeymoon,
+                        hourOfDay = hourOfDay,
+                        mealTime = mealTime,
+                        bfastTime = bfastTime,
+                        lunchTime = lunchTime,
+                        dinnerTime = dinnerTime,
+                        highCarbTime = highCarbTime,
+                        snackTime = snackTime,
+                        sportTime = sportTime,
+                        lateFatRiseFlag = lateFatRiseFlag,
+                        highCarbrunTime = highCarbrunTime,
+                        threshold = threshold,
+                        windowSinceDoseInt = windowSinceDoseInt,
+                        intervalsmb = intervalsmb,
+                        pumpCaps = pumpCaps,
+                        highBgOverrideUsed = highBgOverrideUsed,
+                        cob = cob,
+                        pkpdRuntime = pkpdRuntime,
+                        pumpAgeDays = pumpAgeDays,
+                        modelcal = modelcal,
+                        profileCurrentBasal = profileCurrentBasal,
+                        isConfirmedHighRiseLocal = isConfirmedHighRiseLocal,
+                        exerciseInsulinLockoutActive = exerciseInsulinLockoutActive,
+                        combinedDelta = combinedDelta.toFloat(),
+                        skipLegacySmbBlender = skipLegacySmbBlender,
+                        minBgLookbackMgdl = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
+                    )
+                    return AimiScheduleSmb(stage.smbExecution, stage.isMealAdvisorOneShot)
+                }
+
+                override fun applySmb(
+                    execution: SmbInstructionExecutor.Result,
+                    assignBasal: (Double) -> Unit,
+                ): Float = applySmbAdvisorExecutionToTickStateAndLog(execution, assignBasal)
+
+                override fun pkpdGuard(
+                    execution: SmbInstructionExecutor.Result,
+                    isMealAdvisorOneShot: Boolean,
+                    smbToGive: Float,
+                    targetBg: Double,
+                ): AimiSchedulePkpdGuard {
+                    val guarded = runPkpdGuardEndoDampenRedCarpetAndCapSmb(
+                        ctx = ctx,
+                        rT = rT,
+                        pkpdRuntime = pkpdRuntime,
+                        smbExecution = execution,
+                        isExplicitAdvisorRun = isExplicitAdvisorRun,
+                        isMealAdvisorOneShot = isMealAdvisorOneShot,
+                        isConfirmedHighRiseLocal = isConfirmedHighRiseLocal,
+                        bg = bg,
+                        delta = delta,
+                        shortAvgDelta = shortAvgDelta,
+                        predictedBg = predictedBg,
+                        eventualBG = eventualBG,
+                        targetBg = targetBg,
+                        honeymoon = honeymoon,
+                        mealTime = mealTime,
+                        bfastTime = bfastTime,
+                        lunchTime = lunchTime,
+                        dinnerTime = dinnerTime,
+                        highCarbTime = highCarbTime,
+                        snackTime = snackTime,
+                        windowSinceDoseInt = windowSinceDoseInt,
+                        intervalsmb = intervalsmb,
+                        smbToGive = smbToGive,
+                        iob = iob,
+                    )
+                    return AimiSchedulePkpdGuard(guarded.smbToGive, guarded.intervalsmb)
+                }
+            },
         )
-        smbToGive = pkpdGuardSmbToGive
-        intervalsmb = pkpdGuardIntervalsmb
+        val pumpCaps = schedule.pumpCaps
+        val profile_current_basal = schedule.profileCurrentBasal
+        var basal = schedule.basal
+        var target_bg = schedule.targetBg
+        var min_bg = schedule.minBg
+        var max_bg = schedule.maxBg
+        var sensitivityRatio = schedule.sensitivityRatio
+        val deliverAt = schedule.deliverAt
+        var maxIobLimit = schedule.maxIobLimit
+        val tick = schedule.tick
+        val minDelta = schedule.minDelta
+        val minAvgDelta = schedule.minAvgDelta
+        val timenow = schedule.timenowHour
+        val sixAMHour = schedule.sixAmHour
+        val pregnancyEnable = schedule.pregnancyEnable
+        sens = schedule.sens
+        val bgi = schedule.bgi
+        val deviation = schedule.deviation
+        val isMealAdvisorOneShot = schedule.isMealAdvisorOneShot
+        var smbToGive = schedule.smbToGive
+        intervalsmb = schedule.intervalSmb
         snapshotRtResetEnactmentFieldsRestorePredictionsAndPriorityCommands(
             rT = rT,
             deliverAt = deliverAt,
@@ -14636,225 +13821,316 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             bg = bg,
         )
 
-        val (basalBoostApplied, basalBoostSource) = when (
-            val stage = runMealHyperBasalBoostTickStage(
-                ctx = ctx,
-                profile = profile,
-                rT = rT,
-                basal = basal,
-                profileCurrentBasal = profile_current_basal,
-                isMealAdvisorOneShot = isMealAdvisorOneShot,
-                targetBg = target_bg,
-                estimatedCarbs = estimatedCarbs,
-                estimatedCarbsTimeMs = estimatedCarbsTime,
-            )
-        ) {
-            is AimiMealHyperBasalBoostTickResult.CompleteLoop -> return stage.rT
-            is AimiMealHyperBasalBoostTickResult.ContinueWithOverlay ->
-                applyMealHyperBasalBoostOverlayIfNeeded(stage.overlayRate, deliverAt, rT)
-        }
-
-        appendAutodriveStatusTirAndCompactPhysioSummaryToReason(
-            rT = rT,
-            autodriveDisplay = autodriveDisplay,
-            activeModeName = activeModeName,
-            reasonAimi = reasonAimi,
-            tp = tp,
-            bg = bg,
-            delta = delta,
-            recentSteps5Minutes = recentSteps5Minutes,
-            averageBeatsPerMinute = averageBeatsPerMinute,
-        )
-
-        val (csf, slopeFromDeviations) = runWCycleIcCsfClampCiAndCarbImpactLogs(
-            profile = profile,
-            ctx = ctx,
+        val mealNgr = decideDetermineBasalTickMealNgr(
+            basalIn = basal,
+            maxIobLimitIn = maxIobLimit,
+            smbToGiveIn = smbToGive,
+            profileCurrentBasal = profile_current_basal,
+            isMealAdvisorOneShot = isMealAdvisorOneShot,
+            targetBg = target_bg,
+            maxBg = max_bg,
+            estimatedCarbs = estimatedCarbs,
+            estimatedCarbsTimeMs = estimatedCarbsTime,
+            deliverAt = deliverAt,
             sens = sens,
-            baseSensitivity = baseSensitivity,
             minDelta = minDelta,
             bgi = bgi,
+            deviation = deviation,
             sensitivityRatio = sensitivityRatio,
+            calls = object : AimiTickMealNgrCalls {
+                override fun mealHyper(
+                    basal: Double,
+                    profileCurrentBasal: Double,
+                    isMealAdvisorOneShot: Boolean,
+                    targetBg: Double,
+                    estimatedCarbs: Double,
+                    estimatedCarbsTimeMs: Long,
+                ): AimiTickMealHyperStep = when (
+                    val stage = runMealHyperBasalBoostTickStage(
+                        ctx = ctx,
+                        profile = profile,
+                        rT = rT,
+                        basal = basal,
+                        profileCurrentBasal = profileCurrentBasal,
+                        isMealAdvisorOneShot = isMealAdvisorOneShot,
+                        targetBg = targetBg,
+                        estimatedCarbs = estimatedCarbs,
+                        estimatedCarbsTimeMs = estimatedCarbsTimeMs,
+                    )
+                ) {
+                    is AimiMealHyperBasalBoostTickResult.CompleteLoop -> AimiTickMealHyperStep.ReturnEarly(stage.rT)
+                    is AimiMealHyperBasalBoostTickResult.ContinueWithOverlay -> AimiTickMealHyperStep.Continue(stage.overlayRate)
+                }
+
+                override fun applyOverlay(overlayRate: Double?, deliverAt: Long): AimiTickMealBoost {
+                    val state = applyMealHyperBasalBoostOverlayIfNeeded(overlayRate, deliverAt, rT)
+                    return AimiTickMealBoost(state.basalBoostApplied, state.basalBoostSource)
+                }
+
+                override fun appendAutodriveSummary() {
+                    appendAutodriveStatusTirAndCompactPhysioSummaryToReason(
+                        rT = rT,
+                        autodriveDisplay = autodriveDisplay,
+                        activeModeName = activeModeName,
+                        reasonAimi = reasonAimi,
+                        tp = tp,
+                        bg = bg,
+                        delta = delta,
+                        recentSteps5Minutes = recentSteps5Minutes,
+                        averageBeatsPerMinute = averageBeatsPerMinute,
+                    )
+                }
+
+                override fun csf(sens: Double, minDelta: Double, bgi: Double, sensitivityRatio: Double): AimiTickCsf {
+                    val stage = runWCycleIcCsfClampCiAndCarbImpactLogs(
+                        profile = profile,
+                        ctx = ctx,
+                        sens = sens,
+                        baseSensitivity = baseSensitivity,
+                        minDelta = minDelta,
+                        bgi = bgi,
+                        sensitivityRatio = sensitivityRatio,
+                    )
+                    return AimiTickCsf(stage.csf, stage.slopeFromDeviations)
+                }
+
+                override fun carbsGate(
+                    csf: Double,
+                    slopeFromDeviations: Double,
+                    sens: Double,
+                    bgi: Double,
+                    deviation: Int,
+                    targetBg: Double,
+                    maxBg: Double,
+                ): AimiTickCarbsGate = when (
+                    val gate = runCarbsAdvisorEnableSmbSafetyAndHardHypoBasalStopOrReturn(
+                        profile = profile,
+                        ctx = ctx,
+                        rT = rT,
+                        glucoseStatus = glucoseStatus,
+                        iobData = iob_data,
+                        csf = csf,
+                        slopeFromDeviations = slopeFromDeviations,
+                        sens = sens,
+                        bg = bg,
+                        iob = iob,
+                        cob = cob,
+                        delta = delta,
+                        eventualBG = eventualBG,
+                        combinedDelta = combinedDelta,
+                        deviation = deviation,
+                        bgi = bgi,
+                        targetBgSchedule = targetBg,
+                        maxBgSchedule = maxBg,
+                        windowSinceDoseInt = windowSinceDoseInt,
+                    )
+                ) {
+                    is AimiCarbsAdvisorHardHypoBasalGateResult.ReturnZeroTempBasal -> AimiTickCarbsGate.ReturnEarly(gate.rT)
+                    is AimiCarbsAdvisorHardHypoBasalGateResult.Continue -> AimiTickCarbsGate.Continue(
+                        AimiTickCarbsSafety(
+                            forcedBasalMealModes = gate.stage.forcedBasalmealmodes,
+                            forcedBasal = gate.stage.forcedBasal,
+                            enableSmb = gate.stage.enableSMB,
+                            mealModeActive = gate.stage.mealModeActive,
+                            zeroSinceMin = gate.stage.zeroSinceMin,
+                            minutesSinceLastChange = gate.stage.minutesSinceLastChange,
+                            safetyDecision = gate.stage.safetyDecision,
+                        ),
+                    )
+                }
+
+                override fun mealNgr(
+                    safetyDecision: SafetyDecision,
+                    forcedBasalMealModes: Double,
+                    maxIobLimit: Double,
+                    basal: Double,
+                    smbToGive: Float,
+                    targetBg: Double,
+                ): AimiTickMealNgrStep = when (
+                    val mealNgr = runPostSafetyMealFirst30NgrHeadroomBasalSmbStage(
+                        profile = profile,
+                        ctx = ctx,
+                        rT = rT,
+                        ngrConfig = ngrConfig,
+                        safetyDecision = safetyDecision,
+                        forcedBasalmealmodes = forcedBasalMealModes,
+                        maxIobLimitIn = maxIobLimit,
+                        basalIn = basal,
+                        smbToGiveIn = smbToGive,
+                        bg = bg,
+                        delta = delta,
+                        shortAvgDelta = shortAvgDelta,
+                        longAvgDelta = longAvgDelta,
+                        eventualBG = eventualBG,
+                        targetBgSchedule = targetBg,
+                    )
+                ) {
+                    is AimiPostSafetyMealNgrStageResult.EarlyTempBasal -> AimiTickMealNgrStep.ReturnEarly(mealNgr.rt)
+                    is AimiPostSafetyMealNgrStageResult.Continue -> AimiTickMealNgrStep.Continue(
+                        AimiTickMealNgrContinue(
+                            isMealActive = mealNgr.isMealActive,
+                            runtimeMinValue = mealNgr.runtimeMinValue,
+                            maxIobLimit = mealNgr.maxIobLimit,
+                            basal = mealNgr.basal,
+                            smbToGive = mealNgr.smbToGive,
+                        ),
+                    )
+                }
+
+                override fun maxIob(
+                    mealModeActive: Boolean,
+                    maxIobLimit: Double,
+                    safetyDecision: SafetyDecision,
+                    basal: Double,
+                    targetBg: Double,
+                ): AimiTickMaxIobStep = when (
+                    val gate = runCoreDecisionMaxIobExceededTempBasalGate(
+                        profile = profile,
+                        ctx = ctx,
+                        rT = rT,
+                        originalProfile = originalProfile,
+                        flatBGsDetected = flatBGsDetected,
+                        mealModeActive = mealModeActive,
+                        maxIobLimit = maxIobLimit,
+                        safetyDecision = safetyDecision,
+                        basal = basal,
+                        bg = bg,
+                        delta = delta,
+                        eventualBG = eventualBG,
+                        targetBgSchedule = targetBg,
+                        loopIob = iob_data.iob,
+                    )
+                ) {
+                    is AimiCoreDecisionMaxIobGateResult.ReturnTempBasal -> AimiTickMaxIobStep.ReturnEarly(gate.rt)
+                    is AimiCoreDecisionMaxIobGateResult.ContinueSMBPath -> AimiTickMaxIobStep.Continue(
+                        gate.allowMealHighIob,
+                        gate.mealHighIobDamping,
+                    )
+                }
+
+                override fun insulinReq(
+                    smbToGive: Float,
+                    allowMealHighIob: Boolean,
+                    mealHighIobDamping: Double,
+                    maxIobLimit: Double,
+                    safetyDecision: SafetyDecision,
+                    enableSmb: Boolean,
+                    isMealActive: Boolean,
+                    basalBoostApplied: Boolean,
+                    basalBoostSource: String?,
+                ) {
+                    runInsulinReqActivityRelaxAndMicrobolusStage(
+                        ctx = ctx,
+                        rT = rT,
+                        iobTotal = iob_data,
+                        smbToGive = smbToGive,
+                        allowMealHighIob = allowMealHighIob,
+                        mealHighIobDamping = mealHighIobDamping,
+                        maxIobLimit = maxIobLimit,
+                        safetyDecision = safetyDecision,
+                        enableSMB = enableSmb,
+                        isMealActive = isMealActive,
+                        bg = bg,
+                        delta = delta,
+                        hypoThresholdMgdl = threshold,
+                        systemTime = systemTime,
+                        basalBoostApplied = basalBoostApplied,
+                        basalBoostSource = basalBoostSource,
+                    )
+                }
+            },
         )
+        if (mealNgr is AimiTickMealNgrOutcome.ReturnEarly) return mealNgr.rT
+        val continuedMeal = mealNgr as AimiTickMealNgrOutcome.Continue
+        basal = continuedMeal.basal
+        maxIobLimit = continuedMeal.maxIobLimit
+        smbToGive = continuedMeal.smbToGive
+        val isMealActive = continuedMeal.isMealActive
+        val runtimeMinValue = continuedMeal.runtimeMinValue
+        val forcedBasalmealmodes = continuedMeal.forcedBasalMealModes
+        val forcedBasal = continuedMeal.forcedBasal
+        val enableSMB = continuedMeal.enableSmb
+        val zeroSinceMin = continuedMeal.zeroSinceMin
+        val minutesSinceLastChange = continuedMeal.minutesSinceLastChange
+        val safetyDecision = continuedMeal.safetyDecision
+        val allowMealHighIob = continuedMeal.allowMealHighIob
+        val mealHighIobDamping = continuedMeal.mealHighIobDamping
 
-        val (
-            forcedBasalmealmodes,
-            forcedBasal,
-            enableSMB,
-            mealModeActive,
-            zeroSinceMin,
-            minutesSinceLastChange,
-            safetyDecision,
-        ) = when (
-            val gate = runCarbsAdvisorEnableSmbSafetyAndHardHypoBasalStopOrReturn(
-                profile = profile,
-                ctx = ctx,
-                rT = rT,
-                glucoseStatus = glucoseStatus,
-                iobData = iob_data,
-                csf = csf,
-                slopeFromDeviations = slopeFromDeviations,
-                sens = sens,
-                bg = bg,
-                iob = iob,
-                cob = cob,
-                delta = delta,
-                eventualBG = eventualBG,
-                combinedDelta = combinedDelta,
-                deviation = deviation,
-                bgi = bgi,
-                targetBgSchedule = target_bg,
-                maxBgSchedule = max_bg,
-                windowSinceDoseInt = windowSinceDoseInt,
-            )
-        ) {
-            is AimiCarbsAdvisorHardHypoBasalGateResult.ReturnZeroTempBasal -> return gate.rT
-            is AimiCarbsAdvisorHardHypoBasalGateResult.Continue -> gate.stage
-        }
+        // BasalDecisionEngine: the member targetBg is the loop target, not the schedule band.
+        // nightMode is nightbis, already set by the tick clock.
+        return decideDetermineBasalTickEngine(
+            calls = object : AimiTickEngineCalls<BasalDecisionEngine.Decision> {
+                override fun basalEngine(): BasalDecisionEngine.Decision = runBasalDecisionEngineDecideStage(
+                    AimiBasalDecisionEngineStageBundle(
+                        ctx = ctx,
+                        profile = profile,
+                        rT = rT,
+                        glucoseStatus = glucoseStatus,
+                        featuresCombinedDelta = f?.combinedDelta,
+                        profileCurrentBasal = profile_current_basal,
+                        basalEstimate = basalaimi.toDouble(),
+                        tdd7P = tdd7P,
+                        tdd7Days = tdd7Days,
+                        variableSensitivity = variableSensitivity.toDouble(),
+                        predictedBg = predictedBg.toDouble(),
+                        // The only basal site that sees the auditor's target ratio. The member targetBg
+                        // itself is never reassigned, so the learners and the ML CSV keep the raw value.
+                        targetBg = auditorDoseTarget(targetBg.toDouble(), AuditorProfileFactorCodes.DOSE_SITE_BASAL),
+                        tickIobForEngine = iob.toDouble(),
+                        engineMaxIob = maxIob,
+                        eventualBg = eventualBG,
+                        bg = bg,
+                        delta = delta.toDouble(),
+                        shortAvgDelta = shortAvgDelta.toDouble(),
+                        longAvgDelta = longAvgDelta.toDouble(),
+                        combinedDelta = combinedDelta.toDouble(),
+                        bgAcceleration = bgAcceleration.toDouble(),
+                        allowMealHighIob = allowMealHighIob,
+                        safetyDecision = safetyDecision,
+                        forcedBasal = forcedBasal.toDouble(),
+                        forcedBasalMealModesMax = forcedBasalmealmodes.toDouble(),
+                        isMealActive = isMealActive,
+                        runtimeMinValue = runtimeMinValue,
+                        smbToGive = smbToGive.toDouble(),
+                        zeroSinceMin = zeroSinceMin,
+                        minutesSinceLastChange = minutesSinceLastChange,
+                        pumpCaps = pumpCaps,
+                        timenowHour = timenow,
+                        sixAmHour = sixAMHour,
+                        pregnancyEnable = pregnancyEnable,
+                        nightMode = nightbis,
+                        modesCondition = modesCondition,
+                        autodrivePref = autodrive,
+                        honeymoon = honeymoon,
+                    ),
+                )
 
-        // NGR / repas 0–30 + headroom — see [runPostSafetyMealFirst30NgrHeadroomBasalSmbStage]
-        var isMealActive = false
-        var runtimeMinValue = Int.MAX_VALUE
-        when (
-            val mealNgr = runPostSafetyMealFirst30NgrHeadroomBasalSmbStage(
-                profile = profile,
-                ctx = ctx,
-                rT = rT,
-                ngrConfig = ngrConfig,
-                safetyDecision = safetyDecision,
-                forcedBasalmealmodes = forcedBasalmealmodes,
-                maxIobLimitIn = maxIobLimit,
-                basalIn = basal,
-                smbToGiveIn = smbToGive,
-                bg = bg,
-                delta = delta,
-                shortAvgDelta = shortAvgDelta,
-                longAvgDelta = longAvgDelta,
-                eventualBG = eventualBG,
-                targetBgSchedule = target_bg,
-            )
-        ) {
-            is AimiPostSafetyMealNgrStageResult.EarlyTempBasal -> return mealNgr.rt
-            is AimiPostSafetyMealNgrStageResult.Continue -> {
-                isMealActive = mealNgr.isMealActive
-                runtimeMinValue = mealNgr.runtimeMinValue
-                maxIobLimit = mealNgr.maxIobLimit
-                basal = mealNgr.basal
-                smbToGive = mealNgr.smbToGive
-            }
-        }
-        // MAX_IOB gate — see [runCoreDecisionMaxIobExceededTempBasalGate]
-        val (allowMealHighIob, mealHighIobDamping) = when (
-            val maxIobGate = runCoreDecisionMaxIobExceededTempBasalGate(
-                profile = profile,
-                ctx = ctx,
-                rT = rT,
-                originalProfile = originalProfile,
-                flatBGsDetected = flatBGsDetected,
-                mealModeActive = mealModeActive,
-                maxIobLimit = maxIobLimit,
-                safetyDecision = safetyDecision,
-                basal = basal,
-                bg = bg,
-                delta = delta,
-                eventualBG = eventualBG,
-                targetBgSchedule = target_bg,
-                loopIob = iob_data.iob,
-            )
-        ) {
-            is AimiCoreDecisionMaxIobGateResult.ReturnTempBasal -> return maxIobGate.rt
-            is AimiCoreDecisionMaxIobGateResult.ContinueSMBPath -> maxIobGate
-        }
+                override fun learners(decision: BasalDecisionEngine.Decision): RT =
+                    runPostBasalEngineLearnersRtInstrumentationAndAuditorStage(
+                        AimiPostBasalEngineFinalizeBundle(
+                            ctx = ctx,
+                            profile = profile,
+                            originalProfile = originalProfile,
+                            rT = rT,
+                            basalDecision = decision,
+                            flatBGsDetected = flatBGsDetected,
+                            pkpdRuntime = pkpdRuntime,
+                            tdd7Days = tdd7Days,
+                            intervalsmb = intervalsmb,
+                        ),
+                    )
 
-        runInsulinReqActivityRelaxAndMicrobolusStage(
-            ctx = ctx,
-            rT = rT,
-            iobTotal = iob_data,
-            smbToGive = smbToGive,
-            allowMealHighIob = allowMealHighIob,
-            mealHighIobDamping = mealHighIobDamping,
-            maxIobLimit = maxIobLimit,
-            safetyDecision = safetyDecision,
-            enableSMB = enableSMB,
-            isMealActive = isMealActive,
-            bg = bg,
-            delta = delta,
-            hypoThresholdMgdl = threshold,
-            systemTime = systemTime,
-            basalBoostApplied = basalBoostApplied,
-            basalBoostSource = basalBoostSource,
+                override fun export(finalResult: RT) {
+                    runAimiSnapshotMedicalJsonAndHormonitorExportStage(
+                        ctx = ctx,
+                        profile = profile,
+                        decisionCtx = decisionCtx,
+                        finalResult = finalResult,
+                        pkpdRuntime = pkpdRuntime,
+                    )
+                }
+            },
         )
-
-        // BasalDecisionEngine: [targetBg] = membre instance (objectif loop / temp target), pas le local [target_bg] (bande schedule) — même contrat qu’avant extraction orchestration.
-        val basalDecision = runBasalDecisionEngineDecideStage(
-            AimiBasalDecisionEngineStageBundle(
-                ctx = ctx,
-                profile = profile,
-                rT = rT,
-                glucoseStatus = glucoseStatus,
-                featuresCombinedDelta = f?.combinedDelta,
-                profileCurrentBasal = profile_current_basal,
-                basalEstimate = basalaimi.toDouble(),
-                tdd7P = tdd7P,
-                tdd7Days = tdd7Days,
-                variableSensitivity = variableSensitivity.toDouble(),
-                predictedBg = predictedBg.toDouble(),
-                // The only basal site that sees the auditor's target ratio. The member `targetBg`
-                // itself is never reassigned, so the learners and the ML CSV keep the raw value.
-                targetBg = auditorDoseTarget(targetBg.toDouble(), AuditorProfileFactorCodes.DOSE_SITE_BASAL),
-                tickIobForEngine = iob.toDouble(),
-                engineMaxIob = maxIob,
-                eventualBg = eventualBG,
-                bg = bg,
-                delta = delta.toDouble(),
-                shortAvgDelta = shortAvgDelta.toDouble(),
-                longAvgDelta = longAvgDelta.toDouble(),
-                combinedDelta = combinedDelta.toDouble(),
-                bgAcceleration = bgAcceleration.toDouble(),
-                allowMealHighIob = allowMealHighIob,
-                safetyDecision = safetyDecision,
-                forcedBasal = forcedBasal.toDouble(),
-                forcedBasalMealModesMax = forcedBasalmealmodes.toDouble(),
-                isMealActive = isMealActive,
-                runtimeMinValue = runtimeMinValue,
-                smbToGive = smbToGive.toDouble(),
-                zeroSinceMin = zeroSinceMin,
-                minutesSinceLastChange = minutesSinceLastChange,
-                pumpCaps = pumpCaps,
-                timenowHour = timenow,
-                sixAmHour = sixAMHour,
-                pregnancyEnable = pregnancyEnable,
-                nightMode = nightbis,
-                modesCondition = modesCondition,
-                autodrivePref = autodrive,
-                honeymoon = honeymoon,
-            )
-        )
-
-        // Learners post-moteur, TBR final, comparator, instrumentation RT, auditor — see [runPostBasalEngineLearnersRtInstrumentationAndAuditorStage]
-        val finalResult = runPostBasalEngineLearnersRtInstrumentationAndAuditorStage(
-            AimiPostBasalEngineFinalizeBundle(
-                ctx = ctx,
-                profile = profile,
-                originalProfile = originalProfile,
-                rT = rT,
-                basalDecision = basalDecision,
-                flatBGsDetected = flatBGsDetected,
-                pkpdRuntime = pkpdRuntime,
-                tdd7Days = tdd7Days,
-                intervalsmb = intervalsmb,
-            )
-        )
-
-        // 🏥 AIMI SNAPSHOT + JSONL + EXPORT — see [runAimiSnapshotMedicalJsonAndHormonitorExportStage]
-        runAimiSnapshotMedicalJsonAndHormonitorExportStage(
-            ctx = ctx,
-            profile = profile,
-            decisionCtx = decisionCtx,
-            finalResult = finalResult,
-            pkpdRuntime = pkpdRuntime,
-        )
-
-        return finalResult
     }
 
     /**
@@ -15114,18 +14390,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             cobGrams = windowCobG,
         )
         triggerBasalMlTrainingIfNeeded()
-        val gov = basalNeuralLearner.getGovernanceSnapshot()
         consoleLog.add(
-            "🧭 BASAL_GOV[$govTag]: action=${gov.action} conf=${aimiFmt2(gov.confidence)} " +
-                "n=${gov.sampleCount} hypo=${aimiFmt2(gov.hypoRate)} hypoG=${aimiFmt2(gov.hypoRateGovernance)} " +
-                "hypoAdj=${aimiFmt2(gov.hypoGovernanceAdjusted)} ant=${aimiFmt2(gov.anticipationRelief)} " +
-                "wMean=${aimiFmt2(gov.meanGovernanceWeight)} high=${aimiFmt2(gov.highRate)} " +
-                "mae=${aimiFmt1(gov.meanAbsTargetError)} latch=${gov.hypoHoldLatched} " +
-                "floorB=${gov.activeBasalFloor?.let { aimiFmt2(it) } ?: "-"} " +
-                "floorA=${gov.activeAggressivenessFloor?.let { aimiFmt2(it) } ?: "-"} " +
-                "wBolus=${if (windowBolusU.isFinite()) aimiFmt2(windowBolusU) else "?"}U " +
-                "wCob=${if (windowCobG.isFinite()) aimiFmt0(windowCobG) else "?"}g " +
-                "reason=${gov.reason}"
+            basalGovLine(
+                govTag = govTag,
+                gov = basalNeuralLearner.getGovernanceSnapshot(),
+                windowBolusU = windowBolusU,
+                windowCobG = windowCobG,
+            )
         )
     }
 

@@ -9,7 +9,8 @@ import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiTickContext
 
 /**
  * Android scratch reset and telemetry of the early tick.
- * The TDD adoption is decided here. A failed loop pulse keeps the tick going and logs the type.
+ * The TDD adoption is decided here. The profile copy is the data-class copy.
+ * A failed loop pulse keeps the tick going and logs the type.
  */
 internal data class AimiEarlyTickOutcome(
     val originalProfile: OapsProfileAimi,
@@ -28,7 +29,6 @@ internal interface AimiEarlyTickCalls {
     fun resetEarlyScratch(ctx: AimiTickContext)
     fun appendDebug(line: String)
     fun hydrate(mealData: MealData)
-    fun copyProfile(profile: OapsProfileAimi): OapsProfileAimi
     fun enterBootstrap()
 }
 
@@ -64,7 +64,7 @@ internal fun decideEarlyDetermineBasalStages(
     // `ci` (450 / tdd7Days) NaN for the whole tick. No change for any finite value.
     if (!tdd7Days.isFinite() || tdd7Days == 0.0 || tdd7Days < tdd7P) tdd7Days = tdd7P
 
-    val originalProfile = calls.copyProfile(ctx.profile)
+    val originalProfile = ctx.profile.copy()
     calls.enterBootstrap()
 
     return AimiEarlyTickOutcome(

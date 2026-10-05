@@ -26,7 +26,7 @@ import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
 /**
  * Android reads of the latent physio state.
  * Each method is the call that already existed at that line.
- * Effort belief, the patient runtime and the TPO session stay Android.
+ * Effort belief and the TPO session stay Android. The patient runtime is the common function.
  */
 internal interface AimiPhysioLatentCalls {
     fun physioContext(): PhysioContextMTR?

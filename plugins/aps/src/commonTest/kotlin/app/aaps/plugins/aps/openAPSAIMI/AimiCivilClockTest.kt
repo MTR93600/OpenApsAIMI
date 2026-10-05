@@ -16,6 +16,14 @@ class AimiCivilClockTest {
     private val noonUtc = 1_791_117_296_000L
 
     @Test
+    fun pinnedLocalTimeKeepsTheHourOnAFixedDay() {
+        val zone = TimeZone.UTC
+        assertEquals(14, aimiCivilClock(aimiEpochAtLocalTime(14, zone = zone), zone).hour)
+        assertEquals(0, aimiCivilClock(aimiEpochAtLocalTime(14, zone = zone), zone).minute)
+        assertEquals(5, aimiCivilClock(aimiEpochAtLocalTime(5, zone = zone), zone).hour)
+    }
+
+    @Test
     fun utcSundayNoonKeepsHourMinuteSecondAndCalendarDay() {
         val clock = aimiCivilClock(noonUtc, TimeZone.UTC)
         assertEquals(12, clock.hour)

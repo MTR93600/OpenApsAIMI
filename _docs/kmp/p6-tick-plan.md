@@ -376,13 +376,36 @@ Corps ajouté : **54**. Cumul des **46** fonctions `decide*` : **5 032** lignes 
 
 Corps ajouté : **37**. Cumul des **47** fonctions `decide*` : **5 069** lignes de corps. Le tableau est vide.
 
+`decideCalculateRate` (corps 5), `decideDriftTerminatorCondition` (corps 29) et `decideLateFatProteinRise` (corps 8) passent ensuite en `commonMain`. `profile.copy()` est la copie de la data class, appelée dans `decideEarlyDetermineBasalStages` (corps inchangé, 38). La coquille Android de la montée tardive garde `dateUtil.now()` comme défaut et transmet `nowMs`. `isCompressionProtectionCondition` était déjà `AimiTickPolicyMath`. Les quatre scènes rejouées sont identiques : montée tardive vraie, SMB de dérive **0,12 U**, TBR sport **1,30 U/h** pendant 30 min, TDD adopté **35 U**. `DetermineBasalAIMI2.kt` retombe à **15 536 lignes**.
+
+Corps ajoutés : 5 + 29 + 8 = **42**. Cumul des **50** fonctions `decide*` : **5 111** lignes de corps. Le tableau des têtes reste vide.
+
 Métrique de ce run. Corps ajoutés : 147 + 72 + 155 + 128 + 94 + 126 = **722**. Le corps déjà commun de `decideT3cBrittleBypass` passe de 154 à **170** pour la ligne d’échec de l’arbre. Cumul des **28** fonctions `decide*` : **3 652** lignes de corps. Têtes du tableau encore Android : **19**. L’orchestre de la section 9 commence après ces 19 têtes.
 
 ## 9. Plan de `runDetermineBasalTickInner` et de `HoldAimiEngine`
 
-Ce plan est accepté, avec une correction d’ordre. Les têtes de dose du tableau passent en `commonMain` avant l’orchestre. Si l’orchestre bougeait pendant que ces têtes restent des ports Android, le moteur commun n’aurait aucune implémentation sur iOS, et `HoldAimiEngine` ne pourrait déléguer qu’en Android. Le tableau est vide : les **31** têtes sont en `commonMain`. `enablesmb` (`decideEnableSmb`) et `applyTubeAdvisorFromDoseSnapshot` (`decideApplyTubeAdvisorFromDoseSnapshot`) y sont aussi. Ce ne sont plus des ports seulement Android. L’orchestre ne démarre pas dans ce document.
+Ce plan est accepté, avec une correction d’ordre. Les têtes de dose du tableau passent en `commonMain` avant l’orchestre. Si l’orchestre bougeait pendant que ces têtes restent des ports Android, le moteur commun n’aurait aucune implémentation sur iOS, et `HoldAimiEngine` ne pourrait déléguer qu’en Android. Le tableau est vide : les **31** têtes sont en `commonMain`. `enablesmb` (`decideEnableSmb`) et `applyTubeAdvisorFromDoseSnapshot` (`decideApplyTubeAdvisorFromDoseSnapshot`) y sont aussi. Ce ne sont plus des ports seulement Android. La première tranche de l’orchestre, `decideDetermineBasalTickPrefix`, est en `commonMain`.
 
-Ce plan est écrit avant tout déplacement de l’inner tick. Le tableau est vide, et ce run ne commence toujours pas l’orchestre. `HoldAimiEngine.evaluate` continue de renvoyer `Hold("ENGINE_NOT_EXTRACTED")`. `IosClientConfig.APS` reste `false`. La première PR de l’orchestre est le point 1 : le préfixe, de `runEarlyDetermineBasalStages` au retour de `runT3cBrittleBypassOrReturn`. Scènes : exercice et brittle. Le capteur plat est déjà décidé dans `buildDecisionContextInitRtSosAndFlatShadow` ; cette tranche ne fait que transmettre `flatBGsDetected`. Les sept scènes de bout en bout ne sont rejouées qu’à la PR 6. Les numéros de ligne du découpage sont ceux d’avant les déplacements suivants : la tranche se nomme par les fonctions.
+Ce plan est écrit avant tout déplacement de l’inner tick. Le tableau est vide. `HoldAimiEngine.evaluate` continue de renvoyer `Hold("ENGINE_NOT_EXTRACTED")`. `IosClientConfig.APS` reste `false`. La première PR de l’orchestre est le point 1 : le préfixe, de `runEarlyDetermineBasalStages` au retour de `runT3cBrittleBypassOrReturn`. Scènes : exercice et brittle. Le capteur plat est déjà décidé dans `buildDecisionContextInitRtSosAndFlatShadow` ; cette tranche ne fait que transmettre `flatBGsDetected`. Les sept scènes de bout en bout ne sont rejouées qu’à la PR 6. Les numéros de ligne du découpage sont ceux d’avant les déplacements suivants : la tranche se nomme par les fonctions.
+
+`decideDetermineBasalTickPrefix` (corps 91) est cette première tranche. Il appelle les ports au moment de la référence. Le `runCatching` d’export du retour T3C reste dans la coquille Android. Scènes rejouées octet pour octet : exercice, TBR **0 U/h** (BG 100), et brittle, TBR **1,30 U/h** pendant 30 min (cible 2,06, pas 0,30 au-dessus de la basale 1,00). `HoldAimiEngine` et `IosClientConfig.APS` sont inchangés.
+
+`decideDetermineBasalTickSignal` (corps 121) est la deuxième tranche, de `runSignalPreparationPkpdRuntimePhase` au retour de `runHardBrakeLyraOrReturn`. L’échec de `physioAdapter.getLatestSnapshot()` est `OptionalSignal.Failed` : le repli reste `HealthContextSnapshot()`, et la console reçoit `WEARABLE snapshot failed (<type>): <message> — snapshot empty`. Scènes rejouées octet pour octet : repas, SMB **3,30 U** et TBR **2,00 U/h** pendant 30 min, et hypo par le frein, TBR **0 U/h** pendant 30 min (BG 80, delta −2, short −1, long −3). L’horloge de production reste `Clock.System` via `aimiWallClockMs()`. Le tick lit l’heure civile par le port `epochMs()` (`AimiCivilClock`). En production ce port renvoie l’horloge murale. Les tests fixent `injectedTickEpochMs` : les quatre traces déjà verrouillées (exercice, brittle, repas, frein) sont à 05:00 locale, donc `nightbis` vrai, et ne dépendent plus de l’heure du run.
+
+`decideDetermineBasalTickPostHypo` (corps 71) est la troisième tranche, de la classification post-hypo au retour de `runPostHypoCompressionAndDriftTerminatorOrReturn`. `resolveAndWireRbtLiveTick` et `runAutodriveV3MultiVariableBranch` restent des ports appelés à la ligne. `eventualBG`, `bg` et `targetBg` sont lus à la ligne d’usage. La préférence Autodrive est lue deux fois, aux deux conditions RBT. L’heure de `nightbis` vient du port `epochMs()` ; l’horloge de production reste `Clock.System`. Deux scènes du tick Android, qui appelle cette tranche commune, sont verrouillées à un instant fixe :
+
+- 14:00 locale, `nightbis` faux. Le terminateur de dérive s’engage. Le micro-SMB proposé est 0,30 U. Les prédictions du tick complet sont présentes (`pred=Y`), donc la dégradation du test direct `driftTerminatorTapsAMicroSmb` (`pred=N`, **0,12 U**) ne s’applique pas. La finale autorise **0,18 U**. Ligne `TICK` : `smb=0.30->0.18->0.18 src=DriftTerminator`.
+- 05:00 locale, `nightbis` vrai. Le terminateur ne retourne pas : `DRIFT_TERMINATOR` est absent, `RT.units` est null, il n’y a pas d’effet SMB. Le tick continue. L’effet pompe est une TBR **1,00 U/h** pendant 30 min. Le journal `SMB result: raw=0.00 -> final=0.35` n’est pas une dose délivrée.
+
+Les traces déjà verrouillées ne sont pas réécrites. Les deux tests nouveaux s’appellent `zzPostHypo…` pour s’exécuter après les traces existantes, et remettent à zéro les hystérésis statiques avant et après. `DetermineBasalAIMI2.kt` fait **15 741 lignes**. Cumul des **53** fonctions `decide*` : **5 394** lignes de corps. `HoldAimiEngine` et `IosClientConfig.APS` sont inchangés.
+
+`decideDetermineBasalTickSchedule` (corps 70) est la quatrième tranche, de `buildGlobalAimiBasalScheduleBootstrap` au retour de la garde PKPD déjà extraite. `sens` est enfilé : PAI voit la valeur d’entrée, les cibles PKPD et l’instruction SMB voient la valeur après le plancher ISF. `basalaimi`, `variableSensitivity` et `intervalsmb` sont lus dans le port, à l’appel. La scène UAM du tick de 05:00 (`nightbis` déjà vrai, sans nouvel appel à `aimiLocalHour()`) rejoue la trace de nuit octet pour octet : `UAM=0.00`, journal `SMB result: raw=0.00 -> final=0.35` non délivré, effet pompe TBR **1,00 U/h** pendant 30 min. Le test direct `uamPostHypoReboundBridgesAShortTempBasal` reste le verrou du pont : SMB prédit **0 U**, TBR **1,05 U/h** pendant 5 min. `DetermineBasalAIMI2.kt` fait **15 798 lignes**. Cumul des **54** fonctions `decide*` : **5 464** lignes de corps. `HoldAimiEngine` et `IosClientConfig.APS` sont inchangés.
+
+`decideDetermineBasalTickMealNgr` (corps 82) est la cinquième tranche, de `runMealHyperBasalBoostTickStage` à `runInsulinReqActivityRelaxAndMicrobolusStage`. Elle peut retourner tôt (boost, arrêt basal hypo, repas 0–30, MAX_IOB). Elle ne lit pas `aimiLocalHour()` : `nightbis` est le drapeau déjà posé par l’horloge du tick. Scènes rejouées : repas 0–30, TBR **2,00 U/h** pendant 30 min, override vrai (`mealFirstThirtyMinutesForcesATempBasal`) ; gate MAX_IOB, TBR **2,00 U/h** (`maxIobWithoutMealRelaxSetsATempBasal`) ; tick de 05:00, `nightbis` déjà vrai, trace de nuit inchangée, effet TBR **1,00 U/h** pendant 30 min. `DetermineBasalAIMI2.kt` fait **15 896 lignes**. Cumul des **55** fonctions `decide*` : **5 546** lignes de corps. `HoldAimiEngine` et `IosClientConfig.APS` sont inchangés.
+
+`decideDetermineBasalTickEngine` (corps 6) est la sixième tranche. `runBasalDecisionEngineDecideStage` entre dans l’orchestre. `runPostBasalEngineLearnersRtInstrumentationAndAuditorStage` et `runAimiSnapshotMedicalJsonAndHormonitorExportStage` restent des ports appelés à la ligne. `nightMode` reçoit `nightbis`, déjà posé par l’horloge du tick. Le tick de 05:00, qui est le seul des verrous de bout en bout à atteindre le moteur, rejoue sa trace : TBR **1,00 U/h** pendant 30 min, pas d’effet SMB. Les scènes qui retournent avant (exercice TBR **0 U/h**, brittle TBR **1,30 U/h** / 30 min, repas SMB **3,30 U** et TBR **2,00 U/h**, frein TBR **0 U/h**, dérive 14:00 SMB **0,18 U**, test direct de dérive **0,12 U**, repas 0–30 TBR **2,00 U/h** override vrai, MAX_IOB TBR **2,00 U/h**, pont UAM SMB prédit **0 U** et TBR **1,05 U/h** / 5 min) restent identiques. `HoldAimiEngine` ne délègue pas : des helpers (a) sont encore « décision iOS requise ». `IosClientConfig.APS` reste `false`. `DetermineBasalAIMI2.kt` fait **15 902 lignes**. Cumul des **56** fonctions `decide*` : **5 552** lignes de corps.
+
+`decideDetectMealOnset` (corps 14) et `decideRecordPkpdSoftFloor` (corps 8) passent en `commonMain`. Le veto `effortSuppressesUndeclaredMeal(): Boolean` et l’écriture `lastPkpdSoftFloorTelemetry` plus sa ligne de journal restent des ports Android, appelés à la ligne. Deux scènes déjà verrouillées sont rejouées : moteur sport, TBR **1,30 U/h** pendant 30 min (`basalDecisionEngineRaisesSportTemp`, le veto est faux sans assessment) ; prédiction basse, TBR **0,25 U/h** pendant 30 min, journal `PKPD_SOFT_FLOOR: raw=39 soft=39` (`lowPredictionRequestsAQuarterBasal`). La valeur iOS du veto et la relecture du plancher restent ouvertes, dans `_docs/kmp/p6-ios-decisions.md`. `DetermineBasalAIMI2.kt` fait **15 893 lignes**. Cumul des **58** fonctions `decide*` : **5 574** lignes de corps. `HoldAimiEngine` et `IosClientConfig.APS` sont inchangés.
 
 `runDetermineBasalTickInner` fait 797 lignes (14849–15645). C’est l’orchestre. Il appelle déjà les têtes extraites. Le déplacer ne change pas une formule de dose. Chaque PR verrouille la trace sur le corps Android du parent, déplace une seule tranche, et rejoue. Si la trace diverge, on s’arrête. Les nombres de dose ne changent pas.
 
@@ -398,7 +421,7 @@ Ce plan est écrit avant tout déplacement de l’inner tick. Le tableau est vid
 
 5. **Boost repas, arrêt hypo, repas 0–30, MAX_IOB, insulinReq.** De `runMealHyperBasalBoostTickStage` à `runInsulinReqActivityRelaxAndMicrobolusStage` (15426–15572). Scènes : repas 0–30 (TBR **2,00 U/h**, 30 min, override vrai) et gate MAX_IOB (TBR **2,00 U/h**). L’arrêt basal hypo de `runCarbsAdvisorEnableSmbSafetyAndHardHypoBasalStopOrReturn` est l’autre scène hypo si la PR 2 n’a pas de retour.
 
-6. **Moteur basal, coquille learners/export, puis `HoldAimiEngine`.** `runBasalDecisionEngineDecideStage` entre dans l’orchestre. `runPostBasalEngineLearnersRtInstrumentationAndAuditorStage` et `runAimiSnapshotMedicalJsonAndHormonitorExportStage` restent des ports : ils ne bougent pas. Cette PR rejoue les sept scènes de bout en bout sur `runDetermineBasalTick`, pas seulement la tranche. `HoldAimiEngine` délègue seulement après cette PR. Les 31 têtes du tableau sont déjà en `commonMain`.
+6. **Moteur basal, coquille learners/export, puis `HoldAimiEngine`.** `runBasalDecisionEngineDecideStage` entre dans l’orchestre. `runPostBasalEngineLearnersRtInstrumentationAndAuditorStage` et `runAimiSnapshotMedicalJsonAndHormonitorExportStage` restent des ports : ils ne bougent pas. Cette PR rejoue les sept scènes de bout en bout sur `runDetermineBasalTick`, pas seulement la tranche. `HoldAimiEngine` délègue seulement après cette PR, et seulement quand chaque helper (a) a une implémentation commune ou un port iOS explicitement décidé. Les 31 têtes du tableau sont déjà en `commonMain`.
 
 ### Ce qui reste dans la coquille Android
 
@@ -411,7 +434,80 @@ Ce plan est écrit avant tout déplacement de l’inner tick. Le tableau est vid
 
 `enablesmb` et `applyTubeAdvisorFromDoseSnapshot` ne figurent pas ici. Leurs décisions sont en `commonMain`. La coquille Android reste le point d’appel de l’orchestre.
 
-Restent aussi Android, appelés à la ligne par les têtes déjà communes : `convertBG`, `withoutZeros`, le livre de phrases `rh.gs`, `String.format` du module contexte, la note JSON `noteTubeAdvisorTrace`, `aapsLogger` sur l’échec de contexte, `calculateRate`, `detectMealOnset`, `estimateUndeclaredVirtualCob`, `recordPkpdSoftFloor`, `isLateFatProteinRise`, `isCompressionProtectionCondition`, `isDriftTerminatorCondition`, le pouls d’étude, la remise à zéro du tick précoce, `profile.copy()`, la croyance d’effort, le runtime patient, la session TPO, `physioAdapter.getLatestSnapshot` (le `catch (Exception)` reste à la ligne), TFLite, `AimiUamHandler`, les notifications, les fichiers, la persistance et la fabrique de `AimiDecisionContext`.
+### Classement des helpers encore Android
+
+`HoldAimiEngine` ne délègue jamais tant qu’un élément (a) n’a pas d’implémentation commune ou un port iOS explicitement décidé. Les neutres déjà écrits plus bas comptent comme ces décisions de port. Ils ne sont pas une parité. Ils ne doivent pas être activés. Rien de ce mode n’est implémenté ici. `HoldAimiEngine` et `IosClientConfig.APS` restent inchangés.
+
+La taille est le corps, de l’accolade ouvrante à l’accolade fermante. Une coquille qui ne fait que déléguer ne compte pas.
+
+#### (a) Peuvent changer un nombre de dose ou une décision
+
+Déjà en commun, purs :
+
+| Élément | Taille | Dépendances Android | Passage |
+|---|---|---|---|
+| `decideCalculateRate` | 5 | aucune. `aimiFmt2` et `AimiTickPolicyMath.roundBasal` sont communs | pur. La coquille garde `overrideSafety` faux : le port du moteur basal ne le passe pas |
+| `decideDriftTerminatorCondition` | 29 | aucune | pur. La coquille délègue |
+| `decideLateFatProteinRise` | 8 | `MealFlags` et le défaut `dateUtil.now()` restent sur la coquille. `nowMs` est explicite | pur |
+| `ctx.profile.copy()` | 1, dans `decideEarlyDetermineBasalStages` (38) | aucune. `OapsProfileAimi` est une data class commune | pur |
+| `isCompressionProtectionCondition` | 8, dans `AimiTickPolicyMath` | aucune. La coquille est un délégué d’une ligne | déjà commun. Pas redéplacé |
+| `aimiLocalHour` | 1, dans `AimiCivilClock` | aucune. La source est `Clock.System`, pas `dateUtil.now()` | déjà commun. Remplacer la source changerait des doses |
+
+Encore Android. Il faut un port. Pas purs, donc pas déplacés dans ce lot :
+
+| Élément | Taille | Dépendances Android | Passage |
+|---|---|---|---|
+| `detectMealOnset` | 14, en commun (`decideDetectMealOnset`) | le veto `effortSuppressesUndeclaredMeal(): Boolean` reste Android. Il lit `lastEffortAssessment`, les drapeaux de repas et le COB | port Android en place. iOS, approuvé le 2026-10-05 : veto faux sans assessment |
+| `estimateUndeclaredVirtualCob` | 38 | préférences, `physioAdapter.getLatestSnapshot`, estimateur continu, journal | iOS, approuvé le 2026-10-05 : 0 g |
+| `recordPkpdSoftFloor` | 8, en commun (`decideRecordPkpdSoftFloor`) | la préférence est lue à l’appel. L’écriture de `lastPkpdSoftFloorTelemetry` et la ligne de journal restent Android | iOS, approuvé le 2026-10-05 : stocker, ne pas relire dans le débit |
+| `refreshEffortActivityBelief` | 34 | `physioAdapter`, préférences, `dateUtil`, `EffortActivityBelief` | iOS, approuvé le 2026-10-05 : facteur 1,0 |
+| `refreshPatientStateRuntime` | 221 | instantané physio, contexte, moteurs patient, `dateUtil` | iOS, approuvé le 2026-10-05 : ne pas appeler |
+| session TPO | appel `tpoOrchestrator.onTickStart(dateUtil.now())` | orchestrateur Android, horloge `dateUtil` | iOS, approuvé le 2026-10-05 : ne pas appeler |
+| `physioAdapter.getLatestSnapshot` | lecture à la ligne | adaptateur wearable. `OptionalSignal.Failed` + journal, repli `HealthContextSnapshot()` | iOS, approuvé le 2026-10-05 : snapshot vide |
+| `resetEarlyScratch` | 27 affectations dans l’adaptateur (le mémo disait 29) | écritures de champs du tick Android | iOS, approuvé le 2026-10-05 : les mêmes affectations |
+| `setTempBasal` | 342 | corps pompe, sonde `EFFECT SetTbr` | port décidé : `AimiEffectSink` écrit `TempBasal` ou `Smb` et ne parle pas à une pompe |
+| phase learners | 616, dont `applyBasalNeuralLearningAndTraining` 35, `logLearnersHealth` 53, `neuralnetwork5` 44 | fichiers d’apprentissage, `basalLearner.process` | port décidé : départ à froid multiplicateurs **1,0**, gouvernance `WARMUP`, pas `KEEP` |
+| TFLite, `AimiUamHandler` | interpréteur Android | fichier `.tflite` | port décidé : modèle absent → `predictSmbUam` **0 U**, `refine` identité, pas d’entraînement |
+| persistance pas, FC, bolus | `refreshStepsAsync` 13, `refreshHeartRatesAsync` 13 | `persistenceLayer` | port décidé : listes vides, le même repli qu’une lecture ratée. Ces listes peuvent changer l’ISF |
+| `decisionContextForTrigger` | 43 | `AimiDecisionContext` est un type Android | port décidé, non-parité : ne pas instancier. Neutre documenté, pas activé |
+
+Ces ports iOS sont tranchés dans `_docs/kmp/p6-ios-decisions.md`, approuvé le 2026-10-05. L’implémentation neutre est derrière `AimiCommonEngineSwitch`, éteint par défaut. `IosClientConfig.APS` reste `false`. Le tick Android n’appelle pas ces ports.
+
+- `detectMealOnset` : le corps est `decideDetectMealOnset`. Le veto Android lit l’assessment. iOS : faux sans assessment.
+- `estimateUndeclaredVirtualCob` : iOS rend 0 g.
+- `recordPkpdSoftFloor` : le corps est `decideRecordPkpdSoftFloor`. iOS stocke la télémétrie et ne la relit pas dans le débit.
+- `refreshEffortActivityBelief` : iOS, facteur 1,0.
+- `refreshPatientStateRuntime` : iOS ne l’appelle pas.
+- session TPO : iOS ne l’appelle pas.
+- `physioAdapter.getLatestSnapshot` : l’échec Android reste `OptionalSignal.Failed` et un snapshot vide. iOS : snapshot vide.
+- `resetEarlyScratch` : iOS reprend les affectations de l’adaptateur Android (27 sur cette branche).
+
+### Cycle de vie de `MealAbsorptionPhaseHysteresis`
+
+La fuite d’un test à l’autre vient de la production, pas d’un singleton introduit par le portage. Dans `dev_OAPSAIMI` comme ici, `MealAbsorptionPhaseHysteresis` est un `object` Kotlin. `holdTicksRemaining` et `heldPhase` sont des champs `@Volatile` de ce singleton. `stabilize` les écrit. Un tick suivant, ou une autre instance de `DetermineBasalaimiSMB2` dans le même processus, relit le maintien. `reset()` n’existe dans la ref que dans `MealAbsorptionPhaseEngineTest`, et dans `stabilize` quand le maintien tombe. Le portage n’ajoute que `import kotlin.concurrent.Volatile`, pour compiler en `commonMain`. Le corps est le même. On le garde.
+
+Le même `object` à champs mutables est déjà dans la ref pour `MealAbsorptionMemory`, `EndogenousPhaseHysteresis`, `PhysiologicalPatternHysteresis` et `InsulinSlopePreserveHysteresis`. Parité : le tick iOS n’appelle pas `reset()`. Le maintien traverse le tick, comme sur Android. `iosNeutralResetHysteresisForTest` existe seulement pour les tests. L’interrupteur ne s’allume en production qu’une fois les traces de parité identiques, octet pour octet. `IosClientConfig.APS` reste `false`.
+
+Le test du basal au quart isole son entrée avec `reset()`, parce que la trace verrouillée est le maintien propre (TBR 0,25 U/h). Ce reset ne change pas la production.
+
+#### (b) Présentation ou effets
+
+Ces éléments ne changent pas un nombre de dose. Ils ne bloquent pas la règle ci-dessus par eux-mêmes. Les fichiers qui ne font que garder un journal ou un CSV sont ici. La persistance des pas, de la FC et des bolus est en (a).
+
+| Élément | Taille | Pourquoi (b) |
+|---|---|---|
+| `convertBG` | 1 | `profileUtil.fromMgdlToStringInUnits(value).replace("-0.0", "0.0")`. Chaîne d’affichage seulement. Ce n’est pas un nombre de dose |
+| `withoutZeros` | 1 | `DecimalFormat("0.##")`. Texte |
+| `rh.gs` | livre de phrases | texte montré au raisonnement |
+| `String.format` du module contexte | deux lignes d’intervalle | format, sans `Locale` en `commonMain` |
+| `noteTubeAdvisorTrace` | 25 | note JSON |
+| `aapsLogger` | journal d’échec de contexte | effet |
+| `logDecisionFinal` | 5 | journal, ligne `TICK`, `CACHE TDD24H` |
+| `toMedicalJson` | 354 | export |
+| `runAimiSnapshotMedicalJsonAndHormonitorExportStage` | 497 | export, y compris le `runCatching` du retour T3C |
+| pouls d’étude `recordLoopPulse` | appel | télémétrie. L’échec journalise et le tick continue |
+| notifications | 3 appels `notificationManager.post` | effet. Le neutre déjà écrit est un no-op |
+| fichiers de journal et CSV | stockage d’export | effet. `exists` faux et écritures sans effet sont le neutre déjà écrit |
 
 ### Ports
 
@@ -420,7 +516,7 @@ Ceux qui existent restent appelés à la ligne : `AimiEffectSink`, chaque `decid
 Ports nouveaux de l’orchestre, chacun à l’appel actuel, pas hissés au début de la tranche :
 
 - préfixe : `runEarlyDetermineBasalStages`, `bootstrapPhysiologyAfterEarlyTick`, `runRealtimePhysioIobProfilerAndInsulinObserver`, `ensureWCycleAndLoadGlucoseStatusOrAbort`, `runCombinedDeltaByodaAndDynamicPeak`, `buildPreTherapyAutodriveByodaBootstrap`, `refreshPostHypoDeliveryAuthorityForTick`, `decideAuditorIsfFactorForTick`, `runManualMealModesAfterTherapyGate`, `runT3cBrittleBypassOrReturn` (coquille ; la décision est `decideT3cBrittleBypass`) ;
-- milieu : `runSignalPreparationPkpdRuntimePhase`, `runTrajectoryContextModuleTddIsfAndDynamicPbolusPrep`, `physioAdapter.getLatestSnapshot` (le `catch (Exception)` qui retombe sur `HealthContextSnapshot()` reste à la ligne ; s’il est déplacé, l’échec est journalisé, le repli ne change pas), `runAdvancedPredictionsAndPredPipePrep` (coquille ; `decideAdvancedPredictionsAndPredPipePrep`), `runPredPipelineSafetyHaltOrReturn` (coquille ; `decidePredPipelineSafetyHalt`), `runHardBrakeLyraOrReturn`, `runPostAutodrivePostHypoClassification`, `publishDoseTerminalAuthorityAndSnapshot`, `resolveTdd24hForExport`, `resolveAndWireRbtLiveTick`, `applyPendingTrajSpiralBasalIfNotSuppressed`, `runPostHypoCompressionAndDriftTerminatorOrReturn` ;
+- milieu : `runSignalPreparationPkpdRuntimePhase`, `runTrajectoryContextModuleTddIsfAndDynamicPbolusPrep`, `physioAdapter.getLatestSnapshot` (`OptionalSignal.Failed`, journal du type et du message, repli `HealthContextSnapshot()`), `runAdvancedPredictionsAndPredPipePrep` (coquille ; `decideAdvancedPredictionsAndPredPipePrep`), `runPredPipelineSafetyHaltOrReturn` (coquille ; `decidePredPipelineSafetyHalt`), `runHardBrakeLyraOrReturn`, `runPostAutodrivePostHypoClassification`, `publishDoseTerminalAuthorityAndSnapshot`, `resolveTdd24hForExport`, `resolveAndWireRbtLiveTick`, `applyPendingTrajSpiralBasalIfNotSuppressed`, `runPostHypoCompressionAndDriftTerminatorOrReturn` ;
 - SMB : `buildGlobalAimiBasalScheduleBootstrap` (coquille ; `decideBasalSchedule`), `runPostBasalBootstrapIobTickStepsAndHeartRate` (coquille ; `decideHeartRateIsf`), `applyEndoAndActivityAdjustments`, `applyIsfBoundsAndPhysioMultipliersAfterEndoActivity`, `decideAuditorTargetFactorForTick`, le plafond spiral, `runPkpdPredictionsBgiDeviationAndNoisyTargetsStage`, `runUamModelCalHypoGuardPostHypoAndSetPredictedSmb`, `runSmbDecisionLogAdvisorOneShotAndExecuteInstruction`, `applySmbAdvisorExecutionToTickStateAndLog` ;
 - fin de dose : `runMealHyperBasalBoostTickStage`, `applyMealHyperBasalBoostOverlayIfNeeded`, `runWCycleIcCsfClampCiAndCarbImpactLogs`, `runCarbsAdvisorEnableSmbSafetyAndHardHypoBasalStopOrReturn`, `runBasalDecisionEngineDecideStage` ;
 - queue non déplacée : la phase learners et la phase export.
