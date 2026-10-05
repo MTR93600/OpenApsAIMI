@@ -388,7 +388,9 @@ Ce plan est accepté, avec une correction d’ordre. Les têtes de dose du table
 
 Ce plan est écrit avant tout déplacement de l’inner tick. Le tableau est vide. `HoldAimiEngine.evaluate` continue de renvoyer `Hold("ENGINE_NOT_EXTRACTED")`. `IosClientConfig.APS` reste `false`. La première PR de l’orchestre est le point 1 : le préfixe, de `runEarlyDetermineBasalStages` au retour de `runT3cBrittleBypassOrReturn`. Scènes : exercice et brittle. Le capteur plat est déjà décidé dans `buildDecisionContextInitRtSosAndFlatShadow` ; cette tranche ne fait que transmettre `flatBGsDetected`. Les sept scènes de bout en bout ne sont rejouées qu’à la PR 6. Les numéros de ligne du découpage sont ceux d’avant les déplacements suivants : la tranche se nomme par les fonctions.
 
-`decideDetermineBasalTickPrefix` (corps 91) est cette première tranche. Il appelle les ports au moment de la référence. Le `runCatching` d’export du retour T3C reste dans la coquille Android. Scènes rejouées octet pour octet : exercice, TBR **0 U/h** (BG 100), et brittle, TBR **1,30 U/h** pendant 30 min (cible 2,06, pas 0,30 au-dessus de la basale 1,00). `HoldAimiEngine` et `IosClientConfig.APS` sont inchangés. Les PR 2 à 6 ne sont pas commencées. La coquille a grandi : `DetermineBasalAIMI2.kt` fait **15 613 lignes**. Cumul des **51** fonctions `decide*` : **5 202** lignes de corps.
+`decideDetermineBasalTickPrefix` (corps 91) est cette première tranche. Il appelle les ports au moment de la référence. Le `runCatching` d’export du retour T3C reste dans la coquille Android. Scènes rejouées octet pour octet : exercice, TBR **0 U/h** (BG 100), et brittle, TBR **1,30 U/h** pendant 30 min (cible 2,06, pas 0,30 au-dessus de la basale 1,00). `HoldAimiEngine` et `IosClientConfig.APS` sont inchangés.
+
+`decideDetermineBasalTickSignal` (corps 118) est la deuxième tranche, de `runSignalPreparationPkpdRuntimePhase` au retour de `runHardBrakeLyraOrReturn`. Le `catch (Exception)` de `physioAdapter.getLatestSnapshot()` reste dans l’orchestre, au même endroit : le repli est `HealthContextSnapshot()`. Scènes rejouées octet pour octet : repas, SMB **3,30 U** et TBR **2,00 U/h** pendant 30 min, et hypo par le frein, TBR **0 U/h** pendant 30 min (BG 80, delta −2, short −1, long −3). Les PR 3 à 6 ne sont pas commencées. `DetermineBasalAIMI2.kt` fait **15 678 lignes**. Cumul des **52** fonctions `decide*` : **5 320** lignes de corps.
 
 `runDetermineBasalTickInner` fait 797 lignes (14849–15645). C’est l’orchestre. Il appelle déjà les têtes extraites. Le déplacer ne change pas une formule de dose. Chaque PR verrouille la trace sur le corps Android du parent, déplace une seule tranche, et rejoue. Si la trace diverge, on s’arrête. Les nombres de dose ne changent pas.
 
@@ -453,6 +455,17 @@ Encore Android. Il faut un port. Pas purs, donc pas déplacés dans ce lot :
 | TFLite, `AimiUamHandler` | interpréteur Android | fichier `.tflite` | port décidé : modèle absent → `predictSmbUam` **0 U**, `refine` identité, pas d’entraînement |
 | persistance pas, FC, bolus | `refreshStepsAsync` 13, `refreshHeartRatesAsync` 13 | `persistenceLayer` | port décidé : listes vides, le même repli qu’une lecture ratée. Ces listes peuvent changer l’ISF |
 | `decisionContextForTrigger` | 43 | `AimiDecisionContext` est un type Android | port décidé, non-parité : ne pas instancier. Neutre documenté, pas activé |
+
+Proposition, une ligne, pour chaque (a) qui bloque encore `HoldAimiEngine`. Aucun de ces ports n’est implémenté ici : chacun est soit trop grand, soit une valeur iOS qui changerait une dose sans scène verrouillée.
+
+- `detectMealOnset` : port du veto `effortSuppressesUndeclaredMeal(): Boolean`, impl Android seule. La valeur iOS du veto est une décision iOS requise.
+- `estimateUndeclaredVirtualCob` : décision iOS requise. Le gramme virtuel dépend du snapshot wearable et de l’estimateur continu.
+- `recordPkpdSoftFloor` : port d’écriture `lastPkpdSoftFloorTelemetry` plus la ligne de journal, impl Android seule. Relire cette télémétrie sur iOS est une décision iOS requise.
+- `refreshEffortActivityBelief` : décision iOS requise. Le facteur SMB d’effort est reduce-only, mais le seuil wearable n’est pas tranché.
+- `refreshPatientStateRuntime` : décision iOS requise. 221 lignes, moteurs patient et instantané physio.
+- session TPO : décision iOS requise. L’appel `onTickStart(dateUtil.now())` reste à la ligne.
+- `physioAdapter.getLatestSnapshot` : port `latestSnapshot(): HealthContextSnapshot` déjà appelé par l’orchestre du signal, `catch (Exception)` → snapshot vide. Le contenu wearable iOS est une décision iOS requise.
+- `resetEarlyScratch` : décision iOS requise. Les 29 écritures remettent des champs de dose du tick Android à zéro.
 
 #### (b) Présentation ou effets
 

@@ -262,7 +262,14 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPrefixIob
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPrefixStep
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickPrefixCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickPrefixOutcome
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickPredPrep
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickSignalCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickSignalData
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickSignalOutcome
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickSignalStep
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickTrajectoryPrep
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetermineBasalTickPrefix
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetermineBasalTickSignal
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideEarlyDetermineBasalStages
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideLateFatProteinRise
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTrajectoryContextPrepCalls
@@ -14223,133 +14230,191 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val nightbis = continued.nightbis
         val activeModeName = continued.activeModeName
 
-        val spSignalPkpd = when (
-            val outcome = runSignalPreparationPkpdRuntimePhase(
+        val signaled = when (
+            val outcome = decideDetermineBasalTickSignal(
                 ctx = ctx,
                 profile = profile,
                 rT = rT,
                 glucoseStatus = glucoseStatus,
                 combinedDelta = combinedDelta,
                 tdd7P = tdd7P,
+                tdd7Days = tdd7Days,
                 isExplicitAdvisorRun = isExplicitAdvisorRun,
                 isConfirmedHighRiseLocal = isConfirmedHighRiseLocal,
                 pkpdRuntimeIn = pkpdRuntime,
+                physioMultipliers = physioMultipliers,
+                insulinActionState = insulinActionState,
+                autodriveDisplay = autodriveDisplay,
+                calls = object : AimiTickSignalCalls {
+                    override fun signalPrep(
+                        ctx: AimiTickContext,
+                        profile: OapsProfileAimi,
+                        rT: RT,
+                        glucoseStatus: GlucoseStatusAIMI,
+                        combinedDelta: Float,
+                        tdd7P: Double,
+                        isExplicitAdvisorRun: Boolean,
+                        isConfirmedHighRiseLocal: Boolean,
+                        pkpdRuntime: PkPdRuntime?,
+                    ) = when (
+                        val prepared = runSignalPreparationPkpdRuntimePhase(
+                            ctx, profile, rT, glucoseStatus, combinedDelta, tdd7P,
+                            isExplicitAdvisorRun, isConfirmedHighRiseLocal, pkpdRuntime,
+                        )
+                    ) {
+                        is AimiSignalPreparationPkpdOutcome.StaleAbort ->
+                            AimiTickSignalStep.StaleAbort(prepared.rT)
+                        is AimiSignalPreparationPkpdOutcome.Continue -> AimiTickSignalStep.Continue(
+                            AimiTickSignalData(
+                                modesCondition = prepared.data.modesCondition,
+                                pbolusAS = prepared.data.pbolusAS,
+                                pbolusA = prepared.data.pbolusA,
+                                reason = prepared.data.reason,
+                                recentBGs = prepared.data.recentBGs,
+                                totalBolusLastHour = prepared.data.totalBolusLastHour,
+                                autosensRatio = prepared.data.autosensRatio,
+                                iobData = prepared.data.iob_data,
+                                lastBolusTimeMs = prepared.data.lastBolusTimeMs,
+                                lateFatRiseFlag = prepared.data.lateFatRiseFlag,
+                                tdd24Hrs = prepared.data.tdd24Hrs,
+                                minAgo = prepared.data.minAgo,
+                                windowSinceDoseInt = prepared.data.windowSinceDoseInt,
+                                pkpdRuntime = prepared.data.pkpdRuntime,
+                            ),
+                        )
+                    }
+                    override fun trajectoryPrep(
+                        ctx: AimiTickContext,
+                        profile: OapsProfileAimi,
+                        rT: RT,
+                        iobData: IobTotal,
+                        physioMultipliers: PhysioMultipliersMTR,
+                        insulinActionState: InsulinActionState,
+                        pkpdRuntime: PkPdRuntime?,
+                        tdd7Days: Double,
+                        tdd7P: Double,
+                        tdd24Hrs: Float,
+                        pbolusA: Double,
+                        pbolusAS: Double,
+                        reason: StringBuilder,
+                        isExplicitAdvisorRun: Boolean,
+                    ): AimiTickTrajectoryPrep {
+                        val prep = runTrajectoryContextModuleTddIsfAndDynamicPbolusPrep(
+                            ctx, profile, rT, iobData, physioMultipliers, insulinActionState, pkpdRuntime,
+                            tdd7Days, tdd7P, tdd24Hrs, pbolusA, pbolusAS, reason, isExplicitAdvisorRun,
+                        )
+                        return AimiTickTrajectoryPrep(
+                            prep.sens, prep.baseSensitivity, prep.contextTargetOverride, prep.dynamicPbolusSmall,
+                        )
+                    }
+                    override fun wearableSnapshot() = physioAdapter.getLatestSnapshot()
+                    override fun bg() = bg
+                    override fun delta() = delta
+                    override fun predictedBg() = predictedBg
+                    override fun shortAvgDelta() = shortAvgDelta
+                    override fun longAvgDelta() = longAvgDelta
+                    override fun targetBg() = targetBg
+                    override fun advancedPredictions(
+                        ctx: AimiTickContext,
+                        profile: OapsProfileAimi,
+                        rT: RT,
+                        bg: Double,
+                        delta: Float,
+                        sens: Double,
+                        predictedBg: Float,
+                        glucoseStatus: GlucoseStatusAIMI,
+                        minAgo: Double,
+                        isExplicitAdvisorRun: Boolean,
+                        physioMultipliers: PhysioMultipliersMTR,
+                        iobData: IobTotal,
+                        stepsLast15m: Int,
+                        heartRateBpm: Int,
+                        restingHeartRateBpm: Int,
+                        combinedDelta: Float,
+                    ): AimiTickPredPrep {
+                        val prep = runAdvancedPredictionsAndPredPipePrep(
+                            ctx, profile, rT, bg, delta, sens, predictedBg, glucoseStatus, minAgo,
+                            isExplicitAdvisorRun, physioMultipliers, iobData, stepsLast15m, heartRateBpm,
+                            restingHeartRateBpm, combinedDelta,
+                        )
+                        return AimiTickPredPrep(prep.minBg, prep.threshold, prep.scenario)
+                    }
+                    override fun safetyHalt(
+                        ctx: AimiTickContext,
+                        profile: OapsProfileAimi,
+                        rT: RT,
+                        bg: Double,
+                        delta: Float,
+                        combinedDelta: Float,
+                        iobData: IobTotal,
+                        glucoseStatus: GlucoseStatusAIMI,
+                        scenario: ScenarioProjectionPair,
+                        isExplicitAdvisorRun: Boolean,
+                    ) = when (
+                        val gate = runPredPipelineSafetyHaltOrReturn(
+                            ctx, profile, rT, bg, delta, combinedDelta, iobData, glucoseStatus, scenario,
+                            isExplicitAdvisorRun,
+                        )
+                    ) {
+                        is AimiPredPipelineSafetyGate.Halt -> gate.rT
+                        AimiPredPipelineSafetyGate.Continue -> null
+                    }
+                    override fun hasRecentBolus45m(lastBolusTimeMs: Long) =
+                        hasReceivedRecentBolus(45, lastBolusTimeMs)
+                    override fun mealAdvisor(
+                        ctx: AimiTickContext,
+                        profile: OapsProfileAimi,
+                        rT: RT,
+                        bg: Double,
+                        delta: Float,
+                        iobData: IobTotal,
+                        modesCondition: Boolean,
+                        isExplicitAdvisorRun: Boolean,
+                        lastBolusTimeMs: Long?,
+                        autodriveDisplay: String,
+                        hasRecentBolus45m: Boolean,
+                    ) = runMealAdvisorDecisionOrReturn(
+                        ctx, profile, rT, bg, delta, iobData, modesCondition, isExplicitAdvisorRun,
+                        lastBolusTimeMs, autodriveDisplay, hasRecentBolus45m,
+                    )
+                    override fun hardBrake(
+                        ctx: AimiTickContext,
+                        profile: OapsProfileAimi,
+                        rT: RT,
+                        bg: Double,
+                        delta: Float,
+                        shortAvgDelta: Float,
+                        longAvgDelta: Float,
+                        targetBgMgdl: Float,
+                    ) = runHardBrakeLyraOrReturn(
+                        ctx, profile, rT, bg, delta, shortAvgDelta, longAvgDelta, targetBgMgdl,
+                    )
+                },
             )
         ) {
-            is AimiSignalPreparationPkpdOutcome.StaleAbort -> return outcome.rT
-            is AimiSignalPreparationPkpdOutcome.Continue -> outcome.data
+            is AimiTickSignalOutcome.ReturnEarly -> return outcome.rT
+            is AimiTickSignalOutcome.Continue -> outcome
         }
-        val (
-            modesCondition,
-            pbolusAS,
-            pbolusA,
-            reason,
-            recentBGs,
-            totalBolusLastHour,
-            autosensRatio,
-            iob_data,
-            lastBolusTimeMs,
-            lateFatRiseFlag,
-            tdd24Hrs,
-            minAgo,
-            windowSinceDoseInt,
-            pkpdRuntimeSignal,
-        ) = spSignalPkpd
-        pkpdRuntime = pkpdRuntimeSignal
-        val (systemTime, bgTime) = ctx.currentTime to glucoseStatus.date
-
-        val (
-            sensInit,
-            baseSensitivity,
-            contextTargetOverride,
-            _, // dynamicPbolusLarge — classic autodrive removed; Large-tier prebolus no longer consumed here
-            dynamicPbolusSmall,
-        ) = runTrajectoryContextModuleTddIsfAndDynamicPbolusPrep(
-            ctx = ctx,
-            profile = profile,
-            rT = rT,
-            iobData = iob_data,
-            physioMultipliers = physioMultipliers,
-            insulinActionState = insulinActionState,
-            pkpdRuntime = pkpdRuntime,
-            tdd7Days = tdd7Days,
-            tdd7P = tdd7P,
-            tdd24Hrs = tdd24Hrs,
-            pbolusA = pbolusA,
-            pbolusAS = pbolusAS,
-            reason = reason,
-            isExplicitAdvisorRun = isExplicitAdvisorRun,
-        )
-        var sens = sensInit
-
-        val wearableSnapshot = try {
-            physioAdapter.getLatestSnapshot()
-        } catch (_: Exception) {
-            HealthContextSnapshot()
-        }
-        val (sanity, minBg, threshold, scenario) = runAdvancedPredictionsAndPredPipePrep(
-            ctx = ctx,
-            profile = profile,
-            rT = rT,
-            bg = bg,
-            delta = delta,
-            sens = sens,
-            predictedBg = predictedBg,
-            glucoseStatus = glucoseStatus,
-            minAgo = minAgo,
-            isExplicitAdvisorRun = isExplicitAdvisorRun,
-            physioMultipliers = physioMultipliers,
-            iobData = iob_data,
-            stepsLast15m = wearableSnapshot.stepsLast15m,
-            heartRateBpm = wearableSnapshot.hrNow,
-            restingHeartRateBpm = wearableSnapshot.rhrResting,
-            combinedDelta = combinedDelta,
-        )
-
-        when (
-            val safetyGate = runPredPipelineSafetyHaltOrReturn(
-                ctx = ctx,
-                profile = profile,
-                rT = rT,
-                bg = bg,
-                delta = delta,
-                combinedDelta = combinedDelta,
-                iobData = iob_data,
-                glucoseStatus = glucoseStatus,
-                scenario = scenario,
-                isExplicitAdvisorRun = isExplicitAdvisorRun,
-            )
-        ) {
-            is AimiPredPipelineSafetyGate.Halt -> return safetyGate.rT
-            AimiPredPipelineSafetyGate.Continue -> Unit
-        }
-
-        // PRIORITY 3: Meal Advisor (after safety — see [runMealAdvisorDecisionOrReturn])
-        val hasRecentBolus45m = hasReceivedRecentBolus(45, lastBolusTimeMs ?: 0L)
-        runMealAdvisorDecisionOrReturn(
-            ctx = ctx,
-            profile = profile,
-            rT = rT,
-            bg = bg,
-            delta = delta,
-            iobData = iob_data,
-            modesCondition = modesCondition,
-            isExplicitAdvisorRun = isExplicitAdvisorRun,
-            lastBolusTimeMs = lastBolusTimeMs,
-            autodriveDisplay = autodriveDisplay,
-            hasRecentBolus45m = hasRecentBolus45m,
-        )?.let { return it }
-
-        runHardBrakeLyraOrReturn(
-            ctx = ctx,
-            profile = profile,
-            rT = rT,
-            bg = bg,
-            delta = delta,
-            shortAvgDelta = shortAvgDelta,
-            longAvgDelta = longAvgDelta,
-            targetBgMgdl = targetBg,
-        )?.let { return it }
+        val modesCondition = signaled.modesCondition
+        val reason = signaled.reason
+        val recentBGs = signaled.recentBGs
+        val totalBolusLastHour = signaled.totalBolusLastHour
+        val autosensRatio = signaled.autosensRatio
+        val iob_data = signaled.iobData
+        val lateFatRiseFlag = signaled.lateFatRiseFlag
+        val tdd24Hrs = signaled.tdd24Hrs
+        val minAgo = signaled.minAgo
+        val windowSinceDoseInt = signaled.windowSinceDoseInt
+        pkpdRuntime = signaled.pkpdRuntime
+        val (systemTime, bgTime) = signaled.systemTime to signaled.bgTime
+        var sens = signaled.sens
+        val baseSensitivity = signaled.baseSensitivity
+        val contextTargetOverride = signaled.contextTargetOverride
+        val dynamicPbolusSmall = signaled.dynamicPbolusSmall
+        val wearableSnapshot = signaled.wearableSnapshot
+        val minBg = signaled.minBg
+        val threshold = signaled.threshold
+        val hasRecentBolus45m = signaled.hasRecentBolus45m
 
         val (
             postHypoState,
