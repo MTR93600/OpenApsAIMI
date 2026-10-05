@@ -28,6 +28,7 @@ import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.aps.openAPSAIMI.AIMIAdaptiveBasal
 import app.aaps.plugins.aps.openAPSAIMI.AimiDecisionContext
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.AimiUamHandler
@@ -41,6 +42,7 @@ import app.aaps.plugins.aps.openAPSAIMI.autodrive.estimator.ContinuousStateEstim
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveCommand
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.safety.AutoDriveGater
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
+import app.aaps.plugins.aps.openAPSAIMI.basal.BasalPlanner
 import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController
 import app.aaps.plugins.aps.openAPSAIMI.learning.BasalNeuralLearner
 import app.aaps.plugins.aps.openAPSAIMI.model.PumpCaps
@@ -2015,6 +2017,50 @@ class ShellDecisionTraceTest {
         assertEquals(DOSE_TERMINAL_MEAL_UPLIFT_TRACE, trace)
     }
 
+    @Test
+    fun basalDecisionEngineRaisesSportTemp() {
+        val adaptive = mock(AIMIAdaptiveBasal::class.java)
+        whenever(adaptive.suggest(anyOrNull())).thenReturn(
+            AIMIAdaptiveBasal.Decision(rateUph = null, durationMin = 0, reason = ""),
+        )
+        val planner = mock(BasalPlanner::class.java)
+        whenever(planner.plan(anyOrNull())).thenReturn(null)
+        val rh = mock(TextResolver::class.java, Answer { inv: InvocationOnMock ->
+            if (inv.method.name == "gs") "phrase" else null
+        })
+        setField(tick, "basalDecisionEngine", BasalDecisionEngine(rh, adaptive, planner))
+        setField(tick, "sportTime", true)
+        val profile = profileStub()
+        whenever(profile.min_bg).thenReturn(80.0)
+        whenever(profile.pre_floor_isf_mgdl).thenReturn(50.0)
+        val ctx = tickContext(profile, glucose = 180.0)
+        val rT = RT(runningDynamicIsf = false)
+        val glucose = GlucoseStatusAIMI(glucose = 180.0, delta = 5.0, date = now)
+        val safety = SafetyDecision(stopBasal = false, bolusFactor = 1.0, reason = "", basalLS = false)
+        val caps = PumpCaps(basalStep = 0.05, bolusStep = 0.05, minDurationMin = 30, maxBasal = 3.0, maxSmb = 1.0)
+        val bundle = privateData(
+            "AimiBasalDecisionEngineStageBundle",
+            listOf(
+                ctx, profile, rT, glucose, 5.0,
+                1.0, 1.0, 35.0, 35.0, 50.0,
+                180.0, 100.0, 1.0, 10.0, 180.0,
+                180.0, 5.0, 5.0, 5.0, 5.0,
+                0.0, false, safety, 2.0, 0.0,
+                false, 0, 0.0, 0, 0,
+                caps, 12, 6, false, false,
+                false, false, false,
+            ),
+        )
+        var decision: BasalDecisionEngine.Decision? = null
+        val trace = capture {
+            decision = invokeNamed("runBasalDecisionEngineDecideStage", listOf(bundle)) as BasalDecisionEngine.Decision
+        }
+        assertEquals(1.30, decision!!.rate, 1e-9)
+        assertEquals(30, decision!!.duration)
+        assertFalse(decision!!.overrideSafety)
+        assertEquals(BASAL_ENGINE_SPORT_TRACE, trace)
+    }
+
     private fun resultField(target: Any, name: String): Any? {
         val field = target.javaClass.getDeclaredField(name)
         field.isAccessible = true
@@ -2914,6 +2960,10 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val BASAL_ENGINE_SPORT_TRACE = """
+            READ key=BooleanKey.OApsAIMIBasalProjectedError value=false
+        """.trimIndent()
+
         private val DOSE_TERMINAL_MEAL_UPLIFT_TRACE = """
             READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=true
             READ key=BooleanKey.OApsAIMIPredictionAuthorityShadow value=false
