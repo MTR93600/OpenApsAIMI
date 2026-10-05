@@ -252,7 +252,10 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.decideRefreshMealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPostHypoDriftCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decidePostHypoCompressionAndDriftTerminatorOrReturn
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEarlyTickCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideCalculateRate
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideDriftTerminatorCondition
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideEarlyDetermineBasalStages
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideLateFatProteinRise
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTrajectoryContextPrepCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideTrajectoryContextModuleTddIsfAndDynamicPbolusPrep
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRaObservationCalls
@@ -2278,7 +2281,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 override fun hydrate(mealData: MealData) {
                     hydrateMealDataIfTriggered(mealData)
                 }
-                override fun copyProfile(profile: OapsProfileAimi) = profile.copy()
                 override fun enterBootstrap() {
                     AimiLoopTelemetry.enterPhase(AimiLoopPhase.BOOTSTRAP, hormonitorStudyExporter)
                 }
@@ -11053,11 +11055,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         mealMaxBasalUph,
     )
 
-    private fun calculateRate(basal: Double, currentBasal: Double, multiplier: Double, reason: String, currenttemp: CurrentTemp, rT: RT, overrideSafety: Boolean = false): Double {
-        rT.reason.append("${currenttemp.duration}m@${(currenttemp.rate).toFixed2()} $reason")
-        val rawRate = if (overrideSafety || basal == 0.0) currentBasal * multiplier else roundBasal(basal * multiplier)
-        return rawRate.coerceAtLeast(0.0)
-    }
+    private fun calculateRate(basal: Double, currentBasal: Double, multiplier: Double, reason: String, currenttemp: CurrentTemp, rT: RT, overrideSafety: Boolean = false): Double =
+        decideCalculateRate(basal, currentBasal, multiplier, reason, currenttemp, rT, overrideSafety)
     private fun calculateBasalRate(basal: Double, currentBasal: Double, multiplier: Double): Double =
         AimiTickPolicyMath.calculateBasalRate(basal, currentBasal, multiplier)
 
@@ -12251,35 +12250,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         minDeviation: Double,
         lastBolusVolume: Double,
         reason: StringBuilder
-    ): Boolean {
-        // 1. Slow Creep (Target + 15)
-        if (bg <= targetBg + 15) return false
-
-        // 2. Nature of the Drift: Must be Flat or Rising Slow (CONFIRMED BY 15m AVG & DEVIATION)
-        // [FIX] Plateau/Hovering Detection with Deep Analysis:
-        // - Instant Delta must be > -1.5 (Not falling)
-        // - Avg Delta (15m) must be > -1.5 (Sustained not falling)
-        // - Both must be < 6.0 (Not a spike)
-
-        if (delta < -1.5 || avgDelta < -1.5) return false // Falling real (instant or trend)
-        if (delta > 6.0 || avgDelta > 6.0) return false // Rising fast (Not a creep)
-
-        // 3. Confirmation by MinDeviation (Are we stuck *worse* than IOB allows?)
-        // If deviation is positive, it means BG > IOB prediction -> Resistance/Drift
-        // If combinedDelta is also weak (-1 to +2), it confirms the "stuck" nature.
-        val isStuck = minDeviation > 0 && combinedDelta > -1.0 && combinedDelta < 3.0
-
-        if (!isStuck) {
-             // Fallback: If deviation isn't available/positive, ensure delta is strictly flat
-             if (delta < -0.5) return false
-        }
-
-        // 4. No recent bolus activity (Clean slate)
-        if (lastBolusVolume > 0.1) return false
-
-        reason.append("🧹 Drift Terminator: Plateau detected (Δ${aimiFmt1(delta)} Avg${aimiFmt1(avgDelta)} Dev${aimiFmt0(minDeviation)}) -> ENGAGED\n")
-        return true
-    }
+    ): Boolean = decideDriftTerminatorCondition(
+        bg, targetBg, delta, avgDelta, combinedDelta, minDeviation, lastBolusVolume, reason,
+    )
 
     private fun calculateDynamicMicroBolus(
         isf: Double,
@@ -12751,15 +12724,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastBolusTimeMs: Long?,           // null si inconnu
         mealFlags: MealFlags,
         nowMs: Long = dateUtil.now()      // ou aimiWallClockMs()
-    ): Boolean {
-        val hoursSinceBolus = lastBolusTimeMs?.let { (nowMs - it) / 3_600_000.0 } ?: Double.POSITIVE_INFINITY
-        val rising = delta >= 1.0 && (shortAvgDelta >= 0.5 || longAvgDelta >= 0.3)
-        val highish = bg > 130 || predictedBg > 140
-        val lowIOB  = iob < maxSMB
-        val noMeal  = !(mealFlags.mealTime || mealFlags.bfastTime || mealFlags.lunchTime
-            || mealFlags.dinnerTime || mealFlags.highCarbTime)
-        return noMeal && hoursSinceBolus in 2.0..7.0 && rising && highish && lowIOB && cob <= 1.0
-    }
+    ): Boolean = decideLateFatProteinRise(
+        bg = bg,
+        predictedBg = predictedBg,
+        delta = delta,
+        shortAvgDelta = shortAvgDelta,
+        longAvgDelta = longAvgDelta,
+        iob = iob,
+        cob = cob,
+        maxSMB = maxSMB,
+        lastBolusTimeMs = lastBolusTimeMs,
+        mealTime = mealFlags.mealTime,
+        bfastTime = mealFlags.bfastTime,
+        lunchTime = mealFlags.lunchTime,
+        dinnerTime = mealFlags.dinnerTime,
+        highCarbTime = mealFlags.highCarbTime,
+        nowMs = nowMs,
+    )
 
     /**
      * Damping-only sibling of `isLateFatProteinRise`. SHADOW for now: computed and exported, not
