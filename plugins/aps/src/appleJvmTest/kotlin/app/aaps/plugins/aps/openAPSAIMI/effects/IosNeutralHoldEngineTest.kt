@@ -392,6 +392,49 @@ class IosNeutralHoldEngineTest {
             neutral.portLog.any { it.contains("SMB capped") },
             neutral.portLog.toString(),
         )
+        val learner = neutral.portLog
+            .dropWhile { it != "═══════════════════════════════" }
+            .take(8)
+            .joinToString("\n")
+        assertEquals(COLD_LEARNER_NIGHT_TRACE, learner)
+    }
+
+    @Test
+    fun nightTickLogsColdLearnersAtOneUnitAndSportStaysWithoutThem() {
+        AimiCommonEngineSwitch.enabled = true
+        val storage = InMemoryAimiStorage()
+        val (hold, neutral) = holdAimiEngineWired(
+            IosNeutralScene.NIGHT,
+            MemoryAimiTherapyReads(),
+            storage,
+        )
+        val result = hold.evaluate(
+            AimiTestSnapshots.emptyInput(),
+            AimiTestSnapshots.emptyState(),
+            AimiTestSnapshots.emptyModels(),
+        )
+        val tbr = result.command as AimiTherapyCommand.TempBasal
+        assertEquals("1.00", aimiFmt2(tbr.rateUPerHour))
+        assertEquals(IOS_NEUTRAL_TBR_DURATION_MS, tbr.durationMs)
+        val learner = neutral.portLog
+            .dropWhile { it != "═══════════════════════════════" }
+            .take(8)
+            .joinToString("\n")
+        assertEquals(COLD_LEARNER_NIGHT_TRACE, learner)
+
+        val (sportHold, sport) = holdAimiEngineWired(
+            IosNeutralScene.SPORT,
+            MemoryAimiTherapyReads(),
+            InMemoryAimiStorage(),
+        )
+        val sportResult = sportHold.evaluate(
+            AimiTestSnapshots.emptyInput(),
+            AimiTestSnapshots.emptyState(),
+            AimiTestSnapshots.emptyModels(),
+        )
+        val sportTbr = sportResult.command as AimiTherapyCommand.TempBasal
+        assertEquals("1.30", aimiFmt2(sportTbr.rateUPerHour))
+        assertFalse(sport.portLog.any { it.contains("AIMI LEARNERS HEALTH") }, sport.portLog.toString())
     }
 
     @Test

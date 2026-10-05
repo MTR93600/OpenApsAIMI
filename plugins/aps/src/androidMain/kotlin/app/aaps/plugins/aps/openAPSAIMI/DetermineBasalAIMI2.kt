@@ -41,6 +41,8 @@ import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
+import app.aaps.plugins.aps.openAPSAIMI.effects.basalGovLine
+import app.aaps.plugins.aps.openAPSAIMI.effects.learnerHealthLines
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideEffortSuppressesUndeclaredMeal
 import app.aaps.plugins.aps.openAPSAIMI.effects.OptionalSignal
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideRefreshEffortActivityBelief
@@ -12204,16 +12206,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val reactivityFactor = safeReactivityFactor // Safety check added
         val basalMultiplier = basalLearner.getMultiplier()
 
-        // Construire le rapport de santé
-        val healthLines = listOf(
-            "═══════════════════════════════",
-            "🛡️ AIMI LEARNERS HEALTH",
-            "Storage: $storageReport",
-            "UnifiedReactivity: factor=${aimiFmt3(reactivityFactor)}",
-            "BasalLearner: multiplier=${aimiFmt3(basalMultiplier)}",
-            "PkPdEstimator: runtime-only",
-            "═══════════════════════════════"
-        )
+        val healthLines = learnerHealthLines(storageReport, reactivityFactor, basalMultiplier)
 
         // 📊 NOUVEAU: Afficher en HAUT de la page AIMI via rT.learnersInfo (section dédiée)
         val reactivityPct = (reactivityFactor * 100).toInt()
@@ -14425,18 +14418,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             cobGrams = windowCobG,
         )
         triggerBasalMlTrainingIfNeeded()
-        val gov = basalNeuralLearner.getGovernanceSnapshot()
         consoleLog.add(
-            "🧭 BASAL_GOV[$govTag]: action=${gov.action} conf=${aimiFmt2(gov.confidence)} " +
-                "n=${gov.sampleCount} hypo=${aimiFmt2(gov.hypoRate)} hypoG=${aimiFmt2(gov.hypoRateGovernance)} " +
-                "hypoAdj=${aimiFmt2(gov.hypoGovernanceAdjusted)} ant=${aimiFmt2(gov.anticipationRelief)} " +
-                "wMean=${aimiFmt2(gov.meanGovernanceWeight)} high=${aimiFmt2(gov.highRate)} " +
-                "mae=${aimiFmt1(gov.meanAbsTargetError)} latch=${gov.hypoHoldLatched} " +
-                "floorB=${gov.activeBasalFloor?.let { aimiFmt2(it) } ?: "-"} " +
-                "floorA=${gov.activeAggressivenessFloor?.let { aimiFmt2(it) } ?: "-"} " +
-                "wBolus=${if (windowBolusU.isFinite()) aimiFmt2(windowBolusU) else "?"}U " +
-                "wCob=${if (windowCobG.isFinite()) aimiFmt0(windowCobG) else "?"}g " +
-                "reason=${gov.reason}"
+            basalGovLine(
+                govTag = govTag,
+                gov = basalNeuralLearner.getGovernanceSnapshot(),
+                windowBolusU = windowBolusU,
+                windowCobG = windowCobG,
+            )
         )
     }
 

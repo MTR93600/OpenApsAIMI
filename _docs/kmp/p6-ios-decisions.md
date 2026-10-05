@@ -25,7 +25,7 @@ Ces valeurs ne sont pas la parité. Elles disparaissent avant activation.
 ## Écarts temporaires
 
 - Prédiction basse : le TBR temporaire est **0,25 U/h** pendant 30 min, avec les lignes Android `TREE_DEPLOYED trunk=SENSOR_UNCERTAIN conf=0.90 risk=CRITICAL kinetics=NO_STAGE` et `MEAL_CERTAINTY level=NONE tree=NONE rise=WEAK terminals=HYPO_CONFLICT effortVeto=false`. Les scènes nuit, repas et sport n’appellent pas encore le runtime.
-- Nuit : le TBR temporaire est **1,00 U/h** pendant 30 min, sans les lignes d’apprenants, d’export, `UAM=0.00`, ni le SMB `final=0.35` non délivré.
+- Nuit : le TBR temporaire est **1,00 U/h** pendant 30 min, avec les lignes d’apprenants d’un dépôt vide (`BasalLearner: multiplier=1.000`, `UnifiedReactivity: factor=1.000`, `BASAL_GOV[FINAL]` `action=WARMUP` `reason=Warmup`). Pas encore l’export, `UAM=0.00`, ni le SMB `final=0.35` non délivré.
 - ISF **45** (FC 110 sur 10 min, moyenne 60 min 88, ISF 50 × 0,90) n’est pas produit tant que le snapshot est vide.
 - Un maintien d’hystérésis laissé par le tick précédent reste en place, comme sur Android.
 
@@ -49,7 +49,7 @@ Ordre : d’abord ce qui change un débit ou le tick suivant, ensuite le modèle
 
 8. **TPO.** `onTickStart` avec la même horloge, le fichier `tpo/tpo_session.json`, et le même reversement de préférences. Une session post-hypo d’un cran abaisse le plafond SMB de **1,00 U** à **0,80 U**. La scène d’activité (requête 2 U, protection, amortissement repas 0,50) livre alors **0,20 U**, ligne `SMB capped by Activity/Recovery (Limit: 0.40)`. Passé le délai de 45 min, le plafond revient à **1,00 U** et la requête à **0,25 U**. Traces sans session : `zzPostHypoAtFiveSkipsTheDriftMicroSmb`, TBR **1,00 U/h** ; `basalDecisionEngineRaisesSportTemp`, TBR **1,30 U/h**. Le tick de nuit iOS avec session active garde le TBR **1,00 U/h** et ajoute la requête **0,20 U**.
 
-9. **Learners.** `BasalLearner`, `BasalNeuralLearner` et `UnifiedReactivityLearner` sont déjà en `commonMain`. Il manque l’état persisté identique (`aimi_basal_learner.json`, état du réseau, CSV), pas une autre politique. Départ à froid : multiplicateurs **1,0**, gouvernance `WARMUP`. `KEEP` seulement après les mêmes échantillons. Taille : le stockage de ces fichiers dans la persistance commune, puis les appels `process` au même endroit du tick (616 lignes côté Android, dont l’appel). Trace : `zzPostHypoAtFiveSkipsTheDriftMicroSmb`, TBR **1,00 U/h**, avec les lignes d’apprenants du tick de nuit.
+9. **Learners.** `BasalLearner`, `BasalNeuralLearner` et `UnifiedReactivityLearner` sont en `commonMain`. Le tick de nuit iOS les construit sur le même dossier que la session TPO et lit `aimi_basal_learner.json`, `aimi_unified_reactivity.json`, `basal_adaptive_weights.json`, `t3c_brain_weights.json`. Le CSV `basal_adaptive_records.csv` est celui qu’écrit `updateLearning`. Pas de table Room, pas de schéma 36. Départ à froid : multiplicateurs **1,0**, gouvernance `WARMUP` / `Warmup`. Un fichier illisible journalise `Load failed, using defaults (multiplier=1.0)` et reste à 1,0. `process` n’est pas appelé : la scène de nuit n’a pas l’échantillon de glycémie qu’Android passe à ces 616 lignes, et un appel inventé sortirait du départ à froid. `KEEP` seulement après les mêmes échantillons réalisés. Trace : tick de nuit, TBR **1,00 U/h**, lignes `multiplier=1.000`, `factor=1.000`, `BASAL_GOV[FINAL]` `action=WARMUP` `reason=Warmup`. Le sport reste **1,30 U/h** sans ces lignes.
 
 10. **TFLite et UAM.** Le même fichier `modelUAM.tflite` (4 504 octets). Rien n’est touché. L’inférence Kotlin commune n’est pas retenue. La reprise future exige le même interpréteur LiteRT C sur iOS, CPU d’abord, et un corpus dont le SMB est celui d’`Interpreter` 2.4.0 Android. Détail dans « Plans de PR ». Modèle absent : `predictSmbUam` **0 U**, `refine` identité, pas d’entraînement. Trace : `uamPostHypoReboundBridgesAShortTempBasal`, SMB prédit **0 U**, TBR **1,05 U/h**, 5 min.
 
@@ -91,9 +91,9 @@ Trace inchangée : quatre échantillons 80, 80, 80, puis 110 bpm, pas vides, ISF
 
 ### Learners
 
-- Les classes sont déjà en `commonMain`. Cette PR ajoute le stockage identique (`aimi_basal_learner.json`, état du réseau, CSV) dans la persistance commune, puis les appels `process` au même endroit du tick.
-- Départ à froid : multiplicateurs **1,0**, gouvernance `WARMUP`.
-- Trace : tick de nuit, TBR **1,00 U/h**, avec les lignes d’apprenants.
+- Les trois classes lisent et écrivent les fichiers Android dans le dossier AIMI déjà ouvert pour la session : `aimi_basal_learner.json`, `aimi_unified_reactivity.json`, `basal_adaptive_weights.json`, `t3c_brain_weights.json`, `basal_adaptive_records.csv`. Pas de SQLDelight, pas de table Room.
+- Le tick de nuit appelle la même mise en forme que `logLearnersHealth` et `BASAL_GOV`. Dépôt vide : multiplicateur **1,000**, facteur **1,000**, `action=WARMUP`, `reason=Warmup`, TBR **1,00 U/h**. Un JSON basal illisible journalise `BasalLearner: Load failed, using defaults (multiplier=1.0)`.
+- `process` et `updateLearning` ne sont pas dans le débit de nuit. Android les nourrit avec la glycémie du tick. Cette scène n’en a pas. Le CSV est prouvé par un appel direct d’`updateLearning`, qui laisse la gouvernance à `WARMUP` tant qu’aucun résultat réalisé n’est revenu. Le sport reste **1,30 U/h** et ne reçoit pas ces lignes.
 
 ### TFLite et UAM
 

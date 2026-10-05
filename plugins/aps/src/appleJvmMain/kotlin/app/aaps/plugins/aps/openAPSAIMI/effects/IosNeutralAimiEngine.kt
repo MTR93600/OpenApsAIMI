@@ -72,6 +72,9 @@ class IosNeutralAimiEngine(
         private set
 
     private val log = mutableListOf<String>()
+    private val learnerPersistence = LearnerColdPersistence()
+    private val learnerClock = LearnerColdClock()
+    private val learnerLog = LearnerColdLogger()
 
     override fun evaluate(
         input: AimiInputSnapshot,
@@ -131,7 +134,16 @@ class IosNeutralAimiEngine(
         return when (scene) {
             IosNeutralScene.MEAL -> meal(state, effortFactor)
             IosNeutralScene.SPORT -> temp(state, iosNeutralSportTbrUph(), "SPORT_TBR")
-            IosNeutralScene.NIGHT -> temp(state, iosNeutralNightTbrUph(), "NIGHT_TBR")
+            IosNeutralScene.NIGHT -> {
+                log += coldLearnerNightLines(
+                    storage = tpoStorage,
+                    preferences = tpoPreferences,
+                    persistence = learnerPersistence,
+                    dateUtil = learnerClock,
+                    log = learnerLog,
+                )
+                temp(state, iosNeutralNightTbrUph(), "NIGHT_TBR")
+            }
             IosNeutralScene.LOW_PREDICTION -> error("LOW_PREDICTION returns at the floor, before meal onset")
         }
     }

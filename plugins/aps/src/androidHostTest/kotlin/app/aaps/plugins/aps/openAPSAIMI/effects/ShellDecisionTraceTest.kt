@@ -38,6 +38,7 @@ import app.aaps.plugins.aps.openAPSAIMI.aimiEpochAtLocalTime
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.AimiUamHandler
 import app.aaps.plugins.aps.openAPSAIMI.DetermineBasalaimiSMB2
+import app.aaps.plugins.aps.openAPSAIMI.TherapyNotePersistence
 import app.aaps.plugins.aps.openAPSAIMI.NGRConfig
 import app.aaps.plugins.aps.openAPSAIMI.GlucoseStatusCalculatorAimi
 import app.aaps.plugins.aps.openAPSAIMI.advisor.gestation.GestationalAutopilot
@@ -1141,6 +1142,34 @@ class ShellDecisionTraceTest {
         }
         assertEquals(0.25, restored.insulinReq!!, 1e-9)
         assertEquals(INSULIN_REQ_ACTIVITY_TRACE, restoredTrace)
+    }
+
+    /**
+     * Empty learner files are Android's cold start: basal multiplier 1.0, reactivity factor 1.0,
+     * governance WARMUP with reason Warmup. The night rate stays 1.00 U/h. The stub that prints
+     * multiplier 0.000 and KEEP is left on the older goldens.
+     */
+    @Test
+    fun coldLearnersLogWarmupAndTheNightRateStaysOne() {
+        val storage = InMemoryAimiStorage()
+        val lines = coldLearnerNightLines(
+            storage = storage,
+            preferences = JsonBackedPreferences(storage),
+            persistence = TherapyNotePersistence(emptyList()),
+            dateUtil = dateUtil,
+            log = mock(AAPSLogger::class.java),
+        )
+        assertEquals(COLD_LEARNER_NIGHT_TRACE, lines.joinToString("\n"))
+        val rate = decideCalculateRate(
+            basal = 1.0,
+            currentBasal = 1.0,
+            multiplier = 1.0,
+            reason = "Night",
+            currentTemp = CurrentTemp(duration = 0, rate = 0.0, minutesrunning = 0),
+            rT = RT(runningDynamicIsf = false),
+            overrideSafety = false,
+        )
+        assertEquals(1.0, rate, 1e-9)
     }
 
     @Test
