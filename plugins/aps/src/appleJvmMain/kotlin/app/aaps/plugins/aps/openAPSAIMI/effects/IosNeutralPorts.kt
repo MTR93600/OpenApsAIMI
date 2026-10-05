@@ -53,7 +53,6 @@ object IosNeutralLog {
 
     /** Test option only. `evaluate` does not write this line. */
     const val HYSTERESIS_RESET_TEST = "IOS_NEUTRAL hysteresis=reset"
-    const val VIRTUAL_COB = "IOS_NEUTRAL virtualCob=0"
     const val EFFORT = "IOS_NEUTRAL effortSmbFactor=1.0"
     const val VETO = "IOS_NEUTRAL effortVeto=false"
     const val PATIENT = "IOS_NEUTRAL patientRuntime=skipped"
@@ -203,12 +202,6 @@ fun iosNeutralResetHysteresisForTest(log: MutableList<String>) {
     PhysiologicalPatternHysteresis.reset()
     InsulinSlopePreserveHysteresis.reset()
     log += IosNeutralLog.HYSTERESIS_RESET_TEST
-}
-
-fun iosNeutralVirtualCobG(log: MutableList<String>): Double {
-    val grams = 0.0
-    log += IosNeutralLog.VIRTUAL_COB
-    return grams
 }
 
 fun iosNeutralEffortSmbFactor(

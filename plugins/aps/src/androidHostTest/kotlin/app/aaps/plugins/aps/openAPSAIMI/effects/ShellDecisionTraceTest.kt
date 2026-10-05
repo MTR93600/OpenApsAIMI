@@ -77,6 +77,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternHyste
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorStatusTracker
 import app.aaps.plugins.aps.openAPSAIMI.scenario.InsulinSlopePreserveHysteresis
 import app.aaps.plugins.aps.openAPSAIMI.safety.MealSafetyContext
+import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioContextMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioMultipliersMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisId
@@ -2460,6 +2461,63 @@ class ShellDecisionTraceTest {
         assertEquals(322.0, rT.eventualBG!!, 1e-9)
         assertEquals(getField(tick, "predictedBg") as Float, rT.eventualBG!!.toFloat(), 1e-3f)
         assertEquals(ADVANCED_PREDICTION_COB_TRACE, trace)
+    }
+
+    @Test
+    fun undeclaredVirtualCobLogsNineGramsAndHeartRateOnTheSnapshotGatesIt() {
+        val prefs = recordingPreferences(
+            doubles = mapOf(
+                DoubleKey.OApsAIMIweight to 70.0,
+                DoubleKey.OApsAIMIUndeclaredCobMaxG to 25.0,
+            ),
+            bools = mapOf(BooleanKey.OApsAIMIUndeclaredCobEnabled to true),
+        )
+        tick = newTick(prefs)
+        armShell()
+        val estimator = getField(tick, "continuousStateEstimator") as ContinuousStateEstimator
+        whenever(estimator.getLastRa()).thenReturn(2.0)
+        setField(tick, "lastPhysioLatentState", PhysioLatentState(mealProb = 0.8))
+        val profile = profileStub()
+        whenever(profile.carb_ratio).thenReturn(10.0)
+        val meal = MealData(mealCOB = 0.0)
+        meal.slopeFromMinDeviation = 2.0
+        val declared = capture {
+            val grams = invokeNamed(
+                "estimateUndeclaredVirtualCob",
+                listOf(150.0, 3.0f, 40.0, profile, MealData(mealCOB = 36.0), 36.0),
+            ) as Double
+            assertEquals(0.0, grams, 1e-9)
+        }
+        assertEquals(VIRTUAL_COB_DECLARED_TRACE, declared)
+
+        val nine = capture {
+            val grams = invokeNamed(
+                "estimateUndeclaredVirtualCob",
+                listOf(150.0, 3.0f, 40.0, profile, meal, 0.0),
+            ) as Double
+            assertEquals(9.0, grams, 1e-9)
+        }
+        assertEquals(VIRTUAL_COB_NINE_GRAMS_TRACE, nine)
+
+        setField(
+            tick,
+            "physioAdapter",
+            mock(AIMIInsulinDecisionAdapterMTR::class.java, Answer { inv: InvocationOnMock ->
+                if (inv.method.name == "getLatestSnapshot") {
+                    HealthContextSnapshot(hrNow = 110, rhrResting = 60)
+                } else {
+                    null
+                }
+            }),
+        )
+        val gated = capture {
+            val grams = invokeNamed(
+                "estimateUndeclaredVirtualCob",
+                listOf(150.0, 3.0f, 40.0, profile, meal, 0.0),
+            ) as Double
+            assertEquals(0.0, grams, 1e-9)
+        }
+        assertEquals(VIRTUAL_COB_HR_GATE_TRACE, gated)
     }
 
     @Test
@@ -5491,6 +5549,26 @@ Failed to save AIMI Decision JSON: lateinit property appendCap has not been init
         private val MEAL_ABSORPTION_FIRST_WAVE_TRACE = """
             READ key=DoubleKey.OApsAIMIHighBg value=0.00
             LOG 🍽️ MEAL_ABSORPTION: FIRST_WAVE B=1.00 pri=true waves=1 (FIRST_WAVE B=1.00 π=0.85 K=1.00 T=0.00 P=0.35)
+        """.trimIndent()
+
+        private val VIRTUAL_COB_DECLARED_TRACE = """
+            READ key=BooleanKey.OApsAIMIUndeclaredCobEnabled value=true
+        """.trimIndent()
+
+        private val VIRTUAL_COB_NINE_GRAMS_TRACE = """
+            READ key=BooleanKey.OApsAIMIUndeclaredCobEnabled value=true
+            READ key=BooleanKey.OApsAIMIT3cCfrdMode value=false
+            READ key=DoubleKey.OApsAIMIweight value=70.00
+            READ key=DoubleKey.OApsAIMIUndeclaredCobMaxG value=25.00
+            LOG 🍽️ VIRTUAL_COB: g=9.0 raw=11.3 cap=25.0 gated=false reason=ra_meal_estimate
+        """.trimIndent()
+
+        private val VIRTUAL_COB_HR_GATE_TRACE = """
+            READ key=BooleanKey.OApsAIMIUndeclaredCobEnabled value=true
+            READ key=BooleanKey.OApsAIMIT3cCfrdMode value=false
+            READ key=DoubleKey.OApsAIMIweight value=70.00
+            READ key=DoubleKey.OApsAIMIUndeclaredCobMaxG value=25.00
+            LOG 🍽️ VIRTUAL_COB: g=0.0 raw=0.0 cap=0.0 gated=true reason=hr_inflammation
         """.trimIndent()
 
         private val ADVANCED_PREDICTION_COB_TRACE = """

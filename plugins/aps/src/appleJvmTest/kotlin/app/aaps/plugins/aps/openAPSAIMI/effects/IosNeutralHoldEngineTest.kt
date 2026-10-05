@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.effects
 
 import app.aaps.core.data.model.BS
+import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.data.model.ICfg
 import app.aaps.plugins.aimiengine.AimiCommonEngineSwitch
@@ -18,6 +19,7 @@ import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoPackId
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoPersistence
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoProposal
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoSessionManager
+import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionMemory
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
@@ -257,7 +259,8 @@ class IosNeutralHoldEngineTest {
         val log = neutral.portLog
         assertTrue(log.contains(IosNeutralLog.HYSTERESIS), log.toString())
         assertTrue(log.contains(IosNeutralLog.earlyScratch(IOS_EARLY_SCRATCH_WRITE_COUNT)), log.toString())
-        assertTrue(log.contains(IosNeutralLog.VIRTUAL_COB), log.toString())
+        assertFalse(log.any { it.startsWith("🍽️ VIRTUAL_COB:") }, log.toString())
+        assertEquals(0.0, neutral.virtualCobGrams)
         assertTrue(log.contains(IosNeutralLog.EFFORT), log.toString())
         assertTrue(log.contains(IosNeutralLog.VETO), log.toString())
         if (patientSkipped) {
@@ -435,6 +438,76 @@ class IosNeutralHoldEngineTest {
         val sportTbr = sportResult.command as AimiTherapyCommand.TempBasal
         assertEquals("1.30", aimiFmt2(sportTbr.rateUPerHour))
         assertFalse(sport.portLog.any { it.contains("AIMI LEARNERS HEALTH") }, sport.portLog.toString())
+    }
+
+    @Test
+    fun virtualCobUsesTheSnapshotAndThePreferenceAndLeavesTheMealDose() {
+        AimiCommonEngineSwitch.enabled = true
+        val (nineResult, nine) = mealWithVirtualCob(
+            snapshot = HealthContextSnapshot(),
+            signals = nineGramSignals(),
+        )
+        val smb = nineResult.command as AimiTherapyCommand.Smb
+        val tbr = nineResult.pairedCommand as AimiTherapyCommand.TempBasal
+        assertEquals("3.30", aimiFmt2(smb.insulinU))
+        assertEquals("2.00", aimiFmt2(tbr.rateUPerHour))
+        assertEquals(9.0, nine.virtualCobGrams)
+        assertTrue(
+            nine.portLog.contains(
+                "🍽️ VIRTUAL_COB: g=9.0 raw=11.3 cap=25.0 gated=false reason=ra_meal_estimate",
+            ),
+            nine.portLog.toString(),
+        )
+
+        val (inflamedResult, inflamed) = mealWithVirtualCob(
+            snapshot = HealthContextSnapshot(hrNow = 110, rhrResting = 60),
+            signals = nineGramSignals(),
+        )
+        assertEquals(0.0, inflamed.virtualCobGrams)
+        assertTrue(
+            inflamed.portLog.contains(
+                "🍽️ VIRTUAL_COB: g=0.0 raw=0.0 cap=0.0 gated=true reason=hr_inflammation",
+            ),
+            inflamed.portLog.toString(),
+        )
+        val inflamedSmb = inflamedResult.command as AimiTherapyCommand.Smb
+        assertEquals("3.30", aimiFmt2(inflamedSmb.insulinU))
+    }
+
+    private fun nineGramSignals() = VirtualCobTickSignals(
+        estimatedRaMgdlPerMin = 2.0,
+        isfMgdlPerU = 40.0,
+        carbRatioGPerU = 10.0,
+        bgMgdl = 150.0,
+        deltaMgdl5m = 3.0,
+        slopeFromMinDeviation = 2.0,
+        tdd24hU = 40.0,
+        mealProb = 0.8,
+    )
+
+    private fun mealWithVirtualCob(
+        snapshot: HealthContextSnapshot,
+        signals: VirtualCobTickSignals,
+    ): Pair<app.aaps.plugins.aimicontracts.AimiTickResult, IosNeutralAimiEngine> {
+        val storage = InMemoryAimiStorage()
+        val prefs = JsonBackedPreferences(storage)
+        prefs.put(BooleanKey.OApsAIMIUndeclaredCobEnabled, true)
+        prefs.put(DoubleKey.OApsAIMIweight, 70.0)
+        prefs.put(DoubleKey.OApsAIMIUndeclaredCobMaxG, 25.0)
+        val neutral = IosNeutralAimiEngine(
+            scene = IosNeutralScene.MEAL,
+            therapy = MemoryAimiTherapyReads(),
+            tpoStorage = storage,
+            tpoPreferences = prefs,
+        )
+        neutral.wearableSnapshot = snapshot
+        neutral.virtualCobSignals = signals
+        val result = HoldAimiEngine(neutral).evaluate(
+            AimiTestSnapshots.emptyInput(),
+            AimiTestSnapshots.emptyState(),
+            AimiTestSnapshots.emptyModels(),
+        )
+        return result to neutral
     }
 
     @Test

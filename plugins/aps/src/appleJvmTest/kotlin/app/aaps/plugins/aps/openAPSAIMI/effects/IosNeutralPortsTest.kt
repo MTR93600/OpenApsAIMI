@@ -12,7 +12,14 @@ class IosNeutralPortsTest {
     @Test
     fun virtualCobEffortVetoWearableAndSkippedPortsLogTheirMode() {
         val log = mutableListOf<String>()
-        assertEquals(0.0, iosNeutralVirtualCobG(log))
+        assertEquals(
+            0.0,
+            decideEstimateUndeclaredVirtualCob(
+                enabled = false,
+                declaredOrAdvisorCob = 36.0,
+                consoleLog = log,
+            ) { error("snapshot read while the preference is off") },
+        )
         assertEquals(1.0, iosNeutralEffortSmbFactor(log))
         assertFalse(iosNeutralEffortVeto(log))
         iosNeutralPatientRuntimeSkipped(log)
@@ -24,7 +31,6 @@ class IosNeutralPortsTest {
         assertFalse(wearable.isValid)
         assertEquals(
             listOf(
-                IosNeutralLog.VIRTUAL_COB,
                 IosNeutralLog.EFFORT,
                 IosNeutralLog.VETO,
                 IosNeutralLog.PATIENT,

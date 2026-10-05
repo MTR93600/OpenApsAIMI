@@ -9,8 +9,11 @@ import app.aaps.plugins.aimicontracts.AimiTherapyCommand
 import app.aaps.plugins.aimicontracts.AimiTickResult
 import app.aaps.plugins.aimiengine.AimiEngine
 import app.aaps.plugins.aimiengine.HoldAimiEngine
+import app.aaps.core.keys.BooleanKey
+import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
+import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.tpo.JsonBackedPreferences
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoPersistence
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoSessionStatus
@@ -60,6 +63,19 @@ class IosNeutralAimiEngine(
     var mealOnset: Boolean? = null
         private set
 
+    /** Grams from [decideEstimateUndeclaredVirtualCob]. Zero when the preference is off. */
+    var virtualCobGrams: Double = 0.0
+        private set
+
+    /** Null reads the platform cache. A test passes the snapshot the tick would have cached. */
+    internal var wearableSnapshot: HealthContextSnapshot? = null
+
+    /** Empty Android tick: no Ra and meal probability 0, so the estimator gates. */
+    internal var virtualCobSignals: VirtualCobTickSignals = VirtualCobTickSignals()
+
+    /** Already declared carbs. The neutral scenes have none. */
+    internal var declaredCobG: Double = 0.0
+
     /** SMB ceiling after the session check. Null until [evaluate] runs. */
     var tpoMaxSmb: Double? = null
         private set
@@ -85,8 +101,37 @@ class IosNeutralAimiEngine(
         iosNeutralTickStart(log)
         val writes = scratch.reset(effectiveDiaHours = 5.0, effectivePeakMinutes = 75.0, noise = 0)
         log += IosNeutralLog.earlyScratch(writes)
-        val virtualCobG = iosNeutralVirtualCobG(log)
-        val wearable = iosPlatformWearable(log)
+        val wearable = wearableSnapshot?.also {
+            if (!it.isValid) log += IosNeutralLog.WEARABLE
+        } ?: iosPlatformWearable(log)
+        val virtualCobG = decideEstimateUndeclaredVirtualCob(
+            enabled = tpoPreferences.get(BooleanKey.OApsAIMIUndeclaredCobEnabled),
+            declaredOrAdvisorCob = declaredCobG,
+            consoleLog = log,
+        ) {
+            val signals = virtualCobSignals
+            undeclaredVirtualCobInput(
+                snapshot = wearable,
+                estimatedRaMgdlPerMin = signals.estimatedRaMgdlPerMin,
+                isfMgdlPerU = signals.isfMgdlPerU,
+                carbRatioGPerU = signals.carbRatioGPerU,
+                bgMgdl = signals.bgMgdl,
+                deltaMgdl5m = signals.deltaMgdl5m,
+                slopeFromMinDeviation = signals.slopeFromMinDeviation,
+                patientWeightKg = tpoPreferences.get(DoubleKey.OApsAIMIweight),
+                tdd24hU = signals.tdd24hU,
+                activityContextActive = signals.activityContextActive,
+                mealProb = signals.mealProb,
+                falseMealSuppression = signals.falseMealSuppression,
+                exerciseLockoutActive = signals.exerciseLockoutActive,
+                postHypoActive = signals.postHypoActive,
+                cfrdExacerbationActive =
+                    tpoPreferences.get(BooleanKey.OApsAIMIT3cCfrdMode) &&
+                        tpoPreferences.get(BooleanKey.OApsAIMIT3cCfrdExacerbationMode),
+                maxGramsPref = tpoPreferences.get(DoubleKey.OApsAIMIUndeclaredCobMaxG),
+            )
+        }
+        virtualCobGrams = virtualCobG
         therapyCaches = readTherapyCaches(
             reads = therapy,
             nowMs = aimiWallClockMs(),
@@ -109,7 +154,8 @@ class IosNeutralAimiEngine(
         if (session?.status == TpoSessionStatus.ACTIVE) {
             tpoInsulinReqU = activityProtectionInsulinReq(ceiling.maxSmb, log)
         }
-        check(virtualCobG == 0.0)
+        val cobPreferenceOff = !tpoPreferences.get(BooleanKey.OApsAIMIUndeclaredCobEnabled) || declaredCobG > 0.0
+        check(!cobPreferenceOff || virtualCobG == 0.0)
         check(effortFactor == 1.0)
         check(!veto)
         check(!wearable.isValid)

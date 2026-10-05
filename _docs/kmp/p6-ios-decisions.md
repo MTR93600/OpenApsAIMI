@@ -12,12 +12,12 @@ Règle d’activation : l’interrupteur iOS ne peut être allumé qu’une fois
 
 Ces valeurs ne sont pas la parité. Elles disparaissent avant activation.
 
-- COB virtuel : **0 g**.
+- COB virtuel : la fonction Android. Préférence coupée, ou glucides déjà déclarés : **0 g**, sans ligne. Préférence allumée : la ligne `VIRTUAL_COB` de l’estimateur, lue sur le snapshot.
 - Effort : facteur **1,0**, pas d’assessment.
 - Runtime patient : appelé sur la prédiction basse, après le plancher PKPD. Repas, sport et nuit restent `IOS_NEUTRAL patientRuntime=skipped`.
 - Session TPO : appelée. Sans session, nuit **1,00 U/h** et sport **1,30 U/h**. Session active : plafond SMB **0,80 U**, requête d’activité **0,20 U**.
 - Snapshot wearable : **vide**.
-- `resetEarlyScratch` : les mêmes 27 affectations que l’adaptateur Android. Le texte plus bas disait 29. Le test verrouille 27.
+- `resetEarlyScratch` : les mêmes 27 affectations que l’adaptateur Android, dans le même ordre. Le compte 29 était faux. Le test verrouille 27. Rien à ajouter.
 - Veto d’effort : **faux** sans assessment.
 - Plancher PKPD : stocké et journalisé, **pas relu** dans le débit. Android non plus ne relit pas ce JSON pour doser. La parité est la même ligne de journal, au même endroit du tick.
 - Hystérésis : par défaut, le même cycle de vie qu’Android. Les singletons de processus ne sont pas remis à zéro au début du tick. `iosNeutralResetHysteresisForTest` est une option de test. `evaluate` ne l’appelle pas.
@@ -33,6 +33,26 @@ Ces valeurs ne sont pas la parité. Elles disparaissent avant activation.
 
 Ordre : d’abord ce qui change un débit ou le tick suivant, ensuite le modèle et l’export. La taille est le sous-système à écrire, pas un calendrier. Chaque ligne se prouve par une trace déjà verrouillée sur Android, rejouée octet pour octet sur iOS.
 
+## État de parité
+
+`fait` : la trace verrouillée est la même des deux côtés. `partiel` : une partie du chemin l’est, le reste non. `bloqué` : une décision interdit d’avancer. Les PR sont des brouillons, sauf #213 et #217, déjà mergées dans l’étude.
+
+| Point | Statut | PR | Encore manquant pour l’égalité octet pour octet |
+|---|---|---|---|
+| Hystérésis | fait | #215, #218 | Rien. Le défaut iOS n’appelle pas `reset()`. Le maintien traverse le tick, comme le singleton Android. |
+| Wearable, FC, HealthKit | partiel | #224 | HealthKit remplit un cache hors tick. Le tick lit ce cache. Il reste à le brancher sur une vraie session HealthKit. Tant que le cache est vide, la ligne est `IOS_NEUTRAL wearable snapshot empty`. |
+| Lectures pas, FC, bolus | fait | #223, #227 | Rien sur la trace ISF **45**, `HR_TREND_ISF x0.90`. La session HealthKit qui remplirait le cache n’est pas branchée. |
+| Effort | fait | #222 | Rien sur le repas : facteur **1,0**, assessment null, SMB **3,30 U**, TBR **2,00 U/h**. Une exertion réelle qui baisserait le SMB n’a pas de nombre verrouillé. |
+| Veto et `detectMealOnset` | partiel | #214, #220 | Le veto est commun. Android le passe déjà à `detectMealOnset`. Le tick iOS passe encore un veto faux séparé, pas `decideEffortSuppressesUndeclaredMeal`. Sport : onset faux, TBR **1,30 U/h**. |
+| COB virtuel | fait | cette branche | Rien sur les deux retours Android (préférence coupée, ou **36 g** déclarés : **0 g**, eventual **322**, pas de ligne) ni sur la ligne d’estimateur. Préférence allumée, Ra 2,0, repas 0,8, snapshot vide : `g=9.0 raw=11.3 cap=25.0 reason=ra_meal_estimate`. Le même snapshot avec FC 110 et repos 60 : `reason=hr_inflammation`, **0 g**. Le SMB repas reste **3,30 U**. Ces grammes ne nourrissent pas encore la courbe de prédiction iOS. |
+| Runtime patient | fait | #226 | Rien sur la prédiction basse : TBR **0,25 U/h** et les deux lignes d’arbre. Repas, sport et nuit restent `patientRuntime=skipped`. |
+| Plancher PKPD | fait | #221 | Rien sur la ligne `raw=39`. Elle n’est pas relue dans le débit. Les autres scènes ne l’ont pas. |
+| Session TPO | fait | #228 | Rien. JSON, pas Room. Plafond **0,80 U**, requête **0,20 U**, nuit **1,00 U/h**, sport **1,30 U/h**. |
+| Learners | partiel | #229 | Les fichiers sont lus. Départ à froid : **1,000** et `WARMUP`, nuit **1,00 U/h**. `process` n’est pas appelé sur la scène nuit : elle n’a pas la glycémie Android. |
+| `resetEarlyScratch` | fait | #215 | Rien. **27** écritures, le même ordre que l’adaptateur Android. Le mémo disait 29 : ce compte était faux. Ajouter deux écritures changerait Android ou inventerait des champs qu’il n’a pas. |
+| TFLite / UAM | bloqué | #225, ADR D4 | Le modèle n’est pas branché. Reprise seulement avec le même interpréteur LiteRT C, CPU d’abord, et un corpus dont le SMB est celui d’`Interpreter` 2.4.0 Android. |
+| `AimiDecisionContext` | partiel | #219 | Le type et `toMedicalJson()` sont communs. La fabrique qui remplit les champs reste dans la coquille Android. |
+
 1. **Hystérésis.** Déjà les mêmes `object` que `dev_OAPSAIMI` (`MealAbsorptionPhaseHysteresis`, `MealAbsorptionMemory`, `EndogenousPhaseHysteresis`, `PhysiologicalPatternHysteresis`, `InsulinSlopePreserveHysteresis`). Il ne reste pas de second cycle de vie. Le défaut iOS n’appelle pas `reset()`. Taille : un test de deux ticks, rien d’autre. Trace : `lowPredictionRequestsAQuarterBasal` sur instance propre, TBR **0,25 U/h** sans la ligne `meal absorption hysteresis hold` ; puis un tick `FIRST_WAVE` suivi d’un tick `NONE` qui garde `meal absorption hysteresis hold`, comme le singleton Android.
 
 2. **Wearable, FC, et persistance des pas, de la FC et des bolus.** HealthKit remplit le même `HealthContextSnapshot` (pas 5/15/60 min, FC, FC de repos, fenêtres 10 et 60 min). Le contrat de lecture est commun. Le tick iOS lit `HeartRate`, `StepsCount` et `Bolus` dans Room KMP `2.8.4` (déjà dans le dépôt, Kotlin `2.4.10`, AGP `9.4.0`). Pas de SQLDelight. Les 13 migrations `22→23` … `34→35` sont en commun et passées au constructeur iOS avant tout schéma suivant. Un fichier neuf naît au schéma 35, vide. Android continue d’appeler `persistenceLayer`. Trace : `autosensHalfDoublesScheduledBasalAndRestingHeartRateStrengthensIsf`, les mêmes lignes Room, ISF 50 × 0,90 = **45**, ligne `HR_TREND_ISF x0.90`.
@@ -41,7 +61,7 @@ Ordre : d’abord ce qui change un débit ou le tick suivant, ensuite le modèle
 
 4. **Veto.** La même règle qu’Android : EXERTION, ACTIVE ou RECENT_EFFORT, confiance ≥ 0,30, pas de repas déclaré, COB < 12 g. `decideDetectMealOnset` reçoit ce booléen. Taille : déplacer `effortSuppressesUndeclaredMeal` en commun, une fois l’assessment porté. Trace : `basalDecisionEngineRaisesSportTemp`, BG 180, delta +5, accélération 0, veto faux, onset faux, TBR **1,30 U/h**.
 
-5. **COB virtuel.** La même préférence `OApsAIMIUndeclaredCobEnabled`, le même estimateur de Ra, le poids et le TDD. Glucides déjà déclarés : 0 g virtuel. Taille : les 38 lignes et l’estimateur, après HealthKit. Trace : `advancedPredictionPublishesEventualFromDeclaredCob`, COB déclaré **36 g**, glycémie 180, eventual **322**.
+5. **COB virtuel.** `decideEstimateUndeclaredVirtualCob`. Préférence coupée, ou glucides déjà déclarés : **0 g**, sans lire le snapshot, sans ligne. Sinon l’estimateur lit le snapshot, le poids, le plafond, la Ra et la probabilité de repas. Trace déclarée : `advancedPredictionPublishesEventualFromDeclaredCob`, COB **36 g**, eventual **322**, pas de ligne. Trace estimateur : **9,0 g**, `reason=ra_meal_estimate`. Trace snapshot : FC 110 et repos 60, **0 g**, `reason=hr_inflammation`. Le SMB repas reste **3,30 U**.
 
 6. **Runtime patient.** Appeler les 221 lignes : état patient, arbre, Harmonia, avec le snapshot du tick. Taille : le plus gros port physio, après le snapshot. Il dépend du capteur et du cycle. Trace : `lowPredictionRequestsAQuarterBasal`, `TREE_DEPLOYED trunk=SENSOR_UNCERTAIN`, `MEAL_CERTAINTY level=NONE`, TBR **0,25 U/h**, octet pour octet.
 
@@ -49,7 +69,7 @@ Ordre : d’abord ce qui change un débit ou le tick suivant, ensuite le modèle
 
 8. **TPO.** `onTickStart` avec la même horloge, le fichier `tpo/tpo_session.json`, et le même reversement de préférences. Une session post-hypo d’un cran abaisse le plafond SMB de **1,00 U** à **0,80 U**. La scène d’activité (requête 2 U, protection, amortissement repas 0,50) livre alors **0,20 U**, ligne `SMB capped by Activity/Recovery (Limit: 0.40)`. Passé le délai de 45 min, le plafond revient à **1,00 U** et la requête à **0,25 U**. Traces sans session : `zzPostHypoAtFiveSkipsTheDriftMicroSmb`, TBR **1,00 U/h** ; `basalDecisionEngineRaisesSportTemp`, TBR **1,30 U/h**. Le tick de nuit iOS avec session active garde le TBR **1,00 U/h** et ajoute la requête **0,20 U**.
 
-9. **Learners.** `BasalLearner`, `BasalNeuralLearner` et `UnifiedReactivityLearner` sont en `commonMain`. Le tick de nuit iOS les construit sur le même dossier que la session TPO et lit `aimi_basal_learner.json`, `aimi_unified_reactivity.json`, `basal_adaptive_weights.json`, `t3c_brain_weights.json`. Le CSV `basal_adaptive_records.csv` est celui qu’écrit `updateLearning`. Pas de table Room, pas de schéma 36. Départ à froid : multiplicateurs **1,0**, gouvernance `WARMUP` / `Warmup`. Un fichier illisible journalise `Load failed, using defaults (multiplier=1.0)` et reste à 1,0. `process` n’est pas appelé : la scène de nuit n’a pas l’échantillon de glycémie qu’Android passe à ces 616 lignes, et un appel inventé sortirait du départ à froid. `KEEP` seulement après les mêmes échantillons réalisés. Trace : tick de nuit, TBR **1,00 U/h**, lignes `multiplier=1.000`, `factor=1.000`, `BASAL_GOV[FINAL]` `action=WARMUP` `reason=Warmup`. Le sport reste **1,30 U/h** sans ces lignes.
+9. **Learners.** `BasalLearner`, `BasalNeuralLearner` et `UnifiedReactivityLearner` sont en `commonMain`. Le tick de nuit iOS les construit sur le même dossier que la session TPO et lit `aimi_basal_learner.json`, `aimi_unified_reactivity.json`, `basal_adaptive_weights.json`, `t3c_brain_weights.json`. Le CSV `basal_adaptive_records.csv` est celui qu’écrit `updateLearning`. Pas de table Room, pas de schéma 36. Départ à froid : multiplicateurs **1,0**, gouvernance `WARMUP` / `Warmup`. Un fichier illisible journalise `Load failed, using defaults (multiplier=1.0)` et reste à 1,0. `process` n’est pas appelé sur la scène nuit : elle n’a pas la glycémie Android. `KEEP` seulement après les mêmes échantillons réalisés. Trace : tick de nuit, TBR **1,00 U/h**, lignes `multiplier=1.000`, `factor=1.000`, `BASAL_GOV[FINAL]` `action=WARMUP` `reason=Warmup`. Le sport reste **1,30 U/h** sans ces lignes.
 
 10. **TFLite et UAM.** Le même fichier `modelUAM.tflite` (4 504 octets). Rien n’est touché. L’inférence Kotlin commune n’est pas retenue. La reprise future exige le même interpréteur LiteRT C sur iOS, CPU d’abord, et un corpus dont le SMB est celui d’`Interpreter` 2.4.0 Android. Détail dans « Plans de PR ». Modèle absent : `predictSmbUam` **0 U**, `refine` identité, pas d’entraînement. Trace : `uamPostHypoReboundBridgesAShortTempBasal`, SMB prédit **0 U**, TBR **1,05 U/h**, 5 min.
 
@@ -121,9 +141,9 @@ Scène verrouillée : COB déclaré **36 g**, glycémie 180, eventual publié **
 | Même préférence qu’Android, coupée | Même eventual **322** |
 | HealthKit branché et préférence allumée | Peut ajouter des grammes. Aucune trace ne verrouille le TBR qui en sortirait |
 
-Recommandation : **0 g**.
+Recommandation retenue : la fonction Android. Préférence coupée : **0 g**, eventual **322**. Préférence allumée : la ligne de l’estimateur, pas un second calcul.
 
-Côté iOS : HealthKit (pas, FC), préférence, estimateur de Ra. Sans eux, 0 g.
+Côté iOS : le tick appelle la même fonction avec le snapshot du cache et `tpo/aimi_preferences.json`. HealthKit remplit ce cache hors tick. Une vraie session HealthKit n’est pas encore branchée.
 
 ## `refreshEffortActivityBelief`
 
@@ -197,11 +217,11 @@ Scène verrouillée : prédiction basse sur une instance fraîche, plancher `raw
 
 | Option | Effet sur la scène |
 |---|---|
-| Mêmes 29 écritures | Chaque tick repart comme l’instance fraîche : TBR **0,25 U/h**, plancher 39 |
+| Mêmes 27 écritures, même ordre | Chaque tick repart comme l’instance fraîche : TBR **0,25 U/h**, plancher 39 |
 | Ne pas remettre à zéro | Un tick suivant peut garder le one-shot ou le plancher précédent. Aucune trace de second tick ne verrouille un autre débit |
-| Remettre seulement les drapeaux qui coupent l’insuline | Le TBR **0,25 U/h** de l’instance fraîche n’est plus le contrat complet |
+| Ajouter deux écritures pour arriver à 29 | Android n’a pas ces deux champs. Le tick Android changerait, ou iOS écrirait ce qu’Android n’écrit pas |
 
-Recommandation : **les 29 écritures**, au début de chaque tick.
+Recommandation : **les 27 écritures**, au début de chaque tick, dans l’ordre de l’adaptateur. Le 29 était un mauvais compte.
 
 Côté iOS : ce sont des champs du tick. Pas de HealthKit.
 

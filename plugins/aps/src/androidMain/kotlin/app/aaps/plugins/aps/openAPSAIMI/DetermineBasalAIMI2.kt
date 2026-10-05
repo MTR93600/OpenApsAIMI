@@ -248,6 +248,8 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.decidePublishDoseTerminalAuthori
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiBasalDecisionEngineCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideBasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetectMealOnset
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideEstimateUndeclaredVirtualCob
+import app.aaps.plugins.aps.openAPSAIMI.effects.undeclaredVirtualCobInput
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPkpdSoftFloorWrite
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideRecordPkpdSoftFloor
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiContextModuleCalls
@@ -12784,43 +12786,34 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         profile: OapsProfileAimi,
         mealData: MealData,
         declaredOrAdvisorCob: Double,
-    ): Double {
-        if (!preferences.get(BooleanKey.OApsAIMIUndeclaredCobEnabled)) return 0.0
-        // Explicit carbs already drive the curve — do not stack a virtual estimate on top.
-        if (declaredOrAdvisorCob > 0.0) return 0.0
-
+    ): Double = decideEstimateUndeclaredVirtualCob(
+        enabled = preferences.get(BooleanKey.OApsAIMIUndeclaredCobEnabled),
+        declaredOrAdvisorCob = declaredOrAdvisorCob,
+        consoleLog = consoleLog,
+    ) {
+        // Explicit carbs already returned above. These reads are the snapshot and the preferences.
         val snapshot = physioAdapter.getLatestSnapshot()
-        val hrElevation = (snapshot.hrNow - snapshot.rhrResting)
-        val hrInflammationElevated = snapshot.hrNow > 0 && snapshot.rhrResting > 0 && hrElevation >= 15
         val cfrdExacerbationActive =
             preferences.get(BooleanKey.OApsAIMIT3cCfrdMode) &&
                 preferences.get(BooleanKey.OApsAIMIT3cCfrdExacerbationMode)
-        val tdd24h = resolveTdd24hForExport()
-
-        val result = UndeclaredCobEstimator.estimate(
-            UndeclaredCobEstimator.Input(
-                estimatedRaMgdlPerMin = continuousStateEstimator.getLastRa(),
-                isfMgdlPerU = sens,
-                carbRatioGPerU = profile.carb_ratio,
-                bgMgdl = bg,
-                deltaMgdl5m = delta.toDouble(),
-                slopeFromMinDeviation = mealData.slopeFromMinDeviation,
-                patientWeightKg = preferences.get(DoubleKey.OApsAIMIweight),
-                tdd24hU = tdd24h,
-                stepsLast5m = snapshot.stepsLast5m,
-                stepsLast15m = snapshot.stepsLast15m,
-                activityDetected = aimiContextActivityActive || snapshot.activityState != "IDLE",
-                mealProb = lastPhysioLatentState?.mealProb ?: 0.0,
-                falseMealSuppression = lastPhysioLatentState?.falseMealSuppression ?: false,
-                exerciseLockoutActive = exerciseInsulinLockoutActive,
-                postHypoActive = lastPostHypoDeliveryAuthority.active,
-                cfrdExacerbationActive = cfrdExacerbationActive,
-                hrInflammationElevated = hrInflammationElevated,
-                maxGramsPref = preferences.get(DoubleKey.OApsAIMIUndeclaredCobMaxG),
-            )
+        undeclaredVirtualCobInput(
+            snapshot = snapshot,
+            estimatedRaMgdlPerMin = continuousStateEstimator.getLastRa(),
+            isfMgdlPerU = sens,
+            carbRatioGPerU = profile.carb_ratio,
+            bgMgdl = bg,
+            deltaMgdl5m = delta.toDouble(),
+            slopeFromMinDeviation = mealData.slopeFromMinDeviation,
+            patientWeightKg = preferences.get(DoubleKey.OApsAIMIweight),
+            tdd24hU = resolveTdd24hForExport(),
+            activityContextActive = aimiContextActivityActive,
+            mealProb = lastPhysioLatentState?.mealProb ?: 0.0,
+            falseMealSuppression = lastPhysioLatentState?.falseMealSuppression ?: false,
+            exerciseLockoutActive = exerciseInsulinLockoutActive,
+            postHypoActive = lastPostHypoDeliveryAuthority.active,
+            cfrdExacerbationActive = cfrdExacerbationActive,
+            maxGramsPref = preferences.get(DoubleKey.OApsAIMIUndeclaredCobMaxG),
         )
-        consoleLog.add("🍽️ VIRTUAL_COB: ${result.toLogString()}")
-        return result.grams
     }
 
     private fun applyAdvancedPredictions(
