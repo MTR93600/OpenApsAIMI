@@ -82,6 +82,7 @@ import app.aaps.plugins.aps.openAPSAIMI.ports.AimiBehaviorProfileSource
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiHealthContext
 import app.aaps.plugins.aps.openAPSAIMI.recursive.AutodriveModeHint
 import app.aaps.plugins.aps.openAPSAIMI.recursive.BasalFirstChannel
+import app.aaps.plugins.aps.openAPSAIMI.recursive.T3cBasalFirstResolution
 import app.aaps.plugins.aps.openAPSAIMI.recursive.DoseChannelResolution
 import app.aaps.plugins.aps.openAPSAIMI.recursive.HypoGuardMode
 import app.aaps.plugins.aps.openAPSAIMI.recursive.MealChannelHint
@@ -1735,6 +1736,105 @@ class ShellDecisionTraceTest {
         assertEquals(RBT_MERGE_LIFT_TRACE, trace)
     }
 
+    @Test
+    fun t3cBasalFirstRampsTheNativeRate() {
+        tick = newTick(
+            recordingPreferences(
+                doubles = emptyMap(),
+                bools = mapOf(
+                    BooleanKey.OApsAIMIT3cBrittleMode to true,
+                    BooleanKey.OApsAIMIRecursiveBeliefAuthority to true,
+                ),
+            ),
+        )
+        armShell()
+        val profile = profileStub()
+        whenever(profile.min_bg).thenReturn(80.0)
+        setField(tick, "bg", 180.0)
+        setField(tick, "delta", 0.0f)
+        setField(tick, "shortAvgDelta", 0.0f)
+        setField(tick, "targetBg", 100.0f)
+        setField(tick, "predictedBg", 180.0f)
+        setField(tick, "eventualBG", 180.0)
+        setField(tick, "iob", 1.0f)
+        setField(tick, "maxIob", 10.0)
+        setField(tick, "exerciseInsulinLockoutActive", false)
+        setField(tick, "lastT3cHistoricalBypassNeutralizedThisTick", true)
+        setField(
+            tick,
+            "lastRecursiveAuthorityGateDecision",
+            RecursiveBeliefAuthorityGate.Decision(
+                requestedAuthority = ReleaseAuthority.NONE,
+                maxAllowedAuthority = ReleaseAuthority.NONE,
+                effectiveAuthority = ReleaseAuthority.NONE,
+                readinessScore = 0.0,
+                liftBlend = 0.0,
+                reasonCodes = emptyList(),
+            ),
+        )
+        val t3c = T3cBasalFirstResolution(
+            active = true,
+            eligible = true,
+            basalDemandRateUph = 2.0,
+            boundedRateUph = 2.0,
+            maxBasalCapUph = 3.0,
+            anticipationStrength = 1.0,
+            mealConflict = false,
+            postHypoBlock = false,
+            exerciseBlock = false,
+            hardSafetyBlock = false,
+            dominantBlocker = null,
+        )
+        setField(
+            tick,
+            "lastRecursiveBeliefSnapshot",
+            RecursiveBeliefSnapshot(
+                scales = emptyList(),
+                tensions = emptyList(),
+                paradoxes = emptyList(),
+                resolutions = DoseChannelResolution(
+                    smbDemandU = 0.0,
+                    tbrDemandFraction = 0.0,
+                    waitBias = 0.0,
+                    dominantScaleMinutes = 30,
+                    releaseAuthority = ReleaseAuthority.NONE,
+                    hypoGuardMode = HypoGuardMode.FULL,
+                    autodriveModeHint = AutodriveModeHint.V3,
+                    mealChannel = MealChannelHint.NORMAL,
+                    suppressTrajBasalShift = false,
+                    hypoMinPredIgnored = false,
+                    reasonCodes = emptyList(),
+                    basalFirstChannel = BasalFirstChannel.T3C_BASAL_FIRST,
+                    t3cBasalFirst = t3c,
+                ),
+                mr7Trace = emptyList(),
+            ),
+        )
+        val ctx = tickContext(profile, glucose = 180.0)
+        val rT = RT(runningDynamicIsf = false)
+        val bundle = privateData(
+            "AimiPostBasalEngineFinalizeBundle",
+            listOf(
+                ctx,
+                profile,
+                profile,
+                rT,
+                BasalDecisionEngine.Decision(rate = 1.0, duration = 30, overrideSafety = false),
+                false,
+                null,
+                0.0,
+                1,
+            ),
+        )
+        lateinit var applied: Any
+        val trace = capture {
+            applied = invokeNamed("planT3cBasalFirstProduction", listOf(bundle))!!
+        }
+        assertEquals(1.30, resultField(applied, "rateUph") as Double, 1e-9)
+        assertEquals(30, resultField(applied, "durationMin"))
+        assertEquals(T3C_BASAL_FIRST_TRACE, trace)
+    }
+
     private fun resultField(target: Any, name: String): Any? {
         val field = target.javaClass.getDeclaredField(name)
         field.isAccessible = true
@@ -2634,6 +2734,34 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val T3C_BASAL_FIRST_TRACE = """
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=true
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefShadow value=false
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefAuthority value=true
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefWavelet value=false
+            READ key=BooleanKey.OApsAIMIMealHyperBypassEnabled value=false
+            READ key=BooleanKey.OApsAIMITreeMealRiseFrontLoad value=false
+            READ key=BooleanKey.OApsAIMIBasalChannelSafetyGuards value=false
+            READ key=BooleanKey.OApsAIMIEffectiveIobReleaseEnabled value=false
+            READ key=AimiLongKey.LastPrebolusTime value=0
+            READ key=DoubleKey.OApsAIMIHighBg value=0.00
+            READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+            LOG 🌳 T3C_NATIVE: ready rate=1.30U/h demand=2.00U/h
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=true
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefShadow value=false
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefAuthority value=true
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefWavelet value=false
+            READ key=BooleanKey.OApsAIMIMealHyperBypassEnabled value=false
+            READ key=BooleanKey.OApsAIMITreeMealRiseFrontLoad value=false
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=true
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=true
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefShadow value=false
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefAuthority value=true
+            READ key=BooleanKey.OApsAIMIRecursiveBeliefWavelet value=false
+            READ key=BooleanKey.OApsAIMIMealHyperBypassEnabled value=false
+            READ key=BooleanKey.OApsAIMITreeMealRiseFrontLoad value=false
+        """.trimIndent()
+
         private val RBT_MERGE_LIFT_TRACE = """
             LOG 🪜 RBT_GATE: req=HARD eff=HARD score=1.00 blend=1.00 reasons=LIFT
         """.trimIndent()
