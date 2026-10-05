@@ -39,6 +39,21 @@ internal fun aimiLocalHour(
 ): Int = aimiCivilClock(epochMs, zone).hour
 
 /**
+ * Epoch of [hour]:[minute]:[second] on the local calendar day of [dayEpochMs].
+ * Tests pin the tick with this. Production keeps reading [aimiWallClockMs].
+ */
+internal fun aimiEpochAtLocalTime(
+    hour: Int,
+    minute: Int = 0,
+    second: Int = 0,
+    zone: TimeZone = TimeZone.currentSystemDefault(),
+    dayEpochMs: Long = 1_700_000_000_000L,
+): Long {
+    val date = Instant.fromEpochMilliseconds(dayEpochMs).toLocalDateTime(zone).date
+    return LocalDateTime(date, LocalTime(hour, minute, second)).toInstant(zone).toEpochMilliseconds()
+}
+
+/**
  * `LocalTime.now().isAfter(start) && LocalTime.now().isBefore(end)`, exclusive on both ends.
  * Nanoseconds count: a time that shares the start's second but has a later fraction is inside.
  */

@@ -124,28 +124,33 @@ class IosSecureEncryptTest {
      *
      * The last two hex digits are one ciphertext byte. Writing "ff" over them leaves the
      * string unchanged when that byte is already 0xFF, which is 1 in 256 for a fresh GCM
-     * tag, and the hash then still matches. XOR 0x01 on that byte always changes it.
-     * A header check that stops rejecting a changed body still fails here. No retry.
+     * tag, and the hash then still matches. Two XOR `0x01` mutations always change a byte:
+     * the last ciphertext byte (#153) and the middle ciphertext byte (#237). No retry.
      */
     @Test
     fun `a tampered body no longer validates`() {
         val encrypted = secure.encrypt("secret", "alias1")
-        val tampered = tamperSecureEnvelope(encrypted)
+        val middle = tamperSecureEnvelopeMiddleByte(encrypted)
+        val last = tamperSecureEnvelopeLastByte(encrypted)
 
-        assertNotEquals(encrypted, tampered)
-        assertFalse(secure.isValidDataString(tampered))
-        assertEquals("", secure.decrypt(tampered))
+        assertNotEquals(encrypted, middle)
+        assertNotEquals(encrypted, last)
+        assertFalse(secure.isValidDataString(middle))
+        assertFalse(secure.isValidDataString(last))
+        assertEquals("", secure.decrypt(middle))
+        assertEquals("", secure.decrypt(last))
     }
 
     /**
      * The collision the random IV hides: a ciphertext that already ends in `ff`.
      * The header is a real SHA-256 of that body, so the un-tampered string validates.
+     * This locks the #153 last-byte XOR: `ff` becomes `fe`.
      */
     @Test
     fun `a ciphertext that already ends in ff no longer validates`() {
         val body = "alias1:" + "11".repeat(12) + ":" + "ab".repeat(16) + "ff"
         val encrypted = sha256Hex(body) + ":" + body
-        val tampered = tamperSecureEnvelope(encrypted)
+        val tampered = tamperSecureEnvelopeLastByte(encrypted)
 
         assertTrue(encrypted.endsWith("ff"))
         assertTrue(secure.isValidDataString(encrypted))

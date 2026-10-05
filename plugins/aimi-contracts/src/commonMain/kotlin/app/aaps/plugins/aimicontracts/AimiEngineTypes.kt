@@ -47,4 +47,11 @@ data class AimiTickResult(
     val persistenceEvents: List<AimiPersistenceEvent>,
     val telemetry: AimiDecisionTrace,
     val safety: AimiSafetyReport,
+    /**
+     * Second command of the same tick.
+     *
+     * The meal advisor scene enacts an SMB and a temp basal together. Null means this tick has one
+     * command. It does not mean a zero dose.
+     */
+    val pairedCommand: AimiTherapyCommand? = null,
 )
