@@ -242,11 +242,7 @@ Hors de cette série, par consigne, tailles au brace sur le fichier actuel : `se
 
 Le tableau ci-dessous remplace celui d’après T3C. Les tailles sont le corps réel (accolade ouvrante jusqu’à l’accolade fermante, ou l’expression jusqu’à la ligne blanche), pas « jusqu’à la fonction suivante ». Cette ancienne mesure comptait les champs posés entre deux fonctions : `isAutodriveEngaged` y faisait 123 lignes et n’en fait plus qu’une ; `toMedicalJson` y faisait 754 lignes et son corps en fait 354. `tryMealAdvisor` n’existe plus : le conseiller est `runMealAdvisorDecisionOrReturn` (39 lignes, déjà en `commonMain`). `executeSmbInstruction` (96) ne choisit plus : il appelle `SmbInstructionExecutor.execute`.
 
-Têtes qui choisissent encore un débit, un SMB ou un plafond, 40 lignes et plus. Le tableau d’après `applySafetyPrecautions` en comptait 31, sur un fichier de **16 342 lignes**. Trente d’entre elles sont en `commonMain`. `DetermineBasalAIMI2.kt` fait **15 560 lignes**. Il en reste **1**.
-
-| Lignes | Fonction |
-|---:|---|
-| 40 | `buildRaObservationState` |
+Têtes qui choisissent encore un débit, un SMB ou un plafond, 40 lignes et plus. Le tableau d’après `applySafetyPrecautions` en comptait 31, sur un fichier de **16 342 lignes**. Trente et une d’entre elles sont en `commonMain`. `DetermineBasalAIMI2.kt` fait **15 555 lignes**. Le tableau est vide.
 
 En dessous de 40 lignes : le reste des 325, des helpers d’horloge, de log et de lecture. Les compter une par PR gonflerait le chiffre sans avancer le moteur.
 
@@ -376,13 +372,17 @@ Corps ajouté : **38**. Cumul des **45** fonctions `decide*` : **4 978** lignes 
 
 Corps ajouté : **54**. Cumul des **46** fonctions `decide*` : **5 032** lignes de corps. Têtes du tableau encore Android : **1**.
 
+`buildRaObservationState` (40) est ensuite passé en `commonMain` (`decideBuildRaObservationState`, corps 37 lignes). Le masque d’effort, l’heure, les pas, la confiance UAM, la récupération post-hypo et la garde d’aube restent des ports Android, chacun à sa ligne. Le `runCatching` reste `Throwable` : l’échec garde le repli null et ajoute `RA observation failed (<type>): <message> — state null`. La scène verrouillée ne lance pas ce chemin. ISF 50, poids 70 kg : SI estimée **0,005**, amortissement hypo **faux**. `DetermineBasalAIMI2.kt` retombe à **15 555 lignes**.
+
+Corps ajouté : **37**. Cumul des **47** fonctions `decide*` : **5 069** lignes de corps. Le tableau est vide.
+
 Métrique de ce run. Corps ajoutés : 147 + 72 + 155 + 128 + 94 + 126 = **722**. Le corps déjà commun de `decideT3cBrittleBypass` passe de 154 à **170** pour la ligne d’échec de l’arbre. Cumul des **28** fonctions `decide*` : **3 652** lignes de corps. Têtes du tableau encore Android : **19**. L’orchestre de la section 9 commence après ces 19 têtes.
 
 ## 9. Plan de `runDetermineBasalTickInner` et de `HoldAimiEngine`
 
-Ce plan est accepté, avec une correction d’ordre. Les têtes de dose du tableau passent en `commonMain` avant l’orchestre. Si l’orchestre bougeait pendant que ces têtes restent des ports Android, le moteur commun n’aurait aucune implémentation sur iOS, et `HoldAimiEngine` ne pourrait déléguer qu’en Android. Il reste **1** tête. Le découpage en 6 PR ci-dessous commence quand elle est décidée dans le commun.
+Ce plan est accepté, avec une correction d’ordre. Les têtes de dose du tableau passent en `commonMain` avant l’orchestre. Si l’orchestre bougeait pendant que ces têtes restent des ports Android, le moteur commun n’aurait aucune implémentation sur iOS, et `HoldAimiEngine` ne pourrait déléguer qu’en Android. Le tableau est vide : les **31** têtes sont en `commonMain`. `enablesmb` (`decideEnableSmb`) et `applyTubeAdvisorFromDoseSnapshot` (`decideApplyTubeAdvisorFromDoseSnapshot`) y sont aussi. Ce ne sont plus des ports seulement Android. L’orchestre ne démarre pas dans ce document.
 
-Ce plan est écrit avant tout déplacement de l’inner tick. Aucun run ne le commence tant que le tableau n’est pas vide. `HoldAimiEngine.evaluate` continue de renvoyer `Hold("ENGINE_NOT_EXTRACTED")`. `IosClientConfig.APS` reste `false`.
+Ce plan est écrit avant tout déplacement de l’inner tick. Le tableau est vide, et ce run ne commence toujours pas l’orchestre. `HoldAimiEngine.evaluate` continue de renvoyer `Hold("ENGINE_NOT_EXTRACTED")`. `IosClientConfig.APS` reste `false`. La première PR de l’orchestre est le point 1 : le préfixe, de `runEarlyDetermineBasalStages` au retour de `runT3cBrittleBypassOrReturn`. Scènes : exercice et brittle. Le capteur plat est déjà décidé dans `buildDecisionContextInitRtSosAndFlatShadow` ; cette tranche ne fait que transmettre `flatBGsDetected`. Les sept scènes de bout en bout ne sont rejouées qu’à la PR 6. Les numéros de ligne du découpage sont ceux d’avant les déplacements suivants : la tranche se nomme par les fonctions.
 
 `runDetermineBasalTickInner` fait 797 lignes (14849–15645). C’est l’orchestre. Il appelle déjà les têtes extraites. Le déplacer ne change pas une formule de dose. Chaque PR verrouille la trace sur le corps Android du parent, déplace une seule tranche, et rejoue. Si la trace diverge, on s’arrête. Les nombres de dose ne changent pas.
 
@@ -398,7 +398,7 @@ Ce plan est écrit avant tout déplacement de l’inner tick. Aucun run ne le co
 
 5. **Boost repas, arrêt hypo, repas 0–30, MAX_IOB, insulinReq.** De `runMealHyperBasalBoostTickStage` à `runInsulinReqActivityRelaxAndMicrobolusStage` (15426–15572). Scènes : repas 0–30 (TBR **2,00 U/h**, 30 min, override vrai) et gate MAX_IOB (TBR **2,00 U/h**). L’arrêt basal hypo de `runCarbsAdvisorEnableSmbSafetyAndHardHypoBasalStopOrReturn` est l’autre scène hypo si la PR 2 n’a pas de retour.
 
-6. **Moteur basal, coquille learners/export, puis `HoldAimiEngine`.** `runBasalDecisionEngineDecideStage` entre dans l’orchestre. `runPostBasalEngineLearnersRtInstrumentationAndAuditorStage` et `runAimiSnapshotMedicalJsonAndHormonitorExportStage` restent des ports : ils ne bougent pas. Cette PR rejoue les sept scènes de bout en bout sur `runDetermineBasalTick`, pas seulement la tranche. `HoldAimiEngine` délègue seulement après cette PR, et seulement si la tête restante est déjà en `commonMain`.
+6. **Moteur basal, coquille learners/export, puis `HoldAimiEngine`.** `runBasalDecisionEngineDecideStage` entre dans l’orchestre. `runPostBasalEngineLearnersRtInstrumentationAndAuditorStage` et `runAimiSnapshotMedicalJsonAndHormonitorExportStage` restent des ports : ils ne bougent pas. Cette PR rejoue les sept scènes de bout en bout sur `runDetermineBasalTick`, pas seulement la tranche. `HoldAimiEngine` délègue seulement après cette PR. Les 31 têtes du tableau sont déjà en `commonMain`.
 
 ### Ce qui reste dans la coquille Android
 
@@ -408,6 +408,10 @@ Ce plan est écrit avant tout déplacement de l’inner tick. Aucun run ne le co
 - `toMedicalJson` (354).
 - `logDecisionFinal` (learners, ligne `TICK` à l’horloge murale, `CACHE TDD24H`).
 - `aimiLocalHour()` reste l’horloge murale.
+
+`enablesmb` et `applyTubeAdvisorFromDoseSnapshot` ne figurent pas ici. Leurs décisions sont en `commonMain`. La coquille Android reste le point d’appel de l’orchestre.
+
+Restent aussi Android, appelés à la ligne par les têtes déjà communes : `convertBG`, `withoutZeros`, le livre de phrases `rh.gs`, `String.format` du module contexte, la note JSON `noteTubeAdvisorTrace`, `aapsLogger` sur l’échec de contexte, `calculateRate`, `detectMealOnset`, `estimateUndeclaredVirtualCob`, `recordPkpdSoftFloor`, `isLateFatProteinRise`, `isCompressionProtectionCondition`, `isDriftTerminatorCondition`, le pouls d’étude, la remise à zéro du tick précoce, `profile.copy()`, la croyance d’effort, le runtime patient, la session TPO, `physioAdapter.getLatestSnapshot` (le `catch (Exception)` reste à la ligne), TFLite, `AimiUamHandler`, les notifications, les fichiers, la persistance et la fabrique de `AimiDecisionContext`.
 
 ### Ports
 
