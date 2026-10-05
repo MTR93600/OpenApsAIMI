@@ -240,7 +240,9 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPublishDoseTerminalCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decidePublishDoseTerminalAuthorityAndSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiBasalDecisionEngineCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideBasalDecisionEngine
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEnableSmbCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTrajectorySpiralCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideEnableSmb
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideTrajectoryTightSpiralSafetyBridge
 import app.aaps.plugins.aps.openAPSAIMI.effects.mealPriorityAlignedForSpiralSmbCap
 import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
@@ -11002,82 +11004,38 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         delta: Double,
         eventualBg: Double,
         combinedDelta: Double
-    ): Boolean {
-        mealModeSmbReason = null
-
-        // 0) Garde globale
-        if (!microBolusAllowed) {
-            consoleError.add(rh.gs(ApsStrings.smb_disabled))
-            return false
-        }
-
-        // 🔒 SAFETY: Hard Floor for SMB. No SMB below 80 mg/dL ever.
-        // Even if predicted to rise, we don't SuperBolus a hypo.
-        if (currentBg < 80) {
-            consoleError.add("SMB disabled: BG ${convertBG(currentBg)} < 80")
-            return false
-        }
-
-        // 1) Détection meal-rise plus tolérante
-        val safeFloor = max(100.0, targetbg - 5.0)
-// avant : delta >= 0.3 && currentBg > safeFloor && eventualBg > safeFloor
-        val isMealRise = mealModeActive &&
-            (delta >= 0.1) &&
-            (currentBg > safeFloor)
-
-// 2) Garde high TT : bypass si mode repas actif et pas de risque hypo
-        val hypoGuard = HypoThresholdMath.computeHypoThreshold(minBg = profile.min_bg, lgsThreshold = profile.lgsThreshold)
-        val mealBypassHighTT = mealModeActive && currentBg > hypoGuard
-
-        if (!profile.allowSMB_with_high_temptarget &&
-            profile.temptargetSet && targetbg > 100 &&
-            !mealBypassHighTT && !isMealRise
-        ) {
-            consoleError.add(rh.gs(ApsStrings.smb_disabled_high_target, targetbg))
-            return false
-        }
-
-        // 3) Enable cases (préférences)
-        if (profile.enableSMB_always) {
-            consoleLog.add(rh.gs(ApsStrings.smb_enabled_always))
-            return true
-        }
-        if (profile.enableSMB_with_COB && mealData.mealCOB != 0.0) {
-            consoleLog.add(rh.gs(ApsStrings.smb_enabled_for_cob, mealData.mealCOB))
-            return true
-        }
-        if (profile.enableSMB_after_carbs && mealData.carbs != 0.0) {
-            consoleLog.add(rh.gs(ApsStrings.smb_enabled_after_carb_entry))
-            return true
-        }
-        if (profile.enableSMB_with_temptarget && profile.temptargetSet && targetbg < 100) {
-            consoleLog.add(rh.gs(ApsStrings.smb_enabled_for_temp_target, convertBG(targetbg)))
-            return true
-        }
-
-        // 4) Enfin, l'exception meal-rise si elle est vraie
-        if (mealModeActive) {
-            val safeFloorValue = max(100.0, targetbg - 5)
-            val risingFast = combinedDelta >= 2.0 || (combinedDelta > 0 && currentBg > 120)
-
-            // 🚀 EXPLOSIVE RISE EXCEPTION: Allow SMB at 90mg/dL if combinedDelta is huge (> 4.0)
-            val isExplosive = combinedDelta > 4.0 && currentBg > 90.0
-
-            // Condition assouplie: eventualBg ignoré si montée confirmée
-            if ((currentBg > safeFloorValue || isExplosive) && combinedDelta > 0.5 && (eventualBg > safeFloorValue || risingFast || isExplosive)) {
-                mealModeSmbReason = rh.gs(
-                    ApsStrings.smb_enabled_meal_mode,
-                    convertBG(currentBg),
-                    combinedDelta,
-                    convertBG(eventualBg)
-                ) + if (isExplosive) " [🚀 EXPLOSIVE]" else ""
-                return true
+    ): Boolean = decideEnableSmb(
+        profile = profile,
+        microBolusAllowed = microBolusAllowed,
+        mealData = mealData,
+        targetbg = targetbg,
+        mealModeActive = mealModeActive,
+        currentBg = currentBg,
+        delta = delta,
+        eventualBg = eventualBg,
+        combinedDelta = combinedDelta,
+        calls = object : AimiEnableSmbCalls {
+            override fun writeMealModeReason(reason: String?) {
+                mealModeSmbReason = reason
             }
-        }
-
-        consoleError.add(rh.gs(ApsStrings.smb_disabled_no_pref_or_condition))
-        return false
-    }
+            override fun logError(message: String) {
+                consoleError.add(message)
+            }
+            override fun log(message: String) {
+                consoleLog.add(message)
+            }
+            override fun smbDisabled() = rh.gs(ApsStrings.smb_disabled)
+            override fun convertBg(value: Double) = convertBG(value)
+            override fun smbDisabledHighTarget(targetBg: Double) = rh.gs(ApsStrings.smb_disabled_high_target, targetBg)
+            override fun smbEnabledAlways() = rh.gs(ApsStrings.smb_enabled_always)
+            override fun smbEnabledForCob(cob: Double) = rh.gs(ApsStrings.smb_enabled_for_cob, cob)
+            override fun smbEnabledAfterCarbEntry() = rh.gs(ApsStrings.smb_enabled_after_carb_entry)
+            override fun smbEnabledForTempTarget(bgText: String) = rh.gs(ApsStrings.smb_enabled_for_temp_target, bgText)
+            override fun smbEnabledMealMode(currentBg: String, combinedDelta: Double, eventualBg: String) =
+                rh.gs(ApsStrings.smb_enabled_meal_mode, currentBg, combinedDelta, eventualBg)
+            override fun smbDisabledNoPref() = rh.gs(ApsStrings.smb_disabled_no_pref_or_condition)
+        },
+    )
 
 
     fun reason(rT: RT, msg: String) {

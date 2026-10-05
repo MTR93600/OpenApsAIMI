@@ -2113,6 +2113,31 @@ class ShellDecisionTraceTest {
         assertEquals(TRAJECTORY_TIGHT_SPIRAL_TRACE, trace)
     }
 
+    @Test
+    fun enableSmbAlwaysTurnsTheBolusOn() {
+        val profile = profileStub()
+        whenever(profile.enableSMB_always).thenReturn(true)
+        var enabled = false
+        val trace = capture {
+            enabled = invokeNamed(
+                "enablesmb",
+                listOf(
+                    profile,
+                    true,
+                    MealData(mealCOB = 0.0),
+                    100.0,
+                    false,
+                    180.0,
+                    0.0,
+                    100.0,
+                    0.0,
+                ),
+            ) as Boolean
+        }
+        assertTrue(enabled)
+        assertEquals(ENABLE_SMB_ALWAYS_TRACE, trace)
+    }
+
     private fun resultField(target: Any, name: String): Any? {
         val field = target.javaClass.getDeclaredField(name)
         field.isAccessible = true
@@ -3012,6 +3037,10 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val ENABLE_SMB_ALWAYS_TRACE = """
+            LOG phrase
+        """.trimIndent()
+
         private val TRAJECTORY_TIGHT_SPIRAL_TRACE = """
             READ key=BooleanKey.OApsAIMIautoDriveActive value=false
             READ key=BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive value=false
