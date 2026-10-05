@@ -227,6 +227,8 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPkpdGuardLogChannel
 import app.aaps.plugins.aps.openAPSAIMI.effects.decidePkpdAbsorptionGuardOncePerTick
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRbtMergeCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideRbtMerge
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT3cBasalFirstCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideT3cBasalFirstProduction
 import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
@@ -7042,116 +7044,71 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return null
     }
 
+    /**
+     * Native T3C basal-first plan. The decision is [decideT3cBasalFirstProduction].
+     * Gates that can change are read at the line. A block still logs and returns null.
+     */
     private fun planT3cBasalFirstProduction(
         b: AimiPostBasalEngineFinalizeBundle,
     ): T3cBasalFirstApplyPlan? {
-        if (!isNativeT3cRuntimeOwnerConfigured()) return null
-        val snapshot = lastRecursiveBeliefSnapshot
-            ?: return blockT3cBasalFirstProduction(null, "native_unavailable_no_snapshot")
-        if (snapshot.resolutions.basalFirstChannel != BasalFirstChannel.T3C_BASAL_FIRST) {
-            val reason = snapshot.resolutions.t3cBasalFirst?.dominantBlocker?.lowercase(Locale.US)
-                ?: "native_no_basal_first_channel"
-            return blockT3cBasalFirstProduction(snapshot.resolutions.t3cBasalFirst, reason)
-        }
-        val t3cState = snapshot.resolutions.t3cBasalFirst
-            ?: return blockT3cBasalFirstProduction(null, "missing_t3c_state")
-
-        if (!t3cState.active) {
-            return blockT3cBasalFirstProduction(t3cState, "inactive")
-        }
-        if (!t3cState.eligible) {
-            val blocker = t3cState.dominantBlocker?.lowercase(Locale.US) ?: "resolver_ineligible"
-            return blockT3cBasalFirstProduction(t3cState, blocker)
-        }
-        if (!lastT3cHistoricalBypassNeutralizedThisTick) {
-            return blockT3cBasalFirstProduction(t3cState, "historical_bypass_not_neutralized")
-        }
-        if (lastRecursiveAuthorityGateDecision?.effectiveAuthority != ReleaseAuthority.NONE) {
-            return blockT3cBasalFirstProduction(t3cState, "smb_authority_active")
-        }
-        if ((b.rT.units ?: 0.0) > 0.0 || (b.rT.insulinReq ?: 0.0) > 0.0) {
-            return blockT3cBasalFirstProduction(t3cState, "smb_already_requested")
-        }
-        if (basalChannelSafetyGuardsActive() && smbZeroedBySafetyThisTick()) {
-            basalChannelGuardBlockedT3cCount++
-            return blockT3cBasalFirstProduction(t3cState, "smb_zeroed_by_safety")
-        }
-        if (exerciseInsulinLockoutActive || t3cState.exerciseBlock) {
-            return blockT3cBasalFirstProduction(t3cState, "exercise_lockout")
-        }
-        if (lastPostHypoDeliveryAuthority.active || t3cState.postHypoBlock) {
-            return blockT3cBasalFirstProduction(t3cState, "post_hypo_guard")
-        }
-        if (t3cState.mealConflict) {
-            return blockT3cBasalFirstProduction(t3cState, "meal_conflict")
-        }
-        if (t3cState.hardSafetyBlock) {
-            return blockT3cBasalFirstProduction(t3cState, "hard_safety_block")
-        }
-        if (resolveIobForGate() > maxIob) {
-            return blockT3cBasalFirstProduction(t3cState, "max_iob")
-        }
-        if (lastInsulinStackingEvaluation?.kind == InsulinStackingStance.Kind.SURVEILLANCE_IOB) {
-            return blockT3cBasalFirstProduction(t3cState, "stacking_cap")
-        }
-
-        val hypoGuard = HypoThresholdMath.computeHypoThreshold(
-            minBg = b.profile.min_bg,
-            lgsThreshold = b.profile.lgsThreshold,
-        )
-        val mealContext = MealSafetyContext(
-            mealModeActive = mealTime || lunchTime || dinnerTime || snackTime || highCarbTime || bfastTime,
-            manualBolusAgeMin = internalLastSmbMillis.takeIf { it > 0L }?.let { (dateUtil.now() - it) / 60000.0 },
-            inferredMealSignal = inferredMealSafetyIntent(),
-        )
-        val (hypoPredForLgs, hypoEventualForLgs) = sanitizedHypoGuardPredictedEventual(
+        val decided = decideT3cBasalFirstProduction(
+            profile = b.profile,
             rT = b.rT,
-            predictedBg = predictedBg.toDouble(),
-            eventualBg = eventualBG,
+            consoleLog = consoleLog,
+            calls = object : AimiT3cBasalFirstCalls {
+                override fun nativeOwnerConfigured() = isNativeT3cRuntimeOwnerConfigured()
+                override fun snapshot() = lastRecursiveBeliefSnapshot
+                override fun usLower(value: String) = value.lowercase(Locale.US)
+                override fun block(state: T3cBasalFirstResolution?, reason: String) {
+                    blockT3cBasalFirstProduction(state, reason)
+                }
+                override fun historicalBypassNeutralized() = lastT3cHistoricalBypassNeutralizedThisTick
+                override fun smbAuthorityActive() =
+                    lastRecursiveAuthorityGateDecision?.effectiveAuthority != ReleaseAuthority.NONE
+                override fun guardsActive() = basalChannelSafetyGuardsActive()
+                override fun smbZeroedBySafety() = smbZeroedBySafetyThisTick()
+                override fun noteGuardBlocked() {
+                    basalChannelGuardBlockedT3cCount++
+                }
+                override fun exerciseLockout() = exerciseInsulinLockoutActive
+                override fun postHypoActive() = lastPostHypoDeliveryAuthority.active
+                override fun iobForGate() = resolveIobForGate()
+                override fun maxIob() = maxIob
+                override fun stackingSurveillance() =
+                    lastInsulinStackingEvaluation?.kind == InsulinStackingStance.Kind.SURVEILLANCE_IOB
+                override fun mealContext() = MealSafetyContext(
+                    mealModeActive = mealTime || lunchTime || dinnerTime || snackTime || highCarbTime || bfastTime,
+                    manualBolusAgeMin = internalLastSmbMillis.takeIf { it > 0L }?.let { (dateUtil.now() - it) / 60000.0 },
+                    inferredMealSignal = inferredMealSafetyIntent(),
+                )
+                override fun sanitizedPredictedEventual(): Pair<Double, Double> =
+                    sanitizedHypoGuardPredictedEventual(
+                        rT = b.rT,
+                        predictedBg = predictedBg.toDouble(),
+                        eventualBg = eventualBG,
+                    )
+                override fun lgsCurve(): Pair<Double?, Boolean> = resolveLgsMinPredictedCurve(b.rT)
+                override fun bg() = bg
+                override fun delta() = delta.toDouble()
+                override fun currentTempDuration() = b.ctx.currentTemp.duration
+                override fun currentTempRate() = b.ctx.currentTemp.rate
+                override fun capRate(requestedRateUph: Double, profileBasalUph: Double) =
+                    capBasalRateForCorrectionAggression(
+                        requestedRateUph = requestedRateUph,
+                        profileBasalUph = profileBasalUph,
+                        source = "RBT_T3C_BASAL_FIRST",
+                    )
+                override fun markReady() {
+                    markT3cRuntimeOwnership("NATIVE_READY", "native_rbt_owner")
+                }
+            },
         )
-        val (minPredCurve, ignoreMinPredCurve) = resolveLgsMinPredictedCurve(b.rT)
-        val lgsReason = HypoLgsBlockReason.detect(
-            bgNow = bg,
-            predicted = hypoPredForLgs,
-            eventual = hypoEventualForLgs,
-            minPredictedCurve = minPredCurve,
-            hypo = hypoGuard,
-            delta = delta.toDouble(),
-            mealContext = mealContext,
-            ignoreMinPredictedCurve = ignoreMinPredCurve,
-        )
-        if (lgsReason != null) {
-            return blockT3cBasalFirstProduction(
-                t3cState,
-                "final_hypo_${lgsReason.name.lowercase(Locale.US)}",
+        return decided?.let {
+            T3cBasalFirstApplyPlan(
+                rateUph = it.rateUph,
+                durationMin = it.durationMin,
             )
         }
-
-        val previousRate = if (b.ctx.currentTemp.duration > 0) b.ctx.currentTemp.rate else b.profile.current_basal
-        val maxStepUp = max(0.30, previousRate * 0.20)
-        val rampedRate = if (t3cState.boundedRateUph > previousRate) {
-            min(t3cState.boundedRateUph, previousRate + maxStepUp)
-        } else {
-            t3cState.boundedRateUph
-        }
-        val finalRate = capBasalRateForCorrectionAggression(
-            requestedRateUph = rampedRate,
-            profileBasalUph = b.profile.current_basal,
-            source = "RBT_T3C_BASAL_FIRST",
-        ).coerceIn(0.0, t3cState.maxBasalCapUph.coerceAtLeast(rampedRate))
-        if (finalRate <= 0.0) {
-            return blockT3cBasalFirstProduction(t3cState, "no_basal_demand")
-        }
-
-        consoleLog.add(
-            "🌳 T3C_NATIVE: ready rate=${aimiFmt2(finalRate)}U/h " +
-                "demand=${aimiFmt2(t3cState.boundedRateUph)}U/h",
-        )
-        markT3cRuntimeOwnership("NATIVE_READY", "native_rbt_owner")
-        return T3cBasalFirstApplyPlan(
-            rateUph = finalRate,
-            durationMin = 30,
-        )
     }
 
     private fun recordHarmoniaProductionDecision(
