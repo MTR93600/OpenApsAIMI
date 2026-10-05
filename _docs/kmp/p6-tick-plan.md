@@ -399,6 +399,8 @@ Ce plan est écrit avant tout déplacement de l’inner tick. Le tableau est vid
 
 Les traces déjà verrouillées ne sont pas réécrites. Les deux tests nouveaux s’appellent `zzPostHypo…` pour s’exécuter après les traces existantes, et remettent à zéro les hystérésis statiques avant et après. `DetermineBasalAIMI2.kt` fait **15 741 lignes**. Cumul des **53** fonctions `decide*` : **5 394** lignes de corps. `HoldAimiEngine` et `IosClientConfig.APS` sont inchangés.
 
+`decideDetermineBasalTickSchedule` (corps 70) est la quatrième tranche, de `buildGlobalAimiBasalScheduleBootstrap` au retour de la garde PKPD déjà extraite. `sens` est enfilé : PAI voit la valeur d’entrée, les cibles PKPD et l’instruction SMB voient la valeur après le plancher ISF. `basalaimi`, `variableSensitivity` et `intervalsmb` sont lus dans le port, à l’appel. La scène UAM du tick de 05:00 (`nightbis` déjà vrai, sans nouvel appel à `aimiLocalHour()`) rejoue la trace de nuit octet pour octet : `UAM=0.00`, journal `SMB result: raw=0.00 -> final=0.35` non délivré, effet pompe TBR **1,00 U/h** pendant 30 min. Le test direct `uamPostHypoReboundBridgesAShortTempBasal` reste le verrou du pont : SMB prédit **0 U**, TBR **1,05 U/h** pendant 5 min. `DetermineBasalAIMI2.kt` fait **15 798 lignes**. Cumul des **54** fonctions `decide*` : **5 464** lignes de corps. `HoldAimiEngine` et `IosClientConfig.APS` sont inchangés.
+
 `runDetermineBasalTickInner` fait 797 lignes (14849–15645). C’est l’orchestre. Il appelle déjà les têtes extraites. Le déplacer ne change pas une formule de dose. Chaque PR verrouille la trace sur le corps Android du parent, déplace une seule tranche, et rejoue. Si la trace diverge, on s’arrête. Les nombres de dose ne changent pas.
 
 ### Découpage en 6 PR

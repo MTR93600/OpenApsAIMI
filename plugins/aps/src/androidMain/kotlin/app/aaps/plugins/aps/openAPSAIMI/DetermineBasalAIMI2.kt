@@ -274,6 +274,14 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickTrajectoryPrep
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetermineBasalTickPrefix
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetermineBasalTickSignal
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetermineBasalTickPostHypo
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetermineBasalTickSchedule
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickScheduleCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiScheduleBootstrap
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiScheduleVitals
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiSchedulePai
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiSchedulePkpdTargets
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiScheduleSmb
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiSchedulePkpdGuard
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideEarlyDetermineBasalStages
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideLateFatProteinRise
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTrajectoryContextPrepCalls
@@ -14585,234 +14593,283 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val estimatedCarbsTime = postHypo.estimatedCarbsTimeMs
         val skipLegacySmbBlender = postHypo.skipLegacySmbBlender
 
-        val (
-            pumpCaps,
-            profile_current_basal,
-            basalScheduleBasal,
-            basalScheduleTargetBg,
-            basalScheduleMinBg,
-            basalScheduleMaxBg,
-            basalScheduleSensitivityRatio,
-            deliverAt,
-            basalScheduleMaxIobLimit,
-        ) = buildGlobalAimiBasalScheduleBootstrap(
-            ctx = ctx,
-            profile = profile,
-            rT = rT,
-            glucoseStatus = glucoseStatus,
-            contextTargetOverride = contextTargetOverride,
-            bg = bg,
-            predictedBg = predictedBg,
-            combinedDelta = combinedDelta,
-            minAgo = minAgo,
-            systemTime = systemTime,
-            bgTime = bgTime,
-            flatBGsDetected = flatBGsDetected,
-            honeymoon = honeymoon,
-            circadianMinute = circadianMinute,
-            circadianSecond = circadianSecond,
-        )
-        var basal = basalScheduleBasal
-        var target_bg = basalScheduleTargetBg
-        // The target the engine really works with, before any later adjustment. Observation only:
-        // the auditor is told this level next to the profile target. A tick that ends earlier never
-        // reaches this line, and the field then stays null, which is what the JSONL reports.
-        auditorProfileTick.workingTargetMgdl = target_bg
-        // The target decision itself is NOT taken here: it needs the ISF factor's final, floor-
-        // adjusted effective value for the combined bound (see the call below,
-        // `applyIsfBoundsAndPhysioMultipliersAfterEndoActivity` is where that floor is decided), and
-        // that runs later in this same tick. `target_bg`, `threshold` and `minBg` are read there, not
-        // reassigned between here and there, so capturing `workingTargetMgdl` this early is still the
-        // pre-adjustment value the spec asks for.
-        var min_bg = basalScheduleMinBg
-        var max_bg = basalScheduleMaxBg
-        var sensitivityRatio = basalScheduleSensitivityRatio
-        var maxIobLimit = basalScheduleMaxIobLimit
-
-        val (tick, minDelta, minAvgDelta) = runPostBasalBootstrapIobTickStepsAndHeartRate(
-            glucoseStatus = glucoseStatus,
-            profile = profile,
-            iobData = iob_data,
-            bg = bg,
-        )
-
-        val (timenow, sixAMHour, pregnancyEnable) = runBasalAimiTddCarbLimitsTirEarlyBasalAndPaiIsf(
-            glucoseStatus = glucoseStatus,
-            profile = profile,
-            profileCurrentBasal = profile_current_basal,
-            bg = bg,
-            delta = delta,
-            tdd7Days = tdd7Days,
-            tdd7P = tdd7P,
-            paiBaseSensitivity = sens,
-            honeymoon = honeymoon,
-            tirbasal3B = tirbasal3B,
-            tirbasal3IR = tirbasal3IR,
-            tirbasal3A = tirbasal3A,
-            tirbasalhAP = tirbasalhAP,
-            lastHourTIRAbove = lastHourTIRAbove,
-            iobPeakMinutes = iobPeakMinutes,
-            iobActivityIn30Min = iobActivityIn30Min,
-            iobActivityNow = iobActivityNow,
-        )
-
-        // Endo + activity (ActivityManager); then ISF bounds and physio multipliers.
-        applyEndoAndActivityAdjustments(
-            bg = bg, delta = delta,
-            mealTime = mealTime, bfastTime = bfastTime, lunchTime = lunchTime,
-            dinnerTime = dinnerTime, highCarbTime = highCarbTime, snackTime = snackTime,
-            recentSteps5Minutes = recentSteps5Minutes, recentSteps10Minutes = recentSteps10Minutes,
-            averageBeatsPerMinute = averageBeatsPerMinute.toDouble(), averageBeatsPerMinute60 = averageBeatsPerMinute60
-        )
-
-        sens = applyIsfBoundsAndPhysioMultipliersAfterEndoActivity(
-            profile = profile,
-            physioMultipliers = physioMultipliers,
-            exerciseInsulinLockoutActive = exerciseInsulinLockoutActive,
-        )
-        // Judges the auditor's target factor now, not at the basal-schedule bootstrap: the combined
-        // bound (`AuditorProfileFactorGate.combinedTargetBudgetMgdl`) needs the ISF factor's final
-        // effective value, after the stress floor of `applyIsfBoundsAndPhysioMultipliersAfterEndoActivity`
-        // has had its say — the ISF is applied first and has priority, so the target must see what is
-        // really left, not the pre-floor request. `target_bg`, `threshold` and `minBg` are unchanged
-        // since the basal-schedule bootstrap above, so this is still the tick's raw working target.
-        decideAuditorTargetFactorForTick(
-            ctx = ctx,
-            workingTargetRawMgdl = target_bg,
-            hypoThresholdMgdl = threshold,
-            minPredBgMgdl = minBg,
-        )
-        trajectoryGuard.getLastAnalysis()?.takeIf { it.classification == TrajectoryType.TIGHT_SPIRAL }?.let { analysis ->
-            applyTrajectoryTightSpiralStandardSmbCapIfNeeded(
-                energy = analysis.metrics.energyBalance,
-                iobNow = iob_data.iob,
-                tdd24hU = tdd24Hrs.toDouble(),
-                deltaValue = delta,
-                shortAvgDeltaValue = shortAvgDelta,
-                mealData = ctx.mealData,
-                isExplicitUserAction = isExplicitAdvisorRun,
-                mealClockActiveForSpiralRelax = therapyMealWindowActiveForSpiralAlign(),
-            )
-        }
-        val (
-            bgi,
-            deviation,
-            pkpdTargetsMinBg,
-            pkpdTargetsTargetBg,
-            pkpdTargetsMaxBg,
-        ) = runPkpdPredictionsBgiDeviationAndNoisyTargetsStage(
-            ctx = ctx,
-            profile = profile,
-            rT = rT,
-            glucoseStatus = glucoseStatus,
-            pkpdRuntime = pkpdRuntime,
-            iobData = iob_data,
-            bg = bg,
-            delta = delta,
-            sens = sens,
-            minDelta = minDelta,
-            minAvgDelta = minAvgDelta,
-            minBg = min_bg,
-            targetBg = target_bg,
-            maxBg = max_bg,
-        )
-        min_bg = pkpdTargetsMinBg
-        target_bg = pkpdTargetsTargetBg
-        max_bg = pkpdTargetsMaxBg
-        val modelcal = runUamModelCalHypoGuardPostHypoAndSetPredictedSmb(
-            rT = rT,
-            bg = bg,
-            delta = delta,
-            iob = iob,
-            predictedBg = predictedBg,
-            eventualBg = eventualBG,
-            threshold = threshold,
-            minBgHypoComposite = minBg,
-            targetBg = target_bg,
-            profile = profile,
+        val schedule = decideDetermineBasalTickSchedule(
+            initialSens = sens,
             postHypoState = postHypoState,
-            cob = cob,
-        )
+            calls = object : AimiTickScheduleCalls<SmbInstructionExecutor.Result> {
+                override fun bootstrap(): AimiScheduleBootstrap {
+                    val built = buildGlobalAimiBasalScheduleBootstrap(
+                        ctx = ctx,
+                        profile = profile,
+                        rT = rT,
+                        glucoseStatus = glucoseStatus,
+                        contextTargetOverride = contextTargetOverride,
+                        bg = bg,
+                        predictedBg = predictedBg,
+                        combinedDelta = combinedDelta,
+                        minAgo = minAgo,
+                        systemTime = systemTime,
+                        bgTime = bgTime,
+                        flatBGsDetected = flatBGsDetected,
+                        honeymoon = honeymoon,
+                        circadianMinute = circadianMinute,
+                        circadianSecond = circadianSecond,
+                    )
+                    return AimiScheduleBootstrap(
+                        pumpCaps = built.pumpCaps,
+                        profileCurrentBasal = built.profileCurrentBasal,
+                        basal = built.basal,
+                        targetBg = built.targetBg,
+                        minBg = built.minBg,
+                        maxBg = built.maxBg,
+                        sensitivityRatio = built.sensitivityRatio,
+                        deliverAt = built.deliverAt,
+                        maxIobLimit = built.maxIobLimit,
+                    )
+                }
 
-        // Detailed logging, meal-advisor one-shot prefs/SMB caps, PKPD DIA override, execute SMB instruction
-        val (smbExecution, isMealAdvisorOneShot) = runSmbDecisionLogAdvisorOneShotAndExecuteInstruction(
-            ctx = ctx,
-            profile = profile,
-            rT = rT,
-            glucoseStatus = glucoseStatus,
-            bg = bg,
-            delta = delta,
-            iob = iob,
-            shortAvgDelta = shortAvgDelta,
-            predictedBg = predictedBg,
-            eventualBG = eventualBG,
-            sens = sens,
-            tp = tp,
-            variableSensitivity = variableSensitivity,
-            // The only SMB site that sees the auditor's target ratio. Every target-relative guard
-            // above still reads the raw `target_bg`.
-            targetBg = auditorDoseTarget(target_bg, AuditorProfileFactorCodes.DOSE_SITE_SMB),
-            basalaimi = basalaimi,
-            basal = basal,
-            honeymoon = honeymoon,
-            hourOfDay = hourOfDay,
-            mealTime = mealTime,
-            bfastTime = bfastTime,
-            lunchTime = lunchTime,
-            dinnerTime = dinnerTime,
-            highCarbTime = highCarbTime,
-            snackTime = snackTime,
-            sportTime = sportTime,
-            lateFatRiseFlag = lateFatRiseFlag,
-            highCarbrunTime = highCarbrunTime,
-            threshold = threshold,
-            windowSinceDoseInt = windowSinceDoseInt,
-            intervalsmb = intervalsmb,
-            pumpCaps = pumpCaps,
-            highBgOverrideUsed = highBgOverrideUsed,
-            cob = cob,
-            pkpdRuntime = pkpdRuntime,
-            pumpAgeDays = pumpAgeDays,
-            modelcal = modelcal,
-            profileCurrentBasal = profile_current_basal,
-            isConfirmedHighRiseLocal = isConfirmedHighRiseLocal,
-            exerciseInsulinLockoutActive = exerciseInsulinLockoutActive,
-            combinedDelta = combinedDelta.toFloat(),
-            skipLegacySmbBlender = skipLegacySmbBlender,
-            minBgLookbackMgdl = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
-        )
+                override fun setWorkingTargetMgdl(targetBg: Double) {
+                    // Observation only: the auditor is told this level next to the profile target.
+                    // A tick that ends earlier never reaches this line, and the field then stays null.
+                    auditorProfileTick.workingTargetMgdl = targetBg
+                }
 
-        var smbToGive = applySmbAdvisorExecutionToTickStateAndLog(smbExecution) { basal = it }
+                override fun activityVitals(): AimiScheduleVitals {
+                    val vitals = runPostBasalBootstrapIobTickStepsAndHeartRate(
+                        glucoseStatus = glucoseStatus,
+                        profile = profile,
+                        iobData = iob_data,
+                        bg = bg,
+                    )
+                    return AimiScheduleVitals(vitals.tick, vitals.minDelta, vitals.minAvgDelta)
+                }
 
-        // 🛡️ PKPD ABSORPTION GUARD + endo dampen + red carpet / capSmbDose — see [runPkpdGuardEndoDampenRedCarpetAndCapSmb]
-        val (pkpdGuardSmbToGive, pkpdGuardIntervalsmb) = runPkpdGuardEndoDampenRedCarpetAndCapSmb(
-            ctx = ctx,
-            rT = rT,
-            pkpdRuntime = pkpdRuntime,
-            smbExecution = smbExecution,
-            isExplicitAdvisorRun = isExplicitAdvisorRun,
-            isMealAdvisorOneShot = isMealAdvisorOneShot,
-            isConfirmedHighRiseLocal = isConfirmedHighRiseLocal,
-            bg = bg,
-            delta = delta,
-            shortAvgDelta = shortAvgDelta,
-            predictedBg = predictedBg,
-            eventualBG = eventualBG,
-            targetBg = target_bg,
-            honeymoon = honeymoon,
-            mealTime = mealTime,
-            bfastTime = bfastTime,
-            lunchTime = lunchTime,
-            dinnerTime = dinnerTime,
-            highCarbTime = highCarbTime,
-            snackTime = snackTime,
-            windowSinceDoseInt = windowSinceDoseInt,
-            intervalsmb = intervalsmb,
-            smbToGive = smbToGive,
-            iob = iob,
+                override fun pai(profileCurrentBasal: Double, paiBaseSensitivity: Double): AimiSchedulePai {
+                    val stage = runBasalAimiTddCarbLimitsTirEarlyBasalAndPaiIsf(
+                        glucoseStatus = glucoseStatus,
+                        profile = profile,
+                        profileCurrentBasal = profileCurrentBasal,
+                        bg = bg,
+                        delta = delta,
+                        tdd7Days = tdd7Days,
+                        tdd7P = tdd7P,
+                        paiBaseSensitivity = paiBaseSensitivity,
+                        honeymoon = honeymoon,
+                        tirbasal3B = tirbasal3B,
+                        tirbasal3IR = tirbasal3IR,
+                        tirbasal3A = tirbasal3A,
+                        tirbasalhAP = tirbasalhAP,
+                        lastHourTIRAbove = lastHourTIRAbove,
+                        iobPeakMinutes = iobPeakMinutes,
+                        iobActivityIn30Min = iobActivityIn30Min,
+                        iobActivityNow = iobActivityNow,
+                    )
+                    return AimiSchedulePai(stage.timenowHour, stage.sixAMHour, stage.pregnancyEnable)
+                }
+
+                override fun endoAndActivity() {
+                    applyEndoAndActivityAdjustments(
+                        bg = bg, delta = delta,
+                        mealTime = mealTime, bfastTime = bfastTime, lunchTime = lunchTime,
+                        dinnerTime = dinnerTime, highCarbTime = highCarbTime, snackTime = snackTime,
+                        recentSteps5Minutes = recentSteps5Minutes, recentSteps10Minutes = recentSteps10Minutes,
+                        averageBeatsPerMinute = averageBeatsPerMinute.toDouble(), averageBeatsPerMinute60 = averageBeatsPerMinute60,
+                    )
+                }
+
+                override fun isfAfterEndo(): Double = applyIsfBoundsAndPhysioMultipliersAfterEndoActivity(
+                    profile = profile,
+                    physioMultipliers = physioMultipliers,
+                    exerciseInsulinLockoutActive = exerciseInsulinLockoutActive,
+                )
+
+                override fun auditorTarget(workingTargetRawMgdl: Double) {
+                    // The combined bound needs the ISF factor after the stress floor. `threshold` and
+                    // the signal `minBg` are unchanged since the basal-schedule bootstrap.
+                    decideAuditorTargetFactorForTick(
+                        ctx = ctx,
+                        workingTargetRawMgdl = workingTargetRawMgdl,
+                        hypoThresholdMgdl = threshold,
+                        minPredBgMgdl = minBg,
+                    )
+                }
+
+                override fun tightSpiralCapIfNeeded() {
+                    trajectoryGuard.getLastAnalysis()?.takeIf { it.classification == TrajectoryType.TIGHT_SPIRAL }?.let { analysis ->
+                        applyTrajectoryTightSpiralStandardSmbCapIfNeeded(
+                            energy = analysis.metrics.energyBalance,
+                            iobNow = iob_data.iob,
+                            tdd24hU = tdd24Hrs.toDouble(),
+                            deltaValue = delta,
+                            shortAvgDeltaValue = shortAvgDelta,
+                            mealData = ctx.mealData,
+                            isExplicitUserAction = isExplicitAdvisorRun,
+                            mealClockActiveForSpiralRelax = therapyMealWindowActiveForSpiralAlign(),
+                        )
+                    }
+                }
+
+                override fun pkpdTargets(
+                    sens: Double,
+                    minDelta: Double,
+                    minAvgDelta: Double,
+                    minBg: Double,
+                    targetBg: Double,
+                    maxBg: Double,
+                ): AimiSchedulePkpdTargets {
+                    val stage = runPkpdPredictionsBgiDeviationAndNoisyTargetsStage(
+                        ctx = ctx,
+                        profile = profile,
+                        rT = rT,
+                        glucoseStatus = glucoseStatus,
+                        pkpdRuntime = pkpdRuntime,
+                        iobData = iob_data,
+                        bg = bg,
+                        delta = delta,
+                        sens = sens,
+                        minDelta = minDelta,
+                        minAvgDelta = minAvgDelta,
+                        minBg = minBg,
+                        targetBg = targetBg,
+                        maxBg = maxBg,
+                    )
+                    return AimiSchedulePkpdTargets(stage.bgi, stage.deviation, stage.minBg, stage.targetBg, stage.maxBg)
+                }
+
+                override fun uam(targetBg: Double, postHypoState: PostHypoState): Float =
+                    runUamModelCalHypoGuardPostHypoAndSetPredictedSmb(
+                        rT = rT,
+                        bg = bg,
+                        delta = delta,
+                        iob = iob,
+                        predictedBg = predictedBg,
+                        eventualBg = eventualBG,
+                        threshold = threshold,
+                        minBgHypoComposite = minBg,
+                        targetBg = targetBg,
+                        profile = profile,
+                        postHypoState = postHypoState,
+                        cob = cob,
+                    )
+
+                override fun smb(
+                    targetBg: Double,
+                    basal: Double,
+                    sens: Double,
+                    pumpCaps: PumpCaps,
+                    profileCurrentBasal: Double,
+                    modelcal: Float,
+                ): AimiScheduleSmb<SmbInstructionExecutor.Result> {
+                    val stage = runSmbDecisionLogAdvisorOneShotAndExecuteInstruction(
+                        ctx = ctx,
+                        profile = profile,
+                        rT = rT,
+                        glucoseStatus = glucoseStatus,
+                        bg = bg,
+                        delta = delta,
+                        iob = iob,
+                        shortAvgDelta = shortAvgDelta,
+                        predictedBg = predictedBg,
+                        eventualBG = eventualBG,
+                        sens = sens,
+                        tp = tp,
+                        variableSensitivity = variableSensitivity,
+                        // The only SMB site that sees the auditor's target ratio.
+                        targetBg = auditorDoseTarget(targetBg, AuditorProfileFactorCodes.DOSE_SITE_SMB),
+                        basalaimi = basalaimi,
+                        basal = basal,
+                        honeymoon = honeymoon,
+                        hourOfDay = hourOfDay,
+                        mealTime = mealTime,
+                        bfastTime = bfastTime,
+                        lunchTime = lunchTime,
+                        dinnerTime = dinnerTime,
+                        highCarbTime = highCarbTime,
+                        snackTime = snackTime,
+                        sportTime = sportTime,
+                        lateFatRiseFlag = lateFatRiseFlag,
+                        highCarbrunTime = highCarbrunTime,
+                        threshold = threshold,
+                        windowSinceDoseInt = windowSinceDoseInt,
+                        intervalsmb = intervalsmb,
+                        pumpCaps = pumpCaps,
+                        highBgOverrideUsed = highBgOverrideUsed,
+                        cob = cob,
+                        pkpdRuntime = pkpdRuntime,
+                        pumpAgeDays = pumpAgeDays,
+                        modelcal = modelcal,
+                        profileCurrentBasal = profileCurrentBasal,
+                        isConfirmedHighRiseLocal = isConfirmedHighRiseLocal,
+                        exerciseInsulinLockoutActive = exerciseInsulinLockoutActive,
+                        combinedDelta = combinedDelta.toFloat(),
+                        skipLegacySmbBlender = skipLegacySmbBlender,
+                        minBgLookbackMgdl = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
+                    )
+                    return AimiScheduleSmb(stage.smbExecution, stage.isMealAdvisorOneShot)
+                }
+
+                override fun applySmb(
+                    execution: SmbInstructionExecutor.Result,
+                    assignBasal: (Double) -> Unit,
+                ): Float = applySmbAdvisorExecutionToTickStateAndLog(execution, assignBasal)
+
+                override fun pkpdGuard(
+                    execution: SmbInstructionExecutor.Result,
+                    isMealAdvisorOneShot: Boolean,
+                    smbToGive: Float,
+                    targetBg: Double,
+                ): AimiSchedulePkpdGuard {
+                    val guarded = runPkpdGuardEndoDampenRedCarpetAndCapSmb(
+                        ctx = ctx,
+                        rT = rT,
+                        pkpdRuntime = pkpdRuntime,
+                        smbExecution = execution,
+                        isExplicitAdvisorRun = isExplicitAdvisorRun,
+                        isMealAdvisorOneShot = isMealAdvisorOneShot,
+                        isConfirmedHighRiseLocal = isConfirmedHighRiseLocal,
+                        bg = bg,
+                        delta = delta,
+                        shortAvgDelta = shortAvgDelta,
+                        predictedBg = predictedBg,
+                        eventualBG = eventualBG,
+                        targetBg = targetBg,
+                        honeymoon = honeymoon,
+                        mealTime = mealTime,
+                        bfastTime = bfastTime,
+                        lunchTime = lunchTime,
+                        dinnerTime = dinnerTime,
+                        highCarbTime = highCarbTime,
+                        snackTime = snackTime,
+                        windowSinceDoseInt = windowSinceDoseInt,
+                        intervalsmb = intervalsmb,
+                        smbToGive = smbToGive,
+                        iob = iob,
+                    )
+                    return AimiSchedulePkpdGuard(guarded.smbToGive, guarded.intervalsmb)
+                }
+            },
         )
-        smbToGive = pkpdGuardSmbToGive
-        intervalsmb = pkpdGuardIntervalsmb
+        val pumpCaps = schedule.pumpCaps
+        val profile_current_basal = schedule.profileCurrentBasal
+        var basal = schedule.basal
+        var target_bg = schedule.targetBg
+        var min_bg = schedule.minBg
+        var max_bg = schedule.maxBg
+        var sensitivityRatio = schedule.sensitivityRatio
+        val deliverAt = schedule.deliverAt
+        var maxIobLimit = schedule.maxIobLimit
+        val tick = schedule.tick
+        val minDelta = schedule.minDelta
+        val minAvgDelta = schedule.minAvgDelta
+        val timenow = schedule.timenowHour
+        val sixAMHour = schedule.sixAmHour
+        val pregnancyEnable = schedule.pregnancyEnable
+        sens = schedule.sens
+        val bgi = schedule.bgi
+        val deviation = schedule.deviation
+        val isMealAdvisorOneShot = schedule.isMealAdvisorOneShot
+        var smbToGive = schedule.smbToGive
+        intervalsmb = schedule.intervalSmb
         snapshotRtResetEnactmentFieldsRestorePredictionsAndPriorityCommands(
             rT = rT,
             deliverAt = deliverAt,
