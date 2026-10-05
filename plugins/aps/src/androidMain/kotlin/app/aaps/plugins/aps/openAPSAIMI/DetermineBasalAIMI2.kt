@@ -236,6 +236,8 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.decideUamPostHypoSmb
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTherapyExerciseCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTherapyExerciseDecision
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideTherapyExerciseLockout
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPublishDoseTerminalCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.decidePublishDoseTerminalAuthorityAndSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
@@ -9449,59 +9451,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return doseMinPred to ignoreMinPredictedCurve
     }
 
-    /** Clamp digestion arm: tree / absorption / meal-priority only — not MealCertainty alone. */
-    private fun digestionOrMealActiveForDose(
-        mealPriorityContext: Boolean = false,
-    ): Boolean {
-        val mealAbsorptionActive = when (lastMealAbsorptionOutput?.phase) {
-            MealAbsorptionPhase.FIRST_WAVE,
-            MealAbsorptionPhase.SECOND_WAVE,
-            MealAbsorptionPhase.INTER_WAVE,
-            MealAbsorptionPhase.PEAK_CORRECTION,
-            -> true
-            else -> false
-        }
-        val treeDigestionOrMeal =
-            when (lastPhysiologicalTreeSnapshot?.trunk?.globalState) {
-                GlobalPhysiologicalState.DIGESTION_ACTIVE,
-                GlobalPhysiologicalState.MEAL_PROBABLE,
-                -> true
-                else -> false
-            }
-        return treeDigestionOrMeal || mealAbsorptionActive || mealPriorityContext
-    }
-
-    private fun buildDoseTerminalSnapshot(
-        authority: DecisionPredictionAuthority?,
-        applyResult: PredictionAuthorityApplyResult?,
-        authorityEnabled: Boolean,
-        fallbackEventualMgdl: Double,
-        fallbackMinPredMgdl: Double,
-        targetBgMgdl: Double,
-        mealPriorityContext: Boolean,
-    ): DoseTerminalSnapshot {
-        val scenarioBest = lastScenarioProjection?.scenarioBest
-        return DoseTerminalSnapshotBuilder.build(
-            authority = authority,
-            applyResult = applyResult,
-            authorityEnabled = authorityEnabled,
-            fallbackEventualMgdl = fallbackEventualMgdl,
-            fallbackMinPredMgdl = fallbackMinPredMgdl,
-            clampInput = ClampPkpdScenarioReconcile.Input(
-                bgMgdl = bg,
-                targetBgMgdl = targetBgMgdl,
-                deltaMgdl5m = delta.toDouble(),
-                pkpdEventualMgdl = fallbackEventualMgdl,
-                scenarioTerminalMgdl = scenarioBest?.terminalMgdl,
-                scenarioPathMinMgdl = scenarioBest?.gatePathMinMgdl,
-                scenarioPathMinHitFloor = scenarioBest?.gatePathMinHitFloor == true,
-                digestionOrMealActive = digestionOrMealActiveForDose(mealPriorityContext),
-                sportTime = sportTime,
-                postHypoDeliveryActive = lastPostHypoDeliveryAuthority.active,
-            ),
-        )
-    }
-
     private data class TubeDoseBaseline(
         val maxSmb: Double,
         val maxSmbHb: Double,
@@ -9650,92 +9599,61 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         pkpdPredTerminalMgdl: Double,
         targetBgMgdl: Double,
         stageTag: String,
-    ) {
-        val authorityEnabled = predictionAuthorityEnabled()
-        val authorityShadow = preferences.get(BooleanKey.OApsAIMIPredictionAuthorityShadow)
-        val decisionPrediction = DecisionPredictionAuthorityResolver.resolve(
-            bgMgdl = bg,
-            pkpdEventualMgdl = pkpdEventualMgdl,
-            scenarioProjection = lastScenarioProjection,
-            mealAbsorptionOutput = lastMealAbsorptionOutput,
-            hypothesisState = lastUamHypothesisState,
-            latentState = lastPhysioLatentState,
-            causalStatePosterior = lastPatientState?.causalPosterior,
-            trajectoryAnalysis = trajectoryGuard.getLastAnalysis(),
-            physioPolicy = lastPhysiologicalPhaseOutput?.policy,
-            uamConfidence = AimiUamHandler.confidenceOrZero(),
-            postHypoDelivery = lastPostHypoDeliveryAuthority,
-            mealCertainty = lastMealCertainty,
-            trunkGlobalState = lastPhysiologicalTreeSnapshot?.trunk?.globalState,
-            mealConfirmedEarlyReleaseEnabled = preferences.get(BooleanKey.OApsAIMIMealConfirmedEarlyRelease),
-            // The smoothed combined delta, not the raw 5-minute one. The parameter has always been
-            // named for the combined signal; passing the raw delta let a single sensor step of +24
-            // satisfy the "rising" test and clear the "falling" breaker on the same tick.
-            combinedDeltaMgdl5m = tickCombinedDelta.toDouble(),
-            targetBgMgdl = targetBgMgdl,
-            iobU = iob.toDouble(),
-            maxIobU = maxIob,
-            mcerTailLatched = mcerTailLatch.latched,
-            declaredMeal = anticipTime && preferences.get(BooleanKey.OApsAIMIAnticipMealEvidence),
-        )
-        // Carry the latch to the next tick. Done after the call because the resolver is stateless and
-        // reports the trip; it can only keep an opt-in escalation off, never raise a dose.
-        mcerTailLatch = MealConfirmedEarlyReleaseLatch.next(
-            previous = mcerTailLatch,
-            armedThisTick = decisionPrediction.mcerArmed,
-            tailTripped = decisionPrediction.mcerTailTripped,
-            bgMgdl = bg.toDouble(),
-            targetBgMgdl = targetBgMgdl,
-            iobU = iob.toDouble(),
-        )
-        lastDecisionPredictionAuthority = decisionPrediction
-        consoleLog.add(
-            DecisionPredictionAuthorityResolver.formatLogLine(decisionPrediction) + " [$stageTag]",
-        )
-        val applyResult = PredictionAuthorityApplier.apply(
-            rT = rT,
-            authority = decisionPrediction,
-            scenarioProjection = lastScenarioProjection,
-            enabled = authorityEnabled,
-            shadowOnly = authorityShadow && !authorityEnabled,
-            pkpdEventualBeforeApply = pkpdEventualMgdl,
-            pkpdPredTerminalBeforeApply = pkpdPredTerminalMgdl,
-        )
-        lastPredictionAuthorityApplyResult = applyResult
-        PredictionAuthorityApplier.formatShadowLogLine(applyResult)?.let { line -> consoleLog.add(line) }
-        if (applyResult.applied) {
-            this.eventualBG = applyResult.eventualMgdl
-            this.predictedBg = applyResult.eventualMgdl.toFloat()
-            rT.eventualBG = applyResult.eventualMgdl
-            consoleLog.add(
-                "PRED_AUTHORITY_C1[$stageTag]: eventual=${applyResult.eventualMgdl.toInt()} " +
-                    "predT=${applyResult.predTerminalMgdl.toInt()} " +
-                    "curves=${applyResult.predBGsRemapped} src=${applyResult.source}",
-            )
-        }
-        val mealPriorityContext = lastMealAbsorptionOutput?.mealDeliveryPriority == true
-        val doseSnapshot = buildDoseTerminalSnapshot(
-            authority = decisionPrediction,
-            applyResult = applyResult,
-            authorityEnabled = authorityEnabled,
-            fallbackEventualMgdl = pkpdEventualMgdl,
-            fallbackMinPredMgdl = pkpdPredTerminalMgdl,
-            targetBgMgdl = targetBgMgdl,
-            mealPriorityContext = mealPriorityContext,
-        )
-        lastDoseTerminalSnapshot = doseSnapshot
-        this.eventualBG = doseSnapshot.eventualMgdl
-        this.predictedBg = doseSnapshot.eventualMgdl.toFloat()
-        rT.eventualBG = doseSnapshot.eventualMgdl
-        consoleLog.add(DoseTerminalSnapshot.formatLogLine(doseSnapshot) + " [$stageTag]")
-        if (doseSnapshot.clampReconciled) {
-            consoleLog.add(
-                "🩹 CLAMP_RECONCILE (in snapshot)[$stageTag] reason=${doseSnapshot.clampReason} " +
-                    "ev=${doseSnapshot.eventualMgdl.toInt()}",
-            )
-        }
-        applyTubeAdvisorFromDoseSnapshot(profile, mealData, targetBgMgdl, stageTag)
-    }
+    ) = decidePublishDoseTerminalAuthorityAndSnapshot(
+        rT = rT,
+        profile = profile,
+        mealData = mealData,
+        pkpdEventualMgdl = pkpdEventualMgdl,
+        pkpdPredTerminalMgdl = pkpdPredTerminalMgdl,
+        targetBgMgdl = targetBgMgdl,
+        stageTag = stageTag,
+        preferences = preferences,
+        consoleLog = consoleLog,
+        calls = object : AimiPublishDoseTerminalCalls {
+            override fun bg() = this@DetermineBasalaimiSMB2.bg
+            override fun scenarioProjection() = lastScenarioProjection
+            override fun mealAbsorption() = lastMealAbsorptionOutput
+            override fun hypothesis() = lastUamHypothesisState
+            override fun latent() = lastPhysioLatentState
+            override fun causalPosterior() = lastPatientState?.causalPosterior
+            override fun trajectoryAnalysis() = trajectoryGuard.getLastAnalysis()
+            override fun physioPolicy() = lastPhysiologicalPhaseOutput?.policy
+            override fun uamConfidence() = AimiUamHandler.confidenceOrZero()
+            override fun postHypo() = lastPostHypoDeliveryAuthority
+            override fun mealCertainty() = lastMealCertainty
+            override fun trunk() = lastPhysiologicalTreeSnapshot?.trunk?.globalState
+            override fun combinedDelta() = tickCombinedDelta.toDouble()
+            override fun iob() = this@DetermineBasalaimiSMB2.iob.toDouble()
+            override fun maxIob() = this@DetermineBasalaimiSMB2.maxIob
+            override fun mcerLatch() = mcerTailLatch
+            override fun anticipTime() = this@DetermineBasalaimiSMB2.anticipTime
+            override fun setLatch(value: MealConfirmedEarlyReleaseLatch.State) {
+                mcerTailLatch = value
+            }
+            override fun setAuthority(value: DecisionPredictionAuthority) {
+                lastDecisionPredictionAuthority = value
+            }
+            override fun setApplyResult(value: PredictionAuthorityApplyResult) {
+                lastPredictionAuthorityApplyResult = value
+            }
+            override fun writeEventual(mgdl: Double, rT: RT) {
+                this@DetermineBasalaimiSMB2.eventualBG = mgdl
+                this@DetermineBasalaimiSMB2.predictedBg = mgdl.toFloat()
+                rT.eventualBG = mgdl
+            }
+            override fun delta() = this@DetermineBasalaimiSMB2.delta.toDouble()
+            override fun sportTime() = this@DetermineBasalaimiSMB2.sportTime
+            override fun setSnapshot(value: DoseTerminalSnapshot) {
+                lastDoseTerminalSnapshot = value
+            }
+            override fun applyTube(
+                profile: OapsProfileAimi,
+                mealData: MealData,
+                targetBgMgdl: Double,
+                stageTag: String,
+            ) = applyTubeAdvisorFromDoseSnapshot(profile, mealData, targetBgMgdl, stageTag)
+        },
+    )
 
     /**
      * Re-merge RBT HTR after late PKPD snapshot for finalize/SafetyNet consumers.
