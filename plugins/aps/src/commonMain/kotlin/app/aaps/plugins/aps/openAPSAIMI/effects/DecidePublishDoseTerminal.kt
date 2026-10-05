@@ -28,7 +28,7 @@ import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryAnalysis
 /**
  * Android reads of the dose-terminal publish.
  * Each method is the call that already existed at that line.
- * `applyTubeAdvisorFromDoseSnapshot` stays Android.
+ * `applyTubeAdvisorFromDoseSnapshot` is the Android shell of `decideApplyTubeAdvisorFromDoseSnapshot`.
  */
 internal interface AimiPublishDoseTerminalCalls {
     fun bg(): Double

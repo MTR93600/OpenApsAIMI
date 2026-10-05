@@ -242,6 +242,9 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiBasalDecisionEngineCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideBasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiContextModuleCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPhysioLatentCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTubeAdvisorCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTubeDoseBaseline
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideApplyTubeAdvisorFromDoseSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideUpdatePhysioLatentState
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEnableSmbCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideApplyContextModule
@@ -9413,75 +9416,59 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         mealData: MealData,
         targetBgMgdl: Double,
         stageTag: String,
-    ) {
-        val snap = lastDoseTerminalSnapshot ?: return
-        if (!preferences.get(BooleanKey.OApsAIMIStraightLineTubeAdvisorEnabled)) return
-        if (stageTag == "late_pkpd") {
-            consoleLog.add("📐 TUBE-LINE-D4[$stageTag]: skip (caps frozen after pre-delivery publish)")
-            return
-        }
-        val dia = tickEffectiveDiaHours?.takeIf { it.isFinite() && it > 0.0 } ?: return
-        val isf = variableSensitivity.toDouble().takeIf { it.isFinite() && it > 1.0 } ?: return
-        if (tubeDoseBaseline == null) {
-            tubeDoseBaseline = TubeDoseBaseline(
-                maxSmb = this.maxSMB,
-                maxSmbHb = this.maxSMBHB,
-                currentBasal = profile.current_basal,
-                maxDailyBasal = profile.max_daily_basal,
-            )
-        }
-        val baseline = tubeDoseBaseline!!
-        this.maxSMB = baseline.maxSmb
-        this.maxSMBHB = baseline.maxSmbHb
-        profile.current_basal = baseline.currentBasal
-        profile.max_daily_basal = baseline.maxDailyBasal
-        lastTubeAdvisorSmbCapScale = null
-        try {
-            val tubeOut = straightLineTubeAdvisor.advise(
-                StraightLineTubeAdvisor.Input(
-                    bgMgdl = bg,
-                    deltaMgdlPer5m = delta.toDouble(),
-                    iobU = iob.toDouble(),
-                    cobG = mealData.mealCOB.toDouble(),
-                    isfMgdlPerU = isf,
-                    diaHours = dia,
-                    targetMgdl = targetBgMgdl,
-                    maxSmbU = this.maxSMB,
-                    minPredictedBg = snap.minPredMgdl,
-                    eventualBgMgdl = snap.eventualMgdl,
-                ),
-            )
-            if (!tubeOut.feasible) {
-                this.maxSMB = 0.05
-                this.maxSMBHB = 0.05
-                lastTubeAdvisorSmbCapScale = 0.0
-                if (tubeOut.basalCapScale < 0.999) {
-                    profile.current_basal = baseline.currentBasal * tubeOut.basalCapScale
-                    profile.max_daily_basal = baseline.maxDailyBasal * tubeOut.basalCapScale
-                }
-                consoleLog.add("📐 TUBE-LINE-D4[$stageTag]: infeasible ${tubeOut.reason}")
-                noteTubeAdvisorTrace(tubeOut, snap, stageTag, baseline)
-            } else {
-                if (tubeOut.smbCapScale < 0.999) {
-                    lastTubeAdvisorSmbCapScale = tubeOut.smbCapScale
-                    this.maxSMB = (baseline.maxSmb * tubeOut.smbCapScale).coerceAtLeast(0.05)
-                    this.maxSMBHB = (baseline.maxSmbHb * tubeOut.smbCapScale).coerceAtLeast(0.05)
-                }
-                if (tubeOut.basalCapScale < 0.999) {
-                    profile.current_basal = baseline.currentBasal * tubeOut.basalCapScale
-                    profile.max_daily_basal = baseline.maxDailyBasal * tubeOut.basalCapScale
-                }
-                consoleLog.add(
-                    "📐 TUBE-LINE-D4[$stageTag]: maxSMB=${aimiFmt2(this.maxSMB)} " +
-                        "basal×${aimiFmt3(tubeOut.basalCapScale)} | ${tubeOut.reason}",
-                )
-                noteTubeAdvisorTrace(tubeOut, snap, stageTag, baseline)
+    ) = decideApplyTubeAdvisorFromDoseSnapshot(
+        profile = profile,
+        mealData = mealData,
+        targetBgMgdl = targetBgMgdl,
+        stageTag = stageTag,
+        preferences = preferences,
+        consoleLog = consoleLog,
+        calls = object : AimiTubeAdvisorCalls {
+            override fun snapshot() = lastDoseTerminalSnapshot
+            override fun diaHours() = tickEffectiveDiaHours
+            override fun isf() = variableSensitivity.toDouble()
+            override fun baseline() = tubeDoseBaseline?.let {
+                AimiTubeDoseBaseline(it.maxSmb, it.maxSmbHb, it.currentBasal, it.maxDailyBasal)
             }
-            tubeAppliedFromDoseSnapshotThisTick = true
-        } catch (e: Exception) {
-            consoleError.add("📐 TUBE-LINE-D4[$stageTag]: ${e.message}")
-        }
-    }
+            override fun writeBaseline(value: AimiTubeDoseBaseline) {
+                tubeDoseBaseline = TubeDoseBaseline(value.maxSmb, value.maxSmbHb, value.currentBasal, value.maxDailyBasal)
+            }
+            override fun maxSmb() = this@DetermineBasalaimiSMB2.maxSMB
+            override fun maxSmbHb() = maxSMBHB
+            override fun writeMaxSmb(value: Double) {
+                maxSMB = value
+            }
+            override fun writeMaxSmbHb(value: Double) {
+                maxSMBHB = value
+            }
+            override fun writeScale(value: Double?) {
+                lastTubeAdvisorSmbCapScale = value
+            }
+            override fun bg() = this@DetermineBasalaimiSMB2.bg
+            override fun delta() = this@DetermineBasalaimiSMB2.delta.toDouble()
+            override fun iob() = this@DetermineBasalaimiSMB2.iob.toDouble()
+            override fun advise(input: StraightLineTubeAdvisor.Input) = straightLineTubeAdvisor.advise(input)
+            override fun noteTrace(
+                outcome: StraightLineTubeAdvisor.Outcome,
+                snapshot: DoseTerminalSnapshot,
+                stageTag: String,
+                baseline: AimiTubeDoseBaseline,
+            ) {
+                noteTubeAdvisorTrace(
+                    outcome,
+                    snapshot,
+                    stageTag,
+                    TubeDoseBaseline(baseline.maxSmb, baseline.maxSmbHb, baseline.currentBasal, baseline.maxDailyBasal),
+                )
+            }
+            override fun markApplied() {
+                tubeAppliedFromDoseSnapshotThisTick = true
+            }
+            override fun logError(message: String) {
+                consoleError.add(message)
+            }
+        },
+    )
 
     /**
      * Record what the tube actually decided from, so the next support package can settle it by
