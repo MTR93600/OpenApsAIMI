@@ -238,6 +238,8 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTherapyExerciseDecision
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideTherapyExerciseLockout
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPublishDoseTerminalCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decidePublishDoseTerminalAuthorityAndSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiBasalDecisionEngineCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideBasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
@@ -6820,95 +6822,86 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     /** Construit [BasalDecisionEngine.Input], [BasalDecisionEngine.Helpers], appelle [BasalDecisionEngine.decide]. */
     private fun runBasalDecisionEngineDecideStage(
         bundle: AimiBasalDecisionEngineStageBundle,
-    ): BasalDecisionEngine.Decision {
-        val forcedMealActive =
-            abs(bundle.ctx.currentTemp.rate - bundle.forcedBasalMealModesMax) < 0.05 && bundle.ctx.currentTemp.duration > 0
-        val auditorConfidence =
-            try {
-                app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdictCache.get(300_000)?.verdict?.confidence
-            } catch (e: Exception) {
-                0.0
-            } ?: 0.0
-        val basalInput = BasalDecisionEngine.Input(
-            bg = bundle.bg,
-            profileCurrentBasal = bundle.profileCurrentBasal,
-            basalEstimate = bundle.basalEstimate,
-            tdd7P = bundle.tdd7P,
-            tdd7Days = bundle.tdd7Days,
-            variableSensitivity = bundle.variableSensitivity,
-            profileSens = bundle.profile.sens,
-            // Carried on the profile of THIS tick, never read from a diagnostic global: `profile.sens`
-            // is the commanded value and carries both floors, and a process-global would hand this
-            // basal a value captured at another time of day.
-            preFloorCommandedSens = bundle.profile.pre_floor_isf_mgdl,
-            predictedBg = bundle.predictedBg,
-            targetBg = bundle.targetBg,
-            minBg = bundle.profile.min_bg,
-            lgsThreshold = HypoThresholdMath.getLgsThresholdSafe(bundle.profile),
-            eventualBg = bundle.eventualBg,
-            iob = bundle.tickIobForEngine,
-            maxIob = bundle.engineMaxIob,
-            allowMealHighIob = bundle.allowMealHighIob,
-            safetyDecision = bundle.safetyDecision,
-            mealData = bundle.ctx.mealData,
-            delta = bundle.delta,
-            shortAvgDelta = bundle.shortAvgDelta,
-            longAvgDelta = bundle.longAvgDelta,
-            combinedDelta = bundle.combinedDelta,
-            bgAcceleration = bundle.bgAcceleration,
-            slopeFromMaxDeviation = bundle.ctx.mealData.slopeFromMaxDeviation,
-            slopeFromMinDeviation = bundle.ctx.mealData.slopeFromMinDeviation,
-            forcedBasal = bundle.forcedBasal,
-            forcedMealActive = forcedMealActive,
-            isMealActive = bundle.isMealActive,
-            runtimeMinValue = bundle.runtimeMinValue,
-            snackTime = snackTime,
-            snackRuntimeMin = mealModeRuntimeToNullableMinutes(snackrunTime),
-            fastingTime = fastingTime,
-            sportTime = sportTime,
-            honeymoon = bundle.honeymoon,
-            pregnancyEnable = bundle.pregnancyEnable,
-            mealTime = mealTime,
-            mealRuntimeMin = mealModeRuntimeToNullableMinutes(mealruntime),
-            bfastTime = bfastTime,
-            bfastRuntimeMin = mealModeRuntimeToNullableMinutes(bfastruntime),
-            lunchTime = lunchTime,
-            lunchRuntimeMin = mealModeRuntimeToNullableMinutes(lunchruntime),
-            dinnerTime = dinnerTime,
-            dinnerRuntimeMin = mealModeRuntimeToNullableMinutes(dinnerruntime),
-            highCarbTime = highCarbTime,
-            highCarbRuntimeMin = mealModeRuntimeToNullableMinutes(highCarbrunTime),
-            timenow = bundle.timenowHour,
-            sixAmHour = bundle.sixAmHour,
-            recentSteps5Minutes = recentSteps5Minutes,
-            nightMode = bundle.nightMode,
-            modesCondition = bundle.modesCondition,
-            autodrive = bundle.autodrivePref,
-            currentTemp = bundle.ctx.currentTemp,
-            glucoseStatus = bundle.glucoseStatus,
-            featuresCombinedDelta = bundle.featuresCombinedDelta,
-            smbToGive = bundle.smbToGive,
-            zeroSinceMin = bundle.zeroSinceMin,
-            minutesSinceLastChange = bundle.minutesSinceLastChange,
-            pumpCaps = bundle.pumpCaps,
-            auditorConfidence = auditorConfidence,
-            projectionHorizonMin = DynamicBasalController.PROJECTION_HORIZON_MIN
-                .takeIf { preferences.get(BooleanKey.OApsAIMIBasalProjectedError) },
-        )
-        val helpers = BasalDecisionEngine.Helpers(
-            calculateRate = { basalValue, currentBasalValue, multiplier, label ->
-                calculateRate(basalValue, currentBasalValue, multiplier, label, bundle.ctx.currentTemp, bundle.rT)
-            },
-            calculateBasalRate = { basalValue, currentBasalValue, multiplier ->
-                calculateBasalRate(basalValue, currentBasalValue, multiplier)
-            },
-            detectMealOnset = { deltaValue, predictedDelta, acceleration, predBg, targBg ->
-                detectMealOnset(deltaValue, predictedDelta, acceleration, predBg, targBg)
-            },
-            round = { value, digits -> round(value, digits) }
-        )
-        return basalDecisionEngine.decide(basalInput, bundle.rT, helpers)
-    }
+    ): BasalDecisionEngine.Decision = decideBasalDecisionEngine(
+        currentTemp = bundle.ctx.currentTemp,
+        mealData = bundle.ctx.mealData,
+        profile = bundle.profile,
+        rT = bundle.rT,
+        glucoseStatus = bundle.glucoseStatus,
+        featuresCombinedDelta = bundle.featuresCombinedDelta,
+        profileCurrentBasal = bundle.profileCurrentBasal,
+        basalEstimate = bundle.basalEstimate,
+        tdd7P = bundle.tdd7P,
+        tdd7Days = bundle.tdd7Days,
+        variableSensitivity = bundle.variableSensitivity,
+        predictedBg = bundle.predictedBg,
+        targetBg = bundle.targetBg,
+        tickIobForEngine = bundle.tickIobForEngine,
+        engineMaxIob = bundle.engineMaxIob,
+        eventualBg = bundle.eventualBg,
+        bg = bundle.bg,
+        delta = bundle.delta,
+        shortAvgDelta = bundle.shortAvgDelta,
+        longAvgDelta = bundle.longAvgDelta,
+        combinedDelta = bundle.combinedDelta,
+        bgAcceleration = bundle.bgAcceleration,
+        allowMealHighIob = bundle.allowMealHighIob,
+        safetyDecision = bundle.safetyDecision,
+        forcedBasal = bundle.forcedBasal,
+        forcedBasalMealModesMax = bundle.forcedBasalMealModesMax,
+        isMealActive = bundle.isMealActive,
+        runtimeMinValue = bundle.runtimeMinValue,
+        smbToGive = bundle.smbToGive,
+        zeroSinceMin = bundle.zeroSinceMin,
+        minutesSinceLastChange = bundle.minutesSinceLastChange,
+        pumpCaps = bundle.pumpCaps,
+        timenowHour = bundle.timenowHour,
+        sixAmHour = bundle.sixAmHour,
+        pregnancyEnable = bundle.pregnancyEnable,
+        nightMode = bundle.nightMode,
+        modesCondition = bundle.modesCondition,
+        autodrivePref = bundle.autodrivePref,
+        honeymoon = bundle.honeymoon,
+        preferences = preferences,
+        consoleLog = consoleLog,
+        calls = object : AimiBasalDecisionEngineCalls {
+            override fun snackTime() = this@DetermineBasalaimiSMB2.snackTime
+            override fun snackRuntime() = snackrunTime
+            override fun fastingTime() = this@DetermineBasalaimiSMB2.fastingTime
+            override fun sportTime() = this@DetermineBasalaimiSMB2.sportTime
+            override fun mealTime() = this@DetermineBasalaimiSMB2.mealTime
+            override fun mealRuntime() = mealruntime
+            override fun bfastTime() = this@DetermineBasalaimiSMB2.bfastTime
+            override fun bfastRuntime() = bfastruntime
+            override fun lunchTime() = this@DetermineBasalaimiSMB2.lunchTime
+            override fun lunchRuntime() = lunchruntime
+            override fun dinnerTime() = this@DetermineBasalaimiSMB2.dinnerTime
+            override fun dinnerRuntime() = dinnerruntime
+            override fun highCarbTime() = this@DetermineBasalaimiSMB2.highCarbTime
+            override fun highCarbRuntime() = highCarbrunTime
+            override fun recentSteps5Minutes() = this@DetermineBasalaimiSMB2.recentSteps5Minutes
+            override fun calculateRate(
+                basal: Double,
+                currentBasal: Double,
+                multiplier: Double,
+                reason: String,
+                currentTemp: CurrentTemp,
+                rT: RT,
+            ) = this@DetermineBasalaimiSMB2.calculateRate(
+                basal, currentBasal, multiplier, reason, currentTemp, rT,
+            )
+            override fun detectMealOnset(
+                delta: Float,
+                predictedDelta: Float,
+                acceleration: Float,
+                predictedBg: Float,
+                targetBg: Float,
+            ) = this@DetermineBasalaimiSMB2.detectMealOnset(
+                delta, predictedDelta, acceleration, predictedBg, targetBg,
+            )
+            override fun engine() = basalDecisionEngine
+        },
+    )
 
     /**
      * Paramètres pour [runPostBasalEngineLearnersRtInstrumentationAndAuditorStage] : repères tick
