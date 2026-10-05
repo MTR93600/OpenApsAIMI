@@ -254,6 +254,15 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.decidePostHypoCompressionAndDrif
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEarlyTickCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideCalculateRate
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideDriftTerminatorCondition
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEarlyTickOutcome
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPrefixAutodrive
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPrefixCombined
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPrefixGlucose
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPrefixIob
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPrefixStep
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickPrefixCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickPrefixOutcome
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetermineBasalTickPrefix
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideEarlyDetermineBasalStages
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideLateFatProteinRise
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTrajectoryContextPrepCalls
@@ -14045,106 +14054,174 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Causal censoring of the basal label needs the carbs of THIS tick, and the basal-learning hook
         // runs on paths that have no access to `ctx`. See [basalLearningCobGrams].
         tickCobGrams = ctx.mealData.mealCOB.takeIf { it.isFinite() && it >= 0.0 } ?: Double.NaN
-        val (
-            originalProfile,
-            isExplicitAdvisorRun,
-            tdd7P,
-            tdd7Days,
-        ) = runEarlyDetermineBasalStages(ctx)
-
-        val isConfirmedHighRiseLocal = bootstrapPhysiologyAfterEarlyTick(ctx, tdd7Days)
-        isConfirmedHighRiseThisTick = isConfirmedHighRiseLocal
-
-        val (
-            decisionCtx,
-            rT,
-            flatBGsDetected,
-        ) = buildDecisionContextInitRtSosAndFlatShadow(ctx)
-
-        val (
-            iobTotal,
-            iobPeakMinutes,
-            iobActivityIn30Min,
-            insulinActionState,
-        ) = runRealtimePhysioIobProfilerAndInsulinObserver(ctx, decisionCtx)
-
-        val (glucoseStatus, f) = when (val gsOutcome = ensureWCycleAndLoadGlucoseStatusOrAbort(ctx, rT)) {
-            is AimiGlucosePackLoadOutcome.Abort -> return gsOutcome.returnValue
-            is AimiGlucosePackLoadOutcome.Continue -> gsOutcome.glucoseStatus to gsOutcome.aimiBgFeatures
+        val continued = when (
+            val prefix = decideDetermineBasalTickPrefix(
+                ctx,
+                profile,
+                object : AimiTickPrefixCalls<AimiDecisionContext> {
+                    override fun earlyStages(ctx: AimiTickContext): AimiEarlyTickOutcome {
+                        val state = runEarlyDetermineBasalStages(ctx)
+                        return AimiEarlyTickOutcome(
+                            originalProfile = state.originalProfile,
+                            isExplicitAdvisorRun = state.isExplicitAdvisorRun,
+                            tdd7P = state.tdd7P,
+                            tdd7Days = state.tdd7Days,
+                        )
+                    }
+                    override fun bootstrapPhysiology(ctx: AimiTickContext, tdd7Days: Double) =
+                        bootstrapPhysiologyAfterEarlyTick(ctx, tdd7Days)
+                    override fun writeConfirmedHighRise(value: Boolean) {
+                        isConfirmedHighRiseThisTick = value
+                    }
+                    override fun decisionContext(ctx: AimiTickContext) =
+                        buildDecisionContextInitRtSosAndFlatShadow(ctx)
+                    override fun realtimePhysio(ctx: AimiTickContext, decisionCtx: AimiDecisionContext): AimiPrefixIob {
+                        val bundle = runRealtimePhysioIobProfilerAndInsulinObserver(ctx, decisionCtx)
+                        return AimiPrefixIob(
+                            bundle.iobTotal,
+                            bundle.iobPeakMinutes,
+                            bundle.iobActivityIn30Min,
+                            bundle.insulinActionState,
+                        )
+                    }
+                    override fun loadGlucose(ctx: AimiTickContext, rT: RT) = when (
+                        val outcome = ensureWCycleAndLoadGlucoseStatusOrAbort(ctx, rT)
+                    ) {
+                        is AimiGlucosePackLoadOutcome.Abort -> AimiPrefixGlucose.Abort(outcome.returnValue)
+                        is AimiGlucosePackLoadOutcome.Continue ->
+                            AimiPrefixGlucose.Continue(outcome.glucoseStatus, outcome.aimiBgFeatures)
+                    }
+                    override fun t9Bootstrap(
+                        ctx: AimiTickContext,
+                        glucoseStatus: GlucoseStatusAIMI,
+                        rT: RT,
+                        iobTotal: Double,
+                    ) = runT9PhysioEarlyPkpdAndTubeBootstrap(ctx, glucoseStatus, rT, iobTotal)
+                    override fun cachedPkpdRuntime() = this@DetermineBasalaimiSMB2.cachedPkpdRuntime
+                    override fun combinedDelta(
+                        ctx: AimiTickContext,
+                        glucoseStatus: GlucoseStatusAIMI,
+                        useLegacyDynamics: Boolean,
+                        reasonAimi: StringBuilder,
+                    ): AimiPrefixCombined {
+                        val tick = runCombinedDeltaByodaAndDynamicPeak(
+                            ctx,
+                            glucoseStatus,
+                            useLegacyDynamics,
+                            reasonAimi,
+                        )
+                        return AimiPrefixCombined(tick.combinedDelta, tick.shortAvgDeltaAdj, tick.tp)
+                    }
+                    override fun autodriveBootstrap(ctx: AimiTickContext): AimiPrefixAutodrive {
+                        val boot = buildPreTherapyAutodriveByodaBootstrap(ctx)
+                        return AimiPrefixAutodrive(boot.isG6Byoda, boot.autodriveEnabled, boot.autodriveDisplay)
+                    }
+                    override fun tickClock(
+                        ctx: AimiTickContext,
+                        glucoseStatus: GlucoseStatusAIMI,
+                        rT: RT,
+                        combinedDelta: Float,
+                    ) = runTickClockMaxSmbTirCarbAndGlucoseCopy(ctx, glucoseStatus, rT, combinedDelta)
+                    override fun therapyGate(ctx: AimiTickContext, profile: OapsProfileAimi, rT: RT): AimiPrefixStep<Boolean> =
+                        when (val gate = runTherapyHydrateClocksAndExerciseLockoutGate(ctx, profile, rT)) {
+                            is AimiTherapyExerciseGate.ReturnEarly -> AimiPrefixStep.Stop(gate.result)
+                            is AimiTherapyExerciseGate.Continue -> AimiPrefixStep.Go(gate.nightbis)
+                        }
+                    override fun recentGlucose() = glucoseStatusCalculatorAimi.getRecentGlucose()
+                    override fun refreshPostHypo(
+                        combinedDelta: Float,
+                        recentBGs: List<Float>,
+                        shortAvgDeltaAdj: Float,
+                        slopeFromMinDeviation: Double,
+                        reason: StringBuilder,
+                    ) = refreshPostHypoDeliveryAuthorityForTick(
+                        combinedDelta = combinedDelta,
+                        recentBGs = recentBGs,
+                        shortAvgDeltaAdj = shortAvgDeltaAdj,
+                        slopeFromMinDeviation = slopeFromMinDeviation,
+                        reason = reason,
+                    )
+                    override fun auditorIsf(ctx: AimiTickContext) = decideAuditorIsfFactorForTick(ctx)
+                    override fun mealModes(ctx: AimiTickContext, profile: OapsProfileAimi, rT: RT): AimiPrefixStep<String> =
+                        when (val gate = runManualMealModesAfterTherapyGate(ctx, profile, rT)) {
+                            is AimiManualMealModesGate.ReturnEarly -> AimiPrefixStep.Stop(gate.rT)
+                            is AimiManualMealModesGate.Continue -> AimiPrefixStep.Go(gate.activeModeName)
+                        }
+                    override fun t3cBrittle(
+                        ctx: AimiTickContext,
+                        profile: OapsProfileAimi,
+                        rT: RT,
+                        originalProfile: OapsProfileAimi,
+                        pkpdRuntime: PkPdRuntime?,
+                        shortAvgDeltaAdj: Float,
+                        physioMultipliers: PhysioMultipliersMTR,
+                        insulinActionState: InsulinActionState,
+                    ) = runT3cBrittleBypassOrReturn(
+                        ctx = ctx,
+                        profile = profile,
+                        rT = rT,
+                        originalProfile = originalProfile,
+                        pkpdRuntime = pkpdRuntime,
+                        shortAvgDeltaAdj = shortAvgDeltaAdj,
+                        physioMultipliers = physioMultipliers,
+                        insulinActionState = insulinActionState,
+                    )
+                },
+            )
+        ) {
+            is AimiTickPrefixOutcome.ReturnEarly -> return prefix.rT
+            is AimiTickPrefixOutcome.T3cReturn -> {
+                // T3C returns early, before the shared decision-export tail. The export stays here.
+                runCatching {
+                    runAimiSnapshotMedicalJsonAndHormonitorExportStage(
+                        ctx,
+                        profile,
+                        prefix.decisionCtx,
+                        prefix.rT,
+                        prefix.pkpdRuntime,
+                    )
+                }.onFailure { aapsLogger.error(LTag.APS, "T3C decision export failed", it) }
+                return prefix.rT
+            }
+            is AimiTickPrefixOutcome.Continue -> prefix
         }
-
-        val (pumpAgeDays, physioMultipliers) = runT9PhysioEarlyPkpdAndTubeBootstrap(ctx, glucoseStatus, rT, iobTotal)
-        var pkpdRuntime = this.cachedPkpdRuntime
-
-        val reasonAimi = StringBuilder()
-
-        val useLegacyDynamics = (pkpdRuntime == null)
-        val (combinedDelta, shortAvgDeltaAdj, tp) = runCombinedDeltaByodaAndDynamicPeak(
-            ctx,
-            glucoseStatus,
-            useLegacyDynamics,
-            reasonAimi,
-        )
-        val adBoot = buildPreTherapyAutodriveByodaBootstrap(ctx)
-        val isG6Byoda = adBoot.isG6Byoda
-        val autodrive = adBoot.autodriveEnabled
-        val autodriveDisplay = adBoot.autodriveDisplay
-
-        val (
-            honeymoon,
-            ngrConfig,
-            tir1DAYIR,
-            lastHourTIRAbove,
-            tirbasal3IR,
-            tirbasal3B,
-            tirbasal3A,
-            tirbasalhAP,
-            circadianMinute,
-            circadianSecond,
-            bgAcceleration,
-        ) = runTickClockMaxSmbTirCarbAndGlucoseCopy(ctx, glucoseStatus, rT, combinedDelta)
-        val nightbis = when (val therapyGate = runTherapyHydrateClocksAndExerciseLockoutGate(ctx, profile, rT)) {
-            is AimiTherapyExerciseGate.ReturnEarly -> return therapyGate.result
-            is AimiTherapyExerciseGate.Continue -> therapyGate.nightbis
-        }
-
-        refreshPostHypoDeliveryAuthorityForTick(
-            combinedDelta = combinedDelta,
-            recentBGs = glucoseStatusCalculatorAimi.getRecentGlucose(),
-            shortAvgDeltaAdj = shortAvgDeltaAdj,
-            slopeFromMinDeviation = ctx.mealData.slopeFromMinDeviation,
-            reason = StringBuilder(),
-        )
-
-        // Judges the auditor's ISF factor against this tick. It changes nothing here: the value is
-        // put on the dose-facing sensitivity later, under its floor. It has to be decided before the
-        // target, because the two factors share one budget and the ISF has priority.
-        decideAuditorIsfFactorForTick(ctx)
-
-        val activeModeName = when (val mealModesGate = runManualMealModesAfterTherapyGate(ctx, profile, rT)) {
-            is AimiManualMealModesGate.ReturnEarly -> return mealModesGate.rT
-            is AimiManualMealModesGate.Continue -> mealModesGate.activeModeName
-        }
-
-        // 🛡️ T3C BRITTLE MODE BRANCH (Moved here to capture `therapy` variables for Prebolus)
-        runT3cBrittleBypassOrReturn(
-            ctx = ctx,
-            profile = profile,
-            rT = rT,
-            originalProfile = originalProfile,
-            pkpdRuntime = pkpdRuntime,
-            shortAvgDeltaAdj = shortAvgDeltaAdj,
-            physioMultipliers = physioMultipliers,
-            insulinActionState = insulinActionState,
-        )?.let { t3cResult ->
-            // T3C returns early, before the shared decision-export tail (runAimiSnapshotMedicalJsonAndHormonitorExportStage,
-            // ~L15442). Run that export here so EVERY T3C tick is recorded in AIMI_Decisions.jsonl (empty JSONL bug).
-            // basal-NN learning already ran inside executeT3cBrittleMode (govTag "T3C") — do NOT re-run it (no logDecisionFinal).
-            runCatching {
-                runAimiSnapshotMedicalJsonAndHormonitorExportStage(ctx, profile, decisionCtx, t3cResult, pkpdRuntime)
-            }.onFailure { aapsLogger.error(LTag.APS, "T3C decision export failed", it) }
-            return t3cResult
-        }
+        val originalProfile = continued.originalProfile
+        val isExplicitAdvisorRun = continued.isExplicitAdvisorRun
+        val tdd7P = continued.tdd7P
+        val tdd7Days = continued.tdd7Days
+        val isConfirmedHighRiseLocal = continued.isConfirmedHighRiseLocal
+        val decisionCtx = continued.decisionCtx
+        val rT = continued.rT
+        val flatBGsDetected = continued.flatBGsDetected
+        val iobTotal = continued.iobTotal
+        val iobPeakMinutes = continued.iobPeakMinutes
+        val iobActivityIn30Min = continued.iobActivityIn30Min
+        val insulinActionState = continued.insulinActionState
+        val glucoseStatus = continued.glucoseStatus
+        val f = continued.features
+        val pumpAgeDays = continued.pumpAgeDays
+        val physioMultipliers = continued.physioMultipliers
+        var pkpdRuntime = continued.pkpdRuntime
+        val reasonAimi = continued.reasonAimi
+        val combinedDelta = continued.combinedDelta
+        val shortAvgDeltaAdj = continued.shortAvgDeltaAdj
+        val tp = continued.tp
+        val isG6Byoda = continued.isG6Byoda
+        val autodrive = continued.autodrive
+        val autodriveDisplay = continued.autodriveDisplay
+        val honeymoon = continued.honeymoon
+        val ngrConfig = continued.ngrConfig
+        val tir1DAYIR = continued.tir1DAYIR
+        val lastHourTIRAbove = continued.lastHourTIRAbove
+        val tirbasal3IR = continued.tirbasal3IR
+        val tirbasal3B = continued.tirbasal3B
+        val tirbasal3A = continued.tirbasal3A
+        val tirbasalhAP = continued.tirbasalhAP
+        val circadianMinute = continued.circadianMinute
+        val circadianSecond = continued.circadianSecond
+        val bgAcceleration = continued.bgAcceleration
+        val nightbis = continued.nightbis
+        val activeModeName = continued.activeModeName
 
         val spSignalPkpd = when (
             val outcome = runSignalPreparationPkpdRuntimePhase(
