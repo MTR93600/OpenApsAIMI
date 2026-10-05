@@ -2276,6 +2276,31 @@ class ShellDecisionTraceTest {
         assertEquals(TUBE_ADVISOR_HALF_CAP_TRACE, trace)
     }
 
+    @Test
+    fun advancedPredictionPublishesEventualFromDeclaredCob() {
+        tick = newTick(recordingPreferences(doubles = emptyMap()))
+        armShell()
+        val profile = profileStub()
+        val rT = RT(runningDynamicIsf = false)
+        val trace = capture {
+            invokeNamed(
+                "applyAdvancedPredictions",
+                listOf(
+                    180.0,
+                    0.0f,
+                    50.0,
+                    arrayOf(IobTotal(time = now, iob = 0.0, activity = 0.0)),
+                    MealData(mealCOB = 36.0),
+                    profile,
+                    rT,
+                ),
+            )
+        }
+        assertEquals(322.0, rT.eventualBG!!, 1e-9)
+        assertEquals(getField(tick, "predictedBg") as Float, rT.eventualBG!!.toFloat(), 1e-3f)
+        assertEquals(ADVANCED_PREDICTION_COB_TRACE, trace)
+    }
+
     private fun resultField(target: Any, name: String): Any? {
         val field = target.javaClass.getDeclaredField(name)
         field.isAccessible = true
@@ -3177,6 +3202,19 @@ class ShellDecisionTraceTest {
     companion object {
         private val ENABLE_SMB_ALWAYS_TRACE = """
             LOG phrase
+        """.trimIndent()
+
+        private val ADVANCED_PREDICTION_COB_TRACE = """
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
+            READ key=BooleanKey.OApsAIMIUndeclaredCobEnabled value=false
+            READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
+            READ key=BooleanKey.OApsAIMIPkpdHyperReversion value=false
+            READ key=BooleanKey.OApsAIMIPkpdStackAwareGuardB value=false
+            READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
+            LOG PKPD_SOFT_FLOOR: raw=146 soft=146 hybT=321 hitFloor=false applied=false endo=false fallSuppressed=false reason=endo_reversion_disabled
+            LOG PRED_SET size=49 eventual=322 min=180 uamT=147 source=AdvancedCurves
+            LOG Prédiction avancée avec ISF final de 50.0 (Avancé)
         """.trimIndent()
 
         private val TUBE_ADVISOR_HALF_CAP_TRACE = """
