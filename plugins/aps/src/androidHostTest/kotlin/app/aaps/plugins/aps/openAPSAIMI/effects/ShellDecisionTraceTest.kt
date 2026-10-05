@@ -29,6 +29,10 @@ import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.AIMIAdaptiveBasal
+import app.aaps.plugins.aps.openAPSAIMI.context.ContextInfluenceEngine
+import app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent
+import app.aaps.plugins.aps.openAPSAIMI.context.ContextManager
+import app.aaps.plugins.aps.openAPSAIMI.context.ContextSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.AimiDecisionContext
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.AimiUamHandler
@@ -2138,6 +2142,53 @@ class ShellDecisionTraceTest {
         assertEquals(ENABLE_SMB_ALWAYS_TRACE, trace)
     }
 
+    @Test
+    fun contextActivityZerosSmbAndRaisesTheTarget() {
+        val prefs = recordingPreferences(
+            doubles = emptyMap(),
+            bools = mapOf(BooleanKey.OApsAIMIContextEnabled to true),
+        )
+        tick = newTick(prefs)
+        armShell()
+        val activity = ContextIntent.Activity(
+            startTimeMs = 1L,
+            durationMs = 3_600_000L,
+            intensity = ContextIntent.Intensity.HIGH,
+        )
+        val snapshot = ContextSnapshot(
+            timestampMs = 1L,
+            activeIntents = listOf(activity),
+            hasActivity = true,
+            hasIllness = false,
+            hasMealRisk = false,
+            hasStress = false,
+            hasAlcohol = false,
+            activityIntensity = ContextIntent.Intensity.HIGH,
+            illnessIntensity = null,
+            stressIntensity = null,
+            alcoholIntensity = null,
+        )
+        val manager = mock(ContextManager::class.java)
+        whenever(manager.getSnapshot(any())).thenReturn(snapshot)
+        setField(tick, "contextManager", manager)
+        setField(tick, "contextInfluenceEngine", ContextInfluenceEngine(mock(AAPSLogger::class.java)))
+        setField(tick, "maxSMB", 0.5)
+        setField(tick, "maxSMBHB", 0.5)
+        setField(tick, "intervalsmb", 1)
+        setField(tick, "sportTime", false)
+        setField(tick, "exerciseHyperBasalOverrideActive", false)
+        var target: Double? = null
+        val trace = capture {
+            target = invokeNamed(
+                "applyContextModule",
+                listOf(180.0, 1.0, 0.0, RT(runningDynamicIsf = false)),
+            ) as Double?
+        }
+        assertEquals(150.0, target!!, 1e-9)
+        assertEquals(0.0, getField(tick, "maxSMB") as Double, 1e-9)
+        assertEquals(CONTEXT_ACTIVITY_TARGET_TRACE, trace)
+    }
+
     private fun resultField(target: Any, name: String): Any? {
         val field = target.javaClass.getDeclaredField(name)
         field.isAccessible = true
@@ -3039,6 +3090,20 @@ class ShellDecisionTraceTest {
     companion object {
         private val ENABLE_SMB_ALWAYS_TRACE = """
             LOG phrase
+        """.trimIndent()
+
+        private val CONTEXT_ACTIVITY_TARGET_TRACE = """
+            READ key=BooleanKey.OApsAIMIContextEnabled value=true
+            LOG ═══ CONTEXT MODULE ═══
+            READ key=StringKey.ContextMode value=
+            LOG 🎯 Active Contexts: 1
+            LOG   • Activity
+            LOG   SMB: 0.50→0.38U (×0.75)
+            LOG   Interval: 1→6min (+5)
+            LOG   ⚠️ Prefers TEMP BASAL over SMB (SMB Disabled)
+            LOG   🎯 Sport Target Override -> 150 mg/dL
+            LOG   → Activity HIGH → SMB×0.75 +5min preferBasal=true
+            LOG ═══════════════════════════════════
         """.trimIndent()
 
         private val TRAJECTORY_TIGHT_SPIRAL_TRACE = """
