@@ -42,6 +42,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideEffortSuppressesUndeclaredMeal
+import app.aaps.plugins.aps.openAPSAIMI.effects.OptionalSignal
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideRefreshEffortActivityBelief
 import app.aaps.plugins.aps.openAPSAIMI.effects.readRbtOptional
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEffectProbe
@@ -12789,17 +12790,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val protection = preferences.get(BooleanKey.OApsAIMIEffortActivityProtection)
         val t3c = t3cModeEnabled()
         if (!protection && !t3c) return
-        val signal = readRbtOptional(
+        val signal = readRbtOptional<HealthContextSnapshot>(
             source = "wearableSnapshot",
             consoleLog = consoleLog,
             failureLine = { errorType, message ->
                 "WEARABLE snapshot failed ($errorType): ${message.orEmpty()} — snapshot empty"
             },
         ) { physioAdapter.getLatestSnapshot() }
+        val snapshot = when (signal) {
+            is OptionalSignal.Ready -> signal.value
+            is OptionalSignal.Failed -> null
+        }
         val refresh = decideRefreshEffortActivityBelief(
             protectionEnabled = protection,
             t3cEnabled = t3c,
-            snapshot = signal.valueOrNull(),
+            snapshot = snapshot,
             nowMs = dateUtil.now(),
             stressResistanceProb = lastPhysioLatentState?.transientResistanceProb ?: 0.0,
             prior = lastEffortMemory,
