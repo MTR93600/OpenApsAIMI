@@ -187,18 +187,16 @@ kotlin {
     targets.withType<org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget>().configureEach {
         if (name != "iosArm64" && name != "iosSimulatorArm64") return@configureEach
         val linkDir = if (name == "iosArm64") "ios-arm64" else "ios-simulator-arm64"
+        val include = layout.projectDirectory.dir("src/nativeInterop/cinterop").asFile.absolutePath
+        // Kotlin 2.4 cinterop ignores -linker-option. The object has to be named
+        // on the binary. It is a fat MH_OBJECT; thinTensorFlowLiteC keeps the arm64 slice.
+        val objectFile = layout.buildDirectory.file("tflite-c/link/$linkDir/TensorFlowLiteC.o").get().asFile.absolutePath
         compilations.getByName("main").cinterops.create("tflite") {
             definitionFile.set(layout.projectDirectory.file("src/nativeInterop/cinterop/tflite.def"))
-            val include = layout.projectDirectory.dir("src/nativeInterop/cinterop").asFile.absolutePath
-            // The published binary is a fat MH_OBJECT, not a dylib. ld wants the
-            // arm64 slice as a plain object. thinTensorFlowLiteC writes it here
-            // before the Apple link, which only runs on macOS.
-            val objectFile = layout.buildDirectory.file("tflite-c/link/$linkDir/TensorFlowLiteC.o").get().asFile.absolutePath
-            extraOpts(
-                "-compiler-option", "-I$include",
-                "-linker-option", objectFile,
-                "-linker-option", "-lc++",
-            )
+            extraOpts("-compiler-option", "-I$include")
+        }
+        binaries.configureEach {
+            linkerOpts(objectFile, "-lc++")
         }
     }
 }

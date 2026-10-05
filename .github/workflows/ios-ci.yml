@@ -55,7 +55,9 @@ concurrency:
 jobs:
   ios:
     runs-on: macos-latest
-    timeout-minutes: 60
+    # The UAM parity link pulls in TensorFlow Lite C (~45 MB object). The suite
+    # already used most of an hour before that link succeeded.
+    timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@v5
