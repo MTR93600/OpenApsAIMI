@@ -64,6 +64,15 @@ jobs:
         with:
           fetch-depth: 1
 
+      # Android ships org.tensorflow:tensorflow-lite:2.4.0. The Kotlin/Native test
+      # links TensorFlow Lite C 2.10.0 because that is the oldest published
+      # xcframework with an arm64 simulator slice. This step runs the 2.4.0
+      # x86_64 simulator slice (it exists; arm64 simulator does not) under the
+      # iOS simulator, one thread, no delegate. A mismatch or a spawn failure
+      # fails the job. Nothing here rewrites the Android reference bits.
+      - name: Compare UAM vectors with TensorFlow Lite C 2.4.0 x86_64
+        run: plugins/aps/src/tfliteParity/run-uam24-x64.sh
+
       - name: Load jdk version
         run: |
           JAVA_VERSION=$(jq -r '.default' .github/jdk-map.json)
