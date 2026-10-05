@@ -253,6 +253,8 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPostHypoDriftCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decidePostHypoCompressionAndDriftTerminatorOrReturn
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEarlyTickCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideEarlyDetermineBasalStages
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTrajectoryContextPrepCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideTrajectoryContextModuleTddIsfAndDynamicPbolusPrep
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideUpdatePhysioLatentState
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEnableSmbCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideApplyContextModule
@@ -8956,53 +8958,114 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         reason: StringBuilder,
         isExplicitAdvisorRun: Boolean,
     ): AimiTrajectoryContextIsfPrep {
-        applyTrajectoryAnalysis(
-            currentTime = ctx.currentTime,
-            bg = bg,
-            delta = delta.toDouble(),
-            bgacc = bgacc,
-            iobActivityNow = iobActivityNow,
-            iob = iob,
-            insulinActionState = insulinActionState,
-            lastBolusAgeMinutes = lastBolusAgeMinutes,
-            cob = cob,
-            targetBg = targetBg.toDouble(),
-            profile = profile,
-            rT = rT,
-            uiInteraction = ctx.uiInteraction,
-            relevanceScore = physioMultipliers.trajectoryRelevanceScore
-        )
-        runTrajectoryTightSpiralSafetyBridge(
+        val out = decideTrajectoryContextModuleTddIsfAndDynamicPbolusPrep(
+            ctx = ctx,
             profile = profile,
             rT = rT,
             iobData = iobData,
-            bg = bg,
-            delta = delta,
-            cob = cob,
             physioMultipliers = physioMultipliers,
-            tdd24Hrs = tdd24Hrs,
-            mealData = ctx.mealData,
-            isExplicitUserAction = isExplicitAdvisorRun,
-            mealClockActiveForSpiralRelax = therapyMealWindowActiveForSpiralAlign(),
-        )
-        val contextTargetOverride = applyContextModule(bg = bg, iob = iobData.iob, cob = cob.toDouble(), rT = rT)
-        val sens = runTddRatesAndIsfFusionAfterContext(
-            profile = profile,
+            insulinActionState = insulinActionState,
+            pkpdRuntime = pkpdRuntime,
             tdd7Days = tdd7Days,
             tdd7P = tdd7P,
             tdd24Hrs = tdd24Hrs,
-            pkpdRuntime = pkpdRuntime,
+            pbolusA = pbolusA,
+            pbolusAS = pbolusAS,
+            reason = reason,
+            isExplicitAdvisorRun = isExplicitAdvisorRun,
+            calls = object : AimiTrajectoryContextPrepCalls {
+                override fun bg() = this@DetermineBasalaimiSMB2.bg
+                override fun delta() = this@DetermineBasalaimiSMB2.delta
+                override fun bgacc() = this@DetermineBasalaimiSMB2.bgacc
+                override fun iobActivityNow() = this@DetermineBasalaimiSMB2.iobActivityNow
+                override fun iob() = this@DetermineBasalaimiSMB2.iob
+                override fun lastBolusAgeMinutes() = this@DetermineBasalaimiSMB2.lastBolusAgeMinutes
+                override fun cob() = this@DetermineBasalaimiSMB2.cob
+                override fun targetBg() = this@DetermineBasalaimiSMB2.targetBg
+                override fun mealWindow() = therapyMealWindowActiveForSpiralAlign()
+                override fun autosensRatio() = ctx.autosensData.ratio
+                override fun analyzeTrajectory(
+                    currentTime: Long,
+                    bg: Double,
+                    delta: Double,
+                    bgacc: Double,
+                    iobActivityNow: Double,
+                    iob: Float,
+                    insulinActionState: InsulinActionState,
+                    lastBolusAgeMinutes: Double,
+                    cob: Float,
+                    targetBg: Double,
+                    profile: OapsProfileAimi,
+                    rT: RT,
+                    uiInteraction: UiInteraction,
+                    relevanceScore: Double,
+                ) {
+                    this@DetermineBasalaimiSMB2.applyTrajectoryAnalysis(
+                        currentTime = currentTime,
+                        bg = bg,
+                        delta = delta,
+                        bgacc = bgacc,
+                        iobActivityNow = iobActivityNow,
+                        iob = iob,
+                        insulinActionState = insulinActionState,
+                        lastBolusAgeMinutes = lastBolusAgeMinutes,
+                        cob = cob,
+                        targetBg = targetBg,
+                        profile = profile,
+                        rT = rT,
+                        uiInteraction = uiInteraction,
+                        relevanceScore = relevanceScore,
+                    )
+                }
+                override fun spiralBridge(
+                    profile: OapsProfileAimi,
+                    rT: RT,
+                    iobData: IobTotal,
+                    bg: Double,
+                    delta: Float,
+                    cob: Float,
+                    physioMultipliers: PhysioMultipliersMTR,
+                    tdd24Hrs: Float,
+                    isExplicitUserAction: Boolean,
+                    mealClockActiveForSpiralRelax: Boolean,
+                ) {
+                    this@DetermineBasalaimiSMB2.runTrajectoryTightSpiralSafetyBridge(
+                        profile = profile,
+                        rT = rT,
+                        iobData = iobData,
+                        bg = bg,
+                        delta = delta,
+                        cob = cob,
+                        physioMultipliers = physioMultipliers,
+                        tdd24Hrs = tdd24Hrs,
+                        mealData = ctx.mealData,
+                        isExplicitUserAction = isExplicitUserAction,
+                        mealClockActiveForSpiralRelax = mealClockActiveForSpiralRelax,
+                    )
+                }
+                override fun applyContext(bg: Double, iob: Double, cob: Double, rT: RT) =
+                    this@DetermineBasalaimiSMB2.applyContextModule(bg, iob, cob, rT)
+                override fun fuseIsf(
+                    profile: OapsProfileAimi,
+                    tdd7Days: Double,
+                    tdd7P: Double,
+                    tdd24Hrs: Float,
+                    pkpdRuntime: PkPdRuntime?,
+                ) = runTddRatesAndIsfFusionAfterContext(
+                    profile = profile,
+                    tdd7Days = tdd7Days,
+                    tdd7P = tdd7P,
+                    tdd24Hrs = tdd24Hrs,
+                    pkpdRuntime = pkpdRuntime,
+                )
+            },
         )
-        val baseSensitivity = pkpdRuntime?.fusedIsf ?: profile.sens
-        val effectiveISF = sens * ctx.autosensData.ratio
-        val dynamicPbolusLarge = if (pbolusA > 0.0) pbolusA else calculateDynamicMicroBolus(effectiveISF, 25.0, reason)
-        val dynamicPbolusSmall = if (pbolusAS > 0.0) pbolusAS else calculateDynamicMicroBolus(effectiveISF, 15.0, reason)
         return AimiTrajectoryContextIsfPrep(
-            sens = sens,
-            baseSensitivity = baseSensitivity,
-            contextTargetOverride = contextTargetOverride,
-            dynamicPbolusLarge = dynamicPbolusLarge,
-            dynamicPbolusSmall = dynamicPbolusSmall,
+            sens = out.sens,
+            baseSensitivity = out.baseSensitivity,
+            contextTargetOverride = out.contextTargetOverride,
+            dynamicPbolusLarge = out.dynamicPbolusLarge,
+            dynamicPbolusSmall = out.dynamicPbolusSmall,
         )
     }
 

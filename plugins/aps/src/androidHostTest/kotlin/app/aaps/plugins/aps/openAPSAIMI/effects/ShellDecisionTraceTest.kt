@@ -2426,6 +2426,71 @@ class ShellDecisionTraceTest {
         assertEquals(EARLY_TICK_TDD_TRACE, trace)
     }
 
+    @Test
+    fun trajectoryPrepCutsBasalAndSizesTheMicroBolus() {
+        tick = newTick(recordingPreferences(doubles = emptyMap()))
+        armShell()
+        val guard = getField(tick, "trajectoryGuard") as TrajectoryGuard
+        whenever(guard.getLastAnalysis()).thenReturn(
+            TrajectoryAnalysis(
+                classification = TrajectoryType.TIGHT_SPIRAL,
+                metrics = TrajectoryMetrics(
+                    curvature = 0.40,
+                    convergenceVelocity = 0.0,
+                    coherence = 0.8,
+                    energyBalance = 4.0,
+                    openness = 0.2,
+                ),
+                modulation = TrajectoryModulation.NEUTRAL,
+                warnings = emptyList(),
+                stableOrbitDistance = 0.0,
+                predictedConvergenceTime = null,
+            ),
+        )
+        AimiUamHandler.updateRuntimeConfidence(null)
+        setField(tick, "bg", 120.0)
+        setField(tick, "delta", 0.0f)
+        setField(tick, "shortAvgDelta", 0.0f)
+        setField(tick, "targetBg", 100.0f)
+        setField(tick, "maxIob", 10.0)
+        setField(tick, "iob", 1.0f)
+        setField(tick, "contextInfluenceEngine", ContextInfluenceEngine(mock(AAPSLogger::class.java)))
+        val profile = profileStub()
+        val ctx = tickContext(profile, 120.0)
+        whenever(ctx.autosensData.ratio).thenReturn(1.0)
+        var prep: Any? = null
+        val trace = capture {
+            prep = invokeNamed(
+                "runTrajectoryContextModuleTddIsfAndDynamicPbolusPrep",
+                listOf(
+                    ctx,
+                    profile,
+                    RT(runningDynamicIsf = false),
+                    IobTotal(time = now, iob = 1.0),
+                    PhysioMultipliersMTR(),
+                    InsulinActionState.default(),
+                    null,
+                    35.0,
+                    35.0,
+                    35.0f,
+                    0.0,
+                    0.0,
+                    StringBuilder(),
+                    false,
+                ),
+            )
+        }
+        val out = prep
+        assertEquals(0.50, resultField(out!!, "dynamicPbolusLarge") as Double, 1e-9)
+        assertEquals(0.30, resultField(out, "dynamicPbolusSmall") as Double, 1e-9)
+        assertEquals(50.0, resultField(out, "sens") as Double, 1e-9)
+        val pending = getField(tick, "pendingTrajSpiralBasal")
+            ?: error("pending spiral basal was not set\n$trace")
+        assertEquals(0.25, resultField(pending, "proactiveBasalUph") as Double, 1e-9)
+        assertEquals(30, resultField(pending, "durationMin"))
+        assertEquals(TRAJECTORY_PREP_MICROBOLUS_TRACE, trace)
+    }
+
     private fun resultField(target: Any, name: String): Any? {
         val field = target.javaClass.getDeclaredField(name)
         field.isAccessible = true
@@ -3327,6 +3392,21 @@ class ShellDecisionTraceTest {
     companion object {
         private val ENABLE_SMB_ALWAYS_TRACE = """
             LOG phrase
+        """.trimIndent()
+
+        private val TRAJECTORY_PREP_MICROBOLUS_TRACE = """
+            READ key=BooleanKey.OApsAIMITrajectoryGuardEnabled value=false
+            LOG 🌀 Trajectory: ⏸ Disabled
+            READ key=BooleanKey.OApsAIMIautoDriveActive value=false
+            READ key=BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive value=false
+            READ key=DoubleKey.OApsAIMIHyperEstablishedDevMgdl value=0.00
+            READ key=DoubleKey.OApsAIMIHyperDeepDevMgdl value=0.00
+            READ key=DoubleKey.OApsAIMIHighBg value=0.00
+            LOG 🌀🛡️ TRAJECTORY_SAFETY_BRIDGE (deferred): TRAJ_TIGHT_SPIRAL: E=4.0U κ=0.40 IOB=1.00U → Basale proactive 25% [STACKING_SPIRAL]
+            READ key=DoubleKey.OApsAIMIweight value=0.00
+            READ key=BooleanKey.OApsAIMIContextEnabled value=false
+            LOG ═══════════════════════════════════
+            LOG 📦 CACHE TDD1D_SPARSE=MISSING reason=tdd_1day_sparse_missing
         """.trimIndent()
 
         private val EARLY_TICK_TDD_TRACE = """
