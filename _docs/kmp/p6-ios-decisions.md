@@ -51,7 +51,7 @@ Ordre : d’abord ce qui change un débit ou le tick suivant, ensuite le modèle
 | Learners | partiel | #229 | Option A appliquée, tant qu’il n’y a pas de feu vert pour B. `process` reste hors du débit. Départ à froid **1,000** et `WARMUP`, nuit **1,00 U/h**, comme Android sans historique. Le fichier d’historique n’est pas amorcé. |
 | `resetEarlyScratch` | fait | #215 | Rien. **27** écritures, le même ordre que l’adaptateur Android. Le mémo disait 29 : ce compte était faux. Ajouter deux écritures changerait Android ou inventerait des champs qu’il n’a pas. |
 | TFLite / UAM | bloqué | #225, ADR D4 | Le modèle n’est pas branché. Reprise seulement avec le même interpréteur LiteRT C, CPU d’abord, et un corpus dont le SMB est celui d’`Interpreter` 2.4.0 Android. |
-| `AimiDecisionContext` | partiel | #219 | Le type et `toMedicalJson()` sont communs. La fabrique qui remplit les champs reste dans la coquille Android. |
+| `AimiDecisionContext` | fait | #219 | Rien sur les champs. `decideAimiDecisionContext` est commun. `htr_ra_floor_mgdl_per_min` reste null au bootstrap. L’estimateur de ratio reste lu par la coquille Android, puis passé en argument. |
 
 1. **Hystérésis.** Déjà les mêmes `object` que `dev_OAPSAIMI` (`MealAbsorptionPhaseHysteresis`, `MealAbsorptionMemory`, `EndogenousPhaseHysteresis`, `PhysiologicalPatternHysteresis`, `InsulinSlopePreserveHysteresis`). Il ne reste pas de second cycle de vie. Le défaut iOS n’appelle pas `reset()`. Taille : un test de deux ticks, rien d’autre. Trace : `lowPredictionRequestsAQuarterBasal` sur instance propre, TBR **0,25 U/h** sans la ligne `meal absorption hysteresis hold` ; puis un tick `FIRST_WAVE` suivi d’un tick `NONE` qui garde `meal absorption hysteresis hold`, comme le singleton Android.
 
@@ -73,7 +73,7 @@ Ordre : d’abord ce qui change un débit ou le tick suivant, ensuite le modèle
 
 10. **TFLite et UAM.** Le même fichier `modelUAM.tflite` (4 504 octets). Rien n’est touché. L’inférence Kotlin commune n’est pas retenue. La reprise future exige le même interpréteur LiteRT C sur iOS, CPU d’abord, et un corpus dont le SMB est celui d’`Interpreter` 2.4.0 Android. Détail dans « Plans de PR ». Modèle absent : `predictSmbUam` **0 U**, `refine` identité, pas d’entraînement. Trace : `uamPostHypoReboundBridgesAShortTempBasal`, SMB prédit **0 U**, TBR **1,05 U/h**, 5 min.
 
-11. **`AimiDecisionContext`.** Le type et `toMedicalJson()` sont en `commonMain`. Les champs ne changent pas. La fabrique reste dans la coquille : elle lit la télémétrie d’instance (`IsfSourceTelemetry`, estimateur, ratio) puis remplit le type commun. Trace : `lowPredictionRequestsAQuarterBasal`, TBR **0,25 U/h**, et l’export `pkpd_soft_floor` raw 39, soft 39, hybride 39, `applied` faux, raison `endo_reversion_disabled`.
+11. **`AimiDecisionContext`.** Le type, `toMedicalJson()` et `decideAimiDecisionContext` sont en `commonMain`. Les champs ne changent pas. `htr_ra_floor_mgdl_per_min` reste null au bootstrap. La coquille Android lit encore l’estimateur de ratio et `getLastRa()`, puis passe les nombres. Elle garde `currentTickDecisionEventId`. Trace : `lowPredictionRequestsAQuarterBasal`, TBR **0,25 U/h**, et l’export `pkpd_soft_floor` raw 39, soft 39, hybride 39, `applied` faux, raison `endo_reversion_disabled`.
 
 ## Plans de PR, gros chantiers
 

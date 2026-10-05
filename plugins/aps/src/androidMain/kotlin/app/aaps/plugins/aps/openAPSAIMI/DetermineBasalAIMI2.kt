@@ -339,7 +339,6 @@ import app.aaps.plugins.aps.openAPSAIMI.math.AimiTickPolicyMath
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState
 import app.aaps.plugins.aps.openAPSAIMI.carbs.CarbsAdvisor
 import app.aaps.plugins.aps.openAPSAIMI.ISF.HeartRateTrendIsf
-import app.aaps.plugins.aps.openAPSAIMI.ISF.CommandedIsf
 import app.aaps.plugins.aps.openAPSAIMI.ISF.ObservedSensitivityMeter
 import app.aaps.plugins.aps.openAPSAIMI.ISF.SensitivityRatioEstimator
 import app.aaps.plugins.aps.openAPSAIMI.ISF.WorkingIsf
@@ -1653,46 +1652,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         trigger: String,
         eventId: String,
     ): AimiDecisionContext {
-        return AimiDecisionContext(
-            event_id = eventId.also { currentTickDecisionEventId = it },
+        currentTickDecisionEventId = eventId
+        return decideAimiDecisionContext(
+            eventId = eventId,
             timestamp = ctx.currentTime,
             trigger = trigger,
-            baseline_state = AimiDecisionContext.BaselineState(
-                profile_isf_mgdl = ctx.profile.sens,
-                profile_basal_uph = ctx.profile.current_basal,
-                current_bg_mgdl = ctx.glucoseStatus.glucose,
-                cob_g = ctx.mealData.mealCOB,
-                iob_u = ctx.iobDataArray.firstOrNull()?.iob ?: 0.0,
-                profile_isf_static_mgdl = IsfSourceTelemetry.lastProfileStaticMgdl,
-                command_isf_mgdl = ctx.profile.sens,
-                isf_source = IsfSourceTelemetry.lastSource,
-                isf_age_ms = IsfSourceTelemetry.lastAgeMs,
-                isf_cache_key = IsfSourceTelemetry.lastCacheKey,
-                isf_cache_glucose_mgdl = IsfSourceTelemetry.lastCacheGlucoseMgdl,
-                isf_kalman_fast_mgdl = IsfSourceTelemetry.lastKalmanFastIsf,
-                isf_adj_engine_mgdl = IsfSourceTelemetry.lastIsfAdjEngine,
-                isf_fused_slow_mgdl = IsfSourceTelemetry.lastFusedSlowIsf,
-                isf_trust_fast = IsfSourceTelemetry.lastTrustFast,
-                isf_dynamic_factor = IsfSourceTelemetry.lastDynamicFactor,
-                isf_trajectory_multiplier = IsfSourceTelemetry.lastTrajectoryMultiplier,
-                estimated_ra_mgdl_per_min = runCatching { continuousStateEstimator.getLastRa() }.getOrNull(),
-                physio_isf_factor = IsfSourceTelemetry.lastPhysioIsfFactor,
-                isf_pre_floor_mgdl = CommandedIsf.lastPreFloorMgdlPerU,
-                stress_isf_floor_active = IsfSourceTelemetry.lastStressIsfFloorActive,
-                stress_isf_floor_reason = IsfSourceTelemetry.lastStressIsfFloorReason,
-                stress_isf_floor_isf_mgdl = IsfSourceTelemetry.lastStressIsfFloorIsfMgdl,
-                stress_floor_awake_resting_bpm = IsfSourceTelemetry.lastStressIsfFloorAwakeRestingBpm,
-                isf_profile_relative_shadow_mgdl = IsfSourceTelemetry.lastProfileRelativeShadowMgdl,
-                isf_profile_relative_bound_hit = IsfSourceTelemetry.lastProfileRelativeBoundHit,
-                sensitivity_ratio_r = runCatching { sensitivityRatioEstimator.ratio }.getOrNull(),
-                isf_shadow_s_mgdl = runCatching {
-                    IsfSourceTelemetry.lastProfileStaticMgdl?.let { sensitivityRatioEstimator.sensitivityMgdl(it) }
-                }.getOrNull(),
-                sensitivity_observations = runCatching { sensitivityRatioEstimator.observationCount }.getOrNull(),
-                // Laissé null ici et écrit tard par `markHtrRaFloorForExport` : la valeur n'existe
-                // pas encore au bootstrap du tick.
-                htr_ra_floor_mgdl_per_min = null
-            )
+            profileIsfMgdl = ctx.profile.sens,
+            profileBasalUph = ctx.profile.current_basal,
+            currentBgMgdl = ctx.glucoseStatus.glucose,
+            cobG = ctx.mealData.mealCOB,
+            iobU = ctx.iobDataArray.firstOrNull()?.iob ?: 0.0,
+            estimatedRaMgdlPerMin = runCatching { continuousStateEstimator.getLastRa() }.getOrNull(),
+            sensitivityRatioR = runCatching { sensitivityRatioEstimator.ratio }.getOrNull(),
+            isfShadowSMgdl = runCatching {
+                IsfSourceTelemetry.lastProfileStaticMgdl?.let { sensitivityRatioEstimator.sensitivityMgdl(it) }
+            }.getOrNull(),
+            sensitivityObservations = runCatching { sensitivityRatioEstimator.observationCount }.getOrNull(),
         )
     }
 
