@@ -233,6 +233,9 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiCarbsAdvisorEnableSmbCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideCarbsAdvisorEnableSmbBasalHistoryAndSafety
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiUamPostHypoCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideUamPostHypoSmb
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTherapyExerciseCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTherapyExerciseDecision
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideTherapyExerciseLockout
 import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
@@ -2942,102 +2945,95 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         profile: OapsProfileAimi,
         rT: RT,
     ): AimiTherapyExerciseGate {
-        val therapy = Therapy(persistenceLayer).also {
-            it.updateStatesBasedOnTherapyEvents(forceRefresh = true)
+        val decided = decideTherapyExerciseLockout(
+            profile = profile,
+            rT = rT,
+            currentTemp = ctx.currentTemp,
+            resumeBgMgdl = EXERCISE_BASAL_RESUME_BG_MGDL,
+            consoleLog = consoleLog,
+            calls = object : AimiTherapyExerciseCalls {
+                override fun hydrateClocks(): Boolean {
+                    val therapy = Therapy(persistenceLayer).also {
+                        it.updateStatesBasedOnTherapyEvents(forceRefresh = true)
+                    }
+                    val deleteTime = therapy.deleteTime
+                    if (deleteTime) {
+                        // Still the count based clean up on purpose: the owner asked for the date based one on
+                        // the "bad day" trigger only. `Therapy.deleteEventDate` does carry the day of the note,
+                        // so this path could be moved to `removeRowsForDay` later, but that is a change of
+                        // behaviour and needs to be asked for.
+                        removeLast200Lines(csvfile)
+                    }
+                    this@DetermineBasalaimiSMB2.sleepTime = therapy.sleepTime
+                    this@DetermineBasalaimiSMB2.snackTime = therapy.snackTime
+                    this@DetermineBasalaimiSMB2.sportTime = therapy.sportTime
+                    this@DetermineBasalaimiSMB2.lowCarbTime = therapy.lowCarbTime
+                    this@DetermineBasalaimiSMB2.highCarbTime = therapy.highCarbTime
+                    this@DetermineBasalaimiSMB2.mealTime = therapy.mealTime
+                    this@DetermineBasalaimiSMB2.anticipTime = therapy.anticipTime
+                    this@DetermineBasalaimiSMB2.fclTime = therapy.fclTime
+                    this@DetermineBasalaimiSMB2.bfastTime = therapy.bfastTime
+                    this@DetermineBasalaimiSMB2.lunchTime = therapy.lunchTime
+                    this@DetermineBasalaimiSMB2.dinnerTime = therapy.dinnerTime
+                    this@DetermineBasalaimiSMB2.fastingTime = therapy.fastingTime
+                    this@DetermineBasalaimiSMB2.stopTime = therapy.stopTime
+                    this@DetermineBasalaimiSMB2.mealruntime = therapy.getTimeElapsedSinceLastEvent("meal")
+                    this@DetermineBasalaimiSMB2.anticipruntime = therapy.getTimeElapsedSinceLastEvent("anticip")
+                    this@DetermineBasalaimiSMB2.fclruntime = therapy.getTimeElapsedSinceLastEvent("fcl")
+                    this@DetermineBasalaimiSMB2.bfastruntime = therapy.getTimeElapsedSinceLastEvent("bfast")
+                    this@DetermineBasalaimiSMB2.lunchruntime = therapy.getTimeElapsedSinceLastEvent("lunch")
+                    this@DetermineBasalaimiSMB2.dinnerruntime = therapy.getTimeElapsedSinceLastEvent("dinner")
+                    this@DetermineBasalaimiSMB2.highCarbrunTime = therapy.getTimeElapsedSinceLastEvent("highcarb")
+                    this@DetermineBasalaimiSMB2.snackrunTime = therapy.getTimeElapsedSinceLastEvent("snack")
+                    observeCircadianMealProfile(ctx.currentTime)
+                    this@DetermineBasalaimiSMB2.iscalibration = therapy.calibrationTime
+                    val fieldDelta = this@DetermineBasalaimiSMB2.delta
+                    val fieldShort = this@DetermineBasalaimiSMB2.shortAvgDelta
+                    val fieldLong = this@DetermineBasalaimiSMB2.longAvgDelta
+                    this@DetermineBasalaimiSMB2.acceleratingUp = if (fieldDelta > 2 && fieldDelta - fieldLong > 2) 1 else 0
+                    this@DetermineBasalaimiSMB2.decceleratingUp = if (fieldDelta > 0 && (fieldDelta < fieldShort || fieldDelta < fieldLong)) 1 else 0
+                    this@DetermineBasalaimiSMB2.acceleratingDown = if (fieldDelta < -2 && fieldDelta - fieldLong < -2) 1 else 0
+                    this@DetermineBasalaimiSMB2.decceleratingDown = if (fieldDelta < 0 && (fieldDelta > fieldShort || fieldDelta > fieldLong)) 1 else 0
+                    this@DetermineBasalaimiSMB2.stable = if (fieldDelta > -3 && fieldDelta < 3 && fieldShort > -3 && fieldShort < 3 && fieldLong > -3 && fieldLong < 3) 1 else 0
+                    return this@DetermineBasalaimiSMB2.hourOfDay <= 7
+                }
+                override fun refreshActivity() = refreshAimiContextActivityFlag()
+                override fun sportTime() = this@DetermineBasalaimiSMB2.sportTime
+                override fun aimiActivity() = aimiContextActivityActive
+                override fun setLockout(active: Boolean) {
+                    exerciseInsulinLockoutActive = active
+                }
+                override fun refreshHyper(profile: OapsProfileAimi) = refreshExerciseHyperBasalOverride(profile)
+                override fun lockout() = exerciseInsulinLockoutActive
+                override fun hyperOverride() = exerciseHyperBasalOverrideActive
+                override fun zeroMaxSmb() {
+                    this@DetermineBasalaimiSMB2.maxSMB = 0.0
+                    this@DetermineBasalaimiSMB2.maxSMBHB = 0.0
+                }
+                override fun bg() = this@DetermineBasalaimiSMB2.bg
+                override fun mealPriorityBypass() = mealDeliveryOverridesLockouts()
+                override fun t3cBrittle() = preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
+                override fun markExerciseSafety() = markT3cRuntimeOwnership("SAFETY_TERMINAL", "exercise_lockout")
+                override fun logDecisionFinal(tag: String, rT: RT, bg: Double, delta: Float) {
+                    this@DetermineBasalaimiSMB2.logDecisionFinal(tag, rT, bg, delta)
+                }
+                override fun delta() = this@DetermineBasalaimiSMB2.delta
+                override fun setZeroTemp(profile: OapsProfileAimi, rT: RT, currentTemp: CurrentTemp) =
+                    setTempBasal(
+                        0.0,
+                        30,
+                        profile,
+                        rT,
+                        currentTemp,
+                        overrideSafetyLimits = false,
+                        adaptiveMultiplier = adaptiveMult,
+                    )
+            },
+        )
+        return when (decided) {
+            is AimiTherapyExerciseDecision.ReturnZeroBasal -> AimiTherapyExerciseGate.ReturnEarly(decided.rT)
+            is AimiTherapyExerciseDecision.Continue -> AimiTherapyExerciseGate.Continue(decided.nightbis)
         }
-        val deleteTime = therapy.deleteTime
-        if (deleteTime) {
-            // Still the count based clean up on purpose: the owner asked for the date based one on
-            // the "bad day" trigger only. `Therapy.deleteEventDate` does carry the day of the note,
-            // so this path could be moved to `removeRowsForDay` later, but that is a change of
-            // behaviour and needs to be asked for.
-            removeLast200Lines(csvfile)
-        }
-        this.sleepTime = therapy.sleepTime
-        this.snackTime = therapy.snackTime
-        this.sportTime = therapy.sportTime
-        this.lowCarbTime = therapy.lowCarbTime
-        this.highCarbTime = therapy.highCarbTime
-        this.mealTime = therapy.mealTime
-        this.anticipTime = therapy.anticipTime
-        this.fclTime = therapy.fclTime
-        this.bfastTime = therapy.bfastTime
-        this.lunchTime = therapy.lunchTime
-        this.dinnerTime = therapy.dinnerTime
-        this.fastingTime = therapy.fastingTime
-        this.stopTime = therapy.stopTime
-        this.mealruntime = therapy.getTimeElapsedSinceLastEvent("meal")
-        this.anticipruntime = therapy.getTimeElapsedSinceLastEvent("anticip")
-        this.fclruntime = therapy.getTimeElapsedSinceLastEvent("fcl")
-        this.bfastruntime = therapy.getTimeElapsedSinceLastEvent("bfast")
-        this.lunchruntime = therapy.getTimeElapsedSinceLastEvent("lunch")
-        this.dinnerruntime = therapy.getTimeElapsedSinceLastEvent("dinner")
-        this.highCarbrunTime = therapy.getTimeElapsedSinceLastEvent("highcarb")
-        this.snackrunTime = therapy.getTimeElapsedSinceLastEvent("snack")
-        observeCircadianMealProfile(ctx.currentTime)
-        this.iscalibration = therapy.calibrationTime
-        this.acceleratingUp = if (delta > 2 && delta - longAvgDelta > 2) 1 else 0
-        this.decceleratingUp = if (delta > 0 && (delta < shortAvgDelta || delta < longAvgDelta)) 1 else 0
-        this.acceleratingDown = if (delta < -2 && delta - longAvgDelta < -2) 1 else 0
-        this.decceleratingDown = if (delta < 0 && (delta > shortAvgDelta || delta > longAvgDelta)) 1 else 0
-        this.stable = if (delta > -3 && delta < 3 && shortAvgDelta > -3 && shortAvgDelta < 3 && longAvgDelta > -3 && longAvgDelta < 3) 1 else 0
-        val nightbis = hourOfDay <= 7
-
-        refreshAimiContextActivityFlag()
-        exerciseInsulinLockoutActive = sportTime || aimiContextActivityActive
-        refreshExerciseHyperBasalOverride(profile)
-        if (exerciseInsulinLockoutActive) {
-            this.maxSMB = 0.0
-            this.maxSMBHB = 0.0
-            val basalHint = if (exerciseHyperBasalOverrideActive) {
-                "basale renforcée (hyper+activité)"
-            } else {
-                "basale autorisée seulement si BG>${EXERCISE_BASAL_RESUME_BG_MGDL.toInt()} (T3c PI ou flux standard)"
-            }
-            consoleLog.add(
-                "🏃 EXERCISE_LOCKOUT[therapy]: SMB off (sportTime=$sportTime aimiActivity=$aimiContextActivityActive) | $basalHint"
-            )
-        }
-
-        // 🍱 Exception repas : un repas explicitement déclaré (mode legacy ou Meal Advisor validé) prime sur le
-        // lockout exercice/activité — sauf hypo sévère. On NE coupe PAS le tick ici pour laisser passer le prebolus.
-        val mealPriorityBypass = mealDeliveryOverridesLockouts()
-        if (mealPriorityBypass && exerciseInsulinLockoutActive) {
-            consoleLog.add(
-                "🍱 MEAL_PRIORITY: lockout exercice/activité contourné pour repas déclaré " +
-                    "(bg=${bg.toInt()} > ${SEVERE_HYPO_MEAL_OVERRIDE_MGDL.toInt()}) — prebolus autorisé"
-            )
-        }
-
-        val t3cBrittle = preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
-        if (t3cBrittle && exerciseInsulinLockoutActive && !exerciseHyperBasalOverrideActive &&
-            bg <= EXERCISE_BASAL_RESUME_BG_MGDL && !mealPriorityBypass
-        ) {
-            markT3cRuntimeOwnership("SAFETY_TERMINAL", "exercise_lockout")
-            rT.reason.append(
-                "🏃 T3c + sport/contexte activité : basale & SMB arrêtés (BG≤${EXERCISE_BASAL_RESUME_BG_MGDL.toInt()}).\n"
-            )
-            consoleLog.add("🏃 T3c EXERCISE: return 0 U/h basal (BG=${bg.toInt()} ≤ ${EXERCISE_BASAL_RESUME_BG_MGDL.toInt()})")
-            rT.units = 0.0
-            logDecisionFinal("T3C_EXERCISE_LOCKOUT", rT, bg, delta)
-            return AimiTherapyExerciseGate.ReturnEarly(
-                setTempBasal(0.0, 30, profile, rT, ctx.currentTemp, overrideSafetyLimits = false, adaptiveMultiplier = adaptiveMult)
-            )
-        }
-        if (!t3cBrittle && exerciseInsulinLockoutActive && !exerciseHyperBasalOverrideActive &&
-            bg <= EXERCISE_BASAL_RESUME_BG_MGDL && !mealPriorityBypass
-        ) {
-            rT.reason.append(
-                "🏃 Sport / contexte AIMI activité : basale & SMB arrêtés (BG≤${EXERCISE_BASAL_RESUME_BG_MGDL.toInt()}).\n"
-            )
-            consoleLog.add("🏃 EXERCISE_LOCKOUT: flux standard interrompu → 0 U/h (BG=${bg.toInt()})")
-            rT.units = 0.0
-            logDecisionFinal("EXERCISE_LOCKOUT", rT, bg, delta)
-            return AimiTherapyExerciseGate.ReturnEarly(
-                setTempBasal(0.0, 30, profile, rT, ctx.currentTemp, overrideSafetyLimits = false, adaptiveMultiplier = adaptiveMult)
-            )
-        }
-        return AimiTherapyExerciseGate.Continue(nightbis)
     }
 
     /**
