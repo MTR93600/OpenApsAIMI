@@ -26,7 +26,7 @@ Ces valeurs ne sont pas la parité. Elles disparaissent avant activation.
 
 - Prédiction basse : le TBR temporaire est **0,25 U/h** pendant 30 min, avec les lignes Android `TREE_DEPLOYED trunk=SENSOR_UNCERTAIN conf=0.90 risk=CRITICAL kinetics=NO_STAGE` et `MEAL_CERTAINTY level=NONE tree=NONE rise=WEAK terminals=HYPO_CONFLICT effortVeto=false`. Repas (160 mg/dL, delta +2) et sport (180, delta +5) : `rise=OK`, `terminals=UNKNOWN`. Nuit (180, delta 0) : `rise=WEAK`, `terminals=UNKNOWN`, la même famille que `PHYSIO_LATENT_SMB_CEILING_TRACE`.
 - Nuit : le TBR temporaire est **1,00 U/h** pendant 30 min, avec les lignes d’apprenants d’un dépôt vide (`BasalLearner: multiplier=1.000`, `UnifiedReactivity: factor=1.000`, `BASAL_GOV[FINAL]` `action=WARMUP` `reason=Warmup`). Pas encore l’export, `UAM=0.00`, ni le SMB `final=0.35` non délivré.
-- ISF **45** (FC 110 sur 10 min, moyenne 60 min 88, ISF 50 × 0,90) n’est pas produit tant que le snapshot est vide.
+- ISF **45** (FC 110 sur 10 min, moyenne 60 min 88, ISF 50 × 0,90) est produit quand le port de session rend les quatre échantillons. Le tick par défaut, interrupteurs éteints, garde le snapshot vide et ne produit pas cette ligne.
 - Un maintien d’hystérésis laissé par le tick précédent reste en place, comme sur Android.
 
 ## Chemin vers la parité
@@ -40,8 +40,8 @@ Ordre : d’abord ce qui change un débit ou le tick suivant, ensuite le modèle
 | Point | Statut | PR | Encore manquant pour l’égalité octet pour octet |
 |---|---|---|---|
 | Hystérésis | fait | #215, #218 | Rien. Le défaut iOS n’appelle pas `reset()`. Le maintien traverse le tick, comme le singleton Android. |
-| Wearable, FC, HealthKit | partiel | #224 | HealthKit remplit un cache hors tick. Le tick lit ce cache. Il reste à le brancher sur une vraie session HealthKit. Tant que le cache est vide, la ligne est `IOS_NEUTRAL wearable snapshot empty`. |
-| Lectures pas, FC, bolus | fait | #223, #227 | Rien sur la trace ISF **45**, `HR_TREND_ISF x0.90`. La session HealthKit qui remplirait le cache n’est pas branchée. |
+| Wearable, FC, HealthKit | fait | #224 | Rien sur la trace ISF **45**, `HR_TREND_ISF x0.90 (hr10 110 / hr60 88, steps10 0)`. La session demande pas 5/15/60, FC sur 60 min, FC de repos sur 24 h, derrière `HealthKitWindowPort`, et écrit le même `HealthContextSnapshot`. Tant que `IosClientConfig.APS` ou l’interrupteur moteur est éteint, aucune demande de droit et aucune requête HealthKit : le tick garde le snapshot vide et `IOS_NEUTRAL wearable snapshot empty`. Les entitlements sont documentés et non activés. |
+| Lectures pas, FC, bolus | fait | #223, #227 | Rien sur la trace ISF **45**, `HR_TREND_ISF x0.90`. La session HealthKit fournit les mêmes quatre échantillons au même calcul. |
 | Effort | fait | #222 | Rien sur le repas : facteur **1,0**, assessment null, SMB **3,30 U**, TBR **2,00 U/h**. Une exertion réelle qui baisserait le SMB n’a pas de nombre verrouillé. |
 | Veto et `detectMealOnset` | fait | #214, #220, #231, #235 | Rien sur les deux débits. Accélération 2, pas d’assessment : onset vrai, TBR **2,00 U/h**, `phrase [AD_EARLY_TBR_TRIGGER rate=2.0]`. Le tick iOS appelle `decideBasalDecisionEngine` avec `forcedBasal` **2,0**, modes et autodrive. Même cinématique, posture EXERTION, confiance 0,30, pas de repas déclaré, COB 0 : onset faux, TBR **1,30 U/h**. Accélération 0 : **1,30 U/h**. |
 | COB virtuel | fait | #230, #232 | Rien sur les deux retours Android (préférence coupée, ou **36 g** déclarés : **0 g**, eventual **322**, pas de ligne) ni sur la courbe. Préférence allumée, Ra 2,0, repas 0,8, snapshot vide : `g=9.0`, `PRED_SET` eventual **198**. Le même snapshot avec FC 110 et repos 60 : `reason=hr_inflammation`, **0 g**, eventual **170**. Le SMB repas reste **3,30 U**. Le tick iOS appelle la même fonction. |
@@ -52,6 +52,27 @@ Ordre : d’abord ce qui change un débit ou le tick suivant, ensuite le modèle
 | `resetEarlyScratch` | fait | #215 | Rien. **27** écritures, le même ordre que l’adaptateur Android. Le mémo disait 29 : ce compte était faux. Ajouter deux écritures changerait Android ou inventerait des champs qu’il n’a pas. |
 | TFLite / UAM | bloqué | #225, ADR D4 | Le modèle n’est pas branché. Reprise seulement avec le même interpréteur LiteRT C, CPU d’abord, et un corpus dont le SMB est celui d’`Interpreter` 2.4.0 Android. |
 | `AimiDecisionContext` | fait | #219, #233 | Rien sur les champs. `decideAimiDecisionContext` est commun. `htr_ra_floor_mgdl_per_min` reste null au bootstrap. L’estimateur de ratio reste lu par la coquille Android, puis passé en argument. |
+
+## Conditions d'activation
+
+`AimiCommonEngineSwitch` et `IosClientConfig.APS` restent éteints. Les allumer exige que chaque ligne suivante soit verte en même temps. Une seule ligne ouverte suffit à les laisser éteints.
+
+1. **Toutes les traces de parité**, octet pour octet, entre le tick Android et la tranche iOS. Dans le tableau, chaque point est `fait` et sa colonne « encore manquant » ne contient plus un écart de trace. Aujourd’hui Learners reste `partiel` tant que l’option A n’est pas acceptée, et TFLite reste `bloqué`.
+2. **TFLite**, ou une exemption écrite. Le vert est le même interpréteur LiteRT C, CPU d’abord, et un corpus dont le SMB est celui d’`Interpreter` 2.4.0 Android. L’exemption serait un texte qui accepte le chemin modèle absent (`predictSmbUam` **0 U**, `refine` identité) comme parité. ADR D4 constate l’arrêt. Ce n’est pas cette exemption. TFLite reste bloqué. Ne pas le commencer.
+3. **Session HealthKit.** Le port rejoue la scène ISF **45** / `HR_TREND_ISF x0.90 (hr10 110 / hr60 88, steps10 0)`. Les entitlements ci-dessous sont écrits dans ce mémo. Les activer dans le binaire fait partie de l’allumage, pas d’une PR tant que les interrupteurs sont éteints.
+4. **Learners, option A acceptée.** L’option A est appliquée : `process` hors du débit, départ à froid **1,000**, nuit **1,00 U/h**. Elle n’est pas encore acceptée. L’option B n’est pas choisie. Sans ce feu vert, l’interrupteur reste éteint.
+
+## Entitlements HealthKit
+
+Documentés ici. Aucun fichier `.entitlements` n’est ajouté. `Info.plist` ne reçoit pas ces clés. Rien n’est activé.
+
+- `com.apple.developer.healthkit` = vrai, pour ouvrir `HKHealthStore`.
+- `NSHealthShareUsageDescription` : lecture des pas, de la fréquence cardiaque et de la fréquence cardiaque de repos, pour les mêmes fenêtres que la montre Android.
+- Types lus : `HKQuantityTypeIdentifierStepCount`, `HKQuantityTypeIdentifierHeartRate`, `HKQuantityTypeIdentifierRestingHeartRate`.
+- Pas de `NSHealthUpdateUsageDescription` : la session ne demande aucun type en écriture.
+- Pas de `com.apple.developer.healthkit.background-delivery` : la session est une lecture, pas un réveil en arrière-plan.
+
+`requestAuthorizationToShareTypes` n’est appelé que si `iosHealthKitApsEnabled` (copie de `IosClientConfig.APS`, laissée à faux) et `AimiCommonEngineSwitch.enabled` sont vrais tous les deux. Les deux sont faux. Le tick ne construit pas de requête HealthKit.
 
 1. **Hystérésis.** Déjà les mêmes `object` que `dev_OAPSAIMI` (`MealAbsorptionPhaseHysteresis`, `MealAbsorptionMemory`, `EndogenousPhaseHysteresis`, `PhysiologicalPatternHysteresis`, `InsulinSlopePreserveHysteresis`). Il ne reste pas de second cycle de vie. Le défaut iOS n’appelle pas `reset()`. Taille : un test de deux ticks, rien d’autre. Trace : `lowPredictionRequestsAQuarterBasal` sur instance propre, TBR **0,25 U/h** sans la ligne `meal absorption hysteresis hold` ; puis un tick `FIRST_WAVE` suivi d’un tick `NONE` qui garde `meal absorption hysteresis hold`, comme le singleton Android.
 
@@ -81,10 +102,11 @@ Les chantiers encore ouverts restent derrière l’interrupteur éteint jusqu’
 
 ### HealthKit et snapshot wearable
 
-- `iosMain` : `IosHealthKitWearable` interroge HealthKit (pas cumulés 5/15/60 min, échantillons de FC sur 60 min, FC de repos sur 24 h) et remplit `HealthContextSnapshot`. Les fenêtres 10 et 60 min reprennent le chevauchement `timestamp + duration` de `decideHeartRateIsf`. Les quatre échantillons 80, 80, 80, puis 110 bpm donnent hr10 **110** et hr60 **88**. `hrAvg15m` recopie la FC courante, comme le dépôt Android. FC de repos absente : **60**.
-- La confiance suit Android : la FC seule vaut 0,3, et `isValid` exige plus que 0,3. Sans HRV ni sommeil le snapshot reste invalide, donc il ne réduit pas une dose. Le tick iOS lit le cache (rafraîchi hors du tick). L’échec journalise `WEARABLE snapshot failed … — snapshot empty` et le cache redevient vide. Un `Error` sort.
-- JVM : le même appel reste le snapshot vide et la ligne `IOS_NEUTRAL wearable snapshot empty`. Android `DetermineBasalAIMI2` n’est pas modifié.
-- Hors de cette PR : le COB, le runtime patient, les learners. L’ISF **45** est la lecture commune des mêmes échantillons, pas une seconde formule.
+- `openHealthKitReadSession` demande au port les pas sur 5, 15 et 60 min, les échantillons de FC sur 60 min, et la FC de repos sur 24 h, puis écrit `HealthContextSnapshot`. Les fenêtres 10 et 60 min reprennent le chevauchement `timestamp + duration` de `decideHeartRateIsf`. Les quatre échantillons 80, 80, 80, puis 110 bpm donnent hr10 **110** et hr60 **88**, ISF 50 × 0,90 = **45**, ligne `HR_TREND_ISF x0.90 (hr10 110 / hr60 88, steps10 0)`. `hrAvg15m` recopie la FC courante, comme le dépôt Android. FC de repos absente : **60**.
+- `iosMain` : `IosHealthKitWindowPort` est ce port sur `HKHealthStore`. Tant que `iosHealthKitApsEnabled` ou `AimiCommonEngineSwitch` est faux, `readIosHealthKitSession` ne l’appelle pas : pas de `requestAuthorizationToShareTypes`, pas de requête. Le tick garde `HealthContextSnapshot()` et `IOS_NEUTRAL wearable snapshot empty`. Les deux interrupteurs sont faux.
+- La confiance suit Android : la FC seule vaut 0,3, et `isValid` exige plus que 0,3. Sans HRV ni sommeil le snapshot reste invalide, donc il ne réduit pas une dose. L’échec du port journalise `WEARABLE snapshot failed … — snapshot empty` et le résultat est vide. Un `Error` sort.
+- JVM : sans port injecté, le même appel reste le snapshot vide et la ligne `IOS_NEUTRAL wearable snapshot empty`. Le test injecte un port qui rejoue HealthKit. Android `DetermineBasalAIMI2` n’est pas modifié.
+- Hors de cette PR : le COB, le runtime patient, les learners. L’ISF **45** est la lecture commune des mêmes échantillons, pas une seconde formule. Les entitlements sont dans « Entitlements HealthKit ». Ils ne sont pas activés.
 
 ### Persistance des pas, de la FC et des bolus
 
@@ -155,7 +177,7 @@ Scène verrouillée : COB déclaré **36 g**, glycémie 180, eventual publié **
 
 Recommandation retenue : la fonction Android. Préférence coupée : **0 g**, eventual **322**. Préférence allumée : la ligne de l’estimateur, pas un second calcul.
 
-Côté iOS : le tick appelle la même fonction avec le snapshot du cache et `tpo/aimi_preferences.json`. HealthKit remplit ce cache hors tick. Une vraie session HealthKit n’est pas encore branchée.
+Côté iOS : le tick appelle la même fonction avec le snapshot de la session et `tpo/aimi_preferences.json`. Interrupteurs éteints : snapshot vide, pas de requête HealthKit.
 
 ## `refreshEffortActivityBelief`
 
