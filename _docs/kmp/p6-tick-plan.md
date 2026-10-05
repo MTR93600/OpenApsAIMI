@@ -480,6 +480,14 @@ Proposition, une ligne, pour chaque (a) qui bloque encore `HoldAimiEngine`. Aucu
 - `physioAdapter.getLatestSnapshot` : port déjà appelé par l’orchestre du signal. L’échec est `OptionalSignal.Failed`, une ligne `WEARABLE snapshot failed (<type>): <message> — snapshot empty`, et un snapshot vide. Le contenu wearable iOS est une décision iOS requise.
 - `resetEarlyScratch` : décision iOS requise. Les 29 écritures remettent des champs de dose du tick Android à zéro.
 
+### Cycle de vie de `MealAbsorptionPhaseHysteresis`
+
+La fuite d’un test à l’autre vient de la production, pas d’un singleton introduit par le portage. Dans `dev_OAPSAIMI` comme ici, `MealAbsorptionPhaseHysteresis` est un `object` Kotlin. `holdTicksRemaining` et `heldPhase` sont des champs `@Volatile` de ce singleton. `stabilize` les écrit. Un tick suivant, ou une autre instance de `DetermineBasalaimiSMB2` dans le même processus, relit le maintien. `reset()` n’existe dans la ref que dans `MealAbsorptionPhaseEngineTest`, et dans `stabilize` quand le maintien tombe. Le portage n’ajoute que `import kotlin.concurrent.Volatile`, pour compiler en `commonMain`. Le corps est le même. On le garde.
+
+Le même `object` à champs mutables est déjà dans la ref pour `MealAbsorptionMemory`, `EndogenousPhaseHysteresis`, `PhysiologicalPatternHysteresis` et `InsulinSlopePreserveHysteresis`. Sur iOS le code commun est le même singleton de processus. `IosClientConfig.APS` reste `false`, donc la boucle ne l’atteint pas. Le cycle de vie — un maintien pour tout le processus, partagé d’un tick à l’autre — est une décision iOS. Ce n’est pas une parité à activer, et ce n’est pas un port manquant : l’état est déjà celui de la ref.
+
+Le test du basal au quart isole son entrée avec `reset()`, parce que la trace verrouillée est le maintien propre (TBR 0,25 U/h). Ce reset ne change pas la production.
+
 #### (b) Présentation ou effets
 
 Ces éléments ne changent pas un nombre de dose. Ils ne bloquent pas la règle ci-dessus par eux-mêmes. Les fichiers qui ne font que garder un journal ou un CSV sont ici. La persistance des pas, de la FC et des bolus est en (a).
