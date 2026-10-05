@@ -7,6 +7,9 @@ package app.aaps.plugins.aimiengine
  * delegate was supplied. Turning this on does not read `IosClientConfig.APS` (that flag stays
  * false), does not start the iOS loop, and does not write a pump.
  *
+ * Production iOS may set [enabled] only after every parity trace matches Android byte for byte.
+ * The neutral values behind this switch are temporary. Tests may set it and must set it back.
+ *
  * A test that sets [enabled] must set it back to false before it returns.
  */
 object AimiCommonEngineSwitch {

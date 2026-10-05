@@ -47,7 +47,11 @@ import kotlinx.coroutines.flow.StateFlow
  * catches an exception.
  */
 object IosNeutralLog {
-    const val HYSTERESIS = "IOS_NEUTRAL hysteresis=reset"
+    /** Default. The process singletons survive the tick, as on Android. */
+    const val HYSTERESIS = "IOS_NEUTRAL hysteresis=android-lifecycle"
+
+    /** Test option only. `evaluate` does not write this line. */
+    const val HYSTERESIS_RESET_TEST = "IOS_NEUTRAL hysteresis=reset"
     const val VIRTUAL_COB = "IOS_NEUTRAL virtualCob=0"
     const val EFFORT = "IOS_NEUTRAL effortSmbFactor=1.0"
     const val VETO = "IOS_NEUTRAL effortVeto=false"
@@ -179,14 +183,25 @@ class IosEarlyTickScratch {
     }
 }
 
-/** `reset()` of the five process singletons. Called from the iOS tick start only. */
+/**
+ * iOS tick start. Reproduces the Android lifecycle: the five hysteresis singletons are not reset.
+ * A hold set by the previous tick is still there.
+ */
 fun iosNeutralTickStart(log: MutableList<String>) {
+    log += IosNeutralLog.HYSTERESIS
+}
+
+/**
+ * Test-only reset of the five process singletons.
+ * Not called from [iosNeutralTickStart] and not called from [IosNeutralAimiEngine.evaluate].
+ */
+fun iosNeutralResetHysteresisForTest(log: MutableList<String>) {
     MealAbsorptionPhaseHysteresis.reset()
     MealAbsorptionMemory.reset()
     EndogenousPhaseHysteresis.reset()
     PhysiologicalPatternHysteresis.reset()
     InsulinSlopePreserveHysteresis.reset()
-    log += IosNeutralLog.HYSTERESIS
+    log += IosNeutralLog.HYSTERESIS_RESET_TEST
 }
 
 fun iosNeutralVirtualCobG(log: MutableList<String>): Double {

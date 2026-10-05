@@ -22,7 +22,7 @@ class IosNeutralHoldEngineTest {
     @AfterTest
     fun switchOff() {
         AimiCommonEngineSwitch.enabled = false
-        iosNeutralTickStart(mutableListOf())
+        iosNeutralResetHysteresisForTest(mutableListOf())
     }
 
     @Test
@@ -122,19 +122,23 @@ class IosNeutralHoldEngineTest {
     }
 
     @Test
-    fun iosTickStartResetsHysteresisThatEarlyScratchLeavesAlone() {
+    fun defaultTickKeepsTheAndroidHysteresisAndTheTestOptionClearsIt() {
         MealAbsorptionPhaseHysteresis.stabilize(wave(MealAbsorptionPhase.FIRST_WAVE))
         MealAbsorptionMemory.lastPhase = MealAbsorptionPhase.FIRST_WAVE
         InsulinSlopePreserveHysteresis.stabilize(true)
         assertTrue(InsulinSlopePreserveHysteresis.stabilize(false))
         val scratch = IosEarlyTickScratch()
         scratch.reset(effectiveDiaHours = 5.0, effectivePeakMinutes = 75.0, noise = 0)
+        val startLog = mutableListOf<String>()
+        iosNeutralTickStart(startLog)
+        assertEquals(listOf(IosNeutralLog.HYSTERESIS), startLog)
         val stillHeld = MealAbsorptionPhaseHysteresis.stabilize(wave(MealAbsorptionPhase.NONE))
         assertEquals(MealAbsorptionPhase.FIRST_WAVE, stillHeld.phase)
         assertEquals("meal absorption hysteresis hold", stillHeld.reason)
-        val log = mutableListOf<String>()
-        iosNeutralTickStart(log)
-        assertEquals(listOf(IosNeutralLog.HYSTERESIS), log)
+        assertEquals(MealAbsorptionPhase.FIRST_WAVE, MealAbsorptionMemory.lastPhase)
+        val resetLog = mutableListOf<String>()
+        iosNeutralResetHysteresisForTest(resetLog)
+        assertEquals(listOf(IosNeutralLog.HYSTERESIS_RESET_TEST), resetLog)
         val released = MealAbsorptionPhaseHysteresis.stabilize(wave(MealAbsorptionPhase.NONE))
         assertEquals(MealAbsorptionPhase.NONE, released.phase)
         assertEquals(MealAbsorptionPhase.NONE, MealAbsorptionMemory.lastPhase)

@@ -1,33 +1,61 @@
 # Décisions iOS
 
-Approuvées par l’utilisateur le **2026-10-05**. Toutes les recommandations de ce mémo sont retenues.
+Objectif final : parité stricte Android/iOS. Les valeurs neutres sont un échafaudage temporaire, derrière l'interrupteur éteint, et doivent toutes disparaître avant activation.
 
-`IosClientConfig.APS` reste `false`. La boucle iOS n’est pas activée. Aucune écriture pompe.
+Approuvées par l’utilisateur le **2026-10-05** comme étape temporaire, pas comme état final. `IosClientConfig.APS` reste `false`. La boucle iOS n’est pas activée. Aucune écriture pompe.
 
-L’interrupteur nouveau `AimiCommonEngineSwitch` est **éteint par défaut**, et ce n’est pas `IosClientConfig.APS`. Éteint, `HoldAimiEngine` rend `Hold("ENGINE_NOT_EXTRACTED")`, même si un moteur commun lui a été passé. Allumé, en test, il délègue à ce moteur. Les scènes ci-dessous donnent alors les nombres de ce mémo.
+`AimiCommonEngineSwitch` est **éteint par défaut**, et ce n’est pas `IosClientConfig.APS`. Éteint, `HoldAimiEngine` rend `Hold("ENGINE_NOT_EXTRACTED")`, même si un moteur commun lui a été passé. Allumé en test seulement, il délègue à ce moteur et les scènes ci-dessous donnent les nombres temporaires.
 
-Chaque nombre vient d’une trace déjà verrouillée. La recommandation retenue est celle qui n’ajoute pas d’insuline par rapport à cette trace.
+Règle d’activation : l’interrupteur iOS ne peut être allumé qu’une fois **toutes** les traces de parité vertes, octet pour octet, entre Android et iOS. Tant qu’une ligne diffère, il reste éteint.
 
-## Décision
+## Échafaudage temporaire
+
+Ces valeurs ne sont pas la parité. Elles disparaissent avant activation.
 
 - COB virtuel : **0 g**.
 - Effort : facteur **1,0**, pas d’assessment.
 - Runtime patient : **non appelé**.
 - Session TPO : **non appelée**.
 - Snapshot wearable : **vide**.
-- `resetEarlyScratch` : les mêmes affectations que l’adaptateur Android. Sur cette branche l’adaptateur en a **27**. Le texte plus bas disait 29. La décision est cette liste, pas le chiffre arrondi. Le test verrouille 27.
+- `resetEarlyScratch` : les mêmes 27 affectations que l’adaptateur Android. Le texte plus bas disait 29. Le test verrouille 27.
 - Veto d’effort : **faux** sans assessment.
-- Plancher PKPD : stocké et journalisé, **pas relu** dans le débit.
-- Hystérésis : `reset()` au début de chaque tick **iOS**. Le tick Android n’est pas modifié. Il garde le singleton de la ref.
+- Plancher PKPD : stocké et journalisé, **pas relu** dans le débit. Android non plus ne relit pas ce JSON pour doser. La parité est la même ligne de journal, au même endroit du tick.
+- Hystérésis : par défaut, le même cycle de vie qu’Android. Les singletons de processus ne sont pas remis à zéro au début du tick. `iosNeutralResetHysteresisForTest` est une option de test. `evaluate` ne l’appelle pas.
 
-## Non-parité voulue
+## Écarts temporaires
 
-- Prédiction basse : le TBR reste **0,25 U/h** pendant 30 min. `TREE_DEPLOYED` et `MEAL_CERTAINTY` ne sont pas produits, parce que le runtime patient n’est pas appelé.
-- Nuit : le TBR reste **1,00 U/h** pendant 30 min. Les lignes d’apprenants, d’export, `UAM=0.00` et le `SMB result: raw=0.00 -> final=0.35` non délivré ne sont pas produits. TPO n’est pas appelé.
-- ISF **45** (FC 110 sur 10 min, moyenne 60 min 88, ISF 50 × 0,90) n’est pas produit. Le snapshot wearable est vide.
-- Le `reset()` d’hystérésis est iOS. Un tick Android peut encore hériter du maintien de processus.
+- Prédiction basse : le TBR temporaire est **0,25 U/h** pendant 30 min, sans `TREE_DEPLOYED` ni `MEAL_CERTAINTY`.
+- Nuit : le TBR temporaire est **1,00 U/h** pendant 30 min, sans les lignes d’apprenants, d’export, `UAM=0.00`, ni le SMB `final=0.35` non délivré.
+- ISF **45** (FC 110 sur 10 min, moyenne 60 min 88, ISF 50 × 0,90) n’est pas produit tant que le snapshot est vide.
+- Un maintien d’hystérésis laissé par le tick précédent reste en place, comme sur Android.
 
-Le détail de chaque option reste ci-dessous.
+## Chemin vers la parité
+
+Ordre : d’abord ce qui change un débit ou le tick suivant, ensuite le modèle et l’export. La taille est le sous-système à écrire, pas un calendrier. Chaque ligne se prouve par une trace déjà verrouillée sur Android, rejouée octet pour octet sur iOS.
+
+1. **Hystérésis.** Déjà les mêmes `object` que `dev_OAPSAIMI` (`MealAbsorptionPhaseHysteresis`, `MealAbsorptionMemory`, `EndogenousPhaseHysteresis`, `PhysiologicalPatternHysteresis`, `InsulinSlopePreserveHysteresis`). Il ne reste pas de second cycle de vie. Le défaut iOS n’appelle pas `reset()`. Taille : un test de deux ticks, rien d’autre. Trace : `lowPredictionRequestsAQuarterBasal` sur instance propre, TBR **0,25 U/h** sans la ligne `meal absorption hysteresis hold` ; puis un tick `FIRST_WAVE` suivi d’un tick `NONE` qui garde `meal absorption hysteresis hold`, comme le singleton Android.
+
+2. **Wearable, FC, et persistance des pas, de la FC et des bolus.** HealthKit remplit le même `HealthContextSnapshot` (pas 5/15/60 min, FC, FC de repos, fenêtres 10 et 60 min). La persistance est commune, SQLDelight ou équivalent, avec les mêmes lectures que `persistenceLayer` (`getHeartRatesFromTimeToTime`, pas, bolus). Les caches `stepsSnapshotRef`, `heartRatesSnapshotRef` et le cache bolus partent des mêmes listes. Taille : un adaptateur HealthKit dans `iosMain`, un schéma et les requêtes, branchés à la place des listes vides. Ça débloque l’ISF, l’effort, le COB et le veto. Trace : `autosensHalfDoublesScheduledBasalAndRestingHeartRateStrengthensIsf`, FC 110 / 10 min, moyenne 60 min 88, ISF 50 × 0,90 = **45**, ligne `HR_TREND_ISF x0.90`.
+
+3. **Effort.** Une fois le snapshot réel, appeler `refreshEffortActivityBelief` tel quel (34 lignes). Facteur ≤ 1, assessment null si la protection est coupée. Taille : le corps Android derrière le snapshot, pas une seconde formule. Trace : `signalMealReturnsTheAdvisorSmbAndTbr`, SMB **3,30 U** et TBR **2,00 U/h**, sans exertion.
+
+4. **Veto.** La même règle qu’Android : EXERTION, ACTIVE ou RECENT_EFFORT, confiance ≥ 0,30, pas de repas déclaré, COB < 12 g. `decideDetectMealOnset` reçoit ce booléen. Taille : déplacer `effortSuppressesUndeclaredMeal` en commun, une fois l’assessment porté. Trace : `basalDecisionEngineRaisesSportTemp`, BG 180, delta +5, accélération 0, veto faux, onset faux, TBR **1,30 U/h**.
+
+5. **COB virtuel.** La même préférence `OApsAIMIUndeclaredCobEnabled`, le même estimateur de Ra, le poids et le TDD. Glucides déjà déclarés : 0 g virtuel. Taille : les 38 lignes et l’estimateur, après HealthKit. Trace : `advancedPredictionPublishesEventualFromDeclaredCob`, COB déclaré **36 g**, glycémie 180, eventual **322**.
+
+6. **Runtime patient.** Appeler les 221 lignes : état patient, arbre, Harmonia, avec le snapshot du tick. Taille : le plus gros port physio, après le snapshot. Il dépend du capteur et du cycle. Trace : `lowPredictionRequestsAQuarterBasal`, `TREE_DEPLOYED trunk=SENSOR_UNCERTAIN`, `MEAL_CERTAINTY level=NONE`, TBR **0,25 U/h**, octet pour octet.
+
+7. **Plancher PKPD.** Le débit Android vient des courbes, pas d’une relecture du JSON. La parité est la même ligne `PKPD_SOFT_FLOOR: raw=39 soft=39 hybT=39 hitFloor=true applied=false endo=false` dans le tick, et le même champ d’export. Taille : placer `decideRecordPkpdSoftFloor` au même endroit que la coquille Android. Pas de seconde formule. Trace : `lowPredictionRequestsAQuarterBasal`.
+
+8. **TPO.** `onTickStart` avec la même horloge, un stockage de session commun, et le même reversement de préférences. Taille : orchestrateur et stockage, après l’horloge déjà portée. Les scènes sans session sont verrouillées. Une scène avec session active n’a pas encore de nombre verrouillé : il faudra la verrouiller sur Android avant de l’exiger sur iOS. Traces sans session : `zzPostHypoAtFiveSkipsTheDriftMicroSmb`, TBR **1,00 U/h** ; `basalDecisionEngineRaisesSportTemp`, TBR **1,30 U/h**.
+
+9. **Learners.** `BasalLearner`, `BasalNeuralLearner` et `UnifiedReactivityLearner` sont déjà en `commonMain`. Il manque l’état persisté identique (`aimi_basal_learner.json`, état du réseau, CSV), pas une autre politique. Départ à froid : multiplicateurs **1,0**, gouvernance `WARMUP`. `KEEP` seulement après les mêmes échantillons. Taille : le stockage de ces fichiers dans la persistance commune, puis les appels `process` au même endroit du tick (616 lignes côté Android, dont l’appel). Trace : `zzPostHypoAtFiveSkipsTheDriftMicroSmb`, TBR **1,00 U/h**, avec les lignes d’apprenants du tick de nuit.
+
+10. **TFLite et UAM.** Le même fichier `modelUAM.tflite`. Interpréteur TFLite iOS, ou une inférence en Kotlin commun qui lit ce fichier. Modèle absent : `predictSmbUam` **0 U**, `refine` identité, pas d’entraînement. Modèle présent : le même SMB que Android pour le même vecteur. Taille : l’interpréteur et le branchement de `AimiModelHandler`, sans réécrire `neuralnetwork5`. Traces : `uamPostHypoReboundBridgesAShortTempBasal`, SMB prédit **0 U**, TBR **1,05 U/h**, 5 min, sur le chemin modèle absent ; puis le même vecteur avec le fichier présent, SMB identique à Android.
+
+11. **`AimiDecisionContext`.** Le type est encore dans `DetermineBasalAIMI2.kt` (fabrique 43 lignes). Le porter en commun, avec les champs que l’orchestre et l’export lisent. Taille : déplacer la data class et la fabrique, sans changer les champs. Trace : l’export du tick `lowPredictionRequestsAQuarterBasal`, champ `pkpd_soft_floor` compris, octet pour octet.
+
+Le détail des options temporaires reste ci-dessous.
 
 ## `estimateUndeclaredVirtualCob`
 
@@ -169,6 +197,6 @@ Scène verrouillée : prédiction basse, instance propre, TBR **0,25 U/h** penda
 | `reset()` au début de chaque tick | Chaque tick a la scène propre : TBR **0,25 U/h**. Le maintien de repas ne traverse plus le tick. Ce n’est plus la ref |
 | Un état par instance, pas par processus | Deux moteurs ne partagent plus le maintien. Un second tick de la même instance peut encore hériter. La scène propre reste **0,25 U/h** |
 
-Recommandation : **`reset()` au début de chaque tick** le jour où iOS calculera une dose. C’est le seul choix qui garde le TBR **0,25 U/h** même après un tick de repas. Tant que `APS` est faux, le singleton n’est pas écrit. Le code Android reste le singleton de la ref.
+Recommandation d’alors : `reset()` au début de chaque tick, pour garder le TBR **0,25 U/h** même après un repas. La parité l’emporte : le défaut est le singleton Android, et `reset()` ne reste qu’en test (`iosNeutralResetHysteresisForTest`). Le tick de production iOS n’appelle pas `reset()`. Le code Android reste le singleton de la ref.
 
 Côté iOS : aucun HealthKit. C’est le cycle de vie du processus.

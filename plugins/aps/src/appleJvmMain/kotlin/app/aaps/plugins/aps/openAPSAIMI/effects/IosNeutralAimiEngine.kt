@@ -23,8 +23,8 @@ enum class IosNeutralScene {
 }
 
 /**
- * Common engine behind [HoldAimiEngine]. Each approved port logs its mode on [portLog].
- * Hysteresis `reset()` runs here, at iOS tick start, and not from the Android tick.
+ * Common engine behind [HoldAimiEngine]. Each neutral port logs its mode on [portLog].
+ * Hysteresis follows the Android process singleton. `reset()` is not called here.
  */
 class IosNeutralAimiEngine(
     private val scene: IosNeutralScene,
