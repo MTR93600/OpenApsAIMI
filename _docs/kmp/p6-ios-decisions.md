@@ -188,7 +188,7 @@ La correction est #237 : `tamperSecureEnvelope` fait un XOR `0x01` sur l’octet
 
 Inventaire seulement. L’intégration n’est pas demandée. Aucune de ces PR n’est mergée ici. L’activation reste bloquée par l’acceptation écrite de A, ou B, et par TFLite.
 
-La tête est #237, `cursor/p145-secure-encrypt-tamper-da40`, SHA `8f6ca8b08b872add7f26a5cf906b52179ea75a7b`. Elle contient les 44 commits de #206 à #237. `kmp-aimi-migration-study` (`8be81495f1ca`) n’en est pas l’ancêtre : 10 commits de l’étude manquent sur la tête, dont les merges #213 et #217, le workflow de concurrence iOS, et #153. Une branche d’intégration rejoue la gate ci-dessous après les avoir réunis. Pas avant.
+La tête de code du correctif est #237, `cursor/p145-secure-encrypt-tamper-da40`, SHA `8f6ca8b08b872add7f26a5cf906b52179ea75a7b`. Le commit d’inventaire est juste au-dessus. La branche contient les commits de #206 à #237. `kmp-aimi-migration-study` (`8be81495f1ca`) n’en est pas l’ancêtre : 10 commits de l’étude manquent sur la tête, dont les merges #213 et #217, le workflow de concurrence iOS, et #153. Une branche d’intégration rejoue la gate ci-dessous après les avoir réunis. Pas avant.
 
 Ordre d’empilement. Le SHA est la tête de la branche.
 
@@ -223,7 +223,7 @@ Ordre d’empilement. Le SHA est la tête de la branche.
 | #234 | `cursor/p142-scene-patient-runtime-da40` | `d9a7f13ee3ff` | en file |
 | #233 | `cursor/p143-decision-context-factory-da40` | `8ccbccd8f5ae` | en cours |
 | #236 | `cursor/p144-healthkit-read-session-da40` | `61876c6b3faf` | en file |
-| #237 | `cursor/p145-secure-encrypt-tamper-da40` | `8f6ca8b08b87` | en file, push et pull_request |
+| #237 | `cursor/p145-secure-encrypt-tamper-da40` | `8f6ca8b08b87` (correctif) | en file, push et pull_request |
 
 #213 et #217 sont déjà mergées dans l’étude. Elles ne sont pas dans cette liste. `claude-review` n’est pas la CI iOS. Les comptes XML de #232 à #237 ne sont pas encore là.
 
