@@ -267,9 +267,13 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickSignalCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickSignalData
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickSignalOutcome
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickSignalStep
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPostHypoClassified
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickPostHypoCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickPostHypoOutcome
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickTrajectoryPrep
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetermineBasalTickPrefix
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetermineBasalTickSignal
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetermineBasalTickPostHypo
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideEarlyDetermineBasalStages
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideLateFatProteinRise
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTrajectoryContextPrepCalls
@@ -14424,111 +14428,162 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val threshold = signaled.threshold
         val hasRecentBolus45m = signaled.hasRecentBolus45m
 
-        val (
-            postHypoState,
-            estimatedCarbs,
-            estimatedCarbsTime,
-        ) = runPostAutodrivePostHypoClassification(
-            recentBGs = recentBGs,
-            cob = cob,
-            shortAvgDeltaAdj = shortAvgDeltaAdj,
-            delta = delta,
-            slopeFromMinDeviation = ctx.mealData.slopeFromMinDeviation,
-            mealTime = mealTime,
-            bfastTime = bfastTime,
-            lunchTime = lunchTime,
-            dinnerTime = dinnerTime,
-            highCarbTime = highCarbTime,
-            snackTime = snackTime,
-            reason = reason,
-        )
-        refreshPostHypoDeliveryAuthorityForTick(
-            combinedDelta = combinedDelta,
-            recentBGs = recentBGs,
-            shortAvgDeltaAdj = shortAvgDeltaAdj,
-            slopeFromMinDeviation = ctx.mealData.slopeFromMinDeviation,
-            reason = reason,
-        )
-
-        // Cascade D4: publish gated dose terminals BEFORE RBT/V3 so stacking/HTR/Tube see
-        // Authority+Clamp truth (not raw PKPD floor). Late PKPD stage re-publishes to refine.
-        val earlyPkpdEventual =
-            this.eventualBG.takeIf { it.isFinite() && it > 1.0 }
-                ?: rT.eventualBG?.takeIf { it.isFinite() && it > 1.0 }
-                ?: bg
-        val earlyPkpdMinPred = minPredictedAcrossCurves(rT.predBGs) ?: earlyPkpdEventual
-        publishDoseTerminalAuthorityAndSnapshot(
-            rT = rT,
-            profile = profile,
-            mealData = ctx.mealData,
-            pkpdEventualMgdl = earlyPkpdEventual,
-            pkpdPredTerminalMgdl = earlyPkpdMinPred,
-            targetBgMgdl = targetBg.toDouble(),
-            stageTag = "pre_rbt",
-        )
-
-        val tdd24hForRbt = resolveTdd24hForExport()
-            ?: tdd24Hrs.takeIf { it > 0f }?.toDouble()
-            ?: (profile.max_daily_basal * 24.0).coerceAtLeast(1.0)
-        if (!preferences.get(BooleanKey.OApsAIMIautoDriveActive)) {
-            resolveAndWireRbtLiveTick(
+        val postHypo = when (
+            val outcome = decideDetermineBasalTickPostHypo(
                 ctx = ctx,
                 profile = profile,
                 rT = rT,
-                combinedDelta = combinedDelta,
-                tdd24hU = tdd24hForRbt,
-                v3SmbU = 0.0,
-                stepsLast15m = wearableSnapshot.stepsLast15m,
-                heartRateBpm = wearableSnapshot.hrNow,
+                recentBGs = recentBGs,
+                reason = reason,
+                tdd24Hrs = tdd24Hrs,
+                wearableSnapshot = wearableSnapshot,
+                threshold = threshold,
+                autosensRatio = autosensRatio,
+                nightbis = nightbis,
+                autodriveEnabledPref = autodrive,
+                modesCondition = modesCondition,
+                hasRecentBolus45m = hasRecentBolus45m,
+                totalBolusLastHour = totalBolusLastHour,
+                dynamicPbolusSmall = dynamicPbolusSmall,
+                pkpdRuntime = pkpdRuntime,
+                preferences = preferences,
+                calls = object : AimiTickPostHypoCalls {
+                    override fun classify(
+                        ctx: AimiTickContext,
+                        recentBGs: List<Float>,
+                        reason: StringBuilder,
+                    ): AimiPostHypoClassified {
+                        val bundle = runPostAutodrivePostHypoClassification(
+                            recentBGs = recentBGs,
+                            cob = cob,
+                            shortAvgDeltaAdj = shortAvgDeltaAdj,
+                            delta = delta,
+                            slopeFromMinDeviation = ctx.mealData.slopeFromMinDeviation,
+                            mealTime = mealTime,
+                            bfastTime = bfastTime,
+                            lunchTime = lunchTime,
+                            dinnerTime = dinnerTime,
+                            highCarbTime = highCarbTime,
+                            snackTime = snackTime,
+                            reason = reason,
+                        )
+                        return AimiPostHypoClassified(
+                            postHypoState = bundle.postHypoState,
+                            estimatedCarbs = bundle.estimatedCarbs,
+                            estimatedCarbsTimeMs = bundle.estimatedCarbsTimeMs,
+                        )
+                    }
+                    override fun refreshPostHypo(
+                        ctx: AimiTickContext,
+                        recentBGs: List<Float>,
+                        reason: StringBuilder,
+                    ) = refreshPostHypoDeliveryAuthorityForTick(
+                        combinedDelta = combinedDelta,
+                        recentBGs = recentBGs,
+                        shortAvgDeltaAdj = shortAvgDeltaAdj,
+                        slopeFromMinDeviation = ctx.mealData.slopeFromMinDeviation,
+                        reason = reason,
+                    )
+                    override fun eventualBg() = eventualBG
+                    override fun bg() = this@DetermineBasalaimiSMB2.bg
+                    override fun targetBg() = this@DetermineBasalaimiSMB2.targetBg.toDouble()
+                    override fun publishDoseTerminal(
+                        ctx: AimiTickContext,
+                        profile: OapsProfileAimi,
+                        rT: RT,
+                        pkpdEventualMgdl: Double,
+                        pkpdPredTerminalMgdl: Double,
+                        targetBgMgdl: Double,
+                    ) = publishDoseTerminalAuthorityAndSnapshot(
+                        rT = rT,
+                        profile = profile,
+                        mealData = ctx.mealData,
+                        pkpdEventualMgdl = pkpdEventualMgdl,
+                        pkpdPredTerminalMgdl = pkpdPredTerminalMgdl,
+                        targetBgMgdl = targetBgMgdl,
+                        stageTag = "pre_rbt",
+                    )
+                    override fun tdd24hForExport() = resolveTdd24hForExport()
+                    override fun wireRbt(
+                        ctx: AimiTickContext,
+                        profile: OapsProfileAimi,
+                        rT: RT,
+                        tdd24hU: Double,
+                        wearableSnapshot: HealthContextSnapshot,
+                    ) {
+                        resolveAndWireRbtLiveTick(
+                            ctx = ctx,
+                            profile = profile,
+                            rT = rT,
+                            combinedDelta = combinedDelta,
+                            tdd24hU = tdd24hU,
+                            v3SmbU = 0.0,
+                            stepsLast15m = wearableSnapshot.stepsLast15m,
+                            heartRateBpm = wearableSnapshot.hrNow,
+                        )
+                    }
+                    override fun autodriveV3(
+                        ctx: AimiTickContext,
+                        profile: OapsProfileAimi,
+                        rT: RT,
+                        hypoThresholdMgdl: Double,
+                        pkpdRuntime: PkPdRuntime?,
+                    ) = runAutodriveV3MultiVariableBranch(
+                        ctx = ctx,
+                        profile = profile,
+                        rT = rT,
+                        bg = bg,
+                        combinedDelta = combinedDelta,
+                        shortAvgDeltaAdj = shortAvgDeltaAdj,
+                        hypoThresholdMgdl = hypoThresholdMgdl,
+                        pkpdRuntime = pkpdRuntime,
+                    )
+                    override fun rbtResolvedThisTick() = rbtResolvedThisTick
+                    override fun applyPendingSpiral(rT: RT) =
+                        applyPendingTrajSpiralBasalIfNotSuppressed(rT = rT, bg = bg, delta = delta)
+                    override fun compressionAndDrift(
+                        ctx: AimiTickContext,
+                        rT: RT,
+                        threshold: Double,
+                        postHypoState: PostHypoState,
+                        autosensRatio: Double,
+                        nightbis: Boolean,
+                        autodriveEnabledPref: Boolean,
+                        modesCondition: Boolean,
+                        hasRecentBolus45m: Boolean,
+                        totalBolusLastHour: Double,
+                        dynamicPbolusSmall: Double,
+                        reason: StringBuilder,
+                    ) = runPostHypoCompressionAndDriftTerminatorOrReturn(
+                        ctx = ctx,
+                        rT = rT,
+                        bg = bg,
+                        delta = delta,
+                        threshold = threshold,
+                        combinedDelta = combinedDelta,
+                        shortAvgDeltaRawForDrift = shortAvgDelta,
+                        targetBgMgdl = targetBg,
+                        postHypoState = postHypoState,
+                        autosensRatio = autosensRatio,
+                        nightbis = nightbis,
+                        autodriveEnabledPref = autodriveEnabledPref,
+                        modesCondition = modesCondition,
+                        hasRecentBolus45m = hasRecentBolus45m,
+                        totalBolusLastHour = totalBolusLastHour,
+                        dynamicPbolusSmall = dynamicPbolusSmall,
+                        exerciseInsulinLockoutActive = exerciseInsulinLockoutActive,
+                        reason = reason,
+                    )
+                },
             )
+        ) {
+            is AimiTickPostHypoOutcome.ReturnEarly -> return outcome.rT
+            is AimiTickPostHypoOutcome.Continue -> outcome
         }
-
-        // Autodrive V3 — see [runAutodriveV3MultiVariableBranch]
-        val v3Branch = runAutodriveV3MultiVariableBranch(
-            ctx = ctx,
-            profile = profile,
-            rT = rT,
-            bg = bg,
-            combinedDelta = combinedDelta,
-            shortAvgDeltaAdj = shortAvgDeltaAdj,
-            hypoThresholdMgdl = threshold,
-            pkpdRuntime = pkpdRuntime,
-        )
-        val skipLegacySmbBlender = v3Branch.skipLegacySmbBlender
-        if (preferences.get(BooleanKey.OApsAIMIautoDriveActive) && !rbtResolvedThisTick) {
-            resolveAndWireRbtLiveTick(
-                ctx = ctx,
-                profile = profile,
-                rT = rT,
-                combinedDelta = combinedDelta,
-                tdd24hU = tdd24hForRbt,
-                v3SmbU = 0.0,
-                stepsLast15m = wearableSnapshot.stepsLast15m,
-                heartRateBpm = wearableSnapshot.hrNow,
-            )
-        }
-        applyPendingTrajSpiralBasalIfNotSuppressed(rT = rT, bg = bg, delta = delta)
-
-        runPostHypoCompressionAndDriftTerminatorOrReturn(
-            ctx = ctx,
-            rT = rT,
-            bg = bg,
-            delta = delta,
-            threshold = threshold,
-            combinedDelta = combinedDelta,
-            shortAvgDeltaRawForDrift = shortAvgDelta,
-            targetBgMgdl = targetBg,
-            postHypoState = postHypoState,
-            autosensRatio = autosensRatio,
-            nightbis = nightbis,
-            autodriveEnabledPref = autodrive,
-            modesCondition = modesCondition,
-            hasRecentBolus45m = hasRecentBolus45m,
-            totalBolusLastHour = totalBolusLastHour,
-            dynamicPbolusSmall = dynamicPbolusSmall,
-            exerciseInsulinLockoutActive = exerciseInsulinLockoutActive,
-            reason = reason,
-        )?.let { return it }
+        val postHypoState = postHypo.postHypoState
+        val estimatedCarbs = postHypo.estimatedCarbs
+        val estimatedCarbsTime = postHypo.estimatedCarbsTimeMs
+        val skipLegacySmbBlender = postHypo.skipLegacySmbBlender
 
         val (
             pumpCaps,
