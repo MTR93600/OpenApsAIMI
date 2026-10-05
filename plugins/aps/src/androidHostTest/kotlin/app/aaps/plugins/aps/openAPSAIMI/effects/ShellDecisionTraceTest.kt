@@ -1887,6 +1887,41 @@ class ShellDecisionTraceTest {
         assertEquals(CARBS_SMB_SAFETY_TRACE, trace)
     }
 
+    @Test
+    fun uamPostHypoReboundBridgesAShortTempBasal() {
+        val profile = profileStub()
+        setField(tick, "bg", 180.0)
+        setField(tick, "delta", 0.0f)
+        setField(tick, "targetBg", 100.0f)
+        setField(tick, "predictedBg", 180.0f)
+        setField(tick, "eventualBG", 180.0)
+        setField(tick, "iob", 1.0f)
+        val rT = RT(runningDynamicIsf = false)
+        val trace = capture {
+            invokeNamed(
+                "runUamModelCalHypoGuardPostHypoAndSetPredictedSmb",
+                listOf(
+                    rT,
+                    180.0,
+                    0.0f,
+                    1.0f,
+                    180.0f,
+                    180.0,
+                    70.0,
+                    180.0,
+                    100.0,
+                    profile,
+                    PostHypoState.ReboundSuspected(sinceMs = 0L),
+                    0.0f,
+                ),
+            )
+        }
+        assertEquals(1.05, rT.rate as Double, 1e-9)
+        assertEquals(5, rT.duration)
+        assertEquals(0.0f, getField(tick, "predictedSMB"))
+        assertEquals(UAM_POST_HYPO_REBOUND_TRACE, trace)
+    }
+
     private fun resultField(target: Any, name: String): Any? {
         val field = target.javaClass.getDeclaredField(name)
         field.isAccessible = true
@@ -2786,6 +2821,11 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val UAM_POST_HYPO_REBOUND_TRACE = """
+            READ key=DoubleKey.OApsAIMIHighBg value=0.00
+            LOG 🛡️ POST_HYPO_REBOUND: SMB=0 → TBR bridge 1.05 U/h (0min depuis BG<70, COB=0.0g)
+        """.trimIndent()
+
         private val CARBS_SMB_SAFETY_TRACE = """
             READ key=DoubleKey.meal_modes_MaxBasal value=0.00
             READ key=DoubleKey.autodriveMaxBasal value=0.00

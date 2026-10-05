@@ -231,6 +231,8 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT3cBasalFirstCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideT3cBasalFirstProduction
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiCarbsAdvisorEnableSmbCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideCarbsAdvisorEnableSmbBasalHistoryAndSafety
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiUamPostHypoCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideUamPostHypoSmb
 import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
@@ -5658,96 +5660,63 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         profile: OapsProfileAimi,
         postHypoState: PostHypoState,
         cob: Float,
-    ): Float {
-        val modelcal = calculateSMBFromModel(rT.reason)
-        val decisionRisk = cachedRiskEnvelopeDecision
-        val hypoThresholdForGuard = decisionRisk?.hypoThresholdMgdl ?: threshold
-        val hypoCompositeForReason = decisionRisk?.compositeMinMgdl ?: minBgHypoComposite
-        val (hypoPredSanitized, hypoEventualSanitized) = sanitizedHypoGuardPredictedEventual(
-            rT = rT,
-            predictedBg = predictedBg.toDouble(),
-            eventualBg = eventualBg,
-        )
-        var isHypoBlocked = shouldBlockHypoWithHysteresis(
-            bg = bg,
-            predictedBg = hypoPredSanitized,
-            eventualBg = hypoEventualSanitized,
-            threshold = hypoThresholdForGuard,
-            deltaMgdlPer5min = delta.toDouble(),
-        )
-
-        val aggression = correctionAggressionDecision
-        if (isHypoBlocked && aggression?.allowRocketHypoOverride == true) {
-            isHypoBlocked = false
-            lastHypoBlockAt = 0L
-            rT.reason.append(
-                "🚀 Rocket Override (${CorrectionAggressionGate.LOG_PREFIX} ${aggression.tier.name}): Hypo Block IGNORED. "
+    ): Float = decideUamPostHypoSmb(
+        rT = rT,
+        bg = bg,
+        delta = delta,
+        iob = iob,
+        predictedBg = predictedBg,
+        eventualBg = eventualBg,
+        threshold = threshold,
+        minBgHypoComposite = minBgHypoComposite,
+        targetBg = targetBg,
+        profile = profile,
+        postHypoState = postHypoState,
+        cob = cob,
+        consoleLog = consoleLog,
+        calls = object : AimiUamPostHypoCalls {
+            override fun modelSmb(reason: StringBuilder) = calculateSMBFromModel(reason)
+            override fun riskEnvelope() = cachedRiskEnvelopeDecision
+            override fun sanitizedPredictedEventual(rT: RT, predictedBg: Double, eventualBg: Double) =
+                sanitizedHypoGuardPredictedEventual(rT, predictedBg, eventualBg)
+            override fun nowMs() = aimiWallClockMs()
+            override fun hypoState() = AimiHypoSmbSafety.HypoHysteresisState(
+                lastHypoBlockAt,
+                hypoClearCandidateSince,
             )
-        } else if (isHypoBlocked && (delta > 5.0 || bg > targetBg + 40)) {
-            consoleLog.add(
-                "${CorrectionAggressionGate.LOG_PREFIX}: hypo rocket override BLOCKED " +
-                    "(tier=${aggression?.tier?.name ?: "n/a"} tag=${aggression?.reasonTag ?: "n/a"})"
-            )
-        }
-
-        var fallbackActive = false
-        if (isHypoBlocked) {
-            if (canFallbackSmbWithoutPrediction(bg, delta.toDouble(), targetBg, iob.toDouble(), profile)) {
-                fallbackActive = true
+            override fun writeHypoState(state: AimiHypoSmbSafety.HypoHysteresisState) {
+                lastHypoBlockAt = state.lastHypoBlockAt
+                hypoClearCandidateSince = state.hypoClearCandidateSince
             }
-        }
-
-        if (isHypoBlocked && !fallbackActive) {
-            rT.reason.appendLine(
-                rh.gs(
-                    ApsStrings.reason_hypo_guard,
-                    convertBG(hypoCompositeForReason),
-                    convertBG(hypoThresholdForGuard),
-                    convertBG(bg),
-                    convertBG(predictedBg.toDouble()),
-                    convertBG(eventualBg)
-                )
-            )
-            this.predictedSMB = 0f
-        } else {
-            var finalModelSmb = modelcal
-
-            if (fallbackActive) {
-                finalModelSmb = modelcal * 0.5f
+            override fun aggression() = correctionAggressionDecision
+            override fun clearHypoBlockAt() {
+                lastHypoBlockAt = 0L
+            }
+            override fun appendHypoGuard(
+                rT: RT,
+                composite: Double,
+                hypoThreshold: Double,
+                bg: Double,
+                predicted: Double,
+                eventual: Double,
+            ) {
                 rT.reason.appendLine(
-                    "Hyper fallback active: SMB unblocked (50% damped) despite missing prediction. UAM: ${aimiFmt2(modelcal)} -> ${aimiFmt2(finalModelSmb)}"
+                    rh.gs(
+                        ApsStrings.reason_hypo_guard,
+                        convertBG(composite),
+                        convertBG(hypoThreshold),
+                        convertBG(bg),
+                        convertBG(predicted),
+                        convertBG(eventual),
+                    )
                 )
-            } else {
-                rT.reason.appendLine("💉 SMB (UAM): ${aimiFmt2(modelcal)} U")
             }
-
-            when (postHypoState) {
-                is PostHypoState.ReboundSuspected -> {
-                    val bridgeTbr = (profile.current_basal * 2.0)
-                        .coerceAtMost(profile.max_basal * 0.35)
-                    finalModelSmb = 0f
-                    rT.rate = bridgeTbr
-                    rT.duration = 5
-                    consoleLog.add(
-                        "🛡️ POST_HYPO_REBOUND: SMB=0 → TBR bridge ${aimiFmt2(bridgeTbr)} U/h " +
-                            "(${postHypoState.sinceMs / 60_000}min depuis BG<70, COB=${aimiFmt1(cob)}g)"
-                    )
-                }
-                is PostHypoState.MealConfirmed -> {
-                    val maxSmbPref = preferences.get(DoubleKey.OApsAIMIMaxSMB).toFloat()
-                    finalModelSmb = (finalModelSmb * 0.5f).coerceAtMost(maxSmbPref * 0.5f)
-                    consoleLog.add(
-                        "🍽️ POST_HYPO_MEAL: SMB capped 50% → ${aimiFmt2(finalModelSmb)} U " +
-                            "(COB=${aimiFmt1(cob)}g, ${postHypoState.sinceMs / 60_000}min post-hypo)"
-                    )
-                }
-                PostHypoState.None -> { /* flux normal */ }
+            override fun setPredictedSmb(value: Float) {
+                this@DetermineBasalaimiSMB2.predictedSMB = value
             }
-
-            this.predictedSMB = finalModelSmb
-        }
-        return modelcal
-    }
+            override fun maxSmb() = preferences.get(DoubleKey.OApsAIMIMaxSMB)
+        },
+    )
 
     /**
      * Log + prefs one-shot advisor + [executeSmbInstruction].
