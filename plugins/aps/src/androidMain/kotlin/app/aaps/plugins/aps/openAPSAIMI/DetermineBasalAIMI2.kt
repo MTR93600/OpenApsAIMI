@@ -241,6 +241,8 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.decidePublishDoseTerminalAuthori
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiBasalDecisionEngineCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideBasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiContextModuleCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPhysioLatentCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideUpdatePhysioLatentState
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEnableSmbCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideApplyContextModule
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTrajectorySpiralCalls
@@ -3522,77 +3524,58 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         snapshot: HealthContextSnapshot,
         sourceSensor: SourceSensor?,
         patternSnapshot: PhysiologicalPatternSnapshot? = lastPhysiologicalPatternSnapshot,
-    ): PhysioLatentState {
-        val physioContext = physioAdapter.getEffectiveContext()
-        val physioTrace = physioAdapter.getLastDecisionTrace()
-        val hypothesisState = UamHypothesisStateBuilder.build(
-            phaseOutput = lastPhysiologicalPhaseOutput,
-            mealAbsorptionOutput = lastMealAbsorptionOutput,
-            patternSnapshot = patternSnapshot,
-            correctionAggressionDecision = correctionAggressionDecision,
-            uamConfidence = AimiUamHandler.confidenceOrZero(),
-            behaviorProfile = behaviorProfileSource.read(preferences),
-        )
-        val stressMask = PhysiologicalStressMaskBuilder.build(
-            snapshot = snapshot,
-            physioContext = physioContext,
-            physioTrace = physioTrace,
-            phaseOutput = lastPhysiologicalPhaseOutput,
-            patternSnapshot = patternSnapshot,
-            correctionAggressionDecision = correctionAggressionDecision,
-            chronicInflammation = lastInflammationResult,
-        )
-        val latentState = PhysioLatentStateBuilder.build(
-            snapshot = snapshot,
-            sourceSensor = sourceSensor,
-            phaseOutput = lastPhysiologicalPhaseOutput,
-            mealAbsorptionOutput = lastMealAbsorptionOutput,
-            hypothesisState = hypothesisState,
-            patternSnapshot = patternSnapshot,
-            physioContext = physioContext,
-            physioTrace = physioTrace,
-            correctionAggressionDecision = correctionAggressionDecision,
-            chronicInflammation = lastInflammationResult,
-            autonomicStress = stressMask.autonomicStress,
-            inflammationRecovery = stressMask.inflammationRecovery,
-            hormonalCircadian = stressMask.hormonalCircadian,
-            cgmFirstSensorConfidence = preferences.get(BooleanKey.OApsAIMISensorConfidenceCgmFirst),
-        )
-        lastUamHypothesisState = hypothesisState
-        lastPhysioLatentState = latentState
-        // Effort/activity belief computed HERE (before the basal decision + meal detection) so its posture and
-        // effort-memory can both (a) reduce SMB/basal and (b) veto the undeclared-meal reading of an effort or
-        // post-effort adrenaline rise — see [effortSuppressesUndeclaredMeal].
-        refreshEffortActivityBelief()
-        refreshPatientStateRuntime(
-            nowMs = dateUtil.now(),
-            contextSnapshot = lastContextSnapshot,
-            healthSnapshot = snapshot,
-            sourceSensor = sourceSensor,
-        )
-        if (::tpoOrchestrator.isInitialized) {
-            val patientState = lastPatientState
-            val patientModeDecision = lastPatientModeDecision
-            if (patientState != null && patientModeDecision != null) {
-                tpoOrchestrator.onPatientStateReady(
-                    patientState = patientState,
-                    patientModeName = patientModeDecision.mode.name,
-                    patientModeConfidence = patientModeDecision.confidence,
-                    correctionAggressionDecision = correctionAggressionDecision,
-                    bgMgdl = bg,
-                    deltaMgdl5m = delta.toDouble(),
-                    cobGrams = cob.toDouble(),
-                    minBgLookback75m = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
-                    nowMs = dateUtil.now(),
-                )
-                if (tpoOrchestrator.consumePrefsChangedThisTick()) {
-                    maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
-                    maxSMBHB = preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB).coerceAtLeast(maxSMB)
-                }
+    ): PhysioLatentState = decideUpdatePhysioLatentState(
+        snapshot = snapshot,
+        sourceSensor = sourceSensor,
+        patternSnapshot = patternSnapshot,
+        preferences = preferences,
+        calls = object : AimiPhysioLatentCalls {
+            override fun physioContext() = physioAdapter.getEffectiveContext()
+            override fun physioTrace() = physioAdapter.getLastDecisionTrace()
+            override fun phaseOutput() = lastPhysiologicalPhaseOutput
+            override fun mealAbsorption() = lastMealAbsorptionOutput
+            override fun aggression() = correctionAggressionDecision
+            override fun uamConfidence() = AimiUamHandler.confidenceOrZero()
+            override fun behaviorProfile() = behaviorProfileSource.read(preferences)
+            override fun inflammation() = lastInflammationResult
+            override fun writeHypothesis(state: UamHypothesisState) {
+                lastUamHypothesisState = state
             }
-        }
-        return latentState
-    }
+            override fun writeLatent(state: PhysioLatentState) {
+                lastPhysioLatentState = state
+            }
+            override fun refreshEffort() = refreshEffortActivityBelief()
+            override fun nowMs() = dateUtil.now()
+            override fun contextSnapshot() = lastContextSnapshot
+            override fun refreshPatient(
+                nowMs: Long,
+                contextSnapshot: ContextSnapshot?,
+                healthSnapshot: HealthContextSnapshot,
+                sourceSensor: SourceSensor?,
+            ) {
+                refreshPatientStateRuntime(
+                    nowMs = nowMs,
+                    contextSnapshot = contextSnapshot,
+                    healthSnapshot = healthSnapshot,
+                    sourceSensor = sourceSensor,
+                )
+            }
+            override fun tpoOrNull() = if (::tpoOrchestrator.isInitialized) tpoOrchestrator else null
+            override fun patientState() = lastPatientState
+            override fun patientMode() = lastPatientModeDecision
+            override fun bg() = this@DetermineBasalaimiSMB2.bg
+            override fun delta() = this@DetermineBasalaimiSMB2.delta.toDouble()
+            override fun cob() = this@DetermineBasalaimiSMB2.cob.toDouble()
+            override fun minBgLookback() = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES)
+            override fun writeMaxSmb(value: Double) {
+                maxSMB = value
+            }
+            override fun maxSmb() = maxSMB
+            override fun writeMaxSmbHb(value: Double) {
+                maxSMBHB = value
+            }
+        },
+    )
 
     private fun resolvePatientRuntimeSnapshotForExport(timestampMs: Long): PatientRuntimeSnapshot? {
         PatientStateRuntimeRepository.getLatest()?.let { return it }
