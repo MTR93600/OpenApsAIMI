@@ -1964,6 +1964,57 @@ class ShellDecisionTraceTest {
         assertEquals(0.0, rT.units as Double, 1e-9)
     }
 
+    @Test
+    fun publishDoseTerminalLiftsEventualOnMealEvidence() {
+        tick = newTick(
+            recordingPreferences(
+                doubles = emptyMap(),
+                bools = mapOf(
+                    BooleanKey.OApsAIMIPredictionAuthorityEnabled to true,
+                    BooleanKey.OApsAIMIAnticipMealEvidence to true,
+                ),
+            ),
+        )
+        armShell()
+        AimiUamHandler.updateRuntimeConfidence(null)
+        val floor = ScenarioProjectionCurve.fromRawPoints(
+            ScenarioProjectionKind.CLINICAL_FLOOR,
+            listOf(130.0, 120.0),
+        )
+        val best = ScenarioProjectionCurve.fromRawPoints(
+            ScenarioProjectionKind.SCENARIO_BEST,
+            listOf(160.0, 180.0),
+        )
+        setField(
+            tick,
+            "lastScenarioProjection",
+            ScenarioProjectionPair(
+                clinicalFloor = floor,
+                scenarioBest = best,
+                contributors = emptyList(),
+                cobPointsMgdl = listOf(140),
+                ztPointsMgdl = listOf(140),
+            ),
+        )
+        setField(tick, "bg", 140.0)
+        setField(tick, "delta", 0.0f)
+        setField(tick, "anticipTime", true)
+        setField(tick, "iob", 1.0f)
+        setField(tick, "maxIob", 10.0)
+        val profile = profileStub()
+        val meal = MealData(mealCOB = 0.0)
+        val rT = RT(runningDynamicIsf = false)
+        val trace = capture {
+            invokeNamed(
+                "publishDoseTerminalAuthorityAndSnapshot",
+                listOf(rT, profile, meal, 140.0, 120.0, 100.0, "pre_rbt"),
+            )
+        }
+        assertEquals(180.0, rT.eventualBG as Double, 1e-9)
+        assertEquals(180.0, getField(tick, "eventualBG") as Double, 1e-9)
+        assertEquals(DOSE_TERMINAL_MEAL_UPLIFT_TRACE, trace)
+    }
+
     private fun resultField(target: Any, name: String): Any? {
         val field = target.javaClass.getDeclaredField(name)
         field.isAccessible = true
@@ -2863,6 +2914,17 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val DOSE_TERMINAL_MEAL_UPLIFT_TRACE = """
+            READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=true
+            READ key=BooleanKey.OApsAIMIPredictionAuthorityShadow value=false
+            READ key=BooleanKey.OApsAIMIMealConfirmedEarlyRelease value=false
+            READ key=BooleanKey.OApsAIMIAnticipMealEvidence value=true
+            LOG PRED_AUTHORITY: src=SCENARIO_MEAL_UPLIFT predT=120 evT=180 pkpd=140 best=180 mealSupp=false uplift=true meal_evidence phase=NONE mealCert=NONE trunk=NONE lead=40.0 cause=UNKNOWN [pre_rbt]
+            LOG PRED_AUTHORITY_C1[pre_rbt]: eventual=180 predT=120 curves=true src=SCENARIO_MEAL_UPLIFT
+            LOG DOSE_TERMINAL_SNAPSHOT: ev=180 minPred=160 src=SCENARIO_MEAL_UPLIFT auth=true clamp=false plateauLift=false curves=true [pre_rbt]
+            READ key=BooleanKey.OApsAIMIStraightLineTubeAdvisorEnabled value=false
+        """.trimIndent()
+
         private val THERAPY_EXERCISE_LOCKOUT_TRACE = """
             READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
             READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
