@@ -4,6 +4,7 @@ import app.aaps.plugins.aimiengine.AimiCommonEngineSwitch
 import app.aaps.plugins.aimiengine.HoldAimiEngine
 import app.aaps.plugins.aimicontracts.AimiTherapyCommand
 import app.aaps.plugins.aimitestkit.AimiTestSnapshots
+import app.aaps.plugins.aps.openAPSAIMI.AimiDecisionContext
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionMemory
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
@@ -81,7 +82,7 @@ class IosNeutralHoldEngineTest {
             assertNull(result.pairedCommand)
             assertEquals(39.0, neutral.pkpdFloor.telemetry?.rawPathMinMgdl)
             assertEquals(39.0, neutral.pkpdFloor.telemetry?.softPathMinMgdl)
-            assertNull(neutral.scratch.lastPkpdSoftFloorTelemetry)
+            assertEquals(neutral.pkpdFloor.telemetry, neutral.scratch.lastPkpdSoftFloorTelemetry)
             neutral.pkpdFloor.telemetry = neutral.pkpdFloor.telemetry?.copy(softPathMinMgdl = 999.0)
             val again = holdAimiEngineWired(IosNeutralScene.LOW_PREDICTION).first.evaluate(
                 AimiTestSnapshots.emptyInput(),
@@ -91,6 +92,91 @@ class IosNeutralHoldEngineTest {
             val againTbr = again.command as AimiTherapyCommand.TempBasal
             assertEquals("0.25", aimiFmt2(againTbr.rateUPerHour))
             assertModeLines(neutral)
+        }
+    }
+
+    /**
+     * Android records the floor inside advanced predictions, after the wearable read and before
+     * safety. Safety then returns the quarter basal and does not reach meal onset. The dose does
+     * not re-read the stored telemetry. The export field is that same object.
+     */
+    @Test
+    fun lowPredictionRecordsTheFloorAfterWearableAndBeforeTheDose() {
+        AimiCommonEngineSwitch.enabled = true
+        val (hold, neutral) = holdAimiEngineWired(IosNeutralScene.LOW_PREDICTION)
+        val result = hold.evaluate(
+            AimiTestSnapshots.emptyInput(),
+            AimiTestSnapshots.emptyState(),
+            AimiTestSnapshots.emptyModels(),
+        )
+        val tbr = result.command as AimiTherapyCommand.TempBasal
+        assertEquals("0.25", aimiFmt2(tbr.rateUPerHour))
+        assertEquals(IOS_NEUTRAL_TBR_DURATION_MS, tbr.durationMs)
+        assertNull(neutral.mealOnset)
+
+        val log = neutral.portLog
+        val floorLine =
+            "PKPD_SOFT_FLOOR: raw=39 soft=39 hybT=39 hitFloor=true applied=false endo=false fallSuppressed=false reason=endo_reversion_disabled"
+        val wearableAt = log.indexOf(IosNeutralLog.WEARABLE)
+        val floorAt = log.indexOf(floorLine)
+        assertTrue(wearableAt >= 0, log.toString())
+        assertTrue(floorAt > wearableAt, log.toString())
+        assertEquals(floorAt + 1, log.indexOf(IosNeutralLog.PKPD))
+        assertEquals(log.lastIndex, log.indexOf(IosNeutralLog.PKPD))
+
+        val telemetry = neutral.scratch.lastPkpdSoftFloorTelemetry
+        assertEquals(39.0, telemetry?.rawPathMinMgdl)
+        assertEquals(39.0, telemetry?.softPathMinMgdl)
+        assertEquals(39.0, telemetry?.hybridTerminalMgdl)
+        assertEquals(true, telemetry?.hitNumericFloor)
+        assertEquals(false, telemetry?.applied)
+        assertEquals(false, telemetry?.endogenousReversionEnabled)
+        assertEquals(false, telemetry?.suppressedByFallingTrend)
+        assertEquals("endo_reversion_disabled", telemetry?.reason)
+
+        val ctx = AimiDecisionContext(
+            event_id = "quarter-basal",
+            timestamp = 1_700_000_000_000L,
+            trigger = "low-prediction",
+            baseline_state = AimiDecisionContext.BaselineState(
+                profile_isf_mgdl = 50.0,
+                profile_basal_uph = 1.0,
+                current_bg_mgdl = 100.0,
+                cob_g = 0.0,
+                iob_u = 2.0,
+            ),
+        )
+        ctx.adjustments.pkpd_soft_floor = telemetry?.toJsonObject()
+        val json = ctx.toMedicalJson()
+        assertTrue(json.contains("\"pkpd_soft_floor\""), json)
+        assertTrue(json.contains("\"raw_path_min_mgdl\":39"), json)
+        assertTrue(json.contains("\"soft_path_min_mgdl\":39"), json)
+        assertTrue(json.contains("\"hybrid_terminal_mgdl\":39"), json)
+        assertTrue(json.contains("\"hit_numeric_floor\":true"), json)
+        assertTrue(json.contains("\"applied\":false"), json)
+        assertTrue(json.contains("\"endogenous_reversion_enabled\":false"), json)
+        assertTrue(json.contains("\"reason\":\"endo_reversion_disabled\""), json)
+
+        neutral.scratch.lastPkpdSoftFloorTelemetry =
+            telemetry?.copy(softPathMinMgdl = 999.0, rawPathMinMgdl = 999.0)
+        assertEquals("0.25", aimiFmt2(iosNeutralLowPredictionTbrUph()))
+    }
+
+    @Test
+    fun mealSportAndNightDoNotRecordTheLowPredictionFloor() {
+        AimiCommonEngineSwitch.enabled = true
+        for (scene in listOf(IosNeutralScene.MEAL, IosNeutralScene.SPORT, IosNeutralScene.NIGHT)) {
+            val (hold, neutral) = holdAimiEngineWired(scene)
+            hold.evaluate(
+                AimiTestSnapshots.emptyInput(),
+                AimiTestSnapshots.emptyState(),
+                AimiTestSnapshots.emptyModels(),
+            )
+            assertFalse(
+                neutral.portLog.any { it.startsWith("PKPD_SOFT_FLOOR") },
+                "$scene ${neutral.portLog}",
+            )
+            assertNull(neutral.scratch.lastPkpdSoftFloorTelemetry)
         }
     }
 
@@ -117,7 +203,6 @@ class IosNeutralHoldEngineTest {
         assertTrue(log.contains(IosNeutralLog.PATIENT), log.toString())
         assertTrue(log.contains(IosNeutralLog.TPO), log.toString())
         assertTrue(log.contains(IosNeutralLog.WEARABLE), log.toString())
-        assertTrue(log.contains(IosNeutralLog.PKPD), log.toString())
         assertFalse(log.any { it.contains("Exception") })
     }
 

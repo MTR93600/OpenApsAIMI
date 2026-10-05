@@ -237,12 +237,13 @@ fun iosNeutralEmptyWearable(log: MutableList<String>): HealthContextSnapshot {
 }
 
 /**
- * Stores the soft-floor telemetry. The returned object is not a dose.
- * Callers must not pass it into [iosNeutralLowPredictionTbrUph].
+ * Same write as the Android shell: the tick field and the log line.
+ * The returned object is not a dose. Callers must not pass it into [iosNeutralLowPredictionTbrUph].
  */
 fun iosNeutralStorePkpdFloor(
     curves: AdvancedPredictionCurves,
     memory: IosPkpdFloorMemory,
+    scratch: IosEarlyTickScratch,
     log: MutableList<String>,
 ): PkpdSoftFloorTelemetry {
     return decideRecordPkpdSoftFloor(
@@ -251,6 +252,7 @@ fun iosNeutralStorePkpdFloor(
         calls = object : AimiPkpdSoftFloorWrite {
             override fun writeTelemetryAndLog(telemetry: PkpdSoftFloorTelemetry) {
                 memory.telemetry = telemetry
+                scratch.lastPkpdSoftFloorTelemetry = telemetry
                 log += PkpdSoftFloorPathMin.formatLogLine(telemetry)
                 log += IosNeutralLog.PKPD
             }

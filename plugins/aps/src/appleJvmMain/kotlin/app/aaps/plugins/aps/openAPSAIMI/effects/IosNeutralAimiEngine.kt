@@ -53,12 +53,18 @@ class IosNeutralAimiEngine(
         iosNeutralPatientRuntimeSkipped(log)
         iosNeutralTpoSkipped(log)
         val wearable = iosNeutralEmptyWearable(log)
-        val stored = iosNeutralStorePkpdFloor(iosNeutralFloorCurves(), pkpdFloor, log)
         check(virtualCobG == 0.0)
         check(effortFactor == 1.0)
         check(!veto)
         check(!wearable.isValid)
-        check(stored.rawPathMinMgdl == 39.0)
+        if (scene == IosNeutralScene.LOW_PREDICTION) {
+            // Android records the floor inside advanced predictions, after the wearable read,
+            // then safety returns. Meal onset is not reached.
+            val stored = iosNeutralStorePkpdFloor(iosNeutralFloorCurves(), pkpdFloor, scratch, log)
+            check(stored.rawPathMinMgdl == 39.0)
+            check(scratch.lastPkpdSoftFloorTelemetry == stored)
+            return temp(state, iosNeutralLowPredictionTbrUph(), "LOW_PREDICTION_TBR")
+        }
         check(scratch.lastPkpdSoftFloorTelemetry == null)
         mealOnset = decideDetectMealOnset(
             delta = 5f,
@@ -72,7 +78,7 @@ class IosNeutralAimiEngine(
             IosNeutralScene.MEAL -> meal(state, effortFactor)
             IosNeutralScene.SPORT -> temp(state, iosNeutralSportTbrUph(), "SPORT_TBR")
             IosNeutralScene.NIGHT -> temp(state, iosNeutralNightTbrUph(), "NIGHT_TBR")
-            IosNeutralScene.LOW_PREDICTION -> temp(state, iosNeutralLowPredictionTbrUph(), "LOW_PREDICTION_TBR")
+            IosNeutralScene.LOW_PREDICTION -> error("LOW_PREDICTION returns at the floor, before meal onset")
         }
     }
 
