@@ -275,6 +275,17 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetermineBasalTickPrefix
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetermineBasalTickSignal
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetermineBasalTickPostHypo
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetermineBasalTickSchedule
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetermineBasalTickMealNgr
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickMealNgrCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickMealNgrOutcome
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickMealHyperStep
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickMealBoost
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickCsf
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickCarbsGate
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickCarbsSafety
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickMealNgrStep
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickMealNgrContinue
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickMaxIobStep
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickScheduleCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiScheduleBootstrap
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiScheduleVitals
@@ -14879,153 +14890,240 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             bg = bg,
         )
 
-        val (basalBoostApplied, basalBoostSource) = when (
-            val stage = runMealHyperBasalBoostTickStage(
-                ctx = ctx,
-                profile = profile,
-                rT = rT,
-                basal = basal,
-                profileCurrentBasal = profile_current_basal,
-                isMealAdvisorOneShot = isMealAdvisorOneShot,
-                targetBg = target_bg,
-                estimatedCarbs = estimatedCarbs,
-                estimatedCarbsTimeMs = estimatedCarbsTime,
-            )
-        ) {
-            is AimiMealHyperBasalBoostTickResult.CompleteLoop -> return stage.rT
-            is AimiMealHyperBasalBoostTickResult.ContinueWithOverlay ->
-                applyMealHyperBasalBoostOverlayIfNeeded(stage.overlayRate, deliverAt, rT)
-        }
-
-        appendAutodriveStatusTirAndCompactPhysioSummaryToReason(
-            rT = rT,
-            autodriveDisplay = autodriveDisplay,
-            activeModeName = activeModeName,
-            reasonAimi = reasonAimi,
-            tp = tp,
-            bg = bg,
-            delta = delta,
-            recentSteps5Minutes = recentSteps5Minutes,
-            averageBeatsPerMinute = averageBeatsPerMinute,
-        )
-
-        val (csf, slopeFromDeviations) = runWCycleIcCsfClampCiAndCarbImpactLogs(
-            profile = profile,
-            ctx = ctx,
+        val mealNgr = decideDetermineBasalTickMealNgr(
+            basalIn = basal,
+            maxIobLimitIn = maxIobLimit,
+            smbToGiveIn = smbToGive,
+            profileCurrentBasal = profile_current_basal,
+            isMealAdvisorOneShot = isMealAdvisorOneShot,
+            targetBg = target_bg,
+            maxBg = max_bg,
+            estimatedCarbs = estimatedCarbs,
+            estimatedCarbsTimeMs = estimatedCarbsTime,
+            deliverAt = deliverAt,
             sens = sens,
-            baseSensitivity = baseSensitivity,
             minDelta = minDelta,
             bgi = bgi,
+            deviation = deviation,
             sensitivityRatio = sensitivityRatio,
+            calls = object : AimiTickMealNgrCalls {
+                override fun mealHyper(
+                    basal: Double,
+                    profileCurrentBasal: Double,
+                    isMealAdvisorOneShot: Boolean,
+                    targetBg: Double,
+                    estimatedCarbs: Double,
+                    estimatedCarbsTimeMs: Long,
+                ): AimiTickMealHyperStep = when (
+                    val stage = runMealHyperBasalBoostTickStage(
+                        ctx = ctx,
+                        profile = profile,
+                        rT = rT,
+                        basal = basal,
+                        profileCurrentBasal = profileCurrentBasal,
+                        isMealAdvisorOneShot = isMealAdvisorOneShot,
+                        targetBg = targetBg,
+                        estimatedCarbs = estimatedCarbs,
+                        estimatedCarbsTimeMs = estimatedCarbsTimeMs,
+                    )
+                ) {
+                    is AimiMealHyperBasalBoostTickResult.CompleteLoop -> AimiTickMealHyperStep.ReturnEarly(stage.rT)
+                    is AimiMealHyperBasalBoostTickResult.ContinueWithOverlay -> AimiTickMealHyperStep.Continue(stage.overlayRate)
+                }
+
+                override fun applyOverlay(overlayRate: Double?, deliverAt: Long): AimiTickMealBoost {
+                    val state = applyMealHyperBasalBoostOverlayIfNeeded(overlayRate, deliverAt, rT)
+                    return AimiTickMealBoost(state.basalBoostApplied, state.basalBoostSource)
+                }
+
+                override fun appendAutodriveSummary() {
+                    appendAutodriveStatusTirAndCompactPhysioSummaryToReason(
+                        rT = rT,
+                        autodriveDisplay = autodriveDisplay,
+                        activeModeName = activeModeName,
+                        reasonAimi = reasonAimi,
+                        tp = tp,
+                        bg = bg,
+                        delta = delta,
+                        recentSteps5Minutes = recentSteps5Minutes,
+                        averageBeatsPerMinute = averageBeatsPerMinute,
+                    )
+                }
+
+                override fun csf(sens: Double, minDelta: Double, bgi: Double, sensitivityRatio: Double): AimiTickCsf {
+                    val stage = runWCycleIcCsfClampCiAndCarbImpactLogs(
+                        profile = profile,
+                        ctx = ctx,
+                        sens = sens,
+                        baseSensitivity = baseSensitivity,
+                        minDelta = minDelta,
+                        bgi = bgi,
+                        sensitivityRatio = sensitivityRatio,
+                    )
+                    return AimiTickCsf(stage.csf, stage.slopeFromDeviations)
+                }
+
+                override fun carbsGate(
+                    csf: Double,
+                    slopeFromDeviations: Double,
+                    sens: Double,
+                    bgi: Double,
+                    deviation: Int,
+                    targetBg: Double,
+                    maxBg: Double,
+                ): AimiTickCarbsGate = when (
+                    val gate = runCarbsAdvisorEnableSmbSafetyAndHardHypoBasalStopOrReturn(
+                        profile = profile,
+                        ctx = ctx,
+                        rT = rT,
+                        glucoseStatus = glucoseStatus,
+                        iobData = iob_data,
+                        csf = csf,
+                        slopeFromDeviations = slopeFromDeviations,
+                        sens = sens,
+                        bg = bg,
+                        iob = iob,
+                        cob = cob,
+                        delta = delta,
+                        eventualBG = eventualBG,
+                        combinedDelta = combinedDelta,
+                        deviation = deviation,
+                        bgi = bgi,
+                        targetBgSchedule = targetBg,
+                        maxBgSchedule = maxBg,
+                        windowSinceDoseInt = windowSinceDoseInt,
+                    )
+                ) {
+                    is AimiCarbsAdvisorHardHypoBasalGateResult.ReturnZeroTempBasal -> AimiTickCarbsGate.ReturnEarly(gate.rT)
+                    is AimiCarbsAdvisorHardHypoBasalGateResult.Continue -> AimiTickCarbsGate.Continue(
+                        AimiTickCarbsSafety(
+                            forcedBasalMealModes = gate.stage.forcedBasalmealmodes,
+                            forcedBasal = gate.stage.forcedBasal,
+                            enableSmb = gate.stage.enableSMB,
+                            mealModeActive = gate.stage.mealModeActive,
+                            zeroSinceMin = gate.stage.zeroSinceMin,
+                            minutesSinceLastChange = gate.stage.minutesSinceLastChange,
+                            safetyDecision = gate.stage.safetyDecision,
+                        ),
+                    )
+                }
+
+                override fun mealNgr(
+                    safetyDecision: SafetyDecision,
+                    forcedBasalMealModes: Double,
+                    maxIobLimit: Double,
+                    basal: Double,
+                    smbToGive: Float,
+                    targetBg: Double,
+                ): AimiTickMealNgrStep = when (
+                    val mealNgr = runPostSafetyMealFirst30NgrHeadroomBasalSmbStage(
+                        profile = profile,
+                        ctx = ctx,
+                        rT = rT,
+                        ngrConfig = ngrConfig,
+                        safetyDecision = safetyDecision,
+                        forcedBasalmealmodes = forcedBasalMealModes,
+                        maxIobLimitIn = maxIobLimit,
+                        basalIn = basal,
+                        smbToGiveIn = smbToGive,
+                        bg = bg,
+                        delta = delta,
+                        shortAvgDelta = shortAvgDelta,
+                        longAvgDelta = longAvgDelta,
+                        eventualBG = eventualBG,
+                        targetBgSchedule = targetBg,
+                    )
+                ) {
+                    is AimiPostSafetyMealNgrStageResult.EarlyTempBasal -> AimiTickMealNgrStep.ReturnEarly(mealNgr.rt)
+                    is AimiPostSafetyMealNgrStageResult.Continue -> AimiTickMealNgrStep.Continue(
+                        AimiTickMealNgrContinue(
+                            isMealActive = mealNgr.isMealActive,
+                            runtimeMinValue = mealNgr.runtimeMinValue,
+                            maxIobLimit = mealNgr.maxIobLimit,
+                            basal = mealNgr.basal,
+                            smbToGive = mealNgr.smbToGive,
+                        ),
+                    )
+                }
+
+                override fun maxIob(
+                    mealModeActive: Boolean,
+                    maxIobLimit: Double,
+                    safetyDecision: SafetyDecision,
+                    basal: Double,
+                    targetBg: Double,
+                ): AimiTickMaxIobStep = when (
+                    val gate = runCoreDecisionMaxIobExceededTempBasalGate(
+                        profile = profile,
+                        ctx = ctx,
+                        rT = rT,
+                        originalProfile = originalProfile,
+                        flatBGsDetected = flatBGsDetected,
+                        mealModeActive = mealModeActive,
+                        maxIobLimit = maxIobLimit,
+                        safetyDecision = safetyDecision,
+                        basal = basal,
+                        bg = bg,
+                        delta = delta,
+                        eventualBG = eventualBG,
+                        targetBgSchedule = targetBg,
+                        loopIob = iob_data.iob,
+                    )
+                ) {
+                    is AimiCoreDecisionMaxIobGateResult.ReturnTempBasal -> AimiTickMaxIobStep.ReturnEarly(gate.rt)
+                    is AimiCoreDecisionMaxIobGateResult.ContinueSMBPath -> AimiTickMaxIobStep.Continue(
+                        gate.allowMealHighIob,
+                        gate.mealHighIobDamping,
+                    )
+                }
+
+                override fun insulinReq(
+                    smbToGive: Float,
+                    allowMealHighIob: Boolean,
+                    mealHighIobDamping: Double,
+                    maxIobLimit: Double,
+                    safetyDecision: SafetyDecision,
+                    enableSmb: Boolean,
+                    isMealActive: Boolean,
+                    basalBoostApplied: Boolean,
+                    basalBoostSource: String?,
+                ) {
+                    runInsulinReqActivityRelaxAndMicrobolusStage(
+                        ctx = ctx,
+                        rT = rT,
+                        iobTotal = iob_data,
+                        smbToGive = smbToGive,
+                        allowMealHighIob = allowMealHighIob,
+                        mealHighIobDamping = mealHighIobDamping,
+                        maxIobLimit = maxIobLimit,
+                        safetyDecision = safetyDecision,
+                        enableSMB = enableSmb,
+                        isMealActive = isMealActive,
+                        bg = bg,
+                        delta = delta,
+                        hypoThresholdMgdl = threshold,
+                        systemTime = systemTime,
+                        basalBoostApplied = basalBoostApplied,
+                        basalBoostSource = basalBoostSource,
+                    )
+                }
+            },
         )
-
-        val (
-            forcedBasalmealmodes,
-            forcedBasal,
-            enableSMB,
-            mealModeActive,
-            zeroSinceMin,
-            minutesSinceLastChange,
-            safetyDecision,
-        ) = when (
-            val gate = runCarbsAdvisorEnableSmbSafetyAndHardHypoBasalStopOrReturn(
-                profile = profile,
-                ctx = ctx,
-                rT = rT,
-                glucoseStatus = glucoseStatus,
-                iobData = iob_data,
-                csf = csf,
-                slopeFromDeviations = slopeFromDeviations,
-                sens = sens,
-                bg = bg,
-                iob = iob,
-                cob = cob,
-                delta = delta,
-                eventualBG = eventualBG,
-                combinedDelta = combinedDelta,
-                deviation = deviation,
-                bgi = bgi,
-                targetBgSchedule = target_bg,
-                maxBgSchedule = max_bg,
-                windowSinceDoseInt = windowSinceDoseInt,
-            )
-        ) {
-            is AimiCarbsAdvisorHardHypoBasalGateResult.ReturnZeroTempBasal -> return gate.rT
-            is AimiCarbsAdvisorHardHypoBasalGateResult.Continue -> gate.stage
-        }
-
-        // NGR / repas 0–30 + headroom — see [runPostSafetyMealFirst30NgrHeadroomBasalSmbStage]
-        var isMealActive = false
-        var runtimeMinValue = Int.MAX_VALUE
-        when (
-            val mealNgr = runPostSafetyMealFirst30NgrHeadroomBasalSmbStage(
-                profile = profile,
-                ctx = ctx,
-                rT = rT,
-                ngrConfig = ngrConfig,
-                safetyDecision = safetyDecision,
-                forcedBasalmealmodes = forcedBasalmealmodes,
-                maxIobLimitIn = maxIobLimit,
-                basalIn = basal,
-                smbToGiveIn = smbToGive,
-                bg = bg,
-                delta = delta,
-                shortAvgDelta = shortAvgDelta,
-                longAvgDelta = longAvgDelta,
-                eventualBG = eventualBG,
-                targetBgSchedule = target_bg,
-            )
-        ) {
-            is AimiPostSafetyMealNgrStageResult.EarlyTempBasal -> return mealNgr.rt
-            is AimiPostSafetyMealNgrStageResult.Continue -> {
-                isMealActive = mealNgr.isMealActive
-                runtimeMinValue = mealNgr.runtimeMinValue
-                maxIobLimit = mealNgr.maxIobLimit
-                basal = mealNgr.basal
-                smbToGive = mealNgr.smbToGive
-            }
-        }
-        // MAX_IOB gate — see [runCoreDecisionMaxIobExceededTempBasalGate]
-        val (allowMealHighIob, mealHighIobDamping) = when (
-            val maxIobGate = runCoreDecisionMaxIobExceededTempBasalGate(
-                profile = profile,
-                ctx = ctx,
-                rT = rT,
-                originalProfile = originalProfile,
-                flatBGsDetected = flatBGsDetected,
-                mealModeActive = mealModeActive,
-                maxIobLimit = maxIobLimit,
-                safetyDecision = safetyDecision,
-                basal = basal,
-                bg = bg,
-                delta = delta,
-                eventualBG = eventualBG,
-                targetBgSchedule = target_bg,
-                loopIob = iob_data.iob,
-            )
-        ) {
-            is AimiCoreDecisionMaxIobGateResult.ReturnTempBasal -> return maxIobGate.rt
-            is AimiCoreDecisionMaxIobGateResult.ContinueSMBPath -> maxIobGate
-        }
-
-        runInsulinReqActivityRelaxAndMicrobolusStage(
-            ctx = ctx,
-            rT = rT,
-            iobTotal = iob_data,
-            smbToGive = smbToGive,
-            allowMealHighIob = allowMealHighIob,
-            mealHighIobDamping = mealHighIobDamping,
-            maxIobLimit = maxIobLimit,
-            safetyDecision = safetyDecision,
-            enableSMB = enableSMB,
-            isMealActive = isMealActive,
-            bg = bg,
-            delta = delta,
-            hypoThresholdMgdl = threshold,
-            systemTime = systemTime,
-            basalBoostApplied = basalBoostApplied,
-            basalBoostSource = basalBoostSource,
-        )
+        if (mealNgr is AimiTickMealNgrOutcome.ReturnEarly) return mealNgr.rT
+        val continuedMeal = mealNgr as AimiTickMealNgrOutcome.Continue
+        basal = continuedMeal.basal
+        maxIobLimit = continuedMeal.maxIobLimit
+        smbToGive = continuedMeal.smbToGive
+        val isMealActive = continuedMeal.isMealActive
+        val runtimeMinValue = continuedMeal.runtimeMinValue
+        val forcedBasalmealmodes = continuedMeal.forcedBasalMealModes
+        val forcedBasal = continuedMeal.forcedBasal
+        val enableSMB = continuedMeal.enableSmb
+        val zeroSinceMin = continuedMeal.zeroSinceMin
+        val minutesSinceLastChange = continuedMeal.minutesSinceLastChange
+        val safetyDecision = continuedMeal.safetyDecision
+        val allowMealHighIob = continuedMeal.allowMealHighIob
+        val mealHighIobDamping = continuedMeal.mealHighIobDamping
 
         // BasalDecisionEngine: [targetBg] = membre instance (objectif loop / temp target), pas le local [target_bg] (bande schedule) — même contrat qu’avant extraction orchestration.
         val basalDecision = runBasalDecisionEngineDecideStage(
