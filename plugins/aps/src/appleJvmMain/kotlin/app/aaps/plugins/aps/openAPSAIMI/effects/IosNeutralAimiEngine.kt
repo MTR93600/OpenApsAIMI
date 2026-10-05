@@ -52,7 +52,7 @@ class IosNeutralAimiEngine(
         val writes = scratch.reset(effectiveDiaHours = 5.0, effectivePeakMinutes = 75.0, noise = 0)
         log += IosNeutralLog.earlyScratch(writes)
         val virtualCobG = iosNeutralVirtualCobG(log)
-        val wearable = iosNeutralEmptyWearable(log)
+        val wearable = iosPlatformWearable(log)
         therapyCaches = readTherapyCaches(
             reads = therapy,
             nowMs = aimiWallClockMs(),

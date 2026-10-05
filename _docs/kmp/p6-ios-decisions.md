@@ -61,10 +61,10 @@ Ces PR ne sont pas ouvertes. Chacune reste derrière l’interrupteur éteint ju
 
 ### HealthKit et snapshot wearable
 
-- `iosMain` : un adaptateur qui remplit `HealthContextSnapshot` (pas 5/15/60 min, FC, FC de repos, fenêtres 10 et 60 min) depuis HealthKit, avec les mêmes unités que le snapshot Android.
-- Le tick iOS appelle cet adaptateur là où Android appelle `getLatestSnapshot`. L’échec de lecture journalise la ligne wearable déjà verrouillée, snapshot vide, sans avaler l’exception.
-- Hors de cette PR : SQLDelight, l’effort, le COB, le runtime patient.
-- Trace : `autosensHalfDoublesScheduledBasalAndRestingHeartRateStrengthensIsf`, FC 110 / 10 min, moyenne 60 min 88, ISF **45**, ligne `HR_TREND_ISF x0.90`.
+- `iosMain` : `IosHealthKitWearable` interroge HealthKit (pas cumulés 5/15/60 min, échantillons de FC sur 60 min, FC de repos sur 24 h) et remplit `HealthContextSnapshot`. Les fenêtres 10 et 60 min reprennent le chevauchement `timestamp + duration` de `decideHeartRateIsf`. Les quatre échantillons 80, 80, 80, puis 110 bpm donnent hr10 **110** et hr60 **88**. `hrAvg15m` recopie la FC courante, comme le dépôt Android. FC de repos absente : **60**.
+- La confiance suit Android : la FC seule vaut 0,3, et `isValid` exige plus que 0,3. Sans HRV ni sommeil le snapshot reste invalide, donc il ne réduit pas une dose. Le tick iOS lit le cache (rafraîchi hors du tick). L’échec journalise `WEARABLE snapshot failed … — snapshot empty` et le cache redevient vide. Un `Error` sort.
+- JVM : le même appel reste le snapshot vide et la ligne `IOS_NEUTRAL wearable snapshot empty`. Android `DetermineBasalAIMI2` n’est pas modifié.
+- Hors de cette PR : le COB, le runtime patient, les learners. L’ISF **45** est la lecture commune des mêmes échantillons, pas une seconde formule.
 
 ### Persistance des pas, de la FC et des bolus
 
