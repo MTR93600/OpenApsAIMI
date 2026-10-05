@@ -229,6 +229,8 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRbtMergeCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideRbtMerge
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT3cBasalFirstCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideT3cBasalFirstProduction
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiCarbsAdvisorEnableSmbCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideCarbsAdvisorEnableSmbBasalHistoryAndSafety
 import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
@@ -6395,94 +6397,98 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         maxBgSchedule: Double,
         windowSinceDoseInt: Int,
     ): AimiCarbsAdvisorEnableSmbSafetyStage {
-        val thresholdBG = 70.0
-        val carbsRequired = CarbsAdvisor.estimateRequiredCarbs(
-            bg = bg,
-            targetBG = targetBg.toDouble(),
-            slope = slopeFromDeviations,
-            iob = iob.toDouble(),
+        val decided = decideCarbsAdvisorEnableSmbBasalHistoryAndSafety(
+            profile = profile,
+            ctx = ctx,
+            rT = rT,
+            glucoseStatus = glucoseStatus,
+            iobData = iobData,
             csf = csf,
-            isf = sens,
-            cob = cob.toDouble()
-        )
-        val minutesAboveThreshold = HypoTools.calculateMinutesAboveThreshold(bg, slopeFromDeviations, thresholdBG)
-        if (carbsRequired >= profile.carbsReqThreshold && minutesAboveThreshold <= 45 && !lunchTime && !dinnerTime && !bfastTime && !highCarbTime && !mealTime) {
-            rT.carbsReq = carbsRequired
-            rT.carbsReqWithin = minutesAboveThreshold
-            rT.reason.append(rh.gs(ApsStrings.reason_additional_carbs, carbsRequired, minutesAboveThreshold))
-        }
-
-        val forcedBasalmealmodes = preferences.get(DoubleKey.meal_modes_MaxBasal)
-        val forcedBasal = preferences.get(DoubleKey.autodriveMaxBasal)
-
-        val mealModeActive = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime
-
-        val enableSMB = enablesmb(
-            profile,
-            ctx.microBolusAllowed,
-            ctx.mealData,
-            targetBgSchedule,
-            mealModeActive,
-            bg,
-            delta.toDouble(),
-            eventualBG,
-            combinedDelta.toDouble()
-        )
-
-        mealModeSmbReason?.let { reason(rT, it) }
-
-        rT.COB = ctx.mealData.mealCOB
-        rT.IOB = iobData.iob
-        rT.reason.append(
-            "COB: ${round(ctx.mealData.mealCOB, 1).withoutZeros()}, Dev: ${convertBG(deviation.toDouble())}, BGI: ${convertBG(bgi)}, ISF: ${convertBG(sens)}, CR: ${
-                round(profile.carb_ratio, 2)
-                    .withoutZeros()
-            }, Target: ${convertBG(targetBgSchedule)}${
-                OrefPredictionReasonSuffix.build(rT) { v -> convertBG(v) }
-            } \uD83D\uDCD2 "
-        )
-        val zeroSinceMin = BasalHistoryUtils.historyProvider.zeroBasalDurationMinutes(2)
-        val minutesSinceLastChange = BasalHistoryUtils.historyProvider.minutesSinceLastChange()
-        this.zeroBasalAccumulatedMinutes = zeroSinceMin
-        if (eventualBG >= maxBgSchedule) {
-            rT.reason.append(rh.gs(ApsStrings.reason_eventual_bg, convertBG(eventualBG), convertBG(maxBgSchedule)))
-        }
-        val tdd24h = tddCalculator.averageTDD(
-            resolveTdd1DaySparseForAverage()
-        )?.data?.totalAmount ?: 0.0
-        val tirInHypo = tirCalculator.averageTIR(
-            resolveTir65180ForAverage()
-        )?.belowPct() ?: 0.0
-        val safetyDecision = safetyAdjustment(
-            currentBG = glucoseStatus.glucose.toFloat(),
-            predictedBG = eventualBG.toFloat(),
-            bgHistory = glucoseStatusCalculatorAimi.getRecentGlucose(),
-            combinedDelta = combinedDelta.toFloat(),
+            slopeFromDeviations = slopeFromDeviations,
+            sens = sens,
+            bg = bg,
             iob = iob,
-            maxIob = profile.max_iob.toFloat(),
-            tdd24Hrs = tdd24h.toFloat(),
-            tddPerHour = tddPerHour,
-            tirInhypo = tirInHypo.toFloat(),
-            targetBG = profile.target_bg.toFloat(),
-            zeroBasalDurationMinutes = windowSinceDoseInt
+            cob = cob,
+            delta = delta,
+            eventualBG = eventualBG,
+            combinedDelta = combinedDelta,
+            deviation = deviation,
+            bgi = bgi,
+            targetBgSchedule = targetBgSchedule,
+            maxBgSchedule = maxBgSchedule,
+            windowSinceDoseInt = windowSinceDoseInt,
+            calls = object : AimiCarbsAdvisorEnableSmbCalls {
+                override fun targetBg() = this@DetermineBasalaimiSMB2.targetBg.toDouble()
+                override fun lunchTime() = this@DetermineBasalaimiSMB2.lunchTime
+                override fun dinnerTime() = this@DetermineBasalaimiSMB2.dinnerTime
+                override fun bfastTime() = this@DetermineBasalaimiSMB2.bfastTime
+                override fun highCarbTime() = this@DetermineBasalaimiSMB2.highCarbTime
+                override fun mealTime() = this@DetermineBasalaimiSMB2.mealTime
+                override fun mealModesMaxBasal() = preferences.get(DoubleKey.meal_modes_MaxBasal)
+                override fun autodriveMaxBasal() = preferences.get(DoubleKey.autodriveMaxBasal)
+                override fun enableSmb(
+                    profile: OapsProfileAimi,
+                    microBolusAllowed: Boolean,
+                    mealData: MealData,
+                    targetBgSchedule: Double,
+                    mealModeActive: Boolean,
+                    currentBg: Double,
+                    delta: Double,
+                    eventualBg: Double,
+                    combinedDelta: Double,
+                ) = enablesmb(
+                    profile,
+                    microBolusAllowed,
+                    mealData,
+                    targetBgSchedule,
+                    mealModeActive,
+                    currentBg,
+                    delta,
+                    eventualBg,
+                    combinedDelta,
+                )
+                override fun mealModeSmbReason() = this@DetermineBasalaimiSMB2.mealModeSmbReason
+                override fun reason(rT: RT, msg: String) {
+                    this@DetermineBasalaimiSMB2.reason(rT, msg)
+                }
+                override fun withoutZeros(value: Double) = this@DetermineBasalaimiSMB2.run { value.withoutZeros() }
+                override fun convertBg(value: Double) = convertBG(value)
+                override fun appendAdditionalCarbs(rT: RT, carbsRequired: Int, minutesAboveThreshold: Int) {
+                    rT.reason.append(rh.gs(ApsStrings.reason_additional_carbs, carbsRequired, minutesAboveThreshold))
+                }
+                override fun writeZeroBasalAccumulated(minutes: Int) {
+                    this@DetermineBasalaimiSMB2.zeroBasalAccumulatedMinutes = minutes
+                }
+                override fun appendEventualBg(rT: RT, eventualBg: Double, maxBgSchedule: Double) {
+                    rT.reason.append(rh.gs(ApsStrings.reason_eventual_bg, convertBG(eventualBg), convertBG(maxBgSchedule)))
+                }
+                override fun tdd24h(): Double = tddCalculator.averageTDD(
+                    resolveTdd1DaySparseForAverage()
+                )?.data?.totalAmount ?: 0.0
+                override fun tirInHypo(): Double = tirCalculator.averageTIR(
+                    resolveTir65180ForAverage()
+                )?.belowPct() ?: 0.0
+                override fun recentGlucose() = glucoseStatusCalculatorAimi.getRecentGlucose()
+                override fun tddPerHour() = this@DetermineBasalaimiSMB2.tddPerHour
+                override fun fieldDelta() = this@DetermineBasalaimiSMB2.delta
+                override fun honeymoon() = preferences.get(BooleanKey.OApsAIMIhoneymoon)
+                override fun phraseBook() = safetyPhraseBook()
+                override fun postHypoRisk() {
+                    notificationManager.post(
+                        id = app.aaps.core.interfaces.notifications.NotificationId.HYPO_RISK_ALARM,
+                        text = rh.gs(ApsStrings.hypo_risk_notification_text)
+                    )
+                }
+            },
         )
-        rT.isHypoRisk = safetyDecision.isHypoRisk
-
-        if (safetyDecision.isHypoRisk) {
-            notificationManager.post(
-                id = app.aaps.core.interfaces.notifications.NotificationId.HYPO_RISK_ALARM,
-                text = rh.gs(ApsStrings.hypo_risk_notification_text)
-            )
-        }
-
         return AimiCarbsAdvisorEnableSmbSafetyStage(
-            forcedBasalmealmodes = forcedBasalmealmodes,
-            forcedBasal = forcedBasal,
-            enableSMB = enableSMB,
-            mealModeActive = mealModeActive,
-            zeroSinceMin = zeroSinceMin,
-            minutesSinceLastChange = minutesSinceLastChange,
-            safetyDecision = safetyDecision,
+            forcedBasalmealmodes = decided.forcedBasalmealmodes,
+            forcedBasal = decided.forcedBasal,
+            enableSMB = decided.enableSMB,
+            mealModeActive = decided.mealModeActive,
+            zeroSinceMin = decided.zeroSinceMin,
+            minutesSinceLastChange = decided.minutesSinceLastChange,
+            safetyDecision = decided.safetyDecision,
         )
     }
 
