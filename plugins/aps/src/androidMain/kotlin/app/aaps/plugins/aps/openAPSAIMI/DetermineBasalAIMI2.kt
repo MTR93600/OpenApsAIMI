@@ -245,6 +245,8 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPhysioLatentCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTubeAdvisorCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTubeDoseBaseline
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideApplyTubeAdvisorFromDoseSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiAdvancedPredictionCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideApplyAdvancedPredictions
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideUpdatePhysioLatentState
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEnableSmbCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideApplyContextModule
@@ -13743,73 +13745,48 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         bg: Double, delta: Float, sens: Double,
         iob_data_array: Array<IobTotal>,
         mealData: MealData, profile: OapsProfileAimi, rT: RT
-    ) {
-        try {
-            consoleError.add("🔮 PREDICT INIT: BG=$bg Delta=$delta Sens=${aimiFmt1(sens)} IOB=${iob_data_array.firstOrNull()?.iob}")
-            val advisorTime = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong()
-            val advisorCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
-            val isFreshAdvisor = (dateUtil.now() - advisorTime) < 60 * 60000
-            val declaredOrAdvisorCob = if (mealData.mealCOB > 0) mealData.mealCOB else if (isFreshAdvisor) advisorCarbs else 0.0
-            // 🍽️ Undeclared-meal virtual COB (TBR anticipation only; never SMB). Off by default, and
-            // only added on top of declared/advisor COB when no explicit carbs are present.
-            val virtualCob = estimateUndeclaredVirtualCob(bg, delta, sens, profile, mealData, declaredOrAdvisorCob)
-            val effectiveCOB = declaredOrAdvisorCob + virtualCob
-            val curves = AdvancedPredictionEngine.predictCurves(
-                currentBG = bg, iobArray = iob_data_array, finalSensitivity = sens,
-                cobG = effectiveCOB, profile = profile, delta = delta.toDouble(),
-                endogenousReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEndogenousReversion),
-                hyperReversionEnabled = preferences.get(BooleanKey.OApsAIMIPkpdHyperReversion),
-                stackAwareGuardBEnabled = preferences.get(BooleanKey.OApsAIMIPkpdStackAwareGuardB),
-            )
-            lastAdvancedPredictionCurves = curves
-            val softFloor = recordPkpdSoftFloor(curves)
-            fun sanitizeCurve(points: List<Double>): List<Int> =
-                points.mapNotNull {
-                    if (it.isNaN()) null else round(kotlin.math.min(401.0, kotlin.math.max(39.0, it)), 0).toInt()
-                }
-            val iobInts = applySoftFloorToPredSeries(sanitizeCurve(curves.iob), softFloor)
-            val cobInts = applySoftFloorToPredSeries(sanitizeCurve(curves.cob), softFloor)
-            val uamInts = applySoftFloorToPredSeries(sanitizeCurve(curves.uam), softFloor)
-            val ztInts = applySoftFloorToPredSeries(sanitizeCurve(curves.zt), softFloor)
-            val hybridInts = sanitizeCurve(curves.hybrid)
-            val intsPredictions = hybridInts
-            lastPredictionSize = intsPredictions.size
-            lastPredictionAvailable = intsPredictions.isNotEmpty()
-            if (intsPredictions.isNotEmpty()) {
-                val lastPred = intsPredictions.last().toDouble()
-                val minPred = intsPredictions.minOrNull()?.toDouble() ?: bg
-                val uamTerminal = uamInts.lastOrNull()?.toDouble()
-                lastEventualBgSnapshot = lastPred
-                rT.eventualBG = lastPred
-                this.predictedBg = lastPred.toFloat()
-                rT.predBGs = Predictions().apply {
-                    IOB = iobInts
-                    COB = cobInts
-                    ZT = ztInts
-                    UAM = uamInts
-                }
-                consoleError.add("🔮 PREDICT GRAPH: IOB=${iobInts.size} COB=${cobInts.size} UAM=${uamInts.size}")
-                consoleError.add("minGuardBG ${minPred.toInt()} IOBpredBG ${lastPred.toInt()} UAMterm=${uamTerminal?.toInt() ?: "n/a"}")
-                if (uamInts.size < 6) consoleError.add("⚠ WARNING: UAM Series too short (<6) for Graph!")
-                consoleLog.add(
-                    "PRED_SET size=${intsPredictions.size} eventual=${lastPred.toInt()} min=${minPred.toInt()} " +
-                        "uamT=${uamTerminal?.toInt() ?: "n/a"} source=AdvancedCurves",
-                )
-            } else {
-                consoleError.add("🔮 PREDICT WARNING: Empty prediction list returned. Using Fallback.")
-                val fallbackList = listOf(bg.toInt(), bg.toInt(), bg.toInt())
-                rT.predBGs = Predictions().apply {
-                    IOB = fallbackList; COB = fallbackList; ZT = fallbackList; UAM = fallbackList
-                }
-                rT.eventualBG = bg; this.predictedBg = bg.toFloat()
-                consoleLog.add("PRED_SET size=3 eventual=${bg.toInt()} min=${bg.toInt()} source=FallbackBG")
+    ) = decideApplyAdvancedPredictions(
+        bg = bg,
+        delta = delta,
+        sens = sens,
+        iobDataArray = iob_data_array,
+        mealData = mealData,
+        profile = profile,
+        rT = rT,
+        preferences = preferences,
+        consoleLog = consoleLog,
+        calls = object : AimiAdvancedPredictionCalls {
+            override fun nowMs() = dateUtil.now()
+            override fun virtualCob(
+                bg: Double,
+                delta: Float,
+                sens: Double,
+                profile: OapsProfileAimi,
+                mealData: MealData,
+                declaredOrAdvisorCob: Double,
+            ) = estimateUndeclaredVirtualCob(bg, delta, sens, profile, mealData, declaredOrAdvisorCob)
+            override fun recordSoftFloor(curves: AdvancedPredictionCurves) = recordPkpdSoftFloor(curves)
+            override fun writeCurves(curves: AdvancedPredictionCurves) {
+                lastAdvancedPredictionCurves = curves
             }
-        } catch (e: Exception) {
-            consoleError.add("🔮 PREDICT ERROR: ${e.message}")
-            e.printStackTrace()
-        }
-        consoleLog.add("Prédiction avancée avec ISF final de ${aimiFmt1(sens)} (Avancé)")
-    }
+            override fun writePredictionSize(size: Int) {
+                lastPredictionSize = size
+            }
+            override fun writePredictionAvailable(available: Boolean) {
+                lastPredictionAvailable = available
+            }
+            override fun writeEventualSnapshot(value: Double) {
+                lastEventualBgSnapshot = value
+            }
+            override fun writePredictedBg(value: Float) {
+                this@DetermineBasalaimiSMB2.predictedBg = value
+            }
+            override fun logError(message: String) {
+                consoleError.add(message)
+            }
+        },
+    )
+
 
     private fun applyTrajectoryAnalysis(
         currentTime: Long, bg: Double, delta: Double, bgacc: Double, iobActivityNow: Double,
