@@ -2491,6 +2491,40 @@ class ShellDecisionTraceTest {
         assertEquals(TRAJECTORY_PREP_MICROBOLUS_TRACE, trace)
     }
 
+    @Test
+    fun raObservationCarriesTheProfileSensitivity() {
+        val prefs = recordingPreferences(
+            doubles = mapOf(DoubleKey.OApsAIMIweight to 70.0),
+        )
+        tick = newTick(prefs)
+        armShell()
+        AimiUamHandler.updateRuntimeConfidence(null)
+        setField(tick, "variableSensitivity", 50.0f)
+        setField(tick, "bg", 180.0)
+        setField(tick, "delta", 0.0f)
+        setField(tick, "targetBg", 100.0f)
+        setField(tick, "hourOfDay", 12)
+        val profile = profileStub()
+        var state: Any? = null
+        val trace = capture {
+            state = invokeNamed(
+                "buildRaObservationState",
+                listOf(
+                    tickContext(profile, 180.0),
+                    0.0f,
+                    0.0f,
+                    null,
+                    false,
+                ),
+            )
+        }
+        val observed = state ?: error("RA observation was null\n$trace")
+        assertEquals(0.005, resultField(observed, "estimatedSI") as Double, 1e-12)
+        assertEquals(70.0, resultField(observed, "patientWeightKg") as Double, 1e-9)
+        assertEquals(false, resultField(observed, "applyHypoRecoveryRaDampening") as Boolean)
+        assertEquals(RA_OBSERVATION_ISF_TRACE, trace)
+    }
+
     private fun resultField(target: Any, name: String): Any? {
         val field = target.javaClass.getDeclaredField(name)
         field.isAccessible = true
@@ -3392,6 +3426,10 @@ class ShellDecisionTraceTest {
     companion object {
         private val ENABLE_SMB_ALWAYS_TRACE = """
             LOG phrase
+        """.trimIndent()
+
+        private val RA_OBSERVATION_ISF_TRACE = """
+            READ key=DoubleKey.OApsAIMIweight value=70.00
         """.trimIndent()
 
         private val TRAJECTORY_PREP_MICROBOLUS_TRACE = """

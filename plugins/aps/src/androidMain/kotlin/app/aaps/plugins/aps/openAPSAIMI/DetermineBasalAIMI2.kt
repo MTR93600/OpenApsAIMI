@@ -255,6 +255,8 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEarlyTickCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideEarlyDetermineBasalStages
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTrajectoryContextPrepCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideTrajectoryContextModuleTddIsfAndDynamicPbolusPrep
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRaObservationCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideBuildRaObservationState
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideUpdatePhysioLatentState
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEnableSmbCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideApplyContextModule
@@ -4611,40 +4613,33 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         shortAvgDeltaAdj: Float,
         pkpdRuntime: PkPdRuntime?,
         hasRecentMealEstimate: Boolean,
-    ): app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState? {
-        val bgNow = ctx.glucoseStatus.glucose
-        if (!bgNow.isFinite() || bgNow <= 0.0) return null
-        val velocity = shortAvgDeltaAdj.toDouble() / 5.0
-        if (!velocity.isFinite()) return null
-
-        val canonicalSI = if (pkpdRuntime != null) pkpdRuntime.fusedIsf / 10000.0
-        else variableSensitivity.toDouble() / 10000.0
-        if (!canonicalSI.isFinite() || canonicalSI <= 0.0) return null
-
-        val mealSignals = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || snackTime ||
-            ctx.mealData.mealCOB >= 0.1 || hasRecentMealEstimate
-
-        return runCatching {
-            app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState.createSafe(
-                bg = bgNow,
-                bgVelocity = velocity,
-                iob = ctx.iobDataArray.firstOrNull()?.iob ?: 0.0,
-                cob = ctx.mealData.mealCOB,
-                // No online-learner factor: the engaged path stopped applying it too, so the estimator
-                // sees the same sensitivity on every tick. See the note in AutodriveEngine.tick.
-                estimatedSI = canonicalSI,
-                patientWeightKg = preferences.get(DoubleKey.OApsAIMIweight),
-                physiologicalStressMask = lastPhysioLatentState?.toAttentionMask() ?: DoubleArray(0),
-                hour = hourOfDay,
-                steps = physioAdapter.getLatestSnapshot().stepsLast15m,
-                sourceSensor = ctx.glucoseStatus.sourceSensor,
-                combinedDelta = combinedDelta.toDouble(),
-                uamConfidence = AimiUamHandler.confidenceOrZero(),
-                applyHypoRecoveryRaDampening = postHypoRecoveryActive() && !mealSignals,
-                physioExtendedDawnGuard = lastPhysiologicalPhaseOutput?.policy?.extendedDawnGuard == true,
-            )
-        }.getOrNull()
-    }
+    ): app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState? =
+        decideBuildRaObservationState(
+            ctx = ctx,
+            combinedDelta = combinedDelta,
+            shortAvgDeltaAdj = shortAvgDeltaAdj,
+            pkpdRuntime = pkpdRuntime,
+            hasRecentMealEstimate = hasRecentMealEstimate,
+            preferences = preferences,
+            calls = object : AimiRaObservationCalls {
+                override fun variableSensitivity() = this@DetermineBasalaimiSMB2.variableSensitivity
+                override fun mealTime() = this@DetermineBasalaimiSMB2.mealTime
+                override fun bfastTime() = this@DetermineBasalaimiSMB2.bfastTime
+                override fun lunchTime() = this@DetermineBasalaimiSMB2.lunchTime
+                override fun dinnerTime() = this@DetermineBasalaimiSMB2.dinnerTime
+                override fun highCarbTime() = this@DetermineBasalaimiSMB2.highCarbTime
+                override fun snackTime() = this@DetermineBasalaimiSMB2.snackTime
+                override fun stressMask() = lastPhysioLatentState?.toAttentionMask() ?: DoubleArray(0)
+                override fun hourOfDay() = this@DetermineBasalaimiSMB2.hourOfDay
+                override fun stepsLast15m() = physioAdapter.getLatestSnapshot().stepsLast15m
+                override fun uamConfidence() = AimiUamHandler.confidenceOrZero()
+                override fun postHypoRecoveryActive() = this@DetermineBasalaimiSMB2.postHypoRecoveryActive()
+                override fun extendedDawnGuard() = lastPhysiologicalPhaseOutput?.policy?.extendedDawnGuard == true
+                override fun logObservationFailed(typeName: String?, message: String?) {
+                    consoleLog.add("RA observation failed ($typeName): $message — state null")
+                }
+            },
+        )
 
     /**
      * Records one training row for a tick where Autodrive did **not** engage.
