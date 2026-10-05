@@ -1059,6 +1059,9 @@ class ShellDecisionTraceTest {
 
     @Test
     fun lowPredictionRequestsAQuarterBasal() {
+        // A prior test in this class can leave the meal-absorption hold set. The locked
+        // quarter-basal trace is the clean hold: TBR 0.25 U/h. Reset only here.
+        MealAbsorptionPhaseHysteresis.reset()
         armPump()
         setField(tick, "targetBg", 100.0f)
         val profile = profileStub()
