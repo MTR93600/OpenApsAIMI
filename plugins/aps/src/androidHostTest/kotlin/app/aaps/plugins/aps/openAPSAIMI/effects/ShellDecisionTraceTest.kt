@@ -18,6 +18,7 @@ import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.stats.TddCalculator
+import app.aaps.core.interfaces.stats.TirCalculator
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
@@ -1835,6 +1836,57 @@ class ShellDecisionTraceTest {
         assertEquals(T3C_BASAL_FIRST_TRACE, trace)
     }
 
+    @Test
+    fun carbsAdvisorEnableSmbCutsTheBolusFactorNearTarget() {
+        val profile = profileStub()
+        whenever(profile.enableSMB_always).thenReturn(true)
+        whenever(profile.max_iob).thenReturn(10.0)
+        whenever(profile.carb_ratio).thenReturn(10.0)
+        whenever(profile.min_bg).thenReturn(80.0)
+        val profileUtil = getField(tick, "profileUtil") as ProfileUtil
+        whenever(profileUtil.fromMgdlToStringInUnits(anyOrNull(), anyOrNull())).thenReturn("100")
+        setField(tick, "tirCalculator", mock(TirCalculator::class.java))
+        setField(tick, "delta", 0.0f)
+        setField(tick, "targetBg", 100.0f)
+        val ctx = tickContext(profile, glucose = 180.0)
+        val rT = RT(runningDynamicIsf = false)
+        val glucose = GlucoseStatusAIMI(glucose = 180.0, date = now)
+        val iobData = IobTotal(time = now, iob = 1.0)
+        lateinit var stage: Any
+        val trace = capture {
+            stage = invokeNamed(
+                "runCarbsAdvisorEnableSmbBasalHistoryAndSafetyStage",
+                listOf(
+                    profile,
+                    ctx,
+                    rT,
+                    glucose,
+                    iobData,
+                    5.0,
+                    0.0,
+                    50.0,
+                    180.0,
+                    1.0f,
+                    0.0f,
+                    0.0f,
+                    100.0,
+                    0.0f,
+                    0,
+                    0.0,
+                    100.0,
+                    180.0,
+                    0,
+                ),
+            )!!
+        }
+        val safety = resultField(stage, "safetyDecision") as SafetyDecision
+        assertEquals(0.5, safety.bolusFactor, 1e-9)
+        assertEquals(false, safety.stopBasal)
+        assertEquals(false, safety.isHypoRisk)
+        assertEquals(true, resultField(stage, "enableSMB"))
+        assertEquals(CARBS_SMB_SAFETY_TRACE, trace)
+    }
+
     private fun resultField(target: Any, name: String): Any? {
         val field = target.javaClass.getDeclaredField(name)
         field.isAccessible = true
@@ -2734,6 +2786,15 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val CARBS_SMB_SAFETY_TRACE = """
+            READ key=DoubleKey.meal_modes_MaxBasal value=0.00
+            READ key=DoubleKey.autodriveMaxBasal value=0.00
+            LOG phrase
+            LOG 📦 CACHE TDD1D_SPARSE=MISSING reason=tdd_1day_sparse_missing
+            LOG 📦 CACHE TIR65180_1D=MISSING reason=tir_1day_65180_missing
+            READ key=BooleanKey.OApsAIMIhoneymoon value=false
+        """.trimIndent()
+
         private val T3C_BASAL_FIRST_TRACE = """
             READ key=BooleanKey.OApsAIMIT3cBrittleMode value=true
             READ key=BooleanKey.OApsAIMIRecursiveBeliefShadow value=false
