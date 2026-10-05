@@ -35,7 +35,7 @@ Ordre : d’abord ce qui change un débit ou le tick suivant, ensuite le modèle
 
 1. **Hystérésis.** Déjà les mêmes `object` que `dev_OAPSAIMI` (`MealAbsorptionPhaseHysteresis`, `MealAbsorptionMemory`, `EndogenousPhaseHysteresis`, `PhysiologicalPatternHysteresis`, `InsulinSlopePreserveHysteresis`). Il ne reste pas de second cycle de vie. Le défaut iOS n’appelle pas `reset()`. Taille : un test de deux ticks, rien d’autre. Trace : `lowPredictionRequestsAQuarterBasal` sur instance propre, TBR **0,25 U/h** sans la ligne `meal absorption hysteresis hold` ; puis un tick `FIRST_WAVE` suivi d’un tick `NONE` qui garde `meal absorption hysteresis hold`, comme le singleton Android.
 
-2. **Wearable, FC, et persistance des pas, de la FC et des bolus.** HealthKit remplit le même `HealthContextSnapshot` (pas 5/15/60 min, FC, FC de repos, fenêtres 10 et 60 min). La persistance est commune, SQLDelight ou équivalent, avec les mêmes lectures que `persistenceLayer` (`getHeartRatesFromTimeToTime`, pas, bolus). Les caches `stepsSnapshotRef`, `heartRatesSnapshotRef` et le cache bolus partent des mêmes listes. Taille : un adaptateur HealthKit dans `iosMain`, un schéma et les requêtes, branchés à la place des listes vides. Ça débloque l’ISF, l’effort, le COB et le veto. Trace : `autosensHalfDoublesScheduledBasalAndRestingHeartRateStrengthensIsf`, FC 110 / 10 min, moyenne 60 min 88, ISF 50 × 0,90 = **45**, ligne `HR_TREND_ISF x0.90`.
+2. **Wearable, FC, et persistance des pas, de la FC et des bolus.** HealthKit remplit le même `HealthContextSnapshot` (pas 5/15/60 min, FC, FC de repos, fenêtres 10 et 60 min). Le contrat de lecture est commun. `MemoryAimiTherapyReads` ne survit pas à un redémarrage : la base qui le fera (Room KMP `2.8.4` déjà dans le dépôt, ou SQLDelight) est un choix laissé à l’utilisateur, détaillé dans « Plans de PR ». Les caches `stepsSnapshotRef`, `heartRatesSnapshotRef` et le cache bolus partent des mêmes listes. Trace : `autosensHalfDoublesScheduledBasalAndRestingHeartRateStrengthensIsf`, FC 110 / 10 min, moyenne 60 min 88, ISF 50 × 0,90 = **45**, ligne `HR_TREND_ISF x0.90`.
 
 3. **Effort.** `decideRefreshEffortActivityBelief` est le corps Android, appelé avec le snapshot déjà lu. La protection coupée et T3C coupé laissent l’assessment null. Un snapshot invalide aussi. L’échec de lecture journalise la ligne wearable et ne réduit pas. Le facteur ne dépasse pas 1. Le tick iOS de repas passe le snapshot vide, protection coupée, et garde SMB **3,30 U** et TBR **2,00 U/h**. Trace : `signalMealReturnsTheAdvisorSmbAndTbr`.
 
@@ -51,13 +51,13 @@ Ordre : d’abord ce qui change un débit ou le tick suivant, ensuite le modèle
 
 9. **Learners.** `BasalLearner`, `BasalNeuralLearner` et `UnifiedReactivityLearner` sont déjà en `commonMain`. Il manque l’état persisté identique (`aimi_basal_learner.json`, état du réseau, CSV), pas une autre politique. Départ à froid : multiplicateurs **1,0**, gouvernance `WARMUP`. `KEEP` seulement après les mêmes échantillons. Taille : le stockage de ces fichiers dans la persistance commune, puis les appels `process` au même endroit du tick (616 lignes côté Android, dont l’appel). Trace : `zzPostHypoAtFiveSkipsTheDriftMicroSmb`, TBR **1,00 U/h**, avec les lignes d’apprenants du tick de nuit.
 
-10. **TFLite et UAM.** Le même fichier `modelUAM.tflite`. Interpréteur TFLite iOS, ou une inférence en Kotlin commun qui lit ce fichier. Modèle absent : `predictSmbUam` **0 U**, `refine` identité, pas d’entraînement. Modèle présent : le même SMB que Android pour le même vecteur. Taille : l’interpréteur et le branchement de `AimiModelHandler`, sans réécrire `neuralnetwork5`. Traces : `uamPostHypoReboundBridgesAShortTempBasal`, SMB prédit **0 U**, TBR **1,05 U/h**, 5 min, sur le chemin modèle absent ; puis le même vecteur avec le fichier présent, SMB identique à Android.
+10. **TFLite et UAM.** Le même fichier `modelUAM.tflite` (4 504 octets). L’inférence Kotlin commune n’est pas retenue : le tenseur brut n’est pas le même bit d’un noyau TFLite à l’autre, et `Interpreter` 2.4.0 n’a pas été exécuté ici. Détail et arrêt dans « Plans de PR ». Modèle absent : `predictSmbUam` **0 U**, `refine` identité, pas d’entraînement. Trace : `uamPostHypoReboundBridgesAShortTempBasal`, SMB prédit **0 U**, TBR **1,05 U/h**, 5 min.
 
 11. **`AimiDecisionContext`.** Le type et `toMedicalJson()` sont en `commonMain`. Les champs ne changent pas. La fabrique reste dans la coquille : elle lit la télémétrie d’instance (`IsfSourceTelemetry`, estimateur, ratio) puis remplit le type commun. Trace : `lowPredictionRequestsAQuarterBasal`, TBR **0,25 U/h**, et l’export `pkpd_soft_floor` raw 39, soft 39, hybride 39, `applied` faux, raison `endo_reversion_disabled`.
 
 ## Plans de PR, gros chantiers
 
-Ces PR ne sont pas ouvertes. Chacune reste derrière l’interrupteur éteint jusqu’à sa trace verte.
+Les chantiers encore ouverts restent derrière l’interrupteur éteint jusqu’à leur trace verte. Rien n’est activé.
 
 ### HealthKit et snapshot wearable
 
@@ -68,9 +68,23 @@ Ces PR ne sont pas ouvertes. Chacune reste derrière l’interrupteur éteint ju
 
 ### Persistance des pas, de la FC et des bolus
 
-- Pas de SQLDelight, et Room n’est pas activé pour iOS. Le contrat commun `AimiTherapyReads` reprend les trois lectures de `persistenceLayer` : `getHeartRatesFromTimeToTime` (fenêtre 200 min, `timestamp` inclus), `getStepsCountFromTimeToTime` (fenêtre 210 min), `getBolusesFromTime` (valides, sans `referenceId`, `timestamp >= début`, ordre id descendant si ascending). `MemoryAimiTherapyReads` est le magasin en mémoire. Ce n’est pas une seconde base.
-- Android `DetermineBasalAIMI2` continue d’appeler `persistenceLayer`. Le tick iOS lit ce contrat à la place des listes vides. Un `Exception` est journalisé (`HR windows failed … — averages 80, baseline not real` pour la FC) et la liste est vide. Un `Error` sort. Une FC vide ne renforce pas l’ISF.
-- Trace : les quatre échantillons de `autosensHalfDoublesScheduledBasalAndRestingHeartRateStrengthensIsf` (80, 80, 80, puis 110 bpm, pas vides) donnent ISF **45** et `HR_TREND_ISF x0.90 (hr10 110 / hr60 88, steps10 0)`. Le cache bolus vide laisse le SMB repas **3,30 U** et le TBR **2,00 U/h**.
+`MemoryAimiTherapyReads` est le contrat des trois lectures de `persistenceLayer` : `getHeartRatesFromTimeToTime` (fenêtre 200 min, `timestamp` inclus), `getStepsCountFromTimeToTime` (fenêtre 210 min), `getBolusesFromTime` (valides, sans `referenceId`, `timestamp >= début`, ordre id descendant). C’est un magasin en mémoire. Il meurt avec le processus. Ce n’est pas la parité : sur iOS, les pas, la FC et les bolus doivent survivre à un redémarrage de l’application, comme le fichier Room sur Android. Cette note n’ajoute aucune base. Le choix est laissé à l’utilisateur.
+
+Android `DetermineBasalAIMI2` continue d’appeler `persistenceLayer`. Le tick iOS lit le contrat. Un `Exception` est journalisé (`HR windows failed … — averages 80, baseline not real` pour la FC) et la liste est vide. Un `Error` sort. Une FC vide ne renforce pas l’ISF.
+
+**Room KMP — version déjà résolue dans le dépôt.** Kotlin `2.4.10`, AGP `9.4.0` (`gradlePlugin`), Room `2.8.4`. `:database:impl` compile déjà cette combinaison : `room-runtime` en `commonMain`, `androidx.sqlite.bundled` en `iosMain` et `jvmMain`, processeur KSP sur `kspAndroid`, `kspIosArm64`, `kspIosSimulatorArm64` et `kspJvm`. `AppDatabase` version 35, `@ConstructedBy`, est en `commonMain`, avec `Converters` (150 lignes). `IosAppDatabaseBuilder` ouvre le fichier dans `NSApplicationSupportDirectory` avec `BundledSQLiteDriver`.
+
+Entités du contrat : `HeartRate`, `StepsCount`, `Bolus`, et les DAO `HeartRateDao.getFromTimeToTime`, `StepsCountDao.getFromTimeToTime`, `BolusDao.getBolusesFromTime`. La base en a 21 au total (`APSResult`, bolus, calculateur de bolus, glucides, changements de profil effectif et de profil, bolus étendu, glycémie, basale temporaire, cible temporaire, événement de thérapie, dose journalière, changement de préférence, changement de version, entrée utilisateur, aliment, statut d’appareil, mode, FC, pas, calibration). Ouvrir `AppDatabase` crée les 21 tables. Le tick n’a besoin que des trois lectures.
+
+Migration : 13 objets, `migration22to23` jusqu’à `migration34to35`, uniquement dans `AppDatabaseBuilder` androidMain. Schémas JSON sous `database/impl/src/androidDeviceTest/assets/app.aaps.database.AppDatabase/` : 13 fichiers de `22.json` à `35.json`, 1 515 009 octets ; `35.json` fait 109 013 octets. Le constructeur iOS ne passe pas ces migrations. `fallbackToDestructiveMigration(false)`. Le premier fichier iOS naît à la version 35, parce qu’il n’existe pas encore d’ancienne base iOS. Le commentaire du constructeur fixe la suite : dès qu’un fichier est chez un utilisateur, le prochain changement de schéma doit reprendre la même liste, déplacée en `commonMain`.
+
+Risques. Les DAO sont `internal` et `suspend` ; le tick lit sans coroutine. Un adaptateur ne doit pas bloquer le tick. Le commentaire en tête de `database/impl/build.gradle.kts` dit encore que le processeur ne tourne que pour Android, alors que les lignes KSP iOS et JVM sont déclarées : le `AppDatabase_Impl` iOS doit être vérifié avant de s’en servir, pas activé ici. Aucun import d’un fichier Android. Un iPhone commence vide. `fallbackToDestructiveMigration(false)` refuse un vieux fichier au lieu de l’effacer, à condition que les migrations soient en commun avant le premier schéma livré après une base iOS réelle. Room `2.8.4` est la version déjà compilée avec Kotlin `2.4.10` et AGP `9.4.0`. En changer serait un autre choix.
+
+Taille : pas une nouvelle dépendance. Reste à faire lire au tick iOS les trois DAO, et à déplacer les 13 migrations en commun avant toute livraison. Hors de cette PR.
+
+**SQLDelight.** Absent de `libs.versions.toml`. L’ajouter est une nouvelle dépendance. Il faudrait un plugin et un runtime dont la version supporte Kotlin `2.4.10`, puis réécrire les tables et les trois requêtes. Les objets `Migration` de Room ne se transportent pas : le schéma SQL doit rester aligné sur la version 35 à la main. Risque : Room sur Android et SQLDelight sur iOS divergent au prochain changement de colonne. Taille : le plugin, le driver, les fichiers `.sq`, un second chemin de migration. Rien de cela n’est ajouté.
+
+Trace inchangée : quatre échantillons 80, 80, 80, puis 110 bpm, pas vides, ISF **45**, `HR_TREND_ISF x0.90 (hr10 110 / hr60 88, steps10 0)`. Cache bolus vide : SMB repas **3,30 U**, TBR **2,00 U/h**.
 
 ### Runtime patient
 
@@ -90,9 +104,15 @@ Ces PR ne sont pas ouvertes. Chacune reste derrière l’interrupteur éteint ju
 
 ### TFLite et UAM
 
-- Le même fichier `modelUAM.tflite`. Interpréteur TFLite iOS, ou inférence Kotlin commune qui lit ce fichier. Pas de réécriture de `neuralnetwork5`.
-- Modèle absent : `predictSmbUam` **0 U**, `refine` identité, pas d’entraînement.
-- Traces : `uamPostHypoReboundBridgesAShortTempBasal`, SMB **0 U**, TBR **1,05 U/h**, 5 min ; puis le même vecteur avec le fichier présent, SMB identique à Android.
+Fichier inspecté : `app/src/main/assets/modelUAM.tflite` au commit `64e630c7fc` (absent de l’arbre de travail). 4 504 octets. SHA-256 `741c5248fb81a2551ee4c612c9cbf2be97dbf6b434db7b7407a3ba2214235092`. Identifiant `TFL3`, description `MLIR Converted.`, un sous-graphe. Entrée `[1, 18]` float32, sortie `[1, 1]` float32.
+
+Sept opérations : `SUB` (entrée − moyenne `[1, 18]`), `MUL` (échelle `[1, 18]`), puis `FULLY_CONNECTED` 18→9, 9→5 et 5→2 avec ReLU fusionné, `FULLY_CONNECTED` 2→1 sans activation, `PRELU` à alpha partagé (un scalaire).
+
+Le graphe est petit. Une boucle float32 en Kotlin commun peut l’exécuter. Elle ne prouve pas le SMB Android. `AimiUamHandler` appelle `org.tensorflow.lite.Interpreter` 2.4.0, tronque à 4 décimales (`(v * 10000f).toInt() / 10000f`) et plancher à 0. La bibliothèque JNI de cet artefact est un binaire Android : elle ne se charge pas sur cette machine. Un interpréteur LiteRT récent, en trois modes (référence, builtin sans délégué, XNNPACK), comparé à la boucle scalaire sur 67 vecteurs : le tenseur brut diffère sur 31 à 35 vecteurs selon le mode ; le SMB après la troncature Android coïncide sur les 67. Cette coïncidence n’est pas le bit d’`Interpreter` 2.4.0 sur téléphone. L’ADR D4 le dit : le réseau Kotlin n’est pas le graphe TFLite.
+
+Décision : s’arrêter. Pas d’inférence Kotlin commune, pas de cinterop, pas de CocoaPods. Le chemin modèle absent reste celui d’Android : `predictSmbUam` **0 U**, `refine` identité, pas d’entraînement. Trace : `uamPostHypoReboundBridgesAShortTempBasal`, SMB **0 U**, TBR **1,05 U/h**, 5 min.
+
+Voie à reprendre si elle est choisie : le même fichier, interpréteur TFLite/LiteRT C sur iOS, CPU d’abord, puis un corpus dont le SMB est celui d’`Interpreter` 2.4.0. Pas une réécriture du graphe.
 
 Le détail des options temporaires reste ci-dessous.
 
