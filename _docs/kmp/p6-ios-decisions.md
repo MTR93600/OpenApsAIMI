@@ -14,7 +14,7 @@ Ces valeurs ne sont pas la parité. Elles disparaissent avant activation.
 
 - COB virtuel : **0 g**.
 - Effort : facteur **1,0**, pas d’assessment.
-- Runtime patient : **non appelé**.
+- Runtime patient : appelé sur la prédiction basse, après le plancher PKPD. Repas, sport et nuit restent `IOS_NEUTRAL patientRuntime=skipped`.
 - Session TPO : **non appelée**.
 - Snapshot wearable : **vide**.
 - `resetEarlyScratch` : les mêmes 27 affectations que l’adaptateur Android. Le texte plus bas disait 29. Le test verrouille 27.
@@ -24,7 +24,7 @@ Ces valeurs ne sont pas la parité. Elles disparaissent avant activation.
 
 ## Écarts temporaires
 
-- Prédiction basse : le TBR temporaire est **0,25 U/h** pendant 30 min, sans `TREE_DEPLOYED` ni `MEAL_CERTAINTY`.
+- Prédiction basse : le TBR temporaire est **0,25 U/h** pendant 30 min, avec les lignes Android `TREE_DEPLOYED trunk=SENSOR_UNCERTAIN conf=0.90 risk=CRITICAL kinetics=NO_STAGE` et `MEAL_CERTAINTY level=NONE tree=NONE rise=WEAK terminals=HYPO_CONFLICT effortVeto=false`. Les scènes nuit, repas et sport n’appellent pas encore le runtime.
 - Nuit : le TBR temporaire est **1,00 U/h** pendant 30 min, sans les lignes d’apprenants, d’export, `UAM=0.00`, ni le SMB `final=0.35` non délivré.
 - ISF **45** (FC 110 sur 10 min, moyenne 60 min 88, ISF 50 × 0,90) n’est pas produit tant que le snapshot est vide.
 - Un maintien d’hystérésis laissé par le tick précédent reste en place, comme sur Android.
@@ -163,7 +163,7 @@ Scène verrouillée : prédiction basse, `TREE_DEPLOYED trunk=SENSOR_UNCERTAIN`,
 
 Recommandation retenue : **appeler la fonction commune** avec le snapshot déjà lu. Le TBR **0,25 U/h** reste celui du tick Android. Les deux lignes sont les siennes.
 
-Côté iOS : HealthKit, cycle, capteur, état patient. Gros port.
+Côté iOS : la prédiction basse appelle la fonction commune. Les autres scènes restent en `patientRuntime=skipped`.
 
 ## Session TPO
 
