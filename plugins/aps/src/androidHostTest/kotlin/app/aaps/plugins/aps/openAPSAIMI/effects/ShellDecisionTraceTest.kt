@@ -2525,6 +2525,38 @@ class ShellDecisionTraceTest {
         assertEquals(RA_OBSERVATION_ISF_TRACE, trace)
     }
 
+    @Test
+    fun lateFatProteinRiseIsTrueFourHoursAfterBolus() {
+        tick = newTick(recordingPreferences(doubles = emptyMap()))
+        armShell()
+        val flags = privateData(
+            "MealFlags",
+            listOf(false, false, false, false, false),
+        )
+        val fourHoursAgo = now - 4L * 3_600_000L
+        var rise: Boolean? = null
+        val trace = capture {
+            rise = invokeNamed(
+                "isLateFatProteinRise",
+                listOf(
+                    180.0,
+                    180.0,
+                    2.0,
+                    1.0,
+                    1.0,
+                    0.5,
+                    0.0,
+                    2.0,
+                    fourHoursAgo,
+                    flags,
+                    now,
+                ),
+            ) as Boolean
+        }
+        assertEquals(true, rise)
+        assertEquals(LATE_FAT_PROTEIN_RISE_TRACE, trace)
+    }
+
     private fun resultField(target: Any, name: String): Any? {
         val field = target.javaClass.getDeclaredField(name)
         field.isAccessible = true
@@ -3431,6 +3463,8 @@ class ShellDecisionTraceTest {
         private val RA_OBSERVATION_ISF_TRACE = """
             READ key=DoubleKey.OApsAIMIweight value=70.00
         """.trimIndent()
+
+        private val LATE_FAT_PROTEIN_RISE_TRACE = ""
 
         private val TRAJECTORY_PREP_MICROBOLUS_TRACE = """
             READ key=BooleanKey.OApsAIMITrajectoryGuardEnabled value=false
