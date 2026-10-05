@@ -28,6 +28,7 @@ import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
 import app.aaps.plugins.aps.openAPSAIMI.AIMIAdaptiveBasal
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextInfluenceEngine
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent
@@ -2230,6 +2231,35 @@ class ShellDecisionTraceTest {
     }
 
     @Test
+    fun mealOnsetBehindTheVetoForcesTwoUnitsAndExertionKeepsTheSportRate() {
+        val open = sportEngineDecision(acceleration = 2.0, modesCondition = true, autodrive = true, assessment = null)
+        assertEquals(2.00, open.decision.rate, 1e-9)
+        assertEquals(30, open.decision.duration)
+        assertTrue(open.decision.overrideSafety)
+        assertEquals("phrase [AD_EARLY_TBR_TRIGGER rate=2.0]", open.reason)
+        assertEquals(BASAL_ENGINE_SPORT_TRACE, open.trace)
+
+        val exertion = sportEngineDecision(
+            acceleration = 2.0,
+            modesCondition = true,
+            autodrive = true,
+            assessment = EffortActivityBelief.Assessment(
+                state = EffortActivityBelief.State.ACTIVE,
+                posture = EffortActivityBelief.Posture.EXERTION,
+                confidence = 0.30,
+                minutesSinceEffort = 0.0,
+                smbFactor = 1.0,
+                basalFactor = 1.0,
+                reasons = emptyList(),
+            ),
+        )
+        assertEquals(1.30, exertion.decision.rate, 1e-9)
+        assertEquals(30, exertion.decision.duration)
+        assertFalse(exertion.decision.overrideSafety)
+        assertEquals(BASAL_ENGINE_SPORT_TRACE, exertion.trace)
+    }
+
+    @Test
     fun trajectoryTightSpiralCutsThePendingBasal() {
         val guard = getField(tick, "trajectoryGuard") as TrajectoryGuard
         whenever(guard.getLastAnalysis()).thenReturn(
@@ -3867,6 +3897,59 @@ class ShellDecisionTraceTest {
                 zeroFor(inv)
             }
         })
+
+    private data class SportEngineOutcome(
+        val decision: BasalDecisionEngine.Decision,
+        val reason: String,
+        val trace: String,
+    )
+
+    private fun sportEngineDecision(
+        acceleration: Double,
+        modesCondition: Boolean,
+        autodrive: Boolean,
+        assessment: EffortActivityBelief.Assessment?,
+    ): SportEngineOutcome {
+        val adaptive = mock(AIMIAdaptiveBasal::class.java)
+        whenever(adaptive.suggest(anyOrNull())).thenReturn(
+            AIMIAdaptiveBasal.Decision(rateUph = null, durationMin = 0, reason = ""),
+        )
+        val planner = mock(BasalPlanner::class.java)
+        whenever(planner.plan(anyOrNull())).thenReturn(null)
+        val rh = mock(TextResolver::class.java, Answer { inv: InvocationOnMock ->
+            if (inv.method.name == "gs") "phrase" else null
+        })
+        setField(tick, "basalDecisionEngine", BasalDecisionEngine(rh, adaptive, planner))
+        setField(tick, "sportTime", true)
+        setField(tick, "lastEffortAssessment", assessment)
+        setField(tick, "cob", 0.0f)
+        val profile = profileStub()
+        whenever(profile.min_bg).thenReturn(80.0)
+        whenever(profile.pre_floor_isf_mgdl).thenReturn(50.0)
+        val ctx = tickContext(profile, glucose = 180.0)
+        val rT = RT(runningDynamicIsf = false)
+        val glucose = GlucoseStatusAIMI(glucose = 180.0, delta = 5.0, date = now)
+        val safety = SafetyDecision(stopBasal = false, bolusFactor = 1.0, reason = "", basalLS = false)
+        val caps = PumpCaps(basalStep = 0.05, bolusStep = 0.05, minDurationMin = 30, maxBasal = 3.0, maxSmb = 1.0)
+        val bundle = privateData(
+            "AimiBasalDecisionEngineStageBundle",
+            listOf(
+                ctx, profile, rT, glucose, 5.0,
+                1.0, 1.0, 35.0, 35.0, 50.0,
+                180.0, 100.0, 1.0, 10.0, 180.0,
+                180.0, 5.0, 5.0, 5.0, 5.0,
+                acceleration, false, safety, 2.0, 0.0,
+                false, 0, 0.0, 0, 0,
+                caps, 12, 6, false, false,
+                modesCondition, autodrive, false,
+            ),
+        )
+        var decision: BasalDecisionEngine.Decision? = null
+        val trace = capture {
+            decision = invokeNamed("runBasalDecisionEngineDecideStage", listOf(bundle)) as BasalDecisionEngine.Decision
+        }
+        return SportEngineOutcome(decision!!, rT.reason.toString(), trace)
+    }
 
     private fun profileStub(): OapsProfileAimi {
         val profile = mock(OapsProfileAimi::class.java)

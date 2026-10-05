@@ -247,7 +247,7 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPublishDoseTerminalCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decidePublishDoseTerminalAuthorityAndSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiBasalDecisionEngineCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideBasalDecisionEngine
-import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetectMealOnset
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideMealOnsetBehindEffortVeto
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideEstimateUndeclaredVirtualCob
 import app.aaps.plugins.aps.openAPSAIMI.effects.undeclaredVirtualCobInput
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPkpdSoftFloorWrite
@@ -12159,15 +12159,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return out.finalPeak
     }
 
-    fun detectMealOnset(delta: Float, predictedDelta: Float, acceleration: Float, predictedBg: Float, targetBg: Float): Boolean =
-        decideDetectMealOnset(
+    fun detectMealOnset(delta: Float, predictedDelta: Float, acceleration: Float, predictedBg: Float, targetBg: Float): Boolean {
+        val declaredMeal = mealTime || bfastTime || lunchTime || dinnerTime || snackTime || highCarbTime
+        return decideMealOnsetBehindEffortVeto(
             delta = delta,
             predictedDelta = predictedDelta,
             acceleration = acceleration,
             predictedBg = predictedBg,
             targetBg = targetBg,
-            effortSuppressesUndeclaredMeal = effortSuppressesUndeclaredMeal(),
+            assessment = lastEffortAssessment,
+            declaredMeal = declaredMeal,
+            cobG = cob.toDouble(),
         )
+    }
 
     private fun parseNotes(startMinAgo: Int, endMinAgo: Int): String {
         val olderTimeStamp = now - endMinAgo * 60 * 1000

@@ -43,12 +43,12 @@ Ordre : d’abord ce qui change un débit ou le tick suivant, ensuite le modèle
 | Wearable, FC, HealthKit | partiel | #224 | HealthKit remplit un cache hors tick. Le tick lit ce cache. Il reste à le brancher sur une vraie session HealthKit. Tant que le cache est vide, la ligne est `IOS_NEUTRAL wearable snapshot empty`. |
 | Lectures pas, FC, bolus | fait | #223, #227 | Rien sur la trace ISF **45**, `HR_TREND_ISF x0.90`. La session HealthKit qui remplirait le cache n’est pas branchée. |
 | Effort | fait | #222 | Rien sur le repas : facteur **1,0**, assessment null, SMB **3,30 U**, TBR **2,00 U/h**. Une exertion réelle qui baisserait le SMB n’a pas de nombre verrouillé. |
-| Veto et `detectMealOnset` | partiel | #214, #220 | Le veto est commun. Android le passe déjà à `detectMealOnset`. Le tick iOS passe encore un veto faux séparé, pas `decideEffortSuppressesUndeclaredMeal`. Sport : onset faux, TBR **1,30 U/h**. |
-| COB virtuel | fait | cette branche | Rien sur les deux retours Android (préférence coupée, ou **36 g** déclarés : **0 g**, eventual **322**, pas de ligne) ni sur la ligne d’estimateur. Préférence allumée, Ra 2,0, repas 0,8, snapshot vide : `g=9.0 raw=11.3 cap=25.0 reason=ra_meal_estimate`. Le même snapshot avec FC 110 et repos 60 : `reason=hr_inflammation`, **0 g**. Le SMB repas reste **3,30 U**. Ces grammes ne nourrissent pas encore la courbe de prédiction iOS. |
+| Veto et `detectMealOnset` | fait | #214, #220, cette branche | Rien sur les deux débits du moteur. Accélération 2, pas d’assessment : onset vrai, `forcedBasal` **2,00 U/h**, `AD_EARLY_TBR_TRIGGER rate=2.0`. Même cinématique, posture EXERTION, confiance 0,30, pas de repas déclaré, COB 0 : onset faux, TBR sport **1,30 U/h**. La scène déjà verrouillée (accélération 0) reste **1,30 U/h**. Le tick iOS calcule le même booléen. Sa commande sport neutre reste **1,30 U/h** : son accélération est 0. Elle ne choisit pas encore le `forcedBasal` du moteur. |
+| COB virtuel | fait | #230 | Rien sur les deux retours Android (préférence coupée, ou **36 g** déclarés : **0 g**, eventual **322**, pas de ligne) ni sur la ligne d’estimateur. Préférence allumée, Ra 2,0, repas 0,8, snapshot vide : `g=9.0 raw=11.3 cap=25.0 reason=ra_meal_estimate`. Le même snapshot avec FC 110 et repos 60 : `reason=hr_inflammation`, **0 g**. Le SMB repas reste **3,30 U**. Ces grammes ne nourrissent pas encore la courbe de prédiction iOS. |
 | Runtime patient | fait | #226 | Rien sur la prédiction basse : TBR **0,25 U/h** et les deux lignes d’arbre. Repas, sport et nuit restent `patientRuntime=skipped`. |
 | Plancher PKPD | fait | #221 | Rien sur la ligne `raw=39`. Elle n’est pas relue dans le débit. Les autres scènes ne l’ont pas. |
 | Session TPO | fait | #228 | Rien. JSON, pas Room. Plafond **0,80 U**, requête **0,20 U**, nuit **1,00 U/h**, sport **1,30 U/h**. |
-| Learners | partiel | #229 | Les fichiers sont lus. Départ à froid : **1,000** et `WARMUP`, nuit **1,00 U/h**. `process` n’est pas appelé sur la scène nuit : elle n’a pas la glycémie Android. |
+| Learners | partiel | #229 | Les fichiers sont lus. Départ à froid : **1,000** et `WARMUP`, nuit **1,00 U/h**. `process` n’est pas appelé sur la scène nuit : elle n’a pas la glycémie Android. Un `process` à froid ne change pas un débit arrondi : le pas de convergence 0,02 annule un pas d’EMA. Changer un débit exigerait un fichier d’historique. Voir « Learners, `process` ». |
 | `resetEarlyScratch` | fait | #215 | Rien. **27** écritures, le même ordre que l’adaptateur Android. Le mémo disait 29 : ce compte était faux. Ajouter deux écritures changerait Android ou inventerait des champs qu’il n’a pas. |
 | TFLite / UAM | bloqué | #225, ADR D4 | Le modèle n’est pas branché. Reprise seulement avec le même interpréteur LiteRT C, CPU d’abord, et un corpus dont le SMB est celui d’`Interpreter` 2.4.0 Android. |
 | `AimiDecisionContext` | partiel | #219 | Le type et `toMedicalJson()` sont communs. La fabrique qui remplit les champs reste dans la coquille Android. |
@@ -59,7 +59,7 @@ Ordre : d’abord ce qui change un débit ou le tick suivant, ensuite le modèle
 
 3. **Effort.** `decideRefreshEffortActivityBelief` est le corps Android, appelé avec le snapshot déjà lu. La protection coupée et T3C coupé laissent l’assessment null. Un snapshot invalide aussi. L’échec de lecture journalise la ligne wearable et ne réduit pas. Le facteur ne dépasse pas 1. Le tick iOS de repas passe le snapshot vide, protection coupée, et garde SMB **3,30 U** et TBR **2,00 U/h**. Trace : `signalMealReturnsTheAdvisorSmbAndTbr`.
 
-4. **Veto.** La même règle qu’Android : EXERTION, ACTIVE ou RECENT_EFFORT, confiance ≥ 0,30, pas de repas déclaré, COB < 12 g. `decideDetectMealOnset` reçoit ce booléen. Taille : déplacer `effortSuppressesUndeclaredMeal` en commun, une fois l’assessment porté. Trace : `basalDecisionEngineRaisesSportTemp`, BG 180, delta +5, accélération 0, veto faux, onset faux, TBR **1,30 U/h**.
+4. **Veto.** `decideMealOnsetBehindEffortVeto` calcule `decideEffortSuppressesUndeclaredMeal` puis `decideDetectMealOnset`. Android `detectMealOnset` délègue. Le tick iOS aussi. Trace déjà verrouillée : `basalDecisionEngineRaisesSportTemp`, BG 180, delta +5, accélération 0, onset faux, TBR **1,30 U/h**. Trace nouvelle : accélération 2, modes et autodrive, `forcedBasal` **2,00 U/h**, raison `phrase [AD_EARLY_TBR_TRIGGER rate=2.0]`. Même scène avec EXERTION, confiance 0,30, COB 0 : onset faux, TBR **1,30 U/h**.
 
 5. **COB virtuel.** `decideEstimateUndeclaredVirtualCob`. Préférence coupée, ou glucides déjà déclarés : **0 g**, sans lire le snapshot, sans ligne. Sinon l’estimateur lit le snapshot, le poids, le plafond, la Ra et la probabilité de repas. Trace déclarée : `advancedPredictionPublishesEventualFromDeclaredCob`, COB **36 g**, eventual **322**, pas de ligne. Trace estimateur : **9,0 g**, `reason=ra_meal_estimate`. Trace snapshot : FC 110 et repos 60, **0 g**, `reason=hr_inflammation`. Le SMB repas reste **3,30 U**.
 
@@ -114,6 +114,18 @@ Trace inchangée : quatre échantillons 80, 80, 80, puis 110 bpm, pas vides, ISF
 - Les trois classes lisent et écrivent les fichiers Android dans le dossier AIMI déjà ouvert pour la session : `aimi_basal_learner.json`, `aimi_unified_reactivity.json`, `basal_adaptive_weights.json`, `t3c_brain_weights.json`, `basal_adaptive_records.csv`. Pas de SQLDelight, pas de table Room.
 - Le tick de nuit appelle la même mise en forme que `logLearnersHealth` et `BASAL_GOV`. Dépôt vide : multiplicateur **1,000**, facteur **1,000**, `action=WARMUP`, `reason=Warmup`, TBR **1,00 U/h**. Un JSON basal illisible journalise `BasalLearner: Load failed, using defaults (multiplier=1.0)`.
 - `process` et `updateLearning` ne sont pas dans le débit de nuit. Android les nourrit avec la glycémie du tick. Cette scène n’en a pas. Le CSV est prouvé par un appel direct d’`updateLearning`, qui laisse la gouvernance à `WARMUP` tant qu’aucun résultat réalisé n’est revenu. Le sport reste **1,30 U/h** et ne reçoit pas ces lignes.
+- `process` à froid ne déplace pas le multiplicateur assez pour changer un débit arrondi. Le pas `NEUTRAL_CONVERGENCE_STEP` de 0,02 ramène un pas d’EMA parti de 1,0. Trois glycémies montantes restent à **1,000**. Le TBR de nuit reste **1,00 U/h**. Faire changer ce débit demande un fichier `aimi_basal_learner.json` déjà écarté de 1,0. Ce fichier est un choix clinique : l’orchestre s’arrête là. Les deux options sont dans « Learners, `process` ».
+
+## Learners, `process`
+
+`BasalLearner.process` depuis les multiplicateurs 1,0 ne change pas un nombre de dose. Le terme court (alpha 0,25, ajustement 1,05) bouge d’environ 0,0125, puis le pas de convergence 0,02 le ramène à 1,0. Le terme moyen (alpha 0,15, ajustement 1,12) bouge d’environ 0,018 et revient aussi à 1,0. Le terme long peut laisser 1,001 : la combinaison change d’environ 0,00025, `aimiFmt3` reste `1.000`, et `roundBasal` d’une basale 1,00 reste **1,00 U/h**. `onHypoDetected` (×0,90, combinaison **0,96**) n’est pas `process`.
+
+| Option | Effet |
+|---|---|
+| A. Laisser `process` hors du débit | Trois échantillons montants (BG 180, delta +8) restent au multiplicateur **1,000**. Le TBR de nuit reste **1,00 U/h**. C’est le départ à froid Android. |
+| B. Amorcer `aimi_basal_learner.json` avec un historique qu’Android rechargerait, puis appeler `process` sur la même glycémie | Le multiplicateur part d’ailleurs que 1,0 et le TBR peut changer. Le fichier d’historique est le choix clinique. |
+
+L’orchestre s’arrête sur ce point. Ni le pas 0,02, ni la nuit **1,00 U/h**, ni `onHypoDetected` à la place de `process`.
 
 ### TFLite et UAM
 

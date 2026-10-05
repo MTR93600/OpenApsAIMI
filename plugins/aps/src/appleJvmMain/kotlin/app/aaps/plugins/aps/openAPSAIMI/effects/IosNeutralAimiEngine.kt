@@ -12,6 +12,7 @@ import app.aaps.plugins.aimiengine.HoldAimiEngine
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.tpo.JsonBackedPreferences
@@ -75,6 +76,19 @@ class IosNeutralAimiEngine(
 
     /** Already declared carbs. The neutral scenes have none. */
     internal var declaredCobG: Double = 0.0
+
+    /**
+     * Kinematics of the locked sport scene: delta +5, acceleration 0, so onset stays false.
+     * A test that sets acceleration above 1.2 can make the common onset function return true.
+     */
+    internal var onsetDelta: Float = 5f
+    internal var onsetPredictedDelta: Float = 5f
+    internal var onsetAcceleration: Float = 0f
+    internal var onsetPredictedBg: Float = 180f
+    internal var onsetTargetBg: Float = 100f
+    internal var onsetAssessment: EffortActivityBelief.Assessment? = null
+    internal var onsetDeclaredMeal: Boolean = false
+    internal var onsetCobG: Double = 0.0
 
     /** SMB ceiling after the session check. Null until [evaluate] runs. */
     var tpoMaxSmb: Double? = null
@@ -157,7 +171,7 @@ class IosNeutralAimiEngine(
         val cobPreferenceOff = !tpoPreferences.get(BooleanKey.OApsAIMIUndeclaredCobEnabled) || declaredCobG > 0.0
         check(!cobPreferenceOff || virtualCobG == 0.0)
         check(effortFactor == 1.0)
-        check(!veto)
+        if (onsetAssessment == null) check(!veto)
         check(!wearable.isValid)
         if (scene == IosNeutralScene.LOW_PREDICTION) {
             // Android records the floor inside advanced predictions, after the wearable read,
@@ -169,13 +183,15 @@ class IosNeutralAimiEngine(
             return temp(state, iosNeutralLowPredictionTbrUph(), "LOW_PREDICTION_TBR")
         }
         check(scratch.lastPkpdSoftFloorTelemetry == null)
-        mealOnset = decideDetectMealOnset(
-            delta = 5f,
-            predictedDelta = 5f,
-            acceleration = 0f,
-            predictedBg = 180f,
-            targetBg = 100f,
-            effortSuppressesUndeclaredMeal = veto,
+        mealOnset = decideMealOnsetBehindEffortVeto(
+            delta = onsetDelta,
+            predictedDelta = onsetPredictedDelta,
+            acceleration = onsetAcceleration,
+            predictedBg = onsetPredictedBg,
+            targetBg = onsetTargetBg,
+            assessment = onsetAssessment,
+            declaredMeal = onsetDeclaredMeal,
+            cobG = onsetCobG,
         )
         return when (scene) {
             IosNeutralScene.MEAL -> meal(state, effortFactor)

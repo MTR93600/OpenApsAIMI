@@ -1,9 +1,37 @@
 package app.aaps.plugins.aps.openAPSAIMI.effects
 
+import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
+
 /**
- * Undeclared-meal onset. The effort veto is read by the Android caller at this call.
+ * Undeclared-meal onset behind the effort veto.
+ * The veto is [decideEffortSuppressesUndeclaredMeal]: no assessment is false.
  * A true veto returns false and does not start the forced meal temp basal.
- * The approved iOS value, without an assessment, is false. Android still reads the assessment.
+ */
+internal fun decideMealOnsetBehindEffortVeto(
+    delta: Float,
+    predictedDelta: Float,
+    acceleration: Float,
+    predictedBg: Float,
+    targetBg: Float,
+    assessment: EffortActivityBelief.Assessment?,
+    declaredMeal: Boolean,
+    cobG: Double,
+): Boolean = decideDetectMealOnset(
+    delta = delta,
+    predictedDelta = predictedDelta,
+    acceleration = acceleration,
+    predictedBg = predictedBg,
+    targetBg = targetBg,
+    effortSuppressesUndeclaredMeal = decideEffortSuppressesUndeclaredMeal(
+        assessment = assessment,
+        declaredMeal = declaredMeal,
+        cobG = cobG,
+    ),
+)
+
+/**
+ * Undeclared-meal onset. A true veto returns false and does not start the forced meal temp basal.
+ * Callers that already know the veto pass it here. [decideMealOnsetBehindEffortVeto] computes it.
  */
 internal fun decideDetectMealOnset(
     delta: Float,

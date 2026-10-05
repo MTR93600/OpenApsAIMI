@@ -8,6 +8,7 @@ import app.aaps.plugins.aimiengine.AimiCommonEngineSwitch
 import app.aaps.plugins.aimiengine.HoldAimiEngine
 import app.aaps.plugins.aimicontracts.AimiTherapyCommand
 import app.aaps.plugins.aimitestkit.AimiTestSnapshots
+import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
 import app.aaps.plugins.aps.openAPSAIMI.AimiDecisionContext
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningStepTier
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
@@ -438,6 +439,51 @@ class IosNeutralHoldEngineTest {
         val sportTbr = sportResult.command as AimiTherapyCommand.TempBasal
         assertEquals("1.30", aimiFmt2(sportTbr.rateUPerHour))
         assertFalse(sport.portLog.any { it.contains("AIMI LEARNERS HEALTH") }, sport.portLog.toString())
+    }
+
+    @Test
+    fun sportOnsetUsesTheCommonVetoAndTheUnlockedSceneStaysOnePointThree() {
+        AimiCommonEngineSwitch.enabled = true
+        val storage = InMemoryAimiStorage()
+        val (hold, neutral) = holdAimiEngineWired(
+            IosNeutralScene.SPORT,
+            MemoryAimiTherapyReads(),
+            storage,
+        )
+        neutral.onsetAcceleration = 2f
+        val open = hold.evaluate(
+            AimiTestSnapshots.emptyInput(),
+            AimiTestSnapshots.emptyState(),
+            AimiTestSnapshots.emptyModels(),
+        )
+        assertEquals(true, neutral.mealOnset)
+        val openTbr = open.command as AimiTherapyCommand.TempBasal
+        assertEquals(IOS_NEUTRAL_TBR_DURATION_MS, openTbr.durationMs)
+
+        val (vetoHold, veto) = holdAimiEngineWired(
+            IosNeutralScene.SPORT,
+            MemoryAimiTherapyReads(),
+            InMemoryAimiStorage(),
+        )
+        veto.onsetAcceleration = 2f
+        veto.onsetAssessment = EffortActivityBelief.Assessment(
+            state = EffortActivityBelief.State.ACTIVE,
+            posture = EffortActivityBelief.Posture.EXERTION,
+            confidence = 0.30,
+            minutesSinceEffort = 0.0,
+            smbFactor = 1.0,
+            basalFactor = 1.0,
+            reasons = emptyList(),
+        )
+        val closed = vetoHold.evaluate(
+            AimiTestSnapshots.emptyInput(),
+            AimiTestSnapshots.emptyState(),
+            AimiTestSnapshots.emptyModels(),
+        )
+        assertEquals(false, veto.mealOnset)
+        val closedTbr = closed.command as AimiTherapyCommand.TempBasal
+        assertEquals("1.30", aimiFmt2(closedTbr.rateUPerHour))
+        assertEquals(IOS_NEUTRAL_TBR_DURATION_MS, closedTbr.durationMs)
     }
 
     @Test
