@@ -51,6 +51,7 @@ Ordre : d’abord ce qui change un débit ou le tick suivant, ensuite le modèle
 | Learners | partiel | #229 | Option A appliquée faute de réponse explicite. `process` reste hors du débit. Départ à froid **1,000** et `WARMUP`, nuit **1,00 U/h**, comme Android sans historique. Le fichier d’historique n’est pas amorcé. L’activation exige une acceptation écrite de A, ou B. Cette acceptation n’est pas écrite ici. |
 | `resetEarlyScratch` | fait | #215 | Rien. **27** écritures, le même ordre que l’adaptateur Android. Le mémo disait 29 : ce compte était faux. Ajouter deux écritures changerait Android ou inventerait des champs qu’il n’a pas. |
 | TFLite / UAM | bloqué | #225, ADR D4 | Le modèle n’est pas branché. Le plan de reprise est écrit plus bas. Aucun code. Sortie : SMB tronqué à 4 décimales identique sur les 67 vecteurs dont la référence est `Interpreter` 2.4.0 Android. |
+| Flocon de chiffrement | fait | #237 | Rien sur le test. `tamperSecureEnvelope` fait un XOR `0x01` sur l’octet du milieu du corps chiffré. `ff` devient `fe`. `isValidDataString` est faux. `decrypt` rend `""`. Le fail de #215 était ce flocon. |
 | `AimiDecisionContext` | fait | #219, #233 | Rien sur les champs. `decideAimiDecisionContext` est commun. `htr_ra_floor_mgdl_per_min` reste null au bootstrap. L’estimateur de ratio reste lu par la coquille Android, puis passé en argument. |
 
 ## Conditions d'activation
@@ -181,7 +182,65 @@ Le test remplace les deux derniers caractères de l’enveloppe par `ff`. L’en
 
 Ce n’est pas une tête obsolète annulée par la concurrence. #217 ajoute `concurrency.group: ios-ci-${{ github.ref }}` et `cancel-in-progress: true`, et a été mergée le 2026-10-05 à 12:32 UTC. Les deux runs de #215 ont fini à 10:39 UTC, avant ce merge. Le workflow de ce SHA ne contenait pas ce groupe.
 
-La correction est sur la tête : `tamperSecureEnvelope` fait un XOR `0x01` sur l’octet du milieu du corps chiffré, y compris `ff` → `fe`. `dropLast(2) + "ff"` n’est plus utilisé. Le test jumeau JVM parcourt les 256 valeurs. `SecureEncryptImplTest` vérifie que `isValidDataString` devient faux.
+La correction est #237 : `tamperSecureEnvelope` fait un XOR `0x01` sur l’octet du milieu du corps chiffré, y compris `ff` → `fe`. `dropLast(2) + "ff"` n’est plus utilisé. Le test jumeau JVM parcourt les 256 valeurs. `SecureEncryptImplTest` vérifie que `isValidDataString` devient faux. L’étude contient déjà #153, qui XOR le dernier octet. La pile ne contenait pas ce commit. Les deux éditions se rencontrent au moment d’une intégration. Elle n’est pas faite.
+
+## Prêt à intégrer
+
+Inventaire seulement. L’intégration n’est pas demandée. Aucune de ces PR n’est mergée ici. L’activation reste bloquée par l’acceptation écrite de A, ou B, et par TFLite.
+
+La tête est #237, `cursor/p145-secure-encrypt-tamper-da40`, SHA `8f6ca8b08b872add7f26a5cf906b52179ea75a7b`. Elle contient les 44 commits de #206 à #237. `kmp-aimi-migration-study` (`8be81495f1ca`) n’en est pas l’ancêtre : 10 commits de l’étude manquent sur la tête, dont les merges #213 et #217, le workflow de concurrence iOS, et #153. Une branche d’intégration rejoue la gate ci-dessous après les avoir réunis. Pas avant.
+
+Ordre d’empilement. Le SHA est la tête de la branche.
+
+| PR | Branche | SHA | CI `ios` |
+|---|---|---|---|
+| #206 | `cursor/p116-pure-dose-helpers-da40` | `3220e7665378` | 2 pass |
+| #207 | `cursor/p117-tick-prefix-da40` | `d7321513cb4a` | 2 pass |
+| #208 | `cursor/p118-tick-signal-da40` | `9e6da6cba46a` | 2 pass |
+| #209 | `cursor/p119-tick-post-hypo-da40` | `1ee2f9b4c0a9` | 2 pass |
+| #210 | `cursor/p120-tick-schedule-uam-da40` | `dca5bbf6700a` | 2 pass |
+| #211 | `cursor/p121-tick-meal-ngr-da40` | `3f87da1ac68a` | 2 pass |
+| #212 | `cursor/p122-tick-basal-engine-da40` | `e69902f0722d` | 1 pass |
+| #214 | `cursor/p123-effort-veto-pkpd-floor-da40` | `6660bfd5dbf5` | 2 pass |
+| #215 | `cursor/p124-ios-neutral-hold-da40` | `07393a357203` | 1 fail, 1 pass, même SHA, flocon corrigé par #237 |
+| #216 | `cursor/p125-trace-singleton-isolation-da40` | `6fa156e4c648` | 2 pass |
+| #218 | `cursor/p126-hysteresis-two-tick-da40` | `553bd808b2bc` | 2 pass |
+| #219 | `cursor/p127-decision-context-common-da40` | `52c88632ee61` | 2 pass |
+| #220 | `cursor/p128-effort-veto-common-da40` | `42765dfbb803` | 2 pass |
+| #221 | `cursor/p129-pkpd-floor-tick-da40` | `e1397f73f649` | 2 pass |
+| #222 | `cursor/p130-effort-belief-common-da40` | `1647196f3497` | 2 pass |
+| #223 | `cursor/p131-therapy-reads-da40` | `e9aea5eeb65d` | 2 pass |
+| #224 | `cursor/p132-healthkit-snapshot-da40` | `fb003019f39e` | 2 pass |
+| #225 | `cursor/p133-store-uam-notes-da40` | `70d4cfb263a8` | aucun `ios` (mémo seul) |
+| #226 | `cursor/p134-patient-runtime-common-da40` | `67fd1ab7527c` | 1 pass |
+| #227 | `cursor/p135-room-therapy-ios-da40` | `1dd759db17b6` | 2 pass |
+| #228 | `cursor/p136-tpo-session-json-da40` | `0e61920b4c21` | 2 pass |
+| #229 | `cursor/p137-learners-files-da40` | `9886145df8d1` | 2 pass |
+| #230 | `cursor/p138-virtual-cob-da40` | `a55153bdcff9` | 2 pass |
+| #231 | `cursor/p139-meal-onset-veto-da40` | `799d5e9f3ef1` | 1 pass |
+| #232 | `cursor/p140-virtual-cob-curve-da40` | `21a2ef6151be` | en cours |
+| #235 | `cursor/p141-sport-forced-basal-da40` | `df68c9a5ab60` | en cours |
+| #234 | `cursor/p142-scene-patient-runtime-da40` | `d9a7f13ee3ff` | en file |
+| #233 | `cursor/p143-decision-context-factory-da40` | `8ccbccd8f5ae` | en cours |
+| #236 | `cursor/p144-healthkit-read-session-da40` | `61876c6b3faf` | en file |
+| #237 | `cursor/p145-secure-encrypt-tamper-da40` | `8f6ca8b08b87` | en file, push et pull_request |
+
+#213 et #217 sont déjà mergées dans l’étude. Elles ne sont pas dans cette liste. `claude-review` n’est pas la CI iOS. Les comptes XML de #232 à #237 ne sont pas encore là.
+
+Gate locale à rejouer sur la branche d’intégration, après la réunion avec l’étude. Linux ne lance pas `iosSimulatorArm64Test`.
+
+```
+./gradlew :plugins:aps:testAndroidHost --offline
+./gradlew :plugins:aps:jvmTest --offline
+./gradlew :plugins:aps:compileTestKotlinIosSimulatorArm64 --offline
+./gradlew :implementation:jvmTest --offline --tests app.aaps.implementation.protection.SecureEnvelopeTamperTest
+./gradlew :implementation:testAndroidHostTest --tests app.aaps.implementation.protection.SecureEncryptImplTest
+./gradlew :implementation:compileTestKotlinIosSimulatorArm64 --offline
+```
+
+`testAndroidHost` se rejoue une seconde fois avec `@org.junit.FixMethodOrder(org.junit.runners.MethodSorters.NAME_ASCENDING)` sur `ShellDecisionTraceTest` seulement. L’annotation est retirée avant tout commit. `rg FixMethodOrder` doit être vide. Les deux skips connus sont `NightGrowthResistanceMonitorTest` et `OrefReasonParserTest`. Dernière mesure de cette suite, sur le parent de #237, `plugins/aps` inchangé par #237 : 298 XML, 2046 tests, 0 échec, 0 erreur, 2 skips, les deux ordres. La réunion avec l’étude peut changer ce compte : on le recompte.
+
+Sur macOS, la gate iOS est celle du workflow : `iosSimulatorArm64Test` de `:core:data`, `:core:nssdk`, `:core:keys`, `:core:interfaces`, `:core:objects`, `:implementation`, `:ios:shell`, `:plugins:aps`, puis la somme des XML `tests` / `failures` / `errors`.
 
 Le détail des options temporaires reste ci-dessous.
 
