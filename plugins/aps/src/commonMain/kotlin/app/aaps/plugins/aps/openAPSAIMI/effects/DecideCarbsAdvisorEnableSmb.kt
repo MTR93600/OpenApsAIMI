@@ -26,7 +26,8 @@ internal data class AimiCarbsAdvisorEnableSmbResult(
 
 /**
  * Android reads of the carbs hint, SMB enable, basal-zero history and hypo SMB factor.
- * Each method is the call that already existed at that line. `enablesmb` stays Android.
+ * Each method is the call that already existed at that line.
+ * `enablesmb` is the Android shell of `decideEnableSmb`. `convertBG` and the phrase book stay Android.
  */
 internal interface AimiCarbsAdvisorEnableSmbCalls {
     fun targetBg(): Double
