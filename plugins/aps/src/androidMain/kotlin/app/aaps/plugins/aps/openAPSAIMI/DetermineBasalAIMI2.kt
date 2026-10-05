@@ -249,6 +249,8 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiAdvancedPredictionCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideApplyAdvancedPredictions
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMealAbsorptionCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideRefreshMealAbsorptionPhase
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPostHypoDriftCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.decidePostHypoCompressionAndDriftTerminatorOrReturn
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideUpdatePhysioLatentState
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEnableSmbCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideApplyContextModule
@@ -5024,56 +5026,72 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         dynamicPbolusSmall: Double,
         exerciseInsulinLockoutActive: Boolean,
         reason: StringBuilder,
-    ): RT? {
-        val isPostHypo = postHypoState !is PostHypoState.None
-
-        val isCompression = isCompressionProtectionCondition(delta.toFloat(), reason)
-
-        if (isCompression) {
-            logDecisionFinal("COMPRESSION", rT, bg, delta)
-            markFinalLoopDecisionFromRT(rT, ctx.currentTemp)
-            return rT
-        }
-
-        val terminatorThresholdAdd = when {
-            autosensRatio < 0.8 -> 10.0
-            autosensRatio > 1.2 -> 30.0
-            else -> 15.0
-        }
-        val terminatorTarget = targetBgMgdl + terminatorThresholdAdd
-
-        if (!nightbis && autodriveEnabledPref && bg >= 80 && !isPostHypo && !hasRecentBolus45m &&
-            isDriftTerminatorCondition(
-                bg.toFloat(),
-                terminatorTarget.toFloat(),
-                delta.toFloat(),
-                shortAvgDeltaRawForDrift,
-                combinedDelta.toFloat(),
-                ctx.mealData.slopeFromMinDeviation,
-                totalBolusLastHour,
-                reason
-            ) && modesCondition
-        ) {
-            val terminatortap = dynamicPbolusSmall
-
-            if (this.maxSMB < 0.1 && !exerciseInsulinLockoutActive) {
-                this.maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
-                if (this.maxSMB < 0.1) this.maxSMB = 0.5
-                reason.append(" [Drift Override]")
-                consoleLog.add("⚡ DriftTerminator: Overrode Basal-First block (MaxSMB 0.0 -> ${aimiFmt2(this.maxSMB)})")
+    ): RT? = decidePostHypoCompressionAndDriftTerminatorOrReturn(
+        ctx = ctx,
+        rT = rT,
+        bg = bg,
+        delta = delta,
+        threshold = threshold,
+        combinedDelta = combinedDelta,
+        shortAvgDeltaRawForDrift = shortAvgDeltaRawForDrift,
+        targetBgMgdl = targetBgMgdl,
+        postHypoState = postHypoState,
+        autosensRatio = autosensRatio,
+        nightbis = nightbis,
+        autodriveEnabledPref = autodriveEnabledPref,
+        modesCondition = modesCondition,
+        hasRecentBolus45m = hasRecentBolus45m,
+        totalBolusLastHour = totalBolusLastHour,
+        dynamicPbolusSmall = dynamicPbolusSmall,
+        exerciseInsulinLockoutActive = exerciseInsulinLockoutActive,
+        reason = reason,
+        preferences = preferences,
+        consoleLog = consoleLog,
+        calls = object : AimiPostHypoDriftCalls {
+            override fun compression(delta: Float, reason: StringBuilder) =
+                isCompressionProtectionCondition(delta, reason)
+            override fun drift(
+                bg: Float,
+                targetBg: Float,
+                delta: Float,
+                avgDelta: Float,
+                combinedDelta: Float,
+                minDeviation: Double,
+                lastBolusVolume: Double,
+                reason: StringBuilder,
+            ) = isDriftTerminatorCondition(
+                bg, targetBg, delta, avgDelta, combinedDelta, minDeviation, lastBolusVolume, reason,
+            )
+            override fun maxSmb() = this@DetermineBasalaimiSMB2.maxSMB
+            override fun writeMaxSmb(value: Double) {
+                maxSMB = value
             }
+            override fun finalize(
+                rT: RT,
+                proposedUnits: Double,
+                reasonHeader: String,
+                mealData: MealData,
+                hypoThreshold: Double,
+                isExplicitUserAction: Boolean,
+                decisionSource: String,
+                isMealActive: Boolean,
+                hyperReleaseFloorU: Double,
+                bypassSmbRefractory: Boolean,
+            ) {
+                finalizeAndCapSMB(
+                    rT, proposedUnits, reasonHeader, mealData, hypoThreshold,
+                    isExplicitUserAction, decisionSource, isMealActive, hyperReleaseFloorU, bypassSmbRefractory,
+                )
+            }
+            override fun logFinal(tag: String, rT: RT, bg: Double, delta: Float) {
+                logDecisionFinal(tag, rT, bg, delta)
+            }
+            override fun markFinal(rT: RT, currentTemp: CurrentTemp?) {
+                markFinalLoopDecisionFromRT(rT, currentTemp)
+            }
+        },
+    )
 
-            reason.append("→ Drift Terminator (Trigger +${terminatorThresholdAdd}): Micro-Tap ${terminatortap}U\n")
-            consoleLog.add("AD_EARLY_TBR_TRIGGER rate=0.0 duration=0 reason=DriftTerminator_Tap")
-            consoleLog.add("AD_SMALL_PREBOLUS_TRIGGER amount=$terminatortap reason=DriftTerminator")
-            finalizeAndCapSMB(rT, terminatortap, reason.toString(), ctx.mealData, threshold, decisionSource = "DriftTerminator")
-            logDecisionFinal("DRIFT_TERMINATOR", rT, bg, delta)
-            markFinalLoopDecisionFromRT(rT, ctx.currentTemp)
-            return rT
-        }
-
-        return null
-    }
 
     private data class GlobalAimiBasalScheduleBootstrap(
         val pumpCaps: PumpCaps,

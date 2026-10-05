@@ -2342,6 +2342,56 @@ class ShellDecisionTraceTest {
         assertEquals(MEAL_ABSORPTION_FIRST_WAVE_TRACE, trace)
     }
 
+    @Test
+    fun driftTerminatorTapsAMicroSmb() {
+        val prefs = recordingPreferences(
+            doubles = mapOf(DoubleKey.OApsAIMIMaxSMB to 0.40),
+        )
+        tick = newTick(prefs)
+        armShell()
+        setField(tick, "bg", 180.0)
+        setField(tick, "delta", 0.0f)
+        setField(tick, "shortAvgDelta", 0.0f)
+        setField(tick, "targetBg", 100.0f)
+        setField(tick, "iob", 1.0f)
+        setField(tick, "maxIob", 10.0)
+        setField(tick, "maxSMB", 0.0)
+        setField(tick, "maxSMBHB", 0.40)
+        setField(tick, "sportTime", false)
+        val profile = profileStub()
+        val rT = RT(runningDynamicIsf = false)
+        val ctx = tickContext(profile, 180.0)
+        var returned: RT? = null
+        val trace = capture {
+            returned = invokeNamed(
+                "runPostHypoCompressionAndDriftTerminatorOrReturn",
+                listOf(
+                    ctx,
+                    rT,
+                    180.0,
+                    0.0f,
+                    70.0,
+                    0.0f,
+                    0.0f,
+                    100.0f,
+                    PostHypoState.None,
+                    1.0,
+                    false,
+                    true,
+                    true,
+                    false,
+                    0.0,
+                    0.30,
+                    false,
+                    StringBuilder(),
+                ),
+            ) as RT?
+        }.replace(Regex("(?<![A-Za-z])ts=\\d+"), "ts=<clock>")
+        assertEquals(0.12, returned?.units ?: -2.0, 1e-4)
+        assertEquals(0.40, getField(tick, "maxSMB") as Double, 1e-9)
+        assertEquals(DRIFT_TERMINATOR_TAP_TRACE, trace)
+    }
+
     private fun resultField(target: Any, name: String): Any? {
         val field = target.javaClass.getDeclaredField(name)
         field.isAccessible = true
@@ -3243,6 +3293,60 @@ class ShellDecisionTraceTest {
     companion object {
         private val ENABLE_SMB_ALWAYS_TRACE = """
             LOG phrase
+        """.trimIndent()
+
+        private val DRIFT_TERMINATOR_TAP_TRACE = """
+            READ key=DoubleKey.OApsAIMIMaxSMB value=0.40
+            LOG ⚡ DriftTerminator: Overrode Basal-First block (MaxSMB 0.0 -> 0.40)
+            LOG AD_EARLY_TBR_TRIGGER rate=0.0 duration=0 reason=DriftTerminator_Tap
+            LOG AD_SMALL_PREBOLUS_TRIGGER amount=0.3 reason=DriftTerminator
+            READ key=DoubleKey.OApsAIMIHighBg value=0.00
+            READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+            READ key=BooleanKey.OApsAIMIhoneymoon value=false
+            READ key=BooleanKey.OApsAIMIHyperDroppingExemptEnabled value=false
+            READ key=BooleanKey.OApsAIMIhoneymoon value=false
+            READ key=BooleanKey.OApsAIMIMealAdvisorTrigger value=false
+            READ key=BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled value=false
+            READ key=DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor value=0.00
+            READ key=BooleanKey.OApsAIMIhoneymoon value=false
+            READ key=BooleanKey.OApsAIMInight value=false
+            READ key=IntKey.OApsAIMISnackinterval value=0
+            READ key=IntKey.OApsAIMImealinterval value=0
+            READ key=IntKey.OApsAIMIBFinterval value=0
+            READ key=IntKey.OApsAIMILunchinterval value=0
+            READ key=IntKey.OApsAIMIDinnerinterval value=0
+            READ key=IntKey.OApsAIMISleepinterval value=0
+            READ key=IntKey.OApsAIMIHCinterval value=0
+            READ key=IntKey.OApsAIMIHighBGinterval value=0
+            LOG 📦 CACHE TDD24H=MISSING reason=tdd24h_missing
+            READ key=BooleanKey.OApsAIMIRiseCeilingGuard value=false
+            READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+            READ key=BooleanKey.OApsAIMIIobSurveillanceGuard value=false
+            LOG PKPD_THROTTLE smbFactor=0.60 intervalAdd=3 preferTbr=true reason=Onset unconfirmed, rising BG → TBR priority
+            WRITE key=AimiLongKey.LastPrebolusTime value=1700000000000
+            LOG GATE_REFRACTORY sinceLastBolus=999.0m window=5.0
+            LOG GATE_MAXIOB allowed=10.00 current=1.00
+            LOG GATE_MAXSMB cap=0.40 proposed=0.30
+            LOG GATE_ABSORPTION activity=0.000 threshold=0.188 factor=1.00
+            LOG GATE_PRED_MISSING fallback=ON
+            LOG SMB_CAP: Proposed=0.3 Allowed=0.120000005 Reason=🧹 Drift Terminator: Plateau detected (Δ0.0 Avg0.0 Dev999) -> ENGAGED
+             [Drift Override]→ Drift Terminator (Trigger +15.0): Micro-Tap 0.3U
+
+            LOG   -> Limits: MaxSMB=0.4 MaxIOB=10.0 IOB=1.0
+            READ key=BooleanKey.OApsAIMIIobSurveillanceGuard value=false
+            LOG DECISION_FINAL[DRIFT_TERMINATOR]: smb=0.00U tbr=0.00U/h dur=0m bg=180 Δ=0.0 reason= | 💡 TBR recommended (Onset unconfirmed, rising BG → TBR priority)🧹 Drift Terminator: Plateau detected (Δ0.0 Avg0.0 Dev999) -> ENGAGED |  [Drift Override]→ Drift Terminator (Trig
+            LOG 📦 CACHE TDD24H=MISSING reason=tdd24h_not_ready
+            LOG 🧭 BASAL_GOV[FINAL]: action=KEEP conf=0.00 n=0 hypo=0.00 hypoG=0.00 hypoAdj=0.00 ant=0.00 wMean=1.00 high=0.00 mae=0.0 latch=false floorB=- floorA=- wBolus=0.12U wCob=?g reason=trace
+            LOG TICK ts=<clock> bg=180 d=0.0 iob=1.00 act=0.000 th=0.188 cob=0.0 mode=None autodriveState=IDLE pred=N(sz=0 ev=0) safety=NONE ref=NO maxIOB=10.00 maxSMB=0.40 smb=0.30->0.12->0.12 tbr=0.00 src=DriftTerminator
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
+            READ key=BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled value=false
+            READ key=BooleanKey.OApsAIMIUnifiedReactivityEnabled value=false
+            READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
+            READ key=BooleanKey.OApsAIMIautoDriveActive value=false
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
+            READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
+            READ key=BooleanKey.OApsAIMIPeakGovernorEnabled value=false
+            READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
         """.trimIndent()
 
         private val MEAL_ABSORPTION_FIRST_WAVE_TRACE = """

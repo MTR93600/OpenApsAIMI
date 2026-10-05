@@ -242,11 +242,10 @@ Hors de cette série, par consigne, tailles au brace sur le fichier actuel : `se
 
 Le tableau ci-dessous remplace celui d’après T3C. Les tailles sont le corps réel (accolade ouvrante jusqu’à l’accolade fermante, ou l’expression jusqu’à la ligne blanche), pas « jusqu’à la fonction suivante ». Cette ancienne mesure comptait les champs posés entre deux fonctions : `isAutodriveEngaged` y faisait 123 lignes et n’en fait plus qu’une ; `toMedicalJson` y faisait 754 lignes et son corps en fait 354. `tryMealAdvisor` n’existe plus : le conseiller est `runMealAdvisorDecisionOrReturn` (39 lignes, déjà en `commonMain`). `executeSmbInstruction` (96) ne choisit plus : il appelle `SmbInstructionExecutor.execute`.
 
-Têtes qui choisissent encore un débit, un SMB ou un plafond, 40 lignes et plus. Le tableau d’après `applySafetyPrecautions` en comptait 31, sur un fichier de **16 342 lignes**. Vingt-sept d’entre elles sont en `commonMain`. `DetermineBasalAIMI2.kt` fait **15 470 lignes**. Il en reste **4**.
+Têtes qui choisissent encore un débit, un SMB ou un plafond, 40 lignes et plus. Le tableau d’après `applySafetyPrecautions` en comptait 31, sur un fichier de **16 342 lignes**. Vingt-huit d’entre elles sont en `commonMain`. `DetermineBasalAIMI2.kt` fait **15 488 lignes**. Il en reste **3**.
 
 | Lignes | Fonction |
 |---:|---|
-| 69 | `runPostHypoCompressionAndDriftTerminatorOrReturn` |
 | 65 | `runEarlyDetermineBasalStages` |
 | 65 | `runTrajectoryContextModuleTddIsfAndDynamicPbolusPrep` |
 | 40 | `buildRaObservationState` |
@@ -367,11 +366,15 @@ Corps ajouté : **69**. Cumul des **42** fonctions `decide*` : **4 820** lignes 
 
 Corps ajouté : **59**. Cumul des **43** fonctions `decide*` : **4 879** lignes de corps. Têtes du tableau encore Android : **4**.
 
+`runPostHypoCompressionAndDriftTerminatorOrReturn` (69) est ensuite passé en `commonMain` (`decidePostHypoCompressionAndDriftTerminatorOrReturn`, corps 61 lignes). La compression, le prédicat de dérive, `finalizeAndCapSMB` et le journal final restent des ports Android. Cette tête n’avale pas d’exception. Glycémie 180 plate, Autodrive allumé, pas de bolus récent : SMB **0,12 U**, plafond SMB **0 → 0,40 U**. `DetermineBasalAIMI2.kt` passe à **15 488 lignes**.
+
+Corps ajouté : **61**. Cumul des **44** fonctions `decide*` : **4 940** lignes de corps. Têtes du tableau encore Android : **3**.
+
 Métrique de ce run. Corps ajoutés : 147 + 72 + 155 + 128 + 94 + 126 = **722**. Le corps déjà commun de `decideT3cBrittleBypass` passe de 154 à **170** pour la ligne d’échec de l’arbre. Cumul des **28** fonctions `decide*` : **3 652** lignes de corps. Têtes du tableau encore Android : **19**. L’orchestre de la section 9 commence après ces 19 têtes.
 
 ## 9. Plan de `runDetermineBasalTickInner` et de `HoldAimiEngine`
 
-Ce plan est accepté, avec une correction d’ordre. Les têtes de dose du tableau passent en `commonMain` avant l’orchestre. Si l’orchestre bougeait pendant que ces têtes restent des ports Android, le moteur commun n’aurait aucune implémentation sur iOS, et `HoldAimiEngine` ne pourrait déléguer qu’en Android. Il reste **4** têtes. Le découpage en 6 PR ci-dessous commence quand elles sont décidées dans le commun.
+Ce plan est accepté, avec une correction d’ordre. Les têtes de dose du tableau passent en `commonMain` avant l’orchestre. Si l’orchestre bougeait pendant que ces têtes restent des ports Android, le moteur commun n’aurait aucune implémentation sur iOS, et `HoldAimiEngine` ne pourrait déléguer qu’en Android. Il reste **3** têtes. Le découpage en 6 PR ci-dessous commence quand elles sont décidées dans le commun.
 
 Ce plan est écrit avant tout déplacement de l’inner tick. Aucun run ne le commence tant que le tableau n’est pas vide. `HoldAimiEngine.evaluate` continue de renvoyer `Hold("ENGINE_NOT_EXTRACTED")`. `IosClientConfig.APS` reste `false`.
 
@@ -389,7 +392,7 @@ Ce plan est écrit avant tout déplacement de l’inner tick. Aucun run ne le co
 
 5. **Boost repas, arrêt hypo, repas 0–30, MAX_IOB, insulinReq.** De `runMealHyperBasalBoostTickStage` à `runInsulinReqActivityRelaxAndMicrobolusStage` (15426–15572). Scènes : repas 0–30 (TBR **2,00 U/h**, 30 min, override vrai) et gate MAX_IOB (TBR **2,00 U/h**). L’arrêt basal hypo de `runCarbsAdvisorEnableSmbSafetyAndHardHypoBasalStopOrReturn` est l’autre scène hypo si la PR 2 n’a pas de retour.
 
-6. **Moteur basal, coquille learners/export, puis `HoldAimiEngine`.** `runBasalDecisionEngineDecideStage` entre dans l’orchestre. `runPostBasalEngineLearnersRtInstrumentationAndAuditorStage` et `runAimiSnapshotMedicalJsonAndHormonitorExportStage` restent des ports : ils ne bougent pas. Cette PR rejoue les sept scènes de bout en bout sur `runDetermineBasalTick`, pas seulement la tranche. `HoldAimiEngine` délègue seulement après cette PR, et seulement si les 4 têtes restantes sont déjà en `commonMain`.
+6. **Moteur basal, coquille learners/export, puis `HoldAimiEngine`.** `runBasalDecisionEngineDecideStage` entre dans l’orchestre. `runPostBasalEngineLearnersRtInstrumentationAndAuditorStage` et `runAimiSnapshotMedicalJsonAndHormonitorExportStage` restent des ports : ils ne bougent pas. Cette PR rejoue les sept scènes de bout en bout sur `runDetermineBasalTick`, pas seulement la tranche. `HoldAimiEngine` délègue seulement après cette PR, et seulement si les 3 têtes restantes sont déjà en `commonMain`.
 
 ### Ce qui reste dans la coquille Android
 
