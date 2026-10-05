@@ -68,7 +68,10 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionMemory
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseHysteresis
+import app.aaps.plugins.aps.openAPSAIMI.physio.BehavioralRiskPolicy
 import app.aaps.plugins.aps.openAPSAIMI.physio.EndogenousPhaseHysteresis
+import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
+import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhaseClassifier
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternHysteresis
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorStatusTracker
 import app.aaps.plugins.aps.openAPSAIMI.scenario.InsulinSlopePreserveHysteresis
@@ -171,8 +174,7 @@ class ShellDecisionTraceTest {
 
     @Before
     fun setUp() {
-        DetermineBasalaimiSMB2.resetLegacyPrebolusMemoryForTrace()
-        MealAbsorptionMemory.reset()
+        resetTraceSingletons()
         dateUtil = mock(DateUtil::class.java)
         whenever(dateUtil.now()).thenReturn(now)
         tick = newTick(recordingPreferences(emptyMap()))
@@ -182,10 +184,43 @@ class ShellDecisionTraceTest {
     @After
     fun tearDown() {
         AimiEffectProbe.lines.remove()
+        resetTraceSingletons()
+    }
+
+    /**
+     * Process singletons survive from one test method to the next. Each trace starts from the
+     * same clean hold the production tick would see on a fresh process, except a test that arms
+     * a hold itself.
+     */
+    private fun resetTraceSingletons() {
         DetermineBasalaimiSMB2.resetLegacyPrebolusMemoryForTrace()
-        CircadianMealProfileStore.resetForTests()
         MealAbsorptionMemory.reset()
+        MealAbsorptionPhaseHysteresis.reset()
+        EndogenousPhaseHysteresis.reset()
+        PhysiologicalPatternHysteresis.reset()
+        InsulinSlopePreserveHysteresis.reset()
+        AuditorStatusTracker.reset()
+        CircadianMealProfileStore.resetForTests()
         AimiUamHandler.updateRuntimeConfidence(null)
+    }
+
+    /**
+     * The locked meal trace carries the male circadian hold a prior tick leaves on
+     * [EndogenousPhaseHysteresis]. The test arms that phase. It does not inherit it from
+     * whichever method ran before.
+     */
+    private fun armLockedMaleCircadianHold() {
+        EndogenousPhaseHysteresis.stabilize(
+            PhysiologicalPhaseClassifier.Output(
+                phase = PhysiologicalPhase.MALE_CIRCADIAN_HORMONAL,
+                confidence = 0.85,
+                policy = BehavioralRiskPolicy.forPhase(
+                    PhysiologicalPhase.MALE_CIRCADIAN_HORMONAL,
+                    0.85,
+                    "maleCircadian locked hold",
+                ),
+            ),
+        )
     }
 
     @Test
@@ -2666,11 +2701,7 @@ class ShellDecisionTraceTest {
     }
 
     private fun resetCrossTickHysteresis() {
-        MealAbsorptionPhaseHysteresis.reset()
-        EndogenousPhaseHysteresis.reset()
-        PhysiologicalPatternHysteresis.reset()
-        InsulinSlopePreserveHysteresis.reset()
-        AuditorStatusTracker.reset()
+        resetTraceSingletons()
     }
 
     @Test
@@ -2693,6 +2724,7 @@ class ShellDecisionTraceTest {
 
     @Test
     fun signalMealReturnsTheAdvisorSmbAndTbr() {
+        armLockedMaleCircadianHold()
         val trace = signalSlice(
             glucose = 160.0,
             delta = 2.0,
@@ -2917,6 +2949,10 @@ class ShellDecisionTraceTest {
         whenever(provider.exporter()).thenReturn(null)
         setField(tick, "hormonitorStudyExporterProvider", provider)
         holdRefresh("bolusRefreshInFlight")
+        // An unstubbed persistence mock returns null. The IO refresh can store that null before
+        // the tick reads the list, and the order of the class decides which side wins.
+        holdRefresh("heartRatesRefreshInFlight")
+        holdRefresh("stepsRefreshInFlight")
     }
 
     private fun copyingProfile(): OapsProfileAimi {
