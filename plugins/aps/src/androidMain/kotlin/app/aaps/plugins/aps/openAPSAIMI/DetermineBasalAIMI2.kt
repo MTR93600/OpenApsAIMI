@@ -240,6 +240,9 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPublishDoseTerminalCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decidePublishDoseTerminalAuthorityAndSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiBasalDecisionEngineCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideBasalDecisionEngine
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTrajectorySpiralCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideTrajectoryTightSpiralSafetyBridge
+import app.aaps.plugins.aps.openAPSAIMI.effects.mealPriorityAlignedForSpiralSmbCap
 import app.aaps.plugins.aps.openAPSAIMI.effects.recordSmbActionType as recordSmbActionTypeOn
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
@@ -8516,24 +8519,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         maxIobValue: Double,
         isExplicitUserAction: Boolean,
         mealClockActiveForSpiralRelax: Boolean,
-    ): Boolean {
-        if (isExplicitUserAction) return false
-        val uam = AimiUamHandler.confidenceOrZero()
-        // Feedforward front-load (field data 2026-07-23): on a strong, *sustained* unannounced rise the
-        // UAM model already asks for 2+ U, but the tight-spiral anti-stacking cap withholds it (freezes
-        // maxSMBHB ~1.3) because COB=0 and UAM confidence hasn't yet crossed 0.45 — so the dose only
-        // catches up once BG is already high. Treat such a rise as meal-priority so the cap relaxes and
-        // the SMB is released early. shortAvgDelta ≥ 5 requires the trend to hold across several readings
-        // (not a single spike); the safety floors below (bg ≥ 145, iob < maxIob×0.75) still bind, and all
-        // downstream hypo guards (SafetyNet zones, LGS, minPred, PKPD Guard A/B) are unchanged.
-        val strongConfirmedRise = deltaValue >= 8.0f && shortAvgDeltaValue >= 5.0f
-        if (!(mealClockActiveForSpiralRelax || mealData.mealCOB >= 6.0 || uam >= 0.45 || strongConfirmedRise)) return false
-        if (bgValue < 145.0) return false
-        if (deltaValue < 1.8f && shortAvgDeltaValue < 1.5f) return false
-        if (!maxIobValue.isFinite() || maxIobValue <= 0.0) return false
-        if (iobNow >= maxIobValue * 0.75) return false
-        return true
-    }
+    ): Boolean = mealPriorityAlignedForSpiralSmbCap(
+        bgValue = bgValue,
+        deltaValue = deltaValue,
+        shortAvgDeltaValue = shortAvgDeltaValue,
+        mealData = mealData,
+        iobNow = iobNow,
+        maxIobValue = maxIobValue,
+        isExplicitUserAction = isExplicitUserAction,
+        mealClockActiveForSpiralRelax = mealClockActiveForSpiralRelax,
+        uamConfidence = AimiUamHandler.confidenceOrZero(),
+    )
 
     private fun sharpRiseEligibleForTrajectorySpiralSoftCap(deltaValue: Float, shortAvgDeltaValue: Float): Boolean =
         AimiTickPolicyMath.sharpRiseEligibleForTrajectorySpiralSoftCap(deltaValue, shortAvgDeltaValue)
@@ -8626,82 +8622,47 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         isExplicitUserAction: Boolean,
         mealClockActiveForSpiralRelax: Boolean,
     ) {
-        val lastTraj = trajectoryGuard.getLastAnalysis()
-        if (lastTraj == null || lastTraj.classification != TrajectoryType.TIGHT_SPIRAL) {
-            return
-        }
-
-        val energy = lastTraj.metrics.energyBalance
-        val curvature = lastTraj.metrics.curvature
-        val iobNow = iobData.iob
-
-        val mealPriorityAlign = isMealPriorityAlignedForSpiralSmbCap(
-            bgValue = bg,
-            deltaValue = delta,
-            shortAvgDeltaValue = shortAvgDelta,
-            mealData = mealData,
-            iobNow = iobNow,
-            maxIobValue = maxIob.toDouble(),
-            isExplicitUserAction = isExplicitUserAction,
-            mealClockActiveForSpiralRelax = mealClockActiveForSpiralRelax,
-        )
-        val tdd24Bridge = if (tdd24Hrs.isFinite() && tdd24Hrs > 0f) tdd24Hrs.toDouble() else 50.0
-        val bridgeCombinedDelta = (delta + shortAvgDelta) / 2f
-        val bridgeHyperTier = classifyHyperSeverityForTick(
+        decideTrajectoryTightSpiralSafetyBridge(
+            profile = profile,
             rT = rT,
-            combinedDelta = bridgeCombinedDelta,
-            tdd24hU = tdd24Bridge,
-        ).tier
-        val hyperTrajectorySpiral = bridgeHyperTier >= HyperSeverityTier.EMERGING
-        val stackingSpiral = !hyperTrajectorySpiral
-        val spiralMealAlign = mealPriorityAlign || hyperTrajectorySpiral
-
-        val basalFraction = when {
-            spiralMealAlign && energy > 3.5 -> 0.70
-            spiralMealAlign && energy > 2.5 -> 0.85
-            spiralMealAlign && energy > 1.5 -> 0.95
-            stackingSpiral && energy > 3.5 -> 0.25
-            stackingSpiral && energy > 2.5 -> 0.50
-            stackingSpiral && energy > 1.5 -> 0.70
-            else -> 1.0
-        }
-
-        val cgateAmplified = physioMultipliers.isfFactor > 1.05
-        val effectiveFraction = if (cgateAmplified && basalFraction > 0.25) {
-            (basalFraction - 0.20).coerceAtLeast(0.25)
-        } else {
-            basalFraction
-        }
-
-        if (effectiveFraction >= 1.0) return
-
-        val proactiveBasal = profile.current_basal * effectiveFraction
-        val cgateNote = if (cgateAmplified) " [CGate ISF↑ → amplification]" else ""
-        val spiralNote = when {
-            hyperTrajectorySpiral -> " [HTR_HYPER_SPIRAL tier=${bridgeHyperTier.name}]"
-            mealPriorityAlign -> " [MEAL_PRIORITY_RELAX]"
-            stackingSpiral -> " [STACKING_SPIRAL]"
-            else -> ""
-        }
-        val reason = "TRAJ_TIGHT_SPIRAL: E=${aimiFmt1(energy)}U κ=${aimiFmt2(curvature)} IOB=${aimiFmt2(iobNow)}U → Basale proactive ${(effectiveFraction * 100).toInt()}%$cgateNote$spiralNote"
-
-        consoleLog.add("🌀🛡️ TRAJECTORY_SAFETY_BRIDGE (deferred): $reason")
-
-        pendingTrajSpiralBasal = PendingTrajSpiralBasal(
-            proactiveBasalUph = proactiveBasal,
-            durationMin = if (energy > 3.5) 30 else 15,
-            reason = reason,
-            safetyTierLabel = "TrajBridge_Tier${when { energy > 3.5 -> 1; energy > 2.5 -> 2; else -> 3 }}",
-        )
-        applyTrajectoryTightSpiralStandardSmbCapIfNeeded(
-            energy = energy,
-            iobNow = iobNow,
-            tdd24hU = tdd24Hrs.toDouble(),
-            deltaValue = delta,
-            shortAvgDeltaValue = shortAvgDelta,
+            iobNow = iobData.iob,
+            bg = bg,
+            delta = delta,
+            physioMultipliers = physioMultipliers,
+            tdd24Hrs = tdd24Hrs,
             mealData = mealData,
             isExplicitUserAction = isExplicitUserAction,
             mealClockActiveForSpiralRelax = mealClockActiveForSpiralRelax,
+            consoleLog = consoleLog,
+            calls = object : AimiTrajectorySpiralCalls {
+                override fun lastAnalysis() = trajectoryGuard.getLastAnalysis()
+                override fun shortAvgDelta() = this@DetermineBasalaimiSMB2.shortAvgDelta
+                override fun maxIob() = this@DetermineBasalaimiSMB2.maxIob.toDouble()
+                override fun uamConfidence() = AimiUamHandler.confidenceOrZero()
+                override fun hyperTier(rT: RT, combinedDelta: Float, tdd24hU: Double) =
+                    classifyHyperSeverityForTick(rT, combinedDelta, tdd24hU).tier
+                override fun setPending(rateUph: Double, durationMin: Int, reason: String, tierLabel: String) {
+                    pendingTrajSpiralBasal = PendingTrajSpiralBasal(
+                        proactiveBasalUph = rateUph,
+                        durationMin = durationMin,
+                        reason = reason,
+                        safetyTierLabel = tierLabel,
+                    )
+                }
+                override fun applySmbCap(
+                    energy: Double,
+                    iobNow: Double,
+                    tdd24hU: Double,
+                    deltaValue: Float,
+                    shortAvgDeltaValue: Float,
+                    mealData: MealData,
+                    isExplicitUserAction: Boolean,
+                    mealClockActiveForSpiralRelax: Boolean,
+                ) = applyTrajectoryTightSpiralStandardSmbCapIfNeeded(
+                    energy, iobNow, tdd24hU, deltaValue, shortAvgDeltaValue, mealData,
+                    isExplicitUserAction, mealClockActiveForSpiralRelax,
+                )
+            },
         )
     }
 
