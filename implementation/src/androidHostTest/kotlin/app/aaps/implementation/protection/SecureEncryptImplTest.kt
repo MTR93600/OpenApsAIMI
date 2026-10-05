@@ -42,4 +42,13 @@ class SecureEncryptImplTest : TestBase() {
         // Expect test/sample string has valid data
         assertThat(sut.isValidDataString(secretData)).isTrue()
     }
+
+    /** Same contract as the iOS test: a real change of the ciphertext body fails the header hash. */
+    @Test fun aTamperedBodyNoLongerValidates() {
+        val tampered = tamperSecureEnvelope(secretData)
+
+        assertThat(tampered).isNotEqualTo(secretData)
+        assertThat(sut.isValidDataString(secretData)).isTrue()
+        assertThat(sut.isValidDataString(tampered)).isFalse()
+    }
 }

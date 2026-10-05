@@ -116,12 +116,20 @@ class IosSecureEncryptTest {
         assertFalse(secure.isValidDataString(":"))
     }
 
-    /** The header hash is what turns a tampered or truncated string into a refusal. */
+    /**
+     * The header hash is what turns a tampered body into a refusal.
+     *
+     * The last two hex digits are one ciphertext byte. Writing "ff" over them leaves the
+     * string unchanged when that byte is already 0xFF, which is 1 in 256 for a fresh GCM
+     * tag, and the hash then still matches. XOR 0x01 on the middle ciphertext byte always
+     * changes it, including 0xFF. No retry.
+     */
     @Test
     fun `a tampered body no longer validates`() {
         val encrypted = secure.encrypt("secret", "alias1")
-        val tampered = encrypted.dropLast(2) + "ff"
+        val tampered = tamperSecureEnvelope(encrypted)
 
+        assertNotEquals(encrypted, tampered)
         assertFalse(secure.isValidDataString(tampered))
         assertEquals("", secure.decrypt(tampered))
     }
