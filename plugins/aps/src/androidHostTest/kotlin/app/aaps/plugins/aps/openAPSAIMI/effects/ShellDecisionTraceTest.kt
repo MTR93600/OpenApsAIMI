@@ -1,6 +1,9 @@
 package app.aaps.plugins.aps.openAPSAIMI.effects
 
+import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.HR
+import app.aaps.core.data.model.TE
+import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.data.pump.defs.PumpDescription
 import app.aaps.core.interfaces.aps.AutosensDataStore
 import app.aaps.core.interfaces.plugin.ActivePlugin
@@ -100,6 +103,7 @@ import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryModulation
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryType
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryWarning
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.WarningSeverity
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import app.aaps.plugins.aps.openAPSAIMI.validation.PumpCapabilityValidator
@@ -108,6 +112,7 @@ import app.aaps.plugins.aps.openAPSAIMI.wcycle.VerneuilStatus
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleFacade
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleLearner
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCyclePreferences
+import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalTime
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -1922,6 +1927,43 @@ class ShellDecisionTraceTest {
         assertEquals(UAM_POST_HYPO_REBOUND_TRACE, trace)
     }
 
+    @Test
+    fun therapyExerciseLockoutZerosTheTempBasal() {
+        val persistence = mock(PersistenceLayer::class.java)
+        val clock = aimiWallClockMs()
+        val sport = listOf(
+            TE(
+                timestamp = clock - 60_000L,
+                duration = 3_600_000L,
+                type = TE.Type.NOTE,
+                note = "sport",
+                glucoseUnit = GlucoseUnit.MGDL,
+            ),
+        )
+        runBlocking {
+            whenever(persistence.getTherapyEventDataFromTime(any(), any())).thenReturn(sport)
+            whenever(persistence.getBolusesFromTime(any(), any())).thenReturn(emptyList())
+        }
+        setField(tick, "persistenceLayer", persistence)
+        val storage = getField(tick, "storage") as AimiStorage
+        whenever(storage.file(any<String>())).thenReturn(AimiPath("circadian"))
+        whenever(storage.exists(any())).thenReturn(false)
+        setField(tick, "bg", 100.0)
+        setField(tick, "delta", 0.0f)
+        setField(tick, "targetBg", 100.0f)
+        val profile = profileStub()
+        val ctx = tickContext(profile, glucose = 100.0)
+        val rT = RT(runningDynamicIsf = false)
+        val trace = capture {
+            invokeNamed(
+                "runTherapyHydrateClocksAndExerciseLockoutGate",
+                listOf(ctx, profile, rT),
+            )
+        }.replace(Regex("(?<![A-Za-z])ts=\\d+"), "ts=<clock>")
+        assertEquals(THERAPY_EXERCISE_LOCKOUT_TRACE, trace)
+        assertEquals(0.0, rT.units as Double, 1e-9)
+    }
+
     private fun resultField(target: Any, name: String): Any? {
         val field = target.javaClass.getDeclaredField(name)
         field.isAccessible = true
@@ -2821,6 +2863,22 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val THERAPY_EXERCISE_LOCKOUT_TRACE = """
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
+            READ key=BooleanKey.OApsAIMIContextEnabled value=false
+            READ key=DoubleKey.OApsAIMIHighBg value=0.00
+            LOG 🏃 EXERCISE_LOCKOUT[therapy]: SMB off (sportTime=true aimiActivity=false) | basale autorisée seulement si BG>220 (T3c PI ou flux standard)
+            READ key=BooleanKey.OApsAIMIMealAdvisorTrigger value=false
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
+            LOG 🏃 EXERCISE_LOCKOUT: flux standard interrompu → 0 U/h (BG=100)
+            LOG DECISION_FINAL[EXERCISE_LOCKOUT]: smb=0.00U tbr=0.00U/h dur=0m bg=100 Δ=0.0 reason=🏃 Sport / contexte AIMI activité : basale & SMB arrêtés (BG≤220). | 
+            LOG 📦 CACHE TDD24H=MISSING reason=tdd24h_missing
+            LOG 🧭 BASAL_GOV[FINAL]: action=KEEP conf=0.00 n=0 hypo=0.00 hypoG=0.00 hypoAdj=0.00 ant=0.00 wMean=1.00 high=0.00 mae=0.0 latch=false floorB=- floorA=- wBolus=0.00U wCob=?g reason=trace
+            LOG TICK ts=<clock> bg=100 d=0.0 iob=0.00 act=0.000 th=0.188 cob=0.0 mode=None autodriveState=IDLE pred=N(sz=0 ev=0) safety=NONE ref=NO maxIOB=0.00 maxSMB=0.00 smb=0.00->0.00->0.00 tbr=0.00 src=AIMI
+            EFFECT SetTbr rate=0.00 dur=30 override=false forceExact=false adaptive=1.00
+        """.trimIndent()
+
         private val UAM_POST_HYPO_REBOUND_TRACE = """
             READ key=DoubleKey.OApsAIMIHighBg value=0.00
             LOG 🛡️ POST_HYPO_REBOUND: SMB=0 → TBR bridge 1.05 U/h (0min depuis BG<70, COB=0.0g)
