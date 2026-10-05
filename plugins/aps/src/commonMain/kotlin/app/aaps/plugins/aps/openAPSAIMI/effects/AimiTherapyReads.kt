@@ -13,7 +13,8 @@ import app.aaps.core.data.model.SC
  * descending when [AimiTherapyReads.getBolusesFromTime] is asked for ascending.
  *
  * This is not a second database. Android `DetermineBasalAIMI2` keeps calling `persistenceLayer`.
- * iOS feeds the same lists through [MemoryAimiTherapyReads].
+ * The iOS tick feeds the same lists through [RoomAimiTherapyReads]. [MemoryAimiTherapyReads] stays
+ * the in-memory stand-in for tests that do not open a file.
  */
 interface AimiTherapyReads {
     fun getHeartRatesFromTimeToTime(startTime: Long, endTime: Long): List<HR>

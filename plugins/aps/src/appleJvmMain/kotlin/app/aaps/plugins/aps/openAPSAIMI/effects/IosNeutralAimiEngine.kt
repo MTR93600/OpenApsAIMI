@@ -29,7 +29,7 @@ enum class IosNeutralScene {
  */
 class IosNeutralAimiEngine(
     private val scene: IosNeutralScene,
-    private val therapy: AimiTherapyReads = MemoryAimiTherapyReads(),
+    private val therapy: AimiTherapyReads = iosTickTherapyReads,
 ) : AimiEngine {
 
     val portLog: List<String> get() = log
@@ -127,10 +127,16 @@ class IosNeutralAimiEngine(
     }
 }
 
+/**
+ * One Room file for the iOS tick. Tests that pass their own [AimiTherapyReads] do not open it.
+ * The DAOs stay `suspend`. [IosNeutralAimiEngine.evaluate] stays a normal function.
+ */
+private val iosTickTherapyReads: AimiTherapyReads by lazy { openIosTickTherapyReads() }
+
 /** [HoldAimiEngine] wired to [IosNeutralAimiEngine]. The switch still decides whether it runs. */
 fun holdAimiEngineWired(
     scene: IosNeutralScene,
-    therapy: AimiTherapyReads = MemoryAimiTherapyReads(),
+    therapy: AimiTherapyReads = iosTickTherapyReads,
 ): Pair<HoldAimiEngine, IosNeutralAimiEngine> {
     val neutral = IosNeutralAimiEngine(scene, therapy)
     return HoldAimiEngine(neutral) to neutral

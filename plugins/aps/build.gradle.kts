@@ -63,6 +63,8 @@ kotlin {
             dependencies {
                 implementation(project(":plugins:aimi-contracts"))
                 implementation(project(":plugins:aimi-engine"))
+                implementation(project(":database:impl"))
+                implementation(project(":database:persistence"))
             }
         }
         jvmMain.get().dependsOn(appleJvmMain)
@@ -76,6 +78,11 @@ kotlin {
             }
         }
         jvmTest.get().dependsOn(appleJvmTest)
+        jvmTest {
+            dependencies {
+                implementation(libs.androidx.sqlite.bundled)
+            }
+        }
         iosTest.get().dependsOn(appleJvmTest)
 
         commonMain {

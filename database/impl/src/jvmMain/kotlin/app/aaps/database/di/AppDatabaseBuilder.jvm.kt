@@ -7,6 +7,7 @@ import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.sqlite.execSQL
 import app.aaps.database.AppDatabase
 import app.aaps.database.AppRepository
+import app.aaps.database.RoomTherapyWindowReads
 import kotlinx.coroutines.Dispatchers
 import java.io.File
 
@@ -31,23 +32,20 @@ import java.io.File
  * because moving a database after people have data in it is the expensive kind of change. That
  * decision now lives with the shell, where it belongs.
  *
- * ## No migrations here, on purpose
+ * ## Migrations
  *
- * The Android builder passes fifteen `Migration` objects. They are absent here because there is no
- * older database on desktop to come from: nothing imports an Android database, so the first file
- * this creates is created at the current schema version.
- *
- * That covers arriving on desktop. It does not cover staying: once a desktop build reaches a user,
- * their database sits at whatever version shipped, and the next schema change needs a migration path
- * for them like any other. At that point the migration list has to move to commonMain and be passed
- * here too, rather than be copied, because two histories drift and a schema that differs by platform
- * corrupts data instead of failing loudly.
+ * [appDatabaseMigrations] is the same list Android and iOS pass. A new file is created at version 35.
+ * An older file runs the list. Nothing here copies it.
  */
 class JvmAppDatabaseBuilder {
 
     /** Builds a repository over the database file at [fileName], which is a full path. */
     fun provideAppRepository(fileName: String): AppRepository =
         AppRepository { provideAppDatabase(fileName) }
+
+    /** The three therapy windows, read on the calling thread via [RoomTherapyWindowReads]. */
+    fun provideTherapyWindowReads(fileName: String): RoomTherapyWindowReads =
+        RoomTherapyWindowReads(provideAppDatabase(fileName))
 
     internal fun provideAppDatabase(fileName: String): AppDatabase =
         Room
@@ -56,6 +54,7 @@ class JvmAppDatabaseBuilder {
             // every platform rather than following whatever the OS happens to ship.
             .setDriver(BundledSQLiteDriver())
             .setQueryCoroutineContext(Dispatchers.IO)
+            .addMigrations(*appDatabaseMigrations)
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(connection: SQLiteConnection) {
                     super.onOpen(connection)

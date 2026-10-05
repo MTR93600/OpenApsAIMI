@@ -256,7 +256,7 @@ class DecideHeartRateIsfFromTherapyReadsTest {
     )
 }
 
-private class StepsWatchPreferences(private val enabled: Boolean) : Preferences {
+internal class StepsWatchPreferences(private val enabled: Boolean) : Preferences {
 
     override val simpleMode: Boolean = false
     override val apsMode: Boolean = true
