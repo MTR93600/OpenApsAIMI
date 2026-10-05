@@ -1677,6 +1677,64 @@ class ShellDecisionTraceTest {
         assertEquals(PKPD_ABSORPTION_GUARD_TRACE, trace)
     }
 
+    @Test
+    fun rbtMergeLiftsTheV3SmbUnderHardAuthority() {
+        setField(tick, "delta", 20.0f)
+        val htr = HyperTrajectoryReleaseResult(
+            active = false,
+            tier = HyperSeverityTier.ESTABLISHED,
+            severityWeight = 1.0,
+            smbFloorU = 0.40,
+            v3SmbBeforeU = 0.40,
+            v3SmbAfterU = 0.40,
+            absorptionOffsetMgdl = 0.0,
+            suppressTrajBasalShift = false,
+            hypoMinPredIgnored = false,
+            reason = "htr",
+        )
+        val snapshot = RecursiveBeliefSnapshot(
+            scales = emptyList(),
+            tensions = emptyList(),
+            paradoxes = emptyList(),
+            resolutions = DoseChannelResolution(
+                smbDemandU = 2.0,
+                tbrDemandFraction = 0.0,
+                waitBias = 0.0,
+                dominantScaleMinutes = 30,
+                releaseAuthority = ReleaseAuthority.HARD,
+                hypoGuardMode = HypoGuardMode.FULL,
+                autodriveModeHint = AutodriveModeHint.V3,
+                mealChannel = MealChannelHint.NORMAL,
+                suppressTrajBasalShift = false,
+                hypoMinPredIgnored = false,
+                reasonCodes = listOf("DEMAND"),
+            ),
+            mr7Trace = emptyList(),
+        )
+        val gate = RecursiveBeliefAuthorityGate.Decision(
+            requestedAuthority = ReleaseAuthority.HARD,
+            maxAllowedAuthority = ReleaseAuthority.HARD,
+            effectiveAuthority = ReleaseAuthority.HARD,
+            readinessScore = 1.0,
+            liftBlend = 1.0,
+            reasonCodes = listOf("LIFT"),
+        )
+        lateinit var applied: Any
+        val trace = capture {
+            applied = invokeNamed(
+                "mergeRbtHyperTrajectoryRelease",
+                listOf(htr, snapshot, gate, RT(runningDynamicIsf = false)),
+            )!!
+        }
+        val commit = applied as RbtLiveCommitResult
+        assertEquals(0.40, commit.effectiveHtr.v3SmbBeforeU, 1e-9)
+        assertEquals(2.0, commit.effectiveHtr.v3SmbAfterU, 1e-9)
+        assertEquals(2.0, commit.effectiveHtr.smbFloorU, 1e-9)
+        assertEquals(true, commit.effectiveHtr.active)
+        assertEquals(true, commit.rbtAuthority)
+        assertEquals(RBT_MERGE_LIFT_TRACE, trace)
+    }
+
     private fun resultField(target: Any, name: String): Any? {
         val field = target.javaClass.getDeclaredField(name)
         field.isAccessible = true
@@ -2576,6 +2634,10 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val RBT_MERGE_LIFT_TRACE = """
+            LOG 🪜 RBT_GATE: req=HARD eff=HARD score=1.00 blend=1.00 reasons=LIFT
+        """.trimIndent()
+
         private val PKPD_ABSORPTION_GUARD_TRACE = """
             READ key=BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled value=false
             READ key=DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor value=0.00
