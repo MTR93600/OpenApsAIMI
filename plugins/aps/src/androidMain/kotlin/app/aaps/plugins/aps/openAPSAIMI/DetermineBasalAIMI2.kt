@@ -240,7 +240,9 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPublishDoseTerminalCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decidePublishDoseTerminalAuthorityAndSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiBasalDecisionEngineCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideBasalDecisionEngine
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiContextModuleCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEnableSmbCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideApplyContextModule
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTrajectorySpiralCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideEnableSmb
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideTrajectoryTightSpiralSafetyBridge
@@ -13664,88 +13666,56 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      */
     private fun applyContextModule(
         bg: Double, iob: Double, cob: Double, rT: RT
-    ): Double? {
-        var contextTargetOverride: Double? = null
-        // Reset per tick; set below when a context influence is computed. Enforced at finalizeAndCapSMB.
-        lastContextSmbCeilingU = null
-        lastContextSuppressSmb = false
-        val contextEnabled = preferences.get(app.aaps.core.keys.BooleanKey.OApsAIMIContextEnabled)
-        if (contextEnabled) {
-            try {
-                consoleLog.add("═══ CONTEXT MODULE ═══")
-                val contextSnapshot = contextManager.getSnapshot(aimiWallClockMs())
-                // Keep the fresh snapshot as the tick's source of truth so the meal-priority guards
-                // (legacy prebolus / meal advisor) read the same context as the finalize gate.
-                lastContextSnapshot = contextSnapshot
-                if (contextSnapshot.intentCount > 0) {
-                    aimiContextActivityActive = contextSnapshot.hasActivity
-                    val modeStr = preferences.get(app.aaps.core.keys.StringKey.ContextMode)
-                    val contextMode = when (modeStr) {
-                        "CONSERVATIVE" -> app.aaps.plugins.aps.openAPSAIMI.context.ContextMode.CONSERVATIVE
-                        "AGGRESSIVE" -> app.aaps.plugins.aps.openAPSAIMI.context.ContextMode.AGGRESSIVE
-                        else -> app.aaps.plugins.aps.openAPSAIMI.context.ContextMode.BALANCED
-                    }
-                    val contextInfluence = contextInfluenceEngine.computeInfluence(
-                        snapshot = contextSnapshot, currentBG = bg,
-                        iob = iob, cob = cob, mode = contextMode
-                    )
-                    // Carry protective SMB caps to the universal finalize gate (robust vs upstream maxSMB resets).
-                    lastContextSmbCeilingU = contextInfluence.smbCeilingU
-                    lastContextSuppressSmb = contextInfluence.suppressSmb
-                    consoleLog.add("🎯 Active Contexts: ${contextSnapshot.intentCount}")
-                    contextSnapshot.activeIntents.take(3).forEach { intent ->
-                        consoleLog.add("  • ${intent::class.simpleName ?: "Unknown"}")
-                    }
-                    if (kotlin.math.abs(contextInfluence.smbFactorClamp - 1.0f) > 0.05f) {
-                        val origMaxSMB = maxSMB
-                        maxSMB *= contextInfluence.smbFactorClamp
-                        maxSMBHB *= contextInfluence.smbFactorClamp
-                        consoleLog.add("  SMB: %.2f→%.2fU (×%.2f)".format(java.util.Locale.US, origMaxSMB, maxSMB, contextInfluence.smbFactorClamp))
-                    }
-                    if (contextInfluence.extraIntervalMin > 0) {
-                        val origInterval = intervalsmb
-                        intervalsmb = (intervalsmb + contextInfluence.extraIntervalMin).coerceIn(1, 20)
-                        consoleLog.add("  Interval: %d→%dmin (+%d)".format(origInterval, intervalsmb, contextInfluence.extraIntervalMin))
-                    }
-                    if (contextInfluence.preferBasal && !exerciseHyperBasalOverrideActive) {
-                        consoleLog.add("  ⚠️ Prefers TEMP BASAL over SMB (SMB Disabled)")
-                        maxSMB = 0.0
-                        maxSMBHB = 0.0
-                        if (contextSnapshot.hasActivity) {
-                            contextTargetOverride = 150.0
-                            consoleLog.add("  🎯 Sport Target Override -> 150 mg/dL")
-                        }
-                    } else if (contextInfluence.preferBasal && exerciseHyperBasalOverrideActive) {
-                        consoleLog.add("  🏃 Activity preferBasal skipped (hyper+exercise basal override)")
-                    }
-                    contextInfluence.reasoningSteps.take(3).forEach { reason ->
-                        consoleLog.add("  → $reason")
-                    }
-                    rT.contextEnabled = true
-                    rT.contextIntentCount = contextSnapshot.intentCount
-                    rT.contextModulation = contextInfluence.smbFactorClamp.toDouble()
-                } else {
-                    consoleLog.add("🎯 Context: No active intents")
-                    aimiContextActivityActive = false
-                    rT.contextEnabled = true
-                    rT.contextIntentCount = 0
-                }
-            } catch (e: Exception) {
-                consoleLog.add("⚠️ Context error: ${e.message}")
-                aapsLogger.error(LTag.APS, "Context Module failed", e)
-                rT.contextEnabled = false
+    ): Double? = decideApplyContextModule(
+        bg = bg,
+        iob = iob,
+        cob = cob,
+        rT = rT,
+        preferences = preferences,
+        engine = contextInfluenceEngine,
+        consoleLog = consoleLog,
+        calls = object : AimiContextModuleCalls {
+            override fun writeSmbCeiling(value: Double?) {
+                lastContextSmbCeilingU = value
             }
-        } else {
-            rT.contextEnabled = false
-        }
-        exerciseInsulinLockoutActive = sportTime || aimiContextActivityActive
-        if (exerciseInsulinLockoutActive) {
-            maxSMB = 0.0
-            maxSMBHB = 0.0
-        }
-        consoleLog.add("═══════════════════════════════════")
-        return contextTargetOverride
-    }
+            override fun writeSuppressSmb(value: Boolean) {
+                lastContextSuppressSmb = value
+            }
+            override fun snapshot() = contextManager.getSnapshot(aimiWallClockMs())
+            override fun writeSnapshot(snapshot: ContextSnapshot) {
+                lastContextSnapshot = snapshot
+            }
+            override fun writeActivityActive(value: Boolean) {
+                aimiContextActivityActive = value
+            }
+            override fun contextModeName() = preferences.get(app.aaps.core.keys.StringKey.ContextMode)
+            override fun maxSmb() = maxSMB
+            override fun writeMaxSmb(value: Double) {
+                maxSMB = value
+            }
+            override fun maxSmbHb() = maxSMBHB
+            override fun writeMaxSmbHb(value: Double) {
+                maxSMBHB = value
+            }
+            override fun intervalSmb() = intervalsmb
+            override fun writeIntervalSmb(value: Int) {
+                intervalsmb = value
+            }
+            override fun smbScaleLine(original: Double, updated: Double, factor: Float) =
+                "  SMB: %.2f→%.2fU (×%.2f)".format(java.util.Locale.US, original, updated, factor)
+            override fun intervalLine(original: Int, updated: Int, extra: Int) =
+                "  Interval: %d→%dmin (+%d)".format(original, updated, extra)
+            override fun exerciseHyperOverride() = exerciseHyperBasalOverrideActive
+            override fun sportTime() = this@DetermineBasalaimiSMB2.sportTime
+            override fun activityActive() = aimiContextActivityActive
+            override fun writeExerciseLockout(value: Boolean) {
+                exerciseInsulinLockoutActive = value
+            }
+            override fun logContextFailure(error: Exception) {
+                aapsLogger.error(LTag.APS, "Context Module failed", error)
+            }
+        },
+    )
 
     /**
      * 🍽️ Bounded virtual COB for an undeclared meal (Option A — feeds prediction/TBR anticipation only,
