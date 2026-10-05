@@ -68,9 +68,9 @@ Ces PR ne sont pas ouvertes. Chacune reste derrière l’interrupteur éteint ju
 
 ### Persistance des pas, de la FC et des bolus
 
-- Schéma commun, SQLDelight ou équivalent, et les trois lectures de `persistenceLayer` : `getHeartRatesFromTimeToTime`, pas, bolus. Les caches partent des mêmes listes, y compris la liste vide.
-- Branchement iOS à la place des listes vides. Android garde les mêmes requêtes.
-- Trace : la même scène ISF **45**, plus un tick dont le cache bolus vide ne change pas le SMB déjà verrouillé.
+- Pas de SQLDelight, et Room n’est pas activé pour iOS. Le contrat commun `AimiTherapyReads` reprend les trois lectures de `persistenceLayer` : `getHeartRatesFromTimeToTime` (fenêtre 200 min, `timestamp` inclus), `getStepsCountFromTimeToTime` (fenêtre 210 min), `getBolusesFromTime` (valides, sans `referenceId`, `timestamp >= début`, ordre id descendant si ascending). `MemoryAimiTherapyReads` est le magasin en mémoire. Ce n’est pas une seconde base.
+- Android `DetermineBasalAIMI2` continue d’appeler `persistenceLayer`. Le tick iOS lit ce contrat à la place des listes vides. Un `Exception` est journalisé (`HR windows failed … — averages 80, baseline not real` pour la FC) et la liste est vide. Un `Error` sort. Une FC vide ne renforce pas l’ISF.
+- Trace : les quatre échantillons de `autosensHalfDoublesScheduledBasalAndRestingHeartRateStrengthensIsf` (80, 80, 80, puis 110 bpm, pas vides) donnent ISF **45** et `HR_TREND_ISF x0.90 (hr10 110 / hr60 88, steps10 0)`. Le cache bolus vide laisse le SMB repas **3,30 U** et le TBR **2,00 U/h**.
 
 ### Runtime patient
 

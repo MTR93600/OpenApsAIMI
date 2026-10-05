@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.effects
 
+import app.aaps.core.data.model.BS
+import app.aaps.core.data.model.ICfg
 import app.aaps.plugins.aimiengine.AimiCommonEngineSwitch
 import app.aaps.plugins.aimiengine.HoldAimiEngine
 import app.aaps.plugins.aimicontracts.AimiTherapyCommand
@@ -161,6 +163,48 @@ class IosNeutralHoldEngineTest {
         neutral.scratch.lastPkpdSoftFloorTelemetry =
             telemetry?.copy(softPathMinMgdl = 999.0, rawPathMinMgdl = 999.0)
         assertEquals("0.25", aimiFmt2(iosNeutralLowPredictionTbrUph()))
+    }
+
+    @Test
+    fun emptyBolusCacheLeavesTheMealSmbAndTbr() {
+        AimiCommonEngineSwitch.enabled = true
+        val insulin = ICfg(insulinLabel = "test", peak = 75, dia = 5.0, concentration = 1.0)
+        val store = MemoryAimiTherapyReads(
+            boluses = listOf(
+                BS(
+                    id = 4L,
+                    timestamp = 1L,
+                    amount = 2.0,
+                    type = BS.Type.SMB,
+                    isValid = false,
+                    iCfg = insulin,
+                ),
+                BS(
+                    id = 5L,
+                    timestamp = 1L,
+                    amount = 1.0,
+                    type = BS.Type.NORMAL,
+                    isValid = true,
+                    referenceId = 1L,
+                    iCfg = insulin,
+                ),
+            ),
+        )
+        val (hold, neutral) = holdAimiEngineWired(IosNeutralScene.MEAL, store)
+        val result = hold.evaluate(
+            AimiTestSnapshots.emptyInput(),
+            AimiTestSnapshots.emptyState(),
+            AimiTestSnapshots.emptyModels(),
+        )
+        val smb = result.command as AimiTherapyCommand.Smb
+        val tbr = result.pairedCommand as AimiTherapyCommand.TempBasal
+        assertEquals("3.30", aimiFmt2(smb.insulinU))
+        assertEquals("2.00", aimiFmt2(tbr.rateUPerHour))
+        assertEquals(IOS_NEUTRAL_TBR_DURATION_MS, tbr.durationMs)
+        assertTrue(neutral.therapyCaches.boluses.isEmpty())
+        assertTrue(neutral.therapyCaches.heartRates.isEmpty())
+        assertFalse(neutral.portLog.any { it.contains("HR_TREND_ISF") }, neutral.portLog.toString())
+        assertModeLines(neutral)
     }
 
     @Test

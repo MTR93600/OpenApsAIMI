@@ -9,6 +9,7 @@ import app.aaps.plugins.aimicontracts.AimiTherapyCommand
 import app.aaps.plugins.aimicontracts.AimiTickResult
 import app.aaps.plugins.aimiengine.AimiEngine
 import app.aaps.plugins.aimiengine.HoldAimiEngine
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 
 /**
  * Scenes the user approved on 2026-10-05. The iOS loop does not construct this while
@@ -28,11 +29,14 @@ enum class IosNeutralScene {
  */
 class IosNeutralAimiEngine(
     private val scene: IosNeutralScene,
+    private val therapy: AimiTherapyReads = MemoryAimiTherapyReads(),
 ) : AimiEngine {
 
     val portLog: List<String> get() = log
     val scratch: IosEarlyTickScratch = IosEarlyTickScratch()
     val pkpdFloor: IosPkpdFloorMemory = IosPkpdFloorMemory()
+    internal var therapyCaches: TherapyReadCaches = TherapyReadCaches.EMPTY
+        private set
     var mealOnset: Boolean? = null
         private set
 
@@ -49,6 +53,13 @@ class IosNeutralAimiEngine(
         log += IosNeutralLog.earlyScratch(writes)
         val virtualCobG = iosNeutralVirtualCobG(log)
         val wearable = iosNeutralEmptyWearable(log)
+        therapyCaches = readTherapyCaches(
+            reads = therapy,
+            nowMs = aimiWallClockMs(),
+            bolusFromMs = 0L,
+            bolusAscending = true,
+            consoleLog = log,
+        )
         val effortFactor = iosNeutralEffortSmbFactor(log, wearable)
         val veto = iosNeutralEffortVeto(log)
         iosNeutralPatientRuntimeSkipped(log)
@@ -114,7 +125,10 @@ class IosNeutralAimiEngine(
 }
 
 /** [HoldAimiEngine] wired to [IosNeutralAimiEngine]. The switch still decides whether it runs. */
-fun holdAimiEngineWired(scene: IosNeutralScene): Pair<HoldAimiEngine, IosNeutralAimiEngine> {
-    val neutral = IosNeutralAimiEngine(scene)
+fun holdAimiEngineWired(
+    scene: IosNeutralScene,
+    therapy: AimiTherapyReads = MemoryAimiTherapyReads(),
+): Pair<HoldAimiEngine, IosNeutralAimiEngine> {
+    val neutral = IosNeutralAimiEngine(scene, therapy)
     return HoldAimiEngine(neutral) to neutral
 }
