@@ -457,36 +457,36 @@ Encore Android. Il faut un port. Pas purs, donc pas déplacés dans ce lot :
 
 | Élément | Taille | Dépendances Android | Passage |
 |---|---|---|---|
-| `detectMealOnset` | 14, en commun (`decideDetectMealOnset`) | le veto `effortSuppressesUndeclaredMeal(): Boolean` reste Android. Il lit `lastEffortAssessment`, les drapeaux de repas et le COB | port Android en place. La valeur iOS du veto reste ouverte |
-| `estimateUndeclaredVirtualCob` | 38 | préférences, `physioAdapter.getLatestSnapshot`, estimateur continu, journal | port. Bloque `HoldAimiEngine` |
-| `recordPkpdSoftFloor` | 8, en commun (`decideRecordPkpdSoftFloor`) | la préférence est lue à l’appel. L’écriture de `lastPkpdSoftFloorTelemetry` et la ligne de journal restent Android | port Android en place. Relire cette télémétrie sur iOS reste ouvert |
-| `refreshEffortActivityBelief` | 34 | `physioAdapter`, préférences, `dateUtil`, `EffortActivityBelief` | port. Bloque `HoldAimiEngine` |
-| `refreshPatientStateRuntime` | 221 | instantané physio, contexte, moteurs patient, `dateUtil` | port. Bloque `HoldAimiEngine` |
-| session TPO | appel `tpoOrchestrator.onTickStart(dateUtil.now())` | orchestrateur Android, horloge `dateUtil` | port déjà à la ligne. Décision iOS non écrite. Bloque `HoldAimiEngine` |
-| `physioAdapter.getLatestSnapshot` | lecture à la ligne | adaptateur wearable. `OptionalSignal.Failed` + journal, repli `HealthContextSnapshot()` | port. Le repli ne change pas. Décision iOS du contenu non écrite. Bloque `HoldAimiEngine` |
-| `resetEarlyScratch` | 29 | écritures de champs du tick Android | port. Décision iOS non écrite. Bloque `HoldAimiEngine` |
+| `detectMealOnset` | 14, en commun (`decideDetectMealOnset`) | le veto `effortSuppressesUndeclaredMeal(): Boolean` reste Android. Il lit `lastEffortAssessment`, les drapeaux de repas et le COB | port Android en place. iOS, approuvé le 2026-10-05 : veto faux sans assessment |
+| `estimateUndeclaredVirtualCob` | 38 | préférences, `physioAdapter.getLatestSnapshot`, estimateur continu, journal | iOS, approuvé le 2026-10-05 : 0 g |
+| `recordPkpdSoftFloor` | 8, en commun (`decideRecordPkpdSoftFloor`) | la préférence est lue à l’appel. L’écriture de `lastPkpdSoftFloorTelemetry` et la ligne de journal restent Android | iOS, approuvé le 2026-10-05 : stocker, ne pas relire dans le débit |
+| `refreshEffortActivityBelief` | 34 | `physioAdapter`, préférences, `dateUtil`, `EffortActivityBelief` | iOS, approuvé le 2026-10-05 : facteur 1,0 |
+| `refreshPatientStateRuntime` | 221 | instantané physio, contexte, moteurs patient, `dateUtil` | iOS, approuvé le 2026-10-05 : ne pas appeler |
+| session TPO | appel `tpoOrchestrator.onTickStart(dateUtil.now())` | orchestrateur Android, horloge `dateUtil` | iOS, approuvé le 2026-10-05 : ne pas appeler |
+| `physioAdapter.getLatestSnapshot` | lecture à la ligne | adaptateur wearable. `OptionalSignal.Failed` + journal, repli `HealthContextSnapshot()` | iOS, approuvé le 2026-10-05 : snapshot vide |
+| `resetEarlyScratch` | 27 affectations dans l’adaptateur (le mémo disait 29) | écritures de champs du tick Android | iOS, approuvé le 2026-10-05 : les mêmes affectations |
 | `setTempBasal` | 342 | corps pompe, sonde `EFFECT SetTbr` | port décidé : `AimiEffectSink` écrit `TempBasal` ou `Smb` et ne parle pas à une pompe |
 | phase learners | 616, dont `applyBasalNeuralLearningAndTraining` 35, `logLearnersHealth` 53, `neuralnetwork5` 44 | fichiers d’apprentissage, `basalLearner.process` | port décidé : départ à froid multiplicateurs **1,0**, gouvernance `WARMUP`, pas `KEEP` |
 | TFLite, `AimiUamHandler` | interpréteur Android | fichier `.tflite` | port décidé : modèle absent → `predictSmbUam` **0 U**, `refine` identité, pas d’entraînement |
 | persistance pas, FC, bolus | `refreshStepsAsync` 13, `refreshHeartRatesAsync` 13 | `persistenceLayer` | port décidé : listes vides, le même repli qu’une lecture ratée. Ces listes peuvent changer l’ISF |
 | `decisionContextForTrigger` | 43 | `AimiDecisionContext` est un type Android | port décidé, non-parité : ne pas instancier. Neutre documenté, pas activé |
 
-Proposition, une ligne, pour chaque (a) qui bloque encore `HoldAimiEngine`. Aucun de ces ports n’est implémenté ici : chacun est soit trop grand, soit une valeur iOS qui changerait une dose sans scène verrouillée.
+Ces ports iOS sont tranchés dans `_docs/kmp/p6-ios-decisions.md`, approuvé le 2026-10-05. L’implémentation neutre est derrière `AimiCommonEngineSwitch`, éteint par défaut. `IosClientConfig.APS` reste `false`. Le tick Android n’appelle pas ces ports.
 
-- `detectMealOnset` : le corps est `decideDetectMealOnset`. Le veto `effortSuppressesUndeclaredMeal(): Boolean` a son impl Android. La valeur iOS du veto reste une décision iOS requise.
-- `estimateUndeclaredVirtualCob` : décision iOS requise. Le gramme virtuel dépend du snapshot wearable et de l’estimateur continu.
-- `recordPkpdSoftFloor` : le corps est `decideRecordPkpdSoftFloor`. Le port d’écriture `lastPkpdSoftFloorTelemetry` et la ligne de journal ont leur impl Android. Relire cette télémétrie sur iOS reste une décision iOS requise.
-- `refreshEffortActivityBelief` : décision iOS requise. Le facteur SMB d’effort est reduce-only, mais le seuil wearable n’est pas tranché.
-- `refreshPatientStateRuntime` : décision iOS requise. 221 lignes, moteurs patient et instantané physio.
-- session TPO : décision iOS requise. L’appel `onTickStart(dateUtil.now())` reste à la ligne.
-- `physioAdapter.getLatestSnapshot` : port déjà appelé par l’orchestre du signal. L’échec est `OptionalSignal.Failed`, une ligne `WEARABLE snapshot failed (<type>): <message> — snapshot empty`, et un snapshot vide. Le contenu wearable iOS est une décision iOS requise.
-- `resetEarlyScratch` : décision iOS requise. Les 29 écritures remettent des champs de dose du tick Android à zéro.
+- `detectMealOnset` : le corps est `decideDetectMealOnset`. Le veto Android lit l’assessment. iOS : faux sans assessment.
+- `estimateUndeclaredVirtualCob` : iOS rend 0 g.
+- `recordPkpdSoftFloor` : le corps est `decideRecordPkpdSoftFloor`. iOS stocke la télémétrie et ne la relit pas dans le débit.
+- `refreshEffortActivityBelief` : iOS, facteur 1,0.
+- `refreshPatientStateRuntime` : iOS ne l’appelle pas.
+- session TPO : iOS ne l’appelle pas.
+- `physioAdapter.getLatestSnapshot` : l’échec Android reste `OptionalSignal.Failed` et un snapshot vide. iOS : snapshot vide.
+- `resetEarlyScratch` : iOS reprend les affectations de l’adaptateur Android (27 sur cette branche).
 
 ### Cycle de vie de `MealAbsorptionPhaseHysteresis`
 
 La fuite d’un test à l’autre vient de la production, pas d’un singleton introduit par le portage. Dans `dev_OAPSAIMI` comme ici, `MealAbsorptionPhaseHysteresis` est un `object` Kotlin. `holdTicksRemaining` et `heldPhase` sont des champs `@Volatile` de ce singleton. `stabilize` les écrit. Un tick suivant, ou une autre instance de `DetermineBasalaimiSMB2` dans le même processus, relit le maintien. `reset()` n’existe dans la ref que dans `MealAbsorptionPhaseEngineTest`, et dans `stabilize` quand le maintien tombe. Le portage n’ajoute que `import kotlin.concurrent.Volatile`, pour compiler en `commonMain`. Le corps est le même. On le garde.
 
-Le même `object` à champs mutables est déjà dans la ref pour `MealAbsorptionMemory`, `EndogenousPhaseHysteresis`, `PhysiologicalPatternHysteresis` et `InsulinSlopePreserveHysteresis`. Sur iOS le code commun est le même singleton de processus. `IosClientConfig.APS` reste `false`, donc la boucle ne l’atteint pas. Le cycle de vie — un maintien pour tout le processus, partagé d’un tick à l’autre — est une décision iOS. Ce n’est pas une parité à activer, et ce n’est pas un port manquant : l’état est déjà celui de la ref.
+Le même `object` à champs mutables est déjà dans la ref pour `MealAbsorptionMemory`, `EndogenousPhaseHysteresis`, `PhysiologicalPatternHysteresis` et `InsulinSlopePreserveHysteresis`. Approuvé le 2026-10-05 : `reset()` au début du tick iOS seulement, le jour où ce tick calcule une dose. Le tick Android ne gagne pas cet appel. `IosClientConfig.APS` reste `false`, donc la boucle iOS ne l’atteint pas tant que l’interrupteur `AimiCommonEngineSwitch` est éteint.
 
 Le test du basal au quart isole son entrée avec `reset()`, parce que la trace verrouillée est le maintien propre (TBR 0,25 U/h). Ce reset ne change pas la production.
 

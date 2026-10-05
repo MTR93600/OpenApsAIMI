@@ -1,8 +1,33 @@
-# Décisions iOS encore ouvertes
+# Décisions iOS
 
-Mémo pour trancher. Rien ici n’est implémenté. `IosClientConfig.APS` reste `false`. `HoldAimiEngine` reste `Hold("ENGINE_NOT_EXTRACTED")`.
+Approuvées par l’utilisateur le **2026-10-05**. Toutes les recommandations de ce mémo sont retenues.
 
-Chaque nombre vient d’une trace déjà verrouillée. La recommandation est celle qui n’ajoute pas d’insuline par rapport à cette trace.
+`IosClientConfig.APS` reste `false`. La boucle iOS n’est pas activée. Aucune écriture pompe.
+
+L’interrupteur nouveau `AimiCommonEngineSwitch` est **éteint par défaut**, et ce n’est pas `IosClientConfig.APS`. Éteint, `HoldAimiEngine` rend `Hold("ENGINE_NOT_EXTRACTED")`, même si un moteur commun lui a été passé. Allumé, en test, il délègue à ce moteur. Les scènes ci-dessous donnent alors les nombres de ce mémo.
+
+Chaque nombre vient d’une trace déjà verrouillée. La recommandation retenue est celle qui n’ajoute pas d’insuline par rapport à cette trace.
+
+## Décision
+
+- COB virtuel : **0 g**.
+- Effort : facteur **1,0**, pas d’assessment.
+- Runtime patient : **non appelé**.
+- Session TPO : **non appelée**.
+- Snapshot wearable : **vide**.
+- `resetEarlyScratch` : les mêmes affectations que l’adaptateur Android. Sur cette branche l’adaptateur en a **27**. Le texte plus bas disait 29. La décision est cette liste, pas le chiffre arrondi. Le test verrouille 27.
+- Veto d’effort : **faux** sans assessment.
+- Plancher PKPD : stocké et journalisé, **pas relu** dans le débit.
+- Hystérésis : `reset()` au début de chaque tick **iOS**. Le tick Android n’est pas modifié. Il garde le singleton de la ref.
+
+## Non-parité voulue
+
+- Prédiction basse : le TBR reste **0,25 U/h** pendant 30 min. `TREE_DEPLOYED` et `MEAL_CERTAINTY` ne sont pas produits, parce que le runtime patient n’est pas appelé.
+- Nuit : le TBR reste **1,00 U/h** pendant 30 min. Les lignes d’apprenants, d’export, `UAM=0.00` et le `SMB result: raw=0.00 -> final=0.35` non délivré ne sont pas produits. TPO n’est pas appelé.
+- ISF **45** (FC 110 sur 10 min, moyenne 60 min 88, ISF 50 × 0,90) n’est pas produit. Le snapshot wearable est vide.
+- Le `reset()` d’hystérésis est iOS. Un tick Android peut encore hériter du maintien de processus.
+
+Le détail de chaque option reste ci-dessous.
 
 ## `estimateUndeclaredVirtualCob`
 
@@ -86,7 +111,7 @@ Côté iOS : HealthKit (pas, FC, FC de repos). Le port d’échec existe déjà.
 
 ## `resetEarlyScratch`
 
-Android : 29 écritures au début du tick. Remet à faux ou à null les drapeaux de dose du tick, dont `lastPkpdSoftFloorTelemetry`, `mealAdvisorOneShotThisTick`, `criticalSafetyZeroedThisTick`. Ne touche pas les singletons d’hystérésis.
+Android : les affectations au début du tick. Le mémo les avait comptées 29. L’adaptateur de cette branche en a 27. Elles remettent à faux ou à null les drapeaux de dose du tick, dont `lastPkpdSoftFloorTelemetry`, `mealAdvisorOneShotThisTick`, `criticalSafetyZeroedThisTick`. Elles ne touchent pas les singletons d’hystérésis.
 
 Scène verrouillée : prédiction basse sur une instance fraîche, plancher `raw=39 soft=39`, TBR **0,25 U/h** pendant 30 min.
 

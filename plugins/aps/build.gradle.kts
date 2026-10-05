@@ -51,7 +51,33 @@ kotlin {
     // plain jvm() target, so no special target name is needed.
     jvm()
 
+    // Explicit: the manual dependsOn below would otherwise switch the automatic hierarchy off
+    // and silently unwire iosMain.
+    applyDefaultHierarchyTemplate()
+
     sourceSets {
+        // Hold wiring lives here so the Android variant of :plugins:aps does not depend on
+        // :plugins:aimi-engine (that module has no Android target, and the Android tick is unchanged).
+        val appleJvmMain = create("appleJvmMain") {
+            dependsOn(commonMain.get())
+            dependencies {
+                implementation(project(":plugins:aimi-contracts"))
+                implementation(project(":plugins:aimi-engine"))
+            }
+        }
+        jvmMain.get().dependsOn(appleJvmMain)
+        iosMain.get().dependsOn(appleJvmMain)
+
+        val appleJvmTest = create("appleJvmTest") {
+            dependsOn(commonTest.get())
+            dependencies {
+                implementation(kotlin("test"))
+                implementation(project(":plugins:aimi-testkit"))
+            }
+        }
+        jvmTest.get().dependsOn(appleJvmTest)
+        iosTest.get().dependsOn(appleJvmTest)
+
         commonMain {
             kotlin.srcDir(generateApsStrings.flatMap { it.commonOutputDir })
             dependencies {

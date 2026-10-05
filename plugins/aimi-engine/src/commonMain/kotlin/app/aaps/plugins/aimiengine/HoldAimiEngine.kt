@@ -9,18 +9,26 @@ import app.aaps.plugins.aimicontracts.AimiTherapyCommand
 import app.aaps.plugins.aimicontracts.AimiTickResult
 
 /**
- * Safe default until the freeze tick is extracted into this module.
+ * Safe default until a caller turns [AimiCommonEngineSwitch] on and supplies [commonEngine].
  *
- * Always holds. Does not read [input] services (there are none). Does not command a pump.
- * Reason code [REASON_NOT_EXTRACTED] is stable for traces and tests.
+ * The switch is off by default. Off, this returns `Hold("ENGINE_NOT_EXTRACTED")` and does not
+ * call [commonEngine]. On, with a delegate that is not this instance, it returns that delegate's
+ * result unchanged. It does not catch the delegate's exceptions. It does not command a pump.
+ * Reason code [REASON_NOT_EXTRACTED] stays stable for the off path.
  */
-class HoldAimiEngine : AimiEngine {
+class HoldAimiEngine(
+    private val commonEngine: AimiEngine? = null,
+) : AimiEngine {
 
     override fun evaluate(
         input: AimiInputSnapshot,
         state: AimiEngineState,
         models: AimiModelBundle,
     ): AimiTickResult {
+        val delegate = commonEngine
+        if (AimiCommonEngineSwitch.enabled && delegate != null && delegate !== this) {
+            return delegate.evaluate(input, state, models)
+        }
         return AimiTickResult(
             command = AimiTherapyCommand.Hold(REASON_NOT_EXTRACTED),
             nextState = state,

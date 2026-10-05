@@ -3,7 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.effects
 /**
  * Undeclared-meal onset. The effort veto is read by the Android caller at this call.
  * A true veto returns false and does not start the forced meal temp basal.
- * The iOS value of the veto is not decided.
+ * The approved iOS value, without an assessment, is false. Android still reads the assessment.
  */
 internal fun decideDetectMealOnset(
     delta: Float,

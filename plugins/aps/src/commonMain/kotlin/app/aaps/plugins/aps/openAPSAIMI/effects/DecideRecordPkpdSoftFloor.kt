@@ -5,8 +5,9 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSoftFloorPathMin
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSoftFloorTelemetry
 
 /**
- * Android writes [PkpdSoftFloorTelemetry] and the log line. Re-reading that telemetry on iOS
- * is not decided. The path-min math stays [PkpdSoftFloorPathMin.fromCurves].
+ * Android writes [PkpdSoftFloorTelemetry] and the log line. The approved iOS port stores the
+ * same telemetry and does not read it back into the dose. The path-min math stays
+ * [PkpdSoftFloorPathMin.fromCurves].
  */
 internal interface AimiPkpdSoftFloorWrite {
     fun writeTelemetryAndLog(telemetry: PkpdSoftFloorTelemetry)
