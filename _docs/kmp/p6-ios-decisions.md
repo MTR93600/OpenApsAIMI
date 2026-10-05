@@ -48,19 +48,19 @@ Ordre : d’abord ce qui change un débit ou le tick suivant, ensuite le modèle
 | Runtime patient | fait | #226, #234 | Rien sur la prédiction basse : TBR **0,25 U/h** et `terminals=HYPO_CONFLICT`. Repas et sport : `rise=OK`, `terminals=UNKNOWN`, TBR inchangés (**2,00** et **1,30**). Nuit : `rise=WEAK`, `terminals=UNKNOWN`, TBR **1,00 U/h**. Plus de `patientRuntime=skipped`. |
 | Plancher PKPD | fait | #221 | Rien sur la ligne `raw=39`. Elle n’est pas relue dans le débit. Les autres scènes ne l’ont pas. |
 | Session TPO | fait | #228 | Rien. JSON, pas Room. Plafond **0,80 U**, requête **0,20 U**, nuit **1,00 U/h**, sport **1,30 U/h**. |
-| Learners | partiel | #229 | Option A appliquée, tant qu’il n’y a pas de feu vert pour B. `process` reste hors du débit. Départ à froid **1,000** et `WARMUP`, nuit **1,00 U/h**, comme Android sans historique. Le fichier d’historique n’est pas amorcé. |
+| Learners | partiel | #229 | Option A appliquée faute de réponse explicite. `process` reste hors du débit. Départ à froid **1,000** et `WARMUP`, nuit **1,00 U/h**, comme Android sans historique. Le fichier d’historique n’est pas amorcé. L’activation exige une acceptation écrite de A, ou B. Cette acceptation n’est pas écrite ici. |
 | `resetEarlyScratch` | fait | #215 | Rien. **27** écritures, le même ordre que l’adaptateur Android. Le mémo disait 29 : ce compte était faux. Ajouter deux écritures changerait Android ou inventerait des champs qu’il n’a pas. |
-| TFLite / UAM | bloqué | #225, ADR D4 | Le modèle n’est pas branché. Reprise seulement avec le même interpréteur LiteRT C, CPU d’abord, et un corpus dont le SMB est celui d’`Interpreter` 2.4.0 Android. |
+| TFLite / UAM | bloqué | #225, ADR D4 | Le modèle n’est pas branché. Le plan de reprise est écrit plus bas. Aucun code. Sortie : SMB tronqué à 4 décimales identique sur les 67 vecteurs dont la référence est `Interpreter` 2.4.0 Android. |
 | `AimiDecisionContext` | fait | #219, #233 | Rien sur les champs. `decideAimiDecisionContext` est commun. `htr_ra_floor_mgdl_per_min` reste null au bootstrap. L’estimateur de ratio reste lu par la coquille Android, puis passé en argument. |
 
 ## Conditions d'activation
 
 `AimiCommonEngineSwitch` et `IosClientConfig.APS` restent éteints. Les allumer exige que chaque ligne suivante soit verte en même temps. Une seule ligne ouverte suffit à les laisser éteints.
 
-1. **Toutes les traces de parité**, octet pour octet, entre le tick Android et la tranche iOS. Dans le tableau, chaque point est `fait` et sa colonne « encore manquant » ne contient plus un écart de trace. Aujourd’hui Learners reste `partiel` tant que l’option A n’est pas acceptée, et TFLite reste `bloqué`.
+1. **Toutes les traces de parité**, octet pour octet, entre le tick Android et la tranche iOS. Dans le tableau, chaque point est `fait` et sa colonne « encore manquant » ne contient plus un écart de trace. Aujourd’hui Learners reste `partiel` : l’activation exige une acceptation écrite de A, ou B. TFLite reste `bloqué`.
 2. **TFLite**, ou une exemption écrite. Le vert est le même interpréteur LiteRT C, CPU d’abord, et un corpus dont le SMB est celui d’`Interpreter` 2.4.0 Android. L’exemption serait un texte qui accepte le chemin modèle absent (`predictSmbUam` **0 U**, `refine` identité) comme parité. ADR D4 constate l’arrêt. Ce n’est pas cette exemption. TFLite reste bloqué. Ne pas le commencer.
 3. **Session HealthKit.** Le port rejoue la scène ISF **45** / `HR_TREND_ISF x0.90 (hr10 110 / hr60 88, steps10 0)`. Les entitlements ci-dessous sont écrits dans ce mémo. Les activer dans le binaire fait partie de l’allumage, pas d’une PR tant que les interrupteurs sont éteints.
-4. **Learners, option A acceptée.** L’option A est appliquée : `process` hors du débit, départ à froid **1,000**, nuit **1,00 U/h**. Elle n’est pas encore acceptée. L’option B n’est pas choisie. Sans ce feu vert, l’interrupteur reste éteint.
+4. **Learners.** L’option A est appliquée faute de réponse explicite : `process` hors du débit, départ à froid **1,000**, nuit **1,00 U/h**. L’activation exige une acceptation écrite de A, ou B. Cette phrase ne l’écrit pas. L’option B n’est pas choisie.
 
 ## Entitlements HealthKit
 
@@ -90,7 +90,7 @@ Documentés ici. Aucun fichier `.entitlements` n’est ajouté. `Info.plist` ne 
 
 8. **TPO.** `onTickStart` avec la même horloge, le fichier `tpo/tpo_session.json`, et le même reversement de préférences. Une session post-hypo d’un cran abaisse le plafond SMB de **1,00 U** à **0,80 U**. La scène d’activité (requête 2 U, protection, amortissement repas 0,50) livre alors **0,20 U**, ligne `SMB capped by Activity/Recovery (Limit: 0.40)`. Passé le délai de 45 min, le plafond revient à **1,00 U** et la requête à **0,25 U**. Traces sans session : `zzPostHypoAtFiveSkipsTheDriftMicroSmb`, TBR **1,00 U/h** ; `basalDecisionEngineRaisesSportTemp`, TBR **1,30 U/h**. Le tick de nuit iOS avec session active garde le TBR **1,00 U/h** et ajoute la requête **0,20 U**.
 
-9. **Learners.** `BasalLearner`, `BasalNeuralLearner` et `UnifiedReactivityLearner` sont en `commonMain`. Le tick de nuit iOS les construit sur le même dossier que la session TPO et lit `aimi_basal_learner.json`, `aimi_unified_reactivity.json`, `basal_adaptive_weights.json`, `t3c_brain_weights.json`. Le CSV `basal_adaptive_records.csv` est celui qu’écrit `updateLearning`. Pas de table Room, pas de schéma 36. Départ à froid : multiplicateurs **1,0**, gouvernance `WARMUP` / `Warmup`. Un fichier illisible journalise `Load failed, using defaults (multiplier=1.0)` et reste à 1,0. Option A : `process` reste hors du débit, comme Android sans historique. L’option B n’est pas choisie. `KEEP` seulement après les mêmes échantillons réalisés. Trace : tick de nuit, TBR **1,00 U/h**, lignes `multiplier=1.000`, `factor=1.000`, `BASAL_GOV[FINAL]` `action=WARMUP` `reason=Warmup`. Le sport reste **1,30 U/h** sans ces lignes.
+9. **Learners.** `BasalLearner`, `BasalNeuralLearner` et `UnifiedReactivityLearner` sont en `commonMain`. Le tick de nuit iOS les construit sur le même dossier que la session TPO et lit `aimi_basal_learner.json`, `aimi_unified_reactivity.json`, `basal_adaptive_weights.json`, `t3c_brain_weights.json`. Le CSV `basal_adaptive_records.csv` est celui qu’écrit `updateLearning`. Pas de table Room, pas de schéma 36. Départ à froid : multiplicateurs **1,0**, gouvernance `WARMUP` / `Warmup`. Un fichier illisible journalise `Load failed, using defaults (multiplier=1.0)` et reste à 1,0. Option A appliquée faute de réponse explicite : `process` reste hors du débit, comme Android sans historique. L’activation exige une acceptation écrite de A, ou B. Cette acceptation n’est pas écrite ici. L’option B n’est pas choisie. `KEEP` seulement après les mêmes échantillons réalisés. Trace : tick de nuit, TBR **1,00 U/h**, lignes `multiplier=1.000`, `factor=1.000`, `BASAL_GOV[FINAL]` `action=WARMUP` `reason=Warmup`. Le sport reste **1,30 U/h** sans ces lignes.
 
 10. **TFLite et UAM.** Le même fichier `modelUAM.tflite` (4 504 octets). Rien n’est touché. L’inférence Kotlin commune n’est pas retenue. La reprise future exige le même interpréteur LiteRT C sur iOS, CPU d’abord, et un corpus dont le SMB est celui d’`Interpreter` 2.4.0 Android. Détail dans « Plans de PR ». Modèle absent : `predictSmbUam` **0 U**, `refine` identité, pas d’entraînement. Trace : `uamPostHypoReboundBridgesAShortTempBasal`, SMB prédit **0 U**, TBR **1,05 U/h**, 5 min.
 
@@ -147,7 +147,7 @@ Trace inchangée : quatre échantillons 80, 80, 80, puis 110 bpm, pas vides, ISF
 | A. Laisser `process` hors du débit | Trois échantillons montants (BG 180, delta +8) restent au multiplicateur **1,000**. Le TBR de nuit reste **1,00 U/h**. C’est le départ à froid Android. |
 | B. Amorcer `aimi_basal_learner.json` avec un historique qu’Android rechargerait, puis appeler `process` sur la même glycémie | Le multiplicateur part d’ailleurs que 1,0 et le TBR peut changer. Le fichier d’historique est le choix clinique. |
 
-Option appliquée : **A**. `process` reste hors du débit. Départ à froid **1,000**, nuit **1,00 U/h**, comme Android sans historique. L’option B n’est pas choisie. Elle attend un feu vert. Ni le pas 0,02, ni la nuit **1,00 U/h**, ni `onHypoDetected` à la place de `process`.
+Option appliquée : **A**, faute de réponse explicite. `process` reste hors du débit. Départ à froid **1,000**, nuit **1,00 U/h**, comme Android sans historique. L’option B n’est pas choisie. L’activation exige une acceptation écrite de A, ou B. Cette acceptation n’est pas dans ce mémo. Ni le pas 0,02, ni la nuit **1,00 U/h**, ni `onHypoDetected` à la place de `process`.
 
 ### TFLite et UAM
 
@@ -159,7 +159,27 @@ Le graphe est petit. Une boucle float32 en Kotlin commun peut l’exécuter. Ell
 
 Décision : s’arrêter. Pas d’inférence Kotlin commune, pas de cinterop, pas de CocoaPods. Le chemin modèle absent reste celui d’Android : `predictSmbUam` **0 U**, `refine` identité, pas d’entraînement. Trace : `uamPostHypoReboundBridgesAShortTempBasal`, SMB **0 U**, TBR **1,05 U/h**, 5 min.
 
-Reprise future, si elle est choisie : le même fichier, le même interpréteur LiteRT C sur iOS que le graphe TFLite, CPU d’abord, puis un corpus dont le SMB est celui d’`Interpreter` 2.4.0 Android. Pas une réécriture du graphe. Rien de ce fichier n’est branché tant que ce corpus n’existe pas.
+Reprise future : le plan d’une page ci-dessous. Il n’est pas commencé.
+
+## Plan TFLite iOS
+
+Plan seulement. Aucun cinterop, aucun binaire, aucun appel. TFLite reste bloqué. ADR D4 constate l’arrêt. Ce plan n’est pas l’exemption qui autoriserait l’allumage.
+
+**Interpréteur.** LiteRT C, ou la TFLite C API, lié par cinterop Kotlin/Native. CPU d’abord : pas de délégué GPU ni XNNPACK tant que le critère de sortie n’est pas vert sur CPU. Pas de réécriture du graphe en Kotlin. Pas de CocoaPods dans ce plan.
+
+**Modèle.** Embarquer `modelUAM.tflite`, le fichier du commit `64e630c7fc`. 4 504 octets. SHA-256 `741c5248fb81a2551ee4c612c9cbf2be97dbf6b434db7b7407a3ba2214235092`. Identifiant `TFL3`. Entrée `[1, 18]` float32, sortie `[1, 1]` float32. Il est absent de l’arbre de travail. Le récupérer est un préalable. Il n’est pas récupéré ici.
+
+**Corpus.** 67 vecteurs. Pour chacun, le SMB attendu est celui d’`org.tensorflow.lite.Interpreter` 2.4.0 sur Android, puis la troncature Android `(v * 10000f).toInt() / 10000f` et le plancher à 0. La comparaison déjà faite (boucle scalaire contre un LiteRT récent : tenseur brut différent sur 31 à 35 vecteurs, SMB tronqué coïncidant sur les 67) n’est pas ce corpus. Cette coïncidence n’est pas le bit d’`Interpreter` 2.4.0.
+
+**Critère de sortie.** Sur les 67 vecteurs, la sortie LiteRT C iOS, tronquée de la même façon à 4 décimales et plancher à 0, est identique au SMB Android. Un seul écart laisse le point bloqué et les interrupteurs éteints. Tant que ce critère n’est pas vert : `predictSmbUam` **0 U**, `refine` identité, pas d’entraînement. Trace inchangée : `uamPostHypoReboundBridgesAShortTempBasal`, SMB **0 U**, TBR **1,05 U/h**, 5 min.
+
+## CI iOS de #215
+
+Le run [37290294934](https://github.com/MTR93600/OpenApsAIMI/actions/runs/37290294934) (`push`, SHA `07393a357203b459a03ae80578225cdd2041931a`) a échoué à l’étape « Run the shared tests on the iOS simulator » : `304 tests completed, 1 failed`. Le seul échec est `IosSecureEncryptTest.a tampered body no longer validates`, `kotlin.AssertionError` sans message. Le run [37290303572](https://github.com/MTR93600/OpenApsAIMI/actions/runs/37290303572) est le même SHA, événement `pull_request`, et son étape de tests finit par `BUILD SUCCESSFUL`. Les deux jobs sont allés au bout. Aucun n’a été annulé.
+
+Le test remplace les deux derniers caractères de l’enveloppe par `ff`. L’enveloppe est `<sha256>:<alias>:<iv hex>:<chiffré hex>`. Le dernier octet du chiffré GCM est l’étiquette, donc ces deux caractères hex sont uniformes. S’ils sont déjà `ff`, la chaîne ne change pas, `isValidDataString` reste vrai, et `assertFalse` lève une `AssertionError` sans message. Une chaîne vraiment modifiée rate le hash d’en-tête, et `decrypt` rend `""`. Le produit tient. Le test rate quand le suffixe aléatoire est déjà `ff`, une fois sur 256. Le run vert est le cas où le suffixe était autre. Le fichier de test est le même octet (`057b352e0de0e5b355976acbeafad9d77106135b`) sur ce SHA et sur la tête de la pile. Les CI iOS vertes plus haut dans la pile ont exécuté ce même test.
+
+Ce n’est pas une tête obsolète annulée par la concurrence. #217 ajoute `concurrency.group: ios-ci-${{ github.ref }}` et `cancel-in-progress: true`, et a été mergée le 2026-10-05 à 12:32 UTC. Les deux runs de #215 ont fini à 10:39 UTC, avant ce merge. Le workflow de ce SHA ne contenait pas ce groupe. Le test n’est pas modifié ici.
 
 Le détail des options temporaires reste ci-dessous.
 
