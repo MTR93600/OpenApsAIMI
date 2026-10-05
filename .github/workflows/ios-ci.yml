@@ -20,6 +20,8 @@ name: iOS CI (Kotlin/Native)
 on:
   workflow_dispatch:
   push:
+    branches:
+      - kmp-aimi-migration-study
     paths:
       - 'core/**'
       - 'database/**'
@@ -42,6 +44,13 @@ on:
       - 'ui/**'
       - 'gradle/libs.versions.toml'
       - 'buildSrc/**'
+
+# One job per ref. A newer run for that ref cancels the one still going.
+# Branches opened as pull requests schedule pull_request only. push stays on the study branch,
+# so a cursor/* head does not queue a second identical job.
+concurrency:
+  group: ios-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   ios:
