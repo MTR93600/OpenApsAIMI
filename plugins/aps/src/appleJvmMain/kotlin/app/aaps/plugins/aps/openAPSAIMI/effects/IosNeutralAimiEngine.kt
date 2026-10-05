@@ -9,7 +9,15 @@ import app.aaps.plugins.aimicontracts.AimiTherapyCommand
 import app.aaps.plugins.aimicontracts.AimiTickResult
 import app.aaps.plugins.aimiengine.AimiEngine
 import app.aaps.plugins.aimiengine.HoldAimiEngine
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
+import app.aaps.plugins.aps.openAPSAIMI.tpo.JsonBackedPreferences
+import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoPersistence
+import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoSessionStatus
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
+import app.aaps.plugins.aps.openAPSAIMI.utils.DirectoryAimiStorage
+import app.aaps.plugins.aps.openAPSAIMI.utils.aimiLocalFiles
+import app.aaps.plugins.aps.openAPSAIMI.utils.iosTickAimiRoot
 
 /**
  * Scenes the user approved on 2026-10-05. The iOS loop does not construct this while
@@ -29,8 +37,20 @@ enum class IosNeutralScene {
  */
 class IosNeutralAimiEngine(
     private val scene: IosNeutralScene,
-    private val therapy: AimiTherapyReads = iosTickTherapyReads,
+    private val therapy: AimiTherapyReads,
+    private val tpoStorage: AimiStorage,
+    private val tpoPreferences: Preferences,
 ) : AimiEngine {
+
+    /**
+     * [tpoStorage] and a preference file loaded from it. Tests that pass their own storage do not
+     * share the process directory.
+     */
+    constructor(
+        scene: IosNeutralScene,
+        therapy: AimiTherapyReads = iosTickTherapyReads,
+        tpoStorage: AimiStorage = iosTickTpoStorage,
+    ) : this(scene, therapy, tpoStorage, JsonBackedPreferences(tpoStorage))
 
     val portLog: List<String> get() = log
     val scratch: IosEarlyTickScratch = IosEarlyTickScratch()
@@ -38,6 +58,17 @@ class IosNeutralAimiEngine(
     internal var therapyCaches: TherapyReadCaches = TherapyReadCaches.EMPTY
         private set
     var mealOnset: Boolean? = null
+        private set
+
+    /** SMB ceiling after the session check. Null until [evaluate] runs. */
+    var tpoMaxSmb: Double? = null
+        private set
+
+    /**
+     * Insulin request of the locked activity scene when a session is still active.
+     * Null when there is no session. Night and sport commands do not read it.
+     */
+    var tpoInsulinReqU: Double? = null
         private set
 
     private val log = mutableListOf<String>()
@@ -65,7 +96,16 @@ class IosNeutralAimiEngine(
         if (scene != IosNeutralScene.LOW_PREDICTION) {
             iosNeutralPatientRuntimeSkipped(log)
         }
-        iosNeutralTpoSkipped(log)
+        val ceiling = decideTpoSessionAtTickStart(
+            nowMs = aimiWallClockMs(),
+            preferences = tpoPreferences,
+            persistence = TpoPersistence(tpoStorage),
+        )
+        tpoMaxSmb = ceiling.maxSmb
+        val session = TpoPersistence(tpoStorage).loadSession()
+        if (session?.status == TpoSessionStatus.ACTIVE) {
+            tpoInsulinReqU = activityProtectionInsulinReq(ceiling.maxSmb, log)
+        }
         check(virtualCobG == 0.0)
         check(effortFactor == 1.0)
         check(!veto)
@@ -133,11 +173,17 @@ class IosNeutralAimiEngine(
  */
 private val iosTickTherapyReads: AimiTherapyReads by lazy { openIosTickTherapyReads() }
 
+/** One AIMI directory for the iOS tick. `tpo/tpo_session.json` lives here. */
+private val iosTickTpoStorage: AimiStorage by lazy {
+    DirectoryAimiStorage(iosTickAimiRoot(), aimiLocalFiles())
+}
+
 /** [HoldAimiEngine] wired to [IosNeutralAimiEngine]. The switch still decides whether it runs. */
 fun holdAimiEngineWired(
     scene: IosNeutralScene,
     therapy: AimiTherapyReads = iosTickTherapyReads,
+    tpoStorage: AimiStorage = iosTickTpoStorage,
 ): Pair<HoldAimiEngine, IosNeutralAimiEngine> {
-    val neutral = IosNeutralAimiEngine(scene, therapy)
+    val neutral = IosNeutralAimiEngine(scene, therapy, tpoStorage)
     return HoldAimiEngine(neutral) to neutral
 }

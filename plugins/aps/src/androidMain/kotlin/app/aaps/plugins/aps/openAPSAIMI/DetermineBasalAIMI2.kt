@@ -191,6 +191,7 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMaxIobGateStage
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMaxIobGateState
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMaxIobTempBasal
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideInsulinReqActivityRelaxAndMicrobolus
+import app.aaps.plugins.aps.openAPSAIMI.effects.tpoTickSmbCeiling
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiSafetyGuardApply
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiSafetyPrecautionsCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideMaxIobExceededTempBasal
@@ -1702,11 +1703,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     ): AimiRealtimePhysioIobBootstrap {
         val rtActivity = physioAdapter.getRealTimeActivity()
         consoleLog.add("PHYSIO_RT Steps=${rtActivity.stepsToday} HR=${rtActivity.heartRate}bpm")
-        if (::tpoOrchestrator.isInitialized) {
-            tpoOrchestrator.onTickStart(dateUtil.now())
-        }
-        this.maxSMB = preferences.get(DoubleKey.OApsAIMIMaxSMB)
-        this.maxSMBHB = preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB).coerceAtLeast(this.maxSMB)
+        applyTpoTickSmbCeiling(dateUtil.now())
         val physioSnapshot = physioAdapter.getLatestSnapshot()
         val snsDominance = physioSnapshot.toSNSDominance()
         decisionCtx.adjustments.physiological_context = AimiDecisionContext.PhysioContext(
@@ -2707,6 +2704,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             trajectory_score = out.trajectoryScore,
             physio_score = out.physioScore,
         )
+    }
+
+    /**
+     * Session expiry, then the SMB ceiling.
+     *
+     * `onTickStart` reverts an expired session into [preferences]. The two reads afterwards are
+     * [tpoTickSmbCeiling]. [nowMs] is `dateUtil.now()`, the clock this tick already used.
+     */
+    private fun applyTpoTickSmbCeiling(nowMs: Long) {
+        if (::tpoOrchestrator.isInitialized) {
+            tpoOrchestrator.onTickStart(nowMs)
+        }
+        val ceiling = tpoTickSmbCeiling(preferences)
+        this.maxSMB = ceiling.maxSmb
+        this.maxSMBHB = ceiling.maxSmbHb
     }
 
     private fun updatePhysioLatentState(

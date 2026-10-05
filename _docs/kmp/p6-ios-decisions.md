@@ -15,7 +15,7 @@ Ces valeurs ne sont pas la parité. Elles disparaissent avant activation.
 - COB virtuel : **0 g**.
 - Effort : facteur **1,0**, pas d’assessment.
 - Runtime patient : appelé sur la prédiction basse, après le plancher PKPD. Repas, sport et nuit restent `IOS_NEUTRAL patientRuntime=skipped`.
-- Session TPO : **non appelée**.
+- Session TPO : appelée. Sans session, nuit **1,00 U/h** et sport **1,30 U/h**. Session active : plafond SMB **0,80 U**, requête d’activité **0,20 U**.
 - Snapshot wearable : **vide**.
 - `resetEarlyScratch` : les mêmes 27 affectations que l’adaptateur Android. Le texte plus bas disait 29. Le test verrouille 27.
 - Veto d’effort : **faux** sans assessment.
@@ -47,7 +47,7 @@ Ordre : d’abord ce qui change un débit ou le tick suivant, ensuite le modèle
 
 7. **Plancher PKPD.** Le débit Android vient des courbes, pas d’une relecture du JSON. La parité est la même ligne `PKPD_SOFT_FLOOR: raw=39 soft=39 hybT=39 hitFloor=true applied=false endo=false fallSuppressed=false reason=endo_reversion_disabled` dans le tick, et le même champ d’export. Le tick iOS de prédiction basse appelle `decideRecordPkpdSoftFloor` après le wearable et avant le TBR, puis il retourne. L’onset n’est pas atteint. Le champ écrit est `lastPkpdSoftFloorTelemetry`, celui que le scratch du début de tick avait vidé. Les scènes repas, sport et nuit ne reçoivent pas la ligne raw=39. Pas de seconde formule. Trace : `lowPredictionRequestsAQuarterBasal`.
 
-8. **TPO.** `onTickStart` avec la même horloge, un stockage de session commun, et le même reversement de préférences. Taille : orchestrateur et stockage, après l’horloge déjà portée. Les scènes sans session sont verrouillées. Une scène avec session active n’a pas encore de nombre verrouillé : il faudra la verrouiller sur Android avant de l’exiger sur iOS. Traces sans session : `zzPostHypoAtFiveSkipsTheDriftMicroSmb`, TBR **1,00 U/h** ; `basalDecisionEngineRaisesSportTemp`, TBR **1,30 U/h**.
+8. **TPO.** `onTickStart` avec la même horloge, le fichier `tpo/tpo_session.json`, et le même reversement de préférences. Une session post-hypo d’un cran abaisse le plafond SMB de **1,00 U** à **0,80 U**. La scène d’activité (requête 2 U, protection, amortissement repas 0,50) livre alors **0,20 U**, ligne `SMB capped by Activity/Recovery (Limit: 0.40)`. Passé le délai de 45 min, le plafond revient à **1,00 U** et la requête à **0,25 U**. Traces sans session : `zzPostHypoAtFiveSkipsTheDriftMicroSmb`, TBR **1,00 U/h** ; `basalDecisionEngineRaisesSportTemp`, TBR **1,30 U/h**. Le tick de nuit iOS avec session active garde le TBR **1,00 U/h** et ajoute la requête **0,20 U**.
 
 9. **Learners.** `BasalLearner`, `BasalNeuralLearner` et `UnifiedReactivityLearner` sont déjà en `commonMain`. Il manque l’état persisté identique (`aimi_basal_learner.json`, état du réseau, CSV), pas une autre politique. Départ à froid : multiplicateurs **1,0**, gouvernance `WARMUP`. `KEEP` seulement après les mêmes échantillons. Taille : le stockage de ces fichiers dans la persistance commune, puis les appels `process` au même endroit du tick (616 lignes côté Android, dont l’appel). Trace : `zzPostHypoAtFiveSkipsTheDriftMicroSmb`, TBR **1,00 U/h**, avec les lignes d’apprenants du tick de nuit.
 
@@ -86,8 +86,8 @@ Trace inchangée : quatre échantillons 80, 80, 80, puis 110 bpm, pas vides, ISF
 
 ### TPO
 
-- `onTickStart` avec l’horloge déjà portée, stockage de session commun, même reversement de préférences.
-- D’abord les scènes sans session : nuit TBR **1,00 U/h** (`zzPostHypoAtFiveSkipsTheDriftMicroSmb`) et sport TBR **1,30 U/h**. Une scène avec session active doit être verrouillée sur Android avant d’être exigée sur iOS.
+- `onTickStart` avec l’horloge déjà portée. Le fichier est `tpo/tpo_session.json`, celui d’Android. Les préférences iOS sont `tpo/aimi_preferences.json` dans le même dossier : Android garde son magasin de préférences, le reversement est `TpoSessionManager.expireIfNeeded`. Pas de table Room, pas de schéma 36.
+- Session active, un cran post-hypo : plafond SMB **0,80 U**, requête d’activité **0,20 U**, `SMB capped by Activity/Recovery (Limit: 0.40)`. Session expirée : plafond **1,00 U**, requête **0,25 U**. Nuit sans session TBR **1,00 U/h**. Sport sans session TBR **1,30 U/h**. Le TBR de nuit reste **1,00 U/h** même avec la session : la requête **0,20 U** est celle de la scène d’activité, pas un second débit de nuit.
 
 ### Learners
 
@@ -159,19 +159,19 @@ Côté iOS : la prédiction basse appelle la fonction commune. Les autres scène
 
 ## Session TPO
 
-Android : si `tpoOrchestrator` est initialisé, `onTickStart(dateUtil.now())` expire une session active et peut reverser des préférences. `onPatientStateReady` peut ouvrir une session. Aucune trace de dose ne montre ce reversement.
+Android : si `tpoOrchestrator` est initialisé, `onTickStart(dateUtil.now())` expire une session active et peut reverser des préférences, puis le tick relit le plafond SMB. `onPatientStateReady` peut ouvrir une session. Le fichier de session est `tpo/tpo_session.json`.
 
 Scènes verrouillées sans session : nuit, TBR **1,00 U/h** pendant 30 min ; sport, TBR **1,30 U/h** pendant 30 min.
 
+Scène verrouillée avec session active : un cran post-hypo, plafond SMB **0,80 U**, requête d’activité **0,20 U**, ligne `SMB capped by Activity/Recovery (Limit: 0.40)`. Après 45 min le plafond revient à **1,00 U** et la requête à **0,25 U**.
+
 | Option | Effet sur la scène |
 |---|---|
-| Ne pas appeler | Nuit **1,00 U/h**, sport **1,30 U/h** |
-| Expirer une session et reverser les préférences | Ces deux débits ne sont plus garantis. Aucune trace ne verrouille le débit d’après reversement |
-| HealthKit plus stockage de session, comme Android | Même limite : pas de nombre verrouillé après un pack TPO |
+| Ne pas appeler | Nuit **1,00 U/h**, sport **1,30 U/h**. Pas de requête **0,20 U** |
+| Session active, même fichier, même reversement | Nuit **1,00 U/h** et sport **1,30 U/h** sans session. Avec session, requête **0,20 U**. Expirée, requête **0,25 U** |
+| Nouvelle table Room | Second historique à côté du JSON Android |
 
-Recommandation : **ne pas appeler**.
-
-Côté iOS : horloge, stockage de session, notifications. Rien de tout cela n’est branché.
+Retenu : le JSON déjà utilisé. Le tick iOS appelle `decideTpoSessionAtTickStart` avec `aimiWallClockMs()`. Android continue d’appeler `tpoOrchestrator.onTickStart(dateUtil.now())` puis le même plafond.
 
 ## Contenu wearable de `getLatestSnapshot`
 

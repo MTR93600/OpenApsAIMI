@@ -115,7 +115,15 @@ import app.aaps.plugins.aps.openAPSAIMI.recursive.RecursiveBeliefAuthorityGate
 import app.aaps.plugins.aps.openAPSAIMI.recursive.RecursiveBeliefSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.recursive.ReleaseAuthority
 import app.aaps.plugins.aps.openAPSAIMI.safety.InsulinStackingStance
+import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningStepTier
 import app.aaps.plugins.aps.openAPSAIMI.safety.SafetyDecision
+import app.aaps.plugins.aps.openAPSAIMI.tpo.InMemoryAimiStorage
+import app.aaps.plugins.aps.openAPSAIMI.tpo.JsonBackedPreferences
+import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoDeltaBuilder
+import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoPackId
+import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoPersistence
+import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoProposal
+import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoSessionManager
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryAnalysis
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryGuard
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryMetrics
@@ -1057,6 +1065,82 @@ class ShellDecisionTraceTest {
         }
         assertEquals(0.25, rT.insulinReq!!, 1e-9)
         assertEquals(INSULIN_REQ_ACTIVITY_TRACE, trace)
+    }
+
+    /**
+     * An active post-hypo session steps Max SMB from the default 1.00 U down one ladder rung to
+     * 0.80 U. The tick installs that ceiling, and the activity cap (half of it, then the meal-high
+     * IOB damping of 0.50) delivers 0.20 U. After the 45 minute TTL the same reversal puts 1.00 U
+     * back and the request is 0.25 U again, the number of the scene with no session.
+     */
+    @Test
+    fun activeTpoSessionCapsActivityInsulinAtPointTwoThenExpiryRestoresPointTwoFive() {
+        val storage = InMemoryAimiStorage()
+        val prefs = JsonBackedPreferences(storage)
+        val startedAt = now
+        val plan = TpoDeltaBuilder.buildPlan(
+            proposal = TpoProposal(
+                packId = TpoPackId.POST_HYPO_RECOVERY,
+                tier = TuningStepTier.MICRO,
+                algoConfidence = 0.90,
+                reasonCodes = listOf("post_hypo"),
+            ),
+            preferences = prefs,
+            hypoLoad = 0.0,
+            t3cBrittle = false,
+        )
+        TpoSessionManager(TpoPersistence(storage)).startSession(
+            plan = plan,
+            preferences = prefs,
+            nowMs = startedAt,
+            llmResult = null,
+            historyRepo = null,
+        )
+        val active = decideTpoSessionAtTickStart(startedAt + 60_000L, prefs, TpoPersistence(storage))
+        assertEquals(0.80, active.maxSmb, 1e-9)
+        assertEquals(1.00, active.maxSmbHb, 1e-9)
+
+        tick = newTick(prefs)
+        armShell()
+        invokeNamed("applyTpoTickSmbCeiling", listOf(startedAt + 60_000L))
+        assertEquals(0.80, getField(tick, "maxSMB") as Double, 1e-9)
+        assertEquals(1.00, getField(tick, "maxSMBHB") as Double, 1e-9)
+        setField(tick, "activityProtectionMode", true)
+        setField(tick, "activityStateIntense", false)
+        val profile = profileStub()
+        val rT = RT(runningDynamicIsf = false)
+        val trace = capture {
+            invokeInsulinReq(
+                ctx = tickContext(profile).copy(microBolusAllowed = false),
+                rT = rT,
+                smbToGive = ActiveTpoActivityScene.SMB_TO_GIVE,
+                allowMealHighIob = true,
+                mealHighIobDamping = ActiveTpoActivityScene.MEAL_HIGH_IOB_DAMPING,
+            )
+        }
+        assertEquals(0.20, rT.insulinReq!!, 1e-9)
+        assertEquals(ACTIVE_TPO_ACTIVITY_TRACE, trace)
+
+        val expired = decideTpoSessionAtTickStart(
+            startedAt + TpoSessionManager.TTL_MS + 1L,
+            prefs,
+            TpoPersistence(storage),
+        )
+        assertEquals(1.00, expired.maxSmb, 1e-9)
+        invokeNamed("applyTpoTickSmbCeiling", listOf(startedAt + TpoSessionManager.TTL_MS + 1L))
+        assertEquals(1.00, getField(tick, "maxSMB") as Double, 1e-9)
+        val restored = RT(runningDynamicIsf = false)
+        val restoredTrace = capture {
+            invokeInsulinReq(
+                ctx = tickContext(profile).copy(microBolusAllowed = false),
+                rT = restored,
+                smbToGive = ActiveTpoActivityScene.SMB_TO_GIVE,
+                allowMealHighIob = true,
+                mealHighIobDamping = ActiveTpoActivityScene.MEAL_HIGH_IOB_DAMPING,
+            )
+        }
+        assertEquals(0.25, restored.insulinReq!!, 1e-9)
+        assertEquals(INSULIN_REQ_ACTIVITY_TRACE, restoredTrace)
     }
 
     @Test
@@ -5811,6 +5895,10 @@ Failed to save AIMI Decision JSON: lateinit property appendCap has not been init
 
         private val INSULIN_REQ_ACTIVITY_TRACE = """
             LOG SMB capped by Activity/Recovery (Limit: 0.50)
+        """.trimIndent()
+
+        private val ACTIVE_TPO_ACTIVITY_TRACE = """
+            LOG SMB capped by Activity/Recovery (Limit: 0.40)
         """.trimIndent()
 
         private val MEAL_FIRST_30_TRACE = """

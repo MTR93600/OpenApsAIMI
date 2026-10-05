@@ -1,13 +1,23 @@
 package app.aaps.plugins.aps.openAPSAIMI.effects
 
 import app.aaps.core.data.model.BS
+import app.aaps.core.keys.DoubleKey
 import app.aaps.core.data.model.ICfg
 import app.aaps.plugins.aimiengine.AimiCommonEngineSwitch
 import app.aaps.plugins.aimiengine.HoldAimiEngine
 import app.aaps.plugins.aimicontracts.AimiTherapyCommand
 import app.aaps.plugins.aimitestkit.AimiTestSnapshots
 import app.aaps.plugins.aps.openAPSAIMI.AimiDecisionContext
+import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningStepTier
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
+import app.aaps.plugins.aps.openAPSAIMI.tpo.InMemoryAimiStorage
+import app.aaps.plugins.aps.openAPSAIMI.tpo.JsonBackedPreferences
+import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoDeltaBuilder
+import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoPackId
+import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoPersistence
+import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoProposal
+import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoSessionManager
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionMemory
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
@@ -256,7 +266,8 @@ class IosNeutralHoldEngineTest {
             assertFalse(log.contains(IosNeutralLog.PATIENT), log.toString())
             assertLowPredictionRuntime(neutral)
         }
-        assertTrue(log.contains(IosNeutralLog.TPO), log.toString())
+        assertFalse(log.contains(IosNeutralLog.TPO), log.toString())
+        assertNull(neutral.tpoInsulinReqU)
         assertTrue(log.contains(IosNeutralLog.WEARABLE), log.toString())
         assertFalse(log.any { it.contains("Exception") })
     }
@@ -277,6 +288,110 @@ class IosNeutralHoldEngineTest {
         )
         val tbr = neutral.portLog
         assertFalse(tbr.contains(IosNeutralLog.PATIENT), tbr.toString())
+    }
+
+    @Test
+    fun activeTpoSessionCapsActivityInsulinAtPointTwoAndNightStaysOne() {
+        AimiCommonEngineSwitch.enabled = true
+        val storage = InMemoryAimiStorage()
+        val prefs = JsonBackedPreferences(storage)
+        val nowMs = aimiWallClockMs()
+        val plan = TpoDeltaBuilder.buildPlan(
+            proposal = TpoProposal(
+                packId = TpoPackId.POST_HYPO_RECOVERY,
+                tier = TuningStepTier.MICRO,
+                algoConfidence = 0.90,
+                reasonCodes = listOf("post_hypo"),
+            ),
+            preferences = prefs,
+            hypoLoad = 0.0,
+            t3cBrittle = false,
+        )
+        TpoSessionManager(TpoPersistence(storage)).startSession(
+            plan = plan,
+            preferences = prefs,
+            nowMs = nowMs,
+            llmResult = null,
+            historyRepo = null,
+        )
+        val (hold, neutral) = holdAimiEngineWired(
+            IosNeutralScene.NIGHT,
+            MemoryAimiTherapyReads(),
+            storage,
+        )
+        val result = hold.evaluate(
+            AimiTestSnapshots.emptyInput(),
+            AimiTestSnapshots.emptyState(),
+            AimiTestSnapshots.emptyModels(),
+        )
+        val tbr = result.command as AimiTherapyCommand.TempBasal
+        assertEquals("1.00", aimiFmt2(tbr.rateUPerHour))
+        assertEquals(IOS_NEUTRAL_TBR_DURATION_MS, tbr.durationMs)
+        assertEquals(0.80, neutral.tpoMaxSmb!!, 1e-9)
+        assertEquals(0.20, neutral.tpoInsulinReqU!!, 1e-9)
+        assertTrue(
+            neutral.portLog.contains("SMB capped by Activity/Recovery (Limit: 0.40)"),
+            neutral.portLog.toString(),
+        )
+
+        val reloaded = JsonBackedPreferences(storage)
+        assertEquals(0.80, reloaded.get(DoubleKey.OApsAIMIMaxSMB), 1e-9)
+        val (againHold, again) = holdAimiEngineWired(
+            IosNeutralScene.NIGHT,
+            MemoryAimiTherapyReads(),
+            storage,
+        )
+        val againResult = againHold.evaluate(
+            AimiTestSnapshots.emptyInput(),
+            AimiTestSnapshots.emptyState(),
+            AimiTestSnapshots.emptyModels(),
+        )
+        val againTbr = againResult.command as AimiTherapyCommand.TempBasal
+        assertEquals("1.00", aimiFmt2(againTbr.rateUPerHour))
+        assertEquals(0.20, again.tpoInsulinReqU!!, 1e-9)
+    }
+
+    @Test
+    fun expiredTpoSessionRestoresTheCeilingAndLeavesTheNightTbr() {
+        AimiCommonEngineSwitch.enabled = true
+        val storage = InMemoryAimiStorage()
+        val prefs = JsonBackedPreferences(storage)
+        val plan = TpoDeltaBuilder.buildPlan(
+            proposal = TpoProposal(
+                packId = TpoPackId.POST_HYPO_RECOVERY,
+                tier = TuningStepTier.MICRO,
+                algoConfidence = 0.90,
+                reasonCodes = listOf("post_hypo"),
+            ),
+            preferences = prefs,
+            hypoLoad = 0.0,
+            t3cBrittle = false,
+        )
+        TpoSessionManager(TpoPersistence(storage)).startSession(
+            plan = plan,
+            preferences = prefs,
+            nowMs = 0L,
+            llmResult = null,
+            historyRepo = null,
+        )
+        val (hold, neutral) = holdAimiEngineWired(
+            IosNeutralScene.NIGHT,
+            MemoryAimiTherapyReads(),
+            storage,
+        )
+        val result = hold.evaluate(
+            AimiTestSnapshots.emptyInput(),
+            AimiTestSnapshots.emptyState(),
+            AimiTestSnapshots.emptyModels(),
+        )
+        val tbr = result.command as AimiTherapyCommand.TempBasal
+        assertEquals("1.00", aimiFmt2(tbr.rateUPerHour))
+        assertNull(neutral.tpoInsulinReqU)
+        assertEquals(1.00, neutral.tpoMaxSmb!!, 1e-9)
+        assertFalse(
+            neutral.portLog.any { it.contains("SMB capped") },
+            neutral.portLog.toString(),
+        )
     }
 
     @Test
