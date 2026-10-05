@@ -84,6 +84,7 @@ import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionCurve
 import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionKind
 import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionPair
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiAutonomyMode
+import app.aaps.plugins.aps.openAPSAIMI.control.StraightLineTubeAdvisor
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorRuntimeProfile
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiAuditor
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiTpo
@@ -2224,6 +2225,57 @@ class ShellDecisionTraceTest {
         assertEquals(PHYSIO_LATENT_SMB_CEILING_TRACE, trace)
     }
 
+    @Test
+    fun tubeAdvisorHalvesTheSmbCeiling() {
+        val prefs = recordingPreferences(
+            doubles = emptyMap(),
+            bools = mapOf(BooleanKey.OApsAIMIStraightLineTubeAdvisorEnabled to true),
+        )
+        tick = newTick(prefs)
+        armShell()
+        setField(tick, "bg", 180.0)
+        setField(tick, "delta", 0.0f)
+        setField(tick, "iob", 1.0f)
+        setField(tick, "maxSMB", 2.0)
+        setField(tick, "maxSMBHB", 2.0)
+        setField(tick, "variableSensitivity", 50.0f)
+        setField(tick, "tickEffectiveDiaHours", 5.0)
+        setField(
+            tick,
+            "lastDoseTerminalSnapshot",
+            DoseTerminalSnapshot(
+                eventualMgdl = 180.0,
+                minPredMgdl = 160.0,
+                source = "trace",
+                authorityApplied = true,
+                clampReconciled = false,
+                clampReason = null,
+                predBGsRemapped = true,
+            ),
+        )
+        val advisor = mock(StraightLineTubeAdvisor::class.java)
+        whenever(advisor.advise(any())).thenReturn(
+            StraightLineTubeAdvisor.Outcome(
+                smbCapScale = 0.5,
+                basalCapScale = 1.0,
+                feasible = true,
+                chosenCost = 0.0,
+                reason = "graded",
+            ),
+        )
+        setField(tick, "straightLineTubeAdvisor", advisor)
+        val profile = profileStub()
+        val trace = capture {
+            invokeNamed(
+                "applyTubeAdvisorFromDoseSnapshot",
+                listOf(profile, MealData(mealCOB = 0.0), 100.0, "pre_rbt"),
+            )
+        }
+        assertEquals(1.0, getField(tick, "maxSMB") as Double, 1e-9)
+        assertEquals(1.0, getField(tick, "maxSMBHB") as Double, 1e-9)
+        assertEquals(TUBE_ADVISOR_HALF_CAP_TRACE, trace)
+    }
+
     private fun resultField(target: Any, name: String): Any? {
         val field = target.javaClass.getDeclaredField(name)
         field.isAccessible = true
@@ -3125,6 +3177,11 @@ class ShellDecisionTraceTest {
     companion object {
         private val ENABLE_SMB_ALWAYS_TRACE = """
             LOG phrase
+        """.trimIndent()
+
+        private val TUBE_ADVISOR_HALF_CAP_TRACE = """
+            READ key=BooleanKey.OApsAIMIStraightLineTubeAdvisorEnabled value=true
+            LOG 📐 TUBE-LINE-D4[pre_rbt]: maxSMB=1.00 basal×1.000 | graded
         """.trimIndent()
 
         private val PHYSIO_LATENT_SMB_CEILING_TRACE = """
