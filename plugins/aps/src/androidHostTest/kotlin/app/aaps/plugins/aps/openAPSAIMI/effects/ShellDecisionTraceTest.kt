@@ -2061,6 +2061,58 @@ class ShellDecisionTraceTest {
         assertEquals(BASAL_ENGINE_SPORT_TRACE, trace)
     }
 
+    @Test
+    fun trajectoryTightSpiralCutsThePendingBasal() {
+        val guard = getField(tick, "trajectoryGuard") as TrajectoryGuard
+        whenever(guard.getLastAnalysis()).thenReturn(
+            TrajectoryAnalysis(
+                classification = TrajectoryType.TIGHT_SPIRAL,
+                metrics = TrajectoryMetrics(
+                    curvature = 0.40,
+                    convergenceVelocity = 0.0,
+                    coherence = 0.8,
+                    energyBalance = 4.0,
+                    openness = 0.2,
+                ),
+                modulation = TrajectoryModulation.NEUTRAL,
+                warnings = emptyList(),
+                stableOrbitDistance = 0.0,
+                predictedConvergenceTime = null,
+            ),
+        )
+        AimiUamHandler.updateRuntimeConfidence(null)
+        setField(tick, "bg", 120.0)
+        setField(tick, "delta", 0.0f)
+        setField(tick, "shortAvgDelta", 0.0f)
+        setField(tick, "targetBg", 100.0f)
+        setField(tick, "maxIob", 10.0)
+        val profile = profileStub()
+        val rT = RT(runningDynamicIsf = false)
+        val trace = capture {
+            invokeNamed(
+                "runTrajectoryTightSpiralSafetyBridge",
+                listOf(
+                    profile,
+                    rT,
+                    IobTotal(time = now, iob = 1.0),
+                    120.0,
+                    0.0f,
+                    0.0f,
+                    PhysioMultipliersMTR(),
+                    35.0f,
+                    MealData(mealCOB = 0.0),
+                    false,
+                    false,
+                ),
+            )
+        }
+        val pending = getField(tick, "pendingTrajSpiralBasal")
+            ?: error("pending spiral basal was not set\n$trace")
+        assertEquals(0.25, resultField(pending, "proactiveBasalUph") as Double, 1e-9)
+        assertEquals(30, resultField(pending, "durationMin"))
+        assertEquals(TRAJECTORY_TIGHT_SPIRAL_TRACE, trace)
+    }
+
     private fun resultField(target: Any, name: String): Any? {
         val field = target.javaClass.getDeclaredField(name)
         field.isAccessible = true
@@ -2960,6 +3012,16 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val TRAJECTORY_TIGHT_SPIRAL_TRACE = """
+            READ key=BooleanKey.OApsAIMIautoDriveActive value=false
+            READ key=BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive value=false
+            READ key=DoubleKey.OApsAIMIHyperEstablishedDevMgdl value=0.00
+            READ key=DoubleKey.OApsAIMIHyperDeepDevMgdl value=0.00
+            READ key=DoubleKey.OApsAIMIHighBg value=0.00
+            LOG 🌀🛡️ TRAJECTORY_SAFETY_BRIDGE (deferred): TRAJ_TIGHT_SPIRAL: E=4.0U κ=0.40 IOB=1.00U → Basale proactive 25% [STACKING_SPIRAL]
+            READ key=DoubleKey.OApsAIMIweight value=0.00
+        """.trimIndent()
+
         private val BASAL_ENGINE_SPORT_TRACE = """
             READ key=BooleanKey.OApsAIMIBasalProjectedError value=false
         """.trimIndent()
