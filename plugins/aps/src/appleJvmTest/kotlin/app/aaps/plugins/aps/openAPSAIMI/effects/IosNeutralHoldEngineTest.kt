@@ -75,6 +75,12 @@ class IosNeutralHoldEngineTest {
             assertNull(result.safety.holdReasonCode)
             assertFalse(neutral.portLog.any { it.contains("EFFORT_BELIEF") }, neutral.portLog.toString())
             assertModeLines(neutral)
+            assertTrue(
+                neutral.portLog.contains(
+                    "MEAL_CERTAINTY level=NONE tree=NONE rise=OK terminals=UNKNOWN effortVeto=false",
+                ),
+                neutral.portLog.toString(),
+            )
         }
         assertScene(IosNeutralScene.SPORT) { result, neutral ->
             val tbr = result.command as AimiTherapyCommand.TempBasal
@@ -83,6 +89,12 @@ class IosNeutralHoldEngineTest {
             assertNull(result.pairedCommand)
             assertEquals(false, neutral.mealOnset)
             assertModeLines(neutral)
+            assertTrue(
+                neutral.portLog.contains(
+                    "MEAL_CERTAINTY level=NONE tree=NONE rise=OK terminals=UNKNOWN effortVeto=false",
+                ),
+                neutral.portLog.toString(),
+            )
         }
         assertScene(IosNeutralScene.NIGHT) { result, neutral ->
             val tbr = result.command as AimiTherapyCommand.TempBasal
@@ -90,6 +102,12 @@ class IosNeutralHoldEngineTest {
             assertEquals(IOS_NEUTRAL_TBR_DURATION_MS, tbr.durationMs)
             assertNull(result.pairedCommand)
             assertModeLines(neutral)
+            assertTrue(
+                neutral.portLog.contains(
+                    "MEAL_CERTAINTY level=NONE tree=NONE rise=WEAK terminals=UNKNOWN effortVeto=false",
+                ),
+                neutral.portLog.toString(),
+            )
         }
         assertScene(IosNeutralScene.LOW_PREDICTION) { result, neutral ->
             val tbr = result.command as AimiTherapyCommand.TempBasal
@@ -264,10 +282,13 @@ class IosNeutralHoldEngineTest {
         assertEquals(0.0, neutral.virtualCobGrams)
         assertTrue(log.contains(IosNeutralLog.EFFORT), log.toString())
         assertTrue(log.contains(IosNeutralLog.VETO), log.toString())
+        assertFalse(log.contains(IosNeutralLog.PATIENT), log.toString())
         if (patientSkipped) {
-            assertTrue(log.contains(IosNeutralLog.PATIENT), log.toString())
+            assertTrue(
+                log.any { it.startsWith("TREE_DEPLOYED trunk=SENSOR_UNCERTAIN") },
+                log.toString(),
+            )
         } else {
-            assertFalse(log.contains(IosNeutralLog.PATIENT), log.toString())
             assertLowPredictionRuntime(neutral)
         }
         assertFalse(log.contains(IosNeutralLog.TPO), log.toString())

@@ -14,7 +14,7 @@ Ces valeurs ne sont pas la parité. Elles disparaissent avant activation.
 
 - COB virtuel : la fonction Android. Préférence coupée, ou glucides déjà déclarés : **0 g**, sans ligne, sans courbe. Préférence allumée : la ligne `VIRTUAL_COB`, puis la même courbe. **9,0 g** donne eventual **198**. La porte `hr_inflammation` donne **0 g** et eventual **170**.
 - Effort : facteur **1,0**, pas d’assessment.
-- Runtime patient : appelé sur la prédiction basse, après le plancher PKPD. Repas, sport et nuit restent `IOS_NEUTRAL patientRuntime=skipped`.
+- Runtime patient : appelé sur la prédiction basse, après le plancher PKPD, et sur repas, sport et nuit. Repas et sport : `rise=OK`. Nuit : `rise=WEAK`, `terminals=UNKNOWN`. Plus de `patientRuntime=skipped`.
 - Session TPO : appelée. Sans session, nuit **1,00 U/h** et sport **1,30 U/h**. Session active : plafond SMB **0,80 U**, requête d’activité **0,20 U**.
 - Snapshot wearable : **vide**.
 - `resetEarlyScratch` : les mêmes 27 affectations que l’adaptateur Android, dans le même ordre. Le compte 29 était faux. Le test verrouille 27. Rien à ajouter.
@@ -24,7 +24,7 @@ Ces valeurs ne sont pas la parité. Elles disparaissent avant activation.
 
 ## Écarts temporaires
 
-- Prédiction basse : le TBR temporaire est **0,25 U/h** pendant 30 min, avec les lignes Android `TREE_DEPLOYED trunk=SENSOR_UNCERTAIN conf=0.90 risk=CRITICAL kinetics=NO_STAGE` et `MEAL_CERTAINTY level=NONE tree=NONE rise=WEAK terminals=HYPO_CONFLICT effortVeto=false`. Les scènes nuit, repas et sport n’appellent pas encore le runtime.
+- Prédiction basse : le TBR temporaire est **0,25 U/h** pendant 30 min, avec les lignes Android `TREE_DEPLOYED trunk=SENSOR_UNCERTAIN conf=0.90 risk=CRITICAL kinetics=NO_STAGE` et `MEAL_CERTAINTY level=NONE tree=NONE rise=WEAK terminals=HYPO_CONFLICT effortVeto=false`. Repas (160 mg/dL, delta +2) et sport (180, delta +5) : `rise=OK`, `terminals=UNKNOWN`. Nuit (180, delta 0) : `rise=WEAK`, `terminals=UNKNOWN`, la même famille que `PHYSIO_LATENT_SMB_CEILING_TRACE`.
 - Nuit : le TBR temporaire est **1,00 U/h** pendant 30 min, avec les lignes d’apprenants d’un dépôt vide (`BasalLearner: multiplier=1.000`, `UnifiedReactivity: factor=1.000`, `BASAL_GOV[FINAL]` `action=WARMUP` `reason=Warmup`). Pas encore l’export, `UAM=0.00`, ni le SMB `final=0.35` non délivré.
 - ISF **45** (FC 110 sur 10 min, moyenne 60 min 88, ISF 50 × 0,90) n’est pas produit tant que le snapshot est vide.
 - Un maintien d’hystérésis laissé par le tick précédent reste en place, comme sur Android.
@@ -45,7 +45,7 @@ Ordre : d’abord ce qui change un débit ou le tick suivant, ensuite le modèle
 | Effort | fait | #222 | Rien sur le repas : facteur **1,0**, assessment null, SMB **3,30 U**, TBR **2,00 U/h**. Une exertion réelle qui baisserait le SMB n’a pas de nombre verrouillé. |
 | Veto et `detectMealOnset` | fait | #214, #220, #231 | Rien sur les deux débits. Accélération 2, pas d’assessment : onset vrai, TBR **2,00 U/h**, `phrase [AD_EARLY_TBR_TRIGGER rate=2.0]`. Le tick iOS appelle `decideBasalDecisionEngine` avec `forcedBasal` **2,0**, modes et autodrive. Même cinématique, posture EXERTION, confiance 0,30, pas de repas déclaré, COB 0 : onset faux, TBR **1,30 U/h**. Accélération 0 : **1,30 U/h**. |
 | COB virtuel | fait | #230, #232 | Rien sur les deux retours Android (préférence coupée, ou **36 g** déclarés : **0 g**, eventual **322**, pas de ligne) ni sur la courbe. Préférence allumée, Ra 2,0, repas 0,8, snapshot vide : `g=9.0`, `PRED_SET` eventual **198**. Le même snapshot avec FC 110 et repos 60 : `reason=hr_inflammation`, **0 g**, eventual **170**. Le SMB repas reste **3,30 U**. Le tick iOS appelle la même fonction. |
-| Runtime patient | fait | #226 | Rien sur la prédiction basse : TBR **0,25 U/h** et les deux lignes d’arbre. Repas, sport et nuit restent `patientRuntime=skipped`. |
+| Runtime patient | fait | #226 | Rien sur la prédiction basse : TBR **0,25 U/h** et `terminals=HYPO_CONFLICT`. Repas et sport : `rise=OK`, `terminals=UNKNOWN`, TBR inchangés (**2,00** et **1,30**). Nuit : `rise=WEAK`, `terminals=UNKNOWN`, TBR **1,00 U/h**. Plus de `patientRuntime=skipped`. |
 | Plancher PKPD | fait | #221 | Rien sur la ligne `raw=39`. Elle n’est pas relue dans le débit. Les autres scènes ne l’ont pas. |
 | Session TPO | fait | #228 | Rien. JSON, pas Room. Plafond **0,80 U**, requête **0,20 U**, nuit **1,00 U/h**, sport **1,30 U/h**. |
 | Learners | partiel | #229 | Option A appliquée, tant qu’il n’y a pas de feu vert pour B. `process` reste hors du débit. Départ à froid **1,000** et `WARMUP`, nuit **1,00 U/h**, comme Android sans historique. Le fichier d’historique n’est pas amorcé. |
@@ -63,7 +63,7 @@ Ordre : d’abord ce qui change un débit ou le tick suivant, ensuite le modèle
 
 5. **COB virtuel.** `decideEstimateUndeclaredVirtualCob`, puis `decideApplyAdvancedPredictions` quand la préférence est allumée et qu’aucun glucide n’est déjà déclaré. Préférence coupée, ou glucides déjà déclarés : **0 g**, sans lire le snapshot, sans ligne, sans courbe. Trace déclarée : `advancedPredictionPublishesEventualFromDeclaredCob`, COB **36 g**, eventual **322**, pas de ligne. Préférence allumée, Ra 2,0, repas 0,8, snapshot vide : **9,0 g**, `PRED_SET size=49 eventual=198 min=150 uamT=163 source=AdvancedCurves`. FC 110 et repos 60 : **0 g**, `reason=hr_inflammation`, eventual **170**. Le tick iOS appelle la même fonction. Le SMB repas reste **3,30 U**.
 
-6. **Runtime patient.** Appeler les 221 lignes : état patient, arbre, Harmonia, avec le snapshot du tick. Taille : le plus gros port physio, après le snapshot. Il dépend du capteur et du cycle. Trace : `lowPredictionRequestsAQuarterBasal`, `TREE_DEPLOYED trunk=SENSOR_UNCERTAIN`, `MEAL_CERTAINTY level=NONE`, TBR **0,25 U/h**, octet pour octet.
+6. **Runtime patient.** `decideRefreshPatientStateRuntime` sur les quatre scènes. Prédiction basse : chemin 39, `terminals=HYPO_CONFLICT`, TBR **0,25 U/h**. Repas, glycémie 160, delta +2, et sport, glycémie 180, delta +5 : `rise=OK`, `terminals=UNKNOWN`. Nuit, glycémie 180, delta 0 : `rise=WEAK`, `terminals=UNKNOWN`, les quatre lignes de `PHYSIO_LATENT_SMB_CEILING_TRACE`. Les débits ne changent pas. Plus de `patientRuntime=skipped`.
 
 7. **Plancher PKPD.** Le débit Android vient des courbes, pas d’une relecture du JSON. La parité est la même ligne `PKPD_SOFT_FLOOR: raw=39 soft=39 hybT=39 hitFloor=true applied=false endo=false fallSuppressed=false reason=endo_reversion_disabled` dans le tick, et le même champ d’export. Le tick iOS de prédiction basse appelle `decideRecordPkpdSoftFloor` après le wearable et avant le TBR, puis il retourne. L’onset n’est pas atteint. Le champ écrit est `lastPkpdSoftFloorTelemetry`, celui que le scratch du début de tick avait vidé. Les scènes repas, sport et nuit ne reçoivent pas la ligne raw=39. Pas de seconde formule. Trace : `lowPredictionRequestsAQuarterBasal`.
 
@@ -187,7 +187,7 @@ Scène verrouillée : prédiction basse, `TREE_DEPLOYED trunk=SENSOR_UNCERTAIN`,
 
 Recommandation retenue : **appeler la fonction commune** avec le snapshot déjà lu. Le TBR **0,25 U/h** reste celui du tick Android. Les deux lignes sont les siennes.
 
-Côté iOS : la prédiction basse appelle la fonction commune. Les autres scènes restent en `patientRuntime=skipped`.
+Côté iOS : les quatre scènes appellent la fonction commune. La prédiction basse garde le chemin 39. Repas, sport et nuit n’ont pas ce chemin : `terminals=UNKNOWN`.
 
 ## Session TPO
 

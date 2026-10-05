@@ -135,8 +135,27 @@ class IosNeutralAimiEngine(
         )
         val effortFactor = iosNeutralEffortSmbFactor(log, wearable)
         val veto = iosNeutralEffortVeto(log)
-        if (scene != IosNeutralScene.LOW_PREDICTION) {
-            iosNeutralPatientRuntimeSkipped(log)
+        when (scene) {
+            // Locked scene glucose. The path-39 curve stays on the low prediction, after the floor.
+            IosNeutralScene.MEAL -> log += scenePatientLog(
+                snapshot = wearable,
+                nowMs = aimiWallClockMs(),
+                bgMgdl = 160.0,
+                deltaMgdl = 2.0,
+            )
+            IosNeutralScene.SPORT -> log += scenePatientLog(
+                snapshot = wearable,
+                nowMs = aimiWallClockMs(),
+                bgMgdl = 180.0,
+                deltaMgdl = 5.0,
+            )
+            IosNeutralScene.NIGHT -> log += scenePatientLog(
+                snapshot = wearable,
+                nowMs = aimiWallClockMs(),
+                bgMgdl = 180.0,
+                deltaMgdl = 0.0,
+            )
+            IosNeutralScene.LOW_PREDICTION -> Unit
         }
         val ceiling = decideTpoSessionAtTickStart(
             nowMs = aimiWallClockMs(),

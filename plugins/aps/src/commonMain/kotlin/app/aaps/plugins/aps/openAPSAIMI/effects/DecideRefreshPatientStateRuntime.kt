@@ -380,6 +380,82 @@ internal fun lowPredictionPatientLog(
         pathMinMgdl = 39.0,
         pathMinHitFloor = true,
     )
+    return publishPatientLog(
+        enriched = enriched,
+        hypothesis = hypothesis,
+        latent = latent,
+        nowMs = nowMs,
+        curve = curve,
+    )
+}
+
+/**
+ * Meal, sport, and night ticks. Same builder as [lowPredictionPatientLog], without the
+ * path-39 curve that marks HYPO_CONFLICT. Glucose is the locked scene value.
+ */
+internal fun scenePatientLog(
+    snapshot: HealthContextSnapshot,
+    nowMs: Long,
+    bgMgdl: Double,
+    deltaMgdl: Double,
+    targetBgMgdl: Double = 100.0,
+): List<String> {
+    val enriched = enrichPatientThermal(snapshot, wCyclePhase = null)
+    val hypothesis = UamHypothesisStateBuilder.build(
+        phaseOutput = null,
+        mealAbsorptionOutput = null,
+        patternSnapshot = null,
+        correctionAggressionDecision = null,
+        uamConfidence = 0.0,
+        behaviorProfile = null,
+    )
+    val stress = PhysiologicalStressMaskBuilder.build(
+        snapshot = enriched,
+        physioContext = null,
+        physioTrace = null,
+        phaseOutput = null,
+        patternSnapshot = null,
+        correctionAggressionDecision = null,
+        chronicInflammation = null,
+    )
+    val latent = PhysioLatentStateBuilder.build(
+        snapshot = enriched,
+        sourceSensor = null,
+        phaseOutput = null,
+        mealAbsorptionOutput = null,
+        hypothesisState = hypothesis,
+        patternSnapshot = null,
+        physioContext = null,
+        physioTrace = null,
+        correctionAggressionDecision = null,
+        chronicInflammation = null,
+        autonomicStress = stress.autonomicStress,
+        inflammationRecovery = stress.inflammationRecovery,
+        hormonalCircadian = stress.hormonalCircadian,
+        cgmFirstSensorConfidence = false,
+    )
+    return publishPatientLog(
+        enriched = enriched,
+        hypothesis = hypothesis,
+        latent = latent,
+        nowMs = nowMs,
+        curve = null,
+        bgMgdl = bgMgdl,
+        deltaMgdl = deltaMgdl,
+        targetBgMgdl = targetBgMgdl,
+    )
+}
+
+private fun publishPatientLog(
+    enriched: HealthContextSnapshot,
+    hypothesis: UamHypothesisState,
+    latent: PhysioLatentState,
+    nowMs: Long,
+    curve: ScenarioProjectionCurve?,
+    bgMgdl: Double = 0.0,
+    deltaMgdl: Double = 0.0,
+    targetBgMgdl: Double = 100.0,
+): List<String> {
     val log = mutableListOf<String>()
     decideRefreshPatientStateRuntime(
         nowMs = nowMs,
@@ -387,7 +463,15 @@ internal fun lowPredictionPatientLog(
         healthSnapshot = enriched,
         sourceSensor = null,
         refreshSource = PatientRefreshSource.LOOP_TICK,
-        calls = LowPredictionPatientCalls(log, latent, hypothesis, curve),
+        calls = LowPredictionPatientCalls(
+            log = log,
+            latentState = latent,
+            hypothesisState = hypothesis,
+            curve = curve,
+            bgMgdl = bgMgdl,
+            deltaMgdl = deltaMgdl,
+            targetBgMgdl = targetBgMgdl,
+        ),
     )
     return log
 }
@@ -410,7 +494,10 @@ private class LowPredictionPatientCalls(
     private val log: MutableList<String>,
     private val latentState: PhysioLatentState,
     private val hypothesisState: UamHypothesisState,
-    private val curve: ScenarioProjectionCurve,
+    private val curve: ScenarioProjectionCurve?,
+    private val bgMgdl: Double = 0.0,
+    private val deltaMgdl: Double = 0.0,
+    private val targetBgMgdl: Double = 100.0,
 ) : PatientRuntimeCalls {
     override fun enrichThermal(snapshot: HealthContextSnapshot): HealthContextSnapshot =
         enrichPatientThermal(snapshot, wCyclePhase = null)
@@ -448,9 +535,9 @@ private class LowPredictionPatientCalls(
     override fun cachedEventualTerminal(): Double? = null
     override fun eventualBg() = 0.0
     override fun authoritativeEventual(fallback: Double) = fallback
-    override fun bg() = 0.0
-    override fun delta() = 0.0
-    override fun targetBg() = 100.0
+    override fun bg() = bgMgdl
+    override fun delta() = deltaMgdl
+    override fun targetBg() = targetBgMgdl
     override fun cob() = 0.0
     override fun shortAvgDelta() = 0.0
     override fun effortVeto() = false
