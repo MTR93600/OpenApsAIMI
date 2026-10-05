@@ -175,7 +175,18 @@ class IosNeutralAimiEngine(
         )
         return when (scene) {
             IosNeutralScene.MEAL -> meal(state, effortFactor)
-            IosNeutralScene.SPORT -> temp(state, iosNeutralSportTbrUph(), "SPORT_TBR")
+            IosNeutralScene.SPORT -> iosNeutralSportBasal(
+                state = state,
+                preferences = tpoPreferences,
+                consoleLog = log,
+                onsetDelta = onsetDelta,
+                onsetAcceleration = onsetAcceleration,
+                onsetPredictedBg = onsetPredictedBg,
+                onsetTargetBg = onsetTargetBg,
+                onsetAssessment = onsetAssessment,
+                onsetDeclaredMeal = onsetDeclaredMeal,
+                onsetCobG = onsetCobG,
+            )
             IosNeutralScene.NIGHT -> {
                 log += coldLearnerNightLines(
                     storage = tpoStorage,

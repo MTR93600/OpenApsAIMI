@@ -458,7 +458,12 @@ class IosNeutralHoldEngineTest {
         )
         assertEquals(true, neutral.mealOnset)
         val openTbr = open.command as AimiTherapyCommand.TempBasal
+        assertEquals("2.00", aimiFmt2(openTbr.rateUPerHour))
         assertEquals(IOS_NEUTRAL_TBR_DURATION_MS, openTbr.durationMs)
+        assertTrue(
+            neutral.portLog.contains("phrase [AD_EARLY_TBR_TRIGGER rate=2.0]"),
+            neutral.portLog.toString(),
+        )
 
         val (vetoHold, veto) = holdAimiEngineWired(
             IosNeutralScene.SPORT,
@@ -484,6 +489,10 @@ class IosNeutralHoldEngineTest {
         val closedTbr = closed.command as AimiTherapyCommand.TempBasal
         assertEquals("1.30", aimiFmt2(closedTbr.rateUPerHour))
         assertEquals(IOS_NEUTRAL_TBR_DURATION_MS, closedTbr.durationMs)
+        assertFalse(
+            veto.portLog.any { it.contains("AD_EARLY_TBR_TRIGGER") },
+            veto.portLog.toString(),
+        )
     }
 
     @Test
