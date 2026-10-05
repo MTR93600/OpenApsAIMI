@@ -86,6 +86,7 @@ import app.aaps.plugins.aps.openAPSAIMI.scenario.ScenarioProjectionPair
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiAutonomyMode
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorRuntimeProfile
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiAuditor
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiTpo
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiSmbComparison
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiEmergencySos
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiBehaviorProfileSource
@@ -2189,6 +2190,40 @@ class ShellDecisionTraceTest {
         assertEquals(CONTEXT_ACTIVITY_TARGET_TRACE, trace)
     }
 
+    @Test
+    fun physioLatentPrefsChangeRaisesTheSmbCeiling() {
+        val prefs = recordingPreferences(
+            doubles = mapOf(
+                DoubleKey.OApsAIMIMaxSMB to 1.25,
+                DoubleKey.OApsAIMIHighBGMaxSMB to 0.40,
+            ),
+        )
+        tick = newTick(prefs)
+        armShell()
+        setField(tick, "bg", 180.0)
+        setField(tick, "delta", 0.0f)
+        setField(tick, "cob", 0.0f)
+        setField(tick, "maxSMB", 0.5)
+        setField(tick, "maxSMBHB", 0.5)
+        val tpo = mock(AimiTpo::class.java)
+        whenever(tpo.consumePrefsChangedThisTick()).thenReturn(true)
+        whenever(
+            tpo.onPatientStateReady(
+                any(), any(), any(), anyOrNull(), any(), any(), any(), any(), any(),
+            ),
+        ).thenReturn(true)
+        setField(tick, "tpoOrchestrator", tpo)
+        val trace = capture {
+            invokeNamed(
+                "updatePhysioLatentState",
+                listOf(HealthContextSnapshot(hrNow = 72, rhrResting = 60), null, null),
+            )
+        }
+        assertEquals(1.25, getField(tick, "maxSMB") as Double, 1e-9)
+        assertEquals(1.25, getField(tick, "maxSMBHB") as Double, 1e-9)
+        assertEquals(PHYSIO_LATENT_SMB_CEILING_TRACE, trace)
+    }
+
     private fun resultField(target: Any, name: String): Any? {
         val field = target.javaClass.getDeclaredField(name)
         field.isAccessible = true
@@ -3090,6 +3125,21 @@ class ShellDecisionTraceTest {
     companion object {
         private val ENABLE_SMB_ALWAYS_TRACE = """
             LOG phrase
+        """.trimIndent()
+
+        private val PHYSIO_LATENT_SMB_CEILING_TRACE = """
+            READ key=BooleanKey.OApsAIMISensorConfidenceCgmFirst value=false
+            READ key=BooleanKey.OApsAIMIEffortActivityProtection value=false
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
+            READ key=StringKey.AimiTuningContextSelection value=
+            READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
+            READ key=DoubleKey.autodriveMaxBasal value=0.00
+            LOG TREE_DEPLOYED trunk=SENSOR_UNCERTAIN conf=0.90 risk=CRITICAL kinetics=NO_STAGE
+            LOG Tree: sensor uncertain | conf 90% | risk critical | sensor uncertain
+            LOG MEAL_CERTAINTY level=NONE tree=NONE rise=WEAK terminals=UNKNOWN effortVeto=false
+            LOG Harmonia sim: blocked SENSOR_UNCERTAIN | sensor_uncertain,max_iob_pressure,critical_risk
+            READ key=DoubleKey.OApsAIMIMaxSMB value=1.25
+            READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.40
         """.trimIndent()
 
         private val CONTEXT_ACTIVITY_TARGET_TRACE = """
