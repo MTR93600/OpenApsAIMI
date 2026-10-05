@@ -498,6 +498,7 @@ class IosNeutralHoldEngineTest {
         assertEquals("3.30", aimiFmt2(smb.insulinU))
         assertEquals("2.00", aimiFmt2(tbr.rateUPerHour))
         assertEquals(9.0, nine.virtualCobGrams)
+        assertCurve(nine, "PRED_SET size=49 eventual=198 min=150 uamT=163 source=AdvancedCurves")
         assertTrue(
             nine.portLog.contains(
                 "🍽️ VIRTUAL_COB: g=9.0 raw=11.3 cap=25.0 gated=false reason=ra_meal_estimate",
@@ -510,6 +511,7 @@ class IosNeutralHoldEngineTest {
             signals = nineGramSignals(),
         )
         assertEquals(0.0, inflamed.virtualCobGrams)
+        assertCurve(inflamed, "PRED_SET size=49 eventual=170 min=150 uamT=170 source=AdvancedCurves")
         assertTrue(
             inflamed.portLog.contains(
                 "🍽️ VIRTUAL_COB: g=0.0 raw=0.0 cap=0.0 gated=true reason=hr_inflammation",
@@ -540,6 +542,10 @@ class IosNeutralHoldEngineTest {
         prefs.put(BooleanKey.OApsAIMIUndeclaredCobEnabled, true)
         prefs.put(DoubleKey.OApsAIMIweight, 70.0)
         prefs.put(DoubleKey.OApsAIMIUndeclaredCobMaxG, 25.0)
+        // The shell probe returns false for an unset key. Production defaults of the pkpd flags are true.
+        prefs.put(BooleanKey.OApsAIMIPkpdEndogenousReversion, false)
+        prefs.put(BooleanKey.OApsAIMIPkpdHyperReversion, false)
+        prefs.put(BooleanKey.OApsAIMIPkpdStackAwareGuardB, false)
         val neutral = IosNeutralAimiEngine(
             scene = IosNeutralScene.MEAL,
             therapy = MemoryAimiTherapyReads(),
@@ -554,6 +560,19 @@ class IosNeutralHoldEngineTest {
             AimiTestSnapshots.emptyModels(),
         )
         return result to neutral
+    }
+
+    private fun assertCurve(neutral: IosNeutralAimiEngine, predSet: String) {
+        val log = neutral.portLog
+        assertTrue(log.contains(predSet), log.toString())
+        assertTrue(
+            log.contains("Prédiction avancée avec ISF final de 40.0 (Avancé)"),
+            log.toString(),
+        )
+        val virtualAt = log.indexOfFirst { it.startsWith("🍽️ VIRTUAL_COB:") }
+        val floorAt = log.indexOfFirst { it.startsWith("PKPD_SOFT_FLOOR:") }
+        val predAt = log.indexOf(predSet)
+        assertTrue(virtualAt >= 0 && floorAt > virtualAt && predAt > floorAt, log.toString())
     }
 
     @Test

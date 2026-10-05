@@ -17,8 +17,9 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Android reads of the advanced curve publish.
- * Virtual COB and the soft-floor telemetry stay Android: they touch physio snapshots and a field.
+ * Reads of the advanced curve publish.
+ * Virtual COB is [decideEstimateUndeclaredVirtualCob]. The iOS tick calls this function when the
+ * preference is on, so the estimated grams are the `cobG` of the same curve Android publishes.
  */
 internal interface AimiAdvancedPredictionCalls {
     fun nowMs(): Long
@@ -119,3 +120,60 @@ internal fun decideApplyAdvancedPredictions(
     }
     consoleLog.add("Prédiction avancée avec ISF final de ${aimiFmt1(sens)} (Avancé)")
 }
+
+/**
+ * Profile carried into [decideApplyAdvancedPredictions] for the virtual-COB scenes.
+ * [AdvancedPredictionEngine.predictCurves] reads [OapsProfileAimi.carb_ratio] only.
+ * The other fields are the shell probe's unset values, except basal, dia, target and the LGS
+ * threshold, which the shell stub sets.
+ */
+internal fun virtualCobCurveProfile(carbRatio: Double) = OapsProfileAimi(
+    dia = 5.0,
+    min_5m_carbimpact = 0.0,
+    max_iob = 0.0,
+    max_daily_basal = 1.0,
+    max_basal = 3.0,
+    min_bg = 0.0,
+    max_bg = 0.0,
+    target_bg = 100.0,
+    carb_ratio = carbRatio,
+    sens = 50.0,
+    autosens_adjust_targets = false,
+    max_daily_safety_multiplier = 0.0,
+    current_basal_safety_multiplier = 0.0,
+    high_temptarget_raises_sensitivity = false,
+    low_temptarget_lowers_sensitivity = false,
+    sensitivity_raises_target = false,
+    resistance_lowers_target = false,
+    adv_target_adjustments = false,
+    exercise_mode = false,
+    half_basal_exercise_target = 0,
+    maxCOB = 0,
+    skip_neutral_temps = false,
+    remainingCarbsCap = 0,
+    enableUAM = false,
+    A52_risk_enable = false,
+    SMBInterval = 0,
+    enableSMB_with_COB = false,
+    enableSMB_with_temptarget = false,
+    allowSMB_with_high_temptarget = false,
+    enableSMB_always = false,
+    enableSMB_after_carbs = false,
+    maxSMBBasalMinutes = 0,
+    maxUAMSMBBasalMinutes = 0,
+    bolus_increment = 0.0,
+    carbsReqThreshold = 0,
+    current_basal = 1.0,
+    temptargetSet = false,
+    autosens_max = 0.0,
+    out_units = "",
+    lgsThreshold = 70,
+    variable_sens = 0.0,
+    insulinDivisor = 0,
+    TDD = 0.0,
+    peakTime = 0.0,
+    futureActivity = 0.0,
+    sensorLagActivity = 0.0,
+    historicActivity = 0.0,
+    currentActivity = 0.0,
+)

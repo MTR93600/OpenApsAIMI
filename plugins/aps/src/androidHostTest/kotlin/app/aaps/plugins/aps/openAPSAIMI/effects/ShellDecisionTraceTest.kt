@@ -2551,6 +2551,57 @@ class ShellDecisionTraceTest {
     }
 
     @Test
+    fun virtualCobGramsFeedTheAdvancedCurve() {
+        val prefs = recordingPreferences(
+            doubles = mapOf(
+                DoubleKey.OApsAIMIweight to 70.0,
+                DoubleKey.OApsAIMIUndeclaredCobMaxG to 25.0,
+            ),
+            bools = mapOf(BooleanKey.OApsAIMIUndeclaredCobEnabled to true),
+        )
+        tick = newTick(prefs)
+        armShell()
+        val estimator = getField(tick, "continuousStateEstimator") as ContinuousStateEstimator
+        whenever(estimator.getLastRa()).thenReturn(2.0)
+        setField(tick, "lastPhysioLatentState", PhysioLatentState(mealProb = 0.8))
+        val profile = profileStub()
+        whenever(profile.carb_ratio).thenReturn(10.0)
+        val meal = MealData(mealCOB = 0.0)
+        meal.slopeFromMinDeviation = 2.0
+        val iob = arrayOf(IobTotal(time = now, iob = 0.0, activity = 0.0))
+        val nineRt = RT(runningDynamicIsf = false)
+        val nine = capture {
+            invokeNamed(
+                "applyAdvancedPredictions",
+                listOf(150.0, 3.0f, 40.0, iob, meal, profile, nineRt),
+            )
+        }
+        assertEquals(198.0, nineRt.eventualBG!!, 1e-9)
+        assertEquals(VIRTUAL_COB_NINE_GRAM_CURVE_TRACE, nine)
+
+        setField(
+            tick,
+            "physioAdapter",
+            mock(AIMIInsulinDecisionAdapterMTR::class.java, Answer { inv: InvocationOnMock ->
+                if (inv.method.name == "getLatestSnapshot") {
+                    HealthContextSnapshot(hrNow = 110, rhrResting = 60)
+                } else {
+                    null
+                }
+            }),
+        )
+        val gatedRt = RT(runningDynamicIsf = false)
+        val gated = capture {
+            invokeNamed(
+                "applyAdvancedPredictions",
+                listOf(150.0, 3.0f, 40.0, iob, meal, profile, gatedRt),
+            )
+        }
+        assertEquals(170.0, gatedRt.eventualBG!!, 1e-9)
+        assertEquals(VIRTUAL_COB_HR_GATE_CURVE_TRACE, gated)
+    }
+
+    @Test
     fun mealAbsorptionFirstWavePrioritizesDelivery() {
         MealAbsorptionMemory.reset()
         MealAbsorptionPhaseHysteresis.reset()
@@ -5652,6 +5703,40 @@ Failed to save AIMI Decision JSON: lateinit property appendCap has not been init
             READ key=DoubleKey.OApsAIMIweight value=70.00
             READ key=DoubleKey.OApsAIMIUndeclaredCobMaxG value=25.00
             LOG 🍽️ VIRTUAL_COB: g=0.0 raw=0.0 cap=0.0 gated=true reason=hr_inflammation
+        """.trimIndent()
+
+        private val VIRTUAL_COB_NINE_GRAM_CURVE_TRACE = """
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
+            READ key=BooleanKey.OApsAIMIUndeclaredCobEnabled value=true
+            READ key=BooleanKey.OApsAIMIT3cCfrdMode value=false
+            READ key=DoubleKey.OApsAIMIweight value=70.00
+            READ key=DoubleKey.OApsAIMIUndeclaredCobMaxG value=25.00
+            LOG 🍽️ VIRTUAL_COB: g=9.0 raw=11.3 cap=25.0 gated=false reason=ra_meal_estimate
+            READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
+            READ key=BooleanKey.OApsAIMIPkpdHyperReversion value=false
+            READ key=BooleanKey.OApsAIMIPkpdStackAwareGuardB value=false
+            READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
+            LOG PKPD_SOFT_FLOOR: raw=150 soft=150 hybT=198 hitFloor=false applied=false endo=false fallSuppressed=false reason=endo_reversion_disabled
+            LOG PRED_SET size=49 eventual=198 min=150 uamT=163 source=AdvancedCurves
+            LOG Prédiction avancée avec ISF final de 40.0 (Avancé)
+        """.trimIndent()
+
+        private val VIRTUAL_COB_HR_GATE_CURVE_TRACE = """
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
+            READ key=BooleanKey.OApsAIMIUndeclaredCobEnabled value=true
+            READ key=BooleanKey.OApsAIMIT3cCfrdMode value=false
+            READ key=DoubleKey.OApsAIMIweight value=70.00
+            READ key=DoubleKey.OApsAIMIUndeclaredCobMaxG value=25.00
+            LOG 🍽️ VIRTUAL_COB: g=0.0 raw=0.0 cap=0.0 gated=true reason=hr_inflammation
+            READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
+            READ key=BooleanKey.OApsAIMIPkpdHyperReversion value=false
+            READ key=BooleanKey.OApsAIMIPkpdStackAwareGuardB value=false
+            READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
+            LOG PKPD_SOFT_FLOOR: raw=150 soft=150 hybT=169 hitFloor=false applied=false endo=false fallSuppressed=false reason=endo_reversion_disabled
+            LOG PRED_SET size=49 eventual=170 min=150 uamT=170 source=AdvancedCurves
+            LOG Prédiction avancée avec ISF final de 40.0 (Avancé)
         """.trimIndent()
 
         private val ADVANCED_PREDICTION_COB_TRACE = """

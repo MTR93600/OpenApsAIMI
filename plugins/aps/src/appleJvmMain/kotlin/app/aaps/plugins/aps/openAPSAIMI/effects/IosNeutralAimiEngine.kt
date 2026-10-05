@@ -1,5 +1,9 @@
 package app.aaps.plugins.aps.openAPSAIMI.effects
 
+import app.aaps.core.interfaces.aps.IobTotal
+import app.aaps.core.interfaces.aps.MealData
+import app.aaps.core.interfaces.aps.OapsProfileAimi
+import app.aaps.core.interfaces.aps.RT
 import app.aaps.plugins.aimicontracts.AimiDecisionTrace
 import app.aaps.plugins.aimicontracts.AimiEngineState
 import app.aaps.plugins.aimicontracts.AimiInputSnapshot
@@ -15,6 +19,9 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.AdvancedPredictionCurves
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSoftFloorPathMin
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSoftFloorTelemetry
 import app.aaps.plugins.aps.openAPSAIMI.tpo.JsonBackedPreferences
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoPersistence
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoSessionStatus
@@ -118,34 +125,7 @@ class IosNeutralAimiEngine(
         val wearable = wearableSnapshot?.also {
             if (!it.isValid) log += IosNeutralLog.WEARABLE
         } ?: iosPlatformWearable(log)
-        val virtualCobG = decideEstimateUndeclaredVirtualCob(
-            enabled = tpoPreferences.get(BooleanKey.OApsAIMIUndeclaredCobEnabled),
-            declaredOrAdvisorCob = declaredCobG,
-            consoleLog = log,
-        ) {
-            val signals = virtualCobSignals
-            undeclaredVirtualCobInput(
-                snapshot = wearable,
-                estimatedRaMgdlPerMin = signals.estimatedRaMgdlPerMin,
-                isfMgdlPerU = signals.isfMgdlPerU,
-                carbRatioGPerU = signals.carbRatioGPerU,
-                bgMgdl = signals.bgMgdl,
-                deltaMgdl5m = signals.deltaMgdl5m,
-                slopeFromMinDeviation = signals.slopeFromMinDeviation,
-                patientWeightKg = tpoPreferences.get(DoubleKey.OApsAIMIweight),
-                tdd24hU = signals.tdd24hU,
-                activityContextActive = signals.activityContextActive,
-                mealProb = signals.mealProb,
-                falseMealSuppression = signals.falseMealSuppression,
-                exerciseLockoutActive = signals.exerciseLockoutActive,
-                postHypoActive = signals.postHypoActive,
-                cfrdExacerbationActive =
-                    tpoPreferences.get(BooleanKey.OApsAIMIT3cCfrdMode) &&
-                        tpoPreferences.get(BooleanKey.OApsAIMIT3cCfrdExacerbationMode),
-                maxGramsPref = tpoPreferences.get(DoubleKey.OApsAIMIUndeclaredCobMaxG),
-            )
-        }
-        virtualCobGrams = virtualCobG
+        val curvePublished = publishVirtualCobCurve(wearable)
         therapyCaches = readTherapyCaches(
             reads = therapy,
             nowMs = aimiWallClockMs(),
@@ -169,7 +149,7 @@ class IosNeutralAimiEngine(
             tpoInsulinReqU = activityProtectionInsulinReq(ceiling.maxSmb, log)
         }
         val cobPreferenceOff = !tpoPreferences.get(BooleanKey.OApsAIMIUndeclaredCobEnabled) || declaredCobG > 0.0
-        check(!cobPreferenceOff || virtualCobG == 0.0)
+        check(!cobPreferenceOff || virtualCobGrams == 0.0)
         check(effortFactor == 1.0)
         if (onsetAssessment == null) check(!veto)
         check(!wearable.isValid)
@@ -182,7 +162,7 @@ class IosNeutralAimiEngine(
             log += lowPredictionPatientLog(snapshot = wearable, nowMs = aimiWallClockMs())
             return temp(state, iosNeutralLowPredictionTbrUph(), "LOW_PREDICTION_TBR")
         }
-        check(scratch.lastPkpdSoftFloorTelemetry == null)
+        if (!curvePublished) check(scratch.lastPkpdSoftFloorTelemetry == null)
         mealOnset = decideMealOnsetBehindEffortVeto(
             delta = onsetDelta,
             predictedDelta = onsetPredictedDelta,
@@ -207,6 +187,106 @@ class IosNeutralAimiEngine(
                 temp(state, iosNeutralNightTbrUph(), "NIGHT_TBR")
             }
             IosNeutralScene.LOW_PREDICTION -> error("LOW_PREDICTION returns at the floor, before meal onset")
+        }
+    }
+
+    /**
+     * Preference on and no declared carbs: the estimator runs inside [decideApplyAdvancedPredictions],
+     * so the grams are the curve's `cobG`. Preference off, or carbs already declared: 0 g, no curve,
+     * and the low-prediction floor stays the only `PKPD_SOFT_FLOOR` on the other scenes.
+     */
+    private fun publishVirtualCobCurve(wearable: HealthContextSnapshot): Boolean {
+        val enabled = tpoPreferences.get(BooleanKey.OApsAIMIUndeclaredCobEnabled)
+        if (!enabled || declaredCobG > 0.0) {
+            virtualCobGrams = estimateVirtualCob(wearable, declaredCobG)
+            return false
+        }
+        val signals = virtualCobSignals
+        val profile = virtualCobCurveProfile(signals.carbRatioGPerU)
+        val meal = MealData(mealCOB = 0.0).also { it.slopeFromMinDeviation = signals.slopeFromMinDeviation }
+        val rT = RT(runningDynamicIsf = false)
+        decideApplyAdvancedPredictions(
+            bg = signals.bgMgdl,
+            delta = signals.deltaMgdl5m.toFloat(),
+            sens = signals.isfMgdlPerU,
+            iobDataArray = arrayOf(IobTotal(time = aimiWallClockMs(), iob = 0.0, activity = 0.0)),
+            mealData = meal,
+            profile = profile,
+            rT = rT,
+            preferences = tpoPreferences,
+            consoleLog = log,
+            calls = object : AimiAdvancedPredictionCalls {
+                override fun nowMs() = aimiWallClockMs()
+                override fun virtualCob(
+                    bg: Double,
+                    delta: Float,
+                    sens: Double,
+                    profile: OapsProfileAimi,
+                    mealData: MealData,
+                    declaredOrAdvisorCob: Double,
+                ) = estimateVirtualCob(wearable, declaredOrAdvisorCob, bg, delta, sens, profile, mealData)
+                    .also { virtualCobGrams = it }
+
+                override fun recordSoftFloor(curves: AdvancedPredictionCurves): PkpdSoftFloorTelemetry =
+                    decideRecordPkpdSoftFloor(
+                        curves = curves,
+                        endogenousReversionEnabled = tpoPreferences.get(BooleanKey.OApsAIMIPkpdEndogenousReversion),
+                        calls = object : AimiPkpdSoftFloorWrite {
+                            override fun writeTelemetryAndLog(telemetry: PkpdSoftFloorTelemetry) {
+                                scratch.lastPkpdSoftFloorTelemetry = telemetry
+                                log += PkpdSoftFloorPathMin.formatLogLine(telemetry)
+                            }
+                        },
+                    )
+
+                override fun writeCurves(curves: AdvancedPredictionCurves) = Unit
+                override fun writePredictionSize(size: Int) = Unit
+                override fun writePredictionAvailable(available: Boolean) = Unit
+                override fun writeEventualSnapshot(value: Double) = Unit
+                override fun writePredictedBg(value: Float) = Unit
+                override fun logError(message: String) = Unit
+            },
+        )
+        return true
+    }
+
+    private fun estimateVirtualCob(
+        wearable: HealthContextSnapshot,
+        declaredOrAdvisorCob: Double,
+        bg: Double = virtualCobSignals.bgMgdl,
+        delta: Float = virtualCobSignals.deltaMgdl5m.toFloat(),
+        sens: Double = virtualCobSignals.isfMgdlPerU,
+        profile: OapsProfileAimi = virtualCobCurveProfile(virtualCobSignals.carbRatioGPerU),
+        mealData: MealData = MealData(mealCOB = 0.0).also {
+            it.slopeFromMinDeviation = virtualCobSignals.slopeFromMinDeviation
+        },
+    ): Double {
+        val signals = virtualCobSignals
+        return decideEstimateUndeclaredVirtualCob(
+            enabled = tpoPreferences.get(BooleanKey.OApsAIMIUndeclaredCobEnabled),
+            declaredOrAdvisorCob = declaredOrAdvisorCob,
+            consoleLog = log,
+        ) {
+            undeclaredVirtualCobInput(
+                snapshot = wearable,
+                estimatedRaMgdlPerMin = signals.estimatedRaMgdlPerMin,
+                isfMgdlPerU = sens,
+                carbRatioGPerU = profile.carb_ratio,
+                bgMgdl = bg,
+                deltaMgdl5m = delta.toDouble(),
+                slopeFromMinDeviation = mealData.slopeFromMinDeviation,
+                patientWeightKg = tpoPreferences.get(DoubleKey.OApsAIMIweight),
+                tdd24hU = signals.tdd24hU,
+                activityContextActive = signals.activityContextActive,
+                mealProb = signals.mealProb,
+                falseMealSuppression = signals.falseMealSuppression,
+                exerciseLockoutActive = signals.exerciseLockoutActive,
+                postHypoActive = signals.postHypoActive,
+                cfrdExacerbationActive =
+                    tpoPreferences.get(BooleanKey.OApsAIMIT3cCfrdMode) &&
+                        tpoPreferences.get(BooleanKey.OApsAIMIT3cCfrdExacerbationMode),
+                maxGramsPref = tpoPreferences.get(DoubleKey.OApsAIMIUndeclaredCobMaxG),
+            )
         }
     }
 
