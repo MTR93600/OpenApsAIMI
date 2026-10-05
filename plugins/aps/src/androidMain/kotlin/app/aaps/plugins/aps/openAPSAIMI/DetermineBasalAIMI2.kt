@@ -251,6 +251,8 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMealAbsorptionCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideRefreshMealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPostHypoDriftCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decidePostHypoCompressionAndDriftTerminatorOrReturn
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEarlyTickCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideEarlyDetermineBasalStages
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideUpdatePhysioLatentState
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEnableSmbCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideApplyContextModule
@@ -2215,70 +2217,77 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * advisor/TDD bootstrap, profile snapshot, BOOTSTRAP phase marker.
      */
     private fun runEarlyDetermineBasalStages(ctx: AimiTickContext): AimiDetermineBasalEarlyTickState {
-        determineBasalInvocationCaches.beginInvocation()
-        bolusQueryCache.clear()
-        consoleError = mutableListOf()
-        consoleLog = mutableListOf()
-        if (::aapsLogger.isInitialized) {
-            try {
-                hormonitorStudyExporter?.recordLoopPulse(ctx.currentTime, AimiLoopTelemetry.activeTickId)
-            } catch (_: Throwable) {
-                // Never break determine_basal on telemetry.
-            }
-        }
-        exerciseInsulinLockoutActive = false
-        exerciseHyperBasalOverrideActive = false
-        aimiContextActivityActive = false
-        pkpdAbsorptionGuardAppliedThisTick = false
-        criticalSafetyZeroedThisTick = false
-        cachedRiskEnvelopeEarly = null
-        cachedRiskEnvelopeDecision = null
-        lastSafetyRiskExport = null
-        lastScenarioProjection = null
-        lastPredDivergenceExport = null
-        lastDecisionPredictionAuthority = null
-        lastIntelligenceSnapshot = null
-        lastPredictionAuthorityApplyResult = null
-        lastDoseTerminalSnapshot = null
-        lastPkpdSoftFloorTelemetry = null
-        tubeDoseBaseline = null
-        tubeAppliedFromDoseSnapshotThisTick = false
-        isConfirmedHighRiseThisTick = false
-        correctionAggressionDecision = null
-        mealAdvisorOneShotThisTick = false
-        lastTubeAdvisorSmbCapScale = null
-        lastTubeAdvisorTrace = null
-        lastInflammationResult = null
-        tickInsulinActionState = null
-        tickEffectiveDiaHours = ctx.effectiveDiaHours
-        tickEffectivePeakMinutes = ctx.effectivePeakMinutes
-        lastLoopCgmNoise = ctx.glucoseStatus.noise
-
-        if (ctx.extraDebug.isNotEmpty()) {
-            consoleLog.add(ctx.extraDebug)
-            consoleError.add(ctx.extraDebug)
-        }
-
-        hydrateMealDataIfTriggered(ctx.mealData)
-
-        val isExplicitAdvisorRun = preferences.get(BooleanKey.OApsAIMIMealAdvisorTrigger)
-        val tdd7P = preferences.get(DoubleKey.OApsAIMITDD7)
-        var tdd7Days = ctx.profile.TDD
-        // `!isFinite()` first: the `tdd7Days.toFloat() != 0.0f` guards further down are TRUE for NaN,
-        // so a NaN would enter those branches and make `basalaimi` (tdd7Days / weight) and
-        // `ci` (450 / tdd7Days) NaN for the whole tick. No change for any finite value.
-        if (!tdd7Days.isFinite() || tdd7Days == 0.0 || tdd7Days < tdd7P) tdd7Days = tdd7P
-
-        val originalProfile = ctx.profile.copy()
-        AimiLoopTelemetry.enterPhase(AimiLoopPhase.BOOTSTRAP, hormonitorStudyExporter)
-
+        val out = decideEarlyDetermineBasalStages(
+            ctx = ctx,
+            preferences = preferences,
+            calls = object : AimiEarlyTickCalls {
+                override fun beginInvocation() {
+                    determineBasalInvocationCaches.beginInvocation()
+                }
+                override fun clearBolusCache() {
+                    bolusQueryCache.clear()
+                }
+                override fun resetConsoles() {
+                    consoleError = mutableListOf()
+                    consoleLog = mutableListOf()
+                }
+                override fun loggerReady() = ::aapsLogger.isInitialized
+                override fun recordLoopPulse(nowMs: Long) {
+                    hormonitorStudyExporter?.recordLoopPulse(nowMs, AimiLoopTelemetry.activeTickId)
+                }
+                override fun logPulseFailed(typeName: String?, message: String?) {
+                    consoleLog.add("Loop pulse failed ($typeName): $message — pulse skipped")
+                }
+                override fun resetEarlyScratch(ctx: AimiTickContext) {
+                    exerciseInsulinLockoutActive = false
+                    exerciseHyperBasalOverrideActive = false
+                    aimiContextActivityActive = false
+                    pkpdAbsorptionGuardAppliedThisTick = false
+                    criticalSafetyZeroedThisTick = false
+                    cachedRiskEnvelopeEarly = null
+                    cachedRiskEnvelopeDecision = null
+                    lastSafetyRiskExport = null
+                    lastScenarioProjection = null
+                    lastPredDivergenceExport = null
+                    lastDecisionPredictionAuthority = null
+                    lastIntelligenceSnapshot = null
+                    lastPredictionAuthorityApplyResult = null
+                    lastDoseTerminalSnapshot = null
+                    lastPkpdSoftFloorTelemetry = null
+                    tubeDoseBaseline = null
+                    tubeAppliedFromDoseSnapshotThisTick = false
+                    isConfirmedHighRiseThisTick = false
+                    correctionAggressionDecision = null
+                    mealAdvisorOneShotThisTick = false
+                    lastTubeAdvisorSmbCapScale = null
+                    lastTubeAdvisorTrace = null
+                    lastInflammationResult = null
+                    tickInsulinActionState = null
+                    tickEffectiveDiaHours = ctx.effectiveDiaHours
+                    tickEffectivePeakMinutes = ctx.effectivePeakMinutes
+                    lastLoopCgmNoise = ctx.glucoseStatus.noise
+                }
+                override fun appendDebug(line: String) {
+                    consoleLog.add(line)
+                    consoleError.add(line)
+                }
+                override fun hydrate(mealData: MealData) {
+                    hydrateMealDataIfTriggered(mealData)
+                }
+                override fun copyProfile(profile: OapsProfileAimi) = profile.copy()
+                override fun enterBootstrap() {
+                    AimiLoopTelemetry.enterPhase(AimiLoopPhase.BOOTSTRAP, hormonitorStudyExporter)
+                }
+            },
+        )
         return AimiDetermineBasalEarlyTickState(
-            originalProfile = originalProfile,
-            isExplicitAdvisorRun = isExplicitAdvisorRun,
-            tdd7P = tdd7P,
-            tdd7Days = tdd7Days
+            originalProfile = out.originalProfile,
+            isExplicitAdvisorRun = out.isExplicitAdvisorRun,
+            tdd7P = out.tdd7P,
+            tdd7Days = out.tdd7Days,
         )
     }
+
 
     /**
      * Phase 2 (P2): gestational autopilot, early IOB / dura ISF / acceleration, harmonized basal multipliers,
