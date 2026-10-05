@@ -1,3 +1,5 @@
+import java.net.URI
+
 plugins {
     id("kmp-test-defaults")
     kotlin("multiplatform")
@@ -79,11 +81,14 @@ kotlin {
         }
         jvmTest.get().dependsOn(appleJvmTest)
         jvmTest {
+            kotlin.srcDir("src/tfliteParity/kotlin")
+            kotlin.srcDir("src/tfliteJvm/kotlin")
             dependencies {
                 implementation(libs.androidx.sqlite.bundled)
             }
         }
         iosTest.get().dependsOn(appleJvmTest)
+        iosTest.get().kotlin.srcDir("src/tfliteParity/kotlin")
 
         commonMain {
             kotlin.srcDir(generateApsStrings.flatMap { it.commonOutputDir })
@@ -149,7 +154,10 @@ kotlin {
         }
 
         getByName("androidHostTest") {
+            kotlin.srcDir("src/tfliteParity/kotlin")
+            kotlin.srcDir("src/tfliteJvm/kotlin")
             dependencies {
+                implementation(kotlin("test"))
                 implementation(project(":shared:tests"))
                 implementation(project(":pump:virtual"))
                 implementation(libs.org.junit.jupiter)
@@ -172,6 +180,80 @@ kotlin {
                 runtimeOnly(libs.org.junit.platform.launcher)
             }
         }
+    }
+
+    // TensorFlow Lite C for the two Apple targets. Headers are in the repo. The
+    // xcframework is downloaded before the native link, which only runs on macOS.
+    targets.withType<org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget>().configureEach {
+        if (name != "iosArm64" && name != "iosSimulatorArm64") return@configureEach
+        val linkDir = if (name == "iosArm64") "ios-arm64" else "ios-simulator-arm64"
+        compilations.getByName("main").cinterops.create("tflite") {
+            definitionFile.set(layout.projectDirectory.file("src/nativeInterop/cinterop/tflite.def"))
+            val include = layout.projectDirectory.dir("src/nativeInterop/cinterop").asFile.absolutePath
+            // The published binary is a fat MH_OBJECT, not a dylib. ld wants the
+            // arm64 slice as a plain object. thinTensorFlowLiteC writes it here
+            // before the Apple link, which only runs on macOS.
+            val objectFile = layout.buildDirectory.file("tflite-c/link/$linkDir/TensorFlowLiteC.o").get().asFile.absolutePath
+            extraOpts(
+                "-compiler-option", "-I$include",
+                "-linker-option", objectFile,
+                "-linker-option", "-lc++",
+            )
+        }
+    }
+}
+
+val fetchTensorFlowLiteC = tasks.register("fetchTensorFlowLiteC") {
+    val dest = layout.buildDirectory.dir("tflite-c")
+    outputs.dir(dest)
+    doLast {
+        val root = dest.get().asFile
+        val marker = root.resolve("TensorFlowLiteC.xcframework/Info.plist")
+        if (marker.isFile) return@doLast
+        root.mkdirs()
+        val tar = root.resolve("TensorFlowLiteC-2.10.0.tar.gz")
+        val url = "https://dl.google.com/tflite-release/ios/prod/tensorflow/lite/release/ios/release/18/20220909-095119/TensorFlowLiteC/2.10.0/9410f57778559cad/TensorFlowLiteC-2.10.0.tar.gz"
+        URI.create(url).toURL().openStream().use { input ->
+            tar.outputStream().use { output -> input.copyTo(output) }
+        }
+        val tarProcess = ProcessBuilder(
+            "tar", "-xzf", tar.absolutePath,
+            "-C", root.absolutePath,
+            "--strip-components=2",
+            "TensorFlowLiteC-2.10.0/Frameworks/TensorFlowLiteC.xcframework",
+        ).inheritIO().start()
+        val tarStatus = tarProcess.waitFor()
+        if (tarStatus != 0) error("tar exited $tarStatus")
+        tar.delete()
+    }
+}
+
+val thinTensorFlowLiteC = tasks.register("thinTensorFlowLiteC") {
+    dependsOn(fetchTensorFlowLiteC)
+    val dest = layout.buildDirectory.dir("tflite-c/link")
+    outputs.dir(dest)
+    doLast {
+        val root = layout.buildDirectory.dir("tflite-c").get().asFile
+        val xc = root.resolve("TensorFlowLiteC.xcframework")
+        fun thin(slice: String, outName: String) {
+            val src = xc.resolve("$slice/TensorFlowLiteC.framework/TensorFlowLiteC")
+            val outDir = root.resolve("link/$outName")
+            outDir.mkdirs()
+            val out = outDir.resolve("TensorFlowLiteC.o")
+            val lipo = ProcessBuilder(
+                "lipo", "-thin", "arm64", src.absolutePath, "-output", out.absolutePath,
+            ).inheritIO().start()
+            val status = lipo.waitFor()
+            if (status != 0) error("lipo -thin arm64 exited $status for $slice")
+        }
+        thin("ios-arm64", "ios-arm64")
+        thin("ios-arm64_x86_64-simulator", "ios-simulator-arm64")
+    }
+}
+
+tasks.configureEach {
+    if (name.startsWith("link") && (name.contains("IosArm64") || name.contains("IosSimulatorArm64"))) {
+        dependsOn(thinTensorFlowLiteC)
     }
 }
 

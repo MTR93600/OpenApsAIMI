@@ -50,7 +50,7 @@ Ordre : d’abord ce qui change un débit ou le tick suivant, ensuite le modèle
 | Session TPO | fait | #228 | Rien. JSON, pas Room. Plafond **0,80 U**, requête **0,20 U**, nuit **1,00 U/h**, sport **1,30 U/h**. |
 | Learners | partiel | #229 | Option A appliquée faute de réponse explicite. `process` reste hors du débit. Départ à froid **1,000** et `WARMUP`, nuit **1,00 U/h**, comme Android sans historique. Le fichier d’historique n’est pas amorcé. L’activation exige une acceptation écrite de A, ou B. Cette acceptation n’est pas écrite ici. |
 | `resetEarlyScratch` | fait | #215 | Rien. **27** écritures, le même ordre que l’adaptateur Android. Le mémo disait 29 : ce compte était faux. Ajouter deux écritures changerait Android ou inventerait des champs qu’il n’a pas. |
-| TFLite / UAM | bloqué | #225, ADR D4 | Le modèle n’est pas branché. Le plan de reprise est écrit plus bas. Aucun code. Sortie : SMB tronqué à 4 décimales identique sur les 67 vecteurs dont la référence est `Interpreter` 2.4.0 Android. |
+| TFLite / UAM | bloqué | #225, ADR D4 | Le tick n’appelle pas le modèle : `predictSmbUam` reste **0 U**. Le fichier `modelUAM.tflite` (SHA-256 `741c5248…`) est dans le test. La référence Android est `libtensorflowlite_jni.so` 2.4.0, 67 vecteurs, bits bruts. iOS compare avec TensorFlow Lite C **2.10.0** (le pod 2.4.0 n’a pas de simulateur arm64), 1 thread, sans XNNPACK. Le verdict est le test iOS, pas une exemption. |
 | Flocon de chiffrement | fait | #237 | Rien sur le test. `tamperSecureEnvelope` fait un XOR `0x01` sur l’octet du milieu du corps chiffré. `ff` devient `fe`. `isValidDataString` est faux. `decrypt` rend `""`. Le fail de #215 était ce flocon. |
 | `AimiDecisionContext` | fait | #219, #233 | Rien sur les champs. `decideAimiDecisionContext` est commun. `htr_ra_floor_mgdl_per_min` reste null au bootstrap. L’estimateur de ratio reste lu par la coquille Android, puis passé en argument. |
 
@@ -59,7 +59,7 @@ Ordre : d’abord ce qui change un débit ou le tick suivant, ensuite le modèle
 `AimiCommonEngineSwitch` et `IosClientConfig.APS` restent éteints. Les allumer exige que chaque ligne suivante soit verte en même temps. Une seule ligne ouverte suffit à les laisser éteints.
 
 1. **Toutes les traces de parité**, octet pour octet, entre le tick Android et la tranche iOS. Dans le tableau, chaque point est `fait` et sa colonne « encore manquant » ne contient plus un écart de trace. Aujourd’hui Learners reste `partiel` : l’activation exige une acceptation écrite de A, ou B. TFLite reste `bloqué`.
-2. **TFLite**, ou une exemption écrite. Le vert est le même interpréteur LiteRT C, CPU d’abord, et un corpus dont le SMB est celui d’`Interpreter` 2.4.0 Android. L’exemption serait un texte qui accepte le chemin modèle absent (`predictSmbUam` **0 U**, `refine` identité) comme parité. ADR D4 constate l’arrêt. Ce n’est pas cette exemption. TFLite reste bloqué. Ne pas le commencer.
+2. **TFLite**, ou une exemption écrite. Le vert est l’égalité bit à bit des 67 sorties entre TensorFlow Lite C iOS (2.10.0, 1 thread, sans XNNPACK) et `libtensorflowlite_jni.so` 2.4.0 Android. L’exemption serait un texte qui accepte le chemin modèle absent (`predictSmbUam` **0 U**, `refine` identité) comme parité, ou un écart ULP mesuré. ADR D4 constate l’arrêt. Ce n’est pas cette exemption. TFLite reste bloqué tant que le test iOS n’est pas vert. Le tick n’appelle pas le modèle.
 3. **Session HealthKit.** Le port rejoue la scène ISF **45** / `HR_TREND_ISF x0.90 (hr10 110 / hr60 88, steps10 0)`. Les entitlements ci-dessous sont écrits dans ce mémo. Les activer dans le binaire fait partie de l’allumage, pas d’une PR tant que les interrupteurs sont éteints.
 4. **Learners.** L’option A est appliquée faute de réponse explicite : `process` hors du débit, départ à froid **1,000**, nuit **1,00 U/h**. L’activation exige une acceptation écrite de A, ou B. Cette phrase ne l’écrit pas. L’option B n’est pas choisie.
 
@@ -158,21 +158,23 @@ Sept opérations : `SUB` (entrée − moyenne `[1, 18]`), `MUL` (échelle `[1, 1
 
 Le graphe est petit. Une boucle float32 en Kotlin commun peut l’exécuter. Elle ne prouve pas le SMB Android. `AimiUamHandler` appelle `org.tensorflow.lite.Interpreter` 2.4.0, tronque à 4 décimales (`(v * 10000f).toInt() / 10000f`) et plancher à 0. La bibliothèque JNI de cet artefact est un binaire Android : elle ne se charge pas sur cette machine. Un interpréteur LiteRT récent, en trois modes (référence, builtin sans délégué, XNNPACK), comparé à la boucle scalaire sur 67 vecteurs : le tenseur brut diffère sur 31 à 35 vecteurs selon le mode ; le SMB après la troncature Android coïncide sur les 67. Cette coïncidence n’est pas le bit d’`Interpreter` 2.4.0 sur téléphone. L’ADR D4 le dit : le réseau Kotlin n’est pas le graphe TFLite.
 
-Décision : s’arrêter. Pas d’inférence Kotlin commune, pas de cinterop, pas de CocoaPods. Le chemin modèle absent reste celui d’Android : `predictSmbUam` **0 U**, `refine` identité, pas d’entraînement. Trace : `uamPostHypoReboundBridgesAShortTempBasal`, SMB **0 U**, TBR **1,05 U/h**, 5 min.
+Décision d’alors : s’arrêter. Pas d’inférence Kotlin commune. Le chemin modèle absent reste celui du tick : `predictSmbUam` **0 U**, `refine` identité, pas d’entraînement. Trace : `uamPostHypoReboundBridgesAShortTempBasal`, SMB **0 U**, TBR **1,05 U/h**, 5 min.
 
-Reprise future : le plan d’une page ci-dessous. Il n’est pas commencé.
+La reprise est la section suivante. Le tick n’est pas branché.
 
 ## Plan TFLite iOS
 
-Plan seulement. Aucun cinterop, aucun binaire, aucun appel. TFLite reste bloqué. ADR D4 constate l’arrêt. Ce plan n’est pas l’exemption qui autoriserait l’allumage.
+Le cinterop et le corpus sont en place. TFLite reste bloqué tant que le test iOS n’est pas vert bit à bit. ADR D4 constate l’arrêt précédent. Ce texte n’est pas l’exemption qui autoriserait l’allumage.
 
-**Interpréteur.** LiteRT C, ou la TFLite C API, lié par cinterop Kotlin/Native. CPU d’abord : pas de délégué GPU ni XNNPACK tant que le critère de sortie n’est pas vert sur CPU. Pas de réécriture du graphe en Kotlin. Pas de CocoaPods dans ce plan.
+**Interpréteur.** Côté iOS, TensorFlow Lite C 2.10.0 (`TensorFlowLiteC.xcframework`, cinterop). C’est la plus ancienne version publiée dont le xcframework contient `ios-arm64_x86_64-simulator` : le pod 2.4.0 exclut `arm64` du simulateur, et la CI lance `iosSimulatorArm64Test`. Écart documenté : Android reste `org.tensorflow:tensorflow-lite:2.4.0`. Pas de délégué GPU. XNNPACK n’est pas ajouté. `SetNumThreads(1)`. Pas de réécriture du graphe en Kotlin. Le binaire n’est pas dans git : Gradle le télécharge avant l’édition de liens Apple. Le binaire publié est un Mach-O gras de type MH_OBJECT (pas une dylib) : `lipo -thin arm64` produit l’objet que le linker reçoit, avec `-lc++`. Kotlin 2.4 ne lance pas ce cinterop sur Linux ; le compile et le test bit à bit sont ceux du job `ios`.
 
-**Modèle.** Embarquer `modelUAM.tflite`, le fichier du commit `64e630c7fc`. 4 504 octets. SHA-256 `741c5248fb81a2551ee4c612c9cbf2be97dbf6b434db7b7407a3ba2214235092`. Identifiant `TFL3`. Entrée `[1, 18]` float32, sortie `[1, 1]` float32. Il est absent de l’arbre de travail. Le récupérer est un préalable. Il n’est pas récupéré ici.
+**Modèle.** `plugins/aps/src/tfliteParity/modelUAM.tflite`, le fichier du commit `64e630c7fc`. 4 504 octets. SHA-256 `741c5248fb81a2551ee4c612c9cbf2be97dbf6b434db7b7407a3ba2214235092`. Identifiant `TFL3`. Entrée `[1, 18]` float32, sortie `[1, 1]` float32. Les mêmes octets sont dans `UamTfliteCorpus`. Le tick ne les ouvre pas.
 
-**Corpus.** 67 vecteurs. Pour chacun, le SMB attendu est celui d’`org.tensorflow.lite.Interpreter` 2.4.0 sur Android, puis la troncature Android `(v * 10000f).toInt() / 10000f` et le plancher à 0. La comparaison déjà faite (boucle scalaire contre un LiteRT récent : tenseur brut différent sur 31 à 35 vecteurs, SMB tronqué coïncidant sur les 67) n’est pas ce corpus. Cette coïncidence n’est pas le bit d’`Interpreter` 2.4.0.
+**Référence Android.** `libtensorflowlite_jni.so` 2.4.0 x86_64, la bibliothèque que charge `Interpreter`. Le `.so` de l’AAR est lié à bionic : il ne se charge pas dans le JVM hôte. Il a été exécuté avec son linker Android (`TfLiteInterpreterCreate`, `SetNumThreads(-1)` et `SetNumThreads(1)`, XNNPACK non appliqué). Les deux réglages donnent les mêmes 67 mots. Le constructeur de production `Interpreter(ByteBuffer)` (numThreads -1, `useXNNPACK` non fixé) coïncide donc avec 1 thread sur ce graphe. Les mots sont les bits bruts, en hex, pas le SMB tronqué.
 
-**Critère de sortie.** Sur les 67 vecteurs, la sortie LiteRT C iOS, tronquée de la même façon à 4 décimales et plancher à 0, est identique au SMB Android. Un seul écart laisse le point bloqué et les interrupteurs éteints. Tant que ce critère n’est pas vert : `predictSmbUam` **0 U**, `refine` identité, pas d’entraînement. Trace inchangée : `uamPostHypoReboundBridgesAShortTempBasal`, SMB **0 U**, TBR **1,05 U/h**, 5 min.
+**Corpus.** 67 vecteurs. 0 : zéros. 1 : uns. 2..19 : vecteurs unité. 20..66 : 47 tirages d’un LCG (état `0x00C0FFEE`, ×1664525 + 1013904223, 24 bits, `u / 16777216f * 4f - 2f` en float32). Ce n’est pas la coïncidence ancienne « SMB tronqué identique, tenseur brut différent ».
+
+**Critère.** `UamTfliteIosParityTest` exige l’égalité bit à bit de chaque sortie avec le mot Android. Un écart échoue le test et imprime l’index, les deux hex et la distance ULP. Ce n’est pas une exemption. Tant que ce test n’est pas vert, le point reste bloqué : `predictSmbUam` **0 U**, `refine` identité, pas d’entraînement. Trace inchangée : `uamPostHypoReboundBridgesAShortTempBasal`, SMB **0 U**, TBR **1,05 U/h**, 5 min. Les interrupteurs restent faux.
 
 ## CI iOS de #215
 

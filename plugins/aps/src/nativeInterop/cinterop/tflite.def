@@ -1,0 +1,4 @@
+package = app.aaps.plugins.aps.tflite
+headers = uam_tflite.h
+headerFilter = uam_tflite.h
+linkerOpts = -lc++
