@@ -62,7 +62,9 @@ class IosNeutralAimiEngine(
         )
         val effortFactor = iosNeutralEffortSmbFactor(log, wearable)
         val veto = iosNeutralEffortVeto(log)
-        iosNeutralPatientRuntimeSkipped(log)
+        if (scene != IosNeutralScene.LOW_PREDICTION) {
+            iosNeutralPatientRuntimeSkipped(log)
+        }
         iosNeutralTpoSkipped(log)
         check(virtualCobG == 0.0)
         check(effortFactor == 1.0)
@@ -70,10 +72,11 @@ class IosNeutralAimiEngine(
         check(!wearable.isValid)
         if (scene == IosNeutralScene.LOW_PREDICTION) {
             // Android records the floor inside advanced predictions, after the wearable read,
-            // then safety returns. Meal onset is not reached.
+            // then the patient runtime, then safety returns. Meal onset is not reached.
             val stored = iosNeutralStorePkpdFloor(iosNeutralFloorCurves(), pkpdFloor, scratch, log)
             check(stored.rawPathMinMgdl == 39.0)
             check(scratch.lastPkpdSoftFloorTelemetry == stored)
+            log += lowPredictionPatientLog(snapshot = wearable, nowMs = aimiWallClockMs())
             return temp(state, iosNeutralLowPredictionTbrUph(), "LOW_PREDICTION_TBR")
         }
         check(scratch.lastPkpdSoftFloorTelemetry == null)

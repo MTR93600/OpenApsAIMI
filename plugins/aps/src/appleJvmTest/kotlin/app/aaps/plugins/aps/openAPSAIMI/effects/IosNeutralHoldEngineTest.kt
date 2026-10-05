@@ -86,6 +86,7 @@ class IosNeutralHoldEngineTest {
             assertEquals(39.0, neutral.pkpdFloor.telemetry?.rawPathMinMgdl)
             assertEquals(39.0, neutral.pkpdFloor.telemetry?.softPathMinMgdl)
             assertEquals(neutral.pkpdFloor.telemetry, neutral.scratch.lastPkpdSoftFloorTelemetry)
+            assertLowPredictionRuntime(neutral)
             neutral.pkpdFloor.telemetry = neutral.pkpdFloor.telemetry?.copy(softPathMinMgdl = 999.0)
             val again = holdAimiEngineWired(IosNeutralScene.LOW_PREDICTION).first.evaluate(
                 AimiTestSnapshots.emptyInput(),
@@ -94,7 +95,7 @@ class IosNeutralHoldEngineTest {
             )
             val againTbr = again.command as AimiTherapyCommand.TempBasal
             assertEquals("0.25", aimiFmt2(againTbr.rateUPerHour))
-            assertModeLines(neutral)
+            assertModeLines(neutral, patientSkipped = false)
         }
     }
 
@@ -125,7 +126,11 @@ class IosNeutralHoldEngineTest {
         assertTrue(wearableAt >= 0, log.toString())
         assertTrue(floorAt > wearableAt, log.toString())
         assertEquals(floorAt + 1, log.indexOf(IosNeutralLog.PKPD))
-        assertEquals(log.lastIndex, log.indexOf(IosNeutralLog.PKPD))
+        assertLowPredictionRuntime(neutral)
+        val runtimeAt = log.indexOf(
+            "TREE_DEPLOYED trunk=SENSOR_UNCERTAIN conf=0.90 risk=CRITICAL kinetics=NO_STAGE",
+        )
+        assertTrue(runtimeAt > log.indexOf(IosNeutralLog.PKPD), log.toString())
 
         val telemetry = neutral.scratch.lastPkpdSoftFloorTelemetry
         assertEquals(39.0, telemetry?.rawPathMinMgdl)
@@ -238,17 +243,40 @@ class IosNeutralHoldEngineTest {
         check(result, neutral)
     }
 
-    private fun assertModeLines(neutral: IosNeutralAimiEngine) {
+    private fun assertModeLines(neutral: IosNeutralAimiEngine, patientSkipped: Boolean = true) {
         val log = neutral.portLog
         assertTrue(log.contains(IosNeutralLog.HYSTERESIS), log.toString())
         assertTrue(log.contains(IosNeutralLog.earlyScratch(IOS_EARLY_SCRATCH_WRITE_COUNT)), log.toString())
         assertTrue(log.contains(IosNeutralLog.VIRTUAL_COB), log.toString())
         assertTrue(log.contains(IosNeutralLog.EFFORT), log.toString())
         assertTrue(log.contains(IosNeutralLog.VETO), log.toString())
-        assertTrue(log.contains(IosNeutralLog.PATIENT), log.toString())
+        if (patientSkipped) {
+            assertTrue(log.contains(IosNeutralLog.PATIENT), log.toString())
+        } else {
+            assertFalse(log.contains(IosNeutralLog.PATIENT), log.toString())
+            assertLowPredictionRuntime(neutral)
+        }
         assertTrue(log.contains(IosNeutralLog.TPO), log.toString())
         assertTrue(log.contains(IosNeutralLog.WEARABLE), log.toString())
         assertFalse(log.any { it.contains("Exception") })
+    }
+
+    private fun assertLowPredictionRuntime(neutral: IosNeutralAimiEngine) {
+        val log = neutral.portLog
+        assertTrue(
+            log.contains("TREE_DEPLOYED trunk=SENSOR_UNCERTAIN conf=0.90 risk=CRITICAL kinetics=NO_STAGE"),
+            log.toString(),
+        )
+        assertTrue(
+            log.contains("Tree: sensor uncertain | conf 90% | risk critical | sensor uncertain"),
+            log.toString(),
+        )
+        assertTrue(
+            log.contains("MEAL_CERTAINTY level=NONE tree=NONE rise=WEAK terminals=HYPO_CONFLICT effortVeto=false"),
+            log.toString(),
+        )
+        val tbr = neutral.portLog
+        assertFalse(tbr.contains(IosNeutralLog.PATIENT), tbr.toString())
     }
 
     @Test

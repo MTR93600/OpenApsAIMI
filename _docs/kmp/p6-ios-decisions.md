@@ -88,8 +88,9 @@ Trace inchangée : quatre échantillons 80, 80, 80, puis 110 bpm, pas vides, ISF
 
 ### Runtime patient
 
-- Après le snapshot réel. Appeler les 221 lignes : état patient, arbre, Harmonia. Pas une seconde formule.
-- Trace : `lowPredictionRequestsAQuarterBasal` avec `TREE_DEPLOYED trunk=SENSOR_UNCERTAIN`, `MEAL_CERTAINTY level=NONE`, TBR **0,25 U/h**, octet pour octet.
+- Les 221 lignes sont `decideRefreshPatientStateRuntime`, derrière le snapshot déjà lu. L’échec de lecture reste dans la coquille Android : snapshot vide, pas un `catch` nouveau. Le tick iOS de prédiction basse appelle la même fonction après le plancher PKPD.
+- Entrées de cette scène : champ `bg` encore à 0 (la glycémie 100 n’est pas encore copiée), cible 100, delta 0, IOB 0, `maxIob` 0, chemin scénario 39 mg/dL. L’état latent part du snapshot vide, confiance capteur 0,105, tronc 0,90.
+- Trace : `lowPredictionRequestsAQuarterBasal`, `TREE_DEPLOYED trunk=SENSOR_UNCERTAIN conf=0.90 risk=CRITICAL kinetics=NO_STAGE`, `MEAL_CERTAINTY level=NONE tree=NONE rise=WEAK terminals=HYPO_CONFLICT effortVeto=false`, TBR **0,25 U/h**.
 
 ### TPO
 
@@ -160,7 +161,7 @@ Scène verrouillée : prédiction basse, `TREE_DEPLOYED trunk=SENSOR_UNCERTAIN`,
 | Appeler avec un snapshot vide | Même famille que l’échec wearable : arbre sans vitaux. Le TBR verrouillé de cette scène est **0,25 U/h** quand l’arbre part incertain |
 | HealthKit complet | Peut changer le tronc. Aucune trace ne verrouille un autre débit que **0,25 U/h** pour cet appel |
 
-Recommandation : **ne pas appeler** tant que l’arbre iOS n’est pas décidé. Le TBR **0,25 U/h** reste celui du tick Android déjà verrouillé, pas un second calcul.
+Recommandation retenue : **appeler la fonction commune** avec le snapshot déjà lu. Le TBR **0,25 U/h** reste celui du tick Android. Les deux lignes sont les siennes.
 
 Côté iOS : HealthKit, cycle, capteur, état patient. Gros port.
 

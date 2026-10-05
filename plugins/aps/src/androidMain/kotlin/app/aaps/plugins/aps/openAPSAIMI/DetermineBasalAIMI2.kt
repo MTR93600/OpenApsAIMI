@@ -308,7 +308,10 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTrajectoryContextPrepCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideTrajectoryContextModuleTddIsfAndDynamicPbolusPrep
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRaObservationCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideBuildRaObservationState
+import app.aaps.plugins.aps.openAPSAIMI.effects.PatientRuntimeCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideRefreshPatientStateRuntime
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideUpdatePhysioLatentState
+import app.aaps.plugins.aps.openAPSAIMI.effects.enrichPatientThermal
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEnableSmbCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideApplyContextModule
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTrajectorySpiralCalls
@@ -2802,16 +2805,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
     }
 
-    private fun enrichThermalSnapshot(snapshot: HealthContextSnapshot): HealthContextSnapshot {
-        val thermalBelief = ThermalBeliefEngine.buildFromCache(
-            hrNowBpm = snapshot.hrNow,
-            rhrRestingBpm = snapshot.rhrResting,
-            sleepDebtMinutes = snapshot.sleepDebtMinutes,
-            hrvRmssd = snapshot.hrvRmssd,
-            wCyclePhase = wCycleInfoForRun?.phase,
-        )
-        return snapshot.copy(thermalBelief = thermalBelief)
-    }
+    private fun enrichThermalSnapshot(snapshot: HealthContextSnapshot): HealthContextSnapshot =
+        enrichPatientThermal(snapshot, wCycleInfoForRun?.phase)
 
     private fun refreshPatientStateRuntime(
         nowMs: Long = dateUtil.now(),
@@ -2820,225 +2815,89 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         sourceSensor: SourceSensor? = lastPatientSourceSensor,
         refreshSource: PatientRefreshSource = PatientRefreshSource.LOOP_TICK,
     ): PatientStateSnapshot {
-        lastContextSnapshot = contextSnapshot
-        if (sourceSensor != null) {
-            lastPatientSourceSensor = sourceSensor
-        }
         val wearableSnap = healthSnapshot ?: try {
             physioAdapter.getLatestSnapshot()
         } catch (_: Exception) {
             HealthContextSnapshot()
         }
-        val enrichedSnap = enrichThermalSnapshot(wearableSnap)
-        val eventMemory = buildPatientEventMemory(
-            currentBgMgdl = bg,
-            latentState = lastPhysioLatentState,
-            thermalBelief = enrichedSnap.thermalBelief,
+        val result = decideRefreshPatientStateRuntime(
             nowMs = nowMs,
+            contextSnapshot = contextSnapshot,
+            healthSnapshot = wearableSnap,
+            sourceSensor = sourceSensor,
+            refreshSource = refreshSource,
+            calls = patientRuntimeCalls(),
         )
-        val patientState = PatientStateEngine.build(
-            timestampMs = nowMs,
-            phaseOutput = lastPhysiologicalPhaseOutput,
-            mealAbsorptionOutput = lastMealAbsorptionOutput,
-            patternSnapshot = lastPhysiologicalPatternSnapshot,
-            latentState = lastPhysioLatentState,
-            hypothesisState = lastUamHypothesisState,
-            contextSnapshot = lastContextSnapshot,
-            thermalBelief = enrichedSnap.thermalBelief,
-            eventMemory = eventMemory,
-        )
-        lastPatientState = patientState
-        val patientModeDecision = PatientModeOrchestrator.evaluate(patientState)
-        lastPatientModeDecision = patientModeDecision
-        val physioLive = PhysioLiveDigest.from(enrichedSnap, nowMs)
-        ensureWCycleInfo()
-        val hypoGuardActive =
+        lastContextSnapshot = contextSnapshot
+        if (sourceSensor != null) {
+            lastPatientSourceSensor = sourceSensor
+        }
+        lastPatientState = result.patientState
+        lastPatientModeDecision = result.patientModeDecision
+        lastWCycleBelief = result.wCycleBelief
+        lastPhysiologicalTreeSnapshot = result.physiologicalTree
+        lastMealCertainty = result.mealCertainty
+        lastHarmoniaDecision = result.harmoniaDecision
+        return result.patientState
+    }
+
+    private fun patientRuntimeCalls(): PatientRuntimeCalls = object : PatientRuntimeCalls {
+        override fun enrichThermal(snapshot: HealthContextSnapshot) =
+            enrichThermalSnapshot(snapshot)
+
+        override fun eventMemory(
+            currentBgMgdl: Double,
+            latentState: app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState?,
+            thermalBelief: app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalBeliefDigest?,
+            nowMs: Long,
+        ) = buildPatientEventMemory(currentBgMgdl, latentState, thermalBelief, nowMs)
+
+        override fun phase() = lastPhysiologicalPhaseOutput
+        override fun mealAbsorption() = lastMealAbsorptionOutput
+        override fun pattern() = lastPhysiologicalPatternSnapshot
+        override fun latent() = lastPhysioLatentState
+        override fun hypothesis() = lastUamHypothesisState
+        override fun ensureWCycle() = ensureWCycleInfo()
+        override fun wCyclePreferences() = wCyclePreferences
+        override fun hourOfDay() = hourOfDay
+        override fun hypoGuardActive() =
             TuningContextEngine.parseContext(preferences.get(StringKey.AimiTuningContextSelection)) ==
                 AimiTuningContext.HYPO_GUARD
-        lastWCycleBelief = EndocrineAmplitudeGovernor.from(
-            info = wCycleInfoForRun,
-            prefs = wCyclePreferences,
-            hypoLoad = eventMemory.recentHypoLoad,
-            hypoGuardActive = hypoGuardActive,
-            hourOfDay = hourOfDay,
-        )
-        // Cascade native (R1): tree always deploys on the dose path. AimiPhysioAssistantEnable only
-        // gates vitals multipliers / assistant extras — never the spine Tree→Harmonia.
-        val bodyKinetics = BodyKineticsDigest.fromTick(
-            effectiveDiaHours = tickEffectiveDiaHours,
-            effectivePeakMinutes = tickEffectivePeakMinutes,
-            insulinActionState = tickInsulinActionState,
-        )
-        var physiologicalTree = PhysiologicalTreeBuilder.build(
-            enabled = true,
-            patientState = patientState,
-            patientModeDecision = patientModeDecision,
-            physioLive = physioLive,
-            thermalBelief = enrichedSnap.thermalBelief,
-            timestampMs = nowMs,
-            currentBgMgdl = bg,
-            deltaMgdl5m = delta.toDouble(),
-            // Effort belief → tree branches: ACTIVE drives `activity`, RECENT_EFFORT (adrenaline memory) drives
-            // `postActivity`, so Harmonia chooses PROTECTIVE_REDUCTION natively during and after effort.
-            effortActiveConfidence = lastEffortAssessment
-                ?.takeIf { it.state == EffortActivityBelief.State.ACTIVE }?.confidence ?: 0.0,
-            effortRecentConfidence = lastEffortAssessment
-                ?.takeIf { it.state == EffortActivityBelief.State.RECENT_EFFORT }?.confidence ?: 0.0,
-            wCycleBelief = lastWCycleBelief,
-            bodyKinetics = bodyKinetics,
-        )
-        lastPhysiologicalTreeSnapshot = physiologicalTree
-        val sensorTelemetry = HarmoniaSensorTelemetry.resolve(
-            cgmNoiseRaw = lastLoopCgmNoise,
-            sensorInsertionMs = resolveSensorInsertionMsCached(nowMs),
-            nowMs = nowMs,
-        )
-        val scenarioBestForMeal = lastScenarioProjection?.scenarioBest
-        val pkpdForMeal =
-            cachedRiskEnvelopeDecision?.eventualTerminalMgdl?.takeIf { it.isFinite() }
-                ?: authoritativeEventualBg(this.eventualBG).takeIf { it.isFinite() && it > 1.0 }
-        // Cascade D3: MealCertainty first — meal_rise_confirmed derives from it (not sticky phase).
-        val mealCertainty = physiologicalTree?.let { tree ->
-            MealCertaintyBuilder.evaluate(
-                MealCertaintyBuilder.Input(
-                    trunkState = tree.trunk.globalState,
-                    mealBranchConfidence = tree.branches.meal.confidence,
-                    digestionDetected = tree.branches.digestion.detected,
-                    absorptionPhase = lastMealAbsorptionOutput?.phase ?: MealAbsorptionPhase.NONE,
-                    bgMgdl = bg,
-                    deltaMgdl5m = delta.toDouble(),
-                    targetBgMgdl = targetBg.toDouble(),
-                    cobG = cob.toDouble(),
-                    mealRiseConfirmedLegacy = false,
-                    effortVeto = effortSuppressesUndeclaredMeal(),
-                    shortAvgDeltaMgdl5m = this.shortAvgDelta.toDouble(),
-                    effortLive = effortIsLiveMovement(),
-                    softCorroboration = MealCertaintyBuilder.softCorroborationFromPhysio(physioLive),
-                    pkpdEventualMgdl = pkpdForMeal,
-                    scenarioTerminalMgdl = scenarioBestForMeal?.terminalMgdl,
-                    scenarioPathMinMgdl = scenarioBestForMeal?.gatePathMinMgdl,
-                    scenarioPathMinHitFloor = scenarioBestForMeal?.gatePathMinHitFloor == true,
-                ),
-            )
+        override fun effectiveDiaHours() = tickEffectiveDiaHours
+        override fun effectivePeakMinutes() = tickEffectivePeakMinutes
+        override fun insulinAction() = tickInsulinActionState
+        override fun effortAssessment() = lastEffortAssessment
+        override fun cgmNoise() = lastLoopCgmNoise
+        override fun sensorInsertionMs(nowMs: Long) = resolveSensorInsertionMsCached(nowMs)
+        override fun scenarioBest() = lastScenarioProjection?.scenarioBest
+        override fun cachedEventualTerminal() = cachedRiskEnvelopeDecision?.eventualTerminalMgdl
+        override fun eventualBg() = eventualBG
+        override fun authoritativeEventual(fallback: Double) = authoritativeEventualBg(fallback)
+        override fun bg() = bg
+        override fun delta() = delta.toDouble()
+        override fun targetBg() = targetBg.toDouble()
+        override fun cob() = cob.toDouble()
+        override fun shortAvgDelta() = shortAvgDelta.toDouble()
+        override fun effortVeto() = effortSuppressesUndeclaredMeal()
+        override fun effortLive() = effortIsLiveMovement()
+        override fun basalUph() = basalaimi
+        override fun autodriveMaxBasal() = preferences.get(DoubleKey.autodriveMaxBasal)
+        override fun maxSmb() = maxSMB
+        override fun maxSmbHb() = maxSMBHB
+        override fun maxIob() = maxIob
+        override fun iob() = iob.toDouble()
+        override fun chaosScore() = lastRbtChaosEvaluation?.score ?: 0.0
+        override fun priorRuntimeBlocker() = harmoniaPrevRuntimeBlocker
+        override fun priorBlockedStreak() = harmoniaBlockedStreak
+        override fun aggression() = correctionAggressionDecision
+        override fun inflammation() = lastInflammationResult
+        override fun physioContext() = physioAdapter.getEffectiveContext()
+        override fun physioTrace() = physioAdapter.getLastDecisionTrace()
+        override fun uamConfidence() = AimiUamHandler.confidenceOrZero()
+        override fun storedSourceSensor() = lastPatientSourceSensor
+        override fun log(line: String) {
+            consoleLog.add(line)
         }
-        lastMealCertainty = mealCertainty
-        // Cascade D3-bis: a confirmed meal (MealCertainty HIGH) outranks the tree's activity veto.
-        // The tree is built first because MealCertainty reads its trunk and branches, so the intent
-        // has to be re-resolved here. Hypo protection is untouched — only the activity gate moves.
-        val treeBeforeMealCertainty = physiologicalTree
-        if (treeBeforeMealCertainty != null && mealCertainty?.supportsMealOverProtective == true) {
-            val revisedTree = PhysiologicalTreeBuilder.withMealCertainty(
-                snapshot = treeBeforeMealCertainty,
-                mealOverridesProtective = true,
-                deltaMgdl5m = delta.toDouble(),
-                currentBgMgdl = bg,
-            )
-            if (revisedTree.insulinIntent != treeBeforeMealCertainty.insulinIntent) {
-                consoleLog.add(
-                    "🌳 TREE_INTENT: ${treeBeforeMealCertainty.insulinIntent} → ${revisedTree.insulinIntent} " +
-                        "(meal certainty HIGH outranks activity veto)",
-                )
-            }
-            physiologicalTree = revisedTree
-            lastPhysiologicalTreeSnapshot = revisedTree
-        }
-        val harmoniaMealRiseConfirmed = mealCertainty?.supportsMealSupport == true
-        val harmoniaEnvironment = physiologicalTree?.let {
-            val currentBasalForSimulation = basalaimi.toDouble().takeIf { basal -> basal.isFinite() && basal > 0.0 } ?: 1.0
-            val maxBasalForSimulation = preferences.get(DoubleKey.autodriveMaxBasal)
-                .takeIf { maxBasal -> maxBasal.isFinite() && maxBasal > 0.1 }
-                ?: maxOf(currentBasalForSimulation * 3.0, currentBasalForSimulation + 2.0, 3.0)
-            HarmoniaDecisionEnvironment(
-                currentBgMgdl = bg,
-                deltaMgdl5m = delta.toDouble(),
-                iobU = iob.toDouble(),
-                cobG = cob.toDouble(),
-                currentBasalUph = currentBasalForSimulation,
-                maxBasalUph = maxBasalForSimulation,
-                maxSmbU = maxOf(maxSMB, maxSMBHB),
-                maxIobU = maxIob,
-                sensorAgeMin = sensorTelemetry.sensorAgeMin,
-                sensorNoise = sensorTelemetry.sensorNoise,
-                mealRiseConfirmed = harmoniaMealRiseConfirmed,
-                targetBgMgdl = targetBg.toDouble(),
-                correctionFragilityScore = eventMemory.correctionFragilityScore,
-                postHyperExhaustionScore = eventMemory.postHyperExhaustionScore,
-                chaoticEpisodeLoad = lastRbtChaosEvaluation?.score ?: 0.0,
-                effectiveDiaHours = tickEffectiveDiaHours,
-                effectivePeakMinutes = tickEffectivePeakMinutes,
-                bodyKinetics = bodyKinetics,
-                endocrineBasalAmp = lastWCycleBelief
-                    ?.takeIf {
-                        it.enabled && it.applicationMode == EndocrineApplicationMode.APPLIED
-                    }
-                    ?.effectiveBasalAmp,
-                // Carried for the export and the counterfactual only. The decision engine does not
-                // read these two, and a test locks that down.
-                priorRuntimeBlocker = harmoniaPrevRuntimeBlocker,
-                priorBlockedStreak = harmoniaBlockedStreak,
-            )
-        }
-        val harmoniaDecision = HarmoniaDecisionEngine.evaluate(
-            tree = physiologicalTree,
-            environment = harmoniaEnvironment,
-            timestampMs = nowMs,
-            mealCertainty = mealCertainty,
-        )
-        lastHarmoniaDecision = harmoniaDecision
-        if (refreshSource == PatientRefreshSource.LOOP_TICK) {
-            physiologicalTree?.let { tree ->
-                consoleLog.add(
-                    "TREE_DEPLOYED trunk=${tree.trunk.globalState.name} " +
-                        "conf=${aimiFmt2(tree.trunk.confidence)} " +
-                        "risk=${tree.trunk.riskLevel.name} " +
-                        "kinetics=${bodyKinetics.reason}",
-                )
-                consoleLog.add(tree.compactSummary)
-            }
-            mealCertainty?.let { mc ->
-                consoleLog.add(
-                    "MEAL_CERTAINTY level=${mc.level.name} tree=${mc.treeState.name} " +
-                        "rise=${mc.riseGeometry.name} terminals=${mc.terminalsAgree.name} " +
-                        "effortVeto=${mc.effortVeto}",
-                )
-            }
-            harmoniaDecision?.let { decision ->
-                consoleLog.add(decision.compactSummary)
-                if (!decision.decisionBasis.actionCoherentWithTrunk) {
-                    consoleLog.add(
-                        "HARMONIA_BRANCH_MISMATCH action=${decision.action.name} " +
-                            "trunk=${decision.decisionBasis.trunkState.name} " +
-                            "reason=${decision.decisionBasis.mismatchReason} " +
-                            "primary=${decision.decisionBasis.primaryReason}",
-                    )
-                }
-            }
-        }
-        val loopCache = PatientStateLoopCache(
-            phaseOutput = lastPhysiologicalPhaseOutput,
-            mealAbsorptionOutput = lastMealAbsorptionOutput,
-            patternSnapshot = lastPhysiologicalPatternSnapshot,
-            contextSnapshot = lastContextSnapshot,
-            sourceSensor = lastPatientSourceSensor,
-            correctionAggressionDecision = correctionAggressionDecision,
-            chronicInflammation = lastInflammationResult,
-            physioContext = physioAdapter.getEffectiveContext(),
-            physioTrace = physioAdapter.getLastDecisionTrace(),
-            hypothesisState = lastUamHypothesisState,
-            uamConfidence = AimiUamHandler.confidenceOrZero(),
-        )
-        PatientStateRuntimeRepository.publish(
-            patientState = patientState,
-            patientModeDecision = patientModeDecision,
-            updatedAtMs = nowMs,
-            physioLive = physioLive,
-            thermalBelief = enrichedSnap.thermalBelief,
-            physiologicalTree = physiologicalTree,
-            harmoniaDecision = harmoniaDecision,
-            loopCache = loopCache,
-            refreshSource = refreshSource,
-        )
-        return patientState
     }
 
     private fun buildPatientEventMemory(
