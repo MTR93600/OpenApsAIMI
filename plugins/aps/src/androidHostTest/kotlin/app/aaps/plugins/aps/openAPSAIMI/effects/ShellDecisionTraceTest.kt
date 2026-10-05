@@ -2392,6 +2392,40 @@ class ShellDecisionTraceTest {
         assertEquals(DRIFT_TERMINATOR_TAP_TRACE, trace)
     }
 
+    @Test
+    fun earlyTickAdoptsThePreferenceTddWhenTheProfileIsEmpty() {
+        val prefs = recordingPreferences(
+            doubles = mapOf(DoubleKey.OApsAIMITDD7 to 35.0),
+            bools = mapOf(BooleanKey.OApsAIMIMealAdvisorTrigger to false),
+        )
+        tick = newTick(prefs)
+        armShell()
+        val provider = mock(HormonitorStudyExporterProvider::class.java)
+        whenever(provider.exporter()).thenReturn(null)
+        setField(tick, "hormonitorStudyExporterProvider", provider)
+        val profile = mock(OapsProfileAimi::class.java, Answer { inv ->
+            when {
+                inv.method.name == "copy" || inv.method.name.startsWith("copy") -> inv.mock
+                inv.method.name == "getTDD" -> 0.0
+                inv.method.returnType == java.lang.Double.TYPE -> 0.0
+                inv.method.returnType == java.lang.Boolean.TYPE -> false
+                inv.method.returnType == Integer.TYPE -> 0
+                else -> null
+            }
+        })
+        var state: Any? = null
+        val trace = capture {
+            state = invokeNamed(
+                "runEarlyDetermineBasalStages",
+                listOf(tickContext(profile, 180.0)),
+            )
+        }
+        val early = state
+        assertEquals(35.0, resultField(early!!, "tdd7Days") as Double, 1e-9)
+        assertEquals(false, resultField(early, "isExplicitAdvisorRun") as Boolean)
+        assertEquals(EARLY_TICK_TDD_TRACE, trace)
+    }
+
     private fun resultField(target: Any, name: String): Any? {
         val field = target.javaClass.getDeclaredField(name)
         field.isAccessible = true
@@ -3293,6 +3327,12 @@ class ShellDecisionTraceTest {
     companion object {
         private val ENABLE_SMB_ALWAYS_TRACE = """
             LOG phrase
+        """.trimIndent()
+
+        private val EARLY_TICK_TDD_TRACE = """
+            READ key=BooleanKey.OApsAIMIMealAdvisorTrigger value=false
+            READ key=BooleanKey.OApsAIMIMealAdvisorTrigger value=false
+            READ key=DoubleKey.OApsAIMITDD7 value=35.00
         """.trimIndent()
 
         private val DRIFT_TERMINATOR_TAP_TRACE = """
