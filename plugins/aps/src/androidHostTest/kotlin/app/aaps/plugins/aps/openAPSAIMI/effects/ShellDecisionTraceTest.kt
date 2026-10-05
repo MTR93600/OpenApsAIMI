@@ -64,6 +64,10 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.HormonitorStudyExporterProvider
 import app.aaps.plugins.aps.openAPSAIMI.physio.CircadianMealProfileStore
 import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionMemory
+import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
+import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
+import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseHysteresis
+import app.aaps.plugins.aps.openAPSAIMI.safety.MealSafetyContext
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioContextMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioMultipliersMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisId
@@ -2301,6 +2305,43 @@ class ShellDecisionTraceTest {
         assertEquals(ADVANCED_PREDICTION_COB_TRACE, trace)
     }
 
+    @Test
+    fun mealAbsorptionFirstWavePrioritizesDelivery() {
+        MealAbsorptionMemory.reset()
+        MealAbsorptionPhaseHysteresis.reset()
+        tick = newTick(recordingPreferences(doubles = emptyMap()))
+        armShell()
+        setField(tick, "bg", 180.0)
+        setField(tick, "predictedBg", 180.0f)
+        setField(tick, "delta", 6.0f)
+        setField(tick, "shortAvgDelta", 6.0f)
+        setField(tick, "longAvgDelta", 6.0f)
+        setField(tick, "iob", 1.0f)
+        setField(tick, "cob", 20.0f)
+        setField(tick, "maxSMB", 2.0)
+        setField(tick, "maxIob", 10.0)
+        setField(tick, "targetBg", 100.0f)
+        setField(tick, "hourOfDay", 12)
+        var output: MealAbsorptionPhaseEngine.Output? = null
+        val trace = capture {
+            output = invokeNamed(
+                "refreshMealAbsorptionPhase",
+                listOf(
+                    6.0f,
+                    0,
+                    72,
+                    60,
+                    MealSafetyContext(explicitMealTrigger = true),
+                    null,
+                    now,
+                ),
+            ) as MealAbsorptionPhaseEngine.Output
+        }
+        assertEquals(MealAbsorptionPhase.FIRST_WAVE, output!!.phase)
+        assertEquals(true, output!!.mealDeliveryPriority)
+        assertEquals(MEAL_ABSORPTION_FIRST_WAVE_TRACE, trace)
+    }
+
     private fun resultField(target: Any, name: String): Any? {
         val field = target.javaClass.getDeclaredField(name)
         field.isAccessible = true
@@ -3202,6 +3243,11 @@ class ShellDecisionTraceTest {
     companion object {
         private val ENABLE_SMB_ALWAYS_TRACE = """
             LOG phrase
+        """.trimIndent()
+
+        private val MEAL_ABSORPTION_FIRST_WAVE_TRACE = """
+            READ key=DoubleKey.OApsAIMIHighBg value=0.00
+            LOG 🍽️ MEAL_ABSORPTION: FIRST_WAVE B=1.00 pri=true waves=1 (FIRST_WAVE B=1.00 π=0.85 K=1.00 T=0.00 P=0.35)
         """.trimIndent()
 
         private val ADVANCED_PREDICTION_COB_TRACE = """

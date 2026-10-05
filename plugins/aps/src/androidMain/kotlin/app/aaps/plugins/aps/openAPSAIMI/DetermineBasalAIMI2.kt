@@ -247,6 +247,8 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTubeDoseBaseline
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideApplyTubeAdvisorFromDoseSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiAdvancedPredictionCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideApplyAdvancedPredictions
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiMealAbsorptionCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideRefreshMealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideUpdatePhysioLatentState
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEnableSmbCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideApplyContextModule
@@ -3428,67 +3430,76 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         mealContext: MealSafetyContext,
         lastBolusTimeMs: Long?,
         nowMs: Long,
-    ): MealAbsorptionPhaseEngine.Output {
-        val scenario = lastScenarioProjection
-        val floorT = scenario?.clinicalFloor?.terminalMgdl ?: bg
-        val bestT = scenario?.scenarioBest?.terminalMgdl ?: bg
-        val lateFatRise = isLateFatProteinRise(
-            bg = bg,
-            predictedBg = predictedBg.toDouble(),
-            delta = delta.toDouble(),
-            shortAvgDelta = shortAvgDelta.toDouble(),
-            longAvgDelta = longAvgDelta.toDouble(),
-            iob = iob.toDouble(),
-            cob = cob.toDouble(),
-            maxSMB = maxSMB,
-            lastBolusTimeMs = lastBolusTimeMs,
-            mealFlags = MealFlags(
-                mealTime = mealTime,
-                bfastTime = bfastTime,
-                lunchTime = lunchTime,
-                dinnerTime = dinnerTime,
-                highCarbTime = highCarbTime,
-            ),
-            nowMs = nowMs,
-        )
-        val hoursSinceBolus = lastBolusTimeMs?.let { (nowMs - it) / 3_600_000.0 }
-        val output = MealAbsorptionPhaseEngine.evaluate(
-            MealAbsorptionPhaseEngine.Input(
-                bgMgdl = bg,
-                targetBgMgdl = targetBg.toDouble(),
-                highBgPreferenceMgdl = preferences.get(DoubleKey.OApsAIMIHighBg),
-                deltaMgdlPer5 = delta.toDouble(),
-                shortAvgDeltaMgdlPer5 = shortAvgDelta.toDouble(),
-                combinedDeltaMgdlPer5 = combinedDelta.toDouble(),
-                deltaPrevMgdlPer5 = mealAbsorptionDeltaPrevOfTick(),
-                mealCobG = cob.toDouble(),
-                hourOfDay = hourOfDay,
-                iobU = iob.toDouble(),
-                maxIobU = maxIob,
-                bestTerminalMgdl = bestT,
-                floorTerminalMgdl = floorT,
-                gapPrevMgdl = MealAbsorptionMemory.lastGapMgdl,
-                heartRateBpm = heartRateBpm,
-                restingHeartRateBpm = restingHeartRateBpm,
-                stepsLast15m = stepsLast15m,
-                uamConfidence = AimiUamHandler.confidenceOrZero(),
-                mealIntent = mealContext.hasMealIntent,
-                physiologicalPhase = lastPhysiologicalPhaseOutput?.phase ?: PhysiologicalPhase.OFF,
-                estimatedRa = continuousStateEstimator.getLastRa().takeIf { it.isFinite() && it > 0.0 },
-                hoursSinceBolus = hoursSinceBolus,
-                lateFatProteinRise = lateFatRise,
+    ): MealAbsorptionPhaseEngine.Output = decideRefreshMealAbsorptionPhase(
+        combinedDelta = combinedDelta,
+        stepsLast15m = stepsLast15m,
+        heartRateBpm = heartRateBpm,
+        restingHeartRateBpm = restingHeartRateBpm,
+        mealContext = mealContext,
+        lastBolusTimeMs = lastBolusTimeMs,
+        nowMs = nowMs,
+        preferences = preferences,
+        consoleLog = consoleLog,
+        calls = object : AimiMealAbsorptionCalls {
+            override fun scenario() = lastScenarioProjection
+            override fun bg() = this@DetermineBasalaimiSMB2.bg
+            override fun predictedBg() = this@DetermineBasalaimiSMB2.predictedBg.toDouble()
+            override fun delta() = this@DetermineBasalaimiSMB2.delta.toDouble()
+            override fun shortAvgDelta() = this@DetermineBasalaimiSMB2.shortAvgDelta.toDouble()
+            override fun longAvgDelta() = this@DetermineBasalaimiSMB2.longAvgDelta.toDouble()
+            override fun iob() = this@DetermineBasalaimiSMB2.iob.toDouble()
+            override fun cob() = this@DetermineBasalaimiSMB2.cob.toDouble()
+            override fun maxSmb() = this@DetermineBasalaimiSMB2.maxSMB
+            override fun mealTime() = this@DetermineBasalaimiSMB2.mealTime
+            override fun bfastTime() = this@DetermineBasalaimiSMB2.bfastTime
+            override fun lunchTime() = this@DetermineBasalaimiSMB2.lunchTime
+            override fun dinnerTime() = this@DetermineBasalaimiSMB2.dinnerTime
+            override fun highCarbTime() = this@DetermineBasalaimiSMB2.highCarbTime
+            override fun lateFat(
+                bg: Double,
+                predictedBg: Double,
+                delta: Double,
+                shortAvgDelta: Double,
+                longAvgDelta: Double,
+                iob: Double,
+                cob: Double,
+                maxSmb: Double,
+                lastBolusTimeMs: Long?,
+                mealTime: Boolean,
+                bfastTime: Boolean,
+                lunchTime: Boolean,
+                dinnerTime: Boolean,
+                highCarbTime: Boolean,
+                nowMs: Long,
+            ) = isLateFatProteinRise(
+                bg = bg,
+                predictedBg = predictedBg,
+                delta = delta,
+                shortAvgDelta = shortAvgDelta,
+                longAvgDelta = longAvgDelta,
+                iob = iob,
+                cob = cob,
+                maxSMB = maxSmb,
+                lastBolusTimeMs = lastBolusTimeMs,
+                mealFlags = MealFlags(mealTime, bfastTime, lunchTime, dinnerTime, highCarbTime),
                 nowMs = nowMs,
-            ),
-        )
-        lastMealAbsorptionOutput = output
-        if (output.phase.isActive) {
-            consoleLog.add(
-                "🍽️ MEAL_ABSORPTION: ${output.phase.name} B=${aimiFmt2(output.belief)} " +
-                    "pri=${output.mealDeliveryPriority} waves=${output.waveCount} (${output.reason})",
             )
-        }
-        return output
-    }
+            override fun targetBg() = this@DetermineBasalaimiSMB2.targetBg.toDouble()
+            override fun deltaPrev() = mealAbsorptionDeltaPrevOfTick()
+            override fun hourOfDay() = this@DetermineBasalaimiSMB2.hourOfDay
+            override fun maxIob() = this@DetermineBasalaimiSMB2.maxIob
+            override fun gapPrev() = MealAbsorptionMemory.lastGapMgdl
+            override fun uamConfidence() = AimiUamHandler.confidenceOrZero()
+            override fun physiologicalPhase() =
+                lastPhysiologicalPhaseOutput?.phase ?: PhysiologicalPhase.OFF
+            override fun estimatedRa() =
+                continuousStateEstimator.getLastRa().takeIf { it.isFinite() && it > 0.0 }
+            override fun writeOutput(output: MealAbsorptionPhaseEngine.Output) {
+                lastMealAbsorptionOutput = output
+            }
+        },
+    )
+
 
     private fun physiologicalPhaseExport(): AimiDecisionContext.PhysiologicalPhaseExport? {
         val out = lastPhysiologicalPhaseOutput ?: return null
