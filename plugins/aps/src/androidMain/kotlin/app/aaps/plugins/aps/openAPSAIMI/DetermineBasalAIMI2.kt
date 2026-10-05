@@ -276,6 +276,8 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetermineBasalTickSignal
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetermineBasalTickPostHypo
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetermineBasalTickSchedule
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetermineBasalTickMealNgr
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideDetermineBasalTickEngine
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickEngineCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickMealNgrCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickMealNgrOutcome
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTickMealHyperStep
@@ -15125,77 +15127,81 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val allowMealHighIob = continuedMeal.allowMealHighIob
         val mealHighIobDamping = continuedMeal.mealHighIobDamping
 
-        // BasalDecisionEngine: [targetBg] = membre instance (objectif loop / temp target), pas le local [target_bg] (bande schedule) — même contrat qu’avant extraction orchestration.
-        val basalDecision = runBasalDecisionEngineDecideStage(
-            AimiBasalDecisionEngineStageBundle(
-                ctx = ctx,
-                profile = profile,
-                rT = rT,
-                glucoseStatus = glucoseStatus,
-                featuresCombinedDelta = f?.combinedDelta,
-                profileCurrentBasal = profile_current_basal,
-                basalEstimate = basalaimi.toDouble(),
-                tdd7P = tdd7P,
-                tdd7Days = tdd7Days,
-                variableSensitivity = variableSensitivity.toDouble(),
-                predictedBg = predictedBg.toDouble(),
-                // The only basal site that sees the auditor's target ratio. The member `targetBg`
-                // itself is never reassigned, so the learners and the ML CSV keep the raw value.
-                targetBg = auditorDoseTarget(targetBg.toDouble(), AuditorProfileFactorCodes.DOSE_SITE_BASAL),
-                tickIobForEngine = iob.toDouble(),
-                engineMaxIob = maxIob,
-                eventualBg = eventualBG,
-                bg = bg,
-                delta = delta.toDouble(),
-                shortAvgDelta = shortAvgDelta.toDouble(),
-                longAvgDelta = longAvgDelta.toDouble(),
-                combinedDelta = combinedDelta.toDouble(),
-                bgAcceleration = bgAcceleration.toDouble(),
-                allowMealHighIob = allowMealHighIob,
-                safetyDecision = safetyDecision,
-                forcedBasal = forcedBasal.toDouble(),
-                forcedBasalMealModesMax = forcedBasalmealmodes.toDouble(),
-                isMealActive = isMealActive,
-                runtimeMinValue = runtimeMinValue,
-                smbToGive = smbToGive.toDouble(),
-                zeroSinceMin = zeroSinceMin,
-                minutesSinceLastChange = minutesSinceLastChange,
-                pumpCaps = pumpCaps,
-                timenowHour = timenow,
-                sixAmHour = sixAMHour,
-                pregnancyEnable = pregnancyEnable,
-                nightMode = nightbis,
-                modesCondition = modesCondition,
-                autodrivePref = autodrive,
-                honeymoon = honeymoon,
-            )
-        )
+        // BasalDecisionEngine: the member targetBg is the loop target, not the schedule band.
+        // nightMode is nightbis, already set by the tick clock.
+        return decideDetermineBasalTickEngine(
+            calls = object : AimiTickEngineCalls<BasalDecisionEngine.Decision> {
+                override fun basalEngine(): BasalDecisionEngine.Decision = runBasalDecisionEngineDecideStage(
+                    AimiBasalDecisionEngineStageBundle(
+                        ctx = ctx,
+                        profile = profile,
+                        rT = rT,
+                        glucoseStatus = glucoseStatus,
+                        featuresCombinedDelta = f?.combinedDelta,
+                        profileCurrentBasal = profile_current_basal,
+                        basalEstimate = basalaimi.toDouble(),
+                        tdd7P = tdd7P,
+                        tdd7Days = tdd7Days,
+                        variableSensitivity = variableSensitivity.toDouble(),
+                        predictedBg = predictedBg.toDouble(),
+                        // The only basal site that sees the auditor's target ratio. The member targetBg
+                        // itself is never reassigned, so the learners and the ML CSV keep the raw value.
+                        targetBg = auditorDoseTarget(targetBg.toDouble(), AuditorProfileFactorCodes.DOSE_SITE_BASAL),
+                        tickIobForEngine = iob.toDouble(),
+                        engineMaxIob = maxIob,
+                        eventualBg = eventualBG,
+                        bg = bg,
+                        delta = delta.toDouble(),
+                        shortAvgDelta = shortAvgDelta.toDouble(),
+                        longAvgDelta = longAvgDelta.toDouble(),
+                        combinedDelta = combinedDelta.toDouble(),
+                        bgAcceleration = bgAcceleration.toDouble(),
+                        allowMealHighIob = allowMealHighIob,
+                        safetyDecision = safetyDecision,
+                        forcedBasal = forcedBasal.toDouble(),
+                        forcedBasalMealModesMax = forcedBasalmealmodes.toDouble(),
+                        isMealActive = isMealActive,
+                        runtimeMinValue = runtimeMinValue,
+                        smbToGive = smbToGive.toDouble(),
+                        zeroSinceMin = zeroSinceMin,
+                        minutesSinceLastChange = minutesSinceLastChange,
+                        pumpCaps = pumpCaps,
+                        timenowHour = timenow,
+                        sixAmHour = sixAMHour,
+                        pregnancyEnable = pregnancyEnable,
+                        nightMode = nightbis,
+                        modesCondition = modesCondition,
+                        autodrivePref = autodrive,
+                        honeymoon = honeymoon,
+                    ),
+                )
 
-        // Learners post-moteur, TBR final, comparator, instrumentation RT, auditor — see [runPostBasalEngineLearnersRtInstrumentationAndAuditorStage]
-        val finalResult = runPostBasalEngineLearnersRtInstrumentationAndAuditorStage(
-            AimiPostBasalEngineFinalizeBundle(
-                ctx = ctx,
-                profile = profile,
-                originalProfile = originalProfile,
-                rT = rT,
-                basalDecision = basalDecision,
-                flatBGsDetected = flatBGsDetected,
-                pkpdRuntime = pkpdRuntime,
-                tdd7Days = tdd7Days,
-                intervalsmb = intervalsmb,
-            )
-        )
+                override fun learners(decision: BasalDecisionEngine.Decision): RT =
+                    runPostBasalEngineLearnersRtInstrumentationAndAuditorStage(
+                        AimiPostBasalEngineFinalizeBundle(
+                            ctx = ctx,
+                            profile = profile,
+                            originalProfile = originalProfile,
+                            rT = rT,
+                            basalDecision = decision,
+                            flatBGsDetected = flatBGsDetected,
+                            pkpdRuntime = pkpdRuntime,
+                            tdd7Days = tdd7Days,
+                            intervalsmb = intervalsmb,
+                        ),
+                    )
 
-        // 🏥 AIMI SNAPSHOT + JSONL + EXPORT — see [runAimiSnapshotMedicalJsonAndHormonitorExportStage]
-        runAimiSnapshotMedicalJsonAndHormonitorExportStage(
-            ctx = ctx,
-            profile = profile,
-            decisionCtx = decisionCtx,
-            finalResult = finalResult,
-            pkpdRuntime = pkpdRuntime,
+                override fun export(finalResult: RT) {
+                    runAimiSnapshotMedicalJsonAndHormonitorExportStage(
+                        ctx = ctx,
+                        profile = profile,
+                        decisionCtx = decisionCtx,
+                        finalResult = finalResult,
+                        pkpdRuntime = pkpdRuntime,
+                    )
+                }
+            },
         )
-
-        return finalResult
     }
 
     /**
