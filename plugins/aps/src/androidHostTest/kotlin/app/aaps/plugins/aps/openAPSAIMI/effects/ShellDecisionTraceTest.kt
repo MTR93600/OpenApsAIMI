@@ -1649,6 +1649,40 @@ class ShellDecisionTraceTest {
         assertEquals(RBT_LIVE_TICK_TRACE, trace)
     }
 
+    @Test
+    fun pkpdAbsorptionGuardHalvesThePreOnsetSmb() {
+        setField(tick, "bg", 180.0)
+        setField(tick, "delta", 2.0f)
+        setField(tick, "shortAvgDelta", 2.0f)
+        setField(tick, "targetBg", 100.0f)
+        setField(tick, "predictedBg", 200.0f)
+        setField(tick, "eventualBG", 200.0)
+        setField(tick, "intervalsmb", 1)
+        setField(tick, "pkpdAbsorptionGuardAppliedThisTick", false)
+        val channel = tick.javaClass.declaredClasses
+            .first { it.simpleName == "PkpdGuardLogChannel" }
+            .enumConstants
+            .first { it.toString() == "PIPELINE" }
+        lateinit var applied: Any
+        val trace = capture {
+            applied = invokeNamed(
+                "applyPkpdAbsorptionGuardOncePerTick",
+                listOf(2.0f, preOnsetRuntime(), 10.0, false, false, false, null, channel),
+            )!!
+        }
+        assertEquals(1.0f, resultField(applied, "smbOut"))
+        assertEquals(4, resultField(applied, "intervalAddMin"))
+        assertEquals(true, resultField(applied, "multiplicationApplied"))
+        assertEquals(5, getField(tick, "intervalsmb"))
+        assertEquals(PKPD_ABSORPTION_GUARD_TRACE, trace)
+    }
+
+    private fun resultField(target: Any, name: String): Any? {
+        val field = target.javaClass.getDeclaredField(name)
+        field.isAccessible = true
+        return field.get(target)
+    }
+
     private fun invokeNamed(name: String, args: List<Any?>): Any? {
         val method = tick.javaClass.declaredMethods.first {
             it.name == name && it.parameterCount == args.size
@@ -2542,6 +2576,13 @@ class ShellDecisionTraceTest {
     }
 
     companion object {
+        private val PKPD_ABSORPTION_GUARD_TRACE = """
+            READ key=BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled value=false
+            READ key=DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor value=0.00
+            LOG INTERVAL_ADJUSTED: +4m → 5m total
+            LOG SMB_GUARDED: 2.00U → 1.00U
+        """.trimIndent()
+
         private val SPORT_MEAL_SMB_TRACE = """
             READ key=BooleanKey.OApsAIMIhoneymoon value=false
             READ key=BooleanKey.OApsAIMIHyperDroppingExemptEnabled value=false
