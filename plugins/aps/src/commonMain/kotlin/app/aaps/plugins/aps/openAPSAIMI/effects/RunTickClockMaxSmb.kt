@@ -12,7 +12,6 @@ import app.aaps.plugins.aps.openAPSAIMI.NGRConfig
 import app.aaps.plugins.aps.openAPSAIMI.aimiCivilClock
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
-import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.smb.MaxSmbLadder
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -65,6 +64,12 @@ internal data class AimiTickClockTirCarbGlucoseBootstrap(
 internal interface AimiTickClockState {
     fun nowMs(): Long
     fun setNow(ms: Long)
+
+    /**
+     * Instant for the civil clock and for [setNow].
+     * Production returns `aimiWallClockMs()` (`Clock.System`). A test may return a fixed epoch.
+     */
+    fun epochMs(): Long
     fun setHourOfDay(hour: Int)
     fun setBg(bg: Double)
     fun bg(): Double
@@ -168,7 +173,7 @@ internal fun decideTickClockMaxSmb(
     carbs: AimiCarbContextRead,
     notes: AimiNoteTags,
 ): AimiTickClockTirCarbGlucoseBootstrap {
-    val civilNow = aimiCivilClock(aimiWallClockMs())
+    val civilNow = aimiCivilClock(state.epochMs())
     state.setHourOfDay(civilNow.hour)
     val circadianMinute = civilNow.minute
     val circadianSecond = civilNow.second
@@ -273,7 +278,7 @@ internal fun decideTickClockMaxSmb(
     state.setLastHourTirLow100(tirSnapshot.lastHourTirLow100)
     state.setLastHourTirAbove170(tirSnapshot.lastHourTirAbove170)
     state.setLastHourTirAbove120(tirSnapshot.lastHourTirAbove120)
-    state.setNow(aimiWallClockMs())
+    state.setNow(state.epochMs())
     badDay.automate(tir1DAYIR.toInt())
     // Calendar.SUNDAY = 1, Calendar.SATURDAY = 7, the numbering aimiCivilClock already uses.
     state.setWeekend(if (dayOfWeek == 1 || dayOfWeek == 7) 1 else 0)

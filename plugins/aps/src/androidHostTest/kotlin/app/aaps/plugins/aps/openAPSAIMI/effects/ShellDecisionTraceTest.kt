@@ -34,6 +34,7 @@ import app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextManager
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.AimiDecisionContext
+import app.aaps.plugins.aps.openAPSAIMI.aimiEpochAtLocalTime
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.AimiUamHandler
 import app.aaps.plugins.aps.openAPSAIMI.DetermineBasalaimiSMB2
@@ -2623,6 +2624,24 @@ class ShellDecisionTraceTest {
     }
 
     @Test
+    fun wearableSnapshotFailureIsLoggedAndTheTickStillDecides() {
+        val trace = signalSlice(
+            glucose = 160.0,
+            delta = 2.0,
+            shortAvg = 2.0,
+            longAvg = 2.0,
+            carbs = 40.0,
+            maxBasal = 2.0,
+            wearableFailure = "watch down",
+        )
+        assertEquals(3.3, trace.returned.units ?: 0.0, 0.0)
+        assertTrue(
+            trace.trace,
+            trace.trace.contains("WEARABLE snapshot failed (IllegalStateException): watch down — snapshot empty"),
+        )
+    }
+
+    @Test
     fun signalMealReturnsTheAdvisorSmbAndTbr() {
         val trace = signalSlice(
             glucose = 160.0,
@@ -2658,6 +2677,7 @@ class ShellDecisionTraceTest {
         longAvg: Double,
         carbs: Double,
         maxBasal: Double,
+        wearableFailure: String? = null,
     ): SignalSlice {
         val carbTime = System.currentTimeMillis().toDouble()
         val prefs = recordingPreferences(
@@ -2686,6 +2706,23 @@ class ShellDecisionTraceTest {
         )
         setField(tick, "adaptiveMult", 1.0)
         setField(tick, "contextInfluenceEngine", ContextInfluenceEngine(mock(AAPSLogger::class.java)))
+        if (wearableFailure != null) {
+            setField(tick, "physioAdapter", mock(AIMIInsulinDecisionAdapterMTR::class.java, Answer { inv: InvocationOnMock ->
+                when (inv.method.name) {
+                    "getLatestSnapshot" -> {
+                        val fromSignalCatch = Throwable().stackTrace.any { frame ->
+                            frame.methodName == "wearableSnapshot"
+                        }
+                        if (fromSignalCatch) throw IllegalStateException(wearableFailure)
+                        HealthContextSnapshot(hrNow = 72, rhrResting = 60)
+                    }
+                    "getEffectiveContext" -> PhysioContextMTR.NEUTRAL
+                    "getRealTimeActivity" -> AIMIInsulinDecisionAdapterMTR.RealTimeActivity(stepsToday = 0, heartRate = 0)
+                    "getDetailedLogString" -> ""
+                    else -> null
+                }
+            }))
+        }
         setField(tick, "bg", glucose)
         setField(tick, "delta", delta.toFloat())
         setField(tick, "shortAvgDelta", shortAvg.toFloat())
@@ -2716,7 +2753,8 @@ class ShellDecisionTraceTest {
         return SignalSlice(returned ?: error("tick returned null"), trace)
     }
 
-    private fun armPrefix(glucose: Double, delta: Double, sport: Boolean) {
+    private fun armPrefix(glucose: Double, delta: Double, sport: Boolean, localHour: Int = 5) {
+        setField(tick, "injectedTickEpochMs", aimiEpochAtLocalTime(localHour))
         val persistence = mock(PersistenceLayer::class.java)
         val clock = aimiWallClockMs()
         val events = if (sport) {

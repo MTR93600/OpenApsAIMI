@@ -2896,6 +2896,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         state = object : AimiTickClockState {
             override fun nowMs() = now
             override fun setNow(ms: Long) { now = ms }
+            override fun epochMs(): Long = injectedTickEpochMs ?: aimiWallClockMs()
             override fun setHourOfDay(hour: Int) { hourOfDay = hour }
             override fun setBg(bg: Double) { this@DetermineBasalaimiSMB2.bg = bg }
             override fun bg() = this@DetermineBasalaimiSMB2.bg
@@ -9834,6 +9835,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var tddPerHour = 0.0f
     private var tdd24HrsPerHour = 0.0f
     private var hourOfDay: Int = 0
+
+    /**
+     * Null in production: the tick clock port calls [aimiWallClockMs], which is `Clock.System`.
+     * Tests set a fixed epoch so `hourOfDay` and `nightbis` do not follow the machine clock.
+     */
+    internal var injectedTickEpochMs: Long? = null
     private var weekend: Int = 0
     private var recentSteps5Minutes: Int = 0
     private var recentSteps10Minutes: Int = 0
@@ -12394,7 +12401,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         snackTime: Boolean,
         reason: StringBuilder,
     ): AimiPostAutodrivePostHypoBundle {
-        val localHour = aimiLocalHour()
+        val localHour = aimiLocalHour(injectedTickEpochMs ?: aimiWallClockMs())
         val estimatedCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
         val estimatedCarbsTimeDouble = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime)
         val estimatedCarbsTime = estimatedCarbsTimeDouble.toLong()
@@ -14245,6 +14252,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 physioMultipliers = physioMultipliers,
                 insulinActionState = insulinActionState,
                 autodriveDisplay = autodriveDisplay,
+                consoleLog = consoleLog,
                 calls = object : AimiTickSignalCalls {
                     override fun signalPrep(
                         ctx: AimiTickContext,

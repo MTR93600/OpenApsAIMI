@@ -178,7 +178,7 @@ internal sealed class AimiTickSignalOutcome {
 
 /**
  * From [runSignalPreparationPkpdRuntimePhase] through the return of [runHardBrakeLyraOrReturn].
- * The wearable snapshot failure stays here: the fallback is an empty [HealthContextSnapshot].
+ * A wearable snapshot failure is [OptionalSignal.Failed], a console line, and an empty [HealthContextSnapshot].
  */
 internal fun decideDetermineBasalTickSignal(
     ctx: AimiTickContext,
@@ -194,6 +194,7 @@ internal fun decideDetermineBasalTickSignal(
     physioMultipliers: PhysioMultipliersMTR,
     insulinActionState: InsulinActionState,
     autodriveDisplay: String,
+    consoleLog: MutableList<String>,
     calls: AimiTickSignalCalls,
 ): AimiTickSignalOutcome {
     val signal = when (
@@ -230,11 +231,14 @@ internal fun decideDetermineBasalTickSignal(
         reason = signal.reason,
         isExplicitAdvisorRun = isExplicitAdvisorRun,
     )
-    val wearableSnapshot = try {
-        calls.wearableSnapshot()
-    } catch (_: Exception) {
-        HealthContextSnapshot()
-    }
+    val wearableSignal = readRbtOptional(
+        source = "wearableSnapshot",
+        consoleLog = consoleLog,
+        failureLine = { errorType, message ->
+            "WEARABLE snapshot failed ($errorType): ${message.orEmpty()} — snapshot empty"
+        },
+    ) { calls.wearableSnapshot() }
+    val wearableSnapshot = wearableSignal.valueOrNull() ?: HealthContextSnapshot()
     val predictions = calls.advancedPredictions(
         ctx = ctx,
         profile = profile,
