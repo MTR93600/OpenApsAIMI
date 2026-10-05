@@ -53,7 +53,46 @@ Ordre : d’abord ce qui change un débit ou le tick suivant, ensuite le modèle
 
 10. **TFLite et UAM.** Le même fichier `modelUAM.tflite`. Interpréteur TFLite iOS, ou une inférence en Kotlin commun qui lit ce fichier. Modèle absent : `predictSmbUam` **0 U**, `refine` identité, pas d’entraînement. Modèle présent : le même SMB que Android pour le même vecteur. Taille : l’interpréteur et le branchement de `AimiModelHandler`, sans réécrire `neuralnetwork5`. Traces : `uamPostHypoReboundBridgesAShortTempBasal`, SMB prédit **0 U**, TBR **1,05 U/h**, 5 min, sur le chemin modèle absent ; puis le même vecteur avec le fichier présent, SMB identique à Android.
 
-11. **`AimiDecisionContext`.** Le type est encore dans `DetermineBasalAIMI2.kt` (fabrique 43 lignes). Le porter en commun, avec les champs que l’orchestre et l’export lisent. Taille : déplacer la data class et la fabrique, sans changer les champs. Trace : l’export du tick `lowPredictionRequestsAQuarterBasal`, champ `pkpd_soft_floor` compris, octet pour octet.
+11. **`AimiDecisionContext`.** Le type et `toMedicalJson()` sont en `commonMain`. Les champs ne changent pas. La fabrique reste dans la coquille : elle lit la télémétrie d’instance (`IsfSourceTelemetry`, estimateur, ratio) puis remplit le type commun. Trace : `lowPredictionRequestsAQuarterBasal`, TBR **0,25 U/h**, et l’export `pkpd_soft_floor` raw 39, soft 39, hybride 39, `applied` faux, raison `endo_reversion_disabled`.
+
+## Plans de PR, gros chantiers
+
+Ces PR ne sont pas ouvertes. Chacune reste derrière l’interrupteur éteint jusqu’à sa trace verte.
+
+### HealthKit et snapshot wearable
+
+- `iosMain` : un adaptateur qui remplit `HealthContextSnapshot` (pas 5/15/60 min, FC, FC de repos, fenêtres 10 et 60 min) depuis HealthKit, avec les mêmes unités que le snapshot Android.
+- Le tick iOS appelle cet adaptateur là où Android appelle `getLatestSnapshot`. L’échec de lecture journalise la ligne wearable déjà verrouillée, snapshot vide, sans avaler l’exception.
+- Hors de cette PR : SQLDelight, l’effort, le COB, le runtime patient.
+- Trace : `autosensHalfDoublesScheduledBasalAndRestingHeartRateStrengthensIsf`, FC 110 / 10 min, moyenne 60 min 88, ISF **45**, ligne `HR_TREND_ISF x0.90`.
+
+### Persistance des pas, de la FC et des bolus
+
+- Schéma commun, SQLDelight ou équivalent, et les trois lectures de `persistenceLayer` : `getHeartRatesFromTimeToTime`, pas, bolus. Les caches partent des mêmes listes, y compris la liste vide.
+- Branchement iOS à la place des listes vides. Android garde les mêmes requêtes.
+- Trace : la même scène ISF **45**, plus un tick dont le cache bolus vide ne change pas le SMB déjà verrouillé.
+
+### Runtime patient
+
+- Après le snapshot réel. Appeler les 221 lignes : état patient, arbre, Harmonia. Pas une seconde formule.
+- Trace : `lowPredictionRequestsAQuarterBasal` avec `TREE_DEPLOYED trunk=SENSOR_UNCERTAIN`, `MEAL_CERTAINTY level=NONE`, TBR **0,25 U/h**, octet pour octet.
+
+### TPO
+
+- `onTickStart` avec l’horloge déjà portée, stockage de session commun, même reversement de préférences.
+- D’abord les scènes sans session : nuit TBR **1,00 U/h** (`zzPostHypoAtFiveSkipsTheDriftMicroSmb`) et sport TBR **1,30 U/h**. Une scène avec session active doit être verrouillée sur Android avant d’être exigée sur iOS.
+
+### Learners
+
+- Les classes sont déjà en `commonMain`. Cette PR ajoute le stockage identique (`aimi_basal_learner.json`, état du réseau, CSV) dans la persistance commune, puis les appels `process` au même endroit du tick.
+- Départ à froid : multiplicateurs **1,0**, gouvernance `WARMUP`.
+- Trace : tick de nuit, TBR **1,00 U/h**, avec les lignes d’apprenants.
+
+### TFLite et UAM
+
+- Le même fichier `modelUAM.tflite`. Interpréteur TFLite iOS, ou inférence Kotlin commune qui lit ce fichier. Pas de réécriture de `neuralnetwork5`.
+- Modèle absent : `predictSmbUam` **0 U**, `refine` identité, pas d’entraînement.
+- Traces : `uamPostHypoReboundBridgesAShortTempBasal`, SMB **0 U**, TBR **1,05 U/h**, 5 min ; puis le même vecteur avec le fichier présent, SMB identique à Android.
 
 Le détail des options temporaires reste ci-dessous.
 
