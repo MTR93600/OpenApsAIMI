@@ -28,6 +28,7 @@ import app.aaps.core.keys.interfaces.StringComposedNonPreferenceKey
 import app.aaps.core.keys.interfaces.StringNonPreferenceKey
 import app.aaps.core.keys.interfaces.StringPreferenceKey
 import app.aaps.core.keys.interfaces.UnitDoublePreferenceKey
+import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.model.DecisionResult
 import app.aaps.plugins.aps.openAPSAIMI.physio.EndogenousPhaseHysteresis
@@ -210,8 +211,21 @@ fun iosNeutralVirtualCobG(log: MutableList<String>): Double {
     return grams
 }
 
-fun iosNeutralEffortSmbFactor(log: MutableList<String>): Double {
-    val factor = 1.0
+fun iosNeutralEffortSmbFactor(
+    log: MutableList<String>,
+    snapshot: HealthContextSnapshot = HealthContextSnapshot(),
+): Double {
+    val refresh = decideRefreshEffortActivityBelief(
+        protectionEnabled = false,
+        t3cEnabled = false,
+        snapshot = snapshot,
+        nowMs = aimiWallClockMs(),
+        stressResistanceProb = 0.0,
+        prior = EffortActivityBelief.Memory(),
+    )
+    val factor = refresh.smbFactor
+    check(refresh.assessment == null)
+    check(factor == 1.0)
     log += IosNeutralLog.EFFORT
     return factor
 }

@@ -58,6 +58,7 @@ class IosNeutralHoldEngineTest {
             assertEquals(IOS_NEUTRAL_TBR_DURATION_MS, tbr.durationMs)
             assertEquals("MEAL_ADVISOR", result.telemetry.reasonCode)
             assertNull(result.safety.holdReasonCode)
+            assertFalse(neutral.portLog.any { it.contains("EFFORT_BELIEF") }, neutral.portLog.toString())
             assertModeLines(neutral)
         }
         assertScene(IosNeutralScene.SPORT) { result, neutral ->

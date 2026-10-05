@@ -42,6 +42,8 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideEffortSuppressesUndeclaredMeal
+import app.aaps.plugins.aps.openAPSAIMI.effects.decideRefreshEffortActivityBelief
+import app.aaps.plugins.aps.openAPSAIMI.effects.readRbtOptional
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEffectProbe
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEffectSink
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiLatestSmbCached
@@ -12784,35 +12786,27 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastEffortAssessment = null
         // Dependency: under T3C, activity awareness is required for the physio-informed basal (workstream C).
         // Effort protection is reduce-only, so this never adds insulin.
-        if (!preferences.get(BooleanKey.OApsAIMIEffortActivityProtection) && !t3cModeEnabled()) return
-        val snap = try {
-            physioAdapter.getLatestSnapshot()
-        } catch (_: Exception) {
-            return
-        }
-        if (!snap.isValid) return // no/stale wearable data → fail open (no reduction)
-        val (assessment, memory) = EffortActivityBelief.assess(
-            EffortActivityBelief.Inputs(
-                nowMs = dateUtil.now(),
-                stepsLast5m = snap.stepsLast5m,
-                stepsLast15m = snap.stepsLast15m,
-                stepsLast60m = snap.stepsLast60m,
-                hrAvg15mBpm = snap.hrAvg15m,
-                hrRestingBpm = snap.rhrResting,
-                hrvDeviationZ = null, // HRV plumbing is a follow-up; steps + HR drive v1
-                stressResistanceProb = lastPhysioLatentState?.transientResistanceProb ?: 0.0,
-            ),
-            lastEffortMemory,
+        val protection = preferences.get(BooleanKey.OApsAIMIEffortActivityProtection)
+        val t3c = t3cModeEnabled()
+        if (!protection && !t3c) return
+        val signal = readRbtOptional(
+            source = "wearableSnapshot",
+            consoleLog = consoleLog,
+            failureLine = { errorType, message ->
+                "WEARABLE snapshot failed ($errorType): ${message.orEmpty()} — snapshot empty"
+            },
+        ) { physioAdapter.getLatestSnapshot() }
+        val refresh = decideRefreshEffortActivityBelief(
+            protectionEnabled = protection,
+            t3cEnabled = t3c,
+            snapshot = signal.valueOrNull(),
+            nowMs = dateUtil.now(),
+            stressResistanceProb = lastPhysioLatentState?.transientResistanceProb ?: 0.0,
+            prior = lastEffortMemory,
         )
-        lastEffortMemory = memory
-        lastEffortAssessment = assessment
-        if (assessment.smbFactor < 1.0) {
-            consoleLog.add(
-                "🏃 EFFORT_BELIEF[${assessment.state.name}/${assessment.posture.name}] " +
-                    "SMB ×${aimiFmt2(assessment.smbFactor)} (applied at SMB finalize) " +
-                    assessment.reasons.joinToString(","),
-            )
-        }
+        lastEffortMemory = refresh.memory
+        lastEffortAssessment = refresh.assessment
+        refresh.logLine?.let { consoleLog.add(it) }
     }
 
     /**
