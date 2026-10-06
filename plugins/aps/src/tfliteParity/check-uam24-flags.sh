@@ -67,6 +67,8 @@ def tokens(line):
         if part in {"-isysroot", "-arch", "-I", "-o", "-c"}:
             drop_next = True
             continue
+        if part.startswith("-I") or part.startswith("-isysroot"):
+            continue
         if part.startswith("-mios-simulator-version-min="):
             kept.append("-mios-version-min=" + part.split("=", 1)[1])
             continue
