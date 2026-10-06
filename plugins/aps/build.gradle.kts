@@ -1,3 +1,5 @@
+import java.net.URI
+
 plugins {
     id("kmp-test-defaults")
     kotlin("multiplatform")
@@ -79,11 +81,14 @@ kotlin {
         }
         jvmTest.get().dependsOn(appleJvmTest)
         jvmTest {
+            kotlin.srcDir("src/tfliteParity/kotlin")
+            kotlin.srcDir("src/tfliteJvm/kotlin")
             dependencies {
                 implementation(libs.androidx.sqlite.bundled)
             }
         }
         iosTest.get().dependsOn(appleJvmTest)
+        iosTest.get().kotlin.srcDir("src/tfliteParity/kotlin")
 
         commonMain {
             kotlin.srcDir(generateApsStrings.flatMap { it.commonOutputDir })
@@ -149,7 +154,10 @@ kotlin {
         }
 
         getByName("androidHostTest") {
+            kotlin.srcDir("src/tfliteParity/kotlin")
+            kotlin.srcDir("src/tfliteJvm/kotlin")
             dependencies {
+                implementation(kotlin("test"))
                 implementation(project(":shared:tests"))
                 implementation(project(":pump:virtual"))
                 implementation(libs.org.junit.jupiter)
@@ -173,5 +181,32 @@ kotlin {
             }
         }
     }
-}
 
+    // TensorFlow Lite C 2.4.0 built from tag v2.4.0. The scripts under
+    // src/tfliteParity produce the two static libraries before this link, on
+    // macOS only. Kotlin 2.4 cinterop ignores -linker-option, so the archive
+    // is named here. The published TensorFlowLiteC pod is not a linker input.
+    // -force_load keeps the RUY kernels. CoreFoundation resolves absl cctz.
+    // -map records which archive the link pulled. One thread and no delegate
+    // are in IosUamTflite and the header.
+    targets.withType<org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget>().configureEach {
+        if (name != "iosArm64" && name != "iosSimulatorArm64") return@configureEach
+        val libDir = if (name == "iosArm64") "tflite-24-device-arm64" else "tflite-24-sim-arm64"
+        val include = layout.projectDirectory.dir("src/nativeInterop/cinterop").asFile.absolutePath
+        val staticLib = layout.buildDirectory.file("$libDir/libtensorflow-lite.a").get().asFile.absolutePath
+        compilations.getByName("main").cinterops.create("tflite") {
+            definitionFile.set(layout.projectDirectory.file("src/nativeInterop/cinterop/tflite.def"))
+            extraOpts("-compiler-option", "-I$include")
+        }
+        binaries.configureEach {
+            val binaryName = this.name
+            val mapFile = layout.buildDirectory.file("$libDir/$binaryName-link.map").get().asFile.absolutePath
+            linkerOpts(
+                "-force_load", staticLib,
+                "-lc++",
+                "-framework", "CoreFoundation",
+                "-map", mapFile,
+            )
+        }
+    }
+}

@@ -1,0 +1,124 @@
+#!/bin/bash
+# Published TensorFlow Lite C 2.4.0, x86_64 object only. This runner locks the
+# already measured x86_64-versus-arm64 gap. It is a separate process. The
+# Kotlin device and simulator binaries do not link this object.
+# TensorFlow Lite C 2.4.0, published x86_64 simulator slice, on the macOS runner.
+# One thread, no delegate. vectors.txt holds the Android 2.4.0 arm64-v8a words.
+# This slice matched those words' x86_64 siblings (67 / 67, 0 ULP). Against the
+# arm64 reference it must reproduce x64-against-arm64.txt. A different gap fails
+# the job. The equality gate is build-uam24-sim-arm64.sh.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+WORK="$ROOT/plugins/aps/build/tflite-24"
+MODEL="$ROOT/plugins/aps/src/tfliteParity/modelUAM.tflite"
+VECTORS="$ROOT/plugins/aps/src/tfliteParity/vectors.txt"
+RUNNER_SRC="$ROOT/plugins/aps/src/tfliteParity/uam24_runner.c"
+HEADER_DIR="$ROOT/plugins/aps/src/nativeInterop/cinterop"
+URL="https://dl.google.com/dl/cpdc/e8a95c1d411b795e/TensorFlowLiteC-2.4.0.tar.gz"
+
+mkdir -p "$WORK"
+if [[ ! -f "$WORK/TensorFlowLiteC" ]]; then
+  echo "Downloading TensorFlow Lite C 2.4.0"
+  curl -fsSL -o "$WORK/TensorFlowLiteC-2.4.0.tar.gz" "$URL"
+  tar -xzf "$WORK/TensorFlowLiteC-2.4.0.tar.gz" -C "$WORK" \
+    TensorFlowLiteC-2.4.0/Frameworks/TensorFlowLiteC.framework/TensorFlowLiteC
+  mv "$WORK/TensorFlowLiteC-2.4.0/Frameworks/TensorFlowLiteC.framework/TensorFlowLiteC" \
+    "$WORK/TensorFlowLiteC"
+fi
+
+echo "Fat binary:"
+lipo -info "$WORK/TensorFlowLiteC"
+lipo -thin x86_64 "$WORK/TensorFlowLiteC" -output "$WORK/TensorFlowLiteC-x86_64.o"
+lipo -info "$WORK/TensorFlowLiteC-x86_64.o"
+
+SDK="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+echo "SDK $SDK"
+clang -target x86_64-apple-ios15.0-simulator -isysroot "$SDK" -O2 \
+  -I "$HEADER_DIR" \
+  "$RUNNER_SRC" "$WORK/TensorFlowLiteC-x86_64.o" \
+  -lc++ \
+  -o "$WORK/uam24"
+codesign --force --sign - "$WORK/uam24"
+file "$WORK/uam24"
+
+echo "Runtimes:"
+xcrun simctl list runtimes
+
+# A heredoc is this python's stdin. Do not also pipe simctl into it.
+SELECTION="$(python3 - << 'PY'
+import json, subprocess
+runtimes = json.loads(subprocess.check_output(["xcrun", "simctl", "list", "runtimes", "-j"]))
+ios = [r for r in runtimes["runtimes"] if r.get("isAvailable") and "iOS" in r.get("name", "")]
+if not ios:
+    raise SystemExit("no available iOS runtime")
+devices = json.loads(subprocess.check_output(["xcrun", "simctl", "list", "devicetypes", "-j"]))
+iphone = next(item for item in devices["devicetypes"] if item["name"].startswith("iPhone"))
+print(ios[-1]["identifier"])
+print(iphone["identifier"])
+PY
+)"
+RUNTIME="$(printf '%s\n' "$SELECTION" | sed -n '1p')"
+DEVTYPE="$(printf '%s\n' "$SELECTION" | sed -n '2p')"
+echo "Creating simulator runtime=$RUNTIME device=$DEVTYPE"
+UDID="$(xcrun simctl create uam24 "$DEVTYPE" "$RUNTIME")"
+echo "UDID $UDID"
+xcrun simctl boot "$UDID" || true
+xcrun simctl bootstatus "$UDID" -b
+
+set +e
+xcrun simctl spawn "$UDID" "$WORK/uam24" "$MODEL" "$VECTORS" > "$WORK/out.txt" 2> "$WORK/err.txt"
+STATUS=$?
+set -e
+echo "spawn status $STATUS"
+echo "stderr:"
+cat "$WORK/err.txt" || true
+if [[ "$STATUS" -ne 0 ]]; then
+  echo "x86_64 spawn failed; retrying with arch -x86_64"
+  set +e
+  xcrun simctl spawn "$UDID" arch -x86_64 "$WORK/uam24" "$MODEL" "$VECTORS" > "$WORK/out.txt" 2> "$WORK/err.txt"
+  STATUS=$?
+  set -e
+  echo "arch spawn status $STATUS"
+  cat "$WORK/err.txt" || true
+fi
+xcrun simctl shutdown "$UDID" || true
+xcrun simctl delete "$UDID" || true
+if [[ "$STATUS" -ne 0 ]]; then
+  echo "TensorFlow Lite C 2.4.0 x86_64 simulator did not run"
+  exit "$STATUS"
+fi
+
+echo "stdout:"
+cat "$WORK/out.txt"
+python3 - << PY
+from pathlib import Path
+text = Path("$WORK/out.txt").read_text().strip().splitlines()
+version = text[0]
+if not version.startswith("version 2.4"):
+    raise SystemExit(f"expected TFLite 2.4, got {version!r}")
+rows = []
+for line in text[1:]:
+    index, android, ios = line.split()
+    rows.append((int(index), android, ios))
+if len(rows) != 67:
+    raise SystemExit(f"expected 67 rows, got {len(rows)}")
+
+def ordered(bits):
+    return (0x80000000 - bits) if bits >= 0x80000000 else bits
+
+mismatches = []
+for index, android, ios in rows:
+    if android != ios:
+        mismatches.append((index, android, ios, abs(ordered(int(android, 16)) - ordered(int(ios, 16)))))
+got = "\n".join(f"{i} android={a} ios={b} ulp={u}" for i, a, b, u in mismatches)
+expected = Path("$ROOT/plugins/aps/src/tfliteParity/x64-against-arm64.txt").read_text().strip()
+print(f"identical {67 - len(mismatches)} / 67")
+print("TensorFlow Lite C 2.4.0 x86_64 against the Android arm64-v8a reference.")
+if mismatches:
+    print(f"max ULP {max(m[3] for m in mismatches)}")
+    print(got)
+if got != expected:
+    raise SystemExit("x86_64 gap does not match the recorded arm64 comparison")
+print("recorded arch gap reproduced")
+PY
