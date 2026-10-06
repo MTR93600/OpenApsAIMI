@@ -38,29 +38,22 @@ file "$WORK/uam24"
 
 echo "Runtimes:"
 xcrun simctl list runtimes
-echo "Device types:"
-xcrun simctl list devicetypes | awk '/iPhone/ {print; exit}'
 
-RUNTIME="$(python3 - << 'PY'
+# A heredoc is this python's stdin. Do not also pipe simctl into it.
+SELECTION="$(python3 - << 'PY'
 import json, subprocess
-data = json.loads(subprocess.check_output(["xcrun", "simctl", "list", "runtimes", "-j"]))
-ios = [r for r in data["runtimes"] if r.get("isAvailable") and "iOS" in r.get("name", "")]
+runtimes = json.loads(subprocess.check_output(["xcrun", "simctl", "list", "runtimes", "-j"]))
+ios = [r for r in runtimes["runtimes"] if r.get("isAvailable") and "iOS" in r.get("name", "")]
 if not ios:
     raise SystemExit("no available iOS runtime")
+devices = json.loads(subprocess.check_output(["xcrun", "simctl", "list", "devicetypes", "-j"]))
+iphone = next(item for item in devices["devicetypes"] if item["name"].startswith("iPhone"))
 print(ios[-1]["identifier"])
+print(iphone["identifier"])
 PY
 )"
-DEVTYPE="$(xcrun simctl list devicetypes -j | python3 - << 'PY'
-import json, sys
-data = json.load(sys.stdin)
-for item in data["devicetypes"]:
-    if item["name"].startswith("iPhone"):
-        print(item["identifier"])
-        break
-else:
-    raise SystemExit("no iPhone device type")
-PY
-)"
+RUNTIME="$(printf '%s\n' "$SELECTION" | sed -n '1p')"
+DEVTYPE="$(printf '%s\n' "$SELECTION" | sed -n '2p')"
 echo "Creating simulator runtime=$RUNTIME device=$DEVTYPE"
 UDID="$(xcrun simctl create uam24 "$DEVTYPE" "$RUNTIME")"
 echo "UDID $UDID"
