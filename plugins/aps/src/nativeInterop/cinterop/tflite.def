@@ -1,4 +1,5 @@
 package = app.aaps.plugins.aps.tflite
 headers = uam_tflite.h
 headerFilter = uam_tflite.h
+# Kotlin 2.4 ignores this line. The binaries name libtensorflow-lite.a.
 linkerOpts = -lc++

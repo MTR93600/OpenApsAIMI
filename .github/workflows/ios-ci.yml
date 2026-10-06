@@ -75,8 +75,12 @@ jobs:
       - name: Cache TFLite 2.4.0 iossimulator-arm64
         uses: actions/cache@v4
         with:
-          path: plugins/aps/build/tflite-24-sim-arm64/libtensorflow-lite.a
-          key: tflite-2.4.0-iossim-arm64-v1-${{ hashFiles('plugins/aps/src/tfliteParity/build-uam24-sim-arm64.sh') }}
+          path: |
+            plugins/aps/build/tflite-24-sim-arm64/libtensorflow-lite.a
+            plugins/aps/build/tflite-24-sim-arm64/flags.txt
+            plugins/aps/build/tflite-24-sim-arm64/compile-line.txt
+            plugins/aps/build/tflite-24-sim-arm64/clang-version.txt
+          key: tflite-2.4.0-iossim-arm64-v2-${{ hashFiles('plugins/aps/src/tfliteParity/build-uam24-sim-arm64.sh', 'plugins/aps/src/tfliteParity/uam24-common.sh') }}
 
       # Source build of tag v2.4.0 for iossimulator-arm64. The published 2.4.0
       # framework has no such slice. A compile failure, a spawn failure, or
@@ -84,6 +88,24 @@ jobs:
       # job. The gap is printed. It is not rewritten into the fixtures.
       - name: Compare UAM vectors with TFLite C 2.4.0 built for iossimulator-arm64
         run: plugins/aps/src/tfliteParity/build-uam24-sim-arm64.sh
+
+      - name: Cache TFLite 2.4.0 iphoneos-arm64
+        uses: actions/cache@v4
+        with:
+          path: |
+            plugins/aps/build/tflite-24-device-arm64/libtensorflow-lite.a
+            plugins/aps/build/tflite-24-device-arm64/flags.txt
+            plugins/aps/build/tflite-24-device-arm64/compile-line.txt
+            plugins/aps/build/tflite-24-device-arm64/clang-version.txt
+          key: tflite-2.4.0-iphoneos-arm64-v1-${{ hashFiles('plugins/aps/src/tfliteParity/build-uam24-device-arm64.sh', 'plugins/aps/src/tfliteParity/uam24-common.sh') }}
+
+      # Same tag and the same parity flags, for the device SDK. The library is
+      # linked below. It is not executed: this runner has no iPhone.
+      - name: Build TFLite C 2.4.0 for iphoneos-arm64
+        run: plugins/aps/src/tfliteParity/build-uam24-device-arm64.sh
+
+      - name: Assert simulator and device TFLite builds use the same flags
+        run: plugins/aps/src/tfliteParity/check-uam24-flags.sh
 
       - name: Load jdk version
         run: |
@@ -127,8 +149,10 @@ jobs:
             echo "::error::An iOS compile task was skipped instead of executed."
             exit 1
           fi
-          # Device test binary of :plugins:aps. It links TensorFlow Lite C 2.4.0 arm64.
-          # The simulator test binary is a different link and is not this proof.
+          # Device test binary of :plugins:aps. It links the source-built
+          # iphoneos-arm64 libtensorflow-lite.a, not the published pod slice.
+          # The simulator test binary links the matching iossimulator library
+          # and is what iosSimulatorArm64Test executes.
           if ! grep -E "Task :plugins:aps:linkDebugTestIosArm64( |$)" compile.log | grep -vE "SKIPPED|NO-SOURCE" >/dev/null; then
             echo "::error::The device test link did not execute."
             exit 1
