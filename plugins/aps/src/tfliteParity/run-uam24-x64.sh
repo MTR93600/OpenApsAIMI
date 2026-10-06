@@ -1,6 +1,8 @@
 #!/bin/bash
 # TensorFlow Lite C 2.4.0, x86_64 simulator slice, on the macOS runner.
 # One thread, no delegate. Compares raw float32 bits to the Android 2.4.0 words.
+# The device arm64 slice of this same framework is linked by linkDebugTestIosArm64.
+# That slice is not what this script executes.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
