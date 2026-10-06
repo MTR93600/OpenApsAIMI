@@ -1,6 +1,6 @@
-/* Subset of the TensorFlow Lite C API (2.10 headers) used for UAM inference.
- * Symbols match TensorFlowLiteC.xcframework 2.10.0. No delegate is declared,
- * so the caller cannot turn XNNPACK on through this header.
+/* Subset of the TensorFlow Lite C API used for UAM inference.
+ * Symbols are those of tag v2.4.0. No delegate is declared, so the caller
+ * cannot turn XNNPACK on through this header.
  */
 #ifndef UAM_TFLITE_H_
 #define UAM_TFLITE_H_
