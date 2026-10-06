@@ -67,7 +67,7 @@ if [[ ! -f "$MAP" ]]; then
 fi
 if ! grep -F "$LIB" "$MAP" >/dev/null; then
   echo "link map does not name $LIB"
-  grep -F "libtensorflow-lite.a" "$MAP" | head -5 || true
+  grep -F -m 5 "libtensorflow-lite.a" "$MAP" || true
   exit 1
 fi
 if grep -F "TensorFlowLiteC" "$MAP"; then
@@ -75,7 +75,9 @@ if grep -F "TensorFlowLiteC" "$MAP"; then
   exit 1
 fi
 echo "link map names the source archive"
-grep -F "$LIB" "$MAP" | head -5
+# -m stops after five hits. A pipe into head dies with SIGPIPE under pipefail
+# because the map names the archive once per object file.
+grep -F -m 5 "$LIB" "$MAP"
 
 nm -g -U "$KEXE" > "$LIBDIR/nm-defined.txt"
 nm -g -u "$KEXE" > "$LIBDIR/nm-undefined.txt" || true
