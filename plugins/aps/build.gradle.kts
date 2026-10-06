@@ -189,7 +189,9 @@ kotlin {
         val linkDir = if (name == "iosArm64") "ios-arm64" else "ios-simulator-arm64"
         val include = layout.projectDirectory.dir("src/nativeInterop/cinterop").asFile.absolutePath
         // Kotlin 2.4 cinterop ignores -linker-option. The object has to be named
-        // on the binary. It is a fat MH_OBJECT; thinTensorFlowLiteC keeps the arm64 slice.
+        // on the binary. iosArm64 links the 2.4.0 device slice (the version the
+        // x86_64 runner executes). iosSimulatorArm64 stays on 2.10.0: 2.4.0 has
+        // no arm64 simulator slice.
         val objectFile = layout.buildDirectory.file("tflite-c/link/$linkDir/TensorFlowLiteC.o").get().asFile.absolutePath
         compilations.getByName("main").cinterops.create("tflite") {
             definitionFile.set(layout.projectDirectory.file("src/nativeInterop/cinterop/tflite.def"))
@@ -207,22 +209,43 @@ val fetchTensorFlowLiteC = tasks.register("fetchTensorFlowLiteC") {
     doLast {
         val root = dest.get().asFile
         val marker = root.resolve("TensorFlowLiteC.xcframework/Info.plist")
-        if (marker.isFile) return@doLast
+        val fat24 = root.resolve("TensorFlowLiteC-2.4.0.o")
+        if (marker.isFile && fat24.isFile) return@doLast
         root.mkdirs()
-        val tar = root.resolve("TensorFlowLiteC-2.10.0.tar.gz")
-        val url = "https://dl.google.com/tflite-release/ios/prod/tensorflow/lite/release/ios/release/18/20220909-095119/TensorFlowLiteC/2.10.0/9410f57778559cad/TensorFlowLiteC-2.10.0.tar.gz"
-        URI.create(url).toURL().openStream().use { input ->
-            tar.outputStream().use { output -> input.copyTo(output) }
+        if (!marker.isFile) {
+            val tar = root.resolve("TensorFlowLiteC-2.10.0.tar.gz")
+            val url = "https://dl.google.com/tflite-release/ios/prod/tensorflow/lite/release/ios/release/18/20220909-095119/TensorFlowLiteC/2.10.0/9410f57778559cad/TensorFlowLiteC-2.10.0.tar.gz"
+            URI.create(url).toURL().openStream().use { input ->
+                tar.outputStream().use { output -> input.copyTo(output) }
+            }
+            val tarProcess = ProcessBuilder(
+                "tar", "-xzf", tar.absolutePath,
+                "-C", root.absolutePath,
+                "--strip-components=2",
+                "TensorFlowLiteC-2.10.0/Frameworks/TensorFlowLiteC.xcframework",
+            ).inheritIO().start()
+            val tarStatus = tarProcess.waitFor()
+            if (tarStatus != 0) error("tar exited $tarStatus")
+            tar.delete()
         }
-        val tarProcess = ProcessBuilder(
-            "tar", "-xzf", tar.absolutePath,
-            "-C", root.absolutePath,
-            "--strip-components=2",
-            "TensorFlowLiteC-2.10.0/Frameworks/TensorFlowLiteC.xcframework",
-        ).inheritIO().start()
-        val tarStatus = tarProcess.waitFor()
-        if (tarStatus != 0) error("tar exited $tarStatus")
-        tar.delete()
+        if (!fat24.isFile) {
+            val tar = root.resolve("TensorFlowLiteC-2.4.0.tar.gz")
+            val url = "https://dl.google.com/dl/cpdc/e8a95c1d411b795e/TensorFlowLiteC-2.4.0.tar.gz"
+            URI.create(url).toURL().openStream().use { input ->
+                tar.outputStream().use { output -> input.copyTo(output) }
+            }
+            val extracted = root.resolve("TensorFlowLiteC-2.4.0/Frameworks/TensorFlowLiteC.framework/TensorFlowLiteC")
+            val tarProcess = ProcessBuilder(
+                "tar", "-xzf", tar.absolutePath,
+                "-C", root.absolutePath,
+                "TensorFlowLiteC-2.4.0/Frameworks/TensorFlowLiteC.framework/TensorFlowLiteC",
+            ).inheritIO().start()
+            val tarStatus = tarProcess.waitFor()
+            if (tarStatus != 0) error("tar 2.4.0 exited $tarStatus")
+            if (!extracted.isFile) error("TensorFlow Lite C 2.4.0 binary missing after extract")
+            extracted.copyTo(fat24, overwrite = true)
+            tar.delete()
+        }
     }
 }
 
@@ -233,8 +256,7 @@ val thinTensorFlowLiteC = tasks.register("thinTensorFlowLiteC") {
     doLast {
         val root = layout.buildDirectory.dir("tflite-c").get().asFile
         val xc = root.resolve("TensorFlowLiteC.xcframework")
-        fun thin(slice: String, outName: String) {
-            val src = xc.resolve("$slice/TensorFlowLiteC.framework/TensorFlowLiteC")
+        fun thinArm64(src: java.io.File, outName: String) {
             val outDir = root.resolve("link/$outName")
             outDir.mkdirs()
             val out = outDir.resolve("TensorFlowLiteC.o")
@@ -242,10 +264,15 @@ val thinTensorFlowLiteC = tasks.register("thinTensorFlowLiteC") {
                 "lipo", "-thin", "arm64", src.absolutePath, "-output", out.absolutePath,
             ).inheritIO().start()
             val status = lipo.waitFor()
-            if (status != 0) error("lipo -thin arm64 exited $status for $slice")
+            if (status != 0) error("lipo -thin arm64 exited $status for ${src.name} -> $outName")
         }
-        thin("ios-arm64", "ios-arm64")
-        thin("ios-arm64_x86_64-simulator", "ios-simulator-arm64")
+        // Same 2.4.0 framework as the x86_64 simulator runner. This slice is the
+        // device binary. It is not executed by iosSimulatorArm64Test.
+        thinArm64(root.resolve("TensorFlowLiteC-2.4.0.o"), "ios-arm64")
+        thinArm64(
+            xc.resolve("ios-arm64_x86_64-simulator/TensorFlowLiteC.framework/TensorFlowLiteC"),
+            "ios-simulator-arm64",
+        )
     }
 }
 

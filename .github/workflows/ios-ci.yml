@@ -102,6 +102,7 @@ jobs:
             :core:data:compileKotlinIosArm64 :core:data:compileKotlinIosSimulatorArm64 \
             :core:nssdk:compileKotlinIosArm64 :core:nssdk:compileKotlinIosSimulatorArm64 \
             :core:keys:compileKotlinIosArm64 :core:keys:compileKotlinIosSimulatorArm64 \
+            :plugins:aps:linkDebugFrameworkIosArm64 \
             | tee compile.log
 
       # A disabled Kotlin/Native task reports SKIPPED and still exits 0, so "BUILD SUCCESSFUL" alone
@@ -112,6 +113,12 @@ jobs:
         run: |
           if grep -E "Task :core:(data|nssdk|keys):compileKotlinIos(Arm64|SimulatorArm64) (SKIPPED|NO-SOURCE)" compile.log; then
             echo "::error::An iOS compile task was skipped instead of executed."
+            exit 1
+          fi
+          # Device binary of :plugins:aps. It links TensorFlow Lite C 2.4.0 arm64.
+          # The simulator test binary is a different link and is not this proof.
+          if ! grep -E "Task :plugins:aps:linkDebugFrameworkIosArm64( |$)" compile.log | grep -vE "SKIPPED|NO-SOURCE" >/dev/null; then
+            echo "::error::The device framework link did not execute."
             exit 1
           fi
           for m in data nssdk keys; do
