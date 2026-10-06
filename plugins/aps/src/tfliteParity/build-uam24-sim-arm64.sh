@@ -119,6 +119,9 @@ EOF
   # wrappers call the same libm functions. modelUAM does not use ABS, SIN,
   # COS, LOG or SQRT. -O3 -ffp-contract=on matches the NDK clang default
   # and the Bazel opt config. RUY stays on, as in cpu_ios_arm64.
+  # test_delegate_providers.cc is not named *test.cc, so the makefile
+  # compiles it. -force_load then requires the test flag parser.
+  rm -f "$tree/tensorflow/lite/kernels/test_delegate_providers.cc"
   python3 - "$tree/tensorflow/lite/kernels/elementwise.cc" << 'PY'
 import pathlib, sys
 path = pathlib.Path(sys.argv[1])
@@ -182,6 +185,7 @@ clang -target arm64-apple-ios15.0-simulator -isysroot "$SDK" -O2 \
   "$RUNNER_SRC" \
   -Wl,-force_load,"$CACHE_LIB" \
   -lc++ \
+  -framework CoreFoundation \
   -o "$WORK/uam24-sim-arm64"
 codesign --force --sign - "$WORK/uam24-sim-arm64"
 file "$WORK/uam24-sim-arm64"
