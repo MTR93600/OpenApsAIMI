@@ -80,7 +80,8 @@ jobs:
             plugins/aps/build/tflite-24-sim-arm64/flags.txt
             plugins/aps/build/tflite-24-sim-arm64/compile-line.txt
             plugins/aps/build/tflite-24-sim-arm64/clang-version.txt
-          key: tflite-2.4.0-iossim-arm64-v2-${{ hashFiles('plugins/aps/src/tfliteParity/build-uam24-sim-arm64.sh', 'plugins/aps/src/tfliteParity/uam24-common.sh') }}
+            plugins/aps/build/tflite-24-sim-arm64/archive.sha256
+          key: tflite-2.4.0-iossim-arm64-v3-${{ hashFiles('plugins/aps/src/tfliteParity/build-uam24-sim-arm64.sh', 'plugins/aps/src/tfliteParity/uam24-common.sh') }}
 
       # Source build of tag v2.4.0 for iossimulator-arm64. The published 2.4.0
       # framework has no such slice. A compile failure, a spawn failure, or
@@ -97,7 +98,8 @@ jobs:
             plugins/aps/build/tflite-24-device-arm64/flags.txt
             plugins/aps/build/tflite-24-device-arm64/compile-line.txt
             plugins/aps/build/tflite-24-device-arm64/clang-version.txt
-          key: tflite-2.4.0-iphoneos-arm64-v1-${{ hashFiles('plugins/aps/src/tfliteParity/build-uam24-device-arm64.sh', 'plugins/aps/src/tfliteParity/uam24-common.sh') }}
+            plugins/aps/build/tflite-24-device-arm64/archive.sha256
+          key: tflite-2.4.0-iphoneos-arm64-v2-${{ hashFiles('plugins/aps/src/tfliteParity/build-uam24-device-arm64.sh', 'plugins/aps/src/tfliteParity/uam24-common.sh') }}
 
       # Same tag and the same parity flags, for the device SDK. The library is
       # linked below. It is not executed: this runner has no iPhone.
@@ -149,8 +151,8 @@ jobs:
             echo "::error::An iOS compile task was skipped instead of executed."
             exit 1
           fi
-          # Device test binary of :plugins:aps. It links the source-built
-          # iphoneos-arm64 libtensorflow-lite.a, not the published pod slice.
+          # Device test binary of :plugins:aps. The next step proves it links
+          # only the source-built iphoneos-arm64 libtensorflow-lite.a.
           # The simulator test binary links the matching iossimulator library
           # and is what iosSimulatorArm64Test executes.
           if ! grep -E "Task :plugins:aps:linkDebugTestIosArm64( |$)" compile.log | grep -vE "SKIPPED|NO-SOURCE" >/dev/null; then
@@ -167,6 +169,9 @@ jobs:
               echo "core/$m $t -> $(grep native_targets "$MANIFEST")"
             done
           done
+
+      - name: Prove the device test binary links only the source TFLite archive
+        run: plugins/aps/src/tfliteParity/check-uam24-linked.sh device
 
       # The part that only exists here. commonTest runs through Kotlin/Native against the real
       # NSNumberFormatter and NSTimeZone, which is what no other host can do.
@@ -228,6 +233,9 @@ jobs:
           check ":core:objects" core/objects
           check ":plugins:aps" plugins/aps
           exit $fail
+
+      - name: Prove the simulator test binary links only the source TFLite archive
+        run: plugins/aps/src/tfliteParity/check-uam24-linked.sh simulator
 
       - name: Upload test results
         if: always()

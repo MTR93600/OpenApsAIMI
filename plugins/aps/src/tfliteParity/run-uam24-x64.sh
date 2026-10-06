@@ -1,4 +1,7 @@
 #!/bin/bash
+# Published TensorFlow Lite C 2.4.0, x86_64 object only. This runner locks the
+# already measured x86_64-versus-arm64 gap. It is a separate process. The
+# Kotlin device and simulator binaries do not link this object.
 # TensorFlow Lite C 2.4.0, published x86_64 simulator slice, on the macOS runner.
 # One thread, no delegate. vectors.txt holds the Android 2.4.0 arm64-v8a words.
 # This slice matched those words' x86_64 siblings (67 / 67, 0 ULP). Against the

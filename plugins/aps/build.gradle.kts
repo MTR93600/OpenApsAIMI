@@ -185,8 +185,10 @@ kotlin {
     // TensorFlow Lite C 2.4.0 built from tag v2.4.0. The scripts under
     // src/tfliteParity produce the two static libraries before this link, on
     // macOS only. Kotlin 2.4 cinterop ignores -linker-option, so the archive
-    // is named here. -force_load keeps the RUY kernels. CoreFoundation resolves
-    // absl cctz. One thread and no delegate are in IosUamTflite and the header.
+    // is named here. The published TensorFlowLiteC pod is not a linker input.
+    // -force_load keeps the RUY kernels. CoreFoundation resolves absl cctz.
+    // -map records which archive the link pulled. One thread and no delegate
+    // are in IosUamTflite and the header.
     targets.withType<org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget>().configureEach {
         if (name != "iosArm64" && name != "iosSimulatorArm64") return@configureEach
         val libDir = if (name == "iosArm64") "tflite-24-device-arm64" else "tflite-24-sim-arm64"
@@ -197,7 +199,14 @@ kotlin {
             extraOpts("-compiler-option", "-I$include")
         }
         binaries.configureEach {
-            linkerOpts("-force_load", staticLib, "-lc++", "-framework", "CoreFoundation")
+            val binaryName = this.name
+            val mapFile = layout.buildDirectory.file("$libDir/$binaryName-link.map").get().asFile.absolutePath
+            linkerOpts(
+                "-force_load", staticLib,
+                "-lc++",
+                "-framework", "CoreFoundation",
+                "-map", mapFile,
+            )
         }
     }
 }

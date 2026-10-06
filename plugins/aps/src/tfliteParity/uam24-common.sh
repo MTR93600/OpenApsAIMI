@@ -70,6 +70,11 @@ endif
 EOF
 }
 
+# Prints the SHA-256 of a file, hex only. The sidecar is this line and nothing else.
+uam24_archive_sha256() {
+  shasum -a 256 "$1" | awk '{print $1}'
+}
+
 # Prints "sim" or "device" after reading LC_BUILD_VERSION from a static archive.
 uam24_platform_kind() {
   python3 - "$1" << 'PY'
@@ -163,7 +168,8 @@ PY
 }
 
 # Builds libtensorflow-lite.a when the cache is missing or the wrong platform.
-# Writes flags.txt, compile-line.txt and clang-version.txt next to the library.
+# Writes flags.txt, compile-line.txt, clang-version.txt and archive.sha256
+# next to the library. A cache hit checks the sidecar and does not rewrite it.
 # platform is "simulator" or "device".
 uam24_ensure_lib() {
   local platform="$1"
@@ -187,16 +193,24 @@ uam24_ensure_lib() {
       ;;
   esac
   mkdir -p "$work"
-  if [[ -f "$cache_lib" && -f "$work/flags.txt" && -f "$work/compile-line.txt" && -f "$work/clang-version.txt" ]]; then
-    local kind
+  if [[ -f "$cache_lib" && -f "$work/flags.txt" && -f "$work/compile-line.txt" && -f "$work/clang-version.txt" && -f "$work/archive.sha256" ]]; then
+    local kind recorded actual
     kind="$(uam24_platform_kind "$cache_lib")"
     if [[ "$kind" == "$expected_kind" ]]; then
+      recorded="$(awk 'NR==1 { print $1 }' "$work/archive.sha256")"
+      actual="$(uam24_archive_sha256 "$cache_lib")"
+      echo "archive sha256 $actual"
+      echo "cached sha256 $recorded"
+      if [[ -z "$recorded" || "$actual" != "$recorded" ]]; then
+        echo "cached archive hash does not match libtensorflow-lite.a"
+        return 1
+      fi
       echo "Using cached $cache_lib ($kind)"
       return 0
     fi
     echo "cached library platform is $kind, expected $expected_kind"
   fi
-  rm -f "$cache_lib" "$work/flags.txt" "$work/compile-line.txt" "$work/clang-version.txt"
+  rm -f "$cache_lib" "$work/flags.txt" "$work/compile-line.txt" "$work/clang-version.txt" "$work/archive.sha256"
   echo "Building TensorFlow Lite C 2.4.0 for $platform ($sdk)"
   uam24_prepare_tree "$tree" "$sdk" "$ROOT/plugins/aps/build/tflite-24-tarball"
   xcrun -sdk "$sdk" clang --version > "$work/clang-version.full"
@@ -249,5 +263,8 @@ flags_out.write_text("\n".join(required) + "\n")
 print("recorded parity flags")
 PY
   cp "$built" "$cache_lib"
+  uam24_archive_sha256 "$cache_lib" > "$work/archive.sha256"
+  echo "archive sha256 $(cat "$work/archive.sha256")"
+  echo "cached sha256 $(cat "$work/archive.sha256")"
   echo "cached $cache_lib"
 }

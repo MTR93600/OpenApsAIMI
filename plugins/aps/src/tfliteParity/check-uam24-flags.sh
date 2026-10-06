@@ -10,7 +10,7 @@ SIM="$ROOT/plugins/aps/build/tflite-24-sim-arm64"
 DEV="$ROOT/plugins/aps/build/tflite-24-device-arm64"
 
 for dir in "$SIM" "$DEV"; do
-  for name in libtensorflow-lite.a flags.txt compile-line.txt clang-version.txt; do
+  for name in libtensorflow-lite.a flags.txt compile-line.txt clang-version.txt archive.sha256; do
     if [[ ! -f "$dir/$name" ]]; then
       echo "missing $dir/$name"
       exit 1
