@@ -91,6 +91,7 @@ ifeq ($(TARGET), ios)
     -w \
     --std=c++14 \
     -DTFLITE_WITH_RUY \
+    -ffp-contract=on \
     -isysroot ${IPHONEOS_SYSROOT} \
     -arch $(TARGET_ARCH) \
     -O3 -DNDEBUG
@@ -98,6 +99,7 @@ ifeq ($(TARGET), ios)
     -DFARMHASH_NO_CXX_STRING \
     -Wno-sign-compare \
     -w \
+    -ffp-contract=on \
     -isysroot ${IPHONEOS_SYSROOT} \
     -arch $(TARGET_ARCH) \
     -O3 -DNDEBUG
@@ -111,10 +113,41 @@ EOF
     echo "tensorflow/lite/c/c_api.cc missing from tag v2.4.0"
     exit 1
   fi
+  # Attempt 1 (run 37402326168) compiled with Xcode 26 clang and stopped in
+  # elementwise.cc: std::abs<float> is not a function pointer. The Android
+  # AAR was built by NDK clang 7.0.2, which accepts that form. These five
+  # wrappers call the same libm functions. modelUAM does not use ABS, SIN,
+  # COS, LOG or SQRT. -O3 -ffp-contract=on matches the NDK clang default
+  # and the Bazel opt config. RUY stays on, as in cpu_ios_arm64.
+  python3 - "$tree/tensorflow/lite/kernels/elementwise.cc" << 'PY'
+import pathlib, sys
+path = pathlib.Path(sys.argv[1])
+text = path.read_text()
+replacements = {
+    "return EvalImpl<float>(context, node, std::abs<float>, type);":
+        "return EvalImpl<float>(context, node, [](float v) { return std::abs(v); }, type);",
+    "return EvalNumeric(context, node, std::sin);":
+        "return EvalNumeric(context, node, [](float v) { return std::sin(v); });",
+    "return EvalNumeric(context, node, std::cos);":
+        "return EvalNumeric(context, node, [](float v) { return std::cos(v); });",
+    "return EvalNumeric(context, node, std::log);":
+        "return EvalNumeric(context, node, [](float v) { return std::log(v); });",
+    "return EvalNumeric(context, node, std::sqrt);":
+        "return EvalNumeric(context, node, [](float v) { return std::sqrt(v); });",
+}
+for old, new in replacements.items():
+    if old not in text:
+        raise SystemExit(f"elementwise.cc patch missed: {old}")
+    text = text.replace(old, new, 1)
+path.write_text(text)
+print("patched elementwise.cc for this clang")
+PY
   local jobs
   jobs="$(sysctl -n hw.ncpu)"
+  echo "simulator clang:"
+  xcrun -sdk iphonesimulator clang --version | head -4
   make --version | head -2
-  echo "make -j$jobs micro TARGET=ios TARGET_ARCH=arm64 BUILD_WITH_RUY=true"
+  echo "make -j$jobs micro TARGET=ios TARGET_ARCH=arm64 BUILD_WITH_RUY=true -O3 -ffp-contract=on"
   make -C "$tree" -j"$jobs" -f tensorflow/lite/tools/make/Makefile micro \
     TARGET=ios TARGET_ARCH=arm64 BUILD_WITH_RUY=true \
     CC="xcrun -sdk iphonesimulator clang" \
