@@ -55,23 +55,35 @@ concurrency:
 jobs:
   ios:
     runs-on: macos-latest
-    # The UAM parity link pulls in TensorFlow Lite C (~45 MB object). The suite
-    # already used most of an hour before that link succeeded.
-    timeout-minutes: 90
+    # The suite uses about an hour. A cold TFLite 2.4.0 iossimulator-arm64
+    # source build is on top of that. The static library is cached; a hit
+    # skips the compile and still runs the 67 vectors.
+    timeout-minutes: 150
 
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 1
 
-      # Android ships org.tensorflow:tensorflow-lite:2.4.0. The Kotlin/Native test
-      # links TensorFlow Lite C 2.10.0 because that is the oldest published
-      # xcframework with an arm64 simulator slice. This step runs the 2.4.0
-      # x86_64 simulator slice (it exists; arm64 simulator does not) under the
-      # iOS simulator, one thread, no delegate. A mismatch or a spawn failure
-      # fails the job. Nothing here rewrites the Android reference bits.
+      # Android ships org.tensorflow:tensorflow-lite:2.4.0. The reference words
+      # are the arm64-v8a slice of that AAR. This step runs the published 2.4.0
+      # x86_64 simulator slice, one thread, no delegate. It passes only when
+      # the printed gap equals the recorded x86_64-versus-arm64 table.
       - name: Compare UAM vectors with TensorFlow Lite C 2.4.0 x86_64
         run: plugins/aps/src/tfliteParity/run-uam24-x64.sh
+
+      - name: Cache TFLite 2.4.0 iossimulator-arm64
+        uses: actions/cache@v4
+        with:
+          path: plugins/aps/build/tflite-24-sim-arm64/libtensorflow-lite.a
+          key: tflite-2.4.0-iossim-arm64-v1-${{ hashFiles('plugins/aps/src/tfliteParity/build-uam24-sim-arm64.sh') }}
+
+      # Source build of tag v2.4.0 for iossimulator-arm64. The published 2.4.0
+      # framework has no such slice. A compile failure, a spawn failure, or
+      # any word that differs from the Android arm64-v8a reference fails the
+      # job. The gap is printed. It is not rewritten into the fixtures.
+      - name: Compare UAM vectors with TFLite C 2.4.0 built for iossimulator-arm64
+        run: plugins/aps/src/tfliteParity/build-uam24-sim-arm64.sh
 
       - name: Load jdk version
         run: |

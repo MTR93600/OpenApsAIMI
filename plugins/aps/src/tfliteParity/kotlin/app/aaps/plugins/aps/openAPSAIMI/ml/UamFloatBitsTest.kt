@@ -27,8 +27,8 @@ class UamFloatBitsTest {
             assertEquals(UamTfliteCorpus.INPUTS + 1, row.size)
         }
         assertEquals("TFL3", UamTfliteCorpus.modelBytes.copyOfRange(4, 8).decodeToString())
-        // Vector 0 is the all-zero input. Locked to the Android 2.4.0 word.
+        // Vector 0 is the all-zero input. Locked to the Android 2.4.0 arm64-v8a word.
         assertEquals(floatBitsFromHex("3f9eea89"), UamTfliteCorpus.androidBits(0))
-        assertEquals(floatBitsFromHex("4006ea45"), UamTfliteCorpus.androidBits(66))
+        assertEquals(floatBitsFromHex("4006ea44"), UamTfliteCorpus.androidBits(66))
     }
 }

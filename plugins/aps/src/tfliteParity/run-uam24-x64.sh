@@ -1,8 +1,9 @@
 #!/bin/bash
-# TensorFlow Lite C 2.4.0, x86_64 simulator slice, on the macOS runner.
-# One thread, no delegate. Compares raw float32 bits to the Android 2.4.0 words.
-# The device arm64 slice of this same framework is linked by linkDebugTestIosArm64.
-# That slice is not what this script executes.
+# TensorFlow Lite C 2.4.0, published x86_64 simulator slice, on the macOS runner.
+# One thread, no delegate. vectors.txt holds the Android 2.4.0 arm64-v8a words.
+# This slice matched those words' x86_64 siblings (67 / 67, 0 ULP). Against the
+# arm64 reference it must reproduce x64-against-arm64.txt. A different gap fails
+# the job. The equality gate is build-uam24-sim-arm64.sh.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
@@ -99,19 +100,22 @@ for line in text[1:]:
     rows.append((int(index), android, ios))
 if len(rows) != 67:
     raise SystemExit(f"expected 67 rows, got {len(rows)}")
+
+def ordered(bits):
+    return (0x80000000 - bits) if bits >= 0x80000000 else bits
+
 mismatches = []
 for index, android, ios in rows:
     if android != ios:
-        a = int(android, 16)
-        b = int(ios, 16)
-        def ordered(bits):
-            return (0x80000000 - bits) if bits >= 0x80000000 else bits
-        mismatches.append((index, android, ios, abs(ordered(a) - ordered(b))))
+        mismatches.append((index, android, ios, abs(ordered(int(android, 16)) - ordered(int(ios, 16)))))
+got = "\n".join(f"{i} android={a} ios={b} ulp={u}" for i, a, b, u in mismatches)
+expected = Path("$ROOT/plugins/aps/src/tfliteParity/x64-against-arm64.txt").read_text().strip()
 print(f"identical {67 - len(mismatches)} / 67")
+print("TensorFlow Lite C 2.4.0 x86_64 against the Android arm64-v8a reference.")
 if mismatches:
     print(f"max ULP {max(m[3] for m in mismatches)}")
-    for index, android, ios, ulp in mismatches:
-        print(f"{index} android={android} ios={ios} ulp={ulp}")
-    raise SystemExit(1)
-print("67 / 67 identical")
+    print(got)
+if got != expected:
+    raise SystemExit("x86_64 gap does not match the recorded arm64 comparison")
+print("recorded arch gap reproduced")
 PY
