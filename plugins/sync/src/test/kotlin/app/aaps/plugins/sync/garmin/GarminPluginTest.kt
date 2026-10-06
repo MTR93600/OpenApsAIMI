@@ -608,4 +608,29 @@ class GarminPluginTest : TestBaseWithProfile() {
         verify(loopHub, atLeastOnce()).glucoseUnit
     }
 
+    @Test
+    fun onSgv_IncludesTargetModeTbrMins() {
+        whenever(loopHub.glucoseUnit).thenReturn(GlucoseUnit.MGDL)
+        whenever(loopHub.insulinOnboard).thenReturn(1.0)
+        whenever(loopHub.insulinBasalOnboard).thenReturn(0.5)
+        whenever(loopHub.temporaryBasal).thenReturn(1.2)
+        whenever(loopHub.carbsOnboard).thenReturn(5.0)
+        whenever(loopHub.lowGlucoseMark).thenReturn(70.0)
+        whenever(loopHub.highGlucoseMark).thenReturn(180.0)
+        whenever(loopHub.currentTargetMgdl).thenReturn(100.0)
+        whenever(loopHub.activeTherapyMode).thenReturn("FCL")
+        whenever(loopHub.temporaryBasalRemainingMinutes).thenReturn(27)
+        whenever(loopHub.currentProfile).thenReturn(null)
+        whenever(loopHub.getGlucoseValues(any(), eq(false))).thenReturn(
+            listOf(createGlucoseValue(clock.instant(), 110.0))
+        )
+        val json = gp.onSgv(createUri(mapOf("count" to "1", "brief_mode" to "true")))
+        org.junit.jupiter.api.Assertions.assertTrue(
+            json.contains("\"target\":100") &&
+                json.contains("\"mode\":\"FCL\"") &&
+                json.contains("\"tbrMins\":27"),
+            "missing target/mode/tbrMins in: $json"
+        )
+    }
+
 }

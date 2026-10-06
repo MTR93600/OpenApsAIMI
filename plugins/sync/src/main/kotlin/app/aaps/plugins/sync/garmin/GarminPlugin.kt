@@ -818,9 +818,12 @@ class GarminPlugin @Inject constructor(
             jo.addProperty("date", glucose.timestamp)
             jo.addProperty("sgv", glucose.value.roundToInt())
             if (i + 1 < glucoseValues.size) {
-                // Compute the 5 minute delta.
+                // 5-minute normalized delta (mg/dL). Round to nearest int so ±1 survives
+                // JSON + watch `.toNumber()` / `format("%.0f")` without collapsing to 0.
                 val delta = 300_000.0 * glucoseSlopeMgDlPerMilli(glucoseValues[i + 1], glucose)
-                jo.addProperty("delta", BigDecimal(delta, MathContext(3, RoundingMode.HALF_UP)))
+                if (delta.isFinite()) {
+                    jo.addProperty("delta", delta.roundToInt())
+                }
             }
             jo.addProperty("direction", glucose.trendArrow.text)
             glucose.noise?.let { n -> jo.addProperty("noise", n) }
@@ -850,6 +853,16 @@ class GarminPlugin @Inject constructor(
                 val low = loopHub.lowGlucoseMark.takeIf { it > 0.0 } ?: 70.0
                 val high = loopHub.highGlucoseMark.takeIf { it > 0.0 } ?: 180.0
                 jo.addProperty("tir", calcTirPercent(glucoseValues, low, high))
+                // Blueprint / Cockpit / Atelier: target (mg/dL), AIMI mode, TBR remaining mins
+                loopHub.currentTargetMgdl?.takeIf { it.isFinite() && it > 0.0 }?.let {
+                    jo.addProperty("target", it.roundToInt())
+                }
+                loopHub.activeTherapyMode?.takeIf { it.isNotBlank() }?.let {
+                    jo.addProperty("mode", it)
+                }
+                loopHub.temporaryBasalRemainingMinutes?.takeIf { it > 0 }?.let {
+                    jo.addProperty("tbrMins", it)
+                }
             }
             joa.add(jo)
         }

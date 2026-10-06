@@ -114,6 +114,39 @@ class LoopHubImpl @Inject constructor(
             } ?: Double.NaN
         }
 
+    override val temporaryBasalRemainingMinutes: Int?
+        get() = runBlocking {
+            val now = clock.millis()
+            val tb = processedTbrEbData.getTempBasalIncludingConvertedExtended(now) ?: return@runBlocking null
+            val remainingMs = tb.end - now
+            if (remainingMs <= 0L) null else (remainingMs / 60_000L).toInt().coerceAtLeast(1)
+        }
+
+    override val currentTargetMgdl: Double?
+        get() = runBlocking {
+            // Prefer AIMI/APS last-run targetBg (DetermineBasalAIMI2 → rT.targetBG),
+            // same source Overview uses via ProfileExtension — not the static profile midpoint.
+            val apsTarget = loop.lastRun?.constraintsProcessed?.targetBG
+            if (apsTarget != null && apsTarget.isFinite() && apsTarget > 0.0) {
+                return@runBlocking apsTarget
+            }
+            val now = clock.millis()
+            val tt = persistenceLayer.getTemporaryTargetActiveAt(now)
+            when {
+                tt != null -> (tt.lowTarget + tt.highTarget) / 2.0
+                else -> currentProfile?.getRoundedTargetMgdl()
+            }
+        }
+
+    override val activeTherapyMode: String?
+        get() = runBlocking {
+            val now = clock.millis()
+            // Look back far enough for long modes (sport / highcarb up to several hours).
+            val from = now - TimeUnit.HOURS.toMillis(12)
+            val notes = persistenceLayer.getTherapyEventDataFromTime(from, TE.Type.NOTE, ascending = false)
+            detectActiveTherapyMode(notes, now)
+        }
+
     override val lowGlucoseMark
         get() = profileUtil.convertToMgdl(
             preferences.get(UnitDoubleKey.OverviewLowMark), glucoseUnit
@@ -123,6 +156,53 @@ class LoopHubImpl @Inject constructor(
         get() = profileUtil.convertToMgdl(
             preferences.get(UnitDoubleKey.OverviewHighMark), glucoseUnit
         )
+
+    /**
+     * Mirrors openAPSAIMI [app.aaps.plugins.aps.openAPSAIMI.Therapy] keyword windows without
+     * creating a sync→aps dependency. First match in priority order wins.
+     */
+    @VisibleForTesting
+    internal fun detectActiveTherapyMode(events: List<TE>, now: Long): String? {
+        fun active(keyword: String, minWindowMs: Long = 0L): Boolean =
+            events.any { event ->
+                val note = event.note ?: return@any false
+                note.contains(keyword, ignoreCase = true) &&
+                    now <= (event.timestamp + maxOf(event.duration, minWindowMs))
+            }
+        // high carb: also accept "high carb" spacing
+        fun activeHighCarb(): Boolean =
+            events.any { event ->
+                val note = event.note ?: return@any false
+                (note.contains("highcarb", ignoreCase = true) ||
+                    note.contains("high carb", ignoreCase = true)) &&
+                    now <= (event.timestamp + event.duration)
+            }
+        fun activeBfast(): Boolean =
+            events.any { event ->
+                val note = event.note ?: return@any false
+                (note.contains("bfast", ignoreCase = true) ||
+                    note.contains("breakfast", ignoreCase = true)) &&
+                    now <= (event.timestamp + event.duration)
+            }
+        return when {
+            active("sport") -> "SPORT"
+            active("fcl", FCL_MIN_WINDOW_MS) -> "FCL"
+            active("dinner") -> "DINNER"
+            active("lunch") -> "LUNCH"
+            activeBfast() -> "BFAST"
+            activeHighCarb() -> "HIGHCARB"
+            active("meal") -> "MEAL"
+            active("fasting") -> "FASTING"
+            active("lowcarb") -> "LOWCARB"
+            active("anticip") -> "ANTICIP"
+            else -> null
+        }
+    }
+
+    companion object {
+        /** Same floor as Therapy.FCL_MIN_WINDOW_MS — FCL notes often ship with duration 0. */
+        private const val FCL_MIN_WINDOW_MS = 60 * 60_000L
+    }
 
     /** Tells the loop algorithm that the pump is physically connected. */
     override fun connectPump() {
