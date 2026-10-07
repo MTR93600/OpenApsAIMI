@@ -3582,6 +3582,271 @@ answering a different question than its name suggests, and now `synchronized` no
 `@Synchronized`. **A grep that finds nothing is a hypothesis.** The compiler, a test, or reading the
 file is what settles it.
 
+## 6bf. 2026-10-07: picking the branch back up after 206 commits, and a build prerequisite nobody wrote down
+
+Between `7761d7b9ab` and `4dbd6dfeb36` another agent landed **206 commits** (194 of them its own).
+Measured rather than read from its notes:
+
+- `commonMain` AIMI files **441 → 527**; `androidMain` **88 → 89**.
+- A new package, `commonMain/.../openAPSAIMI/effects/`: **76 files, 13 780 lines**.
+- `androidMain/.../DetermineBasalAIMI2.kt`: **20 109 → 14 826 lines**, and it now calls into
+  `effects/` at **287 sites**.
+
+So roughly 5 300 lines of the live dosing tick moved into shared code, and **Android production runs
+through it**. That, not the iOS work, is what needs adversarial verification.
+
+### The iOS scaffolding is genuinely inert, checked directly
+
+`_docs/kmp/p6-ios-decisions.md` describes "temporary neutral values" that are explicitly *not* parity.
+Before trusting that they are gated off, three facts were checked by reading the code:
+
+- `IosClientConfig.APS` is `false` (`ios/shell/.../IosClientConfig.kt:49`).
+- `HoldAimiEngine` is constructed in exactly one non-test place, `appleJvmMain/.../IosNeutralAimiEngine.kt`.
+- Nothing outside tests assigns `AimiCommonEngineSwitch.enabled`, and off, `HoldAimiEngine` returns
+  `Hold("ENGINE_NOT_EXTRACTED")` **even when a delegate was supplied**.
+
+The one residual risk is discipline, not wiring: `AimiCommonEngineSwitch.enabled` is a mutable global
+`var` whose KDoc asks tests to set it back.
+
+### The prerequisite that is in no checklist
+
+**The full gate fails on the committed tip, and it is not a code defect.**
+
+```
+> Task :plugins:aps:linkDebugTestIosSimulatorArm64 FAILED
+ld: library '…/plugins/aps/build/tflite-24-sim-arm64/libtensorflow-lite.a' not found
+```
+
+`plugins/aps/build.gradle.kts:185-198` says the iOS link now takes a TensorFlow Lite C 2.4.0 static
+library and that "the scripts under `src/tfliteParity` produce the two static libraries before this
+link". `build-uam24-sim-arm64.sh` downloads the TensorFlow v2.4.0 source tarball and builds TFLite
+from source. The artefact lives under `build/`, so **every worktree needs its own**, and a fresh clone
+has none.
+
+The Kotlin/Native compiler cache was ruled out first: `-Pkotlin.native.cacheKind.iosSimulatorArm64=none`
+fails identically.
+
+**Running it takes about four minutes and it reports more than an artefact:**
+
+```
+TensorFlow Lite C 2.4.0 iossimulator-arm64 against the Android arm64-v8a reference.
+identical 67 / 67
+```
+
+So the inference engine is **bit-identical between Android arm64-v8a and the iOS simulator** on the
+whole corpus. That is the hardest part of numerical parity, and it is proven rather than assumed: a
+divergence the parity harness finds later is far more likely to be in the tick's logic, or in *when* a
+value is read, than in TFLite. It also confirms the draft harness's
+`PARITY_ANDROID_UAM_WORD0 = "3f9eea89"` - it is the output for the all-zero input, line 1 of
+`src/tfliteParity/vectors.txt`, and the build log's row `0 3f9eea89 3f9eea89` shows both platforms
+agreeing on it.
+
+**This belongs in `CLAUDE.md` beside the simulator-runtime note**, which records the same shape of
+problem (a platform prerequisite that makes a gate silently unavailable). Proposed wording:
+
+> `iosSimulatorArm64Test` also needs a TensorFlow Lite static library that is **not** produced by
+> Gradle. Run `bash plugins/aps/src/tfliteParity/build-uam24-sim-arm64.sh` once per checkout (and once
+> per agent worktree). Without it the link fails with `ld: library '…/libtensorflow-lite.a' not found`.
+
+### The real baseline, once both prerequisites were met
+
+A second blocker sat behind the first: `:app:compileFullDebugJavaWithJavac` failed on KSP output
+importing **Hilt and Dagger**, which this project replaced with Metro. Checked before touching
+anything - **no Hilt or Dagger anywhere in `app/src`**, none in `:app`'s build file, and the generated
+files dated 6 October 22:03, i.e. the previous agent's run rather than this one. Stale incremental
+output, not a defect. `CLAUDE.md` says to recompile rather than clean on a KSP error; recompiling did
+not help here because KSP considered the files up to date. Deleting only
+`app/build/generated/ksp/fullDebug` fixed it in 1 min 17, with no clean build.
+
+With both cleared, the branch is **green**, and these are the first numbers actually produced from
+these 206 commits on this machine:
+
+| gate | 7761d7b9ab | 4dbd6dfeb36 | delta |
+|---|---:|---:|---:|
+| `testAndroidHostTest` | 1 840 | **2 049** | +209 |
+| `jvmTest` | 594 | **752** | +158 |
+| `iosSimulatorArm64Test` | 599 | **747** | +148 |
+
+0 failures, 0 errors, `BUILD SUCCESSFUL`, every task confirmed executed rather than `UP-TO-DATE`, and
+the result XML timestamped within a minute of the run. **+515 tests.**
+
+### Two traps this reprise walked straight into, both already in the skill
+
+1. **Stale XML read as a result.** The first gate run printed `1840 / 594 / 599, 0 failures` from
+   `build/test-results/` - the previous session's numbers - while `testAndroidHostTest` had never run,
+   because the build died at the link step. Only `BUILD FAILED` was true.
+2. **Read the XML's timestamp, not just its numbers.** The stale-results trap bit twice in one
+   evening, and the second time the numbers were plausible. Comparing the newest result file's mtime
+   against the wall clock is one line and it is now part of how this campaign reads a gate.
+3. **A reconstructed patch is not reviewed work.** The owner handed over a parity harness rebuilt from
+   a dead agent's transcript, described as "never compiled, never tested". The failure above explains
+   why: that agent had been throttling Gradle to `-Xmx2g` and one worker to make the build "fit",
+   while the thing actually stopping it was a missing `.a` that no amount of memory would have fixed.
+
+### The adversarial pass over the extraction: two findings, and my own fix improved
+
+An agent was sent to prove the 206 commits wrong and could not, on the axis that matters. What it did
+rather than assert: three whole-corpus conservation sweeps plus eight hand comparisons, against a
+better reference than the brief gave it - the **pre-extraction tick at `7761d7b9ab`**, same path and
+layout, so content compares exactly instead of fighting `dev_OAPSAIMI`'s re-layout.
+
+- **172 distinct numeric literals** in the old 20 109-line tick: none missing from the new tick plus
+  commonMain, none with a changed occurrence count.
+- **483 `(variable, operator, constant)` guard triples**: 58 absent, every dose-relevant one chased
+  and explained - renames (`hour` → `localHour`, `delta` → `fieldDelta`), a De Morgan rewrite, and
+  `isNosmbHm`, which the old code already marked `// REMOVED intentionally` and never called.
+- Hand-verified faithful: `criticalConditions` (all 15 predicates, both bypass flags, and evaluation
+  order), `sportSafety`, `mealAggression`, `cfrdHrInflammationBoostOf`, `decideBuildRaObservationState`,
+  `decideMealAdvisorOrReturn`, the `MaxSmbLadder` call site, `applyTubeAdvisorFromDoseSnapshot`.
+- Four mutations: three killed with precisely localized failures, one survived - see below.
+
+**`AimiEffectProbe` sits in the live `setTempBasal` path** and was checked rather than waved at: a
+`ThreadLocal<MutableList<String>?>`, null by default, armed only in two test files, both with
+`try/finally { lines.remove() }`, thread-confined so the loop thread cannot see a test's arming, and
+nothing in main source arms it.
+
+#### My own rounding fix was in the right direction and not exact
+
+6bb replaced `aimiFmt*`'s half-even default with `NumberFormat.withDecimalsHalfUp`. That closed the
+half-even gap and left a second one, because **`String.format("%.Nf")` does not round the exact binary
+value** - Java's `Formatter` takes the digits of `Double.toString` (the shortest round-trip decimal)
+and rounds half-up on *that*. Checked with Java rather than reasoned about:
+
+| | `String.format` | `HALF_UP` on exact binary |
+|---|---|---|
+| `%.3f` of `1.2345` | `1.235` | `1.234` |
+| `%.1f` of `8.35` | **`8.4`** | **`8.3`** |
+
+`8.35` is the very example used throughout 6bb to describe the risk, and `withDecimalsHalfUp` lands on
+the wrong side of it. The campaign has since replaced those helpers with `formatFixedHalfAway`, which
+takes the digits from `Double.toString` and then rounds half-up - Java's actual behaviour, and more
+faithful than what 6bb shipped. `AimiFmtStringFormatParityTest` pins it against the real
+`String.format(Locale.US, …)` as its oracle, and a mutation of the tie direction turns it red.
+
+**The generalisable part:** "rounds half up" is not one behaviour. *What* is rounded - the shortest
+decimal or the exact binary value - matters as much as the direction, and the two disagree on ordinary
+numbers. A parity fix that names only the direction is half a fix.
+
+#### Finding 1: the locale swap reached user-visible text (owner's decision)
+
+The conversion to dot-fixed `aimiFmt*` was correct for logs and is mostly logs. It also landed on text
+a user reads:
+
+- `DetermineBasalAIMI2.kt:12209` writes `BasalLearner: ×${aimiFmt2(basalMultiplier)}` into
+  `rT.learnersInfo`, a block whose own comment says `// ✅ Populate rT.learnersInfo for UI section display`.
+- `rT.reason` at 10456 / 10488 / 10577 / 10581, including **inside localized resource templates** -
+  `rh.gs(ApsStrings.temp_basal_pose, aimiFmt2(rate), duration)` - so a French or German sentence now
+  carries a dot decimal.
+
+Numerically identical; only the separator changes for non-dot locales (`1,05` → `1.05`). `rT.reason`
+also goes to Nightscout, where a dot is arguably right. **It is the decision the owner has not made,
+it is systematic rather than a slip, and it is theirs.**
+
+#### Finding 2: a safety guard with no test, and why it matters
+
+`AimiHypoSmbSafety.sportSafety:249`:
+
+```kotlin
+if (input.recentSteps5 == 0 && !input.sportTime && !input.activityActive) return false
+```
+
+Deleting it leaves **all 14 tests green**. The test named `a real sport burst is sport safety and
+standing still is not` passes `SportSafetyInput(0,0,0,0,0, false, false, 70.0, 70.0, 100f)`, for which
+every downstream term is already false, so its "standing still" half is vacuous with respect to the
+guard it appears to test.
+
+**The guard is not redundant, and the gap is clinically meaningful.** Without it, `sustainedActivity`
+(`recentSteps30 >= 1200 || recentSteps60 >= 3000 || recentSteps180 >= 4500`) still fires for someone
+who walked a lot in the last half hour **but has stopped now** - so SMBs would stay suppressed. Line
+249 is the immediate release when the steps stop, which is the behaviour the owner asked for. Only two
+fixtures exist for this function, all-zeros and a burst `(400, 800)`; **neither has `recentSteps5 == 0`
+with a high `recentSteps30`**, which is the one case the guard exists for.
+
+The closing test is one fixture: `recentSteps5 = 0`, `recentSteps30 = 1500`, everything else as the
+"standing still" case, asserting `false`.
+
+#### Clean, with the sample size stated
+
+`AimiCommonEngineSwitch` discipline holds: 12 `= true` writers across three test files, each file with
+an `@AfterTest` reset that runs on failure too, no main-source writer, and `maxParallelForks` uses
+separate processes so a `true` cannot cross. Fragile by construction, not a live hole.
+
+Limits the agent stated rather than hid: ~8 of 287 call sites hand-checked; 4 mutation points in a
+13 780-line package; `ApplyLegacyMealModes` and `RunAutodriveV3` not reviewed in depth;
+`iosSimulatorArm64Test` not run on its side. One mutation - loosening a hypo threshold - was refused by
+the permission classifier, correctly, so that predicate went unmutated.
+
+### The parity harness, finished and frozen
+
+`ParityDoseTrace` + `ParityAndroidFixture` (`commonMain/.../parity/`), `ParityDivergenceTest`
+(`commonTest`), and a nine-scenario capture in `androidHostTest/.../ShellDecisionTraceTest.kt`.
+Gate before 2 049 / 752 / 747, after **2 052 / 754 / 749**, 0 failures throughout - every delta
+accounted for, since `ParityDivergenceTest` is `commonTest` and therefore runs on all three targets.
+
+**The fixture is frozen from the real printed block**, extracted from the JUnit XML by script with a
+shape assertion, never typed by hand, and the tick was not touched. It then matched again inside the
+full gate, so the capture is deterministic across processes. `const val` had to become `val`: a
+116-line raw string is not a compile-time constant.
+
+Two corrections to the draft worth keeping:
+
+- `PARITY_ANDROID_UAM_WORD0` is **not** "word 0 of the corpus". `vectors.txt` is 67 rows of 18 input
+  words plus 1 output word; `3f9eea89` is the **output** of vector 0, whose input is all zeros - the
+  model's intercept. The value was right, the sentence was wrong.
+- **The draft could not have run even once it compiled.** `signalSlice` wires five `lateinit` fields
+  only inside `if (armPump)`, so four of the nine scenarios threw `UninitializedPropertyAccessException`
+  until `armPump = true` was passed. Nothing in a transcript could have revealed that.
+
+#### The two inherited suspicions: one real but inert, one wrong
+
+- **Meal advisor bg 180/Δ0 on iOS against 160/Δ2 on Android is real and cannot move the dose.** `bg`
+  reaches one gate (`bg >= 60`, which both clear) and two debug lines; `delta` reaches one console
+  line. Both sides compute SMB **3.30 U** and TBR **2.0 U/h for 30 min**. The better finding sits
+  beside it: **iOS is internally inconsistent** - `IosNeutralScene.MEAL` logs the patient state at
+  160/Δ2 and then feeds the advisor 180/Δ0.
+- **"`tbrMinutes` absent on Android" was wrong in its cause and overstated.** Five of nine Android
+  scenarios carry `tbrMinutes=30`, and `sport` matches iOS exactly. `decideCalculateRate` is not on
+  the meal path at all. What is real and still open: on `declared-meal` the tick returns
+  `rT.units = 3.3` with `rT.rate` and `rT.duration` both null, while the trace shows
+  `EFFECT SetTbr rate=2.00 dur=30` being issued - **the SMB effect reaches `rT`, the temp-basal effect
+  does not.** Not traced to a branch; could still be a mocked dependency returning early in the
+  harness rather than in production. One for a maintainer.
+
+#### What the harness found on its own, and why it is not a regression
+
+`uam` captured `tbrRate` = **9.223372036854776e+16 U/h**, exactly `Long.MAX_VALUE / 100`.
+`AimiTickPolicyMath.roundBasal` is `aimiMathRoundToLong(value * 100.0) / 100.0`, and for a
+non-finite input the hand-written rounder falls through to `value.toLong()`, which Kotlin saturates.
+So an infinite basal becomes a finite, absurd, **silently plausible** number instead of failing, in
+shared code reached from seven call sites.
+
+**Checked before reporting it as a defect, and it is not one.** Both the pre-extraction tick
+(`7761d7b9ab:12551`) and the clinical reference (`origin/dev_OAPSAIMI:12955`) are
+`Math.round(safeValue * 100.0) / 100.0`, and Java's `Math.round` saturates identically. The
+hand-rolled version is a **faithful port, saturation included**, which is exactly what a port owes.
+The harness surfaced a long-standing property; changing it would be a deliberate step away from the
+reference. In production `PumpCapabilityValidator` clamps downstream, and the oversized input here is
+probably a shell artefact (`recordingPreferences` answers 0.0 for unmapped keys, so a division can go
+infinite, and `armPump()` stubs `validateBasal` as identity).
+
+#### The real obstacle to the activation rule, and it is not technical
+
+`p6-ios-decisions.md` says iOS may be switched on only once **every** parity trace matches byte for
+byte. The harness shows what that costs: **iOS has four scenes, so five of the nine scenarios have no
+counterpart at all** (`fasting`, `uam`, `hypo-rebound`, `sensor-gap`, and both `healthkit`). A replay
+written today would emit `absent` for five of nine. Two fields are also missing from the iOS result
+(`eventualBG`, `variable_sens`), so they would be `absent` on every iOS trace until the engine
+surfaces them.
+
+**So the next decision is the owner's and it comes before any code**: for each of the five, what the
+iOS counterpart should be - a scene to add, or a scenario to declare Android-only and exclude from the
+rule. Until that is settled, "every trace matches" cannot be satisfied or even stated.
+
+Two smaller facts the capture established: `healthkit-present` is **byte-identical to
+`healthkit-absent` except the token**, so that pair cannot by itself catch a HealthKit regression; and
+`sensor-gap` differs from `night` only by the CGM timestamp yet produces a different trace, so the
+shell really does branch on the age of the reading.
+
 ## 7. Start here next session
 
 The plugin is live: `:app:assembleFullDebug` builds with `OpenAPSAIMIPlugin` registered at

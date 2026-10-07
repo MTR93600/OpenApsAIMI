@@ -62,6 +62,9 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecisionEnvironment
 import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalRiskLevel
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiTickContext
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.DoseTerminalSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.parity.PARITY_ANDROID_UAM_WORD0
+import app.aaps.plugins.aps.openAPSAIMI.parity.ParityAndroidFixture
+import app.aaps.plugins.aps.openAPSAIMI.parity.ParityDoseTrace
 import app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.HormonitorStudyExporterProvider
 import app.aaps.plugins.aps.openAPSAIMI.physio.CircadianMealProfileStore
@@ -161,6 +164,7 @@ import org.mockito.invocation.InvocationOnMock
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.whenever
+import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import org.mockito.stubbing.Answer
@@ -3021,6 +3025,7 @@ class ShellDecisionTraceTest {
         armPump: Boolean = false,
         autosensRatio: Double? = null,
         lastBolusAgoMin: Int? = null,
+        glucoseDateMs: Long = now,
     ): SignalSlice {
         val carbTime = System.currentTimeMillis().toDouble()
         val prefs = recordingPreferences(
@@ -3043,7 +3048,7 @@ class ShellDecisionTraceTest {
                     delta = delta,
                     shortAvgDelta = shortAvg,
                     longAvgDelta = longAvg,
-                    date = now,
+                    date = glucoseDateMs,
                 ),
                 null,
             ),
@@ -3124,6 +3129,7 @@ class ShellDecisionTraceTest {
                         longAvgDelta = longAvg,
                         autosensRatio = autosensRatio,
                         lastBolusAgoMin = lastBolusAgoMin,
+                        dateMs = glucoseDateMs,
                     ),
                 ),
             ) as RT
@@ -4026,13 +4032,14 @@ class ShellDecisionTraceTest {
         longAvgDelta: Double = 0.0,
         autosensRatio: Double? = null,
         lastBolusAgoMin: Int? = null,
+        dateMs: Long = now,
     ): AimiTickContext = AimiTickContext(
         glucoseStatus = GlucoseStatusAIMI(
             glucose = glucose,
             delta = delta,
             shortAvgDelta = shortAvgDelta,
             longAvgDelta = longAvgDelta,
-            date = now,
+            date = dateMs,
         ),
         currentTemp = CurrentTemp(duration = 0, rate = 1.0, minutesrunning = 0),
         iobDataArray = arrayOf(
@@ -4213,6 +4220,249 @@ class ShellDecisionTraceTest {
         }
         error("no field $name")
     }
+
+    // ---- Android / iOS parity harness -------------------------------------------------------
+    //
+    // Nine scenarios of this shell, each reduced to the fixed field order of [ParityDoseTrace].
+    // The canonical blocks are joined with "\n---\n" and compared to [ParityAndroidFixture.BLOCK].
+    //
+    // The fixture records what Android does. It is frozen from what this test prints and is never
+    // written by hand, and the tick is never changed to make the fixture match. If a number here
+    // looks wrong, that is a finding to report, not a thing to adjust.
+    //
+    // A scenario that throws is recorded as `port=capture-threw:<Type>` rather than dropped, so a
+    // broken capture stays visible in the frozen block instead of silently shrinking it.
+
+    @Test
+    fun parityHarnessCanonicalTracesMatchTheFrozenAndroidFixture() {
+        val block = listOf(
+            captureScenario("fasting") { captureFasting() },
+            captureScenario("declared-meal") { captureDeclaredMeal() },
+            captureScenario("uam") { captureUam() },
+            captureScenario("hypo-rebound") { captureHypoRebound() },
+            captureScenario("sport") { captureSport() },
+            captureScenario("night") { captureNight() },
+            captureScenario("sensor-gap") { captureSensorGap() },
+            captureScenario("healthkit-absent") { captureHealthKit(present = false) },
+            captureScenario("healthkit-present") { captureHealthKit(present = true) },
+        ).joinToString("\n---\n") { trace -> trace.canonical() }
+        val out = File(System.getProperty("java.io.tmpdir"), "parity-android.txt")
+        out.writeText(block)
+        println("PARITY_BLOCK_FILE ${out.absolutePath}")
+        println("PARITY_BLOCK_BEGIN")
+        println(block)
+        println("PARITY_BLOCK_END")
+        assertEquals(ParityAndroidFixture.BLOCK, block)
+    }
+
+    /**
+     * One scenario. A throw is kept as a trace with `port=capture-threw:<Type>`, so the frozen
+     * block always has the same nine entries in the same order.
+     */
+    private fun captureScenario(scenario: String, block: () -> ParityDoseTrace): ParityDoseTrace =
+        try {
+            block()
+        } catch (e: Throwable) {
+            // The canonical block only carries the type. The reason is printed so a thrown
+            // capture can be read from the test output instead of being guessed at.
+            println("PARITY_THREW $scenario ${e.javaClass.name}: ${e.message}")
+            e.stackTrace.take(8).forEach { frame -> println("PARITY_THREW $scenario   at $frame") }
+            parityAbsent(scenario, "capture-threw:${e.javaClass.simpleName}")
+        }
+
+    /** Fasting force basal. The meal hyper stage, the only place `fastingTime` is read. */
+    private fun captureFasting(): ParityDoseTrace {
+        resetTraceSingletons()
+        tick = newTick(recordingPreferences(emptyMap()))
+        armShell()
+        setField(tick, "fastingTime", true)
+        setField(tick, "bg", 110.0)
+        setField(tick, "delta", 2.0f)
+        setField(tick, "targetBg", 100.0f)
+        setField(tick, "cob", 0.0f)
+        val profile = profileStub()
+        val rT = RT(runningDynamicIsf = false)
+        var returned: Any? = null
+        capture {
+            returned = invokeMealHyper(tickContext(profile, 110.0), profile, rT, targetBg = 100.0)
+        }
+        val outcome = returned ?: error("meal hyper returned null")
+        return parityFromTick(
+            scenario = "fasting",
+            rT = rT,
+            bg = 110.0,
+            delta = 2.0,
+            modelWord0 = null,
+            healthKit = "present",
+            rateUph = resultField(outcome, "rate") as Double?,
+        )
+    }
+
+    /** Declared carbs. Same inputs as `signalMealReturnsTheAdvisorSmbAndTbr`, full tick. */
+    private fun captureDeclaredMeal(): ParityDoseTrace {
+        resetTraceSingletons()
+        armLockedMaleCircadianHold()
+        val slice = signalSlice(
+            glucose = 160.0,
+            delta = 2.0,
+            shortAvg = 2.0,
+            longAvg = 2.0,
+            carbs = 40.0,
+            maxBasal = 2.0,
+            armPump = true,
+        )
+        return parityFromTick("declared-meal", slice.returned, 160.0, 2.0, null, "present")
+    }
+
+    /** A rise with no declared carbs. Carries the model corpus word so the trace says which one. */
+    private fun captureUam(): ParityDoseTrace {
+        resetTraceSingletons()
+        val slice = signalSlice(
+            glucose = 180.0,
+            delta = 5.0,
+            shortAvg = 4.0,
+            longAvg = 3.0,
+            carbs = 0.0,
+            maxBasal = 2.0,
+            armPump = true,
+        )
+        return parityFromTick("uam", slice.returned, 180.0, 5.0, PARITY_ANDROID_UAM_WORD0, "present")
+    }
+
+    /** The post hypo day tick, the one that taps the drift micro SMB. */
+    private fun captureHypoRebound(): ParityDoseTrace {
+        resetTraceSingletons()
+        val slice = postHypoTick(localHour = 14, armPump = true)
+        return parityFromTick("hypo-rebound", slice.returned, 180.0, 0.0, null, "present")
+    }
+
+    /** The basal decision stage with `sportTime` on, at rest. Matches `iosNeutralSportTbrUph`. */
+    private fun captureSport(): ParityDoseTrace {
+        resetTraceSingletons()
+        tick = newTick(recordingPreferences(emptyMap()))
+        armShell()
+        val outcome = sportEngineDecision(
+            acceleration = 0.0,
+            modesCondition = false,
+            autodrive = false,
+            assessment = null,
+        )
+        return ParityDoseTrace(
+            scenario = "sport",
+            tbrRateUph = outcome.decision.rate,
+            tbrMinutes = outcome.decision.duration,
+            smbU = null,
+            eventualBg = null,
+            isfMgdl = null,
+            virtualCobG = null,
+            modelWord0 = null,
+            healthKit = "present",
+            bgMgdl = 180.0,
+            deltaMgdl = 5.0,
+            port = "android",
+        )
+    }
+
+    /** A flat tick at local hour 3. */
+    private fun captureNight(): ParityDoseTrace {
+        resetTraceSingletons()
+        val slice = signalSlice(
+            glucose = 110.0,
+            delta = 0.0,
+            shortAvg = 0.0,
+            longAvg = 0.0,
+            carbs = 0.0,
+            maxBasal = 0.0,
+            localHour = 3,
+            armPump = true,
+        )
+        return parityFromTick("night", slice.returned, 110.0, 0.0, null, "present")
+    }
+
+    /**
+     * The same flat tick as [captureNight] at the usual hour, with the glucose status stamped
+     * 25 minutes behind the tick clock. Nothing else changes, so a difference against the night
+     * trace is the shell reacting to the age of the reading.
+     */
+    private fun captureSensorGap(): ParityDoseTrace {
+        resetTraceSingletons()
+        val slice = signalSlice(
+            glucose = 110.0,
+            delta = 0.0,
+            shortAvg = 0.0,
+            longAvg = 0.0,
+            carbs = 0.0,
+            maxBasal = 0.0,
+            armPump = true,
+            glucoseDateMs = now - 25L * 60L * 1000L,
+        )
+        return parityFromTick("sensor-gap", slice.returned, 110.0, 0.0, null, "present")
+    }
+
+    /**
+     * One flat tick with the wearable read answering, one with it failing. The iOS engine always
+     * runs on an empty snapshot, so the absent trace is the one it can be compared against.
+     */
+    private fun captureHealthKit(present: Boolean): ParityDoseTrace {
+        resetTraceSingletons()
+        val slice = signalSlice(
+            glucose = 140.0,
+            delta = 1.0,
+            shortAvg = 1.0,
+            longAvg = 1.0,
+            carbs = 0.0,
+            maxBasal = 1.0,
+            wearableFailure = if (present) null else "healthkit absent",
+            armPump = true,
+        )
+        return parityFromTick(
+            scenario = if (present) "healthkit-present" else "healthkit-absent",
+            rT = slice.returned,
+            bg = 140.0,
+            delta = 1.0,
+            modelWord0 = null,
+            healthKit = if (present) "present" else "absent",
+        )
+    }
+
+    private fun parityFromTick(
+        scenario: String,
+        rT: RT,
+        bg: Double?,
+        delta: Double?,
+        modelWord0: String?,
+        healthKit: String,
+        rateUph: Double? = rT.rate,
+        minutes: Int? = rT.duration,
+    ): ParityDoseTrace = ParityDoseTrace(
+        scenario = scenario,
+        tbrRateUph = rateUph,
+        tbrMinutes = minutes,
+        smbU = rT.units,
+        eventualBg = rT.eventualBG,
+        isfMgdl = rT.variable_sens,
+        virtualCobG = rT.COB,
+        modelWord0 = modelWord0,
+        healthKit = healthKit,
+        bgMgdl = bg,
+        deltaMgdl = delta,
+        port = "android",
+    )
+
+    private fun parityAbsent(scenario: String, port: String): ParityDoseTrace = ParityDoseTrace(
+        scenario = scenario,
+        tbrRateUph = null,
+        tbrMinutes = null,
+        smbU = null,
+        eventualBg = null,
+        isfMgdl = null,
+        virtualCobG = null,
+        modelWord0 = null,
+        healthKit = "absent",
+        bgMgdl = null,
+        deltaMgdl = null,
+        port = port,
+    )
 
     private class ProbingLog : MutableList<String> by mutableListOf() {
         override fun add(element: String): Boolean {

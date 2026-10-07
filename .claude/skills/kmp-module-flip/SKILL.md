@@ -478,7 +478,18 @@ the check explicit and part of the gate, not an afterthought:
 grep -E '^> Task :plugins:aps:(testAndroidHostTest|jvmTest|iosSimulatorArm64Test)' <log>
 ```
 
-Any of those three printed with `UP-TO-DATE` means that gate did not run and the result is worthless. And `--rerun` on
+Any of those three printed with `UP-TO-DATE` means that gate did not run and the result is worthless.
+
+**And check the result XML's age, not only its numbers.** `build/test-results/` keeps the last
+successful run's files, so a build that dies *before* a test task leaves the previous run's green
+counts sitting there, ready to be read as today's. This has now produced two confident wrong readings
+in one evening, the second with entirely plausible numbers. One line settles it:
+
+```
+python3 -c "import glob,os,time; print(time.strftime('%H:%M', time.localtime(max(os.path.getmtime(p) for p in glob.glob('<module>/build/test-results/<task>/*.xml')))))"
+```
+
+If that is not within a minute or two of now, the counts are from an earlier run. And `--rerun` on
 `:app:assembleFullDebug` does nothing, because that is an action-less lifecycle task; to force the APK,
 put it on `:app:packageFullDebug`.
 
@@ -594,6 +605,28 @@ front rather than discovering it file by file.
 **A fixtures module must be excluded from `checkMigratedModules`.** It declares `iosArm64()` so that
 common tests can use it, but `migratedModules` feeds the exported framework header, and test helpers
 do not belong in the API Swift sees. There is a `filterNot` in `ios/shell/build.gradle.kts` for this.
+
+### Two prerequisites that are not Gradle's job, and make a gate silently unavailable
+
+Both were met on this machine and then lost, and each costs an hour to diagnose from the symptom.
+
+1. **The iOS simulator runtime** is a separate Xcode download. Without it, `iosSimulatorArm64Test`
+   reports `Xcode does not support simulator tests for ios_simulator_arm64`. Install with
+   `xcodebuild -downloadPlatform iOS`.
+2. **The TensorFlow Lite static library.** `plugins/aps`'s iOS link takes a TFLite C 2.4.0 `.a` that
+   **Gradle does not build**: `plugins/aps/build.gradle.kts` says "the scripts under
+   `src/tfliteParity` produce the two static libraries before this link". Run
+   `bash plugins/aps/src/tfliteParity/build-uam24-sim-arm64.sh` once per checkout **and once per agent
+   worktree**, since the artefact lives under `build/`. Without it the link dies with
+   `ld: library '…/tflite-24-sim-arm64/libtensorflow-lite.a' not found`, and the Kotlin/Native
+   compiler cache is a red herring - `-Pkotlin.native.cacheKind.iosSimulatorArm64=none` fails
+   identically. The script takes about four minutes and ends by printing `identical 67 / 67`, its own
+   proof that the simulator build matches the Android arm64-v8a reference bit for bit.
+
+**A stale KSP residue can also stop `:app`.** If `:app:compileFullDebugJavaWithJavac` fails on
+`dagger.hilt` or `dagger.android` imports in `app/build/generated/ksp/`, that is output from before
+the Metro migration. Recompiling does not help, because KSP considers it up to date. Delete only
+`app/build/generated/ksp/<variant>` - never a clean build.
 
 ## `:ios:shell:checkMigratedModules` will fail next
 
