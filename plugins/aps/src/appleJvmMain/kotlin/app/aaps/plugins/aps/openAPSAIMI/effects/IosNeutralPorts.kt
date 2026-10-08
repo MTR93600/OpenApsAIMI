@@ -1,9 +1,30 @@
 package app.aaps.plugins.aps.openAPSAIMI.effects
 
+import app.aaps.core.data.model.BS
+import app.aaps.core.interfaces.aps.AutosensResult
 import app.aaps.core.interfaces.aps.CurrentTemp
+import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
 import app.aaps.core.interfaces.aps.IobTotal
+import app.aaps.core.interfaces.aps.MealData
 import app.aaps.core.interfaces.aps.OapsProfileAimi
+import app.aaps.core.interfaces.aps.Predictions
 import app.aaps.core.interfaces.aps.RT
+import app.aaps.core.interfaces.ui.AlarmSound
+import app.aaps.core.interfaces.ui.UiInteraction
+import app.aaps.plugins.aps.openAPSAIMI.AsyncDataState
+import app.aaps.plugins.aps.openAPSAIMI.compose.AimiAutonomyMode
+import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorRuntimeProfile
+import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiTickContext
+import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientEventMemory
+import app.aaps.plugins.aps.openAPSAIMI.physio.HormonitorStudyExporter
+import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.MealAggressionContext
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdIntegration
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLearnedState
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdBolusSample
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiBehaviorProfileSource
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.keys.BooleanKey
@@ -41,6 +62,8 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSoftFloorPathMin
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSoftFloorTelemetry
 import app.aaps.plugins.aps.openAPSAIMI.safety.resolveSafetyStart
 import app.aaps.plugins.aps.openAPSAIMI.scenario.InsulinSlopePreserveHysteresis
+import kotlin.math.roundToInt
+import kotlin.reflect.KClass
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -510,4 +533,191 @@ private class PortLogLogger(private val log: MutableList<String>) : AAPSLogger {
     override fun info(className: String, methodName: String, lineNumber: Int, tag: LTag, message: String) = Unit
     override fun warn(className: String, methodName: String, lineNumber: Int, tag: LTag, message: String) = Unit
     override fun error(className: String, methodName: String, lineNumber: Int, tag: LTag, message: String) = Unit
+}
+
+/** Pinned clock for the sensor-gap scene, the same `now` as the Android trace test. */
+internal const val IOS_NEUTRAL_SENSOR_GAP_NOW_MS: Long = 1_700_000_000_000L
+
+/**
+ * Locked sensor-gap scene: glucose 110 mg/dL stamped 25 min old.
+ * Same inputs as the Android `ShellDecisionTraceTest.captureSensorGap`, which locks
+ * `tbrRate=absent`, `smb=absent`, `eventual=110.0` — the tick aborts on stale data
+ * (`minAgo=25.0 > 12.0`).
+ */
+fun iosNeutralSensorGapSignal(log: MutableList<String>): AimiSignalPrepPkpd {
+    val nowMs = IOS_NEUTRAL_SENSOR_GAP_NOW_MS
+    val preferences = IosNeutralMealPreferences().apply {
+        doubles[DoubleKey.OApsAIMIautodrivesmallPrebolus.key] = 0.0
+        doubles[DoubleKey.OApsAIMIautodrivePrebolus.key] = 0.0
+    }
+    val ctx = AimiTickContext(
+        glucoseStatus = GlucoseStatusAIMI(
+            glucose = 110.0,
+            delta = 0.0,
+            shortAvgDelta = 0.0,
+            longAvgDelta = 0.0,
+            date = nowMs - 25L * 60L * 1000L,
+        ),
+        currentTemp = CurrentTemp(duration = 0, rate = 1.0, minutesrunning = 0),
+        iobDataArray = arrayOf(IobTotal(time = nowMs, iob = 1.0, lastBolusTime = 0L)),
+        profile = iosNeutralProfile(),
+        // The Android test leaves the AutosensResult mock unstubbed, so ratio reads 0.0.
+        // Not read on the abort path; kept for faithfulness.
+        autosensData = AutosensResult().also { it.ratio = 0.0 },
+        mealData = MealData(mealCOB = 0.0),
+        microBolusAllowed = true,
+        currentTime = nowMs,
+        flatBGsDetected = false,
+        dynIsfMode = false,
+        uiInteraction = SensorGapSilentUi,
+        extraDebug = "",
+    )
+    return decideSignalPreparationPkpdRuntime(
+        ctx = ctx,
+        profile = iosNeutralProfile(),
+        rT = RT(runningDynamicIsf = false),
+        glucoseStatus = ctx.glucoseStatus,
+        combinedDelta = 0.0f,
+        // Only feeds the tdd24Hrs fallback; the abort does not read it.
+        tdd7P = 40.0,
+        isExplicitAdvisorRun = false,
+        isConfirmedHighRiseLocal = false,
+        pkpdRuntimeIn = null,
+        // Never touched on the abort path; a neutral instance keeps the call honest.
+        pkpdIntegration = PkPdIntegration(
+            preferences,
+            PkPdLearnedState(),
+            object : AimiBehaviorProfileSource {
+                override fun read(preferences: Preferences): AimiBehaviorRuntimeProfile =
+                    AimiBehaviorRuntimeProfile(
+                        protectionLevel = 0,
+                        mealCaptureLevel = 0,
+                        stabilityLevel = 0,
+                        physioLevel = 0,
+                        autonomyMode = AimiAutonomyMode.Observation,
+                    )
+            },
+        ),
+        preferences = preferences,
+        consoleLog = log,
+        calls = object : AimiSignalPrepPkpdCalls {
+            override fun mealTime() = false
+            override fun mealRuntime() = 0L
+            override fun lunchTime() = false
+            override fun lunchRuntime() = 0L
+            override fun bfastTime() = false
+            override fun bfastRuntime() = 0L
+            override fun dinnerTime() = false
+            override fun dinnerRuntime() = 0L
+            override fun sportTime() = false
+            override fun snackTime() = false
+            override fun snackRuntime() = 0L
+            override fun highCarbTime() = false
+            override fun highCarbRuntime() = 0L
+            override fun sleepTime() = false
+            override fun lowCarbTime() = false
+            override fun recentBgs(): List<Float> = emptyList()
+            override fun nowMs() = nowMs
+            override fun bolusesSince(startMs: Long, ascending: Boolean): List<BS> = emptyList()
+            override fun calculateBgTrend(recentBGs: List<Float>, reason: StringBuilder) = Unit
+            override fun studyExporter(): HormonitorStudyExporter? = null
+            override fun bg() = 110.0
+            override fun predictedBg() = 110.0f
+            override fun delta() = 0.0f
+            override fun shortAvgDelta() = 0.0f
+            override fun longAvgDelta() = 0.0f
+            override fun iob() = 1.0f
+            override fun cob() = 0.0f
+            override fun maxSmb() = 0.0
+            override fun targetBg() = 100.0f
+            override fun lateFatProteinRise(
+                bg: Double,
+                predictedBg: Double,
+                delta: Double,
+                shortAvgDelta: Double,
+                longAvgDelta: Double,
+                iob: Double,
+                cob: Double,
+                maxSmb: Double,
+                lastBolusTimeMs: Long?,
+                mealTime: Boolean,
+                bfastTime: Boolean,
+                lunchTime: Boolean,
+                dinnerTime: Boolean,
+                highCarbTime: Boolean,
+            ) = false
+            override fun setLateFatRiseFlag(value: Boolean) = Unit
+            override fun tdd24hState(): AsyncDataState<Double> =
+                AsyncDataState.Missing("ios-neutral")
+            override fun noteStaleData(minAgo: Double) {
+                log += "IOS_NEUTRAL sensor-gap stale ${minAgo}m"
+            }
+            override fun logDecisionFinal(tag: String, rT: RT, bg: Double, delta: Float) {
+                log += "IOS_NEUTRAL sensor-gap $tag bg=$bg"
+            }
+            override fun ensurePredictionFallback(rT: RT, bg: Double) {
+                if (rT.predBGs == null) {
+                    val safeBg = bg.roundToInt()
+                    rT.predBGs = Predictions().apply {
+                        IOB = listOf(safeBg)
+                        COB = listOf(safeBg)
+                        ZT = listOf(safeBg)
+                        UAM = listOf(safeBg)
+                    }
+                }
+                if (rT.eventualBG == null) {
+                    rT.eventualBG = bg
+                }
+            }
+            override fun markFinalLoopDecision(rT: RT) = Unit
+            // Everything below runs after the staleness check; the abort never reaches it.
+            override fun internalLastSmbMillis(): Long =
+                error("IOS_NEUTRAL sensor-gap: unexpected internalLastSmbMillis")
+            override fun setLastBolusAgeMinutes(minutes: Double) =
+                error("IOS_NEUTRAL sensor-gap: unexpected setLastBolusAgeMinutes")
+            override fun pkpdMealContext(
+                mealData: MealData,
+                predictedBgMgdl: Double,
+                targetBgMgdl: Double,
+            ): MealAggressionContext =
+                error("IOS_NEUTRAL sensor-gap: unexpected pkpdMealContext")
+            override fun recentPkpdBolusSamples(
+                nowMillis: Long,
+                fallbackWindowMin: Int,
+            ): List<PkpdBolusSample> =
+                error("IOS_NEUTRAL sensor-gap: unexpected recentPkpdBolusSamples")
+            override fun uamConfidence(): Double =
+                error("IOS_NEUTRAL sensor-gap: unexpected uamConfidence")
+            override fun physioLatentState(): PhysioLatentState? =
+                error("IOS_NEUTRAL sensor-gap: unexpected physioLatentState")
+            override fun lastRa(): Double =
+                error("IOS_NEUTRAL sensor-gap: unexpected lastRa")
+            override fun causalPosterior(): CausalStatePosterior? =
+                error("IOS_NEUTRAL sensor-gap: unexpected causalPosterior")
+            override fun eventMemory(): PatientEventMemory? =
+                error("IOS_NEUTRAL sensor-gap: unexpected eventMemory")
+            override fun logPkpdRuntimeFailure(error: Exception) =
+                error("IOS_NEUTRAL sensor-gap: unexpected logPkpdRuntimeFailure")
+            override fun setCachedPkpdRuntime(runtime: PkPdRuntime) =
+                error("IOS_NEUTRAL sensor-gap: unexpected setCachedPkpdRuntime")
+            override fun applyBasalFirst(
+                bg: Double,
+                delta: Float,
+                combinedDelta: Float,
+                mealData: MealData,
+                autosens: AutosensResult,
+                isMealAdvisorOneShot: Boolean,
+                targetBg: Double,
+                rT: RT,
+                isConfirmedHighRise: Boolean,
+            ) = error("IOS_NEUTRAL sensor-gap: unexpected applyBasalFirst")
+        },
+    )
+}
+
+private object SensorGapSilentUi : UiInteraction {
+    override val mainActivity: KClass<*> = SensorGapSilentUi::class
+    override val errorHelperActivity: KClass<*> = SensorGapSilentUi::class
+    override fun runAlarm(status: String, title: String, sound: AlarmSound?) = Unit
+    override fun stopAlarm(reason: String) = Unit
 }
