@@ -31,7 +31,8 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.aimiLocalFiles
 import app.aaps.plugins.aps.openAPSAIMI.utils.iosTickAimiRoot
 
 /**
- * Scenes the user approved on 2026-10-05. The iOS loop does not construct this while
+ * Scenes the user approved on 2026-10-05 (MEAL, SPORT, NIGHT, LOW_PREDICTION) and
+ * 2026-10-08 (FASTING, first of the five iOS scenes). The iOS loop does not construct this while
  * `IosClientConfig.APS` is false. [AimiCommonEngineSwitch][app.aaps.plugins.aimiengine.AimiCommonEngineSwitch]
  * is a second switch, also off by default.
  */
@@ -40,6 +41,7 @@ enum class IosNeutralScene {
     SPORT,
     NIGHT,
     LOW_PREDICTION,
+    FASTING,
 }
 
 /**
@@ -155,6 +157,12 @@ class IosNeutralAimiEngine(
                 bgMgdl = 180.0,
                 deltaMgdl = 0.0,
             )
+            IosNeutralScene.FASTING -> log += scenePatientLog(
+                snapshot = wearable,
+                nowMs = aimiWallClockMs(),
+                bgMgdl = 110.0,
+                deltaMgdl = 2.0,
+            )
             IosNeutralScene.LOW_PREDICTION -> Unit
         }
         val ceiling = decideTpoSessionAtTickStart(
@@ -215,6 +223,12 @@ class IosNeutralAimiEngine(
                     log = learnerLog,
                 )
                 temp(state, iosNeutralNightTbrUph(), "NIGHT_TBR")
+            }
+            IosNeutralScene.FASTING -> {
+                val outcome = iosNeutralFastingMealHyper(log)
+                val rate = (outcome as? AimiMealHyperBasalBoostOutcome.ContinueWithOptionalRate)?.rate
+                    ?: error("IOS_NEUTRAL fasting did not return an optional rate")
+                temp(state, rate, "FASTING_TBR")
             }
             IosNeutralScene.LOW_PREDICTION -> error("LOW_PREDICTION returns at the floor, before meal onset")
         }

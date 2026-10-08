@@ -314,6 +314,64 @@ fun iosNeutralNightTbrUph(): Double {
 }
 
 /**
+ * Locked fasting scene: fastingTime, BG 110, delta +2, target 100, COB 0.
+ * Same inputs as the Android `ShellDecisionTraceTest.captureFasting`, which locks
+ * `tbrRate=4000000000000000` (2.0 U/h) with no duration and no SMB.
+ */
+fun iosNeutralFastingMealHyper(log: MutableList<String>): AimiMealHyperBasalBoostOutcome {
+    val preferences = IosNeutralMealPreferences().apply {
+        doubles[DoubleKey.meal_modes_MaxBasal.key] = 0.0
+    }
+    return decideMealHyperBasalBoost(
+        profile = iosNeutralProfile(),
+        rT = RT(runningDynamicIsf = false),
+        basal = 1.0,
+        profileCurrentBasal = 1.0,
+        isMealAdvisorOneShot = false,
+        targetBg = 100.0,
+        timeSinceEstimateMin = Double.MAX_VALUE,
+        estimatedCarbs = 0.0,
+        currentTemp = CurrentTemp(duration = 0, rate = 1.0, minutesrunning = 0),
+        preferences = preferences,
+        consoleLog = log,
+        fields = object : AimiMealHyperFields {
+            override fun snackTime() = false
+            override fun snackRunTime() = 0L
+            override fun delta() = 2.0f
+            override fun mealTime() = false
+            override fun lunchTime() = false
+            override fun dinnerTime() = false
+            override fun highCarbTime() = false
+            override fun bfastTime() = false
+            override fun mealRuntime() = 0L
+            override fun lunchRuntime() = 0L
+            override fun dinnerRuntime() = 0L
+            override fun highCarbRunTime() = 0L
+            override fun bfastRuntime() = 0L
+            override fun bg() = 110.0
+            override fun shortAvgDelta() = 0.0
+            override fun mealAbsorption() = null
+            override fun cob() = 0.0f
+            override fun phase() = null
+            override fun hyperReleaseActive() = false
+            override fun aggression() = null
+            override fun basalFirstActive() = false
+            override fun fragileBg() = false
+            override fun fastingTime() = true
+        },
+        basalCap = AimiBasalCap { _, _, _ ->
+            error("IOS_NEUTRAL fasting: unexpected basal cap")
+        },
+        tempBasal = AimiMealHyperTempBasal { _, _, _, _, _, _, _ ->
+            error("IOS_NEUTRAL fasting: unexpected setTempBasal")
+        },
+        clock = AimiMealHyperClock {
+            error("IOS_NEUTRAL fasting: unexpected clock read")
+        },
+    )
+}
+
+/**
  * Locked meal advisor scene: 40 g, IC 10, IOB 1.0, max basal 2.0.
  * [effortFactor] is the neutral port (1.0). It scales the SMB and does not invent a second formula.
  */
