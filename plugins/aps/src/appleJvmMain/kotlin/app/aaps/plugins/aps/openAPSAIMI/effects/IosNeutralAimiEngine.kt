@@ -43,6 +43,7 @@ enum class IosNeutralScene {
     LOW_PREDICTION,
     FASTING,
     SENSOR_GAP,
+    HYPO_REBOUND,
 }
 
 /**
@@ -164,6 +165,12 @@ class IosNeutralAimiEngine(
                 bgMgdl = 110.0,
                 deltaMgdl = 2.0,
             )
+            IosNeutralScene.HYPO_REBOUND -> log += scenePatientLog(
+                snapshot = wearable,
+                nowMs = aimiWallClockMs(),
+                bgMgdl = 180.0,
+                deltaMgdl = 0.0,
+            )
             IosNeutralScene.LOW_PREDICTION -> Unit
             IosNeutralScene.SENSOR_GAP -> log += scenePatientLog(
                 snapshot = wearable,
@@ -236,6 +243,10 @@ class IosNeutralAimiEngine(
                 val rate = (outcome as? AimiMealHyperBasalBoostOutcome.ContinueWithOptionalRate)?.rate
                     ?: error("IOS_NEUTRAL fasting did not return an optional rate")
                 temp(state, rate, "FASTING_TBR")
+            }
+            IosNeutralScene.HYPO_REBOUND -> {
+                val outcome = iosNeutralHypoReboundSmb(log)
+                hypoRebound(state, outcome.smbU)
             }
             IosNeutralScene.LOW_PREDICTION -> error("LOW_PREDICTION returns at the floor, before meal onset")
             IosNeutralScene.SENSOR_GAP -> {
@@ -386,6 +397,17 @@ class IosNeutralAimiEngine(
             persistenceEvents = emptyList(),
             telemetry = AimiDecisionTrace(reason),
             safety = AimiSafetyReport(holdReasonCode = reason),
+        )
+    }
+
+    private fun hypoRebound(state: AimiEngineState, smbU: Double): AimiTickResult {
+        return AimiTickResult(
+            command = AimiTherapyCommand.Smb(smbU),
+            nextState = state,
+            trainingEvents = emptyList(),
+            persistenceEvents = emptyList(),
+            telemetry = AimiDecisionTrace("HYPO_REBOUND_SMB"),
+            safety = AimiSafetyReport(holdReasonCode = null),
         )
     }
 }
