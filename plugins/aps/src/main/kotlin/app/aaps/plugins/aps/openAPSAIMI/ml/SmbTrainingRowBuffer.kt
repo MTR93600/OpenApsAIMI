@@ -44,9 +44,13 @@ internal class SmbTrainingRowBuffer(
          *
          * This is the training label. It used to be written when the row was built, inside the SMB
          * executor, which is BEFORE every floor, cap and guard has run — so the column named "the
-         * dose that was really delivered" held the value before capping. `null` until stamped, and
-         * an unstamped row is rendered with an empty label rather than a zero: an empty cell is
-         * dropped by the trainer, a zero would teach it that nothing was given.
+         * dose that was really delivered" held the value before capping.
+         *
+         * `null` means the dose of that tick is UNKNOWN, and the row is then rendered with an empty
+         * label that the trainer drops. It does NOT mean "nothing was given": a tick that ran and
+         * chose to give nothing is stamped with `0.0`, because "here nothing was needed" is half of
+         * what the model has to learn. Writing an empty cell for those ticks hid about one row in
+         * eleven from the trainer.
          */
         var deliveredUnits: Double? = null,
         var smbModelU: Double? = null,

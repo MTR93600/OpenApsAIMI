@@ -39,7 +39,14 @@ object CausalKineticsModulator {
     /** A meal in progress asks for a shorter, sharper action. */
     const val DIA_SHIFT_MEAL_H = -0.8
 
-    fun modulate(causalStatePosterior: CausalStatePosterior?): CausalKineticsModulation {
+    /**
+     * @param learningQualityMin causal score needed to learn. The caller passes a lower value when
+     *   `PkpdLearningWindowGate` is armed, so the two learning checks in one tick use the same minimum.
+     */
+    fun modulate(
+        causalStatePosterior: CausalStatePosterior?,
+        learningQualityMin: Double = CausalStatePosterior.LEARNING_QUALITY_MIN,
+    ): CausalKineticsModulation {
         val posterior = causalStatePosterior ?: return CausalKineticsModulation(
             peakShiftMinutes = 0.0,
             diaShiftHours = 0.0,
@@ -50,7 +57,7 @@ object CausalKineticsModulator {
         )
         val dominant = posterior.dominant
         val conf = posterior.dominantConfidence.coerceIn(0.0, 1.0)
-        val learningAllowed = posterior.learningContextClean()
+        val learningAllowed = posterior.learningContextClean(learningQualityMin)
         return when (dominant) {
             CausalStateId.POST_HYPO_RECOVERY -> CausalKineticsModulation(
                 peakShiftMinutes = 0.0,

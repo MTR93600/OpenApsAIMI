@@ -329,6 +329,30 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
         return lastEvent?.let { (now - it.timestamp) / 60000 } ?: -1L
     }
 
+    /** The last declared meal: how long ago, and whether it was a high-carb one. */
+    data class DeclaredMeal(val ageMin: Long, val highCarb: Boolean)
+
+    /**
+     * The most recent declared-meal note within [lookbackMin], or `null`.
+     *
+     * [getTimeElapsedSinceLastEvent] only looks back 60 min, which is too short for the PK/PD learning
+     * gate: a meal still acts on glucose 3 h later. The notes are kept for 24 h, so a wider lookback
+     * costs nothing. Every meal keyword counts, "anticip" too: it is a meal the person declared.
+     */
+    fun lastDeclaredMeal(nowMs: Long, lookbackMin: Long = DECLARED_MEAL_LOOKBACK_MIN): DeclaredMeal? {
+        val fromTime = nowMs - TimeUnit.MINUTES.toMillis(lookbackMin)
+        val event = latestNoteEvents
+            .asSequence()
+            .filter { it.timestamp in fromTime..nowMs }
+            .filter { event -> DECLARED_MEAL_KEYWORDS.any { event.note?.contains(it, ignoreCase = true) == true } }
+            .maxByOrNull { it.timestamp }
+            ?: return null
+        return DeclaredMeal(
+            ageMin = (nowMs - event.timestamp) / 60_000L,
+            highCarb = event.note?.contains("highcarb", ignoreCase = true) == true,
+        )
+    }
+
     private data class TherapySnapshot(
         val sleepTime: Boolean,
         val sportTime: Boolean,
@@ -360,6 +384,12 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
          * normally much shorter than this.
          */
         const val FCL_MIN_WINDOW_MS = 60 * 60_000L
+
+        /** Note keywords that mean "the person declared a meal". */
+        val DECLARED_MEAL_KEYWORDS = listOf("fcl", "meal", "bfast", "lunch", "dinner", "highcarb", "snack", "anticip")
+
+        /** How far [lastDeclaredMeal] looks back by default: longer than the longest learning block. */
+        const val DECLARED_MEAL_LOOKBACK_MIN = 300L
         private const val SNAPSHOT_TTL_MS = 30_000L
         private val snapshotRef = AtomicReference<TherapySnapshot?>(null)
         private val refreshInFlight = AtomicBoolean(false)

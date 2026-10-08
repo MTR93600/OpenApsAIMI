@@ -929,6 +929,136 @@ class PkPdIntegrationTest {
         return snapshot!!.params.diaHrs
     }
 
+    /**
+     * A clear meal belief that is NOT the dominant state, with a good causal score. A dominant meal is
+     * already refused by `CausalKineticsModulator`; this case is the one the legacy gate lets learn.
+     */
+    private val mealBeliefUnderDawn = CausalStatePosterior(
+        fastMealProb = 0.6,
+        dawnEndogenousProb = 0.9,
+        dominant = CausalStateId.DAWN_ENDOGENOUS,
+        dominantConfidence = 0.9,
+        learningQuality = 0.9,
+    )
+
+    private fun learnTick(integration: PkPdIntegration, minute: Long, posterior: CausalStatePosterior?) =
+        integration.computeRuntime(
+            epochMillis = minute * 60_000L,
+            bg = 140.0,
+            deltaMgDlPer5 = 0.0,
+            iobU = 2.0,
+            carbsActiveG = 0.0,
+            windowMin = 60,
+            exerciseFlag = false,
+            profileIsf = 50.0,
+            tdd24h = 40.0,
+            causalStatePosterior = posterior,
+        )?.learningTrace
+
+    /** Not armed: learning is decided as before, and the curve verdict is only exported. */
+    @Test
+    fun `curve gate off only exports its verdict as a shadow`() {
+        every { preferences.get(BooleanKey.OApsAIMIPkpdEnabled) } returns true
+        every { preferences.get(BooleanKey.OApsAIMIPkpdCurveLearningGate) } returns false
+        mockPkpdDefaults()
+        IsfTddProvider.set(50.0)
+
+        val trace = learnTick(PkPdIntegration(preferences, PkPdLearnedState()), 1_000L, mealBeliefUnderDawn)
+
+        assertNotNull(trace)
+        assertEquals(false, trace!!.curveGateArmed)
+        assertNull(trace.diaLearnBlockedBy)
+        assertEquals(PkpdLearningWindowGate.BLOCK_MEAL_BELIEF, trace.curveGateWouldBlock)
+    }
+
+    /** Armed: a clear meal belief can no longer train DIA/peak, even with a high causal score. */
+    @Test
+    fun `curve gate on blocks learning inside a meal`() {
+        every { preferences.get(BooleanKey.OApsAIMIPkpdEnabled) } returns true
+        every { preferences.get(BooleanKey.OApsAIMIPkpdCurveLearningGate) } returns true
+        mockPkpdDefaults()
+        IsfTddProvider.set(50.0)
+
+        val trace = learnTick(PkPdIntegration(preferences, PkPdLearnedState()), 1_000L, mealBeliefUnderDawn)
+
+        assertEquals(true, trace!!.curveGateArmed)
+        assertEquals(PkPdIntegration.LEARN_BLOCKED_CURVE_PREFIX + PkpdLearningWindowGate.BLOCK_MEAL_BELIEF, trace.diaLearnBlockedBy)
+    }
+
+    /** Armed: after a quiet hour a low causal score (0.35) that the legacy gate refuses may learn. */
+    @Test
+    fun `curve gate on lets a quiet hour learn with a lower causal score`() {
+        every { preferences.get(BooleanKey.OApsAIMIPkpdEnabled) } returns true
+        every { preferences.get(BooleanKey.OApsAIMIPkpdCurveLearningGate) } returns true
+        mockPkpdDefaults()
+        IsfTddProvider.set(50.0)
+        val quiet = CausalStatePosterior(learningQuality = 0.35)
+        val integration = PkPdIntegration(preferences, PkPdLearnedState())
+
+        var trace: PkpdLearningTrace? = null
+        for (minute in 1_000L..1_065L step 5) trace = learnTick(integration, minute, quiet)
+
+        assertNull(trace!!.diaLearnBlockedBy)
+        assertNull(trace.curveGateWouldBlock)
+
+        // The same tick with the gate off is refused by the legacy 0.50 score.
+        every { preferences.get(BooleanKey.OApsAIMIPkpdCurveLearningGate) } returns false
+        val legacy = learnTick(PkPdIntegration(preferences, PkPdLearnedState()), 2_000L, quiet)
+        assertEquals(PkPdIntegration.LEARN_BLOCKED_CAUSAL_UNCLEAN, legacy!!.diaLearnBlockedBy)
+    }
+
+    /** A declared meal reaches the gate and is exported, armed or not. */
+    @Test
+    fun `declared meal blocks learning and is exported`() {
+        every { preferences.get(BooleanKey.OApsAIMIPkpdEnabled) } returns true
+        every { preferences.get(BooleanKey.OApsAIMIPkpdCurveLearningGate) } returns true
+        mockPkpdDefaults()
+        IsfTddProvider.set(50.0)
+
+        val trace = PkPdIntegration(preferences, PkPdLearnedState()).computeRuntime(
+            epochMillis = 1_000L * 60_000L,
+            bg = 140.0,
+            deltaMgDlPer5 = 0.0,
+            iobU = 2.0,
+            carbsActiveG = 0.0,
+            windowMin = 60,
+            exerciseFlag = false,
+            profileIsf = 50.0,
+            tdd24h = 40.0,
+            causalStatePosterior = CausalStatePosterior(learningQuality = 0.9),
+            declaredMealAgeMin = 7L,
+        )?.learningTrace
+
+        assertEquals(PkPdIntegration.LEARN_BLOCKED_CURVE_PREFIX + PkpdLearningWindowGate.BLOCK_DECLARED_MEAL, trace!!.diaLearnBlockedBy)
+        assertEquals(7L, trace.curveGateDeclaredMealAgeMin)
+    }
+
+    /** A read-only call must not feed the history nor report a verdict. */
+    @Test
+    fun `read only call leaves the curve gate alone`() {
+        every { preferences.get(BooleanKey.OApsAIMIPkpdEnabled) } returns true
+        every { preferences.get(BooleanKey.OApsAIMIPkpdCurveLearningGate) } returns true
+        mockPkpdDefaults()
+        IsfTddProvider.set(50.0)
+
+        val trace = PkPdIntegration(preferences, PkPdLearnedState()).computeRuntime(
+            epochMillis = 1_000L * 60_000L,
+            bg = 140.0,
+            deltaMgDlPer5 = 0.0,
+            iobU = 2.0,
+            carbsActiveG = 0.0,
+            windowMin = 60,
+            exerciseFlag = false,
+            profileIsf = 50.0,
+            tdd24h = 40.0,
+            causalStatePosterior = mealBeliefUnderDawn,
+            allowLearning = false,
+        )?.learningTrace
+
+        assertNull(trace!!.curveGateWouldBlock)
+        assertEquals(PkPdIntegration.LEARN_BLOCKED_READ_ONLY_PATH, trace.diaLearnBlockedBy)
+    }
+
     private fun mockPkpdDefaults() {
         mockPkpdDefaults(preferences)
     }

@@ -186,6 +186,26 @@ class SmbTrainingRowBufferTest {
     }
 
     @Test
+    fun `a tick that gave nothing is labelled zero, not left empty`() {
+        // The two are different facts. An empty cell says "the dose of this tick is unknown" and the
+        // trainer drops the row; a tick that ran and chose to give nothing must say so, because
+        // "here nothing was needed" is half of what the model has to learn. Measured on a real
+        // package, treating the two alike hid about one row in eleven.
+        val buffer = SmbTrainingRowBuffer()
+        val t0 = 14_000_000L
+        buffer.enqueue(timestampMs = t0, valuesHead = legacyHead, valuesTail = legacyTail)
+        buffer.stampDeliveredUnits(tickKey = t0, deliveredUnits = 0.0)
+
+        val cols = buffer.drainWritableRows(t0 + SmbTrainingRowBuffer.OUTCOME_HORIZON_MAX_MS + 1)
+            .single()
+            .split(",")
+
+        val cell = cols[enrichedHeaders.indexOf("smbGiven")]
+        assertThat(cell).isNotEmpty()
+        assertThat(cell.toDouble()).isWithin(1e-9).of(0.0)
+    }
+
+    @Test
     fun `an unlabelled row is written with an empty label, never a zero`() {
         // A zero would teach the model that this tick gave nothing, which is exactly the lie that
         // censored the old corpus. An empty cell is dropped by the trainer instead.

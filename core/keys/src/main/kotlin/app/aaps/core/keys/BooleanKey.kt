@@ -660,6 +660,16 @@ enum class BooleanKey(
         defaultValue = false,
         dependency = OApsAIMIPkpdHyperReversion,
     ),
+    /** 🩸 pkpd DIA/peak learning gate read from the glucose curve (opt-in). The causal learning score
+     *  rewards a confident meal guess, so on UAM days 65–77 % of the ticks that trained DIA/peak were
+     *  inside a meal, where unannounced carbs make insulin look slower. When ON, learning needs no rise
+     *  for 60 min, no rise now and no clear meal belief, and the causal score minimum drops to 0.30.
+     *  Learning gets rarer, never faster. Off: legacy score gate; the curve verdict is still exported
+     *  as a shadow (`dia_curve_gate_would_block`). See `PkpdLearningWindowGate`. */
+    OApsAIMIPkpdCurveLearningGate(
+        key = "key_aimi_pkpd_curve_learning_gate",
+        defaultValue = false,
+    ),
     /** 🛡️ Basal-channel safety guards (lot 3, opt-in). Two authority leaks let the automatic basal channel
      *  dose while the SMB channel was deliberately held back:
      *  1. the basal-first mutex only asks "was an SMB requested?", so an SMB **zeroed by a safety rule**
@@ -744,6 +754,15 @@ enum class BooleanKey(
         "key_aimi_tube_veto_ignore_floor_artefact", false,
         titleResId = R.string.pref_title_aimi_tube_veto_ignore_floor_artefact,
         summaryResId = R.string.pref_summary_aimi_tube_veto_ignore_floor_artefact,
+    ),
+    /** 📐 Tube: replace the hyper-reversion clamp (min-pred exactly 80 at BG ≥ 160) by `BG − IOB × ISF`.
+     *  The clamp ignores insulin on board: too strict on a low-IOB meal rise, too permissive with a big
+     *  stack (VETO ↔ GRADED flips on BG 159.9 ↔ 160.4 at 9–11 U). ON by default; the bound and what it
+     *  changed are exported in `tube_advisor.hyper_clamp_*` for review. See `HyperClampTubeBound`. */
+    OApsAIMITubeHyperClampPhysicalBound(
+        "key_aimi_tube_hyper_clamp_physical_bound", true,
+        titleResId = R.string.pref_title_aimi_tube_hyper_clamp_physical_bound,
+        summaryResId = R.string.pref_summary_aimi_tube_hyper_clamp_physical_bound,
     ),
     // 🩸 pkpd predictions: shape the insulin-activity curves on the LEARNED DIA/peak, not the static profile
     OApsAIMIPkpdPredictionKinetics(

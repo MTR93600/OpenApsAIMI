@@ -35,6 +35,25 @@ jobs:
           java-version: '21'
           cache: gradle
 
+      # 2b. Installer le JetBrains Runtime 21 (toolchain Gradle)
+      # Le build exige une toolchain {Java 21, vendor=JetBrains} ; foojay.io
+      # ne distribue plus les packages JBR 21 (son API répond 400 depuis
+      # début octobre 2026). On installe le JBR via SDKMAN puis on l'enregistre
+      # comme installation Java connue de Gradle pour que la toolchain soit
+      # résolue sans téléchargement.
+      - name: Install JetBrains Runtime 21 for Gradle toolchain
+        run: |
+          curl -s "https://get.sdkman.io" | bash
+          source "$HOME/.sdkman/bin/sdkman-init.sh"
+          JBR_VER=$(sdk list java | grep -oE '21\.[0-9.+]+-jbr' | sort -V | tail -1)
+          echo "Using SDKMAN Java identifier: $JBR_VER"
+          test -n "$JBR_VER" || { echo "No JBR 21 found via SDKMAN" >&2; exit 1; }
+          sdk install java "$JBR_VER"
+          JBR_HOME="$HOME/.sdkman/candidates/java/$JBR_VER"
+          "$JBR_HOME/bin/java" -version
+          mkdir -p "$HOME/.gradle"
+          echo "org.gradle.java.installations.paths=$JBR_HOME" >> "$HOME/.gradle/gradle.properties"
+
       # 3. Recréer le keystore à partir du secret base64
       - name: Decode keystore
         run: |

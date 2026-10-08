@@ -48,6 +48,12 @@ class PkPdIntegration(
          * added after it, so the exported value says which causal branch closed the gate.
          */
         const val LEARN_BLOCKED_CAUSAL_MODULATOR_PREFIX = "causal_modulator:"
+
+        /**
+         * [PkpdLearningTrace.diaLearnBlockedBy]: start of the value used when the armed
+         * [PkpdLearningWindowGate] refuses the tick. The gate's own reason is added after it.
+         */
+        const val LEARN_BLOCKED_CURVE_PREFIX = "curve:"
     }
 
     /**
@@ -70,6 +76,9 @@ class PkPdIntegration(
     private var damping: SmbDamping? = null
     private var lastTailPolicy: TailAwareSmbPolicy? = null
     private var recentBolusSamples: List<PkpdBolusSample> = emptyList()
+
+    // Only the learning call feeds it, once per tick, under this class's lock.
+    private val learningWindowGate = PkpdLearningWindowGate()
 
     // The learned state lives in [PkPdLearnedState], so both consumers read one single value.
     // These are views on the holder, not fields: the rest of the class does not change.
@@ -151,6 +160,10 @@ class PkPdIntegration(
          */
         isfRateLimitAuthority: Boolean = allowLearning,
         patientEventMemory: PatientEventMemory? = null,
+        /** Minutes since the last declared meal note (FCL, lunch, …), `null` when none. Learning gate only. */
+        declaredMealAgeMin: Long? = null,
+        /** That declared meal was high-carb. Learning gate only. */
+        declaredMealHighCarb: Boolean = false,
     ): PkPdRuntime? {
         val structural = readStructuralConfig()
         val previousStructural = cachedStructuralConfig
@@ -187,9 +200,26 @@ class PkPdIntegration(
                     "(bounds ${AdaptivePkPdEstimator.LEARNING_WINDOW_MIN_MIN}-${AdaptivePkPdEstimator.LEARNING_WINDOW_MAX_MIN})",
             )
         }
-        val learningContextClean = causalStatePosterior?.learningContextClean() ?: true
-        val causalModulation = CausalKineticsModulator.modulate(causalStatePosterior)
+        // The curve verdict is computed on every learning tick, armed or not, so the export can show
+        // what the gate would do before anyone turns it on. Read-only calls never touch the history.
+        val curveGateArmed = preferences.get(BooleanKey.OApsAIMIPkpdCurveLearningGate)
+        val curveVerdict = if (allowLearning) {
+            learningWindowGate.evaluate(
+                epochMin = epochMin,
+                deltaMgDlPer5 = deltaMgDlPer5,
+                mealConfidence = causalStatePosterior?.mealConfidence,
+                declaredMealAgeMin = declaredMealAgeMin,
+                declaredMealHighCarb = declaredMealHighCarb,
+            ).also { learningWindowGate.record(epochMin, deltaMgDlPer5, bg) }
+        } else {
+            null
+        }
+        val learningQualityMin =
+            if (curveGateArmed) PkpdLearningWindowGate.QUALITY_MIN_WHEN_ARMED else CausalStatePosterior.LEARNING_QUALITY_MIN
+        val learningContextClean = causalStatePosterior?.learningContextClean(learningQualityMin) ?: true
+        val causalModulation = CausalKineticsModulator.modulate(causalStatePosterior, learningQualityMin)
         val causalLearningAllowed = causalModulation.learningAllowed
+        val curveAllowsLearning = !curveGateArmed || curveVerdict?.pass != false
         // Same three booleans as the guard below, read where the guard is really taken.
         // The snapshot used to rebuild this decision later in the tick from a newer causal state,
         // so it could not be trusted. This value is exported as PkpdLearningTrace.diaLearnBlockedBy.
@@ -197,6 +227,7 @@ class PkPdIntegration(
             !allowLearning         -> LEARN_BLOCKED_READ_ONLY_PATH
             !learningContextClean  -> LEARN_BLOCKED_CAUSAL_UNCLEAN
             !causalLearningAllowed -> LEARN_BLOCKED_CAUSAL_MODULATOR_PREFIX + causalModulation.reason
+            !curveAllowsLearning   -> LEARN_BLOCKED_CURVE_PREFIX + curveVerdict?.blockedBy
             else                   -> null
         }
         logPkpdLearningSkipReason(
@@ -209,7 +240,7 @@ class PkPdIntegration(
             learningContextClean = learningContextClean && causalLearningAllowed,
             consoleLog = consoleLog,
         )
-        if (allowLearning && learningContextClean && causalLearningAllowed) {
+        if (allowLearning && learningContextClean && causalLearningAllowed && curveAllowsLearning) {
             estimator.update(
                 epochMin = epochMin,
                 bg = bg,
@@ -221,6 +252,8 @@ class PkPdIntegration(
             )
         } else if (allowLearning && learningContextClean && !causalLearningAllowed) {
             consoleLog?.add("PKPD_LEARN skip: causal_modulator_learningAllowed=false")
+        } else if (allowLearning && learningContextClean && !curveAllowsLearning) {
+            consoleLog?.add("PKPD_LEARN skip: curve_gate=${curveVerdict?.blockedBy}")
         }
         val params = estimator.params()
         persistStateIfNeeded(params, structural.bounds)
@@ -337,7 +370,7 @@ class PkPdIntegration(
             physioSiFactor = physioSiFactor,
             damping = damping,
             activity = activityState,
-            learningTrace = buildLearningTrace(estimator, structural.bounds, learnBlockedBy),
+            learningTrace = buildLearningTrace(estimator, structural.bounds, learnBlockedBy, curveGateArmed, curveVerdict),
         )
     }
 
@@ -349,6 +382,8 @@ class PkPdIntegration(
         estimator: AdaptivePkPdEstimator,
         bounds: PkPdBounds,
         learnBlockedBy: String?,
+        curveGateArmed: Boolean,
+        curveVerdict: PkpdLearningWindowGate.Verdict?,
     ): PkpdLearningTrace {
         val status = estimator.statusSnapshot()
         return PkpdLearningTrace(
@@ -358,6 +393,11 @@ class PkPdIntegration(
             iobResidual120Min = estimator.iobResidualAt(120.0),
             diaAcceptedUpdates = status.acceptedUpdateCount,
             diaLearnBlockedBy = learnBlockedBy,
+            curveGateArmed = curveGateArmed,
+            curveGateWouldBlock = curveVerdict?.blockedBy,
+            curveGateMaxRecentDeltaMgdl = curveVerdict?.maxRecentDeltaMgdl,
+            curveGateDeclaredMealAgeMin = curveVerdict?.declaredMealAgeMin,
+            curveGateDetectedRiseAgeMin = curveVerdict?.detectedRiseAgeMin,
         )
     }
 
@@ -411,6 +451,7 @@ class PkPdIntegration(
         lastFusionBounds = null
         lastTailPolicy = null
         cachedStructuralConfig = null
+        learningWindowGate.clear()
         // seenLearnedStateGeneration is kept on purpose: turning OApsAIMIPkpdEnabled off and on
         // again must not look like an external reset on the next tick.
     }
@@ -715,6 +756,16 @@ data class PkpdLearningTrace(
     val iobResidual120Min: Double,
     val diaAcceptedUpdates: Long = 0L,
     val diaLearnBlockedBy: String? = null,
+    /** `true` when `OApsAIMIPkpdCurveLearningGate` decides; `false` when the verdict below is a shadow. */
+    val curveGateArmed: Boolean = false,
+    /** What [PkpdLearningWindowGate] refused this tick for, armed or not; `null` = it would pass, or a read-only call. */
+    val curveGateWouldBlock: String? = null,
+    /** Largest 5-min delta in the gate's 60-min window, `null` with no history. */
+    val curveGateMaxRecentDeltaMgdl: Double? = null,
+    /** Minutes since the last declared meal the gate saw, `null` when none. */
+    val curveGateDeclaredMealAgeMin: Long? = null,
+    /** Minutes since the last meal-sized rise the gate detected, `null` when none. */
+    val curveGateDetectedRiseAgeMin: Long? = null,
 )
 
 class PkPdRuntime(

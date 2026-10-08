@@ -331,6 +331,8 @@
     <string name="oaps_aimi_pkpd_relief_enabled_summary">ON by default. Keep ON if SMB intent is often over-reduced in explicit meal/high-rise contexts. Turn OFF only if you observe recurrent over-corrections despite hard caps.</string>
     <string name="oaps_aimi_pkpd_stack_aware_guardb_title">Stack-aware hyper floor release</string>
     <string name="oaps_aimi_pkpd_stack_aware_guardb_summary">OFF by default. During a descent from a high glucose, releases the prediction floor as soon as the insulin on board can physiologically bring glucose down and glucose is no longer rising, so the basal cuts and holds instead of bouncing on sensor noise. May leave highs a little longer — turn ON only if you see the basal whipsawing with a large insulin stack.</string>
+    <string name="oaps_aimi_pkpd_curve_learning_gate_title">Learn insulin timing only on quiet glucose</string>
+    <string name="oaps_aimi_pkpd_curve_learning_gate_summary">OFF by default. The learned insulin duration and peak are updated only when glucose has not risen for one hour, is not rising now, and no meal is suspected. Without declared carbs, a meal that is still being absorbed makes insulin look slower than it is. With this ON, learning is rarer but cleaner. It never learns faster. When OFF, the logs still show what this check would have done.</string>
     <string name="oaps_aimi_pkpd_relief_factor_title">PKPD relief minimum factor</string>
     <string name="oaps_aimi_pkpd_relief_factor_summary">Range 0.50-1.00 (default 0.75). Increase (0.80-0.90) if SMB is still too damped in explicit meal/high-rise contexts. Decrease (0.65-0.70) if post-meal drops are too fast.</string>
     <string name="oaps_aimi_redcarpet_restore_title">Red Carpet restore threshold</string>

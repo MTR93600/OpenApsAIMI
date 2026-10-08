@@ -329,6 +329,7 @@ fun PkpdAdvancedSettingsContent(
     }
 
     PkpdDeclaredFields(AimiSettingsSectionId.PkpdAdvancedStackAwareGuardB)
+    PkpdDeclaredFields(AimiSettingsSectionId.PkpdAdvancedCurveLearningGate)
 
     OutlinedButton(onClick = { showResetConfirm = true }) {
         Text(stringResource(R.string.aimi_pkpd_reset_to_profile_action))
@@ -712,6 +713,7 @@ private val pkpdScreenTitleOverrides: Map<String, Int> = mapOf(
     DoubleKey.OApsAIMIPkpdAnchorDiaH.key to R.string.oaps_aimi_pkpd_anchor_dia_title,
     DoubleKey.OApsAIMIPkpdAnchorPeakMin.key to R.string.oaps_aimi_pkpd_anchor_peak_title,
     BooleanKey.OApsAIMIPkpdStackAwareGuardB.key to R.string.oaps_aimi_pkpd_stack_aware_guardb_title,
+    BooleanKey.OApsAIMIPkpdCurveLearningGate.key to R.string.oaps_aimi_pkpd_curve_learning_gate_title,
     BooleanKey.OApsAIMIPkpdEnabled.key to R.string.oaps_aimi_pkpd_enabled_title,
     DoubleKey.OApsAIMIIsfFusionMinFactor.key to R.string.oaps_aimi_isf_fusion_min_title,
     DoubleKey.OApsAIMIIsfFusionMaxFactor.key to R.string.oaps_aimi_isf_fusion_max_title,
@@ -732,6 +734,7 @@ private val pkpdScreenTitleOverrides: Map<String, Int> = mapOf(
 private val pkpdScreenSummaryOverrides: Map<String, Int> = mapOf(
     BooleanKey.OApsAIMIPkpdEnabled.key to R.string.aimi_pkpd_enabled_simple_summary,
     BooleanKey.OApsAIMIPkpdStackAwareGuardB.key to R.string.oaps_aimi_pkpd_stack_aware_guardb_summary,
+    BooleanKey.OApsAIMIPkpdCurveLearningGate.key to R.string.oaps_aimi_pkpd_curve_learning_gate_summary,
     BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled.key to R.string.oaps_aimi_pkpd_relief_enabled_summary,
     BooleanKey.OApsAIMIIobSurveillanceGuard.key to R.string.aimi_iob_surveillance_guard_summary,
 )

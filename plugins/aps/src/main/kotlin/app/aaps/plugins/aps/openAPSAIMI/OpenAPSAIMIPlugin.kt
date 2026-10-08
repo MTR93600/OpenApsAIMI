@@ -2198,6 +2198,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 // Sits next to the advisor it changes. Off by default, and the only setting in this
                 // screen that can raise a dose, which its own summary says in the first person.
                 add(BooleanKey.OApsAIMITubeVetoIgnoreFloorArtefact)
+                add(BooleanKey.OApsAIMITubeHyperClampPhysicalBound)
                 add(
                     PreferenceSubScreenDef(
                         key = "aimi_compose_tube_mpc",

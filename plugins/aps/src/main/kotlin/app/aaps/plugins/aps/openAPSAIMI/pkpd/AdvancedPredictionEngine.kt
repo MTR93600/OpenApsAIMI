@@ -28,7 +28,7 @@ object AdvancedPredictionEngine {
     //    (observé : BG=70 à plat → EGP prédisait 80). Corrige toujours l'artefact plancher 39.
     //  • Guard B : réversion totalement suspendue quand le BG chute franchement (delta ≤ -3), pour
     //    laisser le path-min de sécurité rester pessimiste pendant une vraie descente (observé : -11).
-    private const val ENDO_REVERSION_BASELINE_MGDL = 80.0
+    internal const val ENDO_REVERSION_BASELINE_MGDL = 80.0
     private const val ENDO_REVERSION_RATE = 0.06            // fraction du gap comblée par pas de 5 min (lent)
     private const val ENDO_INSULIN_NEGLIGIBLE_MGDL = 0.3    // |impact insuline/pas| en dessous = insuline épuisée
 
@@ -48,7 +48,7 @@ object AdvancedPredictionEngine {
      * allow the reversion even while insulin is active. Guard A (baseline cap ≤ 80 ≤ currentBG) keeps it
      * from ever predicting a rise, and Guard B (falling-hard) still suspends it — so this never becomes
      * optimistic and never touches euglycemic/low BG. */
-    private const val HYPER_REVERSION_LEVEL_MGDL = 160.0
+    internal const val HYPER_REVERSION_LEVEL_MGDL = 160.0
 
     /**
      * Predict the BG evolution using the final ISF/sensitivity applied by the decision engine.
