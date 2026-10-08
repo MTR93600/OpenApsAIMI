@@ -45,10 +45,11 @@ class IosClientConfig(
 
     override val SUPPORTED_NS_VERSION: Int = 150000
 
-    // No loop and no pump drivers on iOS: this is a follower.
+    // No loop on iOS: this is a follower. Pump drivers are present (Medtrum/Dash
+    // iOS drivers, constructed by hand — not registered with Metro; fail closed).
     override val APS: Boolean = false
     override val PUMPCONTROL: Boolean = false
-    override val PUMPDRIVERS: Boolean = false
+    override val PUMPDRIVERS: Boolean = true
 
     override val AAPSCLIENT: Boolean = true
 
