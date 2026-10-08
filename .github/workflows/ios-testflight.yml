@@ -108,12 +108,31 @@ jobs:
           JAVA_VERSION=$(jq -r '.default' .github/jdk-map.json)
           echo "JAVA_VERSION=$JAVA_VERSION" >> $GITHUB_ENV
 
+      # Same daemon JVM constraint as ios-ci.yml: vendor JetBrains 21, installed
+      # here so Gradle matches it locally and does not call foojay (those package
+      # ids return 400). Temurin as JAVA_HOME does not satisfy the vendor.
+      # GITHUB_TOKEN: the JetBrains distribution lists releases on api.github.com.
+      # An anonymous call is rate-limited on the shared runner IP.
       - name: Set up JDK
         uses: actions/setup-java@v5
         with:
           java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
+          distribution: 'jetbrains'
           cache: gradle
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Assert the JDK is JetBrains 21
+        run: |
+          java -XshowSettings:properties -version 2>&1 | tee java-vendor.txt
+          if ! grep -E 'java\.vendor = .*[Jj]et[Bb]rains' java-vendor.txt; then
+            echo "::error::JAVA_HOME is not a JetBrains JDK. Gradle would ask foojay for one and that package id returns 400."
+            exit 1
+          fi
+          if ! grep -E 'java\.specification\.version = 21' java-vendor.txt; then
+            echo "::error::JAVA_HOME is not Java 21."
+            exit 1
+          fi
 
       - name: Cache Kotlin/Native
         uses: actions/cache@v4
