@@ -249,10 +249,11 @@ class OrefLocalPipeline(
         if (assetContext == null) {
             return OnnxSummaries(OrefMlStatus.NOT_BUNDLED)
         }
-        if (!OrefOnnxScorer.assetModelsPresent(assetContext)) {
+        val assetReader = AndroidAssetReader(assetContext)
+        if (!OrefOnnxScorer.assetModelsPresent(assetReader)) {
             return OnnxSummaries(OrefMlStatus.NOT_BUNDLED)
         }
-        val scorer = OrefOnnxScorer.tryCreate(assetContext)
+        val scorer = OrefOnnxScorer.tryCreate(assetReader)
             ?: return OnnxSummaries(
                 OrefMlStatus.LOAD_FAILED,
                 mlErrorDetail = "Could not create ONNX sessions (check model format).",
