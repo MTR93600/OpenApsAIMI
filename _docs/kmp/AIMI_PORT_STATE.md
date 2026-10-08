@@ -4023,6 +4023,21 @@ What found it was breaking the production line deliberately and watching whether
 anything touching a lock, an atomic or an ordering, **the mutation is the test of the test**, and it
 belongs in the lot rather than in a later pass.
 
+## 6bp. 2026-10-08: the two Compose seams — `AimiAssetReader`, `AimiDateFormatter`
+
+Branch `feat/p6-compose-seams` (`460866996e`): `OrefOnnxScorer` no longer takes a `Context` —
+it takes `ports/AimiAssetReader` (`AndroidAssetReader` via `assets`, throw contract preserved,
+stream leak fixed as a strict improvement); `HormonitorViewerScreen` no longer touches
+`SimpleDateFormat`/`Date`/`Locale` — portable text logic in `HormonitorViewerText`,
+`ports/AimiDateFormatter` (device locale for display, US for parsing), `num1`/`num2` reuse
+`aimiFmt1`/`aimiFmt2`. The review proved the two risky equivalences empirically:
+`SimpleDateFormat.parse(String)` throws rather than returning null (the `?: Date()` branch was
+dead code), and `aimiFmt` ≡ `String.format` (both half-up on the shortest decimal — the KDoc's
+non-equivalence warning is about `DecimalFormat`, not `Formatter`): **2 000 058-case
+differential, zero deviation**. 11 tests green (7 portable + 4 platform contract).
+`java.io.File` remains in the viewer (study-data loading — a separate filesystem seam, not
+this lot).
+
 ## 7. Start here next session
 
 The plugin is live: `:app:assembleFullDebug` builds with `OpenAPSAIMIPlugin` registered at
