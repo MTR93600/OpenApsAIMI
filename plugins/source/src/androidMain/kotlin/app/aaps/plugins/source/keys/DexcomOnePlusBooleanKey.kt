@@ -56,13 +56,13 @@ enum class DexcomOnePlusBooleanKey(
     /**
      * Put a missing SENSOR_CHANGE back for the running ONE+ session.
      *
-     * The reference does this whenever "create sensor change" is on. That choice is not
-     * settled, so this stays off. While it is off, a refresh writes no therapy event.
-     * Turning it on still writes nothing when "create sensor change" is off.
+     * Parity with dev_OAPSAIMI: the reference writes the missing event whenever
+     * "create sensor change" is on, so this defaults to true. When the repair is
+     * on but "create sensor change" is off, the refresh still writes nothing.
      */
     RepairMissingSensorChange(
         key = "dexcom_oneplus_repair_missing_sensor_change",
-        defaultValue = false,
+        defaultValue = true,
         titleResId = R.string.dexcom_oneplus_repair_missing_sensor_change,
         summaryResId = R.string.dexcom_oneplus_repair_missing_sensor_change_summary,
         engineeringModeOnly = true,
@@ -72,13 +72,13 @@ enum class DexcomOnePlusBooleanKey(
     /**
      * Let the Status screen move the insertion time of the sensor that feeds the loop.
      *
-     * Off by default. The owner has not confirmed that invalidating SENSOR_CHANGE events
-     * for this correction is wanted. While it is off the action is hidden and the function
-     * returns before any invalidation or any write. Calibration rows are never removed.
+     * Parity with dev_OAPSAIMI: the reference exposes the correction without a gate,
+     * so this defaults to true. Invalidating SENSOR_CHANGE events rewrites the sensor
+     * start; calibration rows are never removed.
      */
     CorrectSensorStart(
         key = "dexcom_oneplus_correct_sensor_start",
-        defaultValue = false,
+        defaultValue = true,
         titleResId = R.string.dexcom_oneplus_correct_sensor_start,
         summaryResId = R.string.dexcom_oneplus_correct_sensor_start_summary,
         engineeringModeOnly = true,

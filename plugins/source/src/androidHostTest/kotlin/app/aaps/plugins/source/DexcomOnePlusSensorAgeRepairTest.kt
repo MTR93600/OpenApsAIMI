@@ -177,8 +177,10 @@ class DexcomOnePlusSensorAgeRepairTest : TestBase() {
     }
 
     @Test
-    fun `repair stays off by default and writes nothing`() = runTest {
-        assertThat(DexcomOnePlusBooleanKey.RepairMissingSensorChange.defaultValue).isFalse()
+    fun `repair switched off writes nothing`() = runTest {
+        assertThat(DexcomOnePlusBooleanKey.RepairMissingSensorChange.defaultValue).isTrue()
+        // Stubbed explicitly: the point is the switch-off path, not the Mockito default.
+        whenever(preferences.get(DexcomOnePlusBooleanKey.RepairMissingSensorChange)).thenReturn(false)
         // Create-sensor-change stays on, as in the tests below. Without this stub Mockito
         // returns false and the second guard would refuse the write even if the repair switch
         // were gone, so the test would pass for the wrong reason.
