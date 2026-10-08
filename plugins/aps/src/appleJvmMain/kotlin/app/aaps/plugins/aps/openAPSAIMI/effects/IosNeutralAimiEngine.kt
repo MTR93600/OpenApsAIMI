@@ -42,6 +42,7 @@ enum class IosNeutralScene {
     NIGHT,
     LOW_PREDICTION,
     FASTING,
+    SENSOR_GAP,
 }
 
 /**
@@ -164,6 +165,12 @@ class IosNeutralAimiEngine(
                 deltaMgdl = 2.0,
             )
             IosNeutralScene.LOW_PREDICTION -> Unit
+            IosNeutralScene.SENSOR_GAP -> log += scenePatientLog(
+                snapshot = wearable,
+                nowMs = aimiWallClockMs(),
+                bgMgdl = 110.0,
+                deltaMgdl = 0.0,
+            )
         }
         val ceiling = decideTpoSessionAtTickStart(
             nowMs = aimiWallClockMs(),
@@ -231,6 +238,13 @@ class IosNeutralAimiEngine(
                 temp(state, rate, "FASTING_TBR")
             }
             IosNeutralScene.LOW_PREDICTION -> error("LOW_PREDICTION returns at the floor, before meal onset")
+            IosNeutralScene.SENSOR_GAP -> {
+                val outcome = iosNeutralSensorGapSignal(log)
+                check(outcome is AimiSignalPrepPkpd.StaleAbort) {
+                    "IOS_NEUTRAL sensor-gap did not abort on stale data"
+                }
+                hold(state, "STALE_DATA")
+            }
         }
     }
 
@@ -361,6 +375,17 @@ class IosNeutralAimiEngine(
             persistenceEvents = emptyList(),
             telemetry = AimiDecisionTrace(reason),
             safety = AimiSafetyReport(holdReasonCode = null),
+        )
+    }
+
+    private fun hold(state: AimiEngineState, reason: String): AimiTickResult {
+        return AimiTickResult(
+            command = AimiTherapyCommand.Hold(reason),
+            nextState = state,
+            trainingEvents = emptyList(),
+            persistenceEvents = emptyList(),
+            telemetry = AimiDecisionTrace(reason),
+            safety = AimiSafetyReport(holdReasonCode = reason),
         )
     }
 }
