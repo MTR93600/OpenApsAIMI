@@ -45,11 +45,11 @@ import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.preference.ProvidePreferenceTheme
 import app.aaps.plugins.aps.R
+import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
+import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiDateFormatter
 import app.aaps.plugins.aps.openAPSAIMI.utils.AndroidAimiStudyLocations
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
@@ -305,17 +305,11 @@ private fun tirText(s: HormonitorDaySummary): String =
 private fun pct(d: Double?): String = d?.let { "${it.roundToInt()}%" } ?: "—"
 private fun sharePct(d: Double): String = "${(d * 100).roundToInt()}%"
 private fun num0(d: Double?): String = d?.let { "${it.roundToInt()}" } ?: "—"
-private fun num1(d: Double?): String = d?.let { String.format(Locale.US, "%.1f", it) } ?: "—"
-private fun num2(d: Double?): String = d?.let { String.format(Locale.US, "%.2f", it) } ?: "—"
+private fun num1(d: Double?): String = d?.let { aimiFmt1(it) } ?: "—"
+private fun num2(d: Double?): String = d?.let { aimiFmt2(it) } ?: "—"
 
-private fun shortDay(dayLocal: String): String =
-    runCatching {
-        val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(dayLocal)
-        SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(parsed ?: Date())
-    }.getOrDefault(dayLocal)
+private val viewerDateFormatter: AimiDateFormatter = AndroidDateFormatter()
 
-private fun timeSpan(first: Long?, last: Long?): String {
-    if (first == null || last == null) return "—"
-    val f = SimpleDateFormat("HH:mm", Locale.getDefault())
-    return "${f.format(Date(first))} – ${f.format(Date(last))}"
-}
+private fun shortDay(dayLocal: String): String = shortDayText(dayLocal, viewerDateFormatter)
+
+private fun timeSpan(first: Long?, last: Long?): String = timeSpanText(first, last, viewerDateFormatter)

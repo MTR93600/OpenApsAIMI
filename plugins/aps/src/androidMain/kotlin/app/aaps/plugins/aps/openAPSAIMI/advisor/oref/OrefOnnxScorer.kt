@@ -4,7 +4,7 @@ import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OnnxValue
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
-import android.content.Context
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiAssetReader
 import java.nio.FloatBuffer
 
 /**
@@ -125,26 +125,26 @@ class OrefOnnxScorer private constructor(
         const val HYPER = "oref/hyper_lgbm.onnx"
         const val BG_CHANGE = "oref/bg_change_lgbm.onnx"
 
-        fun assetModelsPresent(context: Context): Boolean =
-            assetReadable(context, HYPO) && assetReadable(context, HYPER) && assetReadable(context, BG_CHANGE)
+        fun assetModelsPresent(assets: AimiAssetReader): Boolean =
+            assetReadable(assets, HYPO) && assetReadable(assets, HYPER) && assetReadable(assets, BG_CHANGE)
 
-        private fun assetReadable(context: Context, path: String): Boolean = try {
-            context.assets.open(path).use { it.readBytes().isNotEmpty() }
+        private fun assetReadable(assets: AimiAssetReader, path: String): Boolean = try {
+            assets.readAssetBytes(path).isNotEmpty()
         } catch (_: Exception) {
             false
         }
 
-        fun tryCreate(context: Context): OrefOnnxScorer? {
-            if (!assetModelsPresent(context)) return null
+        fun tryCreate(assets: AimiAssetReader): OrefOnnxScorer? {
+            if (!assetModelsPresent(assets)) return null
             var hypoS: OrtSession? = null
             var hyperS: OrtSession? = null
             var bgS: OrtSession? = null
             try {
                 val env = OrtEnvironment.getEnvironment()
                 val opts = OrtSession.SessionOptions()
-                hypoS = env.createSession(context.assets.open(HYPO).readBytes(), opts)
-                hyperS = env.createSession(context.assets.open(HYPER).readBytes(), opts)
-                bgS = env.createSession(context.assets.open(BG_CHANGE).readBytes(), opts)
+                hypoS = env.createSession(assets.readAssetBytes(HYPO), opts)
+                hyperS = env.createSession(assets.readAssetBytes(HYPER), opts)
+                bgS = env.createSession(assets.readAssetBytes(BG_CHANGE), opts)
                 val hi = hypoS.inputNames.firstOrNull()
                 val he = hyperS.inputNames.firstOrNull()
                 val bi = bgS.inputNames.firstOrNull()
