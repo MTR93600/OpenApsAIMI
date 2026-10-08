@@ -4127,3 +4127,19 @@ separate go/no-go workstream.
 Unreached seams fail loud (`error(...)`) in all three scenes. Remaining, blocked: `uam` (TFLite
 decision), `healthkit-absent`/`healthkit-present` (entitlements). A green JVM test does not prove
 bit-identical on Kotlin/Native — the native iOS run is the real gate for each scene.
+
+## Pump drivers (G1 BLE) — 8 Oct 2026
+
+**Branches** (all on `kmp-aimi-migration-study`, not merged):
+- `feat/p6-pump-medtrum-m1` (`d3a27f2bbb`): Medtrum protocol in `commonMain` (`pump/medtrum/proto/`) — 48 sources, 11/11 tests green, bit-exact encodings.
+- `feat/p6-pump-medtrum-m2` (`77e2496fb4`): Medtrum session state machine — 13/13 tests green. Review caught a safety-critical defect (fixed 60s bolus timeout → dose-proportional + stall detection).
+- `feat/p6-pump-medtrum-m3` (`d337f6d94a`): iOS driver (`IosMedtrumPump` on `BleCentral`, `IosMedtrumBleTransport`, NSUserDefaults state store) — 12/12 tests green. Safety guard `isReady()` (Phase.READY + CONNECTED) fail-closed on all therapeutic methods.
+- `feat/p6-pump-dash-d1` (`4174cf3235` + `9ac3f6776d`): Dash protocol in `commonMain` (`pump/omnipod/dashctl/`) — 58 sources, 34/34 tests green.
+- `feat/p6-pump-dash-d2` (`0d33d2b351`): Dash crypto seams (AES-CCM, AES-CMAC, X25519, Milenage) — 20/20 bit-exact tests green (RFC 7748, 3GPP TS 35.207).
+- `feat/p6-pump-dash-d3` (`4e62079579`): Dash session + state manager — 25/25 tests green. Review caught 2 safety-critical defects (EAP length byte, 4-bit counter seeding).
+- `feat/p6-pump-dash-d4` (`f2679550c8`): iOS driver (`IosDashPump` on `BleTransport`, Keychain state store, crypto via `core.objects`/CommonCrypto) — safety guard `requireSession()` fail-closed. Review vetoed 4 defects (missing import, incomplete cancelTBR, zeroed header, missing mutex) — all fixed before commit.
+- `feat/p6-pump-ui` (`8fe9ff5cf3`): Pump UI in `commonMain` (`:pump:ui` KMP module) — Medtrum overview/patch wizard, Omnipod wizard, Dash history. Zero `android.*` imports.
+
+**Merge order**: M1→M2→M3, D1→D2→D3→D4, then UI.
+
+**Gates still due**: Full Gradle compile (sandbox impossible), Kotlin/Native iOS compile, crypto vectors on device, hardware validation with real pump/pod before any activation.
