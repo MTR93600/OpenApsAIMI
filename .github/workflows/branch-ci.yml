@@ -180,13 +180,28 @@ jobs:
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
+      # This checkout's daemon JVM criteria require JetBrains 21
+      # (gradle/gradle-daemon-jvm.properties). The Linux x64 foojay package id
+      # returns 400, same failure as iOS CI. Install that JBR as JAVA_HOME so
+      # Gradle does not auto-provision. The compiler runs on this JVM.
       - name: Set up JDK
         uses: actions/setup-java@v5
         with:
-          # Java version is defined in .github/versions.env
           java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
+          distribution: 'jetbrains'
           cache: gradle
+
+      - name: Assert the JDK is JetBrains 21
+        run: |
+          java -XshowSettings:properties -version 2>&1 | tee java-vendor.txt
+          if ! grep -E 'java\.vendor = .*[Jj]et[Bb]rains' java-vendor.txt; then
+            echo "::error::JAVA_HOME is not a JetBrains JDK. Gradle would ask foojay for one and that package id returns 400."
+            exit 1
+          fi
+          if ! grep -E 'java\.specification\.version = 21' java-vendor.txt; then
+            echo "::error::JAVA_HOME is not Java 21."
+            exit 1
+          fi
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
