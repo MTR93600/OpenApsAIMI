@@ -27,6 +27,20 @@ kotlin {
             }
         }
 
+        iosMain {
+            dependencies {
+                implementation(project(":core:interfaces"))
+                implementation(project(":core:data"))
+                implementation(project(":core:keys"))
+            }
+        }
+
+        iosTest {
+            dependencies {
+                implementation(kotlin("test"))
+            }
+        }
+
         commonTest {
             dependencies {
                 implementation(kotlin("test"))
