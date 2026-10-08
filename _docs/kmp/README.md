@@ -115,3 +115,4 @@ propriétaire dans le même lot.
 
 Un changement de comportement thérapeutique exige un ADR, un replay avant/après et une justification
 distincte du refactor KMP.
+- [AIMI_HANDOVER_2026-10-08.md](AIMI_HANDOVER_2026-10-08.md) — handover for the next agent: branch state, the hard parts, open defects and decisions, methods, next steps.

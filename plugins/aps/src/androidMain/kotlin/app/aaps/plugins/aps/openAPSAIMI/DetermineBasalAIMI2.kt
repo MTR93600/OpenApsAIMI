@@ -50,6 +50,7 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.readRbtOptional
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEffectProbe
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEffectSink
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiLatestSmbCached
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiSingleFlightCache
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiSmbActionType
 import app.aaps.plugins.aps.openAPSAIMI.effects.LegacyMealTickState
 import app.aaps.plugins.aps.openAPSAIMI.effects.LegacyPrebolusMemory
@@ -350,16 +351,14 @@ import app.aaps.plugins.aps.openAPSAIMI.context.ContextSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import app.aaps.plugins.aps.openAPSAIMI.retention.AimiAppendCap
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
-import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import app.aaps.plugins.aps.openAPSAIMI.model.Constants
 import app.aaps.core.data.model.HR
 import app.aaps.plugins.aps.openAPSAIMI.model.DecisionResult
 import app.aaps.plugins.aps.openAPSAIMI.ml.AimiCorpusPruner
 import app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer
+import app.aaps.plugins.aps.openAPSAIMI.ml.AimiTrainingCsvWriter
 import app.aaps.plugins.aps.openAPSAIMI.ml.SmbRefinementFeatureSchema
 import app.aaps.plugins.aps.openAPSAIMI.ml.SmbTrainingRowBuffer
-import app.aaps.plugins.aps.openAPSAIMI.ml.TrainingCsvHeader
-import app.aaps.plugins.aps.openAPSAIMI.ml.ensureCurrent
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorIsfRaw
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorJsonlExport
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorProfileFactorCache
@@ -569,29 +568,29 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.AdvancedPredictionEngine
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.AdvancedPredictionCurves
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActionProfiler
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActionState
+import app.aaps.plugins.aps.openAPSAIMI.trajectory.PhaseSpaceState
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdAbsorptionGuard
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSoftFloorPathMin
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSoftFloorTelemetry
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.AutodriveEngine
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.PhysiologicalStressMaskBuilder
 import app.aaps.plugins.aps.openAPSAIMI.keys.AimiLongKey
-import java.io.File
-import java.io.RandomAccessFile
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
 import java.time.format.DateTimeFormatter
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.TimeUnit
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
 import kotlin.collections.asSequence
 import app.aaps.core.interfaces.profile.EffectiveProfile
-import kotlinx.coroutines.Dispatchers
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
+import kotlin.concurrent.Volatile
+import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
@@ -826,11 +825,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     @Inject lateinit var unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner
     @Inject lateinit var basalNeuralLearner: app.aaps.plugins.aps.openAPSAIMI.learning.BasalNeuralLearner
     @Inject lateinit var basalMlTrainingCoordinator: app.aaps.plugins.aps.openAPSAIMI.learning.BasalMlTrainingCoordinator
-    @Inject lateinit var storageHelper: AimiStorageHelper  // 🛡️ Restored StorageHelper
-
-    // The shared storage seam, next to the Android helper above. Transitional: the four
-    // CircadianMealProfileStore entry points took `AimiStorage` when they were restored, while the
-    // File-typed members below still need the helper.
+    // The shared storage seam. Every file this tick names goes through it, so the tick holds no
+    // `java.io.File` any more and the Android storage helper is reached only through this port.
     @Inject lateinit var storage: AimiStorage
 
     // Keeps the decisions journal under its hard cap between retention passes. See AimiAppendCap.
@@ -888,35 +884,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     private var adaptiveMult: Double = 1.0
-    @Volatile private var cachedPumpAgeDays: Float = 0f
-    private val pumpAgeRefreshInFlight = AtomicBoolean(false)
-    @Volatile private var cachedLastSmb: BS? = null
-    private val lastSmbRefreshInFlight = AtomicBoolean(false)
-    private val tirWarmupSnapshotRef = AtomicReference<TirWarmupSnapshot?>(null)
-    private val tirWarmupRefreshInFlight = AtomicBoolean(false)
-    private val carbContextSnapshotRef = AtomicReference<CarbContextSnapshot?>(null)
-    private val carbContextRefreshInFlight = AtomicBoolean(false)
-    private val tdd2DaysRef = AtomicReference<Float?>(null)
-    private val tdd2DaysRefreshInFlight = AtomicBoolean(false)
-    private val tdd30DaysRef = AtomicReference<Double?>(null)
-    private val tdd30DaysRefreshInFlight = AtomicBoolean(false)
-    private val sensorInsertionMsRef = AtomicReference<Long?>(null)
-    private val sensorInsertionRefreshInFlight = AtomicBoolean(false)
+    // One read-ahead cache per slow read. Each one owns its value and its own in-flight guard; see
+    // [AimiSingleFlightCache] for why the matching read never waits for the refresh it just started.
+    private val pumpAgeDaysCache = AimiSingleFlightCache(0f)
+    private val lastSmbCache = AimiSingleFlightCache<BS?>(null)
+    private val tirWarmupCache = AimiSingleFlightCache<TirWarmupSnapshot?>(null)
+    private val carbContextCache = AimiSingleFlightCache<CarbContextSnapshot?>(null)
+    private val tdd2DaysCache = AimiSingleFlightCache<Float?>(null)
+    private val tdd30DaysCache = AimiSingleFlightCache<Double?>(null)
+    private val sensorInsertionMsCache = AimiSingleFlightCache<Long?>(null)
     @Volatile private var lastBasalLearnerHypoNotifyMs: Long = 0L
     @Volatile private var lastBasalLearnerHyperNotifyMs: Long = 0L
-    private val stepsSnapshotRef = AtomicReference<List<SC>>(emptyList())
-    private val stepsRefreshInFlight = AtomicBoolean(false)
-    private val heartRatesSnapshotRef = AtomicReference<List<HR>>(emptyList())
-    private val heartRatesRefreshInFlight = AtomicBoolean(false)
-    private val tempBasalsSnapshotRef = AtomicReference<List<TB>>(emptyList())
-    private val tempBasalsRefreshInFlight = AtomicBoolean(false)
-    private val bolusSnapshotRef = AtomicReference<List<BS>>(emptyList())
-    private val bolusRefreshInFlight = AtomicBoolean(false)
-    @Volatile private var cachedEffectiveProfile: EffectiveProfile? = null
-    private val effectiveProfileRefreshInFlight = AtomicBoolean(false)
-    private val trajectoryHistoryRef = AtomicReference<List<app.aaps.plugins.aps.openAPSAIMI.trajectory.PhaseSpaceState>>(emptyList())
-    private val trajectoryHistoryRefreshInFlight = AtomicBoolean(false)
-    private val determineIoScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val stepsCache = AimiSingleFlightCache<List<SC>>(emptyList())
+    private val heartRatesCache = AimiSingleFlightCache<List<HR>>(emptyList())
+    private val tempBasalsCache = AimiSingleFlightCache<List<TB>>(emptyList())
+    private val bolusCache = AimiSingleFlightCache<List<BS>>(emptyList())
+    private val effectiveProfileCache = AimiSingleFlightCache<EffectiveProfile?>(null)
+    private val trajectoryHistoryCache = AimiSingleFlightCache<List<PhaseSpaceState>>(emptyList())
+    private val determineIoScope = CoroutineScope(SupervisorJob() + aapsIoDispatcher)
 
     /** Latest CGM noise from the current determine_basal invocation (for basal governance context). */
     private var lastLoopCgmNoise: Double = 0.0
@@ -934,7 +919,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             BasalHistoryUtils.FetcherProvider(
                 fetcher = { fromMillis: Long ->
                     refreshTempBasalsAsync(fromMillis)
-                    val raws: List<TB> = tempBasalsSnapshotRef.get()
+                    val raws: List<TB> = tempBasalsCache.get()
 
                     raws.asSequence()
                         .filter { it.timestamp > 0L && it.timestamp >= fromMillis }
@@ -952,87 +937,74 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private fun pumpAgeDaysCached(): Float {
         refreshPumpAgeAsync()
-        return cachedPumpAgeDays
+        return pumpAgeDaysCache.get()
     }
 
     private fun refreshPumpAgeAsync() {
-        if (!pumpAgeRefreshInFlight.compareAndSet(false, true)) return
-        determineIoScope.launch {
-            try {
+        pumpAgeDaysCache.refresh(
+            scope = determineIoScope,
+            load = {
                 val fromTime = aimiWallClockMs() - TimeUnit.DAYS.toMillis(7)
                 val siteChanges = persistenceLayer.getTherapyEventDataFromTime(fromTime, TE.Type.CANNULA_CHANGE, true)
-                cachedPumpAgeDays = if (siteChanges.isNotEmpty()) {
+                if (siteChanges.isNotEmpty()) {
                     val latestChangeTimestamp = siteChanges.last().timestamp
                     ((aimiWallClockMs() - latestChangeTimestamp).toFloat() / (1000f * 60f * 60f * 24f))
                 } else {
                     0f
                 }
-            } catch (_: Exception) {
-                cachedPumpAgeDays = 0f
-            } finally {
-                pumpAgeRefreshInFlight.set(false)
-            }
-        }
+            },
+            onFailure = { 0f },
+        )
     }
 
     private fun latestSmbCached(): BS? {
         refreshLatestSmbAsync()
-        return cachedLastSmb
+        return lastSmbCache.get()
     }
 
     private fun refreshLatestSmbAsync() {
-        if (!lastSmbRefreshInFlight.compareAndSet(false, true)) return
-        determineIoScope.launch {
-            try {
-                cachedLastSmb = persistenceLayer.getNewestBolusOfType(BS.Type.SMB)
-            } catch (_: Exception) {
-                cachedLastSmb = null
-            } finally {
-                lastSmbRefreshInFlight.set(false)
-            }
-        }
+        lastSmbCache.refresh(
+            scope = determineIoScope,
+            load = { persistenceLayer.getNewestBolusOfType(BS.Type.SMB) },
+            onFailure = { null },
+        )
     }
 
     private fun latestTirWarmupSnapshot(): TirWarmupSnapshot {
         refreshTirWarmupAsync()
-        return tirWarmupSnapshotRef.get() ?: TirWarmupSnapshot()
+        return tirWarmupCache.get() ?: TirWarmupSnapshot()
     }
 
     private fun refreshTirWarmupAsync() {
-        if (!tirWarmupRefreshInFlight.compareAndSet(false, true)) return
-        determineIoScope.launch {
-            try {
+        tirWarmupCache.refresh(
+            scope = determineIoScope,
+            load = {
                 val tir1Day = tirCalculator.calculate(1, 65.0, 180.0)
                 determineBasalInvocationCaches.storeTir65180FromWarmup(tir1Day)
-                tirWarmupSnapshotRef.set(
-                    TirWarmupSnapshot(
-                        tir1DayAbove = tirCalculator.averageTIR(tir1Day).abovePct() ?: 0.0,
-                        tir1DayInRange = tirCalculator.averageTIR(tir1Day).inRangePct() ?: 0.0,
-                        currentTirLow = tirCalculator.averageTIR(tirCalculator.calculateDaily(65.0, 180.0)).belowPct() ?: 0.0,
-                        currentTirRange = tirCalculator.averageTIR(tirCalculator.calculateDaily(65.0, 180.0)).inRangePct() ?: 0.0,
-                        currentTirAbove = tirCalculator.averageTIR(tirCalculator.calculateDaily(65.0, 180.0)).abovePct() ?: 0.0,
-                        lastHourTirLow = tirCalculator.averageTIR(tirCalculator.calculateHour(80.0, 140.0)).belowPct() ?: 0.0,
-                        lastHourTirAbove = tirCalculator.averageTIR(tirCalculator.calculateHour(72.0, 140.0)).abovePct(),
-                        lastHourTirLow100 = tirCalculator.averageTIR(tirCalculator.calculateHour(100.0, 140.0)).belowPct() ?: 0.0,
-                        lastHourTirAbove170 = tirCalculator.averageTIR(tirCalculator.calculateHour(100.0, 170.0)).abovePct() ?: 0.0,
-                        lastHourTirAbove120 = tirCalculator.averageTIR(tirCalculator.calculateHour(100.0, 120.0)).abovePct() ?: 0.0,
-                        tirBasal3InRange = tirCalculator.averageTIR(tirCalculator.calculate(3, 65.0, 120.0)).inRangePct(),
-                        tirBasal3Below = tirCalculator.averageTIR(tirCalculator.calculate(3, 65.0, 120.0)).belowPct(),
-                        tirBasal3Above = tirCalculator.averageTIR(tirCalculator.calculate(3, 65.0, 120.0)).abovePct(),
-                        tirBasalHourAbove = tirCalculator.averageTIR(tirCalculator.calculateHour(65.0, 100.0)).abovePct(),
-                    )
+                TirWarmupSnapshot(
+                    tir1DayAbove = tirCalculator.averageTIR(tir1Day).abovePct() ?: 0.0,
+                    tir1DayInRange = tirCalculator.averageTIR(tir1Day).inRangePct() ?: 0.0,
+                    currentTirLow = tirCalculator.averageTIR(tirCalculator.calculateDaily(65.0, 180.0)).belowPct() ?: 0.0,
+                    currentTirRange = tirCalculator.averageTIR(tirCalculator.calculateDaily(65.0, 180.0)).inRangePct() ?: 0.0,
+                    currentTirAbove = tirCalculator.averageTIR(tirCalculator.calculateDaily(65.0, 180.0)).abovePct() ?: 0.0,
+                    lastHourTirLow = tirCalculator.averageTIR(tirCalculator.calculateHour(80.0, 140.0)).belowPct() ?: 0.0,
+                    lastHourTirAbove = tirCalculator.averageTIR(tirCalculator.calculateHour(72.0, 140.0)).abovePct(),
+                    lastHourTirLow100 = tirCalculator.averageTIR(tirCalculator.calculateHour(100.0, 140.0)).belowPct() ?: 0.0,
+                    lastHourTirAbove170 = tirCalculator.averageTIR(tirCalculator.calculateHour(100.0, 170.0)).abovePct() ?: 0.0,
+                    lastHourTirAbove120 = tirCalculator.averageTIR(tirCalculator.calculateHour(100.0, 120.0)).abovePct() ?: 0.0,
+                    tirBasal3InRange = tirCalculator.averageTIR(tirCalculator.calculate(3, 65.0, 120.0)).inRangePct(),
+                    tirBasal3Below = tirCalculator.averageTIR(tirCalculator.calculate(3, 65.0, 120.0)).belowPct(),
+                    tirBasal3Above = tirCalculator.averageTIR(tirCalculator.calculate(3, 65.0, 120.0)).abovePct(),
+                    tirBasalHourAbove = tirCalculator.averageTIR(tirCalculator.calculateHour(65.0, 100.0)).abovePct(),
                 )
-            } catch (_: Exception) {
-                tirWarmupSnapshotRef.set(TirWarmupSnapshot())
-            } finally {
-                tirWarmupRefreshInFlight.set(false)
-            }
-        }
+            },
+            onFailure = { TirWarmupSnapshot() },
+        )
     }
 
     private fun latestCarbContextSnapshot(nowMs: Long, mealDataLastCarbTime: Long, cobNow: Float): CarbContextSnapshot {
         refreshCarbContextAsync(nowMs, mealDataLastCarbTime, cobNow)
-        return carbContextSnapshotRef.get() ?: CarbContextSnapshot(
+        return carbContextCache.get() ?: CarbContextSnapshot(
             lastCarbTimestamp = mealDataLastCarbTime.takeIf { it > 0L } ?: nowMs - TimeUnit.DAYS.toMillis(1),
             lastCarbAgeMin = 0,
             futureCarbs = 0.0f,
@@ -1042,9 +1014,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     private fun refreshCarbContextAsync(nowMs: Long, mealDataLastCarbTime: Long, cobNow: Float) {
-        if (!carbContextRefreshInFlight.compareAndSet(false, true)) return
-        determineIoScope.launch {
-            try {
+        carbContextCache.refresh(
+            scope = determineIoScope,
+            load = {
                 var lastCarbTimestamp = mealDataLastCarbTime
                 val oneDayAgoIfNotFound = nowMs - TimeUnit.DAYS.toMillis(1)
                 if (lastCarbTimestamp == 0L) {
@@ -1058,29 +1030,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     cobNow
                 }
                 val recentNotesLocal = persistenceLayer.getUserEntryDataFromTime(nowMs - TimeUnit.HOURS.toMillis(4))
-                carbContextSnapshotRef.set(
-                    CarbContextSnapshot(
-                        lastCarbTimestamp = lastCarbTimestamp,
-                        lastCarbAgeMin = ageMin,
-                        futureCarbs = future,
-                        effectiveCob = effectiveCob,
-                        recentNotes = recentNotesLocal,
-                    )
+                CarbContextSnapshot(
+                    lastCarbTimestamp = lastCarbTimestamp,
+                    lastCarbAgeMin = ageMin,
+                    futureCarbs = future,
+                    effectiveCob = effectiveCob,
+                    recentNotes = recentNotesLocal,
                 )
-            } catch (_: Exception) {
-                carbContextSnapshotRef.set(
-                    CarbContextSnapshot(
-                        lastCarbTimestamp = mealDataLastCarbTime.takeIf { it > 0L } ?: nowMs - TimeUnit.DAYS.toMillis(1),
-                        lastCarbAgeMin = 0,
-                        futureCarbs = 0.0f,
-                        effectiveCob = cobNow,
-                        recentNotes = emptyList(),
-                    )
+            },
+            onFailure = {
+                CarbContextSnapshot(
+                    lastCarbTimestamp = mealDataLastCarbTime.takeIf { it > 0L } ?: nowMs - TimeUnit.DAYS.toMillis(1),
+                    lastCarbAgeMin = 0,
+                    futureCarbs = 0.0f,
+                    effectiveCob = cobNow,
+                    recentNotes = emptyList(),
                 )
-            } finally {
-                carbContextRefreshInFlight.set(false)
-            }
-        }
+            },
+        )
     }
 
     private data class TirWarmupSnapshot(
@@ -1110,65 +1077,54 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private fun tdd2DaysCached(tdd7P: Double): Float {
         refreshTdd2DaysAsync()
-        val cached = tdd2DaysRef.get()
+        val cached = tdd2DaysCache.get()
         if (cached == null || cached == 0.0f || cached < tdd7P.toFloat()) return tdd7P.toFloat()
         return cached
     }
 
     private fun refreshTdd2DaysAsync() {
-        if (!tdd2DaysRefreshInFlight.compareAndSet(false, true)) return
-        determineIoScope.launch {
-            try {
-                val tdd2 = tddCalculator.averageTDD(tddCalculator.calculate(2, allowMissingDays = false))
+        tdd2DaysCache.refresh(
+            scope = determineIoScope,
+            load = {
+                tddCalculator.averageTDD(tddCalculator.calculate(2, allowMissingDays = false))
                     ?.data?.totalAmount?.toFloat() ?: 0.0f
-                tdd2DaysRef.set(tdd2)
-            } catch (_: Exception) {
-                tdd2DaysRef.set(null)
-            } finally {
-                tdd2DaysRefreshInFlight.set(false)
-            }
-        }
+            },
+            onFailure = { null },
+        )
     }
 
     private fun resolveTdd30DaysForLearner(fallback7Day: Double): Double {
         refreshTdd30DaysAsync()
-        return tdd30DaysRef.get()?.takeIf { it > 0.0 } ?: 0.0
+        return tdd30DaysCache.get()?.takeIf { it > 0.0 } ?: 0.0
     }
 
     private fun refreshTdd30DaysAsync() {
-        if (!tdd30DaysRefreshInFlight.compareAndSet(false, true)) return
-        determineIoScope.launch {
-            try {
-                val avg = tddCalculator.averageTDD(tddCalculator.calculate(30, allowMissingDays = true))
-                    ?.data?.totalAmount
-                tdd30DaysRef.set(avg?.takeIf { it > 0.0 })
-            } catch (_: Exception) {
-                tdd30DaysRef.set(null)
-            } finally {
-                tdd30DaysRefreshInFlight.set(false)
-            }
-        }
+        tdd30DaysCache.refresh(
+            scope = determineIoScope,
+            load = {
+                tddCalculator.averageTDD(tddCalculator.calculate(30, allowMissingDays = true))
+                    ?.data?.totalAmount?.takeIf { it > 0.0 }
+            },
+            onFailure = { null },
+        )
     }
 
     private fun resolveSensorInsertionMsCached(nowMs: Long): Long? {
         refreshSensorInsertionAsync(nowMs)
-        return sensorInsertionMsRef.get()
+        return sensorInsertionMsCache.get()
     }
 
     private fun refreshSensorInsertionAsync(nowMs: Long) {
-        if (!sensorInsertionRefreshInFlight.compareAndSet(false, true)) return
-        determineIoScope.launch {
-            try {
+        sensorInsertionMsCache.refresh(
+            scope = determineIoScope,
+            load = {
                 val fromTime = nowMs - 45L * 24L * 60L * 60L * 1000L
                 val events = persistenceLayer.getTherapyEventDataFromTime(fromTime, TE.Type.SENSOR_CHANGE, true)
                 val latest = events.maxByOrNull { it.timestamp }?.timestamp
-                sensorInsertionMsRef.set(latest?.takeIf { it > 0L })
-            } catch (_: Exception) {
-                sensorInsertionMsRef.set(null)
-            } finally {
-                sensorInsertionRefreshInFlight.set(false)
-            }
-        }
+                latest?.takeIf { it > 0L }
+            },
+            onFailure = { null },
+        )
     }
 
     private fun notifyBasalLearnerHypoIfNeeded(nowMs: Long) {
@@ -1202,60 +1158,47 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private fun stepsCountsCached(now: Long): List<SC> {
         refreshStepsAsync(now)
-        return stepsSnapshotRef.get()
+        return stepsCache.get()
     }
 
     private fun refreshStepsAsync(now: Long) {
-        if (!stepsRefreshInFlight.compareAndSet(false, true)) return
-        determineIoScope.launch {
-            try {
+        stepsCache.refresh(
+            scope = determineIoScope,
+            load = {
                 val start = now - 210 * 60 * 1000
-                stepsSnapshotRef.set(persistenceLayer.getStepsCountFromTimeToTime(start, now))
-            } catch (_: Exception) {
-                stepsSnapshotRef.set(emptyList())
-            } finally {
-                stepsRefreshInFlight.set(false)
-            }
-        }
+                persistenceLayer.getStepsCountFromTimeToTime(start, now)
+            },
+            onFailure = { emptyList() },
+        )
     }
 
     private fun heartRatesCached(now: Long): List<HR> {
         refreshHeartRatesAsync(now)
-        return heartRatesSnapshotRef.get()
+        return heartRatesCache.get()
     }
 
     private fun refreshHeartRatesAsync(now: Long) {
-        if (!heartRatesRefreshInFlight.compareAndSet(false, true)) return
-        determineIoScope.launch {
-            try {
+        heartRatesCache.refresh(
+            scope = determineIoScope,
+            load = {
                 val start = now - 200 * 60 * 1000
-                heartRatesSnapshotRef.set(persistenceLayer.getHeartRatesFromTimeToTime(start, now))
-            } catch (_: Exception) {
-                heartRatesSnapshotRef.set(emptyList())
-            } finally {
-                heartRatesRefreshInFlight.set(false)
-            }
-        }
+                persistenceLayer.getHeartRatesFromTimeToTime(start, now)
+            },
+            onFailure = { emptyList() },
+        )
     }
 
     private fun refreshTempBasalsAsync(fromMillis: Long) {
-        if (!tempBasalsRefreshInFlight.compareAndSet(false, true)) return
-        determineIoScope.launch {
-            try {
-                tempBasalsSnapshotRef.set(
-                    persistenceLayer.getTemporaryBasalsStartingFromTime(fromMillis, ascending = false)
-                )
-            } catch (_: Exception) {
-                tempBasalsSnapshotRef.set(emptyList())
-            } finally {
-                tempBasalsRefreshInFlight.set(false)
-            }
-        }
+        tempBasalsCache.refresh(
+            scope = determineIoScope,
+            load = { persistenceLayer.getTemporaryBasalsStartingFromTime(fromMillis, ascending = false) },
+            onFailure = { emptyList() },
+        )
     }
 
     private fun bolusesFromTimeCached(startTime: Long, ascending: Boolean): List<BS> {
         refreshBolusesAsync(startTime, ascending)
-        val cached = bolusSnapshotRef.get()
+        val cached = bolusCache.get()
         return if (ascending) {
             cached.filter { it.timestamp >= startTime }.sortedBy { it.timestamp }
         } else {
@@ -1264,34 +1207,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     private fun refreshBolusesAsync(startTime: Long, ascending: Boolean) {
-        if (!bolusRefreshInFlight.compareAndSet(false, true)) return
-        determineIoScope.launch {
-            try {
-                bolusSnapshotRef.set(persistenceLayer.getBolusesFromTime(startTime, ascending))
-            } catch (_: Exception) {
-                bolusSnapshotRef.set(emptyList())
-            } finally {
-                bolusRefreshInFlight.set(false)
-            }
-        }
+        bolusCache.refresh(
+            scope = determineIoScope,
+            load = { persistenceLayer.getBolusesFromTime(startTime, ascending) },
+            onFailure = { emptyList() },
+        )
     }
 
     private fun effectiveProfileCached(time: Long): EffectiveProfile? {
         refreshEffectiveProfileAsync(time)
-        return cachedEffectiveProfile
+        return effectiveProfileCache.get()
     }
 
     private fun refreshEffectiveProfileAsync(time: Long) {
-        if (!effectiveProfileRefreshInFlight.compareAndSet(false, true)) return
-        determineIoScope.launch {
-            try {
-                cachedEffectiveProfile = profileFunction.getProfile(time)
-            } catch (_: Exception) {
-                cachedEffectiveProfile = null
-            } finally {
-                effectiveProfileRefreshInFlight.set(false)
-            }
-        }
+        effectiveProfileCache.refresh(
+            scope = determineIoScope,
+            load = { profileFunction.getProfile(time) },
+            onFailure = { null },
+        )
     }
 
     private fun trajectoryHistoryCached(
@@ -1301,11 +1234,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         bgacc: Double,
         iobActivityNow: Double,
         iob: Float,
-        insulinActionState: app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActionState,
+        insulinActionState: InsulinActionState,
         lastBolusAgeMinutes: Double,
         cob: Float,
         profile: OapsProfileAimi,
-    ): List<app.aaps.plugins.aps.openAPSAIMI.trajectory.PhaseSpaceState> {
+    ): List<PhaseSpaceState> {
         refreshTrajectoryHistoryAsync(
             currentTime = currentTime,
             bg = bg,
@@ -1318,7 +1251,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             cob = cob,
             profile = profile,
         )
-        return trajectoryHistoryRef.get()
+        return trajectoryHistoryCache.get()
     }
 
     private fun refreshTrajectoryHistoryAsync(
@@ -1328,38 +1261,37 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         bgacc: Double,
         iobActivityNow: Double,
         iob: Float,
-        insulinActionState: app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActionState,
+        insulinActionState: InsulinActionState,
         lastBolusAgeMinutes: Double,
         cob: Float,
         profile: OapsProfileAimi,
     ) {
-        if (!trajectoryHistoryRefreshInFlight.compareAndSet(false, true)) return
-        determineIoScope.launch {
-            try {
-                val effectiveProfile = cachedEffectiveProfile ?: profileFunction.getProfile(currentTime)
-                cachedEffectiveProfile = effectiveProfile
-                trajectoryHistoryRef.set(
-                    trajectoryHistoryProvider.buildHistory(
-                        nowMillis = currentTime,
-                        historyMinutes = 90,
-                        currentBg = bg,
-                        currentDelta = delta,
-                        currentAccel = bgacc,
-                        insulinActivityNow = iobActivityNow,
-                        iobNow = iob.toDouble(),
-                        pkpdStage = insulinActionState.activityStage,
-                        timeSinceLastBolus = if (lastBolusAgeMinutes.isFinite()) lastBolusAgeMinutes.toInt() else 120,
-                        cobNow = cob.toDouble(),
-                        effectiveProfile = effectiveProfile,
-                        historicalInsulinPeakMinutes = profile.peakTime.toInt().coerceAtLeast(35),
-                    )
+        trajectoryHistoryCache.refresh(
+            scope = determineIoScope,
+            load = {
+                // The reference reads the profile cache here and writes back whatever it had to read,
+                // so the profile cache is warmed by this refresh as well. Kept as it is: the write
+                // does not take the profile cache's own guard, so it can still race a profile refresh
+                // that is running at the same time, exactly as before.
+                val effectiveProfile = effectiveProfileCache.get() ?: profileFunction.getProfile(currentTime)
+                effectiveProfileCache.set(effectiveProfile)
+                trajectoryHistoryProvider.buildHistory(
+                    nowMillis = currentTime,
+                    historyMinutes = 90,
+                    currentBg = bg,
+                    currentDelta = delta,
+                    currentAccel = bgacc,
+                    insulinActivityNow = iobActivityNow,
+                    iobNow = iob.toDouble(),
+                    pkpdStage = insulinActionState.activityStage,
+                    timeSinceLastBolus = if (lastBolusAgeMinutes.isFinite()) lastBolusAgeMinutes.toInt() else 120,
+                    cobNow = cob.toDouble(),
+                    effectiveProfile = effectiveProfile,
+                    historicalInsulinPeakMinutes = profile.peakTime.toInt().coerceAtLeast(35),
                 )
-            } catch (_: Exception) {
-                trajectoryHistoryRef.set(emptyList())
-            } finally {
-                trajectoryHistoryRefreshInFlight.set(false)
-            }
-        }
+            },
+            onFailure = { emptyList() },
+        )
     }
     private var lateFatRiseFlag: Boolean = false
 
@@ -2131,7 +2063,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         // the "bad day" trigger only. `Therapy.deleteEventDate` does carry the day of the note,
                         // so this path could be moved to `removeRowsForDay` later, but that is a change of
                         // behaviour and needs to be asked for.
-                        removeLast200Lines(csvfile)
+                        removeLast200Lines(csvfilePath)
                     }
                     this@DetermineBasalaimiSMB2.sleepTime = therapy.sleepTime
                     this@DetermineBasalaimiSMB2.snackTime = therapy.snackTime
@@ -7502,6 +7434,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     /**
      * Async external auditor only: append advisory follow-up without blocking the loop tick.
      */
+    @OptIn(ExperimentalAtomicApi::class)
     private fun maybeAppendAuditorFollowupLine(
         verdict: AuditorVerdict?,
         result: DecisionResult,
@@ -7519,7 +7452,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
             appendAimiDecisionsJsonlLine(followup.toString())
         } finally {
-            auditorFollowupAppendInProgress.set(false)
+            auditorFollowupAppendInProgress.store(false)
         }
     }
 
@@ -8386,24 +8319,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var mealModeSmbReason: String? = null
     private var consoleError = mutableListOf<String>()
     private var consoleLog = mutableListOf<String>()
-    private val externalDir by lazy { storageHelper.getAimiDirectory() }
-    //private val modelFile = File(externalDir, "ml/model.tflite")
-    //private val modelFileUAM = File(externalDir, "ml/modelUAM.tflite")
-    private val csvfile by lazy { storageHelper.getAimiFile("oapsaimiML2_records.csv") }
-    private val csvfile2 by lazy { storageHelper.getAimiFile("oapsaimi2_records.csv") }
-    // AimiPath equivalents of externalDir/csvfile above, for the ml/* chain which takes the storage
-    // port. Same locations as the File-based fields (both resolve through AimiStorageHelper).
+    // The AIMI directory and the two training CSVs, named through the storage port. These were
+    // `java.io.File` fields resolved from `AimiStorageHelper`; `AimiStorage` delegates to the very
+    // same helper, so the files are in the same places as before.
     private val externalDirPath: AimiPath by lazy { storage.directory() }
     private val csvfilePath: AimiPath by lazy { storage.file("oapsaimiML2_records.csv") }
-    /**
-     * The app scoped file the CSV writer falls back to when the shared storage write is denied.
-     *
-     * Same place as before, named through the storage port instead of the platform: [AimiStorage.fallbackFile]
-     * resolves `<app scoped external dir>/AAPS/<name>`, and falls back to the AIMI directory when the
-     * platform has no app scoped external directory - which is the expression this replaces.
-     */
-    private fun appExternalFallbackFile(name: String): File = File(storage.fallbackFile(name).value)
-
+    private val csvfile2Path: AimiPath by lazy { storage.file("oapsaimi2_records.csv") }
     // Telemetry must never crash the loop: if the study exporter can't initialize (storage / permissions / context),
     // degrade to no telemetry rather than letting its construction abort the tick into a safe-hold. Null → all
     // telemetry calls below are no-ops (`?.`); AimiLoopTelemetry.enterPhase already accepts a null exporter.
@@ -8411,11 +8332,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val hormonitorStudyExporter: HormonitorStudyExporter? by lazy {
         hormonitorStudyExporterProvider.exporter()
     }
-    private var csvPrimaryStorageDeniedLogged = false
-    /** Files whose header was already compared with the wanted one since the app started. */
-    private val csvHeaderCheckedPaths = mutableSetOf<String>()
+    /**
+     * Appends a row to a training CSV. Shared code: see [AimiTrainingCsvWriter].
+     *
+     * A field of the tick rather than an injected singleton on purpose - it carries the "header
+     * already checked" set and the one-shot "primary storage refused" flag, which were fields of this
+     * class before, and a `lazy` here keeps them with exactly the same lifetime.
+     */
+    private val trainingCsvWriter by lazy { AimiTrainingCsvWriter(storage, aapsLogger) }
     private val pkpdIntegration = PkPdIntegration(preferences, pkPdLearnedState, behaviorProfileSource)
-    //private val tempFile = File(externalDir, "temp.csv")
     private var bgacc = 0.0
     private var predictedSMB = 0.0f
     private var variableSensitivity = 0.0f
@@ -8766,6 +8691,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * proposal for half an hour.
      */
     private val auditorTickRing = AuditorTickRing()
+    /**
+     * Guards the follow-up append against being entered twice.
+     *
+     * A compare and set, not an [app.aaps.core.interfaces.concurrent.AapsLock]: that lock is
+     * reentrant, so a second entry on the *same* thread would be let through, which is the opposite
+     * of what this guard is for.
+     */
+    @OptIn(ExperimentalAtomicApi::class)
     private val auditorFollowupAppendInProgress = AtomicBoolean(false)
     private var lastLoadGovernorMultiplierG: Double = 1.0
     private var lastPhysiologicalPhaseOutput: PhysiologicalPhaseClassifier.Output? = null
@@ -10648,8 +10581,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         smbTrainingRowBuffer.fillRealisedOutcomes(nowMs = nowMs, observedBg = bg)
         smbTrainingRowBuffer.enqueue(timestampMs = nowMs, valuesPrefix = valuesToRecord)
         smbTrainingRowBuffer.drainWritableRows(nowMs).forEach { readyRow ->
-            appendCsvSafely(
-                primaryFile = csvfile,
+            trainingCsvWriter.appendRowWithFallback(
+                primary = csvfilePath,
                 fallbackFileName = "oapsaimiML2_records.csv",
                 headerRow = headerRow,
                 valuesRow = readyRow,
@@ -10674,111 +10607,30 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             "$recentSteps5Minutes,$recentSteps10Minutes,$recentSteps15Minutes,$recentSteps30Minutes,$recentSteps60Minutes,$recentSteps180Minutes," +
             "$tags0to60minAgo,$tags60to120minAgo,$tags120to180minAgo,$tags180to240minAgo," +
             "$predictedSMB,$maxIob,$maxSMB,$smbToGive,$peakintermediaire,$latestAdjustedDia"
-        appendCsvSafely(
-            primaryFile = csvfile2,
+        trainingCsvWriter.appendRowWithFallback(
+            primary = csvfile2Path,
             fallbackFileName = "oapsaimi2_records.csv",
             headerRow = headerRow,
             valuesRow = valuesToRecord,
         )
     }
 
-    private fun appendCsvSafely(
-        primaryFile: File,
-        fallbackFileName: String,
-        headerRow: String,
-        valuesRow: String,
-    ) {
-        runCatching {
-            appendCsvToFile(primaryFile, headerRow, valuesRow)
-        }.onFailure { primaryError ->
-            if (!csvPrimaryStorageDeniedLogged) {
-                csvPrimaryStorageDeniedLogged = true
-                aapsLogger.warn(
-                    LTag.APS,
-                    "CSV write denied on shared storage (${primaryFile.absolutePath}). " +
-                        "Switching to app-scoped fallback at ${appExternalFallbackFile(fallbackFileName).absolutePath}. " +
-                        "Reason=${primaryError.message}",
-                )
-            }
-            runCatching {
-                appendCsvToFile(appExternalFallbackFile(fallbackFileName), headerRow, valuesRow)
-            }.onFailure { fallbackError ->
-                aapsLogger.error(
-                    LTag.APS,
-                    "CSV write failed on both primary and fallback paths. primary=${primaryFile.absolutePath}, " +
-                        "fallback=${appExternalFallbackFile(fallbackFileName).absolutePath}",
-                    fallbackError,
-                )
-            }
-        }
-    }
-
-    private fun appendCsvToFile(file: File, headerRow: String, valuesRow: String) {
-        if (!file.exists()) {
-            file.parentFile?.mkdirs()
-            file.createNewFile()
-            file.appendText(headerRow)
-        } else {
-            ensureCsvHeaderIsCurrent(file, headerRow)
-        }
-        // The guard in front of the row is what stops it being glued to the last stored one. A clean
-        // up used to rewrite the file without a final line break, so the next row written started on
-        // the same line and the reader dropped both of them. See [AimiCorpusPruner].
-        file.appendText(AimiCorpusPruner.rowPrefix(lastCharOf(file)) + valuesRow + "\n")
-    }
-
     /**
-     * The last character stored in [file], or `null` when it is empty or could not be read.
+     * The name of the copy of the training CSV, taken before the file is rewritten.
      *
-     * Only the last byte is read: this runs on every loop tick, on a file that only grows, so reading
-     * the whole thing to look at its end would not scale. Comparing a single byte to a line break is
-     * safe on UTF-8 text, because the bytes that make up a multi byte character are never `0x0A`.
+     * `backup_yyyyMMdd_HHmmss.csv`, which is the name `AimiRetentionPolicy.DROP_GLOBS` already looks
+     * for when it tidies old backups up. The caller puts it in the AIMI directory with
+     * [AimiStorage.file]; before the storage port it was placed next to the CSV itself, which is the
+     * same place, because both pruned files are named with [AimiStorage.file] as well.
+     *
+     * `Locale.getDefault()` rather than `Locale.US` is kept from the reference even though it means a
+     * non Gregorian calendar writes a non Gregorian year into the name - a Thai locale writes 2569 for
+     * 2026. It is the reference's own behaviour and changing it is the owner's call, not the port's.
      */
-    private fun lastCharOf(file: File): Char? {
-        val length = runCatching { file.length() }.getOrDefault(0L)
-        if (length <= 0L) return null
-        return runCatching {
-            RandomAccessFile(file, "r").use { reader ->
-                reader.seek(length - 1)
-                reader.read().takeIf { it >= 0 }?.toChar()
-            }
-        }.getOrNull()
-    }
-
-    /**
-     * Makes sure an existing CSV carries the header the writer builds today.
-     *
-     * The rewrite itself, and why it is safe to replace the first line whatever its old shape, live in
-     * [app.aaps.plugins.aps.openAPSAIMI.ml.TrainingCsvHeader]. Here we only add the two things that
-     * belong to the running app: the file is checked once per path per app start, and any failure is
-     * logged and swallowed, because a header that could not be fixed must never stop a row from being
-     * written.
-     *
-     * ⚠️ ASYNC IMPACT: File I/O on the tick writer thread (same as the previous prefix-only upgrade).
-     * The path is remembered after the first check so later ticks do not re-read the whole CSV.
-     */
-    private fun ensureCsvHeaderIsCurrent(file: File, headerRow: String) {
-        if (!csvHeaderCheckedPaths.add(file.absolutePath)) return
-        runCatching {
-            val outcome = TrainingCsvHeader.ensureCurrent(storage, AimiPath(file.absolutePath), headerRow)
-            if (outcome == TrainingCsvHeader.Outcome.REPLACED) {
-                aapsLogger.info(LTag.APS, "CSV header replaced in place for ${file.name}")
-            }
-        }.onFailure { error ->
-            aapsLogger.warn(LTag.APS, "CSV header refresh skipped for ${file.name}: ${error.message}")
-        }
-    }
-
-    /**
-     * Where the copy of the training CSV goes before it is rewritten.
-     *
-     * The name is `backup_yyyyMMdd_HHmmss.csv` next to the file itself, which is the name
-     * `AimiRetentionPolicy.DROP_GLOBS` already looks for when it tidies old backups up.
-     */
-    private fun backupFileFor(csvFile: File): File {
+    private fun backupFileName(): String {
         val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
         val timestamp = dateFormat.format(Date())
-        return File(csvFile.parentFile, "backup_$timestamp.csv")
+        return "backup_$timestamp.csv"
     }
 
     /**
@@ -10789,23 +10641,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * tested; the "bad day" trigger uses [removeRowsForDay] instead, which removes the rows of the
      * day the user is told about.
      */
-    fun removeLast200Lines(csvFile: File) {
+    fun removeLast200Lines(csvFile: AimiPath) {
         val reasonBuilder = StringBuilder()
-        if (!csvFile.exists()) {
+        if (!storage.exists(csvFile)) {
             aapsLogger.info(LTag.APS, rh.gs(ApsStrings.original_file_missing))
             return
         }
 
-        val backupFile = backupFileFor(csvFile)
+        val backupName = backupFileName()
         val result = AimiCorpusPruner.removeNewest(
             storage = storage,
-            csv = AimiPath(csvFile.absolutePath),
-            backup = AimiPath(backupFile.absolutePath),
+            csv = csvFile,
+            backup = storage.file(backupName),
             count = 200,
         )
         when (result.outcome) {
             AimiCorpusPruner.Outcome.REMOVED         ->
-                reasonBuilder.append(rh.gs(ApsStrings.last_200_deleted, backupFile.name))
+                reasonBuilder.append(rh.gs(ApsStrings.last_200_deleted, backupName))
 
             AimiCorpusPruner.Outcome.NOTHING_REMOVED ->
                 reasonBuilder.append(rh.gs(ApsStrings.file_too_short))
@@ -10824,8 +10676,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * they mean the same day. A row whose date cannot be read, or that was written while the phone
      * was set to another language, does not match and is kept.
      */
-    private fun removeRowsForDay(csvFile: File, dayText: String): AimiCorpusPruner.Result {
-        if (!csvFile.exists()) {
+    private fun removeRowsForDay(csvFile: AimiPath, dayText: String): AimiCorpusPruner.Result {
+        if (!storage.exists(csvFile)) {
             aapsLogger.info(LTag.APS, rh.gs(ApsStrings.original_file_missing))
             return AimiCorpusPruner.Result(
                 outcome = AimiCorpusPruner.Outcome.FILE_MISSING,
@@ -10835,8 +10687,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         val result = AimiCorpusPruner.removeDay(
             storage = storage,
-            csv = AimiPath(csvFile.absolutePath),
-            backup = AimiPath(backupFileFor(csvFile).absolutePath),
+            csv = csvFile,
+            backup = storage.file(backupFileName()),
             dayText = dayText,
         )
         aapsLogger.info(
@@ -10863,7 +10715,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 // The very text the row writer put in column 0 for that day.
                 val dateToRemove = dateUtil.dateString(yesterdayMiddayMs)
 
-                val result = removeRowsForDay(csvfile, dateToRemove)
+                val result = removeRowsForDay(csvfilePath, dateToRemove)
                 if (result.outcome == AimiCorpusPruner.Outcome.REMOVED) {
                     reasonBuilder.append(rh.gs(ApsStrings.reason_data_removed, dateToRemove))
                 }
@@ -12183,7 +12035,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * NOUVEAU: Populate aussi rT.learnersInfo pour affichage comme section dédiée.
      */
     private fun logLearnersHealth(rT: RT) {
-        val storageReport = storageHelper.getHealthReport()
+        val storageReport = storage.healthReport()
         val reactivityFactor = safeReactivityFactor // Safety check added
         val basalMultiplier = basalLearner.getMultiplier()
 

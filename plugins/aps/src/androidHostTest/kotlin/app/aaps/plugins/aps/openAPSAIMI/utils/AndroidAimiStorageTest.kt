@@ -5,11 +5,12 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import org.mockito.kotlin.mock
 import java.io.File
+import java.io.RandomAccessFile
 
 /**
- * Covers the seven [AimiStorage] members added for the sweep in a later lot: [AimiStorage.delete],
- * [AimiStorage.replaceText], [AimiStorage.readTailLines], [AimiStorage.sizeBytes], [AimiStorage.list],
- * [AimiStorage.copy] and [AimiStorage.lastModifiedMs].
+ * Covers the [AimiStorage] members added for the sweep in a later lot: [AimiStorage.delete],
+ * [AimiStorage.replaceText], [AimiStorage.readTailLines], [AimiStorage.sizeBytes],
+ * [AimiStorage.copy], [AimiStorage.lastModifiedMs] and [AimiStorage.lastChar].
  *
  * None of these touch [AimiStorageHelper] - they operate on an [AimiPath] the caller already
  * resolved - so the helper here is a mock that is never asked to do anything.
@@ -229,5 +230,72 @@ class AndroidAimiStorageTest {
         val file = File(dir, "data.json").apply { writeText("x") }
 
         assertThat(storage.lastModifiedMs(pathOf(file))).isEqualTo(file.lastModified())
+    }
+
+    // --- lastChar -----------------------------------------------------------------------------------
+
+    /**
+     * The read the training CSV writer did before [AimiStorage.lastChar] existed, copied here as the
+     * oracle. Every case below is written with `java.io.File.appendText`, which is what the old writer
+     * appended rows with, and then read both ways.
+     */
+    private fun lastCharTheOldWay(file: File): Char? {
+        val length = runCatching { file.length() }.getOrDefault(0L)
+        if (length <= 0L) return null
+        return runCatching {
+            RandomAccessFile(file, "r").use { reader ->
+                reader.seek(length - 1)
+                reader.read().takeIf { it >= 0 }?.toChar()
+            }
+        }.getOrNull()
+    }
+
+    @Test
+    fun lastChar_on_a_missing_file_answers_null(@TempDir dir: File) {
+        val missing = File(dir, "never_written.csv")
+
+        assertThat(storage.lastChar(pathOf(missing))).isNull()
+        assertThat(storage.lastChar(pathOf(missing))).isEqualTo(lastCharTheOldWay(missing))
+    }
+
+    @Test
+    fun lastChar_on_an_empty_file_answers_null(@TempDir dir: File) {
+        val file = File(dir, "empty.csv").apply { createNewFile() }
+
+        assertThat(storage.lastChar(pathOf(file))).isNull()
+        assertThat(storage.lastChar(pathOf(file))).isEqualTo(lastCharTheOldWay(file))
+    }
+
+    @Test
+    fun lastChar_answers_the_line_break_a_finished_row_ends_with(@TempDir dir: File) {
+        val file = File(dir, "rows.csv")
+        file.appendText("dateStr,bg\n")
+        file.appendText("10/04/2026 12:34,120\n")
+
+        assertThat(storage.lastChar(pathOf(file))).isEqualTo('\n')
+        assertThat(storage.lastChar(pathOf(file))).isEqualTo(lastCharTheOldWay(file))
+    }
+
+    @Test
+    fun lastChar_answers_a_digit_when_the_file_was_left_without_a_line_break(@TempDir dir: File) {
+        // What a clean up used to leave behind, and the reason the writer asks at all.
+        val file = File(dir, "pruned.csv")
+        file.appendText("dateStr,bg\n")
+        file.appendText("10/04/2026 12:34,120")
+
+        assertThat(storage.lastChar(pathOf(file))).isEqualTo('0')
+        assertThat(storage.lastChar(pathOf(file))).isEqualTo(lastCharTheOldWay(file))
+    }
+
+    @Test
+    fun lastChar_answers_the_raw_final_byte_of_a_multi_byte_character(@TempDir dir: File) {
+        // "é" is 0xC3 0xA9 in UTF-8, so the answer is 0xA9 and not the character itself. It is not a
+        // line break either way, which is all the caller looks at.
+        val file = File(dir, "accented.csv")
+        file.appendText("dateStr,note\n")
+        file.appendText("10/04/2026 12:34,caf\u00e9")
+
+        assertThat(storage.lastChar(pathOf(file))).isEqualTo(0xA9.toChar())
+        assertThat(storage.lastChar(pathOf(file))).isEqualTo(lastCharTheOldWay(file))
     }
 }

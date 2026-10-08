@@ -139,7 +139,6 @@ import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryWarning
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.WarningSeverity
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
-import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import app.aaps.plugins.aps.openAPSAIMI.validation.PumpCapabilityValidator
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.ContraceptiveType
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.CyclePhase
@@ -150,6 +149,9 @@ import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleInfo
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleFacade
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleLearner
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCyclePreferences
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalTime
 import org.junit.After
@@ -165,8 +167,6 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.whenever
 import java.io.File
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicReference
 import org.mockito.stubbing.Answer
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -727,17 +727,17 @@ class ShellDecisionTraceTest {
         setField(tick, "preferences", prefs)
         setField(tick, "cob", 0.0f)
         setField(tick, "now", now)
-        holdRefresh("tirWarmupRefreshInFlight")
-        holdRefresh("carbContextRefreshInFlight")
-        setAtomic(
-            "tirWarmupSnapshotRef",
+        holdRefresh("tirWarmupCache")
+        holdRefresh("carbContextCache")
+        seedCache(
+            "tirWarmupCache",
             privateData(
                 "TirWarmupSnapshot",
                 listOf(18.0, 72.0, 4.0, 70.0, 26.0, 3.0, 22.0, 5.0, 11.0, 30.0, 68.0, 6.0, 26.0, 14.0),
             ),
         )
-        setAtomic(
-            "carbContextSnapshotRef",
+        seedCache(
+            "carbContextCache",
             privateData(
                 "CarbContextSnapshot",
                 listOf(now - 8L * 60_000L, 8, 12.0f, 25.0f, emptyList<Any>()),
@@ -812,8 +812,8 @@ class ShellDecisionTraceTest {
         )
         setField(tick, "maxSMB", 1.0)
         setField(tick, "maxSMBHB", 1.20)
-        setField(tick, "cachedPumpAgeDays", 3.5f)
-        holdRefresh("pumpAgeRefreshInFlight")
+        seedCache("pumpAgeDaysCache", 3.5f)
+        holdRefresh("pumpAgeDaysCache")
         val plugin = mock(app.aaps.core.interfaces.plugin.ActivePlugin::class.java)
         whenever(plugin.activeBgSource).thenReturn(mock(app.aaps.core.interfaces.source.BgSource::class.java))
         setField(tick, "activePlugin", plugin)
@@ -883,9 +883,8 @@ class ShellDecisionTraceTest {
     fun decisionContextRiseOverridesAFlatSensorAndArmsTheAuditor() {
         val prefs = recordingPreferences(emptyMap())
         setField(tick, "preferences", prefs)
-        val storage = mock(AimiStorageHelper::class.java)
-        whenever(storage.getHealthReport()).thenReturn("ok")
-        setField(tick, "storageHelper", storage)
+        val storage = getField(tick, "storage") as AimiStorage
+        whenever(storage.healthReport()).thenReturn("ok")
         val learner = getField(tick, "basalLearner") as app.aaps.plugins.aps.openAPSAIMI.learning.BasalLearner
         whenever(learner.getMultiplier()).thenReturn(1.0)
         setField(tick, "emergencySos", mock(AimiEmergencySos::class.java))
@@ -1355,12 +1354,12 @@ class ShellDecisionTraceTest {
         setField(tick, "delta", 2.0f)
         setField(tick, "variableSensitivity", 50.0f)
         setField(tick, "maxIob", 10.0)
-        holdRefresh("stepsRefreshInFlight")
-        holdRefresh("heartRatesRefreshInFlight")
-        setAtomic("stepsSnapshotRef", emptyList<Any>())
+        holdRefresh("stepsCache")
+        holdRefresh("heartRatesCache")
+        seedCache("stepsCache", emptyList<Any>())
         val wall = aimiWallClockMs()
-        setAtomic(
-            "heartRatesSnapshotRef",
+        seedCache(
+            "heartRatesCache",
             listOf(
                 HR(duration = 60_000L, timestamp = wall - 40 * 60_000L, beatsPerMinute = 80.0, device = "watch"),
                 HR(duration = 60_000L, timestamp = wall - 30 * 60_000L, beatsPerMinute = 80.0, device = "watch"),
@@ -1445,7 +1444,7 @@ class ShellDecisionTraceTest {
         setField(tick, "maxSMB", 2.0)
         setField(tick, "targetBg", 100.0f)
         setField(tick, "predictedBg", 100.0f)
-        holdRefresh("bolusRefreshInFlight")
+        holdRefresh("bolusCache")
         val profile = profileStub()
         val autosens = mock(AutosensResult::class.java)
         whenever(autosens.ratio).thenReturn(1.0)
@@ -1480,7 +1479,7 @@ class ShellDecisionTraceTest {
         setField(tick, "maxSMB", 2.0)
         setField(tick, "targetBg", 100.0f)
         setField(tick, "predictedBg", 100.0f)
-        holdRefresh("bolusRefreshInFlight")
+        holdRefresh("bolusCache")
         val profile = profileStub()
         val autosens = mock(AutosensResult::class.java)
         whenever(autosens.ratio).thenReturn(1.0)
@@ -1504,8 +1503,8 @@ class ShellDecisionTraceTest {
         setField(tick, "preferences", prefs)
         setField(tick, "maxSMB", 2.0)
         setField(tick, "maxSMBHB", 2.0)
-        holdRefresh("effectiveProfileRefreshInFlight")
-        holdRefresh("trajectoryHistoryRefreshInFlight")
+        holdRefresh("effectiveProfileCache")
+        holdRefresh("trajectoryHistoryCache")
         val analysis = TrajectoryAnalysis(
             classification = TrajectoryType.STABLE_ORBIT,
             metrics = TrajectoryMetrics(
@@ -1552,8 +1551,8 @@ class ShellDecisionTraceTest {
         setField(tick, "preferences", prefs)
         setField(tick, "maxSMB", 2.0)
         setField(tick, "maxSMBHB", 2.0)
-        holdRefresh("effectiveProfileRefreshInFlight")
-        holdRefresh("trajectoryHistoryRefreshInFlight")
+        holdRefresh("effectiveProfileCache")
+        holdRefresh("trajectoryHistoryCache")
         val notifications = mock(NotificationManager::class.java, Answer { inv ->
             if (inv.method.name == "post") throw RuntimeException("boom") else null
         })
@@ -1672,7 +1671,7 @@ class ShellDecisionTraceTest {
         setField(tick, "variableSensitivity", 50.0f)
         setField(tick, "hourOfDay", 12)
         setField(tick, "eventualBG", 180.0)
-        holdRefresh("bolusRefreshInFlight")
+        holdRefresh("bolusCache")
         val profile = profileStub()
         whenever(profile.carb_ratio).thenReturn(10.0)
         whenever(profile.variable_sens).thenReturn(50.0)
@@ -1721,7 +1720,7 @@ class ShellDecisionTraceTest {
         setField(tick, "variableSensitivity", 50.0f)
         setField(tick, "hourOfDay", 12)
         setField(tick, "eventualBG", 180.0)
-        holdRefresh("bolusRefreshInFlight")
+        holdRefresh("bolusCache")
         val physio = mock(AIMIInsulinDecisionAdapterMTR::class.java, Answer { inv: InvocationOnMock ->
             if (inv.method.name == "getLatestSnapshot") throw RuntimeException("boom")
             else if (inv.method.name == "getEffectiveContext") PhysioContextMTR.NEUTRAL
@@ -3082,8 +3081,11 @@ class ShellDecisionTraceTest {
                     autonomyMode = app.aaps.plugins.aps.openAPSAIMI.compose.AimiAutonomyMode.Observation,
                 ),
             )
-            val helper = getField(tick, "storageHelper") as AimiStorageHelper
-            whenever(helper.getAimiFile(any())).thenReturn(java.io.File.createTempFile("aimi-night", ".csv"))
+            // This path writes the night training CSV. Before the storage port the test handed the
+            // tick a real temporary file, so the write simply worked; the mock storage refuses every
+            // write by default, which would send the writer to its app scoped fallback instead.
+            val storage = getField(tick, "storage") as AimiStorage
+            whenever(storage.appendText(any(), any())).thenReturn(true)
             val profileUtil = mock(ProfileUtil::class.java, Answer { inv: InvocationOnMock ->
                 if (inv.method.name == "fromMgdlToStringInUnits") "180" else null
             })
@@ -3165,9 +3167,7 @@ class ShellDecisionTraceTest {
         val storage = getField(tick, "storage") as AimiStorage
         whenever(storage.file(any<String>())).thenReturn(AimiPath("circadian"))
         whenever(storage.exists(any())).thenReturn(false)
-        val helper = mock(AimiStorageHelper::class.java)
-        whenever(helper.getHealthReport()).thenReturn("ok")
-        setField(tick, "storageHelper", helper)
+        whenever(storage.healthReport()).thenReturn("ok")
         setField(tick, "tirCalculator", mock(TirCalculator::class.java))
         setField(tick, "emergencySos", mock(AimiEmergencySos::class.java))
         val cyclePrefs = getField(tick, "wCyclePreferences") as WCyclePreferences
@@ -3209,11 +3209,11 @@ class ShellDecisionTraceTest {
         val provider = mock(HormonitorStudyExporterProvider::class.java)
         whenever(provider.exporter()).thenReturn(null)
         setField(tick, "hormonitorStudyExporterProvider", provider)
-        holdRefresh("bolusRefreshInFlight")
+        holdRefresh("bolusCache")
         // An unstubbed persistence mock returns null. The IO refresh can store that null before
         // the tick reads the list, and the order of the class decides which side wins.
-        holdRefresh("heartRatesRefreshInFlight")
-        holdRefresh("stepsRefreshInFlight")
+        holdRefresh("heartRatesCache")
+        holdRefresh("stepsCache")
     }
 
     private fun copyingProfile(): OapsProfileAimi {
@@ -4188,13 +4188,48 @@ class ShellDecisionTraceTest {
         error("no field $name")
     }
 
-    private fun holdRefresh(name: String) {
-        (getField(tick, name) as AtomicBoolean).set(true)
+    /**
+     * A scope whose dispatcher throws away every block handed to it, so a coroutine launched on it
+     * never starts. Only [holdRefresh] uses it.
+     */
+    private val neverRunsScope = CoroutineScope(object : CoroutineDispatcher() {
+        override fun dispatch(context: CoroutineContext, block: Runnable) {
+            // Dropped on purpose, so that the refresh which took the guard can never release it.
+        }
+    })
+
+    private fun cache(name: String): AimiSingleFlightCache<Any?> {
+        @Suppress("UNCHECKED_CAST")
+        return getField(tick, name) as AimiSingleFlightCache<Any?>
     }
 
-    private fun setAtomic(name: String, value: Any?) {
-        @Suppress("UNCHECKED_CAST")
-        (getField(tick, name) as AtomicReference<Any?>).set(value)
+    /**
+     * Takes the single flight guard of the cache held in field [name], so that the refresh the tick
+     * starts for it during this test is refused and the value stays whatever the test seeded.
+     *
+     * This is what `holdRefresh("xRefreshInFlight")` did when every cached read was a bare
+     * `AtomicBoolean` next to an `AtomicReference`. [AimiSingleFlightCache] offers no method that
+     * takes the guard on its own, and should not, because the tick has no use for one. What it does
+     * offer is [AimiSingleFlightCache.refresh], which takes the guard synchronously, before the
+     * coroutine is dispatched, and releases it only in that coroutine's `finally`. Starting a
+     * refresh on [neverRunsScope] therefore takes the guard and never gives it back, which is
+     * exactly the hold the test wants - through the public API, with no reflection into the cache's
+     * own fields.
+     */
+    private fun holdRefresh(name: String) {
+        cache(name).refresh(
+            scope = neverRunsScope,
+            load = { error("the held refresh must never run") },
+            onFailure = { error("the held refresh must never fail") },
+        )
+    }
+
+    /**
+     * Seeds the value of the cache held in field [name], which is what `setAtomic("xSnapshotRef", v)`
+     * did on the bare reference before the two were folded together.
+     */
+    private fun seedCache(name: String, value: Any?) {
+        cache(name).set(value)
     }
 
     private fun privateData(simpleName: String, args: List<Any?>): Any {

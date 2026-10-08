@@ -458,7 +458,16 @@ So grep for all of it:
 grep -E '^e: |Kotlin compiler error|BUILD FAILED|BUILD SUCCESSFUL' <log>
 ```
 
-`BUILD FAILED` is the one marker that never lies, so make it the thing you look for first. Read test
+`BUILD FAILED` is the one marker that never lies **as long as the run is not `--quiet`**, so make it
+the thing you look for first - and never pass `--quiet` to a run whose result you intend to read.
+
+**`--quiet` suppresses `BUILD SUCCESSFUL` entirely.** Verified: `./gradlew --quiet --no-daemon help`
+exits 0 and prints no result line at all, only this repo's own `isMaster / gitAvailable /
+allCommitted` preamble. So under `--quiet` the absence of a marker is not evidence of failure, a tiny
+log is not evidence of a crash, and the **exit code is the only signal you have**. `CLAUDE.md`
+recommends `--quiet` to save tokens; that advice and this one collide, and for a gate the result wins.
+A 95-byte log was read as "Gradle was killed at startup" in this campaign and was in fact a clean
+`--quiet` success. Read test
 counts from the XML under `<module>/build/test-results/<task>/`, not from the console line.
 
 **Task names**: the KMP-library plugin calls the Android compile `:<module>:compileAndroidMain`.
@@ -521,6 +530,31 @@ arguments of the type each placeholder asks for and asserts nothing is left unfi
   The compiler never looks at it.
 - A template with non-positional specifiers (`%.2f ... %.2f`) is held together by argument order
   alone. Keep the order byte-identical.
+
+### A green suite does not prove a concurrency port faithful
+
+`kotlin.concurrent.atomics.AtomicBoolean` **has** `compareAndSet`, and this repo already uses it in
+shared code (`AIMIDatabaseStepsProviderMTR.kt:133`). So when a port replaces
+`compareAndSet(false, true)` with
+
+```kotlin
+if (inFlight.load()) return
+inFlight.store(true)
+```
+
+nothing stops it: it compiles, and all three test tasks stay green. That happened here across 13
+caches, weakening an atomic guard the reference held in 14 places, on code the dosing tick calls.
+
+What makes it hard to see is that **the test which claims to catch it does not**. Its comment said a
+plain check-then-set "fails this one"; the shipped code was that shape and the test passed. Mutation
+settled it: restoring a real `compareAndSet` left the suite 6/6 green, and removing the guard
+*entirely* still left that test green, because its 64 calls were issued sequentially from one
+coroutine - only the loads ran concurrently, so the guard was never raced.
+
+**For anything touching a lock, an atomic or an ordering, the mutation is the test of the test, and it
+belongs in the same lot as the port.** Break the production line on purpose, confirm something goes
+red, revert exactly. A concurrency test that survives a broken lock is worse than no test, because it
+is believed.
 
 ### Atomics: the shared API is smaller than the JVM one
 

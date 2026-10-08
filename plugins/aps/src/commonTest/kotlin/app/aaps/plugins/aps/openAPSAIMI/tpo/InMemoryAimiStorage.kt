@@ -19,6 +19,15 @@ internal class InMemoryAimiStorage : AimiStorage {
     /** Written files, keyed by the path string, so a test can assert on what landed. */
     val files: MutableMap<String, String> = mutableMapOf()
 
+    /**
+     * Paths every write answers `false` for, so a test can play a storage permission being denied.
+     *
+     * The real storage never throws on a failed write, it answers `false`, and the CSV writer's
+     * fallback to the app scoped file hangs off exactly that answer. Without this hook that branch
+     * could not be reached from a test at all.
+     */
+    val deniedPaths: MutableSet<String> = mutableSetOf()
+
     override fun directory(): AimiPath = AimiPath("/aimi")
 
     override fun file(name: String): AimiPath = AimiPath("/aimi/$name")
@@ -40,6 +49,7 @@ internal class InMemoryAimiStorage : AimiStorage {
     override fun createParentDirectories(path: AimiPath): Boolean = true
 
     override fun createFile(path: AimiPath): Boolean {
+        if (path.value in deniedPaths) return false
         files.getOrPut(path.value) { "" }
         return true
     }
@@ -69,11 +79,13 @@ internal class InMemoryAimiStorage : AimiStorage {
     }
 
     override fun writeText(path: AimiPath, text: String): Boolean {
+        if (path.value in deniedPaths) return false
         files[path.value] = text
         return true
     }
 
     override fun appendText(path: AimiPath, text: String): Boolean {
+        if (path.value in deniedPaths) return false
         files[path.value] = files[path.value].orEmpty() + text
         return true
     }
@@ -82,7 +94,13 @@ internal class InMemoryAimiStorage : AimiStorage {
 
     override fun healthReport(): String = "in memory"
 
-    override fun fallbackFile(name: String): AimiPath = file(name)
+    /**
+     * A different place from [file], so a test can tell a fallback write from a primary one.
+     *
+     * The real storage answers the app scoped external directory here and only lands on [directory]
+     * when the platform has none, so the two paths are normally different as well.
+     */
+    override fun fallbackFile(name: String): AimiPath = AimiPath("/aimi-app-scoped/$name")
 
     override fun delete(path: AimiPath): Boolean = files.remove(path.value) != null
 
@@ -113,6 +131,15 @@ internal class InMemoryAimiStorage : AimiStorage {
     override fun readTailLines(path: AimiPath, maxLines: Int): List<String> = readLines(path).takeLast(maxLines)
 
     override fun sizeBytes(path: AimiPath): Long = (files[path.value]?.length ?: 0).toLong()
+
+    /**
+     * The last character of the stored text.
+     *
+     * The real storage answers the last *byte*, which differs from the last character only when the
+     * file ends inside a multi byte character. The only caller asks whether that byte is a line
+     * break, and neither answer is one in that case, so a fake that works on characters is enough.
+     */
+    override fun lastChar(path: AimiPath): Char? = files[path.value]?.lastOrNull()
 
     override fun copy(from: AimiPath, to: AimiPath): Boolean {
         val text = files[from.value] ?: return false

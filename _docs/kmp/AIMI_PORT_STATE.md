@@ -3847,6 +3847,182 @@ Two smaller facts the capture established: `healthkit-present` is **byte-identic
 `sensor-gap` differs from `night` only by the CGM timestamp yet produces a different trace, so the
 shell really does branch on the age of the reading.
 
+## 6bi. 2026-10-07: tranche 7 — the CSV helpers, and the tick loses its last file type
+
+### What the hard part actually was
+
+`p6-tick-plan.md` line 27 calls the `RandomAccessFile` use *"lecture CSV … pas d'équivalent commun
+pour une lecture aléatoire"*, and that framing is what made this tranche look expensive. **It is a
+one-byte tail read.** `lastCharOf` does `length()`, `seek(length - 1)`, `read()` and answers one
+question: does this CSV already end with a line break? `AimiCorpusPruner.rowPrefix` turns that into
+`""` or `"\n"` in front of the next row.
+
+The code carries the record of why that matters, at `DetermineBasalAIMI2.kt:10724`: a clean-up once
+rewrote the file without a final newline, the next row glued onto the last kept one, and **the reader
+discarded both.** Lost training data. So the port had to be exact, and one subtlety had to survive:
+`RandomAccessFile.read()` returns an unsigned byte, so a file ending inside a multi-byte character
+yields the raw byte (`0xA9` for a trailing `é`), not a decoded character. That is deliberate - it is
+not `0x0A` either way - and "fixing" it by decoding UTF-8 would be a change, not a repair.
+
+### The seam, and the brief that was wrong about it
+
+`AimiStorage.lastChar(path): Char?`, implemented in **three** places plus the test fake:
+`AndroidAimiStorage` (the `RandomAccessFile` body moved verbatim), `DirectoryAimiStorage` in
+`appleJvmMain` via a new `AimiLocalFiles.lastByte` with real actuals - `RandomAccessFile` on the JVM,
+`NSFileHandle.seekToFileOffset` + `readDataOfLength(1)` on iOS - and `InMemoryAimiStorage`.
+
+**My brief said "`AimiStorage` deliberately has no iOS implementation. Do not add one." That is
+false, and `AimiStorage`'s own KDoc is where I got it.** `DirectoryAimiStorage` has existed in
+`appleJvmMain` over an `AimiLocalFiles` expect/actual with both iOS and JVM actuals. The agent's
+first compile failed on exactly that (`Class 'DirectoryAimiStorage' is not abstract and does not
+implement abstract member`). So **a new `AimiStorage` method is a three-implementation change**, and
+that stale KDoc should be corrected before it misleads anyone else.
+
+The second thing the brief and the plan both understated: `AimiStorage` already had `readTailLines`,
+`sizeBytes`, `copy`, `delete`, `createFile`, `createParentDirectories`, `sibling`, `replaceText`,
+`replaceKeepingBackup`, `rewriteLines`, `lastModifiedMs`, `healthReport` and `fallbackFile`.
+`lastChar` was the **only** gap in the whole tranche.
+
+### The one real hazard, and it was handled
+
+`appendCsvSafely` fell back to app-scoped storage when `File.appendText` **threw**.
+`AimiStorage.appendText` never throws - it returns `false`. A port that kept `runCatching` would have
+left a fallback that could never fire, and **every training row would be silently dropped whenever
+shared storage is denied.** That is a hole in the corpus, not a logging problem. `appendRow` now
+returns `Boolean` and `appendRowWithFallback` branches on `false`, resolving the fallback only after
+the primary has actually failed. Reviewed directly rather than taken on trust.
+
+One log line lost its cause: the old warning carried the exception's message, and there is no
+exception now, so it reports `exists / canRead / canWrite` instead - the triple `canWrite`'s own KDoc
+nominates for this case.
+
+### What moved, and the milestone
+
+New `commonMain/.../ml/AimiTrainingCsvWriter.kt` holds `appendRow`, `appendRowWithFallback` and
+`ensureHeaderIsCurrent`, plus the two pieces of state they owned (`csvHeaderCheckedPaths`,
+`csvPrimaryStorageDeniedLogged`) as a `by lazy` field of the tick, so that state keeps the lifetime it
+had rather than becoming a singleton.
+
+Deleted from the tick: `lastCharOf`, `appExternalFallbackFile`, `appendCsvToFile`, `appendCsvSafely`,
+`ensureCsvHeaderIsCurrent`, the `csvfile` / `csvfile2` / `externalDir` `File` fields (`externalDir`
+was dead), and the imports of `java.io.File` and `java.io.RandomAccessFile`.
+
+**And the consequence worth recording: `@Inject lateinit var storageHelper: AimiStorageHelper` is
+gone from the tick entirely.** Its last remaining use was `getHealthReport()`, which
+`AimiStorage.healthReport()` already delegates to. The tick now holds **no `java.io.File` and no
+Android storage type** - the only two matches left in the file are comments saying so. 14 826 → 14 730
+lines.
+
+Stayed in `androidMain`, with reasons: `backupFileName()` (`SimpleDateFormat("yyyyMMdd_HHmmss",
+Locale.getDefault())`, whose `Locale.getDefault()` quirk tranche 4 deliberately keeps - a Thai locale
+writes 2569 - and whose name is pinned by `AimiRetentionPolicy.DROP_GLOBS` in commonMain);
+`removeLast200Lines` / `removeRowsForDay` (resource strings plus that name); `logDataMLToCsv` /
+`logDataToCsv` (they read ~40 tick members - tranche 8).
+
+**The corpus statement, given explicitly and checked:** nothing changed alters the bytes written to a
+training CSV or how an existing file is read. Header strings, value strings, separator, column order,
+the `dateStr` expression and every number's rendering are untouched; no `aimiFmt*` and no timestamp
+helper was introduced. File locations are unchanged by construction, since
+`AndroidAimiStorage.file(n)` is `AimiPath(helper.getAimiFile(n).absolutePath)` - the same helper the
+deleted `File` fields used.
+
+### A correction to my own gate discipline
+
+I read a 95-byte `pregate5.log` as "Gradle killed at startup" and told the agent its background work
+was dead. **Both claims were wrong, and the agent asked me to re-check rather than accept either
+reading.** Verified directly: `./gradlew --quiet --no-daemon help` exits 0, prints **no**
+`BUILD SUCCESSFUL`, and emits only this repo's `isMaster / gitAvailable / allCommitted` preamble -
+which is exactly those 95 bytes.
+
+So the rule this campaign has been repeating, *"`BUILD FAILED` is the only marker that never lies"*,
+**holds only when the run is not `--quiet`**. Under `--quiet` the absence of a marker is not evidence
+of failure and a tiny log is not evidence of a crash; the exit code is the only signal. `CLAUDE.md`
+recommends `--quiet` for token economy, and for a gate that advice and this one collide. Now in the
+skill.
+
+The agent also corrected itself, with the better evidence: its baseline gate had in fact finished
+green (`BUILD SUCCESSFUL in 7m 12s`, 2052 / 754 / 749, XML timestamps inside the run window), and it
+proved the "before" was uncontaminated by showing **no `AimiTrainingCsvWriter.class` existed anywhere
+under `plugins/aps/build`** after that run.
+
+## 6bj. 2026-10-08: three tranches reconciled, and a parity regression the mutation check caught
+
+Three lots ran in parallel and were reconciled into one tree. Gate on the result:
+**2 082 / 770 / 765, 0 failures**, `BUILD SUCCESSFUL`, every task confirmed executed, XML timestamps
+inside the run window. Up from 2 052 / 754 / 749.
+
+- **Tranche 7 (CSV)** — see 6bi. The tick loses its last Android file type.
+- **Tranche 6 (async caches)** — 13 scattered `AtomicBoolean` + `AtomicReference` pairs folded into
+  `AimiSingleFlightCache`, with a 6-test suite.
+- **Auditor chain** — `AuditorUIState` and `AuditorReportFormatter` moved to `commonMain` once the two
+  unread `@ColorRes` fields went, which `CLAUDE.md` forbids in a domain model anyway. The colour
+  distinction now rides on the `StateType` → `PluginStatusLevel` mapping, and a new test pins all five.
+
+The merged tick is **14 678 lines**, down from 14 826. The three-way merge of the two tick lots
+produced **zero conflicts**, which is what naming every touched function bought.
+
+### The first real gate found 18 failures, and 17 were the harness
+
+Neither tick agent managed an "after" gate - one disclosed that gap itself, the other stalled on a
+watchdog - so this was the first time either lot met the suite. All 18 failures were in
+`ShellDecisionTraceTest`, which pokes the tick's private fields by reflection: 7 asked for the deleted
+`storageHelper`, the rest for `*RefreshInFlight` flags and `*SnapshotRef` values that the caches
+absorbed. **Repaired in the test only; no production file was bent to make a test pass.**
+
+Worth keeping: the repair went through the cache's **public** API rather than reflecting into its
+private `inFlight`. `holdRefresh` now calls `refresh(scope = neverRunsScope, …)` - the guard is taken
+synchronously before `launch` and released only in the coroutine's `finally`, so a scope whose
+dispatcher drops every block takes the guard and never returns it. Same hold, no new reflection.
+
+**And the 18th was the parity fixture, which answered the question it exists to answer.** It matched
+again **without being re-frozen** once the plumbing was fixed. The evidence while still broken: four
+scenarios read `port=capture-threw:NullPointerException` with every field `absent`, while the five
+that still produced numbers - including `hypo-rebound smb=3fc70a3d80000000`,
+`sport tbrRate=3ff4cccccccccccd`, `sensor-gap eventual=405b800000000000` - **already matched the frozen
+block bit for bit.** So no dose moved, and both ports' "no dosing change" claim is now demonstrated
+rather than asserted.
+
+### The regression the mutation check caught, and nothing else would have
+
+`AimiSingleFlightCache.refresh` ships as:
+
+```kotlin
+if (inFlight.load()) return
+inFlight.store(true)
+```
+
+A non-atomic check-then-set. The pre-port tick used **`compareAndSet(false, true)` in 14 places**
+(`git show HEAD:…/DetermineBasalAIMI2.kt`, lines 959-1209). So the port **weakened an atomic guard to
+a racy one across 13 caches**, on code the dosing tick calls. Two callers arriving together can both
+pass the check and both start a load.
+
+Three things make this worth recording beyond the fix:
+
+1. **The class documents the shape it failed to port.** Line 17 of its own KDoc quotes
+   `if (!xRefreshInFlight.compareAndSet(false, true)) return` as the reference.
+2. **Its test claims to reject exactly this code.** The comment on
+   `theReadIsNeverRunningTwiceOverUnderRealThreads` says *"A plain `if (!inFlight) { inFlight = true }`
+   instead of the compare and set fails this one."* The shipped code **is** that plain shape and the
+   test passes.
+3. **Only mutation exposed it.** Putting a real `compareAndSet` back leaves the suite 6/6 green, so it
+   cannot tell CAS from non-CAS; removing the guard **entirely** still leaves test 5 green. The reason
+   is structural: its 64 `refresh` calls are made sequentially from one coroutine inside
+   `withContext(Dispatchers.Default)`, so only the loads run concurrently and the guard is never
+   raced. Tests 1, 3 and 4 do bite (a removed guard, a removed `finally`, an eagerly built fallback
+   each turn something red).
+
+The fix is one line, and the correct form is already in shared code two files away:
+`AIMIDatabaseStepsProviderMTR.kt:133` is `if (!stepsRefreshInFlight.compareAndSet(false, true)) return`
+in `commonMain`. **Put to the owner rather than applied**, with the test's name-versus-body problem
+alongside it: a concurrency test that survives a broken lock is worse than none, because it is
+believed.
+
+**The lesson for the campaign, stated plainly:** a green suite is not evidence that a concurrency port
+is faithful. `jvmTest`, `testAndroidHostTest` and `iosSimulatorArm64Test` were all green on this code.
+What found it was breaking the production line deliberately and watching whether anything cared. For
+anything touching a lock, an atomic or an ordering, **the mutation is the test of the test**, and it
+belongs in the lot rather than in a later pass.
+
 ## 7. Start here next session
 
 The plugin is live: `:app:assembleFullDebug` builds with `OpenAPSAIMIPlugin` registered at

@@ -214,6 +214,22 @@ interface AimiStorage {
     /** How big [path] is, in bytes. `0` when it is missing or unreadable. */
     fun sizeBytes(path: AimiPath): Long
 
+    /**
+     * The last character stored in [path], or `null` when it is empty, missing or unreadable.
+     *
+     * Only the final byte is read, and that is the whole point of having this next to [readLines] and
+     * [readTailLines]. The caller is the training CSV writer, which runs on every loop tick against a
+     * file that only ever grows, so reading the file - or even its tail - to look at its end would not
+     * scale.
+     *
+     * The single question it answers is whether the file already ends with a line break, which
+     * `AimiCorpusPruner.rowPrefix` turns into the prefix of the next row. One byte is enough for that
+     * on UTF-8 text, because no byte of a multi byte character is ever `0x0A`. A file whose final byte
+     * belongs to a multi byte character therefore answers with that raw byte rather than with a
+     * decoded character; it is not a line break either way, which is all the caller looks at.
+     */
+    fun lastChar(path: AimiPath): Char?
+
     /** Copies [from] to [to], overwriting [to] if it exists. `false` on failure; [from] is untouched. */
     fun copy(from: AimiPath, to: AimiPath): Boolean
 

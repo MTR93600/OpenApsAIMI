@@ -6,6 +6,7 @@ import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import java.io.File
+import java.io.RandomAccessFile
 
 /**
  * Android half of [AimiStorage].
@@ -155,6 +156,24 @@ class AndroidAimiStorage @Inject constructor(
         runCatching { JsonlTailReader.readTailLines(fileOf(path), maxLines) }.getOrDefault(emptyList())
 
     override fun sizeBytes(path: AimiPath): Long = runCatching { fileOf(path).length() }.getOrDefault(0L)
+
+    /**
+     * Reads the final byte with a [RandomAccessFile] seek, which is the same read the training CSV
+     * writer did before this method existed. [java.io.RandomAccessFile.read] answers an unsigned byte,
+     * so the returned `Char` is that raw byte and not a decoded character - see [AimiStorage.lastChar]
+     * for why that is what the caller wants.
+     */
+    override fun lastChar(path: AimiPath): Char? {
+        val file = fileOf(path)
+        val length = runCatching { file.length() }.getOrDefault(0L)
+        if (length <= 0L) return null
+        return runCatching {
+            RandomAccessFile(file, "r").use { reader ->
+                reader.seek(length - 1)
+                reader.read().takeIf { it >= 0 }?.toChar()
+            }
+        }.getOrNull()
+    }
 
     override fun copy(from: AimiPath, to: AimiPath): Boolean =
         runCatching { fileOf(from).copyTo(fileOf(to), overwrite = true); true }.getOrDefault(false)

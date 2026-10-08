@@ -1,8 +1,12 @@
 package app.aaps.plugins.aps.openAPSAIMI.utils
 
+import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.get
+import kotlinx.cinterop.reinterpret
 import platform.Foundation.NSDate
 import platform.Foundation.NSDocumentDirectory
+import platform.Foundation.NSFileHandle
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSFileModificationDate
 import platform.Foundation.NSFileSize
@@ -10,7 +14,11 @@ import platform.Foundation.NSSearchPathForDirectoriesInDomains
 import platform.Foundation.NSString
 import platform.Foundation.NSUTF8StringEncoding
 import platform.Foundation.NSUserDomainMask
+import platform.Foundation.closeFile
 import platform.Foundation.create
+import platform.Foundation.fileHandleForReadingAtPath
+import platform.Foundation.readDataOfLength
+import platform.Foundation.seekToFileOffset
 import platform.Foundation.stringWithContentsOfFile
 import platform.Foundation.timeIntervalSince1970
 import platform.Foundation.writeToFile
@@ -68,6 +76,28 @@ private object IosAimiLocalFiles : AimiLocalFiles {
 
     override fun length(path: String): Long =
         (manager.attributesOfItemAtPath(path, null)?.get(NSFileSize) as? Number)?.toLong() ?: 0L
+
+    /**
+     * Seeks to the last byte and reads exactly that one byte.
+     *
+     * `NSFileHandle` is used rather than `NSString.stringWithContentsOfFile` on purpose: the whole
+     * point of this call is not to load the file. The byte is widened to an unsigned 0..255 so it
+     * matches what `java.io.RandomAccessFile.read` answers on the other two targets.
+     */
+    override fun lastByte(path: String): Int? {
+        val length = length(path)
+        if (length <= 0L) return null
+        val handle = NSFileHandle.fileHandleForReadingAtPath(path) ?: return null
+        try {
+            handle.seekToFileOffset((length - 1L).toULong())
+            val data = handle.readDataOfLength(1u)
+            if (data.length.toLong() < 1L) return null
+            val bytes = data.bytes?.reinterpret<ByteVar>() ?: return null
+            return bytes[0].toInt() and 0xFF
+        } finally {
+            handle.closeFile()
+        }
+    }
 
     override fun lastModifiedMs(path: String): Long? {
         val date = manager.attributesOfItemAtPath(path, null)?.get(NSFileModificationDate) as? NSDate

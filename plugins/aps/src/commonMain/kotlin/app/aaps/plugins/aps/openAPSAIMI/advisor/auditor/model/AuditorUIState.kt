@@ -1,20 +1,23 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.model
 
-import androidx.annotation.ColorRes
-import androidx.annotation.DrawableRes
-import app.aaps.core.ui.R as CoreR
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
+import kotlin.jvm.JvmInline
+import kotlin.jvm.JvmOverloads
+import kotlin.jvm.JvmStatic
 
 /**
  * AIMI Auditor UI State
- * 
+ *
  * Represents the visual state of the Auditor status indicator in toolbar
  * Transformed from AuditorStatusTracker.Status for UI consumption
+ *
+ * This state carries no colour. [type] is the classification, and the UI layer picks the colour
+ * from it: `AuditorStatusBadgeSource` maps [type] onto
+ * [app.aaps.core.interfaces.overview.PluginStatusLevel], and the Overview chip gives each level
+ * its own theme colour pair.
  */
 data class AuditorUIState(
     val type: StateType,
-    @ColorRes val iconTintColor: Int,
-    @ColorRes val badgeBackgroundColor: Int,
     val badgeText: String,
     val badgeVisible: Boolean,
     val shouldAnimate: Boolean,
@@ -34,16 +37,12 @@ data class AuditorUIState(
      * @return Result containing the validated state or an exception with details.
      */
     fun validate(): Result<ValidatedAuditorUIState> = runCatching {
-        // 1. Resource Validations
-        require(iconTintColor != 0) { "iconTintColor must be a valid @ColorRes (got 0)" }
-        require(badgeBackgroundColor != 0) { "badgeBackgroundColor must be a valid @ColorRes (got 0)" }
-
-        // 2. Textual Integrity
+        // 1. Textual Integrity
         if (badgeVisible) {
             require(badgeText.isNotEmpty()) { "badgeText cannot be empty when badgeVisible is true" }
         }
 
-        // 3. Logic Consistency & Constraints
+        // 2. Logic Consistency & Constraints
         when (type) {
             StateType.IDLE -> {
                 require(!badgeVisible) { "IDLE state cannot have a visible badge" }
@@ -64,48 +63,46 @@ data class AuditorUIState(
             }
         }
 
-        // 4. Temporal Integrity
+        // 3. Temporal Integrity
         require(timestampMs > 0) { "timestampMs must be valid" }
 
         ValidatedAuditorUIState(this)
     }
-    
+
     /**
      * UI State Types matching visual design
      */
     enum class StateType {
-        IDLE,           // Grey, no badge
-        PROCESSING,     // Blue, animated dots badge
-        READY,          // Green, count badge
-        WARNING,        // Orange, "!" badge
-        ERROR           // Red, "×" badge
+        IDLE,           // No badge
+        PROCESSING,     // Animated dots badge
+        READY,          // Count badge
+        WARNING,        // "!" badge
+        ERROR           // "×" badge
     }
-    
+
     /**
      * Check if state is active (has insights)
      */
     fun isActive(): Boolean = type == StateType.READY || type == StateType.WARNING
-    
+
     /**
      * Check if state requires user attention
      */
     fun requiresAttention(): Boolean = type == StateType.WARNING || type == StateType.ERROR
-    
+
     /**
      * Get age in milliseconds
      */
     fun getAgeMs(): Long = aimiWallClockMs() - timestampMs
-    
+
     companion object {
-        
+
         /**
          * Create IDLE state (default)
          */
         @JvmStatic
         fun idle(): AuditorUIState = AuditorUIState(
             type = StateType.IDLE,
-            iconTintColor = CoreR.color.deviationGrey,
-            badgeBackgroundColor = CoreR.color.deviationGrey,
             badgeText = "",
             badgeVisible = false,
             shouldAnimate = false,
@@ -114,15 +111,13 @@ data class AuditorUIState(
             statusMessage = "Auditor idle",
             timestampMs = aimiWallClockMs()
         )
-        
+
         /**
          * Create PROCESSING state
          */
         @JvmStatic
         fun processing(): AuditorUIState = AuditorUIState(
             type = StateType.PROCESSING,
-            iconTintColor = CoreR.color.examinedProfile,  // Blue
-            badgeBackgroundColor = CoreR.color.examinedProfile,
             badgeText = "...",
             badgeVisible = true,
             shouldAnimate = true,  // Pulse animation
@@ -131,7 +126,7 @@ data class AuditorUIState(
             statusMessage = "Analyzing...",
             timestampMs = aimiWallClockMs()
         )
-        
+
         /**
          * Create READY state with insights
          */
@@ -139,8 +134,6 @@ data class AuditorUIState(
         @JvmOverloads
         fun ready(insightCount: Int, shouldNotify: Boolean = true): AuditorUIState = AuditorUIState(
             type = StateType.READY,
-            iconTintColor = app.aaps.core.ui.R.color.inRange,  // Green
-            badgeBackgroundColor = CoreR.color.high,  // Red badge for visibility
             badgeText = insightCount.toString(),
             badgeVisible = insightCount > 0,
             shouldAnimate = false,
@@ -149,7 +142,7 @@ data class AuditorUIState(
             statusMessage = "$insightCount insight${if (insightCount != 1) "s" else ""} available",
             timestampMs = aimiWallClockMs()
         )
-        
+
         /**
          * Create WARNING state
          */
@@ -157,8 +150,6 @@ data class AuditorUIState(
         @JvmOverloads
         fun warning(message: String = "Warning", shouldNotify: Boolean = true): AuditorUIState = AuditorUIState(
             type = StateType.WARNING,
-            iconTintColor = CoreR.color.warning,  // Orange
-            badgeBackgroundColor = CoreR.color.warning,
             badgeText = "!",
             badgeVisible = true,
             shouldAnimate = false,
@@ -167,7 +158,7 @@ data class AuditorUIState(
             statusMessage = message,
             timestampMs = aimiWallClockMs()
         )
-        
+
         /**
          * Create ERROR state
          */
@@ -175,8 +166,6 @@ data class AuditorUIState(
         @JvmOverloads
         fun error(message: String = "Error"): AuditorUIState = AuditorUIState(
             type = StateType.ERROR,
-            iconTintColor = CoreR.color.high,  // Red
-            badgeBackgroundColor = CoreR.color.high,
             badgeText = "×",
             badgeVisible = true,
             shouldAnimate = false,

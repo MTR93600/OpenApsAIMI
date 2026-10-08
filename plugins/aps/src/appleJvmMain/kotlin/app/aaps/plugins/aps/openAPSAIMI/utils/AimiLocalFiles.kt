@@ -15,6 +15,15 @@ internal interface AimiLocalFiles {
     fun createDirectories(path: String): Boolean
     fun rename(from: String, to: String): Boolean
     fun length(path: String): Long
+
+    /**
+     * The final byte of the file, as an unsigned 0..255, or `null` when the file is empty, missing or
+     * unreadable.
+     *
+     * A real seek to the end, not a read of the whole file: it backs [AimiStorage.lastChar], whose
+     * reason to exist is that its caller runs on every loop tick over a file that only grows.
+     */
+    fun lastByte(path: String): Int?
     fun lastModifiedMs(path: String): Long?
     fun canRead(path: String): Boolean
     fun canWrite(path: String): Boolean

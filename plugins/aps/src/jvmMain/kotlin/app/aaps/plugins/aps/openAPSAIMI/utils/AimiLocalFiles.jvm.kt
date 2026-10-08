@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.utils
 
 import java.io.File
+import java.io.RandomAccessFile
 
 internal actual fun aimiLocalFiles(): AimiLocalFiles = JvmAimiLocalFiles
 
@@ -43,6 +44,18 @@ private object JvmAimiLocalFiles : AimiLocalFiles {
     }.getOrDefault(false)
 
     override fun length(path: String): Long = runCatching { File(path).length() }.getOrDefault(0L)
+
+    override fun lastByte(path: String): Int? {
+        val file = File(path)
+        val length = runCatching { file.length() }.getOrDefault(0L)
+        if (length <= 0L) return null
+        return runCatching {
+            RandomAccessFile(file, "r").use { reader ->
+                reader.seek(length - 1)
+                reader.read().takeIf { it >= 0 }
+            }
+        }.getOrNull()
+    }
 
     override fun lastModifiedMs(path: String): Long? =
         runCatching { File(path).lastModified().takeIf { it != 0L } }.getOrNull()

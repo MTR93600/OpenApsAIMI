@@ -40,15 +40,26 @@ class AuditorStatusBadgeSource @Inject constructor(
         auditorNotificationManager.openReport()
     }
 
-    private fun toBadge(uiState: AuditorUIState): PluginStatusBadge = PluginStatusBadge(
-        level = when (uiState.type) {
-            AuditorUIState.StateType.IDLE -> PluginStatusLevel.IDLE
-            AuditorUIState.StateType.PROCESSING -> PluginStatusLevel.PROCESSING
-            AuditorUIState.StateType.READY -> PluginStatusLevel.READY
-            AuditorUIState.StateType.WARNING -> PluginStatusLevel.WARNING
-            AuditorUIState.StateType.ERROR -> PluginStatusLevel.ERROR
-        },
-        badgeCount = uiState.insightCount,
-        statusMessage = uiState.statusMessage,
-    )
+    companion object {
+
+        /**
+         * Maps one auditor state onto the shared chip contract.
+         *
+         * [AuditorUIState] itself carries no colour any more, so this mapping is the only thing
+         * that keeps the five auditor states visually apart: the Overview chip picks its colours
+         * from [PluginStatusLevel]. It is pure and `internal` so a test can pin the five-to-five
+         * mapping - see `AuditorStatusBadgeSourceMappingTest`.
+         */
+        internal fun toBadge(uiState: AuditorUIState): PluginStatusBadge = PluginStatusBadge(
+            level = when (uiState.type) {
+                AuditorUIState.StateType.IDLE -> PluginStatusLevel.IDLE
+                AuditorUIState.StateType.PROCESSING -> PluginStatusLevel.PROCESSING
+                AuditorUIState.StateType.READY -> PluginStatusLevel.READY
+                AuditorUIState.StateType.WARNING -> PluginStatusLevel.WARNING
+                AuditorUIState.StateType.ERROR -> PluginStatusLevel.ERROR
+            },
+            badgeCount = uiState.insightCount,
+            statusMessage = uiState.statusMessage,
+        )
+    }
 }

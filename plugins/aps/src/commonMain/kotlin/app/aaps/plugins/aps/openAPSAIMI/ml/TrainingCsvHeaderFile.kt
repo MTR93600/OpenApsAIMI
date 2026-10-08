@@ -6,9 +6,8 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 /**
  * Storage-port half of [TrainingCsvHeader]: rewrite the first line of a CSV on disk.
  *
- * Lives in androidMain because the SMB training writer still uses [AimiPath] directly on the tick
- * writer's own file handling (P0.7 left File I/O there). The rewrite rule itself is
- * [TrainingCsvHeader.apply] in commonMain.
+ * Lives next to [TrainingCsvHeader.apply] in commonMain: it names no platform type, it only drives the
+ * [AimiStorage] port. Its caller is `AimiTrainingCsvWriter`, which is shared code as well.
  *
  * Any I/O problem is thrown to the caller, which is expected to log it and carry on: a header that
  * could not be fixed must never stop a row from being written.

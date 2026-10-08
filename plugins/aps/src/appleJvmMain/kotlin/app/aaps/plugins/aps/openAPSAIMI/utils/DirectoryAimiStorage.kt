@@ -138,6 +138,12 @@ internal class DirectoryAimiStorage(
 
     override fun sizeBytes(path: AimiPath): Long = io.length(path.value)
 
+    /**
+     * The final byte, widened to a `Char` the way `java.io.RandomAccessFile.read` gives it on Android,
+     * so a file ending in a multi byte character answers with its raw last byte on every target.
+     */
+    override fun lastChar(path: AimiPath): Char? = io.lastByte(path.value)?.toChar()
+
     override fun copy(from: AimiPath, to: AimiPath): Boolean {
         val text = io.readText(from.value) ?: return false
         createParentDirectories(to)
