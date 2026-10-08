@@ -4087,3 +4087,28 @@ controller, committer) is for lots with a real architectural decision to make. T
 such decision - the array-based preferences with no backing API left in the tree - and it was put to
 the user rather than guessed. Everything else (closing ~45 files' worth of dependency graph, five
 Metro bindings, three dropped-capability restores) was mechanical move-compile-fix, done directly.
+
+## 6bq. 2026-10-08: three iOS parity scenes — FASTING, SENSOR_GAP, HYPO_REBOUND
+
+The five scenario groups without an iOS counterpart get an iOS scene each (user decision, principle
+approved 2026-10-08). The established pattern: a value in `IosNeutralScene` (appleJvmMain, shared
+with iosMain), an `iosNeutral*` function driving the pure commonMain decision function with scripted
+inputs, an appleJvmTest asserting the locked values from `ParityAndroidFixture.kt`. Full-tick replay
+via the 67 seam methods was rejected (tests the harness, not the engine); M1 record/replay is a
+separate go/no-go workstream.
+
+- `feat/p6-ios-scene-fasting` (`9237878668`): `decideMealHyperBasalBoost` with the scripted
+  `captureFasting` inputs. Locks `tbrRate=4000000000000000` (2.0 U/h), no duration, no SMB.
+  Critical catch: `aggression()` must be null, otherwise the Hyper Kicker branch fires (delta 2.0).
+- `feat/p6-ios-scene-sensorgap` (`08f819ff35`): `decideSignalPreparationPkpdRuntime` with BG 110
+  stamped 25 min old. Locks the `StaleAbort` decision and `rT.eventualBG=110.0`. The review caught a
+  real defect: the scene's `ensurePredictionFallback` missed the `if (rt.eventualBG == null)
+  rt.eventualBG = bgNow` half of the Android seam — fixed before commit.
+- `feat/p6-ios-scene-hyporebound` (`4823ed9d23`): `decidePostHypoCompressionAndDriftTerminatorOrReturn`
+  with the scripted `postHypoTick` inputs. Locks `smb=3fc70a3d80000000` (0.18000000715255737 U =
+  float(0.18), the Float cast in `decideFinalizeAndCapSmb`) and `eventualBG=180.0`. The review caught
+  the same `eventualBG` omission and a wrong KDoc (15/83.33 is not 0.18) — both fixed before commit.
+
+Unreached seams fail loud (`error(...)`) in all three scenes. Remaining, blocked: `uam` (TFLite
+decision), `healthkit-absent`/`healthkit-present` (entitlements). A green JVM test does not prove
+bit-identical on Kotlin/Native — the native iOS run is the real gate for each scene.
