@@ -131,12 +131,17 @@ jobs:
       # finds a local match and does not call foojay. A second Temurin install
       # would not help: the toolcache path is not a location Gradle probes, and
       # whichever setup-java runs last owns JAVA_HOME.
+      # The JetBrains distribution lists JetBrainsRuntime releases on api.github.com.
+      # Without this token the call is anonymous and the shared runner IP hits the
+      # 60/hour limit before any JBR is installed.
       - name: Set up JDK
         uses: actions/setup-java@v5
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'jetbrains'
           cache: gradle
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Assert the JDK is JetBrains 21
         run: |

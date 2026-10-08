@@ -111,12 +111,16 @@ jobs:
       # Same daemon JVM constraint as ios-ci.yml: vendor JetBrains 21, installed
       # here so Gradle matches it locally and does not call foojay (those package
       # ids return 400). Temurin as JAVA_HOME does not satisfy the vendor.
+      # GITHUB_TOKEN: the JetBrains distribution lists releases on api.github.com.
+      # An anonymous call is rate-limited on the shared runner IP.
       - name: Set up JDK
         uses: actions/setup-java@v5
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'jetbrains'
           cache: gradle
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Assert the JDK is JetBrains 21
         run: |

@@ -256,12 +256,16 @@ jobs:
       # (gradle/gradle-daemon-jvm.properties). The Linux x64 foojay package id
       # returns 400, same failure as iOS CI. Install that JBR as JAVA_HOME so
       # Gradle does not auto-provision. The compiler runs on this JVM.
+      # GITHUB_TOKEN: the JetBrains distribution lists releases on api.github.com.
+      # An anonymous call is rate-limited on the shared runner IP.
       - name: Set up JDK
         uses: actions/setup-java@v5
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'jetbrains'
           cache: gradle
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Assert the JDK is JetBrains 21
         run: |
