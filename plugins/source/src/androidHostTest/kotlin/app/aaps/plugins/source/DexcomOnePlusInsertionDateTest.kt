@@ -74,12 +74,13 @@ class DexcomOnePlusInsertionDateTest : TestBase() {
     }
 
     @Test
-    fun `the correction switch is off by default`() {
-        assertThat(DexcomOnePlusBooleanKey.CorrectSensorStart.defaultValue).isFalse()
+    fun `the correction switch is on by default`() {
+        assertThat(DexcomOnePlusBooleanKey.CorrectSensorStart.defaultValue).isTrue()
     }
 
     @Test
     fun `a correction while the switch is off writes nothing`() = runTest {
+        whenever(preferences.get(DexcomOnePlusBooleanKey.CorrectSensorStart)).thenReturn(false)
         val current = System.currentTimeMillis() - 2 * HOUR_MS
         OnePlusSensorStore(context).startSessionForSensor(MAC, current, null)
 
