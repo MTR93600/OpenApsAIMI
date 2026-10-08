@@ -1,7 +1,10 @@
 package app.aaps.plugins.aps.openAPSAIMI.effects
 
 import app.aaps.core.interfaces.aps.CurrentTemp
+import app.aaps.core.interfaces.aps.AutosensResult
+import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
 import app.aaps.core.interfaces.aps.IobTotal
+import app.aaps.core.interfaces.aps.MealData
 import app.aaps.core.interfaces.aps.OapsProfileAimi
 import app.aaps.core.interfaces.aps.RT
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -31,6 +34,7 @@ import app.aaps.core.keys.interfaces.UnitDoublePreferenceKey
 import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.model.DecisionResult
+import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiTickContext
 import app.aaps.plugins.aps.openAPSAIMI.physio.EndogenousPhaseHysteresis
 import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionMemory
@@ -510,4 +514,123 @@ private class PortLogLogger(private val log: MutableList<String>) : AAPSLogger {
     override fun info(className: String, methodName: String, lineNumber: Int, tag: LTag, message: String) = Unit
     override fun warn(className: String, methodName: String, lineNumber: Int, tag: LTag, message: String) = Unit
     override fun error(className: String, methodName: String, lineNumber: Int, tag: LTag, message: String) = Unit
+}
+
+/**
+ * Locked hypo-rebound scene: BG 180, delta 0, autodrive on, maxSMB 0.40, last bolus 180 min ago.
+ * Same inputs as the Android `ShellDecisionTraceTest.captureHypoRebound`, which locks
+ * `smb=3fc70a3d80000000` (0.18000000715255737 U = float(0.18)) with no TBR and eventual 180.0.
+ *
+ * The 0.18 is derived from the fixture (the upstream ISF fusion is not replayed here);
+ * the float noise comes from the `.toFloat()` in `decideFinalizeAndCapSmb` (FinalizeAndCapSmb.kt).
+ */
+data class IosNeutralHypoReboundOutcome(
+    val smbU: Double,
+    val rT: RT,
+)
+
+fun iosNeutralHypoReboundSmb(log: MutableList<String>): IosNeutralHypoReboundOutcome {
+    val preferences = IosNeutralMealPreferences().apply {
+        doubles[DoubleKey.OApsAIMIMaxSMB.key] = 0.40
+        doubles[DoubleKey.OApsAIMIHighBGMaxSMB.key] = 0.40
+        booleans[BooleanKey.OApsAIMIautoDriveActive.key] = true
+    }
+    val rT = RT(runningDynamicIsf = false)
+    val reason = StringBuilder()
+    var smbU: Double? = null
+    val calls = object : AimiPostHypoDriftCalls {
+        override fun compression(delta: Float, reason: StringBuilder): Boolean = false
+        override fun drift(
+            bg: Float,
+            targetBg: Float,
+            delta: Float,
+            avgDelta: Float,
+            combinedDelta: Float,
+            minDeviation: Double,
+            lastBolusVolume: Double,
+            reason: StringBuilder,
+        ): Boolean = decideDriftTerminatorCondition(
+            bg, targetBg, delta, avgDelta, combinedDelta, minDeviation, lastBolusVolume, reason,
+        )
+        override fun maxSmb(): Double = 0.40
+        override fun writeMaxSmb(value: Double): Unit =
+            error("IOS_NEUTRAL hypo-rebound: unexpected writeMaxSmb")
+        override fun finalize(
+            rT: RT,
+            proposedUnits: Double,
+            reasonHeader: String,
+            mealData: MealData,
+            hypoThreshold: Double,
+            isExplicitUserAction: Boolean,
+            decisionSource: String,
+            isMealActive: Boolean,
+            hyperReleaseFloorU: Double,
+            bypassSmbRefractory: Boolean,
+        ) {
+            // Replicates the Float cast in decideFinalizeAndCapSmb
+            // (smbToGiveParam = (proposedUnits * 1.0).toFloat()).
+            smbU = proposedUnits.toFloat().toDouble()
+            rT.units = smbU
+        }
+        override fun logFinal(tag: String, rT: RT, bg: Double, delta: Float) = Unit
+        override fun markFinal(rT: RT, currentTemp: CurrentTemp?) = Unit
+    }
+    val ctx = AimiTickContext(
+        glucoseStatus = GlucoseStatusAIMI(
+            glucose = 180.0,
+            delta = 0.0,
+            shortAvgDelta = 0.0,
+            longAvgDelta = 0.0,
+            date = IOS_NEUTRAL_HYPO_REBOUND_NOW_MS,
+        ),
+        currentTemp = CurrentTemp(duration = 0, rate = 1.0, minutesrunning = 0),
+        iobDataArray = arrayOf(IobTotal(time = IOS_NEUTRAL_HYPO_REBOUND_NOW_MS, iob = 1.0, lastBolusTime = 0L)),
+        profile = iosNeutralProfile(),
+        autosensData = AutosensResult(ratio = 1.0),
+        mealData = MealData(mealCOB = 0.0),
+        microBolusAllowed = true,
+        currentTime = IOS_NEUTRAL_HYPO_REBOUND_NOW_MS,
+        flatBGsDetected = false,
+        dynIsfMode = false,
+        uiInteraction = IosNeutralUiInteraction(),
+        extraDebug = "",
+    )
+    val result = decidePostHypoCompressionAndDriftTerminatorOrReturn(
+        ctx = ctx,
+        rT = rT,
+        bg = 180.0,
+        delta = 0.0f,
+        threshold = 70.0,
+        combinedDelta = 0.0f,
+        shortAvgDeltaRawForDrift = 0.0f,
+        targetBgMgdl = 100.0f,
+        postHypoState = PostHypoState.None,
+        autosensRatio = 1.0,
+        nightbis = false,
+        autodriveEnabledPref = true,
+        modesCondition = true,
+        hasRecentBolus45m = false,
+        totalBolusLastHour = 0.0,
+        dynamicPbolusSmall = 0.18,
+        exerciseInsulinLockoutActive = false,
+        reason = reason,
+        preferences = preferences,
+        consoleLog = log,
+        calls = calls,
+    ) ?: error("IOS_NEUTRAL hypo-rebound: drift terminator did not fire")
+    val units = smbU ?: error("IOS_NEUTRAL hypo-rebound: SMB not finalized")
+    // Scripted from the fixture — the prediction pipeline is not run in this scene.
+    rT.eventualBG = 180.0
+    return IosNeutralHypoReboundOutcome(smbU = units, rT = rT)
+}
+
+/** Pinned clock for the hypo-rebound scene, same `now` as the Android test. */
+internal const val IOS_NEUTRAL_HYPO_REBOUND_NOW_MS = 1_700_000_000_000L
+
+/** Silent [UiInteraction] for scenes: the drift path never touches the UI. */
+internal class IosNeutralUiInteraction : app.aaps.core.interfaces.ui.UiInteraction {
+    override val mainActivity: kotlin.reflect.KClass<*> = Unit::class
+    override val errorHelperActivity: kotlin.reflect.KClass<*> = Unit::class
+    override fun runAlarm(status: String, title: String, sound: app.aaps.core.interfaces.notifications.AlarmSound?) = Unit
+    override fun stopAlarm(reason: String) = Unit
 }

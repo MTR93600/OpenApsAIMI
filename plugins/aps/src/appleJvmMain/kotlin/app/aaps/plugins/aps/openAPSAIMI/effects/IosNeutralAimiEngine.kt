@@ -40,6 +40,7 @@ enum class IosNeutralScene {
     SPORT,
     NIGHT,
     LOW_PREDICTION,
+    HYPO_REBOUND,
 }
 
 /**
@@ -155,6 +156,12 @@ class IosNeutralAimiEngine(
                 bgMgdl = 180.0,
                 deltaMgdl = 0.0,
             )
+            IosNeutralScene.HYPO_REBOUND -> log += scenePatientLog(
+                snapshot = wearable,
+                nowMs = aimiWallClockMs(),
+                bgMgdl = 180.0,
+                deltaMgdl = 0.0,
+            )
             IosNeutralScene.LOW_PREDICTION -> Unit
         }
         val ceiling = decideTpoSessionAtTickStart(
@@ -215,6 +222,10 @@ class IosNeutralAimiEngine(
                     log = learnerLog,
                 )
                 temp(state, iosNeutralNightTbrUph(), "NIGHT_TBR")
+            }
+            IosNeutralScene.HYPO_REBOUND -> {
+                val outcome = iosNeutralHypoReboundSmb(log)
+                hypoRebound(state, outcome.smbU)
             }
             IosNeutralScene.LOW_PREDICTION -> error("LOW_PREDICTION returns at the floor, before meal onset")
         }
@@ -346,6 +357,17 @@ class IosNeutralAimiEngine(
             trainingEvents = emptyList(),
             persistenceEvents = emptyList(),
             telemetry = AimiDecisionTrace(reason),
+            safety = AimiSafetyReport(holdReasonCode = null),
+        )
+    }
+
+    private fun hypoRebound(state: AimiEngineState, smbU: Double): AimiTickResult {
+        return AimiTickResult(
+            command = AimiTherapyCommand.Smb(smbU),
+            nextState = state,
+            trainingEvents = emptyList(),
+            persistenceEvents = emptyList(),
+            telemetry = AimiDecisionTrace("HYPO_REBOUND_SMB"),
             safety = AimiSafetyReport(holdReasonCode = null),
         )
     }
