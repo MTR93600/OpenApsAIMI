@@ -98,7 +98,7 @@ object OrefPersonalMlTrainer {
             val meanHy = meanSigmoid(hyperNet, slices)
             PersonalMlOutcome(OrefPersonalMlStatus.TRAINED_AND_USED, meanH * 100.0, meanHy * 100.0, null)
         } catch (t: Throwable) {
-            PersonalMlOutcome(OrefPersonalMlStatus.TRAIN_FAILED, detail = t.message ?: t.javaClass.simpleName)
+            PersonalMlOutcome(OrefPersonalMlStatus.TRAIN_FAILED, detail = t.message ?: t::class.simpleName)
         }
     }
 

@@ -6,6 +6,7 @@ import app.aaps.core.data.model.SC
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.plugins.aps.openAPSAIMI.aimiLocalHour
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRefresher
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRepository
 import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalBeliefEngine
@@ -19,8 +20,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Instant
-import kotlinx.datetime.TimeZone
 
 /**
  * 🏥 Health Context Repository
@@ -371,7 +370,7 @@ class HealthContextRepository @Inject constructor(
     }
 
     private fun clockIsNightHour(nowMs: Long): Boolean {
-        val hour = java.time.ZonedDateTime.ofInstant(Instant.ofEpochMilli(nowMs), ZoneId.systemDefault()).hour
+        val hour = aimiLocalHour(nowMs)
         return hour >= 23 || hour < 6
     }
 

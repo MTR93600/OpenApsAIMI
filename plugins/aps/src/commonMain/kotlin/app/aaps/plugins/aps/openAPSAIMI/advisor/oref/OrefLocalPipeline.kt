@@ -4,6 +4,8 @@ import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.aps.APSResult
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiProfileSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.aimiFmt0
+import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiAssetReader
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
@@ -312,7 +314,7 @@ class OrefLocalPipeline(
         } catch (t: Throwable) {
             return OnnxSummaries(
                 OrefMlStatus.LOAD_FAILED,
-                mlErrorDetail = t.message ?: t.javaClass.simpleName,
+                mlErrorDetail = t.message ?: t::class.simpleName,
             )
         } finally {
             scorer.close()
@@ -358,13 +360,13 @@ class OrefLocalPipeline(
         val smbIdx = OrefModelFeatures.NAMES.indexOf("has_smb")
         if (dynIdx >= 0) {
             val meanDyn = slices.mapNotNull { it.second.getOrNull(dynIdx) }.filter { it.isFinite() }.average().let { if (it.isNaN()) 0.0 else it }
-            if (meanDyn > 0.5) hints.add("Dynamic ISF appears active on most aligned loops (~${"%.0f".format(meanDyn * 100)}%).")
+            if (meanDyn > 0.5) hints.add("Dynamic ISF appears active on most aligned loops (~${aimiFmt0(meanDyn * 100)}%).")
         }
         if (smbIdx >= 0) {
             val meanSmb = slices.mapNotNull { it.second.getOrNull(smbIdx) }.filter { it.isFinite() }.average().let { if (it.isNaN()) 0.0 else it }
-            hints.add("SMB-flagged loops ~${"%.0f".format(meanSmb * 100)}% of aligned rows.")
+            hints.add("SMB-flagged loops ~${aimiFmt0(meanSmb * 100)}% of aligned rows.")
         }
-        hints.add("Profile snapshot: ISF ~${profile.isf.toInt()} mg/dL/U, CR ~${"%.1f".format(profile.icRatio)} g/U, target ~${profile.targetBg.toInt()} mg/dL.")
+        hints.add("Profile snapshot: ISF ~${profile.isf.toInt()} mg/dL/U, CR ~${aimiFmt1(profile.icRatio)} g/U, target ~${profile.targetBg.toInt()} mg/dL.")
         return hints
     }
 

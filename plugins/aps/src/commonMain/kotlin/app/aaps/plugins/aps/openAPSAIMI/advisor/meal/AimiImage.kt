@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.meal
 
+import kotlin.jvm.JvmInline
+
 /**
  * A food photo ready for a vision model, as JPEG bytes.
  *
