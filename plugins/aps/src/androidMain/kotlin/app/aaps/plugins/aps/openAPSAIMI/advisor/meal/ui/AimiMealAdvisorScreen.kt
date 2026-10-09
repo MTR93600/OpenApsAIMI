@@ -157,7 +157,7 @@ fun AimiMealAdvisorScreen(
         analyzing = true
         scope.launch {
             try {
-                val estimate = recognitionService.estimateCarbsFromImage(bitmap, descriptionText)
+                val estimate = recognitionService.estimateCarbsFromImage(bitmap.toAimiImage(), descriptionText)
                 result = estimate
                 carbsText = estimate.recommendedCarbsForDose.toInt().toString()
             } catch (e: Exception) {

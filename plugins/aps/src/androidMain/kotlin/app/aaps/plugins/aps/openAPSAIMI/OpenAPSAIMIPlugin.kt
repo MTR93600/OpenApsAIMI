@@ -157,6 +157,7 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.compose.AimiProfileAdvisorScreen
 import app.aaps.plugins.aps.openAPSAIMI.advisor.compose.AimiSupportPackageScreen
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
 import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiDiagnosticsManager
+import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AndroidAimiDiagPlatform
 import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiSupportPackageExporter
 import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.ui.AimiMealAdvisorScreen
 import app.aaps.plugins.aps.openAPSAIMI.advisor.modesettings.ui.AimiModeSettingsScreen
@@ -2008,7 +2009,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     )
                     AimiSupportPackageScreen(
                         onBack = onBack,
-                        verifyCode = { code -> AimiDiagnosticsManager.verifyCode(code) },
+                        verifyCode = { code -> AimiDiagnosticsManager.verifyCode(code, AndroidAimiDiagPlatform(context)) },
                         buildPackage = { issue -> exporter.build(issue) },
                         sharePackage = { zip, issue -> exporter.share(zip, issue) },
                     )

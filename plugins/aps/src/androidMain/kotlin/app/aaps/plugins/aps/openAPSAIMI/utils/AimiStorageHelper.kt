@@ -61,6 +61,9 @@ class AimiStorageHelper @Inject constructor(
     /**
      * Détermine le meilleur répertoire de stockage disponible.
      * Appelé une seule fois au premier accès (lazy init).
+     *
+     * The 3-tier strategy lives in shared [AimiStorageDirSelector]; this method only supplies
+     * the Android candidate directories and the `java.io.File` probes.
      */
     @Synchronized
     private fun determineStorageDirectory(): File {
@@ -68,56 +71,44 @@ class AimiStorageHelper @Inject constructor(
             return currentDirectory!!
         }
 
-        // 1️⃣ Tenter Documents/AAPS d'abord (préféré pour cohérence AIMI)
-        try {
-            val docsDir = File(Environment.getExternalStorageDirectory(), "Documents/AAPS")
+        val docsDir = File(Environment.getExternalStorageDirectory(), "Documents/AAPS")
+        val appDataDir = context.getExternalFilesDir(null)
 
-            // Créer le répertoire s'il n'existe pas
-            if (!docsDir.exists()) {
-                if (docsDir.mkdirs()) {
-                    log.info(LTag.AIMI, "AimiStorageHelper: ✅ Created Documents/AAPS directory")
-                }
-            }
+        val selection = AimiStorageDirSelector.select(
+            documentsAaps = docsDir.absolutePath,
+            appExternal = appDataDir?.absolutePath,
+            internalDir = context.filesDir.absolutePath,
+            exists = { File(it).exists() },
+            mkdirs = { File(it).mkdirs() },
+            canWrite = { File(it).canWrite() },
+        )
 
-            // Tester si on peut écrire (vérification permission)
-            if (docsDir.exists() && docsDir.canWrite()) {
-                currentStatus = StorageStatus.DOCUMENTS_AAPS
-                currentDirectory = docsDir
+        currentStatus = when (selection.tier) {
+            AimiStorageTier.DOCUMENTS_AAPS -> StorageStatus.DOCUMENTS_AAPS
+            AimiStorageTier.APP_SCOPED_EXTERNAL -> StorageStatus.APP_SCOPED_EXTERNAL
+            AimiStorageTier.INTERNAL_ONLY -> StorageStatus.INTERNAL_ONLY
+        }
+        lastError = selection.reason
+        val dir = File(selection.path)
+        currentDirectory = dir
+
+        when (selection.tier) {
+            AimiStorageTier.DOCUMENTS_AAPS -> {
                 log.info(LTag.AIMI, "AimiStorageHelper: 📁 Using Documents/AAPS (preferred)")
-                log.info(LTag.AIMI, "  → Path: ${docsDir.absolutePath}")
-                return docsDir
-            } else {
-                lastError = "Documents/AAPS not writable (permission issue?)"
-                log.warn(LTag.AIMI, "AimiStorageHelper: ⚠️ $lastError")
+                log.info(LTag.AIMI, "  → Path: ${dir.absolutePath}")
             }
-        } catch (e: Exception) {
-            lastError = "Cannot access Documents/AAPS: ${e.message}"
-            log.warn(LTag.AIMI, "AimiStorageHelper: ⚠️ $lastError")
-        }
-
-        // 2️⃣ Fallback vers app-scoped external storage
-        try {
-            val appDataDir = context.getExternalFilesDir(null)
-            if (appDataDir != null && (appDataDir.exists() || appDataDir.mkdirs())) {
-                currentStatus = StorageStatus.APP_SCOPED_EXTERNAL
-                currentDirectory = appDataDir
+            AimiStorageTier.APP_SCOPED_EXTERNAL -> {
                 log.info(LTag.AIMI, "AimiStorageHelper: 📁 Using app-scoped external storage (fallback)")
-                log.info(LTag.AIMI, "  → Path: ${appDataDir.absolutePath}")
+                log.info(LTag.AIMI, "  → Path: ${dir.absolutePath}")
                 log.info(LTag.AIMI, "  → Reason: $lastError")
-                return appDataDir
             }
-        } catch (e: Exception) {
-            lastError = "Cannot access external app storage: ${e.message}"
-            log.warn(LTag.AIMI, "AimiStorageHelper: Cannot access external app storage: ${e.message}")
+            AimiStorageTier.INTERNAL_ONLY -> {
+                log.warn(LTag.AIMI, "AimiStorageHelper: 📁 Using internal storage (last resort)")
+                log.warn(LTag.AIMI, "  → Path: ${dir.absolutePath}")
+                log.warn(LTag.AIMI, "  → Reason: $lastError")
+            }
         }
-
-        // 3️⃣ Dernier recours : stockage interne (toujours disponible)
-        currentStatus = StorageStatus.INTERNAL_ONLY
-        currentDirectory = context.filesDir
-        log.warn(LTag.AIMI, "AimiStorageHelper: 📁 Using internal storage (last resort)")
-        log.warn(LTag.AIMI, "  → Path: ${context.filesDir.absolutePath}")
-        log.warn(LTag.AIMI, "  → Reason: $lastError")
-        return context.filesDir
+        return dir
     }
 
     /**

@@ -43,7 +43,7 @@ class AimiSupportPackageExporter(
 
     suspend fun build(issue: String): AimiSupportPackageResult {
         return try {
-            val diagManager = AimiDiagnosticsManager(context, preferences, logger)
+            val diagManager = AimiDiagnosticsManager(AndroidAimiDiagPlatform(context), preferences, logger)
             val runningProfile = runCatching { profileFunction.getProfile() }.getOrNull()
             val runningProfileName = runCatching { profileFunction.getProfileName() }.getOrNull()
             val reportContent = diagManager.generateReport(

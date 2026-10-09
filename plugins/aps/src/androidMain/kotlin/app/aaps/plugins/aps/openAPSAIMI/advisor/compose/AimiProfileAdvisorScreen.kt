@@ -61,6 +61,8 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.AdvisorReport
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AdvisorSeverity
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AiCoachingService
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiAdvisorService
+import app.aaps.plugins.aps.openAPSAIMI.advisor.oref.AndroidAssetReader
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiRecommendation
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiSharing
 import app.aaps.plugins.aps.openAPSAIMI.advisor.buildAimiBehaviorCausalInsights
@@ -190,12 +192,13 @@ fun AimiProfileAdvisorScreen(
     LaunchedEffect(Unit) {
         try {
             // history feeds the 48h-cooldown filter on recommendations a later sub-lot renders from
-            // this same report; assetContext lets the OREF pipeline load its bundled ML asset. Both
+            // this same report; assetReader lets the OREF pipeline load its bundled ML asset. Both
             // silently degrade the report (not a crash) if omitted, so pass them like the original did.
             val loaded = withContext(Dispatchers.IO) {
                 advisorService.generateReport(
                     history = historyRepo.getRecentActions(10),
-                    assetContext = context,
+                    assetReader = AndroidAssetReader(context),
+                    filesDir = AimiPath(context.filesDir.absolutePath),
                 )
             }
             report = loaded
