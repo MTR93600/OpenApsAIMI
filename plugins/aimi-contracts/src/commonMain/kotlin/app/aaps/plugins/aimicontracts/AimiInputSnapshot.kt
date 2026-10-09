@@ -1,5 +1,7 @@
 package app.aaps.plugins.aimicontracts
 
+import app.aaps.core.interfaces.aps.IobTotal
+import app.aaps.core.interfaces.aps.OapsProfileAimi
 import kotlinx.serialization.Serializable
 
 /**
@@ -28,6 +30,20 @@ data class AimiInputSnapshot(
     val physiology: AimiPhysiologySnapshot,
     val config: AimiConfigSnapshot,
     val capabilities: AimiCapabilitySnapshot,
+    val advanced: AimiAdvancedFeatures? = null,
+)
+
+/**
+ * Optional advanced features for the tick.
+ *
+ * All fields are nullable: a missing feature is null, never 0. The engine
+ * decides which features it consumes; unknown features are ignored.
+ */
+@Serializable
+data class AimiAdvancedFeatures(
+    val tddMgdl: TimedValue<Double>? = null,
+    val tirPercent: TimedValue<Double>? = null,
+    val duraIsfMgdlPerU: TimedValue<Double>? = null,
 )
 
 /** Why this tick ran. The iOS loop is CGM-BLE driven; a 5 minute timer is not the heartbeat. */
@@ -65,6 +81,10 @@ data class AimiGlucoseSnapshot(
     val sourceId: String?,
     val warmup: AimiGlucoseWarmup,
     val loopEligible: Boolean,
+    val delta: TimedValue<Double> = TimedValue.Missing("not captured"),
+    val shortAvgDelta: TimedValue<Double> = TimedValue.Missing("not captured"),
+    val longAvgDelta: TimedValue<Double> = TimedValue.Missing("not captured"),
+    val noise: TimedValue<Double> = TimedValue.Missing("not captured"),
 )
 
 /** Coarse warm-up for the snapshot. Driver phases stay in the CGM plugin, not here. */
@@ -87,25 +107,21 @@ data class AimiPumpSnapshot(
 )
 
 /**
- * Profile numbers used by the tick.
+ * Full profile for the tick.
  *
- * [memberTargetBgMgdl] is AIMI `targetBg` (member). [scheduleTargetBgMgdl] is AIMI `target_bg`
- * (schedule). They are two fields on purpose. Do not merge them.
+ * Carries the complete [OapsProfileAimi] (all fields) instead of a 6-field
+ * subset. The shell fills this from the active profile before `evaluate`.
  */
 @Serializable
 data class AimiProfileSnapshot(
-    val memberTargetBgMgdl: Double,
-    val scheduleTargetBgMgdl: Double,
-    val isfMgdlPerU: TimedValue<Double>,
-    val icGPerU: TimedValue<Double>,
-    val diaMs: Long?,
-    val peakMs: Long?,
+    val profile: OapsProfileAimi,
 )
 
 @Serializable
 data class AimiInsulinSnapshot(
     val iobU: TimedValue<Double>,
     val activityUPerHour: TimedValue<Double>,
+    val iobHistory: List<IobTotal> = emptyList(),
 )
 
 @Serializable

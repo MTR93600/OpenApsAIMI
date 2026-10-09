@@ -21,6 +21,7 @@ kotlin {
         commonMain {
             dependencies {
                 api(libs.kotlinx.serialization.json)
+                api(project(":core:interfaces"))
             }
         }
         getByName("commonTest") {

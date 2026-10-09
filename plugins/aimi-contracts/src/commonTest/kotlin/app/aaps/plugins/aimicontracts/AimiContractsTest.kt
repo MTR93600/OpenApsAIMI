@@ -1,8 +1,8 @@
 package app.aaps.plugins.aimicontracts
 
+import app.aaps.core.interfaces.aps.OapsProfileAimi
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -31,16 +31,11 @@ class AimiContractsTest {
     }
 
     @Test
-    fun member_target_and_schedule_target_are_separate_fields() {
-        val profile = AimiProfileSnapshot(
-            memberTargetBgMgdl = 100.0,
-            scheduleTargetBgMgdl = 110.0,
-            isfMgdlPerU = TimedValue.Missing("not captured"),
-            icGPerU = TimedValue.Missing("not captured"),
-            diaMs = null,
-            peakMs = null,
-        )
-        assertNotEquals(profile.memberTargetBgMgdl, profile.scheduleTargetBgMgdl)
+    fun profile_snapshot_carries_full_oaps_profile() {
+        val oaps = testOapsProfile(targetBg = 100.0)
+        val profile = AimiProfileSnapshot(profile = oaps)
+        assertEquals(100.0, profile.profile.target_bg)
+        assertEquals(50.0, profile.profile.sens)
     }
 
     @Test
@@ -84,12 +79,7 @@ class AimiContractsTest {
                 pumpCanTempBasal = false,
             ),
             profile = AimiProfileSnapshot(
-                memberTargetBgMgdl = 100.0,
-                scheduleTargetBgMgdl = 110.0,
-                isfMgdlPerU = TimedValue.Missing("not captured"),
-                icGPerU = TimedValue.Missing("not captured"),
-                diaMs = null,
-                peakMs = null,
+                profile = testOapsProfile(targetBg = 100.0),
             ),
             insulin = AimiInsulinSnapshot(
                 iobU = TimedValue.Missing("not collected"),
@@ -116,4 +106,56 @@ class AimiContractsTest {
         val hold = AimiTherapyCommand.Hold("ENGINE_NOT_EXTRACTED")
         assertEquals("ENGINE_NOT_EXTRACTED", hold.reasonCode)
     }
+
+    private fun testOapsProfile(targetBg: Double = 100.0): OapsProfileAimi =
+        OapsProfileAimi(
+            dia = 5.0,
+            min_5m_carbimpact = 8.0,
+            max_iob = 3.0,
+            max_daily_basal = 1.0,
+            max_basal = 3.0,
+            min_bg = targetBg - 10.0,
+            max_bg = targetBg + 70.0,
+            target_bg = targetBg,
+            carb_ratio = 10.0,
+            sens = 50.0,
+            autosens_adjust_targets = false,
+            max_daily_safety_multiplier = 3.0,
+            current_basal_safety_multiplier = 4.0,
+            high_temptarget_raises_sensitivity = false,
+            low_temptarget_lowers_sensitivity = false,
+            sensitivity_raises_target = true,
+            resistance_lowers_target = true,
+            adv_target_adjustments = false,
+            exercise_mode = false,
+            half_basal_exercise_target = 160,
+            maxCOB = 120,
+            skip_neutral_temps = false,
+            remainingCarbsCap = 90,
+            enableUAM = false,
+            A52_risk_enable = false,
+            SMBInterval = 3,
+            enableSMB_with_COB = false,
+            enableSMB_with_temptarget = false,
+            allowSMB_with_high_temptarget = false,
+            enableSMB_always = false,
+            enableSMB_after_carbs = false,
+            maxSMBBasalMinutes = 30,
+            maxUAMSMBBasalMinutes = 30,
+            bolus_increment = 0.1,
+            carbsReqThreshold = 0,
+            current_basal = 1.0,
+            temptargetSet = false,
+            autosens_max = 1.2,
+            out_units = "mg/dL",
+            lgsThreshold = null,
+            variable_sens = 50.0,
+            insulinDivisor = 1,
+            TDD = 50.0,
+            peakTime = 75.0,
+            futureActivity = 0.0,
+            sensorLagActivity = 0.0,
+            historicActivity = 0.0,
+            currentActivity = 0.0,
+        )
 }
