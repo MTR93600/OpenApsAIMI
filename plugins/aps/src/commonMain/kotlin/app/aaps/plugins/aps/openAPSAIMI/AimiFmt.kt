@@ -57,6 +57,13 @@ internal fun aimiFmtSigned1(value: Double): String {
     return if (value >= 0.0) "+$body" else "-$body"
 }
 
+internal fun aimiFmtSigned2(value: Double): String {
+    // Matches Java `%+.2f`: negative zero keeps its sign (raw bits check, like formatFixedHalfAway).
+    val negative = value.toRawBits() < 0L
+    val body = aimiFmt2(abs(value))
+    return if (negative) "-$body" else "+$body"
+}
+
 /**
  * `%.Nf` as Java's Formatter prints it: shortest decimal, ties away from zero,
  * signed zero preserved. `decimals` is 0..4 at every call site.

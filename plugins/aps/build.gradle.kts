@@ -103,6 +103,7 @@ kotlin {
 
                 implementation(libs.androidx.collection)
                 implementation(libs.kotlinx.coroutines.core)
+                implementation(libs.kotlinx.datetime)
                 implementation(libs.cmp.runtime)
                 api(kotlin("reflect"))
             }
