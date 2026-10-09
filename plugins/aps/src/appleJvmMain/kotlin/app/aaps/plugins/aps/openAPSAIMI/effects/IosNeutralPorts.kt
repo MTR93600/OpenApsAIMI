@@ -52,7 +52,6 @@ import app.aaps.core.keys.interfaces.UnitDoublePreferenceKey
 import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.model.DecisionResult
-import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiTickContext
 import app.aaps.plugins.aps.openAPSAIMI.physio.EndogenousPhaseHysteresis
 import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionMemory
@@ -778,6 +777,9 @@ private object SensorGapSilentUi : UiInteraction {
     override val mainActivity: KClass<*> = SensorGapSilentUi::class
     override val errorHelperActivity: KClass<*> = SensorGapSilentUi::class
     override fun runAlarm(status: String, title: String, sound: AlarmSound?) = Unit
+    override fun stopAlarm(reason: String) = Unit
+}
+
 /**
  * Locked hypo-rebound scene: BG 180, delta 0, autodrive on, maxSMB 0.40, last bolus 180 min ago.
  * Same inputs as the Android `ShellDecisionTraceTest.captureHypoRebound`, which locks
