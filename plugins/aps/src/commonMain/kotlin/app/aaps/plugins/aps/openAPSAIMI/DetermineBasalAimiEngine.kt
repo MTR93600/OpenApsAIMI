@@ -123,8 +123,13 @@ private object SilentUiInteraction : UiInteraction {
     override fun stopAlarm(reason: String) = Unit
 }
 
-/** Maps the APS result onto the engine contract. */
-private fun RT.toAimiTickResult(state: AimiEngineState): AimiTickResult {
+/**
+ * Maps the APS result onto the engine contract.
+ *
+ * Internal so the Android parity capture hook can reuse the exact same
+ * mapping when recording the expected result.
+ */
+internal fun RT.toAimiTickResult(state: AimiEngineState): AimiTickResult {
     val command: AimiTherapyCommand = when {
         units != null && (units ?: 0.0) > 0.0 -> AimiTherapyCommand.Smb(units ?: 0.0)
         rate != null && duration != null -> AimiTherapyCommand.TempBasal(
