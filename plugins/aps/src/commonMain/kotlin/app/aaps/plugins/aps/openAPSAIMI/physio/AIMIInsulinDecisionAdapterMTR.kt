@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.physio
 
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
+
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt3
@@ -58,7 +60,7 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
 ) {
     private val inflammationEstimator = InflammationLatentEstimatorMTR()
     private val decisionOrchestratorShadow = AIMIDecisionOrchestratorShadowMTR()
-    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val ioScope = CoroutineScope(SupervisorJob() + aapsIoDispatcher)
     private val hypoEventsRef = AtomicReference<List<TE>>(emptyList())
     private val hypoEventsRefreshInFlight = AtomicBoolean(false)
     private val activityRef = AtomicReference(RealTimeActivity(0, 0))
@@ -590,7 +592,7 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
     private fun ensurePhysioSnapshotRefreshed() {
         try {
             if (aimiIsMainThread()) {
-                runBlocking(Dispatchers.IO) { repo.fetchSnapshot() }
+                runBlocking(aapsIoDispatcher) { repo.fetchSnapshot() }
             } else {
                 repo.fetchSnapshot()
             }

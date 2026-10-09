@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.physio
 
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
+
 import me.tatarka.inject.annotations.Inject as Unused
 import app.aaps.core.data.model.HR
 import app.aaps.core.data.model.SC
@@ -67,7 +69,7 @@ class HealthContextRepository @Inject constructor(
 
     // In-memory cache of the last valid snapshot
     private var lastSnapshot: HealthContextSnapshot = HealthContextSnapshot.EMPTY
-    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val ioScope = CoroutineScope(SupervisorJob() + aapsIoDispatcher)
     private val sleepRef = AtomicReference<Any?>(null)
     private val hrvRef = AtomicReference<List<Any>>(emptyList())
     private val rhrRef = AtomicReference<List<Any>>(emptyList())

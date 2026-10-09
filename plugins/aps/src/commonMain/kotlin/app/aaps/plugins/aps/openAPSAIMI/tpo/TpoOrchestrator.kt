@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.tpo
 
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
+
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiTpo
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -39,7 +41,7 @@ class TpoOrchestrator @Inject constructor(
     private val persistence = TpoPersistence(storage)
     private val sessionManager = TpoSessionManager(persistence)
     private val llmValidator = TpoLlmValidator(sp, aiCoachingService, aapsLogger)
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + aapsIoDispatcher)
     private val historyRepo by lazy { AdvisorHistoryRepository(keyValueCache) }
 
     @Volatile

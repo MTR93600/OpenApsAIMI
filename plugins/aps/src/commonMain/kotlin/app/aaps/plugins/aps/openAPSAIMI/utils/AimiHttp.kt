@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.utils
 
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
+
 /**
  * One HTTP request, as AIMI shared code describes it.
  *
@@ -89,7 +91,7 @@ data class AimiHttpResponse(
  *
  * ### Blocking, not suspending
  *
- * [execute] blocks. Every AIMI caller is already inside `withContext(Dispatchers.IO)`, and most of
+ * [execute] blocks. Every AIMI caller is already inside `withContext(aapsIoDispatcher)`, and most of
  * them call through `LlmHttpRetry`, a plain blocking retry helper that sleeps between attempts. A
  * suspending seam would force that helper, and every call site through it, to become suspending as
  * well, for no gain on the platform that has an implementation today.
