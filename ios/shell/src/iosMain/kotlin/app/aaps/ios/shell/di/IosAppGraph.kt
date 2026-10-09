@@ -30,8 +30,12 @@ import app.aaps.core.interfaces.protection.ProtectionCheck
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.sync.NsClient
+import app.aaps.core.interfaces.profile.ProfileFunction
+import app.aaps.core.interfaces.stats.TddCalculator
+import app.aaps.core.interfaces.stats.TirCalculator
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
+import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.VisibilityContext
 import app.aaps.core.interfaces.ui.UiRestart
@@ -83,6 +87,7 @@ interface IosAppGraph : MetroViewModelMultibindings {
     val dateUtil: DateUtil
     val decimalFormatter: DecimalFormatter
     val profileUtil: ProfileUtil
+    val profileFunction: ProfileFunction
     val passwordHasher: PasswordHasher
     val passwordCheck: PasswordCheck
 
@@ -121,6 +126,21 @@ interface IosAppGraph : MetroViewModelMultibindings {
 
     /** The loop's own calculator and cache, exposed so a test can prove a window does not share them. */
     val iobCobCalculator: IobCobCalculator
+
+    /**
+     * Insulin statistics calculators, resolved from the commonMain implementations
+     * (`TddCalculatorImpl`, `TirCalculatorImpl`). Exposed for the AIMI engine graph,
+     * which needs them to build its input snapshot.
+     */
+    val tddCalculator: TddCalculator
+    val tirCalculator: TirCalculator
+
+    /**
+     * Analytics/crash-reporting privacy gate. The iOS implementation logs locally
+     * only (no Firebase upload); see `FabricPrivacyImpl` for the rationale.
+     * Exposed for the AIMI engine graph.
+     */
+    val fabricPrivacy: FabricPrivacy
 
     /**
      * The plugin registry itself, not just the [ActivePlugin] view of it.

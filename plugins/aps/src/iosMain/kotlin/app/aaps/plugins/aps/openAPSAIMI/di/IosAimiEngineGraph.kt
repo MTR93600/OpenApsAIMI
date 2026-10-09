@@ -34,9 +34,9 @@ import dev.zacsweers.metro.SingleIn
  * implementations are discovered without manual wiring.
  *
  * The 14 platform interfaces have no iOS implementation inside `:plugins:aps`,
- * so they arrive as factory parameters. The iOS shell (`IosAppGraph`) already
- * exposes most of them; the rest must be provided by the shell when it creates
- * this graph (see the KDoc on [Factory.create]).
+ * so they arrive as factory parameters. The iOS shell (`IosAppGraph`) exposes
+ * all of them; the shell wires the two graphs by passing its own bindings
+ * into [Factory.create] (see the KDoc there for the mapping).
  *
  * This is a plain `@DependencyGraph`, not a `@GraphExtension` of `IosAppGraph`:
  * `:plugins:aps` cannot depend on `:ios:shell` (the shell depends on the
@@ -86,19 +86,15 @@ interface IosAimiEngineGraph {
 
         /**
          * @param profileUtil From `IosAppGraph.profileUtil`.
-         * @param fabricPrivacy From `IosProbeGraph.fabricPrivacy`; `IosAppGraph`
-         *   does not expose it yet, the shell must thread it through.
+         * @param fabricPrivacy From `IosAppGraph.fabricPrivacy`.
          * @param preferences From `IosAppGraph.preferences`.
          * @param uiInteraction From `IosAppGraph.uiInteraction`.
          * @param notificationManager From `IosAppGraph.notificationManager`.
          * @param persistenceLayer From `IosAppGraph.persistenceLayer`.
-         * @param tddCalculator Not exposed by the iOS shell yet; the shell
-         *   must provide an implementation (commonMain has `TddCalculatorImpl`
-         *   behind `@ContributesBinding` on Android — check availability).
-         * @param tirCalculator Same as [tddCalculator].
+         * @param tddCalculator From `IosAppGraph.tddCalculator`.
+         * @param tirCalculator From `IosAppGraph.tirCalculator`.
          * @param dateUtil From `IosAppGraph.dateUtil`.
-         * @param profileFunction Not exposed by the iOS shell yet; same note
-         *   as [tddCalculator].
+         * @param profileFunction From `IosAppGraph.profileFunction`.
          * @param iobCobCalculator From `IosAppGraph.iobCobCalculator`.
          * @param activePlugin From `IosAppGraph.activePlugin`.
          * @param textResolver From `IosAppGraph.textResolver`.
