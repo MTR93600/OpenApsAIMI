@@ -134,6 +134,8 @@ data class AimiMealSnapshot(
     val slopeFromMinDeviation: TimedValue<Double> = TimedValue.Missing("not captured"),
     /** Timestamp of the last carbs, epoch ms. */
     val lastCarbTimeMs: Long? = null,
+    /** Timestamp of the last bolus, epoch ms. Null means not captured. */
+    val lastBolusTimeMs: Long? = null,
 )
 
 /**
