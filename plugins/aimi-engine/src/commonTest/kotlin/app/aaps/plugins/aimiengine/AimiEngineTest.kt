@@ -18,8 +18,8 @@ import kotlin.test.assertTrue
 class AimiEngineTest {
 
     @AfterTest
-    fun switchOff() {
-        AimiCommonEngineSwitch.enabled = false
+    fun switchBackToDefault() {
+        AimiCommonEngineSwitch.enabled = true
     }
 
     @Test
