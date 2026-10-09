@@ -58,6 +58,21 @@ enum class AimiStringKey(
         exportable = false,
     ),
 
+    /** Claude model used by every AIMI LLM path when that path uses Claude (Advisor provider, or Physio LLM provider for Physio). See `ClaudeModelResolver`. */
+    AimiAdvisorClaudeModel(
+        key = "aimi_advisor_claude_model",
+        defaultValue = "claude-sonnet-5",
+        title = ApsStrings.aimi_prefs_claude_model_title,
+        summary = ApsStrings.aimi_prefs_claude_model_summary,
+        preferenceType = PreferenceType.LIST,
+        entries = mapOf(
+            "claude-sonnet-5" to ApsStrings.aimi_prefs_claude_model_sonnet5,
+            "claude-fable-5-1" to ApsStrings.aimi_prefs_claude_model_fable51,
+            "claude-opus-5-5" to ApsStrings.aimi_prefs_claude_model_opus55,
+            "claude-haiku-4-5" to ApsStrings.aimi_prefs_claude_model_haiku45,
+        ),
+    ),
+
     /**
      * Steps and heart-rate source.
      * Same stored key as dump `UnifiedActivityProviderMTR.PREF_KEY_SOURCE_MODE`.

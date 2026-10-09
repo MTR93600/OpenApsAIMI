@@ -657,6 +657,17 @@ enum class BooleanKey(
         dependency = OApsAIMIPkpdHyperReversion,
         title = KeysStrings.pref_title_oaps_aimi_pkpd_stack_aware_guard_b,
     ),
+    /** 🩸 pkpd DIA/peak learning gate read from the glucose curve (opt-in). The causal learning score
+     *  rewards a confident meal guess, so on UAM days 65–77 % of the ticks that trained DIA/peak were
+     *  inside a meal, where unannounced carbs make insulin look slower. When ON, learning needs no rise
+     *  for 60 min, no rise now and no clear meal belief, and the causal score minimum drops to 0.30.
+     *  Learning gets rarer, never faster. Off: legacy score gate; the curve verdict is still exported
+     *  as a shadow (`dia_curve_gate_would_block`). See `PkpdLearningWindowGate`. */
+    OApsAIMIPkpdCurveLearningGate(
+        key = "key_aimi_pkpd_curve_learning_gate",
+        defaultValue = false,
+        title = TextRef.Literal("Learn insulin timing only on quiet glucose"),
+    ),
     /** 🛡️ Basal-channel safety guards (lot 3, opt-in). Two authority leaks let the automatic basal channel
      *  dose while the SMB channel was deliberately held back:
      *  1. the basal-first mutex only asks "was an SMB requested?", so an SMB **zeroed by a safety rule**
@@ -696,6 +707,54 @@ enum class BooleanKey(
         "key_aimi_basal_terminal_invariants", true,
         title = KeysStrings.pref_title_aimi_basal_terminal_invariants,
         summary = KeysStrings.pref_summary_aimi_basal_terminal_invariants,
+    ),
+    /**
+     * Let the Traj-Bridge basal reduction survive the basal schedule (opt-in, off by default).
+     *
+     * The trajectory safety bridge asks for a lower basal rate, but the basal schedule runs after it
+     * and writes its own rate over the request. Measured on 2026-10-02: the bridge asked 0.13 U/h and
+     * the pump got 4.84 U/h; 30 of 34 bridge ticks ended far above the request.
+     *
+     * When ON, the request is applied again at the last point where the rate can still be bound,
+     * just before the terminal invariants, and only as `min(scheduled, request)`. It can only lower
+     * the rate, never raise it, and it does nothing on a tick where the bridge did not fire.
+     * When OFF, the behaviour is exactly as before; the request is still written to
+     * `AIMI_Decisions.jsonl` (`adjustments.traj_bridge`) so the effect can be counted first.
+     */
+    OApsAIMITrajBridgeBasalSurvives(
+        "key_aimi_traj_bridge_basal_survives", false,
+        title = KeysStrings.pref_title_aimi_traj_bridge_basal_survives,
+        summary = KeysStrings.pref_summary_aimi_traj_bridge_basal_survives,
+    ),
+    /**
+     * Stop the straight-line tube advisor from vetoing on a railed prediction (opt-in, off by default).
+     *
+     * The advisor refuses every dose rung when the predicted minimum sits under the hypoglycaemia
+     * floor. That minimum comes from curves clamped at 39 mg/dL, so a curve that hit its own floor
+     * reads as "a low is coming". Measured on 2026-10-02 between 21:09 and 21:19: glucose 142, 140 and
+     * 144 mg/dL, flat, predicted minimum 40.97, 40.22 and 39.00, and the bolus channel was held at
+     * 0.05 U for fifteen minutes.
+     *
+     * **This is the one gesture here that can RAISE a dose.** When ON, the bolus cap is released only
+     * while glucose is high and flat, never during sport, never after a low, and never on a fall — the
+     * same conditions the plateau floor-artefact lift already uses, including its 160 mg/dL band. The
+     * basal trim the advisor asked for is kept. When OFF, nothing changes, and both the strict case and
+     * the wider case below that band are written to `AIMI_Decisions.jsonl` so the frequency can be
+     * measured before anyone arms this.
+     */
+    OApsAIMITubeVetoIgnoreFloorArtefact(
+        "key_aimi_tube_veto_ignore_floor_artefact", false,
+        title = KeysStrings.pref_title_aimi_tube_veto_ignore_floor_artefact,
+        summary = KeysStrings.pref_summary_aimi_tube_veto_ignore_floor_artefact,
+    ),
+    /** 📐 Tube: replace the hyper-reversion clamp (min-pred exactly 80 at BG ≥ 160) by `BG − IOB × ISF`.
+     *  The clamp ignores insulin on board: too strict on a low-IOB meal rise, too permissive with a big
+     *  stack (VETO ↔ GRADED flips on BG 159.9 ↔ 160.4 at 9–11 U). ON by default; the bound and what it
+     *  changed are exported in `tube_advisor.hyper_clamp_*` for review. See `HyperClampTubeBound`. */
+    OApsAIMITubeHyperClampPhysicalBound(
+        "key_aimi_tube_hyper_clamp_physical_bound", true,
+        title = KeysStrings.pref_title_aimi_tube_hyper_clamp_physical_bound,
+        summary = KeysStrings.pref_summary_aimi_tube_hyper_clamp_physical_bound,
     ),
     // 🩸 pkpd predictions: shape the insulin-activity curves on the LEARNED DIA/peak, not the static profile
     OApsAIMIPkpdPredictionKinetics(

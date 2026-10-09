@@ -131,5 +131,11 @@
     <string name="pref_summary_hormonitor_viewer">Browse the exported study data day by day: time-in-range, decisions, and how the tree, Harmonia, physio and hormonal context were deployed.</string>
     <string name="pref_title_pkpd_setup">PK/PD setup</string>
     <string name="pref_summary_pkpd_setup">Guided presets, comfort tuning, and expert parameters in one screen</string>
+    <string name="aimi_prefs_claude_model_title">Claude model</string>
+    <string name="aimi_prefs_claude_model_summary">Used by AI Coach, AI Auditor, TPO confirmation, Context, Meal vision and Physio when their provider is Claude (Physio uses its own provider setting).</string>
+    <string name="aimi_prefs_claude_model_sonnet5">Claude Sonnet 5 (recommended)</string>
+    <string name="aimi_prefs_claude_model_fable51">Claude Fable 5.1 (strongest, most expensive)</string>
+    <string name="aimi_prefs_claude_model_opus55">Claude Opus 5.5</string>
+    <string name="aimi_prefs_claude_model_haiku45">Claude Haiku 4.5 (fastest, cheapest)</string>
 
 </resources>
