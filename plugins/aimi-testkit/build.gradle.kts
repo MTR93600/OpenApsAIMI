@@ -1,5 +1,6 @@
 plugins {
     kotlin("multiplatform")
+    kotlin("plugin.serialization")
 }
 
 kotlin {
@@ -16,6 +17,7 @@ kotlin {
         commonMain {
             dependencies {
                 api(project(":plugins:aimi-contracts"))
+                api(project(":plugins:aimi-engine"))
             }
         }
         getByName("commonTest") {
