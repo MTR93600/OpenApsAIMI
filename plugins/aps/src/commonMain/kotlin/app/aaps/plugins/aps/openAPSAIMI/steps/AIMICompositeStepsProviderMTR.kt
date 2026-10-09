@@ -3,8 +3,9 @@ package app.aaps.plugins.aps.openAPSAIMI.steps
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import kotlinx.datetime.Instant
-import me.tatarka.inject.annotations.Inject
-import me.tatarka.inject.annotations.SingleIn
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
+import dev.zacsweers.metro.AppScope
 
 /**
  * 🔗 AIMI Composite Steps Provider - MTR Chain of Responsibility
@@ -25,7 +26,7 @@ import me.tatarka.inject.annotations.SingleIn
  * 
  * @author MTR & Lyra AI - AIMI Health Connect Integration
  */
-@SingleIn
+@SingleIn(AppScope::class)
 class AIMICompositeStepsProviderMTR @Inject constructor(
     private val healthConnectProvider: AIMIHealthConnectStepsProviderMTR,
     private val dbProvider: AIMIDatabaseStepsProviderMTR,
