@@ -1,13 +1,15 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
+import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+
 import androidx.collection.LongSparseArray
 import app.aaps.core.data.model.TDD
 import app.aaps.core.interfaces.stats.TIR
 import app.aaps.core.interfaces.stats.TddCalculator
 import app.aaps.core.interfaces.stats.TirCalculator
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicReference
-import kotlinx.coroutines.Dispatchers
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
@@ -31,6 +33,7 @@ import kotlinx.coroutines.launch
  * [TddCalculator.calculate]`(2, false)`; HealthConnect steps/HR; other [TirCalculator] ranges
  * (daily/hour/3d).
  */
+@OptIn(ExperimentalAtomicApi::class)
 internal class DetermineBasalInvocationCaches {
     private companion object {
         private const val STALE_AGE_MS = 120_000L
@@ -56,7 +59,7 @@ internal class DetermineBasalInvocationCaches {
     private val tdd24InFlight = AtomicBoolean(false)
     private val tdd1DayInFlight = AtomicBoolean(false)
     private val tir1DayInFlight = AtomicBoolean(false)
-    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val ioScope = CoroutineScope(SupervisorJob() + aapsIoDispatcher)
 
     fun beginInvocation() {
         synchronized(lock) {
@@ -85,10 +88,10 @@ internal class DetermineBasalInvocationCaches {
                     ?: AsyncDataState.Missing("tdd24h_not_ready")
             }
             refreshTdd24hAsync(tddCalculator)
-            val total = tdd24Ref.get()
+            val total = tdd24Ref.load()
             cachedTdd24hTotalAmount = total
             cachedTdd24hSeq = invocationSeq
-            val ts = tdd24TsRef.get()
+            val ts = tdd24TsRef.load()
             return when {
                 total == null -> AsyncDataState.Missing("tdd24h_missing")
                 ts == null -> AsyncDataState.Stale(total, STALE_AGE_MS)
@@ -111,10 +114,10 @@ internal class DetermineBasalInvocationCaches {
                     ?: AsyncDataState.Missing("tdd_1day_sparse_not_ready")
             }
             refreshTdd1DayAsync(tddCalculator)
-            val r = tdd1DayRef.get()
+            val r = tdd1DayRef.load()
             cachedTdd1DaySparse = r
             cachedTdd1DaySparseSeq = invocationSeq
-            val ts = tdd1DayTsRef.get()
+            val ts = tdd1DayTsRef.load()
             return when {
                 r == null -> AsyncDataState.Missing("tdd_1day_sparse_missing")
                 ts == null -> AsyncDataState.Stale(r, STALE_AGE_MS)
@@ -137,13 +140,13 @@ internal class DetermineBasalInvocationCaches {
             }
         }
         refreshTir1DayAsync(tirCalculator)
-        val r = tir1DayRef.get() ?: LongSparseArray()
+        val r = tir1DayRef.load() ?: LongSparseArray()
         synchronized(lock) {
             cachedTir65180 = r
             cachedTir65180Seq = invocationSeq
         }
         if (r.size() == 0) return AsyncDataState.Missing("tir_1day_65180_missing")
-        val ts = tir1DayTsRef.get()
+        val ts = tir1DayTsRef.load()
         if (ts == null) return AsyncDataState.Stale(r, STALE_AGE_MS)
         val age = (aimiWallClockMs() - ts).coerceAtLeast(0L)
         return if (age <= STALE_AGE_MS) AsyncDataState.Fresh(r, age) else AsyncDataState.Stale(r, age)
@@ -154,18 +157,18 @@ internal class DetermineBasalInvocationCaches {
             cachedTir65180 = result
             cachedTir65180Seq = invocationSeq
         }
-        tir1DayRef.set(result)
-        tir1DayTsRef.set(aimiWallClockMs())
+        tir1DayRef.store(result)
+        tir1DayTsRef.store(aimiWallClockMs())
     }
 
     private fun refreshTdd24hAsync(tddCalculator: TddCalculator) {
         if (!tdd24InFlight.compareAndSet(false, true)) return
         ioScope.launch {
             try {
-                tdd24Ref.set(tddCalculator.calculateDaily(-24, 0)?.totalAmount)
-                tdd24TsRef.set(aimiWallClockMs())
+                tdd24Ref.store(tddCalculator.calculateDaily(-24, 0)?.totalAmount)
+                tdd24TsRef.store(aimiWallClockMs())
             } finally {
-                tdd24InFlight.set(false)
+                tdd24InFlight.store(false)
             }
         }
     }
@@ -174,10 +177,10 @@ internal class DetermineBasalInvocationCaches {
         if (!tdd1DayInFlight.compareAndSet(false, true)) return
         ioScope.launch {
             try {
-                tdd1DayRef.set(tddCalculator.calculate(1, allowMissingDays = false))
-                tdd1DayTsRef.set(aimiWallClockMs())
+                tdd1DayRef.store(tddCalculator.calculate(1, allowMissingDays = false))
+                tdd1DayTsRef.store(aimiWallClockMs())
             } finally {
-                tdd1DayInFlight.set(false)
+                tdd1DayInFlight.store(false)
             }
         }
     }
@@ -186,10 +189,10 @@ internal class DetermineBasalInvocationCaches {
         if (!tir1DayInFlight.compareAndSet(false, true)) return
         ioScope.launch {
             try {
-                tir1DayRef.set(tirCalculator.calculate(1, 65.0, 180.0))
-                tir1DayTsRef.set(aimiWallClockMs())
+                tir1DayRef.store(tirCalculator.calculate(1, 65.0, 180.0))
+                tir1DayTsRef.store(aimiWallClockMs())
             } finally {
-                tir1DayInFlight.set(false)
+                tir1DayInFlight.store(false)
             }
         }
     }

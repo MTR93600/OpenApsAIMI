@@ -11,7 +11,8 @@ import app.aaps.plugins.aps.openAPSAIMI.ml.SmbRefinementFeatureSchema
 import app.aaps.plugins.aps.openAPSAIMI.ml.TrainingCircuitBreaker
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
-import kotlin.concurrent.AtomicLong
+import kotlin.concurrent.atomics.AtomicLong
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -30,6 +31,7 @@ import dev.zacsweers.metro.SingleIn
  * Coordinated basal / T3C neural training with SMB-style safety:
  * rate limit, min new rows, circuit breaker, validation gate, atomic weights.
  */
+@OptIn(ExperimentalAtomicApi::class)
 @SingleIn(AppScope::class)
 class BasalMlTrainingCoordinator @Inject constructor(
     private val storage: AimiStorage,
@@ -179,7 +181,7 @@ class BasalMlTrainingCoordinator @Inject constructor(
             log.debug(LTag.AIMI, "$TAG: circuit breaker open — skip")
             return TrainingOutcome.SKIPPED
         }
-        if (!bootstrapNeeded && now - lastTrainMs.get() < TRAIN_INTERVAL_MS) {
+        if (!bootstrapNeeded && now - lastTrainMs.load() < TRAIN_INTERVAL_MS) {
             log.debug(LTag.AIMI, "$TAG: rate limit — skip")
             return TrainingOutcome.SKIPPED
         }
@@ -198,7 +200,7 @@ class BasalMlTrainingCoordinator @Inject constructor(
         log.debug(LTag.AIMI, "$TAG: label set ${parsed.rowCount} rows kept (${parsed.stats})")
 
         val totalRows = parsed.rowCount.toLong()
-        val newRows = totalRows - rowsAtLastTrain.get()
+        val newRows = totalRows - rowsAtLastTrain.load()
         // Bootstrap must not be blocked by this gate: rowsAtLastTrain is only meaningful relative to a
         // previous attempt on the same row-counting rule. If the row-filtering rule changes (for example a
         // stricter causal-contamination check), the same CSV can suddenly parse into fewer kept rows, making
@@ -211,7 +213,7 @@ class BasalMlTrainingCoordinator @Inject constructor(
         // STALE_TRAINING_MS since the last completed attempt, force one anyway: BASAL_MIN_ROWS/T3C_MIN_ROWS
         // below still require a minimum corpus, so this cannot train on too little data, only on data that
         // grew slower than expected.
-        val trainingIsStale = now - lastTrainMs.get() > STALE_TRAINING_MS
+        val trainingIsStale = now - lastTrainMs.load() > STALE_TRAINING_MS
         if (!bootstrapNeeded && !trainingIsStale && newRows < MIN_NEW_ROWS) {
             log.debug(LTag.AIMI, "$TAG: only $newRows new rows (need $MIN_NEW_ROWS) — skip")
             return TrainingOutcome.SKIPPED
@@ -366,7 +368,7 @@ class BasalMlTrainingCoordinator @Inject constructor(
     }
 
     /** Epoch ms of the last completed training run, or 0 if none yet. Read-only, dashboard-facing. */
-    fun lastTrainedAtMs(): Long = lastTrainMs.get()
+    fun lastTrainedAtMs(): Long = lastTrainMs.load()
 
     /** True while the training circuit breaker is currently open (recent failures cooling down). */
     fun isCircuitOpenNow(): Boolean = circuitBreaker.isOpen()
@@ -398,8 +400,8 @@ class BasalMlTrainingCoordinator @Inject constructor(
         try {
             val text = storage.readText(statePath) ?: return
             val json = Json.parseToJsonElement(text).jsonObject
-            lastTrainMs.set(json.optLongCompat("lastTrainMs", 0L))
-            rowsAtLastTrain.set(json.optLongCompat("rowsAtLastTrain", 0L))
+            lastTrainMs.store(json.optLongCompat("lastTrainMs", 0L))
+            rowsAtLastTrain.store(json.optLongCompat("rowsAtLastTrain", 0L))
         } catch (e: Exception) {
             log.warn(LTag.AIMI, "$TAG: could not load training state", e)
         }
@@ -413,8 +415,8 @@ class BasalMlTrainingCoordinator @Inject constructor(
      * count kept growing, so the coordinator retrained on every tick indefinitely.
      */
     private fun markAttemptCompleted(nowMs: Long, totalRows: Long) {
-        lastTrainMs.set(nowMs)
-        rowsAtLastTrain.set(totalRows)
+        lastTrainMs.store(nowMs)
+        rowsAtLastTrain.store(totalRows)
         persistState()
     }
 
@@ -423,8 +425,8 @@ class BasalMlTrainingCoordinator @Inject constructor(
             val statePath = storage.file(STATE_FILE)
             storage.createParentDirectories(statePath)
             val json = buildJsonObject {
-                put("lastTrainMs", lastTrainMs.get())
-                put("rowsAtLastTrain", rowsAtLastTrain.get())
+                put("lastTrainMs", lastTrainMs.load())
+                put("rowsAtLastTrain", rowsAtLastTrain.load())
             }
             storage.writeText(statePath, json.toString())
         } catch (e: Exception) {

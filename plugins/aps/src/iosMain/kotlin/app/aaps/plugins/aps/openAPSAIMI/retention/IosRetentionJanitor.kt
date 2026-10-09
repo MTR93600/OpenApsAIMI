@@ -21,6 +21,7 @@ import platform.Foundation.readDataOfLength
 import platform.Foundation.seekToEndOfFile
 import platform.Foundation.seekToFileOffset
 import platform.Foundation.synchronizeFile
+import platform.Foundation.truncateFileAtOffset
 import platform.Foundation.writeData
 
 /**

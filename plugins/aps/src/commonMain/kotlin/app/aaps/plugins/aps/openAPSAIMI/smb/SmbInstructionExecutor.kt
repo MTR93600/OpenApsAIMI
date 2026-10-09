@@ -10,6 +10,9 @@ import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.plugins.aps.ApsStrings
+import app.aaps.plugins.aps.openAPSAIMI.aimiFmt0
+import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
+import app.aaps.plugins.aps.openAPSAIMI.aimiLocalHour
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdCsvLogger
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLogRow
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
@@ -17,8 +20,6 @@ import app.aaps.plugins.aps.openAPSAIMI.safety.HighBgOverride
 import app.aaps.plugins.aps.openAPSAIMI.smb.SmbDampingUsecase
 import app.aaps.plugins.aps.openAPSAIMI.smb.SmbQuantizer
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
-import java.util.Calendar
-import java.util.concurrent.TimeUnit
 import kotlin.math.max
 import kotlin.math.min
 
@@ -133,7 +134,7 @@ object SmbInstructionExecutor {
                 input.rh.gs(
                     ApsStrings.reason_ai_file,
                     if (isModelActive) "✔" else "⏳",
-                    "%.2f".format(refined.takeIf { it.isFinite() } ?: predictedSmb)
+                    aimiFmt2(refined.takeIf { it.isFinite() } ?: predictedSmb)
                 )
             )
             predictedSmb = refined
@@ -199,11 +200,7 @@ object SmbInstructionExecutor {
             // 1. If Manual Mode is Neutral (1.0), fully trust Learner
             if (kotlin.math.abs(manualFactor - 1.0) < 0.01) {
                 input.consoleLog.add(
-                    String.format(
-                        java.util.Locale.US,
-                        "🧠 React: mode=%s manual=%.2f learner=%.2f => resolved=%.2f (neutral-manual)",
-                        modeName, manualFactor, learnerFactor, learnerFactor
-                    )
+                    "🧠 React: mode=$modeName manual=${aimiFmt2(manualFactor)} learner=${aimiFmt2(learnerFactor)} => resolved=${aimiFmt2(learnerFactor)} (neutral-manual)"
                 )
                 return learnerFactor
             }
@@ -211,7 +208,7 @@ object SmbInstructionExecutor {
             // 2. Conflict Resolution: User vs Learner
             val userWantsLess = manualFactor < 1.0
             val learnerWantsMore = learnerFactor > 1.0
-            
+
             val userWantsMore = manualFactor > 1.0
             val learnerWantsLess = learnerFactor < 1.0
 
@@ -226,16 +223,12 @@ object SmbInstructionExecutor {
                 // Aligned (both Up or both Down) -> Combine fully
                 manualFactor * learnerFactor
             }
-            
+
             // Log decision for transparency
             input.consoleLog.add(
-                String.format(
-                    java.util.Locale.US,
-                    "🧠 React: mode=%s(%.2f) learn=%.2f => final=%.2f",
-                    modeName, manualFactor, learnerFactor, resolved
-                )
+                "🧠 React: mode=$modeName(${aimiFmt2(manualFactor)}) learn=${aimiFmt2(learnerFactor)} => final=${aimiFmt2(resolved)}"
             )
-            
+
             return resolved
         }
 
@@ -247,7 +240,7 @@ object SmbInstructionExecutor {
         val snackfactor = resolveFactor(snackRaw, input.globalReactivityFactor, "Snack")
         val sleepfactor = resolveFactor(sleepRaw, input.globalReactivityFactor, "Sleep")
         // No-Mode default: Pure Learner
-        val defaultFactor = input.globalReactivityFactor 
+        val defaultFactor = input.globalReactivityFactor
 
         // Capture factor BEFORE calculation to use it in Safety Override logic
         val factors = when {
@@ -272,23 +265,16 @@ object SmbInstructionExecutor {
             else -> 1.0
         }
         input.consoleLog.add(
-            String.format(
-                java.util.Locale.US,
-                "🧠 ReactTrace: mode=%s manual=%.2f learner=%.2f resolved=%.2f",
-                when {
-                    input.highCarbTime -> "HighCarb"
-                    input.mealTime -> "Meal"
-                    input.bfastTime -> "Breakfast"
-                    input.lunchTime -> "Lunch"
-                    input.dinnerTime -> "Dinner"
-                    input.snackTime -> "Snack"
-                    input.sleepTime -> "Sleep"
-                    else -> "Default"
-                },
-                manualSelected,
-                input.globalReactivityFactor,
-                factors
-            )
+            "🧠 ReactTrace: mode=${when {
+                input.highCarbTime -> "HighCarb"
+                input.mealTime -> "Meal"
+                input.bfastTime -> "Breakfast"
+                input.lunchTime -> "Lunch"
+                input.dinnerTime -> "Dinner"
+                input.snackTime -> "Snack"
+                input.sleepTime -> "Sleep"
+                else -> "Default"
+            }} manual=${aimiFmt2(manualSelected)} learner=${aimiFmt2(input.globalReactivityFactor)} resolved=${aimiFmt2(factors)}"
         )
 
         fun Float.atLeast(min: Float) = if (this < min) min else this
@@ -317,12 +303,12 @@ object SmbInstructionExecutor {
             input.dinnerTime -> base * dinnerfactor.toFloat()
             input.snackTime -> base * snackfactor.toFloat()
             input.sleepTime -> base * sleepfactor.toFloat()
-            
+
             // 🔧 FIX: Apply globalReactivityFactor in normal mode too!
             else -> base * defaultFactor.toFloat()
         }.coerceAtLeast(0f)
 
-        val currentHour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
+        val currentHour = aimiLocalHour()
         val adjustedDIAInMinutes = hooks.calculateAdjustedDia(
             input.profile.dia.toFloat(),
             currentHour,
@@ -426,7 +412,7 @@ object SmbInstructionExecutor {
             val piUsed = (1 - alpha) * piDoseForBlend
             val denom = mpcUsed + piUsed
             val mpcShare = if (denom > 1e-6) 100.0 * mpcUsed / denom else 0.0
-            input.rT.reason.append(" | MPC utile: %.0f%% (alpha=%.0f%%)".format(mpcShare, 100 * alpha))
+            input.rT.reason.append(" | MPC utile: ${aimiFmt0(mpcShare)}% (alpha=${aimiFmt0(100 * alpha)}%)")
         }
         var smbDecision = SmbMpcPiBlend.blendMpcPi(
             optimalBasalMpc = optimalBasalMpc,
@@ -446,7 +432,7 @@ object SmbInstructionExecutor {
             input.isConfirmedHighRise
         )
         input.rT.reason.appendLine(
-            input.rh.gs(ApsStrings.smb_final, "%.2f".format(smbDecision))
+            input.rh.gs(ApsStrings.smb_final, aimiFmt2(smbDecision))
         )
         val hypoGuard = input.threshold ?: hooks.computeHypoThreshold(
             input.profile.min_bg,
@@ -480,7 +466,7 @@ object SmbInstructionExecutor {
         val audit = dampingOut.audit
         val dampedRaw = smbAfterDamping
         val isT3cBrittleMode = input.preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
-        
+
         input.pkpdRuntime?.let { runtime ->
                         if (!isT3cBrittleMode &&
                                 input.bg >= 120.0 &&
@@ -491,13 +477,7 @@ object SmbInstructionExecutor {
                                 val boostFactor = 1.20
                                 val boosted = smbAfterDamping * boostFactor
                                 input.rT.reason.append(
-                                        "\nHighBG PKPD boost: tail=%.0f%%, scale=%.2f → SMB ×%.2f (%.2f→%.2f)".format(
-                                                runtime.tailFraction * 100.0,
-                                                runtime.pkpdScale,
-                                                boostFactor,
-                                                smbAfterDamping,
-                                                boosted
-                                                )
+                                        "\nHighBG PKPD boost: tail=${aimiFmt0(runtime.tailFraction * 100.0)}%, scale=${aimiFmt2(runtime.pkpdScale)} → SMB ×${aimiFmt2(boostFactor)} (${aimiFmt2(smbAfterDamping)}→${aimiFmt2(boosted)})"
                                         )
                                 smbAfterDamping = boosted
                             } else if (isT3cBrittleMode && runtime.fusedIsf <= runtime.profileIsf) {
@@ -541,53 +521,18 @@ object SmbInstructionExecutor {
         val freshnessPct = (activity?.let { (1.0 - it.postWindowFraction).coerceIn(0.0, 1.0) } ?: 0.0) * 100.0
         val activityStage = activity?.stage?.name ?: "n/a"
         input.rT.reason.append(
-            "\nPKPD: DIA=%s min, Peak=%s min, Tail=%.0f%%, Activity=%.0f%% (%s, anticip=%.0f%%, fresh=%.0f%%), ISF(fused)=%s (profile=%s, TDD=%s, scale=%.2f)".format(
-                input.pkpdRuntime?.params?.diaHrs?.let { "%.0f".format(it * 60.0) } ?: "n/a",
-                input.pkpdRuntime?.params?.peakMin?.let { "%.0f".format(it) } ?: "n/a",
-                (input.pkpdRuntime?.tailFraction ?: 0.0) * 100.0,
-                activityPct,
-                activityStage,
-                anticipationPct,
-                freshnessPct,
-                input.pkpdRuntime?.fusedIsf?.let { "%.0f".format(it) } ?: "n/a",
-                input.pkpdRuntime?.profileIsf?.let { "%.0f".format(it) } ?: "n/a",
-                input.pkpdRuntime?.tddIsf?.let { "%.0f".format(it) } ?: "n/a",
-                input.pkpdRuntime?.pkpdScale ?: Double.NaN
-            )
+            "\nPKPD: DIA=${input.pkpdRuntime?.params?.diaHrs?.let { aimiFmt0(it * 60.0) } ?: "n/a"} min, Peak=${input.pkpdRuntime?.params?.peakMin?.let { aimiFmt0(it) } ?: "n/a"} min, Tail=${aimiFmt0((input.pkpdRuntime?.tailFraction ?: 0.0) * 100.0)}%, Activity=${aimiFmt0(activityPct)}% ($activityStage, anticip=${aimiFmt0(anticipationPct)}%, fresh=${aimiFmt0(freshnessPct)}%), ISF(fused)=${input.pkpdRuntime?.fusedIsf?.let { aimiFmt0(it) } ?: "n/a"} (profile=${input.pkpdRuntime?.profileIsf?.let { aimiFmt0(it) } ?: "n/a"}, TDD=${input.pkpdRuntime?.tddIsf?.let { aimiFmt0(it) } ?: "n/a"}, scale=${aimiFmt2(input.pkpdRuntime?.pkpdScale ?: Double.NaN)})"
         )
 
         val bypassTag = if (audit?.mealBypass == true) " [BYPASS]" else ""
         val highBgTag = if (highBgOverrideFlag) " (HighBG override)" else ""
         if (audit != null) {
             input.rT.reason.append(
-                "\nSMB: proposed=%.2f → damped=%.2f [tail%s×%.2f (relief=%.0f%%, %s), ex%s×%.2f, late%s×%.2f] → quantized=%.2f%s%s".format(
-                    smbDecision,
-                    dampedRaw,
-                    if (audit.tailApplied) "✔" else "✘", audit.tailMult,
-                    audit.activityRelief * 100.0,
-                    audit.activityStage.name,
-                    if (audit.exerciseApplied) "✔" else "✘", audit.exerciseMult,
-                    if (audit.lateFatApplied) "✔" else "✘", audit.lateFatMult,
-                    quantized,
-                    highBgTag,
-                    bypassTag,
-                    smbAfterDamping,     // après override
-                    quantized,
-                    highBgTag
-                )
+                "\nSMB: proposed=${aimiFmt2(smbDecision)} → damped=${aimiFmt2(dampedRaw)} [tail${if (audit.tailApplied) "✔" else "✘"}×${aimiFmt2(audit.tailMult)} (relief=${aimiFmt0(audit.activityRelief * 100.0)}%, ${audit.activityStage.name}), ex${if (audit.exerciseApplied) "✔" else "✘"}×${aimiFmt2(audit.exerciseMult)}, late${if (audit.lateFatApplied) "✔" else "✘"}×${aimiFmt2(audit.lateFatMult)}] → quantized=${aimiFmt2(quantized)}$highBgTag$bypassTag"
             )
         } else {
             input.rT.reason.append(
-                "\nSMB: proposed=%.2f → damped=%.2f → quantized=%.2f%s%s".format(
-                    smbDecision,
-                    dampedRaw,
-                    quantized,
-                    highBgTag,
-                    bypassTag,
-                    smbAfterDamping,     // après override
-                    quantized,
-                    highBgTag
-                )
+                "\nSMB: proposed=${aimiFmt2(smbDecision)} → damped=${aimiFmt2(dampedRaw)} → quantized=${aimiFmt2(quantized)}$highBgTag$bypassTag"
             )
         }
 
@@ -596,7 +541,7 @@ object SmbInstructionExecutor {
 
         input.pkpdRuntime?.let { runtime ->
             val dateStr = input.dateUtil.dateAndTimeString(input.currentTime)
-            val epochMin = TimeUnit.MILLISECONDS.toMinutes(input.currentTime)
+            val epochMin = input.currentTime / 60000
             val tailMultLog = audit?.tailMult
             val exMultLog = audit?.exerciseMult
             val lateMultLog = audit?.lateFatMult
@@ -641,4 +586,3 @@ object SmbInstructionExecutor {
         )
     }
 }
-

@@ -603,6 +603,7 @@ import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.round
 import kotlin.math.roundToInt
 
 
@@ -1325,8 +1326,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     bolusQueryCache.clear()
                 }
                 override fun resetConsoles() {
-                    consoleError = mutableListOf()
-                    consoleLog = mutableListOf()
+                    work.consoleError = mutableListOf()
+                    work.consoleLog = mutableListOf()
                 }
                 override fun loggerReady() = ::aapsLogger.isInitialized
                 override fun recordLoopPulse(nowMs: Long) {
@@ -1336,32 +1337,32 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     work.consoleLog.add("Loop pulse failed ($typeName): $message — pulse skipped")
                 }
                 override fun resetEarlyScratch(ctx: AimiTickContext) {
-                    exerciseInsulinLockoutActive = false
-                    exerciseHyperBasalOverrideActive = false
-                    aimiContextActivityActive = false
-                    pkpdAbsorptionGuardAppliedThisTick = false
-                    criticalSafetyZeroedThisTick = false
+                    work.exerciseInsulinLockoutActive = false
+                    work.exerciseHyperBasalOverrideActive = false
+                    work.aimiContextActivityActive = false
+                    work.pkpdAbsorptionGuardAppliedThisTick = false
+                    work.criticalSafetyZeroedThisTick = false
                     cachedRiskEnvelopeEarly = null
                     cachedRiskEnvelopeDecision = null
                     lastSafetyRiskExport = null
                     lastScenarioProjection = null
                     lastPredDivergenceExport = null
-                    lastDecisionPredictionAuthority = null
+                    work.lastDecisionPredictionAuthority = null
                     lastIntelligenceSnapshot = null
-                    lastPredictionAuthorityApplyResult = null
+                    work.lastPredictionAuthorityApplyResult = null
                     lastDoseTerminalSnapshot = null
                     lastPkpdSoftFloorTelemetry = null
-                    tubeDoseBaseline = null
-                    tubeAppliedFromDoseSnapshotThisTick = false
-                    isConfirmedHighRiseThisTick = false
-                    correctionAggressionDecision = null
-                    mealAdvisorOneShotThisTick = false
-                    lastTubeAdvisorSmbCapScale = null
+                    work.tubeDoseBaseline = null
+                    work.tubeAppliedFromDoseSnapshotThisTick = false
+                    work.isConfirmedHighRiseThisTick = false
+                    work.correctionAggressionDecision = null
+                    work.mealAdvisorOneShotThisTick = false
+                    work.lastTubeAdvisorSmbCapScale = null
                     lastTubeAdvisorTrace = null
-                    lastInflammationResult = null
-                    tickInsulinActionState = null
-                    tickEffectiveDiaHours = ctx.effectiveDiaHours
-                    tickEffectivePeakMinutes = ctx.effectivePeakMinutes
+                    work.lastInflammationResult = null
+                    work.tickInsulinActionState = null
+                    work.tickEffectiveDiaHours = ctx.effectiveDiaHours
+                    work.tickEffectivePeakMinutes = ctx.effectivePeakMinutes
                     lastLoopCgmNoise = ctx.glucoseStatus.noise
                 }
                 override fun appendDebug(line: String) {
@@ -1424,7 +1425,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         } else null
         val nMult = nDecision?.multiplier ?: 1.0
         causalState.adaptiveMult = BasalAdaptiveMultiplier.combine(hMult, nMult)
-        if (Math.abs(causalState.adaptiveMult - 1.0) > 0.01) {
+        if (abs(causalState.adaptiveMult - 1.0) > 0.01) {
             work.consoleLog.add("🛡️ BASAL_UNIFIED_SCALING: H=${aimiFmt2(hMult)}x / N=${aimiFmt2(nMult)}x -> Applied=${aimiFmt2(causalState.adaptiveMult)}x")
         }
         lastAdaptiveBasalTrace = buildAdaptiveBasalTrace(hMultRaw, hMult, nDecision, causalState.adaptiveMult)
@@ -1490,15 +1491,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     auditorProfileTick = state
                 }
                 override fun forgetWCycle() {
-                    wCycleInfoForRun = null
-                    wCycleReasonLogged = false
+                    work.wCycleInfoForRun = null
+                    work.wCycleReasonLogged = false
                     causalState.lastWCycleBelief = null
                 }
                 override fun rememberProfile(profile: OapsProfileAimi) {
                     lastProfile = profile
                 }
                 override fun rememberPending(decisionCtx: AimiDecisionContext) {
-                    pendingDecisionCtxForExport = decisionCtx
+                    work.pendingDecisionCtxForExport = decisionCtx
                 }
             },
             contexts = AimiDecisionContextFactory { trigger, eventId ->
@@ -1512,70 +1513,70 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun resetDecisionShadow(nowMs: Long) {
         lastIobSurveillanceExport = null
         lastIobReleaseExport = null
-        tickIobEffectiveU = null
+        work.tickIobEffectiveU = null
         causalState.lastPostHypoOrdinal = 0
         // Reset SMB trace each tick so a basal-only T3C row can't carry stale SMB values from a prior SMB tick
         // (replay_quality export). The standard SMB pipeline overwrites these before use.
-        lastSmbProposed = 0.0
-        lastSmbCapped = 0.0
-        lastSmbFinal = 0.0
-        lastSmbBindingTraceDraft = SmbBindingTrace.Draft(timestampMs = nowMs)
+        work.lastSmbProposed = 0.0
+        work.lastSmbCapped = 0.0
+        work.lastSmbFinal = 0.0
+        work.lastSmbBindingTraceDraft = SmbBindingTrace.Draft(timestampMs = nowMs)
         // The maxSMB ladder runs later in the tick, and a tick can abort before it. Without this
         // reset the export would stamp the previous tick's branch tag and slope onto an otherwise
         // empty trace, and a reader could not tell. Null means "the ladder did not run this tick".
         lastMaxSmbLadderBranch = null
-        lastSlopeFromMinDeviation = null
+        work.lastSlopeFromMinDeviation = null
         lastShortAvgDeltaAtLadder = null
         // Effort reduction telemetry is per tick — a basal-only tick must export null, not the last
         // SMB tick's multiplier.
-        lastEffortSmbFactorRaw = null
+        work.lastEffortSmbFactorRaw = null
         // What the stress floor did belongs to this tick only. A tick that returns before the working
         // sensitivity is finalised must export nothing rather than the previous tick's numbers.
         WorkingIsf.resetLastApplied()
-        lastEffortSmbFactorApplied = null
-        lastEffortSmbBeforeU = null
-        lastEffortSmbAfterU = null
-        lastNgrBasalMultiplier = 1.0
-        lastHyperTrajectoryRelease = null
-        lastRecursiveBeliefSnapshot = null
-        lastRecursiveAuthorityGateDecision = null
-        lastRbtChaosEvaluation = null
-        lastRbtAppliedHints = null
-        lastT3cHistoricalBypassNeutralizedThisTick = false
-        lastT3cRuntimeOwnership = null
-        rbtResolvedThisTick = false
-        lastRbtLiveCommitResult = null
-        lastLoadGovernorMultiplierG = 1.0
-        lastPhysiologicalPhaseOutput = null
-        lastPhysiologicalPatternSnapshot = null
+        work.lastEffortSmbFactorApplied = null
+        work.lastEffortSmbBeforeU = null
+        work.lastEffortSmbAfterU = null
+        work.lastNgrBasalMultiplier = 1.0
+        work.lastHyperTrajectoryRelease = null
+        work.lastRecursiveBeliefSnapshot = null
+        work.lastRecursiveAuthorityGateDecision = null
+        work.lastRbtChaosEvaluation = null
+        work.lastRbtAppliedHints = null
+        work.lastT3cHistoricalBypassNeutralizedThisTick = false
+        work.lastT3cRuntimeOwnership = null
+        work.rbtResolvedThisTick = false
+        work.lastRbtLiveCommitResult = null
+        work.lastLoadGovernorMultiplierG = 1.0
+        work.lastPhysiologicalPhaseOutput = null
+        work.lastPhysiologicalPatternSnapshot = null
         AimiCascadeArbitrationArtifacts.clear()
-        lastMealAbsorptionOutput = null
+        work.lastMealAbsorptionOutput = null
         causalState.lastPhysioLatentState = null
-        lastEffortAssessment = null // per-tick computed; memory (causalState.lastEffortMemory) persists across ticks
+        work.lastEffortAssessment = null // per-tick computed; memory (causalState.lastEffortMemory) persists across ticks
         causalState.lastUamHypothesisState = null
-        lastContextSnapshot = null
-        lastPatientState = null
-        lastPatientModeDecision = null
-        lastPhysiologicalTreeSnapshot = null
-        lastHarmoniaDecision = null
-        lastMealCertainty = null
-        lastHarmonizerOutcome = null
-        lastHarmoniaProductionDecision = null
+        work.lastContextSnapshot = null
+        work.lastPatientState = null
+        work.lastPatientModeDecision = null
+        work.lastPhysiologicalTreeSnapshot = null
+        work.lastHarmoniaDecision = null
+        work.lastMealCertainty = null
+        work.lastHarmonizerOutcome = null
+        work.lastHarmoniaProductionDecision = null
         lastAuditorTickDisposition = null
         lastAuditorLoopSnapshot = null
-        currentTickDecisionEventId = null
+        work.currentTickDecisionEventId = null
         lastAuditorAuditStartedAtMs = 0L
-        lastPostHypoDeliveryAuthority = PostHypoDeliveryAuthority.INACTIVE
-        lastPostHypoSmbBeforeCapU = null
-        lastPostHypoSmbAfterCapU = null
+        work.lastPostHypoDeliveryAuthority = PostHypoDeliveryAuthority.INACTIVE
+        work.lastPostHypoSmbBeforeCapU = null
+        work.lastPostHypoSmbAfterCapU = null
         // Cross-tick hysteresis (InsulinSlope / Endogenous) must NOT reset here — that zeroed
         // holdTicks every loop and made 15–20 min holds dead on arrival. reset() belongs in
         // tests / plugin restart only.
-        pendingTrajSpiralBasal = null
+        work.pendingTrajSpiralBasal = null
         // 🔭 Lot 0 — l'export JSONL doit avoir lieu sur TOUS les chemins de sortie du tick, pas seulement
         // sur les deux qui appellent explicitement le stage. On repart d'un état non exporté à chaque tick.
-        aimiDecisionExportedThisTick = false
-        pendingDecisionCtxForExport = null
+        work.aimiDecisionExportedThisTick = false
+        work.pendingDecisionCtxForExport = null
     }
 
     private fun decisionContextForTrigger(
@@ -1583,7 +1584,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         trigger: String,
         eventId: String,
     ): AimiDecisionContext {
-        currentTickDecisionEventId = eventId
+        work.currentTickDecisionEventId = eventId
         return decideAimiDecisionContext(
             eventId = eventId,
             timestamp = ctx.currentTime,
@@ -1626,11 +1627,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             ctx.iobDataArray
         }
         // Effective-IOB "now" (learned kinetics) for the maxIOB release gate — index 0 is the current tick.
-        tickIobEffectiveU = ctx.pkpdIobDataArray?.firstOrNull()?.iob
+        work.tickIobEffectiveU = ctx.pkpdIobDataArray?.firstOrNull()?.iob
         val iobActionProfile = InsulinActionProfiler.calculate(iobArrayForProfiler, ctx.profile, snsDominance)
         val iobTotal = iobActionProfile.iobTotal
         val iobPeakMinutes = iobActionProfile.peakMinutes
-        iobActivityNow = iobActionProfile.activityNow
+        work.iobActivityNow = iobActionProfile.activityNow
         val iobActivityIn30Min = iobActionProfile.activityIn30Min
         work.consoleLog.add(
             "PAI: Peak in ${aimiFmt0(iobPeakMinutes)}m | " +
@@ -1652,7 +1653,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             now = dateUtil.now()
         )
         work.consoleLog.add("PKPD_OBS ${insulinActionState.reason}")
-        tickInsulinActionState = insulinActionState
+        work.tickInsulinActionState = insulinActionState
         return AimiRealtimePhysioIobBootstrap(
             iobTotal = iobTotal,
             iobPeakMinutes = iobPeakMinutes,
@@ -1750,17 +1751,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             override fun setEventualBg(value: Double) { eventualBG = value }
             override fun setPredictedBg(value: Float) { predictedBg = value }
             override fun setVariableSensitivity(value: Float) { variableSensitivity = value }
-            override fun maxSmb() = this@DetermineBasalaimiSMB2.maxSMB
+            override fun maxSmb() = work.maxSMB
             override fun setMaxSmb(value: Double) { maxSMB = value }
             override fun maxSmbHb() = work.maxSMBHB
             override fun setMaxSmbHb(value: Double) { maxSMBHB = value }
             override fun setInflammation(result: app.aaps.plugins.aps.openAPSAIMI.inflammatory.InflammationAdjuster.InflammationResult) {
-                lastInflammationResult = result
+                work.lastInflammationResult = result
             }
             override fun causalPosterior() = work.lastPatientState?.causalPosterior
         },
         g6 = AimiT9G6Source {
-            val name = activePlugin.activeBgSource.javaClass.simpleName
+            val name = activePlugin.activeBgSource::class.simpleName ?: ""
             name.contains("Dexcom", ignoreCase = true) && name.contains("G6", ignoreCase = true)
         },
         lead = AimiT9G6Lead { raw, isG6 -> continuousStateEstimator.applyG6LeadCompensation(raw, isG6) },
@@ -1954,13 +1955,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             override fun setPendingLegacyPrebolusExpiry(ms: Long) { pendingLegacyPrebolusExpiry = ms }
             override fun internalLastLegacyPrebolusMillis() = this@DetermineBasalaimiSMB2.internalLastLegacyPrebolusMillis
             override fun setMaxIob(value: Double) { maxIob = value }
-            override fun work.maxIob() = this@DetermineBasalaimiSMB2.maxIob
+            override fun work.maxIob() = work.maxIob
             override fun setMaxSmb(value: Double) { maxSMB = value }
             override fun maxSmb() = work.maxSMB
             override fun setMaxSmbHb(value: Double) { maxSMBHB = value }
             override fun maxSmbHb() = work.maxSMBHB
             override fun targetBg() = this@DetermineBasalaimiSMB2.targetBg.toDouble()
-            override fun work.cob() = this@DetermineBasalaimiSMB2.cob
+            override fun work.cob() = work.cob
             override fun setCob(value: Float) { cob = value }
             override fun setLastSlope(value: Double?) { lastSlopeFromMinDeviation = value }
             override fun setLastShortAvg(value: Double?) { lastShortAvgDeltaAtLadder = value }
@@ -2062,51 +2063,51 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         // behaviour and needs to be asked for.
                         removeLast200Lines(csvfilePath)
                     }
-                    this@DetermineBasalaimiSMB2.sleepTime = therapy.sleepTime
-                    this@DetermineBasalaimiSMB2.snackTime = therapy.snackTime
-                    this@DetermineBasalaimiSMB2.sportTime = therapy.sportTime
-                    this@DetermineBasalaimiSMB2.lowCarbTime = therapy.lowCarbTime
+                    work.sleepTime = therapy.sleepTime
+                    work.snackTime = therapy.snackTime
+                    work.sportTime = therapy.sportTime
+                    work.lowCarbTime = therapy.lowCarbTime
                     this@DetermineBasalaimiSMB2.highCarbTime = therapy.highCarbTime
-                    this@DetermineBasalaimiSMB2.mealTime = therapy.mealTime
+                    work.mealTime = therapy.mealTime
                     this@DetermineBasalaimiSMB2.anticipTime = therapy.anticipTime
                     this@DetermineBasalaimiSMB2.fclTime = therapy.fclTime
                     this@DetermineBasalaimiSMB2.bfastTime = therapy.bfastTime
                     this@DetermineBasalaimiSMB2.lunchTime = therapy.lunchTime
                     this@DetermineBasalaimiSMB2.dinnerTime = therapy.dinnerTime
-                    this@DetermineBasalaimiSMB2.fastingTime = therapy.fastingTime
-                    this@DetermineBasalaimiSMB2.stopTime = therapy.stopTime
-                    this@DetermineBasalaimiSMB2.mealruntime = therapy.getTimeElapsedSinceLastEvent("meal")
+                    work.fastingTime = therapy.fastingTime
+                    work.stopTime = therapy.stopTime
+                    work.mealruntime = therapy.getTimeElapsedSinceLastEvent("meal")
                     this@DetermineBasalaimiSMB2.anticipruntime = therapy.getTimeElapsedSinceLastEvent("anticip")
                     this@DetermineBasalaimiSMB2.fclruntime = therapy.getTimeElapsedSinceLastEvent("fcl")
-                    this@DetermineBasalaimiSMB2.bfastruntime = therapy.getTimeElapsedSinceLastEvent("bfast")
-                    this@DetermineBasalaimiSMB2.lunchruntime = therapy.getTimeElapsedSinceLastEvent("lunch")
-                    this@DetermineBasalaimiSMB2.dinnerruntime = therapy.getTimeElapsedSinceLastEvent("dinner")
-                    this@DetermineBasalaimiSMB2.highCarbrunTime = therapy.getTimeElapsedSinceLastEvent("highcarb")
-                    this@DetermineBasalaimiSMB2.snackrunTime = therapy.getTimeElapsedSinceLastEvent("snack")
+                    work.bfastruntime = therapy.getTimeElapsedSinceLastEvent("bfast")
+                    work.lunchruntime = therapy.getTimeElapsedSinceLastEvent("lunch")
+                    work.dinnerruntime = therapy.getTimeElapsedSinceLastEvent("dinner")
+                    work.highCarbrunTime = therapy.getTimeElapsedSinceLastEvent("highcarb")
+                    work.snackrunTime = therapy.getTimeElapsedSinceLastEvent("snack")
                     observeCircadianMealProfile(ctx.currentTime)
-                    this@DetermineBasalaimiSMB2.iscalibration = therapy.calibrationTime
+                    work.iscalibration = therapy.calibrationTime
                     val fieldDelta = this@DetermineBasalaimiSMB2.delta
                     val fieldShort = this@DetermineBasalaimiSMB2.shortAvgDelta
                     val fieldLong = this@DetermineBasalaimiSMB2.longAvgDelta
-                    this@DetermineBasalaimiSMB2.acceleratingUp = if (fieldDelta > 2 && fieldDelta - fieldLong > 2) 1 else 0
-                    this@DetermineBasalaimiSMB2.decceleratingUp = if (fieldDelta > 0 && (fieldDelta < fieldShort || fieldDelta < fieldLong)) 1 else 0
-                    this@DetermineBasalaimiSMB2.acceleratingDown = if (fieldDelta < -2 && fieldDelta - fieldLong < -2) 1 else 0
-                    this@DetermineBasalaimiSMB2.decceleratingDown = if (fieldDelta < 0 && (fieldDelta > fieldShort || fieldDelta > fieldLong)) 1 else 0
-                    this@DetermineBasalaimiSMB2.stable = if (fieldDelta > -3 && fieldDelta < 3 && fieldShort > -3 && fieldShort < 3 && fieldLong > -3 && fieldLong < 3) 1 else 0
-                    return this@DetermineBasalaimiSMB2.hourOfDay <= 7
+                    work.acceleratingUp = if (fieldDelta > 2 && fieldDelta - fieldLong > 2) 1 else 0
+                    work.decceleratingUp = if (fieldDelta > 0 && (fieldDelta < fieldShort || fieldDelta < fieldLong)) 1 else 0
+                    work.acceleratingDown = if (fieldDelta < -2 && fieldDelta - fieldLong < -2) 1 else 0
+                    work.decceleratingDown = if (fieldDelta < 0 && (fieldDelta > fieldShort || fieldDelta > fieldLong)) 1 else 0
+                    work.stable = if (fieldDelta > -3 && fieldDelta < 3 && fieldShort > -3 && fieldShort < 3 && fieldLong > -3 && fieldLong < 3) 1 else 0
+                    return work.hourOfDay <= 7
                 }
                 override fun refreshActivity() = refreshAimiContextActivityFlag()
-                override fun work.sportTime() = this@DetermineBasalaimiSMB2.sportTime
+                override fun work.sportTime() = work.sportTime
                 override fun aimiActivity() = work.aimiContextActivityActive
                 override fun setLockout(active: Boolean) {
-                    exerciseInsulinLockoutActive = active
+                    work.exerciseInsulinLockoutActive = active
                 }
                 override fun refreshHyper(profile: OapsProfileAimi) = refreshExerciseHyperBasalOverride(profile)
                 override fun lockout() = work.exerciseInsulinLockoutActive
                 override fun hyperOverride() = work.exerciseHyperBasalOverrideActive
                 override fun zeroMaxSmb() {
-                    this@DetermineBasalaimiSMB2.maxSMB = 0.0
-                    this@DetermineBasalaimiSMB2.maxSMBHB = 0.0
+                    work.maxSMB = 0.0
+                    work.maxSMBHB = 0.0
                 }
                 override fun bg() = this@DetermineBasalaimiSMB2.bg
                 override fun mealPriorityBypass() = mealDeliveryOverridesLockouts()
@@ -2189,19 +2190,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         calls = object : AimiT3cBypassCalls {
             override fun legacyBypassAllowed() = legacyT3cBypassAllowed()
             override fun markHistoricalBypassNeutralized() {
-                lastT3cHistoricalBypassNeutralizedThisTick = true
+                work.lastT3cHistoricalBypassNeutralizedThisTick = true
             }
             override fun markRuntimeOwnership(mode: String, reason: String) {
                 markT3cRuntimeOwnership(mode, reason)
             }
             override fun setDecisionSource(source: String) {
-                lastDecisionSource = source
+                work.lastDecisionSource = source
             }
             override fun bolusesSince(startMs: Long, ascending: Boolean) =
                 getBolusesFromTimeCached(startMs, ascending)
             override fun internalLastSmbMillis() = this@DetermineBasalaimiSMB2.internalLastSmbMillis
-            override fun work.iob() = this@DetermineBasalaimiSMB2.iob
-            override fun work.maxIob() = this@DetermineBasalaimiSMB2.maxIob
+            override fun work.iob() = work.iob
+            override fun work.maxIob() = work.maxIob
             override fun runAutodriveShadow(ctx: AimiTickContext, profile: OapsProfileAimi, shortAvgDeltaAdj: Float) {
                 runT3cAutodriveShadowTick(ctx, profile, shortAvgDeltaAdj)
             }
@@ -2220,9 +2221,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     bg, delta, sens, iobDataArray, mealData, profile, rT,
                 )
             }
-            override fun work.bgacc() = this@DetermineBasalaimiSMB2.bgacc
-            override fun work.iobActivityNow() = this@DetermineBasalaimiSMB2.iobActivityNow
-            override fun work.cob() = this@DetermineBasalaimiSMB2.cob
+            override fun work.bgacc() = work.bgacc
+            override fun work.iobActivityNow() = work.iobActivityNow
+            override fun work.cob() = work.cob
             override fun applyTrajectoryAnalysis(
                 currentTime: Long,
                 bg: Double,
@@ -2244,7 +2245,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     work.lastBolusAgeMinutes, work.cob, targetBg, profile, rT, uiInteraction, relevanceScore,
                 )
             }
-            override fun eventualBg() = this@DetermineBasalaimiSMB2.eventualBG
+            override fun eventualBg() = work.eventualBG
             override fun lastTrajectoryAnalysis() = trajectoryGuard.getLastAnalysis()
             override fun treeSnapshotMissing() = work.lastPhysiologicalTreeSnapshot == null
             override fun deployPhysioTree(sourceSensor: SourceSensor?) {
@@ -2328,8 +2329,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         statusLine = { display -> rh.gs(ApsStrings.autodrive_status, display, "Meal Advisor") },
         onSmbDelivered = { units ->
             internalLastSmbMillis = dateUtil.now()
-            lastSmbCapped = units
-            lastSmbFinal = units
+            work.lastSmbCapped = units
+            work.lastSmbFinal = units
         },
         logFinal = { decided -> logDecisionFinal("MEAL_ADVISOR", decided, bg, delta) },
         markFinal = { decided, temp -> markFinalLoopDecisionFromRT(decided, temp) },
@@ -2359,7 +2360,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         work.consoleLog.add("🛑 HARD_BRAKE triggered: delta=$delta, short=$shortAvgDelta")
         rT.reason.append("🛑 Hard Brake: Falling Fast & Decelerating -> Zero Basal\n")
         setTempBasal(0.0, 30, profile, rT, ctx.currentTemp, overrideSafetyLimits = true, adaptiveMultiplier = causalState.adaptiveMult)
-        lastSafetySource = "HardBrake"
+        work.lastSafetySource = "HardBrake"
         logDecisionFinal("HARD_BRAKE", rT, bg, delta)
         markFinalLoopDecisionFromRT(rT, ctx.currentTemp)
         return rT
@@ -2479,8 +2480,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             ),
             basePhysioMultipliers,
         )
-        lastPhysiologicalPhaseOutput = fused.phaseOutput
-        lastFusedPhysioMultipliers = fused.multipliers
+        work.lastPhysiologicalPhaseOutput = fused.phaseOutput
+        work.lastFusedPhysioMultipliers = fused.multipliers
         CircadianMealProfileStore.observeDawnPhase(
             storage = storage,
             eventTimeMs = dateUtil.now(),
@@ -2488,7 +2489,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             mealSignalsActive = work.mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || work.snackTime || work.cob > 1.0,
         )
         val policy = fused.phaseOutput.policy
-        lastScenarioBestCappedForPhysio = scenario != null &&
+        work.lastScenarioBestCappedForPhysio = scenario != null &&
             HormonalScenarioTerminalCap.capBestTerminalMgdl(bg, rawBestT, policy) < rawBestT - 0.5
         if (!fused.multipliers.isNeutral() || policy.phase != PhysiologicalPhase.OFF) {
             work.consoleLog.add(
@@ -2525,10 +2526,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             override fun delta() = this@DetermineBasalaimiSMB2.delta.toDouble()
             override fun shortAvgDelta() = this@DetermineBasalaimiSMB2.shortAvgDelta.toDouble()
             override fun longAvgDelta() = this@DetermineBasalaimiSMB2.longAvgDelta.toDouble()
-            override fun work.iob() = this@DetermineBasalaimiSMB2.iob.toDouble()
-            override fun work.cob() = this@DetermineBasalaimiSMB2.cob.toDouble()
-            override fun maxSmb() = this@DetermineBasalaimiSMB2.maxSMB
-            override fun work.mealTime() = this@DetermineBasalaimiSMB2.mealTime
+            override fun work.iob() = work.iob.toDouble()
+            override fun work.cob() = work.cob.toDouble()
+            override fun maxSmb() = work.maxSMB
+            override fun work.mealTime() = work.mealTime
             override fun bfastTime() = this@DetermineBasalaimiSMB2.bfastTime
             override fun lunchTime() = this@DetermineBasalaimiSMB2.lunchTime
             override fun dinnerTime() = this@DetermineBasalaimiSMB2.dinnerTime
@@ -2564,8 +2565,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
             override fun targetBg() = this@DetermineBasalaimiSMB2.targetBg.toDouble()
             override fun deltaPrev() = mealAbsorptionDeltaPrevOfTick()
-            override fun work.hourOfDay() = this@DetermineBasalaimiSMB2.hourOfDay
-            override fun work.maxIob() = this@DetermineBasalaimiSMB2.maxIob
+            override fun work.hourOfDay() = work.hourOfDay
+            override fun work.maxIob() = work.maxIob
             override fun gapPrev() = MealAbsorptionMemory.lastGapMgdl
             override fun uamConfidence() = AimiUamHandler.confidenceOrZero()
             override fun physiologicalPhase() =
@@ -2573,7 +2574,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             override fun estimatedRa() =
                 continuousStateEstimator.getLastRa().takeIf { it.isFinite() && it > 0.0 }
             override fun writeOutput(output: MealAbsorptionPhaseEngine.Output) {
-                lastMealAbsorptionOutput = output
+                work.lastMealAbsorptionOutput = output
             }
         },
     )
@@ -2674,14 +2675,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             override fun patientMode() = work.lastPatientModeDecision
             override fun bg() = this@DetermineBasalaimiSMB2.bg
             override fun delta() = this@DetermineBasalaimiSMB2.delta.toDouble()
-            override fun work.cob() = this@DetermineBasalaimiSMB2.cob.toDouble()
+            override fun work.cob() = work.cob.toDouble()
             override fun minBgLookback() = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES)
             override fun writeMaxSmb(value: Double) {
-                maxSMB = value
+                work.maxSMB = value
             }
             override fun maxSmb() = work.maxSMB
             override fun writeMaxSmbHb(value: Double) {
-                maxSMBHB = value
+                work.maxSMBHB = value
             }
         },
     )
@@ -2717,7 +2718,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         } catch (_: Exception) {
             null
         }
-        lastContextSnapshot = contextSnap
+        work.lastContextSnapshot = contextSnap
         updatePhysioLatentState(
             snapshot = enrichThermalSnapshot(wearableSnap),
             sourceSensor = glucoseStatus.sourceSensor,
@@ -2748,16 +2749,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             refreshSource = refreshSource,
             calls = patientRuntimeCalls(),
         )
-        lastContextSnapshot = contextSnapshot
+        work.lastContextSnapshot = contextSnapshot
         if (sourceSensor != null) {
             lastPatientSourceSensor = sourceSensor
         }
-        lastPatientState = result.patientState
-        lastPatientModeDecision = result.patientModeDecision
+        work.lastPatientState = result.patientState
+        work.lastPatientModeDecision = result.patientModeDecision
         causalState.lastWCycleBelief = result.wCycleBelief
-        lastPhysiologicalTreeSnapshot = result.physiologicalTree
-        lastMealCertainty = result.mealCertainty
-        lastHarmoniaDecision = result.harmoniaDecision
+        work.lastPhysiologicalTreeSnapshot = result.physiologicalTree
+        work.lastMealCertainty = result.mealCertainty
+        work.lastHarmoniaDecision = result.harmoniaDecision
         return result.patientState
     }
 
@@ -2992,7 +2993,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     causalState.lastPostHypoOrdinal = ordinal
                 }
                 override fun setLastNgrBasalMultiplier(multiplier: Double) {
-                    lastNgrBasalMultiplier = multiplier
+                    work.lastNgrBasalMultiplier = multiplier
                 }
             },
         )
@@ -3054,15 +3055,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             override fun mealAbsorption() = work.lastMealAbsorptionOutput
             override fun phaseOutput() = work.lastPhysiologicalPhaseOutput
             override fun uamHypothesis() = causalState.lastUamHypothesisState
-            override fun work.iob() = this@DetermineBasalaimiSMB2.iob.toDouble()
-            override fun work.maxIob() = this@DetermineBasalaimiSMB2.maxIob
+            override fun work.iob() = work.iob.toDouble()
+            override fun work.maxIob() = work.maxIob
             override fun eventualBg() = work.eventualBG
             override fun mealModeActive() =
-                this@DetermineBasalaimiSMB2.mealTime || bfastTime || lunchTime || dinnerTime || work.snackTime || highCarbTime
-            override fun work.hourOfDay() = this@DetermineBasalaimiSMB2.hourOfDay
+                work.mealTime || bfastTime || lunchTime || dinnerTime || work.snackTime || highCarbTime
+            override fun work.hourOfDay() = work.hourOfDay
             override fun exerciseLockout() = work.exerciseInsulinLockoutActive
-            override fun work.sportTime() = this@DetermineBasalaimiSMB2.sportTime
-            override fun work.sleepTime() = this@DetermineBasalaimiSMB2.sleepTime
+            override fun work.sportTime() = work.sportTime
+            override fun work.sleepTime() = work.sleepTime
             override fun trajectoryRelevance() =
                 work.lastFusedPhysioMultipliers?.trajectoryRelevanceScore?.toDouble()
                     ?: work.lastBasePhysioMultipliers.trajectoryRelevanceScore.toDouble()
@@ -3101,13 +3102,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         contextSnapshot = AimiRbtContextSnapshot { contextManager.getSnapshot(it) },
         writes = object : AimiRbtResolveWrites {
             override fun setStacking(evaluation: InsulinStackingStance.Evaluation) {
-                lastInsulinStackingEvaluation = evaluation
+                work.lastInsulinStackingEvaluation = evaluation
             }
             override fun setPattern(snapshot: PhysiologicalPatternSnapshot) {
-                lastPhysiologicalPatternSnapshot = snapshot
+                work.lastPhysiologicalPatternSnapshot = snapshot
             }
             override fun setContext(snapshot: ContextSnapshot?) {
-                lastContextSnapshot = snapshot
+                work.lastContextSnapshot = snapshot
             }
         },
         latent = AimiRbtResolveLatent { snapshot, sourceSensor, patternSnapshot ->
@@ -3147,7 +3148,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             override fun alreadyResolved() = work.rbtResolvedThisTick
             override fun lastCommit() = work.lastRbtLiveCommitResult
             override fun markResolved() {
-                rbtResolvedThisTick = true
+                work.rbtResolvedThisTick = true
             }
             override fun evaluateHtr(
                 v3SmbU: Double,
@@ -3177,16 +3178,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 stepsLast15m, heartRateBpm, autodriveGateOpen, mpcFeedForwardRa, cbfShieldDeltaU,
             )
             override fun storeSnapshot(snapshot: RecursiveBeliefSnapshot?) {
-                lastRecursiveBeliefSnapshot = snapshot
+                work.lastRecursiveBeliefSnapshot = snapshot
             }
             override fun storeLoadGovernor(multiplierG: Double) {
-                lastLoadGovernorMultiplierG = multiplierG
+                work.lastLoadGovernorMultiplierG = multiplierG
             }
             override fun trajectoryUncertain() =
                 trajectoryGuard.getLastAnalysis()?.classification == TrajectoryType.UNCERTAIN
             override fun patternCapFlapping() = patternCapHold.holding
             override fun storeChaos(chaos: RbtChaosEvaluator.Result?) {
-                lastRbtChaosEvaluation = chaos
+                work.lastRbtChaosEvaluation = chaos
             }
             override fun targetBg() = this@DetermineBasalaimiSMB2.targetBg
             override fun bg() = this@DetermineBasalaimiSMB2.bg
@@ -3205,10 +3206,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             override fun treeInsulinUrgency() = work.lastPhysiologicalTreeSnapshot?.insulinUrgency ?: 0.0
             override fun mealDeliveryPriority() = work.lastMealAbsorptionOutput?.mealDeliveryPriority == true
             override fun storeAuthority(decision: RecursiveBeliefAuthorityGate.Decision) {
-                lastRecursiveAuthorityGateDecision = decision
+                work.lastRecursiveAuthorityGateDecision = decision
             }
             override fun storeHints(hints: RbtResolutionBridge.AppliedHints) {
-                lastRbtAppliedHints = hints
+                work.lastRbtAppliedHints = hints
             }
             override fun appliedHints() = work.lastRbtAppliedHints
             override fun merge(
@@ -3218,7 +3219,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 rT: RT,
             ) = mergeRbtHyperTrajectoryRelease(htr, rbtSnapshot, authorityGate, rT)
             override fun storeCommit(result: RbtLiveCommitResult) {
-                lastRbtLiveCommitResult = result
+                work.lastRbtLiveCommitResult = result
             }
         },
     )
@@ -3257,11 +3258,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 ?.takeIf { it.isNotEmpty() }
             override fun bindingDraft() = work.lastSmbBindingTraceDraft
             override fun setBindingDraft(value: app.aaps.plugins.aps.openAPSAIMI.quality.SmbBindingTrace.Draft) {
-                lastSmbBindingTraceDraft = value
+                work.lastSmbBindingTraceDraft = value
             }
             override fun ignoreMinPredictedCurve() = work.lastRbtAppliedHints?.ignoreMinPredictedCurve == true
             override fun storeEffective(effective: HyperTrajectoryReleaseResult) {
-                lastHyperTrajectoryRelease = effective
+                work.lastHyperTrajectoryRelease = effective
             }
         },
     )
@@ -3389,7 +3390,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         delta: Float,
     ) {
         val pending = work.pendingTrajSpiralBasal ?: return
-        pendingTrajSpiralBasal = null
+        work.pendingTrajSpiralBasal = null
         if (work.lastHyperTrajectoryRelease?.suppressTrajBasalShift == true) {
             work.consoleLog.add("🌀 HTR/RBT: deferred Traj-Bridge basal skipped — ${pending.reason}")
             return
@@ -3398,7 +3399,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         rT.rate = pending.proactiveBasalUph * tbrFrac
         rT.duration = pending.durationMin
         rT.reason.append(" | 🌀 Traj-Bridge: ${pending.reason}")
-        lastSafetySource = pending.safetyTierLabel
+        work.lastSafetySource = pending.safetyTierLabel
         logDecisionFinal("TRAJ_SAFETY", rT, bg, delta)
     }
 
@@ -3557,14 +3558,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             preferences = preferences,
             calls = object : AimiRaObservationCalls {
                 override fun variableSensitivity() = this@DetermineBasalaimiSMB2.variableSensitivity
-                override fun work.mealTime() = this@DetermineBasalaimiSMB2.mealTime
+                override fun work.mealTime() = work.mealTime
                 override fun bfastTime() = this@DetermineBasalaimiSMB2.bfastTime
                 override fun lunchTime() = this@DetermineBasalaimiSMB2.lunchTime
                 override fun dinnerTime() = this@DetermineBasalaimiSMB2.dinnerTime
                 override fun highCarbTime() = this@DetermineBasalaimiSMB2.highCarbTime
-                override fun work.snackTime() = this@DetermineBasalaimiSMB2.snackTime
+                override fun work.snackTime() = work.snackTime
                 override fun stressMask() = causalState.lastPhysioLatentState?.toAttentionMask() ?: DoubleArray(0)
-                override fun work.hourOfDay() = this@DetermineBasalaimiSMB2.hourOfDay
+                override fun work.hourOfDay() = work.hourOfDay
                 override fun stepsLast15m() = physioAdapter.getLatestSnapshot().stepsLast15m
                 override fun uamConfidence() = AimiUamHandler.confidenceOrZero()
                 override fun postHypoRecoveryActive() = this@DetermineBasalaimiSMB2.postHypoRecoveryActive()
@@ -3664,7 +3665,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     /** Closes the terminal for this tick. Called once, at the end of `finalizeAndCapSMB`. */
     private fun sealSmbTerminal() {
-        smbTerminalSealed = true
+        work.smbTerminalSealed = true
     }
 
     private fun markEstimatorDiagnosticsForExport(decisionCtx: AimiDecisionContext) {
@@ -3851,8 +3852,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             state = state,
             writes = object : AimiAutodriveTickWrites {
                 override fun setRaNetDeltas(combinedDelta: Float, shortAvgDeltaAdj: Float) {
-                    raNetCombinedDelta = combinedDelta
-                    raNetShortAvgDeltaAdj = shortAvgDeltaAdj
+                    work.raNetCombinedDelta = combinedDelta
+                    work.raNetShortAvgDeltaAdj = shortAvgDeltaAdj
                 }
                 override fun noteAutodriveGate(engaged: Boolean, kindName: String, reason: String) {
                     work.pendingDecisionCtxForExport?.baseline_state?.let { baseline ->
@@ -3865,16 +3866,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     causalState.lastAutodriveState = AutodriveState.ENGAGED
                 }
                 override fun setLastHtrRaFloorMgdlPerMin(floor: Double?) {
-                    lastHtrRaFloorMgdlPerMin = floor
+                    work.lastHtrRaFloorMgdlPerMin = floor
                 }
                 override fun setSmbBindingDraft(draft: SmbBindingTrace.Draft) {
-                    lastSmbBindingTraceDraft = draft
+                    work.lastSmbBindingTraceDraft = draft
                 }
                 override fun setPostHypoSmbBeforeCapU(units: Double) {
-                    lastPostHypoSmbBeforeCapU = units
+                    work.lastPostHypoSmbBeforeCapU = units
                 }
                 override fun setPostHypoSmbAfterCapU(units: Double) {
-                    lastPostHypoSmbAfterCapU = units
+                    work.lastPostHypoSmbAfterCapU = units
                 }
             },
             uam = AimiUamConfidence { AimiUamHandler.confidenceOrZero() },
@@ -4002,9 +4003,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             ) = isDriftTerminatorCondition(
                 bg, targetBg, delta, avgDelta, combinedDelta, minDeviation, lastBolusVolume, reason,
             )
-            override fun maxSmb() = this@DetermineBasalaimiSMB2.maxSMB
+            override fun maxSmb() = work.maxSMB
             override fun writeMaxSmb(value: Double) {
-                maxSMB = value
+                work.maxSMB = value
             }
             override fun finalize(
                 rT: RT,
@@ -4071,15 +4072,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             minAgo, systemTime, bgTime, flatBGsDetected, honeymoon, circadianMinute, circadianSecond,
             rh, work.consoleLog,
             calls = object : AimiBasalScheduleCalls {
-                override fun maxSmb() = this@DetermineBasalaimiSMB2.maxSMB
-                override fun work.hourOfDay() = this@DetermineBasalaimiSMB2.hourOfDay
+                override fun maxSmb() = work.maxSMB
+                override fun work.hourOfDay() = work.hourOfDay
                 override fun pumpSteps(): Pair<Double, Double> {
                     val desc = activePlugin.activePump.pumpDescription
                     return desc.basalStep to desc.bolusStep
                 }
                 override fun validateBasal(rate: Double, caps: PumpCaps) =
                     pumpCapabilityValidator.validateBasal(rate, caps)
-                override fun work.maxIob() = this@DetermineBasalaimiSMB2.maxIob
+                override fun work.maxIob() = work.maxIob
                 override fun recentSteps5() = recentSteps5Minutes
                 override fun recentSteps10() = recentSteps10Minutes
                 override fun recentSteps30() = recentSteps30Minutes
@@ -4121,7 +4122,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val vitals = decideHeartRateIsf(
             glucoseStatus, profile, iobData, bg, preferences, work.consoleLog, work.consoleError,
             calls = object : AimiHeartRateIsfCalls {
-                override fun work.iob() = this@DetermineBasalaimiSMB2.iob
+                override fun work.iob() = work.iob
                 override fun roundDisplay(value: Double) = round(value)
                 override fun stepsCached(now: Long) = stepsCountsCached(now)
                 override fun logSteps(samples: List<SC>) {
@@ -4232,9 +4233,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             preferences = preferences,
             consoleLog = work.consoleLog,
             state = object : AimiBasalPaiState {
-                override fun basalAimi() = this@DetermineBasalaimiSMB2.basalaimi
+                override fun basalAimi() = work.basalaimi
                 override fun setBasalAimi(value: Float) { basalaimi = value }
-                override fun work.ci() = this@DetermineBasalaimiSMB2.ci
+                override fun work.ci() = work.ci
                 override fun setCi(value: Float) { ci = value }
                 override fun aimiLimit() = work.aimilimit
                 override fun setAimiLimit(value: Float) { aimilimit = value }
@@ -4524,13 +4525,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 override fun latentState() = causalState.lastPhysioLatentState
                 override fun uamConfidence() = AimiUamHandler.confidenceOrZero()
                 override fun setAdvancedCurves(curves: AdvancedPredictionCurves) {
-                    lastAdvancedPredictionCurves = curves
+                    work.lastAdvancedPredictionCurves = curves
                 }
                 override fun recordSoftFloor(curves: AdvancedPredictionCurves) = recordPkpdSoftFloor(curves)
                 override fun setEventualBg(value: Double) {
-                    this@DetermineBasalaimiSMB2.eventualBG = value
+                    work.eventualBG = value
                 }
-                override fun eventualBg() = this@DetermineBasalaimiSMB2.eventualBG
+                override fun eventualBg() = work.eventualBG
                 override fun setPredictedBg(value: Float) {
                     this@DetermineBasalaimiSMB2.predictedBg = value
                 }
@@ -4563,7 +4564,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     refineRbtMergeAfterDoseSnapshot(rT)
                 }
                 override fun decisionPrediction() = work.lastDecisionPredictionAuthority
-                override fun work.cob() = this@DetermineBasalaimiSMB2.cob
+                override fun work.cob() = work.cob
                 override fun projectionInput(
                     targetBgValue: Double,
                     cobValue: Double,
@@ -4667,7 +4668,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 )
             }
             override fun setPredictedSmb(value: Float) {
-                this@DetermineBasalaimiSMB2.predictedSMB = value
+                work.predictedSMB = value
             }
             override fun maxSmb() = preferences.get(DoubleKey.OApsAIMIMaxSMB)
         },
@@ -4774,17 +4775,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog = work.consoleLog,
             calls = object : AimiSmbOneShotCalls {
                 override fun setMealAdvisorOneShot(value: Boolean) {
-                    mealAdvisorOneShotThisTick = value
+                    work.mealAdvisorOneShotThisTick = value
                 }
-                override fun maxSmb() = this@DetermineBasalaimiSMB2.maxSMB
+                override fun maxSmb() = work.maxSMB
                 override fun setMaxSmb(value: Double) {
-                    this@DetermineBasalaimiSMB2.maxSMB = value
+                    work.maxSMB = value
                 }
-                override fun maxSmbHb() = this@DetermineBasalaimiSMB2.maxSMBHB
+                override fun maxSmbHb() = work.maxSMBHB
                 override fun setMaxSmbHb(value: Double) {
-                    this@DetermineBasalaimiSMB2.maxSMBHB = value
+                    work.maxSMBHB = value
                 }
-                override fun predictedSmb() = this@DetermineBasalaimiSMB2.predictedSMB
+                override fun predictedSmb() = work.predictedSMB
                 override fun logSmbDecision(
                     bg: Double,
                     delta: Float,
@@ -4896,13 +4897,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         smbExecution: SmbInstructionExecutor.Result,
         assignLocalBasalFromExecution: (Double) -> Unit,
     ): Float {
-        predictedSMB = smbExecution.predictedSmb
+        work.predictedSMB = smbExecution.predictedSmb
         assignLocalBasalFromExecution(smbExecution.basal)
         causalState.highBgOverrideUsed = smbExecution.causalState.highBgOverrideUsed
         smbExecution.newSmbInterval?.let { intervalsmb = it }
         val smbToGive = smbExecution.finalSmb
         if (work.lastSmbBindingTraceDraft.originOwner == "NONE") {
-            lastSmbBindingTraceDraft = work.lastSmbBindingTraceDraft.copy(
+            work.lastSmbBindingTraceDraft = work.lastSmbBindingTraceDraft.copy(
                 originOwner = "GlobalAIMI",
                 modelOutputU = work.predictedSMB.toDouble(),
                 maxSmbU = work.maxSMB,
@@ -4977,11 +4978,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         preferences = preferences,
         consoleLog = work.consoleLog,
         state = object : AimiPkpdGuardState {
-            override fun maxSmb() = this@DetermineBasalaimiSMB2.maxSMB
+            override fun maxSmb() = work.maxSMB
             override fun maxSmbHb() = work.maxSMBHB
-            override fun work.maxIob() = this@DetermineBasalaimiSMB2.maxIob
-            override fun memberIob() = this@DetermineBasalaimiSMB2.iob.toDouble()
-            override fun work.endoSmbMult() = this@DetermineBasalaimiSMB2.endoSmbMult
+            override fun work.maxIob() = work.maxIob
+            override fun memberIob() = work.iob.toDouble()
+            override fun work.endoSmbMult() = work.endoSmbMult
             override fun bindingDraft() = work.lastSmbBindingTraceDraft
             override fun setBindingDraft(value: SmbBindingTrace.Draft) { lastSmbBindingTraceDraft = value }
             override fun criticalSafetyZeroed() = work.criticalSafetyZeroedThisTick
@@ -5091,10 +5092,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             preferences = preferences,
             consoleLog = work.consoleLog,
             fields = object : AimiMealHyperFields {
-                override fun work.snackTime() = this@DetermineBasalaimiSMB2.snackTime
+                override fun work.snackTime() = work.snackTime
                 override fun snackRunTime() = work.snackrunTime
                 override fun delta() = this@DetermineBasalaimiSMB2.delta
-                override fun work.mealTime() = this@DetermineBasalaimiSMB2.mealTime
+                override fun work.mealTime() = work.mealTime
                 override fun lunchTime() = this@DetermineBasalaimiSMB2.lunchTime
                 override fun dinnerTime() = this@DetermineBasalaimiSMB2.dinnerTime
                 override fun highCarbTime() = this@DetermineBasalaimiSMB2.highCarbTime
@@ -5113,7 +5114,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 override fun aggression() = work.correctionAggressionDecision
                 override fun basalFirstActive() = cachedBasalFirstActive
                 override fun fragileBg() = cachedIsFragileBg
-                override fun work.fastingTime() = this@DetermineBasalaimiSMB2.fastingTime
+                override fun work.fastingTime() = work.fastingTime
             },
             basalCap = AimiBasalCap { requested, profileBasal, source ->
                 capBasalRateForCorrectionAggression(requested, profileBasal, source)
@@ -5244,7 +5245,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val maxCI = round(maxCarbAbsorptionRate * csf * 5 / 60, 1)
         if (work.ci > maxCI) {
             work.consoleError.add(rh.gs(ApsStrings.console_limiting_carb_impact, work.ci, maxCI, maxCarbAbsorptionRate))
-            ci = maxCI.toFloat()
+            work.ci = maxCI.toFloat()
         }
         var remainingCATimeMin = 2.0
         remainingCATimeMin = remainingCATimeMin / sensitivityRatio
@@ -5257,13 +5258,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val remainingCIpeak = remainingCarbs * csf * 5 / 60 / (remainingCATime / 2)
         val slopeFromMaxDeviation = ctx.mealData.slopeFromMaxDeviation
         val slopeFromMinDeviation = ctx.mealData.slopeFromMinDeviation
-        val slopeFromDeviations = Math.min(slopeFromMaxDeviation, -slopeFromMinDeviation / 3)
+        val slopeFromDeviations = min(slopeFromMaxDeviation, -slopeFromMinDeviation / 3)
 
         val ciCurrentImpact = round((minDelta - bgi), 1)
         val cid: Double = if (ciCurrentImpact == 0.0) {
             0.0
         } else {
-            min(remainingCATime * 60 / 5 / 2, Math.max(0.0, ctx.mealData.mealCOB * csf / ciCurrentImpact))
+            min(remainingCATime * 60 / 5 / 2, max(0.0, ctx.mealData.mealCOB * csf / ciCurrentImpact))
         }
         work.consoleError.add(rh.gs(ApsStrings.console_carb_impact, ciCurrentImpact, round(cid * 5 / 60 * 2, 1), round(remainingCIpeak, 1)))
 
@@ -5336,7 +5337,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 override fun dinnerTime() = this@DetermineBasalaimiSMB2.dinnerTime
                 override fun bfastTime() = this@DetermineBasalaimiSMB2.bfastTime
                 override fun highCarbTime() = this@DetermineBasalaimiSMB2.highCarbTime
-                override fun work.mealTime() = this@DetermineBasalaimiSMB2.mealTime
+                override fun work.mealTime() = work.mealTime
                 override fun mealModesMaxBasal() = preferences.get(DoubleKey.meal_modes_MaxBasal)
                 override fun autodriveMaxBasal() = preferences.get(DoubleKey.autodriveMaxBasal)
                 override fun enableSmb(
@@ -5360,7 +5361,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     eventualBg,
                     combinedDelta,
                 )
-                override fun work.mealModeSmbReason() = this@DetermineBasalaimiSMB2.mealModeSmbReason
+                override fun work.mealModeSmbReason() = work.mealModeSmbReason
                 override fun reason(rT: RT, msg: String) {
                     this@DetermineBasalaimiSMB2.reason(rT, msg)
                 }
@@ -5515,7 +5516,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             texts = rh,
             consoleLog = work.consoleLog,
             state = object : AimiMealFirstNgrState {
-                override fun work.mealTime() = this@DetermineBasalaimiSMB2.mealTime
+                override fun work.mealTime() = work.mealTime
                 override fun mealRuntime() = work.mealruntime
                 override fun bfastTime() = this@DetermineBasalaimiSMB2.bfastTime
                 override fun bfastRuntime() = work.bfastruntime
@@ -5526,9 +5527,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 override fun highCarbTime() = this@DetermineBasalaimiSMB2.highCarbTime
                 override fun highCarbRuntime() = work.highCarbrunTime
                 override fun adaptiveMult() = this@DetermineBasalaimiSMB2.causalState.adaptiveMult
-                override fun work.maxSMB() = this@DetermineBasalaimiSMB2.maxSMB
+                override fun work.maxSMB() = work.maxSMB
                 override fun setMaxIob(value: Double) {
-                    this@DetermineBasalaimiSMB2.maxIob = value
+                    work.maxIob = value
                 }
             },
             effects = AimiMealFirstTempBasal { rate, durationMin, profile, rT, currenttemp, overrideSafetyLimits, forceExact, adaptiveMultiplier ->
@@ -5695,9 +5696,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             texts = rh,
             consoleLog = work.consoleLog,
             state = object : AimiInsulinReqState {
-                override fun work.activityProtectionMode() = this@DetermineBasalaimiSMB2.activityProtectionMode
-                override fun work.activityStateIntense() = this@DetermineBasalaimiSMB2.activityStateIntense
-                override fun work.maxSMB() = this@DetermineBasalaimiSMB2.maxSMB
+                override fun work.activityProtectionMode() = work.activityProtectionMode
+                override fun work.activityStateIntense() = work.activityStateIntense
+                override fun work.maxSMB() = work.maxSMB
                 override fun hyperReleaseFloorU(): Double =
                     work.lastHyperTrajectoryRelease?.takeIf { it.active }?.smbFloorU ?: 0.0
             },
@@ -5809,11 +5810,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         preferences = preferences,
         consoleLog = work.consoleLog,
         calls = object : AimiBasalDecisionEngineCalls {
-            override fun work.snackTime() = this@DetermineBasalaimiSMB2.snackTime
+            override fun work.snackTime() = work.snackTime
             override fun snackRuntime() = work.snackrunTime
-            override fun work.fastingTime() = this@DetermineBasalaimiSMB2.fastingTime
-            override fun work.sportTime() = this@DetermineBasalaimiSMB2.sportTime
-            override fun work.mealTime() = this@DetermineBasalaimiSMB2.mealTime
+            override fun work.fastingTime() = work.fastingTime
+            override fun work.sportTime() = work.sportTime
+            override fun work.mealTime() = work.mealTime
             override fun mealRuntime() = work.mealruntime
             override fun bfastTime() = this@DetermineBasalaimiSMB2.bfastTime
             override fun bfastRuntime() = work.bfastruntime
@@ -5875,7 +5876,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         mode: String,
         reason: String,
     ) {
-        lastT3cRuntimeOwnership = AimiDecisionContext.T3cRuntimeOwnershipExport(
+        work.lastT3cRuntimeOwnership = AimiDecisionContext.T3cRuntimeOwnershipExport(
             mode = mode,
             native_owner_active = isNativeT3cRuntimeOwnerConfigured(),
             legacy_fallback_allowed = legacyT3cBypassAllowed(),
@@ -5906,7 +5907,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     ) {
         val snapshot = work.lastRecursiveBeliefSnapshot ?: return
         val t3cState = snapshot.resolutions.t3cBasalFirst ?: return
-        lastRecursiveBeliefSnapshot = snapshot.copy(
+        work.lastRecursiveBeliefSnapshot = snapshot.copy(
             resolutions = snapshot.resolutions.copy(
                 t3cBasalFirst = t3cState.copy(
                     selectedForProduction = selectedForProduction,
@@ -5927,7 +5928,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     ) {
         val snapshot = work.lastRecursiveBeliefSnapshot ?: return
         val harmoniaState = snapshot.resolutions.harmoniaBasalFirst ?: return
-        lastRecursiveBeliefSnapshot = snapshot.copy(
+        work.lastRecursiveBeliefSnapshot = snapshot.copy(
             resolutions = snapshot.resolutions.copy(
                 harmoniaBasalFirst = harmoniaState.copy(
                     selectedForProduction = selectedForProduction,
@@ -6034,7 +6035,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         branch: String?,
         reason: String,
     ) {
-        lastHarmoniaProductionDecision = HarmoniaProductionDecision(
+        work.lastHarmoniaProductionDecision = HarmoniaProductionDecision(
             timestampMs = dateUtil.now(),
             mode = mode,
             selectedForProduction = selectedForProduction,
@@ -6111,7 +6112,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 override fun criticalMealConflict() = harmoniaCriticalMealConflict()
                 override fun physioRisk() = work.lastPhysiologicalTreeSnapshot?.trunk?.riskLevel
                 override fun iobForGate() = resolveIobForGate()
-                override fun work.maxIob() = this@DetermineBasalaimiSMB2.maxIob
+                override fun work.maxIob() = work.maxIob
                 override fun stackingKind() = work.lastInsulinStackingEvaluation?.kind
                 override fun mealModeActive() =
                     work.mealTime || lunchTime || dinnerTime || work.snackTime || highCarbTime || bfastTime
@@ -6119,7 +6120,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     internalLastSmbMillis.takeIf { it > 0L }?.let { (dateUtil.now() - it) / 60000.0 }
                 override fun inferredMealIntent() = inferredMealSafetyIntent()
                 override fun predictedBg() = this@DetermineBasalaimiSMB2.predictedBg
-                override fun eventualBg() = this@DetermineBasalaimiSMB2.eventualBG
+                override fun eventualBg() = work.eventualBG
                 override fun sanitizedHypoTerminals(predictedBg: Double, eventualBg: Double) =
                     sanitizedHypoGuardPredictedEventual(b.rT, predictedBg, eventualBg)
                 override fun lgsMinPredictedCurve(rT: RT) = resolveLgsMinPredictedCurve(rT)
@@ -6423,14 +6424,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             finalDuration = t3cNativePlan.durationMin
             finalOverrideSafetyLimits = false
             finalAdaptiveMultiplier = basalFirstAdaptiveMultiplier()
-            lastDecisionSource = t3cNativePlan.decisionSource
+            work.lastDecisionSource = t3cNativePlan.decisionSource
             b.rT.reason.append("; 🌳T3C_NATIVE_BASAL_FIRST")
         } else if (harmoniaProductionPlan != null) {
             finalProposedRate = harmoniaProductionPlan.rateUph
             finalDuration = harmoniaProductionPlan.durationMin
             finalOverrideSafetyLimits = false
             finalAdaptiveMultiplier = basalFirstAdaptiveMultiplier()
-            lastDecisionSource = harmoniaProductionPlan.decisionSource
+            work.lastDecisionSource = harmoniaProductionPlan.decisionSource
             b.rT.reason.append("; 🌿HARMONIA_PRODUCTION_BASAL_FIRST")
         }
 
@@ -6448,7 +6449,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             minBgLookback75m = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
             mealCertainty = work.lastMealCertainty,
         )
-        lastHarmonizerOutcome = harmonizerOutcome
+        work.lastHarmonizerOutcome = harmonizerOutcome
         when (harmonizerOutcome?.posture) {
             HarmoniaHarmonizer.Posture.BLOCK -> {
                 finalProposedRate = b.profile.current_basal.coerceAtLeast(0.0)
@@ -7270,7 +7271,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         appendAimiDecisionsJsonlLine(medicalJson)
         // 🔭 Lot 0 — marque le tick comme exporté pour que l'enveloppe [runDetermineBasalTick] ne double
         // pas la ligne sur les deux chemins qui appellent déjà ce stage.
-        aimiDecisionExportedThisTick = true
+        work.aimiDecisionExportedThisTick = true
 
         AimiLoopTelemetry.enterPhase(AimiLoopPhase.EXPORT, hormonitorStudyExporter)
         try {
@@ -7517,9 +7518,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (!stdMaxSMB.isFinite() || stdMaxSMB <= 0.0) return
         val prevMb = work.maxSMB
         val prevHb = work.maxSMBHB
-        maxSMB = minOf(work.maxSMB, stdMaxSMB)
+        work.maxSMB = minOf(work.maxSMB, stdMaxSMB)
         val sharp = sharpRiseEligibleForTrajectorySpiralSoftCap(deltaValue, shortAvgDeltaValue)
-        maxSMBHB = if (sharp) {
+        work.maxSMBHB = if (sharp) {
             val span = (prevHb - stdMaxSMB).coerceAtLeast(0.0)
             minOf(prevHb, stdMaxSMB + span * 0.5)
         } else {
@@ -7571,12 +7572,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             calls = object : AimiTrajectorySpiralCalls {
                 override fun lastAnalysis() = trajectoryGuard.getLastAnalysis()
                 override fun shortAvgDelta() = this@DetermineBasalaimiSMB2.shortAvgDelta
-                override fun work.maxIob() = this@DetermineBasalaimiSMB2.maxIob.toDouble()
+                override fun work.maxIob() = work.maxIob.toDouble()
                 override fun uamConfidence() = AimiUamHandler.confidenceOrZero()
                 override fun hyperTier(rT: RT, combinedDelta: Float, tdd24hU: Double) =
                     classifyHyperSeverityForTick(rT, combinedDelta, tdd24hU).tier
                 override fun setPending(rateUph: Double, durationMin: Int, reason: String, tierLabel: String) {
-                    pendingTrajSpiralBasal = PendingTrajSpiralBasal(
+                    work.pendingTrajSpiralBasal = PendingTrajSpiralBasal(
                         proactiveBasalUph = rateUph,
                         durationMin = durationMin,
                         reason = reason,
@@ -7693,21 +7694,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             preferences = preferences,
             consoleLog = work.consoleLog,
             calls = object : AimiSignalPrepPkpdCalls {
-                override fun work.mealTime() = this@DetermineBasalaimiSMB2.mealTime
-                override fun mealRuntime() = this@DetermineBasalaimiSMB2.mealruntime
+                override fun work.mealTime() = work.mealTime
+                override fun mealRuntime() = work.mealruntime
                 override fun lunchTime() = this@DetermineBasalaimiSMB2.lunchTime
-                override fun lunchRuntime() = this@DetermineBasalaimiSMB2.lunchruntime
+                override fun lunchRuntime() = work.lunchruntime
                 override fun bfastTime() = this@DetermineBasalaimiSMB2.bfastTime
-                override fun bfastRuntime() = this@DetermineBasalaimiSMB2.bfastruntime
+                override fun bfastRuntime() = work.bfastruntime
                 override fun dinnerTime() = this@DetermineBasalaimiSMB2.dinnerTime
-                override fun dinnerRuntime() = this@DetermineBasalaimiSMB2.dinnerruntime
-                override fun work.sportTime() = this@DetermineBasalaimiSMB2.sportTime
-                override fun work.snackTime() = this@DetermineBasalaimiSMB2.snackTime
-                override fun snackRuntime() = this@DetermineBasalaimiSMB2.snackrunTime
+                override fun dinnerRuntime() = work.dinnerruntime
+                override fun work.sportTime() = work.sportTime
+                override fun work.snackTime() = work.snackTime
+                override fun snackRuntime() = work.snackrunTime
                 override fun highCarbTime() = this@DetermineBasalaimiSMB2.highCarbTime
-                override fun highCarbRuntime() = this@DetermineBasalaimiSMB2.highCarbrunTime
-                override fun work.sleepTime() = this@DetermineBasalaimiSMB2.sleepTime
-                override fun work.lowCarbTime() = this@DetermineBasalaimiSMB2.lowCarbTime
+                override fun highCarbRuntime() = work.highCarbrunTime
+                override fun work.sleepTime() = work.sleepTime
+                override fun work.lowCarbTime() = work.lowCarbTime
                 override fun recentBgs() = getRecentBGs()
                 override fun nowMs() = now
                 override fun bolusesSince(startMs: Long, ascending: Boolean) = getBolusesFromTimeCached(startMs, ascending)
@@ -7720,9 +7721,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 override fun delta() = this@DetermineBasalaimiSMB2.delta
                 override fun shortAvgDelta() = this@DetermineBasalaimiSMB2.shortAvgDelta
                 override fun longAvgDelta() = this@DetermineBasalaimiSMB2.longAvgDelta
-                override fun work.iob() = this@DetermineBasalaimiSMB2.iob
-                override fun work.cob() = this@DetermineBasalaimiSMB2.cob
-                override fun maxSmb() = this@DetermineBasalaimiSMB2.maxSMB
+                override fun work.iob() = work.iob
+                override fun work.cob() = work.cob
+                override fun maxSmb() = work.maxSMB
                 override fun targetBg() = this@DetermineBasalaimiSMB2.targetBg
                 override fun lateFatProteinRise(
                     bg: Double,
@@ -7769,7 +7770,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 }
                 override fun internalLastSmbMillis() = this@DetermineBasalaimiSMB2.internalLastSmbMillis
                 override fun setLastBolusAgeMinutes(minutes: Double) {
-                    lastBolusAgeMinutes = minutes
+                    work.lastBolusAgeMinutes = minutes
                 }
                 override fun pkpdMealContext(mealData: MealData, predictedBgMgdl: Double, targetBgMgdl: Double) =
                     buildPkpdMealContext(mealData, predictedBgMgdl, targetBgMgdl)
@@ -7878,11 +7879,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             calls = object : AimiTrajectoryContextPrepCalls {
                 override fun bg() = this@DetermineBasalaimiSMB2.bg
                 override fun delta() = this@DetermineBasalaimiSMB2.delta
-                override fun work.bgacc() = this@DetermineBasalaimiSMB2.bgacc
-                override fun work.iobActivityNow() = this@DetermineBasalaimiSMB2.iobActivityNow
-                override fun work.iob() = this@DetermineBasalaimiSMB2.iob
-                override fun work.lastBolusAgeMinutes() = this@DetermineBasalaimiSMB2.lastBolusAgeMinutes
-                override fun work.cob() = this@DetermineBasalaimiSMB2.cob
+                override fun work.bgacc() = work.bgacc
+                override fun work.iobActivityNow() = work.iobActivityNow
+                override fun work.iob() = work.iob
+                override fun work.lastBolusAgeMinutes() = work.lastBolusAgeMinutes
+                override fun work.cob() = work.cob
                 override fun targetBg() = this@DetermineBasalaimiSMB2.targetBg
                 override fun mealWindow() = therapyMealWindowActiveForSpiralAlign()
                 override fun autosensRatio() = ctx.autosensData.ratio
@@ -8019,7 +8020,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             calls = object : AimiPredPipeCalls {
                 override fun nowMs() = dateUtil.now()
                 override fun setAdvancedCurves(curves: AdvancedPredictionCurves) {
-                    lastAdvancedPredictionCurves = curves
+                    work.lastAdvancedPredictionCurves = curves
                 }
                 override fun recordSoftFloor(curves: AdvancedPredictionCurves) {
                     recordPkpdSoftFloor(curves)
@@ -8076,13 +8077,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     this@DetermineBasalaimiSMB2.predictedBg = value
                 }
                 override fun setEventualBgSnapshot(value: Double) {
-                    lastEventualBgSnapshot = value
+                    work.lastEventualBgSnapshot = value
                 }
                 override fun setPredictionSize(value: Int) {
-                    lastPredictionSize = value
+                    work.lastPredictionSize = value
                 }
                 override fun setPredictionAvailable(value: Boolean) {
-                    lastPredictionAvailable = value
+                    work.lastPredictionAvailable = value
                 }
                 override fun pumpReachable() =
                     activePlugin.activePump.isInitialized() && activePlugin.activePump.isConnected()
@@ -8131,12 +8132,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         cobValue: Double,
                         combinedDeltaValue: Float,
                     ) = correctionAggressionProjectionInput(targetBgValue, cobValue, combinedDeltaValue)
-                    override fun work.cob() = this@DetermineBasalaimiSMB2.cob
+                    override fun work.cob() = work.cob
                     override fun mealAbsorptionPhase() =
                         work.lastMealAbsorptionOutput?.phase ?: MealAbsorptionPhase.NONE
                     override fun mealCertainty() = work.lastMealCertainty
                     override fun setSafetyTerminals(terminals: SafetyPredictionTerminals) {
-                        lastSafetyTerminalsForRbt = terminals
+                        work.lastSafetyTerminalsForRbt = terminals
                     }
                     override fun trySafetyStart(
                         bg: Double,
@@ -8178,7 +8179,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         )
                     }
                     override fun setDecisionSource(source: String) {
-                        lastDecisionSource = source
+                        work.lastDecisionSource = source
                     }
                     override fun logDecisionFinal(tag: String, rT: RT, bg: Double, delta: Float) {
                         this@DetermineBasalaimiSMB2.logDecisionFinal(tag, rT, bg, delta)
@@ -8414,22 +8415,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 AimiTubeDoseBaseline(it.maxSmb, it.maxSmbHb, it.currentBasal, it.maxDailyBasal)
             }
             override fun writeBaseline(value: AimiTubeDoseBaseline) {
-                tubeDoseBaseline = TubeDoseBaseline(value.maxSmb, value.maxSmbHb, value.currentBasal, value.maxDailyBasal)
+                work.tubeDoseBaseline = TubeDoseBaseline(value.maxSmb, value.maxSmbHb, value.currentBasal, value.maxDailyBasal)
             }
-            override fun maxSmb() = this@DetermineBasalaimiSMB2.maxSMB
+            override fun maxSmb() = work.maxSMB
             override fun maxSmbHb() = work.maxSMBHB
             override fun writeMaxSmb(value: Double) {
-                maxSMB = value
+                work.maxSMB = value
             }
             override fun writeMaxSmbHb(value: Double) {
-                maxSMBHB = value
+                work.maxSMBHB = value
             }
             override fun writeScale(value: Double?) {
-                lastTubeAdvisorSmbCapScale = value
+                work.lastTubeAdvisorSmbCapScale = value
             }
             override fun bg() = this@DetermineBasalaimiSMB2.bg
             override fun delta() = this@DetermineBasalaimiSMB2.delta.toDouble()
-            override fun work.iob() = this@DetermineBasalaimiSMB2.iob.toDouble()
+            override fun work.iob() = work.iob.toDouble()
             override fun advise(input: StraightLineTubeAdvisor.Input) = straightLineTubeAdvisor.advise(input)
             override fun noteTrace(
                 outcome: StraightLineTubeAdvisor.Outcome,
@@ -8445,7 +8446,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 )
             }
             override fun markApplied() {
-                tubeAppliedFromDoseSnapshotThisTick = true
+                work.tubeAppliedFromDoseSnapshotThisTick = true
             }
             override fun logError(message: String) {
                 work.consoleError.add(message)
@@ -8493,8 +8494,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             put("s_max_feasible", outcome.sMaxFeasible)
             put("hyper_excess_mgdl", outcome.hyperExcessMgdl)
             put("max_smb_baseline_u", baseline.maxSmb)
-            put("max_smb_after_u", this@DetermineBasalaimiSMB2.maxSMB)
-            put("max_smb_hb_after_u", this@DetermineBasalaimiSMB2.maxSMBHB)
+            put("max_smb_after_u", work.maxSMB)
+            put("max_smb_hb_after_u", work.maxSMBHB)
         }.build()
     }
 
@@ -8534,26 +8535,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             override fun mealCertainty() = work.lastMealCertainty
             override fun trunk() = work.lastPhysiologicalTreeSnapshot?.trunk?.globalState
             override fun combinedDelta() = work.tickCombinedDelta.toDouble()
-            override fun work.iob() = this@DetermineBasalaimiSMB2.iob.toDouble()
-            override fun work.maxIob() = this@DetermineBasalaimiSMB2.maxIob
+            override fun work.iob() = work.iob.toDouble()
+            override fun work.maxIob() = work.maxIob
             override fun mcerLatch() = mcerTailLatch
             override fun anticipTime() = this@DetermineBasalaimiSMB2.anticipTime
             override fun setLatch(value: MealConfirmedEarlyReleaseLatch.State) {
                 mcerTailLatch = value
             }
             override fun setAuthority(value: DecisionPredictionAuthority) {
-                lastDecisionPredictionAuthority = value
+                work.lastDecisionPredictionAuthority = value
             }
             override fun setApplyResult(value: PredictionAuthorityApplyResult) {
-                lastPredictionAuthorityApplyResult = value
+                work.lastPredictionAuthorityApplyResult = value
             }
             override fun writeEventual(mgdl: Double, rT: RT) {
-                this@DetermineBasalaimiSMB2.eventualBG = mgdl
+                work.eventualBG = mgdl
                 this@DetermineBasalaimiSMB2.predictedBg = mgdl.toFloat()
                 rT.eventualBG = mgdl
             }
             override fun delta() = this@DetermineBasalaimiSMB2.delta.toDouble()
-            override fun work.sportTime() = this@DetermineBasalaimiSMB2.sportTime
+            override fun work.sportTime() = work.sportTime
             override fun setSnapshot(value: DoseTerminalSnapshot) {
                 lastDoseTerminalSnapshot = value
             }
@@ -8585,24 +8586,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 override fun delta() = this@DetermineBasalaimiSMB2.delta
                 override fun shortAvgDelta() = this@DetermineBasalaimiSMB2.shortAvgDelta
                 override fun targetBg() = this@DetermineBasalaimiSMB2.targetBg
-                override fun work.iob() = this@DetermineBasalaimiSMB2.iob
-                override fun work.maxIob() = this@DetermineBasalaimiSMB2.maxIob
+                override fun work.iob() = work.iob
+                override fun work.maxIob() = work.maxIob
                 override fun mealDeliveryPriority() = work.lastMealAbsorptionOutput?.mealDeliveryPriority == true
                 override fun suppressMealInterpretation() =
                     causalState.lastUamHypothesisState?.suppressMealInterpretation == true
                 override fun mealAbsorptionPhase() = work.lastMealAbsorptionOutput?.phase
-                override fun work.mealTime() = this@DetermineBasalaimiSMB2.mealTime
+                override fun work.mealTime() = work.mealTime
                 override fun bfastTime() = this@DetermineBasalaimiSMB2.bfastTime
                 override fun lunchTime() = this@DetermineBasalaimiSMB2.lunchTime
                 override fun dinnerTime() = this@DetermineBasalaimiSMB2.dinnerTime
-                override fun work.snackTime() = this@DetermineBasalaimiSMB2.snackTime
+                override fun work.snackTime() = work.snackTime
                 override fun highCarbTime() = this@DetermineBasalaimiSMB2.highCarbTime
                 override fun setStackingEvaluation(value: InsulinStackingStance.Evaluation) {
-                    lastInsulinStackingEvaluation = value
+                    work.lastInsulinStackingEvaluation = value
                 }
                 override fun beliefSnapshot() = work.lastRecursiveBeliefSnapshot
                 override fun setLiveCommit(value: RbtLiveCommitResult) {
-                    lastRbtLiveCommitResult = value
+                    work.lastRbtLiveCommitResult = value
                 }
             },
             minPred = AimiMinPredWiring { rawMinPred -> minPredictedBgForRbtWiring(rawMinPred) },
@@ -8785,10 +8786,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog = work.consoleLog,
             state = object : AimiBasalFirstAdaptiveState {
                 override fun adaptiveMult() = this@DetermineBasalaimiSMB2.causalState.adaptiveMult
-                override fun work.mealTime() = this@DetermineBasalaimiSMB2.mealTime
+                override fun work.mealTime() = work.mealTime
                 override fun lunchTime() = this@DetermineBasalaimiSMB2.lunchTime
                 override fun dinnerTime() = this@DetermineBasalaimiSMB2.dinnerTime
-                override fun work.snackTime() = this@DetermineBasalaimiSMB2.snackTime
+                override fun work.snackTime() = work.snackTime
                 override fun highCarbTime() = this@DetermineBasalaimiSMB2.highCarbTime
                 override fun bfastTime() = this@DetermineBasalaimiSMB2.bfastTime
             },
@@ -9566,7 +9567,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             postHypoHint = postHypoHint,
         )
         val decision = CorrectionAggressionGate.evaluate(input)
-        correctionAggressionDecision = decision
+        work.correctionAggressionDecision = decision
         CorrectionAggressionGate.appendLogs(decision, input, work.consoleLog, aapsLogger)
         refreshPostHypoDeliveryAuthority(
             combinedDelta = combinedDelta,
@@ -9588,7 +9589,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             cob = work.cob.toDouble(),
             postHypoHint = postHypoHint,
         )
-        lastPostHypoDeliveryAuthority = PostHypoDeliveryAuthority.evaluate(
+        work.lastPostHypoDeliveryAuthority = PostHypoDeliveryAuthority.evaluate(
             PostHypoDeliveryAuthority.Input(
                 gate = work.correctionAggressionDecision,
                 patientMode = work.lastPatientModeDecision?.mode,
@@ -9629,7 +9630,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             cob = work.cob.toDouble(),
             postHypoHint = postHypoHint,
         )
-        correctionAggressionDecision = work.correctionAggressionDecision?.let { prior ->
+        work.correctionAggressionDecision = work.correctionAggressionDecision?.let { prior ->
             CorrectionAggressionGate.refineForPostHypo(
                 prior,
                 aggressionInputForRefine,
@@ -9785,7 +9786,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             return 0
         }
         val scale = 10.0.pow(2.0)
-        return (Math.round(value * scale) / scale).toInt()
+        return (round(value * scale) / scale).toInt()
     }
     private fun adjustBasalForMealHyper(
         suggestedBasalUph: Double,
@@ -9837,7 +9838,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         combinedDelta = combinedDelta,
         calls = object : AimiEnableSmbCalls {
             override fun writeMealModeReason(reason: String?) {
-                mealModeSmbReason = reason
+                work.mealModeSmbReason = reason
             }
             override fun logError(message: String) {
                 work.consoleError.add(message)
@@ -10206,7 +10207,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
 
         // Apply final Universal Adaptive Multiplier (only if > hypoGuard and not 0.0)
-        if (rate > 0.0 && Math.abs(adaptiveMultiplier - 1.0) > 0.01) {
+        if (rate > 0.0 && abs(adaptiveMultiplier - 1.0) > 0.01) {
             val originalBeforeScaling = rate
             // Shared IOB-budget brake on the single basal apply-point: the boost ABOVE 1.0x fades linearly
             // as total IOB fills the physiological budget. Because every basal/TBR path routes through here,
@@ -10702,21 +10703,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             smbAction = legacySmbAction,
             format2f = { app.aaps.core.data.format.NumberFormat.withDecimalsHalfUp(6).format(it.toDouble(), '.') },
         ) ?: return
-        lastDecisionSource = side.decisionSource
-        lastSmbProposed = side.smbProposed
-        pkpdThrottleIntervalAdd = side.pkpdThrottleIntervalAdd
-        pkpdPreferTbrBoost = side.pkpdPreferTbrBoost
+        work.lastDecisionSource = side.decisionSource
+        work.lastSmbProposed = side.smbProposed
+        work.pkpdThrottleIntervalAdd = side.pkpdThrottleIntervalAdd
+        work.pkpdPreferTbrBoost = side.pkpdPreferTbrBoost
         causalState.slowCarbBudgetWindowMs = side.slowCarbWindowMs
         causalState.slowCarbBudgetDeliveredU = side.slowCarbDeliveredU
         ceilingRepeatCount = side.ceilingRepeatCount
         ceilingRepeatLastMs = side.ceilingRepeatLastMs
-        lastEffortSmbFactorRaw = side.effortFactorRaw
-        lastEffortSmbFactorApplied = side.effortFactorApplied
-        lastEffortSmbBeforeU = side.effortBeforeU
-        lastEffortSmbAfterU = side.effortAfterU
-        lastSmbBindingTraceDraft = side.bindingTrace
-        lastSmbCapped = side.smbCapped
-        lastSmbFinal = side.smbFinal
+        work.lastEffortSmbFactorRaw = side.effortFactorRaw
+        work.lastEffortSmbFactorApplied = side.effortFactorApplied
+        work.lastEffortSmbBeforeU = side.effortBeforeU
+        work.lastEffortSmbAfterU = side.effortAfterU
+        work.lastSmbBindingTraceDraft = side.bindingTrace
+        work.lastSmbCapped = side.smbCapped
+        work.lastSmbFinal = side.smbFinal
         lastIobSurveillanceExport = side.iobSurveillance
     }
 
@@ -10775,7 +10776,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             calls = object : AimiPkpdAbsorptionGuardCalls {
                 override fun alreadyApplied() = work.pkpdAbsorptionGuardAppliedThisTick
                 override fun markApplied() {
-                    pkpdAbsorptionGuardAppliedThisTick = true
+                    work.pkpdAbsorptionGuardAppliedThisTick = true
                 }
                 override fun predBg() = resolvePkpdGuardPredBg()
                 override fun bg() = bg
@@ -10834,7 +10835,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 override fun critical(mealData: MealData, hypoThreshold: Double) =
                     isCriticalSafetyCondition(mealData, hypoThreshold)
                 override fun markCriticalSafetyZeroed() {
-                    criticalSafetyZeroedThisTick = true
+                    work.criticalSafetyZeroedThisTick = true
                 }
                 override fun sportSafety() = isSportSafetyCondition()
                 override fun ensureWCycleInfo() = this@DetermineBasalaimiSMB2.ensureWCycleInfo()
@@ -10863,14 +10864,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 }
                 override fun specificAdjustments(smbAmount: Float, ignoreSafetyRestrictions: Boolean) =
                     applySpecificAdjustments(smbAmount, ignoreSafetyRestrictions)
-                override fun work.mealTime() = this@DetermineBasalaimiSMB2.mealTime
+                override fun work.mealTime() = work.mealTime
                 override fun bfastTime() = this@DetermineBasalaimiSMB2.bfastTime
                 override fun lunchTime() = this@DetermineBasalaimiSMB2.lunchTime
                 override fun dinnerTime() = this@DetermineBasalaimiSMB2.dinnerTime
                 override fun highCarbTime() = this@DetermineBasalaimiSMB2.highCarbTime
-                override fun work.snackTime() = this@DetermineBasalaimiSMB2.snackTime
+                override fun work.snackTime() = work.snackTime
                 override fun confirmedHighRiseThisTick() = work.isConfirmedHighRiseThisTick
-                override fun work.mealAdvisorOneShotThisTick() = this@DetermineBasalaimiSMB2.mealAdvisorOneShotThisTick
+                override fun work.mealAdvisorOneShotThisTick() = work.mealAdvisorOneShotThisTick
                 override fun windowSinceLastPkpdDoseMin() = this@DetermineBasalaimiSMB2.windowSinceLastPkpdDoseMin()
                 override fun applyPkpdGuard(
                     smbIn: Float,
@@ -10894,9 +10895,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     return AimiSafetyGuardApply(applied.smbOut, applied.skippedDuplicate)
                 }
                 override fun finalizeSmb(smbToGive: Float) = finalizeSmbToGive(smbToGive)
-                override fun work.maxSMB() = this@DetermineBasalaimiSMB2.maxSMB
-                override fun work.maxIob() = this@DetermineBasalaimiSMB2.maxIob
-                override fun work.iob() = this@DetermineBasalaimiSMB2.iob
+                override fun work.maxSMB() = work.maxSMB
+                override fun work.maxIob() = work.maxIob
+                override fun work.iob() = work.iob
             },
         )
     }
@@ -11678,7 +11679,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog = work.consoleLog,
             calls = object : AimiPkpdCurveCalls {
                 override fun setAdvancedCurves(curves: AdvancedPredictionCurves) {
-                    lastAdvancedPredictionCurves = curves
+                    work.lastAdvancedPredictionCurves = curves
                 }
                 override fun recordSoftFloor(curves: AdvancedPredictionCurves) = recordPkpdSoftFloor(curves)
             },
@@ -11737,7 +11738,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 "dynIsf" to variableSensitivity.toDouble()
             )
         )
-        wCycleInfoForRun = info
+        work.wCycleInfoForRun = info
         checkCycleDayNotification(info)
         return info
     }
@@ -11765,7 +11766,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (work.wCycleReasonLogged) return
         if (info.reason.isBlank()) return
         target.append(", WCycle: ").append(info.reason)
-        wCycleReasonLogged = true
+        work.wCycleReasonLogged = true
     }
 
     private fun updateWCycleLearner(needBasalScale: Double?, needSmbScale: Double?) {
@@ -11799,7 +11800,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             ),
             safetyPhraseBook(),
         )
-        peakintermediaire = out.intermediate
+        work.peakintermediaire = out.intermediate
         out.logs.forEach { work.consoleLog.add(it) }
         reasonBuilder.append(out.reason)
         return out.finalPeak
@@ -11947,7 +11948,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 thyroidStateEstimator.updateState(thyroidInputs)
                 val status = thyroidStateEstimator.currentState.value
                 val confidence = thyroidStateEstimator.confidence.value
-                currentThyroidEffects = thyroidEffectModel.calculateEffects(status, confidence)
+                work.currentThyroidEffects = thyroidEffectModel.calculateEffects(status, confidence)
 
                 val logMsg = app.aaps.plugins.aps.openAPSAIMI.physio.thyroid.ThyroidDiagnosticsLogger.formatDecisionLog(
                     inputs = thyroidInputs,
@@ -12175,9 +12176,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             log = work.consoleLog,
             state = state,
         )
-        lastBolusSMBUnit = state.lastBolusSmbUnit
-        lastSmbCapped = state.lastSmbCapped
-        lastSmbFinal = state.lastSmbFinal
+        work.lastBolusSMBUnit = state.lastBolusSmbUnit
+        work.lastSmbCapped = state.lastSmbCapped
+        work.lastSmbFinal = state.lastSmbFinal
         return result
     }
 
@@ -12236,18 +12237,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     private fun refreshAimiContextActivityFlag(nowMs: Long = aimiWallClockMs()) {
-        aimiContextActivityActive = false
+        work.aimiContextActivityActive = false
         if (!preferences.get(app.aaps.core.keys.BooleanKey.OApsAIMIContextEnabled)) return
         try {
             val snap = contextManager.getSnapshot(nowMs)
-            aimiContextActivityActive = snap.hasActivity && snap.intentCount > 0
+            work.aimiContextActivityActive = snap.hasActivity && snap.intentCount > 0
         } catch (_: Exception) {
-            aimiContextActivityActive = false
+            work.aimiContextActivityActive = false
         }
     }
 
     private fun refreshExerciseHyperBasalOverride(profile: OapsProfileAimi) {
-        exerciseHyperBasalOverrideActive = false
+        work.exerciseHyperBasalOverrideActive = false
         if (!work.exerciseInsulinLockoutActive) return
         val policyInput = app.aaps.plugins.aps.openAPSAIMI.activity.ExerciseHyperOverridePolicy.buildInput(
             bgMgdl = bg.toDouble(),
@@ -12258,7 +12259,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             combinedDeltaMgdlPer5 = work.tickCombinedDelta.toDouble(),
             thyroidEgpMultiplier = work.currentThyroidEffects.egpMultiplier,
         )
-        exerciseHyperBasalOverrideActive =
+        work.exerciseHyperBasalOverrideActive =
             app.aaps.plugins.aps.openAPSAIMI.activity.ExerciseHyperOverridePolicy
                 .isHyperRisingDuringExercise(policyInput)
         if (work.exerciseHyperBasalOverrideActive) {
@@ -12300,7 +12301,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     private fun refreshEffortActivityBelief() {
-        lastEffortAssessment = null
+        work.lastEffortAssessment = null
         // Dependency: under T3C, activity awareness is required for the physio-informed basal (workstream C).
         // Effort protection is reduce-only, so this never adds insulin.
         val protection = preferences.get(BooleanKey.OApsAIMIEffortActivityProtection)
@@ -12326,7 +12327,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             prior = causalState.lastEffortMemory,
         )
         causalState.lastEffortMemory = refresh.memory
-        lastEffortAssessment = refresh.assessment
+        work.lastEffortAssessment = refresh.assessment
         refresh.logLine?.let { work.consoleLog.add(it) }
     }
 
@@ -12382,26 +12383,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         consoleLog = work.consoleLog,
         calls = object : AimiContextModuleCalls {
             override fun writeSmbCeiling(value: Double?) {
-                lastContextSmbCeilingU = value
+                work.lastContextSmbCeilingU = value
             }
             override fun writeSuppressSmb(value: Boolean) {
-                lastContextSuppressSmb = value
+                work.lastContextSuppressSmb = value
             }
             override fun snapshot() = contextManager.getSnapshot(aimiWallClockMs())
             override fun writeSnapshot(snapshot: ContextSnapshot) {
-                lastContextSnapshot = snapshot
+                work.lastContextSnapshot = snapshot
             }
             override fun writeActivityActive(value: Boolean) {
-                aimiContextActivityActive = value
+                work.aimiContextActivityActive = value
             }
             override fun contextModeName() = preferences.get(app.aaps.core.keys.StringKey.ContextMode)
             override fun maxSmb() = work.maxSMB
             override fun writeMaxSmb(value: Double) {
-                maxSMB = value
+                work.maxSMB = value
             }
             override fun maxSmbHb() = work.maxSMBHB
             override fun writeMaxSmbHb(value: Double) {
-                maxSMBHB = value
+                work.maxSMBHB = value
             }
             override fun intervalSmb() = intervalsmb
             override fun writeIntervalSmb(value: Int) {
@@ -12412,10 +12413,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             override fun intervalLine(original: Int, updated: Int, extra: Int) =
                 "  Interval: $original→${updated}min (+$extra)"
             override fun exerciseHyperOverride() = work.exerciseHyperBasalOverrideActive
-            override fun work.sportTime() = this@DetermineBasalaimiSMB2.sportTime
+            override fun work.sportTime() = work.sportTime
             override fun activityActive() = work.aimiContextActivityActive
             override fun writeExerciseLockout(value: Boolean) {
-                exerciseInsulinLockoutActive = value
+                work.exerciseInsulinLockoutActive = value
             }
             override fun logContextFailure(error: Exception) {
                 aapsLogger.error(LTag.APS, "Context Module failed", error)
@@ -12492,16 +12493,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             ) = estimateUndeclaredVirtualCob(bg, delta, sens, profile, mealData, declaredOrAdvisorCob)
             override fun recordSoftFloor(curves: AdvancedPredictionCurves) = recordPkpdSoftFloor(curves)
             override fun writeCurves(curves: AdvancedPredictionCurves) {
-                lastAdvancedPredictionCurves = curves
+                work.lastAdvancedPredictionCurves = curves
             }
             override fun writePredictionSize(size: Int) {
-                lastPredictionSize = size
+                work.lastPredictionSize = size
             }
             override fun writePredictionAvailable(available: Boolean) {
-                lastPredictionAvailable = available
+                work.lastPredictionAvailable = available
             }
             override fun writeEventualSnapshot(value: Double) {
-                lastEventualBgSnapshot = value
+                work.lastEventualBgSnapshot = value
             }
             override fun writePredictedBg(value: Float) {
                 this@DetermineBasalaimiSMB2.predictedBg = value
@@ -12560,21 +12561,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     orbit: app.aaps.plugins.aps.openAPSAIMI.trajectory.StableOrbit,
                 ) = trajectoryGuard.analyzeTrajectory(history, orbit)
                 override fun uamConfidence() = AimiUamHandler.confidenceOrZero()
-                override fun maxSmb() = this@DetermineBasalaimiSMB2.maxSMB
+                override fun maxSmb() = work.maxSMB
                 override fun setMaxSmb(value: Double) {
-                    this@DetermineBasalaimiSMB2.maxSMB = value
+                    work.maxSMB = value
                 }
-                override fun maxSmbHb() = this@DetermineBasalaimiSMB2.maxSMBHB
+                override fun maxSmbHb() = work.maxSMBHB
                 override fun setMaxSmbHb(value: Double) {
-                    this@DetermineBasalaimiSMB2.maxSMBHB = value
+                    work.maxSMBHB = value
                 }
                 override fun intervalSmb() = this@DetermineBasalaimiSMB2.intervalsmb
                 override fun setIntervalSmb(value: Int) {
                     this@DetermineBasalaimiSMB2.intervalsmb = value
                 }
-                override fun work.maxIob() = this@DetermineBasalaimiSMB2.maxIob
+                override fun work.maxIob() = work.maxIob
                 override fun setMaxIob(value: Double) {
-                    this@DetermineBasalaimiSMB2.maxIob = value
+                    work.maxIob = value
                 }
                 override fun postTrajectoryWarning(message: String) {
                     notificationManager.post(
@@ -12617,23 +12618,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      */
     private fun mealAbsorptionDeltaPrevOfTick(): Double? {
         if (!work.mealAbsorptionDeltaPrevLatched) {
-            mealAbsorptionDeltaPrevForTick = MealAbsorptionMemory.lastDeltaMgdlPer5
-            mealAbsorptionDeltaPrevLatched = true
+            work.mealAbsorptionDeltaPrevForTick = MealAbsorptionMemory.lastDeltaMgdlPer5
+            work.mealAbsorptionDeltaPrevLatched = true
         }
         return work.mealAbsorptionDeltaPrevForTick
     }
 
     internal fun runDetermineBasalTick(ctx: AimiTickContext): RT {
-        raEstimatorRunCountAtTickStart = continuousStateEstimator.runCount
-        mealAbsorptionDeltaPrevForTick = null
-        mealAbsorptionDeltaPrevLatched = false
-        lastHtrRaFloorMgdlPerMin = null
-        smbTerminalSealed = false
-        smbSealRefusedCount = 0
-        smbSealRefusedTotalU = 0.0
-        smbSealAllowedRaiseCount = 0
-        raNetCombinedDelta = shortAvgDelta
-        raNetShortAvgDeltaAdj = shortAvgDelta
+        work.raEstimatorRunCountAtTickStart = continuousStateEstimator.runCount
+        work.mealAbsorptionDeltaPrevForTick = null
+        work.mealAbsorptionDeltaPrevLatched = false
+        work.lastHtrRaFloorMgdlPerMin = null
+        work.smbTerminalSealed = false
+        work.smbSealRefusedCount = 0
+        work.smbSealRefusedTotalU = 0.0
+        work.smbSealAllowedRaiseCount = 0
+        work.raNetCombinedDelta = shortAvgDelta
+        work.raNetShortAvgDeltaAdj = shortAvgDelta
         smbTrainingRowTickKey = ctx.currentTime
         val result = try {
             val inner = runDetermineBasalTickInner(ctx)
@@ -12692,7 +12693,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val profile = ctx.profile
         // Causal censoring of the basal label needs the carbs of THIS tick, and the basal-learning hook
         // runs on paths that have no access to `ctx`. See [basalLearningCobGrams].
-        tickCobGrams = ctx.mealData.mealCOB.takeIf { it.isFinite() && it >= 0.0 } ?: Double.NaN
+        work.tickCobGrams = ctx.mealData.mealCOB.takeIf { it.isFinite() && it >= 0.0 } ?: Double.NaN
         val continued = when (
             val prefix = decideDetermineBasalTickPrefix(
                 ctx,
@@ -12710,7 +12711,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     override fun bootstrapPhysiology(ctx: AimiTickContext, tdd7Days: Double) =
                         bootstrapPhysiologyAfterEarlyTick(ctx, tdd7Days)
                     override fun writeConfirmedHighRise(value: Boolean) {
-                        isConfirmedHighRiseThisTick = value
+                        work.isConfirmedHighRiseThisTick = value
                     }
                     override fun decisionContext(ctx: AimiTickContext) =
                         buildDecisionContextInitRtSosAndFlatShadow(ctx)
@@ -14023,7 +14024,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val deltaValue = delta?.toDouble() ?: this.delta.toDouble()
         val refractoryStatus = if (!work.lastBolusAgeMinutes.isNaN() && work.lastBolusAgeMinutes < intervalsmb) "YES" else "NO"
         val smbFinalValue = if (smbUnits > 0.0) smbUnits else smb
-        lastSmbFinal = smbFinalValue
+        work.lastSmbFinal = smbFinalValue
         val predChunk = "${if (predAvailable) "Y" else "N"}(sz=${predSize} ev=${eventual.roundToInt()})"
         return DecisionFinalDiagSnapshot(
             smbFinal = smbFinalValue,
@@ -14274,7 +14275,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         eventualBg: Double,
         mealContext: MealSafetyContext,
     ): SafetyStartResolution {
-        lastSafetySource = "CALLED"
+        work.lastSafetySource = "CALLED"
         val resolution = resolveSafetyStart(
             bg = bg,
             delta = delta,
@@ -14286,7 +14287,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             mealContext = mealContext,
         )
         resolution.consoleLines.forEach { work.consoleLog.add(it) }
-        lastSafetySource = resolution.lastSafetySource
+        work.lastSafetySource = resolution.lastSafetySource
         return resolution
     }
 

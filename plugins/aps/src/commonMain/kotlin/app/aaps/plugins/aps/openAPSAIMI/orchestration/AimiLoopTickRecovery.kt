@@ -6,6 +6,9 @@ import app.aaps.core.interfaces.aps.RT
 /**
  * Builds safe [RT] responses when a loop tick cannot complete normally.
  * Never throws — used to keep the APS process alive after lock contention or unexpected errors.
+ *
+ * Portable note: frame-level stack traces come from [aimiThrowableFrames]
+ * (real frames on JVM/Android, empty on iOS where Kotlin/Native has no stack-trace API).
  */
 object AimiLoopTickRecovery {
 
@@ -66,25 +69,22 @@ object AimiLoopTickRecovery {
     }
 
     /**
-     * First AIMI stack frame outside telemetry/recovery wrappers — identifies the calculation site.
+     * First AIMI frame outside telemetry/recovery wrappers — identifies the calculation site.
+     * Null on platforms without stack-trace access.
      */
     internal fun primaryAimiFrame(error: Throwable): String? =
-        error.stackTrace.firstOrNull { frame -> isAimiFrame(frame) }?.let(::formatFrame)
+        aimiThrowableFrames(error).firstOrNull { frame -> isAimiFrame(frame) }
 
     internal fun stackTraceSummary(error: Throwable, maxFrames: Int = 3): List<String> {
-        val aimiFrames = error.stackTrace.filter { isAimiFrame(it) }.take(maxFrames)
-        val frames = if (aimiFrames.isNotEmpty()) aimiFrames else error.stackTrace.take(1)
-        return frames.map { "  at ${formatFrame(it)}" }
+        val frames = aimiThrowableFrames(error)
+        val aimiFrames = frames.filter { isAimiFrame(it) }.take(maxFrames)
+        val selected = if (aimiFrames.isNotEmpty()) aimiFrames else frames.take(1)
+        return selected.map { "  at $it" }
     }
 
-    private fun isAimiFrame(frame: StackTraceElement): Boolean =
-        frame.className.contains("openAPSAIMI") &&
-            TELEMETRY_ELIDE.none { frame.className.contains(it) }
-
-    private fun formatFrame(frame: StackTraceElement): String {
-        val simpleClass = frame.className.substringAfterLast('.')
-        return "$simpleClass.${frame.methodName}:${frame.lineNumber}"
-    }
+    private fun isAimiFrame(frame: String): Boolean =
+        frame.contains("openAPSAIMI") &&
+            TELEMETRY_ELIDE.none { frame.contains(it) }
 
     private fun minimalRt(
         ctx: AimiTickContext,
