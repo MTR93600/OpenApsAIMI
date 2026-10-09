@@ -13835,8 +13835,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         effective_peak_minutes: Double? = null,
         extraDebug: String = ""
     ): RT {
-        // Fresh tick-local scratch. Helpers access via work.field.
-        work = AimiTickWorkingState()
         // Sync legacy prebolus latch into causal state for the replay harness.
         // Transitional: the getters below read preferences (shell concern).
         causalState.syncFromLegacyPrebolus(
@@ -13897,6 +13895,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 }
             },
         ) {
+            // Fresh tick-local scratch. Helpers access via work.field.
+            // Reset under the tick lock: a tick that cannot acquire the lock must not
+            // clobber the scratch of the tick currently holding it.
+            work = AimiTickWorkingState()
             AimiDetermineBasalTickOrchestrator.run(this, ctx)
         }
     }
