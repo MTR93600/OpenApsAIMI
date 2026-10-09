@@ -275,6 +275,7 @@ data class AimiConfigValues(
     val night: Boolean = false,
     val pregnancy: Boolean = false,
     val apsSmbMaxIob: Double = 3.0,
+    val apsUseSmb: Boolean = false,
     val activityBasalCapFactor: Double = 180.0,
     val bFPrebolus: Double = 2.5,
     val bFPrebolus2: Double = 2.0,
