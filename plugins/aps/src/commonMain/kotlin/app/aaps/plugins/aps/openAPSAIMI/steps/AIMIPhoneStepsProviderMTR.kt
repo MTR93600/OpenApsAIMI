@@ -4,8 +4,9 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.plugins.aps.openAPSAIMI.StepService
 import kotlinx.datetime.Instant
-import me.tatarka.inject.annotations.Inject
-import me.tatarka.inject.annotations.SingleIn
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
+import dev.zacsweers.metro.AppScope
 
 /**
  * 📱 AIMI Phone Steps Provider - MTR Implementation
@@ -22,7 +23,7 @@ import me.tatarka.inject.annotations.SingleIn
  * 
  * @author MTR & Lyra AI - AIMI Health Connect Integration
  */
-@SingleIn
+@SingleIn(AppScope::class)
 class AIMIPhoneStepsProviderMTR @Inject constructor(
     private val aapsLogger: AAPSLogger
 ) : AIMIStepsProviderMTR {
