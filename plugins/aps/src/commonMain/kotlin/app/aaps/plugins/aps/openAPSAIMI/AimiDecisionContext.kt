@@ -89,6 +89,30 @@ internal data class AimiDecisionContext(
         var isf_obs_last_window_drop_mgdl: Double? = null,
         /** Insulin credited to that window, U. */
         var isf_obs_last_window_absorbed_u: Double? = null,
+        /** Which ISF calculation path was taken this tick (telemetry). */
+        var isf_calc_path: String? = null,
+        /** Size of the ISF cache (telemetry). */
+        var isf_cache_size: Int? = null,
+        /** Whether effort-based SMB was armed this tick (telemetry). */
+        var effort_smb_armed: Boolean? = null,
+        /** Requested meal boost rate in U/h (telemetry). */
+        var meal_boost_requested_uph: Double? = null,
+        /** Meal boost cap tier name (telemetry). */
+        var meal_boost_cap_tier: String? = null,
+        /** Maximum allowed meal boost rate in U/h (telemetry). */
+        var meal_boost_cap_max_uph: Double? = null,
+        /** Requested rate after the tier ceiling, never above requested (telemetry). */
+        var meal_boost_capped_uph: Double? = null,
+        /** Whether the meal boost cap would bind (telemetry). */
+        var meal_boost_cap_would_bind: Boolean? = null,
+        /** Engine rate in U/h (telemetry). */
+        var engine_rate_uph: Double? = null,
+        /** RT rate in U/h (telemetry). */
+        var rt_rate_uph: Double? = null,
+        /** Merge mode (telemetry). */
+        var merge_mode: String? = null,
+        /** Merge winner (telemetry). */
+        var merge_winner: String? = null,
         /**
          * Shadow late fat damping window: the late part of an absorption episode while a large
          * insulin stack is already working. Strictly passive — nothing in the dosing chain reads it.
@@ -379,6 +403,8 @@ internal data class AimiDecisionContext(
         var patient_state: JsonObject? = null,
         /** High-level patient mode and strategy derived from the shared state. */
         var patient_mode: JsonObject? = null,
+        /** Trajectory bridge snapshot (telemetry, written on every tick). */
+        var traj_bridge: JsonObject? = null,
         /** AIMI Harmonia physiological tree — deploys insulin intent; Harmonia arbitrates dose. */
         var physiological_tree: JsonObject? = null,
         /** Lot A endocrine belief (WCycle + hypo dampen) — context for tree/Harmonia/forensics. */
@@ -566,6 +592,8 @@ internal data class AimiDecisionContext(
             base.put("isf_source", baseline_state.isf_source ?: AimiJson.NULL)
             base.put("isf_age_ms", baseline_state.isf_age_ms ?: AimiJson.NULL)
             base.put("isf_cache_key", baseline_state.isf_cache_key ?: AimiJson.NULL)
+            base.put("isf_calc_path", baseline_state.isf_calc_path ?: AimiJson.NULL)
+            base.put("isf_cache_size", baseline_state.isf_cache_size ?: AimiJson.NULL)
             base.put("isf_cache_glucose_mgdl", baseline_state.isf_cache_glucose_mgdl ?: AimiJson.NULL)
             base.put("isf_obs_median_mgdl", baseline_state.isf_obs_median_mgdl ?: AimiJson.NULL)
             base.put("isf_obs_night_median_mgdl", baseline_state.isf_obs_night_median_mgdl ?: AimiJson.NULL)
@@ -577,6 +605,16 @@ internal data class AimiDecisionContext(
             base.put("isf_obs_last_window_mgdl", baseline_state.isf_obs_last_window_mgdl ?: AimiJson.NULL)
             base.put("isf_obs_last_window_drop_mgdl", baseline_state.isf_obs_last_window_drop_mgdl ?: AimiJson.NULL)
             base.put("isf_obs_last_window_absorbed_u", baseline_state.isf_obs_last_window_absorbed_u ?: AimiJson.NULL)
+            base.put("effort_smb_armed", baseline_state.effort_smb_armed ?: AimiJson.NULL)
+            base.put("meal_boost_requested_uph", baseline_state.meal_boost_requested_uph ?: AimiJson.NULL)
+            base.put("meal_boost_cap_tier", baseline_state.meal_boost_cap_tier ?: AimiJson.NULL)
+            base.put("meal_boost_cap_max_uph", baseline_state.meal_boost_cap_max_uph ?: AimiJson.NULL)
+            base.put("meal_boost_capped_uph", baseline_state.meal_boost_capped_uph ?: AimiJson.NULL)
+            base.put("meal_boost_cap_would_bind", baseline_state.meal_boost_cap_would_bind ?: AimiJson.NULL)
+            base.put("engine_rate_uph", baseline_state.engine_rate_uph ?: AimiJson.NULL)
+            base.put("rt_rate_uph", baseline_state.rt_rate_uph ?: AimiJson.NULL)
+            base.put("merge_mode", baseline_state.merge_mode ?: AimiJson.NULL)
+            base.put("merge_winner", baseline_state.merge_winner ?: AimiJson.NULL)
             base.put("late_fat_damping_window", baseline_state.late_fat_damping_window ?: AimiJson.NULL)
             base.put("late_fat_rise_flag", baseline_state.late_fat_rise_flag ?: AimiJson.NULL)
             base.put("late_fat_onset_age_min", baseline_state.late_fat_onset_age_min ?: AimiJson.NULL)
@@ -829,6 +867,9 @@ internal data class AimiDecisionContext(
             }
             adjustments.patient_mode?.let { patientMode ->
                 adj.put("patient_mode", patientMode)
+            }
+            adjustments.traj_bridge?.let { bridge ->
+                adj.put("traj_bridge", bridge)
             }
             adjustments.endocrine_belief?.let { endocrine ->
                 adj.put("endocrine_belief", endocrine)
