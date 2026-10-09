@@ -56,6 +56,8 @@ import app.aaps.implementation.lifecycle.IosProtectionLifecycle
 import app.aaps.ios.shell.IosAppStartup
 import app.aaps.ios.shell.PluginStoreRegistry
 import app.aaps.ios.shell.di.IosAppGraph
+import app.aaps.plugins.aps.openAPSAIMI.di.IosAimiEngineGraph
+import app.aaps.plugins.aps.openAPSAIMI.di.IosAimiEngineHolder
 import app.aaps.shared.clientbindings.ClientViewModelFactory
 import app.aaps.ui.compose.configuration.ConfigurationViewModel
 import app.aaps.ui.compose.insulinManagement.InsulinManagementViewModel
@@ -107,6 +109,37 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
     // Before the composition, not beside it: the first view model built reads the active pump, and
     // an empty plugin list there throws from a coroutine and takes the process with it.
     IosAppStartup(logger, PluginStoreRegistry(graph.pluginStore, graph.configBuilder), graph.contributedPlugins) { graph.periodicMaintenance.start(graph.appScope) }.run()
+
+    // The real AIMI engine, built from the shell's own bindings and installed where iOS scene
+    // code can reach it (`IosAimiEngineHolder.engine`). Built after startup on purpose: the
+    // plugin registry above is a lateinit, and some of the engine's transitive dependencies
+    // read it at construction time.
+    //
+    // A failure here must not take the app down. The neutral engine stays the fallback, so this
+    // logs loudly and moves on - `IosAimiEngineHolder.engine` stays null, which scenes read as
+    // "engine not wired".
+    try {
+        val engineGraph = createGraphFactory<IosAimiEngineGraph.Factory>().create(
+            profileUtil = graph.profileUtil,
+            fabricPrivacy = graph.fabricPrivacy,
+            preferences = graph.preferences,
+            uiInteraction = graph.uiInteraction,
+            notificationManager = graph.notificationManager,
+            persistenceLayer = graph.persistenceLayer,
+            tddCalculator = graph.tddCalculator,
+            tirCalculator = graph.tirCalculator,
+            dateUtil = graph.dateUtil,
+            profileFunction = graph.profileFunction,
+            iobCobCalculator = graph.iobCobCalculator,
+            activePlugin = graph.activePlugin,
+            textResolver = graph.textResolver,
+            aapsLogger = graph.logger,
+        )
+        IosAimiEngineHolder.install(engineGraph)
+        logger.debug(LTag.APS, "AIMI engine graph installed")
+    } catch (e: Exception) {
+        logger.error(LTag.APS, "AIMI engine graph failed to build; neutral engine remains the fallback", e)
+    }
 
     // Attach to the notification centre. Registering a category only records it now, so that building
     // the graph does not need an app bundle - see `IosNotificationDelegate.install`. It is done here
