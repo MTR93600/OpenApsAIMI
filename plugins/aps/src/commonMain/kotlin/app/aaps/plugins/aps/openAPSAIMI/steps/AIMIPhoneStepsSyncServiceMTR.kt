@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.steps
 
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
+
 import app.aaps.core.data.model.SC
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -35,7 +37,7 @@ class AIMIPhoneStepsSyncServiceMTR @Inject constructor(
     private val sp: SP,
     private val aapsLogger: AAPSLogger
 ) {
-    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val ioScope = CoroutineScope(SupervisorJob() + aapsIoDispatcher)
     
     companion object {
         private const val TAG = "PhoneStepsSync"

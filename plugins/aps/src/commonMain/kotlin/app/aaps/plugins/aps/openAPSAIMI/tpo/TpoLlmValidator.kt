@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.tpo
 
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
+
 import app.aaps.core.data.json.OrgJsonCompat.optDoubleCompat
 import app.aaps.core.data.json.OrgJsonCompat.optStringCompat
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -35,7 +37,7 @@ internal class TpoLlmValidator(
         plan: TpoApplyPlan,
         input: TpoTickInput,
         ledger: TpoEpisodeLedger,
-    ): TpoLlmResult = withContext(Dispatchers.IO) {
+    ): TpoLlmResult = withContext(aapsIoDispatcher) {
         val started = aimiWallClockMs()
         if (!sp.getBoolean(BooleanKey.OApsAIMIContextLLMEnabled.key, false)) {
             return@withContext TpoLlmResult(
