@@ -6,7 +6,11 @@ import android.hardware.SensorEventListener
 import android.util.Log
 import kotlin.math.roundToLong
 
-object StepService : SensorEventListener {
+/**
+ * Android step-detector listener. Feeds [stepsMap] with per-5-minute step deltas;
+ * the engine reads trailing windows through the getters below.
+ */
+actual object StepService : SensorEventListener {
 
     private const val TAG = "StepService"
     private var previousStepCount = -1
@@ -42,30 +46,30 @@ object StepService : SensorEventListener {
         }
     }
 
-    fun getRecentStepCount5Min(): Int {
+    actual fun getRecentStepCount5Min(): Int {
         val now = currentTimeIn5Min() - 1
         return if (stepsMap.contains(now)) stepsMap.getValue(now) else 0
     }
 
-    fun getRecentStepCount10Min(): Int {
+    actual fun getRecentStepCount10Min(): Int {
         val tenMinAgo = currentTimeIn5Min() - 2
         return if (stepsMap.contains(tenMinAgo)) stepsMap.getValue(tenMinAgo) else 0
     }
 
-    fun getRecentStepCount15Min(): Int {
+    actual fun getRecentStepCount15Min(): Int {
         val fifteenMinAgo = currentTimeIn5Min() - 3
         return if (stepsMap.contains(fifteenMinAgo)) stepsMap.getValue(fifteenMinAgo) else 0
     }
 
-    fun getRecentStepCount30Min(): Int {
+    actual fun getRecentStepCount30Min(): Int {
         return getStepsInLastXMin(6)
     }
 
-    fun getRecentStepCount60Min(): Int {
+    actual fun getRecentStepCount60Min(): Int {
         return getStepsInLastXMin(12)
     }
 
-    fun getRecentStepCount180Min(): Int {
+    actual fun getRecentStepCount180Min(): Int {
         return getStepsInLastXMin(34)
     }
 

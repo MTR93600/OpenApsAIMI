@@ -344,7 +344,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             aapsLogger.error(LTag.APS, "? Failed to schedule AIMI basal/T3C ML trainer", e)
         }
         
-        AimiUamHandler.clearCache(rh)
+        AndroidUamPredictor.clearCache(rh)
         AimiUamHandler.installConfidenceSupplier {
             // retourne null si tu veux "laisser la main" au runtime
             preferences.get(DoubleKey.AimiUamConfidence)
@@ -423,7 +423,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             aapsLogger.error(LTag.APS, "Error stopping AIMI basal/T3C ML trainer", e)
         }
 
-        AimiUamHandler.close(rh)
+        AndroidUamPredictor.close(rh)
     }
     // last values
     override var lastAPSRun: Long = 0
