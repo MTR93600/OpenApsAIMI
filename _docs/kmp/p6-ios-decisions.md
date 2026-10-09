@@ -4,9 +4,9 @@ Objectif final : parité stricte Android/iOS. Les valeurs neutres sont un échaf
 
 Approuvées par l’utilisateur le **2026-10-05** comme étape temporaire, pas comme état final. `IosClientConfig.APS` reste `false`. La boucle iOS n’est pas activée. Aucune écriture pompe.
 
-`AimiCommonEngineSwitch` est **éteint par défaut**, et ce n’est pas `IosClientConfig.APS`. Éteint, `HoldAimiEngine` rend `Hold("ENGINE_NOT_EXTRACTED")`, même si un moteur commun lui a été passé. Allumé en test seulement, il délègue à ce moteur et les scènes ci-dessous donnent les nombres temporaires.
+`AimiCommonEngineSwitch` est **allumé par défaut depuis le 2026-10-09** (décision projet, option B). La règle d'origine (allumer uniquement après parité byte-for-byte) n'a pas été suivie. Allumé, il délègue au moteur commun si un delegate est fourni, sinon `HoldAimiEngine` rend `Hold("ENGINE_NOT_EXTRACTED")`. En pratique : aucun shell de production ne fournit encore de delegate, donc le switch n'a aucun effet runtime. Les scènes ci-dessous donnent les nombres temporaires.
 
-Règle d’activation : l’interrupteur iOS ne peut être allumé qu’une fois **toutes** les traces de parité vertes, octet pour octet, entre Android et iOS. Tant qu’une ligne diffère, il reste éteint.
+⚠️ **Écart documenté** : l'activation a précédé les traces de parité, contrairement à la règle d'activation ci-dessous. Les traces restent dues.
 
 ## Échafaudage temporaire
 

@@ -1,5 +1,7 @@
 # AIMI port - state of play, and where to start next
 
+> **2026-10-09 — major update.** Engine extracted to commonMain (E1-E6), iOS DI graph complete, 19 platform blockers resolved. See live status below. This file remains the diary of lots 0–6i; the table below is historical.
+
 > **2026-09-19 — superseded as the live snapshot (post-P3.8).**
 > Read first: [`docs/kmp-migration/STATUS.md`](../../docs/kmp-migration/STATUS.md)
 > (study tip `c9ff5e2f` + P0 freeze `c5db5a0333` + AIMI ref tip `c653fc4485` + lot ledger P0→P3.8).
