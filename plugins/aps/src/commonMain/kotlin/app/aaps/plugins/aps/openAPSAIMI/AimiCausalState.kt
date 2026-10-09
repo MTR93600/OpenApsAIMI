@@ -12,7 +12,12 @@ package app.aaps.plugins.aps.openAPSAIMI
  * `internalLastLegacyPrebolusMillis`, `pendingLegacyPrebolusUnit`,
  * `pendingLegacyPrebolusExpiry`) stay in the owning class: their custom
  * getters/setters read/write `preferences`, which is a shell concern, not
- * engine state. CACHE, EFFECT and tick-local WORKING fields also stay out.
+ * engine state. The mirror fields below (`lastSmbMillis`,
+ * `lastLegacyPrebolusMillis`, `pendingLegacyPrebolusUnit`,
+ * `pendingLegacyPrebolusExpiry`) are the transitional copy: the tick copies the
+ * current values in via [syncFromLegacyPrebolus] so the replay harness can
+ * observe and compare them. CACHE, EFFECT and tick-local WORKING fields also
+ * stay out.
  *
  * See `_docs/kmp/annex-8-state-replay-and-extraction-contract.md`, lot E3.
  */
@@ -56,6 +61,45 @@ class AimiCausalState {
     // Learner state: grouped here, logic unchanged.
     var adaptiveMult: Double = 1.0
 
+    // Legacy prebolus latch, mirrored from the `LegacyPrebolusMemory`-backed
+    // properties on the owning class (transitional, see [syncFromLegacyPrebolus]).
+    // Key mapping: `AimiLongKey.LastPrebolusTime`,
+    // `AimiLongKey.LastLegacyPrebolusTime`, `AimiLongKey.PendingLegacyPrebolusUnitMilli`
+    // (stored as milli-units, mirrored here as units), `AimiLongKey.PendingLegacyPrebolusExpiry`.
+    var lastSmbMillis: Long = 0L
+    var lastLegacyPrebolusMillis: Long = 0L
+    var pendingLegacyPrebolusUnit: Float = 0.0f
+    var pendingLegacyPrebolusExpiry: Long = 0L
+
+    // Meal advisor estimate, mirrored from preferences (transitional).
+    // Key mapping: `BooleanKey.OApsAIMIMealAdvisorTrigger`,
+    // `DoubleKey.OApsAIMILastEstimatedCarbTime` (epoch ms),
+    // `DoubleKey.OApsAIMILastEstimatedCarbs` (grams).
+    var mealAdvisorTrigger: Boolean = false
+    var lastEstimatedCarbTimeMs: Long = 0L
+    var lastEstimatedCarbsG: Double = 0.0
+
+    /**
+     * Transitional copy of the `LegacyPrebolusMemory`-backed state.
+     *
+     * The owning class keeps the custom getters/setters that read/write
+     * `preferences` (shell concern). The tick calls this at the start with the
+     * values read from those properties, so the replay harness can observe the
+     * causal state without touching preferences. Once the shell feeds these
+     * values through the snapshot, this method goes away.
+     */
+    fun syncFromLegacyPrebolus(
+        lastSmbMillis: Long,
+        lastLegacyPrebolusMillis: Long,
+        pendingUnit: Float,
+        pendingExpiry: Long,
+    ) {
+        this.lastSmbMillis = lastSmbMillis
+        this.lastLegacyPrebolusMillis = lastLegacyPrebolusMillis
+        this.pendingLegacyPrebolusUnit = pendingUnit
+        this.pendingLegacyPrebolusExpiry = pendingExpiry
+    }
+
     /**
      * Snapshot of the causal state after a tick.
      *
@@ -83,6 +127,13 @@ class AimiCausalState {
         copy.lastAutodriveState = lastAutodriveState
         copy.zeroBasalAccumulatedMinutes = zeroBasalAccumulatedMinutes
         copy.adaptiveMult = adaptiveMult
+        copy.lastSmbMillis = lastSmbMillis
+        copy.lastLegacyPrebolusMillis = lastLegacyPrebolusMillis
+        copy.pendingLegacyPrebolusUnit = pendingLegacyPrebolusUnit
+        copy.pendingLegacyPrebolusExpiry = pendingLegacyPrebolusExpiry
+        copy.mealAdvisorTrigger = mealAdvisorTrigger
+        copy.lastEstimatedCarbTimeMs = lastEstimatedCarbTimeMs
+        copy.lastEstimatedCarbsG = lastEstimatedCarbsG
         return copy
     }
 }

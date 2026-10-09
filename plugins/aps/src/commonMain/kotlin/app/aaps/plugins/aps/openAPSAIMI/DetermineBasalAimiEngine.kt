@@ -116,6 +116,7 @@ class DetermineBasalAimiEngine(
             slopeFromMaxDeviation = input.meal.slopeFromMaxDeviation.valueOrNull ?: 0.0,
             slopeFromMinDeviation = input.meal.slopeFromMinDeviation.valueOrNull ?: 999.0,
             lastCarbTime = input.meal.lastCarbTimeMs ?: 0L,
+            lastBolusTime = input.meal.lastBolusTimeMs ?: 0L,
         )
 
         val rt: RT = plugin.determine_basal(
@@ -139,11 +140,11 @@ class DetermineBasalAimiEngine(
          * Snapshot fields with no determine_basal equivalent (documented gaps):
          * - duraISF / parabola features (in AimiAdvancedFeatures, not yet consumed)
          * - TDD windows, TIR quality, physio windows (partially in snapshot)
-         * - 109 config keys: 102 now in AimiConfigValues, 7 persist keys are causal state
-         * - MealData.lastBolusTime (not yet in snapshot)
+         * - 7 persist keys live in AimiCausalState (transitional mirrors, see syncFromLegacyPrebolus)
          *
          * Closed in schema v2/v3: glucose deltas, full OapsProfileAimi,
-         * IOB history, MealData slopes and lastCarbTime.
+         * IOB history, MealData slopes, lastCarbTime and lastBolusTime,
+         * 102 config keys in AimiConfigValues.
          */
         const val GAPS = "see KDoc"
     }
