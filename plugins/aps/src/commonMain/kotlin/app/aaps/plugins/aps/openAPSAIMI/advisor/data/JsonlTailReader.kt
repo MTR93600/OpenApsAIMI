@@ -1,25 +1,29 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.data
 
-import java.io.File
-import java.io.RandomAccessFile
+import app.aaps.plugins.aps.openAPSAIMI.retention.AimiByteReader
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import kotlin.math.min
 
 /**
  * Reads the last [maxLines] complete lines from a text file without loading the whole file.
  * Returns lines in **newest-first** order (same iteration order as `readLines().takeLast(n).asReversed()`).
+ *
+ * Reads backward through [AimiByteReader]; [AimiStorage.readTailLines] documents the same
+ * contract for callers that only need the shared storage half.
  */
 object JsonlTailReader {
 
     private const val CHUNK_SIZE = 8192
     private const val MAX_TAIL_BYTES = 16 * 1024 * 1024L
 
-    fun readTailLines(file: File, maxLines: Int): List<String> {
-        if (maxLines <= 0 || !file.exists() || !file.canRead()) return emptyList()
-        val fileLength = file.length()
-        if (fileLength == 0L) return emptyList()
+    fun readTailLines(path: AimiPath, maxLines: Int): List<String> {
+        if (maxLines <= 0) return emptyList()
+        val reader = runCatching { AimiByteReader(path) }.getOrNull() ?: return emptyList()
+        try {
+            val fileLength = reader.length()
+            if (fileLength == 0L) return emptyList()
 
-        val newestFirst = ArrayList<String>(maxLines)
-        RandomAccessFile(file, "r").use { raf ->
+            val newestFirst = ArrayList<String>(maxLines)
             var filePos = fileLength
             var carry = ""
             var bytesScanned = 0L
@@ -28,12 +32,16 @@ object JsonlTailReader {
                 val readSize = min(CHUNK_SIZE.toLong(), filePos).toInt()
                 filePos -= readSize
                 bytesScanned += readSize
-                raf.seek(filePos)
                 val chunk = ByteArray(readSize)
-                val bytesRead = raf.read(chunk)
-                if (bytesRead <= 0) break
+                var got = 0
+                while (got < readSize) {
+                    val read = reader.readAt(filePos + got, chunk, got, readSize - got)
+                    if (read <= 0) break
+                    got += read
+                }
+                if (got <= 0) break
 
-                val text = String(chunk, 0, bytesRead, Charsets.UTF_8) + carry
+                val text = chunk.decodeToString(0, got) + carry
                 carry = ""
                 var end = text.length
                 while (end > 0 && newestFirst.size < maxLines) {
@@ -61,7 +69,9 @@ object JsonlTailReader {
             if (carry.isNotEmpty() && newestFirst.size < maxLines) {
                 newestFirst.add(carry)
             }
+            return newestFirst
+        } finally {
+            reader.close()
         }
-        return newestFirst
     }
 }

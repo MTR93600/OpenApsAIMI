@@ -1,9 +1,9 @@
 package app.aaps.plugins.aps.openAPSAIMI.retention
 
-import java.io.File
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Instant
 
 /** A byte range of the file that belongs to one calendar month, named `yyyy-MM`. */
 internal data class AimiMonthRange(val month: String, val start: Long, val endExclusive: Long)
@@ -25,6 +25,12 @@ internal data class AimiCutPlan(
     val timestampKeyMatched: Boolean = true,
 )
 
+/** The `yyyy-MM` month label of [epochMs] in [zone]. Shared by the planner, the archive and the manager. */
+internal fun aimiMonthLabel(epochMs: Long, zone: TimeZone): String {
+    val date = Instant.fromEpochMilliseconds(epochMs).toLocalDateTime(zone).date
+    return "${date.year}-${date.monthNumber.toString().padStart(2, '0')}"
+}
+
 /**
  * Reads a file once and works out what to archive.
  *
@@ -34,20 +40,18 @@ internal data class AimiCutPlan(
  */
 internal object AimiCutPlanner {
 
-    private val MONTH = DateTimeFormatter.ofPattern("yyyy-MM")
-
     fun plan(
-        file: File,
+        path: AimiPath,
         rule: AimiRetentionRule,
         nowMs: Long,
-        zone: ZoneId = ZoneId.systemDefault(),
+        zone: TimeZone = TimeZone.currentSystemDefault(),
     ): AimiCutPlan = when (rule.op) {
-        AimiRetentionOp.TRIM_TIME  -> planByTime(file, rule, nowMs, zone)
-        AimiRetentionOp.TRIM_LINES -> planByLines(file, rule, nowMs, zone)
+        AimiRetentionOp.TRIM_TIME  -> planByTime(path, rule, nowMs, zone)
+        AimiRetentionOp.TRIM_LINES -> planByLines(path, rule, nowMs, zone)
         else                       -> AimiCutPlan(0L, 0L, emptyList())
     }
 
-    private fun planByTime(file: File, rule: AimiRetentionRule, nowMs: Long, zone: ZoneId): AimiCutPlan {
+    private fun planByTime(path: AimiPath, rule: AimiRetentionRule, nowMs: Long, zone: TimeZone): AimiCutPlan {
         val key = AimiTimestampKey(rule.timestampKey ?: return AimiCutPlan(0L, 0L, emptyList()))
         val cutoffMs = nowMs - rule.hotDays * 24L * 60L * 60L * 1000L
         var headerBytes = 0L
@@ -55,9 +59,9 @@ internal object AimiCutPlanner {
         var cutOffset = -1L
         var sawTimestamp = false
         val ranges = mutableListOf<AimiMonthRange>()
-        var runMonth = month(nowMs, zone)
+        var runMonth = aimiMonthLabel(nowMs, zone)
 
-        AimiLineScanner.forEachLine(file) { start, end, prefix ->
+        AimiLineScanner.forEachLine(path) { start, end, prefix ->
             if (first && rule.hasHeader) {
                 headerBytes = end
                 first = false
@@ -70,7 +74,7 @@ internal object AimiCutPlanner {
                 cutOffset = start
                 return@forEachLine false
             }
-            val label = if (ts != null) month(ts, zone).also { runMonth = it } else runMonth
+            val label = if (ts != null) aimiMonthLabel(ts, zone).also { runMonth = it } else runMonth
             val last = ranges.lastOrNull()
             if (last != null && last.month == label) {
                 ranges[ranges.size - 1] = last.copy(endExclusive = end)
@@ -88,7 +92,7 @@ internal object AimiCutPlanner {
         return AimiCutPlan(headerBytes, cutOffset, ranges)
     }
 
-    private fun planByLines(file: File, rule: AimiRetentionRule, nowMs: Long, zone: ZoneId): AimiCutPlan {
+    private fun planByLines(path: AimiPath, rule: AimiRetentionRule, nowMs: Long, zone: TimeZone): AimiCutPlan {
         val budget = rule.hotLines
         val starts = LongArray(budget)
         var count = 0
@@ -96,7 +100,7 @@ internal object AimiCutPlanner {
         var headerBytes = 0L
         var first = true
 
-        AimiLineScanner.forEachLine(file) { start, end, _ ->
+        AimiLineScanner.forEachLine(path) { start, end, _ ->
             if (first && rule.hasHeader) {
                 headerBytes = end
                 first = false
@@ -112,10 +116,7 @@ internal object AimiCutPlanner {
         if (count < budget) return AimiCutPlan(headerBytes, headerBytes, emptyList())
         val oldestKept = starts[write]
         if (oldestKept <= headerBytes) return AimiCutPlan(headerBytes, headerBytes, emptyList())
-        val range = AimiMonthRange(month(nowMs, zone), headerBytes, oldestKept)
+        val range = AimiMonthRange(aimiMonthLabel(nowMs, zone), headerBytes, oldestKept)
         return AimiCutPlan(headerBytes, oldestKept, listOf(range))
     }
-
-    private fun month(epochMs: Long, zone: ZoneId): String =
-        MONTH.format(Instant.ofEpochMilli(epochMs).atZone(zone))
 }
