@@ -60,7 +60,7 @@ class AimiSmbComparator @Inject constructor(
             "Context_MealRise,Context_COB_Active,Context_UAM_Bias,SMB_LastBolusAgeMin," +
             "Reason_AIMI,Reason_SMB\n"
     }
-}    // VIRTUAL PATIENT STATE (Lyra Reality System)
+    // VIRTUAL PATIENT STATE (Lyra Reality System)
     // Allows SMB to run "Counter-Factually" (deciding based on its own past, not AIMI's)
     private val virtualReservoir = VirtualInsulinReservoir()
     // No longer passing activePlugin

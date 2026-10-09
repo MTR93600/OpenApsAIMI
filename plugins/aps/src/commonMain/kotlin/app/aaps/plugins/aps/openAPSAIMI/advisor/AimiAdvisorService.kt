@@ -3,13 +3,22 @@ package app.aaps.plugins.aps.openAPSAIMI.advisor
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.profile.EffectiveProfile
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
+import app.aaps.plugins.aps.openAPSAIMI.aimiFmt3
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiAssetReader
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.utils.JsonObj
 import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlin.math.abs
+import kotlin.math.ln
+import kotlin.math.pow
 import kotlin.math.roundToInt
+import kotlin.time.Instant
 import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
@@ -29,7 +38,6 @@ import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRepository
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSmbTailDamping
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
-import org.json.JSONObject
 
 /**
  * =============================================================================
@@ -669,8 +677,8 @@ class AimiAdvisorService {
                                 reason = "Lower pragmatic relief floor slightly while hypo burden is elevated (reversible when control stabilizes).",
                             ),
                             descriptionArgs = listOf(
-                                String.format(Locale.US, "%.2f", reliefMinFactor),
-                                String.format(Locale.US, "%.2f", proposed),
+                                aimiFmt2(reliefMinFactor),
+                                aimiFmt2(proposed),
                             ),
                         ),
                     )
@@ -692,8 +700,8 @@ class AimiAdvisorService {
                                 reason = "Slightly lower restore threshold while lows are frequent to reduce late SMB snap-back.",
                             ),
                             descriptionArgs = listOf(
-                                String.format(Locale.US, "%.2f", redCarpetRestore),
-                                String.format(Locale.US, "%.2f", proposed),
+                                aimiFmt2(redCarpetRestore),
+                                aimiFmt2(proposed),
                             ),
                         ),
                     )
@@ -715,8 +723,8 @@ class AimiAdvisorService {
                                 reason = "Reduce priority MaxIOB factor while hypo exposure is significant.",
                             ),
                             descriptionArgs = listOf(
-                                String.format(Locale.US, "%.2f", maxIobFactor),
-                                String.format(Locale.US, "%.2f", proposed),
+                                aimiFmt2(maxIobFactor),
+                                aimiFmt2(proposed),
                             ),
                         ),
                     )
@@ -738,8 +746,8 @@ class AimiAdvisorService {
                                 reason = "Trim priority MaxIOB extra U during elevated hypo burden.",
                             ),
                             descriptionArgs = listOf(
-                                String.format(Locale.US, "%.2f", maxIobExtra),
-                                String.format(Locale.US, "%.2f", proposed),
+                                aimiFmt2(maxIobExtra),
+                                aimiFmt2(proposed),
                             ),
                         ),
                     )
@@ -875,7 +883,7 @@ class AimiAdvisorService {
                         domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Profile,
                         action = null,
                         descriptionArgs = listOf(
-                            String.format(Locale.US, "%.3f", ctx.prefs.mpcInsulinUPerKgPerStep),
+                            aimiFmt3(ctx.prefs.mpcInsulinUPerKgPerStep),
                         ),
                     ),
                 )
@@ -888,7 +896,7 @@ class AimiAdvisorService {
                         domain = app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Profile,
                         action = null,
                         descriptionArgs = listOf(
-                            String.format(Locale.US, "%.3f", ctx.prefs.mpcInsulinUPerKgPerStep),
+                            aimiFmt3(ctx.prefs.mpcInsulinUPerKgPerStep),
                         ),
                     ),
                 )
@@ -974,7 +982,13 @@ class AimiAdvisorService {
     // internal, not private: the Profile Advisor Compose screen's footer formats the report's
     // generatedAt timestamp the same way, and this is the one place that pattern is defined.
     internal fun formatTime(time: Long): String {
-         return java.text.SimpleDateFormat("dd MMM HH:mm", java.util.Locale.getDefault()).format(java.util.Date(time))
+         // "dd MMM HH:mm" via kotlinx.datetime; SimpleDateFormat does not exist outside the JVM.
+         val local = Instant.fromEpochMilliseconds(time).toLocalDateTime(TimeZone.currentSystemDefault())
+         val months = arrayOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+         val day = local.day.toString().padStart(2, '0')
+         val hour = local.hour.toString().padStart(2, '0')
+         val minute = local.minute.toString().padStart(2, '0')
+         return "$day ${months[local.monthNumber - 1]} $hour:$minute"
     }
 
     /**
@@ -1072,21 +1086,17 @@ class AimiAdvisorService {
             appendLine("generatedAt=${proposal.generatedAt}")
             appendLine("periodDays=${proposal.periodDays}")
             appendLine("strategy=${proposal.strategyCode}")
-            appendLine("scalingFactor=${"%.3f".format(java.util.Locale.US, proposal.scalingFactor)}")
+            appendLine("scalingFactor=${aimiFmt3(proposal.scalingFactor)}")
             appendLine("rationale=${proposal.rationale}")
             appendLine("hour,current,proposed,deltaPct")
         }
 
         val lines = proposal.rows.joinToString(separator = "\n") { row ->
             val deltaPct = if (row.current > 0.0) ((row.proposed / row.current) - 1.0) * 100.0 else 0.0
-            String.format(
-                java.util.Locale.US,
-                "%02d,%.3f,%.3f,%+.1f",
-                row.hour,
-                row.current,
-                row.proposed,
-                deltaPct
-            )
+            // "%02d,%.3f,%.3f,%+.1f" without String.format (JVM-only in commonMain).
+            val hour = row.hour.toString().padStart(2, '0')
+            val signedDelta = (if (deltaPct < 0) "-" else "+") + aimiFmt1(abs(deltaPct))
+            "$hour,${aimiFmt3(row.current)},${aimiFmt3(row.proposed)},$signedDelta"
         }
         return header + lines + "\n"
     }
@@ -1247,7 +1257,7 @@ class AimiAdvisorService {
             
             // Let's implement the logic inline here to ensure it works immediately without breaking DI.
             
-            val stats = JSONObject()
+            val stats = JsonObj()
             
             // Metabolic
             val mean = if(bgReadings.isNotEmpty()) bgReadings.average() else 0.0
@@ -1258,21 +1268,21 @@ class AimiAdvisorService {
             var lbgiSum = 0.0
             bgReadings.forEach { bg ->
                 if(bg > 10) {
-                    val f = 1.509 * (java.lang.Math.pow(java.lang.Math.log(bg), 1.084) - 5.381)
+                    val f = 1.509 * (pow(ln(bg), 1.084) - 5.381)
                     if(f < 0) lbgiSum += 10 * f * f
                 }
             }
             val lbgi = if(bgReadings.isNotEmpty()) lbgiSum/bgReadings.size else 0.0
 
-            stats.put("meta", JSONObject().put("generated", now))
-            stats.put("metabolic", JSONObject().apply {
+            stats.put("meta", JsonObj().put("generated", now))
+            stats.put("metabolic", JsonObj().apply {
                 put("gmi", 3.31 + 0.02392 * mean)
                 put("cv", cv)
                 put("lbgi", lbgi)
                 put("tir", metrics.tir70_180)
             })
             
-            stats.put("advisor_metrics", JSONObject().apply {
+            stats.put("advisor_metrics", JsonObj().apply {
                 put("hypos", metrics.timeBelow70)
                 put("hypers", metrics.timeAbove180)
                 put("basalRatio", metrics.basalPercent)

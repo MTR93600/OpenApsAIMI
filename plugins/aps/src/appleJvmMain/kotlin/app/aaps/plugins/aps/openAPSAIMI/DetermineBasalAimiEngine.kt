@@ -157,7 +157,7 @@ private object SilentUiInteraction : UiInteraction {
 }
 
 /** Maps the APS result onto the engine contract. */
-private fun RT.toAimiTickResult(state: AimiEngineState): AimiTickResult {
+fun RT.toAimiTickResult(state: AimiEngineState): AimiTickResult {
     // C1: Android's LoopPlugin applies BOTH the temp basal and the SMB when both
     // are requested (TBR first, then SMB). The previous code dropped the TBR
     // whenever an SMB was present. Emit the SMB as the primary command and the
