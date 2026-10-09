@@ -9,11 +9,12 @@ import app.aaps.plugins.aimicontracts.AimiTherapyCommand
 import app.aaps.plugins.aimicontracts.AimiTickResult
 
 /**
- * Safe default until a caller turns [AimiCommonEngineSwitch] on and supplies [commonEngine].
+ * Safe default that delegates to [commonEngine] when [AimiCommonEngineSwitch] is on.
  *
- * The switch is off by default. Off, this returns `Hold("ENGINE_NOT_EXTRACTED")` and does not
- * call [commonEngine]. On, with a delegate that is not this instance, it returns that delegate's
- * result unchanged. It does not catch the delegate's exceptions. It does not command a pump.
+ * The switch is on by default (project decision 2026-10-09). Off, this returns
+ * `Hold("ENGINE_NOT_EXTRACTED")` and does not call [commonEngine]. On, with a delegate that is
+ * not this instance, it returns that delegate's result unchanged. It does not catch the
+ * delegate's exceptions. It does not command a pump.
  * Reason code [REASON_NOT_EXTRACTED] stays stable for the off path.
  */
 class HoldAimiEngine(
