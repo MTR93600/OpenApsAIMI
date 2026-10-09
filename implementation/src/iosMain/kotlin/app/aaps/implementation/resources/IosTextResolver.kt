@@ -4,7 +4,6 @@ import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.keys.interfaces.TextRef
 import platform.Foundation.NSBundle
 import platform.Foundation.NSString
-import platform.Foundation.NSString stringWithFormat
 
 /**
  * Resolves [TextRef] on iOS via NSLocalizedString.
@@ -28,6 +27,10 @@ class IosTextResolver : TextResolver {
 
     private fun applyArgs(format: String, args: List<Any?>): String {
         if (args.isEmpty()) return format
+        // ObjC uses %@ for objects; Android-style %s would be read as a C string
+        // pointer, producing garbage. Rewrite %s (and positional %N$s) to %@ so
+        // Kotlin Strings bridge to NSString correctly.
+        val objcFormat = format.replace(Regex("%(\\d+\\$)?s"), "%\$1@")
         val nsArgs: List<Any?> = args.map { arg ->
             when (arg) {
                 null -> "null"
@@ -37,8 +40,7 @@ class IosTextResolver : TextResolver {
                 else -> arg.toString()
             }
         }
-        @Suppress("UNCHECKED_CAST")
-        return NSString.stringWithFormat(format, *(nsArgs.toTypedArray() as Array<Any?>))
+        return NSString.stringWithFormat(objcFormat, *nsArgs.toTypedArray())
     }
 
     override fun gs(ref: TextRef): String = when (ref) {

@@ -45,8 +45,22 @@ class AimiSmbComparator @Inject constructor(
 ) : AimiSmbComparison {
     private companion object {
         const val CSV_SCHEMA_VERSION = "3"
+        // CSV header written when the file is created. Byte-identical to the previous version.
+        private const val HEADER = "SchemaVersion,Timestamp,Date,BG,Delta,ShortAvgDelta,LongAvgDelta,IOB,COB," +
+            "AIMI_Rate,AIMI_SMB,AIMI_Duration,AIMI_EventualBG,AIMI_TargetBG," +
+            "SMB_Rate,SMB_SMB,SMB_Duration,SMB_EventualBG,SMB_TargetBG," +
+            "Diff_Rate,Diff_SMB,Diff_EventualBG," +
+            "MaxIOB,MaxBasal,MicroBolus_Allowed," +
+            "AIMI_Insulin_30min,SMB_Insulin_30min,Cumul_Diff," +
+            "AIMI_Active,SMB_Active,Both_Active," +
+            "AIMI_UAM_Last,SMB_UAM_Last," +
+            "Verdict,Artifact_Flag,Diff_Sign," +
+            "AIMI_Flag_MealPriority,AIMI_Flag_Refractory,AIMI_Flag_Throttle,AIMI_Flag_CBF," +
+            "SMB_Flag_Refractory,SMB_Flag_Throttle,SMB_Flag_CBF," +
+            "Context_MealRise,Context_COB_Active,Context_UAM_Bias,SMB_LastBolusAgeMin," +
+            "Reason_AIMI,Reason_SMB\n"
     }
-    // VIRTUAL PATIENT STATE (Lyra Reality System)
+}    // VIRTUAL PATIENT STATE (Lyra Reality System)
     // Allows SMB to run "Counter-Factually" (deciding based on its own past, not AIMI's)
     private val virtualReservoir = VirtualInsulinReservoir()
     // No longer passing activePlugin
@@ -491,20 +505,4 @@ class AimiSmbComparator @Inject constructor(
         return match.groupValues.getOrNull(1)?.toDoubleOrNull()
     }
 
-    companion object {
-        // CSV header written when the file is created. Byte-identical to the previous version.
-        private const val HEADER = "SchemaVersion,Timestamp,Date,BG,Delta,ShortAvgDelta,LongAvgDelta,IOB,COB," +
-            "AIMI_Rate,AIMI_SMB,AIMI_Duration,AIMI_EventualBG,AIMI_TargetBG," +
-            "SMB_Rate,SMB_SMB,SMB_Duration,SMB_EventualBG,SMB_TargetBG," +
-            "Diff_Rate,Diff_SMB,Diff_EventualBG," +
-            "MaxIOB,MaxBasal,MicroBolus_Allowed," +
-            "AIMI_Insulin_30min,SMB_Insulin_30min,Cumul_Diff," +
-            "AIMI_Active,SMB_Active,Both_Active," +
-            "AIMI_UAM_Last,SMB_UAM_Last," +
-            "Verdict,Artifact_Flag,Diff_Sign," +
-            "AIMI_Flag_MealPriority,AIMI_Flag_Refractory,AIMI_Flag_Throttle,AIMI_Flag_CBF," +
-            "SMB_Flag_Refractory,SMB_Flag_Throttle,SMB_Flag_CBF," +
-            "Context_MealRise,Context_COB_Active,Context_UAM_Bias,SMB_LastBolusAgeMin," +
-            "Reason_AIMI,Reason_SMB\n"
-    }
 }

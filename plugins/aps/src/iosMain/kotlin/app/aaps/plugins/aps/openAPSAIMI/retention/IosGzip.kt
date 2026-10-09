@@ -13,12 +13,18 @@ import platform.Foundation.create
 /**
  * Builds gzip members on iOS without a zlib cinterop.
  *
- * `platform.Foundation` only exposes zlib compression as
- * `-[NSData compressedDataUsingAlgorithm:]`, which produces the RFC 1950 zlib framing
- * (2-byte header + raw deflate + 4-byte ADLER32 trailer). A gzip member needs the raw
- * deflate stream wrapped in the 10-byte gzip header and the 8-byte trailer
- * (CRC32 + ISIZE), so the zlib framing is stripped here and the gzip framing is
- * written by hand. The CRC32 is the standard IEEE polynomial, computed in pure Kotlin,
+ * `platform.Foundation` only exposes deflate compression as
+ * `-[NSData compressedDataUsingAlgorithm:]` with `NSDataCompressionAlgorithmZlib`.
+ * Despite the name, Apple's encoder emits a raw deflate stream (RFC 1951) with no
+ * zlib framing: no 2-byte header, no Adler-32 trailer. This is a documented quirk
+ * of the underlying Compression.framework `COMPRESSION_ZLIB`, confirmed by several
+ * independent reports of interop bugs where the wrapper had to be added by hand.
+ * So the compressor output is used as-is here; stripping anything off it would
+ * corrupt the stream.
+ *
+ * A gzip member needs that raw deflate stream wrapped in the 10-byte gzip header
+ * and the 8-byte trailer (CRC32 of the uncompressed data + ISIZE), which is written
+ * by hand below. The CRC32 is the standard IEEE polynomial, computed in pure Kotlin,
  * so it matches what `java.util.zip` produces on Android.
  *
  * The output is a complete, self-contained gzip member. Concatenated members form a
@@ -46,17 +52,16 @@ internal object IosGzip {
     }
 
     /**
-     * Raw deflate bytes for [data]: the zlib framing is stripped off the Foundation output.
+     * Raw deflate bytes for [data], straight from Foundation.
      *
-     * RFC 1950 fixes the framing at a 2-byte header and a 4-byte ADLER32 trailer, so the
-     * slice is deterministic. Anything at or below that framing size cannot hold deflate
-     * output and is rejected.
+     * Apple's `COMPRESSION_ZLIB` emits bare RFC 1951 deflate with no wrapper, so no
+     * framing is stripped. An empty result cannot hold a deflate stream and is rejected.
      */
     private fun rawDeflate(data: ByteArray): ByteArray? {
-        val zlib = data.toNSData().compressedDataUsingAlgorithm(NSDataCompressionAlgorithmZlib, null)
+        val deflate = data.toNSData().compressedDataUsingAlgorithm(NSDataCompressionAlgorithmZlib, null)
             ?.toByteArray() ?: return null
-        if (zlib.size <= ZLIB_HEADER_SIZE + ADLER32_SIZE) return null
-        return zlib.copyOfRange(ZLIB_HEADER_SIZE, zlib.size - ADLER32_SIZE)
+        if (deflate.isEmpty()) return null
+        return deflate
     }
 
     /** IEEE CRC32. Same result as `java.util.zip.CRC32` on the same bytes. */
@@ -90,8 +95,6 @@ internal object IosGzip {
     )
 
     private const val TRAILER_SIZE = 8 // CRC32 + ISIZE
-    private const val ZLIB_HEADER_SIZE = 2
-    private const val ADLER32_SIZE = 4
 
     private const val CRC32_INIT = 0xFFFFFFFF.toInt()
 

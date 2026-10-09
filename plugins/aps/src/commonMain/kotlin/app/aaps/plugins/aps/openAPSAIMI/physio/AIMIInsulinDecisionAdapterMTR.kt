@@ -1,6 +1,8 @@
 package app.aaps.plugins.aps.openAPSAIMI.physio
 
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
+import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
+import app.aaps.plugins.aps.openAPSAIMI.aimiFmt3
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiHealthContext
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiPhysioSource
 import app.aaps.plugins.aps.openAPSAIMI.aimiIsMainThread
@@ -12,8 +14,9 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.gate.CosineTrajectoryGate
 import app.aaps.plugins.aps.openAPSAIMI.physio.GateInput
 import app.aaps.plugins.aps.openAPSAIMI.physio.SleepLiveDetector
 import app.aaps.plugins.aps.openAPSAIMI.physio.KernelType
-import kotlin.concurrent.AtomicBoolean
-import kotlin.concurrent.AtomicReference
+import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
@@ -43,6 +46,7 @@ import kotlinx.coroutines.runBlocking
  * 
  * @author MTR & Lyra AI - AIMI Physiological Intelligence
  */
+@OptIn(ExperimentalAtomicApi::class)
 @SingleIn(AppScope::class)
 class AIMIInsulinDecisionAdapterMTR @Inject constructor(
     private val repo: AimiHealthContext,
@@ -494,7 +498,7 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
         // Check therapy events for hypo treatments
         try {
             refreshHypoEventsAsync(now)
-            val events = hypoEventsRef.get()
+            val events = hypoEventsRef.load()
             val hypoEvents = events.filter { event ->
                 event.note?.contains("hypo", ignoreCase = true) == true ||
                 event.note?.contains("hypoglycemia", ignoreCase = true) == true
@@ -528,14 +532,14 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
      */
     fun getRealTimeActivity(): RealTimeActivity {
          refreshActivityAsync()
-         return activityRef.get()
+         return activityRef.load()
     }
 
     private fun refreshHypoEventsAsync(now: Long) {
         if (!hypoEventsRefreshInFlight.compareAndSet(false, true)) return
         ioScope.launch {
             try {
-                hypoEventsRef.set(
+                hypoEventsRef.store(
                     persistenceLayer.getTherapyEventDataFromTime(
                         now - RECENT_HYPO_WINDOW_MS,
                         TE.Type.NOTE,
@@ -543,9 +547,9 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
                     )
                 )
             } catch (_: Exception) {
-                hypoEventsRef.set(emptyList())
+                hypoEventsRef.store(emptyList())
             } finally {
-                hypoEventsRefreshInFlight.set(false)
+                hypoEventsRefreshInFlight.store(false)
             }
         }
     }
@@ -554,16 +558,16 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
         if (!activityRefreshInFlight.compareAndSet(false, true)) return
         ioScope.launch {
             try {
-                activityRef.set(
+                activityRef.store(
                     RealTimeActivity(
                         stepsToday = dataRepository.fetchStepsData(0),
                         heartRate = dataRepository.fetchLastHeartRate()
                     )
                 )
             } catch (_: Exception) {
-                activityRef.set(RealTimeActivity(0, 0))
+                activityRef.store(RealTimeActivity(0, 0))
             } finally {
-                activityRefreshInFlight.set(false)
+                activityRefreshInFlight.store(false)
             }
         }
     }
@@ -572,7 +576,11 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
     // UTILITIES
     // ═══════════════════════════════════════════════════════════════════════
     
-    private fun Double.format(decimals: Int): String = "%.${decimals}f".format(this)
+    // Uses the project's locale-stable formatters (String.format is JVM-only).
+    private fun Double.format(decimals: Int): String = when (decimals) {
+        3 -> aimiFmt3(this)
+        else -> aimiFmt2(this)
+    }
 
     /**
      * [HealthContextRepository.fetchSnapshot] reads steps/HR via DB on a non-main thread

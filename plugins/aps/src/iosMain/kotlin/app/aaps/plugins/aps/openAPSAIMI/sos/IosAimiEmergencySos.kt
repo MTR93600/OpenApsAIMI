@@ -13,6 +13,7 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import platform.Foundation.NSDate
 import platform.Foundation.NSDateFormatter
 import platform.Foundation.NSUserDefaults
 import platform.Foundation.dateWithTimeIntervalSince1970
@@ -254,10 +255,10 @@ class IosAimiEmergencySos @Inject constructor() : AimiEmergencySos {
         setBool(KEY_STALE_ALERT_TRIGGERED, false)
     }
 
-    private fun getLong(key: String): Long = NSUserDefaults.standardUserDefaults.longForKey(key)
+    private fun getLong(key: String): Long = NSUserDefaults.standardUserDefaults.integerForKey(key)
 
     private fun setLong(key: String, value: Long) =
-        NSUserDefaults.standardUserDefaults.setLong(value, forKey = key)
+        NSUserDefaults.standardUserDefaults.setInteger(value, forKey = key)
 
     private fun getBool(key: String): Boolean = NSUserDefaults.standardUserDefaults.boolForKey(key)
 
@@ -273,7 +274,7 @@ class IosAimiEmergencySos @Inject constructor() : AimiEmergencySos {
 
     companion object {
         // State keys mirror Android's "aimi_sos_advanced_prefs" file, as plain
-        // NSUserDefaults keys. longForKey/boolForKey return 0/false when absent,
+        // NSUserDefaults keys. integerForKey/boolForKey return 0/false when absent,
         // matching Android's getLong(key, 0L)/getBoolean(key, false).
         private const val KEY_FIRST_BELOW_THRESHOLD_TIME = "aimi_sos.first_below_threshold_time"
         private const val KEY_LAST_ACTION_TIME = "aimi_sos.last_action_time"
