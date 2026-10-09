@@ -471,7 +471,7 @@ Encore Android. Il faut un port. Pas purs, donc pas déplacés dans ce lot :
 | persistance pas, FC, bolus | `refreshStepsAsync` 13, `refreshHeartRatesAsync` 13 | `persistenceLayer` | port décidé : listes vides, le même repli qu’une lecture ratée. Ces listes peuvent changer l’ISF |
 | `decisionContextForTrigger` | 43 | `AimiDecisionContext` est un type Android | port décidé, non-parité : ne pas instancier. Neutre documenté, pas activé |
 
-Ces ports iOS sont tranchés dans `_docs/kmp/p6-ios-decisions.md`, approuvé le 2026-10-05. L’implémentation neutre est derrière `AimiCommonEngineSwitch`, éteint par défaut. `IosClientConfig.APS` reste `false`. Le tick Android n’appelle pas ces ports.
+Ces ports iOS sont tranchés dans `_docs/kmp/p6-ios-decisions.md`, approuvé le 2026-10-05, mis à jour le 2026-10-09. L’implémentation neutre est derrière `AimiCommonEngineSwitch`, allumé par défaut depuis le 2026-10-09 (décision projet, parité non encore prouvée). `IosClientConfig.APS` reste `false`. Le tick Android n’appelle pas ces ports.
 
 - `detectMealOnset` : le corps est `decideDetectMealOnset`. Le veto Android lit l’assessment. iOS : faux sans assessment.
 - `estimateUndeclaredVirtualCob` : iOS rend 0 g.
