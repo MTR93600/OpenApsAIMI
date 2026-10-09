@@ -22,9 +22,9 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
  * janitor runs, not an unlimited bound**. If the janitor stops running, a file is moved aside once and
  * then grows again.
  *
- * **There is deliberately no iOS implementation.** `AimiStorage` has none either, so on iOS these
- * files are never written at all: there is genuinely nothing to cap, which is a different thing from a
- * stub that quietly does nothing. Without a binding, any future iOS graph fails at wiring time.
+ * The iOS half is [IosAimiAppendCap][app.aaps.plugins.aps.openAPSAIMI.retention.IosAimiAppendCap]:
+ * now that iOS has storage, its telemetry files need the cap too. Without a binding, any future
+ * iOS graph fails at wiring time.
  */
 interface AimiAppendCap {
 
