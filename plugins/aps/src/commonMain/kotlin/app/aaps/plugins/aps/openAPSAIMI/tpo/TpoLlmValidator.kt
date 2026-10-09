@@ -1,18 +1,25 @@
 package app.aaps.plugins.aps.openAPSAIMI.tpo
 
+import app.aaps.core.data.json.OrgJsonCompat.optDoubleCompat
+import app.aaps.core.data.json.OrgJsonCompat.optStringCompat
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.StringKey
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AiCoachingService
+import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningContextApplySupport
+import app.aaps.plugins.aps.openAPSAIMI.aimiFmt0
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
-import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningContextApplySupport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
-import java.util.Locale
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.put
 
 internal class TpoLlmValidator(
     private val sp: KeyValueStore,
@@ -86,13 +93,13 @@ internal class TpoLlmValidator(
             TuningContextApplySupport.formatChangeLine(change)
         }
         val timeline = ledger.recentTimeline().joinToString("\n") { episode ->
-            "${episode.type.name} seq=${episode.sequenceIndex} bg=${"%.0f".format(Locale.US, episode.bgExtremeMgdl)} @${episode.peakAtMs}"
+            "${episode.type.name} seq=${episode.sequenceIndex} bg=${aimiFmt0(episode.bgExtremeMgdl)} @${episode.peakAtMs}"
         }
-        val payload = JSONObject().apply {
+        val payload = buildJsonObject {
             put("proposed_pack", proposal.packId.name)
             put("tier", proposal.tier.name)
             put("algo_confidence", proposal.algoConfidence)
-            put("reason_codes", proposal.reasonCodes)
+            put("reason_codes", JsonArray(proposal.reasonCodes.map { JsonPrimitive(it) }))
             put("bg_mgdl", input.bgMgdl)
             put("delta_5m", input.deltaMgdl5m)
             put("cob_g", input.cobGrams)
@@ -134,12 +141,12 @@ Rules:
     private fun parseResponse(raw: String, latencyMs: Long): TpoLlmResult {
         val jsonText = raw.substringAfter("{", "{").let { "{" + it.substringBeforeLast("}") + "}" }
         return runCatching {
-            val json = JSONObject(jsonText)
+            val json = Json.parseToJsonElement(jsonText).jsonObject
             val verdict = runCatching {
-                TpoLlmVerdict.valueOf(json.optString("verdict", "UNCERTAIN").uppercase(Locale.US))
+                TpoLlmVerdict.valueOf(json.optStringCompat("verdict").ifEmpty { "UNCERTAIN" }.uppercase())
             }.getOrDefault(TpoLlmVerdict.UNCERTAIN)
-            val confidence = json.optDouble("confidence", 0.0)
-            val competing = json.optString("competing_hypothesis", "none")
+            val confidence = json.optDoubleCompat("confidence", 0.0)
+            val competing = json.optStringCompat("competing_hypothesis").ifEmpty { "none" }
             val finalVerdict = if (competing != "none" && confidence >= 0.75) {
                 TpoLlmVerdict.VETO
             } else {
@@ -148,7 +155,7 @@ Rules:
             TpoLlmResult(
                 verdict = finalVerdict,
                 confidence = confidence,
-                rationale = json.optString("rationale", "").take(240),
+                rationale = json.optStringCompat("rationale").take(240),
                 competingHypothesis = competing,
                 latencyMs = latencyMs,
             )
