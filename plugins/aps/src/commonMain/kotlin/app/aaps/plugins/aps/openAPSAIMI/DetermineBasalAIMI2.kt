@@ -7947,7 +7947,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     )
                 }
                 override fun applyContext(bg: Double, iob: Double, cob: Double, rT: RT) =
-                    this@DetermineBasalaimiSMB2.applyContextModule(bg, work.iob, work.cob, rT)
+                    this@DetermineBasalaimiSMB2.applyContextModule(bg, iob, cob, rT)
                 override fun fuseIsf(
                     profile: OapsProfileAimi,
                     tdd7Days: Double,
@@ -9850,7 +9850,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             override fun convertBg(value: Double) = convertBG(value)
             override fun smbDisabledHighTarget(targetBg: Double) = rh.gs(ApsStrings.smb_disabled_high_target, targetBg)
             override fun smbEnabledAlways() = rh.gs(ApsStrings.smb_enabled_always)
-            override fun smbEnabledForCob(cob: Double) = rh.gs(ApsStrings.smb_enabled_for_cob, work.cob)
+            override fun smbEnabledForCob(cob: Double) = rh.gs(ApsStrings.smb_enabled_for_cob, cob)
             override fun smbEnabledAfterCarbEntry() = rh.gs(ApsStrings.smb_enabled_after_carb_entry)
             override fun smbEnabledForTempTarget(bgText: String) = rh.gs(ApsStrings.smb_enabled_for_temp_target, bgText)
             override fun smbEnabledMealMode(currentBg: String, combinedDelta: Double, eventualBg: String) =
