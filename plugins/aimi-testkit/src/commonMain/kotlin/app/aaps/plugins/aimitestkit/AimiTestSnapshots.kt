@@ -1,6 +1,8 @@
 package app.aaps.plugins.aimitestkit
 
 import app.aaps.core.interfaces.aps.OapsProfileAimi
+import app.aaps.plugins.aimicontracts.AimiAutosensSnapshot
+import app.aaps.plugins.aimicontracts.AimiBgQualitySnapshot
 import app.aaps.plugins.aimicontracts.AimiCapabilitySnapshot
 import app.aaps.plugins.aimicontracts.AimiConfigSnapshot
 import app.aaps.plugins.aimicontracts.AimiEngineState
@@ -8,6 +10,7 @@ import app.aaps.plugins.aimicontracts.AimiGlucoseSnapshot
 import app.aaps.plugins.aimicontracts.AimiGlucoseWarmup
 import app.aaps.plugins.aimicontracts.AimiInputSnapshot
 import app.aaps.plugins.aimicontracts.AimiInsulinSnapshot
+import app.aaps.plugins.aimicontracts.AimiKineticsSnapshot
 import app.aaps.plugins.aimicontracts.AimiMealSnapshot
 import app.aaps.plugins.aimicontracts.AimiModelBundle
 import app.aaps.plugins.aimicontracts.AimiPhysiologySnapshot
@@ -82,6 +85,18 @@ object AimiTestSnapshots {
             ),
             config = AimiConfigSnapshot(schemaVersion = 1),
             capabilities = AimiCapabilitySnapshot(closedLoopAllowed = closedLoopAllowed),
+            autosens = AimiAutosensSnapshot(
+                ratio = missingDouble("autosens not run"),
+            ),
+            bgQuality = AimiBgQualitySnapshot(
+                flatBGsDetected = false,
+                noiseLevel = null,
+            ),
+            kinetics = AimiKineticsSnapshot(
+                effectiveDiaHours = null,
+                effectivePeakMinutes = null,
+            ),
+            dynIsfMode = false,
         )
     }
 

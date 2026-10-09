@@ -31,6 +31,54 @@ data class AimiInputSnapshot(
     val config: AimiConfigSnapshot,
     val capabilities: AimiCapabilitySnapshot,
     val advanced: AimiAdvancedFeatures? = null,
+    val autosens: AimiAutosensSnapshot = AimiAutosensSnapshot(),
+    val bgQuality: AimiBgQualitySnapshot = AimiBgQualitySnapshot(),
+    val kinetics: AimiKineticsSnapshot = AimiKineticsSnapshot(),
+    /**
+     * Dynamic ISF mode for this tick.
+     *
+     * Not in the 102 typed config keys (verified against
+     * `_docs/kmp/generated/m1-config-keys.csv`); carried here as a tick input.
+     * Default false = dynamic ISF off.
+     */
+    val dynIsfMode: Boolean = false,
+)
+
+/**
+ * Autosens state for this tick.
+ *
+ * [ratio] is the sensitivity ratio computed by the autosens algorithm
+ * (1.0 = neutral). [TimedValue.Missing] means autosens did not run;
+ * the adapter falls back to 1.0 only in that case, and documents it.
+ */
+@Serializable
+data class AimiAutosensSnapshot(
+    val ratio: TimedValue<Double> = TimedValue.Missing("not captured"),
+)
+
+/**
+ * CGM data quality for this tick.
+ *
+ * [flatBGsDetected] is a safety signal: when true, the engine must not
+ * trust flat high readings (stuck sensor can mask a real low or fake a high).
+ * Default false = no flat-data suspicion.
+ */
+@Serializable
+data class AimiBgQualitySnapshot(
+    val flatBGsDetected: Boolean = false,
+    val noiseLevel: TimedValue<Double>? = null,
+)
+
+/**
+ * Learned insulin kinetics for this tick.
+ *
+ * [effectiveDiaHours] and [effectivePeakMinutes] come from the kinetics
+ * profiler. Null means "not learned": the engine uses profile DIA/peak.
+ */
+@Serializable
+data class AimiKineticsSnapshot(
+    val effectiveDiaHours: Double? = null,
+    val effectivePeakMinutes: Double? = null,
 )
 
 /**
@@ -122,6 +170,12 @@ data class AimiInsulinSnapshot(
     val iobU: TimedValue<Double>,
     val activityUPerHour: TimedValue<Double>,
     val iobHistory: List<IobTotal> = emptyList(),
+    /**
+     * IOB array computed with learned (PKPD) kinetics, when available.
+     * Empty means the shell did not compute it; the adapter passes null
+     * and the engine falls back to the standard IOB array.
+     */
+    val pkpdIobHistory: List<IobTotal> = emptyList(),
 )
 
 @Serializable
