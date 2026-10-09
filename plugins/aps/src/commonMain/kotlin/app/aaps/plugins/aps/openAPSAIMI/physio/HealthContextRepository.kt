@@ -21,7 +21,6 @@ import kotlin.concurrent.atomics.AtomicReference
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.AppScope
 import kotlinx.coroutines.Dispatchers as UnusedDispatchers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -39,7 +38,7 @@ import kotlinx.coroutines.launch
  */
 @SingleIn(AppScope::class)
 class HealthContextRepository @Inject constructor(
-    private val hcRepo: AIMIPhysioDataRepositoryMTR,
+    private val hcRepo: AimiPhysioDataSource,
     private val featureExtractor: AIMIPhysioFeatureExtractorMTR,
     private val aggregator: PhysioAggregator,
     private val unifiedProvider: app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR, // 🚀 NEW INJECTION
@@ -289,7 +288,7 @@ class HealthContextRepository @Inject constructor(
     override fun getLastSnapshot(): HealthContextSnapshot = lastSnapshot
     
     // For Workers: Access underlying HC Repo
-    fun getHcRepo(): AIMIPhysioDataRepositoryMTR = hcRepo
+    fun getHcRepo(): AimiPhysioDataSource = hcRepo
     
     // For Daily Worker: Force heavy refresh
     fun forceHeavyRefresh() {

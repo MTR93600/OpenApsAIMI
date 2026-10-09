@@ -34,7 +34,6 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
-import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
@@ -57,14 +56,13 @@ import kotlin.math.sqrt
  * 
  * @author MTR & Lyra AI - AIMI Physiological Intelligence
  */
-@ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
 class AIMIPhysioDataRepositoryMTR @Inject constructor(
     private val context: Context,
     private val aapsLogger: AAPSLogger,
     private val ouraApiThermalClient: OuraApiThermalClient,
     private val keyValueCache: app.aaps.plugins.aps.openAPSAIMI.utils.AimiKeyValueCache,
-) : AimiPhysioSource {
+) : AimiPhysioSource, AimiPhysioDataSource {
     
     companion object {
         private const val TAG = "PhysioRepository"
@@ -232,7 +230,7 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
      * 
      * @return SleepDataMTR or null if unavailable
      */
-    suspend fun fetchSleepData(): SleepDataMTR? {
+    override suspend fun fetchSleepData(): SleepDataMTR? {
         val cacheKey = "sleep_last"
         val cached = cache[cacheKey] as? CachedData<SleepDataMTR>
         
@@ -325,7 +323,7 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
      * 
      * @return List of HRVDataMTR, empty if unavailable
      */
-    suspend fun fetchHRVData(daysBack: Int = 7): List<HRVDataMTR> {
+    override suspend fun fetchHRVData(daysBack: Int = 7): List<HRVDataMTR> {
         val cacheKey = "hrv_${daysBack}days"
         val cached = cache[cacheKey] as? CachedData<List<HRVDataMTR>>
         
@@ -450,7 +448,7 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
      * 
      * @return List of RHRDataMTR, empty if unavailable
      */
-    suspend fun fetchMorningRHR(daysBack: Int = 7): List<RHRDataMTR> {
+    override suspend fun fetchMorningRHR(daysBack: Int = 7): List<RHRDataMTR> {
         val cacheKey = "rhr_${daysBack}days"
         val cached = cache[cacheKey] as? CachedData<List<RHRDataMTR>>
         
@@ -805,7 +803,7 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
      * 2) Oura API daily readiness deviation (Garmin/Oura do not write skin temp to HC)
      * 3) HC recovery proxy from RHR + HRV (Garmin and Oura via HC)
      */
-    internal suspend fun fetchThermalWindow(daysBack: Int = 3): ThermalDataWindowMTR {
+    override suspend fun fetchThermalWindow(daysBack: Int = 3): ThermalDataWindowMTR {
         val cacheKey = "thermal_${daysBack}d"
         val cached = cache[cacheKey] as? CachedData<ThermalDataWindowMTR>
         if (cached?.isValid() == true) {
