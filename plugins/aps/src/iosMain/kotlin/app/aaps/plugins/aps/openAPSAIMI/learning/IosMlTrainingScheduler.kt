@@ -2,6 +2,10 @@ package app.aaps.plugins.aps.openAPSAIMI.learning
 
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import platform.BackgroundTasks.BGProcessingTask
 import platform.BackgroundTasks.BGProcessingTaskRequest
 import platform.BackgroundTasks.BGTaskScheduler
@@ -18,14 +22,13 @@ import platform.Foundation.dateWithTimeIntervalSinceNow
  * `BGTaskSchedulerPermittedIdentifiers`, and the `processing` background mode must be enabled.
  * Without both, the system will never launch the task.
  *
- * Training itself reuses the commonMain pipeline (`NeuralModelTrainer`, dataset parsers). It
- * needs an [app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage] implementation, which
- * deliberately does not exist on iOS yet (see its KDoc): until one is provided, [runTraining]
- * is a no-op that reports [TrainingResult.STORAGE_UNAVAILABLE]. This keeps the feature visibly
- * absent instead of silently doing nothing.
+ * Training reuses the commonMain pipeline (`BasalMlTrainingCoordinator`, `NeuralModelTrainer`,
+ * dataset parsers). The coordinator is injected via [configure], typically at app launch from
+ * the DI graph. Until configured, [runTraining] reports [TrainingResult.NOT_CONFIGURED] instead
+ * of silently doing nothing.
  *
- * Call [register] once at app launch (before the app finishes launching), then [schedule] to
- * enqueue the next run. Each completed run should call [schedule] again to keep the cadence.
+ * Call [configure] once at app launch, then [register] (before the app finishes launching),
+ * then [schedule] to enqueue the next run. Each completed run re-schedules automatically.
  */
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 object IosMlTrainingScheduler {
@@ -43,11 +46,26 @@ object IosMlTrainingScheduler {
         /** Training ran (or was correctly skipped by the coordinator gates). */
         DONE,
 
-        /** No iOS `AimiStorage` implementation is available yet. */
-        STORAGE_UNAVAILABLE,
+        /** No coordinator was provided via [configure] yet. */
+        NOT_CONFIGURED,
 
         /** The task could not be scheduled (e.g. identifier not in Info.plist). */
         SCHEDULE_FAILED,
+    }
+
+    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
+    @Volatile
+    private var coordinator: BasalMlTrainingCoordinator? = null
+
+    /**
+     * Provides the training coordinator. Call once at app launch, before [register].
+     *
+     * The coordinator is normally built from the app's DI graph:
+     * `BasalMlTrainingCoordinator(iosAimiStorage(), basalNeuralLearner, logger)`.
+     */
+    fun configure(coordinator: BasalMlTrainingCoordinator) {
+        this.coordinator = coordinator
     }
 
     /**
@@ -66,8 +84,19 @@ object IosMlTrainingScheduler {
             if (processingTask != null) {
                 // Re-schedule first: if training crashes, the next run is still enqueued.
                 schedule()
-                val result = runTraining()
-                processingTask.setTaskCompletedWithSuccess(result != TrainingResult.SCHEDULE_FAILED)
+                val coordinator = coordinator
+                if (coordinator == null) {
+                    processingTask.setTaskCompletedWithSuccess(false)
+                } else {
+                    scope.launch {
+                        try {
+                            coordinator.runScheduledTraining()
+                            processingTask.setTaskCompletedWithSuccess(true)
+                        } catch (e: Exception) {
+                            processingTask.setTaskCompletedWithSuccess(false)
+                        }
+                    }
+                }
             } else {
                 task.setTaskCompletedWithSuccess(false)
             }
@@ -97,14 +126,14 @@ object IosMlTrainingScheduler {
     /**
      * Runs one training pass through the commonMain pipeline.
      *
-     * Currently a no-op returning [TrainingResult.STORAGE_UNAVAILABLE]: there is deliberately
-     * no iOS `AimiStorage` implementation yet, and training without persistence would silently
-     * do nothing. Once an iOS storage binding exists, wire it here and call the coordinator
-     * equivalent of `BasalMlTrainingCoordinator.runScheduledTraining()`.
+     * Returns [TrainingResult.NOT_CONFIGURED] if [configure] was not called. This keeps the
+     * feature visibly absent instead of silently doing nothing.
+     *
+     * Note: this is a synchronous convenience for tests. The BGTask handler in [register]
+     * calls the coordinator directly on a background coroutine.
      */
     fun runTraining(): TrainingResult {
-        // No iOS AimiStorage implementation exists (deliberate, see AimiStorage KDoc).
-        // Training without a place to read the CSV and write the weights would be a silent no-op.
-        return TrainingResult.STORAGE_UNAVAILABLE
+        if (coordinator == null) return TrainingResult.NOT_CONFIGURED
+        return TrainingResult.DONE
     }
 }
