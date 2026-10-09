@@ -1,6 +1,5 @@
 package app.aaps.plugins.aps.openAPSAIMI.comparison
 
-import android.content.Context
 import app.aaps.core.interfaces.aps.AutosensResult
 import app.aaps.core.interfaces.aps.CurrentTemp
 import app.aaps.core.interfaces.aps.GlucoseStatus
@@ -14,20 +13,18 @@ import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.profile.Profile
 import app.aaps.core.interfaces.profile.ProfileFunction
-import app.aaps.core.objects.constraints.ConstraintObject
+import app.aaps.plugins.aps.openAPSAIMI.aimiCsvTimestamp
+import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
+import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
+import app.aaps.plugins.aps.openAPSAIMI.aimiFmt3
 import app.aaps.plugins.aps.openAPSSMB.DetermineBasalSMB
-import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
-import java.io.File
-import java.io.FileWriter
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiSmbComparison
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
@@ -37,52 +34,36 @@ import dev.zacsweers.metro.AppScope
 @SingleIn(AppScope::class)
 class AimiSmbComparator @Inject constructor(
     private val determineBasalSMB: DetermineBasalSMB,
-    private val iobCobCalculator: IobCobCalculator,  // ⭐ NOUVEAU - Pour calculer IOB comme SMB
+    private val iobCobCalculator: IobCobCalculator,  // To calculate IOB the way SMB sees it
     private val constraintsChecker: ConstraintsChecker,
     private val profileFunction: ProfileFunction,
     private val aapsLogger: AAPSLogger,
-    private val virtualGlucoseEngine: VirtualGlucoseEngine, // 🧪 NOUVEAU
+    private val virtualGlucoseEngine: VirtualGlucoseEngine, // Virtual glucose simulation
     private val dateUtil: DateUtil,          // Dependency for time
-    private val storageHelper: AimiStorageHelper,
+    private val storage: AimiStorage,
     private val preferences: Preferences
 ) : AimiSmbComparison {
     private companion object {
         const val CSV_SCHEMA_VERSION = "3"
     }
-    // 🧠 VIRTUAL PATIENT STATE (Lyra Reality System)
+    // VIRTUAL PATIENT STATE (Lyra Reality System)
     // Allows SMB to run "Counter-Factually" (deciding based on its own past, not AIMI's)
     private val virtualReservoir = VirtualInsulinReservoir()
     // No longer passing activePlugin
     private val virtualIobCalculator = VirtualIobCalculator(virtualReservoir, dateUtil)
 
-    // 📊 Track cumulative insulin difference over time
+    // Track cumulative insulin difference over time
     private var cumulativeDiff = 0.0
 
-    private val logFile by lazy {
-        storageHelper.getAimiFile("comparison_aimi_smb.csv").apply {
-            parentFile?.mkdirs()
-            if (!exists()) {
-                writeText(
-                    "SchemaVersion,Timestamp,Date,BG,Delta,ShortAvgDelta,LongAvgDelta,IOB,COB," +
-                        "AIMI_Rate,AIMI_SMB,AIMI_Duration,AIMI_EventualBG,AIMI_TargetBG," +
-                        "SMB_Rate,SMB_SMB,SMB_Duration,SMB_EventualBG,SMB_TargetBG," +
-                        "Diff_Rate,Diff_SMB,Diff_EventualBG," +
-                        "MaxIOB,MaxBasal,MicroBolus_Allowed," +
-                        "AIMI_Insulin_30min,SMB_Insulin_30min,Cumul_Diff," +
-                        "AIMI_Active,SMB_Active,Both_Active," +
-                        "AIMI_UAM_Last,SMB_UAM_Last," +
-                        "Verdict,Artifact_Flag,Diff_Sign," +
-                        "AIMI_Flag_MealPriority,AIMI_Flag_Refractory,AIMI_Flag_Throttle,AIMI_Flag_CBF," +
-                        "SMB_Flag_Refractory,SMB_Flag_Throttle,SMB_Flag_CBF," +
-                        "Context_MealRise,Context_COB_Active,Context_UAM_Bias,SMB_LastBolusAgeMin," +
-                        "Reason_AIMI,Reason_SMB\n"
-                )
-            }
-        }.also {
-            val (status, path, error) = storageHelper.getStorageStatus()
-            aapsLogger.info(LTag.APS, "SMB Comparator CSV ready at ${it.absolutePath}")
-            aapsLogger.info(LTag.APS, "SMB Comparator storage status=$status path=${path ?: "n/a"} error=${error ?: "none"}")
+    private val logFile: AimiPath by lazy {
+        val path = storage.file("comparison_aimi_smb.csv")
+        storage.createParentDirectories(path)
+        if (!storage.exists(path)) {
+            storage.writeText(path, HEADER)
         }
+        aapsLogger.info(LTag.APS, "SMB Comparator CSV ready at ${storage.displayPath(path)}")
+        aapsLogger.info(LTag.APS, "SMB Comparator storage: ${storage.healthReport()}")
+        path
     }
 
     override fun compare(
@@ -105,9 +86,9 @@ class AimiSmbComparator @Inject constructor(
             // Map Profile directly (values are already constrained)
             val profileSmb = mapProfile(profileAimi)
 
-            // 🔧 FIX: Calculate IOB array specifically for SMB (Counter-Factual IOB)
+            // FIX: Calculate IOB array specifically for SMB (Counter-Factual IOB)
             // We use the Virtual Calculator which looks at what SMB *would have done*
-            
+
             // 1. Maintain Virtual Reservoir (Prevent memory leak)
             // Keep 6 hours of history (DIA + buffers)
             virtualReservoir.pruneOldData(currentTime - 6 * 60 * 60 * 1000L)
@@ -115,19 +96,19 @@ class AimiSmbComparator @Inject constructor(
             // 2. Calculate Virtual IOB AND Activity
             val now = currentTime
             val profileBasal = profileAimi.current_basal
-            
+
             // Simulation logic: To be realistic, SMB must see the BG it *would* have caused.
             // We use the real BG as anchor and add the virtual deviation.
             val lastSimBg = virtualReservoir.virtualBg ?: glucoseStatus.glucose
-            
+
             // Calculate activity for REAL insulin (that happened in the body)
-            // Note: This is an approximation since we don't have access to the full history 
+            // Note: This is an approximation since we don't have access to the full history
             // of real treatments here in the same format. We use the real IOB data provided.
             val realTotalIob = iobData.firstOrNull() ?: IobTotal(now)
-            
+
             // Calculate activity for SIMULATED insulin
             val simTotalIob = virtualIobCalculator.calculateIobTotalForTime(now, profileSmb)
-            
+
             // VIRTUAL GLUCOSE EVOLUTION
             val virtualBg = virtualGlucoseEngine.calculateNextBg(
                 realBg = glucoseStatus.glucose,
@@ -137,7 +118,7 @@ class AimiSmbComparator @Inject constructor(
                 isf = profileAimi.sens,
                 tickMinutes = 5.0
             )
-            
+
             val prevVirtualDelta = virtualReservoir.virtualDelta
             val virtualDelta = virtualBg - (virtualReservoir.virtualBg ?: virtualBg)
             val virtualShortAvgDelta = computeVirtualShortDelta(
@@ -152,15 +133,15 @@ class AimiSmbComparator @Inject constructor(
             )
             virtualReservoir.virtualBg = virtualBg
             virtualReservoir.virtualDelta = virtualDelta
-            
+
             val smbIobArray = virtualIobCalculator.calculateIobArrayForSMB(
-                profileSmb, 
+                profileSmb,
                 autosens,
                 profileAimi.exercise_mode,
                 profileAimi.half_basal_exercise_target,
-                profileAimi.high_temptarget_raises_sensitivity || profileAimi.low_temptarget_lowers_sensitivity 
+                profileAimi.high_temptarget_raises_sensitivity || profileAimi.low_temptarget_lowers_sensitivity
             )
-            
+
             aapsLogger.debug(
                 LTag.APS,
                 "SMB Comparator - AIMI IOB: ${iobData.firstOrNull()?.iob}, " +
@@ -168,7 +149,7 @@ class AimiSmbComparator @Inject constructor(
                 "maxIOB=${profileAimi.max_iob}, maxBasal=${profileAimi.max_basal}"
             )
 
-            // ✅ Run SMB with its own Virtual BG (not the real one)
+            // Run SMB with its own Virtual BG (not the real one)
             val virtualSmbGlucoseStatus = convertToSMBGlucoseStatus(
                 aimiStatus = glucoseStatus,
                 virtualBg = virtualBg,
@@ -176,9 +157,9 @@ class AimiSmbComparator @Inject constructor(
                 virtualShortAvgDelta = virtualShortAvgDelta,
                 virtualLongAvgDelta = virtualLongAvgDelta
             )
-            
+
             val smbResult = determineBasalSMB.determine_basal(
-                glucose_status = virtualSmbGlucoseStatus, 
+                glucose_status = virtualSmbGlucoseStatus,
                 currenttemp = currentTemp,
                 iob_data_array = smbIobArray,
                 profile = profileSmb,
@@ -190,17 +171,17 @@ class AimiSmbComparator @Inject constructor(
                 dynIsfMode = dynIsfMode
             )
 
-            // ✅ UPDATE VIRTUAL STATE
+            // UPDATE VIRTUAL STATE
             // Record what SMB decided so it remembers it next time (Counter-Factual History)
             if (smbResult != null) {
                 virtualReservoir.addDecision(smbResult, currentTime)
             }
 
             logComparison(
-                aimiResult, 
-                smbResult, 
-                glucoseStatus, 
-                iobData.firstOrNull()?.iob ?: 0.0, 
+                aimiResult,
+                smbResult,
+                glucoseStatus,
+                iobData.firstOrNull()?.iob ?: 0.0,
                 mealData.mealCOB,
                 profileAimi.max_iob,
                 profileAimi.max_basal,
@@ -216,14 +197,14 @@ class AimiSmbComparator @Inject constructor(
 
     /**
      * Maps OapsProfileAimi to OapsProfile for SMB plugin.
-     * ✅ Uses values directly from profileAimi (already constrained by AIMI plugin)
-     * ❌ Does NOT re-apply constraints to ensure fair comparison
+     * Uses values directly from profileAimi (already constrained by AIMI plugin)
+     * Does NOT re-apply constraints to ensure fair comparison
      */
     private fun mapProfile(p: OapsProfileAimi): OapsProfile {
         return OapsProfile(
             dia = p.dia,
             min_5m_carbimpact = p.min_5m_carbimpact,
-            // ✅ Use values from profileAimi directly (already constrained)
+            // Use values from profileAimi directly (already constrained)
             max_iob = p.max_iob,
             max_daily_basal = p.max_daily_basal,
             max_basal = p.max_basal,
@@ -273,8 +254,8 @@ class AimiSmbComparator @Inject constructor(
      * SMB expects standard GlucoseStatus type, not AIMI-specific type.
      */
     private fun convertToSMBGlucoseStatus(
-        aimiStatus: GlucoseStatusAIMI, 
-        virtualBg: Double, 
+        aimiStatus: GlucoseStatusAIMI,
+        virtualBg: Double,
         virtualDelta: Double,
         virtualShortAvgDelta: Double,
         virtualLongAvgDelta: Double
@@ -320,48 +301,47 @@ class AimiSmbComparator @Inject constructor(
         microBolusAllowed: Boolean,
         currentTime: Long
     ) {
-        val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-        // On loggue la vraie date de la décision
-        val date = sdf.format(Date(currentTime))
+        // Log the real decision date
+        val date = aimiCsvTimestamp(currentTime)
         val timestamp = currentTime
 
-        // 📊 AIMI Data
+        // AIMI Data
         val aimiRate = aimi.rate ?: 0.0
         val aimiSmb = aimi.units ?: 0.0
         val aimiDuration = aimi.duration ?: 0
         val aimiEventualBG = aimi.eventualBG ?: glucoseStatus.glucose
         val aimiTargetBG = aimi.targetBG ?: 100.0
 
-        // 📊 SMB Data
+        // SMB Data
         val smbRate = smb.rate ?: 0.0
         val smbSmb = smb.units ?: 0.0
         val smbDuration = smb.duration ?: 0
         val smbEventualBG = smb.eventualBG ?: glucoseStatus.glucose
         val smbTargetBG = smb.targetBG ?: 100.0
 
-        // 📊 UAM predictions (dernier point)
+        // UAM predictions (last point)
         val aimiUamLast = aimi.predBGs?.UAM?.lastOrNull()?.toDouble()
         val smbUamLast = smb.predBGs?.UAM?.lastOrNull()?.toDouble()
 
-        // 📊 Differences
+        // Differences
         val diffRate = aimiRate - smbRate
         val diffSmb = aimiSmb - smbSmb
         val diffEventualBG = aimiEventualBG - smbEventualBG
 
-        // 📊 Insuline "instant" (step 5 min = 1/12 h)
-        // Correction: On assume que ce rate s'applique pour les 5 prochaines minutes
-        // C'est une approximation, mais c'est mieux que d'ajouter "30 min de basal" toutes les 5 min
-        val stepHourFraction = 5.0 / 60.0 
+        // Instant insulin (5 min step = 1/12 h)
+        // Assumes this rate applies for the next 5 minutes.
+        // This is an approximation, but it is better than adding "30 min of basal" every 5 min.
+        val stepHourFraction = 5.0 / 60.0
         val aimiInsulinStep = (aimiRate * stepHourFraction) + aimiSmb
         val smbInsulinStep = (smbRate * stepHourFraction) + smbSmb
         cumulativeDiff += (aimiInsulinStep - smbInsulinStep)
 
-        // Flags d’activité
+        // Activity flags
         val aimiActive = (aimiRate != 0.0 && aimiDuration > 0) || aimiSmb > 0.0
         val smbActive = (smbRate != 0.0 && smbDuration > 0) || smbSmb > 0.0
         val bothActive = aimiActive && smbActive
 
-        // Sanitize raisons
+        // Sanitize reasons
         val aimiReason = aimi.reason.toString()
             .replace("\n", " | ")
             .replace(",", ";")
@@ -391,8 +371,8 @@ class AimiSmbComparator @Inject constructor(
         val smbFlagThrottle = smbReason.contains("THROTTLE", ignoreCase = true)
         val smbFlagCbf = smbReason.contains("CBF", ignoreCase = true)
 
-        // 🧠 INTERPRETATION LOGIC (Lyra Expert Analysis)
-        
+        // INTERPRETATION LOGIC (Lyra Expert Analysis)
+
         val diffTotal = aimiInsulinStep - smbInsulinStep
         val absDiff = kotlin.math.abs(diffTotal)
         val diffSign = if (absDiff < 0.02) "=" else if (diffTotal > 0) "+" else "-"
@@ -400,8 +380,8 @@ class AimiSmbComparator @Inject constructor(
         // 1. Verdict
         val verdict = when {
             absDiff < 0.05 -> "AGREEMENT"
-            diffTotal > 0.0 -> "AIMI_AGGRESSIVE" // AIMI donne plus (Risque Hypo ?)
-            else -> "AIMI_CONSERVATIVE" // AIMI donne moins (Retard ?)
+            diffTotal > 0.0 -> "AIMI_AGGRESSIVE" // AIMI gives more (hypo risk?)
+            else -> "AIMI_CONSERVATIVE" // AIMI gives less (lag?)
         }
 
         // 2. Artifact Detection ("Screaming Shadow")
@@ -410,7 +390,7 @@ class AimiSmbComparator @Inject constructor(
         val isHighBg = glucoseStatus.glucose > 140
         val isBigDiff = absDiff > 0.5
         val ratio = if (aimiInsulinStep > 0.05) smbInsulinStep / aimiInsulinStep else 100.0 // Avoid div/0
-        
+
         val artifactFlag = if (
             verdict == "AIMI_CONSERVATIVE" &&
             isHighBg &&
@@ -438,43 +418,43 @@ class AimiSmbComparator @Inject constructor(
             CSV_SCHEMA_VERSION,
             timestamp,
             date,
-            "%.1f".format(Locale.US, glucoseStatus.glucose),
-            "%.2f".format(Locale.US, glucoseStatus.delta),
-            "%.2f".format(Locale.US, glucoseStatus.shortAvgDelta),
-            "%.2f".format(Locale.US, glucoseStatus.longAvgDelta),
-            "%.2f".format(Locale.US, iob),
-            "%.1f".format(Locale.US, cob),
+            aimiFmt1(glucoseStatus.glucose),
+            aimiFmt2(glucoseStatus.delta),
+            aimiFmt2(glucoseStatus.shortAvgDelta),
+            aimiFmt2(glucoseStatus.longAvgDelta),
+            aimiFmt2(iob),
+            aimiFmt1(cob),
             // AIMI
-            "%.2f".format(Locale.US, aimiRate),
-            "%.3f".format(Locale.US, aimiSmb),
+            aimiFmt2(aimiRate),
+            aimiFmt3(aimiSmb),
             aimiDuration,
-            "%.1f".format(Locale.US, aimiEventualBG),
-            "%.1f".format(Locale.US, aimiTargetBG),
+            aimiFmt1(aimiEventualBG),
+            aimiFmt1(aimiTargetBG),
             // SMB
-            "%.2f".format(Locale.US, smbRate),
-            "%.3f".format(Locale.US, smbSmb),
+            aimiFmt2(smbRate),
+            aimiFmt3(smbSmb),
             smbDuration,
-            "%.1f".format(Locale.US, smbEventualBG),
-            "%.1f".format(Locale.US, smbTargetBG),
+            aimiFmt1(smbEventualBG),
+            aimiFmt1(smbTargetBG),
             // Diff
-            "%.2f".format(Locale.US, diffRate),
-            "%.3f".format(Locale.US, diffSmb),
-            "%.1f".format(Locale.US, diffEventualBG),
-            // Contraintes
-            "%.1f".format(Locale.US, maxIOB),
-            "%.2f".format(Locale.US, maxBasal),
+            aimiFmt2(diffRate),
+            aimiFmt3(diffSmb),
+            aimiFmt1(diffEventualBG),
+            // Constraints
+            aimiFmt1(maxIOB),
+            aimiFmt2(maxBasal),
             if (microBolusAllowed) "1" else "0",
-            // Insuline
-            "%.3f".format(Locale.US, aimiInsulinStep),
-            "%.3f".format(Locale.US, smbInsulinStep),
-            "%.3f".format(Locale.US, cumulativeDiff),
+            // Insulin
+            aimiFmt3(aimiInsulinStep),
+            aimiFmt3(smbInsulinStep),
+            aimiFmt3(cumulativeDiff),
             // Activity flags
             if (aimiActive) "1" else "0",
             if (smbActive) "1" else "0",
             if (bothActive) "1" else "0",
             // UAM
-            aimiUamLast?.let { "%.1f".format(Locale.US, it) } ?: "",
-            smbUamLast?.let { "%.1f".format(Locale.US, it) } ?: "",
+            aimiUamLast?.let { aimiFmt1(it) } ?: "",
+            smbUamLast?.let { aimiFmt1(it) } ?: "",
             // Interpretation
             verdict,
             artifactFlag,
@@ -489,14 +469,16 @@ class AimiSmbComparator @Inject constructor(
             if (contextMealRise) "1" else "0",
             if (contextCobActive) "1" else "0",
             if (contextUamBias) "1" else "0",
-            smbLastBolusAgeMin?.let { "%.1f".format(Locale.US, it) } ?: "",
-            // Raisons
+            smbLastBolusAgeMin?.let { aimiFmt1(it) } ?: "",
+            // Reasons
             "\"$aimiReason\"",
             "\"$smbReason\""
         ).joinToString(",") + "\n"
 
         try {
-            FileWriter(logFile, true).use { it.append(line) }
+            if (!storage.appendText(logFile, line)) {
+                aapsLogger.error(LTag.APS, "SMB Comparator log error: write returned false")
+            }
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "SMB Comparator log error: " + e.message)
             e.printStackTrace()
@@ -507,5 +489,22 @@ class AimiSmbComparator @Inject constructor(
         val match = Regex("lastBolusAge=([0-9]+(?:\\.[0-9]+)?)", RegexOption.IGNORE_CASE).find(reason)
             ?: return null
         return match.groupValues.getOrNull(1)?.toDoubleOrNull()
+    }
+
+    companion object {
+        // CSV header written when the file is created. Byte-identical to the previous version.
+        private const val HEADER = "SchemaVersion,Timestamp,Date,BG,Delta,ShortAvgDelta,LongAvgDelta,IOB,COB," +
+            "AIMI_Rate,AIMI_SMB,AIMI_Duration,AIMI_EventualBG,AIMI_TargetBG," +
+            "SMB_Rate,SMB_SMB,SMB_Duration,SMB_EventualBG,SMB_TargetBG," +
+            "Diff_Rate,Diff_SMB,Diff_EventualBG," +
+            "MaxIOB,MaxBasal,MicroBolus_Allowed," +
+            "AIMI_Insulin_30min,SMB_Insulin_30min,Cumul_Diff," +
+            "AIMI_Active,SMB_Active,Both_Active," +
+            "AIMI_UAM_Last,SMB_UAM_Last," +
+            "Verdict,Artifact_Flag,Diff_Sign," +
+            "AIMI_Flag_MealPriority,AIMI_Flag_Refractory,AIMI_Flag_Throttle,AIMI_Flag_CBF," +
+            "SMB_Flag_Refractory,SMB_Flag_Throttle,SMB_Flag_CBF," +
+            "Context_MealRise,Context_COB_Active,Context_UAM_Bias,SMB_LastBolusAgeMin," +
+            "Reason_AIMI,Reason_SMB\n"
     }
 }
