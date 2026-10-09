@@ -45,5 +45,18 @@
 	-->
 	<key>AAPSBuildType</key>
 	<string>$(CONFIGURATION)</string>
+	<!--
+	  Background tasks for AIMI. Required for BGTaskScheduler to allow
+	  the retention janitor and ML training scheduler to run.
+	-->
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>app.aaps.aimi.retention</string>
+		<string>app.aaps.aimi.ml-training</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>processing</string>
+	</array>
 </dict>
 </plist>
