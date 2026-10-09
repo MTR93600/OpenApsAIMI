@@ -1745,16 +1745,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         consoleLog = work.consoleLog,
         consoleError = AimiT9ConsoleError { work.consoleError.add(it) },
         state = object : AimiT9State {
-            override fun setBaseMultipliers(value: PhysioMultipliersMTR) { lastBasePhysioMultipliers = value }
+            override fun setBaseMultipliers(value: PhysioMultipliersMTR) { work.lastBasePhysioMultipliers = value }
             override fun setPkpdRuntime(value: PkPdRuntime?) { cachedPkpdRuntime = value }
             override fun pkpdRuntime() = cachedPkpdRuntime
-            override fun setEventualBg(value: Double) { eventualBG = value }
+            override fun setEventualBg(value: Double) { work.eventualBG = value }
             override fun setPredictedBg(value: Float) { predictedBg = value }
             override fun setVariableSensitivity(value: Float) { variableSensitivity = value }
             override fun maxSmb() = work.maxSMB
-            override fun setMaxSmb(value: Double) { maxSMB = value }
+            override fun setMaxSmb(value: Double) { work.maxSMB = value }
             override fun maxSmbHb() = work.maxSMBHB
-            override fun setMaxSmbHb(value: Double) { maxSMBHB = value }
+            override fun setMaxSmbHb(value: Double) { work.maxSMBHB = value }
             override fun setInflammation(result: app.aaps.plugins.aps.openAPSAIMI.inflammatory.InflammationAdjuster.InflammationResult) {
                 work.lastInflammationResult = result
             }
@@ -1942,28 +1942,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             override fun nowMs() = now
             override fun setNow(ms: Long) { now = ms }
             override fun epochMs(): Long = injectedTickEpochMs ?: aimiWallClockMs()
-            override fun setHourOfDay(hour: Int) { hourOfDay = hour }
+            override fun setHourOfDay(hour: Int) { work.hourOfDay = hour }
             override fun setBg(bg: Double) { this@DetermineBasalaimiSMB2.bg = bg }
             override fun bg() = this@DetermineBasalaimiSMB2.bg
-            override fun setTickCombinedDelta(delta: Float) { tickCombinedDelta = delta }
+            override fun setTickCombinedDelta(delta: Float) { work.tickCombinedDelta = delta }
             override fun internalLastSmbMillis() = this@DetermineBasalaimiSMB2.internalLastSmbMillis
-            override fun setLastBolusSmbUnit(unit: Float) { lastBolusSMBUnit = unit }
-            override fun setLastSmbTime(minutes: Int) { lastsmbtime = minutes }
+            override fun setLastBolusSmbUnit(unit: Float) { work.lastBolusSMBUnit = unit }
+            override fun setLastSmbTime(minutes: Int) { work.lastsmbtime = minutes }
             override fun pendingLegacyPrebolusUnit() = this@DetermineBasalaimiSMB2.pendingLegacyPrebolusUnit
             override fun setPendingLegacyPrebolusUnit(unit: Float) { pendingLegacyPrebolusUnit = unit }
             override fun pendingLegacyPrebolusExpiry() = this@DetermineBasalaimiSMB2.pendingLegacyPrebolusExpiry
             override fun setPendingLegacyPrebolusExpiry(ms: Long) { pendingLegacyPrebolusExpiry = ms }
             override fun internalLastLegacyPrebolusMillis() = this@DetermineBasalaimiSMB2.internalLastLegacyPrebolusMillis
-            override fun setMaxIob(value: Double) { maxIob = value }
+            override fun setMaxIob(value: Double) { work.maxIob = value }
             override fun work.maxIob() = work.maxIob
-            override fun setMaxSmb(value: Double) { maxSMB = value }
+            override fun setMaxSmb(value: Double) { work.maxSMB = value }
             override fun maxSmb() = work.maxSMB
-            override fun setMaxSmbHb(value: Double) { maxSMBHB = value }
+            override fun setMaxSmbHb(value: Double) { work.maxSMBHB = value }
             override fun maxSmbHb() = work.maxSMBHB
             override fun targetBg() = this@DetermineBasalaimiSMB2.targetBg.toDouble()
             override fun work.cob() = work.cob
-            override fun setCob(value: Float) { cob = value }
-            override fun setLastSlope(value: Double?) { lastSlopeFromMinDeviation = value }
+            override fun setCob(value: Float) { work.cob = value }
+            override fun setLastSlope(value: Double?) { work.lastSlopeFromMinDeviation = value }
             override fun setLastShortAvg(value: Double?) { lastShortAvgDeltaAtLadder = value }
             override fun setLadderBranch(branch: String?) { lastMaxSmbLadderBranch = branch }
             override fun ladderBranch() = lastMaxSmbLadderBranch
@@ -1975,19 +1975,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             override fun setLastHourTirLow100(value: Double) { lastHourTIRLow100 = value }
             override fun setLastHourTirAbove170(value: Double) { lastHourTIRabove170 = value }
             override fun setLastHourTirAbove120(value: Double) { lastHourTIRabove120 = value }
-            override fun setWeekend(value: Int) { weekend = value }
+            override fun setWeekend(value: Int) { work.weekend = value }
             override fun setLastCarbAgeMin(value: Int) { lastCarbAgeMin = value }
             override fun lastCarbAgeMin() = this@DetermineBasalaimiSMB2.lastCarbAgeMin
             override fun setFutureCarbs(value: Float) { futureCarbs = value }
             override fun setRecentNotes(notes: List<UE>?) { recentNotes = notes }
-            override fun setTags0to60(value: String) { tags0to60minAgo = value }
-            override fun setTags60to120(value: String) { tags60to120minAgo = value }
-            override fun setTags120to180(value: String) { tags120to180minAgo = value }
-            override fun setTags180to240(value: String) { tags180to240minAgo = value }
+            override fun setTags0to60(value: String) { work.tags0to60minAgo = value }
+            override fun setTags60to120(value: String) { work.tags60to120minAgo = value }
+            override fun setTags120to180(value: String) { work.tags120to180minAgo = value }
+            override fun setTags180to240(value: String) { work.tags180to240minAgo = value }
             override fun setDelta(value: Float) { this@DetermineBasalaimiSMB2.delta = value }
             override fun setShortAvgDelta(value: Float) { shortAvgDelta = value }
             override fun setLongAvgDelta(value: Float) { longAvgDelta = value }
-            override fun setBgAcc(value: Double) { bgacc = value }
+            override fun setBgAcc(value: Double) { work.bgacc = value }
         },
         smbCache = AimiTickSmbCache {
             latestSmbCached()?.let { AimiCachedSmb(it.timestamp, it.amount) }
@@ -4234,11 +4234,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog = work.consoleLog,
             state = object : AimiBasalPaiState {
                 override fun basalAimi() = work.basalaimi
-                override fun setBasalAimi(value: Float) { basalaimi = value }
+                override fun setBasalAimi(value: Float) { work.basalaimi = value }
                 override fun work.ci() = work.ci
-                override fun setCi(value: Float) { ci = value }
+                override fun setCi(value: Float) { work.ci = value }
                 override fun aimiLimit() = work.aimilimit
-                override fun setAimiLimit(value: Float) { aimilimit = value }
+                override fun setAimiLimit(value: Float) { work.aimilimit = value }
                 override fun adaptiveMult() = this@DetermineBasalaimiSMB2.causalState.adaptiveMult
                 override fun setVariableSensitivity(value: Float) { variableSensitivity = value }
             },
@@ -4984,7 +4984,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             override fun memberIob() = work.iob.toDouble()
             override fun work.endoSmbMult() = work.endoSmbMult
             override fun bindingDraft() = work.lastSmbBindingTraceDraft
-            override fun setBindingDraft(value: SmbBindingTrace.Draft) { lastSmbBindingTraceDraft = value }
+            override fun setBindingDraft(value: SmbBindingTrace.Draft) { work.lastSmbBindingTraceDraft = value }
             override fun criticalSafetyZeroed() = work.criticalSafetyZeroedThisTick
             override fun endogenousCounterRegulatory() =
                 work.lastPhysiologicalPhaseOutput?.phase == PhysiologicalPhase.ENDOGENOUS_COUNTER_REGULATORY
