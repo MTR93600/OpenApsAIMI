@@ -1,8 +1,13 @@
 package app.aaps.plugins.aps.openAPSAIMI.retention
 
-import java.io.File
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicLong
+import app.aaps.core.interfaces.concurrent.AapsLock
+import app.aaps.core.interfaces.concurrent.withLock
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
+import kotlin.concurrent.atomics.AtomicLong
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.concurrent.atomics.incrementAndFetch
+import kotlin.jvm.JvmOverloads
 
 /** What [AimiAppendGuard.beforeAppend] did, so a caller can log or ignore it. */
 enum class AimiAppendOutcome {
@@ -33,8 +38,8 @@ enum class AimiAppendOutcome {
  * its first hard cap.
  *
  * This is the only part of the retention code that runs on the decision path, so it must be almost
- * free. It counts the bytes it has been told about and only calls `File.length()` once per megabyte,
- * which is one syscall per megabyte written instead of one per line.
+ * free. It counts the bytes it has been told about and only stats the file once per megabyte,
+ * which is one stat call per megabyte written instead of one per line.
  *
  * Over the cap it renames the file aside, which is O(1) and touches no content. The next janitor
  * pass archives the `.overflow` file and deletes it. Nothing is ever compressed here.
@@ -46,25 +51,31 @@ enum class AimiAppendOutcome {
  * never runs, the file rotates once, then grows without limit again, silently, from the guard's point
  * of view — the returned [AimiAppendOutcome] is the only signal of this; callers that care should
  * watch for it.
+ *
+ * [fileName] is passed in rather than derived because [AimiPath] is opaque to shared code: only
+ * the platform half may take a path apart, so the platform cap implementations
+ * (`AndroidAimiAppendCap`, `IosAimiAppendCap`) supply the name they already know.
  */
+@OptIn(ExperimentalAtomicApi::class)
 object AimiAppendGuard {
 
     private const val STAT_EVERY_BYTES = 1024L * 1024
 
-    private val pending = ConcurrentHashMap<String, AtomicLong>()
+    private val mapGuard = AapsLock()
+    private val pending = HashMap<String, AtomicLong>()
     private val stats = AtomicLong(0)
 
     /** How many times the file size was actually read. Test only. */
-    val statCount: Long get() = stats.get()
+    val statCount: Long get() = stats.load()
 
     /** Clears the byte counters. Test only. */
     fun resetForTest() {
-        pending.clear()
-        stats.set(0)
+        mapGuard.withLock { pending.clear() }
+        stats.store(0)
     }
 
     /**
-     * Called just before [addedBytes] are appended to [file]. Returns what it did; never throws and
+     * Called just before [addedBytes] are appended to [path]. Returns what it did; never throws and
      * never blocks (if the file is locked by the janitor right now, the check is simply skipped).
      *
      * [addedBytes] is normally the number of bytes about to be written, and is added to a per-file
@@ -75,35 +86,40 @@ object AimiAppendGuard {
      * pushed backwards by a bad caller.
      */
     @JvmOverloads
-    fun beforeAppend(file: File, addedBytes: Int, capOverride: Long? = null): AimiAppendOutcome {
-        val rule = AimiRetentionPolicy.ruleFor(file.name) ?: return AimiAppendOutcome.NOT_MANAGED
+    fun beforeAppend(
+        storage: AimiStorage,
+        path: AimiPath,
+        fileName: String,
+        addedBytes: Int,
+        capOverride: Long? = null,
+    ): AimiAppendOutcome {
+        val rule = AimiRetentionPolicy.ruleFor(fileName) ?: return AimiAppendOutcome.NOT_MANAGED
         val cap = capOverride ?: rule.hardCapBytes
-        val counter = pending.computeIfAbsent(file.absolutePath) { AtomicLong(0) }
+        val counter = mapGuard.withLock { pending.getOrPut(path.value) { AtomicLong(0) } }
         val forceCheckNow = addedBytes <= 0
         if (!forceCheckNow) {
-            val total = counter.addAndGet(addedBytes.toLong())
+            val total = counter.addAndFetch(addedBytes.toLong())
             if (total < STAT_EVERY_BYTES) return AimiAppendOutcome.UNDER_CAP
         }
-        counter.set(0)
+        counter.store(0)
         return runCatching {
-            stats.incrementAndGet()
-            if (file.length() <= cap) return@runCatching AimiAppendOutcome.UNDER_CAP
+            stats.incrementAndFetch()
+            if (storage.sizeBytes(path) <= cap) return@runCatching AimiAppendOutcome.UNDER_CAP
             // The rename below only moves this one file aside. The janitor must sweep the directory
             // this file actually lives in to drain the `.overflow` it creates; writers can use a
             // directory the worker does not know about (cross-task coupling, see Task 10).
             //
             // The overflow.exists() check and the rename must happen under the SAME lock acquisition.
             // Two overlapping callers could otherwise both read "overflow does not exist" before
-            // either of them renames, and the second one's renameTo would then silently replace the
-            // first one's still-undrained overflow file - POSIX rename(2) clobbers its destination.
-            // That is unreachable today because one thread writes each managed file, but the guard
-            // must not depend on that.
-            val overflow = File(file.path + AimiRetentionPolicy.OVERFLOW_SUFFIX)
-            AimiFileLock.tryWithFile(file) {
+            // either of them renames, and the second one's rename would then silently replace the
+            // first one's still-undrained overflow file. That is unreachable today because one thread
+            // writes each managed file, but the guard must not depend on that.
+            val overflow = storage.sibling(path, AimiRetentionPolicy.OVERFLOW_SUFFIX)
+            AimiFileLock.tryWithFile(path) {
                 when {
-                    overflow.exists()        -> AimiAppendOutcome.OVERFLOW_ALREADY_PRESENT
-                    file.renameTo(overflow)  -> AimiAppendOutcome.ROTATED
-                    else                      -> AimiAppendOutcome.SKIPPED_BUSY
+                    storage.exists(overflow)   -> AimiAppendOutcome.OVERFLOW_ALREADY_PRESENT
+                    aimiFsRename(path, overflow) -> AimiAppendOutcome.ROTATED
+                    else                         -> AimiAppendOutcome.SKIPPED_BUSY
                 }
             } ?: AimiAppendOutcome.SKIPPED_BUSY
         }.getOrDefault(AimiAppendOutcome.SKIPPED_BUSY)

@@ -1,19 +1,12 @@
 package app.aaps.plugins.aps.openAPSAIMI.retention
 
-import java.io.File
-import java.io.FileOutputStream
-import java.io.IOException
-import java.io.RandomAccessFile
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
-import java.nio.file.attribute.BasicFileAttributes
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import kotlinx.coroutines.CancellationException
+import kotlinx.datetime.TimeZone
 
 /** State of one archive member file before it was appended to, so a failed pass can be undone. */
-private data class ArchiveRollbackRecord(val target: File, val existedBefore: Boolean, val previousLength: Long)
+private data class ArchiveRollbackRecord(val target: AimiPath, val existedBefore: Boolean, val previousLength: Long)
 
 /**
  * Runs one retention pass over one file.
@@ -30,15 +23,16 @@ private data class ArchiveRollbackRecord(val target: File, val existedBefore: Bo
  * The live file is never deleted and never truncated in place. It is replaced only by an atomic
  * move ([moveIntoPlace]), so a failure anywhere before that move leaves it exactly as it was. Right
  * before the catch-up, under the lock, the pass also checks that the file is still the one the plan
- * was built for (same file key, and at least as long as it was when the plan started). If some other
- * component replaced or rotated the file in the meantime, the pass aborts instead of overwriting the
+ * was built for (same identity key, and at least as long as it was when the plan started). If some
+ * other component replaced or rotated the file in the meantime, the pass aborts instead of overwriting the
  * wrong file, and rolls back any archive member it already wrote.
  *
  * Open rather than final so tests can pin free space, fail the archive step, force the move to
  * throw, and observe the moment the tail is copied.
  */
 internal open class AimiRetentionManager(
-    protected val aimiDir: File,
+    protected val aimiDir: AimiPath,
+    protected val storage: AimiStorage,
     protected val logger: (String) -> Unit,
     protected val now: () -> Long,
     // Defaults to `logger` so every existing (test) call site that only passes three positional
@@ -50,39 +44,45 @@ internal open class AimiRetentionManager(
 ) {
 
     /** Free bytes usable for the temporary copy. Overridden in tests. */
-    protected open fun freeSpaceOf(file: File): Long = file.usableSpace
+    protected open fun freeSpaceOf(path: AimiPath): Long = aimiFsFreeBytes(path)
 
     /** Called after the tail has been copied and before the lock is taken. Test seam only. */
-    protected open fun onTailCopied(target: File) = Unit
+    protected open fun onTailCopied(target: AimiPath) = Unit
 
     /**
-     * Moves [tmp] into [file]'s place with one atomic filesystem move.
+     * Moves [tmp] into [path]'s place with one atomic filesystem move.
      *
-     * Either [file] ends up fully replaced by [tmp], or, if this throws, [file] is left exactly as
-     * it was: there is no in-between state where [file] is truncated or partly written, unlike a
+     * Either [path] ends up fully replaced by [tmp], or, if this throws, [path] is left exactly as
+     * it was: there is no in-between state where [path] is truncated or partly written, unlike a
      * plain copy-then-delete. Test seam so a failed move can be simulated.
      */
-    protected open fun moveIntoPlace(tmp: File, file: File) {
-        Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+    protected open fun moveIntoPlace(tmp: AimiPath, path: AimiPath) {
+        aimiFsMoveAtomic(tmp, path)
     }
 
     /** Appends one archive member. Test seam so a failing append can be simulated. */
-    protected open fun appendArchiveMember(source: File, start: Long, endExclusive: Long, target: File, header: ByteArray?) {
-        AimiArchive.appendMember(source, start, endExclusive, target, header)
+    protected open fun appendArchiveMember(
+        source: AimiPath,
+        start: Long,
+        endExclusive: Long,
+        target: AimiPath,
+        header: ByteArray?,
+    ) {
+        AimiArchive.appendMember(storage, source, start, endExclusive, target, header)
     }
 
-    /** Deletes [file]. Test seam so a failing delete can be simulated without filesystem games. */
-    protected open fun deleteSource(file: File): Boolean = file.delete()
+    /** Deletes [path]. Test seam so a failing delete can be simulated without filesystem games. */
+    protected open fun deleteSource(path: AimiPath): Boolean = storage.delete(path)
 
     /**
-     * Archives everything outside [rule]'s window and rewrites [file] with the rest.
+     * Archives everything outside [rule]'s window and rewrites [path] with the rest.
      *
      * @return true when the live file was rewritten.
      */
-    fun trim(file: File, rule: AimiRetentionRule): Boolean {
-        if (!file.isFile || file.length() == 0L) return false
+    fun trim(path: AimiPath, rule: AimiRetentionRule): Boolean {
+        if (!storage.exists(path) || storage.sizeBytes(path) == 0L) return false
 
-        val plan = AimiCutPlanner.plan(file, rule, now())
+        val plan = AimiCutPlanner.plan(path, rule, now())
         if (plan.cutOffset <= plan.headerBytes) {
             // The common case (nothing is out of window yet) is silent by design - it happens on
             // every managed file, every pass, until its hot window is actually exceeded. The one
@@ -91,7 +91,7 @@ internal open class AimiRetentionManager(
             // silently, until someone happens to notice its size.
             if (!plan.timestampKeyMatched) {
                 warn(
-                    "retention: ${file.name} declares timestamp key \"${rule.timestampKey}\" but no line " +
+                    "retention: ${storage.displayPath(path)} declares timestamp key \"${rule.timestampKey}\" but no line " +
                         "matched it, left untouched"
                 )
             }
@@ -100,43 +100,44 @@ internal open class AimiRetentionManager(
         if (plan.headerBytes > MAX_HEADER_BYTES) {
             // .toInt() below would otherwise try to allocate the whole header in one array; an
             // OutOfMemoryError is an Error, not an Exception, so it would escape runOnce()'s catch.
-            warn("retention: ${file.name} has a header line longer than $MAX_HEADER_BYTES bytes, trim skipped")
+            warn("retention: ${storage.displayPath(path)} has a header line longer than $MAX_HEADER_BYTES bytes, trim skipped")
             return false
         }
 
-        val markedEof = file.length()
-        val fileKey = fileKeyOf(file)
+        val markedEof = storage.sizeBytes(path)
+        val fileKey = aimiFsIdentityKey(path)
         val tailBytes = markedEof - plan.cutOffset
         val archivedBytes = plan.cutOffset - plan.headerBytes
         // Gzip on this JSON/CSV data runs at roughly 10:1 (measured on the device), so /4 was about
         // 2.5x over. /8 still leaves a margin, but does not need ~650 MB free to trim a 2.10 GB file
         // on a nearly-full phone on the very first run, when there are no archives yet to evict.
         val neededBytes = tailBytes + archivedBytes / 8 + FREE_SPACE_MARGIN_BYTES
-        if (freeSpaceOf(file) < neededBytes) {
-            AimiArchive.evict(aimiDir, rule.fileName, rule.archiveMonths, now())
-            if (freeSpaceOf(file) < neededBytes) {
+        if (freeSpaceOf(path) < neededBytes) {
+            AimiArchive.evict(storage, aimiDir, rule.fileName, rule.archiveMonths, now())
+            if (freeSpaceOf(path) < neededBytes) {
                 warn(
-                    "retention: not enough free space to trim ${file.name}, needed ~$neededBytes bytes, " +
-                        "had ${freeSpaceOf(file)}, left untouched"
+                    "retention: not enough free space to trim ${storage.displayPath(path)}, needed ~$neededBytes bytes, " +
+                        "had ${freeSpaceOf(path)}, left untouched"
                 )
                 return false
             }
         }
 
-        // Keyed by absolute path, not a list: the planner can emit two ranges for the same month
+        // Keyed by path, not a list: the planner can emit two ranges for the same month
         // when the month is not contiguous in the file, and both then resolve to the same archive
         // target. Each target must be rolled back exactly once, to the length it had before this
         // pass started - never to a length recorded after an earlier append in the same pass. A
         // put-if-absent on the target path keeps only the first (pre-pass) record for that target.
-        val archiveRollback = LinkedHashMap<String, ArchiveRollbackRecord>()
-        val tmp = File(file.parentFile, file.name + TMP_SUFFIX)
+        // AimiPath is a data class, so it keys by its path string.
+        val archiveRollback = LinkedHashMap<AimiPath, ArchiveRollbackRecord>()
+        val tmp = storage.sibling(path, TMP_SUFFIX)
         try {
-            val header = if (rule.hasHeader && plan.headerBytes > 0L) readRange(file, 0L, plan.headerBytes) else null
+            val header = if (rule.hasHeader && plan.headerBytes > 0L) readRange(path, 0L, plan.headerBytes) else null
             plan.ranges.forEach { range ->
-                val target = AimiArchive.memberFile(aimiDir, rule.fileName, range.month)
-                archiveRollback.putIfAbsent(target.absolutePath, recordArchiveState(target))
+                val target = AimiArchive.memberFile(storage, aimiDir, rule.fileName, range.month)
+                archiveRollback.putIfAbsent(target, recordArchiveState(target))
                 appendArchiveMember(
-                    source = file,
+                    source = path,
                     start = range.start,
                     endExclusive = range.endExclusive,
                     target = target,
@@ -144,50 +145,56 @@ internal open class AimiRetentionManager(
                 )
             }
 
-            FileOutputStream(tmp, false).use { out ->
-                header?.let { out.write(it) }
-                copyRange(file, plan.cutOffset, markedEof, out)
+            val writer = AimiByteWriter(tmp, append = false)
+            try {
+                header?.let { writer.write(it, 0, it.size) }
+                copyRange(path, plan.cutOffset, markedEof, writer)
+            } finally {
+                writer.close()
             }
             onTailCopied(tmp)
 
-            val moved = AimiFileLock.withFile(file) {
-                if (identityChanged(file, fileKey, markedEof)) {
-                    warn("retention: ${file.name} changed during trim, skipped")
+            val moved = AimiFileLock.withFile(path) {
+                if (identityChanged(path, fileKey, markedEof)) {
+                    warn("retention: ${storage.displayPath(path)} changed during trim, skipped")
                     false
                 } else {
-                    FileOutputStream(tmp, true).use { out ->
-                        copyRange(file, markedEof, file.length(), out)
-                        out.fd.sync()
+                    val catchUp = AimiByteWriter(tmp, append = true)
+                    try {
+                        copyRange(path, markedEof, storage.sizeBytes(path), catchUp)
+                        catchUp.sync()
+                    } finally {
+                        catchUp.close()
                     }
-                    moveIntoPlace(tmp, file)
+                    moveIntoPlace(tmp, path)
                     true
                 }
             }
             if (!moved) {
-                tmp.delete()
+                storage.delete(tmp)
                 rollbackArchive(archiveRollback.values)
                 return false
             }
         } catch (e: Exception) {
-            tmp.delete()
+            storage.delete(tmp)
             rollbackArchive(archiveRollback.values)
-            warn("retention: trim of ${file.name} failed, live file untouched: ${e.message}")
+            warn("retention: trim of ${storage.displayPath(path)} failed, live file untouched: ${e.message}")
             return false
         }
 
-        AimiArchive.evict(aimiDir, rule.fileName, rule.archiveMonths, now())
+        AimiArchive.evict(storage, aimiDir, rule.fileName, rule.archiveMonths, now())
         return true
     }
 
     /** Called once per managed file before it is processed. Test seam only. */
-    protected open fun onFileVisited(file: File) = Unit
+    protected open fun onFileVisited(path: AimiPath) = Unit
 
-    /** True when nothing has written [file] for [AimiRetentionPolicy.STALE_DAYS]. */
-    fun isStale(file: File): Boolean =
-        file.isFile && now() - file.lastModified() > AimiRetentionPolicy.STALE_DAYS * 24L * 60L * 60L * 1000L
+    /** True when nothing has written [path] for [AimiRetentionPolicy.STALE_DAYS]. */
+    fun isStale(path: AimiPath): Boolean =
+        storage.exists(path) && now() - (storage.lastModifiedMs(path) ?: 0L) > AimiRetentionPolicy.STALE_DAYS * 24L * 60L * 60L * 1000L
 
     /**
-     * Archives the whole of [file] and removes it. For files nothing writes any more.
+     * Archives the whole of [path] and removes it. For files nothing writes any more.
      *
      * Gives the destructive step the same safety envelope [trim] already has around its own:
      * - a free-space guard, with a pre-evict retry, before the (possibly multi-minute) gzip pass
@@ -219,82 +226,82 @@ internal open class AimiRetentionManager(
      * with no usable key (TRIM_LINES files, and the dead RETIRE files, neither of which the viewer
      * reads) keeps the original single-member behaviour.
      */
-    fun retire(file: File, rule: AimiRetentionRule): Boolean {
-        if (!file.isFile || file.length() == 0L) return file.isFile && deleteSource(file)
+    fun retire(path: AimiPath, rule: AimiRetentionRule): Boolean {
+        if (!storage.exists(path) || storage.sizeBytes(path) == 0L) return storage.exists(path) && deleteSource(path)
 
-        val markedEof = file.length()
+        val markedEof = storage.sizeBytes(path)
         // Gzip on this data runs at roughly 10:1; /4 was about 2.5x over. See the matching comment
         // in trim() (I3).
         val estimatedArchiveBytes = markedEof / 8
-        if (freeSpaceOf(file) < estimatedArchiveBytes + FREE_SPACE_MARGIN_BYTES) {
-            AimiArchive.evict(aimiDir, rule.fileName, rule.archiveMonths, now())
-            if (freeSpaceOf(file) < estimatedArchiveBytes + FREE_SPACE_MARGIN_BYTES) {
+        if (freeSpaceOf(path) < estimatedArchiveBytes + FREE_SPACE_MARGIN_BYTES) {
+            AimiArchive.evict(storage, aimiDir, rule.fileName, rule.archiveMonths, now())
+            if (freeSpaceOf(path) < estimatedArchiveBytes + FREE_SPACE_MARGIN_BYTES) {
                 warn(
-                    "retention: not enough free space to retire ${file.name}, needed " +
-                        "~${estimatedArchiveBytes + FREE_SPACE_MARGIN_BYTES} bytes, had ${freeSpaceOf(file)}, left untouched"
+                    "retention: not enough free space to retire ${storage.displayPath(path)}, needed " +
+                        "~${estimatedArchiveBytes + FREE_SPACE_MARGIN_BYTES} bytes, had ${freeSpaceOf(path)}, left untouched"
                 )
                 return false
             }
         }
 
-        val fileKey = fileKeyOf(file)
-        // Keyed by absolute path, not a list, for the same reason trim() keys its rollback map this
+        val fileKey = aimiFsIdentityKey(path)
+        // Keyed by path, not a list, for the same reason trim() keys its rollback map this
         // way: a month-split retire can in principle emit two ranges for the same month (out-of-order
         // timestamps), and both then resolve to the same archive target, which must be rolled back
         // exactly once, to its state before this pass.
-        val archiveRollback = LinkedHashMap<String, ArchiveRollbackRecord>()
+        val archiveRollback = LinkedHashMap<AimiPath, ArchiveRollbackRecord>()
         return try {
             // Inside the try: retireMembers() can throw (see its own guard against a rule that
             // combines hasHeader with a timestampKey), and that must be handled the same way any
             // other failure in this pass is - warned and left in place, not an uncaught exception.
-            val members = retireMembers(file, rule, markedEof)
-            members.forEach { archiveRollback.putIfAbsent(it.target.absolutePath, recordArchiveState(it.target)) }
+            val members = retireMembers(path, rule, markedEof)
+            members.forEach { archiveRollback.putIfAbsent(it.target, recordArchiveState(it.target)) }
             members.forEach { member ->
                 appendArchiveMember(
-                    source = file,
+                    source = path,
                     start = member.start,
                     endExclusive = member.endExclusive,
                     target = member.target,
                     header = null,
                 )
             }
-            val deleted = AimiFileLock.withFile(file) {
+            val deleted = AimiFileLock.withFile(path) {
                 when {
-                    identityChanged(file, fileKey, markedEof) -> {
-                        warn("retention: ${file.name} changed during retire, archive rolled back, left in place")
+                    identityChanged(path, fileKey, markedEof) -> {
+                        warn("retention: ${storage.displayPath(path)} changed during retire, archive rolled back, left in place")
                         false
                     }
 
-                    file.length() > markedEof                 -> {
-                        warn("retention: ${file.name} is being written again, archive rolled back, left for the next pass")
+                    storage.sizeBytes(path) > markedEof        -> {
+                        warn("retention: ${storage.displayPath(path)} is being written again, archive rolled back, left for the next pass")
                         false
                     }
 
                     else                                       -> {
-                        val removed = deleteSource(file)
-                        if (!removed) warn("retention: retire of ${file.name} could not remove the source, archive rolled back")
+                        val removed = deleteSource(path)
+                        if (!removed) warn("retention: retire of ${storage.displayPath(path)} could not remove the source, archive rolled back")
                         removed
                     }
                 }
             }
             if (deleted) {
-                AimiArchive.evict(aimiDir, rule.fileName, rule.archiveMonths, now())
+                AimiArchive.evict(storage, aimiDir, rule.fileName, rule.archiveMonths, now())
             } else {
                 rollbackArchive(archiveRollback.values)
             }
             deleted
         } catch (e: Exception) {
             rollbackArchive(archiveRollback.values)
-            warn("retention: retire of ${file.name} failed: ${e.message}")
+            warn("retention: retire of ${storage.displayPath(path)} failed: ${e.message}")
             false
         }
     }
 
-    /** One archive member a [retire] pass will write: which target file, and which byte range of [file]. */
-    private data class RetireMember(val target: File, val start: Long, val endExclusive: Long)
+    /** One archive member a [retire] pass will write: which target file, and which byte range of [path]. */
+    private data class RetireMember(val target: AimiPath, val start: Long, val endExclusive: Long)
 
     /**
-     * Splits [file] into one [RetireMember] per calendar month when [rule] has a usable timestamp
+     * Splits [path] into one [RetireMember] per calendar month when [rule] has a usable timestamp
      * key, falling back to a single member named for the current month otherwise - either because
      * the rule has no key at all (TRIM_LINES, dead RETIRE files), or because the key never matched a
      * single line despite being declared (the plan comes back with no ranges; the same defensive
@@ -310,7 +317,7 @@ internal open class AimiRetentionManager(
      * so this is unreachable in production; the check exists so a future rule that does gets a loud,
      * caught-and-warned failure (see [retire]'s own `catch`) instead of a silently corrupted archive.
      */
-    private fun retireMembers(file: File, rule: AimiRetentionRule, markedEof: Long): List<RetireMember> {
+    private fun retireMembers(path: AimiPath, rule: AimiRetentionRule, markedEof: Long): List<RetireMember> {
         check(!(rule.hasHeader && rule.timestampKey != null)) {
             "retention: ${rule.fileName} combines hasHeader with a timestampKey; retire()'s month-split " +
                 "path always passes header = null and starts each range after the header line, so the " +
@@ -330,7 +337,7 @@ internal open class AimiRetentionManager(
             // the actual guarantee, covering whatever else might someday produce a bad label.
             val fakeNow = now() + FAR_FUTURE_MARGIN_MS
             val planningRule = rule.copy(op = AimiRetentionOp.TRIM_TIME)
-            val plan = AimiCutPlanner.plan(file, planningRule, fakeNow)
+            val plan = AimiCutPlanner.plan(path, planningRule, fakeNow)
             if (plan.ranges.isNotEmpty()) {
                 // AimiLineScanner deliberately never reports a trailing line with no closing newline
                 // (a write caught mid-line), so the planner's last range can end short of markedEof
@@ -340,30 +347,35 @@ internal open class AimiRetentionManager(
                 // to markedEof here to cover it too.
                 val ranges = plan.ranges.toMutableList()
                 ranges[ranges.lastIndex] = ranges.last().copy(endExclusive = markedEof)
-                val fallbackLabel = monthOfNow()
+                val fallbackLabel = aimiMonthLabel(now(), TimeZone.currentSystemDefault())
                 return ranges.map { range ->
                     // Reject labels dated after the run month: the far-future seed in retireMembers
                     // can produce them, but they are never evicted and never visible to the viewer.
                     val label = if (MONTH_LABEL.matches(range.month) && range.month <= fallbackLabel) range.month else fallbackLabel
-                    RetireMember(AimiArchive.memberFile(aimiDir, rule.fileName, label), range.start, range.endExclusive)
+                    RetireMember(AimiArchive.memberFile(storage, aimiDir, rule.fileName, label), range.start, range.endExclusive)
                 }
             }
         }
-        return listOf(RetireMember(AimiArchive.memberFile(aimiDir, rule.fileName, monthOfNow()), 0L, markedEof))
+        return listOf(
+            RetireMember(
+                AimiArchive.memberFile(storage, aimiDir, rule.fileName, aimiMonthLabel(now(), TimeZone.currentSystemDefault())),
+                0L,
+                markedEof
+            )
+        )
     }
 
     /** Deletes generated backup copies older than [AimiRetentionPolicy.DROP_AFTER_DAYS]. */
     fun dropOrphans(): Int {
         val cutoff = now() - AimiRetentionPolicy.DROP_AFTER_DAYS * 24L * 60L * 60L * 1000L
         var dropped = 0
-        aimiDir.listFiles()?.forEach { candidate ->
-            if (!candidate.isFile) return@forEach
-            if (AimiRetentionPolicy.DROP_GLOBS.none { it.matches(candidate.name) }) return@forEach
-            if (candidate.lastModified() > cutoff) return@forEach
-            val size = candidate.length()
-            if (candidate.delete()) {
+        aimiFsListFiles(aimiDir).forEach { entry ->
+            if (AimiRetentionPolicy.DROP_GLOBS.none { it.matches(entry.name) }) return@forEach
+            if ((storage.lastModifiedMs(entry.path) ?: 0L) > cutoff) return@forEach
+            val size = storage.sizeBytes(entry.path)
+            if (storage.delete(entry.path)) {
                 dropped++
-                logger("retention: dropped orphan ${candidate.name} ($size bytes)")
+                logger("retention: dropped orphan ${entry.name} ($size bytes)")
             }
         }
         return dropped
@@ -371,8 +383,8 @@ internal open class AimiRetentionManager(
 
     /** Archives and removes any `<name>.overflow` left behind by the append guard. */
     fun consumeOverflow(rule: AimiRetentionRule): Int {
-        val overflow = File(aimiDir, rule.fileName + AimiRetentionPolicy.OVERFLOW_SUFFIX)
-        if (!overflow.isFile) return 0
+        val overflow = storage.resolve(aimiDir, rule.fileName + AimiRetentionPolicy.OVERFLOW_SUFFIX)
+        if (!storage.exists(overflow)) return 0
         return if (retire(overflow, rule)) 1 else 0
     }
 
@@ -398,16 +410,16 @@ internal open class AimiRetentionManager(
         } catch (e: Exception) {
             warn("retention: recovery of interrupted archives failed: ${e.message}")
         }
-        val ordered = AimiRetentionPolicy.RULES.sortedByDescending { File(aimiDir, it.fileName).length() }
+        val ordered = AimiRetentionPolicy.RULES.sortedByDescending { storage.sizeBytes(storage.resolve(aimiDir, it.fileName)) }
         ordered.forEach { rule ->
-            val file = File(aimiDir, rule.fileName)
+            val path = storage.resolve(aimiDir, rule.fileName)
             try {
-                onFileVisited(file)
+                onFileVisited(path)
                 changed += consumeOverflow(rule)
                 when {
-                    rule.op == AimiRetentionOp.RETIRE -> if (retire(file, rule)) changed++
-                    isStale(file)                     -> if (retire(file, rule)) changed++
-                    else                              -> if (trim(file, rule)) changed++
+                    rule.op == AimiRetentionOp.RETIRE -> if (retire(path, rule)) changed++
+                    isStale(path)                     -> if (retire(path, rule)) changed++
+                    else                              -> if (trim(path, rule)) changed++
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -438,39 +450,28 @@ internal open class AimiRetentionManager(
      * Returns how many interrupted appends were found and undone.
      */
     fun recoverInterruptedArchives(): Int {
-        val interrupted = AimiArchive.findInterruptedAppends(aimiDir)
+        val interrupted = AimiArchive.findInterruptedAppends(storage, aimiDir)
         if (interrupted.isEmpty()) return 0
         val records = interrupted.map { ArchiveRollbackRecord(it.target, it.previousLength > 0L, it.previousLength) }
         rollbackArchive(records)
-        interrupted.forEach { it.marker.delete() }
+        interrupted.forEach { storage.delete(it.marker) }
         return interrupted.size
     }
 
-    private fun monthOfNow(): String =
-        DateTimeFormatter.ofPattern("yyyy-MM").format(Instant.ofEpochMilli(now()).atZone(ZoneId.systemDefault()))
-
-    /** A filesystem identity for [file], or null when the filesystem does not provide one. */
-    private fun fileKeyOf(file: File): Any? =
-        try {
-            Files.readAttributes(file.toPath(), BasicFileAttributes::class.java).fileKey()
-        } catch (e: IOException) {
-            null
-        }
-
     /**
-     * True when [file] is no longer the file the plan was built for: shorter than [markedEof] (it
-     * was replaced by something smaller, or truncated), or carrying a different file key (it was
+     * True when [path] is no longer the file the plan was built for: shorter than [markedEof] (it
+     * was replaced by something smaller, or truncated), or carrying a different identity key (it was
      * replaced by a new file at the same path). When either key is null, only the length is trusted.
      */
-    private fun identityChanged(file: File, originalKey: Any?, markedEof: Long): Boolean {
-        if (file.length() < markedEof) return true
-        val currentKey = fileKeyOf(file)
+    private fun identityChanged(path: AimiPath, originalKey: String?, markedEof: Long): Boolean {
+        if (storage.sizeBytes(path) < markedEof) return true
+        val currentKey = aimiFsIdentityKey(path)
         return originalKey != null && currentKey != null && originalKey != currentKey
     }
 
-    private fun recordArchiveState(target: File): ArchiveRollbackRecord {
-        val existed = target.exists()
-        return ArchiveRollbackRecord(target, existed, if (existed) target.length() else 0L)
+    private fun recordArchiveState(target: AimiPath): ArchiveRollbackRecord {
+        val existed = storage.exists(target)
+        return ArchiveRollbackRecord(target, existed, if (existed) storage.sizeBytes(target) else 0L)
     }
 
     /**
@@ -481,58 +482,70 @@ internal open class AimiRetentionManager(
      *   [ArchiveRollbackRecord.existedBefore] alone: a target this record believes existed can have
      *   been deleted out of band since (or, for [recoverInterruptedArchives], the record only
      *   approximates "existed before" from the marker's recorded length in the first place). Without
-     *   this, `RandomAccessFile(target, "rw")` would happily *create* a missing target and then
-     *   zero-pad it out to [ArchiveRollbackRecord.previousLength] - a fabricated archive member that
-     *   is worse than no member at all, since `GZIPInputStream` rejects it outright instead of the
-     *   caller simply finding nothing there.
+     *   this, truncating a missing target could *create* it and then zero-pad it out to
+     *   [ArchiveRollbackRecord.previousLength] - a fabricated archive member that is worse than no
+     *   member at all, since a gzip reader rejects it outright instead of the caller simply finding
+     *   nothing there.
      * - the restored length is clamped to never exceed the target's *current* length. A record's
      *   [ArchiveRollbackRecord.previousLength] is only valid against the target as it stood right
      *   after this record was taken; if some other rollback in the same pass (or an earlier pass)
-     *   already shrank the same target further, blindly calling `setLength(previousLength)` would
-     *   EXTEND it back out, padding the gap with zero bytes - `RandomAccessFile.setLength` grows a
-     *   file shorter than the requested length rather than refusing. That padding sits inside what
-     *   was a valid gzip stream and makes every member after it unreadable. Clamping makes this a
-     *   no-op whenever the target is already at or below where this record wants it.
+     *   already shrank the same target further, blindly truncating to `previousLength` would
+     *   EXTEND it back out, padding the gap with zero bytes. That padding sits inside what was a
+     *   valid gzip stream and makes every member after it unreadable. Clamping makes this a no-op
+     *   whenever the target is already at or below where this record wants it.
      */
     private fun rollbackArchive(records: Collection<ArchiveRollbackRecord>) {
         records.forEach { record ->
             try {
-                if (!record.existedBefore || !record.target.exists()) {
-                    record.target.delete()
+                if (!record.existedBefore || !storage.exists(record.target)) {
+                    storage.delete(record.target)
                 } else {
-                    RandomAccessFile(record.target, "rw").use { raf ->
-                        raf.setLength(minOf(record.previousLength, raf.length()))
-                    }
+                    aimiFsTruncate(record.target, minOf(record.previousLength, storage.sizeBytes(record.target)))
                 }
-            } catch (e: IOException) {
-                warn("retention: failed to roll back archive member ${record.target.name}: ${e.message}")
+            } catch (e: Exception) {
+                warn("retention: failed to roll back archive member ${storage.displayPath(record.target)}: ${e.message}")
             }
         }
     }
 
-    private fun readRange(file: File, start: Long, endExclusive: Long): ByteArray {
+    private fun readRange(path: AimiPath, start: Long, endExclusive: Long): ByteArray {
         val size = (endExclusive - start).toInt()
         val out = ByteArray(size)
-        RandomAccessFile(file, "r").use { input ->
-            input.seek(start)
-            input.readFully(out)
+        val reader = AimiByteReader(path)
+        try {
+            var offset = 0
+            while (offset < size) {
+                val read = reader.readAt(start + offset, out, offset, size - offset)
+                if (read <= 0) break
+                offset += read
+            }
+            // The old code used RandomAccessFile.readFully, which throws on a short read; a file
+            // that shrank under the read is a changed-during-trim the caller must hear about, not
+            // a silently short header.
+            check(offset == size) { "short read of ${storage.displayPath(path)}: got $offset of $size bytes" }
+        } finally {
+            reader.close()
         }
         return out
     }
 
-    private fun copyRange(file: File, start: Long, endExclusive: Long, out: FileOutputStream) {
+    private fun copyRange(source: AimiPath, start: Long, endExclusive: Long, writer: AimiByteWriter) {
         if (endExclusive <= start) return
-        RandomAccessFile(file, "r").use { input ->
-            input.seek(start)
+        val reader = AimiByteReader(source)
+        try {
             val buffer = ByteArray(64 * 1024)
+            var position = start
             var remaining = endExclusive - start
             while (remaining > 0) {
                 val want = minOf(remaining, buffer.size.toLong()).toInt()
-                val read = input.read(buffer, 0, want)
+                val read = reader.readAt(position, buffer, 0, want)
                 if (read <= 0) break
-                out.write(buffer, 0, read)
+                writer.write(buffer, 0, read)
+                position += read
                 remaining -= read
             }
+        } finally {
+            reader.close()
         }
     }
 

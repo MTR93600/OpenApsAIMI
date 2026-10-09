@@ -1,8 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.retention
 
-import java.io.ByteArrayOutputStream
-import java.io.File
-import java.io.FileInputStream
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 
 /**
  * Walks a telemetry file line by line and reports each line's byte range.
@@ -10,6 +8,10 @@ import java.io.FileInputStream
  * The decision file is 2.10 GB and a single line can be hundreds of kilobytes, so nothing here
  * materialises a whole line, let alone a whole file. The caller gets the byte offsets plus at most
  * [PREFIX_LIMIT] bytes from the start of the line, which is all any timestamp extractor needs.
+ *
+ * Reads through [AimiByteReader]; the prefix is raw bytes, never decoded, because the timestamp
+ * keys the callers look for are ASCII and decoding a 400 KB line just to read its first bytes
+ * would be waste.
  */
 internal object AimiLineScanner {
 
@@ -28,29 +30,33 @@ internal object AimiLineScanner {
      *
      * Returning `false` from [onLine] stops the walk.
      */
-    fun forEachLine(file: File, onLine: (start: Long, endExclusive: Long, prefix: ByteArray) -> Boolean) {
-        val buffer = ByteArray(BUFFER_SIZE)
-        val prefix = ByteArrayOutputStream(256)
-        var lineStart = 0L
-        var absolute = 0L
-        FileInputStream(file).use { input ->
+    fun forEachLine(path: AimiPath, onLine: (start: Long, endExclusive: Long, prefix: ByteArray) -> Boolean) {
+        val reader = AimiByteReader(path)
+        try {
+            val buffer = ByteArray(BUFFER_SIZE)
+            val prefix = ByteArray(PREFIX_LIMIT)
+            var prefixSize = 0
+            var lineStart = 0L
+            var absolute = 0L
             while (true) {
-                val read = input.read(buffer)
+                val read = reader.readAt(absolute, buffer, 0, BUFFER_SIZE)
                 if (read <= 0) return
                 var i = 0
                 while (i < read) {
                     if (buffer[i] == NEWLINE) {
                         val end = absolute + i + 1
-                        if (!onLine(lineStart, end, prefix.toByteArray())) return
-                        prefix.reset()
+                        if (!onLine(lineStart, end, prefix.copyOf(prefixSize))) return
+                        prefixSize = 0
                         lineStart = end
-                    } else if (prefix.size() < PREFIX_LIMIT) {
-                        prefix.write(buffer[i].toInt())
+                    } else if (prefixSize < PREFIX_LIMIT) {
+                        prefix[prefixSize++] = buffer[i]
                     }
                     i++
                 }
                 absolute += read
             }
+        } finally {
+            reader.close()
         }
     }
 }

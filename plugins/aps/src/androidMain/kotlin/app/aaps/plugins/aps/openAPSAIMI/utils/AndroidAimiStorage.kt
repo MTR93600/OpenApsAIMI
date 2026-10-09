@@ -153,7 +153,7 @@ class AndroidAimiStorage @Inject constructor(
     }
 
     override fun readTailLines(path: AimiPath, maxLines: Int): List<String> =
-        runCatching { JsonlTailReader.readTailLines(fileOf(path), maxLines) }.getOrDefault(emptyList())
+        runCatching { JsonlTailReader.readTailLines(path, maxLines) }.getOrDefault(emptyList())
 
     override fun sizeBytes(path: AimiPath): Long = runCatching { fileOf(path).length() }.getOrDefault(0L)
 
