@@ -22,11 +22,13 @@ package app.aaps.plugins.aps.openAPSAIMI.utils
  * This is small key/value pairs with an expiry, the shape `SharedPreferences` already has on
  * Android.
  *
- * **There is deliberately no implementation on iOS**, for the same reason [AimiStorage] has none:
- * a stub that silently cached nothing would leave a caller like
+ * **There is deliberately no implementation on iOS.**
+ * A stub that silently cached nothing would leave a caller like
  * [app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver] looking alive on iOS while
  * re-fetching the model list on every single call, and any future iOS graph should fail loudly at
  * wiring time instead of failing quietly at runtime.
+ * (Note: [AimiStorage] now has an iOS implementation via `iosAimiStorage()`, but this cache
+ * remains intentionally unwired on iOS.)
  *
  * Reads answer `null`, `false` or the given default rather than throwing - a broken cache must
  * never take down a caller. Writes answer `false` on failure, for the same reason.
