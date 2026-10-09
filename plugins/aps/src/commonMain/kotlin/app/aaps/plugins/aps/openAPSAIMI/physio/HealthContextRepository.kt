@@ -20,6 +20,8 @@ import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.AtomicReference
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.AppScope
 import kotlinx.coroutines.Dispatchers as UnusedDispatchers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -35,7 +37,7 @@ import kotlinx.coroutines.launch
  * 
  * Provides the `HealthContextSnapshot` to the rest of the app.
  */
-@SingleIn
+@SingleIn(AppScope::class)
 class HealthContextRepository @Inject constructor(
     private val hcRepo: AIMIPhysioDataRepositoryMTR,
     private val featureExtractor: AIMIPhysioFeatureExtractorMTR,
