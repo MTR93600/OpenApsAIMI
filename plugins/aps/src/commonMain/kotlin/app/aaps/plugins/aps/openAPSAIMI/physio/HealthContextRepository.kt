@@ -2,13 +2,15 @@ package app.aaps.plugins.aps.openAPSAIMI.physio
 
 import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 
-import me.tatarka.inject.annotations.Inject as Unused
+import dev.zacsweers.metro.Inject as Unused
 import app.aaps.core.data.model.HR
 import app.aaps.core.data.model.SC
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.plugins.aps.openAPSAIMI.aimiLocalHour
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiHealthContext
+import kotlinx.datetime.TimeZone
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRefresher
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRepository
 import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalBeliefEngine
@@ -16,9 +18,9 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalDataWindowMTR
 import app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.AtomicReference
-import me.tatarka.inject.annotations.Inject
-import me.tatarka.inject.annotations.SingleIn
-import kotlinx.coroutines.Dispatchers
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
+import kotlinx.coroutines.Dispatchers as UnusedDispatchers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
@@ -41,7 +43,7 @@ class HealthContextRepository @Inject constructor(
     private val unifiedProvider: app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR, // 🚀 NEW INJECTION
     private val persistenceLayer: PersistenceLayer,
     private val aapsLogger: AAPSLogger
-) {
+) : AimiHealthContext {
 
     companion object {
         private const val TAG = "HealthContextRepo"
@@ -83,12 +85,12 @@ class HealthContextRepository @Inject constructor(
      * Fetches and builds the current Health Snapshot.
      * Merges HC data with Watch data and calculates derived metrics.
      */
-    fun fetchSnapshot(): HealthContextSnapshot = fetchSnapshotInternal()
+    override fun fetchSnapshot(): HealthContextSnapshot = fetchSnapshotInternal()
 
     /**
      * Throttled snapshot for Autodrive V3 gater — avoids four DB reads every 5 min when unchanged.
      */
-    fun fetchSnapshotForAutodriveGater(): HealthContextSnapshot {
+    override fun fetchSnapshotForAutodriveGater(): HealthContextSnapshot {
         val ageMs = aimiWallClockMs() - lastSnapshot.timestamp
         if (lastSnapshot.isValid && ageMs in 0..AUTODRIVE_GATER_SNAPSHOT_MAX_AGE_MS) {
             return lastSnapshot
@@ -282,7 +284,7 @@ class HealthContextRepository @Inject constructor(
     }
 
     // Pass-through for legacy or specific access if needed
-    fun getLastSnapshot(): HealthContextSnapshot = lastSnapshot
+    override fun getLastSnapshot(): HealthContextSnapshot = lastSnapshot
     
     // For Workers: Access underlying HC Repo
     fun getHcRepo(): AIMIPhysioDataRepositoryMTR = hcRepo
@@ -325,7 +327,7 @@ class HealthContextRepository @Inject constructor(
                 val heartRates = persistenceLayer.getHeartRatesFromTimeToTime(windowStart, now)
                 val steps = persistenceLayer.getStepsCountFromTimeToTime(windowStart, now)
                 val samples = buildAwakeSamples(heartRates, steps)
-                val estimate = AwakeRestingHeartRate.estimate(samples, ZoneId.systemDefault())
+                val estimate = AwakeRestingHeartRate.estimate(samples, TimeZone.currentSystemDefault())
                 awakeRestingRef.store(estimate)
                 awakeRestingMeasuredAtMs.store(aimiWallClockMs())
                 aapsLogger.debug(

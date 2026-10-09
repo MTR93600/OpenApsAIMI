@@ -1268,7 +1268,7 @@ class AimiAdvisorService {
             var lbgiSum = 0.0
             bgReadings.forEach { bg ->
                 if(bg > 10) {
-                    val f = 1.509 * (pow(ln(bg), 1.084) - 5.381)
+                    val f = 1.509 * (ln(bg).pow(1.084) - 5.381)
                     if(f < 0) lbgiSum += 10 * f * f
                 }
             }
