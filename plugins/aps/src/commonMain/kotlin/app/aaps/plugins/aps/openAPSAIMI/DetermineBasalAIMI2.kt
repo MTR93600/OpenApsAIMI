@@ -13836,6 +13836,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     ): RT {
         // Fresh tick-local scratch. Helpers access via work.field.
         work = AimiTickWorkingState()
+        // Sync legacy prebolus latch into causal state for the replay harness.
+        // Transitional: the getters below read preferences (shell concern).
+        causalState.syncFromLegacyPrebolus(
+            lastSmbMillis = internalLastSmbMillis,
+            lastLegacyPrebolusMillis = internalLastLegacyPrebolusMillis,
+            pendingUnit = pendingLegacyPrebolusUnit,
+            pendingExpiry = pendingLegacyPrebolusExpiry,
+        )
         val ctx = AimiTickContext(
             glucoseStatus = glucose_status,
             currentTemp = currenttemp,
