@@ -1,5 +1,7 @@
 package app.aaps.plugins.aimicontracts
 
+import kotlinx.serialization.Serializable
+
 /**
  * One measured value plus whether it may be used.
  *
@@ -8,11 +10,13 @@ package app.aaps.plugins.aimicontracts
  *
  * @param T the payload when a number or object was actually captured.
  */
+@Serializable
 sealed interface TimedValue<out T> {
 
     /** The captured payload, or null when nothing was measured. Never a silent 0. */
     val valueOrNull: T?
 
+    @Serializable
     data class Fresh<T>(
         val value: T,
         val capturedAtEpochMs: Long,
@@ -21,6 +25,7 @@ sealed interface TimedValue<out T> {
         override val valueOrNull: T = value
     }
 
+    @Serializable
     data class Stale<T>(
         val value: T,
         val capturedAtEpochMs: Long,
@@ -29,14 +34,17 @@ sealed interface TimedValue<out T> {
         override val valueOrNull: T = value
     }
 
+    @Serializable
     data class Missing(val reason: String) : TimedValue<Nothing> {
         override val valueOrNull: Nothing? = null
     }
 
+    @Serializable
     data class Denied(val capability: String) : TimedValue<Nothing> {
         override val valueOrNull: Nothing? = null
     }
 
+    @Serializable
     data class Unsupported(val capability: String) : TimedValue<Nothing> {
         override val valueOrNull: Nothing? = null
     }

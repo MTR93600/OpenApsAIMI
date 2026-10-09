@@ -1,5 +1,7 @@
 package app.aaps.plugins.aimicontracts
 
+import kotlinx.serialization.Serializable
+
 /**
  * Immutable AIMI calculation input for one tick.
  *
@@ -15,6 +17,7 @@ package app.aaps.plugins.aimicontracts
  * - full physio windows (steps 5–180 min, sleep, SpO2)
  * - Auditor / TPO / LLM (N+1 advice, never mutate tick N)
  */
+@Serializable
 data class AimiInputSnapshot(
     val meta: AimiTickMeta,
     val glucose: AimiGlucoseSnapshot,
@@ -28,6 +31,7 @@ data class AimiInputSnapshot(
 )
 
 /** Why this tick ran. The iOS loop is CGM-BLE driven; a 5 minute timer is not the heartbeat. */
+@Serializable
 enum class AimiTickTrigger {
     Cgm,
     Pump,
@@ -35,6 +39,7 @@ enum class AimiTickTrigger {
     Recovery,
 }
 
+@Serializable
 data class AimiTickMeta(
     val schemaVersion: Int,
     val tickId: Long,
@@ -54,6 +59,7 @@ data class AimiTickMeta(
  *
  * Staging / pre-soak glucose must arrive with [loopEligible] = false until the shell promotes it.
  */
+@Serializable
 data class AimiGlucoseSnapshot(
     val glucoseMgdl: TimedValue<Double>,
     val sourceId: String?,
@@ -62,12 +68,14 @@ data class AimiGlucoseSnapshot(
 )
 
 /** Coarse warm-up for the snapshot. Driver phases stay in the CGM plugin, not here. */
+@Serializable
 enum class AimiGlucoseWarmup {
     None,
     InProgress,
     Failed,
 }
 
+@Serializable
 data class AimiPumpSnapshot(
     val profileBasalUPerHour: TimedValue<Double>,
     val tempBasalUPerHour: TimedValue<Double>,
@@ -84,6 +92,7 @@ data class AimiPumpSnapshot(
  * [memberTargetBgMgdl] is AIMI `targetBg` (member). [scheduleTargetBgMgdl] is AIMI `target_bg`
  * (schedule). They are two fields on purpose. Do not merge them.
  */
+@Serializable
 data class AimiProfileSnapshot(
     val memberTargetBgMgdl: Double,
     val scheduleTargetBgMgdl: Double,
@@ -93,11 +102,13 @@ data class AimiProfileSnapshot(
     val peakMs: Long?,
 )
 
+@Serializable
 data class AimiInsulinSnapshot(
     val iobU: TimedValue<Double>,
     val activityUPerHour: TimedValue<Double>,
 )
 
+@Serializable
 data class AimiMealSnapshot(
     val cobG: TimedValue<Double>,
     val lastCarbsG: TimedValue<Double>,
@@ -106,6 +117,7 @@ data class AimiMealSnapshot(
 /**
  * Physio inputs. RMSSD and SDNN stay two fields. They do not share a baseline or a threshold.
  */
+@Serializable
 data class AimiPhysiologySnapshot(
     val heartRateBpm: TimedValue<Double>,
     val steps: TimedValue<Int>,
@@ -116,6 +128,7 @@ data class AimiPhysiologySnapshot(
 /**
  * Config frozen for this tick. Domain keys are not listed yet; the shell still owns prefs.
  */
+@Serializable
 data class AimiConfigSnapshot(
     val schemaVersion: Int,
 )
@@ -126,6 +139,7 @@ data class AimiConfigSnapshot(
  * Whether the pump can physically take an SMB is [AimiPumpSnapshot.pumpCanSmb].
  * Constraint-plugin SMB rules stay deferred until config is typed.
  */
+@Serializable
 data class AimiCapabilitySnapshot(
     val closedLoopAllowed: Boolean,
 )
