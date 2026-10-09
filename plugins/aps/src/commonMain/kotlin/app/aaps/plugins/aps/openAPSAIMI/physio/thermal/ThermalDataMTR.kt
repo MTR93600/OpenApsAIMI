@@ -19,7 +19,7 @@ data class BasalBodyTemperatureMTR(
     val dataOrigin: String,
 )
 
-internal data class ThermalDataWindowMTR(
+data class ThermalDataWindowMTR(
     val skinSamples: List<ThermalSampleMTR> = emptyList(),
     val basalBodyTemperature: BasalBodyTemperatureMTR? = null,
     val fetchedAtMs: Long = 0L,

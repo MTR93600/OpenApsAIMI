@@ -2,7 +2,9 @@ package app.aaps.plugins.aps.openAPSAIMI.steps
 
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import kotlinx.datetime.Instant
+import kotlin.time.Clock
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
@@ -105,7 +107,7 @@ class AIMICompositeStepsProviderMTR @Inject constructor(
      * @param now Reference timestamp
      * @return Complete steps data model with metadata
      */
-    fun getComprehensiveStepsData(now: Instant = Instant.now()): AIMIStepsDataMTR {
+    fun getComprehensiveStepsData(now: Instant = Clock.System.now()): AIMIStepsDataMTR {
         val windows = listOf(5, 10, 15, 30, 60, 180)
         val results = windows.associateWith { window -> getStepsDelta(window, now) }
         
