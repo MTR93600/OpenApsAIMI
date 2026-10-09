@@ -1,6 +1,5 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
-import android.annotation.SuppressLint
 import androidx.collection.LongSparseArray
 import app.aaps.core.data.model.BS
 import app.aaps.core.data.model.SourceSensor
@@ -575,13 +574,6 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSoftFloorTelemetry
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.AutodriveEngine
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.PhysiologicalStressMaskBuilder
 import app.aaps.plugins.aps.openAPSAIMI.keys.AimiLongKey
-import java.text.DecimalFormat
-import java.text.SimpleDateFormat
-import java.time.format.DateTimeFormatter
-import java.util.Calendar
-import java.util.Date
-import java.util.Locale
-import java.util.concurrent.TimeUnit
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
@@ -596,8 +588,12 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlin.time.Instant as KotlinInstant
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate as KxLocalDate
 import kotlinx.datetime.LocalTime as KxLocalTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.JsonObject
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiJson
 import app.aaps.plugins.aps.openAPSAIMI.utils.JsonArr
@@ -949,7 +945,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         pumpAgeDaysCache.refresh(
             scope = determineIoScope,
             load = {
-                val fromTime = aimiWallClockMs() - TimeUnit.DAYS.toMillis(7)
+                val fromTime = aimiWallClockMs() - 7 * MILLIS_PER_DAY
                 val siteChanges = persistenceLayer.getTherapyEventDataFromTime(fromTime, TE.Type.CANNULA_CHANGE, true)
                 if (siteChanges.isNotEmpty()) {
                     val latestChangeTimestamp = siteChanges.last().timestamp
@@ -1010,7 +1006,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun latestCarbContextSnapshot(nowMs: Long, mealDataLastCarbTime: Long, cobNow: Float): CarbContextSnapshot {
         refreshCarbContextAsync(nowMs, mealDataLastCarbTime, cobNow)
         return carbContextCache.get() ?: CarbContextSnapshot(
-            lastCarbTimestamp = mealDataLastCarbTime.takeIf { it > 0L } ?: nowMs - TimeUnit.DAYS.toMillis(1),
+            lastCarbTimestamp = mealDataLastCarbTime.takeIf { it > 0L } ?: nowMs - MILLIS_PER_DAY,
             lastCarbAgeMin = 0,
             futureCarbs = 0.0f,
             effectiveCob = cobNow,
@@ -1023,7 +1019,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             scope = determineIoScope,
             load = {
                 var lastCarbTimestamp = mealDataLastCarbTime
-                val oneDayAgoIfNotFound = nowMs - TimeUnit.DAYS.toMillis(1)
+                val oneDayAgoIfNotFound = nowMs - MILLIS_PER_DAY
                 if (lastCarbTimestamp == 0L) {
                     lastCarbTimestamp = persistenceLayer.getMostRecentCarbByDate() ?: oneDayAgoIfNotFound
                 }
@@ -1034,7 +1030,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 } else {
                     cobNow
                 }
-                val recentNotesLocal = persistenceLayer.getUserEntryDataFromTime(nowMs - TimeUnit.HOURS.toMillis(4))
+                val recentNotesLocal = persistenceLayer.getUserEntryDataFromTime(nowMs - 4 * MILLIS_PER_HOUR)
                 CarbContextSnapshot(
                     lastCarbTimestamp = lastCarbTimestamp,
                     lastCarbAgeMin = ageMin,
@@ -1045,7 +1041,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             },
             onFailure = {
                 CarbContextSnapshot(
-                    lastCarbTimestamp = mealDataLastCarbTime.takeIf { it > 0L } ?: nowMs - TimeUnit.DAYS.toMillis(1),
+                    lastCarbTimestamp = mealDataLastCarbTime.takeIf { it > 0L } ?: nowMs - MILLIS_PER_DAY,
                     lastCarbAgeMin = 0,
                     futureCarbs = 0.0f,
                     effectiveCob = cobNow,
@@ -1461,7 +1457,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         put("h_mult", hMult)
         put("n_mult", nDecision?.multiplier ?: 1.0)
         put("n_raw", nDecision?.rawValue ?: AimiJson.NULL)
-        put("n_source", (nDecision?.source ?: BasalNeuralLearner.BasalMultiplierSource.DISABLED).name.lowercase(Locale.US))
+        put("n_source", (nDecision?.source ?: BasalNeuralLearner.BasalMultiplierSource.DISABLED).name.lowercase())
         put("n_clamped", nDecision?.clamped ?: false)
         put("n_floor", nDecision?.floor ?: AimiJson.NULL)
         put("n_ceiling", nDecision?.ceiling ?: AimiJson.NULL)
@@ -1880,9 +1876,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             combinedDelta = rawCombinedDelta * 1.30f
             shortAvgDeltaAdj = shortAvgDelta * 1.20f
             work.consoleLog.add(
-                "📡 G6_LEAD rawΔcomb=%.2f → %.2f | rawΔshort=%.2f → %.2f (BYODA +30/+20%%)".format(
-                    rawCombinedDelta, combinedDelta, shortAvgDelta, shortAvgDeltaAdj
-                )
+                "📡 G6_LEAD rawΔcomb=${aimiFmt2(rawCombinedDelta)} → ${aimiFmt2(combinedDelta)} | rawΔshort=${aimiFmt2(shortAvgDelta)} → ${aimiFmt2(shortAvgDeltaAdj)} (BYODA +30/+20%)"
             )
         } else {
             if (isG6Byoda) work.consoleLog.add("📡 G6_LEAD nuit [${work.hourOfDay}h] → pas de compensation (sécurité nocturne)")
@@ -4133,7 +4127,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 override fun logSteps(samples: List<SC>) {
                     if (samples.isNotEmpty()) {
                         val lastSteps = samples.maxByOrNull { it.timestamp }
-                        aapsLogger.debug(LTag.APS, "Steps Data: Found ${samples.size} records. Last: ${lastSteps?.steps5min} steps @ ${java.util.Date(lastSteps?.timestamp ?: 0)}")
+                        aapsLogger.debug(LTag.APS, "Steps Data: Found ${samples.size} records. Last: ${lastSteps?.steps5min} steps @ ${Instant.fromEpochMilliseconds(lastSteps?.timestamp ?: 0)}")
                     } else {
                         aapsLogger.debug(LTag.APS, "Steps Data: No records found in last 210 mins")
                     }
@@ -4156,7 +4150,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 override fun logHeartRates(samples: List<HR>) {
                     if (samples.isNotEmpty()) {
                         val lastHR = samples.maxByOrNull { it.timestamp }
-                        aapsLogger.debug(LTag.APS, "HR Data: Found ${samples.size} records. Last: ${lastHR?.beatsPerMinute} @ ${java.util.Date(lastHR?.timestamp ?: 0)}")
+                        aapsLogger.debug(LTag.APS, "HR Data: Found ${samples.size} records. Last: ${lastHR?.beatsPerMinute} @ ${Instant.fromEpochMilliseconds(lastHR?.timestamp ?: 0)}")
                     } else {
                         aapsLogger.debug(LTag.APS, "HR Data: No records found in last 200 mins")
                     }
@@ -4198,7 +4192,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * Runs **after** [runPostBasalBootstrapIobTickStepsAndHeartRate], **before** [applyEndoAndActivityAdjustments].
      * Mutates [basalaimi], [ci], [aimilimit], [variableSensitivity]; reads [causalState.adaptiveMult], prefs, [unifiedReactivityLearner], [basalDecisionEngine].
      */
-    @SuppressLint("DefaultLocale")
     private fun runBasalAimiTddCarbLimitsTirEarlyBasalAndPaiIsf(
         glucoseStatus: GlucoseStatusAIMI,
         profile: OapsProfileAimi,
@@ -4291,9 +4284,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         WorkingIsf.lastApplied?.let { applied ->
             val floorMgdl = applied.floorMgdlPerU ?: return@let
             work.consoleLog.add(
-                "🧷 STRESS_ISF_FLOOR %.1f -> %.1f (floor %.1f)".format(
-                    Locale.US, applied.beforeMgdlPerU, applied.afterMgdlPerU, floorMgdl,
-                )
+                "🧷 STRESS_ISF_FLOOR ${aimiFmt1(applied.beforeMgdlPerU)} -> ${aimiFmt1(applied.afterMgdlPerU)} (floor ${aimiFmt1(floorMgdl)})"
             )
         }
         profile.max_daily_basal = profile.max_daily_basal * physioMultipliers.basalFactor
@@ -4338,13 +4329,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         auditorProfileTick.isfAppliedFactor = floored.effective
         this.variableSensitivity = (floored.workingAdjustedMgdl ?: raw.workingMgdl).toFloat()
         work.consoleLog.add(
-            "🧪 AUDITOR_ISF %.1f -> %.1f (x%.3f, floor %.1f)".format(
-                Locale.US,
-                raw.workingMgdl,
-                this.variableSensitivity.toDouble(),
-                floored.effective,
-                floored.lowerBoundMgdl ?: 0.0,
-            )
+            "🧪 AUDITOR_ISF ${aimiFmt1(raw.workingMgdl)} -> ${aimiFmt1(this.variableSensitivity.toDouble())} (x${aimiFmt3(floored.effective)}, floor ${aimiFmt1(floored.lowerBoundMgdl ?: 0.0)})"
         )
     }
 
@@ -4810,11 +4795,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     proposed: Float,
                 ) {
                     work.consoleLog.add(
-                        String.format(
-                            java.util.Locale.US,
-                            "SMB Decision: BG=%.0f, Delta=%.1f, IOB=%.2f, HasPred=%s, HyperKicker=%s, UAM=%.2f, Proposed=%.2f",
-                            bg, delta, iob, hasPred, hyperKicker, modelCal, proposed,
-                        )
+                        "SMB Decision: BG=${aimiFmt0(bg)}, Delta=${aimiFmt1(delta)}, IOB=${aimiFmt2(iob)}, HasPred=$hasPred, HyperKicker=$hyperKicker, UAM=${aimiFmt2(modelCal)}, Proposed=${aimiFmt2(proposed)}"
                     )
                 }
                 override fun authoritativePhrase() =
@@ -4936,12 +4917,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
         }
         work.consoleLog.add(
-            String.format(
-                java.util.Locale.US,
-                "💉 SMB result: raw=%.2f -> final=%.2f",
-                work.predictedSMB,
-                smbToGive,
-            )
+            "💉 SMB result: raw=${aimiFmt2(work.predictedSMB)} -> final=${aimiFmt2(smbToGive)}"
         )
         return smbToGive
     }
@@ -4950,7 +4926,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * PKPD absorption guard (relief + meal debridage maxIOB), endo SMB dampen, red carpet vs [capSmbDose], cap reason line.
      * Mutates [rT.reason], [intervalsmb] via returned value; reads [endoSmbMult], [maxSMB]/[maxSMBHB], [iob], [maxIob] membres.
      */
-    @SuppressLint("DefaultLocale")
     private fun runPkpdGuardEndoDampenRedCarpetAndCapSmb(
         ctx: AimiTickContext,
         rT: RT,
@@ -5092,7 +5067,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      *
      * Reads therapy flags + runtimes + [bg]/[delta]/[shortAvgDelta] from instance state like the inlined `when` did.
      */
-    @SuppressLint("DefaultLocale")
     private fun resolveMealHyperBasalBoostOutcome(
         ctx: AimiTickContext,
         profile: OapsProfileAimi,
@@ -5994,7 +5968,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             calls = object : AimiT3cBasalFirstCalls {
                 override fun nativeOwnerConfigured() = isNativeT3cRuntimeOwnerConfigured()
                 override fun snapshot() = work.lastRecursiveBeliefSnapshot
-                override fun usLower(value: String) = value.lowercase(Locale.US)
+                override fun usLower(value: String) = value.lowercase()
                 override fun block(state: T3cBasalFirstResolution?, reason: String) {
                     blockT3cBasalFirstProduction(state, reason)
                 }
@@ -6357,15 +6331,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 work.consoleLog.add("─────────────────────────────────┐")
                 work.consoleLog.add("│ 🌀 TRAJECTORY STATUS            │")
                 work.consoleLog.add("├─────────────────────────────────┤")
-                work.consoleLog.add("│ Type: %-26s│".format(type))
-                work.consoleLog.add("│ Health: %s %d%%          │".format(healthBar, healthPercent))
-                work.consoleLog.add("│ ETA: %-27s│".format(etaText))
+                work.consoleLog.add("│ Type: ${type.padEnd(26)}│")
+                work.consoleLog.add("│ Health: $healthBar $healthPercent%          │")
+                work.consoleLog.add("│ ETA: ${etaText.padEnd(27)}│")
                 work.consoleLog.add("│                                 │")
                 work.consoleLog.add("│ Metrics:                        │")
-                work.consoleLog.add("│ ├─ Curvature:    %-15s│".format(aimiFmt2(metrics.curvature)))
-                work.consoleLog.add("│ ├─ Convergence:  %-15s│".format("%+.2f".format(metrics.convergenceVelocity)))
-                work.consoleLog.add("│ ├─ Coherence:    %-15s│".format(aimiFmt2(metrics.coherence)))
-                work.consoleLog.add("│ ├─ Energy:       %-15s│".format("%+.1f".format(metrics.energyBalance)))
+                work.consoleLog.add("│ ├─ Curvature:    ${aimiFmt2(metrics.curvature).padEnd(15)}│")
+                work.consoleLog.add("│ ├─ Convergence:  ${aimiFmtSigned2(metrics.convergenceVelocity).padEnd(15)}│")
+                work.consoleLog.add("│ ├─ Coherence:    ${aimiFmt2(metrics.coherence).padEnd(15)}│")
+                work.consoleLog.add("│ ├─ Energy:       ${aimiFmtSigned1(metrics.energyBalance).padEnd(15)}│")
 
                 try {
                     val cached = app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdictCache.get(600_000)
@@ -6374,11 +6348,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         val aiIcon = "🤖"
                         val verdictEnum = cached.verdict.verdict
                         val action = verdictEnum.name
-                        work.consoleLog.add("│ $aiIcon AI: %-25s│".format("$action (${(cached.verdict.confidence * 100).toInt()}%)"))
+                        work.consoleLog.add("│ $aiIcon AI: ${"$action (${(cached.verdict.confidence * 100).toInt()}%)".padEnd(25)}│")
                         val evidenceList = cached.verdict.evidence
                         val evidenceStr = if (evidenceList.isNotEmpty()) evidenceList[0] else ""
                         val evidence = evidenceStr.replace("\n", " ").take(30)
-                        work.consoleLog.add("│ > %-30s│".format(evidence))
+                        work.consoleLog.add("│ > ${evidence.padEnd(30)}│")
                     }
                 } catch (_: Exception) {
                 }
@@ -6502,9 +6476,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         work.lastEffortAssessment?.basalFactor?.takeIf { it < 1.0 && !harmoniaAlreadyReducedForEffort }?.let { factor ->
             val damped = (finalProposedRate * factor).coerceAtLeast(0.0)
             work.consoleLog.add(
-                "🏃 EFFORT_BASAL_DAMP: %.2f→%.2f U/h (×%.2f, %s)".format(
-                    Locale.US, finalProposedRate, damped, factor, work.lastEffortAssessment?.state?.name,
-                )
+                "🏃 EFFORT_BASAL_DAMP: ${aimiFmt2(finalProposedRate)}→${aimiFmt2(damped)} U/h (×${aimiFmt2(factor)}, ${work.lastEffortAssessment?.state?.name})"
             )
             b.rT.reason.append("; 🏃EFFORT×${aimiFmt2(factor)}")
             finalProposedRate = damped
@@ -6520,7 +6492,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val slewed = slewLimitBasalUp(prevRateUph, finalProposedRate, b.profile.current_basal)
             if (slewed < finalProposedRate) {
                 work.consoleLog.add(
-                    "🩸 BASAL_SLEW_LIMIT: %.2f→%.2f U/h (prev %.2f)".format(Locale.US, finalProposedRate, slewed, prevRateUph)
+                    "🩸 BASAL_SLEW_LIMIT: ${aimiFmt2(finalProposedRate)}→${aimiFmt2(slewed)} U/h (prev ${aimiFmt2(prevRateUph)})"
                 )
                 b.rT.reason.append("; 🩸SLEW")
                 finalProposedRate = slewed
@@ -6545,11 +6517,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )?.let { floorUph ->
                 if (floorUph > finalProposedRate) {
                     work.consoleLog.add(
-                        "🍽️ ANTICIP_BASAL_FLOOR: %.2f→%.2f U/h (budget %.2f U over %.0f min, elapsed %d min)".format(
-                            Locale.US, finalProposedRate, floorUph,
-                            preferences.get(DoubleKey.OApsAIMIAnticipBudgetU),
-                            AnticipationBasalFloor.WINDOW_MINUTES, anticipruntime,
-                        )
+                        "🍽️ ANTICIP_BASAL_FLOOR: ${aimiFmt2(finalProposedRate)}→${aimiFmt2(floorUph)} U/h (budget ${aimiFmt2(preferences.get(DoubleKey.OApsAIMIAnticipBudgetU))} U over ${aimiFmt0(AnticipationBasalFloor.WINDOW_MINUTES)} min, elapsed $anticipruntime min)"
                     )
                     b.rT.reason.append("; 🍽️anticip ${aimiFmt2(floorUph)}U/h")
                     finalProposedRate = floorUph
@@ -6577,9 +6545,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )?.let { floorUph ->
             if (floorUph > finalProposedRate) {
                 work.consoleLog.add(
-                    "🍽️ FCL_MEAL_BASAL: %.2f→%.2f U/h (temp target %.0f mg/dL, note %d min ago)".format(
-                        Locale.US, finalProposedRate, floorUph, b.profile.target_bg, fclruntime,
-                    )
+                    "🍽️ FCL_MEAL_BASAL: ${aimiFmt2(finalProposedRate)}→${aimiFmt2(floorUph)} U/h (temp target ${aimiFmt0(b.profile.target_bg)} mg/dL, note $fclruntime min ago)"
                 )
                 b.rT.reason.append("; 🍽️FCL ${aimiFmt2(floorUph)}U/h")
                 finalProposedRate = floorUph
@@ -8980,6 +8946,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     // 🛡️ PERSISTENT PREBOLUS LOCKOUT (MTR Safety Patch)
     // Survives instance re-creations and app restarts by combining Memory + SharedPreferences.
         companion object {
+        /** Milliseconds per minute/day/hour. Replaces `java.util.concurrent.TimeUnit`. */
+        private const val MILLIS_PER_MINUTE = 60_000L
+        private const val MILLIS_PER_HOUR = 3_600_000L
+        private const val MILLIS_PER_DAY = 86_400_000L
+
         /**
          * Lookback (minutes) used to report the non-basal insulin of one basal-learning row. Slightly
          * longer than the 5-minute loop tick, so a bolus written a few seconds late is still reported.
@@ -9089,7 +9060,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             LegacyPrebolusMemory.setPendingExpiry(preferences, value)
         }
     private val nightGrowthResistanceMode = NightGrowthResistanceMode()
-    private val ngrTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     private val MAX_ZERO_BASAL_DURATION = 60  // Durée maximale autorisée en minutes à 0 basal
     private val insulinObserver = app.aaps.plugins.aps.openAPSAIMI.pkpd.RealTimeInsulinObserver()  // 🚀 Real-Time Insulin Observer
 
@@ -9209,7 +9179,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             audit: PkpdPort.DampingAudit?
         ) {
             val dateStr = aimiCsvTimestampMinute(ctx.nowEpochMillis)
-            val epochMin = TimeUnit.MILLISECONDS.toMinutes(ctx.nowEpochMillis)
+            val epochMin = ctx.nowEpochMillis / MILLIS_PER_MINUTE
             PkPdCsvLogger.append(
                 PkPdLogRow(
                     dateStr = dateStr,
@@ -9569,9 +9539,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val activityCapUph = profileBasalUph * activityFactor
             if (finalRateUph > activityCapUph) {
                 work.consoleLog.add(
-                    "🏃 ACTIVITY_BASAL_CAP[$source]: %.2f→%.2f U/h (≤ %.2f× profile %.2f)".format(
-                        Locale.US, finalRateUph, activityCapUph, activityFactor, profileBasalUph
-                    )
+                    "🏃 ACTIVITY_BASAL_CAP[$source]: ${aimiFmt2(finalRateUph)}→${aimiFmt2(activityCapUph)} U/h (≤ ${aimiFmt2(activityFactor)}× profile ${aimiFmt2(profileBasalUph)})"
                 )
                 finalRateUph = activityCapUph
             }
@@ -9806,7 +9774,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     fun round(value: Double, digits: Int): Double =
         AimiTickPolicyMath.round(value, digits)
 
-    private fun Double.withoutZeros(): String = DecimalFormat("0.##").format(this)
+    private fun Double.withoutZeros(): String =
+        app.aaps.core.data.format.NumberFormat.UP_TO_2_DECIMALS.format(this)
     fun round(value: Double): Int {
         // Crash backstop: roundToInt() throws on NaN and saturates at Int.MAX_VALUE on ±Infinity.
         // Substitute 0, but keep the fallback observable by PersistenceLayerImpl's non-finite
@@ -10393,8 +10362,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
 
     private fun logDataMLToCsv(predictedSMB: Float, smbToGive: Float) {
-        val usFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm")
-        val dateStr = dateUtil.dateAndTimeString(dateUtil.now()).format(usFormatter)
+        val dateStr = dateUtil.dateAndTimeString(dateUtil.now())
         val latentFeatures = SmbRefinementFeatureSchema.latentFeatureValues(causalState.lastPhysioLatentState)
         val modeFeatures = SmbRefinementFeatureSchema.modeFeatureValues(work.lastPatientModeDecision)
         val causalFeatures = SmbRefinementFeatureSchema.causalFeatureValues(work.lastPatientState?.causalPosterior)
@@ -10435,8 +10403,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private fun logDataToCsv(predictedSMB: Float, smbToGive: Float) {
 
-        val usFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm")
-        val dateStr = dateUtil.dateAndTimeString(dateUtil.now()).format(usFormatter)
+        val dateStr = dateUtil.dateAndTimeString(dateUtil.now())
 
         val headerRow = "dateStr,work.hourOfDay,work.weekend," +
             "bg,targetBg,work.iob,delta,shortAvgDelta,longAvgDelta," +
@@ -10471,8 +10438,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * 2026. It is the reference's own behaviour and changing it is the owner's call, not the port's.
      */
     private fun backupFileName(): String {
-        val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
-        val timestamp = dateFormat.format(Date())
+        // KMP: "yyyyMMdd_HHmmss" via kotlinx.datetime. Gregorian year always; the reference's
+        // `Locale.getDefault()` could write a Buddhist year (2569) on a Thai-locale device.
+        // That edge case is not reproduced here (see KDoc above); the digit layout is identical.
+        val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+        val timestamp = buildString {
+            append(now.year)
+            append(now.monthNumber.toString().padStart(2, '0'))
+            append(now.dayOfMonth.toString().padStart(2, '0'))
+            append('_')
+            append(now.hour.toString().padStart(2, '0'))
+            append(now.minute.toString().padStart(2, '0'))
+            append(now.second.toString().padStart(2, '0'))
+        }
         return "backup_$timestamp.csv"
     }
 
@@ -10542,7 +10520,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return result
     }
 
-    @SuppressLint("StringFormatInvalid")
     private fun automateDeletionIfBadDay(tir1DAYIR: Int) {
         val reasonBuilder = StringBuilder()
         // Only when the time in range of the last day is under 85 %.
@@ -10723,7 +10700,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             },
             bindingDraft = AimiFinalizeBindingDraft { work.lastSmbBindingTraceDraft },
             smbAction = legacySmbAction,
-            format2f = { "%2f".format(it) },
+            format2f = { app.aaps.core.data.format.NumberFormat.withDecimalsHalfUp(6).format(it.toDouble(), '.') },
         ) ?: return
         lastDecisionSource = side.decisionSource
         lastSmbProposed = side.smbProposed
@@ -12431,9 +12408,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 intervalsmb = value
             }
             override fun smbScaleLine(original: Double, updated: Double, factor: Float) =
-                "  SMB: %.2f→%.2fU (×%.2f)".format(java.util.Locale.US, original, updated, factor)
+                "  SMB: ${aimiFmt2(original)}→${aimiFmt2(updated)}U (×${aimiFmt2(factor)})"
             override fun intervalLine(original: Int, updated: Int, extra: Int) =
-                "  Interval: %d→%dmin (+%d)".format(original, updated, extra)
+                "  Interval: $original→${updated}min (+$extra)"
             override fun exerciseHyperOverride() = work.exerciseHyperBasalOverrideActive
             override fun work.sportTime() = this@DetermineBasalaimiSMB2.sportTime
             override fun activityActive() = work.aimiContextActivityActive
@@ -13849,7 +13826,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * @see runDetermineBasalTick
      * @see app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiDetermineBasalTickOrchestrator
      */
-    @SuppressLint("NewApi", "DefaultLocale") fun determine_basal(
+    fun determine_basal(
         glucose_status: GlucoseStatusAIMI, currenttemp: CurrentTemp, iob_data_array: Array<IobTotal>, profile: OapsProfileAimi, autosens_data: AutosensResult, mealData: MealData,
         microBolusAllowed: Boolean, currentTime: Long, flatBGsDetected: Boolean, dynIsfMode: Boolean, uiInteraction: UiInteraction,
         pkpd_iob_data_array: Array<IobTotal>? = null,
