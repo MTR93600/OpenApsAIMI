@@ -3,7 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.physio
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiHealthContext
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiPhysioSource
-import android.os.Looper
+import app.aaps.plugins.aps.openAPSAIMI.aimiIsMainThread
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
@@ -12,8 +12,8 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.gate.CosineTrajectoryGate
 import app.aaps.plugins.aps.openAPSAIMI.physio.GateInput
 import app.aaps.plugins.aps.openAPSAIMI.physio.SleepLiveDetector
 import app.aaps.plugins.aps.openAPSAIMI.physio.KernelType
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicReference
+import kotlin.concurrent.AtomicBoolean
+import kotlin.concurrent.AtomicReference
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
@@ -576,12 +576,12 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
 
     /**
      * [HealthContextRepository.fetchSnapshot] reads steps/HR via DB on a non-main thread
-     * ([UnifiedActivityProviderMTR] skips reads on the UI looper). Uses [runBlocking] on the
-     * main looper only so a brief UI stall is possible; loop/APS should prefer a background thread.
+     * ([UnifiedActivityProviderMTR] skips reads on the UI thread). Uses [runBlocking] on the
+     * UI thread only so a brief UI stall is possible; loop/APS should prefer a background thread.
      */
     private fun ensurePhysioSnapshotRefreshed() {
         try {
-            if (Looper.myLooper() == Looper.getMainLooper()) {
+            if (aimiIsMainThread()) {
                 runBlocking(Dispatchers.IO) { repo.fetchSnapshot() }
             } else {
                 repo.fetchSnapshot()

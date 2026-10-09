@@ -1,10 +1,17 @@
 package app.aaps.plugins.aps.openAPSAIMI.ISF
 
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
-import org.json.JSONObject
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.put
 import kotlin.math.exp
 import kotlin.math.ln
 
@@ -252,28 +259,29 @@ class SensitivityRatioEstimator @Inject constructor(
         runCatching {
             val path = storage.file(STATE_FILE_NAME)
             if (!storage.exists(path) || storage.sizeBytes(path) == 0L) return@runCatching
-            val json = JSONObject(storage.readText(path) ?: return@runCatching)
-            val savedAtMs = json.optLong("saved_at_ms", 0L)
+            val json = Json.parseToJsonElement(storage.readText(path) ?: return@runCatching).jsonObject
+            val savedAtMs = json["saved_at_ms"]?.jsonPrimitive?.longOrNull ?: 0L
             val ageMs = nowMs - savedAtMs
             // Too old to describe this patient, or stamped in the future by a clock change.
             if (savedAtMs <= 0L || ageMs > STALE_AFTER_DAYS * 24L * 3_600_000L || ageMs < -CLOCK_SKEW_TOLERANCE_MS) {
                 return@runCatching
             }
-            val savedRatio = json.optDouble("ratio", 1.0)
+            val savedRatio = json["ratio"]?.jsonPrimitive?.doubleOrNull ?: 1.0
             if (!savedRatio.isFinite()) return@runCatching
             ratio = savedRatio.coerceIn(MIN_RATIO, MAX_RATIO)
-            observationCount = json.optInt("observation_count", 0).coerceAtLeast(0)
-            lastFoldMs = json.optLong("last_fold_ms", 0L).coerceAtLeast(0L)
+            observationCount = (json["observation_count"]?.jsonPrimitive?.intOrNull ?: 0).coerceAtLeast(0)
+            lastFoldMs = (json["last_fold_ms"]?.jsonPrimitive?.longOrNull ?: 0L).coerceAtLeast(0L)
         }
     }
 
     private fun saveState(nowMs: Long) {
         runCatching {
-            val json = JSONObject()
-                .put("ratio", ratio)
-                .put("observation_count", observationCount)
-                .put("last_fold_ms", lastFoldMs)
-                .put("saved_at_ms", nowMs)
+            val json = buildJsonObject {
+                put("ratio", ratio)
+                put("observation_count", observationCount)
+                put("last_fold_ms", lastFoldMs)
+                put("saved_at_ms", nowMs)
+            }
             storage.writeText(storage.file(STATE_FILE_NAME), json.toString())
         }
     }

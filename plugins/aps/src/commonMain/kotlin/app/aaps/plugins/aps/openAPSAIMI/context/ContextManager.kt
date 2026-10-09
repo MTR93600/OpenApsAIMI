@@ -2,6 +2,8 @@ package app.aaps.plugins.aps.openAPSAIMI.context
 
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiContextLlm
+import app.aaps.core.data.json.OrgJsonCompat.optLongCompat
+import app.aaps.core.data.json.OrgJsonCompat.optStringCompat
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.TE
 import app.aaps.core.interfaces.concurrent.AapsLock
@@ -23,17 +25,26 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.double
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import kotlin.reflect.KClass
 import kotlin.time.Duration.Companion.minutes
 
 /**
- * Context Manager - Storage & lifecycle gestion des intents utilisateur.
+ * Context Manager - user intent storage and lifecycle management.
  *
- * **Responsabilités** :
- * - Stockage thread-safe des intents actifs
- * - Lifecycle management (expiration automatique)
- * - Parsing via LLM ou offline
- * - Snapshot generation pour chaque tick
+ * **Responsibilities** :
+ * - Thread-safe storage of active intents
+ * - Lifecycle management (automatic expiration)
+ * - Parsing via LLM or offline
+ * - Snapshot generation for each tick
  *
  * **Thread-Safety** :
  * - One plain map, guarded by one [AapsLock]. The map is private, so the lock cannot be bypassed.
@@ -44,7 +55,7 @@ import kotlin.time.Duration.Companion.minutes
  *   call back into other code (storage write, Nightscout sync, patient state refresh). Every method
  *   takes the lock, copies or mutates, releases, and only then does the slow work. That is what keeps
  *   this free of deadlock even though the loop tick calls in from another thread.
- * - Safe pour appel depuis multiple threads (UI, Loop, etc.)
+ * - Safe to call from multiple threads (UI, Loop, etc.)
  *
  * **Usage** :
  * ```kotlin
@@ -438,35 +449,36 @@ class ContextManager @Inject constructor(
         // Copy under the lock, then build and write outside it: the store is other people's code.
         val snapshot = intentsLock.withLock { activeIntents.toMap() }
         try {
-            val jsonArray = org.json.JSONArray()
-            snapshot.forEach { (id, intent) ->
-                val obj = org.json.JSONObject()
-                obj.put("id", id)
-                obj.put("type", intent::class.simpleName)
+            val jsonArray = buildJsonArray {
+                snapshot.forEach { (id, intent) ->
+                    add(buildJsonObject {
+                        put("id", id)
+                        put("type", intent::class.simpleName ?: "Unknown")
 
-                // Common fields
-                obj.put("start", intent.startTimeMs)
-                obj.put("duration", intent.durationMs)
-                obj.put("intensity", intent.intensity.name)
-                obj.put("confidence", intent.confidence.toDouble())
+                        // Common fields
+                        put("start", intent.startTimeMs)
+                        put("duration", intent.durationMs)
+                        put("intensity", intent.intensity.name)
+                        put("confidence", intent.confidence.toDouble())
 
-                // Specific fields
-                when (intent) {
-                    is Activity -> obj.put("activityType", intent.activityType.name)
-                    is Illness -> obj.put("symptomType", intent.symptomType.name)
-                    is Stress -> obj.put("stressType", intent.stressType.name)
-                    is Alcohol -> obj.put("units", intent.units.toDouble())
-                    is UnannouncedMealRisk -> obj.put("riskWindow", intent.riskWindow.inWholeMinutes)
-                    is Travel -> obj.put("tz", intent.timezoneShiftHours)
-                    is MenstrualCycle -> obj.put("phase", intent.phase.name)
-                    is SlowCarbMeal -> obj.put("absorptionDelay", intent.absorptionDelay.inWholeMinutes)
-                    is HypoRecovery -> { /* no type-specific field */ }
-                    is Custom -> {
-                         obj.put("desc", intent.description)
-                         obj.put("strat", intent.suggestedStrategy)
-                    }
+                        // Specific fields
+                        when (intent) {
+                            is Activity -> put("activityType", intent.activityType.name)
+                            is Illness -> put("symptomType", intent.symptomType.name)
+                            is Stress -> put("stressType", intent.stressType.name)
+                            is Alcohol -> put("units", intent.units.toDouble())
+                            is UnannouncedMealRisk -> put("riskWindow", intent.riskWindow.inWholeMinutes)
+                            is Travel -> put("tz", intent.timezoneShiftHours)
+                            is MenstrualCycle -> put("phase", intent.phase.name)
+                            is SlowCarbMeal -> put("absorptionDelay", intent.absorptionDelay.inWholeMinutes)
+                            is HypoRecovery -> { /* no type-specific field */ }
+                            is Custom -> {
+                                put("desc", intent.description)
+                                put("strat", intent.suggestedStrategy)
+                            }
+                        }
+                    })
                 }
-                jsonArray.put(obj)
             }
 
             sp.putString(app.aaps.core.keys.StringKey.OApsAIMIContextStorage.key, jsonArray.toString())
@@ -482,78 +494,78 @@ class ContextManager @Inject constructor(
             val jsonStr = sp.getString(app.aaps.core.keys.StringKey.OApsAIMIContextStorage.key, "")
             if (jsonStr.isBlank()) return
 
-            val jsonArray = org.json.JSONArray(jsonStr)
+            val jsonArray = Json.parseToJsonElement(jsonStr).jsonArray
             val restored = LinkedHashMap<String, ContextIntent>()
 
-            for (i in 0 until jsonArray.length()) {
-                val obj = jsonArray.getJSONObject(i)
-                val id = obj.optString("id", "")
+            for (i in 0 until jsonArray.size) {
+                val obj = jsonArray[i].jsonObject
+                val id = obj.optStringCompat("id")
                 if (id.isBlank()) continue
 
                 try {
                     // Parse intent
-                    val type = obj.getString("type")
-                    val startTimeMs = obj.getLong("start")
-                    val durationMs = obj.getLong("duration")
-                    val intensity = Intensity.valueOf(obj.getString("intensity"))
-                    val confidence = obj.getDouble("confidence").toFloat()
+                    val type = obj.getValue("type").jsonPrimitive.content
+                    val startTimeMs = obj.getValue("start").jsonPrimitive.long
+                    val durationMs = obj.getValue("duration").jsonPrimitive.long
+                    val intensity = Intensity.valueOf(obj.getValue("intensity").jsonPrimitive.content)
+                    val confidence = obj.getValue("confidence").jsonPrimitive.double.toFloat()
 
-                    val intent = when(type) {
+                    val intent = when (type) {
                         "Activity" -> Activity(
                             startTimeMs = if (startTimeMs > 0) startTimeMs else aimiWallClockMs(),
                             durationMs = durationMs,
                             intensity = intensity,
                             confidence = confidence,
-                            activityType = Activity.ActivityType.valueOf(obj.getString("activityType"))
+                            activityType = Activity.ActivityType.valueOf(obj.getValue("activityType").jsonPrimitive.content)
                         )
                         "Illness" -> Illness(
                             startTimeMs = if (startTimeMs > 0) startTimeMs else aimiWallClockMs(),
                             durationMs = durationMs,
                             intensity = intensity,
                             confidence = confidence,
-                            symptomType = Illness.SymptomType.valueOf(obj.getString("symptomType"))
+                            symptomType = Illness.SymptomType.valueOf(obj.getValue("symptomType").jsonPrimitive.content)
                         )
                         "Stress" -> Stress(
                             startTimeMs = if (startTimeMs > 0) startTimeMs else aimiWallClockMs(),
                             durationMs = durationMs,
                             intensity = intensity,
                             confidence = confidence,
-                            stressType = Stress.StressType.valueOf(obj.getString("stressType"))
+                            stressType = Stress.StressType.valueOf(obj.getValue("stressType").jsonPrimitive.content)
                         )
                         "Alcohol" -> Alcohol(
                             startTimeMs = if (startTimeMs > 0) startTimeMs else aimiWallClockMs(),
                             durationMs = durationMs,
                             intensity = intensity,
                             confidence = confidence,
-                            units = obj.getDouble("units").toFloat()
+                            units = obj.getValue("units").jsonPrimitive.double.toFloat()
                         )
                         "UnannouncedMealRisk" -> UnannouncedMealRisk(
                             startTimeMs = if (startTimeMs > 0) startTimeMs else aimiWallClockMs(),
                             durationMs = durationMs,
                             intensity = intensity,
                             confidence = confidence,
-                            riskWindow = obj.getLong("riskWindow").minutes
+                            riskWindow = obj.getValue("riskWindow").jsonPrimitive.long.minutes
                         )
                         "Travel" -> Travel(
                             startTimeMs = if (startTimeMs > 0) startTimeMs else aimiWallClockMs(),
                             durationMs = durationMs,
                             intensity = intensity,
                             confidence = confidence,
-                            timezoneShiftHours = obj.getInt("tz")
+                            timezoneShiftHours = obj.getValue("tz").jsonPrimitive.int
                         )
                         "MenstrualCycle" -> MenstrualCycle(
                             startTimeMs = if (startTimeMs > 0) startTimeMs else aimiWallClockMs(),
                             durationMs = durationMs,
                             intensity = intensity,
                             confidence = confidence,
-                            phase = MenstrualCycle.CyclePhase.valueOf(obj.getString("phase"))
+                            phase = MenstrualCycle.CyclePhase.valueOf(obj.getValue("phase").jsonPrimitive.content)
                         )
                         "SlowCarbMeal" -> SlowCarbMeal(
                             startTimeMs = if (startTimeMs > 0) startTimeMs else aimiWallClockMs(),
                             durationMs = durationMs,
                             intensity = intensity,
                             confidence = confidence,
-                            absorptionDelay = obj.optLong("absorptionDelay", 90L).minutes
+                            absorptionDelay = obj.optLongCompat("absorptionDelay", 90L).minutes
                         )
                         "HypoRecovery" -> HypoRecovery(
                             startTimeMs = if (startTimeMs > 0) startTimeMs else aimiWallClockMs(),
@@ -566,8 +578,8 @@ class ContextManager @Inject constructor(
                             durationMs = durationMs,
                             intensity = intensity,
                             confidence = confidence,
-                            description = obj.getString("desc"),
-                            suggestedStrategy = obj.optString("strat", "")
+                            description = obj.getValue("desc").jsonPrimitive.content,
+                            suggestedStrategy = obj.optStringCompat("strat")
                         )
                         else -> null
                     }
