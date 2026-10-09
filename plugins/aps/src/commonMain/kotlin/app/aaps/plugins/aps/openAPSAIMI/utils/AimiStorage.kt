@@ -21,10 +21,9 @@ data class AimiPath(val value: String)
  * (`Documents/AAPS`, then app-scoped external, then internal) and `AimiStorageHelper` owns it. This
  * interface is the shared half of that: name a file, read it, write it.
  *
- * **There is deliberately no implementation on iOS.** AIMI storage is a body of Android storage
- * policy with no iOS answer yet, and a stub that quietly wrote nowhere would leave the learning
- * loops looking alive while they persisted nothing. Without a binding, the feature is visibly
- * absent on that target and any future iOS graph fails at wiring time, loudly.
+ * The iOS implementation is [iosAimiStorage], backed by `DirectoryAimiStorage` over the app's
+ * Documents/AAPS directory. It shares the relative file names with Android; only the root
+ * directory is platform-specific.
  *
  * All write operations answer `false` rather than throwing: AIMI logging must never take down a
  * dosing tick.
