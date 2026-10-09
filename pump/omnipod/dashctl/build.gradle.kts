@@ -25,7 +25,6 @@ kotlin {
                 implementation(project(":core:data"))
                 implementation(project(":core:interfaces"))
                 implementation(project(":core:objects"))
-                api(platform(libs.kotlinx.coroutines.bom))
                 api(libs.kotlinx.coroutines.core)
                 api(libs.kotlinx.datetime)
             }
