@@ -1,6 +1,5 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.oref
 
-import android.content.Context
 import app.aaps.plugins.aps.openAPSAIMI.AimiNeuralNetwork
 import app.aaps.plugins.aps.openAPSAIMI.TrainingConfig
 import app.aaps.plugins.aps.openAPSAIMI.saveToFile
@@ -45,8 +44,7 @@ object OrefPersonalMlTrainer {
      * AIMI directory [AimiStorage] otherwise manages - [AimiStorage.resolve] exists exactly for a
      * directory that did not come from [AimiStorage.directory]. Same location as before the port.
      */
-    private fun dir(storage: AimiStorage, ctx: Context): AimiPath {
-        val filesDir = AimiPath(ctx.filesDir.absolutePath)
+    private fun dir(storage: AimiStorage, filesDir: AimiPath): AimiPath {
         val oref = storage.resolve(filesDir, "oref_personal")
         storage.createDirectories(oref)
         return oref
@@ -54,8 +52,8 @@ object OrefPersonalMlTrainer {
 
     // These two files are written after every training run but nothing loads them back yet: the head is always
     // retrained from the current window. They are kept so a later change can reuse the weights.
-    fun hypoFile(storage: AimiStorage, ctx: Context): AimiPath = storage.resolve(dir(storage, ctx), "personal_hypo_mlp.json")
-    fun hyperFile(storage: AimiStorage, ctx: Context): AimiPath = storage.resolve(dir(storage, ctx), "personal_hyper_mlp.json")
+    fun hypoFile(storage: AimiStorage, filesDir: AimiPath): AimiPath = storage.resolve(dir(storage, filesDir), "personal_hypo_mlp.json")
+    fun hyperFile(storage: AimiStorage, filesDir: AimiPath): AimiPath = storage.resolve(dir(storage, filesDir), "personal_hyper_mlp.json")
 
     data class PersonalMlOutcome(
         val status: OrefPersonalMlStatus,
@@ -68,7 +66,7 @@ object OrefPersonalMlTrainer {
 
     fun trainAndSummarize(
         storage: AimiStorage,
-        ctx: Context,
+        filesDir: AimiPath,
         slices: List<Triple<Int, DoubleArray, Long>>,
         outcomePerSlice: List<OrefOutcomeComputer.Outcome>,
     ): PersonalMlOutcome {
@@ -89,8 +87,8 @@ object OrefPersonalMlTrainer {
         return try {
             val hypoNet = trainOneHead(hypoPairs, Random(42L))
             val hyperNet = trainOneHead(hyperPairs, Random(43L))
-            val savedHypo = hypoNet.saveToFile(storage, hypoFile(storage, ctx))
-            val savedHyper = hyperNet.saveToFile(storage, hyperFile(storage, ctx))
+            val savedHypo = hypoNet.saveToFile(storage, hypoFile(storage, filesDir))
+            val savedHyper = hyperNet.saveToFile(storage, hyperFile(storage, filesDir))
             if (!savedHypo || !savedHyper) {
                 return PersonalMlOutcome(OrefPersonalMlStatus.TRAIN_FAILED, detail = "failed to persist trained weights")
             }

@@ -1,12 +1,12 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.meal
 
-import android.graphics.Bitmap
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRepository
-import kotlinx.coroutines.Dispatchers
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttp
 import kotlinx.coroutines.withContext
 
 /**
@@ -17,7 +17,8 @@ import kotlinx.coroutines.withContext
 class FoodRecognitionService(
     private val geminiModelResolver: GeminiModelResolver,
     private val preferences: Preferences,
-    private val aapsLogger: AAPSLogger
+    private val aapsLogger: AAPSLogger,
+    private val aimiHttp: AimiHttp
 ) {
 
     /**
@@ -27,17 +28,17 @@ class FoodRecognitionService(
         val providerName = preferences.get(StringKey.AimiAdvisorProvider)
 
         return when (providerName.uppercase()) {
-            "OPENAI" -> OpenAIVisionProvider()
-            "GEMINI" -> GeminiVisionProvider(geminiModelResolver, aapsLogger)
-            "DEEPSEEK" -> DeepSeekVisionProvider()
-            "CLAUDE" -> ClaudeVisionProvider()
+            "OPENAI" -> OpenAIVisionProvider(aimiHttp)
+            "GEMINI" -> GeminiVisionProvider(geminiModelResolver, aapsLogger, aimiHttp)
+            "DEEPSEEK" -> DeepSeekVisionProvider(aimiHttp)
+            "CLAUDE" -> ClaudeVisionProvider(aimiHttp)
             else -> {
                 // Fallback to OpenAI if unknown provider
-                OpenAIVisionProvider()
+                OpenAIVisionProvider(aimiHttp)
             }
         }
     }
-    
+
     /**
      * Get API key for current provider
      */
@@ -50,33 +51,34 @@ class FoodRecognitionService(
             else -> ""
         }
     }
-    
+
     /**
      * Estimate carbs and macros from food image
      * Uses currently selected provider from preferences
      */
-    suspend fun estimateCarbsFromImage(bitmap: Bitmap, userDescription: String = ""): EstimationResult = withContext(Dispatchers.IO) {
-        val provider = getProvider()
-        val apiKey = getApiKey(provider.providerId)
-        
-        if (apiKey.isBlank()) {
-            return@withContext FoodAnalysisPrompt.emptyErrorResult(
-                "API Key Missing",
-                "Please configure ${provider.displayName} API key in AIMI Preferences → Meal Advisor."
-            )
+    suspend fun estimateCarbsFromImage(image: AimiImage, userDescription: String = ""): EstimationResult =
+        withContext(aapsIoDispatcher) {
+            val provider = getProvider()
+            val apiKey = getApiKey(provider.providerId)
+
+            if (apiKey.isBlank()) {
+                return@withContext FoodAnalysisPrompt.emptyErrorResult(
+                    "API Key Missing",
+                    "Please configure ${provider.displayName} API key in AIMI Preferences → Meal Advisor."
+                )
+            }
+
+            try {
+                val enrichedDescription = MealVisionUserPrompt.appendHarmoniaContext(
+                    userDescription = userDescription,
+                    harmoniaDecision = PatientStateRuntimeRepository.getLatest()?.harmoniaDecision,
+                )
+                provider.estimateFromImage(image, enrichedDescription, apiKey)
+            } catch (e: Exception) {
+                FoodAnalysisPrompt.emptyErrorResult(
+                    "Error",
+                    "${provider.displayName} Error: ${e.message}"
+                )
+            }
         }
-        
-        try {
-            val enrichedDescription = MealVisionUserPrompt.appendHarmoniaContext(
-                userDescription = userDescription,
-                harmoniaDecision = PatientStateRuntimeRepository.getLatest()?.harmoniaDecision,
-            )
-            return@withContext provider.estimateFromImage(bitmap, enrichedDescription, apiKey)
-        } catch (e: Exception) {
-            return@withContext FoodAnalysisPrompt.emptyErrorResult(
-                "Error",
-                "${provider.displayName} Error: ${e.message}"
-            )
-        }
-    }
 }

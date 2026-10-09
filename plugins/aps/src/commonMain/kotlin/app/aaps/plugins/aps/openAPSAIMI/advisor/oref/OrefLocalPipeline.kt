@@ -1,11 +1,12 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.oref
 
-import android.content.Context
 import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.aps.APSResult
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiProfileSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiAssetReader
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import kotlin.math.min
 import kotlinx.coroutines.Dispatchers
@@ -23,7 +24,8 @@ class OrefLocalPipeline(
     suspend fun run(
         profileSnapshot: AimiProfileSnapshot,
         windowDays: Long = DEFAULT_HISTORY_DAYS,
-        assetContext: Context? = null,
+        assetReader: AimiAssetReader? = null,
+        filesDir: AimiPath? = null,
         personalMlEnabled: Boolean = false,
     ): OrefAnalysisReport = withContext(Dispatchers.Default) {
         // APS rows carry large JSON per loop; loading 30d on a 256MB heap can OOM (see APSResultDao cursor).
@@ -136,15 +138,15 @@ class OrefLocalPipeline(
 
         val hints = buildHints(slices, profileSnapshot)
 
-        val onnx = computeOnnxSummaries(assetContext, slices, outcomePerSlice)
+        val onnx = computeOnnxSummaries(assetReader, slices, outcomePerSlice)
 
         val sufficiency = computeDataSufficiency(slices.size, labelled)
         var personalStatus = OrefPersonalMlStatus.OFF
         var personalHypoPct: Double? = null
         var personalHyperPct: Double? = null
         var personalDetail: String? = null
-        if (personalMlEnabled && assetContext != null && storage != null) {
-            val pr = OrefPersonalMlTrainer.trainAndSummarize(storage, assetContext, slices, outcomePerSlice)
+        if (personalMlEnabled && filesDir != null && storage != null) {
+            val pr = OrefPersonalMlTrainer.trainAndSummarize(storage, filesDir, slices, outcomePerSlice)
             personalStatus = pr.status
             personalHypoPct = pr.meanHypoSignalPct
             personalHyperPct = pr.meanHyperSignalPct
@@ -242,14 +244,13 @@ class OrefLocalPipeline(
     )
 
     private fun computeOnnxSummaries(
-        assetContext: Context?,
+        assetReader: AimiAssetReader?,
         slices: List<Triple<Int, DoubleArray, Long>>,
         outcomePerSlice: List<OrefOutcomeComputer.Outcome>,
     ): OnnxSummaries {
-        if (assetContext == null) {
+        if (assetReader == null) {
             return OnnxSummaries(OrefMlStatus.NOT_BUNDLED)
         }
-        val assetReader = AndroidAssetReader(assetContext)
         if (!OrefOnnxScorer.assetModelsPresent(assetReader)) {
             return OnnxSummaries(OrefMlStatus.NOT_BUNDLED)
         }

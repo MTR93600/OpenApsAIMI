@@ -1,45 +1,39 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.meal
 
-import android.graphics.Bitmap
-import android.util.Base64
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import org.json.JSONArray
-import org.json.JSONObject
-import java.io.ByteArrayOutputStream
-import java.net.HttpURLConnection
-import java.net.URL
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmHttpRetry
 import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttp
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpRequest
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 class GeminiVisionProvider(
     private val geminiResolver: GeminiModelResolver,
-    private val aapsLogger: AAPSLogger
+    private val aapsLogger: AAPSLogger,
+    private val aimiHttp: AimiHttp
 ) : AIVisionProvider {
     override val displayName = "Gemini (Flash)"
     override val providerId = "GEMINI"
 
-    override suspend fun estimateFromImage(bitmap: Bitmap, userDescription: String, apiKey: String): EstimationResult = withContext(Dispatchers.IO) {
-        try {
-            val base64Image = bitmapToBase64(bitmap)
-            val responseJson = callGeminiAPI(apiKey, base64Image, userDescription)
-            return@withContext parseResponse(responseJson)
-        } catch (e: Exception) {
-            return@withContext FoodAnalysisPrompt.emptyErrorResult("Gemini Error", e.message ?: "Unknown error")
+    override suspend fun estimateFromImage(image: AimiImage, userDescription: String, apiKey: String): EstimationResult =
+        withContext(aapsIoDispatcher) {
+            try {
+                val base64Image = image.base64()
+                val responseJson = callGeminiAPI(apiKey, base64Image, userDescription)
+                parseResponse(responseJson)
+            } catch (e: Exception) {
+                FoodAnalysisPrompt.emptyErrorResult("Gemini Error", e.message ?: "Unknown error")
+            }
         }
-    }
-    
-    private fun bitmapToBase64(bitmap: Bitmap): String {
-        val bos = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 70, bos)
-        return Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP)
-    }
-    
+
     private fun callGeminiAPI(apiKey: String, base64Image: String, userDescription: String): String {
         // Vision needs a multimodal model; flash tier is multimodal. Durable *-latest alias.
         val primaryModel = geminiResolver.resolveGenerateContentModel(apiKey, "gemini-flash-latest")
-        
+
         try {
             return LlmHttpRetry.withTransientRetry(aapsLogger) { executeRequest(apiKey, base64Image, primaryModel, userDescription) }
         } catch (e: Exception) {
@@ -53,25 +47,17 @@ class GeminiVisionProvider(
 
     private fun executeRequest(apiKey: String, base64Image: String, modelId: String, userDescription: String): String {
         val urlStr = geminiResolver.getGenerateContentUrl(modelId, apiKey)
-        val url = URL(urlStr)
-        val connection = url.openConnection() as HttpURLConnection
-        connection.requestMethod = "POST"
-        connection.setRequestProperty("Content-Type", "application/json")
-        connection.doOutput = true
-        connection.connectTimeout = 30000
-        connection.readTimeout = 60000
-        
         val userPrompt = MealVisionUserPrompt.buildAnalysisUserPrompt(userDescription)
 
-        val jsonBody = JSONObject().apply {
-            put("contents", JSONArray().apply {
-                put(JSONObject().apply {
-                    put("parts", JSONArray().apply {
-                        put(JSONObject().apply {
+        val jsonBody = buildJsonObject {
+            put("contents", buildJsonArray {
+                add(buildJsonObject {
+                    put("parts", buildJsonArray {
+                        add(buildJsonObject {
                             put("text", "${FoodAnalysisPrompt.SYSTEM_PROMPT}\n\n$userPrompt")
                         })
-                        put(JSONObject().apply {
-                            put("inline_data", JSONObject().apply {
+                        add(buildJsonObject {
+                            put("inline_data", buildJsonObject {
                                 put("mime_type", "image/jpeg")
                                 put("data", base64Image)
                             })
@@ -79,49 +65,55 @@ class GeminiVisionProvider(
                     })
                 })
             })
-            put("generationConfig", JSONObject().apply {
+            put("generationConfig", buildJsonObject {
                 put("maxOutputTokens", 4096)
                 put("temperature", 0.0)
                 put("responseMimeType", "application/json")
             })
         }
-        
-        connection.outputStream.use { it.write(jsonBody.toString().toByteArray()) }
-        
-        val code = connection.responseCode
-        if (code == HttpURLConnection.HTTP_OK) {
-            return connection.inputStream.bufferedReader().use { it.readText() }
+
+        val response = aimiHttp.execute(
+            AimiHttpRequest(
+                url = urlStr,
+                method = "POST",
+                connectTimeoutMs = 30000,
+                readTimeoutMs = 60000,
+                headers = mapOf("Content-Type" to "application/json"),
+                body = jsonBody.toString()
+            )
+        )
+        if (response.code == 200) {
+            return response.body ?: throw Exception("Empty response body")
         } else {
-            val err = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "Empty error"
-            throw Exception("HTTP $code: $err")
+            throw Exception("HTTP ${response.code}: ${response.body ?: "Empty error"}")
         }
     }
-    
+
     private fun parseResponse(jsonStr: String): EstimationResult {
-        val root = JSONObject(jsonStr)
-        if (!root.has("candidates")) {
-            return FoodAnalysisPrompt.emptyErrorResult("Gemini Error", "Missing candidates in response")
-        }
-        val candidates = root.getJSONArray("candidates")
-        if (candidates.length() == 0) {
+        val root = kotlinx.serialization.json.Json.parseToJsonElement(jsonStr).let {
+            it as? kotlinx.serialization.json.JsonObject
+        } ?: return FoodAnalysisPrompt.emptyErrorResult("Gemini Error", "Invalid JSON response")
+        val candidates = root["candidates"] as? kotlinx.serialization.json.JsonArray
+            ?: return FoodAnalysisPrompt.emptyErrorResult("Gemini Error", "Missing candidates in response")
+        if (candidates.isEmpty()) {
             return FoodAnalysisPrompt.emptyErrorResult("Gemini Error", "Empty candidates array")
         }
-        val candidate = candidates.getJSONObject(0)
-        val finish = candidate.optString("finishReason", "")
+        val candidate = candidates[0] as? kotlinx.serialization.json.JsonObject
+            ?: return FoodAnalysisPrompt.emptyErrorResult("Gemini Error", "Invalid candidate")
+        val finish = (candidate["finishReason"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: ""
         if (finish.equals("SAFETY", ignoreCase = true) || finish.equals("BLOCKLIST", ignoreCase = true)) {
             return FoodAnalysisPrompt.emptyErrorResult("Gemini Safety", "Response blocked ($finish)")
         }
-        val content = candidate.optJSONObject("content")
+        val content = candidate["content"] as? kotlinx.serialization.json.JsonObject
             ?: return FoodAnalysisPrompt.emptyErrorResult("Gemini Error", "Missing content object")
-        val parts = content.optJSONArray("parts")
+        val parts = content["parts"] as? kotlinx.serialization.json.JsonArray
             ?: return FoodAnalysisPrompt.emptyErrorResult("Gemini Error", "Missing content parts")
-        if (parts.length() == 0) {
+        if (parts.isEmpty()) {
             return FoodAnalysisPrompt.emptyErrorResult("Gemini Error", "Empty content parts")
         }
         var text = ""
-        for (i in 0 until parts.length()) {
-            val part = parts.optJSONObject(i) ?: continue
-            val t = part.optString("text", "")
+        for (part in parts) {
+            val t = ((part as? kotlinx.serialization.json.JsonObject)?.get("text") as? kotlinx.serialization.json.JsonPrimitive)?.content ?: ""
             if (t.isNotBlank()) {
                 text = t
                 break

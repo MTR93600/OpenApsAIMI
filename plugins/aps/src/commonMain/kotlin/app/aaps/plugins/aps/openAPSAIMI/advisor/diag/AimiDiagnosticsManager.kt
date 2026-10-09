@@ -1,16 +1,13 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.diag
 
-import android.content.Context
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.profile.Profile
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
-import java.security.MessageDigest
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import app.aaps.plugins.aps.openAPSAIMI.aimiCsvTimestamp
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiDiagPlatform
 
 /**
  * Secure diagnostic engine for AIMI.
@@ -19,10 +16,11 @@ import java.util.Locale
  * Unparked from `_docs/kmp/staging/openAPSAIMI-android-wip/advisor/diag/` and updated with
  * `origin/dev_OAPSAIMI` @ `02c90656b1` ([ACTIVE PROFILE] via [ProfileFunction][app.aaps.core.interfaces.profile.ProfileFunction]).
  *
- * Observation / tools only. Not on the dose path.
+ * Platform details (app version, device, raw preferences, SHA-256) come from [AimiDiagPlatform];
+ * everything else is shared. Observation / tools only. Not on the dose path.
  */
 class AimiDiagnosticsManager(
-    private val context: Context,
+    private val platform: AimiDiagPlatform,
     private val preferences: Preferences,
     private val logger: AAPSLogger
 ) {
@@ -31,16 +29,10 @@ class AimiDiagnosticsManager(
         // SHA-256 of "MTR-X-742-NEBULA" (Premium Expert Code)
         private const val SUPPORT_HASH = "7bb66c320fbc2e1c0e851eec23a171dcbd07ece4854bec29535822b25839323d"
 
-        fun verifyCode(input: String): Boolean {
+        fun verifyCode(input: String, platform: AimiDiagPlatform): Boolean {
             val inputClean = input.trim()
-            val hash = hashString(inputClean)
+            val hash = platform.sha256Hex(inputClean)
             return constantTimeEquals(hash, SUPPORT_HASH)
-        }
-
-        private fun hashString(input: String): String {
-            return MessageDigest.getInstance("SHA-256")
-                .digest(input.toByteArray())
-                .fold("") { str, it -> str + "%02x".format(it) }
         }
 
         private fun constantTimeEquals(a: String, b: String): Boolean {
@@ -68,7 +60,7 @@ class AimiDiagnosticsManager(
         activeProfileName: String? = null,
     ): String {
         val sb = StringBuilder()
-        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+        val now = aimiCsvTimestamp()
 
         sb.append("=========================================\n")
         sb.append("   AIMI DIAGNOSTIC REPORT - $now\n")
@@ -80,24 +72,9 @@ class AimiDiagnosticsManager(
         }
 
         sb.append("[SYSTEM]\n")
-        var versionName = "Unknown"
-        var versionCode = 0L
-        try {
-            val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-            versionName = pInfo.versionName ?: "Unknown"
-            versionCode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                pInfo.longVersionCode
-            } else {
-                @Suppress("DEPRECATION")
-                pInfo.versionCode.toLong()
-            }
-        } catch (e: Exception) {
-            logger.error(LTag.CORE, "Error getting version info", e)
-        }
-
-        sb.append("App Version: $versionName ($versionCode)\n")
-        sb.append("Android: ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT})\n")
-        sb.append("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}\n\n")
+        sb.append("App Version: ${platform.appVersionName()} (${platform.appVersionCode()})\n")
+        sb.append("${platform.osInfo()}\n")
+        sb.append("Device: ${platform.deviceInfo()}\n\n")
 
         sb.append("[NIGHTSCOUT]\n")
         val nsUrl = preferences.get(StringKey.NsClientUrl)
@@ -113,8 +90,12 @@ class AimiDiagnosticsManager(
 
         AimiDiagnosticsActiveProfile.writeSection(sb, activeProfile, activeProfileName)
         AimiDiagnosticsActiveProfile.writePreferencesPreamble(sb)
-        val prefs = context.getSharedPreferences(context.packageName + "_preferences", Context.MODE_PRIVATE)
-        val allPrefs = prefs.all
+        val allPrefs = try {
+            platform.allPreferences()
+        } catch (e: Exception) {
+            logger.error(LTag.CORE, "Error reading preferences", e)
+            emptyMap()
+        }
 
         val interestKeys = listOf("aimi", "aps", "smb", "max", "basal", "target", "profile", "opt_")
 

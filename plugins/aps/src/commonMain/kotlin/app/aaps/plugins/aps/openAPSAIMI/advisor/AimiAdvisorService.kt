@@ -1,11 +1,13 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor
 
-import android.content.Context
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.profile.EffectiveProfile
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
-import kotlinx.coroutines.Dispatchers
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiAssetReader
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import kotlinx.coroutines.runBlocking
 import kotlin.math.roundToInt
 import app.aaps.plugins.aps.ApsStrings
@@ -17,7 +19,6 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.oref.OrefGlycemicPriority
 import app.aaps.plugins.aps.openAPSAIMI.advisor.oref.OrefLocalPipeline
 import kotlin.math.max
 import kotlin.math.min
-import java.util.Locale
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.BooleanPreferenceKey
@@ -120,7 +121,8 @@ class AimiAdvisorService {
     fun generateReport(
         periodDays: Int = 10,
         history: List<app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository.AdvisorActionLog> = emptyList(),
-        assetContext: Context? = null,
+        assetReader: AimiAssetReader? = null,
+        filesDir: AimiPath? = null,
     ): AdvisorReport {
         val context = collectContext(periodDays)
         val score = computeGlobalScore(context.metrics)
@@ -130,12 +132,13 @@ class AimiAdvisorService {
         val orefWindowDays = periodDays.toLong().coerceIn(1, OrefLocalPipeline.MAX_HISTORY_DAYS_FOR_MEMORY)
         val personalOrefMl = preferences?.get(BooleanKey.OApsAIMIAdvisorPersonalOrefMl) == true
         val orefInsight = if (persistenceLayer != null) {
-            runBlocking(Dispatchers.IO) {
+            runBlocking(aapsIoDispatcher) {
                 try {
                     OrefLocalPipeline(persistenceLayer, storage).run(
                         profileSnapshot = context.profile,
                         windowDays = orefWindowDays,
-                        assetContext = assetContext,
+                        assetReader = assetReader,
+                        filesDir = filesDir,
                         personalMlEnabled = personalOrefMl,
                     )
                 } catch (t: Throwable) {
@@ -186,7 +189,7 @@ class AimiAdvisorService {
         val metrics = calculateMetrics(periodDays)
 
         // 2. Snapshot Profile
-        val profile = runBlocking(Dispatchers.IO) { profileFunction.getProfile() }
+        val profile = runBlocking(aapsIoDispatcher) { profileFunction.getProfile() }
         val profileSnapshot = if (profile != null) {
             // getBasal(timestamp) expects epoch millis, not seconds from midnight - h * 3600 lands
             // every hour inside the first 83 seconds of 1 January 1970, so all 24 rows would read
@@ -283,7 +286,7 @@ class AimiAdvisorService {
         return if (totalDuration > 0) totalWeightedValue / totalDuration else 0.0
     }
 
-    private fun calculateMetrics(days: Int): AdvisorMetrics = runBlocking(Dispatchers.IO) {
+    private fun calculateMetrics(days: Int): AdvisorMetrics = runBlocking(aapsIoDispatcher) {
         // Fallback defaults
         var tir70_180 = 0.65
         var tir70_140 = 0.40
@@ -608,7 +611,7 @@ class AimiAdvisorService {
                             newValue = 0.75,
                             reason = "Increase minimum PKPD factor to preserve SMB intent in priority contexts."
                         ),
-                        descriptionArgs = listOf(String.format(java.util.Locale.US, "%.2f", reliefMinFactor))
+                        descriptionArgs = listOf(aimiFmt2(reliefMinFactor))
                     )
                 )
             }
@@ -625,7 +628,7 @@ class AimiAdvisorService {
                             newValue = 0.75,
                             reason = "Raise restore threshold to avoid excessive final SMB collapse."
                         ),
-                        descriptionArgs = listOf(String.format(java.util.Locale.US, "%.2f", redCarpetRestore))
+                        descriptionArgs = listOf(aimiFmt2(redCarpetRestore))
                     )
                 )
             }
@@ -643,8 +646,8 @@ class AimiAdvisorService {
                             reason = "Increase priority MaxIOB headroom factor in explicit aggressive contexts."
                         ),
                         descriptionArgs = listOf(
-                            String.format(java.util.Locale.US, "%.2f", maxIobFactor),
-                            String.format(java.util.Locale.US, "%.2f", maxIobExtra)
+                            aimiFmt2(maxIobFactor),
+                            aimiFmt2(maxIobExtra)
                         )
                     )
                 )
@@ -1009,7 +1012,7 @@ class AimiAdvisorService {
     fun generateBasalProfileProposal(periodDays: Int = 7): BasalProfileProposal {
         try {
             val metrics = calculateMetrics(periodDays)
-            val profile = profileFunction?.let { runBlocking(Dispatchers.IO) { it.getProfile() } }
+            val profile = profileFunction?.let { runBlocking(aapsIoDispatcher) { it.getProfile() } }
             if (profile == null) {
                 return BasalProfileProposal(
                     generatedAt = aimiWallClockMs(),
@@ -1206,7 +1209,7 @@ class AimiAdvisorService {
             val fromTime = now - (periodDays * 24 * 3600 * 1000L)
             
             val bgReadings = try {
-                runBlocking(Dispatchers.IO) {
+                runBlocking(aapsIoDispatcher) {
                     persistenceLayer.getBgReadingsDataFromTimeToTime(fromTime, now, false)
                 }.map { it.value }
                     .filter { it > 30.0 }
@@ -1216,7 +1219,7 @@ class AimiAdvisorService {
             
             // 2. Build Context
             val metrics = calculateMetrics(periodDays)
-            val profile = profileFunction?.let { runBlocking(Dispatchers.IO) { it.getProfile() } }
+            val profile = profileFunction?.let { runBlocking(aapsIoDispatcher) { it.getProfile() } }
             val isf = profile?.getIsfMgdlTimeFromMidnight(0) ?: 40.0 // Default or specific logic needed to get specific ISF
             
             // Dummy Physio Manager (No access to instance here easily without DI)

@@ -4,11 +4,8 @@ import androidx.work.ListenableWorker.Result
 import app.aaps.core.objects.workflow.LoggingWorker
 
 internal suspend fun LoggingWorker.runBasalMlTrainingJob(coordinator: BasalMlTrainingCoordinator): Result {
-    return when (coordinator.runScheduledTraining()) {
-        BasalMlTrainingCoordinator.TrainingOutcome.SUCCESS,
-        BasalMlTrainingCoordinator.TrainingOutcome.SKIPPED,
-        -> Result.success()
-
-        BasalMlTrainingCoordinator.TrainingOutcome.FAILED_RETRY -> Result.retry()
+    return when (mapTrainingOutcome(coordinator.runScheduledTraining())) {
+        BasalMlTrainAction.SUCCESS -> Result.success()
+        BasalMlTrainAction.RETRY -> Result.retry()
     }
 }

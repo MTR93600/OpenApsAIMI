@@ -32,7 +32,7 @@ import app.aaps.core.keys.interfaces.Preferences
  *   val smb = AimiUamHandler.predictSmbUam(features, rT.reason).coerceAtLeast(0f)
  *   // en lifecycle plugin : onStart -> clearCache ; onStop -> close()
  */
-object AimiUamHandler {
+object AimiModelHandler {
     private const val TAG = "AIMI-UAM"
     // Emplacement standard du modèle
     private val externalDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
@@ -51,27 +51,17 @@ object AimiUamHandler {
     @Volatile private var lastLoadOk: Boolean = false
     @Volatile private var lastLoadError: String? = null
     @Volatile private var lastLoadTime: Long = 0L
-    @Volatile private var runtimeConfidence: Double? = null
-    @Volatile private var confidenceSupplier: (() -> Double?)? = null
 
-    /** Appelé par le moteur UAM ou la logique de détection pour pousser une confiance live (0..1). */
-    fun updateRuntimeConfidence(value: Double?) {
-        runtimeConfidence = value?.coerceIn(0.0, 1.0)
+    /**
+     * Registers the TFLite interpreter as the platform predictor of the shared [AimiUamHandler].
+     * Called once by the Android plugin shell. With no predictor installed the shared facade
+     * returns 0f (model absent) and the engine falls back to the rule-based dose.
+     */
+    fun installAsPredictor() {
+        AimiUamHandler.installPredictor(AimiUamHandler.AimiUamPredictor { features, reason, rh ->
+            predictWithTflite(features, reason, rh)
+        })
     }
-
-    /** Installé par le plugin (qui a accès à Preferences) pour récupérer une confiance persistée. */
-    fun installConfidenceSupplier(supplier: (() -> Double?)?) {
-        confidenceSupplier = supplier
-    }
-
-    /** Lecture "safe" sans dépendance au contexte/DI. Ordre: runtime -> supplier -> 0.0 */
-    fun confidenceOrZero(): Double {
-        runtimeConfidence?.let { return it.coerceIn(0.0, 1.0) }
-        val fromSupplier = try { confidenceSupplier?.invoke() } catch (_: Throwable) { null }
-        return (fromSupplier ?: 0.0).coerceIn(0.0, 1.0)
-    }
-    // Pour compat avec code existant qui attend un "getInstance()"
-    fun getInstance(): AimiUamHandler = this
 
     /** Ligne de statut prête à logguer dans rT.reason */
     fun statusLine(rh: TextResolver): String {
@@ -144,9 +134,9 @@ object AimiUamHandler {
      * @param reason   (optionnel) StringBuilder pour logs visibles (ex: rT.reason)
      * @return SMB brut (>=0 recommandé de faire .coerceAtLeast(0f) côté appelant)
      */
-    fun predictSmbUam(
+    private fun predictWithTflite(
         features: FloatArray,
-        reason: StringBuilder? = null,
+        reason: StringBuilder?,
         rh: TextResolver
     ): Float {
         appendStatus(reason, rh) // affiche d'entrée l'état du modèle
