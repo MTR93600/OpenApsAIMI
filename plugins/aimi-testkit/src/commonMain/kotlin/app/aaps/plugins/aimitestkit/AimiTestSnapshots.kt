@@ -1,5 +1,6 @@
 package app.aaps.plugins.aimitestkit
 
+import app.aaps.core.interfaces.aps.OapsProfileAimi
 import app.aaps.plugins.aimicontracts.AimiCapabilitySnapshot
 import app.aaps.plugins.aimicontracts.AimiConfigSnapshot
 import app.aaps.plugins.aimicontracts.AimiEngineState
@@ -47,6 +48,10 @@ object AimiTestSnapshots {
                 sourceId = sourceId,
                 warmup = AimiGlucoseWarmup.None,
                 loopEligible = loopEligible,
+                delta = missingDouble(),
+                shortAvgDelta = missingDouble(),
+                longAvgDelta = missingDouble(),
+                noise = missingDouble(),
             ),
             pump = AimiPumpSnapshot(
                 profileBasalUPerHour = missingDouble(),
@@ -58,16 +63,12 @@ object AimiTestSnapshots {
                 pumpCanTempBasal = false,
             ),
             profile = AimiProfileSnapshot(
-                memberTargetBgMgdl = 100.0,
-                scheduleTargetBgMgdl = 110.0,
-                isfMgdlPerU = missingDouble("not captured"),
-                icGPerU = missingDouble("not captured"),
-                diaMs = null,
-                peakMs = null,
+                profile = testProfile(),
             ),
             insulin = AimiInsulinSnapshot(
                 iobU = missingDouble(),
                 activityUPerHour = missingDouble(),
+                iobHistory = emptyList(),
             ),
             meal = AimiMealSnapshot(
                 cobG = missingDouble(),
@@ -83,6 +84,65 @@ object AimiTestSnapshots {
             capabilities = AimiCapabilitySnapshot(closedLoopAllowed = closedLoopAllowed),
         )
     }
+
+    /**
+     * Default test profile. Neutral values, not clinical.
+     */
+    fun testProfile(
+        targetBg: Double = 100.0,
+        isf: Double = 50.0,
+        carbRatio: Double = 10.0,
+        diaHours: Double = 5.0,
+    ): OapsProfileAimi = OapsProfileAimi(
+        dia = diaHours,
+        min_5m_carbimpact = 8.0,
+        max_iob = 3.0,
+        max_daily_basal = 1.0,
+        max_basal = 3.0,
+        min_bg = targetBg - 10.0,
+        max_bg = targetBg + 70.0,
+        target_bg = targetBg,
+        carb_ratio = carbRatio,
+        sens = isf,
+        autosens_adjust_targets = false,
+        max_daily_safety_multiplier = 3.0,
+        current_basal_safety_multiplier = 4.0,
+        high_temptarget_raises_sensitivity = false,
+        low_temptarget_lowers_sensitivity = false,
+        sensitivity_raises_target = true,
+        resistance_lowers_target = true,
+        adv_target_adjustments = false,
+        exercise_mode = false,
+        half_basal_exercise_target = 160,
+        maxCOB = 120,
+        skip_neutral_temps = false,
+        remainingCarbsCap = 90,
+        enableUAM = false,
+        A52_risk_enable = false,
+        SMBInterval = 3,
+        enableSMB_with_COB = false,
+        enableSMB_with_temptarget = false,
+        allowSMB_with_high_temptarget = false,
+        enableSMB_always = false,
+        enableSMB_after_carbs = false,
+        maxSMBBasalMinutes = 30,
+        maxUAMSMBBasalMinutes = 30,
+        bolus_increment = 0.1,
+        carbsReqThreshold = 0,
+        current_basal = 1.0,
+        temptargetSet = false,
+        autosens_max = 1.2,
+        out_units = "mg/dL",
+        lgsThreshold = null,
+        variable_sens = isf,
+        insulinDivisor = 1,
+        TDD = 50.0,
+        peakTime = 75.0,
+        futureActivity = 0.0,
+        sensorLagActivity = 0.0,
+        historicActivity = 0.0,
+        currentActivity = 0.0,
+    )
 
     fun emptyState(generation: Long = 0L): AimiEngineState {
         return AimiEngineState(schemaVersion = 1, generation = generation)
