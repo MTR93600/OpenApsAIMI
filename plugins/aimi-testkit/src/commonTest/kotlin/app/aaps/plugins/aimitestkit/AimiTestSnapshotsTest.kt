@@ -38,4 +38,34 @@ class AimiTestSnapshotsTest {
         val snap = AimiTestSnapshots.emptyInput()
         assertTrue(snap.insulin.iobHistory.isEmpty())
     }
+
+    @Test
+    fun empty_input_autosens_ratio_stays_missing_not_neutral() {
+        // Missing must never be confused with 1.0: the adapter only falls back
+        // to neutral when the snapshot explicitly says autosens did not run.
+        val snap = AimiTestSnapshots.emptyInput()
+        assertTrue(snap.autosens.ratio is TimedValue.Missing)
+        assertNull(snap.autosens.ratio.valueOrNull)
+    }
+
+    @Test
+    fun empty_input_flat_bg_defaults_to_no_suspicion() {
+        val snap = AimiTestSnapshots.emptyInput()
+        assertEquals(false, snap.bgQuality.flatBGsDetected)
+        assertNull(snap.bgQuality.noiseLevel)
+    }
+
+    @Test
+    fun empty_input_kinetics_defaults_to_profile_values() {
+        val snap = AimiTestSnapshots.emptyInput()
+        assertNull(snap.kinetics.effectiveDiaHours)
+        assertNull(snap.kinetics.effectivePeakMinutes)
+        assertTrue(snap.insulin.pkpdIobHistory.isEmpty())
+    }
+
+    @Test
+    fun empty_input_dyn_isf_defaults_off() {
+        val snap = AimiTestSnapshots.emptyInput()
+        assertEquals(false, snap.dynIsfMode)
+    }
 }

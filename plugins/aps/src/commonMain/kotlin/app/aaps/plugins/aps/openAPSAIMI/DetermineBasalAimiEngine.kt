@@ -5,7 +5,6 @@ import app.aaps.core.interfaces.aps.CurrentTemp
 import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
 import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.MealData
-import app.aaps.core.interfaces.aps.OapsProfileAimi
 import app.aaps.core.interfaces.aps.RT
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.plugins.aimicontracts.AimiDecisionTrace
@@ -24,10 +23,8 @@ import app.aaps.plugins.aimiengine.AimiEngine
  * direction is `aps -> aimi-engine`: putting it in aimi-engine would create a
  * cycle.
  *
- * The W5 [AimiInputSnapshot] is a simplified envelope. Fields without a snapshot
- * equivalent use neutral documented defaults (see [GAPS]). This adapter is a
- * functional bridge, not a complete clinical mapping: the snapshot schema must
- * grow before this can drive therapy.
+ * The snapshot carries glucose deltas, the full profile and IOB history.
+ * Remaining gaps are documented in [GAPS].
  */
 class DetermineBasalAimiEngine(
     private val plugin: DetermineBasalaimiSMB2,
@@ -40,11 +37,10 @@ class DetermineBasalAimiEngine(
     ): AimiTickResult {
         val glucoseStatus = GlucoseStatusAIMI(
             glucose = input.glucose.glucoseMgdl.valueOrNull ?: 0.0,
-            // GAP: snapshot has no delta / shortAvgDelta / longAvgDelta / noise.
-            delta = 0.0,
-            shortAvgDelta = 0.0,
-            longAvgDelta = 0.0,
-            noise = 0.0,
+            delta = input.glucose.delta.valueOrNull ?: 0.0,
+            shortAvgDelta = input.glucose.shortAvgDelta.valueOrNull ?: 0.0,
+            longAvgDelta = input.glucose.longAvgDelta.valueOrNull ?: 0.0,
+            noise = input.glucose.noise.valueOrNull ?: 0.0,
             date = input.meta.wallClockEpochMs,
         )
         val currentTemp = CurrentTemp(
@@ -52,65 +48,26 @@ class DetermineBasalAimiEngine(
             rate = input.pump.tempBasalUPerHour.valueOrNull ?: 0.0,
             minutesrunning = null,
         )
-        val iobData = arrayOf(
-            IobTotal(
-                time = input.meta.wallClockEpochMs,
-                iob = input.insulin.iobU.valueOrNull ?: 0.0,
-                activity = input.insulin.activityUPerHour.valueOrNull ?: 0.0,
-            ),
+        // Full IOB history when the shell captured it; single current point otherwise.
+        val iobData = if (input.insulin.iobHistory.isNotEmpty()) {
+            input.insulin.iobHistory.toTypedArray()
+        } else {
+            arrayOf(
+                IobTotal(
+                    time = input.meta.wallClockEpochMs,
+                    iob = input.insulin.iobU.valueOrNull ?: 0.0,
+                    activity = input.insulin.activityUPerHour.valueOrNull ?: 0.0,
+                ),
+            )
+        }
+        // Full profile comes from the snapshot now; no neutral defaults.
+        val profile = input.profile.profile
+        // Autosens ratio from the snapshot. Falls back to 1.0 (neutral) ONLY when
+        // the snapshot marks it Missing (autosens did not run this tick). This is
+        // the same default AutosensResult itself declares ("autosens not available").
+        val autosensData = AutosensResult(
+            ratio = input.autosens.ratio.valueOrNull ?: 1.0,
         )
-        val profile = OapsProfileAimi(
-            dia = (input.profile.diaMs ?: 0L) / 3_600_000.0,
-            // GAP: snapshot carries only 6 profile fields; the rest are neutral defaults.
-            min_5m_carbimpact = 8.0,
-            max_iob = 3.0,
-            max_daily_basal = 1.0,
-            max_basal = 3.0,
-            min_bg = input.profile.memberTargetBgMgdl - 10.0,
-            max_bg = input.profile.memberTargetBgMgdl + 70.0,
-            target_bg = input.profile.memberTargetBgMgdl,
-            carb_ratio = 10.0,
-            sens = input.profile.isfMgdlPerU.valueOrNull ?: 50.0,
-            autosens_adjust_targets = false,
-            max_daily_safety_multiplier = 3.0,
-            current_basal_safety_multiplier = 4.0,
-            high_temptarget_raises_sensitivity = false,
-            low_temptarget_lowers_sensitivity = false,
-            sensitivity_raises_target = true,
-            resistance_lowers_target = true,
-            adv_target_adjustments = false,
-            exercise_mode = false,
-            half_basal_exercise_target = 160,
-            maxCOB = 120,
-            skip_neutral_temps = false,
-            remainingCarbsCap = 90,
-            enableUAM = false,
-            A52_risk_enable = false,
-            SMBInterval = 3,
-            enableSMB_with_COB = false,
-            enableSMB_with_temptarget = false,
-            allowSMB_with_high_temptarget = false,
-            enableSMB_always = false,
-            enableSMB_after_carbs = false,
-            maxSMBBasalMinutes = 30,
-            maxUAMSMBBasalMinutes = 30,
-            bolus_increment = 0.1,
-            carbsReqThreshold = 0,
-            current_basal = 1.0,
-            temptargetSet = false,
-            autosens_max = 1.2,
-            out_units = "mg/dL",
-            lgsThreshold = null,
-            variable_sens = input.profile.isfMgdlPerU.valueOrNull ?: 50.0,
-            insulinDivisor = 1,
-            TDD = 50.0,
-            peakTime = 75.0,
-            futureActivity = 0.0,
-            sensorLagActivity = 0.0,
-            historicActivity = 0.0,
-            currentActivity = 0.0,
-        )
-        val autosensData = AutosensResult(ratio = 1.0)
         val mealData = MealData(
             mealCOB = input.meal.cobG.valueOrNull ?: 0.0,
             slopeFromMaxDeviation = input.meal.slopeFromMaxDeviation.valueOrNull ?: 0.0,
@@ -118,6 +75,10 @@ class DetermineBasalAimiEngine(
             lastCarbTime = input.meal.lastCarbTimeMs ?: 0L,
             lastBolusTime = input.meal.lastBolusTimeMs ?: 0L,
         )
+        // PKPD IOB array: pass only when the shell computed learned kinetics.
+        // Null means "not available": the engine falls back to iob_data_array.
+        val pkpdIobData: Array<IobTotal>? =
+            input.insulin.pkpdIobHistory.toTypedArray().takeIf { it.isNotEmpty() }
 
         val rt: RT = plugin.determine_basal(
             glucose_status = glucoseStatus,
@@ -128,9 +89,12 @@ class DetermineBasalAimiEngine(
             mealData = mealData,
             microBolusAllowed = input.pump.pumpCanSmb,
             currentTime = input.meta.wallClockEpochMs,
-            flatBGsDetected = false,
-            dynIsfMode = false,
+            flatBGsDetected = input.bgQuality.flatBGsDetected,
+            dynIsfMode = input.dynIsfMode,
             uiInteraction = SilentUiInteraction,
+            pkpd_iob_data_array = pkpdIobData,
+            effective_dia_hours = input.kinetics.effectiveDiaHours,
+            effective_peak_minutes = input.kinetics.effectivePeakMinutes,
         )
         return rt.toAimiTickResult(state)
     }
@@ -142,9 +106,10 @@ class DetermineBasalAimiEngine(
          * - TDD windows, TIR quality, physio windows (partially in snapshot)
          * - 7 persist keys live in AimiCausalState (transitional mirrors, see syncFromLegacyPrebolus)
          *
-         * Closed in schema v2/v3: glucose deltas, full OapsProfileAimi,
-         * IOB history, MealData slopes, lastCarbTime and lastBolusTime,
-         * 102 config keys in AimiConfigValues.
+         * Closed: glucose deltas, full OapsProfileAimi, IOB history,
+         * MealData slopes, lastCarbTime and lastBolusTime, 102 config keys,
+         * autosens ratio, flatBGsDetected, dynIsfMode, PKPD IOB array,
+         * effective DIA hours and peak minutes.
          */
         const val GAPS = "see KDoc"
     }
