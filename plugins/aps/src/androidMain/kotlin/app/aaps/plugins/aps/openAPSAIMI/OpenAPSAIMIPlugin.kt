@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI
 import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiKeyValueCache
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
+import app.aaps.plugins.aps.openAPSAIMI.parity.AimiParityCaptureHook
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiBehaviorProfileSource
 import app.aaps.plugins.aps.ApsStrings
 import android.annotation.SuppressLint
@@ -1680,6 +1681,26 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 effective_peak_minutes = kineticsView.effective.peakMinutes,
                 extraDebug = physioMults.detailedReason
             ).also {
+                // Parity capture: records this tick's inputs + RT for byte-for-byte
+                // replay. Disabled by default (AimiParityCaptureHook.enabled = false).
+                // Zero behavior change when off: single volatile read.
+                AimiParityCaptureHook.maybeCapture(
+                    storage = storage,
+                    glucoseStatusAimi = glucoseStatusAimi,
+                    currentTemp = currentTemp,
+                    iobArray = iobArray,
+                    profile = oapsProfile,
+                    autosensResult = autosensResult,
+                    mealData = mealData,
+                    microBolusAllowed = microBolusAllowed,
+                    currentTime = now,
+                    flatBGsDetected = flatBGsDetected,
+                    dynIsfMode = dynIsfMode,
+                    pkpdIobDataArray = pkpdIobDataArray,
+                    effectiveDiaHours = kineticsView.effective.diaHours,
+                    effectivePeakMinutes = kineticsView.effective.peakMinutes,
+                    rt = it,
+                )
                 it.aimiAdaptationStatus = it.aimiAdaptationStatus?.let { status ->
                     AimiAdaptationStatusBuilder.enrichGovernors(
                         status = status,
