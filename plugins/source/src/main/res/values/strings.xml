@@ -490,6 +490,12 @@
     <string name="aidex_sensor_stabilizing">The sensor is stabilizing, please wait…</string>
     <string name="aidex_sensor_replace">Sensor replacement required, please replace with a new sensor as soon as possible</string>
     <string name="aidex_signal_lost">Sensor signal lost, please check the connection</string>
+
+    <!-- Automatic switch from the pre-soak sensor to production (ONE+ / G7 and Libre 3) -->
+    <string name="staging_auto_promote_title">Switch to the pre-soak sensor automatically</string>
+    <string name="staging_auto_promote_summary">After the set number of hours, the pre-soak sensor feeds the loop if its recent readings are good. The sensor in use is stopped. The promote button still works.</string>
+    <string name="staging_auto_promote_hours_title">Hours before the automatic switch</string>
+    <string name="staging_auto_promote_done" comment="%1$s=hours since the pre-soak start, with unit. Example: The pre-soak sensor now feeds the loop. Automatic switch after 10 h.">The pre-soak sensor now feeds the loop. Automatic switch after %1$s.</string>
 </resources>
 
 

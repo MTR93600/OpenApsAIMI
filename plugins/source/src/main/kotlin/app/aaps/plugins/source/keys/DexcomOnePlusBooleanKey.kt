@@ -53,4 +53,17 @@ enum class DexcomOnePlusBooleanKey(
         engineeringModeOnly = true,
         exportable = false,
     ),
+
+    /**
+     * Switches the pre-soak sensor to production by itself, [DexcomOnePlusIntKey.AutoPromoteHours]
+     * after the pre-soak start, when its readings are recent and real. The promote button still works.
+     *
+     * Off by default: the switch stops the sensor in use, and the rest of its life is lost.
+     */
+    AutoPromote(
+        key = "dexcom_oneplus_staging_auto_promote",
+        defaultValue = false,
+        titleResId = R.string.staging_auto_promote_title,
+        summaryResId = R.string.staging_auto_promote_summary,
+    ),
 }

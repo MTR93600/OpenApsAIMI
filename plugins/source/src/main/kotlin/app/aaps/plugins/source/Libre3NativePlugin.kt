@@ -9,6 +9,8 @@ import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.notifications.NotificationId
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -24,6 +26,7 @@ import app.aaps.core.interfaces.source.StagingState
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.withActivity
+import app.aaps.core.keys.R as KeysR
 import app.aaps.core.ui.compose.icons.IcPluginByoda
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
 import app.aaps.plugins.libre3.Libre3CgmDriverReal
@@ -43,6 +46,7 @@ import app.aaps.plugins.source.activities.Libre3WarmupActivity
 import app.aaps.plugins.source.compose.BgSourceComposeContent
 import app.aaps.plugins.source.keys.Libre3BooleanKey
 import app.aaps.plugins.source.keys.Libre3IntentKey
+import app.aaps.plugins.source.keys.Libre3IntKey
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -57,6 +61,9 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -81,6 +88,7 @@ class Libre3NativePlugin @Inject constructor(
     private val availabilityProvider: Libre3AvailabilityProvider,
     private val bleRadioPriority: BleRadioPriority,
     private val activePlugin: ActivePlugin,
+    private val notificationManager: NotificationManager,
 ) : AbstractBgSourcePlugin(
     pluginDescription = PluginDescription()
         .mainType(PluginType.BGSOURCE)
@@ -97,6 +105,7 @@ class Libre3NativePlugin @Inject constructor(
     ownPreferences = listOf(
         Libre3IntentKey::class.java,
         Libre3BooleanKey::class.java,
+        Libre3IntKey::class.java,
     ),
     aapsLogger,
     rh,
@@ -288,6 +297,19 @@ class Libre3NativePlugin @Inject constructor(
     private var stagingLastValueAtMs: Long? = null
 
     /**
+     * Only one promotion at a time. Without it the button and the automatic switch could both pass
+     * the [stagingPresent] check and swap the driver instances twice.
+     */
+    private val promoteMutex = Mutex()
+
+    /** An automatic promotion is already on its way, so the next reading does not start another. */
+    private val autoPromoteInFlight = AtomicBoolean(false)
+
+    /** Time of the last automatic try that was refused, see [StagingAutoPromotion.RETRY_INTERVAL_MS]. */
+    @Volatile
+    private var lastAutoPromoteTryMs = 0L
+
+    /**
      * Watches the pre-soak driver.
      *
      * Every path here is collect-only. It never touches [persistenceLayer] and it never calls
@@ -334,6 +356,8 @@ class Libre3NativePlugin @Inject constructor(
             Libre3BooleanKey.UseRealSkeleton,
             Libre3BooleanKey.PresoakEnabled,
             Libre3BooleanKey.KeepSessionAlive,
+            Libre3BooleanKey.AutoPromote,
+            Libre3IntKey.AutoPromoteHours,
             // The sensor age on the dashboard and the calibration session both come from the
             // SENSOR_CHANGE therapy event written by `logSensorChangeOnce`.
             BooleanKey.BgSourceCreateSensorChange,
@@ -968,16 +992,22 @@ class Libre3NativePlugin @Inject constructor(
     /**
      * Hands the loop over from the running sensor to the pre-soak sensor.
      *
-     * This is the only action that changes which sensor feeds the loop, and it is always a user
-     * action. The order of the steps is chosen so that every step that can fail comes before the
-     * first step that cannot be undone: the store write of the new sensor is the last reversible
-     * one. See `docs/LIBRE3_PRESOAK_PLAN.md` §10.
+     * This is the only action that changes which sensor feeds the loop. It is a user action, or the
+     * automatic switch the user turned on with [Libre3BooleanKey.AutoPromote] (see
+     * [maybeAutoPromote], which adds its own checks before calling this). The order of the steps is
+     * chosen so that every step that can fail comes before the first step that cannot be undone:
+     * the store write of the new sensor is the last reversible one. See
+     * `docs/LIBRE3_PRESOAK_PLAN.md` §10.
      *
      * @param allowEarly accepted and ignored. A Libre 3 pre-soak has no soak gate, because the user
      *   already pays real sensor wear time for the soak, so there is nothing here to relax. Please
      *   do not turn this into a gate.
      */
-    override suspend fun promoteStagingToProduction(allowEarly: Boolean): PromotionResult {
+    override suspend fun promoteStagingToProduction(allowEarly: Boolean): PromotionResult =
+        promoteMutex.withLock { promoteLocked(byAuto = false) }
+
+    /** The promotion itself. Call it only while holding [promoteMutex]. */
+    private suspend fun promoteLocked(byAuto: Boolean): PromotionResult {
         if (!stagingPresent) return PromotionResult.Rejected(PromotionRejectReason.STAGING_ABSENT)
         // Non-null only when serial, MAC and PIN are all there, that is when the NFC write landed.
         val staged = runCatching { stagingStore.loadIdentity() }.getOrNull()
@@ -992,7 +1022,7 @@ class Libre3NativePlugin @Inject constructor(
         val nowMs = System.currentTimeMillis()
         aapsLogger.info(
             LTag.BGSOURCE,
-            "${Libre3LogMarkers.PRESOAK}: promote asked serial=${staged.serialNumber} " +
+            "${Libre3LogMarkers.PRESOAK}: promote asked by=${if (byAuto) "auto" else "user"} serial=${staged.serialNumber} " +
                 "soakMs=${nowMs - staged.activatedAtMs} readings=$stagingValidReadingCount",
         )
         // The last reversible step. One commit, so a false means nothing at all was written and the
@@ -1134,6 +1164,56 @@ class Libre3NativePlugin @Inject constructor(
             LTag.BGSOURCE,
             "${Libre3LogMarkers.PRESOAK}: collected ${sample.mgdl.toInt()} count=$stagingValidReadingCount, not published",
         )
+        maybeAutoPromote()
+    }
+
+    /**
+     * Switches the pre-soak sensor to production by itself when [Libre3BooleanKey.AutoPromote] is
+     * on and [StagingAutoPromotion] agrees.
+     *
+     * Called on every pre-soak reading, so it needs no timer and survives a restart. Only reads the
+     * pre-soak store here; the switch itself writes the database, so it runs on [ioScope] and never
+     * on this BLE thread (invariant I1). The promotion of a Libre 3 checks almost nothing by itself,
+     * so the checks on recent, real readings in [StagingAutoPromotion] are the ones that count here.
+     */
+    private fun maybeAutoPromote() {
+        val nowMs = System.currentTimeMillis()
+        if (nowMs - lastAutoPromoteTryMs < StagingAutoPromotion.RETRY_INTERVAL_MS) return
+        if (!preferences.get(Libre3BooleanKey.AutoPromote)) return
+        val delayHours = preferences.get(Libre3IntKey.AutoPromoteHours)
+        val startMs = runCatching { stagingStore.loadIdentity() }.getOrNull()?.activatedAtMs?.takeIf { it > 0L }
+            ?: runCatching { stagingStore.loadSlotActivatedAt() }.getOrDefault(0L)
+        val decision = StagingAutoPromotion.decide(
+            enabled = true,
+            delayHours = delayHours,
+            startMs = startMs,
+            readings = _stagingCurve.value.map { it.timestampMs to it.mgdl },
+            minRecentReadings = AUTO_PROMOTE_MIN_RECENT_READINGS,
+            nowMs = nowMs,
+        )
+        if (decision != StagingAutoPromotion.Decision.PROMOTE) return
+        if (!autoPromoteInFlight.compareAndSet(false, true)) return
+        ioScope.launch {
+            try {
+                aapsLogger.info(
+                    LTag.BGSOURCE,
+                    "${Libre3LogMarkers.PRESOAK}: auto switch asked delayHours=$delayHours soakMs=${nowMs - startMs}",
+                )
+                val result = promoteMutex.withLock { promoteLocked(byAuto = true) }
+                if (result is PromotionResult.Ok) {
+                    notificationManager.post(
+                        NotificationId.CGM_STAGING_AUTO_PROMOTED,
+                        R.string.staging_auto_promote_done,
+                        rh.gs(KeysR.string.units_format_hours, delayHours),
+                    )
+                } else {
+                    aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.PRESOAK}: auto switch refused, $result")
+                    lastAutoPromoteTryMs = System.currentTimeMillis()
+                }
+            } finally {
+                autoPromoteInFlight.set(false)
+            }
+        }
     }
 
     /** Puts the pre-soak slot back to "no sensor". It never touches a file. */
@@ -1208,6 +1288,9 @@ class Libre3NativePlugin @Inject constructor(
 
         /** How far back stored readings are read to rebuild the repeat guard after a restart. */
         private const val INGEST_SEED_WINDOW_MS = 6L * 60L * 60L * 1000L
+
+        /** Automatic switch: readings needed in the last 30 min (about 30 expected at a 1 min cadence). */
+        private const val AUTO_PROMOTE_MIN_RECENT_READINGS = 10
 
         /** What the stored ingest mark holds when no reading of this sensor was accepted yet. */
         private const val NO_LIFE_COUNT = -1

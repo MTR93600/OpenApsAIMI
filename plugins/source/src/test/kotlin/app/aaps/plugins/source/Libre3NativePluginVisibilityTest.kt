@@ -60,7 +60,7 @@ class Libre3NativePluginVisibilityTest : TestBase() {
         whenever(extraDir.findFile(LIBRE3_ACCESS_FILE_NAME)).thenReturn(markerFile)
         val availabilityProvider =
             Libre3AvailabilityProvider(aapsLogger, Lazy { fileListProvider }, preferences, notificationManager, dateUtil)
-        plugin = Libre3NativePlugin(rh, aapsLogger, preferences, config, context, persistenceLayer, availabilityProvider, bleRadioPriority, activePlugin)
+        plugin = Libre3NativePlugin(rh, aapsLogger, preferences, config, context, persistenceLayer, availabilityProvider, bleRadioPriority, activePlugin, notificationManager)
     }
 
     @Test

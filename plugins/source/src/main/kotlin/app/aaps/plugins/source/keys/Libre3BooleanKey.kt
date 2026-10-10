@@ -68,4 +68,19 @@ enum class Libre3BooleanKey(
         engineeringModeOnly = true,
         exportable = false,
     ),
+
+    /**
+     * Switches the pre-soak sensor to production by itself, [Libre3IntKey.AutoPromoteHours] after
+     * its NFC activation, when its readings are recent and real. The promote button still works.
+     *
+     * Off by default: the switch stops the sensor in use, and the rest of its life is lost. Shown
+     * only while [PresoakEnabled] is on.
+     */
+    AutoPromote(
+        key = "libre3_staging_auto_promote",
+        defaultValue = false,
+        titleResId = R.string.staging_auto_promote_title,
+        summaryResId = R.string.staging_auto_promote_summary,
+        dependency = PresoakEnabled,
+    ),
 }

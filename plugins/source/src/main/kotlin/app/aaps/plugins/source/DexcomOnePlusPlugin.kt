@@ -12,6 +12,8 @@ import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.notifications.NotificationId
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -30,6 +32,7 @@ import app.aaps.core.interfaces.source.StagingState
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.withActivity
+import app.aaps.core.keys.R as KeysR
 import app.aaps.core.ui.compose.icons.IcPluginByoda
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers
@@ -45,6 +48,7 @@ import app.aaps.plugins.source.activities.DexcomOnePlusWarmupActivity
 import app.aaps.plugins.source.compose.BgSourceComposeContent
 import app.aaps.plugins.source.keys.DexcomOnePlusBooleanKey
 import app.aaps.plugins.source.keys.DexcomOnePlusIntentKey
+import app.aaps.plugins.source.keys.DexcomOnePlusIntKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -58,6 +62,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -80,6 +87,7 @@ class DexcomOnePlusPlugin @Inject constructor(
     private val bleRadioPriority: BleRadioPriority,
     private val activePlugin: ActivePlugin,
     private val rxBus: RxBus,
+    private val notificationManager: NotificationManager,
 ) : AbstractBgSourcePlugin(
     pluginDescription = PluginDescription()
         .mainType(PluginType.BGSOURCE)
@@ -96,6 +104,7 @@ class DexcomOnePlusPlugin @Inject constructor(
     ownPreferences = listOf(
         DexcomOnePlusIntentKey::class.java,
         DexcomOnePlusBooleanKey::class.java,
+        DexcomOnePlusIntKey::class.java,
     ),
     aapsLogger,
     rh,
@@ -196,6 +205,18 @@ class DexcomOnePlusPlugin @Inject constructor(
     /** Recent staging readings (ts→mgdl) for QA / dashboard comparison overlay. Never published. */
     private val stagingBuffer = ArrayDeque<Pair<Long, Double>>()
 
+    /**
+     * Only one promotion at a time. Without it the button and the automatic switch could both pass
+     * the [stagingPresent] check and swap the driver instances twice.
+     */
+    private val promoteMutex = Mutex()
+
+    /** An automatic promotion is already on its way, so the next reading does not start another. */
+    private val autoPromoteInFlight = AtomicBoolean(false)
+
+    /** Time of the last automatic try that was refused, see [StagingAutoPromotion.RETRY_INTERVAL_MS]. */
+    @Volatile private var lastAutoPromoteTryMs = 0L
+
     /** Watches the STAGING driver; routes glucose to a local buffer (never the loop) until promoted. */
     private val stagingWatcher = object : OnePlusGlucoseWatcher {
         override fun onWarmup(state: OnePlusWarmupState) = handleStagingWarmup(state)
@@ -253,6 +274,8 @@ class DexcomOnePlusPlugin @Inject constructor(
             DexcomOnePlusIntentKey.Warmup.withActivity(DexcomOnePlusWarmupActivity::class.java),
             DexcomOnePlusBooleanKey.UseRealSkeleton,
             DexcomOnePlusBooleanKey.SendCalibrationToSensor,
+            DexcomOnePlusBooleanKey.AutoPromote,
+            DexcomOnePlusIntKey.AutoPromoteHours,
             // Sensor age on the dashboard comes from the SENSOR_CHANGE therapy event this writes.
             BooleanKey.BgSourceCreateSensorChange,
         ),
@@ -853,7 +876,11 @@ class DexcomOnePlusPlugin @Inject constructor(
      * no gap, and every other reader of [OnePlusCgmDrivers.default] (the Status/Warmup screens, the
      * reconnect watchdog) now sees it too.
      */
-    override suspend fun promoteStagingToProduction(allowEarly: Boolean): PromotionResult {
+    override suspend fun promoteStagingToProduction(allowEarly: Boolean): PromotionResult =
+        promoteMutex.withLock { promoteLocked(allowEarly, byAuto = false) }
+
+    /** The promotion itself. Call it only while holding [promoteMutex]. */
+    private suspend fun promoteLocked(allowEarly: Boolean, byAuto: Boolean): PromotionResult {
         if (!stagingPresent) return rejectPromotion(PromotionRejectReason.STAGING_ABSENT, allowEarly)
         if (stagingValidEgvCount < DexcomOnePlusStaging.STAGING_MIN_VALID_EGV)
             return rejectPromotion(PromotionRejectReason.STAGING_NO_VALID_GLUCOSE, allowEarly)
@@ -876,7 +903,7 @@ class DexcomOnePlusPlugin @Inject constructor(
 
         aapsLogger.info(
             LTag.BGSOURCE,
-            "DEXCOM_ONEPLUS_PROMOTE: staging → production (by user) early=$allowEarly " +
+            "DEXCOM_ONEPLUS_PROMOTE: staging → production (by ${if (byAuto) "auto" else "user"}) early=$allowEarly " +
                 "soakMs=${System.currentTimeMillis() - startMs} egvCount=$stagingValidEgvCount",
         )
         // The promoted sensor is a real sensor — ensure it resumes on the Real driver after a restart.
@@ -1021,6 +1048,56 @@ class DexcomOnePlusPlugin @Inject constructor(
             LTag.BGSOURCE,
             "DEXCOM_ONEPLUS_STAGING: buffered ${sample.mgdl.toInt()} count=$stagingValidEgvCount (not published)",
         )
+        maybeAutoPromote()
+    }
+
+    /**
+     * Switches the pre-soak sensor to production by itself when [DexcomOnePlusBooleanKey.AutoPromote]
+     * is on and [StagingAutoPromotion] agrees.
+     *
+     * Called on every staging reading, so it needs no timer and survives a restart. The switch runs
+     * on [ioScope], never on the BLE thread that delivered the reading, and goes through the same
+     * [promoteLocked] as the button, with all of its checks. Before the 12 hour settling time it uses
+     * the button's "not settled" path.
+     */
+    private fun maybeAutoPromote() {
+        val nowMs = System.currentTimeMillis()
+        if (nowMs - lastAutoPromoteTryMs < StagingAutoPromotion.RETRY_INTERVAL_MS) return
+        if (!preferences.get(DexcomOnePlusBooleanKey.AutoPromote)) return
+        val delayHours = preferences.get(DexcomOnePlusIntKey.AutoPromoteHours)
+        val startMs = stagingStore.loadSessionStart()
+        val decision = StagingAutoPromotion.decide(
+            enabled = true,
+            delayHours = delayHours,
+            startMs = startMs,
+            readings = synchronized(stagingBuffer) { stagingBuffer.toList() },
+            minRecentReadings = AUTO_PROMOTE_MIN_RECENT_READINGS,
+            nowMs = nowMs,
+        )
+        if (decision != StagingAutoPromotion.Decision.PROMOTE) return
+        if (!autoPromoteInFlight.compareAndSet(false, true)) return
+        ioScope.launch {
+            try {
+                val allowEarly = nowMs - startMs < DexcomOnePlusStaging.STAGING_MIN_SETTLE_MS
+                aapsLogger.info(
+                    LTag.BGSOURCE,
+                    "DEXCOM_ONEPLUS_PROMOTE: auto switch asked delayHours=$delayHours soakMs=${nowMs - startMs} early=$allowEarly",
+                )
+                val result = promoteMutex.withLock { promoteLocked(allowEarly, byAuto = true) }
+                if (result is PromotionResult.Ok) {
+                    notificationManager.post(
+                        NotificationId.CGM_STAGING_AUTO_PROMOTED,
+                        R.string.staging_auto_promote_done,
+                        rh.gs(KeysR.string.units_format_hours, delayHours),
+                    )
+                } else {
+                    // Refused: the reason is already in the log, see rejectPromotion. Try again later.
+                    lastAutoPromoteTryMs = System.currentTimeMillis()
+                }
+            } finally {
+                autoPromoteInFlight.set(false)
+            }
+        }
     }
 
     private fun refreshProductionLifecycle() {
@@ -1124,6 +1201,9 @@ class DexcomOnePlusPlugin @Inject constructor(
         /** How far back to seed the ingest dedup from the DB on start — wide enough to cover any
          *  plausible on-reconnect backfill, capped downstream by [DexcomOnePlusIngest] RECENT_CAP. */
         private const val INGEST_SEED_WINDOW_MS = 6L * 60L * 60L * 1000L
+
+        /** Automatic switch: readings needed in the last 30 min (6 expected at a 5 min cadence). */
+        private const val AUTO_PROMOTE_MIN_RECENT_READINGS = 4
 
         /** Staging QA buffer cap (~24 h at 5-min cadence). */
         private const val STAGING_BUFFER_CAP = 288

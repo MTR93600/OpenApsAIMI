@@ -33,6 +33,7 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import app.aaps.core.interfaces.notifications.NotificationManager
 import org.mockito.kotlin.after
 import org.mockito.kotlin.never
 import org.mockito.kotlin.timeout
@@ -63,6 +64,7 @@ class DexcomOnePlusPromotionStoreBindingTest : TestBase() {
     /** Promotion tells the active calibration plugin to drop the retired sensor's fingersticks. */
     private val activeCalibration: Calibration = mock()
     private val activePlugin: ActivePlugin = mock<ActivePlugin>().also { whenever(it.activeCalibration).thenReturn(activeCalibration) }
+    private val notificationManager: NotificationManager = mock()
 
     private val productionPrefs: SharedPreferences = SharedPreferencesMock()
     private val stagingPrefs: SharedPreferences = SharedPreferencesMock()
@@ -80,7 +82,7 @@ class DexcomOnePlusPromotionStoreBindingTest : TestBase() {
             .thenReturn(PersistenceLayer.TransactionResult())
         whenever(persistenceLayer.getTherapyEventDataIncludingInvalidFromTime(any(), any())).thenReturn(emptyList())
         plugin = DexcomOnePlusPlugin(
-            rh, aapsLogger, preferences, config, context, persistenceLayer, warmupBasalGuard, availabilityProvider, bleRadioPriority, activePlugin, rxBus,
+            rh, aapsLogger, preferences, config, context, persistenceLayer, warmupBasalGuard, availabilityProvider, bleRadioPriority, activePlugin, rxBus, notificationManager,
         )
     }
 

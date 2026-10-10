@@ -61,7 +61,7 @@ class DexcomOnePlusPluginVisibilityTest : TestBase() {
         whenever(extraDir.findFile(ONE_PLUS_ACCESS_FILE_NAME)).thenReturn(markerFile)
         val availabilityProvider =
             DexcomOnePlusAvailabilityProvider(aapsLogger, Lazy { fileListProvider }, preferences, notificationManager, dateUtil)
-        plugin = DexcomOnePlusPlugin(rh, aapsLogger, preferences, config, context, persistenceLayer, warmupBasalGuard, availabilityProvider, bleRadioPriority, activePlugin, rxBus)
+        plugin = DexcomOnePlusPlugin(rh, aapsLogger, preferences, config, context, persistenceLayer, warmupBasalGuard, availabilityProvider, bleRadioPriority, activePlugin, rxBus, notificationManager)
     }
 
     @Test
