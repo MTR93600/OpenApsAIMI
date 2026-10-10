@@ -1,5 +1,7 @@
 package app.aaps.core.ui.compose.dashboard
 
+import app.aaps.core.ui.compose.formatKmp
+
 /**
  * Product-level freshness policy for dashboard graph status.
  *
