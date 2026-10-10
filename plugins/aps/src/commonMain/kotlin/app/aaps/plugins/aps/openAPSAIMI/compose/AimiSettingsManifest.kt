@@ -234,7 +234,8 @@ internal object AimiSettingsManifest {
         IntKey.AimiCosineGateMaxPeakShift.key,
         // Read every loop tick (unannounced-meal confidence), never shown on a screen.
         DoubleKey.AimiUamConfidence.key,
-        // Read by the physio LLM analyzer, never shown on a screen.
+        // Kept so an existing stored value is not lost; the physio LLM analyzer now follows
+        // StringKey.AimiAdvisorProvider and nothing reads this key any more. Never shown on a screen.
         StringKey.AimiPhysioLLMProvider.key,
         // Set from `AimiProfileAdvisorActivity`'s button row, which is a standalone activity, not
         // a section of the AIMI settings tree this manifest covers.

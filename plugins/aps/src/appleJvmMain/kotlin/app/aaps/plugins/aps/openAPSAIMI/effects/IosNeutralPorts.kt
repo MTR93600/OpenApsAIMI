@@ -9,7 +9,7 @@ import app.aaps.core.interfaces.aps.MealData
 import app.aaps.core.interfaces.aps.OapsProfileAimi
 import app.aaps.core.interfaces.aps.Predictions
 import app.aaps.core.interfaces.aps.RT
-import app.aaps.core.interfaces.ui.AlarmSound
+import app.aaps.core.interfaces.notifications.AlarmSound
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.plugins.aps.openAPSAIMI.AsyncDataState
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiAutonomyMode
@@ -341,7 +341,7 @@ fun iosNeutralNightTbrUph(): Double {
  * Same inputs as the Android `ShellDecisionTraceTest.captureFasting`, which locks
  * `tbrRate=4000000000000000` (2.0 U/h) with no duration and no SMB.
  */
-fun iosNeutralFastingMealHyper(log: MutableList<String>): AimiMealHyperBasalBoostOutcome {
+internal fun iosNeutralFastingMealHyper(log: MutableList<String>): AimiMealHyperBasalBoostOutcome {
     val preferences = IosNeutralMealPreferences().apply {
         doubles[DoubleKey.meal_modes_MaxBasal.key] = 0.0
     }
@@ -602,7 +602,7 @@ internal const val IOS_NEUTRAL_SENSOR_GAP_NOW_MS: Long = 1_700_000_000_000L
  * `tbrRate=absent`, `smb=absent`, `eventual=110.0` — the tick aborts on stale data
  * (`minAgo=25.0 > 12.0`).
  */
-fun iosNeutralSensorGapSignal(log: MutableList<String>): AimiSignalPrepPkpd {
+internal fun iosNeutralSensorGapSignal(log: MutableList<String>): AimiSignalPrepPkpd {
     val nowMs = IOS_NEUTRAL_SENSOR_GAP_NOW_MS
     val preferences = IosNeutralMealPreferences().apply {
         doubles[DoubleKey.OApsAIMIautodrivesmallPrebolus.key] = 0.0

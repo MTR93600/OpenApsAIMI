@@ -152,6 +152,7 @@ import kotlin.math.abs
 import kotlin.math.exp
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AiCoachingService
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiAdvisorService
+import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiAdvisorStringsAndroid
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiSharing
 import app.aaps.plugins.aps.openAPSAIMI.advisor.compose.AimiProfileAdvisorScreen
 import app.aaps.plugins.aps.openAPSAIMI.advisor.compose.AimiSupportPackageScreen
@@ -2065,7 +2066,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         profileFunction = profileFunction,
                         persistenceLayer = persistenceLayer,
                         preferences = preferences,
-                        rh = rh,
+                        strings = AimiAdvisorStringsAndroid(rh),
                         unifiedReactivityLearner = unifiedReactivityLearner,
                         tddCalculator = tddCalculator,
                         tirCalculator = tirCalculator,
@@ -2176,7 +2177,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                                 profileFunction = profileFunction,
                                 persistenceLayer = persistenceLayer,
                                 preferences = preferences,
-                                rh = rh,
+                                strings = AimiAdvisorStringsAndroid(rh),
                                 unifiedReactivityLearner = unifiedReactivityLearner,
                                 tddCalculator = tddCalculator,
                                 tirCalculator = tirCalculator,

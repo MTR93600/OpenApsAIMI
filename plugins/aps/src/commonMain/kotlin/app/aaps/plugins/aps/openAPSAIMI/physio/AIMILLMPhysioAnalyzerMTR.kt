@@ -3,8 +3,8 @@ package app.aaps.plugins.aps.openAPSAIMI.physio
 import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.keys.StringKey
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmHttpRetry
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
@@ -17,18 +17,15 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.JsonObj
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.AtomicReference
-import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 /**
  * 🤖 AIMI LLM Physiological Analyzer - MTR Implementation
@@ -39,7 +36,8 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
  * CRITICAL CONSTRAINTS:
  * - LLM NEVER modifies insulin parameters directly
  * - LLM output is NARRATIVE ONLY (explanation for user)
- * - Timeout: 10 seconds max
+ * - Timeout: bounded per provider (60 s for Claude/Gemini, 10 s otherwise); [analyze] suspends
+ *   instead of blocking a loop thread — the only caller is a daily background worker
  * - If unavailable/failed → system continues normally with deterministic only
  * - API key required (stored in preferences)
  *
@@ -51,17 +49,14 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
  *
  * @author MTR & Lyra AI - AIMI Physiological Intelligence
  */
-@OptIn(ExperimentalAtomicApi::class)
 @SingleIn(AppScope::class)
 class AIMILLMPhysioAnalyzerMTR @Inject constructor(
-    private val sp: SP,
+    private val preferences: Preferences,
     private val aapsLogger: AAPSLogger,
     private val geminiResolver: GeminiModelResolver,
     private val aimiHttp: AimiHttp
 ) {
-    private val ioScope = CoroutineScope(SupervisorJob() + aapsIoDispatcher)
     private val lastNarrativeRef = AtomicReference("")
-    private val analysisInFlight = AtomicBoolean(false)
 
     companion object {
         private const val TAG = "LLMPhysioAnalyzer"
@@ -72,7 +67,7 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
         private const val THINKING_TIMEOUT_MS = 60_000L
 
         private fun timeoutFor(provider: String): Long =
-            if (provider == "claude" || provider == "gemini") THINKING_TIMEOUT_MS else TIMEOUT_MS
+            if (provider.uppercase() == "CLAUDE" || provider.uppercase() == "GEMINI") THINKING_TIMEOUT_MS else TIMEOUT_MS
 
         private val SYSTEM_ROLE_NARRATIVE: String = buildString {
             append(
@@ -145,18 +140,22 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
      * Analyzes physiological state using LLM
      * Returns narrative explanation (or empty string if failed)
      *
+     * Suspends instead of blocking a loop thread: the only caller is a daily background worker,
+     * which can afford to wait. The fresh narrative is returned to the caller directly; a failed
+     * or empty call keeps the last good narrative instead of blanking it.
+     *
      * @param features Current features
      * @param baseline 7-day baseline
      * @param context Deterministic analysis result
      * @return Narrative string (empty if failed/unavailable)
      */
-    fun analyze(
+    suspend fun analyze(
         features: PhysioFeaturesMTR,
         baseline: PhysioBaselineMTR,
         context: PhysioContextMTR
     ): String {
 
-        val provider = sp.getString(StringKey.AimiPhysioLLMProvider.key, "gpt4")
+        val provider = physioProviderFor(preferences.get(StringKey.AimiAdvisorProvider))
         val apiKey = getAPIKey(provider)
 
         if (apiKey.isBlank()) {
@@ -164,43 +163,59 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
             return ""
         }
 
-        refreshNarrativeAsync(provider, apiKey, features, baseline, context)
-        return lastNarrativeRef.load()
-    }
-
-    private fun refreshNarrativeAsync(
-        provider: String,
-        apiKey: String,
-        features: PhysioFeaturesMTR,
-        baseline: PhysioBaselineMTR,
-        context: PhysioContextMTR
-    ) {
-        if (!analysisInFlight.compareAndSet(false, true)) return
-        ioScope.launch {
-            try {
-                val result = withTimeout(timeoutFor(provider)) {
-                    withContext(aapsIoDispatcher) {
-                        when (provider) {
-                            "gpt4" -> analyzeWithGPT(features, baseline, context, apiKey)
-                            "gemini" -> analyzeWithGemini(features, baseline, context, apiKey)
-                            "claude" -> analyzeWithClaude(features, baseline, context, apiKey)
-                            "deepseek" -> analyzeWithDeepSeek(features, baseline, context, apiKey)
-                            else -> {
-                                aapsLogger.warn(LTag.APS, "[$TAG] Unknown provider: $provider")
-                                ""
-                            }
-                        }
+        val result = try {
+            withTimeout(timeoutFor(provider)) {
+                withContext(aapsIoDispatcher) {
+                    when (provider) {
+                        "gpt4" -> analyzeWithGPT(features, baseline, context, apiKey)
+                        "gemini" -> analyzeWithGemini(features, baseline, context, apiKey)
+                        "claude" -> analyzeWithClaude(features, baseline, context, apiKey)
+                        "deepseek" -> analyzeWithDeepSeek(features, baseline, context, apiKey)
+                        // `physioProviderFor` only ever returns the four names above, so this branch is
+                        // unreachable. It stays because `when` is used as an expression here.
+                        else -> ""
                     }
                 }
-                lastNarrativeRef.store(result)
-            } catch (e: Exception) {
-                aapsLogger.warn(LTag.APS, "[$TAG] LLM analysis failed", e)
-                lastNarrativeRef.store("")
-            } finally {
-                analysisInFlight.store(false)
+            }
+        } catch (e: Exception) {
+            aapsLogger.warn(LTag.APS, "[$TAG] LLM analysis failed", e)
+            ""
+        }
+
+        // A model that answers nothing, a reply the provider filtered, and a call that threw all end
+        // up here as an empty string. None of them is a reason to wipe text the user could still
+        // read, so the last good narrative is kept and handed back instead.
+        if (result.isBlank()) return lastNarrativeRef.load()
+
+        lastNarrativeRef.store(result)
+        return result
+    }
+
+    /**
+     * Turns the provider the user picked on the AI keys screen into the name used inside this class.
+     *
+     * There are two settings in the code. `StringKey.AimiPhysioLLMProvider` is the one this class
+     * used to read, and it is on no preference screen at all, so it could only ever hold its default
+     * and the user could not change it. `StringKey.AimiAdvisorProvider` is the one the AI keys
+     * screen writes, and the Auditor, the coach, the meal advisor and food recognition all follow
+     * it. The two hold the same four providers under different spellings, so they map one to one and
+     * this class now follows the setting the user actually fills in, next to the four keys it reads.
+     *
+     * An unknown value falls back to OpenAI, which is what the advisor setting's own default and the
+     * other readers of it do. The fallback cannot send anything on its own: without an OpenAI key
+     * the guard in [analyze] still stops the call.
+     */
+    internal fun physioProviderFor(advisorProvider: String): String =
+        when (advisorProvider.uppercase()) {
+            "OPENAI" -> "gpt4"
+            "GEMINI" -> "gemini"
+            "CLAUDE" -> "claude"
+            "DEEPSEEK" -> "deepseek"
+            else -> {
+                aapsLogger.warn(LTag.APS, "[$TAG] Unknown provider: $advisorProvider - using OpenAI")
+                "gpt4"
             }
         }
-    }
 
     // ═══════════════════════════════════════════════════════════════════════
     // GPT-4 INTEGRATION
@@ -245,8 +260,7 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
         return try {
             val json = Json.parseToJsonElement(response).jsonObject
             json["choices"]!!.jsonArray[0]
-                .jsonObject["message"]!!.jsonObject["content"]!!.jsonPrimitive.content
-                .trim()
+                .jsonObject["message"]!!.jsonObject["content"]!!.narrativeText()
         } catch (e: Exception) {
             aapsLogger.warn(LTag.APS, "[$TAG] Failed to parse GPT response", e)
             ""
@@ -262,8 +276,7 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
             val json = Json.parseToJsonElement(response).jsonObject
             json["candidates"]!!.jsonArray[0]
                 .jsonObject["content"]!!.jsonObject["parts"]!!.jsonArray[0]
-                .jsonObject["text"]!!.jsonPrimitive.content
-                .trim()
+                .jsonObject["text"]!!.narrativeText()
         } catch (e: Exception) {
             aapsLogger.warn(LTag.APS, "[$TAG] Failed to parse Gemini response", e)
             ""
@@ -439,18 +452,41 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
     // UTILITIES
     // ═══════════════════════════════════════════════════════════════════════
 
+    /**
+     * The text of one JSON field, or an empty string when the field holds no usable text.
+     *
+     * Every provider is read through this, because every provider can answer with nothing. A model
+     * that has nothing to say, and a reply the provider's own content filter emptied, both come back
+     * as JSON `null`. In kotlinx.serialization `JsonNull` is itself a `JsonPrimitive`, and its
+     * `content` is the four letters `null`. Reading `.content` therefore produced the narrative
+     * "null", and because `"null".isNotBlank()` is true it passed every later check and was stored
+     * and shown to the user as that day's insight. `contentOrNull` is null for `JsonNull`, so an
+     * empty answer stays empty and [analyze] treats it as no answer.
+     */
+    private fun JsonElement.narrativeText(): String = jsonPrimitive.contentOrNull?.trim().orEmpty()
+
+    /**
+     * The setting that holds the key for one provider, or `null` when the provider is not known.
+     *
+     * These are the same four settings the user fills in on the AI keys screen, so the key typed
+     * there is the key this class sends. Before this, the class read four names that nothing ever
+     * wrote, so it never had a key and never ran.
+     *
+     * Kept apart from [getAPIKey] so a test can read the mapping without a preference store, and
+     * so a swap between two providers shows up as a failing test instead of one provider's key
+     * being sent to another provider's endpoint.
+     */
+    internal fun apiKeySettingFor(provider: String): StringKey? = when (provider) {
+        "gpt4" -> StringKey.AimiAdvisorOpenAIKey
+        "gemini" -> StringKey.AimiAdvisorGeminiKey
+        "claude" -> StringKey.AimiAdvisorClaudeKey
+        "deepseek" -> StringKey.AimiAdvisorDeepSeekKey
+        else -> null
+    }
+
     private fun getAPIKey(provider: String): String {
-        // API keys stored in preferences (user-configured).
-        // Kept on the raw preference names the JVM version read: no settings screen ever wrote
-        // them (they exist nowhere else in the codebase), so the analyzer effectively ran keyless
-        // there too. Do NOT repoint these at the AimiAdvisor*Key entries — that would change
-        // which preference is read and silently switch the feature on.
-        return when (provider) {
-            "gpt4" -> sp.getString("aimi_openai_api_key", "")
-            "gemini" -> sp.getString("aimi_gemini_api_key", "")
-            "claude" -> sp.getString("aimi_claude_api_key", "")
-            "deepseek" -> sp.getString("aimi_deepseek_api_key", "")
-            else -> ""
-        }
+        // API keys stored in preferences (user-configured)
+        val setting = apiKeySettingFor(provider) ?: return ""
+        return preferences.get(setting)
     }
 }

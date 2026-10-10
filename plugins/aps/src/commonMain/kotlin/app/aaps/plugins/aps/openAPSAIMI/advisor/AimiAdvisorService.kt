@@ -20,7 +20,7 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.time.Instant
 import app.aaps.plugins.aps.ApsStrings
-import app.aaps.plugins.aps.R
+import app.aaps.core.interfaces.resources.formatTemplate
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
 import app.aaps.plugins.aps.openAPSAIMI.advisor.oref.OrefAnalysisReport
 import app.aaps.plugins.aps.openAPSAIMI.advisor.oref.OrefDataSufficiency
@@ -45,7 +45,7 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
  * =============================================================================
  * 
  * Analyzes metrics and provides scored recommendations.
- * Uses Resource IDs for localization support.
+ * Localized through [AimiAdvisorStrings] (KMP-safe); falls back to English literals.
  * =============================================================================
  */
 class AimiAdvisorService {
@@ -73,7 +73,7 @@ class AimiAdvisorService {
     private val unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner?
     private val tddCalculator: app.aaps.core.interfaces.stats.TddCalculator?
     private val tirCalculator: app.aaps.core.interfaces.stats.TirCalculator?
-    private val rh: app.aaps.core.interfaces.resources.ResourceHelper?
+    private val strings: AimiAdvisorStrings?
     private val aapsLogger: app.aaps.core.interfaces.logging.AAPSLogger?
     private val pluginManager: app.aaps.plugins.aps.openAPSAIMI.plugins.AimiPluginManager
     private val storage: AimiStorage?
@@ -83,7 +83,7 @@ class AimiAdvisorService {
         profileFunction: app.aaps.core.interfaces.profile.ProfileFunction? = null,
         persistenceLayer: app.aaps.core.interfaces.db.PersistenceLayer? = null,
         preferences: app.aaps.core.keys.interfaces.Preferences? = null,
-        rh: app.aaps.core.interfaces.resources.ResourceHelper? = null,
+        strings: AimiAdvisorStrings? = null,
         unifiedReactivityLearner: app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner? = null,
         tddCalculator: app.aaps.core.interfaces.stats.TddCalculator? = null,
         tirCalculator: app.aaps.core.interfaces.stats.TirCalculator? = null,
@@ -94,7 +94,7 @@ class AimiAdvisorService {
         this.profileFunction = profileFunction
         this.persistenceLayer = persistenceLayer
         this.preferences = preferences
-        this.rh = rh
+        this.strings = strings
         this.unifiedReactivityLearner = unifiedReactivityLearner
         this.tddCalculator = tddCalculator
         this.tirCalculator = tirCalculator
@@ -159,7 +159,7 @@ class AimiAdvisorService {
         val recommendations = generateRecommendations(context, history, orefInsight).toMutableList()
 
         // PKPD Analysis - now returns AimiRecommendation
-        val pkpdSuggestions = PkpdAdvisor().analysePkpd(context.metrics, context.pkpdPrefs, rh!!, orefInsight)
+        val pkpdSuggestions = PkpdAdvisor().analysePkpd(context.metrics, context.pkpdPrefs, strings!!, orefInsight)
 
         // Filter PKPD suggestions based on history (48h cooldown)
         pkpdSuggestions.forEach { rec ->
@@ -263,10 +263,10 @@ class AimiAdvisorService {
      * PKPD-only recommendations for the guided Compose settings screen (7-day metrics when available).
      */
     fun pkpdRecommendationsForSettings(periodDays: Int = 7): List<AimiRecommendation> {
-        if (preferences == null || rh == null) return emptyList()
+        if (preferences == null || strings == null) return emptyList()
         return try {
             val context = collectContext(periodDays)
-            PkpdAdvisor().analysePkpd(context.metrics, context.pkpdPrefs, rh, null)
+            PkpdAdvisor().analysePkpd(context.metrics, context.pkpdPrefs, strings, null)
         } catch (t: Throwable) {
             aapsLogger?.error(app.aaps.core.interfaces.logging.LTag.APS, "pkpdRecommendationsForSettings failed", t)
             emptyList()
@@ -471,11 +471,11 @@ class AimiAdvisorService {
 
     private fun getAssessmentLabel(score: Double): String {
         return when {
-            score >= 8.5 -> rh?.gs(R.string.aimi_advisor_score_label_excellent) ?: "Excellent"
-            score >= 7.0 -> rh?.gs(R.string.aimi_advisor_score_label_good) ?: "Good"
-            score >= 4.0 -> rh?.gs(R.string.aimi_advisor_score_label_warning) ?: "Warning"
-            score >= 2.0 -> rh?.gs(R.string.aimi_advisor_score_label_attention) ?: "Attention"
-            else -> rh?.gs(R.string.aimi_advisor_score_label_critical) ?: "Critical"
+            score >= 8.5 -> strings?.scoreLabelExcellent ?: "Excellent"
+            score >= 7.0 -> strings?.scoreLabelGood ?: "Good"
+            score >= 4.0 -> strings?.scoreLabelWarning ?: "Warning"
+            score >= 2.0 -> strings?.scoreLabelAttention ?: "Attention"
+            else -> strings?.scoreLabelCritical ?: "Critical"
         }
     }
 
@@ -515,7 +515,7 @@ class AimiAdvisorService {
         // plugin system took over, so they are built first here too, and stay first even if a plugin
         // is ever registered. The informational ones carry no action, which shouldShowRecommendation
         // always lets through.
-        val recs = metricRecommendations(ctx.metrics, ctx.prefs, rh)
+        val recs = metricRecommendations(ctx.metrics, ctx.prefs, strings)
             .filter { shouldShowRecommendation(it, history) }
             .toMutableList()
 
@@ -934,26 +934,26 @@ class AimiAdvisorService {
     ): String {
         val sb = StringBuilder()
         
-        if (rh != null) {
+        if (strings != null) {
             // Introduction based on score
             if (report.overallScore >= 8.5) {
-                sb.append(rh.gs(R.string.aimi_adv_analysis_intro_excellent) + "\n\n")
+                sb.append(strings.analysisIntroExcellent + "\n\n")
             } else if (report.overallScore >= 5.5) {
-                sb.append(rh.gs(R.string.aimi_adv_analysis_intro_good) + "\n\n")
+                sb.append(strings.analysisIntroGood + "\n\n")
             } else {
-                sb.append(rh.gs(R.string.aimi_adv_analysis_intro_poor) + "\n\n")
+                sb.append(strings.analysisIntroPoor + "\n\n")
             }
-            
+
             // Summary of Issues
             if (report.recommendations.isNotEmpty()) {
-                sb.append(rh.gs(R.string.aimi_adv_analysis_issues_header) + "\n")
+                sb.append(strings.analysisIssuesHeader + "\n")
                 report.recommendations.forEach { rec ->
                     // Just print the title of the recommendation
-                    val title = try { rh.gs(rec.title) } catch (e: Exception) { "-" }
+                    val title = try { strings.gs(rec.title) } catch (e: Exception) { "-" }
                     sb.append("- $title\n")
                 }
             } else {
-                sb.append(rh.gs(R.string.aimi_adv_analysis_all_good))
+                sb.append(strings.analysisAllGood)
             }
 
             report.orefAnalysis?.let { oref ->
@@ -963,14 +963,14 @@ class AimiAdvisorService {
                     sb.append("\n\n")
                     sb.append(
                         app.aaps.plugins.aps.openAPSAIMI.advisor.oref.OrefUserInsightFormatter.buildParagraph(
-                            rh,
+                            strings,
                             oref,
                         ),
                     )
                 }
             }
-            
-            sb.append("\n" + rh.gs(R.string.aimi_adv_generated_footer, formatTime(report.generatedAt)))
+
+            sb.append("\n" + formatTemplate(strings.generatedFooter, listOf(formatTime(report.generatedAt))))
 
         } else {
              sb.append("Analysis available in app.")
@@ -1013,7 +1013,7 @@ class AimiAdvisorService {
                 "smbTailDamping": ${context.pkpdPrefs.smbTailDamping}
               },
               "suggestions": [
-                ${report.recommendations.filter { it.domain is app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Pkpd }.joinToString(",") { "\"${try{rh?.gs(it.title)}catch(e:Exception){rh?.gs(it.description)}}\"" }}
+                ${report.recommendations.filter { it.domain is app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain.Pkpd }.joinToString(",") { "\"${try{strings?.gs(it.title)}catch(e:Exception){strings?.gs(it.description)}}\"" }}
               ]
             }
         """.trimIndent()
@@ -1032,7 +1032,7 @@ class AimiAdvisorService {
                     generatedAt = aimiWallClockMs(),
                     periodDays = periodDays,
                     strategyCode = "NO_PROFILE",
-                    strategy = rh?.gs(R.string.aimi_adv_basal_strategy_no_profile) ?: "No profile available",
+                    strategy = strings?.basalStrategyNoProfile ?: "No profile available",
                     scalingFactor = 1.0,
                     rationale = "Profile unavailable",
                     rows = emptyList()
@@ -1082,7 +1082,7 @@ class AimiAdvisorService {
     // first translator to touch that label silently changes the export's value per language.
     fun exportBasalProfileProposalText(proposal: BasalProfileProposal): String {
         val header = buildString {
-            appendLine(rh?.gs(R.string.aimi_adv_basal_export_header_title) ?: "AIMI BASAL PROPOSAL (NOT APPLIED)")
+            appendLine(strings?.basalExportHeaderTitle ?: "AIMI BASAL PROPOSAL (NOT APPLIED)")
             appendLine("generatedAt=${proposal.generatedAt}")
             appendLine("periodDays=${proposal.periodDays}")
             appendLine("strategy=${proposal.strategyCode}")
@@ -1102,7 +1102,7 @@ class AimiAdvisorService {
     }
 
     // strategy/rationale are shown in the basal-proposal dialog (AimiProfileAdvisorScreen), so they
-    // are resolved through rh when it is available. rh is only nullable for tests that construct
+    // are resolved through strings when it is available. strings is only nullable for tests that construct
     // this service without it; the literal is the same text the resource carries.
     private data class BasalProposalFactor(
         val factor: Double,
@@ -1118,20 +1118,20 @@ class AimiAdvisorService {
             metrics.timeBelow54 >= 0.01 || metrics.timeBelow70 >= 0.06 -> BasalProposalFactor(
                 factor = 0.95,
                 code = "SAFETY_REDUCTION",
-                label = rh?.gs(R.string.aimi_adv_basal_strategy_safety_reduction) ?: "Reduce basal for safety",
-                rationale = rh?.gs(R.string.aimi_adv_basal_rationale_safety_reduction) ?: "There is hypo risk in the recent data.",
+                label = strings?.basalStrategySafetyReduction ?: "Reduce basal for safety",
+                rationale = strings?.basalRationaleSafetyReduction ?: "There is hypo risk in the recent data.",
             )
             metrics.timeAbove180 >= 0.35 && metrics.tir70_180 < 0.60 && metrics.timeBelow70 <= 0.03 -> BasalProposalFactor(
                 factor = 1.06,
                 code = "GENTLE_INCREASE",
-                label = rh?.gs(R.string.aimi_adv_basal_strategy_gentle_increase) ?: "Increase basal a little",
-                rationale = rh?.gs(R.string.aimi_adv_basal_rationale_gentle_increase) ?: "Blood glucose is often high and hypo risk is low.",
+                label = strings?.basalStrategyGentleIncrease ?: "Increase basal a little",
+                rationale = strings?.basalRationaleGentleIncrease ?: "Blood glucose is often high and hypo risk is low.",
             )
             else -> BasalProposalFactor(
                 factor = 1.00,
                 code = "HOLD_BASELINE",
-                label = rh?.gs(R.string.aimi_adv_basal_strategy_hold_baseline) ?: "Keep the current basal",
-                rationale = rh?.gs(R.string.aimi_adv_basal_rationale_hold_baseline) ?: "There is no clear pattern to change the basal profile.",
+                label = strings?.basalStrategyHoldBaseline ?: "Keep the current basal",
+                rationale = strings?.basalRationaleHoldBaseline ?: "There is no clear pattern to change the basal profile.",
             )
         }
     }
