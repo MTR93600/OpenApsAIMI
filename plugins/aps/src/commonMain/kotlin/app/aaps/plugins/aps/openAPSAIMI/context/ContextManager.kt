@@ -14,6 +14,7 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.core.keys.StringKey
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent.*
 import app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRefresher
@@ -34,6 +35,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
+import kotlinx.serialization.json.put
 import kotlin.reflect.KClass
 import kotlin.time.Duration.Companion.minutes
 
@@ -405,12 +407,12 @@ class ContextManager @Inject constructor(
         }
 
         // CHECK SHARED/ADVISOR KEYS instead of legacy Context Keys
-        val provider = sp.getString(app.aaps.core.keys.StringKey.AimiAdvisorProvider.key, "OPENAI")
+        val provider = sp.getString(StringKey.AimiAdvisorProvider.key, "OPENAI")
         val apiKey = when (provider) {
-            "OPENAI" -> sp.getString(app.aaps.core.keys.StringKey.AimiAdvisorOpenAIKey.key, "")
-            "GEMINI" -> sp.getString(app.aaps.core.keys.StringKey.AimiAdvisorGeminiKey.key, "")
-            "DEEPSEEK" -> sp.getString(app.aaps.core.keys.StringKey.AimiAdvisorDeepSeekKey.key, "")
-            "CLAUDE" -> sp.getString(app.aaps.core.keys.StringKey.AimiAdvisorClaudeKey.key, "")
+            "OPENAI" -> sp.getString(StringKey.AimiAdvisorOpenAIKey.key, "")
+            "GEMINI" -> sp.getString(StringKey.AimiAdvisorGeminiKey.key, "")
+            "DEEPSEEK" -> sp.getString(StringKey.AimiAdvisorDeepSeekKey.key, "")
+            "CLAUDE" -> sp.getString(StringKey.AimiAdvisorClaudeKey.key, "")
             else -> ""
         }
 
@@ -481,7 +483,7 @@ class ContextManager @Inject constructor(
                 }
             }
 
-            sp.putString(app.aaps.core.keys.StringKey.OApsAIMIContextStorage.key, jsonArray.toString())
+            sp.putString(StringKey.OApsAIMIContextStorage.key, jsonArray.toString())
 
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "[ContextManager] Save failed: ${e.message}")
@@ -491,7 +493,7 @@ class ContextManager @Inject constructor(
     private fun loadFromStorage() {
         try {
             // Read and parse outside the lock; only the handover to the map is guarded.
-            val jsonStr = sp.getString(app.aaps.core.keys.StringKey.OApsAIMIContextStorage.key, "")
+            val jsonStr = sp.getString(StringKey.OApsAIMIContextStorage.key, "")
             if (jsonStr.isBlank()) return
 
             val jsonArray = Json.parseToJsonElement(jsonStr).jsonArray

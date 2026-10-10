@@ -99,7 +99,7 @@ object IosMlTrainingScheduler {
                     }
                 }
             } else {
-                task.setTaskCompletedWithSuccess(false)
+                task?.setTaskCompletedWithSuccess(false)
             }
         }
     }

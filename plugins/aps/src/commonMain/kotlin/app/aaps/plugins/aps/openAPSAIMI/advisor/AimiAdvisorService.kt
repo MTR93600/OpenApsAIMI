@@ -400,10 +400,10 @@ class AimiAdvisorService {
                 val fromTime = now - (days * 24 * 3600 * 1000L)
                 val bgReadings = persistenceLayer.getBgReadingsDataFromTimeToTime(fromTime, now, ascending = false)
                 
-                android.util.Log.d("AIMI_ADVISOR", "📊 Mean BG calculation: fetched ${bgReadings.size} BG readings")
+                aapsLogger?.debug(LTag.APS, "📊 Mean BG calculation: fetched ${bgReadings.size} BG readings")
                 
                 if (bgReadings.isEmpty()) {
-                    android.util.Log.w("AIMI_ADVISOR", "⚠️ No BG readings found for last $days days. Using fallback meanBg=$meanBg")
+                    aapsLogger?.warn(LTag.APS, "⚠️ No BG readings found for last $days days. Using fallback meanBg=$meanBg")
                 } else {
                     // Extract valid glucose values (GV objects have .value property)
                     val bgValues = bgReadings
@@ -417,17 +417,17 @@ class AimiAdvisorService {
                             .average()
                         val sd = kotlin.math.sqrt(variance)
                         variabilityCv = if (meanBg > 0.0) (sd / meanBg).coerceIn(0.0, 1.0) else 0.0
-                        android.util.Log.d("AIMI_ADVISOR", "✅ Calculated Mean BG: ${meanBg.toInt()} mg/dL from ${bgValues.size} readings")
+                        aapsLogger?.debug(LTag.APS, "✅ Calculated Mean BG: ${meanBg.toInt()} mg/dL from ${bgValues.size} readings")
                     } else {
-                        android.util.Log.w("AIMI_ADVISOR", "⚠️ No valid BG data after filtering. Using fallback $meanBg")
+                        aapsLogger?.warn(LTag.APS, "⚠️ No valid BG data after filtering. Using fallback $meanBg")
                     }
                 }
             } catch (e: Exception) {
-                android.util.Log.e("AIMI_ADVISOR", "❌ Failed to calculate Mean BG: ${e.message}")
+                aapsLogger?.error(LTag.APS, "❌ Failed to calculate Mean BG: ${e.message}")
                 e.printStackTrace()
             }
         } else {
-            android.util.Log.w("AIMI_ADVISOR", "⚠️ PersistenceLayer is null, cannot calculate mean BG. Using fallback $meanBg")
+            aapsLogger?.warn(LTag.APS, "⚠️ PersistenceLayer is null, cannot calculate mean BG. Using fallback $meanBg")
         }
 
         AdvisorMetrics(
@@ -930,7 +930,7 @@ class AimiAdvisorService {
     fun generatePlainTextAnalysis(
         context: AdvisorContext,
         report: AdvisorReport,
-        insightContext: Context? = null,
+        includeUserInsight: Boolean = false,
     ): String {
         val sb = StringBuilder()
         
@@ -959,7 +959,7 @@ class AimiAdvisorService {
             report.orefAnalysis?.let { oref ->
                 sb.append("\n\n--- OREF local ---\n")
                 sb.append(oref.toPromptSection())
-                insightContext?.let {
+                if (includeUserInsight) {
                     sb.append("\n\n")
                     sb.append(
                         app.aaps.plugins.aps.openAPSAIMI.advisor.oref.OrefUserInsightFormatter.buildParagraph(
@@ -1232,19 +1232,9 @@ class AimiAdvisorService {
             val profile = profileFunction?.let { runBlocking(aapsIoDispatcher) { it.getProfile() } }
             val isf = profile?.getIsfMgdlTimeFromMidnight(0) ?: 40.0 // Default or specific logic needed to get specific ISF
             
-            // Dummy Physio Manager (No access to instance here easily without DI)
-            // In a real integration, we'd pass the PhysioManagerMTR instance.
-            // For now, allow null or partial data.
-            
-            // Note: We cannot easily access PhysioManager here. 
-            // We'll create a lightweight engine instance manually.
-            // WARNING: PhysioManager is missing, so physio section will be empty/mocked.
-            
-            val clinicalCtx = AimiClinicalReportEngine.ClinicalContext(
-                bgReadings = bgReadings,
-                isfProfile = isf,
-                metrics = metrics
-            )
+            // AimiClinicalReportEngine is Android-only: it reads AIMIPhysioManagerMTR. The context
+            // built here was never read - the comments below say the engine was not wired up - so
+            // the stats are assembled inline instead.
             
             // Create Engine (We pass null for PhysioManager as we can't access it easily here - TODO: Fix DI)
             // Wait, we need to handle the missing PhysioManager arg in constructor or make it nullable?

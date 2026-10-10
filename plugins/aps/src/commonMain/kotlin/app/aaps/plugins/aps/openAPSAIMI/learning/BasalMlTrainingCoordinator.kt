@@ -26,6 +26,7 @@ import kotlinx.serialization.json.put
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import kotlin.concurrent.Volatile
 
 /**
  * Coordinated basal / T3C neural training with SMB-style safety:

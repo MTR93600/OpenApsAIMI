@@ -36,6 +36,7 @@ import platform.posix.fsync
 import platform.posix.open
 
 /** iOS [AimiRetentionFs]: Foundation (`NSFileManager`, `NSFileHandle`) + [IosGzip]. */
+@OptIn(ExperimentalForeignApi::class)
 internal actual class AimiByteReader actual constructor(path: AimiPath) {
     private val handle: NSFileHandle =
         NSFileHandle.fileHandleForReadingAtPath(path.value)
@@ -93,6 +94,7 @@ internal actual class AimiByteWriter actual constructor(path: AimiPath, append: 
     }
 }
 
+@OptIn(ExperimentalForeignApi::class)
 internal actual fun aimiFsListFiles(dir: AimiPath): List<AimiDirEntry> {
     val manager = NSFileManager.defaultManager
     val names = manager.contentsOfDirectoryAtPath(dir.value, error = null) ?: return emptyList()
@@ -126,17 +128,20 @@ internal actual fun aimiFsMoveAtomic(source: AimiPath, target: AimiPath) {
     }
 }
 
+@OptIn(ExperimentalForeignApi::class)
 internal actual fun aimiFsRename(source: AimiPath, to: AimiPath): Boolean {
     val manager = NSFileManager.defaultManager
     if (manager.fileExistsAtPath(to.value)) manager.removeItemAtPath(to.value, null)
     return manager.moveItemAtPath(source.value, toPath = to.value, error = null)
 }
 
+@OptIn(ExperimentalForeignApi::class)
 internal actual fun aimiFsFreeBytes(path: AimiPath): Long {
     val attrs = NSFileManager.defaultManager.attributesOfFileSystemForPath(path.value, null)
     return (attrs?.get(NSFileSystemFreeSize) as? NSNumber)?.longLongValue ?: 0L
 }
 
+@OptIn(ExperimentalForeignApi::class)
 internal actual fun aimiFsIdentityKey(path: AimiPath): String? {
     val attrs = NSFileManager.defaultManager.attributesOfItemAtPath(path.value, null) ?: return null
     return (attrs[NSFileSystemFileNumber] as? NSNumber)?.stringValue

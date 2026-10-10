@@ -1,5 +1,10 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
+import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
+import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
+import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisState
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleBelief
+
 /**
  * Causal state for one `DetermineBasalAIMI2` instance.
  *
@@ -21,7 +26,7 @@ package app.aaps.plugins.aps.openAPSAIMI
  *
  * See `_docs/kmp/annex-8-state-replay-and-extraction-contract.md`, lot E3.
  */
-class AimiCausalState {
+internal class AimiCausalState {
     // Hysteresis flags.
     var lateFatRiseFlag: Boolean = false
     var highBgOverrideUsed = false

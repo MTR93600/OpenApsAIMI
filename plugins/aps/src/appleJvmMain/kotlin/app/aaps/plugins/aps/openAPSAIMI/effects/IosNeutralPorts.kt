@@ -487,6 +487,14 @@ internal fun iosNeutralProfile(): OapsProfileAimi = OapsProfileAimi(
 internal class IosNeutralMealPreferences : Preferences {
     val doubles: MutableMap<String, Double> = mutableMapOf()
 
+    /**
+     * Booleans a scene scripts, read the same way [doubles] is.
+     *
+     * A key the scene did not script still fails loud, so a seam the scene forgot to set cannot be
+     * read as `false` by accident.
+     */
+    val booleans: MutableMap<String, Boolean> = mutableMapOf()
+
     override val simpleMode: Boolean = false
     override val apsMode: Boolean = true
     override val nsclientMode: Boolean = false
@@ -502,7 +510,7 @@ internal class IosNeutralMealPreferences : Preferences {
     override fun get(key: BooleanNonPreferenceKey): Boolean = unexpected(key.key)
     override fun getIfExists(key: BooleanNonPreferenceKey): Boolean? = unexpected(key.key)
     override fun observe(key: BooleanNonPreferenceKey): StateFlow<Boolean> = unexpected(key.key)
-    override fun get(key: BooleanPreferenceKey): Boolean = unexpected(key.key)
+    override fun get(key: BooleanPreferenceKey): Boolean = requireBoolean(key.key)
     override fun get(key: BooleanComposedNonPreferenceKey, vararg arguments: Any): Boolean = unexpected(key.key)
     override fun get(key: BooleanComposedNonPreferenceKey, vararg arguments: Any, defaultValue: Boolean): Boolean =
         unexpected(key.key)
@@ -563,6 +571,9 @@ internal class IosNeutralMealPreferences : Preferences {
 
     private fun requireDouble(key: String): Double =
         doubles[key] ?: error("IOS_NEUTRAL preferences: missing $key")
+
+    private fun requireBoolean(key: String): Boolean =
+        booleans[key] ?: error("IOS_NEUTRAL preferences: missing $key")
 
     private fun unexpected(key: String): Nothing =
         error("IOS_NEUTRAL preferences: unexpected $key")

@@ -248,7 +248,7 @@ fun AimiProfileAdvisorScreen(
             coachAdvice = if (activeKey.isBlank()) {
                 // No key configured: this is what most users see. Same deterministic summary as the
                 // report's own text, plus a note asking for a key - never a network call.
-                val basicAnalysis = advisorService.generatePlainTextAnalysis(advisorCtx, currentReport, insightContext = context)
+                val basicAnalysis = advisorService.generatePlainTextAnalysis(advisorCtx, currentReport, includeUserInsight = true)
                 val note = rh.gs(R.string.aimi_coach_placeholder, provider.name)
                 rh.gs(R.string.aimi_coach_basic_with_note, basicAnalysis, note)
             } else {

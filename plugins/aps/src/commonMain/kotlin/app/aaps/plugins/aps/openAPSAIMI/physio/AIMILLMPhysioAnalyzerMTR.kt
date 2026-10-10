@@ -26,6 +26,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 /**
  * 🤖 AIMI LLM Physiological Analyzer - MTR Implementation
@@ -49,6 +50,7 @@ import kotlin.concurrent.atomics.AtomicReference
  *
  * @author MTR & Lyra AI - AIMI Physiological Intelligence
  */
+@OptIn(ExperimentalAtomicApi::class)
 @SingleIn(AppScope::class)
 class AIMILLMPhysioAnalyzerMTR @Inject constructor(
     private val preferences: Preferences,

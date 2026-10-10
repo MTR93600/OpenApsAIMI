@@ -17,6 +17,9 @@ import platform.Foundation.NSFileManager
 import platform.Foundation.closeFile
 import platform.Foundation.create
 import platform.Foundation.dateWithTimeIntervalSince1970
+import platform.Foundation.fileHandleForReadingAtPath
+import platform.Foundation.fileHandleForUpdatingAtPath
+import platform.Foundation.fileHandleForWritingAtPath
 import platform.Foundation.readDataOfLength
 import platform.Foundation.seekToEndOfFile
 import platform.Foundation.seekToFileOffset
@@ -354,6 +357,7 @@ internal class IosRetentionJanitor(
         return "${total / 12}-${(total % 12 + 1).toString().padStart(2, '0')}"
     }
 
+    @OptIn(ExperimentalForeignApi::class)
     private fun NSData.toByteArray(): ByteArray =
         bytes?.readBytes(length.toInt()) ?: ByteArray(0)
 

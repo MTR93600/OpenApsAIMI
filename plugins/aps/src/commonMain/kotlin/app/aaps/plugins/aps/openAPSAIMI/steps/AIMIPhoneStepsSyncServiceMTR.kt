@@ -8,14 +8,15 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import app.aaps.plugins.aps.openAPSAIMI.StepService
-import AimiTimer
-import AimiTimerTask
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -47,7 +48,7 @@ class AIMIPhoneStepsSyncServiceMTR @Inject constructor(
         private const val PREF_KEY_ENABLED = "aimi_phone_steps_sync_enable"
     }
 
-    private var syncTimer: Timer? = null
+    private var syncJob: Job? = null
     
     /**
      * Starts periodic synchronization
@@ -58,23 +59,28 @@ class AIMIPhoneStepsSyncServiceMTR @Inject constructor(
             return
         }
         
-        if (syncTimer != null) {
+        if (syncJob != null) {
             aapsLogger.debug(LTag.APS, "[$TAG] Already running")
             return
         }
         
         aapsLogger.info(LTag.APS, "[$TAG] Starting phone steps sync (every 5 min)")
         
-        syncTimer = Timer("PhoneStepsSync", true).apply {
-            scheduleAtFixedRate(object : TimerTask() {
-                override fun run() {
-                    try {
-                        syncStepsToDatabase()
-                    } catch (e: Exception) {
-                        aapsLogger.error(LTag.APS, "[$TAG] Sync error", e)
-                    }
+        // Was java.util.Timer.scheduleAtFixedRate(task, 30_000L, SYNC_INTERVAL_MS), which does not
+        // exist outside the JVM. The deadline is kept absolute so the cadence stays fixed-rate: a run
+        // that takes longer than the period makes the next wait zero rather than pushing every later
+        // tick back, which is what the Timer did.
+        syncJob = ioScope.launch {
+            var nextRunAtMs = aimiWallClockMs() + 30_000L // First sync after 30s
+            while (isActive) {
+                delay((nextRunAtMs - aimiWallClockMs()).coerceAtLeast(0L))
+                try {
+                    syncStepsToDatabase()
+                } catch (e: Exception) {
+                    aapsLogger.error(LTag.APS, "[$TAG] Sync error", e)
                 }
-            }, 30_000L, SYNC_INTERVAL_MS) // First sync after 30s
+                nextRunAtMs += SYNC_INTERVAL_MS
+            }
         }
     }
     
@@ -82,8 +88,8 @@ class AIMIPhoneStepsSyncServiceMTR @Inject constructor(
      * Stops synchronization
      */
     fun stop() {
-        syncTimer?.cancel()
-        syncTimer = null
+        syncJob?.cancel()
+        syncJob = null
         aapsLogger.info(LTag.APS, "[$TAG] Stopped")
     }
     

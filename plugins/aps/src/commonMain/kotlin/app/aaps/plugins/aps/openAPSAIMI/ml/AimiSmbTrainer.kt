@@ -431,7 +431,7 @@ object AimiSmbTrainer {
             minOutputSpread = SMB_MIN_OUTPUT_SPREAD,
             maxBaselineMaeRatio = SMB_MAX_BASELINE_MAE_RATIO,
             log = { message ->
-                println("$TAG: $message)
+                println("$TAG: $message")
                 lastGateMessage = message
             },
         )

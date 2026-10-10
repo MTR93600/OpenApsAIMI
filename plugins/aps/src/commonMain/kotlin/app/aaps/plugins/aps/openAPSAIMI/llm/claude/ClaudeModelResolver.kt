@@ -5,6 +5,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlin.concurrent.Volatile
 
 /**
  * Single source of truth for the Claude model id used by every AIMI LLM path

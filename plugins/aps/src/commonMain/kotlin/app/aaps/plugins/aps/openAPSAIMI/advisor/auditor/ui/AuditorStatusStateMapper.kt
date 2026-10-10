@@ -1,6 +1,5 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui
 
-import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorReportFormatter
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorStatusTracker
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdictCache
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.model.AuditorUIState

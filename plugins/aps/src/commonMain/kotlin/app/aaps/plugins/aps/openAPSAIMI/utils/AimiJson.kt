@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.utils
 
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -60,6 +61,16 @@ internal class JsonObj {
     fun build(): JsonObject = JsonObject(members)
 
     override fun toString(): String = build().toString()
+
+    /**
+     * Stands in for `org.json.JSONObject.toString(indentFactor)`: the same indented output.
+     *
+     * The indent is a width in spaces, as `org.json` takes it. The exact line breaks are
+     * `kotlinx.serialization`'s, not `org.json`'s, so the two are not byte for byte the same -
+     * only the call sites that print a document for a person to read use this.
+     */
+    fun toString(indent: Int): String =
+        Json { prettyPrint = true; prettyPrintIndent = " ".repeat(indent) }.encodeToString(build())
 }
 
 /** Mirrors `org.json.JSONArray`'s building surface, including the collection constructor. */

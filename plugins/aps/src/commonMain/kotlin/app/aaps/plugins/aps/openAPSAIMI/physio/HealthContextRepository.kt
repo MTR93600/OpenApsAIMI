@@ -2,13 +2,13 @@ package app.aaps.plugins.aps.openAPSAIMI.physio
 
 import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 
-import dev.zacsweers.metro.Inject as Unused
 import app.aaps.core.data.model.HR
 import app.aaps.core.data.model.SC
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.plugins.aps.openAPSAIMI.aimiLocalHour
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiHealthContext
 import kotlinx.datetime.TimeZone
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRefresher
@@ -18,10 +18,10 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalDataWindowMTR
 import app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
-import kotlinx.coroutines.Dispatchers as UnusedDispatchers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
@@ -36,6 +36,7 @@ import kotlinx.coroutines.launch
  * 
  * Provides the `HealthContextSnapshot` to the rest of the app.
  */
+@OptIn(ExperimentalAtomicApi::class)
 @SingleIn(AppScope::class)
 class HealthContextRepository @Inject constructor(
     private val hcRepo: AimiPhysioDataSource,

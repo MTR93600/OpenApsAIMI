@@ -23,9 +23,8 @@ import kotlin.math.sqrt
  * 2. Physiological Context (Sleep, Stress, Cycle)
  * 3. Algorithm Stress Test (Saturation, Capping, Divergence)
  *
- * Note: [AIMIPhysioManagerMTR] is not ported to commonMain yet; the reference is kept
- * (same forward reference as `AIMIPhysioPipelineWatchdogMTR`) so the shape stays intact
- * until the manager lands.
+ * Android only, because [AIMIPhysioManagerMTR] reads Health Connect. Nothing in commonMain
+ * builds this engine, so it lives next to the manager rather than carrying a dangling reference.
  */
 class AimiClinicalReportEngine @Inject constructor(
     private val tddCalculator: TddCalculator,

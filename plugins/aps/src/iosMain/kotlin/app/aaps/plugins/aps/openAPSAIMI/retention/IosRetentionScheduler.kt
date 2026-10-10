@@ -85,7 +85,7 @@ object IosRetentionScheduler {
                     }
                 }
             } else {
-                task.setTaskCompletedWithSuccess(false)
+                task?.setTaskCompletedWithSuccess(false)
             }
         }
     }

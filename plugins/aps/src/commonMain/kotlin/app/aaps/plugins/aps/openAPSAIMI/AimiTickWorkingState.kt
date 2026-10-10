@@ -1,5 +1,38 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
+import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
+import app.aaps.plugins.aps.openAPSAIMI.context.ContextSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.effects.RbtLiveCommitResult
+import app.aaps.plugins.aps.openAPSAIMI.inflammatory.InflammationAdjuster
+import app.aaps.plugins.aps.openAPSAIMI.orchestration.PredictionAuthorityApplyResult
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecision
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaHarmonizer
+import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaProductionDecision
+import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertainty
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientModeOrchestrator
+import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalTreeSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
+import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioMultipliersMTR
+import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhaseClassifier
+import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.physio.thyroid.ThyroidEffects
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.AdvancedPredictionCurves
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActionState
+import app.aaps.plugins.aps.openAPSAIMI.quality.SmbBindingTrace
+import app.aaps.plugins.aps.openAPSAIMI.recursive.RbtChaosEvaluator
+import app.aaps.plugins.aps.openAPSAIMI.recursive.RbtResolutionBridge
+import app.aaps.plugins.aps.openAPSAIMI.recursive.RecursiveBeliefAuthorityGate
+import app.aaps.plugins.aps.openAPSAIMI.recursive.RecursiveBeliefSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.release.HyperTrajectoryReleaseResult
+import app.aaps.plugins.aps.openAPSAIMI.risk.DecisionPredictionAuthority
+import app.aaps.plugins.aps.openAPSAIMI.risk.SafetyPredictionTerminals
+import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
+import app.aaps.plugins.aps.openAPSAIMI.safety.InsulinStackingStance
+import app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoDeliveryAuthority
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleInfo
+
+
 /**
  * Tick-local scratch for one `determine_basal` execution.
  *
@@ -10,7 +43,7 @@ package app.aaps.plugins.aps.openAPSAIMI
  *
  * See `_docs/kmp/annex-8-state-replay-and-extraction-contract.md`, lot E2.
  */
-class AimiTickWorkingState {
+internal class AimiTickWorkingState {
     var lastPostHypoDeliveryAuthority: PostHypoDeliveryAuthority.Decision =
         PostHypoDeliveryAuthority.INACTIVE
     var mealModeSmbReason: String? = null
@@ -24,7 +57,7 @@ class AimiTickWorkingState {
     var tags0to60minAgo = ""
     var lastDecisionPredictionAuthority: DecisionPredictionAuthority? = null
     var lastPredictionAuthorityApplyResult: PredictionAuthorityApplyResult? = null
-    var tubeDoseBaseline: TubeDoseBaseline? = null
+    var tubeDoseBaseline: DetermineBasalaimiSMB2.TubeDoseBaseline? = null
     var tubeAppliedFromDoseSnapshotThisTick: Boolean = false
     var lastAdvancedPredictionCurves: AdvancedPredictionCurves? = null
     var lastSafetyTerminalsForRbt: SafetyPredictionTerminals? = null
@@ -46,7 +79,7 @@ class AimiTickWorkingState {
     var lastBasePhysioMultipliers: PhysioMultipliersMTR = PhysioMultipliersMTR.NEUTRAL
     var lastFusedPhysioMultipliers: PhysioMultipliersMTR? = null
     var lastScenarioBestCappedForPhysio: Boolean = false
-    var pendingTrajSpiralBasal: PendingTrajSpiralBasal? = null
+    var pendingTrajSpiralBasal: DetermineBasalaimiSMB2.PendingTrajSpiralBasal? = null
     var tags60to120minAgo = ""
     var tags120to180minAgo = ""
     var tags180to240minAgo = ""
@@ -122,7 +155,7 @@ class AimiTickWorkingState {
     var lastEffortSmbAfterU: Double? = null
     var mealAdvisorOneShotThisTick: Boolean = false
     var lastTubeAdvisorSmbCapScale: Double? = null
-    var lastInflammationResult: app.aaps.plugins.aps.openAPSAIMI.inflammatory.InflammationAdjuster.InflammationResult? = null
+    var lastInflammationResult: InflammationAdjuster.InflammationResult? = null
     var tickInsulinActionState: InsulinActionState? = null
     var tickEffectiveDiaHours: Double? = null
     var tickEffectivePeakMinutes: Double? = null
@@ -147,7 +180,7 @@ class AimiTickWorkingState {
     var lastHarmoniaProductionDecision: HarmoniaProductionDecision? = null
     var tickIobEffectiveU: Double? = null
     var lastSmbCapped: Double = 0.0
-    var currentThyroidEffects = app.aaps.plugins.aps.openAPSAIMI.physio.thyroid.ThyroidEffects()
+    var currentThyroidEffects = ThyroidEffects()
     var lastSmbFinal: Double = 0.0
     var duraISFminutes: Double = 0.0
     var duraISFaverage: Double = 0.0

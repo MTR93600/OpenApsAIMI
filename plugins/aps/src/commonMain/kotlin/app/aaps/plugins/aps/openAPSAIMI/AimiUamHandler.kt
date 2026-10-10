@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
 import app.aaps.core.interfaces.resources.TextResolver
+import kotlin.concurrent.Volatile
 
 /**
  * UAM (unannounced-meal) inference entry point for the engine.

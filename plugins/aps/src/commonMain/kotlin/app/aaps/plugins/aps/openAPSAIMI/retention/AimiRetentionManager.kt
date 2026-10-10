@@ -135,7 +135,8 @@ internal open class AimiRetentionManager(
             val header = if (rule.hasHeader && plan.headerBytes > 0L) readRange(path, 0L, plan.headerBytes) else null
             plan.ranges.forEach { range ->
                 val target = AimiArchive.memberFile(storage, aimiDir, rule.fileName, range.month)
-                archiveRollback.putIfAbsent(target, recordArchiveState(target))
+                val targetState = recordArchiveState(target)
+                if (!archiveRollback.containsKey(target)) archiveRollback[target] = targetState
                 appendArchiveMember(
                     source = path,
                     start = range.start,
@@ -255,7 +256,10 @@ internal open class AimiRetentionManager(
             // combines hasHeader with a timestampKey), and that must be handled the same way any
             // other failure in this pass is - warned and left in place, not an uncaught exception.
             val members = retireMembers(path, rule, markedEof)
-            members.forEach { archiveRollback.putIfAbsent(it.target, recordArchiveState(it.target)) }
+            members.forEach {
+                val memberState = recordArchiveState(it.target)
+                if (!archiveRollback.containsKey(it.target)) archiveRollback[it.target] = memberState
+            }
             members.forEach { member ->
                 appendArchiveMember(
                     source = path,
