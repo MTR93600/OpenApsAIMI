@@ -3,7 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.steps
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.plugins.aps.openAPSAIMI.StepService
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope

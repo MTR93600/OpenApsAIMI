@@ -22,6 +22,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.aaps.core.ui.compose.htmlToAnnotatedString
+import app.aaps.core.ui.compose.formatKmp
 
 @Composable
 internal fun DashboardAdjustmentComposeCard(
@@ -78,16 +79,16 @@ internal fun DashboardAdjustmentComposeCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 AdjustmentPumpBadge(
-                    text = strings.pumpReservoir.format(resV),
-                    contentDescription = strings.pumpReservoirA11y.format(resV),
+                    text = strings.pumpReservoir.formatKmp(resV),
+                    contentDescription = strings.pumpReservoirA11y.formatKmp(resV),
                 )
                 AdjustmentPumpBadge(
-                    text = strings.pumpSite.format(siteV),
-                    contentDescription = strings.pumpSiteA11y.format(siteV),
+                    text = strings.pumpSite.formatKmp(siteV),
+                    contentDescription = strings.pumpSiteA11y.formatKmp(siteV),
                 )
                 AdjustmentPumpBadge(
-                    text = strings.pumpSensor.format(sensV),
-                    contentDescription = strings.pumpSensorA11y.format(sensV),
+                    text = strings.pumpSensor.formatKmp(sensV),
+                    contentDescription = strings.pumpSensorA11y.formatKmp(sensV),
                 )
             }
             Text(text = state.safetyLine.htmlToAnnotatedString(), style = MaterialTheme.typography.bodySmall)

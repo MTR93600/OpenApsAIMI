@@ -78,3 +78,16 @@ fun formatSliderDisplayValue(
         else                           -> valueFormat.format(value)
     }
 }
+
+/**
+ * KMP-safe replacement for JVM's `String.format()`.
+ * Replaces `%s` and `%d` placeholders sequentially with the provided args.
+ * Used by dashboard composables that receive format strings from the platform.
+ */
+fun String.formatKmp(vararg args: Any?): String {
+    var result = this
+    for (arg in args) {
+        result = result.replaceFirst("%s", arg.toString()).replaceFirst("%d", arg.toString())
+    }
+    return result
+}

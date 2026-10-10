@@ -6,7 +6,7 @@ package app.aaps.core.ui.compose.dashboard
  * Ported from `plugins/main` — Android string resources are replaced by
  * caller-provided [GraphFreshnessStrings] so this stays in commonMain.
  */
-internal enum class GraphFreshnessLevel {
+enum class GraphFreshnessLevel {
     FRESH,
     WARNING,
     STALE,
@@ -49,17 +49,17 @@ internal object GraphRefreshPolicy {
             )
             ageMinutes < warningThresholdMinutes -> GraphFreshnessUi(
                 level = GraphFreshnessLevel.FRESH,
-                message = strings.minutesAgo.format(ageMinutes),
+                message = strings.minutesAgo.formatKmp(ageMinutes),
                 minutesAgo = ageMinutes,
             )
             ageMinutes < staleThresholdMinutes -> GraphFreshnessUi(
                 level = GraphFreshnessLevel.WARNING,
-                message = strings.minutesAgo.format(ageMinutes),
+                message = strings.minutesAgo.formatKmp(ageMinutes),
                 minutesAgo = ageMinutes,
             )
             else -> GraphFreshnessUi(
                 level = GraphFreshnessLevel.STALE,
-                message = strings.minutesAgo.format(ageMinutes),
+                message = strings.minutesAgo.formatKmp(ageMinutes),
                 minutesAgo = ageMinutes,
             )
         }

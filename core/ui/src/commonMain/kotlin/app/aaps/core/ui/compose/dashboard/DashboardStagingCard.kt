@@ -21,6 +21,8 @@ import app.aaps.core.interfaces.source.CgmStagingEvidence
 import app.aaps.core.interfaces.source.CgmWarmupStatus
 import app.aaps.core.interfaces.source.StagingState
 import app.aaps.core.ui.compose.AapsSpacing
+import app.aaps.core.ui.compose.formatKmp
+import kotlin.time.Clock
 
 /**
  * Compact "new sensor" (staging slot) card for the Compose dashboard. Only rendered when a second
@@ -83,7 +85,7 @@ private fun StagingWarmupContent(warmup: CgmWarmupStatus?, strings: DashboardCar
     val remainingMinutes = warmup?.remainingMinutesOrNull()
     if (remainingMinutes != null) {
         Text(
-            text = strings.stagingWarmupCountdown.format(remainingMinutes),
+            text = strings.stagingWarmupCountdown.formatKmp(remainingMinutes),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSecondaryContainer,
             maxLines = 1,
@@ -116,14 +118,14 @@ private fun StagingSettlingContent(
     // Ceil to whole hours so "ready in 1 h" is shown until the final minutes rather than "0 h".
     val readyInHours = ((remainingMs + HOUR_MS - 1L) / HOUR_MS).coerceAtLeast(0L).toInt()
     Text(
-        text = strings.stagingTitleSettling.format(readyInHours),
+        text = strings.stagingTitleSettling.formatKmp(readyInHours),
         style = MaterialTheme.typography.labelLarge,
         maxLines = 2,
         overflow = TextOverflow.Ellipsis,
     )
     // Reading count tells the user the staging sensor is really sending data, not just counting hours.
     Text(
-        text = strings.stagingReadings.format(evidence?.validCount ?: 0),
+        text = strings.stagingReadings.formatKmp(evidence?.validCount ?: 0),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSecondaryContainer,
         maxLines = 1,
@@ -175,7 +177,7 @@ private fun CgmWarmupStatus.remainingMsOrNull(): Long? {
     val ends = endsAtEpochMs
     val remaining = remainingMs
     return when {
-        ends != null      -> (ends - System.currentTimeMillis()).coerceAtLeast(0L)
+        ends != null      -> (ends - Clock.System.now().toEpochMilliseconds()).coerceAtLeast(0L)
         remaining != null -> remaining.coerceAtLeast(0L)
         else              -> null
     }
