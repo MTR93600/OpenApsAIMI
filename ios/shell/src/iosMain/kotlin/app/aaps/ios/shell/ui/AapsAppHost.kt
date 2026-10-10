@@ -140,6 +140,9 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
             activePlugin = graph.activePlugin,
             textResolver = graph.textResolver,
             aapsLogger = graph.logger,
+            decimalFormatter = graph.decimalFormatter,
+            constraintsChecker = graph.constraintsChecker,
+            keyValueStore = graph.keyValueStore,
         )
         IosAimiEngineHolder.install(engineGraph)
         logger.debug(LTag.APS, "AIMI engine graph installed")

@@ -4,6 +4,7 @@ import app.aaps.core.interfaces.bgQualityCheck.BgQualityCheck
 import app.aaps.core.interfaces.clientcontrol.ClientControlActionDispatcher
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.configuration.ConfigBuilder
+import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.constraints.Objectives
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.iob.IobCobCalculator
@@ -24,6 +25,7 @@ import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.queue.CommandQueue
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.rx.bus.RxBus
+import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import app.aaps.core.interfaces.source.DexcomBoyda
 import app.aaps.core.interfaces.sync.NsClient
 import app.aaps.core.interfaces.profile.ProfileFunction
@@ -88,6 +90,17 @@ interface IosAppGraph : MetroViewModelMultibindings {
     val uiRestart: UiRestart
     val dateUtil: DateUtil
     val decimalFormatter: DecimalFormatter
+
+    /**
+     * The shell's own checker, `ConstraintsCheckerImpl` from `:plugins:constraints`.
+     *
+     * Exposed because the AIMI engine graph needs the same instance: a checker that knows no
+     * plugins would apply no limits, and "no limit" is the unsafe direction for every constraint.
+     */
+    val constraintsChecker: ConstraintsChecker
+
+    /** `IosSp` over `NSUserDefaults`, exposed for graphs that take it as a factory parameter. */
+    val keyValueStore: KeyValueStore
     val profileUtil: ProfileUtil
     val profileFunction: ProfileFunction
     val passwordHasher: PasswordHasher

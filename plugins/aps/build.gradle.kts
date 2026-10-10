@@ -72,6 +72,15 @@ kotlin {
         jvmMain.get().dependsOn(appleJvmMain)
         iosMain.get().dependsOn(appleJvmMain)
 
+        iosMain {
+            dependencies {
+                // Darwin runs on NSURLSession, so an iOS build gets the system's own connection
+                // handling rather than a second HTTP stack. Same engine :core:nssdk already picked.
+                // ktor-client-core itself arrives through :core:nssdk, which exposes it with `api`.
+                implementation(libs.io.ktor.client.darwin)
+            }
+        }
+
         val appleJvmTest = create("appleJvmTest") {
             dependsOn(commonTest.get())
             dependencies {

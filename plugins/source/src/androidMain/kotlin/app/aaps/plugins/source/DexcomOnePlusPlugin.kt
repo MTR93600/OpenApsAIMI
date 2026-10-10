@@ -14,6 +14,7 @@ import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.ActivePlugin
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -84,6 +85,9 @@ class DexcomOnePlusPlugin @Inject constructor(
     aapsLogger: AAPSLogger,
     preferences: Preferences,
     config: Config,
+    // Not a `val`: PluginBase already keeps it as a protected property, so a second one here would
+    // shadow it. This only carries it to the super constructor.
+    notificationManager: NotificationManager,
     private val context: Context,
     private val persistenceLayer: PersistenceLayer,
     private val warmupBasalGuard: DexcomOnePlusWarmupBasalGuard,
@@ -94,6 +98,16 @@ class DexcomOnePlusPlugin @Inject constructor(
 ) : AbstractBgSourcePlugin(
     pluginDescription = PluginDescription()
         .mainType(PluginType.BGSOURCE)
+        // ONE+ is only offered when the engineering marker file is present in the AAPS `extra`
+        // directory - see DexcomOnePlusAvailabilityProvider, the single place that decides this.
+        // This was `specialShowInListCondition()` until upstream removed it; same test, same
+        // effect. ActivePlugin.getSpecificPluginsVisibleInList filters on this, so hiding here
+        // removes ONE+ from Config Builder, the Setup Wizard, search and Quick Launch alike - it
+        // cannot be newly selected anywhere.
+        // Deliberately NOT wired into `specialEnableCondition`: an already-selected ONE+ must keep
+        // feeding glucose exactly as before. BGSOURCE has no `fallbackIfNotVisible` (only
+        // SENSITIVITY does), which is the existing framework behaviour and is left untouched.
+        .showInList({ availabilityProvider.isAvailable() })
         .composeContent { plugin ->
             BgSourceComposeContent(
                 title = rh.gs(R.string.dexcom_oneplus_native),
@@ -101,7 +115,6 @@ class DexcomOnePlusPlugin @Inject constructor(
         }
         .icon(IcPluginByoda)
         .pluginName(TextRef.AndroidRes(R.string.dexcom_oneplus_native))
-        .shortName(TextRef.AndroidRes(R.string.dexcom_oneplus_short))
         .preferencesVisibleInSimpleMode(false)
         .description(TextRef.AndroidRes(R.string.description_source_dexcom_oneplus_native)),
     ownPreferences = DexcomOnePlusIntentKey.entries + DexcomOnePlusBooleanKey.entries,
@@ -109,6 +122,7 @@ class DexcomOnePlusPlugin @Inject constructor(
     rh,
     preferences,
     config,
+    notificationManager,
 ), BgSource, OnePlusGlucoseWatcher, CgmSensorStatusProvider {
 
     private val resources: ResourceHelper = rh
@@ -222,20 +236,6 @@ class DexcomOnePlusPlugin @Inject constructor(
         }
     }
 
-    /**
-     * ONE+ is only offered when the engineering marker file is present in the AAPS `extra`
-     * directory — see [DexcomOnePlusAvailabilityProvider], the single place that decides this.
-     *
-     * `showInList` is the project's own availability mechanism: it is what
-     * `app.aaps.core.interfaces.plugin.ActivePlugin.getSpecificPluginsVisibleInList` filters on, so
-     * hiding here removes ONE+ from Config Builder, the Setup Wizard, search and Quick Launch
-     * alike — it cannot be newly selected anywhere.
-     *
-     * Deliberately NOT wired into `specialEnableCondition`: an already-selected ONE+ must keep
-     * feeding glucose exactly as before. BGSOURCE has no `fallbackIfNotVisible` (only SENSITIVITY
-     * does), which is the existing framework behaviour and is left untouched here.
-     */
-    override fun specialShowInListCondition(): Boolean = availabilityProvider.isAvailable()
 
     /**
      * A fingerstick goes to the sensor only while the engineering switch is on.

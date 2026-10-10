@@ -60,6 +60,8 @@ import app.aaps.core.ui.compose.LocalMasterReachable
 import app.aaps.core.ui.compose.LocalPreferences
 import app.aaps.core.ui.compose.LocalProfileUtil
 import app.aaps.core.ui.compose.LocalSnackbarHostState
+import app.aaps.core.ui.compose.navigation.NavigationRequest
+import app.aaps.core.ui.compose.navigation.PendingNavigation
 import app.aaps.core.ui.compose.ProtectionHost
 import app.aaps.core.ui.compose.dialogs.GlobalDialogHost
 import app.aaps.core.ui.compose.dialogs.GlobalSnackbarHost
@@ -120,6 +122,16 @@ fun AapsAppRoot(
     splashLogo: @Composable (Modifier) -> Unit,
     onNavControllerReady: (NavHostController) -> Unit,
     onClose: () -> Unit,
+    /**
+     * Sends a request parked by a tapped notification to the host's navigator.
+     *
+     * A host passes its own `ElementNavigator::handleNavigationRequest` here. It has to go through
+     * the navigator and not straight to the nav controller, because opening settings asks for
+     * authorization first and a deep link must not be a way around that.
+     *
+     * Null means this host has no notifications to come back from, which is the desktop case.
+     */
+    onPendingNavigation: ((NavigationRequest) -> Unit)? = null,
     content: @Composable (NavHostController) -> Unit
 ) {
     val navController = rememberNavController().also(onNavControllerReady)
@@ -140,6 +152,17 @@ fun AapsAppRoot(
     LaunchedEffect(navController) {
         navController.currentBackStackEntryFlow.collect {
             if (!nsClient.masterReachable.value) nsClient.requestMasterProbe()
+        }
+    }
+
+    // Where a tapped notification finally lands. The tap happens before this graph exists - and may
+    // happen again later, while the app is already open - so the request waits in PendingNavigation
+    // and is collected here rather than read once at start up.
+    if (onPendingNavigation != null) {
+        LaunchedEffect(navController, onPendingNavigation) {
+            PendingNavigation.pending.collect {
+                PendingNavigation.consume()?.let(onPendingNavigation)
+            }
         }
     }
 

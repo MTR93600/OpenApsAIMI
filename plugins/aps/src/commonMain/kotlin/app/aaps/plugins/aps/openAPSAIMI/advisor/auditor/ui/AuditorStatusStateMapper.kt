@@ -8,9 +8,9 @@ import app.aaps.plugins.aps.openAPSAIMI.model.VerdictType
 /**
  * Pure mapping from [AuditorStatusTracker.Status] to [AuditorUIState].
  *
- * Extracted from the Android `AuditorStatusLiveData` so shared code (and iOS) can compute
- * the same UI state without `androidx.lifecycle.LiveData`. The platform holder keeps the
- * reactive plumbing; this object owns the decision.
+ * Extracted so the decision could be shared before the holder was. Both halves are shared code
+ * now: [AuditorStatusStateHolder] keeps the state and publishes it, this object decides what the
+ * state should be.
  */
 object AuditorStatusStateMapper {
 

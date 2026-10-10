@@ -39,8 +39,13 @@ import app.aaps.core.interfaces.iob.GlucoseStatusProvider
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.insulin.ConcentrationHelper
+import app.aaps.core.interfaces.plugin.EnforcedState
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorNotificationManager
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorStatusStateHolder
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttp
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.profile.EffectiveProfile
@@ -189,6 +194,9 @@ import kotlinx.serialization.json.JsonObject
 @SingleIn(AppScope::class)
 open class OpenAPSAIMIPlugin  @Inject constructor(
     aapsLogger: AAPSLogger,
+    // Not a `val`: PluginBase already keeps it as a protected property, so a second one here would
+    // shadow it. This only carries it to the super constructor.
+    notificationManager: NotificationManager,
     private val rxBus: RxBus,
     private val constraintsChecker: ConstraintsChecker,
     override val rh: ResourceHelper,
@@ -219,6 +227,10 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     // ?? Physiological Decision Adapter (The Safety Gate)
     private val physioAdapter: app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR,
     private val auditorOrchestrator: app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator, // ?? AI Auditor MTR
+    // The two halves of the auditor notification: the state to watch, and the thing that tells the
+    // user. See [auditorNotifyJob].
+    private val auditorStatusStateHolder: AuditorStatusStateHolder,
+    private val auditorNotificationManager: AuditorNotificationManager,
     private val contextManager: app.aaps.plugins.aps.openAPSAIMI.context.ContextManager, // ?? Context Manager
     private val healthContextRepository: HealthContextRepository,
     private val physioContextStore: AIMIPhysioContextStoreMTR, // holds the daily physio narrative shown on the Context screen
@@ -240,6 +252,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private val exportPasswordDataStore: ExportPasswordDataStore,
     private val aiCoachingService: AiCoachingService,
     private val sharing: AimiSharing,
+    private val aimiHttp: AimiHttp,
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.APS)
@@ -253,12 +266,22 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         }
         .icon(IcPluginOpenAPS)
         .pluginName(ApsStrings.openapsaimi)
-        .shortName(ApsStrings.oaps_aimi_shortname)
         .preferencesVisibleInSimpleMode(false)
-        .showInList({ config.APS })
+        // Upstream dropped `specialShowInListCondition()`, so its test moves in here. This is the
+        // two old gates joined: the build has to be an APS build, and the pump has to take a temp
+        // basal. The lambda runs when the list is built, so it reads the pump of the moment.
+        .showInList({ config.APS && activePlugin.activePump.pumpDescription.isTempBasalCapable })
+        // Was `specialEnableCondition()`, which upstream replaced with enforcements. Same rule: a
+        // pump that cannot take a temp basal cannot run AIMI, so the plugin is forced off.
+        // The old code answered "capable" when the read threw, because the pump may not be up yet
+        // during start up, and this is asked on a hot path that must not throw. `getOrDefault(true)`
+        // keeps exactly that: on an error the rule does not apply and the user's choice stands.
+        .enforce(EnforcedState.Disabled) {
+            !runCatching { activePlugin.activePump.pumpDescription.isTempBasalCapable }.getOrDefault(true)
+        }
         .description(ApsStrings.description_openapsaimi)
         .setDefault(),
-    aapsLogger, rh
+    aapsLogger, rh, notificationManager
 ), APS, PluginConstraints {
 
     /** Background work for plugin startup (avoids blocking the thread that calls [onStart]). */
@@ -300,6 +323,19 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 if (event.isChanged(DoubleKey.OApsAIMISmbTailDamping.key)) logTailDampingSnapshot("change")
             }
             .catch { t -> aapsLogger.error(LTag.APS, "PKPD_TAIL_TRACE subscription error", t) }
+            .launchIn(aimiPluginIoScope)
+        // See [auditorNotifyJob]. showInsightAvailable decides for itself whether this state is
+        // worth a notification and never posts the same verdict twice, so collecting every state
+        // is right - the rule about when to tell the user stays in one place.
+        // runCatching inside onEach, not only catch: a failed notification must not end the
+        // collection, or the next verdict would go unannounced too.
+        auditorNotifyJob?.cancel()
+        auditorNotifyJob = auditorStatusStateHolder.uiState
+            .onEach { state ->
+                runCatching { auditorNotificationManager.showInsightAvailable(state) }
+                    .onFailure { t -> aapsLogger.error(LTag.APS, "AIMI auditor notification failed", t) }
+            }
+            .catch { t -> aapsLogger.error(LTag.APS, "AIMI auditor notification subscription error", t) }
             .launchIn(aimiPluginIoScope)
         // Prewarm Therapy snapshot cache at plugin start to avoid first-loop default flags.
         aimiPluginIoScope.launch {
@@ -347,7 +383,10 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             aapsLogger.error(LTag.APS, "? Failed to schedule AIMI basal/T3C ML trainer", e)
         }
         
-        AimiUamHandler.clearCache(rh)
+        // There was a `AimiUamHandler.clearCache(rh)` call here. That function has never existed on
+        // AimiUamHandler, in any commit, so the line never ran - the Android build was red and hid
+        // it. Nothing is lost by dropping it: the handler keeps no cache to clear, the detector
+        // pushes a fresh runtime confidence every tick, and the supplier is re-installed just below.
         AimiUamHandler.installConfidenceSupplier {
             // retourne null si tu veux "laisser la main" au runtime
             preferences.get(DoubleKey.AimiUamConfidence)
@@ -403,7 +442,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         physioPreferenceJob = null
         tailDampingTraceJob?.cancel()
         tailDampingTraceJob = null
-        
+        auditorNotifyJob?.cancel()
+        auditorNotifyJob = null
+
         // ?? Stop AIMI Steps Manager
         try {
             stepsManager.stop()
@@ -426,7 +467,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             aapsLogger.error(LTag.APS, "Error stopping AIMI basal/T3C ML trainer", e)
         }
 
-        AimiUamHandler.close(rh)
+        // A `AimiUamHandler.close(rh)` call sat here. Like the `clearCache` call in onStart, that
+        // function has never existed on AimiUamHandler, so it never ran. The handler holds no
+        // resource to close - three volatile fields and an installed predictor, nothing more.
     }
     // last values
     override var lastAPSRun: Long = 0
@@ -448,6 +491,21 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
     /** Diagnostic: rx subscription tracing writes to `OApsAIMISmbTailDamping` (PKPD_TAIL_TRACE). */
     private var tailDampingTraceJob: Job? = null
+
+    /**
+     * Raises the auditor notification when a new verdict arrives.
+     *
+     * On `master` the XML `OverviewFragment` and `DashboardFragment` each observed the auditor
+     * state and called `AuditorNotificationManager.showInsightAvailable` themselves. The Compose
+     * migration replaced those observers with the Overview chip, which only draws a badge, so the
+     * notification stopped firing. This job is where that call went.
+     *
+     * It hangs off the plugin and not off a screen on purpose. The old observers were bound to
+     * `viewLifecycleOwner`, so a verdict that landed while the user was on another screen was
+     * never announced. The auditor belongs to AIMI, so the notification should live exactly as
+     * long as AIMI runs.
+     */
+    private var auditorNotifyJob: Job? = null
 
     /**
      * Instant the current unbroken stress signature started, or null when there is none.
@@ -705,19 +763,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         )
     }
 
-    override fun specialEnableCondition(): Boolean {
-        return try {
-            activePlugin.activePump.pumpDescription.isTempBasalCapable
-        } catch (ignored: Exception) {
-            // may fail during initialization
-            true
-        }
-    }
-
-    override fun specialShowInListCondition(): Boolean {
-        val pump = activePlugin.activePump
-        return pump.pumpDescription.isTempBasalCapable
-    }
 
     private val dynIsfCache = DynIsfCache()
 
@@ -2042,6 +2087,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         profileFunction = profileFunction,
                         aapsLogger = aapsLogger,
                         geminiModelResolver = geminiModelResolver,
+                        aimiHttp = aimiHttp,
                         onBack = onBack,
                     )
                 },
@@ -2157,7 +2203,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private fun aimiComposeHormonitorViewerItem(): PreferenceItem =
         ApsIntentKey.HormonitorViewer.withCompose(
             ComposeScreenContent { onBack ->
-                HormonitorViewerScreen(onBack = onBack)
+                HormonitorViewerScreen(storage = storage, onBack = onBack)
             }
         )
 

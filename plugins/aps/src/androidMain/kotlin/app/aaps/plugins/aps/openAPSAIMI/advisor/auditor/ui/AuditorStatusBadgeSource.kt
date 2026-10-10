@@ -8,33 +8,40 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 
 /**
- * Android/AIMI half of [PluginStatusBadgeSource] - bridges [AuditorStatusLiveData]'s `LiveData`
- * (Android-only) to the plain [StateFlow] the shared Overview chip (`:ui`) can consume.
+ * AIMI half of [PluginStatusBadgeSource] - turns [AuditorStatusStateHolder]'s auditor state into
+ * the chip the shared Overview (`:ui`) draws.
  *
- * `observeForever` is safe here: this is a process-scoped singleton with no view lifecycle of its
- * own, mirroring how [AuditorStatusLiveData] itself already behaves - the Overview chip observes
- * the resulting [StateFlow], not this class, and Compose collection is what has a lifecycle.
+ * The state itself is shared code now, so this class is only the mapping plus the click. It stays
+ * on Android because of the click: [onBadgeClick] opens the report through
+ * [AuditorNotificationManager], which is Android notifications and an Android dialog intent. When
+ * iOS gets its own way to show that report, this class can move too.
+ *
+ * The scope below is never cancelled, on purpose: this is a process-scoped singleton with no
+ * lifecycle of its own, so the badge must follow the state for as long as the app runs. The
+ * Compose collector of [badge] is what has a lifecycle.
  */
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
 class AuditorStatusBadgeSource @Inject constructor(
-    private val auditorStatusLiveData: AuditorStatusLiveData,
+    auditorStatusStateHolder: AuditorStatusStateHolder,
     private val auditorNotificationManager: AuditorNotificationManager,
 ) : PluginStatusBadgeSource {
 
-    private val _badge = MutableStateFlow(toBadge(AuditorUIState.idle()))
-    override val badge: StateFlow<PluginStatusBadge> = _badge.asStateFlow()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
 
-    init {
-        auditorStatusLiveData.uiState.observeForever { uiState ->
-            _badge.value = toBadge(uiState)
-        }
-    }
+    override val badge: StateFlow<PluginStatusBadge> =
+        auditorStatusStateHolder.uiState
+            .map { toBadge(it) }
+            .stateIn(scope, SharingStarted.Eagerly, toBadge(auditorStatusStateHolder.uiState.value))
 
     override fun onBadgeClick() {
         auditorNotificationManager.openReport()

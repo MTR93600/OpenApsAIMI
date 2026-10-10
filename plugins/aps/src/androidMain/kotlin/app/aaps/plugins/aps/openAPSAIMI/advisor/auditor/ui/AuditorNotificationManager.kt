@@ -34,7 +34,7 @@ class AuditorNotificationManager @Inject constructor(
   private val context: Context,
   private val uiInteraction: UiInteraction,
   private val notificationManager: AapsNotificationManager,
-  private val auditorStatusLiveData: AuditorStatusLiveData,
+  private val auditorStatusStateHolder: AuditorStatusStateHolder,
   private val rxBus: RxBus,
   private val rh: TextResolver,
   private val aapsLogger: AAPSLogger,
@@ -49,6 +49,18 @@ class AuditorNotificationManager @Inject constructor(
 
   /**
    * Posts system + in-app notifications when a new verdict is available.
+   *
+   * Called from `OpenAPSAIMIPlugin`, which collects the auditor state for as long as the plugin
+   * runs. On `master` the old XML `OverviewFragment` and `DashboardFragment` each observed that
+   * state and called this themselves; the Compose migration replaced those observers with the
+   * Overview chip, which only draws a badge, and the notification quietly stopped firing. Hanging
+   * it off the plugin instead of a screen also fixes the older weakness: those observers were
+   * bound to `viewLifecycleOwner`, so a verdict that landed while the user was elsewhere was never
+   * announced.
+   *
+   * Safe to call on every state. It decides for itself whether the state deserves a notification,
+   * and it never announces the same verdict twice.
+   *
    * @return true if notifications were posted for this verdict.
    */
   fun showInsightAvailable(uiState: AuditorUIState): Boolean {
@@ -73,7 +85,7 @@ class AuditorNotificationManager @Inject constructor(
    * Presents the full auditor report dialog and clears notification state.
    */
   fun openReport(onFinish: (() -> Unit)? = null) {
-    auditorStatusLiveData.markAsRead()
+    auditorStatusStateHolder.markAsRead()
     cancelNotification()
     val (message, _) = AuditorReportFormatter.buildFullReportMessageWithFallback(rh)
     rxBus.send(

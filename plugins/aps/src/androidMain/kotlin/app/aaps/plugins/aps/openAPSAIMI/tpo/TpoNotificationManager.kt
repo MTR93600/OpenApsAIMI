@@ -12,6 +12,7 @@ import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.ui.compose.navigation.PendingNavigation
 import app.aaps.core.ui.R as CoreUiR
 import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
@@ -47,8 +48,13 @@ class TpoNotificationManager @Inject constructor(
         private const val CHANNEL_ID_ENDED = "AIMI_TPO_PROTECTION_ENDED"
         private const val NOTIFICATION_ID_STARTED = 8891
         private const val NOTIFICATION_ID_ENDED = 8892
+        /**
+         * Where tapping this notification goes.
+         *
+         * The key is the plugin's class simple name, because that is what the
+         * `plugin_preferences/{pluginKey}` destination matches on.
+         */
         private const val OPENAPS_AIMI_PLUGIN_ROUTE = "plugin_preferences/OpenAPSAIMIPlugin"
-        private const val EXTRA_NAVIGATE_ROUTE = "extra_navigate_route"
     }
 
     init {
@@ -153,7 +159,7 @@ class TpoNotificationManager @Inject constructor(
     private fun createOpenAimiPrefsIntent(): PendingIntent {
         val intent = Intent(context, uiInteraction.mainActivity.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra(EXTRA_NAVIGATE_ROUTE, OPENAPS_AIMI_PLUGIN_ROUTE)
+            putExtra(PendingNavigation.EXTRA_NAVIGATE_ROUTE, OPENAPS_AIMI_PLUGIN_ROUTE)
         }
         return PendingIntent.getActivity(
             context,

@@ -52,7 +52,7 @@ sealed interface DexcomOnePlusAvailability {
  * that helper caches its answer for the whole process lifetime and collapses "file absent" and
  * "directory not reachable" into a single `false`, and ONE+ must tell those two apart.
  *
- * Consumed only by `DexcomOnePlusPlugin.specialShowInListCondition`, which is what
+ * Consumed only by `DexcomOnePlusPlugin`'s `showInList`, which is what
  * `app.aaps.core.interfaces.plugin.ActivePlugin.getSpecificPluginsVisibleInList` filters on — so
  * Config Builder, the Setup Wizard, search and Quick Launch all inherit the gate from one place.
  * No other component evaluates the marker file.

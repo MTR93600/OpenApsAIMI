@@ -62,11 +62,13 @@ data class AimiHttpResponse(
  * is a platform question, not a shared one. This interface is the shared half of that: describe a
  * request, get an answer back.
  *
- * **There is deliberately no implementation on iOS.** A stub that quietly answered "no data" would
- * leave the meal photo analysis, the coaching, the auditor's advice and the thermal reading looking
- * alive while they never reached a server, and the user would read a blank answer as a real one.
- * Without a binding, the feature is visibly absent on that target and any future iOS graph fails at
- * wiring time, loudly. See `AimiStorage` for the same reasoning about files.
+ * Both platforms implement it: `AndroidAimiHttp` on `HttpURLConnection`, `IosAimiHttp` on Ktor's
+ * Darwin engine. A stub that quietly answered "no data" is not an option on either - it would leave
+ * the meal photo analysis, the coaching, the auditor's advice and the thermal reading looking alive
+ * while they never reached a server, and the user would read a blank answer as a real one.
+ *
+ * (This KDoc used to say there was deliberately no iOS implementation and that a future iOS graph
+ * should fail loudly at wiring time. That was the earlier plan; it was dropped on 2026-10-10.)
  *
  * ### A refused request is data, not an exception
  *
@@ -131,11 +133,13 @@ interface AimiHttp {
      *
      * An implementation answers [AimiHttpFailure.OTHER] for anything it cannot place, and must never
      * guess. Guessing here is not harmless: a wrong answer both retries a request that should not be
-     * retried and tells the user the wrong reason their auditor verdict did not arrive. There is no
-     * iOS implementation of this interface at all, on purpose, so no iOS classifier has to guess
-     * today. Whoever writes one should map `NSURLErrorTimedOut` to [AimiHttpFailure.TIMEOUT], the
-     * not-connected and host-not-found errors to [AimiHttpFailure.NO_NETWORK], and everything it
-     * cannot tell apart to [AimiHttpFailure.OTHER].
+     * retried and tells the user the wrong reason their auditor verdict did not arrive.
+     *
+     * `IosAimiHttp` follows exactly that rule: `NSURLErrorTimedOut` is [AimiHttpFailure.TIMEOUT],
+     * the not-connected, host-not-found, cannot-connect, connection-lost and DNS errors are
+     * [AimiHttpFailure.NO_NETWORK], and everything else is [AimiHttpFailure.OTHER]. It walks the
+     * cause chain, because the Darwin engine wraps the platform's `NSError` in its own exception
+     * and testing only the outermost type would answer `OTHER` for every real network failure.
      */
     fun classify(error: Throwable): AimiHttpFailure
 }

@@ -183,11 +183,15 @@ interface AimiEmergencySos {
 
 
 /**
- * The one method `ContextManager` needs of `ContextLLMClient` (605 lines, androidMain).
+ * The one method `ContextManager` needs of `ContextLLMClient`.
  *
  * The implementation's `parseWithLLM` also takes a `MedicalContext?`, defaulted to null and declared
  * inside `ContextLLMClient` itself. Every call site passes one argument, so the port does not carry
  * that parameter and the type stays where it is.
+ *
+ * `ContextLLMClient` is in commonMain and has no platform call left in it: it reaches the network
+ * only through `AiCoachingService`. So both phones run the same code behind this port, and the port
+ * stays because `ContextManager` is the dosing path and must be testable with a fake.
  */
 interface AimiContextLlm {
 

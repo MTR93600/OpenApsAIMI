@@ -19,6 +19,7 @@ import app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
@@ -37,6 +38,7 @@ import kotlinx.coroutines.launch
  * Provides the `HealthContextSnapshot` to the rest of the app.
  */
 @OptIn(ExperimentalAtomicApi::class)
+@ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
 class HealthContextRepository @Inject constructor(
     private val hcRepo: AimiPhysioDataSource,

@@ -12,6 +12,7 @@ import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.profile.ProfileFunction
@@ -72,6 +73,9 @@ import kotlin.time.Instant
 class AdaptiveSmoothingPlugin(
     aapsLogger: AAPSLogger,
     rh: TextResolver,
+    // Not a `val`: PluginBase already keeps it as a protected property, so a second one here would
+    // shadow it. This only carries it to the super constructor.
+    notificationManager: NotificationManager,
     private val rxBus: RxBus,
     private val config: Config,
     private val persistenceLayer: PersistenceLayer,
@@ -83,9 +87,8 @@ class AdaptiveSmoothingPlugin(
         .mainType(PluginType.SMOOTHING)
         .icon(IcStats)
         .pluginName(SmoothingStrings.adaptive_smoothing_name)
-        .shortName(SmoothingStrings.smoothing_shortname)
         .description(SmoothingStrings.description_adaptive_smoothing),
-    aapsLogger, rh
+    aapsLogger, rh, notificationManager
 ), Smoothing {
 
     override fun preferDashboardGlucoseFromGlucoseStatus(): Boolean = true

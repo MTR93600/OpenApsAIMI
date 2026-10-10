@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.di
 
+import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -8,12 +9,15 @@ import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.resources.TextResolver
+import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import app.aaps.core.interfaces.stats.TddCalculator
 import app.aaps.core.interfaces.stats.TirCalculator
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.database.persistence.PersistenceLayerImpl
 import app.aaps.plugins.aps.openAPSAIMI.DetermineBasalAimiEngine
 import app.aaps.plugins.aps.openAPSAIMI.DetermineBasalaimiSMB2
 import app.aaps.plugins.aps.openAPSAIMI.physio.HormonitorStudyExporter
@@ -33,7 +37,7 @@ import dev.zacsweers.metro.SingleIn
  * commonMain automatically: `@Inject` constructors and `@ContributesBinding`
  * implementations are discovered without manual wiring.
  *
- * The 14 platform interfaces have no iOS implementation inside `:plugins:aps`,
+ * The 17 platform interfaces have no iOS implementation inside `:plugins:aps`,
  * so they arrive as factory parameters. The iOS shell (`IosAppGraph`) exposes
  * all of them; the shell wires the two graphs by passing its own bindings
  * into [Factory.create] (see the KDoc there for the mapping).
@@ -45,8 +49,14 @@ import dev.zacsweers.metro.SingleIn
  *
  * Testable by design: every binding is explicit, no hidden singletons. A test
  * creates the graph with fakes through the same factory.
+ *
+ * `PersistenceLayerImpl` is excluded on purpose. It sits in `:database:persistence`
+ * commonMain and contributes a `PersistenceLayer` binding to every `AppScope` graph,
+ * which would be a second one next to the instance the shell passes in. The shell owns
+ * the database, so its instance is the one that must win; excluding the contributed
+ * binding says that in one place instead of leaving Metro to report a duplicate.
  */
-@DependencyGraph(AppScope::class)
+@DependencyGraph(AppScope::class, excludes = [PersistenceLayerImpl::class])
 interface IosAimiEngineGraph {
 
     /** The ready-to-use engine: `AimiEngine.evaluate` over the real `determine_basal`. */
@@ -99,6 +109,12 @@ interface IosAimiEngineGraph {
          * @param activePlugin From `IosAppGraph.activePlugin`.
          * @param textResolver From `IosAppGraph.textResolver`.
          * @param aapsLogger From `IosAppGraph.logger`.
+         * @param decimalFormatter From `IosAppGraph.decimalFormatter`.
+         * @param constraintsChecker From the shell's `ConstraintsCheckerImpl`. It must be the
+         *   shell's own: a checker that knows no plugins would apply no limits, and "no limit"
+         *   is the unsafe direction for every constraint AAPS has.
+         * @param keyValueStore From `IosPlatformBindings.keyValueStore()`, which is `IosSp` over
+         *   `NSUserDefaults`.
          */
         fun create(
             @Provides profileUtil: ProfileUtil,
@@ -115,6 +131,9 @@ interface IosAimiEngineGraph {
             @Provides activePlugin: ActivePlugin,
             @Provides textResolver: TextResolver,
             @Provides aapsLogger: AAPSLogger,
+            @Provides decimalFormatter: DecimalFormatter,
+            @Provides constraintsChecker: ConstraintsChecker,
+            @Provides keyValueStore: KeyValueStore,
         ): IosAimiEngineGraph
     }
 }

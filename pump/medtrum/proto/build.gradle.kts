@@ -23,6 +23,11 @@ kotlin {
     sourceSets {
         commonMain {
             dependencies {
+                // The catalog gives coroutines no version of its own any more, the BOM does. Most
+                // modules inherit it through `:core:interfaces`, which exports it with `api`. This
+                // source set depends on no such module, so it has to import the BOM itself or the
+                // dependency cannot be resolved for android and jvm.
+                implementation(project.dependencies.platform(libs.kotlinx.coroutines.bom))
                 implementation(libs.kotlinx.coroutines.core)
             }
         }

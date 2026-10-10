@@ -275,9 +275,35 @@ class ComposeMainActivity : MetroAppCompatActivity() {
 
         observePreferences()
 
+        parkNavigationFromIntent(intent)
+
         setContent {
             MainContent()
         }
+    }
+
+    /**
+     * A tap on a notification can arrive while this activity is already on screen.
+     *
+     * Android then delivers a new intent instead of creating the activity again, so the route has
+     * to be read here as well as in [onCreate]. Without this, tapping a notification while the app
+     * is open does nothing at all.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        parkNavigationFromIntent(intent)
+    }
+
+    /**
+     * Reads the route a notification asked for and parks it for the UI to pick up.
+     *
+     * The navigator does not exist yet when this runs, so this cannot navigate: it can only record
+     * what was wanted. `MainContent` takes it once the nav graph is up.
+     */
+    private fun parkNavigationFromIntent(intent: Intent?) {
+        val route = intent?.getStringExtra(PendingNavigation.EXTRA_NAVIGATE_ROUTE)
+        PendingNavigation.parseRoute(route)?.let { PendingNavigation.request(it) }
     }
 
     @Composable
@@ -321,6 +347,11 @@ class ComposeMainActivity : MetroAppCompatActivity() {
             // The Activity keeps a reference so an incoming intent can route without the composition.
             onNavControllerReady = { navController = it },
             onClose = { finish() },
+            // Where a tapped notification ends up. It goes through the navigator, so opening
+            // settings still asks for authorization first.
+            onPendingNavigation = { request ->
+                navController?.let { handleNavigationRequest(request, it) }
+            },
             content = { navController -> AppContent(navController) }
         )
     }

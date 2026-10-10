@@ -13,7 +13,9 @@ import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent.*
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiContextLlm
 import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import kotlinx.serialization.json.Json
@@ -50,11 +52,23 @@ import kotlin.time.Duration.Companion.minutes
  * ```
  */
 @SingleIn(AppScope::class)
+@ContributesBinding(AppScope::class)
 class ContextLLMClient @Inject constructor(
     private val aiCoachingService: AiCoachingService,
     private val preferences: Preferences,
     private val aapsLogger: AAPSLogger
-) {
+) : AimiContextLlm {
+
+    /**
+     * The port's one method. [ContextManager] asks through [AimiContextLlm] and passes no medical
+     * context, so this forwards to the full function with `null`.
+     *
+     * Kept as an explicit override rather than a default argument on the function below: a default
+     * argument does not satisfy an interface member, so the supertype would not be implemented.
+     */
+    override suspend fun parseWithLLM(userText: String): List<ContextIntent> =
+        parseWithLLM(userText, medicalContext = null)
+
     companion object {
         private const val TIMEOUT_MS = 3000L // 3 secondes max
 

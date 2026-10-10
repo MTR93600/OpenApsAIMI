@@ -50,7 +50,7 @@ sealed interface Libre3Availability {
  * whole process life and cannot tell "file absent" from "directory not reachable", and those two
  * cases need different handling here.
  *
- * Consumed only by `Libre3NativePlugin.specialShowInListCondition`, which is what
+ * Consumed only by `Libre3NativePlugin`'s `showInList`, which is what
  * [app.aaps.core.interfaces.plugin.ActivePlugin.getSpecificPluginsVisibleInList] filters on, so
  * Config Builder, the Setup Wizard, search and Quick Launch all inherit the gate from one place.
  */

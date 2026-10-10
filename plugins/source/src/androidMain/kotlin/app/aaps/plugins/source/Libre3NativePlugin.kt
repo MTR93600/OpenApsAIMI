@@ -11,6 +11,7 @@ import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.ActivePlugin
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -87,6 +88,9 @@ class Libre3NativePlugin @Inject constructor(
     aapsLogger: AAPSLogger,
     preferences: Preferences,
     config: Config,
+    // Not a `val`: PluginBase already keeps it as a protected property, so a second one here would
+    // shadow it. This only carries it to the super constructor.
+    notificationManager: NotificationManager,
     private val context: Context,
     private val persistenceLayer: PersistenceLayer,
     private val availabilityProvider: Libre3AvailabilityProvider,
@@ -95,6 +99,15 @@ class Libre3NativePlugin @Inject constructor(
 ) : AbstractBgSourcePlugin(
     pluginDescription = PluginDescription()
         .mainType(PluginType.BGSOURCE)
+        // Libre 3 native is only offered when the engineering marker file is present in the AAPS
+        // `extra` directory. See Libre3AvailabilityProvider, the only place that decides this.
+        // This was `specialShowInListCondition()` until upstream removed it; same test, same
+        // effect. ActivePlugin.getSpecificPluginsVisibleInList filters on this, so hiding here
+        // removes the plugin from Config Builder, the Setup Wizard, search and Quick Launch at the
+        // same time.
+        // On purpose this is NOT wired into `specialEnableCondition`: a plugin that is already
+        // selected must keep feeding glucose exactly as before.
+        .showInList({ availabilityProvider.isAvailable() })
         .composeContent { plugin ->
             BgSourceComposeContent(
                 title = rh.gs(R.string.libre3_native),
@@ -102,7 +115,6 @@ class Libre3NativePlugin @Inject constructor(
         }
         .icon(IcPluginByoda)
         .pluginName(TextRef.AndroidRes(R.string.libre3_native))
-        .shortName(TextRef.AndroidRes(R.string.libre3_short))
         .preferencesVisibleInSimpleMode(false)
         .description(TextRef.AndroidRes(R.string.description_source_libre3_native)),
     ownPreferences = Libre3IntentKey.entries + Libre3BooleanKey.entries,
@@ -110,6 +122,7 @@ class Libre3NativePlugin @Inject constructor(
     rh,
     preferences,
     config,
+    notificationManager,
 ), BgSource, Libre3GlucoseWatcher, CgmSensorStatusProvider {
 
     /** The constructor argument, kept as [ResourceHelper] so string ids do not need a cast. */
@@ -476,19 +489,6 @@ class Libre3NativePlugin @Inject constructor(
         promotionAlerter(message)
     }
 
-    /**
-     * Libre 3 native is only offered when the engineering marker file is present in the AAPS
-     * `extra` directory. See [Libre3AvailabilityProvider], the only place that decides this.
-     *
-     * `showInList` is the project's own availability mechanism: it is what
-     * [app.aaps.core.interfaces.plugin.ActivePlugin.getSpecificPluginsVisibleInList] filters on, so
-     * hiding here removes the plugin from Config Builder, the Setup Wizard, search and Quick Launch
-     * at the same time.
-     *
-     * On purpose this is **not** wired into `specialEnableCondition`: a plugin that is already
-     * selected must keep feeding glucose exactly as before.
-     */
-    override fun specialShowInListCondition(): Boolean = availabilityProvider.isAvailable()
 
     override fun getPreferenceScreenContent() = PreferenceSubScreenDef(
         key = "libre3_settings",

@@ -36,7 +36,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -48,8 +47,7 @@ import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiDateFormatter
-import app.aaps.plugins.aps.openAPSAIMI.utils.AndroidAimiStudyLocations
-import java.io.File
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import kotlin.math.roundToInt
 
 /**
@@ -59,12 +57,11 @@ import kotlin.math.roundToInt
  * context were actually deployed across a day. Embedded in AIMI settings via [ComposeScreenContent].
  */
 @Composable
-fun HormonitorViewerScreen(onBack: () -> Unit) {
-    val context = LocalContext.current
-    val reader = remember {
-        val dirs = AndroidAimiStudyLocations(context).studyDirectories().map { File(it.value) }
-        HormonitorReader(dirs)
-    }
+fun HormonitorViewerScreen(storage: AimiStorage, onBack: () -> Unit) {
+    // The reader reads study files through the shared storage seam now, so it no longer builds its
+    // own list of directories here. The plugin injects the same AimiStorage the engine writes with,
+    // which keeps the viewer reading exactly what was written.
+    val reader = remember(storage) { HormonitorReader(storage) }
 
     var days by remember { mutableStateOf<List<HormonitorDaySummary>>(emptyList()) }
     var selectedDay by remember { mutableStateOf<String?>(null) }

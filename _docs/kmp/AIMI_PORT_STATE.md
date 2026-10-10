@@ -4145,3 +4145,173 @@ bit-identical on Kotlin/Native — the native iOS run is the real gate for each 
 **Merge order**: M1→M2→M3, D1→D2→D3→D4, then UI.
 
 **Gates still due**: Full Gradle compile (sandbox impossible), Kotlin/Native iOS compile, crypto vectors on device, hardware validation with real pump/pod before any activation.
+
+## 6br. 2026-10-10: the merge with `milos/dev`, and what it uncovered in the iOS Metro graph
+
+Branch `kmp-aimi-merge-dev-2026-10-10`, merge commit `a07fd618d9d`. 1008 upstream commits, 21
+conflicts, none inside `openAPSAIMI/`. What was kept from the fork and why is in the commit
+message; the short version is that `SourceSensor` keeps six fork entries because the dosing code
+has to tell the native BLE plugins apart from the xDrip path, the database enum is a strict union
+because rows are stored by name, and `fromDb()` maps every legacy spelling onto a current entry.
+
+**The iOS target had never actually been compiling.** `OrefLocalPipeline` and `AimiAdvisorService`
+sat in `commonMain` while referencing `OrefOnnxScorer`, which is `androidMain` only. The frontend
+died there on every run, which is why nobody had seen the Metro graph errors behind it: Metro
+validates the object graph only once the frontend is clean. Moving the two files beside the scorer
+in `androidMain` — where `dev_OAPSAIMI` also keeps them — got past the frontend and surfaced
+**11 Metro errors in `IosAimiEngineGraph`**, all pre-existing, none caused by the merge.
+
+Four were pure wiring and are fixed, with no behaviour invented:
+
+- `PersistenceLayer` was bound twice. `PersistenceLayerImpl` is in `:database:persistence`
+  commonMain with `@ContributesBinding(AppScope::class)`, so it contributes to every `AppScope`
+  graph, next to the instance the shell passes in. The graph now carries
+  `excludes = [PersistenceLayerImpl::class]`: the shell owns the database, so the shell's instance
+  wins, and saying so in one place beats letting Metro report a duplicate.
+- `DecimalFormatter`, `ConstraintsChecker` and `KeyValueStore` are now factory parameters. The
+  shell already has a real object for each (`IosAppGraph.decimalFormatter`, the
+  `ConstraintsCheckerImpl` from `:plugins:constraints`, and `IosSp` over `NSUserDefaults`), so
+  `IosAppGraph` grew two accessors and `AapsAppHost` passes all three. `ConstraintsChecker` in
+  particular must be the shell's own: a checker that knows no plugins applies no limits, and "no
+  limit" is the unsafe direction for every constraint AAPS has.
+
+**The remaining seven are a decision, not a defect.** They are the AIMI platform seams whose only
+implementation is `androidMain`:
+
+| Seam | What it does | Reached from the dosing root through |
+|---|---|---|
+| `AimiHealthContext` | HRV, sleep, steps snapshot | `AutoDriveGater`, `AIMIInsulinDecisionAdapterMTR` |
+| `AimiPhysioSource` | heart rate, steps | `AIMIInsulinDecisionAdapterMTR` |
+| `AimiContextLlm` | parses the user's free text | `ContextManager` |
+| `AimiHttp` | blocking HTTP | `GeminiModelResolver` |
+| `AimiKeyValueCache` | small key/value with expiry | `GeminiModelResolver` |
+| `AuditorStatusNotifier` | "the auditor status changed" | `AuditorOrchestrator` |
+| `TpoNotifications` | tells the user a TPO session began or ended | `TpoOrchestrator` |
+
+Every one of them is reached through a **non-optional** `@Inject` field or constructor parameter of
+`DetermineBasalaimiSMB2`. The engine cannot be built on iOS without answering all seven.
+
+Three of these interfaces already say in their own KDoc that the absence is deliberate:
+`AimiKeyValueCache` ("any future iOS graph should fail loudly at wiring time instead of failing
+quietly at runtime"), `AimiHttp` ("no iOS implementation of this interface at all, on purpose, so
+no iOS classifier has to guess today") and `TpoNotifications` ("a real gap, not something to paper
+over with a no-op binding"). So the seven errors are the documented intended state, and adding
+no-op bindings would be writing against an explicit instruction.
+
+That made the open question architectural rather than mechanical: should the iOS engine graph build
+the whole of `DetermineBasalaimiSMB2`, LLM and auditor and TPO and health subtrees included, or
+should the dose path be separable from the features that hang off it?
+
+**User decision, 2026-10-10: the whole engine, and it must behave the same.** In their words, AIMI
+has to run the same way whether the user picks an iPhone or an Android phone. So all seven seams
+get real iOS implementations. No-op bindings are ruled out, and so is leaving a feature off on one
+platform.
+
+Two consequences follow, and both are binding on the work:
+
+1. **The three KDocs that declare the absence deliberate are now wrong** and have to be rewritten
+   as the implementations land. Leaving them would be worse than having no comment at all, because
+   they would be believed: `AimiKeyValueCache` ("any future iOS graph should fail loudly at wiring
+   time"), `AimiHttp` ("no iOS implementation of this interface at all, on purpose") and
+   `TpoNotifications` ("a real gap, not something to paper over with a no-op binding").
+2. **"Identical" argues against writing parallel iOS implementations of logic.** Two
+   implementations of the same rule drift, and here a drift is a dosing difference between two
+   phones. Where an Android class is mostly rule and only incidentally platform, the faithful move
+   is the repo's own KMP rule — migrate the class, lift only the platform call out — so both
+   platforms run the *same* code and the seam carries only the true platform call. Which seams that
+   applies to is being measured before anything is written.
+
+### 6br.1 Two of the seven were not iOS gaps at all — they were lost bindings
+
+Research on the seven seams turned up something better than a porting plan. Commit `edd0acb4e0e`
+("fix: lot 0 - 11 blocking compilation corrections", 2026-10-09) deleted nine androidMain classes
+as duplicates of commonMain copies. Two of those nine carried `@ContributesBinding(AppScope::class)`
+and the commonMain copy that survived did not:
+
+- `ContextLLMClient` lost the annotation **and** `: AimiContextLlm` **and** the one-argument
+  `parseWithLLM` override. `AimiContextLlm` was then bound nowhere in the repository, while
+  `ContextManager` still injected it — and `ContextManager` is reached from
+  `DetermineBasalaimiSMB2.contextManager`, so this is on the dosing path.
+- `HealthContextRepository` kept `@SingleIn` and `: AimiHealthContext` but lost
+  `@ContributesBinding`, so `AimiHealthContext` was bound nowhere either.
+
+Both are restored, in commonMain, which fixes Android and iOS in the same edit. This is the trap
+CLAUDE.md already warns about in another form: code that looks like a duplicate can be the copy
+holding the wiring. A dedup has to compare annotations, not just bodies.
+
+The other seven deleted classes were checked the same way and none of them had a
+`@ContributesBinding` to lose, so the audit of that commit is closed.
+
+`AimiKeyValueCache` now has `IosAimiKeyValueCache` over `NSUserDefaults`, written to match the
+Android semantics including the edges that differ by default: `integerForKey` cannot tell an absent
+key from a stored zero, so `getLong` asks `objectForKey` first; `setObject` returns nothing, so a
+write reads itself back rather than claiming success; and a `null` store is `standardUserDefaults`,
+the same store `IosSp` uses, because `UnifiedActivityProviderMTR` reads the user's activity-source
+setting through it.
+
+**The iOS graph is down from 11 errors to 5**, and `AimiPhysioDataSource` has surfaced one level
+below `AimiHealthContext` as expected. The five left are `AimiHttp`, `AuditorStatusNotifier`,
+`AimiPhysioSource`, `AimiPhysioDataSource` and `TpoNotifications`.
+
+`AuditorStatusNotifier` is closed by deleting the seam, not by implementing it twice. Its only
+implementation was `AuditorStatusLiveData` in androidMain, and the only Android thing in it was
+`MutableLiveData` used as the publishing mechanism. Everything it read -- `AuditorStatusTracker`,
+`AuditorVerdictCache`, `AuditorStatusStateMapper`, `AuditorUIState` -- was already commonMain, and
+the one live reader (`AuditorStatusBadgeSource`) turned the `LiveData` back into a `StateFlow`
+anyway. So the class moved to commonMain as `AuditorStatusStateHolder` publishing
+`StateFlow<AuditorUIState>`, and the badge source lost its bridge. Two notes on the swap:
+
+- `postValue` was asynchronous and coalesced on the main looper; `MutableStateFlow.value` is
+  synchronous and conflates by equality. Every `AuditorUIState` factory stamps
+  `timestampMs = aimiWallClockMs()`, so two states built in different milliseconds are never equal
+  and nothing is dropped. Two built inside one millisecond are equal in every field, so dropping
+  one shows the reader the same thing.
+- `forceUpdate()` is gone. It existed only to push the state at a `LiveData` observer that had just
+  attached; a `StateFlow` collector always gets the current value when it starts.
+
+`AuditorStatusBadgeSource` stays in androidMain because `onBadgeClick()` goes to
+`AuditorNotificationManager`, which is Android notifications and an Android dialog intent.
+
+**The iOS graph is down to 4 errors**: `AimiHttp`, `AimiPhysioSource`, `AimiPhysioDataSource` and
+`TpoNotifications`.
+
+### 6br.2 Down to three, and the auditor notification put back
+
+`AimiHttp` now has `IosAimiHttp`, on Ktor's Darwin engine (`implementation(libs.io.ktor.client.darwin)`
+added to the `iosMain` source set - an external library, which the repo rules allow; ktor-client-core
+already arrives through `:core:nssdk`, which exposes it with `api`).
+
+Ktor rather than raw `NSURLSession`, and both reasons are contract rather than taste:
+
+- `AimiHttpRequest` carries a connect timeout **and** a read timeout and says they must not be
+  flattened. `NSURLSessionConfiguration` has no separate connect timeout, so raw `NSURLSession`
+  could not keep them apart and the auditor would give up at the wrong moment.
+- `HttpURLConnection` refuses a redirect that changes protocol. These requests carry an API key in a
+  header, so a silent https-to-http downgrade would leak it. Ktor refuses the downgrade too.
+
+Two behaviour notes, both deliberate and both written into the KDoc. `reason` is always `null` on
+iOS: NSURLSession exposes no status line, and `localizedStringForStatusCode` is a translated
+sentence rather than the reason phrase, so handing that back would quietly change the text
+`AIMILLMPhysioAnalyzerMTR` and `OuraApiThermalClient` print. And `classify` walks the cause chain,
+because the Darwin engine wraps the platform's `NSError` in its own exception - testing only the
+outermost type would answer `OTHER` for every real network failure.
+
+**The auditor notification fires again.** It had stopped at the Compose migration: on `master` the
+XML `OverviewFragment` and `DashboardFragment` each observed the auditor state and called
+`AuditorNotificationManager.showInsightAvailable` themselves, and the chip that replaced them only
+draws a badge. The call now hangs off `OpenAPSAIMIPlugin.onStart`, cancelled in `onStop`, using the
+job pattern the plugin already has.
+
+The plugin rather than `AuditorStatusBadgeSource`, which looked like the obvious home: that class
+exists only because `ChipsViewModel` injects it when the Overview composes, and it holds the
+notification manager only for the badge click. Anyone moving that click elsewhere would have killed
+the notification again, silently - which is exactly how it was lost the first time. Hanging it off
+the plugin also fixes an older weakness: the old observers were bound to `viewLifecycleOwner`, so a
+verdict landing while the user was on another screen was never announced at all.
+
+**iOS graph: 3 errors left** - `AimiPhysioSource`, `AimiPhysioDataSource`, `TpoNotifications`.
+
+Still open and still the user's call: `AimiParityCaptureHook` sits in `androidMain` and imports
+`:plugins:aimi-contracts`, which has no Android target, so it has never compiled. Giving that module
+an Android target is the recommendation, because the hook is the harness that would prove the two
+platforms agree - but it is a build structure change and has not been made.
