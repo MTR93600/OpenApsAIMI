@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import app.aaps.core.interfaces.concurrent.AapsLock
 
 import androidx.collection.LongSparseArray
 import app.aaps.core.data.model.TDD
@@ -39,7 +40,7 @@ internal class DetermineBasalInvocationCaches {
         private const val STALE_AGE_MS = 120_000L
     }
 
-    private val lock = Any()
+    private val lock = AapsLock()
     private var invocationSeq: Long = 0L
 
     private var cachedTdd24hSeq: Long = -1L
@@ -62,7 +63,7 @@ internal class DetermineBasalInvocationCaches {
     private val ioScope = CoroutineScope(SupervisorJob() + aapsIoDispatcher)
 
     fun beginInvocation() {
-        synchronized(lock) {
+        lock.withLock {
             invocationSeq++
         }
     }
@@ -72,7 +73,7 @@ internal class DetermineBasalInvocationCaches {
      * Bumps the sequence so async stats work from a failed tick cannot be mistaken for the next pass.
      */
     fun abandonInvocationAfterUnhandledError() {
-        synchronized(lock) {
+        lock.withLock {
             invocationSeq++
         }
     }
@@ -82,7 +83,7 @@ internal class DetermineBasalInvocationCaches {
     }
 
     fun getTdd24hTotalAmountState(tddCalculator: TddCalculator): AsyncDataState<Double> {
-        synchronized(lock) {
+        lock.withLock {
             if (cachedTdd24hSeq == invocationSeq) {
                 return cachedTdd24hTotalAmount?.let { AsyncDataState.Fresh(it) }
                     ?: AsyncDataState.Missing("tdd24h_not_ready")
@@ -108,7 +109,7 @@ internal class DetermineBasalInvocationCaches {
     }
 
     fun getTddCalculate1DaySparseState(tddCalculator: TddCalculator): AsyncDataState<LongSparseArray<TDD>> {
-        synchronized(lock) {
+        lock.withLock {
             if (cachedTdd1DaySparseSeq == invocationSeq) {
                 return cachedTdd1DaySparse?.let { AsyncDataState.Fresh(it) }
                     ?: AsyncDataState.Missing("tdd_1day_sparse_not_ready")
@@ -134,14 +135,14 @@ internal class DetermineBasalInvocationCaches {
     }
 
     fun getTirCalculate1Day65180State(tirCalculator: TirCalculator): AsyncDataState<LongSparseArray<TIR>> {
-        synchronized(lock) {
+        lock.withLock {
             if (cachedTir65180Seq == invocationSeq && cachedTir65180 != null) {
                 return AsyncDataState.Fresh(cachedTir65180!!)
             }
         }
         refreshTir1DayAsync(tirCalculator)
         val r = tir1DayRef.load() ?: LongSparseArray()
-        synchronized(lock) {
+        lock.withLock {
             cachedTir65180 = r
             cachedTir65180Seq = invocationSeq
         }
@@ -153,7 +154,7 @@ internal class DetermineBasalInvocationCaches {
     }
 
     fun storeTir65180FromWarmup(result: LongSparseArray<TIR>) {
-        synchronized(lock) {
+        lock.withLock {
             cachedTir65180 = result
             cachedTir65180Seq = invocationSeq
         }

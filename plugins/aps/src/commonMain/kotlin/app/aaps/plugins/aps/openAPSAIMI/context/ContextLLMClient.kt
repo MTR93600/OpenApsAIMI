@@ -5,7 +5,8 @@ import app.aaps.core.data.json.OrgJsonCompat.optIntCompat
 import app.aaps.core.data.json.OrgJsonCompat.optStringCompat
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.sharedPreferences.SP
+import app.aaps.core.keys.StringKey
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AiCoachingService
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
@@ -51,7 +52,7 @@ import kotlin.time.Duration.Companion.minutes
 @SingleIn(AppScope::class)
 class ContextLLMClient @Inject constructor(
     private val aiCoachingService: AiCoachingService,
-    private val sp: SP,
+    private val preferences: Preferences,
     private val aapsLogger: AAPSLogger
 ) {
     companion object {
@@ -247,8 +248,8 @@ Output:
             // Build enriched prompt with medical context
             val prompt = buildEnrichedPrompt(userText, medicalContext)
 
-            // Get provider and API key from SHARED preferences (same as Advisor)
-            val providerStr = sp.getString(app.aaps.core.keys.StringKey.AimiAdvisorProvider.key, "OPENAI")
+            // Get provider and API key from preferences (same as Advisor)
+            val providerStr = preferences.get(StringKey.AimiAdvisorProvider)
             val provider = when (providerStr) {
                 "GEMINI" -> AiCoachingService.Provider.GEMINI
                 "DEEPSEEK" -> AiCoachingService.Provider.DEEPSEEK
@@ -257,10 +258,10 @@ Output:
             }
 
             val apiKey = when (provider) {
-                AiCoachingService.Provider.OPENAI -> sp.getString(app.aaps.core.keys.StringKey.AimiAdvisorOpenAIKey.key, "")
-                AiCoachingService.Provider.GEMINI -> sp.getString(app.aaps.core.keys.StringKey.AimiAdvisorGeminiKey.key, "")
-                AiCoachingService.Provider.DEEPSEEK -> sp.getString(app.aaps.core.keys.StringKey.AimiAdvisorDeepSeekKey.key, "")
-                AiCoachingService.Provider.CLAUDE -> sp.getString(app.aaps.core.keys.StringKey.AimiAdvisorClaudeKey.key, "")
+                AiCoachingService.Provider.OPENAI -> preferences.get(StringKey.AimiAdvisorOpenAIKey)
+                AiCoachingService.Provider.GEMINI -> preferences.get(StringKey.AimiAdvisorGeminiKey)
+                AiCoachingService.Provider.DEEPSEEK -> preferences.get(StringKey.AimiAdvisorDeepSeekKey)
+                AiCoachingService.Provider.CLAUDE -> preferences.get(StringKey.AimiAdvisorClaudeKey)
             }
 
             if (apiKey.isBlank()) {

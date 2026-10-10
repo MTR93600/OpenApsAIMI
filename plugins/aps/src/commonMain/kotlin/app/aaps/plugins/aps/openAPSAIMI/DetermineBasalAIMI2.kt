@@ -1999,8 +1999,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 }
             }
         },
-        maxIobPhrase = AimiMaxIobPhrase { target, work.maxIob ->
-            target.reason.append(rh.gs(ApsStrings.reason_max_iob, work.maxIob))
+        maxIobPhrase = AimiMaxIobPhrase { target, maxIob ->
+            target.reason.append(rh.gs(ApsStrings.reason_max_iob, maxIob))
         },
         nightGrowth = AimiNightGrowthConfig { profile, autosens, glucose, targetBg ->
             buildNightGrowthResistanceConfig(profile, autosens, glucose, targetBg)
@@ -2325,7 +2325,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         logger = aapsLogger,
         effects = legacyEffectSink,
         hasHypoRecovery = work.lastContextSnapshot?.hasHypoRecovery == true,
-        causalState.adaptiveMult = causalState.adaptiveMult,
+        adaptiveMult = causalState.adaptiveMult,
         statusLine = { display -> rh.gs(ApsStrings.autodrive_status, display, "Meal Advisor") },
         onSmbDelivered = { units ->
             internalLastSmbMillis = dateUtil.now()
@@ -2908,7 +2908,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             eventualBG = work.eventualBG,
             targetBg = targetBg,
             hourOfDay = work.hourOfDay,
-            causalState.adaptiveMult = causalState.adaptiveMult,
+            adaptiveMult = causalState.adaptiveMult,
             bgacc = work.bgacc,
             duraISFminutes = work.duraISFminutes,
             duraISFaverage = work.duraISFaverage,
@@ -2926,11 +2926,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             exerciseInsulinLockoutActive = work.exerciseInsulinLockoutActive,
             exerciseHyperBasalOverrideActive = work.exerciseHyperBasalOverrideActive,
             exerciseBasalResumeBgMgdl = EXERCISE_BASAL_RESUME_BG_MGDL,
-            causalState.highBgOverrideUsed = causalState.highBgOverrideUsed,
+            highBgOverrideUsed = causalState.highBgOverrideUsed,
             mealAdvisorOneShotThisTick = work.mealAdvisorOneShotThisTick,
             lastScenarioBestCappedForPhysio = work.lastScenarioBestCappedForPhysio,
-            causalState.lastPhysioLatentState = causalState.lastPhysioLatentState,
-            causalState.lastUamHypothesisState = causalState.lastUamHypothesisState,
+            lastPhysioLatentState = causalState.lastPhysioLatentState,
+            lastUamHypothesisState = causalState.lastUamHypothesisState,
             lastPatientState = work.lastPatientState,
             lastPatientModeDecision = work.lastPatientModeDecision,
             lastMealAbsorptionOutput = work.lastMealAbsorptionOutput,
@@ -3802,7 +3802,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             variableSensitivity = variableSensitivity,
             hourOfDay = work.hourOfDay,
             exerciseInsulinLockoutActive = work.exerciseInsulinLockoutActive,
-            causalState.adaptiveMult = causalState.adaptiveMult,
+            adaptiveMult = causalState.adaptiveMult,
             maxIob = work.maxIob,
             iob = work.iob,
             maxSmb = work.maxSMB,
@@ -4754,13 +4754,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             highCarbTime = highCarbTime,
             snackTime = work.snackTime,
             sportTime = work.sportTime,
-            causalState.lateFatRiseFlag = causalState.lateFatRiseFlag,
+            lateFatRiseFlag = causalState.lateFatRiseFlag,
             highCarbRuntime = work.highCarbrunTime,
             threshold = threshold,
             windowSinceDoseInt = windowSinceDoseInt,
             intervalSmb = intervalsmb,
             insulinStep = pumpCaps.bolusStep.toFloat(),
-            causalState.highBgOverrideUsed = causalState.highBgOverrideUsed,
+            highBgOverrideUsed = causalState.highBgOverrideUsed,
             cob = work.cob,
             pkpdRuntime = pkpdRuntime,
             pumpAgeDays = pumpAgeDays,
@@ -4853,11 +4853,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     sens = sens, tp = tp, variableSensitivity = variableSensitivity,
                     target_bg = targetBg, predictedBg = predictedBg, eventualBG = eventualBg,
                     isMealAdvisorOneShot = isMealAdvisorOneShot, mealData = mealData,
-                    pkpdRuntime = pkpdRuntime, sportTime = work.sportTime, causalState.lateFatRiseFlag = causalState.lateFatRiseFlag,
+                    pkpdRuntime = pkpdRuntime, sportTime = work.sportTime, lateFatRiseFlag = causalState.lateFatRiseFlag,
                     highCarbrunTime = highCarbRuntime, threshold = threshold,
                     currentTime = currentTime, windowSinceDoseInt = windowSinceDoseInt,
                     intervalsmb = intervalSmb, insulinStep = insulinStep,
-                    causalState.highBgOverrideUsed = causalState.highBgOverrideUsed, cob = work.cob,
+                    highBgOverrideUsed = causalState.highBgOverrideUsed, cob = work.cob,
                     pkpdDiaMinutesOverride = pkpdDiaMinutesOverride,
                     profile = profile, rT = rT,
                     combinedDeltaLocal = combinedDelta, glucoseStatusLocal = glucoseStatus,
@@ -10274,7 +10274,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
             rate = if (bypassSafety) rate.coerceAtMost(profile.max_basal) else rate.coerceAtMost(maxSafe)
         } else if (harmoniaOwnedBasal && causalState.lastWCycleBelief != null) {
-            causalState.lastWCycleBelief = causalState.lastWCycleBelief?.copy(
+            lastWCycleBelief = causalState.lastWCycleBelief?.copy(
                 dosePathOwner = EndocrineDosePathOwner.HARMONIA_PRODUCTION_BASAL_FIRST,
             )
         }
@@ -11022,7 +11022,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             estimatedCarbsAgeMs = estimatedCarbsAgeMs,
             localHour = localHour,
             targetBg = targetBg.toDouble(),
-            causalState.lastHypoBelow70At = causalState.lastHypoBelow70At,
+            lastHypoBelow70At = causalState.lastHypoBelow70At,
             now = now,
             uamConfidence = { AimiUamHandler.confidenceOrZero() },
         )
@@ -12028,12 +12028,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 mealData = mealData, pkpdRuntime = pkpdRuntime,
                 sportTime = sportTime || exerciseInsulinLockout,
                 exerciseInsulinLockout = exerciseInsulinLockout,
-                causalState.lateFatRiseFlag = causalState.lateFatRiseFlag,
+                lateFatRiseFlag = causalState.lateFatRiseFlag,
                 highCarbRunTime = highCarbrunTime, threshold = threshold,
                 dateUtil = dateUtil, currentTime = currentTime,
                 windowSinceDoseInt = windowSinceDoseInt, currentInterval = intervalsmb,
                 insulinStep = insulinStep,
-                causalState.highBgOverrideUsed = causalState.highBgOverrideUsed,
+                highBgOverrideUsed = causalState.highBgOverrideUsed,
                 profileCurrentBasal = profileCurrentBasalLocal,
                 cob = cob,
                 globalReactivityFactor = if (preferences.get(BooleanKey.OApsAIMIUnifiedReactivityEnabled)) {
@@ -13401,13 +13401,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         highCarbTime = highCarbTime,
                         snackTime = work.snackTime,
                         sportTime = work.sportTime,
-                        causalState.lateFatRiseFlag = causalState.lateFatRiseFlag,
+                        lateFatRiseFlag = causalState.lateFatRiseFlag,
                         highCarbrunTime = work.highCarbrunTime,
                         threshold = threshold,
                         windowSinceDoseInt = windowSinceDoseInt,
                         intervalsmb = intervalsmb,
                         pumpCaps = pumpCaps,
-                        causalState.highBgOverrideUsed = causalState.highBgOverrideUsed,
+                        highBgOverrideUsed = causalState.highBgOverrideUsed,
                         cob = work.cob,
                         pkpdRuntime = pkpdRuntime,
                         pumpAgeDays = pumpAgeDays,
@@ -14459,7 +14459,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         autodriveBasalProposal = autodriveBasalProposal,
         exerciseInsulinLockoutActive = work.exerciseInsulinLockoutActive,
         exerciseBasalResumeBgMgdl = EXERCISE_BASAL_RESUME_BG_MGDL,
-        causalState.adaptiveMult = causalState.adaptiveMult,
+        adaptiveMult = causalState.adaptiveMult,
         tree = work.lastPhysiologicalTreeSnapshot,
         effortSmbFactor = work.lastEffortAssessment?.smbFactor,
         ngrBasalMultiplier = work.lastNgrBasalMultiplier,
