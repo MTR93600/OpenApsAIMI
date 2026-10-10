@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.aaps.core.interfaces.notifications.Notification
+import app.aaps.core.ui.compose.formatKmp
 
 @Composable
 internal fun DashboardNotificationsComposeList(
@@ -31,7 +32,7 @@ internal fun DashboardNotificationsComposeList(
     val itemMargin = 8.dp
     if (compact) {
         val first = notifications.first()
-        val line = strings.notificationsCompactHeader.format(notifications.size, first.text)
+        val line = strings.notificationsCompactHeader.formatKmp(notifications.size, first.text)
         Card(
             modifier = modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.55f)),

@@ -3,6 +3,8 @@ package app.aaps.core.ui.compose.dashboard
 import app.aaps.core.interfaces.rx.events.AdaptiveSmoothingQualityTier
 import app.aaps.core.interfaces.source.CgmSensorLifecycle
 import app.aaps.core.interfaces.source.CgmWarmupStatus
+import app.aaps.core.ui.compose.formatKmp
+import kotlin.time.Clock
 
 /**
  * Minimal UI state for the dashboard glucose hero, ported from the Android
@@ -46,7 +48,7 @@ data class DashboardHeroPalette(
  * Pre-formatted strings for the hero. Replaces `context.getString(R.string.*)`.
  * Parameterized entries are lambdas so the platform controls formatting.
  */
-data class DashboardHeroStrings(
+data class DashboardHeroSensorStrings(
     val sensorEndOfLife: (hours: Int) -> String,
     val sensorEarlyLife: (day: Int, hours: Int) -> String,
     val warmupEndsAt: (time: String) -> String,
@@ -62,7 +64,7 @@ data class DashboardHeroStrings(
  *
  * Ported from `plugins/main/.../dashboard/compose/DashboardComposeHeroUiMapper` to
  * commonMain: `Context`/`DateFormat`/`TypedValue` replaced by [DashboardHeroPalette],
- * [DashboardHeroStrings] and a time-formatting lambda (platform supplies
+ * [DashboardHeroSensorStrings] and a time-formatting lambda (platform supplies
  * `AimiDateFormatter`-backed formatting).
  */
 object DashboardHeroUiMapper {
@@ -76,7 +78,7 @@ object DashboardHeroUiMapper {
     fun buildHeroState(
         state: HeroStatusCardState,
         palette: DashboardHeroPalette,
-        strings: DashboardHeroStrings,
+        strings: DashboardHeroSensorStrings,
         formatTime: (epochMs: Long) -> String,
     ): GlucoseHeroUiState? {
         val warmup = state.warmup
@@ -123,7 +125,7 @@ object DashboardHeroUiMapper {
      */
     fun buildLifecycleSubtext(
         state: HeroStatusCardState,
-        strings: DashboardHeroStrings,
+        strings: DashboardHeroSensorStrings,
     ): String? {
         val lifecycle = state.lifecycle ?: return null
         val hasFreshGlucose = state.glucoseMgdl != null && state.isGlucoseActual
@@ -176,11 +178,11 @@ object DashboardHeroUiMapper {
         state: HeroStatusCardState,
         warmup: CgmWarmupStatus,
         palette: DashboardHeroPalette,
-        strings: DashboardHeroStrings,
+        strings: DashboardHeroSensorStrings,
         formatTime: (epochMs: Long) -> String,
     ): GlucoseHeroUiState {
-        // Matches Tier 1 (DashboardStagingCard): System.currentTimeMillis() in commonMain.
-        val now = System.currentTimeMillis()
+        // Matches Tier 1 (DashboardStagingCard): Clock.System.now().toEpochMilliseconds() in commonMain.
+        val now = Clock.System.now().toEpochMilliseconds()
         val endsAt = warmup.endsAtEpochMs
         val remaining = warmup.remainingMs
         val remainingMs: Long? = when {
@@ -230,7 +232,7 @@ object DashboardHeroUiMapper {
         CgmWarmupStatus.Phase.OTHER -> palette.warmupTeal
     }
 
-    private fun warmupPhaseLabel(phase: CgmWarmupStatus.Phase, strings: DashboardHeroStrings): String = when (phase) {
+    private fun warmupPhaseLabel(phase: CgmWarmupStatus.Phase, strings: DashboardHeroSensorStrings): String = when (phase) {
         CgmWarmupStatus.Phase.CONNECTING -> strings.warmupPhaseConnecting
         CgmWarmupStatus.Phase.RECONNECTING -> strings.warmupPhaseReconnecting
         CgmWarmupStatus.Phase.PAIRING -> strings.warmupPhasePairing

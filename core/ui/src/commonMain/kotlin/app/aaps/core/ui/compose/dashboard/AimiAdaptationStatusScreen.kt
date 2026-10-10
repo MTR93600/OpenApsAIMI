@@ -30,6 +30,8 @@ import app.aaps.core.interfaces.aps.AimiAdaptationModuleId
 import app.aaps.core.interfaces.aps.AimiAdaptationModuleStatus
 import app.aaps.core.interfaces.aps.AimiAdaptationPhase
 import app.aaps.core.interfaces.aps.AimiAdaptationReasonCode
+import app.aaps.core.ui.compose.AapsSpacing
+import app.aaps.core.ui.compose.AapsTopAppBar
 
 /**
  * Adaptation status screen, ported from `plugins/main`.
