@@ -10,12 +10,12 @@
     <string name="no_connectivity">無連線</string>
     <string name="unsupported_ns_version">不支援的 Nightscout 版本</string>
     <!-- AAPSClient -->
-    <string name="ns_client_v3_short_name">NSv3</string>
     <!-- Authorized clients (paired devices that can issue signed commands) -->
     <string name="authorized_clients_title">已授權的用戶端</string>
     <string name="authorized_clients_add">新增用戶端</string>
     <string name="authorized_clients_comm_switch_title">允許用戶端控制</string>
     <string name="authorized_clients_comm_switch_summary">允許已配對的用戶端透過 Nightscout 傳送簽章的指令。關閉可在不移除的情況下停止通訊。</string>
+    <string name="authorized_clients_needs_websocket">WebSockets 已關閉，因此無法接收來自用戶端的指令。在您開啟 WebSockets 之前，用戶端會將此主機端顯示為不接受指令。</string>
     <string name="authorized_clients_state_active">啟用中</string>
     <string name="authorized_clients_state_pending">等待中</string>
     <string name="authorized_clients_last_seen">上次連線於 %1$s</string>
@@ -74,7 +74,6 @@
     <string name="summary_tidepool_dev_servers">若啟用，資料上傳將會發送至測試伺服器，而非一般的伺服器。</string>
     <string name="title_tidepool_dev_servers">使用集成（測試）伺服器</string>
     <string name="tidepool">Tidepool</string>
-    <string name="tidepool_shortname">TDP</string>
     <string name="description_tidepool">將資料上傳到 Tidepool</string>
     <string name="upload_now">立即上傳</string>
     <string name="tidepool_purge_data">清除所有資料</string>
@@ -85,7 +84,6 @@
     <string name="working">工作中</string>
     <!-- Xdrip StatusLine -->
     <string name="xdrip">xDrip+</string>
-    <string name="xdrip_shortname">XD+</string>
     <string name="description_xdrip">將資料傳送到 xDrip+</string>
     <string name="xdrip_status_settings">xDrip+ 狀態行進階</string>
     <string name="xdrip_not_installed">未安裝 xDrip+</string>
@@ -94,7 +92,6 @@
     <string name="xdrip_local_broadcasts_title">啟用傳送到 xDrip+。</string>
     <!--    DataBroadcast-->
     <string name="tizen">外部輔助 App</string>
-    <string name="tizen_short">CAB</string>
     <string name="tizen_description">啟用向各種外部輔助 App 廣播資料</string>
     <!-- GarminPlugin -->
     <string name="garmin">Garmin</string>
@@ -102,14 +99,14 @@
     <string name="garmin_local_http_server_port">本地 HTTP 伺服器端口</string>
     <string name="garmin_local_http_server">本地 HTTP 伺服器</string>
     <!--    Wear-->
-    <string name="wear_shortname">WEAR</string>
     <string name="description_wear">使用您的 WearOS 手錶監控和控制 AAPS。</string>
     <string name="no_watch_connected">（無手錶連線）</string>
     <string name="pump_status">幫浦狀態</string>
-    <string name="loop_status">循環狀態</string>
+    <string name="loop_status"> 循環狀態</string>
     <string name="user_action_not_available">選定的用戶操作 %1$s 已不再可用，請重新整理您的面版</string>
     <string name="scene_not_available">情境 %1$s 已無法使用，請重新整理您的圖塊</string>
     <string name="wear_remote_insulin_not_allowed_in_client">遠端胰島素指令在用戶端模式中已停用</string>
+    <string name="wear_phone_not_ready">手機仍在啟動或套用設定中。請稍後再試。</string>
     <string name="wear_action_tempt_unit_error">手錶和手機上使用了不同的單位！</string>
     <string name="wear_action_tempt_min_bg_error">最低血糖超出範圍！</string>
     <string name="wear_action_tempt_max_bg_error">最高血糖超出範圍！</string>
@@ -118,6 +115,11 @@
     <string name="wear_general_settings">一般設定</string>
     <string name="wear_custom_watchface_settings">自訂錶盤設定</string>
     <string name="wear_custom_watchface">自訂錶盤: %1$s</string>
+    <string name="wear_pushed_watchface_installing" comment="Short note after the selected watchface while the watch is still replacing its face">正在安裝…</string>
+    <string name="wear_custom_watchface_not_shown" comment="Dialog after a custom watchface was sent while the complications watchface is selected. %1$s=name of the sent custom watchface">手錶目前顯示小工具錶面。選擇自訂錶面即可在手錶上看到 %1$s。</string>
+    <string name="wear_pushed_watchface_confirm_title">要變更手錶上的錶面嗎？</string>
+    <string name="wear_pushed_watchface_confirm_message" comment="%1$s=name of the watchface that will be installed, %2$s=name of the one installed now. Example: Complications watchface will replace the Custom watchface on the watch.">%1$s 將取代手錶上的 %2$s。</string>
+    <string name="wear_pushed_watchface_confirm_message_from_complications" comment="%1$s=name of the watchface that will be installed, %2$s=name of the one installed now. Example: Custom watchface will replace the Complications watchface on the watch.">%1$s 將取代手錶上的 %2$s。你在錶面編輯器中變更的 Complication 將恢復為預設值。</string>
     <string name="wear_load_watchface">載入錶盤</string>
     <string name="wear_infos_watchface">資訊錶盤</string>
     <string name="wear_export_watchface">匯出範本</string>
@@ -134,7 +136,7 @@
     <string name="pump_fetching_data">嘗試從幫浦獲取資料。</string>
     <string name="pump_old_data">TDD: 資料仍然是舊的！無法從幫浦載入。</string>
     <string name="units_short">U</string>
-    <string name="hour_short">h</string>
+    <string name="hour_short">時</string>
     <string name="no_active_profile">沒有活動的設定檔切換！</string>
     <string name="target_only_aps_mode">目標僅適用於 APS 模式！</string>
     <string name="no_history">無歷史資料！</string>
@@ -163,7 +165,6 @@
     <string name="garmin_request_key">請求金鑰</string>
     <!-- SMS Communicator & OTP Authenticator -->
     <string name="smscommunicator">SMS 通訊器</string>
-    <string name="smscommunicator_shortname">SMS</string>
     <string name="description_sms_communicator">使用 SMS 指令遠端控制 AAPS。</string>
     <string name="smscommunicator_code_from_authenticator_for" comment="This is continuation of sentence: To [ACTION] reply with code">來自驗證器應用程式，針對：%1$s，後接 PIN 碼</string>
     <string name="smscommunicator_tab_otp_label">驗證器設定</string>

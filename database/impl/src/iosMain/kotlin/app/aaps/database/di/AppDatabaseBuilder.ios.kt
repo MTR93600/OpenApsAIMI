@@ -4,7 +4,6 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
-import androidx.sqlite.execSQL
 import app.aaps.database.AppDatabase
 import app.aaps.database.AppRepository
 import app.aaps.database.RoomTherapyWindowReads
@@ -45,12 +44,17 @@ import platform.Foundation.NSUserDomainMask
  * for the opposite reason: iOS evicts it under storage pressure, so the app would come back empty on
  * its own.
  *
- * ## Migrations
+ * ## The migrations are shared
  *
- * [appDatabaseMigrations] is the Android list, now in commonMain, passed here before any schema
- * after 35. A file that does not exist yet is created at version 35 and does not run them. A file
- * already at an older version does. `fallbackToDestructiveMigration(false)` still refuses a file
- * this list cannot reach.
+ * This used to pass none, because nothing imports an Android database, so the first file an iOS
+ * install creates is created at the current schema version. That covered arriving on iOS but not
+ * staying: once a build reaches a user their database sits at the version that shipped, and the next
+ * schema change needs a path for them like any other.
+ *
+ * So `databaseMigrations` in commonMain is passed here as well, and is the only place a migration is
+ * written. Do not copy the list into a platform source set: two histories drift, and a schema that
+ * differs by platform corrupts data instead of failing loudly. Room runs only the steps it needs, so
+ * the entries older than the version this platform started at cost nothing.
  *
  * @param log where the file move reports itself. The first argument says whether it failed, so a
  *   caller with a real logger can raise the failure and leave the ordinary case at debug. The
@@ -78,7 +82,7 @@ class IosAppDatabaseBuilder(
             // platforms rather than following whatever the OS happens to ship.
             .setDriver(BundledSQLiteDriver())
             .setQueryCoroutineContext(Dispatchers.IO)
-            .addMigrations(*appDatabaseMigrations)
+            .addMigrations(*databaseMigrations)
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(connection: SQLiteConnection) {
                     super.onOpen(connection)
@@ -179,20 +183,6 @@ class IosAppDatabaseBuilder(
         listOf(applicationSupportPath(fileName), documentsPath(fileName)).forEach { base ->
             (SUFFIXES + INCIDENTAL_SUFFIXES).forEach { suffix -> manager.removeItemAtPath(base + suffix, null) }
         }
-    }
-
-    /**
-     * The same computed indexes the Android builder creates.
-     *
-     * Room cannot declare an index over an expression, so both platforms add these by hand. They
-     * belong in commonMain next to the migrations for the same reason.
-     */
-    private fun createCustomIndexes(connection: SQLiteConnection) {
-        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_temporaryBasals_end` ON `temporaryBasals` (`timestamp` + `duration`)")
-        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_extendedBoluses_end` ON `extendedBoluses` (`timestamp` + `duration`)")
-        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_temporaryTargets_end` ON `temporaryTargets` (`timestamp` + `duration`)")
-        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_carbs_end` ON `carbs` (`timestamp` + `duration`)")
-        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_runningModes_end` ON `runningModes` (`timestamp` + `duration`)")
     }
 
     /**

@@ -33,19 +33,20 @@ import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import io.reactivex.rxjava3.disposables.CompositeDisposable
-import java.time.Clock
-import java.time.Instant
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import java.time.Clock
+import java.time.Instant
 
 /**
  * Interface to the functionality of the looping algorithm and storage systems.
  */
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
-class LoopHubImpl @Inject constructor(
+@Inject
+class LoopHubImpl(
     private val aapsLogger: AAPSLogger,
     private val commandQueue: CommandQueue,
     private val constraintChecker: ConstraintsChecker,
@@ -159,7 +160,7 @@ class LoopHubImpl @Inject constructor(
                 carbs = carbsAfterConstraints,
                 note = null,
                 source = Sources.Garmin,
-                onError = { aapsLogger.error(LTag.GARMIN, "carbs delivery failed: $it") }
+                onError = { aapsLogger.error(LTag.GARMIN, "carbs delivery failed: ${it.comment}") }
             )
         }
     }

@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
 import androidx.activity.compose.setContent
+import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -58,13 +59,11 @@ import app.aaps.wear.R
 import app.aaps.wear.comm.DataLayerListenerServiceWear
 import app.aaps.wear.comm.IntentCancelNotification
 import app.aaps.wear.comm.IntentWearToMobile
-import app.aaps.wear.di.WearMetroActivity
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
-import androidx.appcompat.app.AppCompatActivity
 
 /**
  * Two-page confirmation screen for an action authored on (or relayed by) the master.
@@ -147,7 +146,7 @@ class AcceptActivity : AppCompatActivity() {
                 val correctionU = if (correctionSteps == 0) 0.0 else correctionSteps * (wizardDetail?.bolusStep ?: 0.0)
                 val adjustedTotal = wizardDetail?.let { (it.unclampedInsulin + correctionU).coerceAtLeast(0.0) }
                 // Swipe to confirm is only meaningful when there is insulin or carbs to deliver.
-                val canConfirm = adjustedTotal == null || adjustedTotal > 0.0 || (wizardDetail!!.carbs > 0)
+                val canConfirm = adjustedTotal == null || adjustedTotal > 0.0 || (wizardDetail.carbs > 0)
                 val pagerState = rememberPagerState(pageCount = { if (isError && !hasLines) 1 else if (canConfirm) 2 else 1 })
 
                 if (wizardDetail == null) LaunchedEffect(Unit) {
@@ -629,7 +628,7 @@ private fun WizardDetailPage(detail: EventData.WizardDetail, correctionSteps: In
                         val hasIob = totalIob != null && totalIob != 0.0
                         if (hasIob || correctionU != 0.0) {
                             WizardDetailDivider()
-                            if (hasIob) WizardDetailRow(stringResource(R.string.wizard_result_iob), -totalIob!!, fmt2)
+                            if (hasIob) WizardDetailRow(stringResource(R.string.wizard_result_iob), -totalIob, fmt2)
                             if (correctionU != 0.0) WizardDetailRow(stringResource(R.string.wizard_result_correction), correctionU, fmt2)
                         }
                         WizardDetailDivider()

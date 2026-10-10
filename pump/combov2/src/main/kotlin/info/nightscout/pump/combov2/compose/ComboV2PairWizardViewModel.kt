@@ -7,6 +7,7 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.resources.ResourceHelper
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
+import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import info.nightscout.comboctl.base.BasicProgressStage
@@ -23,7 +24,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import dev.zacsweers.metro.Inject
 
 enum class PairWizardPhase {
     /** Driver not yet initialized — Bluetooth unavailable. */
@@ -62,7 +62,8 @@ sealed class PairWizardEvent {
 // unscoped so each screen gets its own.
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 @ViewModelKey
-class ComboV2PairWizardViewModel @Inject constructor(
+@Inject
+class ComboV2PairWizardViewModel(
     private val aapsLogger: AAPSLogger,
     private val rh: ResourceHelper,
     private val combov2Plugin: ComboV2Plugin

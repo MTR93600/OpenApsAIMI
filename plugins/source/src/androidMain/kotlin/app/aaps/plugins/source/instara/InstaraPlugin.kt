@@ -15,6 +15,7 @@ import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -48,12 +49,14 @@ import org.json.JSONObject
 @ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
 @IntKey(540)
 @SingleIn(AppScope::class)
-class InstaraPlugin @Inject constructor(
+@Inject
+class InstaraPlugin(
     private val context: Context,
     rh: ResourceHelper,
     aapsLogger: AAPSLogger,
     preferences: Preferences,
-    config: Config
+    config: Config,
+    notificationManager: NotificationManager
 ) : AbstractBgSourcePlugin(
     PluginDescription()
         .mainType(PluginType.BGSOURCE)
@@ -68,7 +71,7 @@ class InstaraPlugin @Inject constructor(
         .description(TextRef.AndroidRes(app.aaps.plugins.source.R.string.description_source_instara_app)),
     // Register Instara plugin-local preference/non-preference key enums
     ownPreferences = InstaraBooleanKey.entries + InstaraStringKey.entries,
-    aapsLogger, rh, preferences, config
+    aapsLogger, rh, preferences, config, notificationManager
 ), BgSource {
 
     private fun appContext(): Context = context
@@ -99,7 +102,8 @@ class InstaraPlugin @Inject constructor(
     }
 
 
-    class InstaraWorker @AssistedInject constructor(
+    @AssistedInject
+    class InstaraWorker(
         @Assisted context: Context,
         @Assisted params: WorkerParameters,
         aapsLogger: AAPSLogger,

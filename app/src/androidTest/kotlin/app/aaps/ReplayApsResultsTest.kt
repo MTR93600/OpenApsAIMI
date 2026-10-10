@@ -2,10 +2,7 @@ package app.aaps
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import app.aaps.di.newStaticInjector
-import app.aaps.di.testGraphs
 import app.aaps.core.data.model.GlucoseUnit
-import app.aaps.core.interfaces.di.MetroMemberInjector
 import app.aaps.core.interfaces.aps.APSResult
 import app.aaps.core.interfaces.aps.AutosensResult
 import app.aaps.core.interfaces.aps.CurrentTemp
@@ -15,23 +12,17 @@ import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.MealData
 import app.aaps.core.interfaces.aps.OapsProfile
 import app.aaps.core.interfaces.aps.OapsProfileAutoIsf
-import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.core.interfaces.di.MetroMemberInjector
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.maintenance.FileListProvider
-import app.aaps.core.interfaces.storage.Storage
-import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.StringKey
-import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.utils.JsonHelper
-import app.aaps.plugins.aps.utils.StaticInjector
-import app.aaps.plugins.aps.openAPSAMA.DetermineBasalAMA
+import app.aaps.di.newStaticInjector
+import app.aaps.di.testGraphs
 import app.aaps.plugins.aps.openAPSAMA.DetermineBasalAdapterAMAJS
 import app.aaps.plugins.aps.openAPSAMA.OpenAPSAMAPlugin
-import app.aaps.plugins.aps.openAPSAutoISF.DetermineBasalAutoISF
 import app.aaps.plugins.aps.openAPSSMB.DetermineBasalAdapterSMBJS
-import app.aaps.plugins.aps.openAPSSMB.DetermineBasalSMB
 import app.aaps.plugins.aps.openAPSSMB.OpenAPSSMBPlugin
 import app.aaps.plugins.aps.openAPSSMBAutoISF.DetermineBasalAdapterAutoISFJS
 import app.aaps.plugins.aps.openAPSSMBDynamicISF.DetermineBasalAdapterSMBDynamicISFJS

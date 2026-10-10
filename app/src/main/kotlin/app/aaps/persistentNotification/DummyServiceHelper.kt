@@ -6,8 +6,8 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.os.IBinder
 import app.aaps.core.interfaces.notifications.NotificationHolder
-import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 
 /*
@@ -21,7 +21,8 @@ import dev.zacsweers.metro.SingleIn
 
  */
 @SingleIn(AppScope::class)
-class DummyServiceHelper @Inject constructor(
+@Inject
+class DummyServiceHelper(
     private val notificationHolder: NotificationHolder
 ) {
 

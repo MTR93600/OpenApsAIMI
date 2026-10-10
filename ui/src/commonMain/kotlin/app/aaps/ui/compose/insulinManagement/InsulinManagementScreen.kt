@@ -61,7 +61,6 @@ import app.aaps.core.data.ui.ConfirmationLine
 import app.aaps.core.graph.InsulinGraphCompose
 import app.aaps.core.interfaces.insulin.InsulinType
 import app.aaps.core.interfaces.navigation.ElementType
-import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.AapsFab
 import app.aaps.core.ui.compose.AapsTopAppBar
@@ -219,7 +218,7 @@ fun InsulinManagementScreen(
                     IconButton(onClick = { viewModel.requestBack() }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = null
+                            contentDescription = stringResource(CoreUiStrings.back)
                         )
                     }
                 },
@@ -234,7 +233,7 @@ fun InsulinManagementScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Save,
-                                contentDescription = null
+                                contentDescription = stringResource(CoreUiStrings.save)
                             )
                         }
                     }
@@ -474,7 +473,7 @@ fun InsulinManagementScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.PlayArrow,
-                                contentDescription = null
+                                contentDescription = stringResource(CoreUiStrings.activate_insulin)
                             )
                         }
                 }
@@ -559,7 +558,7 @@ private fun PeakPresetChips(
             )
             Icon(
                 imageVector = Icons.Default.Info,
-                contentDescription = null,
+                contentDescription = stringResource(CoreUiStrings.carousel_show_card),
                 modifier = Modifier
                     .size(16.dp)
                     .clickable { showInfo = true },

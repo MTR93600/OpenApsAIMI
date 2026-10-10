@@ -18,8 +18,6 @@ import app.aaps.plugins.sync.tidepool.keys.TidepoolStringNonKey
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
-import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
 import net.openid.appauth.AppAuthConfiguration
 import net.openid.appauth.AuthState
 import net.openid.appauth.AuthorizationException
@@ -29,6 +27,8 @@ import net.openid.appauth.AuthorizationServiceConfiguration
 import net.openid.appauth.ResponseTypeValues
 import net.openid.appauth.browser.BrowserAllowList
 import net.openid.appauth.browser.VersionedBrowserMatcher
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 
 /**
  * JamOrHam
@@ -37,7 +37,8 @@ import net.openid.appauth.browser.VersionedBrowserMatcher
  * Handler for new style Tidepool openid auth
  */
 @SingleIn(AppScope::class)
-class AuthFlowOut @Inject constructor(
+@Inject
+class AuthFlowOut(
     private val aapsLogger: AAPSLogger,
     private val preferences: Preferences,
     private val context: Context,

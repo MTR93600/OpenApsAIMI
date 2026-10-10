@@ -19,6 +19,7 @@ import app.aaps.pump.diaconn.events.EventDiaconnG8DeviceChange
 import app.aaps.pump.diaconn.keys.DiaconnStringNonKey
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
+import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -27,7 +28,6 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import java.util.UUID
-import dev.zacsweers.metro.Inject
 
 enum class DiaconnPairStep {
     BLE_SCAN,
@@ -48,7 +48,8 @@ sealed class DiaconnPairWizardEvent {
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 @ViewModelKey
 @Stable
-class DiaconnPairWizardViewModel @Inject constructor(
+@Inject
+class DiaconnPairWizardViewModel(
     private val aapsLogger: AAPSLogger,
     private val preferences: Preferences,
     private val rxBus: RxBus,

@@ -1,11 +1,8 @@
 package app.aaps.plugins.sync.nsclientV3.clientcontrol
 
-import org.mockito.kotlin.doAnswer
-import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.interfaces.clientcontrol.ClientControlActionDispatcher
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.logging.AAPSLogger
-import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.LongComposedKey
@@ -15,6 +12,8 @@ import app.aaps.core.keys.interfaces.IntNonPreferenceKey
 import app.aaps.core.keys.interfaces.NonPreferenceKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.StringNonPreferenceKey
+import app.aaps.plugins.sync.SyncStringsValues
+import app.aaps.shared.tests.generatedTextResolver
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.test.advanceTimeBy
@@ -36,7 +35,7 @@ class PreferencesClientPublisherTest {
     @Mock lateinit var preferences: Preferences
     @Mock lateinit var clientControlRoundTrip: ClientControlRoundTrip
     @Mock lateinit var config: Config
-    @Mock lateinit var rh: ResourceHelper
+    private val rh = generatedTextResolver("sync" to SyncStringsValues::textOf)
     @Mock lateinit var aapsLogger: AAPSLogger
 
     private val changes = MutableSharedFlow<NonPreferenceKey>(extraBufferCapacity = 10)
@@ -48,7 +47,6 @@ class PreferencesClientPublisherTest {
     fun setup() {
         MockitoAnnotations.openMocks(this)
         whenever(config.AAPSCLIENT).thenReturn(true)
-        doAnswer { "update settings" }.whenever(rh).gs(any<TextRef>())
         whenever(preferences.syncedLocalChanges).thenReturn(changes)
         whenever(preferences.get(key as BooleanNonPreferenceKey)).thenReturn(true)
         whenever(preferences.get(LongComposedKey.SyncedPrefModified, key.key)).thenReturn(100L)
@@ -61,7 +59,7 @@ class PreferencesClientPublisherTest {
         runCurrent()
 
         changes.emit(key)
-        advanceTimeBy(600); runCurrent() // settle window
+        advanceTimeBy(1600); runCurrent() // settle window
 
         verify(clientControlRoundTrip).run(eq(ClientControlActionDispatcher.Command.PreferenceEdit(mapOf(key.key to ("true" to 100L)))), any())
     }
@@ -77,7 +75,26 @@ class PreferencesClientPublisherTest {
         changes.emit(key)
         changes.emit(pct)
         runCurrent()                     // both accumulate in pending
-        advanceTimeBy(600); runCurrent() // single settle → single round-trip
+        advanceTimeBy(1600); runCurrent() // single settle → single round-trip
+
+        verify(clientControlRoundTrip).run(
+            eq(ClientControlActionDispatcher.Command.PreferenceEdit(mapOf(key.key to ("true" to 100L), pct.key to ("80" to 200L)))), any()
+        )
+    }
+
+    @Test
+    fun slowTapsOneSecondApartShipAsOneRoundTrip() = runTest {
+        val pct = IntKey.OverviewBolusPercentage
+        whenever(preferences.get(pct as IntNonPreferenceKey)).thenReturn(80)
+        whenever(preferences.get(LongComposedKey.SyncedPrefModified, pct.key)).thenReturn(200L)
+        sut.start(backgroundScope)
+        runCurrent()
+
+        changes.emit(key)
+        advanceTimeBy(1000); runCurrent() // still inside the settle window, nothing sent yet
+        verify(clientControlRoundTrip, never()).run(any(), any())
+        changes.emit(pct)
+        advanceTimeBy(1600); runCurrent()
 
         verify(clientControlRoundTrip).run(
             eq(ClientControlActionDispatcher.Command.PreferenceEdit(mapOf(key.key to ("true" to 100L), pct.key to ("80" to 200L)))), any()
@@ -94,7 +111,7 @@ class PreferencesClientPublisherTest {
         runCurrent()
 
         changes.emit(qw)
-        advanceTimeBy(600); runCurrent()
+        advanceTimeBy(1600); runCurrent()
 
         verify(clientControlRoundTrip).run(eq(ClientControlActionDispatcher.Command.PreferenceEdit(mapOf(qw.key to (blob to 300L)))), any())
     }
@@ -105,7 +122,7 @@ class PreferencesClientPublisherTest {
         sut.start(backgroundScope)
 
         changes.emit(key)
-        advanceTimeBy(600); runCurrent()
+        advanceTimeBy(1600); runCurrent()
 
         verify(clientControlRoundTrip, never()).run(any(), any())
     }

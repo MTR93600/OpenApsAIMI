@@ -62,7 +62,7 @@ class LinearCalibrationPlugin(
     override val rh: TextResolver,
     private val dateUtil: DateUtil,
     private val persistenceLayer: PersistenceLayer,
-    private val notificationManager: NotificationManager,
+    notificationManager: NotificationManager,
     private val glucoseStatusProvider: GlucoseStatusProvider,
     private val rxBus: RxBus,
     private val profileUtil: ProfileUtil,
@@ -72,10 +72,9 @@ class LinearCalibrationPlugin(
         .mainType(PluginType.CALIBRATION)
         .icon(IcCalibration)
         .pluginName(CalibrationStrings.linear_calibration_name)
-        .shortName(CalibrationStrings.calibration_shortname)
         .description(CalibrationStrings.description_linear_calibration)
         .composeContent { CalibrationComposeContent(persistenceLayer, profileUtil, aapsLogger, dateUtil) },
-    aapsLogger, rh
+    aapsLogger, rh, notificationManager
 ), Calibration {
 
     private var scope: CoroutineScope? = null

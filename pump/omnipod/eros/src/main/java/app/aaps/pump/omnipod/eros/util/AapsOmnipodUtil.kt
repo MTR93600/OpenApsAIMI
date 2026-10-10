@@ -9,12 +9,12 @@ import com.google.gson.GsonBuilder
 import com.google.gson.JsonDeserializer
 import com.google.gson.JsonPrimitive
 import com.google.gson.JsonSerializer
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 import org.joda.time.DateTime
 import org.joda.time.DateTimeZone
 import org.joda.time.format.ISODateTimeFormat
-import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.SingleIn
 
 /**
  * Created by andy on 4/8/19. Was Java.
@@ -22,7 +22,8 @@ import dev.zacsweers.metro.SingleIn
  * swapping the serializer would change what is written to disk.
  */
 @SingleIn(AppScope::class)
-class AapsOmnipodUtil @Inject constructor(
+@Inject
+class AapsOmnipodUtil(
     private val rh: ResourceHelper
 ) {
 

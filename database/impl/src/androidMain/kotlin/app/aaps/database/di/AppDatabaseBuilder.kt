@@ -1,20 +1,20 @@
 package app.aaps.database.di
 
 import android.content.Context
-import androidx.annotation.VisibleForTesting
 import androidx.room.Room
 import androidx.room.RoomDatabase.Callback
-import androidx.room.migration.Migration
 import androidx.sqlite.SQLiteConnection
-import androidx.sqlite.driver.bundled.BundledSQLiteDriver
-import androidx.sqlite.execSQL
 import androidx.sqlite.db.SupportSQLiteDatabase
+import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import app.aaps.database.AppDatabase
 
 /**
  * Builds the Room database. Not a DI module any more - `DatabaseBindings` provides the instance and
- * this class only holds the builder and the migration list, so the instrumented tests in this module
- * can open a database exactly the way the app does.
+ * this class only holds the builder, so the instrumented tests in this module can open a database
+ * exactly the way the app does.
+ *
+ * The migrations are not here. They live in `DatabaseMigrations` in commonMain, because every
+ * platform needs the same ones - see the note there.
  */
 open class AppDatabaseBuilder {
 
@@ -26,7 +26,7 @@ open class AppDatabaseBuilder {
             // across all devices) and, crucially, it does not allocate the framework CursorWindow
             // mem buffer, eliminating CursorWindowAllocationException on memory-constrained devices.
             .setDriver(BundledSQLiteDriver())
-            .addMigrations(*migrations)
+            .addMigrations(*databaseMigrations)
             .addCallback(object : Callback() {
                 // Driver mode delivers an SQLiteConnection (not a SupportSQLiteConnection), so the
                 // SupportSQLiteDatabase overload of onOpen never fires here — the connection overload must.
@@ -61,18 +61,5 @@ open class AppDatabaseBuilder {
         database.execSQL("CREATE INDEX IF NOT EXISTS `index_carbs_end` ON `carbs` (`timestamp` + `duration`)")
         database.execSQL("CREATE INDEX IF NOT EXISTS `index_runningModes_end` ON `runningModes` (`timestamp` + `duration`)")
     }
-
-    private fun createCustomIndexes(connection: SQLiteConnection) {
-        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_temporaryBasals_end` ON `temporaryBasals` (`timestamp` + `duration`)")
-        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_extendedBoluses_end` ON `extendedBoluses` (`timestamp` + `duration`)")
-        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_temporaryTargets_end` ON `temporaryTargets` (`timestamp` + `duration`)")
-        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_carbs_end` ON `carbs` (`timestamp` + `duration`)")
-        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_runningModes_end` ON `runningModes` (`timestamp` + `duration`)")
-    }
-
-    /** The common list. Instrument tests still ask the Android builder for it. */
-    @VisibleForTesting
-    internal val migrations: Array<Migration>
-        get() = appDatabaseMigrations
 
 }

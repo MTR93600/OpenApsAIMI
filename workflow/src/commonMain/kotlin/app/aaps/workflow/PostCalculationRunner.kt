@@ -1,13 +1,5 @@
 package app.aaps.workflow
 
-import kotlin.time.Duration.Companion.hours
-import kotlin.time.Clock
-import kotlinx.datetime.toLocalDateTime
-import kotlinx.datetime.toInstant
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.LocalDateTime
-import dev.zacsweers.metro.Inject
-import app.aaps.core.objects.workflow.WorkOutcome
 import app.aaps.core.data.configuration.Constants
 import app.aaps.core.data.model.SourceSensor
 import app.aaps.core.data.time.T
@@ -16,20 +8,25 @@ import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
-import app.aaps.core.interfaces.overview.OverviewData
 import app.aaps.core.interfaces.overview.graph.BgDataPoint
 import app.aaps.core.interfaces.overview.graph.BgRange
 import app.aaps.core.interfaces.overview.graph.BgType
-import app.aaps.core.interfaces.overview.graph.OverviewDataCache
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.widget.WidgetUpdater
-import app.aaps.core.interfaces.workflow.CalculationSignalsEmitter
 import app.aaps.core.interfaces.workflow.CalculationWorkflow
 import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.objects.workflow.WorkOutcome
+import dev.zacsweers.metro.Inject
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
+import kotlinx.datetime.toLocalDateTime
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
 
 /**
  * Merged tail-of-chain worker covering: APS loop invocation, widget update,
@@ -38,7 +35,8 @@ import kotlin.math.min
  * Used by [CalculationWorkflow.runCalculation] (MAIN only, full phases) and by
  * [CalculationWorkflow.runOnReceivedPredictions] (predictions only).
  */
-class PostCalculationRunner @Inject constructor(
+@Inject
+class PostCalculationRunner(
     private val aapsLogger: AAPSLogger,
     private val workflowChainData: WorkflowChainData,
     private val iobCobCalculator: IobCobCalculator,
@@ -55,7 +53,7 @@ class PostCalculationRunner @Inject constructor(
         val data = workflowChainData.postFor(job, generation) ?: return WorkOutcome.StaleInput
 
         if (data.runLoopAndWidgetPhase) {
-            invokeLoop(data)
+            invokeLoop()
             if (isStopped()) return WorkOutcome.Stopped
             widgetUpdater.update("WorkFlow")
             if (isStopped()) return WorkOutcome.Stopped
@@ -69,11 +67,17 @@ class PostCalculationRunner @Inject constructor(
     }
 
     /*
-     * Triggered once autosens calculation has completed so the Loop has current data to work with.
-     * Autosens can be triggered by multiple sources but currently only a new BG should trigger a loop run.
+     * Runs after a completed MAIN calculation so the Loop has current data to work with.
+     *
+     * The loop is invoked when the newest BG has not been used for a loop run yet. The check is on
+     * purpose not tied to what started this chain: a chain started by a new BG can be cancelled and
+     * replaced by a chain started by another database change before it reaches this runner, and the
+     * replacement must not lose the pending BG trigger (issue #5066).
+     *
+     * [app.aaps.core.interfaces.aps.Loop.lastBgTriggeredRun] is written before the call and never
+     * reset, so each BG timestamp can drive at most one automatic loop run.
      */
-    private suspend fun invokeLoop(data: PostCalculationData) {
-        if (!data.triggeredByNewBG) return
+    private suspend fun invokeLoop() {
         val glucoseValue = iobCobCalculator.ads.actualBg() ?: return
         if (glucoseValue.timestamp <= loop.lastBgTriggeredRun) return
         loop.lastBgTriggeredRun = glucoseValue.timestamp

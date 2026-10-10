@@ -28,7 +28,6 @@ import app.aaps.core.objects.extensions.profileNames
 import app.aaps.core.objects.extensions.toScenes
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.clientcontrol.failText
-import app.aaps.ui.UiStrings
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
@@ -51,7 +50,8 @@ import kotlinx.coroutines.launch
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 @ViewModelKey
 @Stable
-class SceneListViewModel @Inject constructor(
+@Inject
+class SceneListViewModel(
     private val sceneRepository: SceneStore,
     private val activeSceneManager: ActiveSceneSync,
     private val persistenceLayer: PersistenceLayer,
@@ -167,10 +167,8 @@ class SceneListViewModel @Inject constructor(
         return invalid
     }
 
-    /** Format minutes as human-readable duration using DateUtil */
-    fun formatMinutes(minutes: Int): String =
-        if (minutes == 0) rh.gs(CoreUiStrings.scene_duration_indefinite)
-        else dateUtil.niceTimeScalar(minutes * 60_000L, rh)
+    /** "3 actions, 2 h" - see [sceneSummary]. */
+    fun summary(scene: Scene): String = sceneSummary(scene, rh)
 
     // --- Dialog state ---
 

@@ -2,13 +2,13 @@ package app.aaps.desktop.shell.platform
 
 import app.aaps.core.interfaces.autotune.Autotune
 import app.aaps.core.interfaces.bgQualityCheck.BgQualityCheck
+import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.maintenance.ExportResult
 import app.aaps.core.interfaces.maintenance.Maintenance
 import app.aaps.core.interfaces.overview.OverviewData
 import app.aaps.core.interfaces.overview.graph.OverviewDataCache
-import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.workflow.CalculationSignalsEmitter
 import app.aaps.implementation.maintenance.DesktopFolders
 import app.aaps.ui.compose.history.HistoryScope
@@ -16,9 +16,9 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
-import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import java.io.File
 
 /**
  * Real features that are not ported to desktop yet, refusing rather than pretending.
@@ -41,7 +41,8 @@ import kotlinx.coroutines.flow.StateFlow
  */
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
-class DesktopAutotune @Inject constructor(
+@Inject
+class DesktopAutotune(
     private val aapsLogger: AAPSLogger
 ) : Autotune {
 
@@ -65,7 +66,8 @@ class DesktopAutotune @Inject constructor(
  */
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
-class DesktopBgQualityCheck @Inject constructor(
+@Inject
+class DesktopBgQualityCheck(
     private val aapsLogger: AAPSLogger
 ) : BgQualityCheck {
 
@@ -91,7 +93,8 @@ class DesktopBgQualityCheck @Inject constructor(
  */
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
-class DesktopMaintenance @Inject constructor(
+@Inject
+class DesktopMaintenance(
     private val aapsLogger: AAPSLogger,
     /**
      * The live log, whose siblings are the rotated ones. Overridden in a test so it neither reads
@@ -148,7 +151,8 @@ class DesktopMaintenance @Inject constructor(
  */
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
-class DesktopHistoryScope @Inject constructor(
+@Inject
+class DesktopHistoryScope(
     private val aapsLogger: AAPSLogger
 ) : HistoryScope {
 

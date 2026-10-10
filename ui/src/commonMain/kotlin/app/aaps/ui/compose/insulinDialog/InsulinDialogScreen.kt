@@ -1,7 +1,6 @@
 package app.aaps.ui.compose.insulinDialog
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,7 +28,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -44,6 +42,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.aaps.core.data.format.NumberFormat
@@ -51,12 +51,13 @@ import app.aaps.core.data.model.ICfg
 import app.aaps.core.data.ui.ConfirmationLine
 import app.aaps.core.interfaces.InterfacesStrings
 import app.aaps.core.interfaces.navigation.ElementType
-import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.DateTimeSection
 import app.aaps.core.ui.compose.InsulinSelector
+import app.aaps.core.ui.compose.LabeledSwitch
 import app.aaps.core.ui.compose.NumberInputRow
+import app.aaps.core.ui.compose.banner.WarningBanner
 import app.aaps.core.ui.compose.bottomBarSafeArea
 import app.aaps.core.ui.compose.clearFocusOnTap
 import app.aaps.core.ui.compose.consumeOverscroll
@@ -251,6 +252,13 @@ internal fun InsulinDialogContent(
             )
         },
         bottomBar = {
+            // One text for both the visible label and the screen reader, so the two cannot drift apart.
+            // A Button merges its children, so a bare "Confirm" would hide the amount. Carry the amount in it.
+            val confirmLabel =
+                if (uiState.insulin > 0.0) stringResource(InterfacesStrings.format_insulin_units, uiState.insulin)
+                else stringResource(CoreUiStrings.ok)
+            val confirmDescription =
+                stringResource(CoreUiStrings.confirm)
             Button(
                 onClick = {
                     focusManager.clearFocus()
@@ -261,6 +269,7 @@ internal fun InsulinDialogContent(
                     .fillMaxWidth()
                     .bottomBarSafeArea()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .semantics { contentDescription = confirmDescription }
             ) {
                 Icon(
                     imageVector = Icons.Filled.Check,
@@ -268,11 +277,7 @@ internal fun InsulinDialogContent(
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                if (uiState.insulin > 0.0) {
-                    Text(stringResource(InterfacesStrings.format_insulin_units, uiState.insulin))
-                } else {
-                    Text(stringResource(CoreUiStrings.ok))
-                }
+                Text(confirmLabel)
             }
         }
     ) { paddingValues ->
@@ -295,6 +300,13 @@ internal fun InsulinDialogContent(
             // --- Status Bar ---
             DialogStatusBar(bgInfo = bgInfo, iob = iob, cob = cob)
 
+            // --- Forced-record-only warning ---
+            // Same as the treatment dialog. Here it was only a red label, so a screen reader user
+            // was never told that this insulin will be recorded and NOT given by the pump.
+            if (uiState.forcedRecordOnly) {
+                WarningBanner(message = stringResource(InterfacesStrings.bolus_recorded_only))
+            }
+
             // --- Card 1: Switches ---
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -304,45 +316,19 @@ internal fun InsulinDialogContent(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    // Eating Soon TT
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onEatingSoonChange(!uiState.eatingSoonTtChecked) },
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = stringResource(UiStrings.start_eating_soon_tt),
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Switch(checked = uiState.eatingSoonTtChecked, onCheckedChange = { onEatingSoonChange(it) })
-                    }
-
-                    // Record Only
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(enabled = uiState.recordOnlyEnabled) {
-                                onRecordOnlyChange(!uiState.recordOnlyChecked)
-                            },
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = stringResource(InterfacesStrings.bolus_recorded_only),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = if (uiState.forcedRecordOnly) MaterialTheme.colorScheme.error
-                            else MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Switch(
-                            checked = uiState.recordOnlyChecked,
-                            onCheckedChange = { onRecordOnlyChange(it) },
-                            enabled = uiState.recordOnlyEnabled
-                        )
-                    }
+                    LabeledSwitch(
+                        label = stringResource(UiStrings.start_eating_soon_tt),
+                        checked = uiState.eatingSoonTtChecked,
+                        onCheckedChange = onEatingSoonChange
+                    )
+                    LabeledSwitch(
+                        label = stringResource(InterfacesStrings.bolus_recorded_only),
+                        checked = uiState.recordOnlyChecked,
+                        onCheckedChange = onRecordOnlyChange,
+                        enabled = uiState.recordOnlyEnabled,
+                        labelColor = if (uiState.forcedRecordOnly) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurface
+                    )
                 }
             }
 

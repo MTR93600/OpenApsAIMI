@@ -12,6 +12,7 @@ import app.aaps.pump.diaconn.DiaconnG8Pump
 import app.aaps.pump.diaconn.keys.DiaconnIntKey
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
+import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -20,7 +21,6 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import dev.zacsweers.metro.Inject
 
 data class DiaconnUserOptionsUiState(
     val beepAndAlarm: Int = 1,      // 1=sound, 2=vibrate, 3=silent
@@ -40,7 +40,8 @@ sealed class DiaconnUserOptionsEvent {
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 @ViewModelKey
 @Stable
-class DiaconnUserOptionsViewModel @Inject constructor(
+@Inject
+class DiaconnUserOptionsViewModel(
     private val aapsLogger: AAPSLogger,
     private val rh: ResourceHelper,
     private val commandQueue: CommandQueue,

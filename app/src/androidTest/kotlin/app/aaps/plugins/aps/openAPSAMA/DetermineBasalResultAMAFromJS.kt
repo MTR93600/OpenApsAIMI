@@ -1,17 +1,18 @@
 package app.aaps.plugins.aps.openAPSAMA
 
-import app.aaps.core.interfaces.di.MetroMemberInjector
 import app.aaps.core.interfaces.aps.Predictions
+import app.aaps.core.interfaces.di.MetroMemberInjector
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.plugins.aps.openAPS.APSResultObject
+import dev.zacsweers.metro.Inject
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import org.json.JSONObject
 import org.mozilla.javascript.NativeObject
-import dev.zacsweers.metro.Inject
 
-class DetermineBasalResultAMAFromJS @Inject constructor(injector: MetroMemberInjector) : APSResultObject(injector) {
+@Inject
+class DetermineBasalResultAMAFromJS(injector: MetroMemberInjector) : APSResultObject(injector) {
 
     @Inject lateinit var dateUtil: DateUtil
 

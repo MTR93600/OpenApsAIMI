@@ -1,6 +1,5 @@
 package app.aaps.core.ui.compose.preference
 
-import app.aaps.core.keys.interfaces.TextRef
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -27,6 +26,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.StringComposedNonPreferenceKey
 import app.aaps.core.keys.interfaces.StringNonPreferenceKey
 import app.aaps.core.keys.interfaces.StringPreferenceKey
+import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.keys.interfaces.UnitDoublePreferenceKey
 import app.aaps.core.ui.compose.LocalConfig
 import app.aaps.core.ui.compose.LocalPreferences
@@ -135,6 +135,8 @@ private object PreviewPreferences : Preferences {
     override fun allMatchingInts(key: ComposedKey): List<Int> = emptyList()
     override fun isExportableKey(key: String): Boolean = false
     override fun getAllPreferenceKeys(): List<PreferenceKey> = emptyList()
+    override fun getAllKeys(): List<NonPreferenceKey> = emptyList()
+    override fun reloadFromStore() {}
 }
 
 /**
@@ -172,6 +174,8 @@ private object PreviewConfig : Config {
     override fun initCompleted() {}
     override fun initFailed(error: String) {}
     override fun showInitSnackbar(message: String) {}
+    override fun beginReconfiguring() {}
+    override fun endReconfiguring() {}
 
     override fun isDev(): Boolean = false
     override fun isEngineeringModeOrRelease(): Boolean = true

@@ -500,6 +500,16 @@ internal class IosNeutralMealPreferences : Preferences {
     override val nsclientMode: Boolean = false
     override val pumpControlMode: Boolean = false
 
+    /** Nothing registers keys here: a scene scripts [doubles] and [booleans] directly. */
+    override fun getAllKeys(): List<NonPreferenceKey> = emptyList()
+
+    /**
+     * No-op, and not a fail-loud case: there is no store behind this fake, only the two maps a
+     * scene fills, so there is nothing to re-read. Unlike an unscripted key read, calling this is
+     * not a sign that a scene forgot something.
+     */
+    override fun reloadFromStore() {}
+
     override fun get(key: DoublePreferenceKey): Double = requireDouble(key.key)
     override fun get(key: DoubleNonPreferenceKey): Double = requireDouble(key.key)
     override fun put(key: DoubleNonPreferenceKey, value: Double) {

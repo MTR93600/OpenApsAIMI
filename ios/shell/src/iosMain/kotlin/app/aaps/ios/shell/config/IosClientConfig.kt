@@ -1,22 +1,23 @@
 package app.aaps.ios.shell.config
 
-import app.aaps.core.keys.interfaces.AppPlatform
-import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.configuration.ExternalOptions
 import app.aaps.core.interfaces.configuration.InitProgress
+import app.aaps.core.keys.interfaces.AppPlatform
+import app.aaps.core.keys.interfaces.TextRef
+import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.coroutines.flow.update
 import platform.Foundation.NSBundle
-import platform.Foundation.NSUserDomainMask
 import platform.Foundation.NSDocumentDirectory
-import platform.Foundation.NSSearchPathForDirectoriesInDomains
 import platform.Foundation.NSFileManager
+import platform.Foundation.NSSearchPathForDirectoriesInDomains
+import platform.Foundation.NSUserDomainMask
 import platform.UIKit.UIDevice
 
 /**
@@ -125,16 +126,30 @@ class IosClientConfig(
     private val _initSnackbarFlow = MutableSharedFlow<String>(extraBufferCapacity = 8)
     override val initSnackbarFlow: SharedFlow<String> = _initSnackbarFlow.asSharedFlow()
 
+    // Each of these replaces the whole value rather than copying it, which is how they were written
+    // and what the start-up progress wants. The one field that must survive is the reconfigure depth:
+    // it belongs to whoever opened the window, not to init progress, and clobbering it here would
+    // close a window that `whileReconfiguring` still believes is open - reopening the app to readers
+    // in the middle of an import. It matters more on iOS than anywhere else, because iOS starts at
+    // `done = true` and has no start-up sequence that would put the state right again afterwards.
     override fun updateInitProgress(step: String, current: Int, total: Int) {
-        _initProgressFlow.value = InitProgress(step = step, current = current, total = total)
+        _initProgressFlow.update { InitProgress(step = step, current = current, total = total, reconfiguringDepth = it.reconfiguringDepth) }
     }
 
     override fun initCompleted() {
-        _initProgressFlow.value = InitProgress(done = true)
+        _initProgressFlow.update { InitProgress(done = true, reconfiguringDepth = it.reconfiguringDepth) }
     }
 
     override fun initFailed(error: String) {
-        _initProgressFlow.value = InitProgress(done = true, error = error)
+        _initProgressFlow.update { InitProgress(done = true, error = error, reconfiguringDepth = it.reconfiguringDepth) }
+    }
+
+    override fun beginReconfiguring() {
+        _initProgressFlow.update { it.enteringReconfigure() }
+    }
+
+    override fun endReconfiguring() {
+        _initProgressFlow.update { it.leavingReconfigure() }
     }
 
     override fun showInitSnackbar(message: String) {

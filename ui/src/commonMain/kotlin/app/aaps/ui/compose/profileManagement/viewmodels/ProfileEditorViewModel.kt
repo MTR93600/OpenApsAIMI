@@ -20,12 +20,11 @@ import app.aaps.core.interfaces.profile.SingleProfile
 import app.aaps.core.interfaces.protection.ProtectionCheck
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.utils.DateUtil
-import app.aaps.core.interfaces.utils.Round
 import app.aaps.core.interfaces.utils.HardLimits
+import app.aaps.core.interfaces.utils.Round
 import app.aaps.core.objects.extensions.toPureProfile
 import app.aaps.core.objects.profile.ProfileSealed
 import app.aaps.core.ui.CoreUiStrings
-import app.aaps.ui.UiStrings
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
@@ -82,7 +81,8 @@ data class ProfileUiState(
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 @ViewModelKey
 @Stable
-class ProfileEditorViewModel @Inject constructor(
+@Inject
+class ProfileEditorViewModel(
     private val aapsLogger: AAPSLogger,
     private val rh: TextResolver,
     private val profileRepository: ProfileRepository,

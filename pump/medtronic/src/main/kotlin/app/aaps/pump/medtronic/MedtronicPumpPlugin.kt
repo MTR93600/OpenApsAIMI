@@ -95,6 +95,11 @@ import app.aaps.pump.medtronic.keys.MedtronicStringPreferenceKey
 import app.aaps.pump.medtronic.service.RileyLinkMedtronicService
 import app.aaps.pump.medtronic.util.MedtronicUtil
 import app.aaps.pump.medtronic.util.MedtronicUtil.Companion.isSame
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.ContributesIntoMap
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
+import dev.zacsweers.metro.binding
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -108,14 +113,9 @@ import org.joda.time.LocalDateTime
 import java.util.Calendar
 import java.util.GregorianCalendar
 import java.util.Locale
-import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoMap
-import dev.zacsweers.metro.IntKey as MetroIntKey
-import dev.zacsweers.metro.binding
-import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.SingleIn
 import kotlin.math.abs
 import kotlin.math.floor
+import dev.zacsweers.metro.IntKey as MetroIntKey
 
 /**
  * Created by andy on 23.04.18.
@@ -126,7 +126,8 @@ import kotlin.math.floor
 @PumpDriver
 @MetroIntKey(1090)
 @SingleIn(AppScope::class)
-class MedtronicPumpPlugin @Inject constructor(
+@Inject
+class MedtronicPumpPlugin(
     aapsLogger: AAPSLogger,
     override val rh: ResourceHelper,
     preferences: Preferences,
@@ -139,7 +140,7 @@ class MedtronicPumpPlugin @Inject constructor(
     private val rileyLinkServiceData: RileyLinkServiceData,
     private val serviceTaskExecutor: ServiceTaskExecutor,
     private val uiInteraction: UiInteraction,
-    private val notificationManager: NotificationManager,
+    notificationManager: NotificationManager,
     dateUtil: DateUtil,
     pumpSync: PumpSync,
     pumpSyncStorage: PumpSyncStorage,
@@ -160,7 +161,6 @@ class MedtronicPumpPlugin @Inject constructor(
         }
         .icon(IcPluginMedtronic)
         .pluginName(TextRef.AndroidRes(R.string.medtronic_name))
-        .shortName(TextRef.AndroidRes(R.string.medtronic_name_short))
         .description(TextRef.AndroidRes(R.string.description_pump_medtronic)),
     ownPreferences = RileylinkBooleanPreferenceKey.entries + RileyLinkDoubleKey.entries + RileyLinkLongKey.entries + RileyLinkStringKey.entries +
         RileyLinkStringPreferenceKey.entries + MedtronicBooleanPreferenceKey.entries + MedtronicIntPreferenceKey.entries +
@@ -180,7 +180,8 @@ class MedtronicPumpPlugin @Inject constructor(
     //instantiator = instantiator,
     pumpEnactResultProvider = pumpEnactResultProvider,
     bolusProgressData = bolusProgressData,
-    pumpDriverConfigurationInternal = MedtronicPumpDriverConfiguration()
+    pumpDriverConfigurationInternal = MedtronicPumpDriverConfiguration(),
+    notificationManager = notificationManager
 ), Pump, RileyLinkPumpDevice, PumpSyncEntriesCreator {
 
     private var rileyLinkMedtronicService: RileyLinkMedtronicService? = null
@@ -238,7 +239,10 @@ class MedtronicPumpPlugin @Inject constructor(
     override suspend fun onStop() {
         scope?.cancel()
         scope = null
-        super.onStop()
+        super.onStop() // unbinds the service
+        // onServiceDisconnected is not called after unbindService, so drop the reference here.
+        // Otherwise the destroyed service stays alive after a pump switch or config change.
+        rileyLinkMedtronicService = null
     }
 
     override fun initPumpStatusData() {
@@ -256,7 +260,8 @@ class MedtronicPumpPlugin @Inject constructor(
             preferences.put(MedtronicLongNonKey.FirstPumpUse, System.currentTimeMillis())
         migrateSettings()
 
-        pumpSyncStorage.initStorage()
+        // pumpSyncStorage.initStorage() was here. It no longer exists: the storage reads the
+        // preference on every call now, so there is nothing to prime and nothing that can go stale.
 
         this.displayConnectionMessages = false
     }

@@ -24,7 +24,6 @@ import app.aaps.core.objects.profile.ProfileSealed
 import app.aaps.core.utils.MidnightUtils
 import app.aaps.plugins.aps.R
 import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.SingleIn
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.buildJsonArray
@@ -35,10 +34,10 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.util.TimeZone
-
 import kotlin.math.min
 
-class ATProfile @Inject constructor(
+@Inject
+class ATProfile(
     private val preferences: Preferences,
     private val profileUtil: ProfileUtil,
     private val dateUtil: DateUtil,

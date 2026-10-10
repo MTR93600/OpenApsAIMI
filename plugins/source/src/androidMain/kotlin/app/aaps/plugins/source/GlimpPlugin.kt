@@ -13,6 +13,7 @@ import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -38,11 +39,13 @@ import kotlinx.coroutines.Dispatchers
 @ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
 @IntKey(430)
 @SingleIn(AppScope::class)
-class GlimpPlugin @Inject constructor(
+@Inject
+class GlimpPlugin(
     rh: ResourceHelper,
     aapsLogger: AAPSLogger,
     preferences: Preferences,
     config: Config,
+    notificationManager: NotificationManager
 ) : AbstractBgSourcePlugin(
     pluginDescription = PluginDescription()
         .mainType(PluginType.BGSOURCE)
@@ -56,12 +59,13 @@ class GlimpPlugin @Inject constructor(
         .preferencesVisibleInSimpleMode(false)
         .description(TextRef.AndroidRes(R.string.description_source_glimp)),
     ownPreferences = emptyList(),
-    aapsLogger, rh, preferences, config
+    aapsLogger, rh, preferences, config, notificationManager
 ), BgSource {
 
     // cannot be inner class because of needed injection
 
-    class GlimpWorker @AssistedInject constructor(
+    @AssistedInject
+    class GlimpWorker(
         @Assisted context: Context,
         @Assisted params: WorkerParameters,
         aapsLogger: AAPSLogger,
@@ -93,7 +97,7 @@ class GlimpPlugin @Inject constructor(
                 raw = null,
                 noise = null,
                 trendArrow = TrendArrow.fromString(inputData.getString("myTrend")),
-                sourceSensor = SourceSensor.LIBRE_1_GLIMP
+                sourceSensor = SourceSensor.LIBRE_1
             )
             try {
                 persistenceLayer.insertCgmSourceData(Sources.Glimp, glucoseValues, emptyList(), null)

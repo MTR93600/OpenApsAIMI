@@ -1,12 +1,10 @@
 package app.aaps.plugins.automation.actions
 
-import app.aaps.plugins.automation.AutomationStrings
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.IDs
 import app.aaps.core.data.model.TT
 import app.aaps.core.interfaces.db.PersistenceLayer
-import app.aaps.core.ui.CoreUiStrings
-import app.aaps.plugins.automation.R
+import app.aaps.plugins.automation.AutomationStrings
 import app.aaps.plugins.automation.elements.InputDuration
 import app.aaps.plugins.automation.elements.InputTempTarget
 import com.google.common.truth.Truth.assertThat
@@ -26,10 +24,8 @@ class ActionStartTempTargetTest : ActionsTestBase() {
 
     @BeforeEach
     fun setup() {
-        whenever(rh.gs(AutomationStrings.starttemptarget)).thenReturn("Start temp target")
-        whenever(rh.gs(CoreUiStrings.format_mins)).thenReturn("%1\$d min")
 
-        sut = ActionStartTempTarget(aapsLogger, rh, { pumpEnactResultProvider() }, activePlugin, persistenceLayer, profileFunction, dateUtil, profileUtil, triggerDeps)
+        sut = ActionStartTempTarget(aapsLogger, text, { pumpEnactResultProvider() }, activePlugin, persistenceLayer, profileFunction, dateUtil, profileUtil, triggerDeps)
     }
 
     @Test fun friendlyNameTest() {

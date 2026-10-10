@@ -15,7 +15,7 @@
     <string name="count_selected">%1$d selectat</string>
     <string name="delete">Ștergeți</string>
     <string name="show_invalidated">Afișați invalidate</string>
-    <string name="hide_invalidated">Ascundeți invalidate</string>
+    <string name="hide_invalidated">Ascundeți invalidat</string>
     <string name="more_options">Mai multe opțiuni</string>
     <string name="refresh">Actualizați</string>
     <string name="no_history_records">Nu s-au găsit înregistrări</string>
@@ -68,7 +68,6 @@
     <string name="confirm_pin_hint">Confirmați codul PIN</string>
     <string name="preference_range_summary" comment="%1$s=current value, %2$s=unit label, %3$s=minimum, %4$s=maximum. Example: 5.0 U (0.0 – 10.0)">%1$s%2$s (%3$s – %4$s)</string>
     <string name="statuslights">Lumini de stare</string>
-    <string name="copy_existing_values">Copiați setările NS (dacă există)?</string>
     <string name="configbuilder_insulin">Insulină</string>
     <string name="configbuilder_bgsource">Sursă glicemie</string>
     <string name="configbuilder_smoothing">Netezire</string>
@@ -117,7 +116,6 @@
     <string name="profile_switch_no_insulin">Nu se poate schimba profilul: nicio insulină nu este în uz și nu a fost selectată niciuna.</string>
     <string name="profile_switch_select_insulin_hint">Nicio insulină nu este încă utilizată. Selectați insulina pe care o utilizați, astfel încât această modificare de profil să o poată înregistra.</string>
     <string name="insulin_activation_failed">Insulina nu a fost schimbată. Insulina anterioară este încă în uz.</string>
-    <string name="insulin_activation_failed_reason" comment="%1$s=localized failure reason. Example: The insulin was not switched: Master not reachable. Your previous insulin is still in use.">Insulina nu a fost schimbată: %1$s. Insulina anterioară este încă în uz.</string>
     <string name="insulin_activation_unconfirmed">Schimbarea insulinei nu a putut fi confirmată. Verificați care insulină este activă în profilul dumneavoastră înainte de administrare.</string>
     <string name="fill_prime_failed_insulin_not_switched" comment="%1$s=the delivery error message from the failed prime. Shown as one message because the insulin switch was chained to the prime succeeding.">%1$s\n\nInsulina nu a fost de asemenea schimbată.</string>
     <string name="active"><![CDATA[<Activ>]]></string>
@@ -184,6 +182,8 @@
     <string name="a11y_arrow_double_up">în creștere rapidă</string>
     <string name="a11y_arrow_none">nimic</string>
     <string name="a11y_arrow_unknown">necunoscută</string>
+    <string name="decrement">scădere</string>
+    <string name="increment">creștere</string>
     <string name="a11y_high">hiper</string>
     <string name="a11y_inrange">în țintă</string>
     <string name="a11y_low">hipo</string>
@@ -258,7 +258,6 @@
     <string name="pin_dont_match">PIN-urile nu se potrivesc</string>
     <!--    Profile-->
     <!--    ProfileFunction-->
-    <string name="startprofile">Utilizați profilul %1$d%% pentru %2$d min</string>
     <!--    APSResult-->
     <string name="cancel_temp">Anulare rată bazală temporară</string>
     <string name="let_temp_basal_run">Permiteți funcționarea bazalei temporare</string>
@@ -282,7 +281,7 @@
     <string name="in_range">În țintă</string>
     <string name="veryLow" comment="below 3.1">Foarte scăzută</string>
     <string name="low" comment="3.1-3.9">Scăzută</string>
-    <string name="high" comment="10.0-13.9">Mare</string>
+    <string name="high" comment="10.0-13.9">Ridicată</string>
     <string name="veryHigh" comment="above 13.9">Foarte mare</string>
     <string name="above" comment="above &quot;in range&quot;">Mai sus</string>
     <string name="detailed_14_days">Detaliere 14 zile</string>
@@ -295,7 +294,6 @@
     <!--    ProfileSwitch-->
     <!--    Temptarget-->
     <!--    Translator-->
-    <string name="careportal">Careportal</string>
     <string name="careportal_bgcheck">Verificare glicemie</string>
     <string name="careportal_mbg">Test glicemie manual sau Calibrare</string>
     <string name="careportal_announcement">Anunț</string>
@@ -346,7 +344,6 @@
     <string name="scene_conflict_active_running_mode">Modul de funcționare activ va fi înlocuit</string>
     <string name="scene_conflict_active_scene">Scenariul activa \"%1$s\" se va încheia primul</string>
     <string name="scene_action_tt">Țintă temporară: %1$s</string>
-    <string name="scene_action_profile" comment="%1$s=profile name, %2$d=percentage. Example: Profile: Default 150%">Profil: %1$s %2$d%%</string>
     <string name="scene_action_profile_pct_only" comment="%1$d=percentage, used when no specific named profile. Example: Profile: 150%">Profil: %1$d%%</string>
     <string name="scene_action_smb_on">Activați SMB</string>
     <string name="scene_action_smb_off">Dezactivați SMB</string>
@@ -435,7 +432,6 @@
     <string name="treatment_insulin_desc">Administrați bolusul manual</string>
     <string name="treatment_carbs_desc">Înregistrați carbohidrați fără insulină</string>
     <string name="treatment_calculator_desc">Calculați bolusul</string>
-    <string name="insulin_management">Insulină</string>
     <string name="manage_insulin_desc">Gestionați și activați configurațiile insulinei</string>
     <string name="concentration_disable_blocked">Nu se poate dezactiva suportul concentrației cât timp există insuline non-U100. Îndepărtați mai întâi toate configurațiile de insulină non-U100 și treceți la un profil U100.</string>
     <string name="simple_mode_blocked_by_concentration">Nu se poate activa modul simplu în timp ce se folosește insulina non-U100. Mai întâi se trece la insulina U100.</string>
@@ -637,7 +633,6 @@
     <string name="uel_scene_deactivated">SCENARIU DEZACTIVAT</string>
     <string name="uel_remote_config_changed">CONFIGURAȚIA PENTRU TELECOMANDĂ MODIFICATĂ</string>
     <!-- HardLimits -->
-    <string name="temp_target_low_target">Limita inferioară a țintei temporare</string>
     <string name="temp_target_high_target">Limita superioară a țintei temporare</string>
     <string name="temp_target_value">Valoare țintă temporară</string>
     <string name="insulin_dia">Valoarea DIA a insulinei</string>
@@ -722,7 +717,6 @@
     <string name="wizard_include_iob">Includeți IOB</string>
     <string name="wizard_include_cob">Includeți COB</string>
     <string name="wizard_calculation">Calcul</string>
-    <string name="no_action_selected">Nicio acțiune selectată, nu se va întâmpla nimic</string>
     <string name="carbs_removal_cob_limit" comment="Shown under the carbs field when removing carbs (a negative value). %1$d = grams of carbs currently on board, the maximum removable. Example: Max removal: 30 g (carbs on board)">Eliminare maximă: %1$d g (carbohidrați la bord)</string>
     <string name="wizard_no_insulin_required">Nu este necesară insulină</string>
     <string name="wizard_no_actual_bg">Nicio glicemie recentă pe care să se bazeze calculul!</string>
@@ -796,7 +790,6 @@
     <string name="close">Închideți</string>
     <!-- TwoMessagesDialog -->
     <!-- <unattended_export> -->
-    <string name="export_ok">OK</string>
     <string name="export_warning">Atenție</string>
     <string name="export_expired">Expirat</string>
     <string name="export_disabled">Dezactivat</string>
@@ -863,7 +856,6 @@
     <!--    Combo-->
     <string name="user_request" comment="26 characters max for translation">Cerere utilizator</string>
     <!--    Pump pair/unpair (shared) -->
-    <string name="pump_pair">Asociați</string>
     <string name="pump_unpair">Dezasociați</string>
     <string name="pump_unpair_confirm_title">Dezasociați pompa?</string>
     <string name="pump_paired" comment="26 characters max for translation">Pompă asociată</string>
@@ -902,7 +894,7 @@
     <string name="reorder">Reordonați</string>
     <string name="carousel_move_earlier" comment="Content description of the button that moves the centred carousel card one position towards the start of the list. Order-relative wording (not left/right) so it stays correct in right-to-left languages.">Mutați mai devreme</string>
     <string name="carousel_move_later" comment="Content description of the button that moves the centred carousel card one position towards the end of the list. Order-relative wording (not left/right) so it stays correct in right-to-left languages.">Mutați mai târziu</string>
-    <string name="carousel_show_card" comment="Screen-reader label for tapping a carousel card. The tap centres the card and shows its details below — it does not activate or apply anything.">Afișați detalii</string>
+    <string name="carousel_show_card" comment="Screen-reader label for any control that only reveals more detail about the item next to it - a carousel card that shows its details below, or an info button that opens a tooltip. It never activates or applies anything.">Afișați detalii</string>
     <string name="presets_changed_reorder_aborted">Presetări schimbate în altă parte. Ordinea nouă nu a fost salvată.</string>
     <string name="carousel_position" comment="Compact position readout shown between the reorder buttons. %1$d=position of the centred card starting at 1, %2$d=total cards. Example: 3 / 7">%1$d / %2$d</string>
     <string name="carousel_position_description" comment="Spoken form of carousel_position, read out by screen readers after each move. %1$d=position of the centred card starting at 1, %2$d=total cards. Example: Position 3 of 7">Poziția %1$d din %2$d</string>
@@ -1025,8 +1017,11 @@
     <string name="import_wrong_password">Parolă greșită</string>
     <string name="import_btn">Importați</string>
     <string name="import_anyway_btn">Importați oricum</string>
-    <string name="import_restart_title">Setări importate</string>
-    <string name="import_restart_message">Setările au fost importate. Aplicația trebuie să repornească.</string>
+    <!--
+      Worded as labelled counts rather than "%1$d settings will change", because the count can be 1
+      and this screen is shared with iOS and desktop - Android <plurals> are read with rh.gq(), which
+      only exists on Android. A label and a number agree with any quantity in any language.
+    -->
     <string name="import_source_local">Local</string>
     <string name="import_source_cloud">Cloud</string>
     <string name="import_load_more">Încărcați mai multe</string>
@@ -1039,7 +1034,6 @@
     <string name="nav_resetdb">Resetați bazele de date</string>
     <!--    BLE Scan Step (shared pump pairing) -->
     <string name="step_ble_scan">Găsiți pompa</string>
-    <string name="ble_scan_select_pump">Selectați pompa din lista de mai jos</string>
     <string name="ble_scan_scanning">Se scanează pentru dispozitive…</string>
     <!-- Graph configuration -->
     <string name="graph_add">Adăugați grafic</string>
@@ -1068,11 +1062,7 @@
     <string name="units_format_double_3">%1$.3f</string>
     <string name="units_format_double_3_range">%1$.3f (%2$.3f - %3$.3f)</string>
     <string name="units_format_double_range">%1$.1f (%2$.1f - %3$.1f)</string>
-    <string name="units_format_grams">%1$d g</string>
-    <string name="units_format_grams_range">%1$d g (%2$d - %3$d)</string>
     <string name="units_format_hours">%1$d h</string>
-    <string name="units_format_hours_double">%1$.0f h</string>
-    <string name="units_format_hours_double_range">%1$.0f h (%2$.0f - %3$.0f)</string>
     <string name="units_format_hours_range">%1$d h (%2$d - %3$d)</string>
     <string name="units_format_insulin">%1$.1f U</string>
     <string name="units_format_insulin_int">%1$d U</string>

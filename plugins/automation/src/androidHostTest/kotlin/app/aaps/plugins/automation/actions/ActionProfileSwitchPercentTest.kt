@@ -1,9 +1,7 @@
 package app.aaps.plugins.automation.actions
 
-import app.aaps.core.ui.CoreUiStrings
-import app.aaps.plugins.automation.AutomationStrings
 import app.aaps.core.data.model.PS
-import app.aaps.plugins.automation.R
+import app.aaps.plugins.automation.AutomationStrings
 import app.aaps.plugins.automation.elements.InputDuration
 import app.aaps.plugins.automation.elements.InputPercent
 import com.google.common.truth.Truth.assertThat
@@ -25,10 +23,8 @@ class ActionProfileSwitchPercentTest : ActionsTestBase() {
     @BeforeEach
     fun setup() {
 
-        whenever(rh.gs(AutomationStrings.startprofileforever)).thenReturn("Start profile %d%%")
-        whenever(rh.gs(CoreUiStrings.startprofile)).thenReturn("Start profile %d%% for %d min")
 
-        sut = ActionProfileSwitchPercent(aapsLogger, rh, { pumpEnactResultProvider() }, profileFunction, triggerDeps)
+        sut = ActionProfileSwitchPercent(aapsLogger, text, { pumpEnactResultProvider() }, profileFunction, triggerDeps)
     }
 
     @Test fun friendlyNameTest() = runTest {

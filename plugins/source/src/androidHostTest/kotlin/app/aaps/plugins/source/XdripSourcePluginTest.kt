@@ -5,6 +5,7 @@ import app.aaps.shared.tests.TestBaseWithProfile
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.kotlin.mock
 
 class XdripSourcePluginTest : TestBaseWithProfile() {
 
@@ -12,7 +13,7 @@ class XdripSourcePluginTest : TestBaseWithProfile() {
 
     @BeforeEach
     fun setup() {
-        xdripSourcePlugin = XdripSourcePlugin(rh, aapsLogger, preferences, config)
+        xdripSourcePlugin = XdripSourcePlugin(rh, aapsLogger, preferences, config, mock())
     }
 
     @Test

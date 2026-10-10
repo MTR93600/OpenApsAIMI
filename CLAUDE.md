@@ -72,6 +72,26 @@ Useful commands on the Mac:
 - Compile the iOS device target for every KMP module: `./gradlew compileKotlinIosArm64 --no-daemon`
 - Run the iOS simulator tests: `./gradlew iosSimulatorArm64Test --no-daemon`
 
+**A real body of tests runs on the simulator** - `iosTest` and `commonTest` source sets both execute
+under `iosSimulatorArm64Test`, so a change to shared code is genuinely run on Apple, not merely
+cross-compiled to a klib. Measured on 2026-09-21 at `7e303d9bb5`: **714 tests, 0 failures, across all
+14 modules below** (4m 11s). There are 18 populated test source sets in those 14 modules:
+
+- `commonTest`: `core/data`, `core/interfaces`, `core/nssdk`, `core/objects`, `core/utils`,
+  `database/persistence`, `implementation`, `plugins/aps`, `plugins/sync`, `shared/clientbindings`,
+  `shared/impl`, `ui`
+- `iosTest`: `core/interfaces`, `implementation`, `ios/shell`, `plugins/aps`, `plugins/automation`,
+  `plugins/sync`
+
+`.github/workflows/ios-ci.yml` already runs five of them explicitly. Re-derive the list rather than
+trusting this one when it matters:
+`find . -maxdepth 4 -type d \( -name commonTest -o -name iosTest \) -not -path "*/build/*"` - and
+check each for `.kt` files, because an empty source-set directory still exists for `core/ui`.
+
+(This paragraph used to say only `:core:data` had a `commonTest` source set and that everything else
+reported `NO-SOURCE`. That was wrong by the time anyone read it, and it caused work to be shipped as
+"compiles for iOS" when it could have been run.)
+
 Eighteen modules now have a `commonTest` source set, so a lot more than before really runs on the
 simulator: `core/data`, `core/interfaces`, `core/nssdk`, `core/objects`, `core/utils`,
 `database/persistence`, `implementation`, the five `plugins/aimi-*` modules, `plugins/aps`,
@@ -309,6 +329,30 @@ the exact assertions passed on `iosSimulatorArm64Test`.
   worse than none, because it gets believed. The same goes for `.claude/procedures/*.md`.
 - Skills are checked into the repo, so every contributor and the macOS checkout get them. Keep them
   free of session state ("green, uncommitted, device-pending") - that belongs in notes, not here.
+
+## Memory
+
+Decide where a thing belongs **before** writing it down. Three tiers:
+
+- **Method and procedure** (how to flip a module, how to review, how to audit memory) → a skill or
+  `.claude/procedures/*.md` in the repo. Everybody gets it and git carries it between machines.
+- **Durable facts** (a stated preference, a decision made under pushback, a standing "do not re-add
+  this", a trap in a tool) → memory. These are worth sharing between machines.
+- **Working state** (file paths, counts, "migration is 60% done", "applied but not committed") →
+  memory, but short-lived and local. It rots fastest and another machine does not need it.
+
+Rules that follow from that:
+
+- **Anything re-derivable from the code is a liability, not an asset.** A list of files a migration
+  touched will be wrong within weeks and someone will plan work from it. Record *why* a decision was
+  made - that is the part the code cannot tell you.
+- **Never put sensitive content in this public repo**: analysis of unfixed safety bugs, machine
+  names, network addresses, key paths. Those stay in private memory.
+- **Cite symbols, not line numbers.** `File.kt:123` is wrong within months; a function or class name
+  survives.
+- **The goal is not the same memory on every machine, it is true memory.** The three machines work on
+  different branches, so their memories should differ. Syncing does not make memory true - auditing
+  does. Use the `memory-audit` skill.
 
 ## Migration Procedures
 

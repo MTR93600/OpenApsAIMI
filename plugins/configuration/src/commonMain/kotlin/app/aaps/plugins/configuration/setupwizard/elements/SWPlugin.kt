@@ -1,8 +1,5 @@
 package app.aaps.plugins.configuration.setupwizard.elements
 
-import app.aaps.core.ui.compose.stringResource
-import app.aaps.core.keys.interfaces.TextRef
-import app.aaps.core.ui.CoreUiStrings
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
@@ -23,12 +20,16 @@ import app.aaps.core.interfaces.protection.PasswordCheck
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.ConfigPluginCard
 import app.aaps.core.ui.compose.ConfigPluginUiModel
 import app.aaps.core.ui.compose.SelectionMode
+import app.aaps.core.ui.compose.stringResource
 import dev.zacsweers.metro.Inject
 
-class SWPlugin @Inject constructor(
+@Inject
+class SWPlugin(
     aapsLogger: AAPSLogger, rh: TextResolver, rxBus: RxBus, preferences: Preferences, passwordCheck: PasswordCheck,
     private val activePlugin: ActivePlugin,
     private val configBuilder: ConfigBuilder
@@ -77,7 +78,7 @@ class SWPlugin @Inject constructor(
                     description = plugin.description,
                     composeIcon = plugin.pluginDescription.icon,
                     isEnabled = pluginEnabled,
-                    canToggle = !plugin.pluginDescription.alwaysEnabled && (!pluginEnabled || isMultiSelect(pType)),
+                    canToggle = plugin.enforcedState() == null && (!pluginEnabled || isMultiSelect(pType)),
                     showPreferences = plugin.hasPreferences() && pluginEnabled,
                     hasContent = plugin.hasComposeContent()
                 )

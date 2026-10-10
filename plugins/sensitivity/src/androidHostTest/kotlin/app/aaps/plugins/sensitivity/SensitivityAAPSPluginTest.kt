@@ -22,7 +22,7 @@ class SensitivityAAPSPluginTest : SensitivityTestBase() {
     private lateinit var sut: SensitivityAAPSPlugin
 
     @BeforeEach fun prepare() {
-        sut = SensitivityAAPSPlugin(aapsLogger, rh, preferences, dateUtil, activePlugin)
+        sut = SensitivityAAPSPlugin(aapsLogger, rh, preferences, dateUtil, activePlugin, mock())
     }
 
     private fun detect(
@@ -164,24 +164,24 @@ class SensitivityAAPSPluginTest : SensitivityTestBase() {
     }
 
     @Test
-    fun specialShowInListCondition_trueWhenNoActiveAps() {
+    fun `shown while no APS is elected yet`() {
         whenever(activePlugin.activeAPS).thenReturn(null)
-        assertThat(sut.specialShowInListCondition()).isTrue()
+        assertThat(sut.showInList()).isTrue()
     }
 
     @Test
-    fun specialShowInListCondition_trueForAma() {
+    fun `shown when the active APS is AMA`() {
         val aps = mock<APS>()
         whenever(aps.algorithm).thenReturn(APSResult.Algorithm.AMA)
         whenever(activePlugin.activeAPS).thenReturn(aps)
-        assertThat(sut.specialShowInListCondition()).isTrue()
+        assertThat(sut.showInList()).isTrue()
     }
 
     @Test
-    fun specialShowInListCondition_falseForSmb() {
+    fun `hidden when the active APS is SMB`() {
         val aps = mock<APS>()
         whenever(aps.algorithm).thenReturn(APSResult.Algorithm.SMB)
         whenever(activePlugin.activeAPS).thenReturn(aps)
-        assertThat(sut.specialShowInListCondition()).isFalse()
+        assertThat(sut.showInList()).isFalse()
     }
 }

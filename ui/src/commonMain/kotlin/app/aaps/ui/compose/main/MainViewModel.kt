@@ -19,7 +19,7 @@ import app.aaps.core.interfaces.bolus.BatchAction
 import app.aaps.core.interfaces.bolus.BatchExecutor
 import app.aaps.core.interfaces.bolus.WizardExecutor
 import app.aaps.core.interfaces.clientcontrol.ActionProgress
-import app.aaps.core.interfaces.clientcontrol.FailureReason
+import app.aaps.core.interfaces.clientcontrol.isNotDeliveryError
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.configuration.ExternalOptions
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
@@ -47,9 +47,9 @@ import app.aaps.core.interfaces.rx.events.EventShowDialog
 import app.aaps.core.interfaces.scenes.ActiveSceneSync
 import app.aaps.core.interfaces.scenes.SceneActions
 import app.aaps.core.interfaces.scenes.SceneChainResolver
+import app.aaps.core.interfaces.scenes.SceneStore
 import app.aaps.core.interfaces.sync.NsClient
 import app.aaps.core.interfaces.ui.UrlOpener
-import app.aaps.core.interfaces.ui.IconsProvider
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.keys.BooleanKey
@@ -87,7 +87,6 @@ import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
-import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -103,13 +102,15 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 // Registers itself: @ViewModelKey infers the key from the class. No graph entry, and deliberately
 // unscoped so each screen gets its own.
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 @ViewModelKey
 @Stable
-class MainViewModel @Inject constructor(
+@Inject
+class MainViewModel(
     private val activePlugin: ActivePlugin,
     val config: Config,
     private val urlOpener: UrlOpener,
@@ -133,6 +134,7 @@ class MainViewModel @Inject constructor(
     private val protectionCheck: ProtectionCheck,
     private val sceneActions: SceneActions,
     private val sceneChainTargetResolver: SceneChainResolver,
+    private val sceneStore: SceneStore,
     private val activeSceneManager: ActiveSceneSync,
     private val rxBus: RxBus,
     private val nsClient: NsClient,
@@ -338,7 +340,7 @@ class MainViewModel @Inject constructor(
             } else {
                 modeName
             }
-        } else ""
+        } else rh.gs(CoreUiStrings.unknown)
 
         return ChipState(
             isProfileLoaded = profileData?.isLoaded ?: false,
@@ -352,7 +354,7 @@ class MainViewModel @Inject constructor(
             tempTargetProgress = ttProgress,
             tempTargetReason = if (ttExpired) null else ttData?.reason,
             tempTargetRecordId = if (ttExpired) 0 else ttData?.recordId ?: 0,
-            runningMode = rmData?.mode ?: RM.Mode.DISABLED_LOOP,
+            runningMode = rmData?.mode,
             runningModeText = rmText,
             runningModeRemaining = rmRemaining,
             runningModeProgress = rmProgress,
@@ -410,6 +412,10 @@ class MainViewModel @Inject constructor(
         val carbsAfterConstraints = constraintChecker.applyCarbsConstraints(ConstraintObject(entry.carbs(), aapsLogger)).value()
         if (carbsAfterConstraints != entry.carbs())
             return QuickWizardItem(guid = guid, buttonText = buttonText, mode = entry.mode().value, detail = detail, disabledReason = rh.gs(UiStrings.carbs_constraint_violation))
+        // The eCarbs amount is stored in the preset, so the limit may have been lowered since it was entered.
+        val eCarbs = entry.eCarbsGrams()
+        if (constraintChecker.applyCarbsConstraints(ConstraintObject(eCarbs, aapsLogger)).value() != eCarbs)
+            return QuickWizardItem(guid = guid, buttonText = buttonText, mode = entry.mode().value, detail = detail, disabledReason = rh.gs(UiStrings.carbs_constraint_violation))
 
         return QuickWizardItem(guid = guid, buttonText = buttonText, mode = entry.mode().value, detail = detail, isEnabled = true)
     }
@@ -450,6 +456,10 @@ class MainViewModel @Inject constructor(
         val carbsAfterConstraints = constraintChecker.applyCarbsConstraints(ConstraintObject(entry.carbs(), aapsLogger)).value()
         if (carbsAfterConstraints != entry.carbs())
             return QuickWizardItem(guid = guid, buttonText = buttonText, mode = entry.mode().value, detail = detail, disabledReason = rh.gs(UiStrings.carbs_constraint_violation))
+        // The eCarbs amount is stored in the preset, so the limit may have been lowered since it was entered.
+        val eCarbs = entry.eCarbsGrams()
+        if (constraintChecker.applyCarbsConstraints(ConstraintObject(eCarbs, aapsLogger)).value() != eCarbs)
+            return QuickWizardItem(guid = guid, buttonText = buttonText, mode = entry.mode().value, detail = detail, disabledReason = rh.gs(UiStrings.carbs_constraint_violation))
         val minStep = pump.pumpDescription.pumpType.determineCorrectBolusStepSize(wizard.insulinAfterConstraints)
         if (abs(wizard.insulinAfterConstraints - wizard.calculatedTotalInsulin) >= minStep)
             return QuickWizardItem(guid = guid, buttonText = buttonText, mode = entry.mode().value, detail = detail, disabledReason = rh.gs(UiStrings.insulin_constraint_violation))
@@ -489,7 +499,7 @@ class MainViewModel @Inject constructor(
                 }
             // A master-local compute failure (no modal) or a client offline pre-check surfaces here; a client round-trip failure already showed on the app modal.
             is ActionProgress.Rejected ->
-                if (!config.AAPSCLIENT || prepared.reason == FailureReason.NotReachable || prepared.reason == FailureReason.ControlDisabled)
+                if (!config.AAPSCLIENT || prepared.reason.isNotDeliveryError())
                     rxBus.send(EventShowDialog.Ok(title = entry.buttonText(), message = prepared.detail ?: rh.gs(prepared.reason.failText())))
 
             else                       -> Unit // Unconfirmed → app modal
@@ -519,7 +529,7 @@ class MainViewModel @Inject constructor(
                 )
             // A master-local failure (no modal) or a client offline pre-check surfaces here; a client round-trip failure already showed on the app modal.
             is ActionProgress.Rejected ->
-                if (!config.AAPSCLIENT || prepared.reason == FailureReason.NotReachable || prepared.reason == FailureReason.ControlDisabled)
+                if (!config.AAPSCLIENT || prepared.reason.isNotDeliveryError())
                     rxBus.send(EventShowDialog.Ok(title = entry.buttonText(), message = prepared.detail ?: rh.gs(prepared.reason.failText())))
 
             else                       -> Unit // Unconfirmed → app modal
@@ -547,7 +557,7 @@ class MainViewModel @Inject constructor(
             listOf(BatchAction.Bolus(
                 insulin = 0.0, carbs = carbs, carbsTimeOffsetMinutes = 0, carbsDurationHours = 0,
                 recordOnly = false, notes = entry.buttonText(), timestamp = 0L, iCfg = null,
-                eCarbsGrams = if (hasEcarbs) entry.carbs2() else 0,
+                eCarbsGrams = entry.eCarbsGrams(),
                 eCarbsDelayMinutes = if (hasEcarbs) entry.time() else 0,
                 eCarbsDurationHours = if (hasEcarbs) entry.duration() else 0
             )),
@@ -723,7 +733,7 @@ class MainViewModel @Inject constructor(
                     )
 
                 is ActionProgress.Rejected ->
-                    if (!config.AAPSCLIENT || prepared.reason == FailureReason.NotReachable || prepared.reason == FailureReason.ControlDisabled)
+                    if (!config.AAPSCLIENT || prepared.reason.isNotDeliveryError())
                         rxBus.send(EventShowDialog.Ok(title = rh.gs(CoreUiStrings.temporary_target), message = prepared.detail ?: rh.gs(prepared.reason.failText())))
 
                 else                       -> Unit
@@ -741,7 +751,7 @@ class MainViewModel @Inject constructor(
                     rxBus.send(EventShowDialog.OkCancel(title = label, message = "", confirmationLines = prepared.lines, icon = IcProfile, onOk = { appScope.launch { batchExecutor.commit(prepared.id, Sources.ProfileSwitchDialog, label) } }))
 
                 is ActionProgress.Rejected ->
-                    if (!config.AAPSCLIENT || prepared.reason == FailureReason.NotReachable || prepared.reason == FailureReason.ControlDisabled)
+                    if (!config.AAPSCLIENT || prepared.reason.isNotDeliveryError())
                         rxBus.send(EventShowDialog.Ok(title = label, message = prepared.detail ?: rh.gs(prepared.reason.failText())))
 
                 else                       -> Unit
@@ -787,6 +797,20 @@ class MainViewModel @Inject constructor(
     /** Expose active scene state for UI (banner, etc.) */
     val activeSceneState: StateFlow<ActiveSceneState?> = activeSceneManager.activeSceneState
 
+    /**
+     * Name of the scene that starts when the active one ends, for the banner. A catalog lookup only:
+     * whether the follow-up can run is decided when this scene ends, not now.
+     *
+     * Recomputed on every catalog change as well, not only when the active scene changes: the edit
+     * lock covers the running scene but not its follow-up, so that one can be renamed, disabled or
+     * deleted while the banner is on screen (and on a client the catalog arrives by sync). A banner
+     * naming a follow-up that no longer exists would promise something that will not start.
+     */
+    val activeSceneChainTargetName: StateFlow<String?> =
+        combine(activeSceneManager.activeSceneState, sceneStore.scenesFlow) { state, _ ->
+            state?.let { sceneChainTargetResolver.resolveCatalogChainTarget(it.scene)?.name }
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
     /** Whether the active scene has expired (duration ran out, non-duration actions reverted).
      *  Derived from the lifecycle field that lives inside [ActiveSceneState] and rides NS sync. */
     val sceneExpired: StateFlow<Boolean> = activeSceneManager.activeSceneState
@@ -826,7 +850,7 @@ class MainViewModel @Inject constructor(
                     )
 
                 is ActionProgress.Rejected ->
-                    if (!config.AAPSCLIENT || prepared.reason == FailureReason.NotReachable || prepared.reason == FailureReason.ControlDisabled)
+                    if (!config.AAPSCLIENT || prepared.reason.isNotDeliveryError())
                         rxBus.send(EventShowDialog.Ok(title = title, message = prepared.detail ?: rh.gs(prepared.reason.failText())))
 
                 else                       -> Unit
@@ -918,7 +942,7 @@ private data class ChipState(
     val tempTargetProgress: Float = 0f,
     val tempTargetReason: TT.Reason? = null,
     val tempTargetRecordId: Long = 0,
-    val runningMode: RM.Mode = RM.Mode.DISABLED_LOOP,
+    val runningMode: RM.Mode? = null,
     val runningModeText: String = "",
     val runningModeRemaining: String = "",
     val runningModeProgress: Float = 0f,

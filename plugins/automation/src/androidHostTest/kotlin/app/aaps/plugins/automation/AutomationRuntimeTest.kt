@@ -1,7 +1,7 @@
 package app.aaps.plugins.automation
 
-import app.aaps.core.data.model.GlucoseUnit
 import android.Manifest
+import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.interfaces.alerts.ReminderScheduler
 import app.aaps.core.interfaces.aps.Loop
 import app.aaps.core.interfaces.automation.AutomationEvent
@@ -10,13 +10,13 @@ import app.aaps.core.interfaces.location.LocationServiceController
 import app.aaps.core.interfaces.logging.UserEntryLogger
 import app.aaps.core.interfaces.receivers.ReceiverStatusStore
 import app.aaps.core.interfaces.scenes.SceneAutomationApi
-import app.aaps.plugins.automation.BtConnectionSource
 import app.aaps.plugins.automation.actions.Action
 import app.aaps.plugins.automation.triggers.TriggerConnector
 import app.aaps.plugins.automation.triggers.TriggerDeps
 import app.aaps.plugins.automation.triggers.TriggerFactory
 import app.aaps.plugins.automation.triggers.TriggerLocation
 import app.aaps.shared.tests.TestBaseWithProfile
+import app.aaps.shared.tests.generatedTextResolver
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.launchIn
@@ -34,6 +34,9 @@ import org.mockito.kotlin.whenever
 
 class AutomationRuntimeTest : TestBaseWithProfile() {
 
+    /** Real English, so an unstubbed automation string fails instead of becoming its own name. */
+    private val text = generatedTextResolver("automation" to AutomationStringsValues::textOf)
+
 @Mock lateinit var actionFactory: app.aaps.plugins.automation.actions.ActionFactory
     private val triggerFactory: TriggerFactory by lazy {
         // A real provider, not a mock: a mocked Provider hands null to TriggerBTDevice.
@@ -43,7 +46,7 @@ class AutomationRuntimeTest : TestBaseWithProfile() {
     // nulls to element constructors that require them.
     private val triggerDeps: TriggerDeps by lazy {
         TriggerDeps(
-            aapsLogger, rxBus, rh, profileFunction, profileUtil, preferences, mock(), mock(),
+            aapsLogger, rxBus, text, profileFunction, profileUtil, preferences, mock(), mock(),
             activePlugin, iobCobCalculator, smbGlucoseStatusProvider, dateUtil
         )
     }
@@ -60,7 +63,7 @@ class AutomationRuntimeTest : TestBaseWithProfile() {
 
     @BeforeEach fun prepare() {
         automationRuntime = AutomationRuntime(
-            AndroidLocationPermissions(), eventFactory, aapsLogger, rh, preferences, loop, rxBus, constraintChecker,
+            AndroidLocationPermissions(), eventFactory, aapsLogger, text, preferences, loop, rxBus, constraintChecker,
             config, locationServiceController, dateUtil, activePlugin, reminderScheduler, actionFactory, triggerFactory, triggerDeps, receiverStatusStore,
             uel, profileRepository, sceneApi, mock()
         )

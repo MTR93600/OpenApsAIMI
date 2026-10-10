@@ -104,7 +104,7 @@ fun TempBasalScreen(
     // Delete confirmation dialog
     if (showDeleteDialog) {
         OkCancelDialog(
-            title = viewModel.rh.gs(CoreUiStrings.removerecord),
+            title = stringResource(CoreUiStrings.removerecord),
             message = deleteDialogMessage,
             onConfirm = {
                 viewModel.deleteSelected()
@@ -188,7 +188,9 @@ private fun TempBasalItem(
             .padding(horizontal = 2.dp)
             .combinedClickable(
                 onClick = onClick,
-                onLongClick = onLongPress
+                onLongClick = onLongPress,
+                // Long press is the only way into remove mode; TalkBack says "double-tap and hold to Remove".
+                onLongClickLabel = stringResource(CoreUiStrings.remove)
             ),
         selected = isSelected
     ) {

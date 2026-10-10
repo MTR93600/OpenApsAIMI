@@ -7,6 +7,7 @@ import android.os.IBinder
 import android.os.SystemClock
 import app.aaps.core.data.model.BS
 import app.aaps.core.data.time.T
+import app.aaps.core.interfaces.di.MetroMemberInjector
 import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
@@ -31,6 +32,7 @@ import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.core.objects.workflow.MetroService
 import app.aaps.pump.medtrum.MedtrumPlugin
 import app.aaps.pump.medtrum.MedtrumPump
 import app.aaps.pump.medtrum.R
@@ -65,8 +67,7 @@ import app.aaps.pump.medtrum.keys.MedtrumIntKey
 import app.aaps.pump.medtrum.keys.MedtrumStringKey
 import app.aaps.pump.medtrum.keys.MedtrumStringNonKey
 import app.aaps.pump.medtrum.util.MedtrumSnUtil
-import app.aaps.core.objects.workflow.MetroService
-import app.aaps.core.interfaces.di.MetroMemberInjector
+import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -76,7 +77,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import dev.zacsweers.metro.Inject
 import kotlin.math.abs
 
 class MedtrumService : MetroService(), MedtrumBleCallback {
@@ -785,10 +785,14 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
     private fun notifyPumpWarning(alarmState: AlarmState) {
         // Notification on pump warning
         if (medtrumPump.desiredPumpWarning && alarmState != AlarmState.NONE) {
+            // No level here: PUMP_WARNING already declares NORMAL. It used to be overridden to
+            // ANNOUNCEMENT, which is the LOWEST tier of all - below INFO - so the notification badge took
+            // the colour of any routine INFO message instead. A low reservoir warning was left showing
+            // the green "Basal profile in pump updated" colour, which reads as "nothing is wrong".
             notificationManager.post(
                 NotificationId.PUMP_WARNING,
-                TextRef.AndroidRes(R.string.pump_warning, listOf(medtrumPump.alarmStateToString(alarmState))),
-                level = NotificationLevel.ANNOUNCEMENT)
+                TextRef.AndroidRes(R.string.pump_warning, listOf(medtrumPump.alarmStateToString(alarmState)))
+            )
             runBlocking {
                 pumpSync.insertAnnouncement(
                     medtrumPump.alarmStateToString(alarmState),
@@ -804,10 +808,11 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
         if (medtrumPump.desiredPatchExpiration && medtrumPump.desiredPumpWarning) {
             val warningAt = medtrumPump.patchStartTime + T.hours(medtrumPump.desiredPumpWarningExpiryThresholdHours.toLong()).msecs()
             if (dateUtil.now() >= warningAt && dateUtil.now() <= warningAt + CHECK_EXPIRY_WARNING_TIME_MS) {
+                // Keep the id's own NORMAL level, for the same reason as notifyPumpWarning above.
                 notificationManager.post(
                     NotificationId.PUMP_WARNING,
-                    TextRef.AndroidRes(R.string.alarm_pump_expires_soon),
-                    level = NotificationLevel.ANNOUNCEMENT)
+                    TextRef.AndroidRes(R.string.alarm_pump_expires_soon)
+                )
                 runBlocking {
                     pumpSync.insertAnnouncement(
                         rh.gs(R.string.alarm_pump_expires_soon),

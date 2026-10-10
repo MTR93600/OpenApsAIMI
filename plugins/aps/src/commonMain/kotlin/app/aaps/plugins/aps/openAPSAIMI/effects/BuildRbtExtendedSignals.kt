@@ -48,7 +48,9 @@ import app.aaps.plugins.aps.openAPSAIMI.wcycle.EndometriosisAdjuster
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.time.Instant as KotlinInstant
+// `kotlinx.datetime.Instant`, not `kotlin.time.Instant`: that is what the shared contract
+// `AimiNightGrowthEvaluate` and `NightGrowthResistanceMonitor.evaluate` both declare.
+import kotlinx.datetime.Instant as KotlinInstant
 
 /**
  * Members [buildRbtExtendedSignals] already holds when the reference enters the function.

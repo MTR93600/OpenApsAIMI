@@ -84,20 +84,20 @@ kotlin {
                 // CMP rather than androidx. On Android CMP delegates to androidx, so the composeBom
                 // below still decides the Android versions and nothing about the Android build
                 // changes.
-                api(libs.cmp.runtime)
-                api(libs.cmp.foundation)
-                api(libs.cmp.ui)
+                api(libs.jetbrains.compose.runtime)
+                api(libs.jetbrains.compose.foundation)
+                api(libs.jetbrains.compose.ui)
                 // Replaces the deprecated androidx.compose.ui.backhandler.BackHandler.
-                api(libs.androidx.navigationevent.compose)
-                api(libs.cmp.material3)
-                api(libs.cmp.material.icons.extended)
+                api(libs.jetbrains.androidx.navigationevent.compose)
+                api(libs.jetbrains.compose.material3)
+                api(libs.jetbrains.compose.material.icons.extended)
                 // viewModel() for Compose. The JetBrains republish, not androidx: it is the one with Apple
                 // targets, and `metroViewModel()` below has to compile wherever the shared UI does.
                 api(libs.jetbrains.lifecycle.viewmodel.compose)
                 // Metro's view model extension. `api` so every module with a view model gets @ViewModelKey
                 // without repeating the dependency - there are eighty of them to convert.
                 api(libs.metrox.viewmodel)
-                implementation(libs.cmp.ui.tooling.preview)
+                implementation(libs.jetbrains.compose.ui.tooling.preview)
             }
         }
 
@@ -161,16 +161,8 @@ kotlin {
     }
 }
 
-tasks.withType<Test> {
-    // useJUnitPlatform() and the heap cap come from kmp-test-defaults; only the JaCoCo part is
-    // specific to this module.
-    // Robolectric runs tests in its own classloader sandbox and rewrites bytecode, so the default
-    // JaCoCo on-the-fly agent records no coverage for the classes those tests exercise - here that is
-    // every Compose screen the UI tests drive. Restated from jacoco-module-dependencies, which applies
-    // com.android.library and so cannot be used by a multiplatform module. The jacoco plugin itself is
-    // already applied to every project by the root build file.
-    extensions.configure<JacocoTaskExtension> {
-        isIncludeNoLocationClasses = true
-        excludes = listOf("jdk.internal.*")
-    }
-}
+// The JaCoCo/Robolectric setting that used to be restated here now lives in `kmp-test-defaults`, so
+// every multiplatform module gets it instead of only the ones that remembered. This module was the
+// only one that did remember: :core:graph and :plugins:calibration lost it when they flipped to
+// multiplatform and reported 0% and 33.5% for Compose screens their Robolectric tests were already
+// driving.

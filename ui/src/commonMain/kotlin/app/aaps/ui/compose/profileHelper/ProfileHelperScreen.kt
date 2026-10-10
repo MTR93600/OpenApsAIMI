@@ -56,7 +56,6 @@ import app.aaps.core.graph.profile.buildIsfRows
 import app.aaps.core.graph.profile.buildTargetRows
 import app.aaps.core.interfaces.InterfacesStrings
 import app.aaps.core.interfaces.navigation.ElementType
-import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.objects.profile.ProfileSealed
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.AapsTopAppBar
@@ -170,11 +169,11 @@ fun ProfileHelperScreen(
                     profile1 = sealed1,
                     profile2 = sealed2,
                     icsRows = buildIcRows(sealed1, sealed2, viewModel.dateUtil),
-                    icUnits = viewModel.rh.gs(InterfacesStrings.profile_carbs_per_unit),
+                    icUnits = stringResource(InterfacesStrings.profile_carbs_per_unit),
                     isfsRows = buildIsfRows(sealed1, sealed2, viewModel.profileUtil, viewModel.dateUtil),
-                    isfUnits = viewModel.rh.gs(if (viewModel.getUnits() == GlucoseUnit.MGDL) InterfacesStrings.profile_isf_units_mgdl else InterfacesStrings.profile_isf_units_mmol),
+                    isfUnits = stringResource(if (viewModel.getUnits() == GlucoseUnit.MGDL) InterfacesStrings.profile_isf_units_mgdl else InterfacesStrings.profile_isf_units_mmol),
                     basalsRows = buildBasalRows(sealed1, sealed2, viewModel.dateUtil),
-                    basalUnits = viewModel.rh.gs(InterfacesStrings.profile_ins_units_per_hour),
+                    basalUnits = stringResource(InterfacesStrings.profile_ins_units_per_hour),
                     targetsRows = buildTargetRows(sealed1, sealed2, viewModel.dateUtil, viewModel.profileUtil),
                     targetUnits = viewModel.getUnits().displayLabel,
                     profileName1 = name0,

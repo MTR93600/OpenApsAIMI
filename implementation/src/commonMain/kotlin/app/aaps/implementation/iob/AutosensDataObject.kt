@@ -1,5 +1,7 @@
 package app.aaps.implementation.iob
 
+import app.aaps.core.data.format.NumberFormat
+import app.aaps.core.data.format.NumberFormatPlatform
 import app.aaps.core.interfaces.aps.AutosensData
 import app.aaps.core.interfaces.aps.AutosensResult
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -7,8 +9,6 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.core.data.format.NumberFormat
-import app.aaps.core.data.format.NumberFormatPlatform
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
@@ -17,7 +17,8 @@ import kotlin.math.min
 // Deliberately NOT @SingleIn: the @Binds this replaces had no scope. AutosensData is a value object
 // computed per run, so each caller is meant to get its own.
 @ContributesBinding(AppScope::class)
-class AutosensDataObject @Inject constructor(
+@Inject
+class AutosensDataObject(
     private val aapsLogger: AAPSLogger,
     private val preferences: Preferences,
     private val dateUtil: DateUtil

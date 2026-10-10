@@ -50,7 +50,8 @@ data class PluginGroup(
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 @ViewModelKey
 @Stable
-class QuickLaunchConfigViewModel @Inject constructor(
+@Inject
+class QuickLaunchConfigViewModel(
     private val preferences: Preferences,
     private val quickWizard: QuickWizard,
     private val automation: Automation,
@@ -196,7 +197,7 @@ class QuickLaunchConfigViewModel @Inject constructor(
             // a client) must not be offered as a quick-launch either.
             .filter {
                 it.isEnabled(it.pluginDescription.mainType) && it.hasComposeContent() &&
-                    it.showInList(it.pluginDescription.mainType)
+                    it.showInList()
             }
 
         return typeOrder.mapNotNull { type ->

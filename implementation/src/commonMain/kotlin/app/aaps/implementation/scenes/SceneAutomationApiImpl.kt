@@ -20,7 +20,8 @@ import kotlinx.coroutines.flow.map
 
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
-class SceneAutomationApiImpl @Inject constructor(
+@Inject
+class SceneAutomationApiImpl(
     private val sceneRepository: SceneRepository,
     private val sceneExecutor: SceneExecutor,
     private val activeSceneManager: ActiveSceneManager,
@@ -75,7 +76,7 @@ class SceneAutomationApiImpl @Inject constructor(
         return sceneExecutor.prepareScene(scene, durationMinutes)
     }
 
-    override suspend fun commitScene(bolusId: Long, onError: (String) -> Unit): WizardBolusExecutor.ConfirmResult =
+    override suspend fun commitScene(bolusId: Long, onError: (WizardBolusExecutor.Failure) -> Unit): WizardBolusExecutor.ConfirmResult =
         sceneExecutor.commitScene(bolusId, onError)
 
     override suspend fun stopActiveSceneAndStartScene(targetSceneId: String): SceneAutomationResult {

@@ -32,7 +32,7 @@
     <string name="pref_title_alert_urgent_as_android_notification">Alza gli avvisi urgenti come notifiche Android</string>
     <string name="pref_title_alert_increase_volume">Aumenta gradualmente il volume delle notifiche</string>
     <string name="pref_title_alert_override_dnd">Ignora la modalità Non Disturbare</string>
-    <string name="pref_summary_alert_override_dnd">Se abilitata, gli avvisi AAPS giocano attraverso modalità silenziosa e non disturbare (flusso di avvisi). Quando disabilitato, gli avvisi rispettano silenzioso/DND (flusso di notifica).</string>
+    <string name="pref_summary_alert_override_dnd">Quando abilitato, gli allarmi AAPS suonano anche se il telefono è silenziato o in Non Disturbare. Quando disabilitato, gli allarmi rimangono tranquilli in quelle modalità.</string>
     <!-- BG Source preferences -->
     <string name="pref_title_bg_source_upload_to_ns">Carica dati BG su NS</string>
     <string name="pref_title_bg_source_create_sensor_change">Registra cambio sensore</string>
@@ -145,6 +145,9 @@
     <string name="pref_title_wear_wizard_cob">Includi COB nella procedura guidata</string>
     <string name="pref_title_wear_wizard_iob">Includi IOB nella procedura guidata</string>
     <string name="pref_title_wear_custom_watchface_authorization">Autorizza watchface personalizzate</string>
+    <string name="pref_title_wear_pushed_watchface">Watchface installata sull\'orologio</string>
+    <string name="wear_pushed_watchface_wfs" comment="Entry of a list setting: the built-in watchface made of AAPS complications">Complicazioni watchface</string>
+    <string name="wear_pushed_watchface_cwf" comment="Entry of a list setting: the watchface loaded from a custom watchface zip file">Watchface personalizzata</string>
     <string name="pref_title_wear_notify_on_smb">Notifica su SMB</string>
     <string name="pref_summary_wear_notify_on_smb">Invia notifiche per quando SMB viene erogato.</string>
     <string name="pref_title_wear_broadcast_data">Trasmetti i dati all\'orologio</string>
@@ -178,7 +181,7 @@
     <!-- IntKey: Protection preferences -->
     <string name="pref_title_protection_timeout">Timeout protezione</string>
     <string name="pref_title_protection_type_application">Livello 0: Protezione dell\'applicazione</string>
-    <string name="pref_summary_protection_type_application">Avvio app. Indipendente da altri livelli</string>
+    <string name="pref_summary_protection_type_application">Avvio dell\'app e quando torna all\'app. Indipendente da altri livelli</string>
     <string name="pref_title_protection_type_bolus">Livello 1: Protezione bolo</string>
     <string name="pref_summary_protection_type_bolus">Trattamenti, attivazione profilo. Richiede Livello 2</string>
     <string name="pref_title_protection_type_settings">Livello 2: Protezione impostazioni</string>

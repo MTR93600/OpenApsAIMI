@@ -9,17 +9,18 @@ import app.aaps.pump.eopatch.core.scan.BleConnectionState
 import app.aaps.pump.eopatch.core.scan.IBleDevice
 import app.aaps.pump.eopatch.vo.NormalBasalManager
 import app.aaps.pump.eopatch.vo.PatchConfig
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.HasMemberInjections
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.disposables.Disposable
 import io.reactivex.rxjava3.functions.Consumer
-import dev.zacsweers.metro.HasMemberInjections
-import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.SingleIn
 
 @HasMemberInjections
 @SingleIn(AppScope::class)
-open class TaskBase @Inject constructor(val func: TaskFunc) {
+@Inject
+open class TaskBase(val func: TaskFunc) {
 
     @Inject lateinit var aapsLogger: AAPSLogger
     @Inject lateinit var pm: PreferenceManager

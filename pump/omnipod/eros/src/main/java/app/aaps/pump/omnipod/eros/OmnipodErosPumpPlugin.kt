@@ -17,12 +17,14 @@ import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.data.pump.defs.TimeChangeType
 import app.aaps.core.data.time.T.Companion.msecs
 import app.aaps.core.data.ue.Sources
+import app.aaps.core.interfaces.di.PumpDriver
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.AlarmSound
 import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.OwnDatabasePlugin
+import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.pump.BlePreCheck
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
@@ -99,6 +101,11 @@ import app.aaps.pump.omnipod.eros.rileylink.service.RileyLinkOmnipodService
 import app.aaps.pump.omnipod.eros.ui.compose.OmnipodErosComposeContent
 import app.aaps.pump.omnipod.eros.util.AapsOmnipodUtil
 import app.aaps.pump.omnipod.eros.util.OmnipodAlertUtil
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.ContributesIntoMap
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
+import dev.zacsweers.metro.binding
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -116,14 +123,7 @@ import org.joda.time.Duration
 import org.joda.time.Instant
 import java.util.Optional
 import java.util.function.Supplier
-import app.aaps.core.interfaces.di.PumpDriver
-import app.aaps.core.interfaces.plugin.PluginBase
-import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.IntKey as MetroIntKey
-import dev.zacsweers.metro.binding
-import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.SingleIn
 
 /**
  * Created by andy on 23.04.18.
@@ -134,7 +134,8 @@ import dev.zacsweers.metro.SingleIn
 @PumpDriver
 @MetroIntKey(1070)
 @SingleIn(AppScope::class)
-class OmnipodErosPumpPlugin @Inject constructor(
+@Inject
+class OmnipodErosPumpPlugin(
     aapsLogger: AAPSLogger,
     override val rh: ResourceHelper,
     preferences: Preferences,
@@ -150,7 +151,7 @@ class OmnipodErosPumpPlugin @Inject constructor(
     private val omnipodAlertUtil: OmnipodAlertUtil,
     private val pumpSync: PumpSync,
     private val uiInteraction: UiInteraction,
-    private val notificationManager: NotificationManager,
+    notificationManager: NotificationManager,
     private val erosHistoryDatabase: ErosHistoryDatabase,
     private val pumpEnactResultProvider: () -> PumpEnactResult,
     private val protectionCheck: app.aaps.core.interfaces.protection.ProtectionCheck,
@@ -167,10 +168,9 @@ class OmnipodErosPumpPlugin @Inject constructor(
         }
         .icon(IcPluginOmnipod)
         .pluginName(TextRef.AndroidRes(R.string.omnipod_eros_name))
-        .shortName(TextRef.AndroidRes(R.string.omnipod_eros_name_short))
         .description(TextRef.AndroidRes(R.string.omnipod_eros_pump_description)),
     ownPreferences = ErosBooleanPreferenceKey.entries + ErosLongNonPreferenceKey.entries + ErosStringNonPreferenceKey.entries,
-    aapsLogger, rh, preferences, commandQueue
+    aapsLogger, rh, preferences, commandQueue, notificationManager
 ), Pump, RileyLinkPumpDevice, OmnipodEros, OwnDatabasePlugin {
 
     private var scope: CoroutineScope? = null
@@ -400,8 +400,16 @@ class OmnipodErosPumpPlugin @Inject constructor(
         aapsLogger.debug(LTag.PUMP, "OmnipodPumpPlugin.onStop()")
         scope?.cancel()
         scope = null
+        // statusChecker re-posts itself every STATUS_CHECK_INTERVAL_MILLIS, so without this the chain
+        // kept running after the plugin stopped - reading pod status and touching the service this same
+        // method has just unbound. The looper is deliberately NOT quit: loopHandler is created once with
+        // the plugin, so a later onStart posts to this same handler and a dead looper would swallow it.
+        loopHandler.removeCallbacksAndMessages(null)
         serviceConnection?.let { context.unbindService(it) }
         serviceConnection = null
+        // onServiceDisconnected is not called after unbindService, so drop the reference here.
+        // Otherwise the destroyed service stays alive after a pump switch or config change.
+        rileyLinkOmnipodService = null
     }
 
     private fun queueAcknowledgeAlertsCommand() {

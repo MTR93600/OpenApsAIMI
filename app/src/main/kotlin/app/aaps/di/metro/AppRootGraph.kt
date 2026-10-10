@@ -74,6 +74,7 @@ import app.aaps.core.interfaces.pump.PumpWithConcentration
 import app.aaps.core.interfaces.pump.TemporaryBasalStorage
 import app.aaps.core.interfaces.queue.CommandQueue
 import app.aaps.core.interfaces.receivers.ReceiverStatusStore
+import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.AapsSchedulers
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.scenes.ActiveSceneSync
@@ -84,9 +85,7 @@ import app.aaps.core.interfaces.scenes.SceneIconResolver
 import app.aaps.core.interfaces.scenes.SceneStore
 import app.aaps.core.interfaces.scenes.Scenes
 import app.aaps.core.interfaces.sharedPreferences.SP
-import app.aaps.core.interfaces.source.DexcomBoyda
 import app.aaps.core.interfaces.source.NSClientSource
-import app.aaps.core.interfaces.source.XDripSource
 import app.aaps.core.interfaces.stats.DexcomTirCalculator
 import app.aaps.core.interfaces.stats.TddCalculator
 import app.aaps.core.interfaces.stats.TirCalculator
@@ -96,14 +95,13 @@ import app.aaps.core.interfaces.sync.NsClient
 import app.aaps.core.interfaces.sync.XDripBroadcast
 import app.aaps.core.interfaces.ui.CarbSuggestionActions
 import app.aaps.core.interfaces.ui.IconsProvider
-import app.aaps.core.interfaces.userEntry.UserEntryPresentationHelper
 import app.aaps.core.interfaces.ui.UiInteraction
+import app.aaps.core.interfaces.userEntry.UserEntryPresentationHelper
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.core.interfaces.utils.HardLimits
 import app.aaps.core.interfaces.utils.Translator
 import app.aaps.core.interfaces.utils.TrendCalculator
-import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.interfaces.versionChecker.VersionCheckerUtils
 import app.aaps.core.interfaces.widget.WidgetUpdater
@@ -114,23 +112,24 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.VisibilityContext
 import app.aaps.core.nssdk.interfaces.RunningConfiguration
 import app.aaps.core.objects.crypto.CryptoUtil
-import app.aaps.database.di.DatabaseConfig
-import app.aaps.di.ExternalOptionsOverride
 import app.aaps.core.objects.di.CoreObjectsGraph
 import app.aaps.core.objects.runningMode.RunningModeGuard
 import app.aaps.core.objects.wizard.BolusWizard
 import app.aaps.core.objects.wizard.QuickWizard
 import app.aaps.core.utils.receivers.DataInbox
 import app.aaps.database.AppRepository
-import app.aaps.implementation.maintenance.cloud.CloudStorageManager
+import app.aaps.database.di.DatabaseConfig
+import app.aaps.di.ExternalOptionsOverride
 import app.aaps.implementation.lifecycle.ProcessLifecycleListener
-import app.aaps.implementation.resources.ResourceHelperImpl
-import app.aaps.implementation.utils.fabric.FabricPrivacyImpl
+import app.aaps.implementation.maintenance.cloud.CloudStorageManager
+import app.aaps.implementation.notifications.SnackbarNotificationFallback
 import app.aaps.implementation.plugin.PluginStore
 import app.aaps.implementation.profile.ProfileSwitchExpiryScheduler
 import app.aaps.implementation.profile.ProfileSwitchSilentGate
+import app.aaps.implementation.resources.ResourceHelperImpl
 import app.aaps.implementation.scenes.ActiveSceneManager
 import app.aaps.implementation.scenes.SceneExecutor
+import app.aaps.implementation.utils.fabric.FabricPrivacyImpl
 import app.aaps.plugins.aps.loop.runningMode.RunningModeExpiryJob
 import app.aaps.plugins.aps.loop.runningMode.RunningModeReconciler
 import app.aaps.plugins.aps.openAPS.DeltaCalculator
@@ -193,13 +192,21 @@ import kotlin.reflect.KClass
  * what the history browser needs and what the same test verifies.
  */
 /**
- * [PumpAccessors] is a supertype rather than a `@ContributesTo` interface: a contributed interface
- * reaches the *generated* graph, so `root as PumpAccessors` would only work at runtime. Extending it
- * makes the accessors part of this type, and it compiles for every flavour because both flavour source
- * sets declare a `PumpAccessors` - empty in a follower, which has no pump module on its classpath.
+ * Pump accessors are NOT a supertype here. They used to be: a `PumpAccessors` interface in
+ * `src/withPumps` named the Dana and Equil types so instrumented tests could reach the app's own
+ * instances at compile time, with an empty copy in `src/aapsclient` so this file still compiled for a
+ * follower. But `src/withPumps` is part of the `full` and `pumpcontrol` MAIN source sets, so that made
+ * those pump modules a compile-time dependency of the app itself - removing `:pump:equil` from
+ * `settings.gradle` failed `:app:compileFullDebugKotlin` and produced no APK at all.
+ *
+ * Each pump module now declares its own accessor interface and contributes it, so the accessors exist
+ * exactly when their module does and nothing here names a pump. See `DanaAccessors` in
+ * `:pump:dana:common` for what that costs - a test resolves them with a cast rather than at compile
+ * time, and their accessors become roots that every `AppScope` graph on the same classpath has to
+ * satisfy.
  */
 @DependencyGraph(AppScope::class)
-interface AppRootGraph : MetroViewModelMultibindings, PumpAccessors {
+interface AppRootGraph : MetroViewModelMultibindings {
 
     // Both of the graphs below are extensions rather than roots of their own. A second
     // `@DependencyGraph(AppScope::class)` is unsafe: two graphs both declaring `AppScope` get a
@@ -350,6 +357,7 @@ interface AppRootGraph : MetroViewModelMultibindings, PumpAccessors {
     val pumpEnactResult: PumpEnactResult
     val profileSwitchSilentGate: ProfileSwitchSilentGate
     val profileSwitchExpiryScheduler: ProfileSwitchExpiryScheduler
+    val snackbarNotificationFallback: SnackbarNotificationFallback
     val runningConfiguration: RunningConfiguration
     val runningConfigurationKeys: RunningConfigurationKeys
     val activePlugin: ActivePlugin

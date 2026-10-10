@@ -37,6 +37,7 @@ import app.aaps.pump.equil.manager.EquilManager
 import app.aaps.pump.equil.manager.command.CmdModelSet
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
+import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -49,7 +50,6 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import dev.zacsweers.metro.Inject
 import app.aaps.core.ui.R as CoreUiR
 
 sealed class EquilOverviewEvent {
@@ -62,7 +62,8 @@ sealed class EquilOverviewEvent {
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 @ViewModelKey
 @Stable
-class EquilOverviewViewModel @Inject constructor(
+@Inject
+class EquilOverviewViewModel(
     private val rh: ResourceHelper,
     private val aapsLogger: AAPSLogger,
     private val dateUtil: DateUtil,

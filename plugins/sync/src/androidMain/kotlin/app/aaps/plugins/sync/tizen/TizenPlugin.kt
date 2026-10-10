@@ -1,6 +1,5 @@
 package app.aaps.plugins.sync.tizen
 
-import app.aaps.plugins.sync.SyncStrings
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ResolveInfo
@@ -14,6 +13,7 @@ import app.aaps.core.interfaces.iob.GlucoseStatusProvider
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginBase
@@ -33,10 +33,10 @@ import app.aaps.core.interfaces.rx.events.EventLoopUpdateGui
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.objects.extensions.round
 import app.aaps.core.ui.compose.icons.IcPluginTizen
 import app.aaps.core.ui.extensions.toStringFull
+import app.aaps.plugins.sync.SyncStrings
 import app.aaps.shared.impl.extensions.safeQueryBroadcastReceivers
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
@@ -54,7 +54,8 @@ import kotlinx.coroutines.runBlocking
 @ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
 @IntKey(360)
 @SingleIn(AppScope::class)
-class TizenPlugin @Inject constructor(
+@Inject
+class TizenPlugin(
     aapsLogger: AAPSLogger,
     override val rh: ResourceHelper,
     private val context: Context,
@@ -71,15 +72,15 @@ class TizenPlugin @Inject constructor(
     private val config: Config,
     private val glucoseStatusProvider: GlucoseStatusProvider,
     private val pumpStatusProvider: PumpStatusProvider,
-    private val bolusProgressData: BolusProgressData
+    private val bolusProgressData: BolusProgressData,
+    notificationManager: NotificationManager
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.SYNC)
         .icon(IcPluginTizen)
         .pluginName(SyncStrings.tizen)
-        .shortName(SyncStrings.tizen_short)
         .description(SyncStrings.tizen_description),
-    aapsLogger, rh
+    aapsLogger, rh, notificationManager
 ) {
 
     private var scope: CoroutineScope? = null
@@ -134,6 +135,9 @@ class TizenPlugin @Inject constructor(
     }
 
     private fun sendData(event: Event) {
+        // prepareData reads the active pump (basalStatus + pumpStatus). Until ConfigBuilder.initialize()
+        // has run verifySelectionInCategories() there is none and PluginStore throws "No pump selected".
+        if (!config.appInitialized) return
         val bundle = Bundle()
         prepareData(event, bundle)
 
@@ -176,7 +180,7 @@ class TizenPlugin @Inject constructor(
         bundle.putInt("phoneBattery", receiverStatusStore.batteryLevel)
         bundle.putInt("rigBattery", processedDeviceStatusData.uploaderStatus.replace("%", "").trim { it <= ' ' }.toInt())
 
-        if (config.APS && loop.lastRun?.lastTBREnact != 0L) { //we are AndroidAPS
+        if (config.APS && loop.lastRun?.lastTBREnact != 0L) { //we are AAPS
             bundle.putLong("suggestedTimeStamp", loop.lastRun?.lastAPSRun ?: -1L)
             bundle.putString("suggested", loop.lastRun?.request?.json().toString())
             if (loop.lastRun?.tbrSetByPump != null && loop.lastRun?.tbrSetByPump?.enacted == true) {

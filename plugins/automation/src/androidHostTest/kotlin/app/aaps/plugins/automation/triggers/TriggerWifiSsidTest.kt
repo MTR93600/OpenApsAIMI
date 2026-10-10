@@ -1,7 +1,7 @@
 package app.aaps.plugins.automation.triggers
 
-import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.interfaces.receivers.ReceiverStatusStore.NetworkStatus
+import app.aaps.core.ui.CoreUiStrings
 import app.aaps.plugins.automation.asJsonObject
 import app.aaps.plugins.automation.elements.Comparator
 import com.google.common.truth.Truth.assertThat
@@ -58,6 +58,6 @@ class TriggerWifiSsidTest : TriggerTestBase() {
     }
 
     @Test fun friendlyDescriptionTest() = runTest {
-        assertThat(triggerFactory.triggerWifiSsid().friendlyDescription()).isEqualTo("wifissidcompared") // nothing stubbed, so the name is the fallback
+        assertThat(triggerFactory.triggerWifiSsid().friendlyDescription()).isEqualTo("WiFi SSID is equal to ")
     }
 }

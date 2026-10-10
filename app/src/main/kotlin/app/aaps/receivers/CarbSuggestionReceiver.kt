@@ -10,8 +10,8 @@ import app.aaps.core.interfaces.ui.CarbSuggestionActions
 import app.aaps.core.objects.workflow.MetroBroadcastReceiver
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
-import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 
 /**
  * Moved here from :plugins:aps so that module could become multiplatform.
@@ -41,7 +41,8 @@ class CarbSuggestionReceiver : MetroBroadcastReceiver() {
 // Metro builds this; the @Binds in PersistentNotificationModule is gone.
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
-class CarbSuggestionActionsImpl @Inject constructor(
+@Inject
+class CarbSuggestionActionsImpl(
     private val context: Context
 ) : CarbSuggestionActions {
 

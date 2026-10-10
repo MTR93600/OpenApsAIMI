@@ -1,7 +1,5 @@
 package app.aaps.plugins.sync.xdrip
 
-import app.aaps.core.ui.CoreUiStrings
-import app.aaps.plugins.sync.SyncStrings
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -23,6 +21,7 @@ import app.aaps.core.interfaces.iob.GlucoseStatusProvider
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginBaseWithPreferences
 import app.aaps.core.interfaces.plugin.PluginDescription
@@ -46,13 +45,14 @@ import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.objects.extensions.round
 import app.aaps.core.objects.profile.ProfileSealed
+import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.icons.IcXDrip
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
 import app.aaps.core.ui.extensions.generateCOBString
 import app.aaps.core.ui.extensions.toStringShort
+import app.aaps.plugins.sync.SyncStrings
 import app.aaps.plugins.sync.xdrip.compose.XdripComposeContent
 import app.aaps.plugins.sync.xdrip.compose.XdripMvvmRepository
 import app.aaps.plugins.sync.xdrip.extensions.toJson
@@ -68,10 +68,6 @@ import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.IntKey
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.binding
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledExecutorService
-import java.util.concurrent.ScheduledFuture
-import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -81,6 +77,10 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 
 @ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
 // Also the app-wide XDripBroadcast. It was a second @Binds in SyncModule to this same class, so one
@@ -88,7 +88,8 @@ import org.json.JSONArray
 @ContributesBinding(AppScope::class, binding = binding<XDripBroadcast>())
 @IntKey(330)
 @SingleIn(AppScope::class)
-class XdripPlugin @Inject constructor(
+@Inject
+class XdripPlugin(
     aapsLogger: AAPSLogger,
     override val rh: ResourceHelper,
     preferences: Preferences,
@@ -107,6 +108,7 @@ class XdripPlugin @Inject constructor(
     private val xdripMvvmRepository: XdripMvvmRepository,
     private val dataSyncSelector: DataSyncSelectorXdrip,
     private val persistenceLayer: PersistenceLayer,
+    notificationManager: NotificationManager,
 ) : XDripBroadcast, Sync, PluginBaseWithPreferences(
     pluginDescription = PluginDescription()
         .mainType(PluginType.SYNC)
@@ -120,10 +122,9 @@ class XdripPlugin @Inject constructor(
         }
         .icon(IcXDrip)
         .pluginName(SyncStrings.xdrip)
-        .shortName(SyncStrings.xdrip_shortname)
         .description(SyncStrings.description_xdrip),
     ownPreferences = XdripLongKey.entries + XdripIntentKey.entries,
-    aapsLogger, rh, preferences
+    aapsLogger, rh, preferences, notificationManager
 ) {
 
     @Suppress("PrivatePropertyName")
@@ -159,8 +160,12 @@ class XdripPlugin @Inject constructor(
 
     override suspend fun onStop() {
         super.onStop()
-        handler?.looper?.quitSafely()
+        // Drop the queued work BEFORE quitting the looper. The other order does nothing: quitSafely()
+        // still delivers the messages that are already due, and removeCallbacksAndMessages then runs
+        // against a looper that is on its way out, so a pending send could still fire after onStop
+        // returned - inside the window an import uses to stop the plugins and write the store.
         handler?.removeCallbacksAndMessages(null)
+        handler?.looper?.quitSafely()
         handler = null
         eventWorker?.shutdown()
         eventWorker = null
@@ -175,6 +180,11 @@ class XdripPlugin @Inject constructor(
     }
 
     private fun sendStatusLine() {
+        // buildStatusLine below reads the active pump through ProcessedTbrEbData. Until
+        // ConfigBuilder.initialize() has run verifySelectionInCategories() there is no pump selected and
+        // PluginStore throws "No pump selected". onStart subscribes to every database change and startup
+        // writes to the database, so this really can fire inside that window.
+        if (!config.appInitialized) return
         if (preferences.get(BooleanKey.XdripSendStatus)) {
             val status = runBlocking { profileFunction.getProfile() }?.let { buildStatusLine(it) } ?: ""
             context.sendBroadcast(

@@ -9,7 +9,6 @@ import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.PumpEnactResult
-import app.aaps.core.interfaces.queue.Callback
 import app.aaps.core.interfaces.queue.Command
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.utils.DateUtil
@@ -29,9 +28,8 @@ class CommandSMBBolus(
     private val bolusProgressData: BolusProgressData,
     override val pumpEnactResultProvider: () -> PumpEnactResult,
     private val detailedBolusInfo: DetailedBolusInfo,
-    override val callback: Callback?,
     private val bolusGeneration: Long,
-) : Command {
+) : Command() {
 
     override val commandType: Command.CommandType = Command.CommandType.SMB_BOLUS
 
@@ -58,8 +56,8 @@ class CommandSMBBolus(
 
     override fun log(): String = "SMB BOLUS ${rh.gs(InterfacesStrings.format_insulin_units, detailedBolusInfo.insulin)}"
 
-    override fun cancel(comment: TextRef, success: Boolean) {
-        super.cancel(comment, success)
+    override fun cancel(comment: TextRef, success: Boolean, cancelled: Boolean) {
+        super.cancel(comment, success, cancelled)
         bolusProgressData.clear(bolusGeneration)
     }
 }

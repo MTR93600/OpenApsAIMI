@@ -1,13 +1,13 @@
 package app.aaps.plugins.sync.smsCommunicator.otp
 
-import app.aaps.core.ui.CoreUiStrings
 import android.util.Base64
 import app.aaps.core.data.configuration.Constants
-import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.StringNonKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.ui.CoreUiStrings
 import com.eatthepath.otp.HmacOneTimePasswordGenerator
 import com.google.common.io.BaseEncoding
 import dev.zacsweers.metro.AppScope
@@ -20,9 +20,10 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.SecretKeySpec
 
 @SingleIn(AppScope::class)
-class OneTimePassword @Inject constructor(
+@Inject
+class OneTimePassword(
     private val preferences: Preferences,
-    private val rh: ResourceHelper,
+    private val rh: TextResolver,
     private val dateUtil: DateUtil
 ) {
 

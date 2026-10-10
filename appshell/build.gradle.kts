@@ -98,14 +98,14 @@ kotlin {
                     }
                     .forEach { api(project(it.path)) }
 
-                api(libs.cmp.runtime)
-                api(libs.cmp.foundation)
-                api(libs.cmp.ui)
-                api(libs.cmp.material3)
-                api(libs.cmp.material.icons.extended)
+                api(libs.jetbrains.compose.runtime)
+                api(libs.jetbrains.compose.foundation)
+                api(libs.jetbrains.compose.ui)
+                api(libs.jetbrains.compose.material3)
+                api(libs.jetbrains.compose.material.icons.extended)
                 // The JetBrains republishes, not the plain androidx ones: same package names, with
                 // Apple targets. Same choice as :core:ui and :ui.
-                api(libs.androidx.compose.navigation)
+                api(libs.jetbrains.androidx.compose.navigation)
                 api(libs.jetbrains.lifecycle.runtime.compose)
             }
         }
@@ -128,6 +128,17 @@ kotlin {
                 implementation(libs.org.mockito.kotlin)
                 implementation(libs.com.google.truth)
                 implementation(libs.kotlinx.coroutines.test)
+                // Compose UI tests on the JVM via Robolectric. Declared here rather than through
+                // `compose-test-module-dependencies`, because that convention plugin applies
+                // com.android.library, which AGP 9 refuses next to the multiplatform plugin.
+                // createComposeRule() is a JUnit4 rule, so the vintage engine bridges these onto the
+                // JUnit Platform beside the Jupiter tests.
+                implementation(project.dependencies.platform(libs.androidx.compose.bom))
+                implementation(libs.androidx.compose.ui.test.junit4)
+                implementation(libs.org.robolectric)
+                // Supplies the manifest holding the activity createComposeRule() launches.
+                implementation(libs.androidx.compose.ui.test.manifest)
+                runtimeOnly(libs.org.junit.vintage.engine)
                 runtimeOnly(libs.org.junit.platform.launcher)
             }
         }

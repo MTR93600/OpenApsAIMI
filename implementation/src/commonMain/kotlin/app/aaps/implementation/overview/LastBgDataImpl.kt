@@ -1,5 +1,6 @@
 package app.aaps.implementation.overview
 
+import app.aaps.core.data.configuration.Constants
 import app.aaps.core.data.iob.InMemoryGlucoseValue
 import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.db.PersistenceLayer
@@ -21,7 +22,8 @@ import kotlinx.coroutines.runBlocking
 
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
-class LastBgDataImpl @Inject constructor(
+@Inject
+class LastBgDataImpl(
     private val rh: TextResolver,
     private val dateUtil: DateUtil,
     private val persistenceLayer: PersistenceLayer,
@@ -53,6 +55,6 @@ class LastBgDataImpl @Inject constructor(
 
     override fun isActualBg(): Boolean =
         lastBg()?.let { lastBg ->
-            lastBg.timestamp > dateUtil.now() - T.mins(9).msecs()
+            lastBg.timestamp > dateUtil.now() - T.mins(Constants.OLD_BG_MINUTES).msecs()
         } == true
 }

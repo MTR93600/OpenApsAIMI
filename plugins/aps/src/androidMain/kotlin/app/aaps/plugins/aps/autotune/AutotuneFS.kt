@@ -5,7 +5,9 @@ import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.autotune.data.ATProfile
 import app.aaps.plugins.aps.autotune.data.PreppedGlucose
+import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 import org.json.JSONException
 import org.slf4j.LoggerFactory
 import java.io.BufferedInputStream
@@ -20,11 +22,10 @@ import java.io.PrintWriter
 import java.text.SimpleDateFormat
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
-import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.SingleIn
 
 @SingleIn(AppScope::class)
-class AutotuneFS @Inject constructor(
+@Inject
+class AutotuneFS(
     private val rh: ResourceHelper,
     private val loggerUtils: LoggerUtils
 ) {

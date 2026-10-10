@@ -26,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.core.app.ActivityCompat
 import androidx.core.net.toUri
 import androidx.fragment.app.FragmentActivity
@@ -74,21 +75,22 @@ import app.aaps.core.interfaces.rx.events.EventShowDialog
 import app.aaps.core.interfaces.source.DexcomBoyda
 import app.aaps.core.interfaces.sync.NsClient
 import app.aaps.core.interfaces.ui.IconsProvider
+import app.aaps.core.interfaces.ui.SnackbarHostPresence
 import app.aaps.core.interfaces.ui.UiInteraction
+import app.aaps.core.interfaces.ui.UiRestart
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.BooleanNonKey
-import app.aaps.core.interfaces.ui.UiRestart
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.VisibilityContext
 import app.aaps.core.objects.crypto.CryptoUtil
+import app.aaps.core.ui.compose.FallbackViewModelFactory
 import app.aaps.core.ui.compose.MetroAppCompatActivity
 import app.aaps.core.ui.compose.MetroViewModelFactoryOwner
 import app.aaps.core.ui.compose.navigation.NavigationRequest
-import app.aaps.core.ui.compose.pump.PumpActivityDialog
 import app.aaps.core.ui.compose.pump.PumpCommunicationStatus
 import app.aaps.core.ui.locale.LocaleHelper
 import app.aaps.core.utils.isRunningRealPumpTest
@@ -137,6 +139,7 @@ import app.aaps.core.ui.R as CoreUiR
 class ComposeMainActivity : MetroAppCompatActivity() {
 
     @Inject lateinit var rxBus: RxBus
+    @Inject lateinit var snackbarHostPresence: SnackbarHostPresence
     @Inject lateinit var rh: ResourceHelper
     @Inject lateinit var aapsLogger: AAPSLogger
     @Inject lateinit var preferences: Preferences
@@ -181,7 +184,14 @@ class ComposeMainActivity : MetroAppCompatActivity() {
      * The factory `by viewModels()` uses.
      */
     override val defaultViewModelProviderFactory: ViewModelProvider.Factory
-        get() = (applicationContext as MetroViewModelFactoryOwner).metroViewModelFactory
+        get() = FallbackViewModelFactory(
+            primary = (applicationContext as MetroViewModelFactoryOwner).metroViewModelFactory,
+            // Anything the graph does not contribute still has to be buildable. AndroidX creates its
+            // own view models through this activity - BiometricPrompt makes a BiometricViewModel -
+            // and handing out the Metro factory alone made that throw, taking the biometric prompt
+            // down and with it the Configuration screen and profile editing.
+            fallback = super.defaultViewModelProviderFactory
+        )
 
     // View models, built by Metro - each carries @ContributesIntoMap and @ViewModelKey.
     private val mainViewModel: MainViewModel by viewModels()
@@ -300,7 +310,11 @@ class ComposeMainActivity : MetroAppCompatActivity() {
             visibilityContext = visibilityContext,
             nsClient = nsClient,
             rxBus = rxBus,
+            snackbarHostPresence = snackbarHostPresence,
             clientControlActionDispatcher = clientControlActionDispatcher,
+            bolusProgressData = bolusProgressData,
+            commandQueue = commandQueue,
+            pumpCommunicationStatus = pumpCommunicationStatus,
             // The two per-build bitmaps the shared root cannot paint itself.
             appIcon = { modifier -> Image(painterResource(iconsProvider.getIcon()), null, modifier) },
             splashLogo = { modifier -> Image(painterResource(CoreUiR.drawable.splash_logo), null, modifier) },
@@ -382,11 +396,23 @@ class ComposeMainActivity : MetroAppCompatActivity() {
                                 )
 
                             effect.group.permissions.contains(Manifest.permission.SCHEDULE_EXACT_ALARM)                 ->
-                                startActivity(
-                                    Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-                                        data = "package:$packageName".toUri()
+                                // Every user can get here now, not only EOPatch users. If a ROM has no screen
+                                // for this intent, open the app's own settings page instead of crashing.
+                                try {
+                                    startActivity(
+                                        Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                                            data = "package:$packageName".toUri()
+                                        }
+                                    )
+                                } catch (_: ActivityNotFoundException) {
+                                    runCatching {
+                                        startActivity(
+                                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                                data = "package:$packageName".toUri()
+                                            }
+                                        )
                                     }
-                                )
+                                }
 
                             effect.group.permissions.contains(PluginPermissionsImpl.PERMISSION_NOTIFICATION_LISTENER)   ->
                                 startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
@@ -422,9 +448,6 @@ class ComposeMainActivity : MetroAppCompatActivity() {
         }
 
         val state by mainViewModel.uiState.collectAsStateWithLifecycle()
-        val bolusState by bolusProgressData.state.collectAsStateWithLifecycle()
-        val pumpStatusBanner by pumpCommunicationStatus.statusBannerFlow.collectAsStateWithLifecycle()
-        val pumpQueueStatus by pumpCommunicationStatus.queueStatusFlow.collectAsStateWithLifecycle()
 
         NavHost(
             navController = navController,
@@ -501,8 +524,8 @@ class ComposeMainActivity : MetroAppCompatActivity() {
                         clientControlActionDispatcher = clientControlActionDispatcher,
                         commandQueue = commandQueue,
                         pumpCommunicationStatus = pumpCommunicationStatus,
-                        appName = getString(R.string.app_name),
-                        authorizationFailedMessage = getString(R.string.authorizationfailed),
+                        appName = stringResource(R.string.app_name),
+                        authorizationFailedMessage = stringResource(R.string.authorizationfailed),
                         onNavigate = { request -> handleNavigationRequest(request, navController) },
                         onSearchResultClick = { entry -> handleSearchResultClick(entry, navController) },
                         onNotificationActionClick = { notification -> handleNotificationAction(notification.id, navController) },
@@ -542,31 +565,6 @@ class ComposeMainActivity : MetroAppCompatActivity() {
                     )
                 },
             )
-        }
-
-        // Modal bolus progress overlay — shown above everything for standard bolus
-        bolusState?.let { state ->
-            if (!state.isSMB) {
-                val pumpStatus = pumpStatusBanner?.text ?: ""
-                val queueStatus = pumpQueueStatus
-                PumpActivityDialog(
-                    bolusState = state,
-                    pumpStatus = pumpStatus,
-                    queueStatus = queueStatus,
-                    isModal = true,
-                    onStop = {
-                        if (config.AAPSCLIENT) {
-                            clientControlActionDispatcher.stopBolus()
-                            bolusProgressData.stopPressed()
-                        } else {
-                            commandQueue.cancelAllBoluses(null)
-                        }
-                    },
-                    // Only reachable via the stalled-state Dismiss button (client/follower): hides the
-                    // local mirror dialog. Delivery belongs to the master — this does not touch the pump.
-                    onDismiss = { bolusProgressData.clear() }
-                )
-            }
         }
     }
 

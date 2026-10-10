@@ -10,7 +10,8 @@ import dev.zacsweers.metro.Inject
 // Deliberately NOT @SingleIn: the @Binds this replaces had no scope. It is a result object, built
 // fresh for each call and handed back to the caller.
 @ContributesBinding(AppScope::class)
-class PumpEnactResultObject @Inject constructor(private val rh: TextResolver) : PumpEnactResult {
+@Inject
+class PumpEnactResultObject(private val rh: TextResolver) : PumpEnactResult {
 
     override var success = false // request was processed successfully (but possible no change was needed)
     override var enacted = false // request was processed successfully and change has been made
@@ -26,11 +27,13 @@ class PumpEnactResultObject @Inject constructor(private val rh: TextResolver) : 
     // Result of treatment delivery
     override var bolusDelivered = 0.0 // real value of delivered insulin
     override var queued = false
+    override var cancelled = false // dropped on purpose, not tried and failed - see PumpEnactResult
 
     override fun toString() =
         "PumpEnactResultObject(success=$success,enacted=$enacted,comment=$comment,duration=$duration,absolute=$absolute,percent=$percent,isPercent=$isPercent,isTempCancel=$isTempCancel,bolusDelivered=$bolusDelivered,queued=$queued)"
 
     override fun success(success: Boolean): PumpEnactResultObject = this.also { this.success = success }
+    override fun cancelled(cancelled: Boolean): PumpEnactResultObject = this.also { it.cancelled = cancelled }
     override fun enacted(enacted: Boolean): PumpEnactResultObject = this.also { it.enacted = enacted }
     override fun comment(comment: String): PumpEnactResultObject = this.also { it.comment = comment }
     override fun comment(ref: TextRef): PumpEnactResultObject = this.also { it.comment = rh.gs(ref) }

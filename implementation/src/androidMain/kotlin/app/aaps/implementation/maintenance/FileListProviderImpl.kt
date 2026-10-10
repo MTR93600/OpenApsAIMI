@@ -26,24 +26,25 @@ import app.aaps.implementation.R
 import app.aaps.implementation.maintenance.data.PrefsStatusImpl
 import app.aaps.implementation.maintenance.formats.EncryptedPrefsFormat
 import app.aaps.shared.impl.weardata.ZipWatchfaceFormat
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.ContributesBinding
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
+import dev.zacsweers.metro.binding
 import org.joda.time.DateTime
 import org.joda.time.Days
 import org.joda.time.Hours
 import org.joda.time.LocalDateTime
 import org.joda.time.format.DateTimeFormat
 import java.io.File
-import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesBinding
-import dev.zacsweers.metro.binding
-import dev.zacsweers.metro.SingleIn
-import dev.zacsweers.metro.Inject
 import kotlin.math.abs
 
 @Suppress("SpellCheckingInspection")
 @ContributesBinding(AppScope::class)
 @ContributesBinding(AppScope::class, binding = binding<PrefsFileInfo>())
 @SingleIn(AppScope::class)
-class FileListProviderImpl @Inject constructor(
+@Inject
+class FileListProviderImpl(
     private val rh: ResourceHelper,
     private val config: () -> Config,
     private val encryptedPrefsFormat: EncryptedPrefsFormat,

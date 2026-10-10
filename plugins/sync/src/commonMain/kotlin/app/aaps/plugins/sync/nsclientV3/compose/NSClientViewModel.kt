@@ -1,6 +1,5 @@
 package app.aaps.plugins.sync.nsclientV3.compose
 
-import app.aaps.core.ui.CoreUiStrings
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
@@ -9,6 +8,7 @@ import app.aaps.core.interfaces.nsclient.NSClientLog
 import app.aaps.core.interfaces.nsclient.NSClientRepository
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.ui.CoreUiStrings
 import app.aaps.plugins.sync.nsclientV3.keys.NsclientBooleanKey
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
@@ -33,7 +33,8 @@ data class NSClientUiState(
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 @ViewModelKey
 @Stable
-class NSClientViewModel @Inject constructor(
+@Inject
+class NSClientViewModel(
     private val rh: TextResolver,
     private val nsClientRepository: NSClientRepository,
     private val preferences: Preferences

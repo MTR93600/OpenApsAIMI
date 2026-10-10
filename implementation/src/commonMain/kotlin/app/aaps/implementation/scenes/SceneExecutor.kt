@@ -13,6 +13,7 @@ import app.aaps.core.data.ue.Sources
 import app.aaps.core.data.ue.ValueWithUnit
 import app.aaps.core.data.ui.ConfirmationLine
 import app.aaps.core.data.ui.ConfirmationRole
+import app.aaps.core.interfaces.InterfacesStrings
 import app.aaps.core.interfaces.aps.Loop
 import app.aaps.core.interfaces.bolus.WizardBolusExecutor
 import app.aaps.core.interfaces.concurrent.AapsLock
@@ -30,11 +31,11 @@ import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventProfileChangeRequested
+import app.aaps.core.interfaces.scenes.SceneChainResolver
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.Translator
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.core.interfaces.InterfacesStrings
 import app.aaps.core.objects.extensions.profileNames
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.formatMinutesAsDuration
@@ -48,7 +49,8 @@ import dev.zacsweers.metro.SingleIn
  * Captures prior state before activation for revert on deactivation.
  */
 @SingleIn(AppScope::class)
-class SceneExecutor @Inject constructor(
+@Inject
+class SceneExecutor(
     private val persistenceLayer: PersistenceLayer,
     private val profileFunction: ProfileFunction,
     private val profileRepository: ProfileRepository,
@@ -65,7 +67,8 @@ class SceneExecutor @Inject constructor(
     private val translator: Translator,
     private val profileSwitchSilentGate: ProfileSwitchSilentGate,
     private val notificationManager: NotificationManager,
-    private val sceneExpiryScheduler: SceneExpiryScheduler
+    private val sceneExpiryScheduler: SceneExpiryScheduler,
+    private val sceneChainResolver: SceneChainResolver
 ) {
 
     /** A parked scene activation awaiting [commitScene] — the two-step master-authoritative path. */
@@ -147,19 +150,26 @@ class SceneExecutor @Inject constructor(
      * commit finds the slot drained → [WizardBolusExecutor.ConfirmResult.NoPending] (no double-activate). An activation
      * failure rides back through [onError]. Mirrors [WizardBolusExecutor.confirm].
      */
-    suspend fun commitScene(bolusId: Long, onError: (String) -> Unit): WizardBolusExecutor.ConfirmResult {
+    suspend fun commitScene(bolusId: Long, onError: (WizardBolusExecutor.Failure) -> Unit): WizardBolusExecutor.ConfirmResult {
         val parked = pendingScenes.take(bolusId) ?: return WizardBolusExecutor.ConfirmResult.NoPending
         val result = activate(parked.scene, parked.durationMinutes)
-        if (!result.success) onError(result.errorMessage ?: rh.gs(CoreUiStrings.scene_some_actions_failed))
+        if (!result.success) onError(WizardBolusExecutor.Failure(result.errorMessage ?: rh.gs(CoreUiStrings.scene_some_actions_failed)))
         return WizardBolusExecutor.ConfirmResult.Delivered
     }
 
-    /** The master-authored confirmation lines for a scene — name + duration + one line per action (authored ONCE here). */
+    /**
+     * The master-authored confirmation lines for a scene — name + duration + one line per action
+     * (authored ONCE here), and the follow-up that starts when it ends, so the wearer knows what
+     * they are setting in motion before they confirm. The catalog check is enough here: whether
+     * the follow-up can run is decided when this scene ends, not now.
+     */
     private fun buildSceneLines(scene: Scene, durationMinutes: Int): List<ConfirmationLine> = buildList {
         add(ConfirmationLine(ConfirmationRole.SCENE, scene.name))
         if (durationMinutes > 0)
             add(ConfirmationLine(ConfirmationRole.NORMAL, rh.gs(InterfacesStrings.confirmation_line, rh.gs(CoreUiStrings.duration), formatMinutesAsDuration(durationMinutes, rh))))
         scene.actions.forEach { add(ConfirmationLine(ConfirmationRole.NORMAL, sceneActionLine(it))) }
+        // The same "→ X" the Scenes list shows, in the scene colour on both the phone and the watch
+        sceneChainResolver.resolveCatalogChainTarget(scene)?.let { add(ConfirmationLine(ConfirmationRole.SCENE, rh.gs(CoreUiStrings.scene_chain_indicator, it.name))) }
     }
 
     private fun sceneActionLine(action: SceneAction): String = when (action) {

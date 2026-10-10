@@ -6,13 +6,14 @@ import app.aaps.pump.eopatch.core.ble.BytesConverter
 import app.aaps.pump.eopatch.core.ble.PatchFunc
 import app.aaps.pump.eopatch.core.response.WakeUpTimeResponse
 import app.aaps.pump.eopatch.core.scan.IBleDevice
-import io.reactivex.rxjava3.core.Single
-import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import io.reactivex.rxjava3.core.Single
 
 @SingleIn(AppScope::class)
-class GetWakeUpTime @Inject constructor(patch: IBleDevice, aapsLogger: AAPSLogger) : BaseAPI<WakeUpTimeResponse>(PatchFunc.GET_WAKE_UP_TIME, patch, aapsLogger) {
+@Inject
+class GetWakeUpTime(patch: IBleDevice, aapsLogger: AAPSLogger) : BaseAPI<WakeUpTimeResponse>(PatchFunc.GET_WAKE_UP_TIME, patch, aapsLogger) {
     override fun parse(bytes: ByteArray): WakeUpTimeResponse {
         val success = bytes[DATA0].toInt() == 0
         if (!success) return WakeUpTimeResponse(false, 0)

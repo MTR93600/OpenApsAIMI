@@ -12,7 +12,6 @@ import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.pump.VirtualPump
 import app.aaps.core.interfaces.queue.CommandQueue
-import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventPumpStatusChanged
@@ -22,9 +21,11 @@ import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.LongNonKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.ui.CoreUiStrings
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.CancellationException
-import kotlin.concurrent.Volatile
-import kotlin.time.Clock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -35,9 +36,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.SingleIn
-import dev.zacsweers.metro.Inject
+import kotlin.concurrent.Volatile
+import kotlin.time.Clock
 
 /**
  * App-owned host for the pump command loop. Replaces the WorkManager `QueueWorker`.
@@ -58,7 +58,8 @@ import dev.zacsweers.metro.Inject
  *     arrives during the linger keeps draining instead of forcing a disconnect+reconnect.
  */
 @SingleIn(AppScope::class)
-class CommandExecutor @Inject constructor(
+@Inject
+class CommandExecutor(
     private val aapsLogger: AAPSLogger,
     private val fabricPrivacy: FabricPrivacy,
     private val queue: CommandQueue,
@@ -169,8 +170,13 @@ class CommandExecutor @Inject constructor(
                 val secondsElapsed = (Clock.System.now().toEpochMilliseconds() - connectionStartTime) / 1000
                 val pump = activePlugin.activePump
                 if (!pump.isConfigured()) {
-                    aapsLogger.debug(LTag.PUMPQUEUE, "pump not configured - completing queue as no-op")
-                    queue.completeAllAsNoOp(CoreUiStrings.pump_not_configured)
+                    aapsLogger.debug(LTag.PUMPQUEUE, "pump not configured - dropping the queue")
+                    // success = false: nothing reached the pump, so no caller may be told it did.
+                    // `cancelAll` passes cancelled = true, and that is what keeps this quiet - a pump
+                    // selected but not yet paired is a normal setup state, not a delivery failure. The
+                    // older comment here kept success = true to avoid the alarm; that reason went away
+                    // when PumpEnactResult.cancelled arrived and the consumers learned to check it.
+                    queue.cancelAll(CoreUiStrings.pump_not_configured, success = false)
                     rxBus.send(EventPumpStatusChanged(EventPumpStatusChanged.Status.DISCONNECTED))
                     return
                 }
@@ -254,7 +260,7 @@ class CommandExecutor @Inject constructor(
                             rxBus.send(EventQueueChanged())
                             rxBus.send(EventPumpStatusChanged(cmd.status()))
                             try {
-                                cmd.executeWithCallback()
+                                cmd.executeAndComplete()
                             } catch (e: CancellationException) {
                                 throw e // honor coroutine cancellation (app shutdown)
                             } catch (e: Exception) {

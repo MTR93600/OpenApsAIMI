@@ -4,18 +4,17 @@
     <!-- ns_wifi_ssids moved to core:keys module -->
     <string name="connection_settings_title">Paramètres de connexion</string>
     <!-- ns_wifi_ssids_summary moved to core:keys module -->
-    <string name="description_ns_client_v3">Synchronise vos données avec Nightscout en utilisant l\'API v3</string>
     <string name="blocked_by_charging">Bloqué par les options de recharge</string>
     <string name="blocked_by_connectivity">Bloqué par les options de connectivité</string>
     <string name="no_connectivity">Aucune connectivité</string>
     <string name="unsupported_ns_version">Version de Nightscout non supportée</string>
     <!-- AAPSClient -->
-    <string name="ns_client_v3_short_name">NSv3</string>
     <!-- Authorized clients (paired devices that can issue signed commands) -->
     <string name="authorized_clients_title">Clients autorisés</string>
     <string name="authorized_clients_add">Ajouter un client</string>
     <string name="authorized_clients_comm_switch_title">Autoriser le contrôle par un client</string>
     <string name="authorized_clients_comm_switch_summary">Autorise les clients associés à envoyer des commandes signées sur Nightscout. Désactivez pour arrêter le contrôle sans supprimer les clients.</string>
+    <string name="authorized_clients_needs_websocket">Les websockets sont désactivés, donc les commandes des clients ne peuvent pas être reçues. Les clients voient ce maître comme n\'acceptant pas les commandes tant que vous n\'activez pas les websockets.</string>
     <string name="authorized_clients_state_active">Actif</string>
     <string name="authorized_clients_state_pending">En cours</string>
     <string name="authorized_clients_last_seen">Dernière fois vu %1$s</string>
@@ -74,7 +73,6 @@
     <string name="summary_tidepool_dev_servers">Si activé, les téléchargements iront vers les serveurs de test au lieu des serveurs habituels</string>
     <string name="title_tidepool_dev_servers">Utiliser les serveurs d\'Intégration (test)</string>
     <string name="tidepool">Tidepool</string>
-    <string name="tidepool_shortname">TDP</string>
     <string name="description_tidepool">Transfère les données vers Tidepool</string>
     <string name="upload_now">Télécharger maintenant</string>
     <string name="tidepool_purge_data">Purger toutes les données</string>
@@ -84,7 +82,6 @@
     <string name="working">Opération en cours</string>
     <!-- Xdrip StatusLine -->
     <string name="xdrip">xDrip+</string>
-    <string name="xdrip_shortname">XD</string>
     <string name="description_xdrip">Envoyer des données à xDrip+</string>
     <string name="xdrip_status_settings">xDrip+ barre d\'état avancée</string>
     <string name="xdrip_not_installed">xDrip+ n\'est pas installé</string>
@@ -93,7 +90,6 @@
     <string name="xdrip_local_broadcasts_title">Activer les diffusions vers xDrip+.</string>
     <!--    DataBroadcast-->
     <string name="tizen">Applications compagnon externes</string>
-    <string name="tizen_short">DAC</string>
     <string name="tizen_description">Active la diffusion de données vers diverses applications compagnons externes</string>
     <!-- GarminPlugin -->
     <string name="garmin">Garmin</string>
@@ -101,7 +97,6 @@
     <string name="garmin_local_http_server_port">Port du serveur HTTP local</string>
     <string name="garmin_local_http_server">Serveur HTTP local</string>
     <!--    Wear-->
-    <string name="wear_shortname">WEAR</string>
     <string name="description_wear">Surveillez et contrôlez AAPS en utilisant votre montre WearOS.</string>
     <string name="no_watch_connected">(Pas de montre connectée)</string>
     <string name="pump_status">État de la pompe</string>
@@ -162,7 +157,6 @@
     <string name="garmin_request_key">Demande de clé</string>
     <!-- SMS Communicator & OTP Authenticator -->
     <string name="smscommunicator">Communicateur SMS</string>
-    <string name="smscommunicator_shortname">SMS</string>
     <string name="description_sms_communicator">Commander à distance AAPS en utilisant les commandes SMS.</string>
     <string name="smscommunicator_code_from_authenticator_for" comment="This is continuation of sentence: To [ACTION] reply with code">depuis l\'application Authenticator pour : %1$s suivie du code PIN</string>
     <string name="smscommunicator_tab_otp_label">Configuration de l\'Authentificateur</string>

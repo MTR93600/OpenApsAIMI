@@ -14,6 +14,7 @@ import app.aaps.core.interfaces.bolus.BatchAction
 import app.aaps.core.interfaces.bolus.BatchExecutor
 import app.aaps.core.interfaces.clientcontrol.ActionProgress
 import app.aaps.core.interfaces.clientcontrol.FailureReason
+import app.aaps.core.interfaces.clientcontrol.isNotDeliveryError
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.db.PersistenceLayer
@@ -36,8 +37,6 @@ import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
-import kotlin.math.max
-import kotlin.concurrent.Volatile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -48,13 +47,16 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.concurrent.Volatile
+import kotlin.math.max
 
 // Registers itself: @ViewModelKey infers the key from the class. No graph entry, and deliberately
 // unscoped so each screen gets its own.
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 @ViewModelKey
 @Stable
-class CarbsDialogViewModel @Inject constructor(
+@Inject
+class CarbsDialogViewModel(
     private val constraintChecker: ConstraintsChecker,
     private val profileUtil: ProfileUtil,
     private val iobCobCalculator: IobCobCalculator,
@@ -101,12 +103,6 @@ class CarbsDialogViewModel @Inject constructor(
         // COB removal limit: a negative entry may remove at most the carbs currently on board (floored, ≥0).
         val cobLimit = (iobCobCalculator.getCobInfo("carbsDialog").displayCob ?: 0.0).toInt().coerceAtLeast(0)
 
-        // Bolus reminder: visible when preference enabled AND predicted BG is low
-        val showBolusReminder = if (preferences.get(BooleanKey.OverviewUseBolusReminder)) {
-            val glucoseStatus = glucoseStatusProvider.glucoseStatusData
-            glucoseStatus != null && glucoseStatus.glucose + 3 * glucoseStatus.delta < 70.0
-        } else false
-
         // Auto-detect hypo condition
         val autoHypo = detectAutoHypo(now)
 
@@ -130,7 +126,7 @@ class CarbsDialogViewModel @Inject constructor(
                 carbsButtonIncrement3 = preferences.get(IntKey.OverviewCarbsButtonIncrement3),
                 units = units,
                 showNotesFromPreferences = preferences.get(BooleanKey.OverviewShowNotesInDialogs),
-                showBolusReminder = showBolusReminder,
+                showBolusReminder = showBolusReminder(),
                 hypoTtTarget = profileUtil.fromMgdlToUnits(preferences.ttTargetMgdl(TT.Reason.HYPOGLYCEMIA), units),
                 hypoTtDuration = preferences.ttDurationMinutes(TT.Reason.HYPOGLYCEMIA),
                 eatingSoonTtTarget = profileUtil.fromMgdlToUnits(preferences.ttTargetMgdl(TT.Reason.EATING_SOON), units),
@@ -166,12 +162,32 @@ class CarbsDialogViewModel @Inject constructor(
         return true
     }
 
+    /**
+     * Whether the bolus reminder row belongs on screen: the preference is on, and the prediction says
+     * the glucose is heading low.
+     *
+     * Read in both places that build the state, so that turning the preference on in the settings
+     * sheet takes effect at once. It used to be read only when the dialog opened, so switching it on
+     * from inside the dialog did nothing until the dialog was opened again - and the reminder could
+     * not be asked for either, because submitting needs the row to have been ticked.
+     */
+    private fun showBolusReminder(): Boolean {
+        if (!preferences.get(BooleanKey.OverviewUseBolusReminder)) return false
+        val glucoseStatus = glucoseStatusProvider.glucoseStatusData
+        return glucoseStatus != null && glucoseStatus.glucose + 3 * glucoseStatus.delta < 70.0
+    }
+
+    /** Re-reads everything the settings sheet of this dialog can change. */
     fun refreshCarbsButtons() {
+        val showBolusReminder = showBolusReminder()
         _uiState.update {
             it.copy(
                 carbsButtonIncrement1 = preferences.get(IntKey.OverviewCarbsButtonIncrement1),
                 carbsButtonIncrement2 = preferences.get(IntKey.OverviewCarbsButtonIncrement2),
-                carbsButtonIncrement3 = preferences.get(IntKey.OverviewCarbsButtonIncrement3)
+                carbsButtonIncrement3 = preferences.get(IntKey.OverviewCarbsButtonIncrement3),
+                showBolusReminder = showBolusReminder,
+                // Never leave the tick set on a row that is no longer shown.
+                bolusReminderChecked = it.bolusReminderChecked && showBolusReminder
             )
         }
     }
@@ -285,11 +301,11 @@ class CarbsDialogViewModel @Inject constructor(
             }
             when (val prepared = batchExecutor.prepare(actions, Sources.CarbDialog, rh.gs(InterfacesStrings.carbs))) {
                 is ActionProgress.Prepared -> _sideEffect.tryEmit(SideEffect.ShowConfirmation(prepared.id, prepared.lines))
-                is ActionProgress.Rejected -> when (prepared.reason) {
-                    FailureReason.NotReachable, FailureReason.ControlDisabled -> rxBus.send(EventShowDialog.Ok(title = rh.gs(InterfacesStrings.carbs), message = rh.gs(prepared.reason.failText())))
+                is ActionProgress.Rejected -> when {
                     // No-op (e.g. nothing left to remove after a COB-shrink between open and confirm): neutral message, NOT the bolus-error alarm.
-                    FailureReason.NoAction     -> _sideEffect.tryEmit(SideEffect.ShowNoActionDialog)
-                    else                       -> prepared.detail?.let { detail ->
+                    prepared.reason == FailureReason.NoAction -> _sideEffect.tryEmit(SideEffect.ShowNoActionDialog)
+                    prepared.reason.isNotDeliveryError()      -> rxBus.send(EventShowDialog.Ok(title = rh.gs(InterfacesStrings.carbs), message = rh.gs(prepared.reason.failText())))
+                    else                                      -> prepared.detail?.let { detail ->
                         if (config.AAPSCLIENT) rxBus.send(EventShowDialog.Ok(title = rh.gs(InterfacesStrings.carbs), message = detail))
                         else _sideEffect.tryEmit(SideEffect.ShowDeliveryError(detail))
                     }
@@ -311,7 +327,7 @@ class CarbsDialogViewModel @Inject constructor(
             // Surface a failed commit. NotReachable → the offline message; any other Rejected (ExecutionFailed,
             // NoPendingBolus, …) → the master's detail. Unconfirmed (state unknown) rides the round-trip's app-level modal.
             if (result is ActionProgress.Rejected) {
-                if (result.reason == FailureReason.NotReachable || result.reason == FailureReason.ControlDisabled)
+                if (result.reason.isNotDeliveryError())
                     rxBus.send(EventShowDialog.Ok(title = rh.gs(InterfacesStrings.carbs), message = rh.gs(result.reason.failText())))
                 else result.detail?.let { detail ->
                     if (config.AAPSCLIENT) rxBus.send(EventShowDialog.Ok(title = rh.gs(InterfacesStrings.carbs), message = detail))

@@ -7,13 +7,14 @@ import app.aaps.pump.eopatch.core.ble.PatchFunc
 import app.aaps.pump.eopatch.core.code.PatchBleResultCode
 import app.aaps.pump.eopatch.core.response.TempBasalFinishTimeResponse
 import app.aaps.pump.eopatch.core.scan.IBleDevice
-import io.reactivex.rxjava3.core.Single
-import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import io.reactivex.rxjava3.core.Single
 
 @SingleIn(AppScope::class)
-class TempBasalFinishTimeGet @Inject constructor(patch: IBleDevice, aapsLogger: AAPSLogger) : BaseAPI<TempBasalFinishTimeResponse>(PatchFunc.GET_TEMP_BASAL_FINISH_TIME, patch, aapsLogger) {
+@Inject
+class TempBasalFinishTimeGet(patch: IBleDevice, aapsLogger: AAPSLogger) : BaseAPI<TempBasalFinishTimeResponse>(PatchFunc.GET_TEMP_BASAL_FINISH_TIME, patch, aapsLogger) {
     override fun parse(bytes: ByteArray): TempBasalFinishTimeResponse {
         val ret = bytes[DATA0].toInt()
         var tempBasalFinishTime = 0

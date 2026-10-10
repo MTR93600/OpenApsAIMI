@@ -13,6 +13,7 @@ import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.PermissionGroup
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
@@ -81,7 +82,8 @@ import kotlin.time.Clock
 @IntKey(1000)
 @ContributesBinding(AppScope::class, binding = binding<VirtualPump>())
 @SingleIn(AppScope::class)
-open class VirtualPumpPlugin @Inject constructor(
+@Inject
+open class VirtualPumpPlugin(
     aapsLogger: AAPSLogger,
     private val rxBus: RxBus,
     override val rh: TextResolver,
@@ -99,7 +101,8 @@ open class VirtualPumpPlugin @Inject constructor(
     private val ch: ConcentrationHelper,
     private val profileFunction: ProfileFunction,
     private val bolusProgressData: BolusProgressData,
-    private val appScope: CoroutineScope
+    private val appScope: CoroutineScope,
+    notificationManager: NotificationManager
 ) : PumpPluginBase(
     pluginDescription = PluginDescription()
         .mainType(PluginType.PUMP)
@@ -118,12 +121,18 @@ open class VirtualPumpPlugin @Inject constructor(
         }
         .icon(IcPluginVirtualPump)
         .pluginName(CoreUiStrings.virtual_pump)
-        .shortName(VirtualStrings.virtual_pump_shortname)
         .description(VirtualStrings.description_pump_virtual)
         .setDefault()
         .showInList { !config.AAPSCLIENT },
-    ownPreferences = VirtualBooleanNonPreferenceKey.entries,
-    aapsLogger, rh, preferences, commandQueue
+    // The two core-enum keys are claimed here on purpose. Ownership is what decides whether an
+    // import's "keep pump settings" protects a key, and these are this pump's own configuration -
+    // the type it emulates and whether it uploads status - even though they live in StringKey and
+    // BooleanKey rather than in a driver enum. Without them an import replaced the virtual pump's
+    // settings in the very mode that promises not to. `registerPreferences` takes a Set, so naming a
+    // key the core list already seeds costs nothing.
+    ownPreferences = VirtualBooleanNonPreferenceKey.entries +
+        listOf(StringKey.VirtualPumpType, BooleanKey.VirtualPumpStatusUpload),
+    aapsLogger, rh, preferences, commandQueue, notificationManager
 ), Pump, VirtualPump {
 
     private var scope: CoroutineScope? = null

@@ -1,9 +1,8 @@
 package app.aaps.plugins.automation.actions
 
-import app.aaps.plugins.automation.AutomationStrings
 import app.aaps.core.data.model.Scene
 import app.aaps.core.interfaces.scenes.SceneAutomationResult
-import app.aaps.plugins.automation.R
+import app.aaps.plugins.automation.AutomationStrings
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
@@ -25,11 +24,7 @@ class ActionRunSceneTest : ActionsTestBase() {
     private val disabledScene = Scene(id = "scene-2", name = "Sleep", isEnabled = false)
 
     @BeforeEach fun setUp() {
-        whenever(rh.gs(AutomationStrings.action_run_scene)).thenReturn("Run scene")
-        whenever(rh.gs(AutomationStrings.action_run_scene_short)).thenReturn("Run scene: %1\$s")
-        whenever(rh.gs(AutomationStrings.action_scene_not_found)).thenReturn("Scene not found")
-        whenever(rh.gs(AutomationStrings.action_scene_disabled)).thenReturn("Scene is disabled")
-        sut = ActionRunScene(aapsLogger, rh, { pumpEnactResultProvider() }, sceneApi, sceneIconResolver, triggerDeps)
+        sut = ActionRunScene(aapsLogger, text, { pumpEnactResultProvider() }, sceneApi, sceneIconResolver, triggerDeps)
     }
 
     @Test fun friendlyName() = runTest {

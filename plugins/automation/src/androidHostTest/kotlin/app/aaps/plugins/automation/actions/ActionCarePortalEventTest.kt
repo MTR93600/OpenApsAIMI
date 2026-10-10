@@ -1,8 +1,8 @@
 package app.aaps.plugins.automation.actions
 
-import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.ui.CoreUiStrings
 import app.aaps.plugins.automation.elements.InputCarePortalMenu
 import app.aaps.plugins.automation.elements.InputDuration
 import app.aaps.plugins.automation.elements.InputString
@@ -21,14 +21,13 @@ class ActionCarePortalEventTest : ActionsTestBase() {
 
     @BeforeEach
     fun setup() {
-        whenever(rh.gs(CoreUiStrings.careportal_note_message)).thenReturn("Note : %s")
         whenever(dateUtil.now()).thenReturn(0)
         whenever(profileFunction.getUnits()).thenReturn(GlucoseUnit.MGDL)
         runTest {
             whenever(persistenceLayer.insertPumpTherapyEventIfNewByTimestamp(anyOrNull(), anyLong(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
                 .thenReturn(PersistenceLayer.TransactionResult())
         }
-        sut = ActionCarePortalEvent(aapsLogger, rh, { pumpEnactResultProvider() }, persistenceLayer, profileFunction, dateUtil, glucoseStatusProvider)
+        sut = ActionCarePortalEvent(aapsLogger, text, { pumpEnactResultProvider() }, persistenceLayer, profileFunction, dateUtil, glucoseStatusProvider)
         sut.cpEvent = InputCarePortalMenu()
         sut.cpEvent.value = InputCarePortalMenu.EventType.NOTE
         sut.note = InputString("Asd")

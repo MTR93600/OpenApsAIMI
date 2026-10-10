@@ -31,12 +31,12 @@ kotlin {
                 api(project(":core:data"))
 
                 // CMP rather than androidx. On Android CMP delegates to androidx.
-                api(libs.cmp.runtime)
-                api(libs.cmp.foundation)
-                api(libs.cmp.ui)
-                api(libs.cmp.material3)
-                api(libs.cmp.material.icons.extended)
-                implementation(libs.cmp.ui.tooling.preview)
+                api(libs.jetbrains.compose.runtime)
+                api(libs.jetbrains.compose.foundation)
+                api(libs.jetbrains.compose.ui)
+                api(libs.jetbrains.compose.material3)
+                api(libs.jetbrains.compose.material.icons.extended)
+                implementation(libs.jetbrains.compose.ui.tooling.preview)
             }
         }
 

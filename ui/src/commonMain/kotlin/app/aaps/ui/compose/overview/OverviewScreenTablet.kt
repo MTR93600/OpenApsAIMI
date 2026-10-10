@@ -55,7 +55,7 @@ fun OverviewScreenTablet(
     tempTargetProgress: Float,
     tempTargetReason: TT.Reason?,
     tempTargetSceneManaged: Boolean = false,
-    runningMode: RM.Mode,
+    runningMode: RM.Mode?,
     runningModeText: String,
     runningModeRemaining: String,
     runningModeProgress: Float,
@@ -74,6 +74,7 @@ fun OverviewScreenTablet(
     paddingValues: PaddingValues,
     activeSceneState: ActiveSceneState? = null,
     sceneExpired: Boolean = false,
+    activeSceneChainTargetName: String? = null,
     onEndScene: () -> Unit = {},
     onDismissScene: () -> Unit = {},
     endSceneEnabled: Boolean = true,
@@ -99,6 +100,7 @@ fun OverviewScreenTablet(
         ActiveSceneBanner(
             activeState = activeSceneState,
             expired = sceneExpired,
+            chainTargetName = activeSceneChainTargetName,
             onEndClick = onEndScene,
             onDismiss = onDismissScene,
             endEnabled = endSceneEnabled,
@@ -209,7 +211,7 @@ fun OverviewScreenTablet(
                     .verticalScroll(rememberScrollState())
                     .padding(start = AapsSpacing.small)
             ) {
-                GraphsSection(graphViewModel = graphViewModel, isSimpleMode = isSimpleMode)
+                GraphsSection(graphViewModel = graphViewModel, isSimpleMode = isSimpleMode, iobText = iobUiState.text, cobText = cobUiState.text)
             }
         }
     }

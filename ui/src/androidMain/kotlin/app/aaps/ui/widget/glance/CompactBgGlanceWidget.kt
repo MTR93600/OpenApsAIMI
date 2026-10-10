@@ -19,6 +19,8 @@ import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
 import androidx.glance.layout.Alignment
+import androidx.glance.semantics.contentDescription
+import androidx.glance.semantics.semantics
 import androidx.glance.layout.Box
 import androidx.glance.layout.Row
 import androidx.glance.layout.fillMaxSize
@@ -29,9 +31,8 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextDecoration
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
+import app.aaps.core.interfaces.configuration.awaitInitialized
 import app.aaps.core.ui.compose.navigation.DarkElementColors
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Compact single-row widget: BG + trend arrow | bolus-icon IOB | carbs-icon COB.
@@ -46,9 +47,8 @@ class CompactBgGlanceWidget : GlanceAppWidget() {
         val stateLoader = deps.widgetStateLoader
         val config = deps.config
 
-        val ready = config.appInitialized || withTimeoutOrNull(AWAIT_INIT_TIMEOUT_MS) {
-            config.initProgressFlow.first { it.done }
-        } != null
+        // See AapsGlanceWidget: `done` alone is true during a settings import, awaitInitialized is not.
+        val ready = config.awaitInitialized(AWAIT_INIT_TIMEOUT_MS)
         if (!ready) {
             provideContent { LoadingContent() }
             return
@@ -90,19 +90,21 @@ private fun CompactContent(state: WidgetRenderState) {
                 fontSize = TEXT_SIZE,
                 fontWeight = FontWeight.Bold,
                 textDecoration = if (state.strikeThrough) TextDecoration.LineThrough else TextDecoration.None
-            )
+            ),
+            // Says "old reading" when the value is struck through.
+            modifier = GlanceModifier.semantics { contentDescription = state.bgSpoken }
         )
         if (state.arrowResId != null) {
             Image(
                 provider = ImageProvider(state.arrowResId),
-                contentDescription = null,
+                contentDescription = state.arrowDescription,
                 modifier = GlanceModifier.size(ICON_SIZE).padding(start = 3.dp),
                 colorFilter = ColorFilter.tint(ColorProvider(bgColor))
             )
         }
         Image(
             provider = ImageProvider(state.iobIconResId),
-            contentDescription = null,
+            contentDescription = state.iobLabel,
             modifier = GlanceModifier.size(ICON_SIZE).padding(start = SECTION_GAP),
             colorFilter = ColorFilter.tint(ColorProvider(DarkElementColors.insulin))
         )
@@ -116,7 +118,7 @@ private fun CompactContent(state: WidgetRenderState) {
         )
         Image(
             provider = ImageProvider(state.cobIconResId),
-            contentDescription = null,
+            contentDescription = state.cobLabel,
             modifier = GlanceModifier.size(ICON_SIZE).padding(start = SECTION_GAP),
             colorFilter = ColorFilter.tint(ColorProvider(DarkElementColors.cob))
         )
@@ -131,7 +133,7 @@ private fun CompactContent(state: WidgetRenderState) {
         )
         Image(
             provider = ImageProvider(state.tbrIconResId),
-            contentDescription = null,
+            contentDescription = state.tbrDescription,
             modifier = GlanceModifier.size(ICON_SIZE).padding(start = SECTION_GAP),
             colorFilter = ColorFilter.tint(ColorProvider(DarkElementColors.tempBasal))
         )

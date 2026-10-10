@@ -66,6 +66,7 @@ import app.aaps.pump.omnipod.eros.util.AapsOmnipodUtil
 import app.aaps.pump.omnipod.eros.util.OmnipodAlertUtil
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
+import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.CoroutineScope
@@ -83,7 +84,6 @@ import kotlinx.coroutines.launch
 import org.joda.time.DateTime
 import org.joda.time.Duration
 import java.util.TimeZone
-import dev.zacsweers.metro.Inject
 import app.aaps.core.ui.R as CoreUiR
 import app.aaps.pump.common.hw.rileylink.R as RileyLinkR
 import app.aaps.pump.omnipod.common.R as CommonR
@@ -93,7 +93,8 @@ import app.aaps.pump.omnipod.common.R as CommonR
 // gets its own - the same shape the other pump view models use.
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 @ViewModelKey
-class ErosOverviewViewModel @Inject constructor(
+@Inject
+class ErosOverviewViewModel(
     private val rh: ResourceHelper,
     private val podStateManager: ErosPodStateManager,
     private val omnipodErosPumpPlugin: OmnipodErosPumpPlugin,
@@ -415,7 +416,7 @@ class ErosOverviewViewModel @Inject constructor(
 
     private fun onDiscardPodClicked() {
         _events.tryEmit(
-            OmnipodOverviewEvent.ShowDialog(
+            OmnipodOverviewEvent.ConfirmDiscardPod(
                 rh.gs(CommonR.string.omnipod_common_pod_management_button_discard_pod),
                 rh.gs(CommonR.string.omnipod_common_pod_management_discard_pod_confirmation)
             )

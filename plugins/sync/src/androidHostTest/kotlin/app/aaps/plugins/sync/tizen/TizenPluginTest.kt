@@ -31,6 +31,7 @@ import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.Mock
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyVararg
+import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 
 internal class TizenPluginTest : TestBaseWithProfile() {
@@ -49,7 +50,7 @@ internal class TizenPluginTest : TestBaseWithProfile() {
     fun setUp() {
         sut = TizenPlugin(
             aapsLogger, rh, context, dateUtil, rxBus, iobCobCalculator, processedTbrEbData, profileFunction, preferences, processedDeviceStatusData,
-            loop, activePlugin, receiverStatusStore, config, glucoseStatusProvider, pumpStatusProvider, bolusProgressData
+            loop, activePlugin, receiverStatusStore, config, glucoseStatusProvider, pumpStatusProvider, bolusProgressData, mock()
         )
         // gs(TextRef) is a DEFAULT interface method, so a mock answers null unless it is stubbed.
         whenever(rh.gs(any<TextRef>())).thenAnswer {

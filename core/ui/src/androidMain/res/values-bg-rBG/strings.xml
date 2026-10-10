@@ -68,7 +68,6 @@
     <string name="confirm_pin_hint">Потвърдете ПИН</string>
     <string name="preference_range_summary" comment="%1$s=current value, %2$s=unit label, %3$s=minimum, %4$s=maximum. Example: 5.0 U (0.0 – 10.0)">%1$s%2$s (%3$s – %4$s)</string>
     <string name="statuslights">Индикатори</string>
-    <string name="copy_existing_values">Да копирам ли настройките от NS (ако има такива)?</string>
     <string name="configbuilder_insulin">Инсулин (ед.):</string>
     <string name="configbuilder_bgsource">Източник на КЗ</string>
     <string name="configbuilder_smoothing">Изглаждане</string>
@@ -83,7 +82,7 @@
     <string name="value_unavailable_short">---</string>
     <!-- master_password moved to core/keys/strings.xml -->
     <string name="ue_export_to_csv">Експортиране на потребителски данни към Excel (csv)</string>
-    <string name="confirm">Потвърди</string>
+    <string name="confirm">Потвърждаване</string>
     <string name="pump">Помпа</string>
     <string name="pump_management">Помпа</string>
     <string name="openaps">OpenAPS</string>
@@ -116,7 +115,6 @@
     <string name="profile_switch_no_insulin">Не мога да сменя профил: няма избран инсулин.</string>
     <string name="profile_switch_select_insulin_hint">Няма избран инсулин. Изберете какъв използвате за да може профилът да го използва.</string>
     <string name="insulin_activation_failed">Превключването на инсулина не е направено. Старият ви инсулин е още избран.</string>
-    <string name="insulin_activation_failed_reason" comment="%1$s=localized failure reason. Example: The insulin was not switched: Master not reachable. Your previous insulin is still in use.">Превключването на инсулина не е направено: %1$s. Използвам старият инсулин.</string>
     <string name="insulin_activation_unconfirmed">Не мога да потвърдя смяната на инсулин. Проверете кой инсулин е активен в профила преди да направите болус.</string>
     <string name="fill_prime_failed_insulin_not_switched" comment="%1$s=the delivery error message from the failed prime. Shown as one message because the insulin switch was chained to the prime succeeding.">%1$s\n\n Инсулинът не е сменен.</string>
     <string name="active"><![CDATA[<Активно>]]></string>
@@ -157,7 +155,7 @@
     <string name="cob">СОВ</string>
     <string name="name_short">Име:</string>
     <string name="time">Време</string>
-    <string name="ns_wifi_ssids">WiFi име</string>
+    <string name="ns_wifi_ssids">WiFi SSID на мрежа</string>
     <string name="loading">Зареждане…</string>
     <string name="waiting_for_pump">Чакаме помпата…</string>
     <string name="initialization_failed">Грешка при инициализация</string>
@@ -183,11 +181,13 @@
     <string name="a11y_arrow_double_up">бързо покачване</string>
     <string name="a11y_arrow_none">без</string>
     <string name="a11y_arrow_unknown">неизвестно</string>
+    <string name="decrement">Намаляване</string>
+    <string name="increment">Нарастване</string>
     <string name="a11y_high">висока</string>
     <string name="a11y_inrange">в диапазон</string>
     <string name="a11y_low">ниска</string>
-    <string name="remove_label">Премахни</string>
-    <string name="activate_profile">Активирай профила</string>
+    <string name="remove_label">Изтрий</string>
+    <string name="activate_profile">Активирай профил</string>
     <string name="activate_insulin">Активирай инсулин</string>
     <string name="pump_wizard_profile_gate_title">Нужен е профил</string>
     <string name="pump_wizard_profile_gate_pick">Изберете профил за прилагане при активация.</string>
@@ -208,7 +208,7 @@
     <string name="logout">Изход</string>
     <string name="prime_fill">Смяна/Пълнене</string>
     <string name="site_rotation">Смяна на мястото</string>
-    <string name="edit_site">Редактиране</string>
+    <string name="edit_site">Редакция</string>
     <string name="select_arrow">Изберете стрелка</string>
     <string name="site_filter_info">Изберете какво да виждате: Възраст игла и/или Смяна на сензор</string>
     <string name="selected_location">Избрано: %1$s</string>
@@ -257,7 +257,6 @@
     <string name="pin_dont_match">ПИН кодовете не съвпадат</string>
     <!--    Profile-->
     <!--    ProfileFunction-->
-    <string name="startprofile">Стартирай профил %1$d%% за %2$d мин</string>
     <!--    APSResult-->
     <string name="cancel_temp">Откажи временен базал</string>
     <string name="let_temp_basal_run">Нека текущия временен базал продължи</string>
@@ -285,7 +284,7 @@
     <string name="veryHigh" comment="above 13.9">Много високи</string>
     <string name="above" comment="above &quot;in range&quot;">Над</string>
     <string name="detailed_14_days">Детайлно за 14 дни</string>
-    <string name="day_tir">Дневен TIR</string>
+    <string name="day_tir">Дневно в целта</string>
     <string name="night_tir">Нощен TIR</string>
     <string name="hba1c">HbA1c: </string>
     <string name="std_deviation">Стд. откл.: %1$s</string>
@@ -294,7 +293,6 @@
     <!--    ProfileSwitch-->
     <!--    Temptarget-->
     <!--    Translator-->
-    <string name="careportal">Careportal</string>
     <string name="careportal_bgcheck">Проверка на КЗ</string>
     <string name="careportal_mbg">Калибрация или ръчна КЗ</string>
     <string name="careportal_announcement">Известие</string>
@@ -345,7 +343,6 @@
     <string name="scene_conflict_active_running_mode">Текущият режим ще бъде сменен</string>
     <string name="scene_conflict_active_scene">Активният сценарий \"%1$s\" ще бъде спрян</string>
     <string name="scene_action_tt">Временна цел: %1$s</string>
-    <string name="scene_action_profile" comment="%1$s=profile name, %2$d=percentage. Example: Profile: Default 150%">Профил: %1$s %2$d%%</string>
     <string name="scene_action_profile_pct_only" comment="%1$d=percentage, used when no specific named profile. Example: Profile: 150%">Профил: %1$d%%</string>
     <string name="scene_action_smb_on">Включи SMB</string>
     <string name="scene_action_smb_off">Изключи SMB</string>
@@ -434,7 +431,6 @@
     <string name="treatment_insulin_desc">Постави инсулина ръчно</string>
     <string name="treatment_carbs_desc">Запиши въглехидрати без инсулин</string>
     <string name="treatment_calculator_desc">Изчисли болус</string>
-    <string name="insulin_management">Инсулин</string>
     <string name="manage_insulin_desc">Редакция и активация на инсолинови конфигурации</string>
     <string name="concentration_disable_blocked">Не може да изключите поддръжката на концентрация докато има инсулини различни от 100E/мл съществуват. Изтрийте всички такива конфигурации и превключете на профил с концентрация U100.</string>
     <string name="simple_mode_blocked_by_concentration">Не може да включите опростен режим докато ползвате инсулин, който не е U100ед/мл. Първо превключете към такъв.</string>
@@ -636,7 +632,6 @@
     <string name="uel_scene_deactivated">СЦЕНАРИЙ ДЕАКТИВИРАН</string>
     <string name="uel_remote_config_changed">ОТДАЛЕЧЕНАТА КОНФИГУРАЦИЯ Е СМЕНЕНА</string>
     <!-- HardLimits -->
-    <string name="temp_target_low_target">Стойност цел минимум</string>
     <string name="temp_target_high_target">Стойност цел максимум</string>
     <string name="temp_target_value">Стойност временна цел</string>
     <string name="insulin_dia">Време на действие на инсулин DIA</string>
@@ -721,7 +716,6 @@
     <string name="wizard_include_iob">Включи IOB</string>
     <string name="wizard_include_cob">Включи въглехидрати</string>
     <string name="wizard_calculation">Калкулация</string>
-    <string name="no_action_selected">Няма избрано действие, нищо няма да се изпълни</string>
     <string name="carbs_removal_cob_limit" comment="Shown under the carbs field when removing carbs (a negative value). %1$d = grams of carbs currently on board, the maximum removable. Example: Max removal: 30 g (carbs on board)">Макс премахване: %1$d гр (CoB)</string>
     <string name="wizard_no_insulin_required">Няма нужда от инсулин</string>
     <string name="wizard_no_actual_bg">Не е налична кръвна захар, върху която да се изчисли!</string>
@@ -767,7 +761,7 @@
     <string name="pump_busy">Помпата е заета</string>
     <string name="connection_error">Грешка при връзка с помпата</string>
     <string name="reading_pump_history">Чете историята на помпата</string>
-    <string name="password_cleared">Паролата е изчистена!</string>
+    <string name="password_cleared">Ключовете за сдвояване с помпата са изчистени. Проверете серийния номер и сдвоете отново.</string>
     <string name="pairing">Сдвояване</string>
     <string name="initializing">Стартиране…</string>
     <string name="secs" comment="second short">%1$d с</string>
@@ -901,7 +895,7 @@
     <string name="reorder">Подреди</string>
     <string name="carousel_move_earlier" comment="Content description of the button that moves the centred carousel card one position towards the start of the list. Order-relative wording (not left/right) so it stays correct in right-to-left languages.">Премести по-рано</string>
     <string name="carousel_move_later" comment="Content description of the button that moves the centred carousel card one position towards the end of the list. Order-relative wording (not left/right) so it stays correct in right-to-left languages.">Премести по-късно</string>
-    <string name="carousel_show_card" comment="Screen-reader label for tapping a carousel card. The tap centres the card and shows its details below — it does not activate or apply anything.">Повече информация</string>
+    <string name="carousel_show_card" comment="Screen-reader label for any control that only reveals more detail about the item next to it - a carousel card that shows its details below, or an info button that opens a tooltip. It never activates or applies anything.">Повече информация</string>
     <string name="presets_changed_reorder_aborted">Настройката е сменена на друго място. Новата последователност не е запазена.</string>
     <string name="carousel_position" comment="Compact position readout shown between the reorder buttons. %1$d=position of the centred card starting at 1, %2$d=total cards. Example: 3 / 7">%1$d / %2$d</string>
     <string name="carousel_position_description" comment="Spoken form of carousel_position, read out by screen readers after each move. %1$d=position of the centred card starting at 1, %2$d=total cards. Example: Position 3 of 7">Позиция %1$d от %2$d</string>
@@ -1021,8 +1015,11 @@
     <string name="import_wrong_password">Грешна парола</string>
     <string name="import_btn">Импорт</string>
     <string name="import_anyway_btn">Импортиране въпреки това</string>
-    <string name="import_restart_title">Настройките са импортирани</string>
-    <string name="import_restart_message">Настройките са импортирани. Трябва рестарт на приложението.</string>
+    <!--
+      Worded as labelled counts rather than "%1$d settings will change", because the count can be 1
+      and this screen is shared with iOS and desktop - Android <plurals> are read with rh.gq(), which
+      only exists on Android. A label and a number agree with any quantity in any language.
+    -->
     <string name="import_source_local">Локално</string>
     <string name="import_source_cloud">Клауд</string>
     <string name="import_load_more">Зареди още</string>
@@ -1064,11 +1061,9 @@
     <string name="units_format_double_3">%1$.3f</string>
     <string name="units_format_double_3_range">%1$.3f (%2$.3f - %3$.3f)</string>
     <string name="units_format_double_range">%1$.1f (%2$.1f - %3$.1f)</string>
-    <string name="units_format_grams">%1$d гр</string>
-    <string name="units_format_grams_range">%1$d гр (%2$d - %3$d)</string>
     <string name="units_format_hours">%1$d ч</string>
-    <string name="units_format_hours_double">%1$.0f ч</string>
-    <string name="units_format_hours_double_range">%1$.0f ч (%2$.0f - %3$.0f)</string>
+    <string name="units_format_hours_double">%1$.1f ч</string>
+    <string name="units_format_hours_double_range">%1$.1f ч (%2$.1f - %3$.1f)</string>
     <string name="units_format_hours_range">%1$d ч (%2$d - %3$d)</string>
     <string name="units_format_insulin">%1$.1f Ед</string>
     <string name="units_format_insulin_int">%1$d Ед</string>
@@ -1095,5 +1090,5 @@
     <string name="units_percent">%</string>
     <string name="units_sec">сек</string>
     <string name="units_years">г</string>
-    <string name="prefs_range_title">Диапазон на визуализация</string>
+    <string name="prefs_range_title">Диапазон за визуализация</string>
 </resources>

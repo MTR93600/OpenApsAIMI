@@ -20,6 +20,8 @@ import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.configuration.ExternalOptions
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.core.interfaces.notifications.NotificationManager
+import app.aaps.core.interfaces.plugin.EnforcedState
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.pump.VirtualPump
@@ -51,7 +53,8 @@ import dev.zacsweers.metro.IntKey as MetroIntKey
 @ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
 @MetroIntKey(550)
 @SingleIn(AppScope::class)
-class RandomBgPlugin @Inject constructor(
+@Inject
+class RandomBgPlugin(
     private val context: Context,
     rh: ResourceHelper,
     aapsLogger: AAPSLogger,
@@ -59,6 +62,7 @@ class RandomBgPlugin @Inject constructor(
     private val virtualPump: VirtualPump,
     preferences: Preferences,
     config: Config,
+    notificationManager: NotificationManager,
 ) : AbstractBgSourcePlugin(
     PluginDescription()
         .mainType(PluginType.BGSOURCE)
@@ -69,13 +73,20 @@ class RandomBgPlugin @Inject constructor(
         }
         .icon(IcPluginRandomBg)
         .pluginName(TextRef.AndroidRes(R.string.random_bg))
-        .shortName(TextRef.AndroidRes(R.string.random_bg_short))
         .preferencesVisibleInSimpleMode(false)
+        // A debug BG source: only in a test, or on the virtual pump in an engineering build, or with the
+        // unfinished-features option file. Forced off otherwise. This is the one enforcement that reads
+        // something other than build config - `virtualPump.isEnabled()` changes when the user picks another
+        // pump - which is why the virtual pump must never gain an enforcement that reads this plugin back.
+        .enforce(EnforcedState.Disabled) {
+            !(isRunningTest() || virtualPump.isEnabled() && config.isEngineeringMode() || config.isEnabled(ExternalOptions.UNFINISHED_MODE))
+        }
         .description(TextRef.AndroidRes(R.string.description_source_random_bg)),
     aapsLogger = aapsLogger,
     rh = rh,
     preferences = preferences,
-    config = config
+    config = config,
+    notificationManager = notificationManager
 ), BgSource {
 
     @VisibleForTesting
@@ -128,9 +139,6 @@ class RandomBgPlugin @Inject constructor(
         if (wakeLock?.isHeld == true) wakeLock?.release()
     }
 
-    override fun specialEnableCondition(): Boolean {
-        return isRunningTest() || virtualPump.isEnabled() && config.isEngineeringMode() || config.isEnabled(ExternalOptions.UNFINISHED_MODE)
-    }
 
     @SuppressLint("CheckResult")
     @VisibleForTesting

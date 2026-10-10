@@ -7,6 +7,7 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
+import org.mockito.kotlin.mock
 
 class NSClientSourcePluginTest : TestBase() {
 
@@ -17,7 +18,7 @@ class NSClientSourcePluginTest : TestBase() {
 
     @BeforeEach
     fun setup() {
-        nsClientSourcePlugin = NSClientSourcePlugin(rh, aapsLogger, config)
+        nsClientSourcePlugin = NSClientSourcePlugin(rh, aapsLogger, config, mock())
     }
 
     @Test

@@ -10,6 +10,7 @@
     <string name="configure">Konfigurovat průhlednost</string>
     <string name="widget_description">Widget AAPS</string>
     <string name="widget_bg_graph_description">Graf glykémie AAPS</string>
+    <string name="widget_glucose_circle_description">Kruh glykémie AAPS</string>
     <string name="widget_compact_bg_description">AAPS gly + IOB + COB (kompaktní)</string>
     <string name="widget_small_description">AAPS malé</string>
     <!--     Activities-->
@@ -151,7 +152,7 @@
     <string name="cannot_delete_last_insulin">Nelze odstranit poslední inzulín</string>
     <string name="cannot_delete_active_insulin">Nelze odstranit aktivní inzulín</string>
     <string name="reuse_profile_pct_hours">Znovu použít %1$d%% %2$dh</string>
-    <string name="percentage_label">% změna</string>
+    <string name="percentage_label">Procenta</string>
     <!-- LoopDialog -->
     <string name="disconnectpump">Odpojit pumpu</string>
     <string name="resume">Uvolnit</string>
@@ -172,15 +173,18 @@
     <string name="treatments_iob_label_string">IOB:</string>
     <string name="carbs_and_bolus">Sacharidy a bolusy</string>
     <string name="show_invalidated">Zobrazit zneplatněné</string>
-    <string name="hide_invalidated">Skrýt zneplatněné</string>
+    <string name="hide_invalidated">Skrýt neplatné</string>
     <string name="careportal_remove_started_events">Odebrat záznamy spuštěné AAPS</string>
-    <string name="user_entry">Uživatelská položka</string>
+    <string name="user_entry">Uživatelský záznam</string>
     <string name="clone_label">Klonovat</string>
+    <string name="a11y_bg_graph_summary" comment="Screen-reader description of the glucose graph, which is drawn and so cannot be read otherwise. %1$s=the recent glucose values newest first, already joined and carrying their unit, %2$s=insulin on board with its label, %3$s=carbs on board with its label. Example: Glucose graph. Recent values 7.2, 7.0, 6.8. IOB: 1.20 U. COB: 45 g">Glukózový graf. Nedávné hodnoty %1$s. %2$s. %3$s</string>
+    <string name="a11y_bg_graph_summary_values_only" comment="Same as a11y_bg_graph_summary but for the history browser, where insulin and carbs on board are current values and would be wrong beside a past day. %1$s=the glucose values newest first, already joined and carrying their unit.">Glukózový graf. Nedávné hodnoty %1$s</string>
+    <string name="execute_label" comment="Button that runs the selected quick wizard, which delivers its bolus.">Spustit</string>
     <string name="add_new_profile">Přidat nový profil</string>
     <string name="edit_label">Upravit</string>
     <string name="activate_label">Aktivovat</string>
     <string name="activate_profile">Aktivovat profil</string>
-    <string name="remove_label">Odstranit</string>
+    <string name="remove_label">Odebrat</string>
     <string name="active_profile_indicator">AKTIVNÍ</string>
     <string name="confirm_remove_profile">Odstranit profil \"%1$s\"?</string>
     <string name="confirm_clone_profile">Klonovat profil \"%1$s\"?</string>
@@ -237,7 +241,7 @@
     <string name="valid_from_to">Platné časové rozmezí</string>
     <string name="carb_time">Čas sacharidů</string>
     <string name="save_changes_question">Uložit změny této položky?</string>
-    <string name="wizard_no_insulin_required">Není potřeba žádný inzulín</string>
+    <string name="wizard_no_insulin_required">Inzulín není potřeba</string>
     <string name="carbs_constraint_violation">Sacharidy omezeny omezeními</string>
     <string name="insulin_constraint_violation">Inzulín omezen omezeními</string>
     <string name="confirm_treatment">Potvrďte prosím záznam</string>

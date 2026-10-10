@@ -10,12 +10,13 @@ import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.pump.insight.R
 import app.aaps.pump.insight.descriptors.AlertCategory
 import app.aaps.pump.insight.descriptors.AlertType
-import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 
 @SingleIn(AppScope::class)
-class AlertUtils @Inject constructor(private val rh: ResourceHelper) {
+@Inject
+class AlertUtils(private val rh: ResourceHelper) {
 
     fun getAlertCode(alertType: AlertType) = rh.gs(
         when (alertType) {

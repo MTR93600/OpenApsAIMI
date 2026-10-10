@@ -34,13 +34,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.aaps.core.data.format.NumberFormat
 import app.aaps.core.data.ui.ConfirmationLine
 import app.aaps.core.interfaces.InterfacesStrings
 import app.aaps.core.interfaces.navigation.ElementType
-import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.NumberInputRow
@@ -146,6 +147,13 @@ internal fun ExtendedBolusDialogContent(
             )
         },
         bottomBar = {
+            // One text for both the visible label and the screen reader, so the two cannot drift apart.
+            // A Button merges its children, so the description must carry the amount too.
+            val confirmText =
+                if (uiState.insulin > 0.0) stringResource(InterfacesStrings.format_insulin_units, uiState.insulin)
+                else stringResource(CoreUiStrings.ok)
+            val confirmDescription =
+                stringResource(CoreUiStrings.confirm)
             Button(
                 onClick = {
                     focusManager.clearFocus()
@@ -156,6 +164,7 @@ internal fun ExtendedBolusDialogContent(
                     .fillMaxWidth()
                     .bottomBarSafeArea()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .semantics { contentDescription = confirmDescription }
             ) {
                 Icon(
                     imageVector = Icons.Filled.Check,
@@ -163,11 +172,7 @@ internal fun ExtendedBolusDialogContent(
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                if (uiState.insulin > 0.0) {
-                    Text(stringResource(InterfacesStrings.format_insulin_units, uiState.insulin))
-                } else {
-                    Text(stringResource(CoreUiStrings.ok))
-                }
+                Text(confirmText)
             }
         }
     ) { paddingValues ->

@@ -64,12 +64,63 @@ data class GlucoseValue(
         ;
     }
 
+    /**
+     * One entry per sensor. Names that older versions stored are mapped on read by
+     * `Converters.toSourceSensor`, so a row written before the entries were merged keeps its meaning.
+     */
+    /**
+     * Stored by name, so **no value may ever be removed**: a row written by an older build names a
+     * constant, and a constant that is gone cannot be read back.
+     *
+     * That is why this is the union of the upstream list and this fork's older, per-bridge one.
+     * Upstream consolidated its model enum to one entry per sensor; the values below that upstream
+     * no longer has are kept because real databases contain them. New rows use the upstream
+     * spelling, except for the three native plugins this fork ships, which stay distinct because
+     * AIMI reads them to decide how much a sensor lags — see `SourceSensor`'s own note.
+     */
     enum class SourceSensor {
-        DEXCOM_NATIVE_UNKNOWN,
+        DEXCOM_UNKNOWN,
+        DEXCOM_G6,
+        DEXCOM_G7,
+        LIBRE_1,
+        LIBRE_2,
+        LIBRE_3,
+        MEDTRUM_A6,
+        MEDTRUM_UNKNOWN,
+        MM_600_SERIES,
+        MM_SIMPLERA,
+        MM_UNKNOWN,
+        SIBIONIC_UNKNOWN,
+        SIBIONIC_GS1,
+        SIBIONIC_GS3,
+        ACCU_CHEK,
+        CARESENS_AIR,
+        AIDEX,
+        AIDEX_X,
+        POCTECH_NATIVE,
+        GLUNOVO_NATIVE,
+        INTELLIGO_NATIVE,
+        SINOCARE,
+        ANYTIME,
+        GLUTEC,
+        GLUPRO,
+        EVERSENSE,
+        SYAI_TAG,
+        INSTARA,
+        RANDOM,
+        UNKNOWN,
+
+        // ---- This fork's own entries, and values written by older builds of it ----
+        // Still produced today, because AIMI distinguishes them:
         DEXCOM_G6_NATIVE,
         DEXCOM_G7_NATIVE,
         DEXCOM_ONEPLUS_NATIVE,
-        MEDTRUM_A6,
+        LIBRE_3_NATIVE,
+        EVERSENSE_E3,
+        EVERSENSE_365,
+
+        // Read only: older rows carry these. New readings land on the consolidated value above.
+        DEXCOM_NATIVE_UNKNOWN,
         DEXCOM_G6_NATIVE_XDRIP,
         DEXCOM_G7_NATIVE_XDRIP,
         DEXCOM_G7_XDRIP,
@@ -84,27 +135,11 @@ data class GlucoseValue(
         LIBRE_1_BUBBLE,
         LIBRE_1_ATOM,
         LIBRE_1_GLIMP,
-        LIBRE_2,
         LIBRE_2_NATIVE,
-        LIBRE_3,
-        LIBRE_3_NATIVE,
-        POCTECH_NATIVE,
-        GLUNOVO_NATIVE,
-        INTELLIGO_NATIVE,
-        MM_600_SERIES,
-        MM_SIMPLERA,
-        EVERSENSE,
-        EVERSENSE_E3,
-        EVERSENSE_365,
-        AIDEX,
-        RANDOM,
-        UNKNOWN,
         OTTAI,
         SIBIONIC,
         SINO,
-        SYAI_TAG,
 
-        INSTARA,
         IOB_PREDICTION,
         A_COB_PREDICTION,
         COB_PREDICTION,

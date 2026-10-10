@@ -15,6 +15,7 @@ import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -43,11 +44,13 @@ import org.json.JSONException
 @ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
 @IntKey(460)
 @SingleIn(AppScope::class)
-class PoctechPlugin @Inject constructor(
+@Inject
+class PoctechPlugin(
     rh: ResourceHelper,
     aapsLogger: AAPSLogger,
     preferences: Preferences,
     config: Config,
+    notificationManager: NotificationManager
 ) : AbstractBgSourcePlugin(
     PluginDescription()
         .mainType(PluginType.BGSOURCE)
@@ -61,12 +64,13 @@ class PoctechPlugin @Inject constructor(
         .preferencesVisibleInSimpleMode(false)
         .description(TextRef.AndroidRes(R.string.description_source_poctech)),
     ownPreferences = emptyList(),
-    aapsLogger, rh, preferences, config
+    aapsLogger, rh, preferences, config, notificationManager
 ), BgSource {
 
     // cannot be inner class because of needed injection
 
-    class PoctechWorker @AssistedInject constructor(
+    @AssistedInject
+    class PoctechWorker(
         @Assisted context: Context,
         @Assisted params: WorkerParameters,
         aapsLogger: AAPSLogger,

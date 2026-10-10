@@ -4,6 +4,7 @@ import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.db.ProcessedTbrEbData
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.overview.OverviewData
 import app.aaps.core.interfaces.overview.graph.OverviewDataCache
 import app.aaps.core.interfaces.plugin.ActivePlugin
@@ -20,7 +21,6 @@ import app.aaps.implementation.overview.OverviewDataImpl
 import app.aaps.plugins.main.iob.iobCobCalculator.IobCobCalculatorPlugin
 import app.aaps.ui.compose.overview.OverviewDataCacheFactory
 import dev.zacsweers.metro.GraphExtension
-import dev.zacsweers.metro.Provider
 import dev.zacsweers.metro.Provides
 import dev.zacsweers.metro.SingleIn
 
@@ -68,7 +68,7 @@ interface HistoryWindowGraph {
     fun provideSignals(): CalculationSignalsEmitter = CalculationSignalsImpl()
 
     /**
-     * The cache and the calculator need each other. Metro's [Provider] is a deferred lookup, so the
+     * The cache and the calculator need each other. A function type is a deferred lookup, so the
      * graph accepts it where a direct reference would be a cycle error.
      */
     @SingleIn(HistoryWindowScope::class)
@@ -76,7 +76,7 @@ interface HistoryWindowGraph {
     fun provideCache(
         factory: OverviewDataCacheFactory,
         signals: CalculationSignalsEmitter,
-        iobCobCalculator: Provider<IobCobCalculator>
+        iobCobCalculator: () -> IobCobCalculator
     ): OverviewDataCache = factory.create(
         iobCobCalculatorProvider = { iobCobCalculator() },
         signals = signals,
@@ -101,9 +101,10 @@ interface HistoryWindowGraph {
         decimalFormatter: DecimalFormatter,
         processedTbrEbData: ProcessedTbrEbData,
         signals: CalculationSignalsEmitter,
-        cache: Provider<OverviewDataCache>
+        notificationManager: NotificationManager,
+        cache: () -> OverviewDataCache
     ): IobCobCalculator = IobCobCalculatorPlugin(
         aapsLogger, rxBus, preferences, rh, profileFunction, activePlugin, dateUtil, persistenceLayer,
-        overviewData, calculationWorkflow, decimalFormatter, processedTbrEbData, signals
+        overviewData, calculationWorkflow, decimalFormatter, processedTbrEbData, signals, notificationManager
     ) { cache() }
 }

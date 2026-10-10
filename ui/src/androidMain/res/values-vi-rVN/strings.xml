@@ -10,6 +10,7 @@
     <string name="configure">Cấu hình độ trong suốt</string>
     <string name="widget_description">AAPS widget</string>
     <string name="widget_bg_graph_description">Biểu đồ đường huyết AAPS</string>
+    <string name="widget_glucose_circle_description">Vòng tròn đường huyết AAPS</string>
     <string name="widget_compact_bg_description">AAPS BG + IOB + COB (thu gọn)</string>
     <string name="widget_small_description">AAPS thu gọn</string>
     <!--     Activities-->
@@ -41,7 +42,7 @@
     <string name="bg_sensor">Cảm biến</string>
     <!-- WizardDialog -->
     <!-- SiteRotationDialog -->
-    <string name="edit_site">Chỉnh sửa</string>
+    <string name="edit_site">Sửa</string>
     <string name="record_site_location">Vị trí: %1$s</string>
     <string name="record_site_arrow">Hướng vị trí: %1$s</string>
     <string name="record_site_note">Ghi chú: %1$s</string>
@@ -171,11 +172,14 @@
     <string name="no_records_available">Không có bản ghi nào</string>
     <string name="treatments_iob_label_string">IOB:</string>
     <string name="carbs_and_bolus">Carb và liều bolus</string>
-    <string name="show_invalidated">Hiện các bản ghi không hợp lệ</string>
-    <string name="hide_invalidated">Ẩn các bản ghi không hợp lệ</string>
+    <string name="show_invalidated">Hiển thị các mục không hợp lệ</string>
+    <string name="hide_invalidated">Ẩn các mục không hợp lệ</string>
     <string name="careportal_remove_started_events">Xóa các bản ghi đã bắt đầu bởi AAPS</string>
-    <string name="user_entry">Nhập liệu người dùng</string>
+    <string name="user_entry">Nhập liệu của người dùng</string>
     <string name="clone_label">Nhân bản</string>
+    <string name="a11y_bg_graph_summary" comment="Screen-reader description of the glucose graph, which is drawn and so cannot be read otherwise. %1$s=the recent glucose values newest first, already joined and carrying their unit, %2$s=insulin on board with its label, %3$s=carbs on board with its label. Example: Glucose graph. Recent values 7.2, 7.0, 6.8. IOB: 1.20 U. COB: 45 g">Biểu đồ đường huyết. Các giá trị gần đây %1$s. %2$s. %3$s</string>
+    <string name="a11y_bg_graph_summary_values_only" comment="Same as a11y_bg_graph_summary but for the history browser, where insulin and carbs on board are current values and would be wrong beside a past day. %1$s=the glucose values newest first, already joined and carrying their unit.">Biểu đồ đường huyết. Các giá trị gần đây %1$s</string>
+    <string name="execute_label" comment="Button that runs the selected quick wizard, which delivers its bolus.">Thực hiện</string>
     <string name="add_new_profile">Thêm cấu hình mới</string>
     <string name="edit_label">Sửa</string>
     <string name="activate_label">Kích hoạt</string>

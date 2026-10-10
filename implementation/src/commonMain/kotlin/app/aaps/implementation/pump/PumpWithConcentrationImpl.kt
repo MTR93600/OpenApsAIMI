@@ -9,6 +9,7 @@ import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.ActivePlugin
+import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.profile.EffectiveProfile
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
@@ -25,16 +26,17 @@ import app.aaps.core.interfaces.pump.defs.determineCorrectBolusStepSize
 import app.aaps.core.interfaces.queue.CustomCommand
 import app.aaps.core.interfaces.utils.Round
 import app.aaps.core.objects.constraints.ConstraintObject
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.ContributesBinding
+import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.JsonObject
-import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.ContributesBinding
 
 // Deliberately NOT @SingleIn: the @Binds this replaces had no scope, so every injection site got its
 // own. Scoping it now would be a silent behaviour change in a class that talks to the pump.
 @ContributesBinding(AppScope::class)
-class PumpWithConcentrationImpl @Inject constructor(
+@Inject
+class PumpWithConcentrationImpl(
     private val aapsLogger: AAPSLogger,
     private val activePlugin: ActivePlugin,
     private val profileFunction: ProfileFunction,
@@ -51,7 +53,17 @@ class PumpWithConcentrationImpl @Inject constructor(
     private val concentration: Double get() = profileFunction.runningICfg.value?.concentration ?: 1.0
 
     override fun isConfigured(): Boolean = activePumpInternal.isConfigured()
-    override fun isInitialized(): Boolean = activePumpInternal.isInitialized()
+    /**
+     * A driver whose `onStart` threw is not initialized, whatever it says about itself.
+     *
+     * The drivers answer this from DEVICE state - DanaRS reads `lastConnection > 0`, Dash reads
+     * `podStateManager.isPodRunning` - and none of that is reset by `onStop`. So after a stop and a
+     * failed start the driver still reports true while its service is not even bound, and every dosing
+     * gate that asks here (the loop, the bolus wizard, the scenes) would be told it is ready.
+     * The plugin is deliberately left ENABLED, so this is where the half-built state has to show up.
+     */
+    override fun isInitialized(): Boolean =
+        (activePumpInternal as? PluginBase)?.lastStartFailed != true && activePumpInternal.isInitialized()
     override fun isSuspended(): Boolean = activePumpInternal.isSuspended()
     override fun isBusy(): Boolean = activePumpInternal.isBusy()
     override fun isConnected(): Boolean = activePumpInternal.isConnected()
@@ -114,27 +126,33 @@ class PumpWithConcentrationImpl @Inject constructor(
     override val baseBasalRate: PumpRate get() = activePumpInternal.baseBasalRate
 
     override suspend fun deliverTreatment(detailedBolusInfo: DetailedBolusInfo): PumpEnactResult {
-        if (detailedBolusInfo.bolusType != BS.Type.PRIMING) {
-            // IU -> cU. The max limit is applied in IU by ConstraintsChecker (it folds the pump's own cU cap
-            // into the scan); here we (1) last-resort guard against the overall cU max [defense-in-depth, the
-            // queue already applied it] and (2) floor to the pump's native pulse step so a concentration-unaware
-            // driver never gets an off-grid amount (e.g. U200 0.25 IU -> 0.125 cU -> 0.10 cU). Reasons are logged.
-            val requestedIu = detailedBolusInfo.insulin
-            val converted = requestedIu / concentration
-            val guarded = converted.coerceAtMost(constraintsChecker.getMaxBolusAllowed().value() / concentration)
-            val result = Round.floorTo(guarded, activePumpInternal.pumpDescription.pumpType.determineCorrectBolusStepSize(guarded))
-            if (result != converted)
-                aapsLogger.warn(LTag.PUMP, "Concentration boundary adjusted bolus: requested $requestedIu IU -> $converted cU -> $result cU (concentration $concentration)")
-            detailedBolusInfo.insulin = result
-            // A bolus below the pump's native pulse step floors to 0.0 cU (e.g. U200 sub-0.10 IU SMB -> < 0.05 cU).
-            // Sending 0.0 to a driver that requires insulin > 0 (Medtrum) crashes with IllegalArgumentException.
-            // Short-circuit to a clean "processed, nothing delivered" result instead of calling the pump.
-            if (result <= 0.0) {
-                aapsLogger.warn(LTag.PUMP, "Bolus rounds to 0 under concentration $concentration (requested $requestedIu IU, below pump step) → not delivered")
-                return pumpEnactResultProvider().success(true).enacted(false).bolusDelivered(0.0)
-            }
+        // Priming is in pump units already: it goes to the pump as it is, and its result comes back as it is.
+        if (detailedBolusInfo.bolusType == BS.Type.PRIMING) return activePumpInternal.deliverTreatment(detailedBolusInfo)
+        // Read once, so the way back uses the same factor as the way in.
+        val concentration = concentration
+        // IU -> cU. The max limit is applied in IU by ConstraintsChecker (it folds the pump's own cU cap
+        // into the scan); here we (1) last-resort guard against the overall cU max [defense-in-depth, the
+        // queue already applied it] and (2) floor to the pump's native pulse step so a concentration-unaware
+        // driver never gets an off-grid amount (e.g. U200 0.25 IU -> 0.125 cU -> 0.10 cU). Reasons are logged.
+        val requestedIu = detailedBolusInfo.insulin
+        val converted = requestedIu / concentration
+        val guarded = converted.coerceAtMost(constraintsChecker.getMaxBolusAllowed().value() / concentration)
+        val result = Round.floorTo(guarded, activePumpInternal.pumpDescription.pumpType.determineCorrectBolusStepSize(guarded))
+        if (result != converted)
+            aapsLogger.warn(LTag.PUMP, "Concentration boundary adjusted bolus: requested $requestedIu IU -> $converted cU -> $result cU (concentration $concentration)")
+        detailedBolusInfo.insulin = result
+        // A bolus below the pump's native pulse step floors to 0.0 cU (e.g. U200 sub-0.10 IU SMB -> < 0.05 cU).
+        // Sending 0.0 to a driver that requires insulin > 0 (Medtrum) crashes with IllegalArgumentException.
+        // Short-circuit to a clean "processed, nothing delivered" result instead of calling the pump.
+        if (result <= 0.0) {
+            aapsLogger.warn(LTag.PUMP, "Bolus rounds to 0 under concentration $concentration (requested $requestedIu IU, below pump step) → not delivered")
+            return pumpEnactResultProvider().success(true).enacted(false).bolusDelivered(0.0)
         }
-        return activePumpInternal.deliverTreatment(detailedBolusInfo)
+        // cU -> IU. The driver answers in the units it was given, but every reader of bolusDelivered (SMS
+        // reply, Nightscout device status, loop screen) expects IU. Under U200 it showed half the dose (#5191).
+        return activePumpInternal.deliverTreatment(detailedBolusInfo).also {
+            it.bolusDelivered = PumpInsulin(it.bolusDelivered).iU(concentration)
+        }
     }
 
     override suspend fun setTempBasalAbsolute(absoluteRate: Double, durationInMinutes: Int, enforceNew: Boolean, tbrType: PumpSync.TemporaryBasalType): PumpEnactResult =
@@ -166,13 +184,17 @@ class PumpWithConcentrationImpl @Inject constructor(
     override suspend fun setExtendedBolus(insulin: Double, durationInMinutes: Int): PumpEnactResult {
         // Same boundary as deliverTreatment: last-resort guard against the overall cU max, then floor to the
         // pump's native extended-bolus step.
+        val concentration = concentration
         val converted = insulin / concentration
         val guarded = converted.coerceAtMost(constraintsChecker.getMaxExtendedBolusAllowed().value() / concentration)
         val step = activePumpInternal.pumpDescription.extendedBolusStep
         val result = if (step > 0.0) Round.floorTo(guarded, step) else guarded
         if (result != converted)
             aapsLogger.warn(LTag.PUMP, "Concentration boundary adjusted extended bolus: requested $insulin IU -> $converted cU -> $result cU (concentration $concentration)")
-        return activePumpInternal.setExtendedBolus(result, durationInMinutes)
+        // cU -> IU, as in deliverTreatment.
+        return activePumpInternal.setExtendedBolus(result, durationInMinutes).also {
+            it.bolusDelivered = PumpInsulin(it.bolusDelivered).iU(concentration)
+        }
     }
 
     /** PumpWithConcentration.pumpDescription should be used instead of Pump.pumpDescription outside Pump Driver to have corrected values */

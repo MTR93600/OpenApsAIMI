@@ -59,6 +59,9 @@ import com.google.gson.JsonDeserializer
 import com.google.gson.JsonElement
 import com.google.gson.JsonPrimitive
 import com.google.gson.JsonSerializer
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.apache.commons.lang3.StringUtils
 import org.joda.time.DateTime
@@ -66,13 +69,11 @@ import org.joda.time.DateTimeZone
 import org.joda.time.format.ISODateTimeFormat
 import java.util.Calendar
 import java.util.Optional
-import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.SingleIn
 import kotlin.math.min
 
 @SingleIn(AppScope::class)
-class EquilManager @Inject constructor(
+@Inject
+class EquilManager(
     private val aapsLogger: AAPSLogger,
     private val rxBus: RxBus,
     private val preferences: Preferences,

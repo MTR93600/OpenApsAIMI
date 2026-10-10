@@ -1,17 +1,11 @@
 package app.aaps.plugins.automation.actions
 
-import app.aaps.core.keys.interfaces.TextRef
-import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.interfaces.navigation.ElementType
-import app.aaps.core.ui.R as CoreUiR
+import app.aaps.core.ui.CoreUiStrings
 import com.google.common.truth.Truth.assertThat
 import org.json.JSONObject
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.mockito.ArgumentMatchers.anyInt
-import org.mockito.kotlin.any
-import org.mockito.kotlin.anyVararg
-import org.mockito.kotlin.whenever
 
 /**
  * Covers the pure surface of [ActionSettingsExport]: labels, icon/element type, validity, dialog
@@ -23,8 +17,7 @@ class ActionSettingsExportTest : ActionsTestBase() {
 
     @BeforeEach
     fun setup() {
-        whenever(rh.gs(any<TextRef>(), anyVararg())).thenReturn("desc")
-        sut = ActionSettingsExport(aapsLogger, rh, { pumpEnactResultProvider() }, rxBus, notificationManager, dateUtil, config, persistenceLayer, importExportPrefs, exportPasswordDataStore, preferences)
+        sut = ActionSettingsExport(aapsLogger, text, { pumpEnactResultProvider() }, rxBus, notificationManager, dateUtil, config, persistenceLayer, importExportPrefs, exportPasswordDataStore, preferences)
     }
 
     @Test fun friendlyName() {
@@ -32,7 +25,7 @@ class ActionSettingsExportTest : ActionsTestBase() {
     }
 
     @Test fun shortDescription() {
-        assertThat(sut.shortDescription()).isEqualTo("desc")
+        assertThat(sut.shortDescription()).isEqualTo("Settings Export: ")
     }
 
     @Test fun iconElementValidityDialog() {

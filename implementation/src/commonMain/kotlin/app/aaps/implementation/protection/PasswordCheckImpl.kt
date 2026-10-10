@@ -2,6 +2,7 @@ package app.aaps.implementation.protection
 
 import app.aaps.core.interfaces.protection.ExportPasswordDataStore
 import app.aaps.core.interfaces.protection.PasswordCheck
+import app.aaps.core.interfaces.protection.PasswordHasher
 import app.aaps.core.interfaces.protection.PasswordRequest
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.rx.bus.RxBus
@@ -9,7 +10,6 @@ import app.aaps.core.interfaces.rx.events.EventShowSnackbar
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.StringPreferenceKey
 import app.aaps.core.keys.interfaces.TextRef
-import app.aaps.core.interfaces.protection.PasswordHasher
 import app.aaps.core.ui.CoreUiStrings
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
@@ -33,7 +33,8 @@ import kotlinx.coroutines.flow.asStateFlow
 // have to see the same [request] flow.
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
-class PasswordCheckImpl @Inject constructor(
+@Inject
+class PasswordCheckImpl(
     private val preferences: Preferences,
     private val passwordHasher: PasswordHasher,
     private val rxBus: RxBus,

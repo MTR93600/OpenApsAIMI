@@ -1,15 +1,15 @@
 package app.aaps.plugins.sync.smsCommunicator
 
-import app.aaps.plugins.sync.SyncStrings
 import app.aaps.core.data.configuration.Constants
 import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.queue.CommandQueue
-import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.smsCommunicator.Sms
 import app.aaps.core.interfaces.smsCommunicator.SmsCommunicator
 import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.plugins.sync.SyncStrings
 import app.aaps.plugins.sync.smsCommunicator.otp.OneTimePassword
 import app.aaps.plugins.sync.smsCommunicator.otp.OneTimePasswordValidationResult
 import kotlinx.coroutines.delay
@@ -27,7 +27,7 @@ class AuthRequest(
     private val action: SmsAction,
     private val aapsLogger: AAPSLogger,
     private val smsCommunicator: SmsCommunicator,
-    private val rh: ResourceHelper,
+    private val rh: TextResolver,
     private val otp: OneTimePassword,
     private val dateUtil: DateUtil,
     private val commandQueue: CommandQueue

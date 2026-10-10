@@ -8,6 +8,7 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
+import org.mockito.kotlin.mock
 
 class PatchedSinoAppPluginTest : TestBase() {
 
@@ -19,7 +20,7 @@ class PatchedSinoAppPluginTest : TestBase() {
 
     @BeforeEach
     fun setup() {
-        patchedSinoAppPlugin = PatchedSinoAppPlugin(rh, aapsLogger, preferences, config)
+        patchedSinoAppPlugin = PatchedSinoAppPlugin(rh, aapsLogger, preferences, config, mock())
     }
 
     @Test

@@ -1,6 +1,5 @@
 package app.aaps.ui.compose.overview.graphs
 
-import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -8,7 +7,6 @@ import app.aaps.core.data.configuration.Constants
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.overview.graph.BgDataPoint
-import app.aaps.core.interfaces.overview.graph.BgInfoData
 import app.aaps.core.interfaces.overview.graph.GraphConfig
 import app.aaps.core.interfaces.overview.graph.GraphConfigRepository
 import app.aaps.core.interfaces.overview.graph.OverviewDataCache
@@ -21,7 +19,6 @@ import app.aaps.core.keys.interfaces.Preferences
 import dev.zacsweers.metro.Assisted
 import dev.zacsweers.metro.AssistedFactory
 import dev.zacsweers.metro.AssistedInject
-import kotlin.concurrent.Volatile
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -34,6 +31,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlin.concurrent.Volatile
 
 /**
  * ViewModel for Overview graphs (Compose/Vico version).
@@ -48,7 +46,8 @@ import kotlinx.coroutines.flow.update
  */
 
 @Stable
-class GraphViewModel @AssistedInject constructor(
+@AssistedInject
+class GraphViewModel(
     @Assisted cache: OverviewDataCache,
     @Assisted private val fullWindow: Boolean,
     private val graphConfigRepository: GraphConfigRepository,
@@ -170,13 +169,16 @@ class GraphViewModel @AssistedInject constructor(
     ) { bgReadings, bucketedData, predictions, cacheTimeRange, graphConfig ->
         val showPredictions = SeriesType.PREDICTIONS in graphConfig.bgOverlays
         val effectivePredictions = if (showPredictions) predictions else emptyList()
-        val allTimestamps = (bgReadings + bucketedData + effectivePredictions).map { it.timestamp }
+        // Kept apart, because only one of the two may set the left edge. Predictions are future
+        // points; a set holding nothing else has its minimum at roughly now.
+        val historyTimestamps = (bgReadings + bucketedData).map { it.timestamp }
+        val allTimestamps = historyTimestamps + effectivePredictions.map { it.timestamp }
 
         // fullWindow takes the same branch as "no data at all": the axis is the calculated window,
         // not the extent of what happens to be in it. Without this a day whose readings start in the
         // evening gets an axis only as wide as those readings, and zooming out to the whole day then
         // leaves the readings squashed into a corner instead of filling the day.
-        if (allTimestamps.isEmpty() || fullWindow) {
+        val range = if (allTimestamps.isEmpty() || fullWindow) {
             cacheTimeRange?.let {
                 val upper = if (showPredictions) it.endTime else it.toTime
                 Pair(it.fromTime, upper)
@@ -187,12 +189,39 @@ class GraphViewModel @AssistedInject constructor(
                 Pair(now - Constants.GRAPH_TIME_RANGE_HOURS * 3600_000L, now)
             }
         } else {
-            val minTime = allTimestamps.minOrNull() ?: return@combine null
+            // History only, never predictions - issue #5111. Predictions are future points, so when
+            // the glucose and bucketed flows are empty and a loop run has published some, the
+            // minimum of everything sits at roughly now: the axis became [now, now + horizon], the
+            // current time was pinned to the left edge with no past behind it, the prediction was
+            // the only thing drawn, and it could not be scrolled back because that was the whole
+            // range. It came right on the next reading, which refilled the glucose flow and pulled
+            // the edge back. Reported as "offline for a while, then it starts loading data".
+            //
+            // With no history at all, the calculated window is the honest left edge: it is the same
+            // 24 hours the branch above uses, so an empty graph keeps the axis it had.
+            val minTime = historyTimestamps.minOrNull()
+                ?: cacheTimeRange?.fromTime
+                ?: (dateUtil.now() - Constants.GRAPH_TIME_RANGE_HOURS * 3600_000L)
             val maxTime = allTimestamps.maxOrNull() ?: return@combine null
             val cacheUpper = cacheTimeRange?.let { if (showPredictions) it.endTime else it.toTime }
             val effectiveMax = if (cacheUpper != null) maxOf(maxTime, cacheUpper) else maxTime
             Pair(minTime, effectiveMax)
         }
+        // The right edge every series is measured against. A series that stops before this is drawn
+        // short of the axis, which is what a basal line ending before "now" looks like. `by` names
+        // which input won, because the cure differs: `data` means a reading or a prediction reaches
+        // past the cached range, `range` means the cached range is the wider of the two.
+        aapsLogger.debug(LTag.UI) {
+            val cacheUpper = cacheTimeRange?.let { if (showPredictions) it.endTime else it.toTime }
+            val dataMax = allTimestamps.maxOrNull()
+            "Graph axis: to=${dateUtil.dateAndTimeAndSecondsString(range.second)} " +
+                "by=${if (!fullWindow && cacheUpper != null && dataMax != null && dataMax > cacheUpper) "data" else "range"} " +
+                "data=${dataMax?.let { dateUtil.dateAndTimeAndSecondsString(it) } ?: "none"} " +
+                "range=${cacheUpper?.let { dateUtil.dateAndTimeAndSecondsString(it) } ?: "none"} " +
+                "now=${dateUtil.dateAndTimeAndSecondsString(dateUtil.now())} " +
+                "predictions=${if (showPredictions) "on" else "off"}"
+        }
+        range
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),

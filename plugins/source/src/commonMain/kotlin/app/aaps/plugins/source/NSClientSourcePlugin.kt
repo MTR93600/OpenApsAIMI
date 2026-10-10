@@ -3,12 +3,13 @@ package app.aaps.plugins.source
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.core.interfaces.notifications.NotificationManager
+import app.aaps.core.interfaces.plugin.EnforcedState
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.source.BgSource
 import app.aaps.core.interfaces.source.NSClientSource
-import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.ui.compose.icons.IcPluginNsClientBg
 import app.aaps.plugins.source.compose.BgSourceComposeContent
 import dev.zacsweers.metro.AppScope
@@ -23,10 +24,12 @@ import dev.zacsweers.metro.binding
 @ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
 @IntKey(410)
 @SingleIn(AppScope::class)
-class NSClientSourcePlugin @Inject constructor(
+@Inject
+class NSClientSourcePlugin(
     override val rh: TextResolver,
     aapsLogger: AAPSLogger,
     config: Config,
+    notificationManager: NotificationManager
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.BGSOURCE)
@@ -37,9 +40,10 @@ class NSClientSourcePlugin @Inject constructor(
         }
         .icon(IcPluginNsClientBg)
         .pluginName(SourceStrings.ns_client_bg)
-        .shortName(SourceStrings.ns_client_bg_short)
         .description(SourceStrings.description_source_ns_client)
-        .alwaysEnabled(config.AAPSCLIENT)
+        // Forced on for a client, which has no other BG source. On a master it stays the user's choice, so
+        // this is one-sided on purpose - no forced-off half.
+        .enforce(EnforcedState.Enabled) { config.AAPSCLIENT }
         .setDefault(config.AAPSCLIENT),
-    aapsLogger, rh
+    aapsLogger, rh, notificationManager
 ), BgSource, NSClientSource

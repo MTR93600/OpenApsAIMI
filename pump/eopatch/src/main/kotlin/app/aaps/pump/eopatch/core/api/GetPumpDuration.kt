@@ -6,13 +6,14 @@ import app.aaps.pump.eopatch.core.ble.BytesConverter
 import app.aaps.pump.eopatch.core.ble.PatchFunc
 import app.aaps.pump.eopatch.core.response.PumpDurationResponse
 import app.aaps.pump.eopatch.core.scan.IBleDevice
-import io.reactivex.rxjava3.core.Single
-import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import io.reactivex.rxjava3.core.Single
 
 @SingleIn(AppScope::class)
-class GetPumpDuration @Inject constructor(patch: IBleDevice, aapsLogger: AAPSLogger) : BaseAPI<PumpDurationResponse>(PatchFunc.GET_PUMP_DURATION, patch, aapsLogger) {
+@Inject
+class GetPumpDuration(patch: IBleDevice, aapsLogger: AAPSLogger) : BaseAPI<PumpDurationResponse>(PatchFunc.GET_PUMP_DURATION, patch, aapsLogger) {
     override fun parse(bytes: ByteArray) = PumpDurationResponse(
         BytesConverter.toUInt(bytes[DATA0], bytes[DATA1]),
         BytesConverter.toUInt(bytes[DATA2], bytes[DATA3]),

@@ -63,10 +63,13 @@ import app.aaps.implementation.maintenance.data.PrefsStatusImpl
 import app.aaps.implementation.maintenance.formats.EncryptedPrefsFormat
 import app.aaps.implementation.maintenance.formats.ExportMetadata
 import app.aaps.shared.impl.weardata.ZipWatchfaceFormat
+import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Assisted
 import dev.zacsweers.metro.AssistedFactory
 import dev.zacsweers.metro.AssistedInject
+import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -78,9 +81,6 @@ import java.io.FileNotFoundException
 import java.io.IOException
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
-import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesBinding
-import dev.zacsweers.metro.SingleIn
 
 /**
  * Created by mike on 03.07.2016.
@@ -91,7 +91,8 @@ private fun filenameTimestamp(): String =
 
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
-class ImportExportPrefsImpl @Inject constructor(
+@Inject
+class ImportExportPrefsImpl(
     private var aapsLogger: AAPSLogger,
     private val rh: ResourceHelper,
     private val sp: SP,
@@ -111,7 +112,8 @@ class ImportExportPrefsImpl @Inject constructor(
     private val cloudStorageManager: CloudStorageManager,
     private val userEntryPresentationHelper: UserEntryPresentationHelper,
     private val storage: Storage,
-    private val cryptoUtil: CryptoUtil
+    private val cryptoUtil: CryptoUtil,
+    private val applier: PreferenceImportApplier
 ) : ImportExportPrefs {
 
     private var pendingExportFile: DocumentFile? = null
@@ -617,18 +619,23 @@ class ImportExportPrefsImpl @Inject constructor(
         }
     }
 
-    override fun executeImport(prefs: Prefs) {
+    override suspend fun executeImport(prefs: Prefs, keepPumpSettings: Boolean): ImportExportPrefs.ImportOutcome {
         activePlugin.beforeImport()
-        sp.clear()
-        for ((key, value) in prefs.values) {
-            if (value == "true" || value == "false") {
-                sp.putBoolean(key, value.toBoolean())
-            } else {
-                sp.putString(key, value)
-            }
-        }
+        val outcome = applier.apply(prefs, keepPumpSettings)
         activePlugin.afterImport()
+        aapsLogger.info(
+            LTag.CORE,
+            "Import applied: ${outcome.changed} changed, ${outcome.unchanged} already matched, " +
+                "${outcome.pumpSkipped} pump settings kept (${outcome.pumpWouldChange} would have changed), " +
+                "${outcome.syncedSkipped} synced keys left to the master, ${outcome.notExportable} refused as device state, " +
+                "${outcome.unresolved.size} unknown names left alone, ${outcome.unreadable.size} unreadable values skipped"
+        )
+        if (outcome.unresolved.isNotEmpty()) aapsLogger.debug(LTag.CORE, "Import: names this build does not know: ${outcome.unresolved}")
+        return outcome
     }
+
+    override fun previewImport(prefs: Prefs, keepPumpSettings: Boolean): ImportExportPrefs.ImportOutcome =
+        applier.preview(prefs, keepPumpSettings)
 
     override fun prepareImportedSettings() {
         rxBus.send(EventDiaconnG8PumpLogReset())
@@ -739,7 +746,8 @@ class ImportExportPrefsImpl @Inject constructor(
     }
 
 
-    class CsvExportWorker @AssistedInject constructor(
+    @AssistedInject
+    class CsvExportWorker(
         @Assisted private val context: Context,
         @Assisted params: WorkerParameters,
         aapsLogger: AAPSLogger,
@@ -886,7 +894,8 @@ class ImportExportPrefsImpl @Inject constructor(
     }
 
 
-    class ApsResultExportWorker @AssistedInject constructor(
+    @AssistedInject
+    class ApsResultExportWorker(
         @Assisted context: Context,
         @Assisted params: WorkerParameters,
         aapsLogger: AAPSLogger,

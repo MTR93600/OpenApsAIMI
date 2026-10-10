@@ -1,11 +1,5 @@
 package app.aaps.pump.equil
 
-import app.aaps.core.interfaces.di.PumpDriver
-import app.aaps.core.interfaces.plugin.PluginBase
-import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoMap
-import dev.zacsweers.metro.IntKey as MetroIntKey
-import dev.zacsweers.metro.binding
 import android.content.Context
 import android.os.SystemClock
 import app.aaps.core.data.plugin.PluginType
@@ -15,6 +9,7 @@ import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.data.pump.defs.TimeChangeType
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
+import app.aaps.core.interfaces.di.PumpDriver
 import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
@@ -22,6 +17,7 @@ import app.aaps.core.interfaces.notifications.AlarmSound
 import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.interfaces.notifications.NotificationLevel
 import app.aaps.core.interfaces.notifications.NotificationManager
+import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.protection.ProtectionCheck
 import app.aaps.core.interfaces.pump.BlePreCheck
@@ -69,6 +65,11 @@ import app.aaps.pump.equil.manager.command.CmdDevicesGet
 import app.aaps.pump.equil.manager.command.CmdSettingSet
 import app.aaps.pump.equil.manager.command.CmdTimeSet
 import app.aaps.pump.equil.manager.customCommands.CmdModeAndHistoryGet
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.ContributesIntoMap
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
+import dev.zacsweers.metro.binding
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -78,15 +79,15 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import org.joda.time.DateTime
 import org.joda.time.Duration
-import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.SingleIn
 import kotlin.math.max
+import dev.zacsweers.metro.IntKey as MetroIntKey
 
 @ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
 @PumpDriver
 @MetroIntKey(1130)
 @SingleIn(AppScope::class)
-class EquilPumpPlugin @Inject constructor(
+@Inject
+class EquilPumpPlugin(
     aapsLogger: AAPSLogger,
     override val rh: ResourceHelper,
     preferences: Preferences,
@@ -98,7 +99,7 @@ class EquilPumpPlugin @Inject constructor(
     private val pumpEnactResultProvider: () -> PumpEnactResult,
     private val constraintsChecker: ConstraintsChecker,
     private val ch: ConcentrationHelper,
-    private val notificationManager: NotificationManager,
+    notificationManager: NotificationManager,
     private val protectionCheck: ProtectionCheck,
     private val blePreCheck: BlePreCheck,
     private val config: Config
@@ -115,10 +116,9 @@ class EquilPumpPlugin @Inject constructor(
         }
         .icon(IcPluginEquil)
         .pluginName(TextRef.AndroidRes(R.string.equil_name))
-        .shortName(TextRef.AndroidRes(R.string.equil_name_short))
         .description(TextRef.AndroidRes(R.string.equil_pump_description)),
     ownPreferences = EquilBooleanKey.entries + EquilBooleanPreferenceKey.entries + EquilIntPreferenceKey.entries + EquilStringKey.entries,
-    aapsLogger, rh, preferences, commandQueue
+    aapsLogger, rh, preferences, commandQueue, notificationManager
 ), Pump {
 
     override val pumpDescription: PumpDescription

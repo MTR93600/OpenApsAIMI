@@ -44,7 +44,8 @@ data class ConfigurationUiState(
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 @ViewModelKey
 @Stable
-class ConfigurationViewModel @Inject constructor(
+@Inject
+class ConfigurationViewModel(
     private val activePlugin: ActivePlugin,
     private val configBuilder: ConfigBuilder,
     private val config: Config,
@@ -152,7 +153,7 @@ class ConfigurationViewModel @Inject constructor(
                     description = plugin.description,
                     composeIcon = plugin.pluginDescription.icon,
                     isEnabled = pluginEnabled,
-                    canToggle = !plugin.pluginDescription.alwaysEnabled && (isMultiSelect || !pluginEnabled),
+                    canToggle = plugin.enforcedState() == null && (isMultiSelect || !pluginEnabled),
                     showPreferences = hasPreferences && pluginEnabled && (!isSimpleMode || plugin.pluginDescription.preferencesVisibleInSimpleMode),
                     hasContent = plugin.hasComposeContent()
                 )

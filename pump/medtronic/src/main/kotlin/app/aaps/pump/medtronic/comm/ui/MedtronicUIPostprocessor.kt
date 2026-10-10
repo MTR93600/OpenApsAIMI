@@ -14,19 +14,20 @@ import app.aaps.pump.medtronic.defs.MedtronicNotificationType
 import app.aaps.pump.medtronic.defs.MedtronicUIResponseType
 import app.aaps.pump.medtronic.driver.MedtronicPumpStatus
 import app.aaps.pump.medtronic.util.MedtronicUtil
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 import org.joda.time.DateTimeZone
 import org.joda.time.Duration
 import java.util.Date
 import java.util.Locale
-import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.SingleIn
 
 /**
  * Created by andy on 6/15/18.
  */
 @SingleIn(AppScope::class)
-class MedtronicUIPostprocessor @Inject constructor(
+@Inject
+class MedtronicUIPostprocessor(
     private val aapsLogger: AAPSLogger,
     private val rh: ResourceHelper,
     private val medtronicUtil: MedtronicUtil,

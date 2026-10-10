@@ -50,7 +50,6 @@ import app.aaps.core.ui.compose.dialogs.OkCancelDialog
 import app.aaps.core.ui.compose.icons.Ns
 import app.aaps.core.ui.compose.icons.Pump
 import app.aaps.core.ui.compose.stringResource
-import app.aaps.ui.UiStrings
 import app.aaps.ui.compose.components.ContentContainer
 import app.aaps.ui.compose.treatments.viewmodels.ExtendedBolusViewModel
 
@@ -94,7 +93,7 @@ fun ExtendedBolusScreen(
     // Delete confirmation dialog
     if (showDeleteDialog) {
         OkCancelDialog(
-            title = viewModel.rh.gs(CoreUiStrings.removerecord),
+            title = stringResource(CoreUiStrings.removerecord),
             message = deleteDialogMessage,
             onConfirm = {
                 viewModel.deleteSelected()
@@ -176,7 +175,9 @@ private fun ExtendedBolusItem(
             .padding(horizontal = 2.dp)
             .combinedClickable(
                 onClick = onClick,
-                onLongClick = onLongPress
+                onLongClick = onLongPress,
+                // Long press is the only way into remove mode; TalkBack says "double-tap and hold to Remove".
+                onLongClickLabel = stringResource(CoreUiStrings.remove)
             ),
         selected = isSelected
     ) {

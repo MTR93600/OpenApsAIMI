@@ -1,6 +1,5 @@
 package app.aaps.di
 
-import app.aaps.di.GeneratedStringOwners
 import android.app.Application
 import android.content.Context
 import androidx.work.Configuration
@@ -11,20 +10,8 @@ import androidx.work.testing.SynchronousExecutor
 import androidx.work.testing.WorkManagerTestInitHelper
 import app.aaps.core.interfaces.di.MetroMemberInjector
 import app.aaps.core.ui.compose.MetroViewModelFactoryOwner
-import app.aaps.di.metro.MetroGraphs
 import app.aaps.database.di.DatabaseConfig
-import app.aaps.plugins.aps.ApsStringIds
-import app.aaps.plugins.automation.AutomationStringIds
-import app.aaps.plugins.calibration.CalibrationStringIds
-import app.aaps.plugins.configuration.ConfigurationStringIds
-import app.aaps.plugins.constraints.ConstraintsStringIds
-import app.aaps.plugins.main.MainStringIds
-import app.aaps.plugins.sensitivity.SensitivityStringIds
-import app.aaps.plugins.sync.SyncStringIds
-import app.aaps.plugins.source.SourceStringIds
-import app.aaps.plugins.smoothing.SmoothingStringIds
-import app.aaps.pump.virtual.VirtualStringIds
-import app.aaps.ui.UiStringIds
+import app.aaps.di.metro.MetroGraphs
 import com.google.firebase.Firebase
 import com.google.firebase.analytics.analytics
 import com.google.firebase.crashlytics.FirebaseCrashlytics

@@ -1,12 +1,10 @@
 package app.aaps.plugins.sync.nsclientV3.compose
 
-import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.interfaces.nsclient.NSClientLog
 import app.aaps.core.interfaces.nsclient.NSClientRepository
-import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.core.ui.R
 import app.aaps.plugins.sync.nsclientV3.keys.NsclientBooleanKey
+import app.aaps.shared.tests.generatedTextResolver
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -24,7 +22,6 @@ import org.mockito.kotlin.whenever
 @OptIn(ExperimentalCoroutinesApi::class)
 internal class NSClientViewModelTest {
 
-    @Mock private lateinit var rh: ResourceHelper
     @Mock private lateinit var nsClientRepository: NSClientRepository
     @Mock private lateinit var preferences: Preferences
 
@@ -39,12 +36,11 @@ internal class NSClientViewModelTest {
     fun setUp() {
         MockitoAnnotations.openMocks(this)
         Dispatchers.setMain(UnconfinedTestDispatcher())
-        whenever(rh.gs(CoreUiStrings.value_unavailable_short)).thenReturn("UNAVAILABLE")
         whenever(nsClientRepository.queueSize).thenReturn(queueSizeFlow)
         whenever(nsClientRepository.statusUpdate).thenReturn(statusFlow)
         whenever(nsClientRepository.urlUpdate).thenReturn(urlFlow)
         whenever(nsClientRepository.logList).thenReturn(logListFlow)
-        sut = NSClientViewModel(rh, nsClientRepository, preferences)
+        sut = NSClientViewModel(generatedTextResolver(), nsClientRepository, preferences)
     }
 
     @AfterEach
@@ -67,9 +63,9 @@ internal class NSClientViewModelTest {
     }
 
     @Test
-    fun `negative queue size shows UNAVAILABLE`() {
+    fun `negative queue size shows the not-available marker`() {
         queueSizeFlow.value = -1
-        assertThat(sut.uiState.value.queue).isEqualTo("UNAVAILABLE")
+        assertThat(sut.uiState.value.queue).isEqualTo("n/a")
     }
 
     @Test

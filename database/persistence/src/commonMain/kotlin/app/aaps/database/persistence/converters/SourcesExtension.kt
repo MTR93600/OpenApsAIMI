@@ -64,6 +64,7 @@ fun UserEntry.Sources.fromDb(): Sources =
         UserEntry.Sources.DanaRv2             -> Sources.DanaRv2
         UserEntry.Sources.DanaRS              -> Sources.DanaRS
         UserEntry.Sources.DanaI               -> Sources.DanaI
+        UserEntry.Sources.DanaI2              -> Sources.DanaI2
         UserEntry.Sources.DiaconnG8           -> Sources.DiaconnG8
         UserEntry.Sources.Insight             -> Sources.Insight
         UserEntry.Sources.Combo               -> Sources.Combo
@@ -89,6 +90,7 @@ fun UserEntry.Sources.fromDb(): Sources =
         UserEntry.Sources.Garmin              -> Sources.Garmin
         UserEntry.Sources.Scene               -> Sources.Scene
         UserEntry.Sources.Database            -> Sources.Database
+        UserEntry.Sources.Carelevo            -> Sources.Carelevo
         UserEntry.Sources.Unknown             -> Sources.Unknown
     }
 
@@ -152,6 +154,7 @@ fun Sources.toDb(): UserEntry.Sources =
         Sources.DanaRv2             -> UserEntry.Sources.DanaRv2
         Sources.DanaRS              -> UserEntry.Sources.DanaRS
         Sources.DanaI               -> UserEntry.Sources.DanaI
+        Sources.DanaI2              -> UserEntry.Sources.DanaI2
         Sources.DiaconnG8           -> UserEntry.Sources.DiaconnG8
         Sources.Insight             -> UserEntry.Sources.Insight
         Sources.Combo               -> UserEntry.Sources.Combo
@@ -178,6 +181,7 @@ fun Sources.toDb(): UserEntry.Sources =
         Sources.Scene               -> UserEntry.Sources.Scene
         Sources.Database            -> UserEntry.Sources.Database
         Sources.Insulin             -> UserEntry.Sources.Insulin
+        Sources.Carelevo            -> UserEntry.Sources.Carelevo
         Sources.Unknown             -> UserEntry.Sources.Unknown
     }
 

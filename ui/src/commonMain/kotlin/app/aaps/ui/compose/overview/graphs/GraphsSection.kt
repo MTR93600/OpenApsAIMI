@@ -41,26 +41,34 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.aaps.core.data.configuration.Constants
+import app.aaps.core.data.model.GlucoseUnit
+import app.aaps.core.interfaces.InterfacesStrings
+import app.aaps.core.interfaces.overview.graph.BgDataPoint
 import app.aaps.core.interfaces.overview.graph.GraphConfig
 import app.aaps.core.interfaces.overview.graph.SecondaryGraph
 import app.aaps.core.interfaces.overview.graph.SeriesType
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.LocalDateUtil
+import app.aaps.core.ui.compose.LocalDecimalFormatter
+import app.aaps.core.ui.compose.LocalProfileUtil
 import app.aaps.core.ui.compose.NumberInputRow
+import app.aaps.core.ui.compose.rowAction
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.ui.UiStrings
 import com.patrykandpatrick.vico.compose.cartesian.Scroll
 import com.patrykandpatrick.vico.compose.cartesian.Zoom
 import com.patrykandpatrick.vico.compose.cartesian.rememberVicoScrollState
 import com.patrykandpatrick.vico.compose.cartesian.rememberVicoZoomState
-import kotlin.math.abs
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.debounce
+import kotlin.math.abs
 
 /**
  * Overview graphs section using Vico charts.
@@ -87,6 +95,14 @@ private val SIMPLE_MODE_CONFIG = GraphConfig(
     secondaryGraphs = listOf(SecondaryGraph(listOf(SeriesType.COB)))
 )
 
+/**
+ * How many recent readings the spoken description of the BG graph lists.
+ *
+ * Five is about twenty-five minutes, which is enough to hear where the glucose is heading without
+ * turning the description into a list nobody will sit through.
+ */
+private const val RECENT_VALUES_SPOKEN = 5
+
 /** Series types available as BG graph overlays */
 private val BG_OVERLAY_SERIES = listOf(SeriesType.ACTIVITY, SeriesType.PREDICTIONS)
 
@@ -101,7 +117,14 @@ fun GraphsSection(
     graphViewModel: GraphViewModel,
     isSimpleMode: Boolean,
     modifier: Modifier = Modifier,
-    fitWholeWindow: Boolean = false
+    fitWholeWindow: Boolean = false,
+    /**
+     * Insulin and carbs on board, already formatted, for the spoken description of the BG graph.
+     * The overview passes them; the history browser must NOT, because these are CURRENT values and
+     * announcing them beside a past day would state something untrue about insulin.
+     */
+    iobText: String? = null,
+    cobText: String? = null
 ) {
     val dateUtil = LocalDateUtil.current
     val savedGraphConfig by graphViewModel.graphConfigFlow.collectAsStateWithLifecycle()
@@ -354,6 +377,37 @@ fun GraphsSection(
         )
         // BG Graph - primary interactive graph
         var editingBgOverlays by remember { mutableStateOf(false) }
+
+        // The graph is drawn, so a screen reader gets nothing from it at all - a chart contributes
+        // no semantics node of its own. Describe it instead: the recent readings newest first,
+        // because the current value is what matters most and a listener may stop there, plus what
+        // is on board. The description goes on the graph itself rather than the Box, so the edit
+        // button beside it stays a separate control.
+        val bgReadings by graphViewModel.bgReadingsFlow.collectAsStateWithLifecycle()
+        val profileUtil = LocalProfileUtil.current
+        val decimalFormatter = LocalDecimalFormatter.current
+        val recentValues = remember(bgReadings, profileUtil.units) {
+            // BgDataPoint.value is ALREADY in the user's units, so it must not be converted again -
+            // only formatted. The unit decides the decimals; the "detect" helpers guess that from
+            // the magnitude and would read a very high mmol/l reading as mg/dl.
+            newestReadings(bgReadings, RECENT_VALUES_SPOKEN)
+                .joinToString(", ") {
+                    if (profileUtil.units == GlucoseUnit.MGDL) decimalFormatter.to0Decimal(it.value)
+                    else decimalFormatter.to1Decimal(it.value)
+                }
+        }
+        val graphDescription = when {
+            recentValues.isEmpty()                 -> null
+            iobText != null && cobText != null     -> stringResource(
+                UiStrings.a11y_bg_graph_summary,
+                recentValues,
+                stringResource(InterfacesStrings.confirmation_line, stringResource(CoreUiStrings.iob), iobText),
+                stringResource(InterfacesStrings.confirmation_line, stringResource(CoreUiStrings.cob), cobText)
+            )
+
+            else                                   -> stringResource(UiStrings.a11y_bg_graph_summary_values_only, recentValues)
+        }
+
         Box(modifier = Modifier.offset(y = (-16).dp)) {
             BgGraphCompose(
                 viewModel = graphViewModel,
@@ -366,10 +420,15 @@ fun GraphsSection(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(graphConfig.bgHeight.dp)
+                    .then(
+                        if (graphDescription != null) Modifier.semantics { contentDescription = graphDescription }
+                        else Modifier
+                    )
             )
             if (!isSimpleMode) {
                 GraphEditButton(
                     onClick = { editingBgOverlays = true },
+                    graphName = stringResource(CoreUiStrings.glucose),
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(end = 4.dp, top = 2.dp)
@@ -420,6 +479,7 @@ fun GraphsSection(
             if (!isSimpleMode) {
                 GraphEditButton(
                     onClick = { editingIobOverlays = true },
+                    graphName = stringResource(CoreUiStrings.iob),
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(end = 4.dp, top = 2.dp)
@@ -471,6 +531,7 @@ fun GraphsSection(
                 if (!isSimpleMode) {
                     GraphEditButton(
                         onClick = { editingGraphIndex = i },
+                        graphName = seriesListLabel(secondary.series),
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .padding(end = 4.dp, top = 2.dp)
@@ -479,20 +540,24 @@ fun GraphsSection(
             }
         }
         if (editingGraphIndex >= 0 && editingGraphIndex < activeCount) {
-            val editing = graphConfig.secondaryGraphs[editingGraphIndex]
+            // Read once. The lambdas below can run after the sheet has closed and the index is
+            // already -1: NumberInputRow saves a focused field when it leaves the screen.
+            val index = editingGraphIndex
+            val editing = graphConfig.secondaryGraphs[index]
             GraphSeriesBottomSheet(
-                title = stringResource(CoreUiStrings.graph_number, editingGraphIndex + 2),
+                title = stringResource(CoreUiStrings.graph_number, index + 2),
                 selectedSeries = editing.series,
                 availableSeries = CONFIGURABLE_SERIES,
                 height = editing.height,
                 onHeightChange = { h ->
-                    val graphs = graphConfig.secondaryGraphs.toMutableList()
-                    graphs[editingGraphIndex] = graphs[editingGraphIndex].copy(height = h)
-                    graphViewModel.updateGraphConfig(graphConfig.copy(secondaryGraphs = graphs))
+                    // The current config, not the captured one: after "Remove graph" the captured
+                    // config still holds the removed graph, and writing it back would restore it.
+                    withSecondaryGraphHeight(graphViewModel.graphConfigFlow.value, index, editing.series, h)
+                        ?.let { graphViewModel.updateGraphConfig(it) }
                 },
                 onToggle = { type ->
                     val graphs = graphConfig.secondaryGraphs.toMutableList()
-                    val current = graphs[editingGraphIndex].series.toMutableList()
+                    val current = graphs[index].series.toMutableList()
                     if (type in current) {
                         current.remove(type)
                     } else {
@@ -501,16 +566,16 @@ fun GraphsSection(
                     }
                     if (current.isEmpty()) {
                         // Auto-remove graph when all series deselected
-                        graphs.removeAt(editingGraphIndex)
+                        graphs.removeAt(index)
                         editingGraphIndex = -1
                     } else {
-                        graphs[editingGraphIndex] = graphs[editingGraphIndex].copy(series = current)
+                        graphs[index] = graphs[index].copy(series = current)
                     }
                     graphViewModel.updateGraphConfig(graphConfig.copy(secondaryGraphs = graphs))
                 },
                 onRemoveGraph = {
                     val graphs = graphConfig.secondaryGraphs.toMutableList()
-                    graphs.removeAt(editingGraphIndex)
+                    graphs.removeAt(index)
                     editingGraphIndex = -1
                     graphViewModel.updateGraphConfig(graphConfig.copy(secondaryGraphs = graphs))
                 },
@@ -565,6 +630,33 @@ fun GraphsSection(
     }
 }
 
+/**
+ * The [count] newest readings, newest first.
+ *
+ * Sorted here rather than trusted: the graph data comes newest first, and reading it as oldest
+ * first made the screen reader speak the readings from 24 hours ago instead of the current ones.
+ */
+internal fun newestReadings(readings: List<BgDataPoint>, count: Int): List<BgDataPoint> =
+    readings.sortedByDescending { it.timestamp }.take(count)
+
+/**
+ * [config] with the height of secondary graph [index] set to [height], or null when that graph no
+ * longer shows [expectedSeries].
+ *
+ * The height field saves its text when the settings sheet closes, so this can run after the graph
+ * was removed. Then [index] points to another graph, or to nothing, and nothing may be written.
+ * Graphs have no id, so the graph is recognised by its series. The height is not compared: quick
+ * taps on the +/- buttons can arrive before the screen has caught up with the previous one.
+ * With two graphs showing the same series, the other one could get the height. That is harmless.
+ */
+internal fun withSecondaryGraphHeight(config: GraphConfig, index: Int, expectedSeries: List<SeriesType>, height: Int): GraphConfig? {
+    val graph = config.secondaryGraphs.getOrNull(index) ?: return null
+    if (graph.series != expectedSeries) return null
+    val graphs = config.secondaryGraphs.toMutableList()
+    graphs[index] = graph.copy(height = height)
+    return config.copy(secondaryGraphs = graphs)
+}
+
 // =========================================================================
 // Graph label generation
 // =========================================================================
@@ -600,6 +692,7 @@ private fun seriesShortNameId(type: SeriesType): TextRef = when (type) {
 @Composable
 private fun GraphEditButton(
     onClick: () -> Unit,
+    graphName: String,
     modifier: Modifier = Modifier
 ) {
     IconButton(
@@ -611,7 +704,8 @@ private fun GraphEditButton(
     ) {
         Icon(
             imageVector = Icons.Filled.Edit,
-            contentDescription = null,
+            // One per graph, so it names its graph: "Edit: COB", not "Edit" four times.
+            contentDescription = rowAction(CoreUiStrings.switch_to_edit, graphName),
             modifier = Modifier.size(16.dp)
         )
     }

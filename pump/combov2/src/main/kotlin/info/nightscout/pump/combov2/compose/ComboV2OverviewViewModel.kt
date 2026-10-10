@@ -25,6 +25,7 @@ import app.aaps.core.ui.compose.pump.StatusBanner
 import app.aaps.core.ui.compose.pump.tickerFlow
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
+import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import info.nightscout.comboctl.base.DisplayFrame
@@ -44,7 +45,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.Locale
-import dev.zacsweers.metro.Inject
 import kotlin.math.max
 import kotlin.time.ExperimentalTime
 import app.aaps.core.ui.R as CoreUiR
@@ -67,7 +67,8 @@ data class ComboV2OverviewUiState(
 // unscoped so each screen gets its own.
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 @ViewModelKey
-class ComboV2OverviewViewModel @Inject constructor(
+@Inject
+class ComboV2OverviewViewModel(
     private val aapsLogger: AAPSLogger,
     private val rh: ResourceHelper,
     rxBus: RxBus,

@@ -1,14 +1,12 @@
 package app.aaps.plugins.sync.wear.wearintegration
 
-import app.aaps.core.interfaces.InterfacesStrings
-import app.aaps.core.ui.CoreUiStrings
-import app.aaps.plugins.sync.SyncStrings
 import android.app.NotificationManager
 import android.content.Context
 import android.content.res.Configuration
 import androidx.compose.ui.graphics.toArgb
 import app.aaps.core.data.configuration.Constants
 import app.aaps.core.data.iob.InMemoryGlucoseValue
+import app.aaps.core.data.model.ActiveSceneState
 import app.aaps.core.data.model.BS
 import app.aaps.core.data.model.GV
 import app.aaps.core.data.model.GlucoseUnit
@@ -16,6 +14,7 @@ import app.aaps.core.data.model.HR
 import app.aaps.core.data.model.RM
 import app.aaps.core.data.model.SC
 import app.aaps.core.data.model.Scene
+import app.aaps.core.data.model.SceneLifecycle
 import app.aaps.core.data.model.SourceSensor
 import app.aaps.core.data.model.TB
 import app.aaps.core.data.model.TDD
@@ -25,6 +24,7 @@ import app.aaps.core.data.time.T
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.data.ui.ConfirmationLine
 import app.aaps.core.data.ui.ConfirmationRole
+import app.aaps.core.interfaces.InterfacesStrings
 import app.aaps.core.interfaces.aps.GlucoseStatus
 import app.aaps.core.interfaces.aps.Loop
 import app.aaps.core.interfaces.automation.Automation
@@ -45,6 +45,7 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.maintenance.ImportExportPrefs
 import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
+import app.aaps.core.interfaces.overview.SensitivityOverview
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.profile.Profile
@@ -53,23 +54,27 @@ import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.pump.PumpStatusProvider
 import app.aaps.core.interfaces.queue.CommandQueue
 import app.aaps.core.interfaces.receivers.ReceiverStatusStore
-import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.chunkedOnQuietPeriod
 import app.aaps.core.interfaces.rx.collectResilient
 import app.aaps.core.interfaces.rx.events.EventMobileToWear
 import app.aaps.core.interfaces.rx.events.EventShowSnackbar
 import app.aaps.core.interfaces.rx.events.EventWearUpdateGui
+import app.aaps.core.interfaces.rx.weardata.ActiveSceneInfo
 import app.aaps.core.interfaces.rx.weardata.CwfMetadataKey
 import app.aaps.core.interfaces.rx.weardata.EventData
 import app.aaps.core.interfaces.rx.weardata.EventData.RunningModeList.AvailableRunningMode
 import app.aaps.core.interfaces.rx.weardata.LoopStatusData
 import app.aaps.core.interfaces.rx.weardata.OapsResultInfo
+import app.aaps.core.interfaces.rx.weardata.ProfileInfo
 import app.aaps.core.interfaces.rx.weardata.TargetRange
 import app.aaps.core.interfaces.rx.weardata.TempTargetInfo
+import app.aaps.core.interfaces.scenes.ActiveSceneSync
 import app.aaps.core.interfaces.scenes.SceneActions
 import app.aaps.core.interfaces.scenes.SceneAutomationApi
 import app.aaps.core.interfaces.scenes.SceneAutomationResult
+import app.aaps.core.interfaces.scenes.SceneChainResolver
 import app.aaps.core.interfaces.tempTargets.ttDurationMinutes
 import app.aaps.core.interfaces.tempTargets.ttTargetMgdl
 import app.aaps.core.interfaces.ui.UiInteraction
@@ -95,14 +100,20 @@ import app.aaps.core.objects.runningMode.RunningModeGuard
 import app.aaps.core.objects.wizard.QuickWizard
 import app.aaps.core.objects.wizard.QuickWizardEntry
 import app.aaps.core.objects.wizard.QuickWizardMode
+import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.clientcontrol.failText
 import app.aaps.core.ui.compose.DarkGeneralColors
 import app.aaps.core.ui.compose.LightGeneralColors
 import app.aaps.core.ui.extensions.generateCOBString
 import app.aaps.core.ui.extensions.toStringShort
+import app.aaps.plugins.sync.SyncStrings
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -110,21 +121,18 @@ import java.util.LinkedList
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.min
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 
 // Quiet-period that closes a Wear-event batch. Long enough to absorb a Data Layer reconnect-flush,
 // short enough that live data stays effectively real-time.
 private const val HEALTH_EVENT_QUIET_PERIOD_MS = 500L
 
 @SingleIn(AppScope::class)
-class DataHandlerMobile @Inject constructor(
+@Inject
+class DataHandlerMobile(
     private val context: Context,
     private val rxBus: RxBus,
     private val aapsLogger: AAPSLogger,
-    private val rh: ResourceHelper,
+    private val rh: TextResolver,
     private val preferences: Preferences,
     private val config: Config,
     private val iobCobCalculator: IobCobCalculator,
@@ -161,6 +169,9 @@ class DataHandlerMobile @Inject constructor(
     @Inject lateinit var automation: Automation
     @Inject lateinit var scenes: SceneAutomationApi
     @Inject lateinit var sceneActions: SceneActions
+    @Inject lateinit var activeSceneSync: ActiveSceneSync
+    @Inject lateinit var sceneChainResolver: SceneChainResolver
+    @Inject lateinit var sensitivityOverview: SensitivityOverview
 
     // App lifetime: this is a @Singleton that subscribes in init and
     // never tears down. Dispatchers.IO because that is what the io scheduler gave these handlers, and
@@ -190,6 +201,19 @@ class DataHandlerMobile @Inject constructor(
     }
 
     /**
+     * [onEvent] for a command that changes therapy. The handler only runs while the phone's
+     * "Wear control" switch is on; otherwise the watch gets an error reply (see [rejectIfWearControlOff]).
+     * Register every bolus, carbs, target, profile, running mode, scene and user-action command through
+     * this, so a new one cannot forget the gate.
+     */
+    private inline fun <reified T : EventData> onControlEvent(crossinline handler: suspend (T) -> Unit) {
+        onEvent<T> { event ->
+            if (rejectIfWearControlOff()) return@onEvent
+            handler(event)
+        }
+    }
+
+    /**
      * Fire-immediately sibling of [onEvent] for non-suspend handlers (no concatMap serialization).
      * Emits the same uniform "<Type> received from <node>" debug line; extra diagnostics go through
      * [detail]. Errors are routed to [FabricPrivacy.logException], matching the prior subscriptions.
@@ -209,15 +233,18 @@ class DataHandlerMobile @Inject constructor(
         // From Wear
         onEventSync<EventData.ActionPong> { fabricPrivacy.logCustom("WearOS_${it.apiLevel}") }
         onEventSync<EventData.CancelBolus> {
-            if (!config.appInitialized) return@onEventSync
+            if (rejectIfNotReady()) return@onEventSync
             activePlugin.activePump.stopBolusDelivering()
         }
-        onEvent<EventData.OpenLoopRequestConfirmed> {
-            if (!config.appInitialized) return@onEvent
-            loop.acceptChangeRequest()
+        onControlEvent<EventData.OpenLoopRequestConfirmed> {
+            if (rejectIfNotReady()) return@onControlEvent
+            // A refused accept (loop paused, suggestion too old) must say so, or the watch shows it as done.
+            loop.acceptChangeRequest()?.let { sendError(it) }
             (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(Constants.NOTIFICATION_ID)
         }
         onEvent<EventData.ActionResendData> { resendData(it.from) }
+        // The watch's word on Watch Face Push, kept by WearPlugin for the wear screen
+        onEvent<EventData.WatchFacePushStatus> { rxBus.send(EventWearUpdateGui(watchFacePushStatus = it)) }
         onEvent<EventData.ActionPumpStatus> {
             sendToWear(
                 EventData.ConfirmAction(
@@ -247,25 +274,25 @@ class DataHandlerMobile @Inject constructor(
             )
         }
         onEvent<EventData.RunningModeRequest> { handleAvailableRunningModes() }
-        onEvent<EventData.RunningModeSelected> { handleRunningModeSelected(it) }
-        onEvent<EventData.RunningModeConfirmed> { handleRunningModeConfirmed(it) }
+        onControlEvent<EventData.RunningModeSelected> { handleRunningModeSelected(it) }
+        onControlEvent<EventData.RunningModeConfirmed> { handleRunningModeConfirmed(it) }
         onEvent<EventData.ActionTddStatus> { handleTddStatus() }
         onEvent<EventData.ActionProfileSwitchSendInitialData> { handleProfileSwitchSendInitialData() }
-        onEvent<EventData.ActionProfileSwitchPreCheck> { handleProfileSwitchPreCheck(it) }
-        onEvent<EventData.ActionProfileSwitchConfirmed> {
+        onControlEvent<EventData.ActionProfileSwitchPreCheck> { handleProfileSwitchPreCheck(it) }
+        onControlEvent<EventData.ActionProfileSwitchConfirmed> {
             // Commit the parked profile switch through the role-transparent relay (MASTER → local applyProfileSwitch;
             // CLIENT → signed BolusCommit so the MASTER applies it, not the follower locally).
             contacting() // CLIENT: show the spinner during the commit round-trip too (no-op on master).
             onCommitResult(batchExecutor.commit(it.bolusId, Sources.Wear, rh.gs(CoreUiStrings.careportal_profileswitch)))
         }
-        onEvent<EventData.ActionTempTargetPreCheck> { handleTempTargetPreCheck(it) }
-        onEvent<EventData.ActionTempTargetConfirmed> {
+        onControlEvent<EventData.ActionTempTargetPreCheck> { handleTempTargetPreCheck(it) }
+        onControlEvent<EventData.ActionTempTargetConfirmed> {
             // Commit the parked TT through the relay (MASTER → local applyTempTarget set/cancel; CLIENT → master applies).
             contacting() // CLIENT: show the spinner during the commit round-trip too (no-op on master).
             onCommitResult(batchExecutor.commit(it.bolusId, Sources.Wear, rh.gs(CoreUiStrings.temporary_target)))
         }
-        onEvent<EventData.ActionBolusPreCheck> { handleBolusPreCheck(it) }
-        onEvent<EventData.ActionBolusConfirmed> {
+        onControlEvent<EventData.ActionBolusPreCheck> { handleBolusPreCheck(it) }
+        onControlEvent<EventData.ActionBolusConfirmed> {
             // Commit the parked dose by id through the role-transparent relay (MASTER → local deliver; CLIENT →
             // signed BolusCommit). Consume-once = no double bolus; a failure surfaces to the watch.
             contacting() // CLIENT: show the spinner during the commit round-trip too (no-op on master).
@@ -278,27 +305,48 @@ class DataHandlerMobile @Inject constructor(
                 sendQuickWizardListToWear()
             }
         }
-        onEvent<EventData.ActionECarbsPreCheck> { handleECarbsPreCheck(it) }
-        onEvent<EventData.ActionECarbsConfirmed> {
+        onControlEvent<EventData.ActionECarbsPreCheck> { handleECarbsPreCheck(it) }
+        onControlEvent<EventData.ActionECarbsConfirmed> {
             // Commit the parked eCarbs through the relay (MASTER → local deliverECarbs; CLIENT → master records them).
             contacting() // CLIENT: show the spinner during the commit round-trip too (no-op on master).
             onCommitResult(batchExecutor.commit(it.bolusId, Sources.Wear, rh.gs(CoreUiStrings.overview_treatment_label)))
         }
-        onEvent<EventData.ActionFillPresetPreCheck> { handleFillPresetPreCheck(it) }
-        onEvent<EventData.ActionFillPreCheck> { handleFillPreCheck(it) }
-        onEvent<EventData.ActionFillConfirmed> {
-            if (!config.appInitialized) return@onEvent
+        // Same pre-init gate as every other handler here. These reach the wizard/batch path, and before
+        // ConfigBuilder.initialize() has run verifySelectionInCategories() the active APS is still null, so a
+        // dose recompute would hit ProfileSealed's "APS not defined" guard.
+        onControlEvent<EventData.ActionFillPresetPreCheck> {
+            if (rejectIfNotReady()) return@onControlEvent
+            handleFillPresetPreCheck(it)
+        }
+        onControlEvent<EventData.ActionFillPreCheck> {
+            if (rejectIfNotReady()) return@onControlEvent
+            handleFillPreCheck(it)
+        }
+        onControlEvent<EventData.ActionFillConfirmed> {
+            if (rejectIfNotReady()) return@onControlEvent
             // Defense-in-depth: Fill is off-relay and delivered locally only — a client must never reach here.
-            if (rejectIfAapsClient()) return@onEvent
+            if (rejectIfAapsClient()) return@onControlEvent
             if (constraintChecker.applyBolusConstraints(ConstraintObject(it.insulin, aapsLogger)).value() - it.insulin != 0.0) {
                 rxBus.send(EventShowSnackbar("aborting: previously applied constraint changed", EventShowSnackbar.Type.Warning))
                 sendError("aborting: previously applied constraint changed")
             } else
-                wizardBolusExecutor.deliverFillBolus(it.insulin, null, Sources.Wear, ::sendError)
+                // The executor already wrote the right sentence for both cases (a failure and a cancel), so the
+                // watch shows its comment as-is. The watch has no neutral terminal screen — a cancel still lands
+                // under the red "Error" heading — but the words are correct.
+                wizardBolusExecutor.deliverFillBolus(it.insulin, null, Sources.Wear, onError = { failure -> sendError(failure.comment) })
         }
-        onEvent<EventData.ActionQuickWizardPreCheck> { handleQuickWizardPreCheck(it) }
-        onEvent<EventData.ActionWizardPreCheck> { handleWizardPreCheck(it) }
-        onEvent<EventData.ActionWizardConfirmed> {
+        // These two are the ones that actually recompute a dose. The executor they delegate to already
+        // refuses before init, so this is defence in depth - but it keeps the refusal in one place with the
+        // rest, so a later direct call here cannot bring back the "APS not defined" crash.
+        onControlEvent<EventData.ActionQuickWizardPreCheck> {
+            if (rejectIfNotReady()) return@onControlEvent
+            handleQuickWizardPreCheck(it)
+        }
+        onControlEvent<EventData.ActionWizardPreCheck> {
+            if (rejectIfNotReady()) return@onControlEvent
+            handleWizardPreCheck(it)
+        }
+        onControlEvent<EventData.ActionWizardConfirmed> {
             // Commit the parked wizard/quick-wizard dose by id through the role-transparent relay (MASTER → local
             // deliver; CLIENT → signed BolusCommit; wear has no advisor fork → asAdvisor=false). Refresh the watch's
             // quick-wizard list (lastUsed) only when something was actually delivered; a failure surfaces to the watch.
@@ -309,33 +357,34 @@ class DataHandlerMobile @Inject constructor(
                 sendQuickWizardListToWear()
             }
         }
-        onEvent<EventData.ActionUserActionPreCheck> {
-            if (!config.appInitialized) return@onEvent
+        onControlEvent<EventData.ActionUserActionPreCheck> {
+            if (rejectIfNotReady()) return@onControlEvent
             handleUserActionPreCheck(it)
         }
-        onEvent<EventData.ActionUserActionConfirmed> {
-            if (!config.appInitialized) return@onEvent
+        onControlEvent<EventData.ActionUserActionConfirmed> {
+            if (rejectIfNotReady()) return@onControlEvent
             handleUserActionConfirmed(it)
         }
-        onEvent<EventData.ActionScenePreCheck> {
-            if (!config.appInitialized) return@onEvent
+        onControlEvent<EventData.ActionScenePreCheck> {
+            if (rejectIfNotReady()) return@onControlEvent
             handleScenePreCheck(it)
         }
-        onEvent<EventData.ActionSceneConfirmed> {
-            if (!config.appInitialized) return@onEvent
+        onControlEvent<EventData.ActionSceneConfirmed> {
+            if (rejectIfNotReady()) return@onControlEvent
             handleSceneConfirmed(it)
         }
-        onEvent<EventData.ActionSceneStop> {
-            if (!config.appInitialized) return@onEvent
+        onControlEvent<EventData.ActionSceneStop> {
+            if (rejectIfNotReady()) return@onControlEvent
             scenes.stopActiveScene()
         }
-        onEvent<EventData.ActionSceneStopPreCheck> {
-            if (!config.appInitialized) return@onEvent
-            handleSceneStopPreCheck()
+        onControlEvent<EventData.ActionSceneStopPreCheck> {
+            if (rejectIfNotReady()) return@onControlEvent
+            handleSceneStopPreCheck(it)
         }
-        onEvent<EventData.ActionSceneStopConfirmed> {
-            if (!config.appInitialized) return@onEvent
-            onCommitResult(sceneActions.stop(triggerChain = false))
+        onControlEvent<EventData.ActionSceneStopConfirmed> {
+            if (rejectIfNotReady()) return@onControlEvent
+            // The master re-derives the follow-up itself and falls back to a plain stop if it is gone
+            onCommitResult(sceneActions.stop(triggerChain = it.triggerChain))
         }
         onEventSync<EventData.SnoozeAlert> { uiInteraction.stopAlarm("Muted from wear") }
         onEventSync<EventData.WearException> { fabricPrivacy.logWearException(it) }
@@ -361,6 +410,9 @@ class DataHandlerMobile @Inject constructor(
         val tempTarget = persistenceLayer.getTemporaryTargetActiveAt(dateUtil.now())
         val profile = profileFunction.getProfile()
         val usedAPS = activePlugin.activeAPS
+        // The records the active scene created, so the watch can mark a temp target or a profile
+        // switch as the scene's doing. Read once: the same answer serves both cards.
+        val sceneRecords = activeSceneSync.getActiveState()?.scopedRecords
 
         // Get data based on app type
         val (lastRunTimestamp, lastEnactTimestamp, apsResult) = if (config.APS) {
@@ -397,18 +449,7 @@ class DataHandlerMobile @Inject constructor(
 
         // Map loop mode
         val runningModeRecord = loop.runningModeRecord()
-        val loopMode = when (runningModeRecord.mode) {
-            RM.Mode.CLOSED_LOOP       -> LoopStatusData.LoopMode.CLOSED
-            RM.Mode.OPEN_LOOP         -> LoopStatusData.LoopMode.OPEN
-            RM.Mode.CLOSED_LOOP_LGS   -> LoopStatusData.LoopMode.LGS
-            RM.Mode.DISABLED_LOOP     -> LoopStatusData.LoopMode.DISABLED
-            RM.Mode.SUSPENDED_BY_USER -> LoopStatusData.LoopMode.SUSPENDED
-            RM.Mode.SUSPENDED_BY_PUMP -> LoopStatusData.LoopMode.PUMP_SUSPENDED
-            RM.Mode.SUSPENDED_BY_DST  -> LoopStatusData.LoopMode.DST_SUSPENDED
-            RM.Mode.DISCONNECTED_PUMP -> LoopStatusData.LoopMode.DISCONNECTED
-            RM.Mode.SUPER_BOLUS       -> LoopStatusData.LoopMode.SUPERBOLUS
-            else                      -> LoopStatusData.LoopMode.UNKNOWN
-        }
+        val loopMode = runningModeRecord.mode.toLoopMode()
         // End time of a temporary mode (suspend/disconnect/superbolus) so the watch can show remaining duration
         val modeEndTime = if (runningModeRecord.isTemporary()) runningModeRecord.timestamp + runningModeRecord.duration else null
 
@@ -426,7 +467,8 @@ class DataHandlerMobile @Inject constructor(
                 targetDisplay = targetString,
                 endTime = it.end,
                 durationMinutes = durationMin,
-                units = units
+                units = units,
+                fromScene = it.id == sceneRecords?.ttId
             )
         }
 
@@ -535,7 +577,11 @@ class DataHandlerMobile @Inject constructor(
             autosensTarget = autosensTarget,
             defaultRange = defaultRange,
             oapsResult = oapsResultInfo,
-            modeEndTime = modeEndTime
+            modeEndTime = modeEndTime,
+            activeScene = activeSceneInfo(),
+            profile = profileInfo(dateUtil.now(), sceneRecords),
+            modeFromScene = runningModeRecord.id == sceneRecords?.rmId,
+            sensitivity = sensitivityOverview.build().lines
         )
     }
 
@@ -567,6 +613,55 @@ class DataHandlerMobile @Inject constructor(
     private fun rejectIfAapsClient(): Boolean {
         if (config.AAPSCLIENT) {
             sendError(rh.gs(SyncStrings.wear_remote_insulin_not_allowed_in_client))
+            return true
+        }
+        return false
+    }
+
+    /**
+     * The phone cannot act on this yet, and the watch is told so instead of being left waiting.
+     *
+     * [app.aaps.core.interfaces.configuration.Config.appInitialized] is false in two situations, and the
+     * watch cannot tell them apart or do anything about either: start up has not finished, or a settings
+     * import is rebuilding plugin state. In both, reading the active plugin would hit `PluginStore`'s
+     * deliberate "No pump selected" assertion.
+     *
+     * Every handler guarded by this is something the user just did on the watch - cancel a bolus, accept
+     * a change request, fill. A bare `return` there leaves the watch showing a spinner that never
+     * resolves, so the action looks accepted when nothing happened. Saying "try again" is the whole
+     * difference.
+     *
+     * The three gates on the DATA path (`resendData` and the two display builders) deliberately do NOT
+     * use this: nothing asked for them, so there is nobody to answer, and they retry on the next state
+     * change by themselves.
+     */
+    // internal, not private, so the test can drive it directly - the same reason the handlers are.
+    // Driving it through rxBus instead would re-enter the bus while the incoming event is still being
+    // collected, and the reply is then not seen by a test collector.
+    internal fun rejectIfNotReady(): Boolean {
+        if (!config.appInitialized) {
+            aapsLogger.debug(LTag.WEAR, "Refusing a watch action: app not initialized or reconfiguring")
+            sendError(rh.gs(SyncStrings.wear_phone_not_ready))
+            return true
+        }
+        return false
+    }
+
+    /**
+     * The phone's "Wear control" switch is the user's word that the watch may change therapy. The watch
+     * hides its control screens when the switch is off, but the watch is the device the switch is meant
+     * to restrain (a child's watch, a borrowed one, a stale build), so the phone must not rely on the
+     * watch UI to enforce it. Every command that changes therapy is refused here with an error reply,
+     * so the watch does not show a spinner that never resolves.
+     *
+     * Read-only requests (status, TDD, resend, health data, watchfaces) are not gated: the watch still
+     * displays data with control off. `CancelBolus` is not gated either - stopping a running bolus is a
+     * safety action, not control.
+     */
+    internal fun rejectIfWearControlOff(): Boolean {
+        if (!preferences.get(BooleanKey.WearControl)) {
+            aapsLogger.debug(LTag.WEAR, "Refusing a watch action: Wear control is off")
+            sendError(rh.gs(SyncStrings.wear_control_disabled))
             return true
         }
         return false
@@ -678,21 +773,52 @@ class DataHandlerMobile @Inject constructor(
         }
     }
 
-    private fun handleSceneStopPreCheck() {
+    // internal (not private) so DataHandlerMobileSceneTest can drive it without RxBus scaffolding.
+    internal suspend fun handleSceneStopPreCheck(command: EventData.ActionSceneStopPreCheck) {
         // Build confirm locally — no master round-trip needed before showing "End active scene".
         // The watch waits for RemoteDelivered (deferConfirm) while the stop relays to master.
         // Wider than "a scene is running": ending an expired-but-undismissed scene from the watch is a
         // valid stop (stopActiveScene dismisses it), and it is the only remote way to clear that banner.
         if (!scenes.hasSceneToStop()) return sendError(rh.gs(CoreUiStrings.scene_ended))
+        val state = activeSceneSync.getActiveState()
+        val chainTarget = state?.let { chainTargetOf(it) }
+        // Skip was offered for a follow-up that can have been disabled or deleted since the tile
+        // was drawn; with nothing to skip to, this is a plain End and the confirm says so
+        val triggerChain = command.triggerChain && chainTarget != null
+        val lines = buildList {
+            // Both confirms open the same way, "End active scene" over the scene's name, then say what
+            // differs: Skip names the scene that starts, End says which follow-up will not start -
+            // the phone's own dialog offers the two side by side, the watch has one button per choice
+            add(EventData.ConfirmActionLine(ConfirmationRole.NORMAL.name, rh.gs(CoreUiStrings.scene_end_active)))
+            state?.let { add(EventData.ConfirmActionLine(ConfirmationRole.SCENE.name, it.scene.name)) }
+            if (triggerChain) {
+                add(EventData.ConfirmActionLine(ConfirmationRole.NORMAL.name, rh.gs(CoreUiStrings.scene_skip_to_label)))
+                add(EventData.ConfirmActionLine(ConfirmationRole.SCENE.name, chainTarget!!.name))
+            } else {
+                chainTarget?.let { add(EventData.ConfirmActionLine(ConfirmationRole.INFO.name, rh.gs(CoreUiStrings.scene_end_follow_up_not_started, it.name))) }
+            }
+        }
         sendToWear(
             EventData.ConfirmAction(
                 title = rh.gs(CoreUiStrings.scenes),
                 message = "",
-                returnCommand = EventData.ActionSceneStopConfirmed(),
-                lines = listOf(EventData.ConfirmActionLine(ConfirmationRole.NORMAL.name, rh.gs(CoreUiStrings.scene_end_active))),
+                returnCommand = EventData.ActionSceneStopConfirmed(triggerChain = triggerChain),
+                lines = lines,
                 deferConfirm = config.AAPSCLIENT
             )
         )
+    }
+
+    /**
+     * The follow-up the active scene would start, resolved the way the phone's own End dialog does
+     * it: the master checks that the target can run right now, a client only that it exists and
+     * is enabled, since the master re-validates on commit. Null once the scene has expired: the
+     * master's expiry already dealt with the follow-up, so there is nothing left to skip to.
+     */
+    private suspend fun chainTargetOf(state: ActiveSceneState): Scene? = when {
+        state.lifecycle != SceneLifecycle.ACTIVE -> null
+        config.AAPSCLIENT                       -> sceneChainResolver.resolveCatalogChainTarget(state.scene)
+        else                                    -> sceneChainResolver.resolveRunnableChainTarget(state.scene)
     }
 
     // internal (not private) so DataHandlerMobileWearBolusTest can drive it without RxBus scaffolding.
@@ -993,11 +1119,9 @@ class DataHandlerMobile @Inject constructor(
                     AvailableRunningMode(AvailableRunningMode.RunningMode.LOOP_RESUME)
             }
 
-        val allStates = loop.allowedNextModes().mapNotNull { mapMode(it) }
-        // LOOP_DISABLE is dropped when LOOP_USER_SUSPEND is present to fit within 4 tile slots.
-        val states = if (allStates.any { it.state == AvailableRunningMode.RunningMode.LOOP_USER_SUSPEND })
-            allStates.filter { it.state != AvailableRunningMode.RunningMode.LOOP_DISABLE }
-        else allStates
+        // Send the FULL list. The 4-slot tile drops LOOP_DISABLE on the watch side
+        // (RunningModeSource); the running-mode picker shows every entry.
+        val states = loop.allowedNextModes().mapNotNull { mapMode(it) }
         // Only rotate the timestamp when available modes actually change.
         // Keeping the old TS when modes are identical lets in-flight tile taps (e.g. from a
         // just-woken watch) succeed without a "Please try again" race against onTileEnterEvent.
@@ -1008,6 +1132,20 @@ class DataHandlerMobile @Inject constructor(
         sendToWear(
             EventData.RunningModeList(lastAuthorizedRunningModeChangeTS!!, states)
         )
+    }
+
+    /** Domain [RM.Mode] → wear wire mode used by the loop status screen and the running-mode complication. */
+    private fun RM.Mode.toLoopMode(): LoopStatusData.LoopMode = when (this) {
+        RM.Mode.CLOSED_LOOP       -> LoopStatusData.LoopMode.CLOSED
+        RM.Mode.OPEN_LOOP         -> LoopStatusData.LoopMode.OPEN
+        RM.Mode.CLOSED_LOOP_LGS   -> LoopStatusData.LoopMode.LGS
+        RM.Mode.DISABLED_LOOP     -> LoopStatusData.LoopMode.DISABLED
+        RM.Mode.SUSPENDED_BY_USER -> LoopStatusData.LoopMode.SUSPENDED
+        RM.Mode.SUSPENDED_BY_PUMP -> LoopStatusData.LoopMode.PUMP_SUSPENDED
+        RM.Mode.SUSPENDED_BY_DST  -> LoopStatusData.LoopMode.DST_SUSPENDED
+        RM.Mode.DISCONNECTED_PUMP -> LoopStatusData.LoopMode.DISCONNECTED
+        RM.Mode.SUPER_BOLUS       -> LoopStatusData.LoopMode.SUPERBOLUS
+        else                      -> LoopStatusData.LoopMode.UNKNOWN
     }
 
     /** Wire (wear-tile) running mode → domain [RM.Mode]; null for the non-user-selectable states (gated out anyway). */
@@ -1088,7 +1226,8 @@ class DataHandlerMobile @Inject constructor(
                 insulinButtonIncrement1 = preferences.get(DoubleKey.OverviewInsulinButtonIncrement1),
                 insulinButtonIncrement2 = preferences.get(DoubleKey.OverviewInsulinButtonIncrement2),
                 carbsButtonIncrement1 = preferences.get(IntKey.OverviewCarbsButtonIncrement1),
-                carbsButtonIncrement2 = preferences.get(IntKey.OverviewCarbsButtonIncrement2)
+                carbsButtonIncrement2 = preferences.get(IntKey.OverviewCarbsButtonIncrement2),
+                pushedWatchface = preferences.get(StringKey.WearPushedWatchface)
             )
         )
         // QuickWizard
@@ -1142,9 +1281,57 @@ class DataHandlerMobile @Inject constructor(
         sendToWear(EventData.SceneList(ArrayList(enabled.map { it.toWear(now) })))
     }
 
-    fun sendActiveSceneState(active: Boolean) {
-        sendToWear(EventData.ActiveSceneState(active))
+    /**
+     * What the watch shows for the active scene: the tile's End button, its Skip button when a
+     * follow-up can start, and the Loop Status card. [active] comes from the caller so this agrees
+     * with `scenes.activeFlow`, which is wider than "running": an expired scene whose banner is
+     * still up can be ended too, and then carries its name but no follow-up.
+     */
+    suspend fun sendActiveSceneState(active: Boolean) {
+        val state = if (active) activeSceneSync.getActiveState() else null
+        sendToWear(
+            EventData.ActiveSceneState(
+                active = active,
+                sceneName = state?.scene?.name,
+                endTime = state?.endsAt,
+                chainTargetName = state?.let { chainTargetOf(it) }?.name
+            )
+        )
     }
+
+    /**
+     * The profile in force for Loop Status, or null when none is set.
+     *
+     * A temporary switch ends at its start plus its duration - not at the stored end, which the
+     * sync paths leave at zero - and the profile that returns is whichever switch is in force one
+     * millisecond after that, the same rule the phone's profile management uses. A switch the
+     * active scene made is marked, so the watch can show the scene's icon beside it.
+     *
+     * internal so DataHandlerMobileProfileInfoTest can drive it without the whole status builder.
+     */
+    internal suspend fun profileInfo(now: Long, sceneRecords: ActiveSceneState.ScopedRecords?): ProfileInfo? {
+        val switch = persistenceLayer.getEffectiveProfileSwitchActiveAt(now) ?: return null
+        val end = if (switch.originalDuration > 0) switch.timestamp + switch.originalDuration else null
+        // The scene's profile switch id is a local id on both sides: the client resolves it by
+        // Nightscout id. The link stored on the effective switch is not: a client gets the master's
+        // id from Nightscout. So the mark compares against the profile switch in force now instead.
+        val scenePsId = sceneRecords?.psId
+        val fromScene = scenePsId != null && persistenceLayer.getProfileSwitchActiveAt(now)?.id == scenePsId
+        return ProfileInfo(
+            name = switch.originalProfileName,
+            percentage = switch.originalPercentage,
+            timeshiftHours = T.msecs(switch.originalTimeshift).hours().toInt(),
+            endTime = end,
+            returnsTo = end?.let { persistenceLayer.getProfileSwitchActiveAt(it + 1)?.profileName },
+            fromScene = fromScene
+        )
+    }
+
+    /** The active scene for Loop Status, or null; same source and same follow-up rule as [sendActiveSceneState] */
+    private suspend fun activeSceneInfo(): ActiveSceneInfo? =
+        activeSceneSync.getActiveState()?.takeIf { scenes.hasSceneToStop() }?.let { state ->
+            ActiveSceneInfo(name = state.scene.name, endTime = state.endsAt, chainTargetName = chainTargetOf(state)?.name)
+        }
 
     private suspend fun sendTreatments() {
         val now = System.currentTimeMillis()
@@ -1372,6 +1559,9 @@ class DataHandlerMobile @Inject constructor(
             else                   -> 0
         }
 
+        // Current running mode (+ end time of a temporary one) for the running-mode complication and picker
+        val runningModeRecord = loop.runningModeRecord()
+
         sendToWear(
             EventData.Status(
                 dataset = 0,
@@ -1392,7 +1582,10 @@ class DataHandlerMobile @Inject constructor(
                 tempTargetDuration = tempTargetDuration,
                 reservoirString = reservoirString,
                 reservoir = reservoir,
-                reservoirLevel = reservoirLevel
+                reservoirLevel = reservoirLevel,
+                loopMode = runningModeRecord.mode.toLoopMode(),
+                modeEndTime = if (runningModeRecord.isTemporary()) runningModeRecord.timestamp + runningModeRecord.duration else null,
+                modeFromScene = runningModeRecord.id == activeSceneSync.getActiveState()?.scopedRecords?.rmId
             )
         )
     }

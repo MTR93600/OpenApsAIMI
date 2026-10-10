@@ -1,12 +1,8 @@
 package app.aaps.workflow
 
-import app.aaps.core.objects.workflow.WorkOutcome
-import dev.zacsweers.metro.Inject
-import kotlin.time.Instant
-import kotlinx.datetime.toLocalDateTime
-import kotlinx.datetime.TimeZone
 import app.aaps.core.data.aps.SMBDefaults
 import app.aaps.core.data.configuration.Constants
+import app.aaps.core.data.model.CA
 import app.aaps.core.data.model.TE
 import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.aps.AutosensData
@@ -17,11 +13,9 @@ import app.aaps.core.interfaces.calibration.CalibrationContext
 import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
-import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
-import app.aaps.core.interfaces.overview.OverviewData
 import app.aaps.core.interfaces.overview.graph.AbsIobGraphData
 import app.aaps.core.interfaces.overview.graph.ActivityGraphData
 import app.aaps.core.interfaces.overview.graph.BgDataPoint
@@ -36,7 +30,6 @@ import app.aaps.core.interfaces.overview.graph.DeviationType
 import app.aaps.core.interfaces.overview.graph.DeviationsGraphData
 import app.aaps.core.interfaces.overview.graph.GraphDataPoint
 import app.aaps.core.interfaces.overview.graph.IobGraphData
-import app.aaps.core.interfaces.overview.graph.OverviewDataCache
 import app.aaps.core.interfaces.overview.graph.RatioGraphData
 import app.aaps.core.interfaces.overview.graph.TimeRange
 import app.aaps.core.interfaces.overview.graph.VarSensGraphData
@@ -49,22 +42,24 @@ import app.aaps.core.interfaces.rx.events.EventAutosensCalculationFinished
 import app.aaps.core.interfaces.rx.events.EventBucketedDataCreated
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
-import app.aaps.core.interfaces.workflow.CalculationSignalsEmitter
 import app.aaps.core.interfaces.workflow.CalculationWorkflow
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.objects.extensions.combine
+import app.aaps.core.objects.workflow.WorkOutcome
 import app.aaps.workflow.iob.fromCarbs
+import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToLong
+import kotlin.time.Instant
 
 /**
  * Merged worker covering: BG load+smooth, bucketed data prep, BG readings prep,
@@ -74,7 +69,8 @@ import kotlin.math.roundToLong
  * [emitFinalProgress] is set when this worker is the last in the chain (HISTORY);
  * otherwise [PostCalculationWorker] emits the final signal.
  */
-class PrepareGraphDataRunner @Inject constructor(
+@Inject
+class PrepareGraphDataRunner(
     private val aapsLogger: AAPSLogger,
     private val workflowChainData: WorkflowChainData,
     private val dateUtil: DateUtil,
@@ -107,7 +103,12 @@ class PrepareGraphDataRunner @Inject constructor(
             data.iobCobCalculator.ads.loadBgData(data.end)
             data.iobCobCalculator.ads.smoothData()
             rxBus.send(EventBucketedDataCreated())
-            data.iobCobCalculator.clearCache()
+            // Not clearCache(): a new BG changes nothing in the IOB of the past, and without the cache the
+            // whole history was calculated again for every BG. Cleared here since 2021 (36040b7ed2); the two
+            // problems the clear hid are fixed: the time zone (full reset on a change) and the basal cache
+            // that held another caller's profile (removed). A diagnostic shadow of the cache found no other
+            // difference in 85,082 values over 12 hours. History changes still invalidate from their time.
+            data.iobCobCalculator.bgDataReloaded()
         }
         if (isStopped()) return WorkOutcome.Stopped
 
@@ -122,7 +123,10 @@ class PrepareGraphDataRunner @Inject constructor(
         if (isStopped()) return WorkOutcome.Stopped
 
         // ===== Phases 4 & 5: IOB/COB autosens + graph data prep (was IobCobOref* + PrepareIobAutosens) =====
-        if (activePlugin.activeSensitivity.isOref1) runIobCobOref1(data, isStopped) else runIobCobOref(data, isStopped)
+        // True once this run no longer owns the chain: it was stopped, or a newer generation took the
+        // slot. Asked again right before the result is published, see publishAds().
+        val superseded = { isStopped() || workflowChainData.prepareFor(job, generation) == null }
+        if (activePlugin.activeSensitivity.isOref1) runIobCobOref1(data, isStopped, superseded) else runIobCobOref(data, isStopped, superseded)
         if (isStopped()) return WorkOutcome.Stopped
         prepareIobAutosensGraphData(data, isStopped)
         if (isStopped()) return WorkOutcome.Stopped
@@ -136,6 +140,22 @@ class PrepareGraphDataRunner @Inject constructor(
         return WorkOutcome.Success
     }
 
+    /**
+     * The carbs belonging to one 5 minute bucket, taken from the span read once per calculation pass.
+     *
+     * This used to be a database query of its own for every bucket, with `from = bgTime - 5min + 1` and
+     * `to = bgTime`. That query keeps rows where `(timestamp + duration) > from AND timestamp <= to`,
+     * expands any entry that has a duration into 15 minute ticks, and then drops the expanded entries
+     * outside `from..to`. Both bounds only widen when the whole span is read at once, and the expansion
+     * of an entry does not depend on the window, so the single read is a superset of every per-bucket
+     * read and the timestamp test below selects the same rows out of it.
+     *
+     * The `+1` is the #4596 guard: without it two neighbouring buckets both count a carb that falls on
+     * the boundary they share. `internal` so it can be unit-tested.
+     */
+    internal fun carbsForBucket(windowCarbs: List<CA>, bgTime: Long): List<CA> =
+        windowCarbs.filter { it.timestamp in (bgTime - T.mins(5).msecs() + 1)..bgTime }
+
     // ---------- Phase 1 helpers (LoadBgDataWorker logic) ----------
 
     private suspend fun AutosensDataStore.loadBgData(to: Long) {
@@ -147,6 +167,18 @@ class PrepareGraphDataRunner @Inject constructor(
             bgReadings = readings
             aapsLogger.debug(LTag.AUTOSENS) { "BG data loaded. Size: ${bgReadings.size} Start date: ${dateUtil.dateAndTimeString(start)} End date: ${dateUtil.dateAndTimeString(to)}" }
             createBucketedData(aapsLogger, dateUtil)
+            // Drop autosens entries that fell out of the window this run works on. Nothing can ask for
+            // them any more: every reader is bounded either by the bucketed data built above or by the
+            // detection start, and both live inside [start, to].
+            //
+            // The cut is `start`, so it follows this run's own `to` and never the wall clock. The
+            // history browser runs the same code on its own store with `to` in the past, and a cut
+            // taken from `now` would empty that store on every step.
+            //
+            // This runs on the LIVE store in phase 1, on purpose. Phase 4 works on a clone whose
+            // publish is skipped when the run is superseded, which is exactly the case where the table
+            // needs pruning most, and it mutates that clone's table outside this lock.
+            pruneOlderThan(start, aapsLogger, dateUtil)
         }
     }
 
@@ -229,7 +261,7 @@ class PrepareGraphDataRunner @Inject constructor(
 
     // ---------- Phase 4: IOB/COB oref1 (was IobCobOref1Worker) ----------
 
-    private suspend fun runIobCobOref1(data: PrepareGraphData, isStopped: () -> Boolean) {
+    private suspend fun runIobCobOref1(data: PrepareGraphData, isStopped: () -> Boolean, superseded: () -> Boolean) {
         val start = dateUtil.now()
         try {
             aapsLogger.debug(LTag.AUTOSENS, "AUTOSENSDATA thread started: ${data.reason}")
@@ -254,6 +286,20 @@ class PrepareGraphDataRunner @Inject constructor(
             val sensitivityProfile = profileFunction.getProfile()
             val siteChanges = persistenceLayer.getTherapyEventDataFromTime(oldestTimeWithData, TE.Type.CANNULA_CHANGE, true)
             val profileSwitches = persistenceLayer.getProfileSwitchesFromTime(oldestTimeWithData, true)
+            // Same idea for the carbs. This used to be one database call per bucketed data point, so a cold
+            // start over the full 24h + DIA window made about 400 round trips, each a suspend call hopping to
+            // the IO dispatcher. On the incremental path only the newest bucket or two is computed, which is
+            // why it was never felt there.
+            //
+            // One call over the whole span is a superset of every per-bucket call: the query keeps rows with
+            // (timestamp + duration) > from AND timestamp <= to, both bounds widen here, and the expansion of
+            // a carb entry depends only on the entry itself. So the filter in the loop picks exactly the same
+            // rows out of it.
+            val windowCarbs = persistenceLayer.getCarbsFromTimeToTimeExpanded(
+                ads.roundUpTime(bucketedData[bucketedData.size - 1].timestamp) - T.mins(5).msecs() + 1,
+                ads.roundUpTime(bucketedData[0].timestamp),
+                true
+            )
             // start from oldest to be able sub cob
             for (i in bucketedData.size - 4 downTo 0) {
                 data.signals.emitProgress(CalculationWorkflow.ProgressData.IOB_COB_OREF, 100 - (100.0 * i / bucketedData.size).toInt())
@@ -329,7 +375,7 @@ class PrepareGraphDataRunner @Inject constructor(
                 }
                 // Use exclusive start (+1ms) to avoid double-counting carbs at window boundaries
                 // when consecutive 5-min windows share a boundary timestamp (issue #4596)
-                val recentCarbTreatments = persistenceLayer.getCarbsFromTimeToTimeExpanded(bgTime - T.mins(5).msecs() + 1, bgTime, true)
+                val recentCarbTreatments = carbsForBucket(windowCarbs, bgTime)
                 for (recentCarbTreatment in recentCarbTreatments) {
                     autosensData.carbsFromBolus += recentCarbTreatment.amount
                     val isAAPSOrWeighted = activePlugin.activeSensitivity.isMinCarbsAbsorptionDynamic
@@ -439,13 +485,7 @@ class PrepareGraphDataRunner @Inject constructor(
                 autosensData.autosensResult = sensitivity
                 aapsLogger.debug(LTag.AUTOSENS) { autosensData.toString() }
             }
-            data.iobCobCalculator.ads = ads
-            // On the app scope, not a bare Thread: same fire-and-forget timing as before, but plain
-            // Kotlin. NOTE this still outlives a superseded chain, exactly as the thread did.
-            scope.launch {
-                delay(1000)
-                rxBus.send(EventAutosensCalculationFinished(data.triggeredByNewBG))
-            }
+            publishAds(data, ads, superseded)
         } finally {
             data.signals.emitProgress(CalculationWorkflow.ProgressData.IOB_COB_OREF, 100)
             aapsLogger.debug(LTag.AUTOSENS) { "AUTOSENSDATA thread ended: ${data.reason}" }
@@ -455,7 +495,7 @@ class PrepareGraphDataRunner @Inject constructor(
 
     // ---------- Phase 4: IOB/COB oref (was IobCobOrefWorker) ----------
 
-    private suspend fun runIobCobOref(data: PrepareGraphData, isStopped: () -> Boolean) {
+    private suspend fun runIobCobOref(data: PrepareGraphData, isStopped: () -> Boolean, superseded: () -> Boolean) {
         val start = dateUtil.now()
         try {
             aapsLogger.debug(LTag.AUTOSENS) { "AUTOSENSDATA thread started: ${data.reason}" }
@@ -480,6 +520,13 @@ class PrepareGraphDataRunner @Inject constructor(
             val sensitivityProfile = profileFunction.getProfile()
             val siteChanges = persistenceLayer.getTherapyEventDataFromTime(oldestTimeWithData, TE.Type.CANNULA_CHANGE, true)
             val profileSwitches = persistenceLayer.getProfileSwitchesFromTime(oldestTimeWithData, true)
+            // One call for the whole span instead of one per bucketed data point - see the same hoist in the
+            // first calculation block above for why it is equivalent.
+            val windowCarbs = persistenceLayer.getCarbsFromTimeToTimeExpanded(
+                ads.roundUpTime(bucketedData[bucketedData.size - 1].timestamp) - T.mins(5).msecs() + 1,
+                ads.roundUpTime(bucketedData[0].timestamp),
+                true
+            )
             // start from oldest to be able to sub cob
             for (i in bucketedData.size - 4 downTo 0) {
                 data.signals.emitProgress(CalculationWorkflow.ProgressData.IOB_COB_OREF, 100 - (100.0 * i / bucketedData.size).toInt())
@@ -553,7 +600,7 @@ class PrepareGraphDataRunner @Inject constructor(
                     }
                 }
                 // Use exclusive start (+1ms) to avoid double-counting carbs at window boundaries (issue #4596)
-                val recentCarbTreatments = persistenceLayer.getCarbsFromTimeToTimeExpanded(bgTime - T.mins(5).msecs() + 1, bgTime, true)
+                val recentCarbTreatments = carbsForBucket(windowCarbs, bgTime)
                 for (recentCarbTreatment in recentCarbTreatments) {
                     autosensData.carbsFromBolus += recentCarbTreatment.amount
                     val isAAPSOrWeighted = activePlugin.activeSensitivity.isMinCarbsAbsorptionDynamic
@@ -625,17 +672,39 @@ class PrepareGraphDataRunner @Inject constructor(
                 autosensData.autosensResult = sensitivity
                 aapsLogger.debug(LTag.AUTOSENS, autosensData.toString())
             }
-            data.iobCobCalculator.ads = ads
-            // On the app scope, not a bare Thread: same fire-and-forget timing as before, but plain
-            // Kotlin. NOTE this still outlives a superseded chain, exactly as the thread did.
-            scope.launch {
-                delay(1000)
-                rxBus.send(EventAutosensCalculationFinished(data.triggeredByNewBG))
-            }
+            publishAds(data, ads, superseded)
         } finally {
             data.signals.emitProgress(CalculationWorkflow.ProgressData.IOB_COB_OREF, 100)
             aapsLogger.debug(LTag.AUTOSENS) { "AUTOSENSDATA thread ended: ${data.reason}" }
             profiler.log(LTag.AUTOSENS, "IobCobThread", start)
+        }
+    }
+
+    /**
+     * Puts the locally computed store back into the live calculator, but only while this run still
+     * owns the chain.
+     *
+     * The run works on a clone taken at the start of the phase. `stopCalculation()` returns as soon as
+     * WorkManager marks the work as no longer RUNNING, which happens before the running coroutine sees
+     * its own stop flag - the next check sits at the top of the bucket loop, up to one bucket away.
+     * The caller then invalidates the live store and starts a new chain while this run is still alive.
+     * Without the check below this run would write its clone, taken before that invalidation, over the
+     * state the new chain has already prepared: a lost update (issue #5066).
+     *
+     * The check makes the window small but cannot close it completely, because the caller invalidates
+     * the store before it registers the new generation.
+     *
+     * [EventAutosensCalculationFinished] is sent either way. It only asks its listeners to refresh, and
+     * the graph data in `data.cache` was written by this run whether or not the store was published.
+     */
+    private fun publishAds(data: PrepareGraphData, ads: AutosensDataStore, superseded: () -> Boolean) {
+        if (superseded()) aapsLogger.debug(LTag.AUTOSENS) { "Skipping ads publish (superseded): ${data.reason}" }
+        else data.iobCobCalculator.ads = ads
+        // On the app scope, not a bare Thread: same fire-and-forget timing as before, but plain
+        // Kotlin. NOTE this still outlives a superseded chain, exactly as the thread did.
+        scope.launch {
+            delay(1000)
+            rxBus.send(EventAutosensCalculationFinished(data.triggeredByNewBG))
         }
     }
 

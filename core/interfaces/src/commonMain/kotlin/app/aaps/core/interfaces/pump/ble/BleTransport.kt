@@ -36,12 +36,27 @@ interface BleAdapter {
     fun isDeviceBonded(address: String): Boolean
     fun createBond(address: String): Boolean
     fun removeBond(address: String)
+
+    /**
+     * Bond state with "in progress" kept apart from "done". [isDeviceBonded] cannot tell them apart.
+     * A pump that only accepts an encrypted link must not get its first command while bonding is
+     * still running. Transports that do not track this report only [BondState.BONDED] or [BondState.NONE].
+     */
+    fun bondState(address: String): BondState = if (isDeviceBonded(address)) BondState.BONDED else BondState.NONE
+}
+
+enum class BondState {
+
+    NONE,
+    BONDING,
+    BONDED
 }
 
 data class ScannedDevice(
     val name: String,
     val address: String,
-    val scanRecordBytes: ByteArray? = null
+    val scanRecordBytes: ByteArray? = null,
+    val rssi: Int = Int.MIN_VALUE
 )
 
 interface BleScanner {

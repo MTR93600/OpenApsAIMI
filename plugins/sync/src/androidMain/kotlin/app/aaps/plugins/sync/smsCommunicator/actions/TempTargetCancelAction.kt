@@ -1,44 +1,33 @@
 package app.aaps.plugins.sync.smsCommunicator.actions
 
-import app.aaps.plugins.sync.SyncStrings
-import app.aaps.core.data.ue.Action
-import app.aaps.core.data.ue.Sources
-import app.aaps.core.data.ue.ValueWithUnit
-import app.aaps.core.interfaces.db.PersistenceLayer
-import app.aaps.core.interfaces.logging.UserEntryLogger
-import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.data.model.TT
+import app.aaps.core.interfaces.bolus.BatchAction
+import app.aaps.core.interfaces.bolus.WizardBolusExecutor
+import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.smsCommunicator.Sms
-import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.core.interfaces.smsCommunicator.SmsCommunicator
+import app.aaps.plugins.sync.SyncStrings
 import app.aaps.plugins.sync.smsCommunicator.SmsAction
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
+import app.aaps.plugins.sync.smsCommunicator.SmsBatchResult
+import app.aaps.plugins.sync.smsCommunicator.runSmsBatch
 
-/** Cancels an active temp target: TARGET STOP/CANCEL. */
+/**
+ * Cancels an active temp target through [WizardBolusExecutor]: TARGET STOP/CANCEL. A temp target with duration 0
+ * is how a batch says "cancel", the same as the phone's temp target screen.
+ */
 class TempTargetCancelAction(
     private val receivedSms: Sms,
-    private val persistenceLayer: PersistenceLayer,
-    private val dateUtil: DateUtil,
-    private val rh: ResourceHelper,
-    private val uel: UserEntryLogger,
-    private val appScope: CoroutineScope,
+    private val wizardBolusExecutor: WizardBolusExecutor,
+    private val rh: TextResolver,
+    private val smsCommunicator: SmsCommunicator,
     private val sendSMSToAllNumbers: (Sms) -> Unit
 ) : SmsAction(pumpCommand = false) {
 
     override suspend fun run() {
-        appScope.launch {
-            persistenceLayer.cancelCurrentTemporaryTargetIfAny(
-                timestamp = dateUtil.now(),
-                action = Action.CANCEL_TT,
-                source = Sources.SMS,
-                note = rh.gs(SyncStrings.smscommunicator_tt_canceled),
-                listValues = listOf(ValueWithUnit.SimpleString(rh.gsNotLocalised(SyncStrings.smscommunicator_tt_canceled)))
-            )
+        val cancel = BatchAction.TempTarget(reason = TT.Reason.CUSTOM.text, lowMgdl = 0.0, highMgdl = 0.0, durationMinutes = 0, startOffsetMinutes = 0)
+        when (val result = wizardBolusExecutor.runSmsBatch(listOf(cancel))) {
+            is SmsBatchResult.Done    -> sendSMSToAllNumbers(Sms(receivedSms.phoneNumber, rh.gs(SyncStrings.smscommunicator_tt_canceled)))
+            is SmsBatchResult.NotDone -> smsCommunicator.sendSMS(Sms(receivedSms.phoneNumber, result.reply(rh.gs(SyncStrings.smscommunicator_remote_command_not_possible))))
         }
-        val replyText = rh.gs(SyncStrings.smscommunicator_tt_canceled)
-        sendSMSToAllNumbers(Sms(receivedSms.phoneNumber, replyText))
-        uel.log(
-            Action.CANCEL_TT, Sources.SMS, rh.gs(SyncStrings.smscommunicator_tt_canceled),
-            ValueWithUnit.SimpleString(rh.gsNotLocalised(SyncStrings.smscommunicator_tt_canceled))
-        )
     }
 }

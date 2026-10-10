@@ -8,6 +8,7 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
+import org.mockito.kotlin.mock
 
 class SyaiPluginTest : TestBase() {
 
@@ -19,7 +20,7 @@ class SyaiPluginTest : TestBase() {
 
     @BeforeEach
     fun setup() {
-        syaiPlugin = SyaiPlugin(rh, aapsLogger, preferences, config)
+        syaiPlugin = SyaiPlugin(rh, aapsLogger, preferences, config, mock())
     }
 
     @Test

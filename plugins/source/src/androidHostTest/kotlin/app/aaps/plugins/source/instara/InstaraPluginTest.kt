@@ -5,13 +5,14 @@ import app.aaps.shared.tests.TestBaseWithProfile
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.kotlin.mock
 
 class InstaraPluginTest : TestBaseWithProfile() {
 
     private lateinit var instaraPlugin: InstaraPlugin
 
     @BeforeEach fun prepare() {
-        instaraPlugin = InstaraPlugin(context, rh, aapsLogger, preferences, config)
+        instaraPlugin = InstaraPlugin(context, rh, aapsLogger, preferences, config, mock())
     }
 
     @Test

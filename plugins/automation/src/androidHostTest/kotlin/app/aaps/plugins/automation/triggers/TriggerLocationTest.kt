@@ -1,7 +1,6 @@
 package app.aaps.plugins.automation.triggers
 
 import app.aaps.plugins.automation.AutomationStrings
-import app.aaps.plugins.automation.R
 import app.aaps.plugins.automation.asJsonObject
 import app.aaps.plugins.automation.elements.InputLocationMode
 import com.google.common.truth.Truth.assertThat
@@ -103,6 +102,6 @@ class TriggerLocationTest : TriggerTestBase() {
     }
 
     @Test fun friendlyDescriptionTest() = runTest {
-        assertThat(TriggerLocation(triggerDeps).friendlyDescription()).isEqualTo("locationis") // nothing stubbed, so the name is the fallback
+        assertThat(TriggerLocation(triggerDeps).friendlyDescription()).isEqualTo("When you are inside the area  ")
     }
 }

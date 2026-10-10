@@ -7,13 +7,14 @@ import app.aaps.pump.eopatch.core.ble.PatchFunc
 import app.aaps.pump.eopatch.core.code.PatchBleResultCode
 import app.aaps.pump.eopatch.core.response.BolusStopResponse
 import app.aaps.pump.eopatch.core.scan.IBleDevice
-import io.reactivex.rxjava3.core.Single
-import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import io.reactivex.rxjava3.core.Single
 
 @SingleIn(AppScope::class)
-class BolusStop @Inject constructor(patch: IBleDevice, aapsLogger: AAPSLogger) : BaseAPI<BolusStopResponse>(PatchFunc.STOP_BOLUS, patch, aapsLogger) {
+@Inject
+class BolusStop(patch: IBleDevice, aapsLogger: AAPSLogger) : BaseAPI<BolusStopResponse>(PatchFunc.STOP_BOLUS, patch, aapsLogger) {
     override fun parse(bytes: ByteArray): BolusStopResponse {
         val ret = bytes[DATA0].toInt()
         val id = BytesConverter.toUInt(bytes[DATA1], bytes[DATA2])

@@ -6,13 +6,14 @@ import app.aaps.pump.eopatch.core.ble.PatchFunc
 import app.aaps.pump.eopatch.core.code.PatchBleResultCode
 import app.aaps.pump.eopatch.core.response.BondingResponse
 import app.aaps.pump.eopatch.core.scan.IBleDevice
-import io.reactivex.rxjava3.core.Single
-import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import io.reactivex.rxjava3.core.Single
 
 @SingleIn(AppScope::class)
-class StartBonding @Inject constructor(patch: IBleDevice, aapsLogger: AAPSLogger) : BaseAPI<BondingResponse>(PatchFunc.REQUEST_BONDING, patch, aapsLogger) {
+@Inject
+class StartBonding(patch: IBleDevice, aapsLogger: AAPSLogger) : BaseAPI<BondingResponse>(PatchFunc.REQUEST_BONDING, patch, aapsLogger) {
     override fun parse(bytes: ByteArray): BondingResponse {
         val ret = bytes[DATA0].toInt()
         val resultCode = if (ret == REQUEST_FAIL) PatchBleResultCode.UNKNOWN_ERROR else PatchBleResultCode.SUCCESS

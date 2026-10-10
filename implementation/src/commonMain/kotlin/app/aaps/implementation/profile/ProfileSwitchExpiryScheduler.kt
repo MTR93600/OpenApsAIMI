@@ -8,13 +8,13 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventProfileChangeRequested
 import app.aaps.core.interfaces.utils.DateUtil
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.SingleIn
 
 /**
  * Fires [EventProfileChangeRequested] at the exact end of an active *temporary* ProfileSwitch.
@@ -35,7 +35,8 @@ import dev.zacsweers.metro.SingleIn
  * which creates the EffectiveProfileSwitch on master while clients sync it over NS.
  */
 @SingleIn(AppScope::class)
-class ProfileSwitchExpiryScheduler @Inject constructor(
+@Inject
+class ProfileSwitchExpiryScheduler(
     private val persistenceLayer: PersistenceLayer,
     private val rxBus: RxBus,
     private val dateUtil: DateUtil,

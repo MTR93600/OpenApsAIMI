@@ -8,6 +8,8 @@ import androidx.datastore.preferences.preferencesDataStore
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.maintenance.FileListProvider
 import app.aaps.core.interfaces.protection.ExportPasswordPlatform
+import app.aaps.implementation.protection.AndroidExportPasswordPlatform.Companion.DATASTORE_NAME
+import app.aaps.implementation.protection.AndroidExportPasswordPlatform.Companion.PASSWORD_PREFERENCE_NAME
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
@@ -30,7 +32,8 @@ import kotlinx.coroutines.runBlocking
  */
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
-class AndroidExportPasswordPlatform @Inject constructor(
+@Inject
+class AndroidExportPasswordPlatform(
     private val context: Context,
     private val config: Config,
     private val fileListProvider: FileListProvider

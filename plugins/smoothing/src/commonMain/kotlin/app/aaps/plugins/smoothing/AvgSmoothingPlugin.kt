@@ -8,6 +8,7 @@ import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.TextResolver
@@ -29,15 +30,15 @@ import kotlin.math.abs
 @IntKey(620)
 class AvgSmoothingPlugin(
     aapsLogger: AAPSLogger,
-    rh: TextResolver
+    rh: TextResolver,
+    notificationManager: NotificationManager
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.SMOOTHING)
         .icon(Icons.Default.Timeline)
         .pluginName(SmoothingStrings.avg_smoothing_name)
-        .shortName(SmoothingStrings.smoothing_shortname)
         .description(SmoothingStrings.description_avg_smoothing),
-    aapsLogger, rh
+    aapsLogger, rh, notificationManager
 ), Smoothing {
 
     /**

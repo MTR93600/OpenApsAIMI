@@ -4,10 +4,10 @@ import app.aaps.core.interfaces.location.LocationServiceController
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.PermissionGroup
+import app.aaps.plugins.automation.GeoPosition
 import app.aaps.plugins.automation.LastKnownLocation
 import app.aaps.plugins.automation.LocationPermissions
 import app.aaps.plugins.automation.PairedBtDevices
-import app.aaps.plugins.automation.GeoPosition
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
@@ -36,7 +36,8 @@ import dev.zacsweers.metro.SingleIn
  */
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
-class DesktopPairedBtDevices @Inject constructor(
+@Inject
+class DesktopPairedBtDevices(
     private val aapsLogger: AAPSLogger
 ) : PairedBtDevices {
 
@@ -49,7 +50,8 @@ class DesktopPairedBtDevices @Inject constructor(
 
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
-class DesktopLastKnownLocation @Inject constructor(
+@Inject
+class DesktopLastKnownLocation(
     private val aapsLogger: AAPSLogger
 ) : LastKnownLocation {
 
@@ -80,7 +82,8 @@ class DesktopLastKnownLocation @Inject constructor(
  */
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
-class DesktopLocationPermissions @Inject constructor() : LocationPermissions {
+@Inject
+class DesktopLocationPermissions() : LocationPermissions {
 
     override fun groups(): List<PermissionGroup> = emptyList()
 }
@@ -93,7 +96,8 @@ class DesktopLocationPermissions @Inject constructor() : LocationPermissions {
  */
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
-class DesktopLocationServiceController @Inject constructor(
+@Inject
+class DesktopLocationServiceController(
     private val aapsLogger: AAPSLogger
 ) : LocationServiceController {
 

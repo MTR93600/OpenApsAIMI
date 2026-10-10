@@ -1,20 +1,20 @@
 package app.aaps.plugins.sync.smsCommunicator.actions
 
-import app.aaps.plugins.sync.SyncStrings
 import app.aaps.core.data.ue.Action
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.data.ue.ValueWithUnit
 import app.aaps.core.interfaces.configuration.ConfigBuilder
 import app.aaps.core.interfaces.logging.UserEntryLogger
-import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.smsCommunicator.Sms
 import app.aaps.core.interfaces.smsCommunicator.SmsCommunicator
+import app.aaps.plugins.sync.SyncStrings
 import app.aaps.plugins.sync.smsCommunicator.SmsAction
 
 /** Restarts AAPS: RESTART. */
 class RestartAction(
     private val receivedSms: Sms,
-    private val rh: ResourceHelper,
+    private val rh: TextResolver,
     private val uel: UserEntryLogger,
     private val configBuilder: ConfigBuilder,
     private val smsCommunicator: SmsCommunicator

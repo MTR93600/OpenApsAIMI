@@ -1,5 +1,7 @@
 package app.aaps.implementation.maintenance
 
+import app.aaps.implementation.maintenance.DesktopFolders.data
+import app.aaps.implementation.maintenance.DesktopFolders.root
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
@@ -21,7 +23,8 @@ import java.util.Locale
  */
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
-class JvmPrefsFileAccess @Inject constructor(
+@Inject
+class JvmPrefsFileAccess(
     /** Overridden in a test so it neither reads the user's exports nor leaves files behind. */
     private val directory: File = DesktopFolders.preferences,
     /** The CSV goes elsewhere, for the reason given on [write]. */

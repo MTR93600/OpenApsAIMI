@@ -17,8 +17,6 @@
     <string name="permission_directory_description">Sélectionnez un répertoire pour les paramètres de l\'application et les fichiers journaux</string>
     <string name="permission_notifications_title">Notifications</string>
     <string name="permission_notifications_description">Requis pour afficher les alertes, les alarmes et les mises à jour des états de la pompe</string>
-    <string name="permission_fsi_title">Alarmes plein écran</string>
-    <string name="permission_fsi_description">Requis pour que les alarmes puissent réveiller l\'écran et s\'afficher en plein écran lorsque le téléphone est verrouillé</string>
     <!--       ConcentrationHelper / DecimalFormatter-->
     <string name="bolus_with_volume">%1$s\u00a0U (%2$.1f\u00a0µl)</string>
     <string name="insulin_concentration">U%1$d</string>
@@ -45,7 +43,6 @@
     <string name="metadata_warning_date_format">Format date et heure non valide !</string>
     <string name="metadata_warning_different_version">Préférences d\'une autre version mineure, différente de l\'application. C\'est OK si vous importez après la mise à jour, mais vérifiez après l\'importation si les préférences sont toujours correctes !</string>
     <string name="metadata_urgent_different_version">Préférences d\'une autre version majeure, différente de l\'application. Les versions majeures diffèrent significativement et peuvent avoir des préférences incompatibles ! Vérifiez bien après l\'import que les préférences sont toujours correctes !</string>
-    <string name="prefdecrypt_settings_tampered">Fichier paramètres altérés</string>
     <string name="prefdecrypt_settings_secure">Fichier paramètres sécurisé</string>
     <string name="prefdecrypt_settings_unencrypted">Utilisation de paramètres de format non sécurisés et non chiffrés</string>
     <string name="prefdecrypt_wrong_json">Erreur de format JSON, champs obligatoire manquants (format, contenu, métadonnées ou sécurité)</string>

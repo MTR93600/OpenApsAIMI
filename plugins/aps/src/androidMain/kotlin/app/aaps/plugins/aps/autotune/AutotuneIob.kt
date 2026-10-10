@@ -28,16 +28,17 @@ import app.aaps.core.objects.extensions.toJson
 import app.aaps.core.objects.extensions.toTemporaryBasal
 import app.aaps.core.utils.MidnightUtils
 import app.aaps.plugins.aps.autotune.data.ATProfile
+import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
-import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.SingleIn
 import kotlin.math.ceil
 
 @SingleIn(AppScope::class)
-open class AutotuneIob @Inject constructor(
+@Inject
+open class AutotuneIob(
     private val aapsLogger: AAPSLogger,
     private val persistenceLayer: PersistenceLayer,
     private val profileFunction: ProfileFunction,

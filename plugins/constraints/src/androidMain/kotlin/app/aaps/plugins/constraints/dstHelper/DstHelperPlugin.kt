@@ -1,7 +1,5 @@
 package app.aaps.plugins.constraints.dstHelper
 
-import app.aaps.core.ui.CoreUiStrings
-import app.aaps.plugins.constraints.ConstraintsStrings
 import app.aaps.core.data.model.RM
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.time.T
@@ -15,13 +13,15 @@ import app.aaps.core.interfaces.notifications.NotificationAction
 import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.ActivePlugin
+import app.aaps.core.interfaces.plugin.EnforcedState
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginBaseWithPreferences
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.core.ui.CoreUiStrings
+import app.aaps.plugins.constraints.ConstraintsStrings
 import app.aaps.plugins.constraints.dstHelper.keys.DstHelperLongKey
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
@@ -37,22 +37,23 @@ import java.util.Calendar
 @ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
 @IntKey(850)
 @SingleIn(AppScope::class)
-class DstHelperPlugin @Inject constructor(
+@Inject
+class DstHelperPlugin(
     aapsLogger: AAPSLogger,
     rh: ResourceHelper,
     preferences: Preferences,
     private val activePlugin: ActivePlugin,
-    private val notificationManager: NotificationManager,
+    notificationManager: NotificationManager,
     private val loop: Loop,
     private val profileFunction: ProfileFunction
 ) : PluginBaseWithPreferences(
     pluginDescription = PluginDescription()
         .mainType(PluginType.GENERAL)
-        .alwaysEnabled(true)
+        .enforce(EnforcedState.Enabled)
         .showInList { false }
         .pluginName(ConstraintsStrings.dst_plugin_name),
     ownPreferences = DstHelperLongKey.entries,
-    aapsLogger, rh, preferences
+    aapsLogger, rh, preferences, notificationManager
 ), DstHelper {
 
     companion object {

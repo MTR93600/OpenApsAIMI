@@ -77,7 +77,8 @@ import kotlin.math.floor
 import kotlin.math.ln
 
 @SingleIn(AppScope::class)
-open class OpenAPSSMBPlugin @Inject constructor(
+@Inject
+open class OpenAPSSMBPlugin(
     aapsLogger: AAPSLogger,
     private val rxBus: RxBus,
     private val constraintsChecker: ConstraintsChecker,
@@ -95,7 +96,7 @@ open class OpenAPSSMBPlugin @Inject constructor(
     private val glucoseStatusProvider: GlucoseStatusProvider,
     private val tddCalculator: TddCalculator,
     private val bgQualityCheck: BgQualityCheck,
-    private val notificationManager: NotificationManager,
+    notificationManager: NotificationManager,
     private val determineBasalSMB: DetermineBasalSMB,
     private val profiler: Profiler,
     private val glucoseStatusCalculatorSMB: GlucoseStatusCalculatorSMB,
@@ -115,13 +116,12 @@ open class OpenAPSSMBPlugin @Inject constructor(
         }
         .icon(IcPluginOpenAPS)
         .pluginName(ApsStrings.openapssmb)
-        .shortName(CoreUiStrings.smb_shortname)
         .preferencesVisibleInSimpleMode(false)
         .showInList { config.APS || config.AAPSCLIENT }   // AAPSCLIENT: visible so a client can select the master's APS
         .description(ApsStrings.description_smb)
         .setDefault(),
     ownPreferences = ApsIntentKey.entries,
-    aapsLogger, rh, preferences
+    aapsLogger, rh, preferences, notificationManager
 ), APS, PluginConstraints {
 
     override suspend fun onStart() {
@@ -181,23 +181,11 @@ open class OpenAPSSMBPlugin @Inject constructor(
         return sensitivity
     }
 
-    override fun specialEnableCondition(): Boolean {
-        return try {
-            activePlugin.activePump.pumpDescription.isTempBasalCapable
-        } catch (_: Exception) {
-            // may fail during initialization
-            true
-        }
-    }
-
-    override fun specialShowInListCondition(): Boolean {
-        try {
-            val pump = activePlugin.activePump
-            return pump.pumpDescription.isTempBasalCapable
-        } catch (_: Exception) {
-            return true
-        }
-    }
+    // No temp basal check here. A pump that cannot do temp basals is handled by
+    // SafetyPlugin.isLoopInvocationAllowed, which forces the running mode to DISABLED_LOOP with a reason
+    // the user can read, is re-evaluated on every run, and cannot be switched off. Repeating it as a
+    // plugin condition only added a second source of truth on the wrong axis: enablement is static per
+    // build, while pump capability changes when the user switches pumps.
 
     private val dynIsfCache = LongSparseArray<Double>()
 

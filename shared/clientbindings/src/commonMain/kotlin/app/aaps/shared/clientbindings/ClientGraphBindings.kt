@@ -1,5 +1,6 @@
 package app.aaps.shared.clientbindings
 
+import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.constraints.Objectives
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.db.ProcessedTbrEbData
@@ -8,27 +9,22 @@ import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.L
+import app.aaps.core.interfaces.maintenance.ImportExportPrefs
 import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.notifications.SystemNotificationPlatform
 import app.aaps.core.interfaces.overview.OverviewData
 import app.aaps.core.interfaces.overview.graph.OverviewDataCache
-import app.aaps.core.interfaces.configuration.Config
-import app.aaps.core.interfaces.maintenance.ImportExportPrefs
 import app.aaps.core.interfaces.plugin.ActivePlugin
+import app.aaps.core.interfaces.plugin.PluginBase
+import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.protection.ExportPasswordDataStore
 import app.aaps.core.interfaces.protection.PasswordHasher
 import app.aaps.core.interfaces.protection.SecureEncrypt
-import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
-import app.aaps.implementation.maintenance.LocalImportExportPrefs
-import app.aaps.implementation.maintenance.cloud.CloudStorageManager
-import app.aaps.implementation.maintenance.PrefsFileAccess
-import app.aaps.implementation.maintenance.PrefsFileLister
-import app.aaps.core.interfaces.plugin.PluginBase
-import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.queue.CommandQueue
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.rx.bus.RxBus
+import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import app.aaps.core.interfaces.userEntry.UserEntryPresentationHelper
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
@@ -36,6 +32,11 @@ import app.aaps.core.interfaces.workflow.CalculationSignalsEmitter
 import app.aaps.core.interfaces.workflow.CalculationWorkflow
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.pump.PumpCommunicationStatus
+import app.aaps.implementation.maintenance.LocalImportExportPrefs
+import app.aaps.implementation.maintenance.PreferenceImportApplier
+import app.aaps.implementation.maintenance.PrefsFileAccess
+import app.aaps.implementation.maintenance.PrefsFileLister
+import app.aaps.implementation.maintenance.cloud.CloudStorageManager
 import app.aaps.implementation.notifications.CommonNotificationManager
 import app.aaps.implementation.resources.GeneratedTextResolver
 import app.aaps.implementation.resources.isCompactScreen
@@ -44,7 +45,6 @@ import app.aaps.plugins.constraints.objectives.objectives.DurationText
 import app.aaps.plugins.constraints.objectives.objectives.Objective
 import app.aaps.plugins.constraints.objectives.objectives.PlainDurationText
 import app.aaps.plugins.main.iob.iobCobCalculator.IobCobCalculatorPlugin
-import app.aaps.plugins.sync.nsclientV3.NSClientV3Plugin
 import app.aaps.plugins.sync.nsclientV3.ws.NsConnection
 import app.aaps.plugins.sync.nsclientV3.ws.SocketNsConnection
 import app.aaps.shared.impl.logging.LImpl
@@ -149,7 +149,8 @@ object ClientGraphBindings {
         @ApplicationScope appScope: CoroutineScope,
         secureEncrypt: SecureEncrypt,
         textResolver: TextResolver,
-        cloudStorageManager: CloudStorageManager
+        cloudStorageManager: CloudStorageManager,
+        applier: PreferenceImportApplier
     ): ImportExportPrefs = LocalImportExportPrefs(
         aapsLogger = aapsLogger,
         preferences = preferences,
@@ -165,6 +166,7 @@ object ClientGraphBindings {
         persistenceLayer = persistenceLayer,
         userEntryPresentationHelper = userEntryPresentationHelper,
         appScope = appScope,
+        applier = applier,
         secureEncrypt = secureEncrypt,
         textResolver = textResolver
     )
@@ -208,10 +210,11 @@ object ClientGraphBindings {
         decimalFormatter: DecimalFormatter,
         processedTbrEbData: ProcessedTbrEbData,
         signals: CalculationSignalsEmitter,
+        notificationManager: NotificationManager,
         cache: () -> OverviewDataCache
     ): IobCobCalculatorPlugin = IobCobCalculatorPlugin(
         aapsLogger, rxBus, preferences, rh, profileFunction, activePlugin, dateUtil, persistenceLayer,
-        overviewData, calculationWorkflow, decimalFormatter, processedTbrEbData, signals
+        overviewData, calculationWorkflow, decimalFormatter, processedTbrEbData, signals, notificationManager
     ) { cache() }
 
     @Provides

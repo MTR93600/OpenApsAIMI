@@ -10,12 +10,13 @@ import app.aaps.core.data.pump.defs.ManufacturerType
 import app.aaps.core.data.pump.defs.PumpDescription
 import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.data.time.T
-import app.aaps.core.interfaces.di.PumpDriver
 import app.aaps.core.interfaces.constraints.PumpPluginConstraints
+import app.aaps.core.interfaces.di.PumpDriver
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.plugin.PluginBase
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.OwnDatabasePlugin
+import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.pump.BlePreCheck
 import app.aaps.core.interfaces.pump.BolusProgressData
@@ -56,6 +57,12 @@ import app.aaps.pump.diaconn.keys.DiaconnIntNonKey
 import app.aaps.pump.diaconn.keys.DiaconnIntentKey
 import app.aaps.pump.diaconn.keys.DiaconnStringNonKey
 import app.aaps.pump.diaconn.service.DiaconnG8Service
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.ContributesIntoMap
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.IntKey
+import dev.zacsweers.metro.SingleIn
+import dev.zacsweers.metro.binding
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -63,12 +70,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoMap
-import dev.zacsweers.metro.IntKey
-import dev.zacsweers.metro.binding
-import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.SingleIn
 import kotlin.math.abs
 import kotlin.math.max
 
@@ -76,7 +77,8 @@ import kotlin.math.max
 @PumpDriver
 @IntKey(1100)
 @SingleIn(AppScope::class)
-class DiaconnG8Plugin @Inject constructor(
+@Inject
+class DiaconnG8Plugin(
     aapsLogger: AAPSLogger,
     override val rh: ResourceHelper,
     preferences: Preferences,
@@ -91,7 +93,8 @@ class DiaconnG8Plugin @Inject constructor(
     private val diaconnHistoryDatabase: DiaconnHistoryDatabase,
     private val pumpEnactResultProvider: () -> PumpEnactResult,
     private val bolusProgressData: BolusProgressData,
-    private val blePreCheck: BlePreCheck
+    private val blePreCheck: BlePreCheck,
+    notificationManager: NotificationManager
 ) : PumpPluginBase(
     pluginDescription = PluginDescription()
         .mainType(PluginType.PUMP)
@@ -104,11 +107,10 @@ class DiaconnG8Plugin @Inject constructor(
         }
         .icon(IcPluginDiaconn)
         .pluginName(TextRef.AndroidRes(R.string.diaconn_g8_pump))
-        .shortName(TextRef.AndroidRes(R.string.diaconn_g8_pump_shortname))
         .description(TextRef.AndroidRes(R.string.description_pump_diaconn_g8)),
     ownPreferences = DiaconnIntentKey.entries + DiaconnIntKey.entries + DiaconnBooleanKey.entries + DiaconnStringNonKey.entries +
         DiaconnIntNonKey.entries,
-    aapsLogger, rh, preferences, commandQueue
+    aapsLogger, rh, preferences, commandQueue, notificationManager
 ), Pump, Diaconn, PumpPluginConstraints, OwnDatabasePlugin {
 
     private var scope: CoroutineScope? = null
@@ -142,6 +144,9 @@ class DiaconnG8Plugin @Inject constructor(
         scope?.cancel()
         scope = null
         context.unbindService(mConnection)
+        // onServiceDisconnected is not called after unbindService, so drop the reference here.
+        // Otherwise the destroyed service stays alive after a pump switch or config change.
+        diaconnG8Service = null
         super.onStop()
     }
 
@@ -471,7 +476,11 @@ class DiaconnG8Plugin @Inject constructor(
 
     override fun manufacturer(): ManufacturerType = ManufacturerType.G2e
     override fun model(): PumpType = PumpType.DIACONN_G8
-    override fun serialNumber(): String = diaconnG8Pump.serialNo.toString()
+    // `serialNo` is 0 until the pump has been connected to and asked, so "0" is not a serial, it is
+    // "not read yet". Reporting it as text made callers compare a real stored serial against "0" and
+    // conclude the pump had been swapped. Only this driver knows what its own unset value looks like,
+    // so it is translated here into the blank that means unknown everywhere else.
+    override fun serialNumber(): String = if (diaconnG8Pump.serialNo == 0) "" else diaconnG8Pump.serialNo.toString()
     override val isFakingTempsByExtendedBoluses: Boolean = false
     override suspend fun loadTDDs(): PumpEnactResult = loadHistory()
     override fun getCustomActions(): List<CustomAction>? = null

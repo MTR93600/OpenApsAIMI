@@ -3,6 +3,9 @@ package app.aaps.pump.eopatch.ble.task
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.rx.AapsSchedulers
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.functions.Action
 import io.reactivex.rxjava3.functions.Consumer
@@ -12,12 +15,10 @@ import io.reactivex.rxjava3.subjects.BehaviorSubject
 import java.util.LinkedList
 import java.util.Queue
 import java.util.concurrent.Callable
-import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.SingleIn
 
 @SingleIn(AppScope::class)
-class TaskQueue @Inject constructor(
+@Inject
+class TaskQueue(
     private val aapsLogger: AAPSLogger,
     private val aapsSchedulers: AapsSchedulers
 ) {

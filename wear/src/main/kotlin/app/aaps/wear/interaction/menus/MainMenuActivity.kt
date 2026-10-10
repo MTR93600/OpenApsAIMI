@@ -14,12 +14,14 @@ import app.aaps.core.keys.BooleanKey
 import app.aaps.wear.BuildConfig
 import app.aaps.wear.R
 import app.aaps.wear.interaction.actions.ECarbActivity
+import app.aaps.wear.interaction.actions.RunningModePickerActivity
 import app.aaps.wear.interaction.actions.TempTargetActivity
 import app.aaps.wear.interaction.actions.TreatmentActivity
 import app.aaps.wear.interaction.actions.WizardActivity
 import app.aaps.wear.interaction.activities.BgGraphActivity
 import app.aaps.wear.interaction.activities.LoopStatusActivity
 import app.aaps.wear.interaction.utils.MenuListActivity
+import app.aaps.wear.watchfaces.PushedFace
 import app.aaps.wear.watchfaces.WatchFacePushHelper
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.launch
@@ -59,13 +61,15 @@ class MainMenuActivity : MenuListActivity() {
                 add(MenuItem(R.drawable.ic_sync, getString(R.string.menu_resync)))
             } else {
                 add(MenuItem(R.drawable.ic_loop_closed, getString(R.string.loop_status)))
-                add(MenuItem(R.drawable.ic_bg_graph, getString(R.string.menu_bg_graph)))
                 if (sp.getBoolean(R.string.key_show_wizard, true))
                     add(MenuItem(R.drawable.ic_calculator, getString(R.string.menu_wizard)))
                 add(MenuItem(R.drawable.ic_carbs_orange, getString(R.string.menu_ecarb)))
                 add(MenuItem(R.drawable.ic_bolus_carbs, getString(R.string.menu_treatment)))
                 add(MenuItem(R.drawable.ic_temptarget_flat, getString(R.string.loop_status_temp_target)))
                 add(MenuItem(R.drawable.ic_profile_switch, getString(R.string.status_profile_switch)))
+                // Running mode + BG graph: only path to these for watchfaces without tiles/complications
+                add(MenuItem(R.drawable.ic_loop_closed_white, getString(R.string.label_running_mode_title)))
+                add(MenuItem(R.drawable.ic_bg_graph, getString(R.string.menu_bg_graph)))
                 add(MenuItem(R.drawable.ic_settings, getString(R.string.menu_settings)))
                 add(MenuItem(R.drawable.ic_status, getString(R.string.menu_status)))
                 if (sp.getBoolean(R.string.key_prime_fill, false))
@@ -77,13 +81,20 @@ class MainMenuActivity : MenuListActivity() {
             // user who removed the face and wants it back before the next app update. While an
             // install runs the label switches to an inert "Installing…" so the tap is visibly
             // acknowledged (install can take a few seconds and a silent wait provokes second taps)
-            if (watchFacePushHelper.isSupported() && !sp.getBoolean(WatchFacePushHelper.KEY_FACE_INSTALLED, false))
-                add(MenuItem(R.drawable.watchface_aapsv4, getString(if (installing) R.string.menu_installing_watchface else R.string.menu_install_watchface)))
+            if (watchFacePushHelper.isSupported() && !sp.getBoolean(WatchFacePushHelper.KEY_FACE_INSTALLED, false)) {
+                // The entry installs whichever face is selected on the phone, so it shows that face
+                val icon = when (watchFacePushHelper.selectedFace) {
+                    PushedFace.WFS -> R.drawable.watchface_wfs
+                    PushedFace.CWF -> R.drawable.watchface_custom
+                }
+                add(MenuItem(icon, getString(if (installing) R.string.menu_installing_watchface else R.string.menu_install_watchface)))
+            }
         }
 
     override fun doAction(position: String) {
         when (position) {
             getString(R.string.loop_status)             -> startActivity(Intent(this, LoopStatusActivity::class.java))
+            getString(R.string.label_running_mode_title) -> startActivity(Intent(this, RunningModePickerActivity::class.java))
             getString(R.string.menu_bg_graph)           -> startActivity(Intent(this, BgGraphActivity::class.java))
             getString(R.string.menu_wizard)             -> startActivity(Intent(this, WizardActivity::class.java))
             getString(R.string.menu_ecarb)              -> startActivity(Intent(this, ECarbActivity::class.java))

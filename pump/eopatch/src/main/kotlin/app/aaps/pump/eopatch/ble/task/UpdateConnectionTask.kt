@@ -6,16 +6,17 @@ import app.aaps.pump.eopatch.core.api.UpdateConnection
 import app.aaps.pump.eopatch.core.response.UpdateConnectionResponse
 import app.aaps.pump.eopatch.vo.PatchState
 import app.aaps.pump.eopatch.vo.PatchState.Companion.create
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 import io.reactivex.rxjava3.core.Single
 import io.reactivex.rxjava3.functions.Consumer
 import io.reactivex.rxjava3.functions.Function
 import java.util.concurrent.TimeUnit
-import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.SingleIn
 
 @SingleIn(AppScope::class)
-class UpdateConnectionTask @Inject constructor(
+@Inject
+class UpdateConnectionTask(
     private val patchStateManager: PatchStateManager
 ) : TaskBase(TaskFunc.UPDATE_CONNECTION) {
 

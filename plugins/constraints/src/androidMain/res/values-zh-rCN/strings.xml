@@ -20,6 +20,7 @@
     <!-- Safety -->
     <string name="limitingextendedbolus">由于 %2$s, 将扩展大剂量限制为 %1$.1f U</string>
     <string name="limitingcarbs">由于 %2$s, 将碳水化合物限制为 %1$d 克</string>
+    <string name="safety">安全性</string>
     <string name="pumpisnottempbasalcapable">这个泵无法设置临时基础率</string>
     <string name="closed_loop_disabled_on_dev_branch">正在运行开发版本，闭环被禁用了</string>
     <string name="closed_loop_disabled_with_eb">由于运行扩展大剂量而禁用了闭环</string>
@@ -36,7 +37,6 @@
     <string name="loopenabled">闭环启用了</string>
     <string name="apsselected">APS已选择</string>
     <string name="closedmodeenabled">闭环模式启用了</string>
-    <string name="objectives_shortname">目标</string>
     <string name="description_objectives">学习计划</string>
     <string name="doyouwantresetstart">你想要重置已启动的目标? 你会失去已有的进度。</string>
     <string name="objectives_button_unfinish">重置完成状态</string>

@@ -45,7 +45,7 @@ internal class LearnerColdPersistence : PersistenceLayer {
 
     override suspend fun clearDatabases() { unused() }
     override suspend fun clearApsResults() { unused() }
-    override suspend fun cleanupDatabase(keepDays: Long, deleteTrackedChanges: Boolean): String = unused()
+    override suspend fun cleanupDatabase(olderThan: Long, deleteTrackedChanges: Boolean): String = unused()
     override suspend fun vacuumDatabase() { unused() }
     override suspend fun databaseMaintenanceInfo(retentionDays: Long): DatabaseMaintenanceInfo = unused()
     override fun <T : Any> observeChanges(type: KClass<T>): Flow<List<T>> = unused()
@@ -138,6 +138,7 @@ internal class LearnerColdPersistence : PersistenceLayer {
     override suspend fun syncNsProfileSwitches(profileSwitches: List<PS>, doLog: Boolean): TransactionResult<PS> = unused()
     override suspend fun updateProfileSwitchesNsIds(profileSwitches: List<PS>): TransactionResult<PS> = unused()
     override suspend fun getRunningModeActiveAt(timestamp: Long): RM = unused()
+    override suspend fun getRunningModeActiveAtOrNull(timestamp: Long): RM? = unused()
     override suspend fun getRunningModeByNSId(nsId: String): RM? = unused()
     override suspend fun getPermanentRunningModeActiveAt(timestamp: Long): RM = unused()
     override suspend fun getRunningModes(): List<RM> = unused()
@@ -156,7 +157,7 @@ internal class LearnerColdPersistence : PersistenceLayer {
     override suspend fun getOldestTemporaryBasalRecord(): TB? = unused()
     override suspend fun getLastTemporaryBasalId(): Long? = unused()
     override suspend fun getTemporaryBasalByNSId(nsId: String): TB? = unused()
-    override suspend fun getTemporaryBasalsActiveBetweenTimeAndTime(startTime: Long, endTime: Long): List<TB> = unused()
+    override suspend fun getTemporaryBasalsActiveAt(timestamp: Long): List<TB> = unused()
     override suspend fun getTemporaryBasalsStartingFromTimeToTime(startTime: Long, endTime: Long, ascending: Boolean): List<TB> = unused()
     override suspend fun getTemporaryBasalsStartingFromTime(startTime: Long, ascending: Boolean): List<TB> = unused()
     override suspend fun getTemporaryBasalsStartingFromTimeIncludingInvalid(startTime: Long, ascending: Boolean): List<TB> = unused()
@@ -171,6 +172,7 @@ internal class LearnerColdPersistence : PersistenceLayer {
     override suspend fun syncPumpTemporaryBasalWithTempId(temporaryBasal: TB, type: TB.Type?): TransactionResult<TB> = unused()
     override suspend fun insertTemporaryBasalWithTempId(temporaryBasal: TB): TransactionResult<TB> = unused()
     override suspend fun getExtendedBolusActiveAt(timestamp: Long): EB? = unused()
+    override suspend fun getExtendedBolusesActiveAt(timestamp: Long): List<EB> = unused()
     override suspend fun getOldestExtendedBolusRecord(): EB? = unused()
     override suspend fun getLastExtendedBolusId(): Long? = unused()
     override suspend fun getExtendedBolusByNSId(nsId: String): EB? = unused()
@@ -184,6 +186,7 @@ internal class LearnerColdPersistence : PersistenceLayer {
     override suspend fun syncPumpExtendedBolus(extendedBolus: EB): TransactionResult<EB> = unused()
     override suspend fun syncPumpStopExtendedBolusWithPumpId(timestamp: Long, endPumpId: Long, pumpType: PumpType, pumpSerial: String): TransactionResult<EB> = unused()
     override suspend fun getTemporaryTargetActiveAt(timestamp: Long): TT? = unused()
+    override suspend fun getTemporaryTargetsActiveAt(timestamp: Long): List<TT> = unused()
     override suspend fun getLastTemporaryTargetId(): Long? = unused()
     override suspend fun getTemporaryTargetByNSId(nsId: String): TT? = unused()
     override suspend fun getTemporaryTargetDataFromTime(timestamp: Long, ascending: Boolean): List<TT> = unused()

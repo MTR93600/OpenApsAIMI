@@ -1,11 +1,11 @@
 package app.aaps.plugins.constraints.objectives.objectives
 
-import app.aaps.plugins.constraints.ConstraintsStrings
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.constraints.ConstraintsStrings
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
@@ -19,7 +19,8 @@ import dev.zacsweers.metro.binding
 @ContributesIntoMap(AppScope::class, binding = binding<Objective>())
 @IntKey(4)
 @SingleIn(AppScope::class)
-class Objective4 @Inject constructor(
+@Inject
+class Objective4(
     preferences: Preferences,
     rh: TextResolver,
     durationText: DurationText,

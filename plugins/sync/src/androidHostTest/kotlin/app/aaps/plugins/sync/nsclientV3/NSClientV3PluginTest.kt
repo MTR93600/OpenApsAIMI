@@ -36,19 +36,19 @@ import app.aaps.core.keys.StringNonKey
 import app.aaps.core.nssdk.interfaces.NSAndroidClient
 import app.aaps.core.nssdk.localmodel.treatment.CreateUpdateResponse
 import app.aaps.core.nssdk.remotemodel.LastModified
+import app.aaps.plugins.sync.SyncStringsValues
 import app.aaps.plugins.sync.nsclientV3.clientcontrol.OrphanDetector
 import app.aaps.plugins.sync.nsclientV3.keys.NsclientStringKey
 import app.aaps.plugins.sync.nsclientV3.ws.NsConnection
 import app.aaps.plugins.sync.nsclientV3.ws.NsLoadExecutor
 import app.aaps.shared.tests.TestBaseWithProfile
+import app.aaps.shared.tests.generatedTextResolver
 import com.google.common.truth.Truth.assertThat
-import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
@@ -56,6 +56,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers.anyLong
@@ -66,11 +67,15 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.reflect.KClass
 
 @Suppress("SpellCheckingInspection")
 @OptIn(ExperimentalAtomicApi::class)
 internal class NSClientV3PluginTest : TestBaseWithProfile() {
+
+    /** Real English; the sync owner is not one of the five :shared:tests can see. */
+    private val text = generatedTextResolver("sync" to SyncStringsValues::textOf)
 
     @Mock lateinit var receiverDelegate: ReceiverDelegate
     @Mock lateinit var dataSyncSelectorV3: DataSyncSelectorV3
@@ -91,6 +96,21 @@ internal class NSClientV3PluginTest : TestBaseWithProfile() {
     private lateinit var storeDataForDb: StoreDataForDbImpl
     private lateinit var sut: NSClientV3Plugin
 
+    // Every extra plugin a test builds through [buildPlugin]. The plugin starts a coroutine scope on
+    // the IO dispatcher the moment it is constructed, so one built inside a test keeps background
+    // work alive after the method ends. Mockito then disables the mocks, the leftover coroutine
+    // touches one, and the throw lands on whatever test runs next as UncaughtExceptionsBeforeTest.
+    private val extraPlugins = mutableListOf<NSClientV3Plugin>()
+
+    @AfterEach
+    fun stopPlugins() {
+        runBlocking {
+            if (::sut.isInitialized) sut.shutdownForTest()
+            extraPlugins.forEach { it.shutdownForTest() }
+        }
+        extraPlugins.clear()
+    }
+
     private var insulinConfiguration: ICfg = ICfg("Insulin", 360 * 60 * 1000, 60 * 60 * 1000)
 
     @BeforeEach
@@ -101,10 +121,10 @@ internal class NSClientV3PluginTest : TestBaseWithProfile() {
         storeDataForDb = StoreDataForDbImpl(aapsLogger, persistenceLayer, preferences, config, nsClientRepository, CoroutineScope(SupervisorJob() + Dispatchers.Unconfined))
         sut =
             NSClientV3Plugin(
-                aapsLogger, rh, preferences, rxBus,
+                aapsLogger, text, preferences, rxBus,
                 receiverDelegate, config, dateUtil, dataSyncSelectorV3, persistenceLayer,
                 nsClientSource, storeDataForDb, decimalFormatter, l, nsClientRepository, uel,
-                mock(), mock(), mock(), mock(), mock(), mock(), profileRepository, nsConnection, nsLoadExecutor
+                mock(), mock(), mock(), mock(), mock(), mock(), profileRepository, nsConnection, nsLoadExecutor, mock()
             )
         whenever(nsConnection.connected).thenReturn(wsConnectedState)
         // idle is collected in onStart; a mock would hand back null and NPE there.
@@ -144,11 +164,11 @@ internal class NSClientV3PluginTest : TestBaseWithProfile() {
 
     private fun buildPlugin(orphanDetector: OrphanDetector): NSClientV3Plugin =
         NSClientV3Plugin(
-            aapsLogger, rh, preferences, rxBus,
+            aapsLogger, text, preferences, rxBus,
             receiverDelegate, config, dateUtil, dataSyncSelectorV3, persistenceLayer,
             nsClientSource, storeDataForDb, decimalFormatter, l, nsClientRepository, uel,
-            mock(), mock(), mock(), orphanDetector, mock(), mock(), profileRepository, nsConnection, nsLoadExecutor
-        )
+            mock(), mock(), mock(), orphanDetector, mock(), mock(), profileRepository, nsConnection, nsLoadExecutor, mock()
+        ).also { extraPlugins += it }
 
     /** Poll the (WhileSubscribed) flow's value until it settles to [expected]; a live collector keeps it computing. */
     private suspend fun awaitValue(flow: StateFlow<Boolean>, expected: Boolean) =
@@ -222,7 +242,7 @@ internal class NSClientV3PluginTest : TestBaseWithProfile() {
             value = 99.0,
             trendArrow = TrendArrow.DOUBLE_UP,
             noise = 1.0,
-            sourceSensor = SourceSensor.DEXCOM_G6_NATIVE,
+            sourceSensor = SourceSensor.DEXCOM_G6,
             ids = IDs(nightscoutId = "nightscoutId")
         )
         val dataPair = DataSyncSelector.PairGlucoseValue(glucoseValue, 1000)

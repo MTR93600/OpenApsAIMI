@@ -1,7 +1,5 @@
 package app.aaps.plugins.sync.tidepool
 
-import app.aaps.core.ui.CoreUiStrings
-import app.aaps.plugins.sync.SyncStrings
 import app.aaps.core.data.model.GV
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.time.T
@@ -9,6 +7,7 @@ import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.di.NotNSClient
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginBaseWithPreferences
 import app.aaps.core.interfaces.plugin.PluginDescription
@@ -22,9 +21,10 @@ import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.icons.IcPluginTidepool
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
+import app.aaps.plugins.sync.SyncStrings
 import app.aaps.plugins.sync.nsclientV3.ReceiverDelegate
 import app.aaps.plugins.sync.tidepool.auth.AuthFlowOut
 import app.aaps.plugins.sync.tidepool.comm.TidepoolUploader
@@ -55,7 +55,8 @@ import kotlinx.coroutines.launch
 @NotNSClient
 @IntKey(320)
 @SingleIn(AppScope::class)
-class TidepoolPlugin @Inject constructor(
+@Inject
+class TidepoolPlugin(
     aapsLogger: AAPSLogger,
     rh: ResourceHelper,
     preferences: Preferences,
@@ -68,11 +69,11 @@ class TidepoolPlugin @Inject constructor(
     private val tidepoolRepository: TidepoolRepository,
     private val dateUtil: DateUtil,
     private val persistenceLayer: PersistenceLayer,
+    notificationManager: NotificationManager,
 ) : Sync, Tidepool, PluginBaseWithPreferences(
     PluginDescription()
         .mainType(PluginType.SYNC)
         .pluginName(SyncStrings.tidepool)
-        .shortName(SyncStrings.tidepool_shortname)
         .icon(IcPluginTidepool)
         .composeContent {
             TidepoolComposeContent(
@@ -90,7 +91,7 @@ class TidepoolPlugin @Inject constructor(
         }
         .description(SyncStrings.description_tidepool),
     ownPreferences = TidepoolBooleanKey.entries + TidepoolLongNonKey.entries + TidepoolStringNonKey.entries,
-    aapsLogger, rh, preferences
+    aapsLogger, rh, preferences, notificationManager
 ) {
 
     private var scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

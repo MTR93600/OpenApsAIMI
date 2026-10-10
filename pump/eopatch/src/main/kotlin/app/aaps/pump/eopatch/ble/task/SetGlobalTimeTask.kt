@@ -5,20 +5,21 @@ import app.aaps.pump.eopatch.core.api.GetGlobalTime
 import app.aaps.pump.eopatch.core.api.SetGlobalTime
 import app.aaps.pump.eopatch.core.response.GlobalTimeResponse
 import app.aaps.pump.eopatch.core.response.PatchBooleanResponse
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 import io.reactivex.rxjava3.core.Single
 import io.reactivex.rxjava3.functions.Consumer
 import io.reactivex.rxjava3.functions.Function
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
-import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.SingleIn
 import kotlin.math.abs
 import kotlin.time.Duration.Companion.milliseconds
 
 @Suppress("unused", "PrivatePropertyName")
 @SingleIn(AppScope::class)
-class SetGlobalTimeTask @Inject constructor() : TaskBase(TaskFunc.SET_GLOBAL_TIME) {
+@Inject
+class SetGlobalTimeTask() : TaskBase(TaskFunc.SET_GLOBAL_TIME) {
 
     @Inject lateinit var setGlobalTime: SetGlobalTime
     @Inject lateinit var getGlobalTime: GetGlobalTime

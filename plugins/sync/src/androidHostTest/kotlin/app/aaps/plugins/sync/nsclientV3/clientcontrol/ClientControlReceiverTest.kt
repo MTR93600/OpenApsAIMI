@@ -18,7 +18,6 @@ import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.pump.BolusProgressState
 import app.aaps.core.interfaces.pump.PumpInsulin
 import app.aaps.core.interfaces.queue.CommandQueue
-import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.scenes.SceneAutomationApi
 import app.aaps.core.interfaces.scenes.SceneAutomationResult
 import app.aaps.core.interfaces.utils.DateUtil
@@ -40,8 +39,10 @@ import app.aaps.core.nssdk.localmodel.clientcontrol.PrefEntry
 import app.aaps.core.nssdk.localmodel.clientcontrol.SignedEnvelope
 import app.aaps.core.nssdk.localmodel.treatment.CreateUpdateResponse
 import app.aaps.core.nssdk.utils.ClientControlCrypto
+import app.aaps.plugins.sync.SyncStringsValues
 import app.aaps.plugins.sync.nsclientV3.NSClientV3Plugin
 import app.aaps.plugins.sync.nsclientV3.services.RunningConfigurationPublisher
+import app.aaps.shared.tests.generatedTextResolver
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -73,7 +74,7 @@ internal class ClientControlReceiverTest {
 
     @Mock private lateinit var preferences: Preferences
     @Mock private lateinit var aapsLogger: AAPSLogger
-    @Mock private lateinit var rh: ResourceHelper
+    private val rh = generatedTextResolver("sync" to SyncStringsValues::textOf)
     @Mock private lateinit var nsClientRepository: NSClientRepository
     @Mock private lateinit var nsClientV3Plugin: NSClientV3Plugin
     @Mock private lateinit var nsAndroidClient: NSAndroidClient
@@ -130,14 +131,6 @@ internal class ClientControlReceiverTest {
     @BeforeEach
     fun setUp() {
         MockitoAnnotations.openMocks(this)
-        // gs(TextRef) is a DEFAULT interface method, so a mock answers null unless it is stubbed.
-        whenever(rh.gs(any<TextRef>())).thenAnswer {
-            when (val ref = it.getArgument<TextRef>(0)) {
-                is TextRef.Literal    -> ref.text
-                is TextRef.Named      -> ref.name
-                is TextRef.AndroidRes -> "S" + ref.id
-            }
-        }
         stored = "[]"
         storage.clear()
         storage[StringNonKey.SceneDefinitions.key] = "[]"
@@ -568,7 +561,7 @@ internal class ClientControlReceiverTest {
     fun masterMirrorsProgressToArmedClientThenDisarmsOnTerminal() = runTest {
         val (clientId, secret) = pair()
         authorizedRepository.markActive(clientId, counterReceived = 1L, now = now - 5_000L)
-        whenever(wizardBolusExecutor.confirm(any(), any(), any(), any(), any())).thenReturn(WizardBolusExecutor.ConfirmResult.Delivered)
+        whenever(wizardBolusExecutor.confirm(any(), any(), any(), any(), any(), any())).thenReturn(WizardBolusExecutor.ConfirmResult.Delivered)
         val progressId = "${ClientControlPublisher.IDENTIFIER_PROGRESS_PREFIX}$clientId"
         val cmdId = "${ClientControlPublisher.IDENTIFIER_CMD_PREFIX}bolus_commit_$clientId"
 
@@ -591,7 +584,7 @@ internal class ClientControlReceiverTest {
     fun masterDoesNotMirrorAnAlreadyRunningBolusToTheCommittingClient() = runTest {
         val (clientId, secret) = pair()
         authorizedRepository.markActive(clientId, counterReceived = 1L, now = now - 5_000L)
-        whenever(wizardBolusExecutor.confirm(any(), any(), any(), any(), any())).thenReturn(WizardBolusExecutor.ConfirmResult.Delivered)
+        whenever(wizardBolusExecutor.confirm(any(), any(), any(), any(), any(), any())).thenReturn(WizardBolusExecutor.ConfirmResult.Delivered)
         val progressId = "${ClientControlPublisher.IDENTIFIER_PROGRESS_PREFIX}$clientId"
         val cmdId = "${ClientControlPublisher.IDENTIFIER_CMD_PREFIX}bolus_commit_$clientId"
 
@@ -614,9 +607,9 @@ internal class ClientControlReceiverTest {
         authorizedRepository.markActive(clientId, counterReceived = 1L, now = now - 5_000L)
         // confirm() consumed the parked dose (Delivered) but delivery fails via onError before any frame streams
         // (e.g. the master was already bolusing → queue-rejected this one). The arm must be cleared right away.
-        whenever(wizardBolusExecutor.confirm(any(), any(), any(), any(), any())).thenAnswer { inv ->
-            @Suppress("UNCHECKED_CAST") val onError = inv.arguments[2] as (String) -> Unit
-            onError("executing right now")
+        whenever(wizardBolusExecutor.confirm(any(), any(), any(), any(), any(), any())).thenAnswer { inv ->
+            @Suppress("UNCHECKED_CAST") val onError = inv.arguments[2] as (WizardBolusExecutor.Failure) -> Unit
+            onError(WizardBolusExecutor.Failure("executing right now"))
             WizardBolusExecutor.ConfirmResult.Delivered
         }
         val progressId = "${ClientControlPublisher.IDENTIFIER_PROGRESS_PREFIX}$clientId"
@@ -683,21 +676,73 @@ internal class ClientControlReceiverTest {
     fun bolusCommitDeliversAndAcksOk() = runTest {
         val (clientId, secret) = pair()
         authorizedRepository.markActive(clientId, counterReceived = 1L, now = now - 5_000L)
-        whenever(wizardBolusExecutor.confirm(any(), any(), any(), any(), any())).thenReturn(WizardBolusExecutor.ConfirmResult.Delivered)
+        whenever(wizardBolusExecutor.confirm(any(), any(), any(), any(), any(), any())).thenReturn(WizardBolusExecutor.ConfirmResult.Delivered)
         val acks = captureAcks(clientId)
         val identifier = "${ClientControlPublisher.IDENTIFIER_CMD_PREFIX}bolus_commit_$clientId"
 
         sut.onSettingsDocChanged(identifier, wrap(envelope(clientId, secret, message = ClientControlMessage.BolusCommit(42L, asAdvisor = false), counter = 5L, wantsAck = true)))
 
-        verify(wizardBolusExecutor).confirm(eq(42L), eq(Sources.NSClient), any(), eq(false), any())
+        verify(wizardBolusExecutor).confirm(eq(42L), eq(Sources.NSClient), any(), eq(false), any(), any())
         assertThat(acks.last().status.name).isEqualTo("Ok")
+    }
+
+    /**
+     * The LATE delivery ack — the bolus was already acked Ok, then the pump result arrived. The client turns a
+     * Delivery/Failed ack into an URGENT BOLUS_ERROR alarm, so the reason has to say whether anything actually
+     * failed. A command dropped on purpose (the master's queue was cleared by a settings import) must ack
+     * Cancelled, or the client alarms for a bolus nothing tried to give.
+     */
+    @Test
+    fun lateDeliveryFailureAcksCancelledWhenTheCommandWasDropped() = runTest {
+        val (clientId, secret) = pair()
+        authorizedRepository.markActive(clientId, counterReceived = 1L, now = now - 5_000L)
+        // Capture the callback instead of calling it inside confirm(): the real failure arrives AFTER confirm
+        // returned, which is exactly what makes it a late Delivery ack rather than part of the Done ack.
+        var report: ((WizardBolusExecutor.Failure) -> Unit)? = null
+        whenever(wizardBolusExecutor.confirm(any(), any(), any(), any(), any(), any())).thenAnswer {
+            report = it.getArgument(2)
+            WizardBolusExecutor.ConfirmResult.Delivered
+        }
+        val acks = captureAcks(clientId)
+        val identifier = "${ClientControlPublisher.IDENTIFIER_CMD_PREFIX}bolus_commit_$clientId"
+        sut.onSettingsDocChanged(identifier, wrap(envelope(clientId, secret, message = ClientControlMessage.BolusCommit(42L), counter = 5L, wantsAck = true)))
+        assertThat(acks.last().status.name).isEqualTo("Ok")
+
+        report!!(WizardBolusExecutor.Failure("settings import", cancelled = true))
+
+        val delivery = acks.last()
+        assertThat(delivery.phase.name).isEqualTo("Delivery")
+        assertThat(delivery.status.name).isEqualTo("Failed")
+        assertThat(delivery.reason).isEqualTo(FailureReason.Cancelled.name)
+        assertThat(delivery.payload).isEqualTo("settings import")
+    }
+
+    /** The same late ack for a real pump failure still says ExecutionFailed, so the client still alarms. */
+    @Test
+    fun lateDeliveryFailureAcksExecutionFailedWhenThePumpFailed() = runTest {
+        val (clientId, secret) = pair()
+        authorizedRepository.markActive(clientId, counterReceived = 1L, now = now - 5_000L)
+        var report: ((WizardBolusExecutor.Failure) -> Unit)? = null
+        whenever(wizardBolusExecutor.confirm(any(), any(), any(), any(), any(), any())).thenAnswer {
+            report = it.getArgument(2)
+            WizardBolusExecutor.ConfirmResult.Delivered
+        }
+        val acks = captureAcks(clientId)
+        val identifier = "${ClientControlPublisher.IDENTIFIER_CMD_PREFIX}bolus_commit_$clientId"
+        sut.onSettingsDocChanged(identifier, wrap(envelope(clientId, secret, message = ClientControlMessage.BolusCommit(42L), counter = 5L, wantsAck = true)))
+
+        report!!(WizardBolusExecutor.Failure("pump said no"))
+
+        val delivery = acks.last()
+        assertThat(delivery.phase.name).isEqualTo("Delivery")
+        assertThat(delivery.reason).isEqualTo(FailureReason.ExecutionFailed.name)
     }
 
     @Test
     fun bolusCommitNoPendingAcksNoPendingBolus() = runTest {
         val (clientId, secret) = pair()
         authorizedRepository.markActive(clientId, counterReceived = 1L, now = now - 5_000L)
-        whenever(wizardBolusExecutor.confirm(any(), any(), any(), any(), any())).thenReturn(WizardBolusExecutor.ConfirmResult.NoPending)
+        whenever(wizardBolusExecutor.confirm(any(), any(), any(), any(), any(), any())).thenReturn(WizardBolusExecutor.ConfirmResult.NoPending)
         val acks = captureAcks(clientId)
         val identifier = "${ClientControlPublisher.IDENTIFIER_CMD_PREFIX}bolus_commit_$clientId"
 
@@ -723,7 +768,7 @@ internal class ClientControlReceiverTest {
         val done = acks.last()
         assertThat(done.status.name).isEqualTo("Failed")
         assertThat(done.reason).isEqualTo(FailureReason.ControlDisabled.name)
-        verify(wizardBolusExecutor, never()).confirm(any(), any(), any(), any(), any())
+        verify(wizardBolusExecutor, never()).confirm(any(), any(), any(), any(), any(), any())
     }
 
     @Test
@@ -742,7 +787,7 @@ internal class ClientControlReceiverTest {
         val done = acks.last()
         assertThat(done.status.name).isEqualTo("Failed")
         assertThat(done.reason).isEqualTo(FailureReason.ControlDisabled.name)
-        verify(wizardBolusExecutor, never()).confirm(any(), any(), any(), any(), any())
+        verify(wizardBolusExecutor, never()).confirm(any(), any(), any(), any(), any(), any())
     }
 
     @Test
@@ -763,13 +808,13 @@ internal class ClientControlReceiverTest {
     fun bolusCommitAsAdvisorDeliversAdvisorVariant() = runTest {
         val (clientId, secret) = pair()
         authorizedRepository.markActive(clientId, counterReceived = 1L, now = now - 5_000L)
-        whenever(wizardBolusExecutor.confirm(any(), any(), any(), any(), any())).thenReturn(WizardBolusExecutor.ConfirmResult.Delivered)
+        whenever(wizardBolusExecutor.confirm(any(), any(), any(), any(), any(), any())).thenReturn(WizardBolusExecutor.ConfirmResult.Delivered)
         captureAcks(clientId)
         val identifier = "${ClientControlPublisher.IDENTIFIER_CMD_PREFIX}bolus_commit_$clientId"
 
         sut.onSettingsDocChanged(identifier, wrap(envelope(clientId, secret, message = ClientControlMessage.BolusCommit(42L, asAdvisor = true), counter = 5L, wantsAck = true)))
 
-        verify(wizardBolusExecutor).confirm(eq(42L), eq(Sources.NSClient), any(), eq(true), any())
+        verify(wizardBolusExecutor).confirm(eq(42L), eq(Sources.NSClient), any(), eq(true), any(), any())
     }
 
     @Test

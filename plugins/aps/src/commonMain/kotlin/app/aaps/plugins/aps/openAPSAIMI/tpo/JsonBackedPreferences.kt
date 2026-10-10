@@ -64,6 +64,18 @@ internal class JsonBackedPreferences(
     override val nsclientMode: Boolean = false
     override val pumpControlMode: Boolean = false
 
+    /**
+     * Empty, because nothing registers keys with this store: it answers whatever key TPO asks for
+     * and falls back to that key's own default. There is no list of "every key handed to
+     * registerPreferences" to return.
+     */
+    override fun getAllKeys(): List<NonPreferenceKey> = emptyList()
+
+    /** Re-reads `tpo/aimi_preferences.json`. This store is the file, so this is a real reload. */
+    override fun reloadFromStore() {
+        load()
+    }
+
     override fun get(key: BooleanNonPreferenceKey): Boolean = bools[key.key] ?: key.defaultValue
     override fun getIfExists(key: BooleanNonPreferenceKey): Boolean? = bools[key.key]
     override fun put(key: BooleanNonPreferenceKey, value: Boolean) {

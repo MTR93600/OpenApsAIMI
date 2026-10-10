@@ -16,13 +16,14 @@ import app.aaps.pump.common.hw.rileylink.ble.RileyLinkBLE
 import app.aaps.pump.common.hw.rileylink.ble.data.GattAttributes
 import app.aaps.pump.common.hw.rileylink.ble.operations.BLECommOperationResult
 import app.aaps.pump.common.hw.rileylink.service.RileyLinkServiceData
-import java.util.UUID
-import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import java.util.UUID
 
 @SingleIn(AppScope::class)
-class OrangeLinkImpl @Inject constructor(
+@Inject
+class OrangeLinkImpl(
     var aapsLogger: AAPSLogger,
     var rileyLinkServiceData: RileyLinkServiceData,
     // A Provider, not the object: RileyLinkBLE takes this class in its own constructor, so asking for it

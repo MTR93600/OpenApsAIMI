@@ -16,6 +16,7 @@ import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.receivers.Intents
@@ -34,10 +35,10 @@ import app.aaps.core.utils.receivers.DataInbox
 import app.aaps.core.utils.receivers.Inbox
 import app.aaps.plugins.source.compose.BgSourceComposeContent
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Assisted
 import dev.zacsweers.metro.AssistedFactory
 import dev.zacsweers.metro.AssistedInject
+import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.IntKey
@@ -52,11 +53,13 @@ import kotlin.math.round
 @IntKey(400)
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class, binding = binding<XDripSource>())
-class XdripSourcePlugin @Inject constructor(
+@Inject
+class XdripSourcePlugin(
     rh: ResourceHelper,
     aapsLogger: AAPSLogger,
     preferences: Preferences,
     config: Config,
+    notificationManager: NotificationManager
 ) : AbstractBgSourceWithSensorInsertLogPlugin(
     pluginDescription = PluginDescription()
         .mainType(PluginType.BGSOURCE)
@@ -71,14 +74,16 @@ class XdripSourcePlugin @Inject constructor(
         .description(TextRef.AndroidRes(R.string.description_source_xdrip)),
     aapsLogger = aapsLogger,
     rh = rh,
-    preferences = preferences
+    preferences = preferences,
+    notificationManager = notificationManager
 ), BgSource, XDripSource {
 
     override var sensorBatteryLevel = -1
 
     // cannot be inner class because of needed injection
 
-    class XdripSourceWorker @AssistedInject constructor(
+    @AssistedInject
+    class XdripSourceWorker(
         @Assisted context: Context,
         @Assisted params: WorkerParameters,
         aapsLogger: AAPSLogger,

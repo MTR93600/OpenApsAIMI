@@ -23,17 +23,18 @@ import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.objects.extensions.asAnnouncement
 import app.aaps.implementation.androidNotification.AlarmNotificationManager
 import app.aaps.ui.activities.ErrorActivity
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
-import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
+import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlin.reflect.KClass
 
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
-class UiInteractionImpl @Inject constructor(
+@Inject
+class UiInteractionImpl(
     private val context: Context,
     private val alarmNotificationManager: AlarmNotificationManager,
     private val notificationManager: () -> NotificationManager,
@@ -94,9 +95,10 @@ class UiInteractionImpl @Inject constructor(
                 postFsiFallback(status, title, sound)
             }
         } else {
-            // Background path — FSI notification. Android auto-launches the activity on
-            // lockscreen/idle, or shows a heads-up (with channel sound) when the user is
-            // active in another app.
+            // Background path — the full-screen alarm ("FSI" in the names here, although it no
+            // longer uses a full-screen intent): a notification with channel sound plus the looping
+            // alarm sound, and a setAlarmClock screen wake that brings up the activity when exact
+            // alarms are allowed.
             aapsLogger.debug(LTag.CORE, "runAlarm (background via FSI): $title - $status (sound=$sound)")
             alarmNotificationManager.postFullScreenAlarm(status = status, title = title, sound = sound)
         }

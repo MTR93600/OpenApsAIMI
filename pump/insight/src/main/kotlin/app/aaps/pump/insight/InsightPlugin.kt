@@ -14,17 +14,17 @@ import app.aaps.core.data.pump.defs.ManufacturerType
 import app.aaps.core.data.pump.defs.PumpDescription
 import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.data.time.T
-import app.aaps.core.interfaces.di.PumpDriver
 import app.aaps.core.interfaces.constraints.PumpPluginConstraints
 import app.aaps.core.interfaces.di.ApplicationScope
+import app.aaps.core.interfaces.di.PumpDriver
 import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.interfaces.notifications.NotificationLevel
 import app.aaps.core.interfaces.notifications.NotificationManager
-import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.OwnDatabasePlugin
+import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.profile.Profile
 import app.aaps.core.interfaces.pump.BlePreCheck
@@ -40,6 +40,7 @@ import app.aaps.core.interfaces.pump.PumpRate
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.interfaces.pump.PumpSync.PumpState.TemporaryBasal
 import app.aaps.core.interfaces.pump.PumpSync.TemporaryBasalType
+import app.aaps.core.interfaces.pump.comment
 import app.aaps.core.interfaces.pump.defs.fillFor
 import app.aaps.core.interfaces.queue.CommandQueue
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -123,7 +124,14 @@ import app.aaps.pump.insight.keys.InsightIntKey
 import app.aaps.pump.insight.keys.InsightLongNonKey
 import app.aaps.pump.insight.utils.ExceptionTranslator
 import app.aaps.pump.insight.utils.ParameterBlockUtil
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.ContributesIntoMap
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.IntKey
+import dev.zacsweers.metro.SingleIn
+import dev.zacsweers.metro.binding
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -131,23 +139,17 @@ import kotlinx.coroutines.runBlocking
 import java.util.Calendar
 import java.util.Date
 import java.util.TimeZone
-import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoMap
-import dev.zacsweers.metro.IntKey
-import dev.zacsweers.metro.binding
-import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.SingleIn
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 import android.app.NotificationManager as AndroidNotificationManager
-import app.aaps.core.interfaces.pump.comment
 
 @ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
 @PumpDriver
 @IntKey(1050)
 @SingleIn(AppScope::class)
-class InsightPlugin @Inject constructor(
+@Inject
+class InsightPlugin(
     aapsLogger: AAPSLogger,
     override val rh: ResourceHelper,
     preferences: Preferences,
@@ -159,7 +161,7 @@ class InsightPlugin @Inject constructor(
     private val pumpSync: PumpSync,
     private val insightDatabase: InsightDatabase,
     private val pumpEnactResultProvider: () -> PumpEnactResult,
-    private val notificationManager: NotificationManager,
+    notificationManager: NotificationManager,
     private val ch: ConcentrationHelper,
     private val bolusProgressData: BolusProgressData,
     @ApplicationScope private val appScope: CoroutineScope,
@@ -169,7 +171,6 @@ class InsightPlugin @Inject constructor(
     pluginDescription = PluginDescription()
         .icon(IcPluginInsight)
         .pluginName(TextRef.AndroidRes(R.string.insight_local))
-        .shortName(TextRef.AndroidRes(R.string.insightpump_shortname))
         .mainType(PluginType.PUMP)
         .description(TextRef.AndroidRes(R.string.description_pump_insight_local))
         .composeContent { plugin ->
@@ -188,7 +189,7 @@ class InsightPlugin @Inject constructor(
             )
         },
     ownPreferences = InsightBooleanKey.entries + InsightIntKey.entries + InsightLongNonKey.entries + InsightDoubleNonKey.entries,
-    aapsLogger, rh, preferences, commandQueue
+    aapsLogger, rh, preferences, commandQueue, notificationManager
 ), Pump, Insight, PumpPluginConstraints, InsightConnectionService.StateCallback, OwnDatabasePlugin {
 
     override val pumpDescription: PumpDescription = PumpDescription().also { it.fillFor(PumpType.ACCU_CHEK_INSIGHT) }
@@ -206,12 +207,21 @@ class InsightPlugin @Inject constructor(
         private set
     private var alertService: InsightAlertService? = null
     var connectionService: InsightConnectionService? = null
-        private set
+        // internal rather than private so a test can stand in a fake connection service. Still not
+        // settable from outside the module - only the service connection below assigns it for real.
+        internal set
     private val serviceConnection: ServiceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
             if (binder is InsightConnectionService.LocalBinder) {
                 connectionService = binder.service
                 connectionService?.registerStateCallback(this@InsightPlugin)
+                // Follow the connection service, which stamps this every time the pump answers
+                // anything. Reading it only while fetching the pump status left it standing still
+                // between status reads, and the "pump unreachable" alarm is timed off it.
+                lastDataTimeJob?.cancel()
+                lastDataTimeJob = connectionService?.let { service ->
+                    appScope.launch { service.lastDataTimeFlow.collect { _lastDataTime.value = it } }
+                }
             } else if (binder is InsightAlertService.LocalBinder) {
                 alertService = binder.service
             }
@@ -221,7 +231,13 @@ class InsightPlugin @Inject constructor(
         }
 
         override fun onServiceDisconnected(name: ComponentName) {
+            lastDataTimeJob?.cancel()
+            lastDataTimeJob = null
             connectionService = null
+            // Without a service there is nothing to report. Say "just now" rather than leave an old
+            // stamp behind, so a pump that is merely unbound does not raise the unreachable alarm -
+            // that is what the previous getter did.
+            _lastDataTime.value = dateUtil.now()
         }
     }
     private var timeOffset: Long = 0
@@ -275,7 +291,16 @@ class InsightPlugin @Inject constructor(
 
     override suspend fun onStop() {
         super.onStop()
+        // Cancel before unbinding. onServiceDisconnected is only called when the service process
+        // dies unexpectedly, never by unbindService, so a plugin stop - a settings import, a config
+        // change, switching pumps - would otherwise leave the collector running on appScope for the
+        // life of the process, still writing the value the pump unreachable alarm is timed from.
+        lastDataTimeJob?.cancel()
+        lastDataTimeJob = null
         context.unbindService(serviceConnection)
+        // For the same reason the services have to be dropped here, or the destroyed ones stay alive.
+        connectionService = null
+        alertService = null
     }
 
     override fun isConfigured(): Boolean =
@@ -336,7 +361,6 @@ class InsightPlugin @Inject constructor(
                 aapsLogger.error("Exception while fetching status", e)
             }
         }
-        _lastDataTime.value = if (connectionService == null || alertService == null) dateUtil.now() else connectionService?.lastDataTime ?: 0
     }
 
     @Throws(Exception::class) private fun updatePumpTimeIfNeeded() {
@@ -465,13 +489,23 @@ class InsightPlugin @Inject constructor(
         }
         connectionService?.let { service ->
             try {
-                val activeBRProfileBlock = ActiveBRProfileBlock()
-                activeBRProfileBlock.activeBasalProfile = BasalProfile.PROFILE_1
-                ParameterBlockUtil.writeConfigurationBlock(service, activeBRProfileBlock)
-                activeBasalProfile = BasalProfile.PROFILE_1
+                // Both blocks go into ONE write session, rates first and activation second.
+                //
+                // The pump only applies a write session when it is closed, so nothing at all is
+                // committed until both blocks have been written. A connection lost anywhere in
+                // between leaves the pump exactly as it was, instead of switched to PROFILE_1 while
+                // PROFILE_1 still holds the old rates - which is what the previous two-session
+                // version did, with nothing to warn the user.
+                //
+                // The order still matters as a second line of defence: if the pump ever rejects the
+                // second write while the link is up, the close is still sent, so the rates must be
+                // the block that is already in.
                 val profileBlock: BRProfileBlock = BRProfile1Block()
                 profileBlock.profileBlocks = profileBlocks
-                ParameterBlockUtil.writeConfigurationBlock(service, profileBlock)
+                val activeBRProfileBlock = ActiveBRProfileBlock()
+                activeBRProfileBlock.activeBasalProfile = BasalProfile.PROFILE_1
+                ParameterBlockUtil.writeConfigurationBlocks(service, profileBlock, activeBRProfileBlock)
+                activeBasalProfile = BasalProfile.PROFILE_1
                 // PROFILE_SET_OK posted (and FAILED cleared) centrally on the return value.
                 result.success(true)
                     .enacted(true)
@@ -520,7 +554,8 @@ class InsightPlugin @Inject constructor(
         return true
     }
 
-    private val _lastDataTime = MutableStateFlow(0L)
+    private var lastDataTimeJob: Job? = null
+    private val _lastDataTime = MutableStateFlow(dateUtil.now())
     override val lastDataTime: StateFlow<Long> = _lastDataTime
 
     private val _lastBolusTime = MutableStateFlow<Long?>(null)

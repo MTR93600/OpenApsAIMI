@@ -1,12 +1,11 @@
 package app.aaps.ui.compose.history
 
-import kotlinx.coroutines.launch
-import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import app.aaps.core.data.configuration.Constants
 import app.aaps.core.data.time.T
-import app.aaps.core.interfaces.utils.MidnightTime
 import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.core.interfaces.utils.MidnightTime
 import app.aaps.core.interfaces.workflow.CalculationWorkflow
 import app.aaps.ui.compose.overview.graphs.GraphViewModel
 import dev.zacsweers.metro.AppScope
@@ -17,12 +16,14 @@ import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 // Registers itself: @ViewModelKey infers the key from the class. No graph entry, and deliberately
 // unscoped so each screen gets its own.
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 @ViewModelKey
-class HistoryViewModel @Inject constructor(
+@Inject
+class HistoryViewModel(
     private val historyScope: HistoryScope,
     private val calculationWorkflow: CalculationWorkflow,
     private val dateUtil: DateUtil,

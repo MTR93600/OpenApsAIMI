@@ -1,6 +1,5 @@
 package app.aaps.plugins.sync.nsclientV3.clientcontrol
 
-import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.data.json.OrgJsonCompat.optJsonObjectCompat
 import app.aaps.core.data.ui.ConfirmationLine
 import app.aaps.core.data.ui.ConfirmationRole
@@ -32,6 +31,7 @@ import app.aaps.core.nssdk.localmodel.clientcontrol.ProgressEnvelope
 import app.aaps.core.nssdk.localmodel.clientcontrol.ProgressPhase
 import app.aaps.core.nssdk.localmodel.clientcontrol.WizardDetailDto
 import app.aaps.core.nssdk.utils.ClientControlCrypto
+import app.aaps.core.ui.CoreUiStrings
 import app.aaps.plugins.sync.nsclientV3.NSClientV3Plugin
 import app.aaps.plugins.sync.nsclientV3.clientcontrol.ClientControlRoundTrip.Companion.PROGRESS_WATCHDOG_MS
 import app.aaps.plugins.sync.nsclientV3.clientcontrol.ClientControlRoundTrip.Companion.PROPAGATION_MARGIN_MS
@@ -41,10 +41,6 @@ import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.binding
-import kotlin.concurrent.Volatile
-import kotlin.concurrent.atomics.AtomicBoolean
-import kotlin.concurrent.atomics.AtomicReference
-import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -63,6 +59,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlin.concurrent.Volatile
+import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 /**
  * Client-side round-trip coordinator: sends a command via [ClientControlPublisher.publishTracked] and
@@ -79,7 +79,8 @@ import kotlinx.serialization.json.JsonObject
 @OptIn(ExperimentalAtomicApi::class)
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class, binding = binding<ClientControlActionDispatcher>())
-class ClientControlRoundTrip @Inject constructor(
+@Inject
+class ClientControlRoundTrip(
     private val publisher: ClientControlPublisher,
     private val pairingRepository: ClientPairingRepository,
     private val nsClientV3Plugin: () -> NSClientV3Plugin,
@@ -184,13 +185,17 @@ class ClientControlRoundTrip @Inject constructor(
         // raise an URGENT alarm here. It is NOT a round-trip response (the commit already terminated), so it does
         // not feed ackEvents; the master itself alarmed locally too (executor, phase 1a).
         if (ack.phase == AckPhase.Delivery) {
-            if (ack.status == AckStatus.Failed)
-                notificationManager.post(
-                    NotificationId.BOLUS_DELIVERY_FAILED,
-                    // payload is the master-authored full text ("title\n<pump detail>"); show it as-is, don't re-prefix the title.
-                    ack.payload ?: rh.gs(CoreUiStrings.treatmentdeliveryerror),
-                    validMinutes = 0, sound = AlarmSound.BOLUS_ERROR
-                )
+            if (ack.status == AckStatus.Failed) {
+                // payload is the master-authored full text ("title\n<pump detail>"); show it as-is, don't re-prefix the title.
+                val text = ack.payload ?: rh.gs(CoreUiStrings.treatmentdeliveryerror)
+                // A command the master dropped on purpose (its queue was cleared by a settings import) did not fail
+                // on the pump, so it must not alarm here either — the master itself only posts a silent notice. It
+                // still has to be shown: nothing re-sends a bolus.
+                if (ack.reason.toFailureReason() == FailureReason.Cancelled)
+                    notificationManager.post(NotificationId.BOLUS_CANCELLED, text)
+                else
+                    notificationManager.post(NotificationId.BOLUS_DELIVERY_FAILED, text, validMinutes = 0, sound = AlarmSound.BOLUS_ERROR)
+            }
             return
         }
         ackEvents.tryEmit(ack)

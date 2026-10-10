@@ -1,9 +1,8 @@
 package app.aaps.plugins.automation.actions
 
-import app.aaps.plugins.automation.AutomationStrings
 import app.aaps.core.data.model.Scene
 import app.aaps.core.interfaces.scenes.SceneAutomationResult
-import app.aaps.plugins.automation.R
+import app.aaps.plugins.automation.AutomationStrings
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
@@ -23,10 +22,7 @@ class ActionEnableSceneTest : ActionsTestBase() {
     private val scene = Scene(id = "scene-1", name = "Sport")
 
     @BeforeEach fun setUp() {
-        whenever(rh.gs(AutomationStrings.action_enable_scene)).thenReturn("Enable scene")
-        whenever(rh.gs(AutomationStrings.action_enable_scene_short)).thenReturn("Enable scene: %1\$s")
-        whenever(rh.gs(AutomationStrings.action_scene_not_found)).thenReturn("Scene not found")
-        sut = ActionEnableScene(aapsLogger, rh, { pumpEnactResultProvider() }, sceneApi, sceneIconResolver)
+        sut = ActionEnableScene(aapsLogger, text, { pumpEnactResultProvider() }, sceneApi, sceneIconResolver)
     }
 
     @Test fun friendlyName() = runTest {

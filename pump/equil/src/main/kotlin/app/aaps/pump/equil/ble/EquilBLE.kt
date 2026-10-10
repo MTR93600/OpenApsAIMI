@@ -23,17 +23,18 @@ import app.aaps.pump.equil.manager.command.CmdHistoryGet
 import app.aaps.pump.equil.manager.command.CmdInsulinGet
 import app.aaps.pump.equil.manager.command.CmdPair
 import app.aaps.pump.equil.manager.command.CmdRunningModeGet
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.SingleIn
 
 @SingleIn(AppScope::class)
-class EquilBLE @Inject constructor(
+@Inject
+class EquilBLE(
     private val aapsLogger: AAPSLogger,
     private val bleTransport: EquilBleTransport,
     private val rxBus: RxBus

@@ -16,7 +16,6 @@ import kotlinx.cinterop.alloc
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
 import kotlinx.cinterop.value
-import platform.Foundation.NSError
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -29,6 +28,7 @@ import platform.AVFAudio.AVAudioSessionCategoryPlayback
 import platform.AVFAudio.AVAudioSessionCategorySoloAmbient
 import platform.AVFAudio.setActive
 import platform.Foundation.NSBundle
+import platform.Foundation.NSError
 import platform.Foundation.NSURL
 
 /**
@@ -55,7 +55,8 @@ import platform.Foundation.NSURL
 @OptIn(ExperimentalForeignApi::class)
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
-class IosAlarmSoundPlayer @Inject constructor(
+@Inject
+class IosAlarmSoundPlayer(
     private val aapsLogger: AAPSLogger,
     private val preferences: Preferences
 ) : AlarmSoundPlayer {

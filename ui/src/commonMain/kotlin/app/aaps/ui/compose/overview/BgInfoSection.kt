@@ -28,6 +28,7 @@ import app.aaps.core.interfaces.overview.graph.BgRange
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.LocalAapsScale
+import app.aaps.ui.compose.components.bgSpokenDescription
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -37,7 +38,8 @@ import kotlin.math.sin
  * Shows BG value centered in a ring, with trend indicated by an arc position.
  *
  * @param bgInfo Current BG info data, or null if no data available
- * @param timeAgoText Formatted "time ago" string (e.g., "2 min")
+ * @param timeAgoText Formatted "time ago" string in the user's language, including the word "ago"
+ *   (`DateUtil.minAgo`, e.g. "2 min ago")
  * @param modifier Optional modifier for the composable
  * @param size Size of the circular BG display. Defaults to [AapsSpacing.bgCircleSize] scaled by
  *   [LocalAapsScale] so the circle grows on tablets to match scaled typography. Pass an explicit
@@ -76,14 +78,15 @@ fun BgInfoSection(
     val ringColor = bgColor.copy(alpha = 0.3f)
     val ringStrokeWidth = AapsSpacing.bgRingStrokeWidth * LocalAapsScale.current
 
-    // Build accessibility description: "BG 120, Flat, delta +2, 2 min ago"
-    val a11yDescription = buildString {
-        append("BG ${bgInfo.bgText}")
-        append(", ${bgInfo.trendDescription}")
-        bgInfo.deltaText?.let { append(", delta $it") }
-        if (timeAgoText.isNotEmpty()) append(", $timeAgoText ago")
-        if (bgInfo.isOutdated) append(", outdated")
-    }
+    // High/low is the colour and an old reading is struck through, so the description says both.
+    val a11yDescription = bgSpokenDescription(
+        bgText = bgInfo.bgText,
+        range = bgInfo.bgRange,
+        trend = bgInfo.trendDescription,
+        deltaText = bgInfo.deltaText,
+        timeAgo = timeAgoText,
+        isOutdated = bgInfo.isOutdated
+    )
 
     Box(
         contentAlignment = Alignment.Center,
@@ -206,12 +209,12 @@ private fun BgRange.toColor(): Color = when (this) {
 }
 
 /**
- * Arc indicator describing position and triangle count.
+ * Arc indicator describing position and triangle count. Internal: also used by the glucose circle widget.
  * @param centerAngle center of the arc in degrees (0° = right/3 o'clock, -90° = top, 90° = bottom)
  * @param sweepAngle arc length in degrees
  * @param triangleCount number of outward-pointing triangles (1-3)
  */
-private data class ArcIndicator(
+internal data class ArcIndicator(
     val centerAngle: Float,
     val sweepAngle: Float,
     val triangleCount: Int
@@ -224,7 +227,7 @@ private data class ArcIndicator(
  * Positions: Up (-90°), 45°-up (-45°), Flat (0°), 45°-down (45°), Down (90°)
  * Double/Triple use same position but show 2 or 3 triangles.
  */
-private fun TrendArrow.toArcIndicator(): ArcIndicator? {
+internal fun TrendArrow.toArcIndicator(): ArcIndicator? {
     val sweepAngle = 40f
     return when (this) {
         TrendArrow.NONE            -> null

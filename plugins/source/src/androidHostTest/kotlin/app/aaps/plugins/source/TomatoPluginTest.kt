@@ -9,6 +9,7 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
+import org.mockito.kotlin.mock
 
 class TomatoPluginTest : TestBase() {
 
@@ -20,7 +21,7 @@ class TomatoPluginTest : TestBase() {
 
     @BeforeEach
     fun setup() {
-        tomatoPlugin = TomatoPlugin(rh, aapsLogger, preferences, config)
+        tomatoPlugin = TomatoPlugin(rh, aapsLogger, preferences, config, mock())
     }
 
     @Test

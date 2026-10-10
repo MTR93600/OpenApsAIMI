@@ -11,6 +11,7 @@ import android.provider.Settings
 import android.text.TextUtils
 import androidx.core.content.ContextCompat
 import app.aaps.core.interfaces.plugin.ActivePlugin
+import app.aaps.core.interfaces.plugin.PermissionGroup
 import app.aaps.core.interfaces.plugin.PermissionProvider
 import app.aaps.core.interfaces.plugin.PluginPermissions
 import app.aaps.core.interfaces.plugin.missingPermissions
@@ -18,7 +19,6 @@ import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.implementation.R
-import app.aaps.core.interfaces.plugin.PermissionGroup
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
@@ -106,8 +106,24 @@ class PluginPermissionsImpl(
         // Note: USE_FULL_SCREEN_INTENT is intentionally NOT requested. Google Play silently
         // re-revokes it on every update for a sideloaded, non-alarm app, so it can never be relied
         // on. Background alarms instead wake the screen and launch the alarm activity via
-        // AlarmManager.setAlarmClock() (see AlarmScreenWakeReceiver / AlarmNotificationManager),
-        // which is permission-free.
+        // AlarmManager.setAlarmClock() (see AlarmScreenWakeReceiver / AlarmNotificationManager).
+        //
+        // setAlarmClock() is not permission-free: from targetSdk 31 it needs SCHEDULE_EXACT_ALARM unless
+        // AAPS is excluded from battery optimization. (The SDK javadoc leaves that exemption out; the
+        // system service applies it to setAlarmClock exactly as to setExact.) Reminders
+        // (ReminderSchedulerImpl) use it too. Android 14 and later deny the permission by default on a
+        // new install, so it is asked for here, for everyone - it used to be asked for only while the
+        // EOPatch plugin was enabled. isPermissionMissing checks canScheduleExactAlarms(), which is true
+        // with either the permission or the exemption, so a user who excluded AAPS from battery
+        // optimization is never asked.
+        add(
+            PermissionGroup(
+                permissions = listOf(Manifest.permission.SCHEDULE_EXACT_ALARM),
+                rationaleTitle = TextRef.AndroidRes(R.string.permission_schedule_exact_alarm_title),
+                rationaleDescription = TextRef.AndroidRes(R.string.permission_schedule_exact_alarm_description),
+                special = true,
+            )
+        )
     }
 
     private fun isPermissionMissing(context: Context, perm: String): Boolean =

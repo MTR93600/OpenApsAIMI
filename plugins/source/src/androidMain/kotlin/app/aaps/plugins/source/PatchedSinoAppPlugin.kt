@@ -13,6 +13,7 @@ import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -40,11 +41,13 @@ import org.json.JSONException
 @ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
 @IntKey(520)
 @SingleIn(AppScope::class)
-class PatchedSinoAppPlugin @Inject constructor(
+@Inject
+class PatchedSinoAppPlugin(
     rh: ResourceHelper,
     aapsLogger: AAPSLogger,
     preferences: Preferences,
     config: Config,
+    notificationManager: NotificationManager
 ) : AbstractBgSourcePlugin(
     PluginDescription()
         .mainType(PluginType.BGSOURCE)
@@ -58,11 +61,12 @@ class PatchedSinoAppPlugin @Inject constructor(
         .preferencesVisibleInSimpleMode(false)
         .description(TextRef.AndroidRes(R.string.description_source_patched_sino_app)),
     ownPreferences = emptyList(),
-    aapsLogger, rh, preferences, config
+    aapsLogger, rh, preferences, config, notificationManager
 ), BgSource {
 
 
-    class PatchedSinoAppWorker @AssistedInject constructor(
+    @AssistedInject
+    class PatchedSinoAppWorker(
         @Assisted context: Context,
         @Assisted params: WorkerParameters,
         aapsLogger: AAPSLogger,
@@ -103,7 +107,7 @@ class PatchedSinoAppPlugin @Inject constructor(
                                         raw = null,
                                         noise = null,
                                         trendArrow = TrendArrow.fromString(jsonObject.getString("direction")),
-                                        sourceSensor = SourceSensor.SINO
+                                        sourceSensor = SourceSensor.SINOCARE
                                     )
 
                                 else  -> aapsLogger.debug(LTag.BGSOURCE, "Unknown entries type: $type")

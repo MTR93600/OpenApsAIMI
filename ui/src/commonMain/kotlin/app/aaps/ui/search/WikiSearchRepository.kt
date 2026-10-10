@@ -29,7 +29,7 @@ sealed class WikiSearchResult {
 }
 
 /**
- * Repository for searching AndroidAPS documentation on ReadTheDocs.
+ * Repository for searching AAPS documentation on ReadTheDocs.
  * Uses the RTD Search API v3 to query the wiki and returns results
  * as [SearchIndexEntry] items with [SearchCategory.WIKI].
  *
@@ -39,7 +39,8 @@ sealed class WikiSearchResult {
  * that. Nothing here is a stored or transmitted format of ours.
  */
 @SingleIn(AppScope::class)
-class WikiSearchRepository @Inject constructor(
+@Inject
+class WikiSearchRepository(
     private val receiverStatusStore: ReceiverStatusStore
 ) {
 
@@ -53,7 +54,7 @@ class WikiSearchRepository @Inject constructor(
     private val json = Json { ignoreUnknownKeys = true }
 
     /**
-     * Search the AndroidAPS wiki for the given query.
+     * Search the AAPS wiki for the given query.
      *
      * @param query Search query string (minimum 3 characters)
      * @return [WikiSearchResult.Offline] if no connectivity,

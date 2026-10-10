@@ -23,7 +23,7 @@ class SensitivityWeightedAveragePluginTest : SensitivityTestBase() {
     private lateinit var sut: SensitivityWeightedAveragePlugin
 
     @BeforeEach fun prepare() {
-        sut = SensitivityWeightedAveragePlugin(aapsLogger, rh, preferences, dateUtil, activePlugin)
+        sut = SensitivityWeightedAveragePlugin(aapsLogger, rh, preferences, dateUtil, activePlugin, mock())
     }
 
     private fun detect(
@@ -158,10 +158,10 @@ class SensitivityWeightedAveragePluginTest : SensitivityTestBase() {
     }
 
     @Test
-    fun specialShowInListCondition_falseForSmb() {
+    fun `hidden when the active APS is SMB`() {
         val aps = mock<APS>()
         whenever(aps.algorithm).thenReturn(APSResult.Algorithm.SMB)
         whenever(activePlugin.activeAPS).thenReturn(aps)
-        assertThat(sut.specialShowInListCondition()).isFalse()
+        assertThat(sut.showInList()).isFalse()
     }
 }

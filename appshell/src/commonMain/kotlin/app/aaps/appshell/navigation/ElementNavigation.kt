@@ -3,22 +3,22 @@ package app.aaps.appshell.navigation
 import androidx.navigation.NavController
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.interfaces.configuration.ConfigBuilder
+import app.aaps.core.interfaces.navigation.ElementType
+import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.protection.ProtectionCheck
 import app.aaps.core.interfaces.protection.ProtectionResult
 import app.aaps.core.interfaces.source.DexcomBoyda
-import app.aaps.ui.compose.careDialog.CareportalEventType
-import app.aaps.core.interfaces.navigation.ElementType
-import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.keys.StringKey
-import app.aaps.core.ui.search.SearchableItem
-import app.aaps.ui.compose.quickLaunch.QuickLaunchAction
-import app.aaps.ui.search.SearchIndexEntry
 import app.aaps.core.ui.compose.ScreenMode
 import app.aaps.core.ui.compose.navigation.NavigationRequest
-import app.aaps.ui.compose.main.MainViewModel
+import app.aaps.core.ui.search.SearchableItem
+import app.aaps.ui.compose.careDialog.CareportalEventType
 import app.aaps.ui.compose.fillDialog.FillPreselect
+import app.aaps.ui.compose.main.MainViewModel
+import app.aaps.ui.compose.quickLaunch.QuickLaunchAction
+import app.aaps.ui.search.SearchIndexEntry
 
 /**
  * Where a tap in the drawer, the toolbar or a search result actually goes.
@@ -245,7 +245,10 @@ fun ElementNavigator.handleNotificationAction(notificationId: NotificationId) {
         NotificationId.MASTER_PASSWORD_NOT_SET ->
             navController.navigate(AppRoute.PreferenceScreen.createRoute("protection", StringKey.ProtectionMasterPassword.key))
 
-        NotificationId.AAPS_DIR_NOT_SELECTED   -> onRequestDirectoryAccess()
+        // Both go to the same picker: one has never chosen a directory, the other chose one and lost
+        // the permission behind it. Re-granting is the same action in each case.
+        NotificationId.AAPS_DIR_NOT_SELECTED,
+        NotificationId.AAPS_DIR_ACCESS_LOST    -> onRequestDirectoryAccess()
 
         else                                   -> Unit
     }

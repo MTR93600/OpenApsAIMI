@@ -1,6 +1,6 @@
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
+
 plugins {
     kotlin("multiplatform")
     // Metro, because this module does not only link the migrated code, it builds a graph from it.
@@ -126,7 +126,12 @@ tasks.matching { it.name.startsWith("linkDebugFramework") }.configureEach { depe
 fun buildStamp(): String {
     val commit = try {
         val out = File.createTempFile("git-build", "")
-        ProcessBuilder("git", "describe", "--always", "--abbrev=7").redirectOutput(out).start().waitFor()
+        // `--exclude=ios-testflight-*` for the same reason as in `:app`. It is tempting to keep these
+        // on the iOS side, since the tag was made by this platform's own release - but the tag names
+        // one past submission, not this build. `git describe` reports the nearest one whatever the
+        // distance, so a build 53 commits later still called itself
+        // "ios-testflight-20260906-085036-53-g4dddae0", which reads as that TestFlight build and is not.
+        ProcessBuilder("git", "describe", "--always", "--abbrev=7", "--exclude=ios-testflight-*").redirectOutput(out).start().waitFor()
         out.readText().trim()
     } catch (_: Exception) {
         "NoGitSystemAvailable"
@@ -192,10 +197,10 @@ kotlin {
                 migratedModules.forEach { api(project.dependencies.project(it)) }
 
                 // Named here rather than inherited, so the iOS parts of Compose are in the link.
-                implementation(libs.cmp.runtime)
-                implementation(libs.cmp.foundation)
-                implementation(libs.cmp.ui)
-                implementation(libs.cmp.material3)
+                implementation(libs.jetbrains.compose.runtime)
+                implementation(libs.jetbrains.compose.foundation)
+                implementation(libs.jetbrains.compose.ui)
+                implementation(libs.jetbrains.compose.material3)
             }
         }
 

@@ -31,19 +31,20 @@ import app.aaps.pump.medtrum.keys.MedtrumIntNonKey
 import app.aaps.pump.medtrum.keys.MedtrumLongNonKey
 import app.aaps.pump.medtrum.keys.MedtrumStringKey
 import app.aaps.pump.medtrum.keys.MedtrumStringNonKey
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.runBlocking
 import java.util.EnumSet
 import java.util.GregorianCalendar
-import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.SingleIn
 import kotlin.math.round
 
 @SingleIn(AppScope::class)
-class MedtrumPump @Inject constructor(
+@Inject
+class MedtrumPump(
     private val aapsLogger: AAPSLogger,
     private val rh: ResourceHelper,
     private val preferences: Preferences,

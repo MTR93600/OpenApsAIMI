@@ -2,11 +2,16 @@ package app.aaps.implementation.pump
 
 import app.aaps.core.data.model.BS
 import app.aaps.core.data.model.ICfg
+import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.pump.defs.PumpDescription
 import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.interfaces.constraints.Constraint
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
+import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.ActivePlugin
+import app.aaps.core.interfaces.plugin.PluginBase
+import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.profile.EffectiveProfile
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
@@ -15,6 +20,7 @@ import app.aaps.core.interfaces.pump.PumpEnactResult
 import app.aaps.core.interfaces.pump.PumpProfile
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.interfaces.pump.defs.fillFor
+import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.objects.constraints.ConstraintObject
 import app.aaps.shared.tests.TestBase
 import com.google.common.truth.Truth.assertThat
@@ -150,6 +156,68 @@ class PumpWithConcentrationImplTest : TestBase() {
         sut.deliverTreatment(dbi)
 
         verify(pump).deliverTreatment(any())
+    }
+
+    // --- bolusDelivered comes back in IU (#5191) ---
+
+    /** What a driver answers: the amount in its own units, the units it was handed. */
+    private fun driverDelivered(cU: Double): PumpEnactResult =
+        PumpEnactResultObject(mock<TextResolver>()).success(true).enacted(true).bolusDelivered(cU)
+
+    @Test
+    fun `deliverTreatment converts bolusDelivered back to IU for U200`() = runBlocking<Unit> {
+        setupConcentration(2.0)
+        val dbi = DetailedBolusInfo().apply { insulin = 1.0; bolusType = BS.Type.NORMAL }
+        whenever(pump.deliverTreatment(any())).thenReturn(driverDelivered(0.5))
+
+        // The SMS reply and Nightscout read this. Half of it was what a caregiver used to see.
+        assertThat(sut.deliverTreatment(dbi).bolusDelivered).isEqualTo(1.0)
+    }
+
+    @Test
+    fun `deliverTreatment converts bolusDelivered back to IU for U50`() = runBlocking<Unit> {
+        setupConcentration(0.5)
+        val dbi = DetailedBolusInfo().apply { insulin = 1.0; bolusType = BS.Type.SMB }
+        whenever(pump.deliverTreatment(any())).thenReturn(driverDelivered(2.0))
+
+        assertThat(sut.deliverTreatment(dbi).bolusDelivered).isEqualTo(1.0)
+    }
+
+    @Test
+    fun `deliverTreatment reports a partly delivered bolus in IU`() = runBlocking<Unit> {
+        // Stopped by the user: 3.0 cU asked, 1.2 cU given.
+        setupConcentration(2.0)
+        val dbi = DetailedBolusInfo().apply { insulin = 6.0; bolusType = BS.Type.NORMAL }
+        whenever(pump.deliverTreatment(any())).thenReturn(driverDelivered(1.2))
+
+        assertThat(sut.deliverTreatment(dbi).bolusDelivered).isWithin(1e-9).of(2.4)
+    }
+
+    @Test
+    fun `deliverTreatment leaves bolusDelivered unchanged for U100`() = runBlocking<Unit> {
+        setupU100()
+        val dbi = DetailedBolusInfo().apply { insulin = 1.5; bolusType = BS.Type.NORMAL }
+        whenever(pump.deliverTreatment(any())).thenReturn(driverDelivered(1.5))
+
+        assertThat(sut.deliverTreatment(dbi).bolusDelivered).isEqualTo(1.5)
+    }
+
+    @Test
+    fun `deliverTreatment leaves bolusDelivered of a priming bolus unchanged`() = runBlocking<Unit> {
+        // Priming goes in without conversion, so it must come back without one too.
+        setupConcentration(2.0)
+        val dbi = DetailedBolusInfo().apply { insulin = 4.0; bolusType = BS.Type.PRIMING }
+        whenever(pump.deliverTreatment(any())).thenReturn(driverDelivered(4.0))
+
+        assertThat(sut.deliverTreatment(dbi).bolusDelivered).isEqualTo(4.0)
+    }
+
+    @Test
+    fun `setExtendedBolus converts bolusDelivered back to IU for U200`() = runBlocking<Unit> {
+        setupConcentration(2.0)
+        whenever(pump.setExtendedBolus(any(), any())).thenReturn(driverDelivered(2.0))
+
+        assertThat(sut.setExtendedBolus(4.0, 60).bolusDelivered).isEqualTo(4.0)
     }
 
     // --- setTempBasalAbsolute tests ---
@@ -329,5 +397,40 @@ class PumpWithConcentrationImplTest : TestBase() {
         } catch (e: IllegalStateException) {
             assertThat(e.message).isEqualTo("No profile running")
         }
+    }
+
+    // --- a driver that failed to start ---
+
+    /**
+     * A driver whose own `isInitialized()` is delegated to [pump], so it keeps answering what the hardware
+     * state says while [PluginBase.lastStartFailed] is set. That is the real shape: `DanaRSPlugin` reads
+     * `danaPump.lastConnection`, `OmnipodDashPumpPlugin` reads `podStateManager.isPodRunning`, and neither
+     * is reset by `onStop`.
+     */
+    private class FailingPumpPlugin(
+        aapsLogger: AAPSLogger,
+        rh: TextResolver,
+        notificationManager: NotificationManager,
+        delegate: Pump
+    ) : PluginBase(PluginDescription().mainType(PluginType.PUMP), aapsLogger, rh, notificationManager), Pump by delegate {
+
+        override suspend fun onStart() {
+            throw IllegalStateException("driver did not come up")
+        }
+    }
+
+    @Test
+    fun `a pump driver whose start failed is reported as not initialized`() = runBlocking {
+        val failing = FailingPumpPlugin(aapsLogger, mock<TextResolver>(), mock<NotificationManager>(), pump)
+        whenever(pump.isInitialized()).thenReturn(true)
+        whenever(activePlugin.activePumpInternal).thenReturn(failing)
+
+        // Same driver, same device state, before and after: only the failed start differs.
+        assertThat(sut.isInitialized()).isTrue()
+
+        failing.setPluginEnabledAwaiting(PluginType.PUMP, true)
+
+        assertThat(failing.isInitialized()).isTrue()   // the driver still says yes, as it would after a restart
+        assertThat(sut.isInitialized()).isFalse()      // ...and the dosing gates are told no
     }
 }

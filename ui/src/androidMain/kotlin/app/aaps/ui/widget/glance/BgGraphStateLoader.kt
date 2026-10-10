@@ -15,7 +15,6 @@ import app.aaps.core.keys.BooleanComposedKey
 import app.aaps.core.keys.IntComposedKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.CoreUiStrings
-import app.aaps.ui.UiStrings
 import app.aaps.ui.widget.directionToDrawableRes
 import dev.zacsweers.metro.Inject
 
@@ -37,7 +36,8 @@ data class BgGraphRenderState(
  * widget has already awaited `config.appInitialized`, so all lateinit plugin state
  * is ready.
  */
-class BgGraphStateLoader @Inject constructor(
+@Inject
+class BgGraphStateLoader(
     private val cacheProvider: () -> OverviewDataCache,
     private val profileFunction: ProfileFunction,
     private val profileUtil: ProfileUtil,

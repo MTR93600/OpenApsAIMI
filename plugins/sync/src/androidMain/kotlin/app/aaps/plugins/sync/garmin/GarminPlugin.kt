@@ -1,6 +1,5 @@
 package app.aaps.plugins.sync.garmin
 
-import app.aaps.plugins.sync.SyncStrings
 import android.content.Context
 import androidx.annotation.VisibleForTesting
 import app.aaps.core.data.model.GV
@@ -9,15 +8,16 @@ import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginBaseWithPreferences
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.collectResilient
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.ui.compose.icons.IcPluginGarmin
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
+import app.aaps.plugins.sync.SyncStrings
 import app.aaps.plugins.sync.garmin.keys.GarminBooleanKey
 import app.aaps.plugins.sync.garmin.keys.GarminIntKey
 import app.aaps.plugins.sync.garmin.keys.GarminStringKey
@@ -29,6 +29,11 @@ import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.IntKey
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.binding
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.drop
 import java.math.BigDecimal
 import java.math.MathContext
 import java.math.RoundingMode
@@ -43,11 +48,6 @@ import java.util.concurrent.locks.Condition
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 import kotlin.math.roundToInt
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.drop
 
 /** Support communication with Garmin devices.
  *
@@ -59,22 +59,23 @@ import kotlinx.coroutines.flow.drop
 @ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
 @IntKey(370)
 @SingleIn(AppScope::class)
-class GarminPlugin @Inject constructor(
+@Inject
+class GarminPlugin(
     aapsLogger: AAPSLogger,
     resourceHelper: ResourceHelper,
     preferences: Preferences,
     private val context: Context,
     private val loopHub: LoopHub,
-    private val persistenceLayer: PersistenceLayer
+    private val persistenceLayer: PersistenceLayer,
+    notificationManager: NotificationManager
 ) : PluginBaseWithPreferences(
     pluginDescription = PluginDescription()
         .mainType(PluginType.SYNC)
         .icon(IcPluginGarmin)
         .pluginName(SyncStrings.garmin)
-        .shortName(SyncStrings.garmin)
         .description(SyncStrings.garmin_description),
     ownPreferences = GarminStringKey.entries + GarminBooleanKey.entries + GarminIntKey.entries,
-    aapsLogger, resourceHelper, preferences
+    aapsLogger, resourceHelper, preferences, notificationManager
 ) {
 
     /** HTTP Server for local HTTP server communication (device app requests values) .*/

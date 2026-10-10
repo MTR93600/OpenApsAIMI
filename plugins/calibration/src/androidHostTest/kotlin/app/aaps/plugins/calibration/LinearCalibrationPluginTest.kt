@@ -19,12 +19,12 @@ import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.interfaces.notifications.NotificationLevel
 import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.profile.ProfileUtil
-import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.plugins.calibration.keys.CalibrationLongKey
 import app.aaps.shared.tests.TestBase
+import app.aaps.shared.tests.generatedTextResolver
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
@@ -42,7 +42,7 @@ import org.mockito.kotlin.whenever
 
 class LinearCalibrationPluginTest : TestBase() {
 
-    @Mock lateinit var rh: ResourceHelper
+    private val rh = generatedTextResolver("calibration" to CalibrationStringsValues::textOf)
     @Mock lateinit var dateUtil: DateUtil
     @Mock lateinit var persistenceLayer: PersistenceLayer
     @Mock lateinit var notificationManager: NotificationManager

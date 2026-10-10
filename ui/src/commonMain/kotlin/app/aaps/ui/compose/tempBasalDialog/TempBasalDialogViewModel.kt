@@ -9,7 +9,7 @@ import app.aaps.core.data.ui.ConfirmationLine
 import app.aaps.core.interfaces.bolus.BatchAction
 import app.aaps.core.interfaces.bolus.BatchExecutor
 import app.aaps.core.interfaces.clientcontrol.ActionProgress
-import app.aaps.core.interfaces.clientcontrol.FailureReason
+import app.aaps.core.interfaces.clientcontrol.isNotDeliveryError
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.profile.ProfileFunction
@@ -18,7 +18,6 @@ import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventShowDialog
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.clientcontrol.failText
-import app.aaps.ui.UiStrings
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
@@ -40,7 +39,8 @@ import kotlinx.coroutines.launch
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 @ViewModelKey
 @Stable
-class TempBasalDialogViewModel @Inject constructor(
+@Inject
+class TempBasalDialogViewModel(
     private val profileFunction: ProfileFunction,
     private val activePlugin: ActivePlugin,
     private val config: Config,
@@ -134,7 +134,7 @@ class TempBasalDialogViewModel @Inject constructor(
                     is ActionProgress.Prepared -> _sideEffect.tryEmit(SideEffect.ShowConfirmation(prepared.id, prepared.lines))
                     // Offline block (and a master-local failure) surface here; a client round-trip failure already showed on the modal.
                     is ActionProgress.Rejected ->
-                        if (prepared.reason == FailureReason.NotReachable || prepared.reason == FailureReason.ControlDisabled) rxBus.send(EventShowDialog.Ok(title = rh.gs(CoreUiStrings.tempbasal_label), message = rh.gs(prepared.reason.failText())))
+                        if (prepared.reason.isNotDeliveryError()) rxBus.send(EventShowDialog.Ok(title = rh.gs(CoreUiStrings.tempbasal_label), message = rh.gs(prepared.reason.failText())))
                         else prepared.detail?.let { detail ->
                             if (config.AAPSCLIENT) rxBus.send(EventShowDialog.Ok(title = rh.gs(CoreUiStrings.tempbasal_label), message = detail))
                             else _sideEffect.tryEmit(SideEffect.ShowDeliveryError(detail))
@@ -153,7 +153,7 @@ class TempBasalDialogViewModel @Inject constructor(
         appScope.launch {
             val result = batchExecutor.commit(bolusId, Sources.TempBasalDialog, rh.gs(CoreUiStrings.tempbasal_label), pumpDirect = true)
             if (result is ActionProgress.Rejected)
-                if (result.reason == FailureReason.NotReachable || result.reason == FailureReason.ControlDisabled) rxBus.send(EventShowDialog.Ok(title = rh.gs(CoreUiStrings.tempbasal_label), message = rh.gs(result.reason.failText())))
+                if (result.reason.isNotDeliveryError()) rxBus.send(EventShowDialog.Ok(title = rh.gs(CoreUiStrings.tempbasal_label), message = rh.gs(result.reason.failText())))
                 else result.detail?.let { detail ->
                     if (config.AAPSCLIENT) rxBus.send(EventShowDialog.Ok(title = rh.gs(CoreUiStrings.tempbasal_label), message = detail))
                     else _sideEffect.tryEmit(SideEffect.ShowDeliveryError(detail))

@@ -5,6 +5,7 @@ import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.db.ProcessedTbrEbData
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.overview.OverviewData
 import app.aaps.core.interfaces.overview.graph.OverviewDataCache
 import app.aaps.core.interfaces.plugin.ActivePlugin
@@ -22,7 +23,6 @@ import app.aaps.plugins.main.iob.iobCobCalculator.IobCobCalculatorPlugin
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.BindingContainer
 import dev.zacsweers.metro.ContributesTo
-import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.IntKey
 import dev.zacsweers.metro.IntoMap
 import dev.zacsweers.metro.Provides
@@ -64,10 +64,11 @@ object MainPluginsBindings {
         decimalFormatter: DecimalFormatter,
         processedTbrEbData: ProcessedTbrEbData,
         signals: CalculationSignalsEmitter,
+        notificationManager: NotificationManager,
         cache: () -> OverviewDataCache
     ): IobCobCalculatorPlugin = IobCobCalculatorPlugin(
         aapsLogger, rxBus, preferences, rh, profileFunction, activePlugin, dateUtil, persistenceLayer,
-        overviewData, calculationWorkflow, decimalFormatter, processedTbrEbData, signals
+        overviewData, calculationWorkflow, decimalFormatter, processedTbrEbData, signals, notificationManager
     ) { cache() }
 
     @Provides

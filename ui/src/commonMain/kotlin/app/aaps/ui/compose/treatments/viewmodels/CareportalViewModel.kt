@@ -23,7 +23,6 @@ import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.MenuItemData
 import app.aaps.core.ui.compose.SelectableListToolbar
 import app.aaps.core.ui.compose.ToolbarConfig
-import app.aaps.ui.UiStrings
 import app.aaps.ui.compose.treatments.viewmodels.TreatmentConstants.TREATMENT_HISTORY_DAYS
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.FlowPreview
@@ -40,7 +39,8 @@ import kotlinx.coroutines.launch
  * ViewModel for CareportalScreen managing therapy event state and business logic.
  */
 @Stable
-class CareportalViewModel @Inject constructor(
+@Inject
+class CareportalViewModel(
     private val persistenceLayer: PersistenceLayer,
     val rh: TextResolver,
     private val translator: Translator,

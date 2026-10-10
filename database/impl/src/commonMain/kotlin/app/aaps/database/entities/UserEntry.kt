@@ -186,6 +186,7 @@ data class UserEntry(
         DanaRv2,
         DanaRS,
         DanaI,
+        DanaI2,
         DiaconnG8,
         Insight,
         Combo,
@@ -217,6 +218,8 @@ data class UserEntry(
         BgFragment,
         Garmin,
         Database,           //for PersistenceLayer
+
+        Carelevo,
         Unknown,            //if necessary
         ;
 

@@ -43,6 +43,7 @@ import app.aaps.pump.diaconn.events.EventDiaconnG8NewStatus
 import app.aaps.pump.diaconn.keys.DiaconnStringNonKey
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
+import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.CoroutineStart
@@ -58,7 +59,6 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import dev.zacsweers.metro.Inject
 import app.aaps.core.ui.R as CoreUiR
 
 sealed class DiaconnOverviewEvent {
@@ -73,7 +73,8 @@ sealed class DiaconnOverviewEvent {
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 @ViewModelKey
 @Stable
-class DiaconnOverviewViewModel @Inject constructor(
+@Inject
+class DiaconnOverviewViewModel(
     private val aapsLogger: AAPSLogger,
     private val rh: ResourceHelper,
     private val rxBus: RxBus,

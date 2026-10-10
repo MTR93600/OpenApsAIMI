@@ -47,7 +47,7 @@ fun OverviewScreenSplit(
     tempTargetProgress: Float,
     tempTargetReason: TT.Reason?,
     tempTargetSceneManaged: Boolean = false,
-    runningMode: RM.Mode,
+    runningMode: RM.Mode?,
     runningModeText: String,
     runningModeRemaining: String,
     runningModeProgress: Float,
@@ -66,6 +66,7 @@ fun OverviewScreenSplit(
     paddingValues: PaddingValues,
     activeSceneState: ActiveSceneState? = null,
     sceneExpired: Boolean = false,
+    activeSceneChainTargetName: String? = null,
     onEndScene: () -> Unit = {},
     onDismissScene: () -> Unit = {},
     endSceneEnabled: Boolean = true,
@@ -91,6 +92,7 @@ fun OverviewScreenSplit(
         ActiveSceneBanner(
             activeState = activeSceneState,
             expired = sceneExpired,
+            chainTargetName = activeSceneChainTargetName,
             onEndClick = onEndScene,
             onDismiss = onDismissScene,
             endEnabled = endSceneEnabled,
@@ -198,7 +200,7 @@ fun OverviewScreenSplit(
                     .verticalScroll(rememberScrollState())
                     .padding(start = 4.dp)
             ) {
-                GraphsSection(graphViewModel = graphViewModel, isSimpleMode = isSimpleMode)
+                GraphsSection(graphViewModel = graphViewModel, isSimpleMode = isSimpleMode, iobText = iobUiState.text, cobText = cobUiState.text)
             }
         }
     }

@@ -16,6 +16,7 @@ import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.time.Duration
 
 /**
  * Decides what each calculation run contains; [CalculationExecutor] decides how it is run.
@@ -25,7 +26,8 @@ import kotlinx.coroutines.sync.withLock
  */
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
-class CalculationWorkflowImpl @Inject constructor(
+@Inject
+class CalculationWorkflowImpl(
     private val aapsLogger: AAPSLogger,
     private val dateUtil: DateUtil,
     private val workflowChainData: WorkflowChainData,
@@ -56,6 +58,8 @@ class CalculationWorkflowImpl @Inject constructor(
     override suspend fun stopCalculation(job: String, from: String) = executor.stop(job, from)
 
     override suspend fun waitForCalculationFinish(job: String, reason: String) = executor.waitForPrepare(job, reason)
+
+    override suspend fun awaitCalculationIdle(job: String, timeout: Duration): Boolean = executor.awaitIdle(job, timeout)
 
     override suspend fun runCalculation(
         job: String,
@@ -90,7 +94,6 @@ class CalculationWorkflowImpl @Inject constructor(
                     overviewData = overviewData,
                     cache = cache,
                     signals = signals,
-                    triggeredByNewBG = triggeredByNewBG,
                     runLoopAndWidgetPhase = true
                 )
                 workflowChainData.startMain(prepare, post)
@@ -110,7 +113,6 @@ class CalculationWorkflowImpl @Inject constructor(
                     overviewData = overviewData,
                     cache = mainCache,
                     signals = mainSignals,
-                    triggeredByNewBG = false,
                     runLoopAndWidgetPhase = false
                 )
             )

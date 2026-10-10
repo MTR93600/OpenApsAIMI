@@ -2,7 +2,6 @@ package app.aaps.ui.compose.fillDialog
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,7 +29,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -45,6 +43,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -52,12 +52,12 @@ import app.aaps.core.data.format.NumberFormat
 import app.aaps.core.data.model.ICfg
 import app.aaps.core.data.model.TE
 import app.aaps.core.interfaces.navigation.ElementType
-import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.ui.CoreUiStrings
-import app.aaps.core.ui.compose.LocalDecimalFormatter
 import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.DateTimeSection
 import app.aaps.core.ui.compose.EventTimeRow
+import app.aaps.core.ui.compose.LabeledSwitch
+import app.aaps.core.ui.compose.LocalDecimalFormatter
 import app.aaps.core.ui.compose.NumberInputRow
 import app.aaps.core.ui.compose.bottomBarSafeArea
 import app.aaps.core.ui.compose.clearFocusOnTap
@@ -262,6 +262,10 @@ internal fun FillDialogContent(
             )
         },
         bottomBar = {
+            // The button shows only a value, so a screen reader would say just the amount and never
+            // what pressing it does. The verb only: the Text below is still read, so repeating the
+            // amount here would have it announced twice. See ChipAnnouncementTest.
+            val confirmDescription = stringResource(CoreUiStrings.confirm)
             Button(
                 onClick = {
                     focusManager.clearFocus()
@@ -272,6 +276,7 @@ internal fun FillDialogContent(
                     .fillMaxWidth()
                     .bottomBarSafeArea()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .semantics { contentDescription = confirmDescription }
             ) {
                 Icon(
                     imageVector = Icons.Filled.Check,
@@ -309,22 +314,11 @@ internal fun FillDialogContent(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     // Site change
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSiteChangeClick() },
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = stringResource(UiStrings.record_pump_site_change),
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Switch(
-                            checked = uiState.siteChange,
-                            onCheckedChange = { onSiteChangeClick() }
-                        )
-                    }
+                    LabeledSwitch(
+                        label = stringResource(UiStrings.record_pump_site_change),
+                        checked = uiState.siteChange,
+                        onCheckedChange = { onSiteChangeClick() }
+                    )
 
                     // Site location picker
                     if (uiState.siteChange && uiState.siteRotationEnabled) {
@@ -337,22 +331,11 @@ internal fun FillDialogContent(
                     }
 
                     // Cartridge change
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onCartridgeChangeClick() },
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = stringResource(UiStrings.record_insulin_cartridge_change),
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Switch(
-                            checked = uiState.insulinCartridgeChange,
-                            onCheckedChange = { onCartridgeChangeClick() }
-                        )
-                    }
+                    LabeledSwitch(
+                        label = stringResource(UiStrings.record_insulin_cartridge_change),
+                        checked = uiState.insulinCartridgeChange,
+                        onCheckedChange = { onCartridgeChangeClick() }
+                    )
 
                     // Insulin selection
                     AnimatedVisibility(visible = uiState.showInsulinChange) {

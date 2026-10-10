@@ -172,7 +172,7 @@
     <string name="treatments_iob_label_string">IOB活性胰岛素:</string>
     <string name="carbs_and_bolus">碳水与大剂量</string>
     <string name="show_invalidated">显示无效项</string>
-    <string name="hide_invalidated">隐藏失效项</string>
+    <string name="hide_invalidated">隐藏无效项</string>
     <string name="careportal_remove_started_events">删除 AAPS 启动的条目</string>
     <string name="user_entry">用户条目</string>
     <string name="clone_label">克隆</string>

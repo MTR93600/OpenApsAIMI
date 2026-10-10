@@ -35,17 +35,18 @@ import app.aaps.core.ui.CoreUiStrings
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
-import kotlin.math.abs
-import kotlin.math.max
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
+import kotlin.math.abs
+import kotlin.math.max
 import kotlin.time.Clock
 
 // Deliberately NOT @SingleIn: the @Binds this replaces had no scope. It is a result object, built
 // fresh for each call and handed back to the caller.
 @ContributesBinding(AppScope::class)
-class DetermineBasalResult @Inject constructor(
+@Inject
+class DetermineBasalResult(
     private val aapsLogger: AAPSLogger,
     private val fabricPrivacy: FabricPrivacy,
     private val constraintChecker: ConstraintsChecker,

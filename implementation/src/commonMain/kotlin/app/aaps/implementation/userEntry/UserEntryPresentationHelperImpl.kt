@@ -49,6 +49,7 @@ import app.aaps.core.ui.compose.icons.IcNote
 import app.aaps.core.ui.compose.icons.IcPatchPump
 import app.aaps.core.ui.compose.icons.IcPluginAutomation
 import app.aaps.core.ui.compose.icons.IcPluginAutotune
+import app.aaps.core.ui.compose.icons.IcPluginCarelevo
 import app.aaps.core.ui.compose.icons.IcPluginCombo
 import app.aaps.core.ui.compose.icons.IcPluginConfigBuilder
 import app.aaps.core.ui.compose.icons.IcPluginDanaI
@@ -93,7 +94,8 @@ import dev.zacsweers.metro.SingleIn
 
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
-class UserEntryPresentationHelperImpl @Inject constructor(
+@Inject
+class UserEntryPresentationHelperImpl(
     private val translator: Translator,
     private val profileUtil: ProfileUtil,
     private val rh: TextResolver,
@@ -114,11 +116,13 @@ class UserEntryPresentationHelperImpl @Inject constructor(
         Sources.BgFragment          -> IcAaps
         Sources.CalibrationDialog   -> IcCalibration
         Sources.CarbDialog          -> IcCarbs
+        Sources.Carelevo            -> IcPluginCarelevo
         Sources.Combo               -> IcPluginCombo
         Sources.ConcentrationDialog -> IcPluginInsulin
         Sources.ConfigBuilder       -> IcPluginConfigBuilder
         Sources.Dana                -> IcPluginDanaI
         Sources.DanaI               -> IcPluginDanaI
+        Sources.DanaI2              -> IcPluginDanaI
         Sources.DanaR               -> IcPluginDanaI
         Sources.DanaRC              -> IcPluginDanaI
         Sources.DanaRS              -> IcPluginDanaI
@@ -208,6 +212,7 @@ class UserEntryPresentationHelperImpl @Inject constructor(
         Sources.ConfigBuilder       -> ElementType.CONFIGURATION.color()
         Sources.Dana                -> ElementType.PUMP.color()
         Sources.DanaI               -> ElementType.PUMP.color()
+        Sources.DanaI2              -> ElementType.PUMP.color()
         Sources.DanaR               -> ElementType.PUMP.color()
         Sources.DanaRC              -> ElementType.PUMP.color()
         Sources.DanaRS              -> ElementType.PUMP.color()
@@ -276,6 +281,7 @@ class UserEntryPresentationHelperImpl @Inject constructor(
         Sources.Wear                -> ElementType.AAPS.color()
         Sources.WizardDialog        -> ElementType.BOLUS_WIZARD.color()
         Sources.Xdrip               -> ElementType.CGM_XDRIP.color()
+        Sources.Carelevo            -> ElementType.PUMP.color()
     }
 
     override fun listToPresentationString(list: List<ValueWithUnit>) =

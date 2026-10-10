@@ -19,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -28,13 +29,13 @@ import app.aaps.core.data.model.TT
 import app.aaps.core.interfaces.notifications.AapsNotification
 import app.aaps.core.interfaces.overview.graph.TbrState
 import app.aaps.core.interfaces.pump.BolusProgressState
-import app.aaps.core.ui.compose.isLandscape
-import app.aaps.core.ui.compose.smallestScreenWidthDp
 import app.aaps.core.ui.compose.TABLET_MIN_SW_DP
+import app.aaps.core.ui.compose.isLandscape
 import app.aaps.core.ui.compose.navigation.NavigationRequest
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
 import app.aaps.core.ui.compose.pump.PumpActivityDialog
 import app.aaps.core.ui.compose.pump.PumpActivityFab
+import app.aaps.core.ui.compose.smallestScreenWidthDp
 import app.aaps.ui.compose.main.TempTargetChipState
 import app.aaps.ui.compose.manageSheet.ManageViewModel
 import app.aaps.ui.compose.notificationsSheet.NotificationBottomSheet
@@ -57,7 +58,7 @@ fun OverviewScreen(
     tempTargetProgress: Float,
     tempTargetReason: TT.Reason?,
     tempTargetRecordId: Long = 0,
-    runningMode: RM.Mode,
+    runningMode: RM.Mode?,
     runningModeText: String,
     runningModeRemaining: String,
     runningModeProgress: Float,
@@ -81,6 +82,7 @@ fun OverviewScreen(
     onAutoShowConsumed: () -> Unit,
     activeSceneState: ActiveSceneState? = null,
     sceneExpired: Boolean = false,
+    activeSceneChainTargetName: String? = null,
     onEndScene: () -> Unit = {},
     onDismissScene: () -> Unit = {},
     endSceneEnabled: Boolean = true,
@@ -100,9 +102,20 @@ fun OverviewScreen(
     var showPumpActivityDialog by remember { mutableStateOf(false) }
     val showPumpFab = isPumpCommunicating || (bolusState != null && bolusState.isSMB)
 
+    // Three seconds is enough to glance at the card, but not to hear it read out. Ask the platform
+    // how long this content needs instead: with a screen reader on it stretches the timeout, and
+    // with one off calculateRecommendedTimeoutMillis hands back the original 3 seconds unchanged.
+    val accessibilityManager = LocalAccessibilityManager.current
     LaunchedEffect(showPumpFab) {
         if (!showPumpFab && showPumpActivityDialog) {
-            delay(3_000)
+            delay(
+                accessibilityManager?.calculateRecommendedTimeoutMillis(
+                    originalTimeoutMillis = 3_000,
+                    containsIcons = true,
+                    containsText = true,
+                    containsControls = true
+                ) ?: 3_000
+            )
             showPumpActivityDialog = false
         }
     }
@@ -155,6 +168,7 @@ fun OverviewScreen(
                 paddingValues = paddingValues,
                 activeSceneState = activeSceneState,
                 sceneExpired = sceneExpired,
+                activeSceneChainTargetName = activeSceneChainTargetName,
                 onEndScene = onEndScene,
                 onDismissScene = onDismissScene,
                 endSceneEnabled = endSceneEnabled,
@@ -192,6 +206,7 @@ fun OverviewScreen(
                     paddingValues = paddingValues,
                     activeSceneState = activeSceneState,
                     sceneExpired = sceneExpired,
+                    activeSceneChainTargetName = activeSceneChainTargetName,
                     onEndScene = onEndScene,
                     onDismissScene = onDismissScene,
                     endSceneEnabled = endSceneEnabled,
@@ -228,6 +243,7 @@ fun OverviewScreen(
                     paddingValues = paddingValues,
                     activeSceneState = activeSceneState,
                     sceneExpired = sceneExpired,
+                    activeSceneChainTargetName = activeSceneChainTargetName,
                     onEndScene = onEndScene,
                     onDismissScene = onDismissScene,
                     endSceneEnabled = endSceneEnabled,

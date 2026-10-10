@@ -75,10 +75,10 @@ import app.aaps.ui.UiStrings
 import app.aaps.ui.compose.components.CarouselReorderConfig
 import app.aaps.ui.compose.components.ContentContainer
 import app.aaps.ui.compose.components.ManagementCarousel
-import kotlin.time.Instant
+import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import kotlinx.coroutines.launch
+import kotlin.time.Instant
 
 /**
  * Screen for managing temporary target presets and activating TTs.
@@ -147,8 +147,8 @@ fun TempTargetManagementScreen(
     if (showDeleteDialog && uiState.selectedPreset != null) {
         val presetName = uiState.selectedPreset!!.getDisplayName()
         OkCancelDialog(
-            title = viewModel.rh.gs(CoreUiStrings.removerecord),
-            message = "${viewModel.rh.gs(CoreUiStrings.delete)} $presetName?",
+            title = stringResource(CoreUiStrings.removerecord),
+            message = "${stringResource(CoreUiStrings.delete)} $presetName?",
             onConfirm = {
                 viewModel.deleteCurrentPreset()
                 showDeleteDialog = false
@@ -544,7 +544,7 @@ fun TempTargetManagementScreen(
                                     IconButton(onClick = { viewModel.addNewPreset() }) {
                                         Icon(
                                             imageVector = Icons.Filled.Add,
-                                            contentDescription = "Add preset"
+                                            contentDescription = stringResource(CoreUiStrings.add)
                                         )
                                     }
                                     // Revert button (only for fixed presets when editor values differ from defaults)

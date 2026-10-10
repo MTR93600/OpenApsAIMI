@@ -11,15 +11,16 @@ import app.aaps.pump.omnipod.eros.event.EventOmnipodErosFaultEventChanged
 import app.aaps.pump.omnipod.eros.event.EventOmnipodErosTbrChanged
 import app.aaps.pump.omnipod.eros.event.EventOmnipodErosUncertainTbrRecovered
 import app.aaps.pump.omnipod.eros.keys.ErosStringNonPreferenceKey
-import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 
 /**
  * Was Java.
  */
 @SingleIn(AppScope::class)
-class AapsErosPodStateManager @Inject constructor(
+@Inject
+class AapsErosPodStateManager(
     aapsLogger: AAPSLogger,
     private val preferences: Preferences,
     private val rxBus: RxBus,

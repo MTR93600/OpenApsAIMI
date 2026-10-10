@@ -5,13 +5,14 @@ import app.aaps.pump.eopatch.core.ble.BaseBooleanAPI
 import app.aaps.pump.eopatch.core.ble.PatchFunc
 import app.aaps.pump.eopatch.core.response.PatchBooleanResponse
 import app.aaps.pump.eopatch.core.scan.IBleDevice
-import io.reactivex.rxjava3.core.Single
-import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import io.reactivex.rxjava3.core.Single
 
 @SingleIn(AppScope::class)
-class BasalResume @Inject constructor(patch: IBleDevice, aapsLogger: AAPSLogger) : BaseBooleanAPI(PatchFunc.RESUME_NORMAL_BASAL, patch, aapsLogger) {
+@Inject
+class BasalResume(patch: IBleDevice, aapsLogger: AAPSLogger) : BaseBooleanAPI(PatchFunc.RESUME_NORMAL_BASAL, patch, aapsLogger) {
     override fun generate(): ByteArray = allocate().putByte(DEFAULT).build()
     fun resume(): Single<PatchBooleanResponse> = writeAndRead(generate())
 

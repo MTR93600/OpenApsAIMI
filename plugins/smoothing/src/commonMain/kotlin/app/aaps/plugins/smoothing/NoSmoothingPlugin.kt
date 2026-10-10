@@ -5,6 +5,7 @@ import androidx.compose.material.icons.filled.Timeline
 import app.aaps.core.data.iob.InMemoryGlucoseValue
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.TextResolver
@@ -25,16 +26,16 @@ import dev.zacsweers.metro.binding
 @IntKey(600)
 class NoSmoothingPlugin(
     aapsLogger: AAPSLogger,
-    rh: TextResolver
+    rh: TextResolver,
+    notificationManager: NotificationManager
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.SMOOTHING)
         .icon(Icons.Default.Timeline)
         .setDefault(true)
         .pluginName(SmoothingStrings.no_smoothing_name)
-        .shortName(SmoothingStrings.smoothing_shortname)
         .description(SmoothingStrings.description_no_smoothing),
-    aapsLogger, rh
+    aapsLogger, rh, notificationManager
 ), Smoothing {
 
     /** [context] carries hints only the adaptive smoother uses, so this plugin ignores it. */

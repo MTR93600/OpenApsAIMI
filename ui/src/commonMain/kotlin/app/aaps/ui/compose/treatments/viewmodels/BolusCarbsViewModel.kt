@@ -11,8 +11,8 @@ import app.aaps.core.data.time.T
 import app.aaps.core.data.ue.Action
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.data.ue.ValueWithUnit
-import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import app.aaps.core.interfaces.InterfacesStrings
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.db.observeChanges
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -26,7 +26,6 @@ import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.SelectableListToolbar
 import app.aaps.core.ui.compose.ToolbarConfig
-import app.aaps.ui.UiStrings
 import app.aaps.ui.compose.treatments.MealLink
 import app.aaps.ui.compose.treatments.viewmodels.TreatmentConstants.TREATMENT_HISTORY_DAYS
 import dev.zacsweers.metro.Inject
@@ -45,7 +44,8 @@ import kotlinx.coroutines.launch
  * ViewModel for BolusCarbsScreen managing bolus, carbs, and calculator result state and business logic.
  */
 @Stable
-class BolusCarbsViewModel @Inject constructor(
+@Inject
+class BolusCarbsViewModel(
     private val persistenceLayer: PersistenceLayer,
     private val profileFunction: ProfileFunction,
     val rh: TextResolver,

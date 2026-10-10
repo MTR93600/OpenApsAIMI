@@ -12,6 +12,7 @@ import app.aaps.plugins.automation.triggers.TriggerConnector
 import app.aaps.plugins.automation.triggers.TriggerDeps
 import app.aaps.plugins.automation.triggers.TriggerFactory
 import app.aaps.shared.tests.TestBaseWithProfile
+import app.aaps.shared.tests.generatedTextResolver
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -25,9 +26,12 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
 import org.mockito.kotlin.any
+import org.mockito.kotlin.argThat
 import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.spy
 import org.mockito.kotlin.whenever
 
 /**
@@ -47,6 +51,9 @@ import org.mockito.kotlin.whenever
 @OptIn(ExperimentalCoroutinesApi::class)
 class AutomationRuntimeSyncTest : TestBaseWithProfile() {
 
+    /** Real English, so an unstubbed automation string fails instead of becoming its own name. */
+    private val text = generatedTextResolver("automation" to AutomationStringsValues::textOf)
+
 @Mock lateinit var actionFactory: app.aaps.plugins.automation.actions.ActionFactory
     private val triggerFactory: TriggerFactory by lazy {
         TriggerFactory(triggerDeps, mock(), sceneApi, receiverStatusStore)
@@ -55,7 +62,7 @@ class AutomationRuntimeSyncTest : TestBaseWithProfile() {
     // nulls to element constructors that require them.
     private val triggerDeps: TriggerDeps by lazy {
         TriggerDeps(
-            aapsLogger, rxBus, rh, profileFunction, profileUtil, preferences, mock(), mock(),
+            aapsLogger, rxBus, text, profileFunction, profileUtil, preferences, mock(), mock(),
             activePlugin, iobCobCalculator, smbGlucoseStatusProvider, dateUtil
         )
     }
@@ -93,8 +100,8 @@ class AutomationRuntimeSyncTest : TestBaseWithProfile() {
         automationRuntime = newRuntime()
     }
 
-    private fun newRuntime() = AutomationRuntime(
-        mock<LocationPermissions>(), eventFactory, aapsLogger, rh, preferences, loop, rxBus, constraintChecker,
+    private fun newRuntime(factory: AutomationEventFactory = eventFactory) = AutomationRuntime(
+        mock<LocationPermissions>(), factory, aapsLogger, text, preferences, loop, rxBus, constraintChecker,
         config, locationServiceController, dateUtil, activePlugin, reminderScheduler, actionFactory, triggerFactory, triggerDeps, receiverStatusStore,
         uel, profileRepository, sceneApi, mock()
     )
@@ -247,6 +254,64 @@ class AutomationRuntimeSyncTest : TestBaseWithProfile() {
 
         assertThat(remoteWrites).isEmpty()
         assertThat(localPutCount).isEqualTo(0)
+
+        masterScope.cancel()
+    }
+
+    /**
+     * #5214: a stored list that does not parse at all used to load as empty, and bootstrap then wrote
+     * "[]" back - every rule deleted at the next start. It must stay on disk as it is.
+     */
+    @Test
+    fun `master bootstrap does not overwrite a list it cannot parse`() = runTest {
+        whenever(config.AAPSCLIENT).thenReturn(false)
+        val corrupt = "[{\"title\":\"cut off"
+        autoFlow.value = corrupt
+        val master = newRuntime()
+        val masterScope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        master.start(masterScope)
+        advanceUntilIdle()
+
+        assertThat(master.events.value).isEmpty()
+        assertThat(remoteWrites).isEmpty()
+        assertThat(localPutCount).isEqualTo(0)
+        assertThat(autoFlow.value).isEqualTo(corrupt)
+
+        masterScope.cancel()
+    }
+
+    /**
+     * #5214: one event that fails to load is skipped, the events after it still load, and bootstrap
+     * does not write the shorter list back over the stored one.
+     */
+    @Test
+    fun `one bad event is skipped and nothing is written back`() = runTest {
+        val producerScope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        automationRuntime.start(producerScope)
+        advanceUntilIdle()
+        automationRuntime.add(event("first"))
+        automationRuntime.add(event("broken"))
+        automationRuntime.add(event("last"))
+        advanceUntilIdle()
+        val stored = autoFlow.value
+        producerScope.cancel()
+
+        // fromJSON is lenient and hardly ever throws, so make it throw for the one event.
+        val failingFactory = spy(eventFactory)
+        doThrow(IllegalStateException("cannot read")).whenever(failingFactory).fromJSON(argThat { contains("broken") })
+
+        whenever(config.AAPSCLIENT).thenReturn(false)
+        localPutCount = 0
+        remoteWrites.clear()
+        val master = newRuntime(failingFactory)
+        val masterScope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        master.start(masterScope)
+        advanceUntilIdle()
+
+        assertThat(master.events.value.map { it.title }).containsExactly("first", "last").inOrder()
+        assertThat(remoteWrites).isEmpty()
+        assertThat(localPutCount).isEqualTo(0)
+        assertThat(autoFlow.value).isEqualTo(stored)
 
         masterScope.cancel()
     }

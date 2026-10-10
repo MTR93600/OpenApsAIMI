@@ -23,6 +23,7 @@ import app.aaps.wear.R
 import app.aaps.wear.events.EventWearPreferenceChange
 import app.aaps.wear.heartrate.HeartRateListener
 import app.aaps.wear.interaction.ConfigurationActivity
+import app.aaps.wear.watchfaces.WatchFacePushHelper
 import app.aaps.wear.wearStepCount.StepCountListener
 import com.google.android.gms.tasks.Tasks
 import com.google.android.gms.wearable.CapabilityClient
@@ -53,6 +54,7 @@ class DataLayerListenerServiceWear : WearableListenerService() {
     @Inject lateinit var sp: SP
     @Inject lateinit var rxBus: RxBus
     @Inject lateinit var aapsSchedulers: AapsSchedulers
+    @Inject lateinit var watchFacePushHelper: WatchFacePushHelper
 
     private val dataClient by lazy { Wearable.getDataClient(this) }
     private val messageClient by lazy { Wearable.getMessageClient(this) }
@@ -94,6 +96,16 @@ class DataLayerListenerServiceWear : WearableListenerService() {
 
         updateHeartRateListener()
         updateStepsCountListener()
+
+        // A watch with Watch Face Push has no code-based face to ask the phone for its data, so
+        // nothing would ask until a menu or a tile is opened. The pushed face choice lives on the
+        // phone, and after a reinstall the watch starts with the default face until the
+        // preferences arrive. So ask now. Posted behind the capability lookup above, on the same
+        // thread: that is the first moment a node is known, and the collectors above exist by then.
+        handler.post {
+            if (watchFacePushHelper.isSupported())
+                rxBus.send(EventWearToMobile(EventData.ActionResendData("DataLayerListenerServiceWear::onCreate")))
+        }
     }
 
     override fun onCapabilityChanged(p0: CapabilityInfo) {
@@ -299,6 +311,8 @@ class DataLayerListenerServiceWear : WearableListenerService() {
         const val FOREGROUND_NOTIF_ID = 3
         const val CHANGE_NOTIF_ID = 556677
 
+        // Do not change the ID: Android keeps the user's channel settings by ID. The name shown is set
+        // where the channel is created ("AAPS Open Loop").
         const val AAPS_NOTIFY_CHANNEL_ID_OPEN_LOOP = "AndroidAPS-OpenLoop"
         const val AAPS_NOTIFY_CHANNEL_ID_BOLUS_PROGRESS = "bolus progress vibration"
         const val AAPS_NOTIFY_CHANNEL_ID_BOLUS_PROGRESS_SILENT = "bolus progress silent"

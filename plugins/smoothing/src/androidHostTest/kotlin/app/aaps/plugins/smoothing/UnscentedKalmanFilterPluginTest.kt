@@ -25,7 +25,7 @@ internal class UnscentedKalmanFilterPluginTest {
     private val preferences = mock<Preferences>()
     private val persistenceLayer = mock<PersistenceLayer>()
 
-    private fun plugin() = UnscentedKalmanFilterPlugin(aapsLogger, rh, preferences, persistenceLayer)
+    private fun plugin() = UnscentedKalmanFilterPlugin(aapsLogger, rh, preferences, persistenceLayer, mock())
 
     /**
      * Runs a fresh plugin over [data]. `Smoothing.smooth` is suspend (the adaptive smoother reads IOB and

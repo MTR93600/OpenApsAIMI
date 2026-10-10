@@ -19,7 +19,6 @@ import app.aaps.core.objects.wizard.QuickWizardEntry
 import app.aaps.core.objects.wizard.QuickWizardMode
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.ScreenMode
-import app.aaps.ui.UiStrings
 import app.aaps.ui.events.EventQuickWizardChange
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
@@ -50,7 +49,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 @ViewModelKey
 @Stable
-class QuickWizardManagementViewModel @Inject constructor(
+@Inject
+class QuickWizardManagementViewModel(
     private val quickWizard: QuickWizard,
     private val rxBus: RxBus,
     private val constraintChecker: ConstraintsChecker,

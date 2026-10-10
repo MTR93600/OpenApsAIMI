@@ -19,6 +19,7 @@ import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.PermissionGroup
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
@@ -39,10 +40,10 @@ import app.aaps.core.utils.receivers.Inbox
 import app.aaps.plugins.source.activities.RequestDexcomPermissionActivity
 import app.aaps.plugins.source.compose.BgSourceComposeContent
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Assisted
 import dev.zacsweers.metro.AssistedFactory
 import dev.zacsweers.metro.AssistedInject
+import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.IntKey
@@ -56,12 +57,14 @@ import kotlin.math.abs
 @IntKey(440)
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class, binding = binding<DexcomBoyda>())
-class DexcomPlugin @Inject constructor(
+@Inject
+class DexcomPlugin(
     rh: ResourceHelper,
     aapsLogger: AAPSLogger,
     private val context: Context,
     config: Config,
     preferences: Preferences,
+    notificationManager: NotificationManager
 ) : AbstractBgSourceWithSensorInsertLogPlugin(
     pluginDescription = PluginDescription()
         .mainType(PluginType.BGSOURCE)
@@ -72,12 +75,12 @@ class DexcomPlugin @Inject constructor(
         }
         .icon(IcPluginByoda)
         .pluginName(TextRef.AndroidRes(R.string.dexcom_app_patched))
-        .shortName(TextRef.AndroidRes(R.string.dexcom_short))
         .preferencesVisibleInSimpleMode(false)
         .description(TextRef.AndroidRes(R.string.description_source_dexcom)),
     aapsLogger = aapsLogger,
     rh = rh,
-    preferences = preferences
+    preferences = preferences,
+    notificationManager = notificationManager
 ), BgSource, DexcomBoyda {
 
     init {
@@ -114,7 +117,8 @@ class DexcomPlugin @Inject constructor(
 
     // cannot be inner class because of needed injection
 
-    class DexcomWorker @AssistedInject constructor(
+    @AssistedInject
+    class DexcomWorker(
         @Assisted context: Context,
         @Assisted params: WorkerParameters,
         aapsLogger: AAPSLogger,
@@ -176,9 +180,9 @@ class DexcomPlugin @Inject constructor(
             // discriminator lives in the bundle itself as "sensorType", so we don't
             // need to thread the original intent action through the queue.
             val sourceSensor = when (bundle.getString("sensorType") ?: "") {
-                "G6" -> SourceSensor.DEXCOM_G6_NATIVE
-                "G7" -> SourceSensor.DEXCOM_G7_NATIVE
-                else -> SourceSensor.DEXCOM_NATIVE_UNKNOWN
+                "G6" -> SourceSensor.DEXCOM_G6
+                "G7" -> SourceSensor.DEXCOM_G7
+                else -> SourceSensor.DEXCOM_UNKNOWN
             }
             val calibrations = mutableListOf<PersistenceLayer.Calibration>()
             bundle.getBundle("meters")?.let { meters ->
@@ -211,7 +215,7 @@ class DexcomPlugin @Inject constructor(
                 // G5 calibration bug workaround (calibration is sent as glucoseValue too)
                 var valid = true
                 // G6 is sending one 24h old changed value causing recalculation. Ignore
-                if (sourceSensor == SourceSensor.DEXCOM_G6_NATIVE)
+                if (sourceSensor == SourceSensor.DEXCOM_G6)
                     if ((now - timestamp) > T.hours(20).msecs()) valid = false
                 if (valid)
                     glucoseValues += GV(
@@ -235,7 +239,7 @@ class DexcomPlugin @Inject constructor(
             val result = persistenceLayer.insertCgmSourceData(Sources.Dexcom, glucoseValues, calibrations, sensorStartTime)
             // G6 calibration bug workaround (2 additional GVs are created within 1 minute)
             for (i in result.inserted.indices) {
-                if (sourceSensor == SourceSensor.DEXCOM_G6_NATIVE) {
+                if (sourceSensor == SourceSensor.DEXCOM_G6) {
                     if (i < result.inserted.size - 1) {
                         if (abs(result.inserted[i].timestamp - result.inserted[i + 1].timestamp) < T.mins(1).msecs()) {
                             persistenceLayer.invalidateGlucoseValue(result.inserted[i].id, Action.BG_REMOVED, Sources.Dexcom, note = null, listValues = listOf())

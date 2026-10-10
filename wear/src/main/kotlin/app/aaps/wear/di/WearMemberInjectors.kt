@@ -14,10 +14,14 @@ import app.aaps.wear.complications.CobDetailedComplication
 import app.aaps.wear.complications.CobIconComplication
 import app.aaps.wear.complications.CobIobComplication
 import app.aaps.wear.complications.ComplicationTapActivity
+import app.aaps.wear.complications.CwfAmbientBgComplication
+import app.aaps.wear.complications.CwfAmbientStatusComplication
+import app.aaps.wear.complications.CwfImageComplication
 import app.aaps.wear.complications.IobDetailedComplication
 import app.aaps.wear.complications.IobIconComplication
 import app.aaps.wear.complications.LongStatusComplication
 import app.aaps.wear.complications.LongStatusFlippedComplication
+import app.aaps.wear.complications.RunningModeComplication
 import app.aaps.wear.complications.SgvComplication
 import app.aaps.wear.complications.SgvComplicationExt1
 import app.aaps.wear.complications.SgvComplicationExt2
@@ -27,6 +31,8 @@ import app.aaps.wear.complications.UploaderBatteryComplication
 import app.aaps.wear.complications.WallpaperDarkComplication
 import app.aaps.wear.complications.WallpaperGrayComplication
 import app.aaps.wear.complications.WallpaperLightComplication
+import app.aaps.wear.complications.cwf.CwfAmbientFaceComplication
+import app.aaps.wear.complications.cwf.CwfFaceComplication
 import app.aaps.wear.interaction.ConfigurationActivity
 import app.aaps.wear.interaction.WatchfaceConfigurationActivity
 import app.aaps.wear.interaction.actions.BackgroundActionActivity
@@ -36,11 +42,13 @@ import app.aaps.wear.interaction.actions.ECarbActivity
 import app.aaps.wear.interaction.actions.FillActivity
 import app.aaps.wear.interaction.actions.ProfileSwitchActivity
 import app.aaps.wear.interaction.actions.QuickSnoozeActivity
+import app.aaps.wear.interaction.actions.RunningModePickerActivity
 import app.aaps.wear.interaction.actions.RunningModeTimedActivity
 import app.aaps.wear.interaction.actions.TempTargetActivity
 import app.aaps.wear.interaction.actions.TreatmentActivity
 import app.aaps.wear.interaction.actions.WizardActivity
 import app.aaps.wear.interaction.activities.BgGraphActivity
+import app.aaps.wear.interaction.activities.CwfRenderPreviewActivity
 import app.aaps.wear.interaction.activities.LoopStatusActivity
 import app.aaps.wear.interaction.menus.FillMenuActivity
 import app.aaps.wear.interaction.menus.MainMenuActivity
@@ -228,6 +236,42 @@ object WearMemberInjectors {
     @Provides
     @FeatureMemberInjectors
     @IntoMap
+    @ClassKey(CwfAmbientBgComplication::class)
+    fun bindCwfAmbientBgComplication(injector: MembersInjector<CwfAmbientBgComplication>): MembersInjector<*> = injector
+
+    @Provides
+    @FeatureMemberInjectors
+    @IntoMap
+    @ClassKey(CwfAmbientFaceComplication::class)
+    fun bindCwfAmbientFaceComplication(injector: MembersInjector<CwfAmbientFaceComplication>): MembersInjector<*> = injector
+
+    @Provides
+    @FeatureMemberInjectors
+    @IntoMap
+    @ClassKey(CwfAmbientStatusComplication::class)
+    fun bindCwfAmbientStatusComplication(injector: MembersInjector<CwfAmbientStatusComplication>): MembersInjector<*> = injector
+
+    @Provides
+    @FeatureMemberInjectors
+    @IntoMap
+    @ClassKey(CwfFaceComplication::class)
+    fun bindCwfFaceComplication(injector: MembersInjector<CwfFaceComplication>): MembersInjector<*> = injector
+
+    @Provides
+    @FeatureMemberInjectors
+    @IntoMap
+    @ClassKey(CwfImageComplication::class)
+    fun bindCwfImageComplication(injector: MembersInjector<CwfImageComplication>): MembersInjector<*> = injector
+
+    @Provides
+    @FeatureMemberInjectors
+    @IntoMap
+    @ClassKey(CwfRenderPreviewActivity::class)
+    fun bindCwfRenderPreviewActivity(injector: MembersInjector<CwfRenderPreviewActivity>): MembersInjector<*> = injector
+
+    @Provides
+    @FeatureMemberInjectors
+    @IntoMap
     @ClassKey(DataLayerListenerServiceWear::class)
     fun bindDataLayerListenerServiceWear(injector: MembersInjector<DataLayerListenerServiceWear>): MembersInjector<*> = injector
 
@@ -330,6 +374,12 @@ object WearMemberInjectors {
     @Provides
     @FeatureMemberInjectors
     @IntoMap
+    @ClassKey(RunningModePickerActivity::class)
+    fun bindRunningModePickerActivity(injector: MembersInjector<RunningModePickerActivity>): MembersInjector<*> = injector
+
+    @Provides
+    @FeatureMemberInjectors
+    @IntoMap
     @ClassKey(SceneTileService::class)
     fun bindSceneTileService(injector: MembersInjector<SceneTileService>): MembersInjector<*> = injector
 
@@ -416,6 +466,12 @@ object WearMemberInjectors {
     @IntoMap
     @ClassKey(UploaderBatteryComplication::class)
     fun bindUploaderBatteryComplication(injector: MembersInjector<UploaderBatteryComplication>): MembersInjector<*> = injector
+
+    @Provides
+    @FeatureMemberInjectors
+    @IntoMap
+    @ClassKey(RunningModeComplication::class)
+    fun bindRunningModeComplication(injector: MembersInjector<RunningModeComplication>): MembersInjector<*> = injector
 
     @Provides
     @FeatureMemberInjectors

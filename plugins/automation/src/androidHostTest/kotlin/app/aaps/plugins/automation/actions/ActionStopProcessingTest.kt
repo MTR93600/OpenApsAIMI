@@ -1,12 +1,10 @@
 package app.aaps.plugins.automation.actions
 
 import app.aaps.plugins.automation.AutomationStrings
-import app.aaps.plugins.automation.R
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.mockito.kotlin.whenever
 
 class ActionStopProcessingTest : ActionsTestBase() {
 
@@ -15,8 +13,7 @@ class ActionStopProcessingTest : ActionsTestBase() {
     @BeforeEach
     fun setup() {
 
-        whenever(rh.gs(AutomationStrings.stop_processing)).thenReturn("Stop processing")
-        sut = ActionStopProcessing(aapsLogger, rh, { pumpEnactResultProvider() })
+        sut = ActionStopProcessing(aapsLogger, text, { pumpEnactResultProvider() })
     }
 
     @Test

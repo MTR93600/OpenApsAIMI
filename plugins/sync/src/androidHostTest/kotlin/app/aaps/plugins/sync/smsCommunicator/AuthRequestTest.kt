@@ -1,15 +1,15 @@
 package app.aaps.plugins.sync.smsCommunicator
 
-import app.aaps.plugins.sync.SyncStrings
 import app.aaps.core.data.configuration.Constants
 import app.aaps.core.interfaces.queue.CommandQueue
-import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.smsCommunicator.Sms
 import app.aaps.core.interfaces.smsCommunicator.SmsCommunicator
 import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.plugins.sync.SyncStringsValues
 import app.aaps.plugins.sync.smsCommunicator.otp.OneTimePassword
 import app.aaps.plugins.sync.smsCommunicator.otp.OneTimePasswordValidationResult
 import app.aaps.shared.tests.TestBase
+import app.aaps.shared.tests.generatedTextResolver
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
@@ -23,7 +23,7 @@ import org.mockito.kotlin.whenever
 class AuthRequestTest : TestBase() {
 
     @Mock lateinit var smsCommunicator: SmsCommunicator
-    @Mock lateinit var rh: ResourceHelper
+    private val rh = generatedTextResolver("sync" to SyncStringsValues::textOf)
     @Mock lateinit var otp: OneTimePassword
     @Mock lateinit var dateUtil: DateUtil
     @Mock lateinit var commandQueue: CommandQueue
@@ -32,7 +32,6 @@ class AuthRequestTest : TestBase() {
     private var actionCalled = false
 
     @BeforeEach fun prepareTests() {
-        whenever(rh.gs(SyncStrings.sms_wrong_code)).thenReturn("Wrong code. Command cancelled.")
         doAnswer { invocation: InvocationOnMock ->
             sentSms = invocation.getArgument(0)
             null

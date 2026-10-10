@@ -1,6 +1,5 @@
 package app.aaps.plugins.constraints.signatureVerifier
 
-import app.aaps.plugins.constraints.ConstraintsStrings
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Handler
@@ -12,12 +11,13 @@ import app.aaps.core.interfaces.di.APS
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.interfaces.notifications.NotificationManager
+import app.aaps.core.interfaces.plugin.EnforcedState
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginBaseWithPreferences
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.plugins.constraints.ConstraintsStrings
 import app.aaps.plugins.constraints.signatureVerifier.keys.SignatureVerifierLongKey
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
@@ -40,7 +40,7 @@ import java.security.NoSuchAlgorithmException
 import kotlin.time.Duration.Companion.days
 
 /**
- * AndroidAPS is meant to be build by the user.
+ * AAPS is meant to be build by the user.
  * In case someone decides to leak a ready-to-use APK nonetheless, we can still disable it.
  * Self-compiled APKs with privately held certificates cannot and will not be disabled.
  */
@@ -49,20 +49,21 @@ import kotlin.time.Duration.Companion.days
 @APS
 @IntKey(830)
 @SingleIn(AppScope::class)
-class SignatureVerifierPlugin @Inject constructor(
+@Inject
+class SignatureVerifierPlugin(
     aapsLogger: AAPSLogger,
     rh: ResourceHelper,
     preferences: Preferences,
     private val context: Context,
-    private val notificationManager: NotificationManager
+    notificationManager: NotificationManager
 ) : PluginBaseWithPreferences(
     pluginDescription = PluginDescription()
         .mainType(PluginType.CONSTRAINTS)
-        .alwaysEnabled(true)
+        .enforce(EnforcedState.Enabled)
         .showInList { false }
         .pluginName(ConstraintsStrings.signature_verifier),
     ownPreferences = SignatureVerifierLongKey.entries,
-    aapsLogger, rh, preferences
+    aapsLogger, rh, preferences, notificationManager
 ), PluginConstraints {
 
     private var handler: Handler? = null

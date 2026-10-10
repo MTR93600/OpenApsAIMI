@@ -22,6 +22,7 @@ import org.mockito.Mock
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -48,7 +49,8 @@ class TidepoolPluginTest : TestBaseWithProfile() {
         whenever(receiverDelegate.connectivityStatusFlow).thenReturn(connectivityFlow)
         whenever(persistenceLayer.observeChanges(anyOrNull<KClass<*>>())).thenReturn(emptyFlow())
         tidepoolPlugin = TidepoolPlugin(
-            aapsLogger, rh, preferences, rxBus, tidepoolUploader, uploadChunk, rateLimit, receiverDelegate, authFlowOut, tidepoolRepository, dateUtil, persistenceLayer
+            aapsLogger, rh, preferences, rxBus, tidepoolUploader, uploadChunk, rateLimit, receiverDelegate, authFlowOut, tidepoolRepository, dateUtil, persistenceLayer,
+            mock()
         )
     }
 
@@ -95,7 +97,7 @@ class TidepoolPluginTest : TestBaseWithProfile() {
         val plugin = TidepoolPlugin(
             aapsLogger, rh, preferences, rxBus,
             realUploader, uploadChunk, rateLimit,
-            receiverDelegate, authFlowOut, tidepoolRepository, dateUtil, persistenceLayer
+            receiverDelegate, authFlowOut, tidepoolRepository, dateUtil, persistenceLayer, mock()
         )
         runBlocking { plugin.onStart() }
         Thread.sleep(500) // Ensure flow collector has started and processed initial value
@@ -119,7 +121,7 @@ class TidepoolPluginTest : TestBaseWithProfile() {
         val plugin = TidepoolPlugin(
             aapsLogger, rh, preferences, rxBus,
             realUploader, uploadChunk, rateLimit,
-            receiverDelegate, authFlowOut, tidepoolRepository, dateUtil, persistenceLayer
+            receiverDelegate, authFlowOut, tidepoolRepository, dateUtil, persistenceLayer, mock()
         )
         runBlocking { plugin.onStart() }
         connectivityFlow.value = ConnectivityStatus("Blocked", allowed = false, connected = false)

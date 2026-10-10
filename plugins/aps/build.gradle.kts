@@ -104,7 +104,7 @@ kotlin {
                 implementation(libs.androidx.collection)
                 implementation(libs.kotlinx.coroutines.core)
                 implementation(libs.kotlinx.datetime)
-                implementation(libs.cmp.runtime)
+                implementation(libs.jetbrains.compose.runtime)
                 api(kotlin("reflect"))
             }
         }

@@ -3,6 +3,7 @@ package app.aaps.database.di
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.SQLiteConnection
+import androidx.sqlite.SQLiteDriver
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.sqlite.execSQL
 import app.aaps.database.AppDatabase
@@ -34,7 +35,7 @@ import java.io.File
  *
  * ## Migrations
  *
- * [appDatabaseMigrations] is the same list Android and iOS pass. A new file is created at version 35.
+ * [databaseMigrations] is the same list Android and iOS pass. A new file is created at version 35.
  * An older file runs the list. Nothing here copies it.
  */
 class JvmAppDatabaseBuilder {
@@ -43,18 +44,15 @@ class JvmAppDatabaseBuilder {
     fun provideAppRepository(fileName: String): AppRepository =
         AppRepository { provideAppDatabase(fileName) }
 
-    /** The three therapy windows, read on the calling thread via [RoomTherapyWindowReads]. */
-    fun provideTherapyWindowReads(fileName: String): RoomTherapyWindowReads =
-        RoomTherapyWindowReads(provideAppDatabase(fileName))
-
-    internal fun provideAppDatabase(fileName: String): AppDatabase =
+    /** [driver] is only changed by tests, which wrap it to see the SQL the DAOs run. */
+    internal fun provideAppDatabase(fileName: String, driver: SQLiteDriver = BundledSQLiteDriver()): AppDatabase =
         Room
             .databaseBuilder<AppDatabase>(name = databasePath(fileName))
             // Same driver as Android and Apple: SQLite compiled from source, so the engine matches on
             // every platform rather than following whatever the OS happens to ship.
-            .setDriver(BundledSQLiteDriver())
+            .setDriver(driver)
             .setQueryCoroutineContext(Dispatchers.IO)
-            .addMigrations(*appDatabaseMigrations)
+            .addMigrations(*databaseMigrations)
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(connection: SQLiteConnection) {
                     super.onOpen(connection)

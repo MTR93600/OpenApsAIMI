@@ -39,7 +39,8 @@ import android.app.NotificationManager as AndroidNotificationManager
  */
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
-class AndroidSystemNotificationPlatform @Inject constructor(
+@Inject
+class AndroidSystemNotificationPlatform(
     private val aapsLogger: AAPSLogger,
     private val context: Context,
     private val preferences: Preferences,
@@ -145,7 +146,7 @@ class AndroidSystemNotificationPlatform @Inject constructor(
         started = true
 
         notificationManager.createNotificationChannel(
-            NotificationChannel(NotificationManager.CHANNEL_ID, NotificationManager.CHANNEL_ID, AndroidNotificationManager.IMPORTANCE_HIGH)
+            NotificationChannel(NotificationManager.CHANNEL_ID, NotificationManager.CHANNEL_NAME, AndroidNotificationManager.IMPORTANCE_HIGH)
         )
 
         val filter = IntentFilter(NotificationManager.DISMISS_ACTION)

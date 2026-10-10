@@ -7,17 +7,18 @@ import app.aaps.pump.eopatch.core.response.PatchBooleanResponse
 import app.aaps.pump.eopatch.core.response.UpdateConnectionResponse
 import app.aaps.pump.eopatch.vo.PatchState
 import app.aaps.pump.eopatch.vo.PatchState.Companion.create
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.functions.Consumer
 import io.reactivex.rxjava3.functions.Function
 import io.reactivex.rxjava3.functions.Predicate
 import java.util.concurrent.TimeUnit
-import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.SingleIn
 
 @SingleIn(AppScope::class)
-class PrimingTask @Inject constructor() : TaskBase(TaskFunc.PRIMING) {
+@Inject
+class PrimingTask() : TaskBase(TaskFunc.PRIMING) {
 
     @Inject lateinit var updateConnection: UpdateConnection
     @Inject lateinit var startPriming: StartPriming

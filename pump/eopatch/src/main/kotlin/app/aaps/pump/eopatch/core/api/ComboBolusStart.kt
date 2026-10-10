@@ -10,13 +10,14 @@ import app.aaps.pump.eopatch.core.define.IPatchConstant.Companion.EXT_BOLUS_ID
 import app.aaps.pump.eopatch.core.define.IPatchConstant.Companion.NOW_BOLUS_ID
 import app.aaps.pump.eopatch.core.response.ComboBolusStartResponse
 import app.aaps.pump.eopatch.core.scan.IBleDevice
-import io.reactivex.rxjava3.core.Single
-import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import io.reactivex.rxjava3.core.Single
 
 @SingleIn(AppScope::class)
-class ComboBolusStart @Inject constructor(patch: IBleDevice, aapsLogger: AAPSLogger) : BaseAPI<ComboBolusStartResponse>(PatchFunc.START_COMBO_BOLUS, patch, aapsLogger) {
+@Inject
+class ComboBolusStart(patch: IBleDevice, aapsLogger: AAPSLogger) : BaseAPI<ComboBolusStartResponse>(PatchFunc.START_COMBO_BOLUS, patch, aapsLogger) {
     override fun parse(bytes: ByteArray): ComboBolusStartResponse {
         if (bytes[DATA0].toInt() != 0) return ComboBolusStartResponse(false, 0, 0)
         val id = BytesConverter.toUInt(bytes[DATA1], bytes[DATA2])

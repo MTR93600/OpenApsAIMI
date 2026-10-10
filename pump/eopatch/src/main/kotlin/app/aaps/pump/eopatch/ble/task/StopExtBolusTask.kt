@@ -4,16 +4,17 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.pump.eopatch.core.api.BolusStop
 import app.aaps.pump.eopatch.core.define.IPatchConstant
 import app.aaps.pump.eopatch.core.response.BolusStopResponse
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 import io.reactivex.rxjava3.core.Single
 import io.reactivex.rxjava3.functions.Consumer
 import io.reactivex.rxjava3.functions.Function
 import java.util.concurrent.TimeUnit
-import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.SingleIn
 
 @SingleIn(AppScope::class)
-class StopExtBolusTask @Inject constructor() : BolusTask(TaskFunc.STOP_EXT_BOLUS) {
+@Inject
+class StopExtBolusTask() : BolusTask(TaskFunc.STOP_EXT_BOLUS) {
 
     @Inject lateinit var bolusStop: BolusStop
 

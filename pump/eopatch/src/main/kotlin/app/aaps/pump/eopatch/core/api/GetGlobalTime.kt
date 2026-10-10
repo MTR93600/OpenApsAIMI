@@ -6,13 +6,14 @@ import app.aaps.pump.eopatch.core.ble.BytesConverter
 import app.aaps.pump.eopatch.core.ble.PatchFunc
 import app.aaps.pump.eopatch.core.response.GlobalTimeResponse
 import app.aaps.pump.eopatch.core.scan.IBleDevice
-import io.reactivex.rxjava3.core.Single
-import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import io.reactivex.rxjava3.core.Single
 
 @SingleIn(AppScope::class)
-class GetGlobalTime @Inject constructor(patch: IBleDevice, aapsLogger: AAPSLogger) : BaseAPI<GlobalTimeResponse>(PatchFunc.GET_GLOBAL_TIME, patch, aapsLogger) {
+@Inject
+class GetGlobalTime(patch: IBleDevice, aapsLogger: AAPSLogger) : BaseAPI<GlobalTimeResponse>(PatchFunc.GET_GLOBAL_TIME, patch, aapsLogger) {
     override fun parse(bytes: ByteArray): GlobalTimeResponse {
         val time = BytesConverter.toUInt(bytes, DATA0)
         return GlobalTimeResponse(time, bytes[DATA5].toInt())

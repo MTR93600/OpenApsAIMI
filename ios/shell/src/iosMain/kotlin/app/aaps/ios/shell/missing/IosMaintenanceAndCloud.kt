@@ -1,13 +1,6 @@
 package app.aaps.ios.shell.missing
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CloudOff
 import app.aaps.core.interfaces.logging.AAPSLogger
-import platform.Foundation.NSUserDomainMask
-import platform.Foundation.NSSearchPathForDirectoriesInDomains
-import platform.Foundation.NSFileManager
-import platform.Foundation.NSDocumentDirectory
-import kotlinx.cinterop.ExperimentalForeignApi
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.maintenance.ExportResult
 import app.aaps.core.interfaces.maintenance.Maintenance
@@ -15,6 +8,11 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import kotlinx.cinterop.ExperimentalForeignApi
+import platform.Foundation.NSDocumentDirectory
+import platform.Foundation.NSFileManager
+import platform.Foundation.NSSearchPathForDirectoriesInDomains
+import platform.Foundation.NSUserDomainMask
 
 /*
  * Maintenance and cloud export.
@@ -30,7 +28,8 @@ import dev.zacsweers.metro.SingleIn
 @OptIn(ExperimentalForeignApi::class)
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
-class IosMaintenance @Inject constructor(
+@Inject
+class IosMaintenance(
     private val aapsLogger: AAPSLogger,
     /** Overridden in a test, so it neither reads the real log nor deletes it. */
     private val logDirectory: String? = defaultLogDirectory()
