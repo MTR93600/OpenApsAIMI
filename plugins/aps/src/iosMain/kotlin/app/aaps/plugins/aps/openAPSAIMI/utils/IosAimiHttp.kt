@@ -15,7 +15,7 @@ import io.ktor.client.plugins.timeout
 import io.ktor.client.request.header
 import io.ktor.client.request.request
 import io.ktor.client.request.setBody
-import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.bodyAsBytes
 import io.ktor.http.HttpMethod
 import kotlinx.coroutines.runBlocking
 import platform.Foundation.NSURLErrorCannotConnectToHost
@@ -79,15 +79,20 @@ class IosAimiHttp @Inject constructor() : AimiHttp {
                 socketTimeoutMillis = request.readTimeoutMs.toLong()
             }
         }
-        val text = response.bodyAsText()
+        // Bytes decoded as UTF-8, not `bodyAsText()`. That helper decodes with the charset named in
+        // the Content-Type header, while Android reads the stream as UTF-8 whatever the header
+        // says. A server answering `charset=ISO-8859-1` would otherwise give the two phones two
+        // different strings for the same body.
+        val text = response.bodyAsBytes().decodeToString()
         val successful = response.status.value in 200..299
         AimiHttpResponse(
             code = response.status.value,
-            // `null`, which the interface allows for a platform that has none. NSURLSession does
-            // not expose a status line, and `localizedStringForStatusCode` is a translated sentence,
-            // not the reason phrase - handing that back would quietly change the text two callers
-            // print. See the note in [AimiHttpResponse].
-            reason = null,
+            // The standard reason phrase for this code, which is what `HttpURLConnection` hands
+            // back on Android. NSURLSession does not expose the status line itself, so it cannot be
+            // read off the wire; `localizedStringForStatusCode` is no substitute, because it is a
+            // translated sentence rather than the phrase. Ktor carries the canonical phrase with
+            // the code, so both phones print the same words.
+            reason = response.status.description.takeIf { it.isNotEmpty() },
             // Android reads the error stream on a failure, and that stream is absent when the
             // refusal carried no body at all, which it reports as `null`. An empty body on a
             // successful call stays an empty string, because that is what Android returns.

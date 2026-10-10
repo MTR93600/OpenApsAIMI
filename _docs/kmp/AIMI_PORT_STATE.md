@@ -4289,12 +4289,22 @@ Ktor rather than raw `NSURLSession`, and both reasons are contract rather than t
 - `HttpURLConnection` refuses a redirect that changes protocol. These requests carry an API key in a
   header, so a silent https-to-http downgrade would leak it. Ktor refuses the downgrade too.
 
-Two behaviour notes, both deliberate and both written into the KDoc. `reason` is always `null` on
-iOS: NSURLSession exposes no status line, and `localizedStringForStatusCode` is a translated
-sentence rather than the reason phrase, so handing that back would quietly change the text
-`AIMILLMPhysioAnalyzerMTR` and `OuraApiThermalClient` print. And `classify` walks the cause chain,
-because the Darwin engine wraps the platform's `NSError` in its own exception - testing only the
-outermost type would answer `OTHER` for every real network failure.
+**No accepted behaviour differences.** Two were nearly shipped and both were wrong:
+
+- `reason` was going to be `null` on iOS, because NSURLSession exposes no status line. That is not
+  the same answer Android gives, and two callers print it. Ktor carries the canonical reason phrase
+  with the status code - which is exactly what `HttpURLConnection` returns over HTTP/1.1 - so iOS
+  hands back the same words. `localizedStringForStatusCode` is no substitute: it is a translated
+  sentence, not the phrase.
+- `bodyAsText()` decodes with the charset named in the `Content-Type` header, while Android reads
+  the stream as UTF-8 whatever the header says. A server answering `charset=ISO-8859-1` would have
+  given the two phones two different strings for one body. The bytes are decoded as UTF-8 instead.
+
+`classify` walks the cause chain, because the Darwin engine wraps the platform's `NSError` in its
+own exception - testing only the outermost type would answer `OTHER` for every real network failure.
+
+The rule this settles, and it applies to the seams still to come: a difference is a defect, not a
+note to write down. Where iOS cannot do what Android does, fix iOS.
 
 **The auditor notification fires again.** It had stopped at the Compose migration: on `master` the
 XML `OverviewFragment` and `DashboardFragment` each observed the auditor state and called
