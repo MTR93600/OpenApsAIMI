@@ -8,7 +8,7 @@
     <string name="description_source_xdrip">Recebe valores de glicose do xDrip+ e aplicativos compatíveis (Juggluco, etc.).</string>
     <string name="dexcom_app_patched">BYODA</string>
     <string name="dexcom_short">BYODA</string>
-    <string name="description_source_dexcom">Recebe valores de glicose do aplicativo 'Build Your Own Dexcom App' (BYODA).</string>
+    <string name="description_source_dexcom">Recebe valores de glicose do aplicativo \'Build Your Own Dexcom App\' (BYODA).</string>
     <string name="dexcom_oneplus_native">Dexcom ONE+ / G7</string>
     <string name="dexcom_oneplus_short">ONE+/G7</string>
     <string name="description_source_dexcom_oneplus_native">Bluetooth nativo para Dexcom ONE+ e G7 no AAPS. Aplique o sensor, insira o código de parecimento imediatamente e aguarde cerca de 30 minutos de aquecimento antes de iniciar o loop de glicose.</string>
