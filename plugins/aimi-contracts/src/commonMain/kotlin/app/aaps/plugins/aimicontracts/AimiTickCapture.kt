@@ -1,9 +1,5 @@
-package app.aaps.plugins.aimitestkit
+package app.aaps.plugins.aimicontracts
 
-import app.aaps.plugins.aimicontracts.AimiEngineState
-import app.aaps.plugins.aimicontracts.AimiInputSnapshot
-import app.aaps.plugins.aimicontracts.AimiModelBundle
-import app.aaps.plugins.aimicontracts.AimiTickResult
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -17,6 +13,12 @@ import kotlinx.serialization.json.Json
  * File storage is a shell concern: the Android/iOS shell reads and writes the JSON
  * (or CBOR) files. This module only defines the in-memory shape and the codec entry
  * points. No `java.io`, no `android.*` here.
+ *
+ * It lives here and not in `:plugins:aimi-testkit`, where it started, because both ends of a
+ * replay need it: the Android tick records one and the testkit replays it. The testkit exposes
+ * `:plugins:aimi-engine` with `api`, so the recorder could not reach the type there without
+ * dragging the engine into the Android build, which the `:plugins:aps` build file sets out to
+ * avoid. A capture is a contract between the two sides, so it belongs with the contracts.
  */
 @Serializable
 data class AimiTickCapture(

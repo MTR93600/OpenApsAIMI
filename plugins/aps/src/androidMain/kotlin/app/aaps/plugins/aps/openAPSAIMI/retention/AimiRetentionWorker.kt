@@ -7,6 +7,8 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.objects.workflow.LoggingWorker
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import app.aaps.core.objects.workflow.MetroWorkerCreator
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
@@ -106,6 +108,9 @@ class AimiRetentionWorker @AssistedInject constructor(
     aapsLogger: AAPSLogger,
     fabricPrivacy: FabricPrivacy,
     private val storageHelper: AimiStorageHelper,
+    // The file-operations seam the manager works through. It acts on whatever path it is handed,
+    // so one instance serves every candidate directory this worker sweeps.
+    private val storage: AimiStorage,
 ) : LoggingWorker(context, params, Dispatchers.IO, aapsLogger, fabricPrivacy) {
 
     override suspend fun doWorkAndLog(): Result {
@@ -131,7 +136,9 @@ class AimiRetentionWorker @AssistedInject constructor(
                 },
             ) { directory ->
                 val manager = AimiRetentionManager(
-                    aimiDir = directory,
+                    // The sweep still walks java.io.File candidates; the manager speaks AimiPath.
+                    aimiDir = AimiPath(directory.absolutePath),
+                    storage = storage,
                     logger = { message -> aapsLogger.info(LTag.APS, message) },
                     now = ::aimiWallClockMs,
                     // Failures and skips (not enough space, a changed-during-trim abort, a stale

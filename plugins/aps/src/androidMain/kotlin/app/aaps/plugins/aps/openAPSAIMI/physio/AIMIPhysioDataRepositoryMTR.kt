@@ -323,7 +323,7 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
      * 
      * @return List of HRVDataMTR, empty if unavailable
      */
-    override suspend fun fetchHRVData(daysBack: Int = 7): List<HRVDataMTR> {
+    override suspend fun fetchHRVData(daysBack: Int): List<HRVDataMTR> {
         val cacheKey = "hrv_${daysBack}days"
         val cached = cache[cacheKey] as? CachedData<List<HRVDataMTR>>
         
@@ -448,7 +448,7 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
      * 
      * @return List of RHRDataMTR, empty if unavailable
      */
-    override suspend fun fetchMorningRHR(daysBack: Int = 7): List<RHRDataMTR> {
+    override suspend fun fetchMorningRHR(daysBack: Int): List<RHRDataMTR> {
         val cacheKey = "rhr_${daysBack}days"
         val cached = cache[cacheKey] as? CachedData<List<RHRDataMTR>>
         
@@ -803,7 +803,7 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
      * 2) Oura API daily readiness deviation (Garmin/Oura do not write skin temp to HC)
      * 3) HC recovery proxy from RHR + HRV (Garmin and Oura via HC)
      */
-    override suspend fun fetchThermalWindow(daysBack: Int = 3): ThermalDataWindowMTR {
+    override suspend fun fetchThermalWindow(daysBack: Int): ThermalDataWindowMTR {
         val cacheKey = "thermal_${daysBack}d"
         val cached = cache[cacheKey] as? CachedData<ThermalDataWindowMTR>
         if (cached?.isValid() == true) {

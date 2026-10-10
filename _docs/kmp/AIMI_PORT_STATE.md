@@ -4325,3 +4325,38 @@ Still open and still the user's call: `AimiParityCaptureHook` sits in `androidMa
 `:plugins:aimi-contracts`, which has no Android target, so it has never compiled. Giving that module
 an Android target is the recommendation, because the hook is the harness that would prove the two
 platforms agree - but it is a build structure change and has not been made.
+
+### 6br.3 The parity hook, and the Android build green again
+
+**`:plugins:aimi-contracts` did not need an Android target, and the analysis that said it did was
+wrong.** A Kotlin Multiplatform module with only `jvm()` and the two iOS targets *can* be consumed
+from an `androidMain` source set: the Android consumer resolves the jvm variant. `:core:data` has
+done exactly this all along, and `:plugins:constraints` depends on it from its own `androidMain`.
+What was missing was simply the dependency line.
+
+So `:plugins:aps` `androidMain` now declares `implementation(project(":plugins:aimi-contracts"))`
+and `AimiParityCaptureHook` compiles. Two things had to move for that, and both moved to where they
+belonged anyway:
+
+- **`AimiTickCapture`**, from `:plugins:aimi-testkit` to `:plugins:aimi-contracts`. Both ends of a
+  replay need it - the Android tick records one, the testkit replays it - and the testkit exposes
+  `:plugins:aimi-engine` with `api`, so reaching the type there would have dragged the engine into
+  the Android build, which the `:plugins:aps` build file explicitly set out to avoid. A capture is
+  a contract between the two sides. It references only contract types, so the move was clean.
+- **`RT.toAimiTickResult`**, from `:plugins:aps` `appleJvmMain` to `:plugins:aimi-contracts`. It
+  reads `RT` and writes contract types, nothing platform, and it sat in a source set the Android
+  tick cannot see. It could not be lifted to `commonMain` instead: `commonMain` would then need the
+  contracts dependency for *every* target, and the KMP resolution checker refuses that because there
+  is no Android variant - the same check that failed earlier on the coroutines BOM.
+
+Note the asymmetry, because it is the thing to remember: an **androidMain** source set may depend on
+a jvm-only KMP module, a **commonMain** source set may not.
+
+**`:app:compileFullDebugKotlin` is green.** It had been red since `ebfcb154a7d`. Beyond the upstream
+API changes listed in 6br, the fork-side repairs were: three `AimiPhysioDataRepositoryMTR` overrides
+re-declaring default values (the interface already carries the same 7/7/3, so no behaviour change),
+`AimiRetentionWorker` not passing the `storage` the manager gained and still handing it a
+`java.io.File` where it now wants an `AimiPath`, and a missing `ExperimentalAtomicApi` opt-in in
+`AIMIHealthConnectStepsProviderMTR`.
+
+Not yet run: the test suites, and an APK build.

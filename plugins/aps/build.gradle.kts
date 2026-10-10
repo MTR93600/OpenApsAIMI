@@ -122,6 +122,12 @@ kotlin {
             // Android only: the string name to R.string id map.
             kotlin.srcDir(generateApsStrings.flatMap { it.androidOutputDir })
             dependencies {
+                // AimiParityCaptureHook turns the real Android tick into contract types so the run
+                // can be replayed against the shared engine. That hook is the thing that proves the
+                // two platforms agree, so it has to sit beside the Android tick it captures.
+                // :plugins:aimi-contracts has no Android target and does not need one: an Android
+                // consumer resolves its jvm variant, the same way :core:data is consumed here.
+                implementation(project(":plugins:aimi-contracts"))
                 implementation(project(":core:graph"))
                 // TensorFlow Lite for AimiModelHandler's UAM inference. Dropped when upstream rewrote
                 // this module for KMP. The model stays: modelUAM.tflite has its own architecture, so

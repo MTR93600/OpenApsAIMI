@@ -25,8 +25,8 @@ import app.aaps.plugins.aimicontracts.AimiPumpSnapshot
 import app.aaps.plugins.aimicontracts.AimiTickMeta
 import app.aaps.plugins.aimicontracts.AimiTickTrigger
 import app.aaps.plugins.aimicontracts.TimedValue
-import app.aaps.plugins.aimitestkit.AimiTickCapture
-import app.aaps.plugins.aps.openAPSAIMI.toAimiTickResult
+import app.aaps.plugins.aimicontracts.AimiTickCapture
+import app.aaps.plugins.aimicontracts.toAimiTickResult
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong

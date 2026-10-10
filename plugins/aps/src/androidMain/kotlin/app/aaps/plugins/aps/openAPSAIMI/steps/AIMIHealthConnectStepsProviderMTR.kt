@@ -13,6 +13,7 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -35,6 +36,7 @@ import kotlinx.coroutines.launch
  * @author MTR & Lyra AI - AIMI Health Connect Integration
  * @since Android SDK 14+
  */
+@OptIn(ExperimentalAtomicApi::class)
 @SingleIn(AppScope::class)
 actual class AIMIHealthConnectStepsProviderMTR @Inject constructor(
     private val context: Context,

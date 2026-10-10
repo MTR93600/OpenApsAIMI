@@ -14,6 +14,7 @@ import app.aaps.plugins.aimicontracts.AimiModelBundle
 import app.aaps.plugins.aimicontracts.AimiSafetyReport
 import app.aaps.plugins.aimicontracts.AimiTherapyCommand
 import app.aaps.plugins.aimicontracts.AimiTickResult
+import app.aaps.plugins.aimicontracts.toAimiTickResult
 import app.aaps.plugins.aimiengine.AimiEngine
 
 /**
@@ -156,34 +157,3 @@ private object SilentUiInteraction : UiInteraction {
     override fun stopAlarm(reason: String) = Unit
 }
 
-/** Maps the APS result onto the engine contract. */
-fun RT.toAimiTickResult(state: AimiEngineState): AimiTickResult {
-    // C1: Android's LoopPlugin applies BOTH the temp basal and the SMB when both
-    // are requested (TBR first, then SMB). The previous code dropped the TBR
-    // whenever an SMB was present. Emit the SMB as the primary command and the
-    // TBR as the paired command so the shell enacts both.
-    val smbCommand: AimiTherapyCommand.Smb? =
-        if (units != null && (units ?: 0.0) > 0.0) AimiTherapyCommand.Smb(units ?: 0.0) else null
-    val tbrCommand: AimiTherapyCommand.TempBasal? =
-        if (rate != null && duration != null) AimiTherapyCommand.TempBasal(
-            rateUPerHour = rate ?: 0.0,
-            durationMs = (duration ?: 0) * 60_000L,
-        ) else null
-    val command: AimiTherapyCommand = smbCommand
-        ?: tbrCommand
-        ?: AimiTherapyCommand.Hold(reasonCode = "NO_COMMAND")
-    // The paired command is the "other" one when both are present.
-    val pairedCommand: AimiTherapyCommand? = when {
-        smbCommand != null && tbrCommand != null -> tbrCommand
-        else -> null
-    }
-    return AimiTickResult(
-        command = command,
-        nextState = state.copy(generation = state.generation + 1),
-        trainingEvents = emptyList(),
-        persistenceEvents = emptyList(),
-        telemetry = AimiDecisionTrace(reasonCode = reason.toString().take(200)),
-        safety = AimiSafetyReport(holdReasonCode = null),
-        pairedCommand = pairedCommand,
-    )
-}

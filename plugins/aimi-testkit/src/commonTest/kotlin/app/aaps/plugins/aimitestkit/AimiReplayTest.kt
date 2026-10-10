@@ -1,5 +1,6 @@
 package app.aaps.plugins.aimitestkit
 
+import app.aaps.plugins.aimicontracts.AimiTickCapture
 import app.aaps.plugins.aimicontracts.AimiDecisionTrace
 import app.aaps.plugins.aimicontracts.AimiEngineState
 import app.aaps.plugins.aimicontracts.AimiInputSnapshot
