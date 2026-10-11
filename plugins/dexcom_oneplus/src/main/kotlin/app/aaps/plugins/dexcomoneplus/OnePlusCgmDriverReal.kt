@@ -132,6 +132,11 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
      * promoted instance keeps calling itself "staging" in the log but is production from the
      * arbiter's point of view — which is why the check below is on [storeNamespace], read live,
      * rather than on the fixed [slot] label.
+     *
+     * Every session gets this queue, the pre-soak ones too. That is safe because the refusal in
+     * [offerCalibration] keeps a pre-soak queue empty, and it is needed because a promotion keeps
+     * the session the instance had as a pre-soak: a session built without the queue would never
+     * send anything for the rest of the sensor's life.
      */
     private val calibrationQueue = OnePlusCalibrationQueue()
 
@@ -146,8 +151,12 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
             )
             return false
         }
-        if (session?.isUp() != true) {
-            OnePlusLog.w("${OnePlusLogMarkers.SESSION}: [$slot] calibration refused — no session up")
+        // A session that exists but is not "up" is only between two radio windows: a G7 / ONE+
+        // connects for a few seconds every 5 minutes. The value waits in the queue and is sent at
+        // the next connection, or dropped there when it is older than one hour. Asking for `isUp()`
+        // here refused almost every fingerstick.
+        if (session == null) {
+            OnePlusLog.w("${OnePlusLogMarkers.SESSION}: [$slot] calibration refused — no session")
             return false
         }
         val accepted = calibrationQueue.offer(glucoseMgdl, bloodAtMs, System.currentTimeMillis())
@@ -582,9 +591,8 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
             },
             appContext = ctx,
             slot = slot,
-            // Read live, not captured: a promotion rebinds this instance to the production store,
-            // and only from that moment may its sessions carry a calibration.
-            calibrationQueue = if (storeNamespace == null) calibrationQueue else null,
+            // Always passed, see [calibrationQueue]: the pre-soak refusal lives in offerCalibration.
+            calibrationQueue = calibrationQueue,
             onCalibrationResult = { reply -> onCalibrationAnswered(reply) },
         )
         return created

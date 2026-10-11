@@ -1,5 +1,6 @@
 package app.aaps.plugins.dexcomoneplus
 
+import app.aaps.plugins.dexcomoneplus.session.OnePlusBleSession
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 
@@ -24,13 +25,56 @@ class OnePlusCgmDriverCalibrationTest {
     }
 
     @Test
-    fun `nothing is queued while no session is up`() {
-        // Without a live link the value would sit in the slot and go stale, and the user would be
-        // told it was on its way. Refusing now is what lets them try again later.
+    fun `nothing is queued without a session`() {
+        // No sensor is being followed at all, so nothing would ever take the value. Refusing now is
+        // what lets the user try again later.
         val production = OnePlusCgmDriverReal()
 
         assertThat(production.offerCalibration(glucoseMgdl = 209, bloodAtMs = now)).isFalse()
         assertThat(production.calibrationPending()).isFalse()
+    }
+
+    @Test
+    fun `a session between two radio windows still takes the value`() {
+        // A G7 / ONE+ is connected a few seconds every 5 minutes. Between two windows the session is
+        // not "up", and refusing there refused almost every fingerstick (field report 2026-10-11).
+        val production = OnePlusCgmDriverReal()
+        setSession(production, FakeSession(up = false))
+
+        assertThat(production.offerCalibration(glucoseMgdl = 94, bloodAtMs = now)).isTrue()
+        assertThat(production.calibrationPending()).isTrue()
+    }
+
+    @Test
+    fun `a promoted pre-soak instance takes the value`() {
+        // A promotion keeps the instance and its session, and only rebinds the store to production.
+        val promoted = OnePlusCgmDriverReal(storeNamespace = OnePlusCgmDrivers.STAGING_NAMESPACE)
+        setSession(promoted, FakeSession(up = false))
+        promoted.rebindStore(null)
+
+        assertThat(promoted.offerCalibration(glucoseMgdl = 94, bloodAtMs = now)).isTrue()
+        assertThat(promoted.calibrationPending()).isTrue()
+    }
+
+    @Test
+    fun `a pre-soak with a running session is still never calibrated`() {
+        val staging = OnePlusCgmDriverReal(storeNamespace = OnePlusCgmDrivers.STAGING_NAMESPACE)
+        setSession(staging, FakeSession(up = true))
+
+        assertThat(staging.offerCalibration(glucoseMgdl = 94, bloodAtMs = now)).isFalse()
+        assertThat(staging.calibrationPending()).isFalse()
+    }
+
+    /** The real session needs Android BLE; only its presence matters to [OnePlusCgmDriverReal.offerCalibration]. */
+    private class FakeSession(private val up: Boolean) : OnePlusBleSession {
+        override fun startWithPairingCode(deviceAddress: String, pairingCode: String) = Unit
+        override fun stop(reason: String?) = Unit
+        override fun isUp(): Boolean = up
+        override fun warmupState(): OnePlusWarmupState = OnePlusWarmupState(phase = OnePlusWarmupState.Phase.READY)
+    }
+
+    private fun setSession(driver: OnePlusCgmDriverReal, session: OnePlusBleSession) {
+        OnePlusCgmDriverReal::class.java.getDeclaredField("session").apply { isAccessible = true }.set(driver, session)
     }
 
     @Test

@@ -34,12 +34,15 @@ class OnePlusCalibrationQueue {
      * Ask for [glucoseMgdl] to be sent to the sensor.
      *
      * @return false when the value is outside what the sensor accepts, when the fingerstick is
-     *   already too old to be meaningful, or when another one is still waiting.
+     *   already too old to be meaningful, or when another one is still waiting. A waiting one that
+     *   is older than [MAX_AGE_MS] does not count: it would be dropped at sending anyway, and it
+     *   must not block every new fingerstick when the sensor stays out of reach.
      */
     fun offer(glucoseMgdl: Int, bloodAtMs: Long, nowMs: Long): Boolean {
         if (glucoseMgdl < OnePlusCalibrateTx.MIN_GLUCOSE_MGDL || glucoseMgdl > OnePlusCalibrateTx.MAX_GLUCOSE_MGDL) return false
         if (isTooOld(bloodAtMs, nowMs) || bloodAtMs > nowMs) return false
-        if (pending != null) return false
+        val waiting = pending
+        if (waiting != null && !isTooOld(waiting.bloodAtMs, nowMs)) return false
         pending = Pending(glucoseMgdl, bloodAtMs)
         return true
     }

@@ -26,6 +26,21 @@ class OnePlusCalibrationQueueTest {
     }
 
     @Test
+    fun `a value left waiting for more than an hour does not block the next one`() {
+        // The sensor stayed out of reach, so nothing took the first value. It would be dropped at
+        // sending anyway, and it must not refuse every new fingerstick until an app restart.
+        val queue = OnePlusCalibrationQueue()
+        assertThat(queue.offer(glucoseMgdl = 150, bloodAtMs = now, nowMs = now)).isTrue()
+
+        val later = now + 59 * minute
+        assertThat(queue.offer(glucoseMgdl = 94, bloodAtMs = later, nowMs = later)).isFalse()
+
+        val muchLater = now + 61 * minute
+        assertThat(queue.offer(glucoseMgdl = 94, bloodAtMs = muchLater, nowMs = muchLater)).isTrue()
+        assertThat(queue.peek()?.glucoseMgdl).isEqualTo(94)
+    }
+
+    @Test
     fun `out of range, in the future, or too old is refused at the door`() {
         val queue = OnePlusCalibrationQueue()
 
