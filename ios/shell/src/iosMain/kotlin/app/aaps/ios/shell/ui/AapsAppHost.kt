@@ -12,6 +12,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
@@ -41,6 +42,7 @@ import app.aaps.core.ui.compose.LocalMetroViewModelFactory
 import app.aaps.core.ui.compose.LocalSnackbarHostState
 import app.aaps.core.ui.compose.icons.IcAaps
 import app.aaps.core.ui.compose.metroViewModel
+import app.aaps.core.ui.compose.navigation.NavigationRequest
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.implementation.lifecycle.IosProtectionLifecycle
 import app.aaps.ios.shell.IosAppStartup
@@ -159,6 +161,11 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
     IosLanguage.apply(graph.preferences)
     logger.debug(LTag.CORE, "Language: ${TextRefValueRegistry.locale ?: "English"}")
 
+    // A tapped notification asks for a screen. Registered before the delegate is installed, so a tap
+    // that started the app is not missed in the moment between the two. Android reads the same route
+    // from an intent extra in `ComposeMainActivity`; everything below the route string is shared.
+    installNotificationDeepLinks()
+
     IosNotificationDelegate.install()
 
     // A snackbar sent while no screen is up becomes a notification instead of being lost. Shared
@@ -172,6 +179,12 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
     // Clears a granted PIN or biometric session when the app is backgrounded, which is what Android
     // gets from `ProcessLifecycleListener.onPause`. Same placement and the same UIKit reason.
     IosProtectionLifecycle(logger, graph.protectionCheck).start()
+
+    // Built out here, once, for two reasons: the request it carries has to survive a recomposition,
+    // and `AapsAppRoot` collects pending requests in an effect keyed on the lambda, so handing it a
+    // new lambda on every recomposition would restart that collection for nothing.
+    val navigationRelay = NavigationRelay()
+    val onPendingNavigation: (NavigationRequest) -> Unit = navigationRelay::offer
 
     // Read once, outside the composition, for the same reason as the graph: decoding the icon on
     // every recomposition would be work for nothing.
@@ -233,7 +246,12 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
                 appIcon = { modifier -> AppIconImage(appIcon, modifier) },
                 splashLogo = { modifier -> AppIconImage(appIcon, modifier) },
                 onNavControllerReady = {},
-                onClose = { logger.error(LTag.CORE, "Initialization failed and iOS cannot close an app") }
+                onClose = { logger.error(LTag.CORE, "Initialization failed and iOS cannot close an app") },
+                // Where a tapped notification ends up. The relay passes it on to the navigator below
+                // as soon as there is one, so it still goes through `handleNavigationRequest` and
+                // opening settings still asks for authorization first - a deep link must not be a
+                // way around that.
+                onPendingNavigation = onPendingNavigation
             ) { navController ->
                 // Application protection, the counterpart of the request `ComposeMainActivity`
                 // makes from `onResume`. Without this nothing on iOS ever asks, so `ProtectionHost`
@@ -348,6 +366,20 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
                     onRequestDirectoryAccess = { reportNotReady("directory access") },
                     onOpenUrl = { url -> graph.urlOpener.open(url) }
                 )
+
+                // Gives the relay somewhere to send a tapped notification's request. It can only be
+                // done here: the navigator needs the nav controller and the main view model, and it
+                // does not exist at all until the app is unlocked above. Until then the relay holds
+                // the request rather than dropping it.
+                //
+                // `rememberUpdatedState` because a new navigator is built on each recomposition,
+                // while the attachment should outlive them all.
+                val latestNavigator by rememberUpdatedState(navigator)
+                DisposableEffect(Unit) {
+                    navigationRelay.attach { request -> latestNavigator.handleNavigationRequest(request) }
+                    onDispose { navigationRelay.attach(null) }
+                }
+
                 val chips: ChipsViewModel = viewModel(
                     factory = viewModelFactory {
                         initializer { graph.chipsViewModelFactory.create(graph.overviewDataCache) }

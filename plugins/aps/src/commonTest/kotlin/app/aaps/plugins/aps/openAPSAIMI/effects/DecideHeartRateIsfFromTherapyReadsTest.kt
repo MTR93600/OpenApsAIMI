@@ -330,4 +330,6 @@ internal class StepsWatchPreferences(private val enabled: Boolean) : Preferences
     override fun allMatchingInts(key: ComposedKey): List<Int> = emptyList()
     override fun isExportableKey(key: String): Boolean = false
     override fun getAllPreferenceKeys(): List<PreferenceKey> = emptyList()
+    override fun getAllKeys(): List<NonPreferenceKey> = emptyList()
+    override fun reloadFromStore() {}
 }

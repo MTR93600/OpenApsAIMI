@@ -30,6 +30,21 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>AAPS uses your location only to evaluate automation rules you set up yourself, such as starting a temporary target when you arrive somewhere.</string>
 	<!--
+	  Required before HealthKit may be asked for anything. iOS terminates an app that touches
+	  HealthKit without a usage description, so this has to exist before the AIMI physio reads run -
+	  which they do the first time the loop asks for a health snapshot.
+
+	  Reading only. `IosHealthKitWindowPort.requestReadAuthorization` passes `typesToShare = null`,
+	  and the physio source only fetches. NSHealthUpdateUsageDescription is therefore deliberately
+	  absent: add it the day anything writes a sample back, or that write will terminate the app the
+	  same way.
+
+	  The entitlement is separate and lives in Device.entitlements and Simulator.entitlements. The
+	  string alone is not enough; the entitlement alone is not enough either.
+	-->
+	<key>NSHealthShareUsageDescription</key>
+	<string>AAPS reads your steps, heart rate, resting heart rate, heart rate variability and sleep from Health. It uses them to tell when you are active, asleep or unwell, and takes that into account when it decides how much insulin to give. AAPS only reads from Health. It never writes to it.</string>
+	<!--
 	  Export compliance. AAPS uses only exempt cryptography - HTTPS to Nightscout, and Apple's own
 	  Keychain and CryptoKit for the export password. Without this key every upload stops in App
 	  Store Connect waiting for the question to be answered by hand, which would make an automatic

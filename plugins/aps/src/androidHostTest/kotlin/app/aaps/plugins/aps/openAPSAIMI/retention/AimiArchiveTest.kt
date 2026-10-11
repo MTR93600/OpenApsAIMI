@@ -1,17 +1,34 @@
 package app.aaps.plugins.aps.openAPSAIMI.retention
 
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
+import app.aaps.plugins.aps.openAPSAIMI.utils.AndroidAimiStorage
 import com.google.common.truth.Truth.assertThat
+import kotlinx.datetime.TimeZone
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import org.mockito.kotlin.mock
 import java.io.File
 import java.io.IOException
-import java.time.ZoneId
 import java.util.zip.GZIPInputStream
 
 class AimiArchiveTest {
 
-    private val utc = ZoneId.of("UTC")
+    private val utc = TimeZone.UTC
+
+    /** The archive speaks AimiPath now; these tests still build their fixtures with java.io.File. */
+    private fun File.asAimiPath() = AimiPath(absolutePath)
+
+    /** And back again, so the fixtures can still read and write the files the archive names. */
+    private fun AimiPath.asFile() = File(value)
+
+    /**
+     * The archive only asks the storage about paths, text and sizes, and the real Android storage
+     * answers all of that from the path alone, so the helper never gets called.
+     */
+    private val storage: AimiStorage = AndroidAimiStorage(mock<AimiStorageHelper>())
 
     private fun readBack(file: File): String =
         GZIPInputStream(file.inputStream()).use { it.readBytes().toString(Charsets.UTF_8) }
@@ -22,7 +39,7 @@ class AimiArchiveTest {
         source.writeText("one\ntwo\nthree\n")
         val target = File(dir, "archive/x_2026-09.jsonl.gz")
 
-        AimiArchive.appendMember(source, 0L, 8L, target, null)
+        AimiArchive.appendMember(storage, source.asAimiPath(), 0L, 8L, target.asAimiPath(), null)
 
         assertThat(readBack(target)).isEqualTo("one\ntwo\n")
     }
@@ -33,8 +50,8 @@ class AimiArchiveTest {
         source.writeText("one\ntwo\n")
         val target = File(dir, "archive/x_2026-09.jsonl.gz")
 
-        AimiArchive.appendMember(source, 0L, 4L, target, null)
-        AimiArchive.appendMember(source, 4L, 8L, target, null)
+        AimiArchive.appendMember(storage, source.asAimiPath(), 0L, 4L, target.asAimiPath(), null)
+        AimiArchive.appendMember(storage, source.asAimiPath(), 4L, 8L, target.asAimiPath(), null)
 
         assertThat(readBack(target)).isEqualTo("one\ntwo\n")
     }
@@ -46,8 +63,8 @@ class AimiArchiveTest {
         val target = File(dir, "archive/x_2026-09.csv.gz")
         val header = "a,b\n".toByteArray()
 
-        AimiArchive.appendMember(source, 4L, 8L, target, header)
-        AimiArchive.appendMember(source, 8L, 12L, target, header)
+        AimiArchive.appendMember(storage, source.asAimiPath(), 4L, 8L, target.asAimiPath(), header)
+        AimiArchive.appendMember(storage, source.asAimiPath(), 8L, 12L, target.asAimiPath(), header)
 
         assertThat(readBack(target)).isEqualTo("a,b\n1,1\na,b\n2,2\n")
     }
@@ -62,7 +79,7 @@ class AimiArchiveTest {
         source.writeText("one\ntwo\n")
         val target = File(dir, "archive/x_2026-09.jsonl.gz")
 
-        AimiArchive.appendMember(source, 0L, 4L, target, null)
+        AimiArchive.appendMember(storage, source.asAimiPath(), 0L, 4L, target.asAimiPath(), null)
 
         assertThat(markerOf(target).exists()).isFalse()
     }
@@ -73,8 +90,8 @@ class AimiArchiveTest {
         source.writeText("one\ntwo\n")
         val target = File(dir, "archive/x_2026-09.jsonl.gz")
 
-        AimiArchive.appendMember(source, 0L, 4L, target, null)
-        AimiArchive.appendMember(source, 4L, 8L, target, null)
+        AimiArchive.appendMember(storage, source.asAimiPath(), 0L, 4L, target.asAimiPath(), null)
+        AimiArchive.appendMember(storage, source.asAimiPath(), 4L, 8L, target.asAimiPath(), null)
 
         assertThat(markerOf(target).exists()).isFalse()
         assertThat(readBack(target)).isEqualTo("one\ntwo\n")
@@ -93,7 +110,7 @@ class AimiArchiveTest {
         target.mkdir()
 
         assertThrows(IOException::class.java) {
-            AimiArchive.appendMember(source, 0L, 4L, target, null)
+            AimiArchive.appendMember(storage, source.asAimiPath(), 0L, 4L, target.asAimiPath(), null)
         }
 
         // After R3's fix, appendMember removes the marker only on success. When an append throws,
@@ -107,7 +124,7 @@ class AimiArchiveTest {
 
     @Test
     fun findInterruptedAppendsDiscoversASurvivingMarkerAndItsRecordedLength(@TempDir dir: File) {
-        val archive = AimiArchive.directory(dir)
+        val archive = AimiArchive.directory(storage, dir.asAimiPath()).asFile()
         archive.mkdirs()
         // Simulates a crash partway through appending a SECOND member to an existing target: the
         // marker recorded the target's length before this (interrupted) append started.
@@ -115,45 +132,45 @@ class AimiArchiveTest {
         target.writeText("some bytes, possibly a truncated gzip member")
         markerOf(target).writeText("5")
 
-        val interrupted = AimiArchive.findInterruptedAppends(dir)
+        val interrupted = AimiArchive.findInterruptedAppends(storage, dir.asAimiPath())
 
         assertThat(interrupted).hasSize(1)
-        assertThat(interrupted.single().target).isEqualTo(target)
+        assertThat(interrupted.single().target).isEqualTo(target.asAimiPath())
         assertThat(interrupted.single().previousLength).isEqualTo(5L)
     }
 
     @Test
     fun findInterruptedAppendsSkipsAMalformedMarkerRatherThanGuessAtItsLength(@TempDir dir: File) {
-        val archive = AimiArchive.directory(dir)
+        val archive = AimiArchive.directory(storage, dir.asAimiPath()).asFile()
         archive.mkdirs()
         File(archive, "x_2026-09.jsonl.gz.partial").writeText("not-a-number")
 
-        assertThat(AimiArchive.findInterruptedAppends(dir)).isEmpty()
+        assertThat(AimiArchive.findInterruptedAppends(storage, dir.asAimiPath())).isEmpty()
     }
 
     @Test
     fun findInterruptedAppendsReturnsEmptyWhenTheArchiveDirectoryDoesNotExist(@TempDir dir: File) {
-        assertThat(AimiArchive.findInterruptedAppends(dir)).isEmpty()
+        assertThat(AimiArchive.findInterruptedAppends(storage, dir.asAimiPath())).isEmpty()
     }
 
     @Test
     fun memberFileNamesKeepTheOriginalExtension(@TempDir dir: File) {
-        assertThat(AimiArchive.memberFile(dir, "AIMI_Decisions.jsonl", "2026-09").name)
+        assertThat(AimiArchive.memberFile(storage, dir.asAimiPath(), "AIMI_Decisions.jsonl", "2026-09").asFile().name)
             .isEqualTo("AIMI_Decisions_2026-09.jsonl.gz")
-        assertThat(AimiArchive.memberFile(dir, "oapsaimi_wcycle.csv", "2026-08").name)
+        assertThat(AimiArchive.memberFile(storage, dir.asAimiPath(), "oapsaimi_wcycle.csv", "2026-08").asFile().name)
             .isEqualTo("oapsaimi_wcycle_2026-08.csv.gz")
     }
 
     @Test
     fun evictionRemovesOnlyMonthsOlderThanTheWindow(@TempDir dir: File) {
-        val archive = AimiArchive.directory(dir)
+        val archive = AimiArchive.directory(storage, dir.asAimiPath()).asFile()
         archive.mkdirs()
         listOf("2026-04", "2026-05", "2026-08", "2026-09").forEach {
             File(archive, "x_$it.jsonl.gz").writeText("body")
         }
         val now = 1_789_776_000_000L // 2026-09-19 in UTC; keeping 3 months means 2026-06 onwards
 
-        val removed = AimiArchive.evict(dir, "x.jsonl", keepMonths = 3, nowMs = now, zone = utc)
+        val removed = AimiArchive.evict(storage, dir.asAimiPath(), "x.jsonl", keepMonths = 3, nowMs = now, zone = utc)
 
         assertThat(removed).isEqualTo(2)
         assertThat(File(archive, "x_2026-04.jsonl.gz").exists()).isFalse()
@@ -164,12 +181,12 @@ class AimiArchiveTest {
 
     @Test
     fun evictionIgnoresMembersOfOtherFiles(@TempDir dir: File) {
-        val archive = AimiArchive.directory(dir)
+        val archive = AimiArchive.directory(storage, dir.asAimiPath()).asFile()
         archive.mkdirs()
         File(archive, "x_2020-01.jsonl.gz").writeText("body")
         File(archive, "y_2020-01.jsonl.gz").writeText("body")
 
-        AimiArchive.evict(dir, "x.jsonl", keepMonths = 1, nowMs = 1_758_240_000_000L, zone = utc)
+        AimiArchive.evict(storage, dir.asAimiPath(), "x.jsonl", keepMonths = 1, nowMs = 1_758_240_000_000L, zone = utc)
 
         assertThat(File(archive, "y_2020-01.jsonl.gz").exists()).isTrue()
     }

@@ -1,14 +1,28 @@
 package app.aaps.plugins.aps.openAPSAIMI.retention
 
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
+import app.aaps.plugins.aps.openAPSAIMI.utils.AndroidAimiStorage
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import org.mockito.kotlin.mock
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 class AimiAppendGuardTest {
+
+    /** The guard speaks AimiPath now; these tests still build their fixtures with java.io.File. */
+    private fun File.asAimiPath() = AimiPath(absolutePath)
+
+    /**
+     * The guard only asks the storage about size, siblings and existence, and the real Android
+     * storage answers all three from the path alone, so the helper never gets called.
+     */
+    private val storage: AimiStorage = AndroidAimiStorage(mock<AimiStorageHelper>())
 
     @BeforeEach
     fun setUp() {
@@ -20,7 +34,7 @@ class AimiAppendGuardTest {
         val file = File(dir, "AIMI_Decisions.jsonl")
         file.writeText("body\n")
 
-        repeat(1000) { AimiAppendGuard.beforeAppend(file, 2048) }
+        repeat(1000) { AimiAppendGuard.beforeAppend(storage, file.asAimiPath(), file.name, 2048) }
 
         assertThat(AimiAppendGuard.statCount).isAtMost(3)
         assertThat(file.exists()).isTrue()
@@ -32,7 +46,7 @@ class AimiAppendGuardTest {
         val file = File(dir, "AIMI_Decisions.jsonl")
         file.writeText("body\n")
 
-        val outcome = AimiAppendGuard.beforeAppend(file, 0, capOverride = 1L)
+        val outcome = AimiAppendGuard.beforeAppend(storage, file.asAimiPath(), file.name, 0, capOverride = 1L)
 
         assertThat(outcome).isEqualTo(AimiAppendOutcome.ROTATED)
         assertThat(file.exists()).isFalse()
@@ -45,7 +59,7 @@ class AimiAppendGuardTest {
         val file = File(dir, "oapsaimiML2_records.csv")
         file.writeText("body\n")
 
-        val outcome = AimiAppendGuard.beforeAppend(file, 1024 * 1024 * 4)
+        val outcome = AimiAppendGuard.beforeAppend(storage, file.asAimiPath(), file.name, 1024 * 1024 * 4)
 
         assertThat(outcome).isEqualTo(AimiAppendOutcome.NOT_MANAGED)
         assertThat(file.exists()).isTrue()
@@ -58,7 +72,7 @@ class AimiAppendGuardTest {
         val overflow = File(dir, "AIMI_Decisions.jsonl" + AimiRetentionPolicy.OVERFLOW_SUFFIX)
         overflow.writeText("first\n")
 
-        val outcome = AimiAppendGuard.beforeAppend(file, 0, capOverride = 1L)
+        val outcome = AimiAppendGuard.beforeAppend(storage, file.asAimiPath(), file.name, 0, capOverride = 1L)
 
         assertThat(outcome).isEqualTo(AimiAppendOutcome.OVERFLOW_ALREADY_PRESENT)
         assertThat(overflow.readText()).isEqualTo("first\n")
@@ -76,7 +90,7 @@ class AimiAppendGuardTest {
         val holderHasLock = CountDownLatch(1)
         val releaseHolder = CountDownLatch(1)
         val holderThread = Thread {
-            AimiFileLock.withFile(file) {
+            AimiFileLock.withFile(file.asAimiPath()) {
                 holderHasLock.countDown()
                 releaseHolder.await(5, TimeUnit.SECONDS)
             }
@@ -86,7 +100,7 @@ class AimiAppendGuardTest {
         try {
             assertThat(holderHasLock.await(2, TimeUnit.SECONDS)).isTrue()
 
-            val outcomeWhileBusy = AimiAppendGuard.beforeAppend(file, 0, capOverride = 1L)
+            val outcomeWhileBusy = AimiAppendGuard.beforeAppend(storage, file.asAimiPath(), file.name, 0, capOverride = 1L)
 
             assertThat(outcomeWhileBusy).isEqualTo(AimiAppendOutcome.SKIPPED_BUSY)
             assertThat(file.exists()).isTrue()
@@ -97,7 +111,7 @@ class AimiAppendGuardTest {
         }
 
         // Part 2: the lock is free now. Rotate for real, once.
-        val firstOutcome = AimiAppendGuard.beforeAppend(file, 0, capOverride = 1L)
+        val firstOutcome = AimiAppendGuard.beforeAppend(storage, file.asAimiPath(), file.name, 0, capOverride = 1L)
         assertThat(firstOutcome).isEqualTo(AimiAppendOutcome.ROTATED)
         assertThat(overflow.exists()).isTrue()
         val overflowBytesAfterFirstRotation = overflow.readBytes()
@@ -109,7 +123,7 @@ class AimiAppendGuardTest {
         // A second rotation attempt, with the overflow already present and the lock free, must see
         // that under the SAME lock acquisition as its own check, and must never reach renameTo: the
         // existing overflow's bytes must stay exactly what they were, not just "still exist".
-        val secondOutcome = AimiAppendGuard.beforeAppend(file, 0, capOverride = 1L)
+        val secondOutcome = AimiAppendGuard.beforeAppend(storage, file.asAimiPath(), file.name, 0, capOverride = 1L)
 
         assertThat(secondOutcome).isEqualTo(AimiAppendOutcome.OVERFLOW_ALREADY_PRESENT)
         assertThat(overflow.readBytes()).isEqualTo(overflowBytesAfterFirstRotation)
@@ -126,7 +140,7 @@ class AimiAppendGuardTest {
         val holderHasLock = CountDownLatch(1)
         val releaseHolder = CountDownLatch(1)
         val holderThread = Thread {
-            AimiFileLock.withFile(file) {
+            AimiFileLock.withFile(file.asAimiPath()) {
                 holderHasLock.countDown()
                 releaseHolder.await(5, TimeUnit.SECONDS)
             }
@@ -137,7 +151,7 @@ class AimiAppendGuardTest {
             assertThat(holderHasLock.await(2, TimeUnit.SECONDS)).isTrue()
 
             val startNanos = System.nanoTime()
-            val outcome = AimiAppendGuard.beforeAppend(file, 0, capOverride = 1L)
+            val outcome = AimiAppendGuard.beforeAppend(storage, file.asAimiPath(), file.name, 0, capOverride = 1L)
             val elapsedMs = (System.nanoTime() - startNanos) / 1_000_000
 
             assertThat(elapsedMs).isLessThan(500L)

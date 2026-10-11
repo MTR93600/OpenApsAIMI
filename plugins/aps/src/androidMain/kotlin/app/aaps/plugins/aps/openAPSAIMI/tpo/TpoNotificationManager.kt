@@ -10,36 +10,35 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.ui.UiInteraction
-import app.aaps.core.keys.BooleanKey
-import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.navigation.PendingNavigation
 import app.aaps.core.ui.R as CoreUiR
 import app.aaps.plugins.aps.ApsStrings
-import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
 
 /**
- * User-visible notification when a TPO protection session starts or ends.
- * Controlled by [BooleanKey.OApsAIMITpoNotifyOnApply].
+ * The Android side of [TpoNotifications]: puts a ready-made TPO notification in the tray.
  *
- * This is the Android side of [TpoNotifications]. Everything here is platform work - channels,
- * `NotificationCompat`, the `PendingIntent` that opens the AIMI screen - which is why it stays in
- * `androidMain` while the orchestrator that decides when to call it is shared.
+ * Nothing here decides anything. The words arrive already built by [TpoNotificationText], and
+ * [TpoOrchestrator] has already checked whether the user wants these notifications at all. What is
+ * left is pure Android: two channels, `NotificationCompat`, and the `PendingIntent` that opens the
+ * AIMI screen.
  *
- * The **text** is not platform work, so none of it goes through `Context.getString`. Every line comes
- * from [app.aaps.core.interfaces.resources.TextResolver], which exists on every target and which the
- * rest of the app already uses. One notification used to take its pack label from the resolver and
- * everything else from the raw `Context`; those two do not answer in the same language when the user
- * has set an AAPS language override, so a single notification could be half translated.
+ * [TpoNotificationKind] says how loud each one should be; the two channels are how Android carries
+ * that out. The started channel is `IMPORTANCE_DEFAULT` with its sound and vibration switched off,
+ * so it appears without interrupting. The ended channel is `IMPORTANCE_HIGH` with the default
+ * sound, so it peeks and is heard.
+ *
+ * The only text read here is the two channel names, and it comes from
+ * [app.aaps.core.interfaces.resources.TextResolver] rather than `Context.getString`, so a user with
+ * an AAPS language override sees one language and not two.
  */
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
 class TpoNotificationManager @Inject constructor(
     private val context: Context,
-    private val preferences: Preferences,
     private val uiInteraction: UiInteraction,
     private val rh: TextResolver,
 ) : TpoNotifications {
@@ -48,112 +47,45 @@ class TpoNotificationManager @Inject constructor(
         private const val CHANNEL_ID_ENDED = "AIMI_TPO_PROTECTION_ENDED"
         private const val NOTIFICATION_ID_STARTED = 8891
         private const val NOTIFICATION_ID_ENDED = 8892
-        /**
-         * Where tapping this notification goes.
-         *
-         * The key is the plugin's class simple name, because that is what the
-         * `plugin_preferences/{pluginKey}` destination matches on.
-         */
-        private const val OPENAPS_AIMI_PLUGIN_ROUTE = "plugin_preferences/OpenAPSAIMIPlugin"
+
     }
 
     init {
         createNotificationChannels()
     }
 
-    override fun showSessionStarted(session: TpoSessionDocument) {
-        if (!preferences.get(BooleanKey.OApsAIMITpoNotifyOnApply)) return
-        if (session.status != TpoSessionStatus.ACTIVE) return
-
-        val ui = TpoUiSupport.buildActiveSessionUi(session, aimiWallClockMs()) ?: return
-        val packLabel = rh.gs(ui.packTitle)
-        val title = rh.gs(ApsStrings.aimi_tpo_notification_started_title)
-        val text = rh.gs(
-            ApsStrings.aimi_tpo_notification_started_text,
-            packLabel,
-            ui.remainingMinutes,
-            ui.changedKeyCount,
-        )
-        val bigText = buildString {
-            append(text)
-            append('\n')
-            append(rh.gs(ApsStrings.aimi_tpo_notification_started_tier, ui.tierLabel))
-            if (ui.deltaPreviewLines.isNotEmpty()) {
-                append('\n')
-                ui.deltaPreviewLines.forEach { line ->
-                    append(line)
-                    append('\n')
-                }
-            }
-            if (ui.extraChangeCount > 0) {
-                append(rh.gs(ApsStrings.aimi_tpo_extra_changes, ui.extraChangeCount))
-            }
-        }.trim()
-
-        postNotification(
-            title = title,
-            text = text,
-            bigText = bigText,
-            notificationId = NOTIFICATION_ID_STARTED,
-            channelId = CHANNEL_ID_STARTED,
-            onlyAlertOnce = true,
-            priority = NotificationCompat.PRIORITY_DEFAULT,
-        )
-    }
-
-    override fun showSessionEnded(reason: TpoEndReason) {
-        if (!preferences.get(BooleanKey.OApsAIMITpoNotifyOnApply)) return
-        cancelStartedNotification()
-        val title = rh.gs(ApsStrings.aimi_tpo_notification_ended_title)
-        val text = when (reason) {
-            TpoEndReason.EXPIRED -> rh.gs(ApsStrings.aimi_tpo_notification_ended_expired)
-            TpoEndReason.MANUAL_REVERT -> rh.gs(ApsStrings.aimi_tpo_notification_ended_manual)
-            TpoEndReason.SUPERSEDED -> rh.gs(ApsStrings.aimi_tpo_notification_ended_superseded)
-        }
-        postNotification(
-            title = title,
-            text = text,
-            bigText = text,
-            notificationId = NOTIFICATION_ID_ENDED,
-            channelId = CHANNEL_ID_ENDED,
-            onlyAlertOnce = false,
-            priority = NotificationCompat.PRIORITY_HIGH,
-        )
-    }
-
-    fun cancelNotification() {
-        cancelStartedNotification()
-        NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID_ENDED)
-    }
-
-    private fun cancelStartedNotification() {
-        NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID_STARTED)
-    }
-
-    private fun postNotification(
-        title: String,
-        text: String,
-        bigText: String,
-        notificationId: Int,
-        channelId: String,
-        onlyAlertOnce: Boolean,
-        priority: Int,
-    ) {
-        val notification = NotificationCompat.Builder(context, channelId)
+    override fun show(notification: TpoNotification) {
+        val started = notification.kind == TpoNotificationKind.SESSION_STARTED
+        val builder = NotificationCompat.Builder(context, channelOf(notification.kind))
             .setSmallIcon(CoreUiR.drawable.ic_shield)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(bigText))
-            .setPriority(priority)
+            .setContentTitle(notification.title)
+            .setContentText(notification.text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(notification.longText))
+            .setPriority(if (started) NotificationCompat.PRIORITY_DEFAULT else NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
-            .setOnlyAlertOnce(onlyAlertOnce)
+            // The start notification is reposted as the session runs; only the end one should alert
+            // again each time it is shown.
+            .setOnlyAlertOnce(started)
             .setContentIntent(createOpenAimiPrefsIntent())
-            .build()
         try {
-            NotificationManagerCompat.from(context).notify(notificationId, notification)
+            NotificationManagerCompat.from(context).notify(idOf(notification.kind), builder.build())
         } catch (_: SecurityException) {
             // POST_NOTIFICATIONS denied on Android 13+
         }
+    }
+
+    override fun cancel(kind: TpoNotificationKind) {
+        NotificationManagerCompat.from(context).cancel(idOf(kind))
+    }
+
+    private fun idOf(kind: TpoNotificationKind): Int = when (kind) {
+        TpoNotificationKind.SESSION_STARTED -> NOTIFICATION_ID_STARTED
+        TpoNotificationKind.SESSION_ENDED   -> NOTIFICATION_ID_ENDED
+    }
+
+    private fun channelOf(kind: TpoNotificationKind): String = when (kind) {
+        TpoNotificationKind.SESSION_STARTED -> CHANNEL_ID_STARTED
+        TpoNotificationKind.SESSION_ENDED   -> CHANNEL_ID_ENDED
     }
 
     private fun createOpenAimiPrefsIntent(): PendingIntent {

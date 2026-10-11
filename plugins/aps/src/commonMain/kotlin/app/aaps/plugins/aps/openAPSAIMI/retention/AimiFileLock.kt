@@ -20,18 +20,25 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
  * if the lock is busy: a lost telemetry line is cheap, a delayed dose is not. Wiring an actual writer
  * to do so is a later task.
  *
- * Keyed by the [AimiPath] string, which is the platform's own spelling of the file. Two different
- * spellings of the same file (on Android, `/sdcard` versus `/storage/emulated/0`) take two
- * different locks here; de-duplicating spellings before a sweep stays the platform's job, the way
- * the Android worker already does.
+ * Keyed by the resolved path, so two spellings of one file share one lock. On Android `/sdcard` is
+ * itself a symlink to `/storage/emulated/0`, and the janitor and the writers do not get their paths
+ * from the same place: the worker's sweep resolves its own candidates, but the append guard's path
+ * comes from `AimiStorageHelper`. Keying on the raw spelling would therefore have left the janitor
+ * and a writer holding two different locks for one file, which is the case this lock exists for.
+ *
+ * When a path cannot be resolved - typically a file that does not exist yet - the raw spelling is
+ * the key instead. Two spellings of a file nobody has created yet still take two locks, which is
+ * harmless: there is nothing to corrupt until one of them writes it.
  */
 internal object AimiFileLock {
 
     private val mapGuard = AapsLock()
     private val locks = HashMap<String, AapsLock>()
 
-    private fun lockFor(path: AimiPath): AapsLock =
-        mapGuard.withLock { locks.getOrPut(path.value) { AapsLock() } }
+    private fun lockFor(path: AimiPath): AapsLock {
+        val key = aimiFsCanonicalPath(path) ?: path.value
+        return mapGuard.withLock { locks.getOrPut(key) { AapsLock() } }
+    }
 
     /** Runs [block] with exclusive access to [path], waiting for it if necessary. */
     fun <T> withFile(path: AimiPath, block: () -> T): T = lockFor(path).withLock(block)

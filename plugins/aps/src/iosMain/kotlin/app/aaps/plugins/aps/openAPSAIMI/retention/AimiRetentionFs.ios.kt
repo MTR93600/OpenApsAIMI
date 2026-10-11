@@ -18,6 +18,9 @@ import platform.Foundation.NSFileSize
 import platform.Foundation.NSFileSystemFileNumber
 import platform.Foundation.NSFileSystemFreeSize
 import platform.Foundation.NSFileType
+import platform.Foundation.NSString
+import platform.Foundation.stringByStandardizingPath
+import platform.Foundation.stringByResolvingSymlinksInPath
 import platform.Foundation.NSFileTypeRegular
 import platform.Foundation.NSNumber
 import platform.Foundation.closeFile
@@ -142,6 +145,15 @@ internal actual fun aimiFsFreeBytes(path: AimiPath): Long {
 }
 
 @OptIn(ExperimentalForeignApi::class)
+internal actual fun aimiFsCanonicalPath(path: AimiPath): String? =
+    // standardizingPath folds away "." and "..", resolvingSymlinks follows the links. Both are
+    // pure string and filesystem work on NSString, which is why no file handle is needed and a
+    // path that does not exist yet still resolves as far as it can.
+    (path.value as NSString).stringByStandardizingPath.let { standardized ->
+        (standardized as NSString).stringByResolvingSymlinksInPath
+    }
+
+@OptIn(ExperimentalForeignApi::class)
 internal actual fun aimiFsIdentityKey(path: AimiPath): String? {
     val attrs = NSFileManager.defaultManager.attributesOfItemAtPath(path.value, null) ?: return null
     return (attrs[NSFileSystemFileNumber] as? NSNumber)?.stringValue
@@ -198,7 +210,15 @@ internal actual fun aimiGzipAppendMember(
     } finally {
         reader.close()
     }
-    val member = IosGzip.member(data)
+    // The header is compressed with the range, not written beside it. Writing it raw would put it
+    // where the member's gzip magic should be, and a reader would reject the whole file with
+    // "Not in GZIP format" - and because members are concatenated, one such header makes every
+    // later member unreadable too. Inside the member, decompressing one member yields a CSV that
+    // parses on its own. The JVM and Android halves write the header through their
+    // GZIPOutputStream for the same reason; here the member is built in one go, so it is prefixed
+    // to the bytes instead.
+    val payload = if (header != null) header + data else data
+    val member = IosGzip.member(payload)
         ?: throw IllegalStateException("retention: gzip compression failed for ${source.value}")
     val manager = NSFileManager.defaultManager
     if (!manager.fileExistsAtPath(target.value)) {
@@ -208,7 +228,6 @@ internal actual fun aimiGzipAppendMember(
         ?: throw IllegalStateException("retention: cannot open ${target.value} for append")
     try {
         handle.seekToEndOfFile()
-        if (header != null) handle.writeData(header.toNSData())
         handle.writeData(member.toNSData())
         handle.synchronizeFile()
     } finally {

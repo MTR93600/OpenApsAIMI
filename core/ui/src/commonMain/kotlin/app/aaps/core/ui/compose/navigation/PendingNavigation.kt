@@ -64,6 +64,18 @@ object PendingNavigation {
         }
     }
 
+    /**
+     * Builds the route a notification carries so a tap opens [pluginKey]'s settings.
+     *
+     * The inverse of [parseRoute], and kept beside it so the two cannot drift. Every poster calls
+     * this instead of writing the string: Android puts it in an intent extra, iOS puts it in
+     * `userInfo`, and one of them changing the spelling would break the other silently.
+     *
+     * [pluginKey] is the plugin's class simple name, because that is what the
+     * `plugin_preferences/{pluginKey}` destination matches on.
+     */
+    fun pluginPreferencesRoute(pluginKey: String): String = PLUGIN_PREFERENCES_PREFIX + pluginKey
+
     /** The intent extra Android carries the route in. */
     const val EXTRA_NAVIGATE_ROUTE: String = "extra_navigate_route"
 

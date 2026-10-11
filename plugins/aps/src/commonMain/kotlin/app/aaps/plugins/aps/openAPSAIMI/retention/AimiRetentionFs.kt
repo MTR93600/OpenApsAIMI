@@ -71,6 +71,16 @@ internal expect fun aimiFsRename(source: AimiPath, to: AimiPath): Boolean
 internal expect fun aimiFsFreeBytes(path: AimiPath): Long
 
 /**
+ * [path] with symlinks and `..` resolved, or null when the platform cannot resolve it.
+ *
+ * Deliberately not [aimiFsIdentityKey]. An inode is a stronger identity, but it does not survive
+ * the janitor replacing a file by moving a temporary copy over it: the name stays, the inode
+ * changes. A lock keyed on the inode would therefore stop matching halfway through a pass, in
+ * exactly the window where exclusion matters. A resolved name is stable across that move.
+ */
+internal expect fun aimiFsCanonicalPath(path: AimiPath): String?
+
+/**
  * A filesystem identity for [path] (inode / file key), or null when the platform has none or the
  * file cannot be statted. Two reads naming the same file must answer equal strings.
  */

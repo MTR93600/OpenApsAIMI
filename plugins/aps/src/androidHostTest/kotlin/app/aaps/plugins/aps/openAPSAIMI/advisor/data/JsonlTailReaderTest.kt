@@ -1,11 +1,15 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.data
 
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
 
 class JsonlTailReaderTest {
+
+    /** The reader speaks AimiPath now; these tests still build their fixtures with java.io.File. */
+    private fun File.asAimiPath() = AimiPath(absolutePath)
 
     @TempDir
     lateinit var tempDir: File
@@ -15,7 +19,7 @@ class JsonlTailReaderTest {
         val file = File(tempDir, "test.jsonl")
         file.writeText((1..200).joinToString("\n") { """{"line":$it}""" })
 
-        val tail = JsonlTailReader.readTailLines(file, maxLines = 5)
+        val tail = JsonlTailReader.readTailLines(file.asAimiPath(), maxLines = 5)
 
         assertThat(tail).hasSize(5)
         assertThat(tail[0]).contains("\"line\":200")
@@ -29,7 +33,7 @@ class JsonlTailReaderTest {
         file.writeText(lines.joinToString("\n"))
 
         val expected = lines.takeLast(4).asReversed()
-        val actual = JsonlTailReader.readTailLines(file, maxLines = 4)
+        val actual = JsonlTailReader.readTailLines(file.asAimiPath(), maxLines = 4)
 
         assertThat(actual).isEqualTo(expected)
     }
@@ -39,16 +43,16 @@ class JsonlTailReaderTest {
         val file = File(tempDir, "crlf.jsonl")
         file.writeBytes("{\"a\":1}\r\n{\"a\":2}\r\n{\"a\":3}\r\n".toByteArray(Charsets.UTF_8))
 
-        val tail = JsonlTailReader.readTailLines(file, maxLines = 2)
+        val tail = JsonlTailReader.readTailLines(file.asAimiPath(), maxLines = 2)
 
         assertThat(tail).containsExactly("{\"a\":3}", "{\"a\":2}")
     }
 
     @Test
     fun readTailLines_empty_or_missing_file_returns_empty() {
-        assertThat(JsonlTailReader.readTailLines(File(tempDir, "missing.jsonl"), 10)).isEmpty()
+        assertThat(JsonlTailReader.readTailLines(File(tempDir, "missing.jsonl").asAimiPath(), 10)).isEmpty()
         val empty = File(tempDir, "empty.jsonl")
         empty.writeText("")
-        assertThat(JsonlTailReader.readTailLines(empty, 10)).isEmpty()
+        assertThat(JsonlTailReader.readTailLines(empty.asAimiPath(), 10)).isEmpty()
     }
 }

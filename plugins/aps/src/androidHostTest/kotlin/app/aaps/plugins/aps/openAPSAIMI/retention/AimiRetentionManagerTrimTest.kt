@@ -1,8 +1,13 @@
 package app.aaps.plugins.aps.openAPSAIMI.retention
 
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
+import app.aaps.plugins.aps.openAPSAIMI.utils.AndroidAimiStorage
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import org.mockito.kotlin.mock
 import java.io.File
 import java.io.IOException
 import java.time.Instant
@@ -16,9 +21,21 @@ class AimiRetentionManagerTrimTest {
     private val now = 1_758_240_000_000L
     private val day = 24L * 60 * 60 * 1000
 
+    /** The manager speaks AimiPath now; these tests still build their fixtures with java.io.File. */
+    private fun File.asAimiPath() = AimiPath(absolutePath)
+
+    /** And back again, so the fixtures can still read and write the files the manager names. */
+    private fun AimiPath.asFile() = File(value)
+
+    /**
+     * The manager only asks the storage about paths, text and sizes, and the real Android storage
+     * answers all of that from the path alone, so the helper never gets called.
+     */
+    private val storage: AimiStorage = AndroidAimiStorage(mock<AimiStorageHelper>())
+
     private fun manager(dir: File, freeSpace: Long = Long.MAX_VALUE) =
-        object : AimiRetentionManager(dir, {}, { now }) {
-            override fun freeSpaceOf(file: File): Long = freeSpace
+        object : AimiRetentionManager(dir.asAimiPath(), storage, {}, { now }) {
+            override fun freeSpaceOf(path: AimiPath): Long = freeSpace
         }
 
     private fun jsonlRule() = AimiRetentionRule(
@@ -32,7 +49,7 @@ class AimiRetentionManagerTrimTest {
     private fun line(ts: Long) = """{"event_id":"e","timestamp":$ts}"""
 
     private fun archived(dir: File) =
-        AimiArchive.directory(dir).listFiles().orEmpty().sortedBy { it.name }
+        AimiArchive.directory(storage, dir.asAimiPath()).asFile().listFiles().orEmpty().sortedBy { it.name }
             .joinToString("") { GZIPInputStream(it.inputStream()).use { s -> s.readBytes().toString(Charsets.UTF_8) } }
 
     @Test
@@ -41,11 +58,11 @@ class AimiRetentionManagerTrimTest {
         val before = line(now - day) + "\n" + line(now) + "\n"
         file.writeText(before)
 
-        val rewritten = manager(dir).trim(file, jsonlRule())
+        val rewritten = manager(dir).trim(file.asAimiPath(), jsonlRule())
 
         assertThat(rewritten).isFalse()
         assertThat(file.readText()).isEqualTo(before)
-        assertThat(AimiArchive.directory(dir).exists()).isFalse()
+        assertThat(AimiArchive.directory(storage, dir.asAimiPath()).asFile().exists()).isFalse()
     }
 
     @Test
@@ -54,7 +71,7 @@ class AimiRetentionManagerTrimTest {
         val kept = line(now - day)
         file.writeText(line(now - 30 * day) + "\n" + kept + "\n")
 
-        val rewritten = manager(dir).trim(file, jsonlRule())
+        val rewritten = manager(dir).trim(file.asAimiPath(), jsonlRule())
 
         assertThat(rewritten).isTrue()
         assertThat(file.readText()).isEqualTo("$kept\n")
@@ -66,7 +83,7 @@ class AimiRetentionManagerTrimTest {
         val old = line(now - 30 * day)
         file.writeText("$old\n" + line(now) + "\n")
 
-        manager(dir).trim(file, jsonlRule())
+        manager(dir).trim(file.asAimiPath(), jsonlRule())
 
         assertThat(archived(dir)).isEqualTo("$old\n")
     }
@@ -83,7 +100,7 @@ class AimiRetentionManagerTrimTest {
         val file = File(dir, "x.csv")
         file.writeText("a,b\n1,1\n2,2\n")
 
-        manager(dir).trim(file, rule)
+        manager(dir).trim(file.asAimiPath(), rule)
 
         assertThat(file.readText()).isEqualTo("a,b\n2,2\n")
         assertThat(archived(dir)).isEqualTo("a,b\n1,1\n")
@@ -95,7 +112,7 @@ class AimiRetentionManagerTrimTest {
         val before = line(now - 30 * day) + "\n" + line(now) + "\n"
         file.writeText(before)
 
-        val rewritten = manager(dir, freeSpace = 1L).trim(file, jsonlRule())
+        val rewritten = manager(dir, freeSpace = 1L).trim(file.asAimiPath(), jsonlRule())
 
         assertThat(rewritten).isFalse()
         assertThat(file.readText()).isEqualTo(before)
@@ -108,12 +125,12 @@ class AimiRetentionManagerTrimTest {
         file.writeText(line(now - 30 * day) + "\n" + kept + "\n")
         val late = line(now)
 
-        val subject = object : AimiRetentionManager(dir, {}, { now }) {
-            override fun onTailCopied(target: File) {
+        val subject = object : AimiRetentionManager(dir.asAimiPath(), storage, {}, { now }) {
+            override fun onTailCopied(target: AimiPath) {
                 file.appendText("$late\n")
             }
         }
-        subject.trim(file, jsonlRule())
+        subject.trim(file.asAimiPath(), jsonlRule())
 
         assertThat(file.readText()).isEqualTo("$kept\n$late\n")
     }
@@ -128,9 +145,9 @@ class AimiRetentionManagerTrimTest {
         file.writeText("{\"wall_ms\":1}\n{\"wall_ms\":2}\n")
         val warned = mutableListOf<String>()
         val logged = mutableListOf<String>()
-        val subject = object : AimiRetentionManager(dir, { logged.add(it) }, { now }, warn = { warned.add(it) }) {}
+        val subject = object : AimiRetentionManager(dir.asAimiPath(), storage, { logged.add(it) }, { now }, warn = { warned.add(it) }) {}
 
-        val rewritten = subject.trim(file, jsonlRule())
+        val rewritten = subject.trim(file.asAimiPath(), jsonlRule())
 
         assertThat(rewritten).isFalse()
         assertThat(warned).hasSize(1)
@@ -144,9 +161,9 @@ class AimiRetentionManagerTrimTest {
         val file = File(dir, "x.jsonl")
         file.writeText(line(now - day) + "\n" + line(now) + "\n")
         val warned = mutableListOf<String>()
-        val subject = object : AimiRetentionManager(dir, {}, { now }, warn = { warned.add(it) }) {}
+        val subject = object : AimiRetentionManager(dir.asAimiPath(), storage, {}, { now }, warn = { warned.add(it) }) {}
 
-        subject.trim(file, jsonlRule())
+        subject.trim(file.asAimiPath(), jsonlRule())
 
         assertThat(warned).isEmpty()
     }
@@ -156,11 +173,11 @@ class AimiRetentionManagerTrimTest {
         val file = File(dir, "x.jsonl")
         file.writeText(line(now - 30 * day) + "\n" + line(now) + "\n")
         val warned = mutableListOf<String>()
-        val subject = object : AimiRetentionManager(dir, {}, { now }, warn = { warned.add(it) }) {
-            override fun freeSpaceOf(file: File): Long = 1L
+        val subject = object : AimiRetentionManager(dir.asAimiPath(), storage, {}, { now }, warn = { warned.add(it) }) {
+            override fun freeSpaceOf(path: AimiPath): Long = 1L
         }
 
-        val rewritten = subject.trim(file, jsonlRule())
+        val rewritten = subject.trim(file.asAimiPath(), jsonlRule())
 
         assertThat(rewritten).isFalse()
         assertThat(warned).hasSize(1)
@@ -184,13 +201,13 @@ class AimiRetentionManagerTrimTest {
         val before = hugeHeader + "1,1\n2,2\n"
         file.writeText(before)
         val warned = mutableListOf<String>()
-        val subject = object : AimiRetentionManager(dir, {}, { now }, warn = { warned.add(it) }) {}
+        val subject = object : AimiRetentionManager(dir.asAimiPath(), storage, {}, { now }, warn = { warned.add(it) }) {}
 
-        val rewritten = subject.trim(file, rule)
+        val rewritten = subject.trim(file.asAimiPath(), rule)
 
         assertThat(rewritten).isFalse()
         assertThat(file.readText()).isEqualTo(before)
-        assertThat(AimiArchive.directory(dir).exists()).isFalse()
+        assertThat(AimiArchive.directory(storage, dir.asAimiPath()).asFile().exists()).isFalse()
         assertThat(warned).hasSize(1)
         assertThat(warned.single()).contains("x.csv")
         assertThat(warned.single()).contains("header")
@@ -198,7 +215,7 @@ class AimiRetentionManagerTrimTest {
 
     @Test
     fun aMissingFileIsNotAnError(@TempDir dir: File) {
-        val rewritten = manager(dir).trim(File(dir, "absent.jsonl"), jsonlRule())
+        val rewritten = manager(dir).trim(File(dir, "absent.jsonl").asAimiPath(), jsonlRule())
 
         assertThat(rewritten).isFalse()
     }
@@ -209,12 +226,12 @@ class AimiRetentionManagerTrimTest {
         val before = line(now - 30 * day) + "\n" + line(now - day) + "\n"
         file.writeText(before)
 
-        val subject = object : AimiRetentionManager(dir, {}, { now }) {
-            override fun moveIntoPlace(tmp: File, file: File) {
+        val subject = object : AimiRetentionManager(dir.asAimiPath(), storage, {}, { now }) {
+            override fun moveIntoPlace(tmp: AimiPath, path: AimiPath) {
                 throw IOException("boom")
             }
         }
-        val rewritten = subject.trim(file, jsonlRule())
+        val rewritten = subject.trim(file.asAimiPath(), jsonlRule())
 
         assertThat(rewritten).isFalse()
         assertThat(file.readText()).isEqualTo(before)
@@ -225,7 +242,7 @@ class AimiRetentionManagerTrimTest {
         val monthLabel = DateTimeFormatter.ofPattern("yyyy-MM").format(
             Instant.ofEpochMilli(now - 30 * day).atZone(ZoneId.systemDefault())
         )
-        assertThat(AimiArchive.memberFile(dir, "x.jsonl", monthLabel).exists()).isFalse()
+        assertThat(AimiArchive.memberFile(storage, dir.asAimiPath(), "x.jsonl", monthLabel).asFile().exists()).isFalse()
     }
 
     @Test
@@ -234,14 +251,14 @@ class AimiRetentionManagerTrimTest {
         file.writeText(line(now - 30 * day) + "\n" + line(now - day) + "\n")
         val fresh = "fresh content, not related\n"
 
-        val subject = object : AimiRetentionManager(dir, {}, { now }) {
-            override fun onTailCopied(target: File) {
+        val subject = object : AimiRetentionManager(dir.asAimiPath(), storage, {}, { now }) {
+            override fun onTailCopied(target: AimiPath) {
                 val rotated = File(dir, "x.jsonl.overflow")
                 file.renameTo(rotated)
                 file.writeText(fresh)
             }
         }
-        val rewritten = subject.trim(file, jsonlRule())
+        val rewritten = subject.trim(file.asAimiPath(), jsonlRule())
 
         assertThat(rewritten).isFalse()
         assertThat(file.readText()).isEqualTo(fresh)
@@ -253,23 +270,23 @@ class AimiRetentionManagerTrimTest {
         val file = File(dir, "x.jsonl")
         file.writeText(line(now - 30 * day) + "\n" + line(now - day) + "\n")
 
-        val firstPass = manager(dir).trim(file, jsonlRule())
+        val firstPass = manager(dir).trim(file.asAimiPath(), jsonlRule())
         assertThat(firstPass).isTrue()
-        val member = AimiArchive.directory(dir).listFiles()!!.single()
+        val member = AimiArchive.directory(storage, dir.asAimiPath()).asFile().listFiles()!!.single()
         val previousBytes = member.readBytes()
         val previousArchivedText = archived(dir)
 
         val second = """{"event_id":"e2","timestamp":${now - 30 * day}}"""
         file.writeText(second + "\n" + line(now - day) + "\n")
         val before = file.readText()
-        val subject = object : AimiRetentionManager(dir, {}, { now }) {
-            override fun appendArchiveMember(source: File, start: Long, endExclusive: Long, target: File, header: ByteArray?) {
-                target.appendBytes(byteArrayOf(0))
+        val subject = object : AimiRetentionManager(dir.asAimiPath(), storage, {}, { now }) {
+            override fun appendArchiveMember(source: AimiPath, start: Long, endExclusive: Long, target: AimiPath, header: ByteArray?) {
+                target.asFile().appendBytes(byteArrayOf(0))
                 throw IOException("disk full mid member")
             }
         }
 
-        val rewritten = subject.trim(file, jsonlRule())
+        val rewritten = subject.trim(file.asAimiPath(), jsonlRule())
 
         assertThat(rewritten).isFalse()
         assertThat(file.readText()).isEqualTo(before)
@@ -291,11 +308,11 @@ class AimiRetentionManagerTrimTest {
         // runs at roughly 10:1, so /4 was about 2.5x over).
         val freeSpace = tailBytes + margin + archivedBytes / 8 - 1
 
-        val rewritten = manager(dir, freeSpace = freeSpace).trim(file, jsonlRule())
+        val rewritten = manager(dir, freeSpace = freeSpace).trim(file.asAimiPath(), jsonlRule())
 
         assertThat(rewritten).isFalse()
         assertThat(file.readText()).isEqualTo("$old\n$kept\n")
-        assertThat(AimiArchive.directory(dir).exists()).isFalse()
+        assertThat(AimiArchive.directory(storage, dir.asAimiPath()).asFile().exists()).isFalse()
     }
 
     @Test
@@ -311,11 +328,11 @@ class AimiRetentionManagerTrimTest {
         val monthATs2 = monthTs(6, 20)
         val monthBTs = monthTs(5, 10)
         val monthALabel = monthFormat.format(Instant.ofEpochMilli(monthATs1).atZone(zone))
-        val targetA = AimiArchive.memberFile(dir, "x.jsonl", monthALabel)
+        val targetA = AimiArchive.memberFile(storage, dir.asAimiPath(), "x.jsonl", monthALabel).asFile()
 
         // Pass 1: real archiving, creates non-trivial pre-pass content for month A (and month B).
         file.writeText(line(monthATs1) + "\n" + line(monthBTs) + "\n" + line(now - day) + "\n")
-        val firstPass = manager(dir).trim(file, jsonlRule())
+        val firstPass = manager(dir).trim(file.asAimiPath(), jsonlRule())
         assertThat(firstPass).isTrue()
         assertThat(targetA.exists()).isTrue()
         val previousTargetABytes = targetA.readBytes()
@@ -327,24 +344,24 @@ class AimiRetentionManagerTrimTest {
             line(monthATs1) + "\n" + line(monthBTs) + "\n" + line(monthATs2) + "\n" + line(now - day) + "\n"
         )
         val before = file.readText()
-        val plan = AimiCutPlanner.plan(file, jsonlRule(), now)
+        val plan = AimiCutPlanner.plan(file.asAimiPath(), jsonlRule(), now)
         assertThat(plan.ranges.count { it.month == monthALabel }).isEqualTo(2)
 
         // The second append to any target in this pass fails partway, after writing a corrupt byte.
         val callCount = mutableMapOf<String, Int>()
-        val subject = object : AimiRetentionManager(dir, {}, { now }) {
-            override fun appendArchiveMember(source: File, start: Long, endExclusive: Long, target: File, header: ByteArray?) {
-                val count = (callCount[target.absolutePath] ?: 0) + 1
-                callCount[target.absolutePath] = count
+        val subject = object : AimiRetentionManager(dir.asAimiPath(), storage, {}, { now }) {
+            override fun appendArchiveMember(source: AimiPath, start: Long, endExclusive: Long, target: AimiPath, header: ByteArray?) {
+                val count = (callCount[target.value] ?: 0) + 1
+                callCount[target.value] = count
                 if (count == 2) {
-                    target.appendBytes(byteArrayOf(0))
+                    target.asFile().appendBytes(byteArrayOf(0))
                     throw IOException("disk full mid member")
                 }
-                AimiArchive.appendMember(source, start, endExclusive, target, header)
+                AimiArchive.appendMember(storage, source, start, endExclusive, target, header)
             }
         }
 
-        val rewritten = subject.trim(file, jsonlRule())
+        val rewritten = subject.trim(file.asAimiPath(), jsonlRule())
 
         assertThat(rewritten).isFalse()
         assertThat(file.readText()).isEqualTo(before)

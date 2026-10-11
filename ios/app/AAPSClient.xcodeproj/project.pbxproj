@@ -264,6 +264,16 @@
 			baseConfigurationReference = AA1000300000000000000 /* Signing.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				// The HealthKit capability, which AIMI needs to read steps, heart rate and sleep.
+				// Set here rather than by ticking the box in Xcode's Signing & Capabilities tab:
+				// the box writes the same two things, but names the file after the target, so
+				// the two targets would get two copies that drift apart. Automatic signing adds
+				// HealthKit to the App ID by itself. Shared/Info.plist must carry
+				// NSHealthShareUsageDescription as well, or iOS terminates the app on first use.
+				CODE_SIGN_ENTITLEMENTS = Device.entitlements;
+				// The simulator keeps its own file, which REPLACES the one above rather than
+				// adding to it, so that file repeats the HealthKit keys. Simulator.entitlements
+				// says why a simulator build needs a file of its own at all.
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = Simulator.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -306,6 +316,16 @@
 			baseConfigurationReference = AA1000300000000000000 /* Signing.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				// The HealthKit capability, which AIMI needs to read steps, heart rate and sleep.
+				// Set here rather than by ticking the box in Xcode's Signing & Capabilities tab:
+				// the box writes the same two things, but names the file after the target, so
+				// the two targets would get two copies that drift apart. Automatic signing adds
+				// HealthKit to the App ID by itself. Shared/Info.plist must carry
+				// NSHealthShareUsageDescription as well, or iOS terminates the app on first use.
+				CODE_SIGN_ENTITLEMENTS = Device.entitlements;
+				// The simulator keeps its own file, which REPLACES the one above rather than
+				// adding to it, so that file repeats the HealthKit keys. Simulator.entitlements
+				// says why a simulator build needs a file of its own at all.
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = Simulator.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -369,6 +389,16 @@
 			baseConfigurationReference = AA1000300000000000000 /* Signing.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				// The HealthKit capability, which AIMI needs to read steps, heart rate and sleep.
+				// Set here rather than by ticking the box in Xcode's Signing & Capabilities tab:
+				// the box writes the same two things, but names the file after the target, so
+				// the two targets would get two copies that drift apart. Automatic signing adds
+				// HealthKit to the App ID by itself. Shared/Info.plist must carry
+				// NSHealthShareUsageDescription as well, or iOS terminates the app on first use.
+				CODE_SIGN_ENTITLEMENTS = Device.entitlements;
+				// The simulator keeps its own file, which REPLACES the one above rather than
+				// adding to it, so that file repeats the HealthKit keys. Simulator.entitlements
+				// says why a simulator build needs a file of its own at all.
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = Simulator.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -411,6 +441,16 @@
 			baseConfigurationReference = AA1000300000000000000 /* Signing.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				// The HealthKit capability, which AIMI needs to read steps, heart rate and sleep.
+				// Set here rather than by ticking the box in Xcode's Signing & Capabilities tab:
+				// the box writes the same two things, but names the file after the target, so
+				// the two targets would get two copies that drift apart. Automatic signing adds
+				// HealthKit to the App ID by itself. Shared/Info.plist must carry
+				// NSHealthShareUsageDescription as well, or iOS terminates the app on first use.
+				CODE_SIGN_ENTITLEMENTS = Device.entitlements;
+				// The simulator keeps its own file, which REPLACES the one above rather than
+				// adding to it, so that file repeats the HealthKit keys. Simulator.entitlements
+				// says why a simulator build needs a file of its own at all.
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = Simulator.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;

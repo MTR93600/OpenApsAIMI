@@ -4360,3 +4360,227 @@ re-declaring default values (the interface already carries the same 7/7/3, so no
 `AIMIHealthConnectStepsProviderMTR`.
 
 Not yet run: the test suites, and an APK build.
+
+### 6br.4 TPO notifications, the iOS deep link, and down to two
+
+`TpoNotifications` is closed, and the shape is the one the KMP rule asks for: the seam carries only
+the hand-off to the operating system. `TpoOrchestrator` (commonMain) decides **when** to tell the
+user - the `OApsAIMITpoNotifyOnApply` preference and the session state - and a new
+`TpoNotificationText` (commonMain) decides **what it says**. Both phones therefore show the same
+words by construction, and the wording is testable in `commonTest`.
+
+**The two Android notification channels turned out not to be a gap.** `CHANNEL_ID_STARTED` is
+`IMPORTANCE_DEFAULT` with sound and vibration off; `CHANNEL_ID_ENDED` is `IMPORTANCE_HIGH`. Written
+out as what the user perceives, they differ in exactly one way: the end notification makes a noise
+and peeks, the start one arrives quietly. Neither sets `bypassDnd`. iOS expresses both directly - a
+default sound on SESSION_ENDED and none on SESSION_STARTED. `.timeSensitive` was rejected on
+purpose: it breaks through Focus, which the Android channel does **not** do, so using it would have
+made iOS *louder* than Android rather than equal to it. The decision about which one is loud now
+lives in shared code, as KDoc on `TpoNotificationKind`, so the two cannot drift.
+
+**The iOS implementation deliberately does not go through the shared `NotificationManager`
+registry**, which was the instruction it was given. The reasons are good enough to record:
+`CommonNotificationManager` posts with `title = rh.gs(... else CoreUiStrings.info)` because
+`AapsNotification` has no title field, so every registry notification on iOS reads "Info" where
+Android's TPO banner reads "AIMI temporary protection active"; and the iOS platform posts everything
+silently by design, routing sound only for `URGENT`, so the ENDED notification would have been
+silent on iPhone and audible on Android. Following the instruction would have **created** two
+differences. `IosTpoNotifications` follows `IosLoopNotifier` instead, which is the existing pattern
+in this module for a plugin posting its own notification with its own title and sound. Giving the
+registry a title and a sound is a real improvement, but it is a registry-wide change and belongs in
+its own lot.
+
+**The deep link now works on both platforms.** `PendingNavigation` gained
+`pluginPreferencesRoute(pluginKey)`, the inverse of `parseRoute` and kept beside it, so neither
+poster writes the route string itself - the literal had already been duplicated once, in the Android
+and iOS posters, and is now a single shared constant in `TpoNotifications.kt`. A round-trip test
+pins the two directions against each other. On iOS, `IosNotificationDelegate` gained tap observers
+(separate from its button handlers: a button claims the response, a tap is for everyone), the shell
+parks the route through the same shared parser Android uses, and a relay holds the request until a
+navigator exists - which matters because the iOS host returns early while app protection is
+unlocked, so a user with a launch password would otherwise have lost the destination every time.
+The link goes through `ElementNavigator.handleNavigationRequest`, so opening settings still asks for
+authorization.
+
+Deleted on the way: `IosTextResolver`. It was never constructed in any commit, does not exist on
+`master`, is superseded by the locale-aware `GeneratedTextResolver` that `ClientGraphBindings`
+actually binds - and it could not have compiled anyway, because it calls `NSString.stringWithFormat`,
+an Objective-C variadic method that Kotlin/Native does not bridge.
+
+**iOS graph: 2 errors left**, both HealthKit - `AimiPhysioSource` and `AimiPhysioDataSource`.
+`:app:compileFullDebugKotlin`, `:plugins:aps:compileKotlinIosArm64` (bar those two) and
+`:core:ui` / `:core:interfaces` for iOS are all green. `:plugins:aps` `jvmMain` and `androidHostTest`
+both carry their own pre-existing `AimiPath` / `AimiStorage` migration debt, which is why the new
+`TpoNotificationTextTest` has been written but not yet run.
+
+### 6br.5 A production bug the test debt was hiding: the gzip header is written outside the member
+
+Clearing the `androidHostTest` migration debt (so the new TPO tests could actually run) turned up a
+real defect in the retention archive, on **all three platforms**. Verified by reading the code, not
+only from the failing tests:
+
+```kotlin
+// AimiRetentionFs.android.kt and .jvm.kt, identical lines
+FileOutputStream(dst, true).use { fos ->
+    if (header != null) fos.write(header)      // raw bytes, OUTSIDE the gzip stream
+    val gzip = GZIPOutputStream(fos)
+```
+
+`AimiRetentionFs.ios.kt` has the same shape: `handle.writeData(header)` then `handle.writeData(member)`,
+with the header outside the already-compressed member.
+
+The header therefore lands as plain text where a gzip member should begin, and `GZIPInputStream`
+answers `ZipException: Not in GZIP format`. Because archive members are concatenated into one file,
+**one bad header makes every later member of that archive unreadable too**. In production this hits
+the four `TRIM_LINES` rules that carry a header: `oapsaimi2_records.csv`, `oapsaimi_wcycle.csv`,
+`aimi_reactivity_analysis.csv` and `comparison_aimi_smb.csv` - the learner corpora. `RETIRE` rules
+escape only by accident, because `retireMembers` always passes `header = null`.
+
+Three tests already assert the right contract and fail: `AimiArchiveTest.aHeaderIsWrittenAtTheTopOfEveryMember`,
+`AimiRetentionManagerTrimTest.theHeaderStaysAtTheTopOfTheLiveFileAndOpensTheArchive` and
+`AimiRetentionEndToEndTest.trimmedComparisonCsvStillParsesToTheTailOfTheOriginalEntries`. They were
+invisible because the whole source set would not compile.
+
+Not fixed yet: the JVM and Android halves are a one-line move (write the header through the
+`GZIPOutputStream` instead of the raw stream), but the iOS half receives an already-built member, so
+the header has to go in where that member is built. Awaiting the user.
+
+A second, smaller finding from the same pass: `AimiFileLock` used to key on `File.canonicalPath`,
+with a KDoc about `/sdcard` being a symlink to `/storage/emulated/0`. The commonMain version keys on
+the raw `AimiPath.value` and says de-duplicating spellings is the platform's job. That holds for the
+worker's own sweep, which de-dups by canonical path, but **not** for the append guard, whose path
+comes from `AimiStorageHelper`. So janitor-versus-writer exclusion is no longer spelling-proof.
+`AimiFileLockTest.twoDifferentSpellingsOfTheSameFileShareOneLock` asserts the old contract and fails.
+Also awaiting the user: restore canonicalisation behind a platform seam, or retire the test.
+
+**Suite state after the repair**: `:plugins:aps:compileAndroidHostTest` green; 2127 tests, 2030 pass,
+95 fail, 2 skipped. 91 of the failures are untouched pre-existing debt, 78 of those being
+`ShellDecisionTraceTest` and `LegacyMealEffectTraceTest` failing with `no field consoleLog` - those
+two drive the engine by reflection and `consoleLog` moved onto `AimiTickWorkingState` during the
+`work.` refactor. The new `TpoNotificationTextTest` passes, 8 of 8.
+
+### 6br.6 Both retention defects fixed, and verified by the tests that were already red
+
+**The gzip header now travels inside the member**, on all three platforms. Android and the JVM write
+it through the `GZIPOutputStream` instead of the raw `FileOutputStream`. iOS builds its member in one
+call, so the header is prefixed to the bytes before compression. Decompressing one member now yields
+a CSV that parses on its own, which is what the three failing tests had been asserting all along.
+
+**`AimiFileLock` is keyed on a resolved path again.** A new `aimiFsCanonicalPath` expect/actual does
+it: `File.canonicalPath` on Android and the JVM, `stringByStandardizingPath` then
+`stringByResolvingSymlinksInPath` on iOS. An unresolvable path - a file nobody has created yet -
+falls back to its raw spelling, which is harmless because there is nothing to corrupt until someone
+writes it.
+
+The existing `aimiFsIdentityKey` was deliberately **not** reused, although an inode is the stronger
+identity. It does not survive the janitor replacing a file by moving a temporary over it: the name
+stays, the inode changes. A lock keyed on the inode would therefore stop matching halfway through a
+pass, in exactly the window the lock exists for. A resolved name is stable across that move.
+
+**Suite after the fixes: 2127 tests, 2036 pass, 89 fail, 2 skipped** - up from 2030 passing and down
+from 95 failing, with no new failure anywhere. Six went green: the four retention and lock tests
+plus two that could only pass once an archive could be read back.
+
+The 89 that remain are all pre-existing and all in one of four classes:
+
+| Count | Class | Cause |
+|---|---|---|
+| 73 | `ShellDecisionTraceTest` | `no field consoleLog` |
+| 5 | `LegacyMealEffectTraceTest` | same |
+| 7 | `AimiPhysioLlmNarrativeDeliveryTest` | empty capture / empty narrative |
+| 2 | `AimiLlmRequestBodyParityTest` | frozen fixture vs a production constant that changed |
+| 2 | `AimiHttpClientMessageTest` | `callPrivate` passes 3 arguments, the method now takes 4 |
+
+The 78 `consoleLog` ones are one cause: both trace tests drive the engine by reflection and
+`consoleLog` moved onto `AimiTickWorkingState` during the `work.` refactor, so the field lookup fails
+before any assertion runs. Test debt, but these are the engine's decision traces, so they are worth
+repairing properly rather than deleting.
+
+`AimiLlmRequestBodyParityTest` is a frozen request body against `max_tokens` 150 in the fixture and
+2000 in production. The production change carries its own reason in a comment - "Gemini Pro always
+thinks; thinking tokens count in this limit" - and 150 would truncate every answer from a reasoning
+model, so the fixture is the stale half.
+
+## 6bs. 2026-10-11: the iOS graph is complete
+
+`IosAimiEngineGraph` resolves. `:plugins:aps:compileKotlinIosArm64` and
+`:ios:shell:compileKotlinIosArm64` are both green with zero errors, `:app:compileFullDebugKotlin` is
+green, and `:plugins:aps:iosSimulatorArm64Test` runs **816 tests, 0 failures** on the real simulator.
+The count went 11 errors to 0 over this session; two of the eleven were never iOS gaps at all but
+lost `@ContributesBinding` annotations, and one was closed by deleting the seam rather than
+implementing it twice.
+
+The last two were the HealthKit pair, `AimiPhysioSource` and `AimiPhysioDataSource`, now served by
+`IosHealthKitPhysioRepository` with the pure maths split into `IosHealthKitPhysioMath` so 25 tests
+can drive it with scripted samples - the simulator serves no HealthKit data, so testing the queries
+themselves is not possible here.
+
+### The HRV answer, now measured
+
+The user's decision was to derive real RMSSD from `HKHeartbeatSeriesSample` rather than pass
+HealthKit's SDNN off as RMSSD. That was the right call and it is implemented. What it costs is now
+known, which it was not when the decision was made:
+
+- **No API asks for a series.** Apple DTS states plainly that third-party apps cannot trigger an
+  on-demand heartbeat series and cannot reach the raw beat data.
+- **Two producers only**: Apple's background tachogram, and Mindfulness/Breathe. Workouts do not
+  write one.
+- **Cadence, from Apple's own white paper**: the default tachogram cadence is every four hours, each
+  burst about a minute. That is roughly **6 minutes of beat-level data per day out of 1440**. Every
+  two hours with Irregular Rhythm Notifications; every 15 minutes with AFib History, which is a user
+  setting and unavailable in mainland China.
+- **No iPhone-only source.** No watch means no HRV at all.
+- Watch-to-iPhone sync latency is unbounded and cannot be forced.
+
+So on iOS `hrvRmssd` will be absent on most ticks, and HRV-driven behaviour will fire far less often
+than on an Android phone whose Garmin writes RMSSD into Health Connect. This is a platform
+capability limit, not a code difference: the alternative was frequent-but-wrong rather than
+rare-but-correct. Worth revisiting only if a chest strap writing through `HKHeartbeatSeriesBuilder`
+becomes part of the picture.
+
+### Deliberate non-matches, each with a reason
+
+- **Sleep stage minutes stay 0.** HealthKit knows deep/REM/core and the Health Connect reader
+  ignores stages. `AIMIPhysioFeatureExtractorMTR` branches on `deepSleepMinutes <= 0`, so filling
+  them in on one platform only would make the same night dose differently on the two phones. Pinned
+  by a test. Change both sides together.
+- **Wrist temperature baseline is computed on iOS**, because `appleSleepingWristTemperature` is an
+  absolute temperature while `SkinTemperatureRecord` carries the writer's own baseline. Thirty days,
+  median, at least five nights or nothing. `ThermalBeliefEngine` only uses the delta and its slope,
+  both offset-invariant, so the method cannot flip a verdict. `resolvedSource` keeps `HC_SKIN`
+  on purpose: the engine does `startsWith(HC_SKIN)` to tell measured from inferred.
+- **Sleep sessions are reconstructed**, since HealthKit has no session object: asleep samples merged
+  with a 60-minute bridge, falling back to `inBed` when no stage sample exists, so an iPhone-only
+  user does not lose a night Health Connect would have had.
+
+### Still open, and now documented rather than discovered later
+
+1. **Steps and current heart rate will still be zero on iOS.** `UnifiedActivityProviderMTR` reads
+   them from `PersistenceLayer`, nothing on iOS writes `HR` or `SC` rows, and `StepService.ios.kt`
+   returns 0 everywhere. The physio path can still be valid without them (HRV 0.4 + sleep 0.3 clears
+   the 0.3 threshold) but `hrNow = 0` closes `AutoDriveGater`, the stress ISF floor and the meal
+   corroboration. Decision needed: write HealthKit steps and heart rate into the AAPS database on
+   iOS, or give `UnifiedActivityProviderMTR` its own platform seam.
+2. **Two HealthKit clients now exist.** The legacy `IosPlatformWearable` serves only
+   `IosNeutralAimiEngine`, which has no production caller; the new repository serves the real graph.
+   They disagree on `rhrResting` - a 24-hour average of Apple's own estimate versus the morning
+   minimum over seven days, which is systematically lower and feeds the thermal engine, the sleep
+   detector and the stress ISF floor. Keep the real path's definition, because that is what the
+   Android gestures were tuned against. Reconciling also means one permission prompt instead of two.
+3. **A gate that was never wired.** `iosHealthKitApsEnabled` is false because nothing assigns it, in
+   any commit. Its KDoc claimed activation copied `IosClientConfig.APS` into it; the neighbouring
+   KDoc claimed the engine switch "is also false in production", when it has been true since
+   2026-10-09. Of the two gates described, one held and the comment named the other. Both KDocs are
+   now truthful. The variable is kept, because it is the only thing holding the HealthKit prompt
+   back.
+
+### App-side prerequisites, done
+
+`NSHealthShareUsageDescription` added to `ios/app/Shared/Info.plist`; a new `Device.entitlements`
+and the same two keys appended to `Simulator.entitlements`, because an SDK-conditional
+`CODE_SIGN_ENTITLEMENTS` **replaces** the plain setting rather than adding to it - without the
+simulator half, HealthKit would have failed silently in the one place it gets tested. Verified with
+`plutil -lint`, `xcodebuild -list` and `xcodebuild -showBuildSettings` for both SDKs.
+`NSHealthUpdateUsageDescription` is deliberately absent: nothing writes to HealthKit, and the plist
+says so to stop someone "fixing" it. Not proven: a device build now asks for an entitlement it did
+not before, and automatic signing should reissue the profile by itself, but no device build was run.

@@ -6,6 +6,7 @@ import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiTpo
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
@@ -38,6 +39,7 @@ class TpoOrchestrator @Inject constructor(
     private val aapsLogger: AAPSLogger,
     private val tpoNotifications: TpoNotifications,
     private val keyValueCache: AimiKeyValueCache,
+    private val rh: TextResolver,
 ) : AimiTpo {
     private val persistence = TpoPersistence(storage)
     private val sessionManager = TpoSessionManager(persistence)
@@ -63,7 +65,7 @@ class TpoOrchestrator @Inject constructor(
         val changed = sessionManager.revertNow(preferences, historyRepo, aimiWallClockMs())
         if (changed) {
             prefsChangedThisTick = true
-            tpoNotifications.showSessionEnded(TpoEndReason.MANUAL_REVERT)
+            notifySessionEnded(TpoEndReason.MANUAL_REVERT)
         }
         return changed
     }
@@ -73,7 +75,7 @@ class TpoOrchestrator @Inject constructor(
         val changed = sessionManager.expireIfNeeded(nowMs, preferences, historyRepo)
         if (changed) {
             prefsChangedThisTick = true
-            tpoNotifications.showSessionEnded(TpoEndReason.EXPIRED)
+            notifySessionEnded(TpoEndReason.EXPIRED)
         }
         return changed
     }
@@ -135,7 +137,7 @@ class TpoOrchestrator @Inject constructor(
                 return false
             }
             sessionManager.supersedeActiveSession(preferences, historyRepo, nowMs)
-            tpoNotifications.showSessionEnded(TpoEndReason.SUPERSEDED)
+            notifySessionEnded(TpoEndReason.SUPERSEDED)
         }
 
         val plan = TpoDeltaBuilder.buildPlan(
@@ -153,7 +155,7 @@ class TpoOrchestrator @Inject constructor(
         if (!llmConfirmEnabled) {
             val session = sessionManager.startSession(plan, preferences, nowMs, llmResult = null, historyRepo)
             prefsChangedThisTick = true
-            tpoNotifications.showSessionStarted(session)
+            notifySessionStarted(session)
             aapsLogger.info(LTag.APS, "TPO applied ${proposal.packId.name} algo-only")
             return true
         }
@@ -169,7 +171,7 @@ class TpoOrchestrator @Inject constructor(
                 if (llmValidator.shouldApply(result, llmConfirmEnabled = true)) {
                     if (sessionManager.activatePendingSession(pending, preferences, result, historyRepo)) {
                         prefsChangedThisTick = true
-                        sessionManager.currentSession()?.let { tpoNotifications.showSessionStarted(it) }
+                        sessionManager.currentSession()?.let { notifySessionStarted(it) }
                     }
                     aapsLogger.info(LTag.APS, "TPO applied ${proposal.packId.name} LLM=${result.verdict}")
                 } else {
@@ -184,6 +186,37 @@ class TpoOrchestrator @Inject constructor(
             }
         }
         return false
+    }
+
+    /**
+     * Tells the user a session has started, when there is anything to tell.
+     *
+     * The two gates used to sit in the Android notification class, which meant an iOS
+     * implementation would have had to repeat them and could have got them wrong. They are rules,
+     * not platform work, so they belong here:
+     *
+     * - the user can turn these notifications off with `OApsAIMITpoNotifyOnApply`;
+     * - a session that is not yet active (still waiting for the LLM) has nothing to announce. The
+     *   caller inside the LLM branch re-reads the session after activating it, so it arrives here
+     *   as ACTIVE.
+     */
+    private fun notifySessionStarted(session: TpoSessionDocument) {
+        if (!preferences.get(BooleanKey.OApsAIMITpoNotifyOnApply)) return
+        if (session.status != TpoSessionStatus.ACTIVE) return
+        val notification = TpoNotificationText.sessionStarted(rh, session, aimiWallClockMs()) ?: return
+        tpoNotifications.show(notification)
+    }
+
+    /**
+     * Tells the user the session is over, and clears the "protection active" notification first so
+     * the tray does not keep claiming a session that has ended.
+     *
+     * Behind the same preference as the start notification, so turning them off turns off both.
+     */
+    private fun notifySessionEnded(reason: TpoEndReason) {
+        if (!preferences.get(BooleanKey.OApsAIMITpoNotifyOnApply)) return
+        tpoNotifications.cancel(TpoNotificationKind.SESSION_STARTED)
+        tpoNotifications.show(TpoNotificationText.sessionEnded(rh, reason))
     }
 
     private fun isTpoEnabled(): Boolean = preferences.get(BooleanKey.OApsAIMITpoEnabled)

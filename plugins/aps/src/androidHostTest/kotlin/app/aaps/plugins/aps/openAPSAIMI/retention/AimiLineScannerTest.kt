@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.retention
 
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -7,9 +8,12 @@ import java.io.File
 
 class AimiLineScannerTest {
 
+    /** The scanner speaks AimiPath now; these tests still build their fixtures with java.io.File. */
+    private fun File.asAimiPath() = AimiPath(absolutePath)
+
     private fun collect(file: File): List<Triple<Long, Long, String>> {
         val out = mutableListOf<Triple<Long, Long, String>>()
-        AimiLineScanner.forEachLine(file) { start, end, prefix ->
+        AimiLineScanner.forEachLine(file.asAimiPath()) { start, end, prefix ->
             out.add(Triple(start, end, String(prefix, Charsets.UTF_8)))
             true
         }
@@ -58,7 +62,7 @@ class AimiLineScannerTest {
         file.writeText("one\ntwo\nthree\n")
         var seen = 0
 
-        AimiLineScanner.forEachLine(file) { _, _, _ ->
+        AimiLineScanner.forEachLine(file.asAimiPath()) { _, _, _ ->
             seen++
             false
         }

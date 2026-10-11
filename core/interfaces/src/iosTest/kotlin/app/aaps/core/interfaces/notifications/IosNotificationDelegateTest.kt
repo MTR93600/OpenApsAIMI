@@ -1,5 +1,7 @@
 package app.aaps.core.interfaces.notifications
 
+import platform.UserNotifications.UNNotificationDefaultActionIdentifier
+import platform.UserNotifications.UNNotificationDismissActionIdentifier
 import platform.UserNotifications.UNNotificationPresentationOptionBanner
 import platform.UserNotifications.UNNotificationPresentationOptionList
 import platform.UserNotifications.UNNotificationPresentationOptionSound
@@ -91,6 +93,89 @@ class IosNotificationDelegateTest {
             options and UNNotificationPresentationOptionSound,
             "the notification's own sound is suppressed"
         )
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Taps that open the app
+    // ---------------------------------------------------------------------------------------------
+
+    /**
+     * What a notification was carrying has to reach the observer, because that is where the route
+     * is. Without it a tap opens the app on whatever screen it was last on, which is what iOS did
+     * while Android already navigated.
+     */
+    @Test
+    fun `a tap hands the observer what the notification was carrying`() {
+        var seen: Map<String, String>? = null
+        IosNotificationDelegate.onTapped { seen = it }
+
+        IosNotificationDelegate.dispatch(
+            actionId = UNNotificationDefaultActionIdentifier,
+            notificationId = "notification",
+            userInfo = mapOf("extra_navigate_route" to "plugin_preferences/OpenAPSAIMIPlugin")
+        )
+
+        assertEquals(mapOf("extra_navigate_route" to "plugin_preferences/OpenAPSAIMIPlugin"), seen)
+    }
+
+    /** Every observer hears a tap. Nobody takes it away from anybody, unlike the handlers. */
+    @Test
+    fun `every tap observer hears the tap`() {
+        var first = false
+        var second = false
+        IosNotificationDelegate.onTapped { first = true }
+        IosNotificationDelegate.onTapped { second = true }
+
+        IosNotificationDelegate.dispatch(UNNotificationDefaultActionIdentifier, "notification")
+
+        assertTrue(first)
+        assertTrue(second)
+    }
+
+    /** A button on the notification answers it - "ignore carbs for 15 minutes" - and opens nothing. */
+    @Test
+    fun `pressing a button on the notification is not a tap`() {
+        var tapped = false
+        IosNotificationDelegate.onTapped { tapped = true }
+
+        IosNotificationDelegate.dispatch("aaps-ignore-15", "notification")
+
+        assertFalse(tapped)
+    }
+
+    /** Swiping it away is the user getting rid of it, not asking to see a screen. */
+    @Test
+    fun `swiping the notification away is not a tap`() {
+        var tapped = false
+        IosNotificationDelegate.onTapped { tapped = true }
+
+        IosNotificationDelegate.dispatch(UNNotificationDismissActionIdentifier, "notification")
+
+        assertFalse(tapped)
+    }
+
+    /** The two paths are independent: watching for taps must not swallow anybody's response. */
+    @Test
+    fun `a tap still reaches the handlers`() {
+        var handlerSaw = false
+        IosNotificationDelegate.onTapped { }
+        IosNotificationDelegate.register(emptySet()) { _, _ -> handlerSaw = true; false }
+
+        IosNotificationDelegate.dispatch(UNNotificationDefaultActionIdentifier, "notification")
+
+        assertTrue(handlerSaw)
+    }
+
+    /** Otherwise one test's observer would still be listening during the next one. */
+    @Test
+    fun `reset forgets the tap observers`() {
+        var tapped = false
+        IosNotificationDelegate.onTapped { tapped = true }
+
+        IosNotificationDelegate.reset()
+        IosNotificationDelegate.dispatch(UNNotificationDefaultActionIdentifier, "notification")
+
+        assertFalse(tapped)
     }
 
     /** Both real users register: the notification platform and the loop notifier. */

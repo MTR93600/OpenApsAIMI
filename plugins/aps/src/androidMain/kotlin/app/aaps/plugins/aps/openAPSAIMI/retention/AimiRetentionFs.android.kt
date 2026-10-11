@@ -64,6 +64,9 @@ internal actual fun aimiFsRename(source: AimiPath, to: AimiPath): Boolean =
 
 internal actual fun aimiFsFreeBytes(path: AimiPath): Long = File(path.value).usableSpace
 
+internal actual fun aimiFsCanonicalPath(path: AimiPath): String? =
+    runCatching { File(path.value).canonicalPath }.getOrNull()
+
 internal actual fun aimiFsIdentityKey(path: AimiPath): String? =
     runCatching {
         Files.readAttributes(File(path.value).toPath(), BasicFileAttributes::class.java)
@@ -93,8 +96,13 @@ internal actual fun aimiGzipAppendMember(
     val dst = File(target.value)
     RandomAccessFile(File(source.value), "r").use { raf ->
         FileOutputStream(dst, true).use { fos ->
-            if (header != null) fos.write(header)
             val gzip = GZIPOutputStream(fos)
+            // Through the gzip stream, not the raw one. A header written straight to `fos` lands
+            // where the member's gzip magic should be, and GZIPInputStream then rejects the file
+            // with "Not in GZIP format" - and because members are concatenated, one such header
+            // makes every later member unreadable too. The header belongs inside the member, so a
+            // reader that decompresses one member gets a CSV it can parse on its own.
+            if (header != null) gzip.write(header)
             val buf = ByteArray(DEFAULT_COPY_BUFFER)
             raf.seek(start)
             var remaining = rangeLength

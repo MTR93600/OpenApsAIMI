@@ -1,14 +1,18 @@
 package app.aaps.plugins.aps.openAPSAIMI.retention
 
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import com.google.common.truth.Truth.assertThat
+import kotlinx.datetime.TimeZone
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
-import java.time.ZoneId
 
 class AimiCutPlannerTest {
 
-    private val utc = ZoneId.of("UTC")
+    private val utc = TimeZone.UTC
+
+    /** The planner speaks AimiPath now; these tests still build their fixtures with java.io.File. */
+    private fun File.asAimiPath() = AimiPath(absolutePath)
     private val day = 24L * 60 * 60 * 1000
 
     private fun jsonlRule(hotDays: Int) = AimiRetentionRule(
@@ -27,7 +31,7 @@ class AimiCutPlannerTest {
         val file = File(dir, "x.jsonl")
         file.writeText(line(now - day) + "\n" + line(now) + "\n")
 
-        val plan = AimiCutPlanner.plan(file, jsonlRule(7), now, utc)
+        val plan = AimiCutPlanner.plan(file.asAimiPath(), jsonlRule(7), now, utc)
 
         assertThat(plan.cutOffset).isEqualTo(0L)
         assertThat(plan.ranges).isEmpty()
@@ -41,7 +45,7 @@ class AimiCutPlannerTest {
         val file = File(dir, "x.jsonl")
         file.writeText("$old\n$fresh\n")
 
-        val plan = AimiCutPlanner.plan(file, jsonlRule(7), now, utc)
+        val plan = AimiCutPlanner.plan(file.asAimiPath(), jsonlRule(7), now, utc)
 
         assertThat(plan.cutOffset).isEqualTo(old.length + 1L)
         assertThat(plan.ranges).hasSize(1)
@@ -59,7 +63,7 @@ class AimiCutPlannerTest {
         val file = File(dir, "x.jsonl")
         file.writeText(line(july) + "\n" + line(august) + "\n" + line(september) + "\n" + line(now) + "\n")
 
-        val plan = AimiCutPlanner.plan(file, jsonlRule(1), now, utc)
+        val plan = AimiCutPlanner.plan(file.asAimiPath(), jsonlRule(1), now, utc)
 
         assertThat(plan.ranges.map { it.month }).containsExactly("2026-07", "2026-08", "2026-09").inOrder()
         assertThat(plan.ranges.first().start).isEqualTo(0L)
@@ -74,7 +78,7 @@ class AimiCutPlannerTest {
         val file = File(dir, "x.jsonl")
         file.writeText("$broken\n$fresh\n")
 
-        val plan = AimiCutPlanner.plan(file, jsonlRule(7), now, utc)
+        val plan = AimiCutPlanner.plan(file.asAimiPath(), jsonlRule(7), now, utc)
 
         assertThat(plan.cutOffset).isEqualTo(broken.length + 1L)
         assertThat(plan.ranges.single().endExclusive).isEqualTo(broken.length + 1L)
@@ -88,7 +92,7 @@ class AimiCutPlannerTest {
         val file = File(dir, "x.jsonl")
         file.writeText("{\"wall_ms\":1}\n{\"wall_ms\":2}\n")
 
-        val plan = AimiCutPlanner.plan(file, jsonlRule(7), now, utc)
+        val plan = AimiCutPlanner.plan(file.asAimiPath(), jsonlRule(7), now, utc)
 
         assertThat(plan.cutOffset).isEqualTo(0L)
         assertThat(plan.ranges).isEmpty()
@@ -107,7 +111,7 @@ class AimiCutPlannerTest {
         val file = File(dir, "x.csv")
         file.writeText("a,b\n1,1\n2,2\n3,3\n")
 
-        val plan = AimiCutPlanner.plan(file, rule, now, utc)
+        val plan = AimiCutPlanner.plan(file.asAimiPath(), rule, now, utc)
 
         assertThat(plan.headerBytes).isEqualTo(4L)
         assertThat(plan.cutOffset).isEqualTo(12L)
@@ -126,7 +130,7 @@ class AimiCutPlannerTest {
         val file = File(dir, "x.csv")
         file.writeText("aa\nbb\ncc\ndd\n")
 
-        val plan = AimiCutPlanner.plan(file, rule, now, utc)
+        val plan = AimiCutPlanner.plan(file.asAimiPath(), rule, now, utc)
 
         assertThat(plan.cutOffset).isEqualTo(6L)
         assertThat(plan.ranges.single().month).isEqualTo("2025-09")
@@ -144,7 +148,7 @@ class AimiCutPlannerTest {
         val file = File(dir, "x.csv")
         file.writeText("aa\nbb\n")
 
-        val plan = AimiCutPlanner.plan(file, rule, now, utc)
+        val plan = AimiCutPlanner.plan(file.asAimiPath(), rule, now, utc)
 
         assertThat(plan.cutOffset).isEqualTo(0L)
         assertThat(plan.ranges).isEmpty()

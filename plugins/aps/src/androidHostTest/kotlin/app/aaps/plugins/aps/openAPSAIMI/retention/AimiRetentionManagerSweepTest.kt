@@ -1,8 +1,13 @@
 package app.aaps.plugins.aps.openAPSAIMI.retention
 
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
+import app.aaps.plugins.aps.openAPSAIMI.utils.AndroidAimiStorage
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import org.mockito.kotlin.mock
 import java.io.File
 import java.io.IOException
 import java.time.Instant
@@ -16,7 +21,19 @@ class AimiRetentionManagerSweepTest {
     private val now = 1_758_240_000_000L
     private val day = 24L * 60 * 60 * 1000
 
-    private fun manager(dir: File) = AimiRetentionManager(dir, {}, { now })
+    /** The manager speaks AimiPath now; these tests still build their fixtures with java.io.File. */
+    private fun File.asAimiPath() = AimiPath(absolutePath)
+
+    /** And back again, so the fixtures can still read and write the files the manager names. */
+    private fun AimiPath.asFile() = File(value)
+
+    /**
+     * The manager only asks the storage about paths, text and sizes, and the real Android storage
+     * answers all of that from the path alone, so the helper never gets called.
+     */
+    private val storage: AimiStorage = AndroidAimiStorage(mock<AimiStorageHelper>())
+
+    private fun manager(dir: File) = AimiRetentionManager(dir.asAimiPath(), storage, {}, { now })
 
     private fun readBack(file: File) =
         GZIPInputStream(file.inputStream()).use { it.readBytes().toString(Charsets.UTF_8) }
@@ -30,11 +47,11 @@ class AimiRetentionManagerSweepTest {
         val file = File(dir, "dead.csv")
         file.writeText("a,b\n1,1\n")
 
-        val done = manager(dir).retire(file, rule)
+        val done = manager(dir).retire(file.asAimiPath(), rule)
 
         assertThat(done).isTrue()
         assertThat(file.exists()).isFalse()
-        assertThat(readBack(AimiArchive.directory(dir).listFiles()!!.single())).isEqualTo("a,b\n1,1\n")
+        assertThat(readBack(AimiArchive.directory(storage, dir.asAimiPath()).asFile().listFiles()!!.single())).isEqualTo("a,b\n1,1\n")
     }
 
     @Test
@@ -51,9 +68,9 @@ class AimiRetentionManagerSweepTest {
         file.setLastModified(now - (AimiRetentionPolicy.STALE_DAYS + 1) * day)
 
         val subject = manager(dir)
-        assertThat(subject.isStale(file)).isTrue()
+        assertThat(subject.isStale(file.asAimiPath())).isTrue()
 
-        subject.retire(file, rule)
+        subject.retire(file.asAimiPath(), rule)
         assertThat(file.exists()).isFalse()
     }
 
@@ -63,7 +80,7 @@ class AimiRetentionManagerSweepTest {
         file.writeText("body\n")
         file.setLastModified(now - day)
 
-        assertThat(manager(dir).isStale(file)).isFalse()
+        assertThat(manager(dir).isStale(file.asAimiPath())).isFalse()
     }
 
     @Test
@@ -106,15 +123,15 @@ class AimiRetentionManagerSweepTest {
 
         assertThat(consumed).isEqualTo(1)
         assertThat(overflow.exists()).isFalse()
-        assertThat(AimiArchive.directory(dir).listFiles()).hasLength(1)
+        assertThat(AimiArchive.directory(storage, dir.asAimiPath()).asFile().listFiles()).hasLength(1)
     }
 
     @Test
     fun runOnceProcessesTheLargestFileFirst(@TempDir dir: File) {
         val seen = mutableListOf<String>()
-        val subject = object : AimiRetentionManager(dir, {}, { now }) {
-            override fun onFileVisited(file: File) {
-                seen.add(file.name)
+        val subject = object : AimiRetentionManager(dir.asAimiPath(), storage, {}, { now }) {
+            override fun onFileVisited(path: AimiPath) {
+                seen.add(path.asFile().name)
             }
         }
         File(dir, "AIMI_Decisions.jsonl").writeText("x".repeat(500) + "\n")
@@ -127,9 +144,9 @@ class AimiRetentionManagerSweepTest {
 
     @Test
     fun oneBrokenFileDoesNotStopTheOthers(@TempDir dir: File) {
-        val subject = object : AimiRetentionManager(dir, {}, { now }) {
-            override fun onFileVisited(file: File) {
-                if (file.name == "AIMI_Decisions.jsonl") error("boom")
+        val subject = object : AimiRetentionManager(dir.asAimiPath(), storage, {}, { now }) {
+            override fun onFileVisited(path: AimiPath) {
+                if (path.asFile().name == "AIMI_Decisions.jsonl") error("boom")
             }
         }
         File(dir, "AIMI_Decisions.jsonl").writeText("x".repeat(500) + "\n")
@@ -155,9 +172,9 @@ class AimiRetentionManagerSweepTest {
 
         // First pass: a real, successful retire. This creates non-trivial pre-pass content in the
         // month's archive member, the same way an earlier day's pass would have.
-        val firstPass = manager(dir).retire(file, rule)
+        val firstPass = manager(dir).retire(file.asAimiPath(), rule)
         assertThat(firstPass).isTrue()
-        val member = AimiArchive.directory(dir).listFiles()!!.single()
+        val member = AimiArchive.directory(storage, dir.asAimiPath()).asFile().listFiles()!!.single()
         val previousBytes = member.readBytes()
         val previousText = readBack(member)
 
@@ -165,14 +182,14 @@ class AimiRetentionManagerSweepTest {
         // this time the append into the very same month's target fails partway through.
         val second = File(dir, "dead.csv")
         second.writeText("a,b\n2,2\n")
-        val subject = object : AimiRetentionManager(dir, {}, { now }) {
-            override fun appendArchiveMember(source: File, start: Long, endExclusive: Long, target: File, header: ByteArray?) {
-                target.appendBytes(byteArrayOf(0))
+        val subject = object : AimiRetentionManager(dir.asAimiPath(), storage, {}, { now }) {
+            override fun appendArchiveMember(source: AimiPath, start: Long, endExclusive: Long, target: AimiPath, header: ByteArray?) {
+                target.asFile().appendBytes(byteArrayOf(0))
                 throw IOException("disk full mid member")
             }
         }
 
-        val done = subject.retire(second, rule)
+        val done = subject.retire(second.asAimiPath(), rule)
 
         assertThat(done).isFalse()
         assertThat(second.exists()).isTrue()
@@ -186,20 +203,20 @@ class AimiRetentionManagerSweepTest {
         val rule = AimiRetentionRule("dead.csv", AimiRetentionOp.RETIRE, archiveMonths = 12, hasHeader = true)
         val file = File(dir, "dead.csv")
         file.writeText("a,b\n1,1\n")
-        val subject = object : AimiRetentionManager(dir, {}, { now }) {
-            override fun appendArchiveMember(source: File, start: Long, endExclusive: Long, target: File, header: ByteArray?) {
-                target.parentFile?.mkdirs()
-                target.appendBytes(byteArrayOf(0))
+        val subject = object : AimiRetentionManager(dir.asAimiPath(), storage, {}, { now }) {
+            override fun appendArchiveMember(source: AimiPath, start: Long, endExclusive: Long, target: AimiPath, header: ByteArray?) {
+                target.asFile().parentFile?.mkdirs()
+                target.asFile().appendBytes(byteArrayOf(0))
                 throw IOException("disk full mid member")
             }
         }
 
-        val done = subject.retire(file, rule)
+        val done = subject.retire(file.asAimiPath(), rule)
 
         assertThat(done).isFalse()
         assertThat(file.exists()).isTrue()
         assertThat(file.readText()).isEqualTo("a,b\n1,1\n")
-        assertThat(AimiArchive.memberFile(dir, "dead.csv", monthOfNow()).exists()).isFalse()
+        assertThat(AimiArchive.memberFile(storage, dir.asAimiPath(), "dead.csv", monthOfNow()).asFile().exists()).isFalse()
     }
 
     @Test
@@ -211,16 +228,16 @@ class AimiRetentionManagerSweepTest {
         // The deleteSource seam simulates that without any filesystem permission games, which would
         // not fail as root (e.g. in a root CI container). retire() must treat a failed delete the
         // same as a failed append: roll the archive member back and keep the source.
-        val subject = object : AimiRetentionManager(dir, {}, { now }) {
-            override fun deleteSource(file: File): Boolean = false
+        val subject = object : AimiRetentionManager(dir.asAimiPath(), storage, {}, { now }) {
+            override fun deleteSource(path: AimiPath): Boolean = false
         }
 
-        val done = subject.retire(file, rule)
+        val done = subject.retire(file.asAimiPath(), rule)
 
         assertThat(done).isFalse()
         assertThat(file.exists()).isTrue()
         assertThat(file.readText()).isEqualTo("a,b\n1,1\n")
-        assertThat(AimiArchive.memberFile(dir, "dead.csv", monthOfNow()).exists()).isFalse()
+        assertThat(AimiArchive.memberFile(storage, dir.asAimiPath(), "dead.csv", monthOfNow()).asFile().exists()).isFalse()
     }
 
     // --- retire() safety envelope: fix round 1 (I2, I3) ---
@@ -234,16 +251,16 @@ class AimiRetentionManagerSweepTest {
         val rule = AimiRetentionRule("dead.csv", AimiRetentionOp.RETIRE, archiveMonths = 12, hasHeader = true)
         val file = File(dir, "dead.csv")
         file.writeText("a,b\n1,1\n")
-        val subject = object : AimiRetentionManager(dir, {}, { now }) {
-            override fun freeSpaceOf(file: File): Long = 1L
+        val subject = object : AimiRetentionManager(dir.asAimiPath(), storage, {}, { now }) {
+            override fun freeSpaceOf(path: AimiPath): Long = 1L
         }
 
-        val done = subject.retire(file, rule)
+        val done = subject.retire(file.asAimiPath(), rule)
 
         assertThat(done).isFalse()
         assertThat(file.exists()).isTrue()
         assertThat(file.readText()).isEqualTo("a,b\n1,1\n")
-        assertThat(AimiArchive.directory(dir).listFiles().orEmpty()).isEmpty()
+        assertThat(AimiArchive.directory(storage, dir.asAimiPath()).asFile().listFiles().orEmpty()).isEmpty()
     }
 
     @Test
@@ -256,20 +273,20 @@ class AimiRetentionManagerSweepTest {
         // length means the separate `file.length() > markedEof` growth check in retire() cannot
         // catch this on its own - only the file-key half of identityChanged can, so this isolates
         // that check specifically (unlike the growth test below, which is deliberately longer).
-        val subject = object : AimiRetentionManager(dir, {}, { now }) {
-            override fun appendArchiveMember(source: File, start: Long, endExclusive: Long, target: File, header: ByteArray?) {
-                AimiArchive.appendMember(source, start, endExclusive, target, header)
+        val subject = object : AimiRetentionManager(dir.asAimiPath(), storage, {}, { now }) {
+            override fun appendArchiveMember(source: AimiPath, start: Long, endExclusive: Long, target: AimiPath, header: ByteArray?) {
+                AimiArchive.appendMember(storage, source, start, endExclusive, target, header)
                 file.renameTo(File(dir, "dead.csv.rotated"))
                 file.writeText("z,y\n9,9\n")
             }
         }
 
-        val done = subject.retire(file, rule)
+        val done = subject.retire(file.asAimiPath(), rule)
 
         assertThat(done).isFalse()
         assertThat(file.exists()).isTrue()
         assertThat(file.readText()).isEqualTo("z,y\n9,9\n")
-        assertThat(AimiArchive.memberFile(dir, "dead.csv", monthOfNow()).exists()).isFalse()
+        assertThat(AimiArchive.memberFile(storage, dir.asAimiPath(), "dead.csv", monthOfNow()).asFile().exists()).isFalse()
     }
 
     @Test
@@ -280,29 +297,29 @@ class AimiRetentionManagerSweepTest {
         // Archive the real (original) content first, then append more to the SAME file (same
         // identity, just longer). retire() must still refuse to delete it: the new tail was never
         // archived.
-        val subject = object : AimiRetentionManager(dir, {}, { now }) {
-            override fun appendArchiveMember(source: File, start: Long, endExclusive: Long, target: File, header: ByteArray?) {
-                AimiArchive.appendMember(source, start, endExclusive, target, header)
+        val subject = object : AimiRetentionManager(dir.asAimiPath(), storage, {}, { now }) {
+            override fun appendArchiveMember(source: AimiPath, start: Long, endExclusive: Long, target: AimiPath, header: ByteArray?) {
+                AimiArchive.appendMember(storage, source, start, endExclusive, target, header)
                 file.appendText("a,b\n2,2\n")
             }
         }
 
-        val done = subject.retire(file, rule)
+        val done = subject.retire(file.asAimiPath(), rule)
 
         assertThat(done).isFalse()
         assertThat(file.exists()).isTrue()
         assertThat(file.readText()).isEqualTo("a,b\n1,1\na,b\n2,2\n")
-        assertThat(AimiArchive.memberFile(dir, "dead.csv", monthOfNow()).exists()).isFalse()
+        assertThat(AimiArchive.memberFile(storage, dir.asAimiPath(), "dead.csv", monthOfNow()).asFile().exists()).isFalse()
     }
 
     @Test
     fun retireOnAMissingFileReturnsFalseAndDeletesNothing(@TempDir dir: File) {
         val rule = AimiRetentionRule("dead.csv", AimiRetentionOp.RETIRE, archiveMonths = 12, hasHeader = true)
 
-        val done = manager(dir).retire(File(dir, "absent.csv"), rule)
+        val done = manager(dir).retire(File(dir, "absent.csv").asAimiPath(), rule)
 
         assertThat(done).isFalse()
-        assertThat(AimiArchive.directory(dir).exists()).isFalse()
+        assertThat(AimiArchive.directory(storage, dir.asAimiPath()).asFile().exists()).isFalse()
     }
 
     @Test
@@ -311,11 +328,11 @@ class AimiRetentionManagerSweepTest {
         val file = File(dir, "dead.csv")
         file.writeText("")
 
-        val done = manager(dir).retire(file, rule)
+        val done = manager(dir).retire(file.asAimiPath(), rule)
 
         assertThat(done).isTrue()
         assertThat(file.exists()).isFalse()
-        assertThat(AimiArchive.directory(dir).exists()).isFalse()
+        assertThat(AimiArchive.directory(storage, dir.asAimiPath()).asFile().exists()).isFalse()
     }
 
     @Test
@@ -356,12 +373,12 @@ class AimiRetentionManagerSweepTest {
         val file = File(dir, "x.jsonl")
         file.writeText("$earlierLine\n$laterLine\n")
 
-        val done = manager(dir).retire(file, rule)
+        val done = manager(dir).retire(file.asAimiPath(), rule)
 
         assertThat(done).isTrue()
         assertThat(file.exists()).isFalse()
-        val earlierMember = AimiArchive.memberFile(dir, "x.jsonl", earlierLabel)
-        val laterMember = AimiArchive.memberFile(dir, "x.jsonl", laterLabel)
+        val earlierMember = AimiArchive.memberFile(storage, dir.asAimiPath(), "x.jsonl", earlierLabel).asFile()
+        val laterMember = AimiArchive.memberFile(storage, dir.asAimiPath(), "x.jsonl", laterLabel).asFile()
         assertThat(readBack(earlierMember)).isEqualTo("$earlierLine\n")
         assertThat(readBack(laterMember)).isEqualTo("$laterLine\n")
     }
@@ -388,11 +405,11 @@ class AimiRetentionManagerSweepTest {
         val originalContent = "$completeLine\n$trailingLine"
         file.writeText(originalContent)
 
-        val done = manager(dir).retire(file, rule)
+        val done = manager(dir).retire(file.asAimiPath(), rule)
 
         assertThat(done).isTrue()
         assertThat(file.exists()).isFalse()
-        val member = AimiArchive.memberFile(dir, "x.jsonl", monthLabel)
+        val member = AimiArchive.memberFile(storage, dir.asAimiPath(), "x.jsonl", monthLabel).asFile()
         assertThat(readBack(member)).isEqualTo(originalContent)
     }
 
@@ -413,9 +430,9 @@ class AimiRetentionManagerSweepTest {
         val file = File(dir, "x.jsonl")
         file.writeText("h\n" + """{"timestamp":${now - day}}""" + "\n")
         val warned = mutableListOf<String>()
-        val subject = object : AimiRetentionManager(dir, {}, { now }, warn = { warned.add(it) }) {}
+        val subject = object : AimiRetentionManager(dir.asAimiPath(), storage, {}, { now }, warn = { warned.add(it) }) {}
 
-        val done = subject.retire(file, rule)
+        val done = subject.retire(file.asAimiPath(), rule)
 
         assertThat(done).isFalse()
         assertThat(file.exists()).isTrue()
@@ -439,10 +456,10 @@ class AimiRetentionManagerSweepTest {
         val file = File(dir, "x.jsonl")
         file.writeText("not json, no timestamp field at all\n" + """{"timestamp":${now - day}}""" + "\n")
 
-        val done = manager(dir).retire(file, rule)
+        val done = manager(dir).retire(file.asAimiPath(), rule)
 
         assertThat(done).isTrue()
-        val archived = AimiArchive.directory(dir).listFiles().orEmpty()
+        val archived = AimiArchive.directory(storage, dir.asAimiPath()).asFile().listFiles().orEmpty()
         assertThat(archived).isNotEmpty()
         val expectedMonth = monthOfNow()
         archived.forEach { member ->
@@ -458,11 +475,11 @@ class AimiRetentionManagerSweepTest {
         val file = File(dir, "dead.csv")
         file.writeText("a,b\n1,1\n2,2\n")
 
-        val done = manager(dir).retire(file, rule)
+        val done = manager(dir).retire(file.asAimiPath(), rule)
 
         assertThat(done).isTrue()
-        assertThat(AimiArchive.directory(dir).listFiles()).hasLength(1)
-        assertThat(AimiArchive.memberFile(dir, "dead.csv", monthOfNow()).exists()).isTrue()
+        assertThat(AimiArchive.directory(storage, dir.asAimiPath()).asFile().listFiles()).hasLength(1)
+        assertThat(AimiArchive.memberFile(storage, dir.asAimiPath(), "dead.csv", monthOfNow()).asFile().exists()).isTrue()
     }
 
     // --- C2: interrupted-archive recovery, at the start of every pass ---
@@ -471,10 +488,10 @@ class AimiRetentionManagerSweepTest {
     fun recoverInterruptedArchivesRestoresATruncatedMemberToItsPreCrashLengthAndDeletesTheMarker(@TempDir dir: File) {
         val source = File(dir, "x.jsonl")
         source.writeText("one\ntwo\nthree\n")
-        val target = AimiArchive.memberFile(dir, "x.jsonl", "2026-09")
+        val target = AimiArchive.memberFile(storage, dir.asAimiPath(), "x.jsonl", "2026-09").asFile()
 
         // A real, complete append first - this is the "good" content an earlier pass produced.
-        AimiArchive.appendMember(source, 0L, 4L, target, null)
+        AimiArchive.appendMember(storage, source.asAimiPath(), 0L, 4L, target.asAimiPath(), null)
         val goodBytes = target.readBytes()
 
         // Simulate a crash partway through a SECOND append: the marker survives (it records the
@@ -493,7 +510,7 @@ class AimiRetentionManagerSweepTest {
 
     @Test
     fun recoverInterruptedArchivesDeletesABrandNewMemberInterruptedBeforeItHadAnyPriorContent(@TempDir dir: File) {
-        val target = AimiArchive.memberFile(dir, "x.jsonl", "2026-09")
+        val target = AimiArchive.memberFile(storage, dir.asAimiPath(), "x.jsonl", "2026-09").asFile()
         target.parentFile.mkdirs()
         // A crash on the very first append to this target: it did not exist before this pass, so
         // the marker records length 0, and recovery must delete it outright, not truncate to 0
@@ -518,14 +535,14 @@ class AimiRetentionManagerSweepTest {
         // than the requested length, zero-padding it and making every member after it unreadable.
         val source = File(dir, "x.jsonl")
         source.writeText("one\ntwo\n")
-        val target = AimiArchive.memberFile(dir, "x.jsonl", "2026-09")
+        val target = AimiArchive.memberFile(storage, dir.asAimiPath(), "x.jsonl", "2026-09").asFile()
 
         // P: real content from an earlier, successful pass.
-        AimiArchive.appendMember(source, 0L, 4L, target, null)
+        AimiArchive.appendMember(storage, source.asAimiPath(), 0L, 4L, target.asAimiPath(), null)
         val goodBytesAtP = target.readBytes()
 
         // L1: a further, successful append within THIS pass (grows the target past P).
-        AimiArchive.appendMember(source, 4L, 8L, target, null)
+        AimiArchive.appendMember(storage, source.asAimiPath(), 4L, 8L, target.asAimiPath(), null)
         val lengthAtL1 = target.length()
         assertThat(lengthAtL1).isGreaterThan(goodBytesAtP.size.toLong())
 
@@ -550,7 +567,7 @@ class AimiRetentionManagerSweepTest {
         // created) while the marker survived. previousLength alone ("5") looks like the target
         // existed, but RandomAccessFile(target, "rw") would CREATE it and zero-pad it out to 5 bytes
         // - a fabricated ".gz" that GZIPInputStream rejects outright, worse than no file at all.
-        val target = AimiArchive.memberFile(dir, "x.jsonl", "2026-09")
+        val target = AimiArchive.memberFile(storage, dir.asAimiPath(), "x.jsonl", "2026-09").asFile()
         target.parentFile.mkdirs()
         val marker = File(target.parentFile, target.name + ".partial")
         marker.writeText("5")
@@ -569,7 +586,7 @@ class AimiRetentionManagerSweepTest {
 
     @Test
     fun runOnceRecoversInterruptedArchivesBeforeProcessingAnyManagedFile(@TempDir dir: File) {
-        val target = AimiArchive.memberFile(dir, "AIMI_Decisions.jsonl", "2026-09")
+        val target = AimiArchive.memberFile(storage, dir.asAimiPath(), "AIMI_Decisions.jsonl", "2026-09").asFile()
         target.parentFile.mkdirs()
         target.writeBytes(byteArrayOf(1, 2, 3))
         File(target.parentFile, target.name + ".partial").writeText("0")

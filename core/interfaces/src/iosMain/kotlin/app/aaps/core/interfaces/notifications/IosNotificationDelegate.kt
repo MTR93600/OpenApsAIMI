@@ -2,9 +2,11 @@ package app.aaps.core.interfaces.notifications
 
 import app.aaps.core.interfaces.notifications.IosNotificationDelegate.PRESENTATION_OPTIONS
 import app.aaps.core.interfaces.notifications.IosNotificationDelegate.install
+import app.aaps.core.interfaces.notifications.IosNotificationDelegate.onTapped
 import app.aaps.core.interfaces.notifications.IosNotificationDelegate.register
 import platform.UserNotifications.UNNotification
 import platform.UserNotifications.UNNotificationCategory
+import platform.UserNotifications.UNNotificationDefaultActionIdentifier
 import platform.UserNotifications.UNNotificationPresentationOptionBanner
 import platform.UserNotifications.UNNotificationPresentationOptionList
 import platform.UserNotifications.UNNotificationPresentationOptionSound
@@ -30,6 +32,10 @@ import platform.darwin.NSObject
  * Categories work the same way. `setNotificationCategories` replaces the whole set, so they are
  * accumulated here and registered together rather than each caller overwriting the last.
  *
+ * Plain taps are reported separately, through [onTapped]. A tap is not an answer to one notification
+ * the way a button is - it means "open the app, and show me this" - so it goes to everyone who asked
+ * rather than to the first handler that claims it.
+ *
  * The delegate object is held in a property because the centre keeps only a weak reference to it -
  * a locally created delegate is collected and the callbacks stop, which looks exactly like iOS
  * simply not calling back.
@@ -38,6 +44,16 @@ object IosNotificationDelegate {
 
     private val handlers = mutableListOf<(actionId: String, notificationId: String) -> Boolean>()
     private val categories = mutableSetOf<UNNotificationCategory>()
+
+    /**
+     * Observers of a plain tap, together with what the notification was carrying.
+     *
+     * Kept apart from `handlers` on purpose. A handler answers one button on one notification and
+     * says whether it took the response, so ordering between handlers matters. A tap observer is
+     * interested in every notification the user opened and takes nothing away from anybody. Folding
+     * the two together would mean every registrant saw every tap and had to remember to decline it.
+     */
+    private val tapObservers = mutableListOf<(userInfo: Map<String, String>) -> Unit>()
 
     /** Strong reference: the centre holds its delegate weakly. */
     private var delegate: RoutingDelegate? = null
@@ -63,22 +79,55 @@ object IosNotificationDelegate {
     }
 
     /**
-     * Offers the response to each handler until one claims it.
+     * Adds an observer of the taps that open the app.
      *
-     * Takes the two identifiers rather than the `UNNotificationResponse` they came from: that is all
-     * any handler needs, and a response cannot be constructed outside a delivered notification, so
-     * passing it would make the routing untestable.
+     * [observer] is given the notification's `userInfo`, which is how a notification says which
+     * screen it wants - the counterpart of the intent extra Android carries. Only the plain tap is
+     * reported: pressing one of the notification's own buttons, or swiping it away, is an answer to
+     * the notification and not a request to open a screen.
      */
-    internal fun dispatch(actionId: String, notificationId: String): Boolean =
-        handlers.any { it(actionId, notificationId) }
+    fun onTapped(observer: (userInfo: Map<String, String>) -> Unit) {
+        tapObservers += observer
+    }
+
+    /**
+     * Tells the tap observers, then offers the response to each handler until one claims it.
+     *
+     * Takes the identifiers and a plain string map rather than the `UNNotificationResponse` they
+     * came from: that is all any handler needs, and a response cannot be constructed outside a
+     * delivered notification, so passing it would make the routing untestable.
+     */
+    internal fun dispatch(
+        actionId: String,
+        notificationId: String,
+        userInfo: Map<String, String> = emptyMap()
+    ): Boolean {
+        if (actionId == UNNotificationDefaultActionIdentifier) tapObservers.forEach { it(userInfo) }
+        return handlers.any { it(actionId, notificationId) }
+    }
 
     /** Visible for tests, which must not inherit another test's handlers. */
     internal fun reset() {
         handlers.clear()
         categories.clear()
+        tapObservers.clear()
         delegate = null
         installed = false
     }
+
+    /**
+     * The `userInfo` dictionary as plain strings.
+     *
+     * A notification can carry anything in there, but what this app puts in is a route, which is a
+     * string. Narrowing it here is also what makes a tap testable: a string map can be written in a
+     * test, an `NSDictionary` from a delivered notification cannot.
+     */
+    private fun stringUserInfo(userInfo: Map<Any?, *>): Map<String, String> =
+        userInfo.entries.mapNotNull { entry ->
+            val key = entry.key as? String ?: return@mapNotNull null
+            val value = entry.value as? String ?: return@mapNotNull null
+            key to value
+        }.toMap()
 
     /**
      * Attaches to the real notification centre: publishes the categories and claims the delegate slot.
@@ -134,9 +183,11 @@ object IosNotificationDelegate {
             didReceiveNotificationResponse: UNNotificationResponse,
             withCompletionHandler: () -> Unit
         ) {
+            val request = didReceiveNotificationResponse.notification.request
             dispatch(
                 actionId = didReceiveNotificationResponse.actionIdentifier,
-                notificationId = didReceiveNotificationResponse.notification.request.identifier
+                notificationId = request.identifier,
+                userInfo = stringUserInfo(request.content.userInfo)
             )
             // Always called, handled or not: iOS holds the response open until it is.
             withCompletionHandler()

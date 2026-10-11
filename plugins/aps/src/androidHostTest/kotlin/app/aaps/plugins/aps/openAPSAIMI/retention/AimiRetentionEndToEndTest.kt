@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.retention
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.JsonlTailReader
 import app.aaps.plugins.aps.openAPSAIMI.comparison.ComparisonCsvParser
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import app.aaps.plugins.aps.openAPSAIMI.utils.AndroidAimiStorage
 import com.google.common.truth.Truth.assertThat
@@ -32,7 +33,19 @@ class AimiRetentionEndToEndTest {
     private val now = 1_758_240_000_000L
     private val day = 24L * 60 * 60 * 1000
 
-    private fun manager(dir: File) = AimiRetentionManager(dir, {}, { now })
+    /** The manager speaks AimiPath now; these tests still build their fixtures with java.io.File. */
+    private fun File.asAimiPath() = AimiPath(absolutePath)
+
+    /** And back again, so the fixtures can still read the files the manager names. */
+    private fun AimiPath.asFile() = File(value)
+
+    /**
+     * The manager only asks the storage about paths, text and sizes, and the real Android storage
+     * answers all of that from the path alone, so the helper never gets called.
+     */
+    private val storage: AimiStorage = AndroidAimiStorage(mock<AimiStorageHelper>())
+
+    private fun manager(dir: File) = AimiRetentionManager(dir.asAimiPath(), storage, {}, { now })
 
     /**
      * On this branch the parser reads through `AimiStorage`, not a `File`. The path given is absolute,
@@ -41,7 +54,7 @@ class AimiRetentionEndToEndTest {
     private fun comparisonParser() = ComparisonCsvParser(AndroidAimiStorage(mock<AimiStorageHelper>()))
 
     private fun archivedConcat(dir: File, prefix: String): String =
-        AimiArchive.directory(dir).listFiles().orEmpty()
+        AimiArchive.directory(storage, dir.asAimiPath()).asFile().listFiles().orEmpty()
             .filter { it.name.startsWith(prefix) }
             .sortedBy { it.name } // "yyyy-MM" sorts lexicographically the same as chronologically
             .joinToString("") { GZIPInputStream(it.inputStream()).use { s -> s.readBytes().toString(Charsets.UTF_8) } }
@@ -81,14 +94,14 @@ class AimiRetentionEndToEndTest {
         file.writeText(originalContent)
         assertThat(lines).hasSize(500)
 
-        val tailBefore = JsonlTailReader.readTailLines(file, 120)
+        val tailBefore = JsonlTailReader.readTailLines(file.asAimiPath(), 120)
         assertThat(tailBefore).hasSize(120)
 
-        val rewritten = manager(dir).trim(file, rule)
+        val rewritten = manager(dir).trim(file.asAimiPath(), rule)
         assertThat(rewritten).isTrue()
 
         // The real consumer sees exactly the same tail as before the trim.
-        val tailAfter = JsonlTailReader.readTailLines(file, 120)
+        val tailAfter = JsonlTailReader.readTailLines(file.asAimiPath(), 120)
         assertThat(tailAfter).isEqualTo(tailBefore)
         assertThat(file.readText().lineSequence().first()).isEqualTo(firstInWindowLine)
 
@@ -96,7 +109,7 @@ class AimiRetentionEndToEndTest {
         assertThat(archivedConcat(dir, "AIMI_Decisions") + file.readText()).isEqualTo(originalContent)
 
         // The archives are readable on their own (this file has no header).
-        val members = AimiArchive.directory(dir).listFiles().orEmpty().filter { it.name.startsWith("AIMI_Decisions") }
+        val members = AimiArchive.directory(storage, dir.asAimiPath()).asFile().listFiles().orEmpty().filter { it.name.startsWith("AIMI_Decisions") }
         assertThat(members).isNotEmpty()
         members.forEach { member -> GZIPInputStream(member.inputStream()).use { it.readBytes() } }
     }
@@ -149,17 +162,17 @@ class AimiRetentionEndToEndTest {
         val originalContent = csvHeader + "\n" + csvLines.joinToString("\n") + "\n"
         file.writeText(originalContent)
 
-        val entriesBefore = comparisonParser().parse(AimiPath(file.absolutePath))
+        val entriesBefore = comparisonParser().parse(file.asAimiPath())
         assertThat(entriesBefore).hasSize(totalRows)
 
-        val rewritten = manager(dir).trim(file, rule)
+        val rewritten = manager(dir).trim(file.asAimiPath(), rule)
         assertThat(rewritten).isTrue()
 
         // The real consumer still parses the trimmed file, and gets exactly the tail of what it
         // parsed before. This pins the header-preservation contract: if the header were dropped,
         // the first surviving data row would be read as a header and skipped instead, shifting
         // every entry after it and shrinking the list by one.
-        val entriesAfter = comparisonParser().parse(AimiPath(file.absolutePath))
+        val entriesAfter = comparisonParser().parse(file.asAimiPath())
         assertThat(entriesAfter).isEqualTo(entriesBefore.takeLast(rule.hotLines))
 
         // No line is lost anywhere: archive + trimmed live file reproduce the original exactly.
@@ -171,7 +184,7 @@ class AimiRetentionEndToEndTest {
         assertThat(archivedConcat(dir, "comparison_aimi_smb") + liveWithoutDuplicateHeader).isEqualTo(originalContent)
 
         // The archives are readable on their own, and the header is their first line.
-        val members = AimiArchive.directory(dir).listFiles().orEmpty().filter { it.name.startsWith("comparison_aimi_smb") }
+        val members = AimiArchive.directory(storage, dir.asAimiPath()).asFile().listFiles().orEmpty().filter { it.name.startsWith("comparison_aimi_smb") }
         assertThat(members).isNotEmpty()
         members.forEach { member ->
             val content = GZIPInputStream(member.inputStream()).use { it.readBytes().toString(Charsets.UTF_8) }

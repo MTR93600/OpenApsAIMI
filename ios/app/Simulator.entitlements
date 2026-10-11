@@ -15,12 +15,22 @@
 	     simulator build even when this file was applied.
 
 	     A device build must NOT use this file: there the profile supplies the real entitlements,
-	     with the team prefix. That is why the build setting is keyed to the simulator SDK. -->
+	     with the team prefix. That is why the build setting is keyed to the simulator SDK.
+
+	     Because the SDK-keyed setting REPLACES the plain one rather than adding to it, a
+	     simulator build does not see Device.entitlements at all. Anything a device needs has to
+	     be repeated here, which is why HealthKit appears twice. Keep the two files in step. -->
 	<key>application-identifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>keychain-access-groups</key>
 	<array>
 		<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	</array>
+	<!-- Mirrors Device.entitlements, which says what these are for. Without them a simulator
+	     build would be the one place HealthKit is missing, and a reader would blame the code. -->
+	<key>com.apple.developer.healthkit</key>
+	<true/>
+	<key>com.apple.developer.healthkit.access</key>
+	<array/>
 </dict>
 </plist>

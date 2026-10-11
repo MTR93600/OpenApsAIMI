@@ -33,6 +33,19 @@ class PendingNavigationTest {
         )
     }
 
+    /**
+     * The two directions must stay each other's inverse. A poster builds the route, the host parses
+     * it back, and they live on different platforms - so a change to one spelling that missed the
+     * other would only show up as a notification that opens nothing.
+     */
+    @Test
+    fun buildingAndParsingARouteRoundTrips() {
+        val route = PendingNavigation.pluginPreferencesRoute("OpenAPSAIMIPlugin")
+
+        assertEquals("plugin_preferences/OpenAPSAIMIPlugin", route)
+        assertEquals(NavigationRequest.PluginPreferences("OpenAPSAIMIPlugin"), PendingNavigation.parseRoute(route))
+    }
+
     @Test
     fun answersNullForNoRouteAtAll() {
         assertNull(PendingNavigation.parseRoute(null))

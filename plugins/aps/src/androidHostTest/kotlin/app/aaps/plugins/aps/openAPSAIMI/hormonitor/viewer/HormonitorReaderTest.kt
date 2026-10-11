@@ -1,5 +1,8 @@
 package app.aaps.plugins.aps.openAPSAIMI.hormonitor.viewer
 
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
+import app.aaps.plugins.aps.openAPSAIMI.utils.AndroidAimiStorage
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
@@ -11,6 +14,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.whenever
 
 /**
  * Proves the viewer reads the compact daily file and correctly aggregates the rich event stream for one day:
@@ -69,7 +74,7 @@ class HormonitorReaderTest {
             ).joinToString("\n"),
         )
 
-        val reader = HormonitorReader(listOf(dir))
+        val reader = HormonitorReader(storageFor(dir))
 
         val days = reader.readDays()
         assertThat(days).hasSize(1)
@@ -99,7 +104,22 @@ class HormonitorReaderTest {
         File(dir, "AIMI_HORMONITOR_event_stream_v1.jsonl").writeText(
             event(baseTs, "MEAL", "RESTING", "SafetyPass", "EUTHYROID"),
         )
-        val reader = HormonitorReader(listOf(dir))
+        val reader = HormonitorReader(storageFor(dir))
         assertThat(reader.readDayDetail("1999-01-01")).isNull()
     }
+
+    /**
+     * An [AimiStorage] whose AIMI directory is [dir]. The reader resolves its two file names
+     * itself now, so the mocked helper only has to answer those two.
+     */
+    private fun storageFor(dir: File): AimiStorage {
+        val helper = mock<AimiStorageHelper>()
+        // Spelled out, because the reader keeps these names in a private companion. The fixtures
+        // above write the same two literals.
+        for (name in listOf("AIMI_HORMONITOR_daily_outcomes_v1.jsonl", "AIMI_HORMONITOR_event_stream_v1.jsonl")) {
+            whenever(helper.getAimiFile(name)).thenReturn(File(dir, name))
+        }
+        return AndroidAimiStorage(helper)
+    }
+
 }

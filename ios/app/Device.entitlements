@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Device builds only; see CODE_SIGN_ENTITLEMENTS in the project, which the simulator
+	     overrides with Simulator.entitlements.
+
+	     This file is what the "HealthKit" capability in Xcode's Signing & Capabilities tab
+	     writes. Ticking the box in Xcode and keeping this file produce the same build, so do
+	     not do both - Xcode would create a second file and point the target at it.
+
+	     HealthKit needs two separate things and neither one works without the other:
+	       - this entitlement, or the first HKHealthStore call fails;
+	       - NSHealthShareUsageDescription in Shared/Info.plist, or iOS TERMINATES the app
+	         rather than returning an error. That key is in the plist, with the same warning.
+
+	     Automatic signing adds HealthKit to the App ID and reissues the profile, so a fresh
+	     clone needs no portal work. A device build without a team still stops earlier, at
+	     "requires a development team" - see Signing.xcconfig.
+
+	     We only READ, so there is no com.apple.developer.healthkit.background-delivery here:
+	     that one wakes the app on new samples and AAPS has its own loop cadence.
+
+	     The access array is for clinical health records (lab results, medications) from a
+	     health provider. AAPS reads none of those, so it stays empty. Xcode writes the empty
+	     array too; it requests nothing. -->
+	<key>com.apple.developer.healthkit</key>
+	<true/>
+	<key>com.apple.developer.healthkit.access</key>
+	<array/>
+</dict>
+</plist>

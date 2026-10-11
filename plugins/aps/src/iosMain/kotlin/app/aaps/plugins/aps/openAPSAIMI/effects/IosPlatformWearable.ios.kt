@@ -36,9 +36,14 @@ import platform.darwin.dispatch_semaphore_wait
 /**
  * HealthKit read session behind [HealthKitWindowPort].
  *
- * `apsEnabled` stays false while `IosClientConfig.APS` is false. The engine switch is read live
- * and is also false in production. Both have to be true before [requestReadAuthorization] runs,
+ * Both `apsEnabled` and the engine switch have to be true before [requestReadAuthorization] runs,
  * and before any HealthKit query. The tick then still logs the empty-snapshot line.
+ *
+ * **Only one of the two gates actually holds, and it is not the one this comment used to name.**
+ * It said the engine switch "is also false in production"; `AimiCommonEngineSwitch.enabled` has
+ * been `true` since 2026-10-09. What keeps the prompt away is [iosHealthKitApsEnabled], which is
+ * false because nothing ever sets it - see its own KDoc. Anyone relying on two independent gates
+ * here is relying on one.
  */
 @OptIn(ExperimentalForeignApi::class)
 private object IosHealthKitWindowPort : HealthKitWindowPort {
@@ -149,8 +154,16 @@ private class QuerySlot {
 }
 
 /**
- * False while `IosClientConfig.APS` is false. Activation is the only place that may copy that field
- * here. Together with [AimiCommonEngineSwitch] it gates the HealthKit prompt.
+ * Gates the HealthKit permission prompt, and is false because **nothing ever assigns it** - in any
+ * commit, in production or in a test. It was meant to follow `IosClientConfig.APS`, which this
+ * module cannot see (`:ios:shell` depends on `:plugins:aps`, not the other way round), and that
+ * wire was never made. So it is a constant wearing a `var`.
+ *
+ * Left in place rather than deleted, because it is the one thing holding the prompt back: the
+ * engine switch beside it has been `true` since 2026-10-09. Whoever wires the neutral engine into
+ * a real graph has to give this a real value first - a shell-side setter, or an intentional
+ * decision that this path is retired in favour of `IosHealthKitPhysioRepository`, which is the
+ * HealthKit client the real engine graph uses.
  */
 @Volatile
 internal var iosHealthKitApsEnabled: Boolean = false
