@@ -33,7 +33,9 @@ internal object HcRecoveryProxyThermalSource {
 
         val baselineRhr = medianInt(validRhr.map { it.bpm })
         val validHrv = hrvPoints.filter { it.hasValidData() }
-        val baselineHrv = if (validHrv.size >= 2) validHrv.map { it.rmssd }.average() else null
+        // `value`, not `rmssd` - see HrvMetric. Without this the recovery-proxy thermal tier
+        // would stay inert on an iPhone, because every SDNN sample would read as 0.
+        val baselineHrv = if (validHrv.size >= 2) validHrv.map { it.value }.average() else null
 
         val zone = TimeZone.currentSystemDefault()
         val cutoffMs = nowMs - daysBack * 24L * 3_600_000L
@@ -50,7 +52,7 @@ internal object HcRecoveryProxyThermalSource {
             val dayEnd = date.plus(DatePeriod(days = 1)).atStartOfDayIn(zone).toEpochMilliseconds()
             val dayHrv = validHrv.filter { it.timestamp in dayStart until dayEnd }
             val hrvProxy = if (baselineHrv != null && dayHrv.isNotEmpty()) {
-                val dayAvg = dayHrv.map { it.rmssd }.average()
+                val dayAvg = dayHrv.map { it.value }.average()
                 ((baselineHrv - dayAvg) / 40.0) * 0.35
             } else {
                 0.0

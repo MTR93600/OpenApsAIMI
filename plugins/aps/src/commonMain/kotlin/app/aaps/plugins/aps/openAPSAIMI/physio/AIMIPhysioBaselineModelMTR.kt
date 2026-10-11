@@ -41,6 +41,9 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
     // One lock for every history map (`synchronized` is JVM only).
     private val historyLock = AapsLock()
 
+    /** Which HRV metric [hrvRMSSDHistory] currently holds. See the guard in [updateBaseline]. */
+    private var lastHrvMetric: HrvMetric = HrvMetric.RMSSD
+
     // Rolling history for each metric (timestamp -> value)
     private val sleepDurationHistory = mutableMapOf<Long, Double>()
     private val hrvRMSSDHistory = mutableMapOf<Long, Double>()
@@ -57,7 +60,10 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
      * @param features New physiological features
      * @return Updated PhysioBaselineMTR
      */
-    fun updateBaseline(features: PhysioFeaturesMTR): PhysioBaselineMTR {
+    fun updateBaseline(
+        features: PhysioFeaturesMTR,
+        hrvMetric: HrvMetric = HrvMetric.RMSSD,
+    ): PhysioBaselineMTR {
         if (!features.hasValidData) {
             aapsLogger.debug(LTag.AIMI, "[$TAG] No valid features - skipping baseline update")
             return cachedBaseline
@@ -69,6 +75,27 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
             // Add new data points
             if (features.sleepDurationHours > 0) {
                 sleepDurationHistory[now] = features.sleepDurationHours
+            }
+
+            // One person's HRV history must never hold both metrics. RMSSD and SDNN live in
+            // different ranges, so a mixed history would give a mean and a spread that describe
+            // neither, and every person-relative reading taken from it would be wrong. This is
+            // not hypothetical: someone moving from an Android phone to an iPhone keeps their
+            // AAPS data and starts receiving SDNN where RMSSD used to arrive.
+            //
+            // So the history is dropped when the metric changes. The cost is a cold start - a few
+            // days with no HRV contribution, which the dose path treats as neutral - and that is
+            // much cheaper than silently reading the new numbers against the old distribution.
+            if (hrvMetric != lastHrvMetric) {
+                if (hrvRMSSDHistory.isNotEmpty()) {
+                    aapsLogger.info(
+                        LTag.AIMI,
+                        "[$TAG] HRV metric changed $lastHrvMetric -> $hrvMetric, " +
+                            "dropping ${hrvRMSSDHistory.size} samples of the old one"
+                    )
+                }
+                hrvRMSSDHistory.clear()
+                lastHrvMetric = hrvMetric
             }
 
             if (features.hrvMeanRMSSD > 0) {

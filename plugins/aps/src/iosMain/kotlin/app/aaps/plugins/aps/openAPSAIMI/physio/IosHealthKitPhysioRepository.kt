@@ -4,7 +4,7 @@ import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
-import app.aaps.plugins.aps.openAPSAIMI.physio.IosHealthKitPhysioMath.Heartbeat
+import app.aaps.plugins.aps.openAPSAIMI.physio.IosHealthKitPhysioMath.SdnnSample
 import app.aaps.plugins.aps.openAPSAIMI.physio.IosHealthKitPhysioMath.SleepSegment
 import app.aaps.plugins.aps.openAPSAIMI.physio.IosHealthKitPhysioMath.WristTemperatureSample
 import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.BasalBodyTemperatureMTR
@@ -37,8 +37,7 @@ import platform.Foundation.timeIntervalSince1970
 import platform.HealthKit.HKCategorySample
 import platform.HealthKit.HKCategoryTypeIdentifierSleepAnalysis
 import platform.HealthKit.HKHealthStore
-import platform.HealthKit.HKHeartbeatSeriesQuery
-import platform.HealthKit.HKHeartbeatSeriesSample
+import platform.HealthKit.HKMetricPrefixMilli
 import platform.HealthKit.HKObjectQueryNoLimit
 import platform.HealthKit.HKObjectType
 import platform.HealthKit.HKQuantity
@@ -47,6 +46,7 @@ import platform.HealthKit.HKQuantityType
 import platform.HealthKit.HKQuantityTypeIdentifierAppleSleepingWristTemperature
 import platform.HealthKit.HKQuantityTypeIdentifierBasalBodyTemperature
 import platform.HealthKit.HKQuantityTypeIdentifierHeartRate
+import platform.HealthKit.HKQuantityTypeIdentifierHeartRateVariabilitySDNN
 import platform.HealthKit.HKQuantityTypeIdentifierRestingHeartRate
 import platform.HealthKit.HKQuantityTypeIdentifierStepCount
 import platform.HealthKit.HKQuery
@@ -55,7 +55,6 @@ import platform.HealthKit.HKQueryOptionStrictStartDate
 import platform.HealthKit.HKSample
 import platform.HealthKit.HKSampleQuery
 import platform.HealthKit.HKSampleType
-import platform.HealthKit.HKSeriesType
 import platform.HealthKit.HKStatistics
 import platform.HealthKit.HKStatisticsOptionCumulativeSum
 import platform.HealthKit.HKStatisticsOptionDiscreteMin
@@ -65,6 +64,7 @@ import platform.HealthKit.countUnit
 import platform.HealthKit.degreeCelsiusUnit
 import platform.HealthKit.minuteUnit
 import platform.HealthKit.predicateForSamplesWithStartDate
+import platform.HealthKit.secondUnitWithMetricPrefix
 import platform.HealthKit.unitDividedByUnit
 
 /**
@@ -78,25 +78,24 @@ import platform.HealthKit.unitDividedByUnit
  *
  * ### What is genuinely different, and why
  *
- * - **HRV is computed, not read.** Health Connect publishes RMSSD. HealthKit publishes SDNN, which
- *   is a different number from the same heartbeats and is not interchangeable with it. `hrvRmssd`
- *   scales insulin through `smbMult`, so SDNN is not put in that field. Instead the beat to beat
- *   intervals in `HKHeartbeatSeriesSample` are read and RMSSD is worked out from them, which is
- *   the real metric. **This costs coverage.** Apple records a heartbeat series only during its own
- *   background tachogram, which by default runs about every four hours, so a watch wearer gets
- *   roughly six one minute bursts a day, more with Irregular Rhythm Notifications or AFib History
- *   on, and none at all during workouts or Low Power Mode. On most ticks the honest answer is
- *   therefore no HRV data, which the dose path already handles. A substituted SDNN would look like
- *   better coverage and quietly be the wrong number.
+ * - **HRV arrives as SDNN, not RMSSD.** Health Connect defines an RMSSD record. HealthKit defines
+ *   only one HRV type, `heartRateVariabilitySDNN`, and the same wearable apps - Garmin, Oura,
+ *   Samsung - write it in quantity. The two metrics are different numbers from the same heartbeats
+ *   and cannot be converted into one another, so the sample is tagged [HrvMetric.SDNN] and the
+ *   value is kept in the `sdnn` field. Nothing downstream reads a fixed HRV threshold: every
+ *   decision compares the reading against the person's own rolling baseline, so "low HRV" means
+ *   low for this person in whichever metric their history holds.
  * - **Wrist temperature is absolute.** Health Connect carries the writer's baseline, HealthKit does
  *   not, so the baseline is worked out from the person's own history. See
  *   `IosHealthKitPhysioMath.wristTemperatureDeltas`.
  * - **A denied read looks exactly like no data.** HealthKit refuses to say which it is, by design.
  *   So nothing here tries to tell them apart: absence is reported as absence.
  *
- * An iPhone with no Apple Watch has no heart rate, no HRV, no resting heart rate and no wrist
- * temperature, so the physio path stays inert. That is the same as an Android phone with no
- * wearable, and it is the intended behaviour, not a gap.
+ * An iPhone with no wearable at all - no Apple Watch and no other app writing into HealthKit - has
+ * no heart rate, no HRV, no resting heart rate and no wrist temperature, so the physio path stays
+ * inert. That is the same as an Android phone with no wearable, and it is the intended behaviour,
+ * not a gap. Wrist temperature is the one reading that still needs an Apple Watch Series 8 or
+ * newer; heart rate, HRV and resting heart rate also arrive from Garmin, Oura and Samsung.
  *
  * ### Threading
  *
@@ -122,16 +121,6 @@ class IosHealthKitPhysioRepository @Inject constructor(
 
         /** Same as Android. */
         const val API_TIMEOUT_MS = 10_000L
-
-        /**
-         * The whole HRV read gets its own, longer budget, because one HealthKit query per heartbeat
-         * series is needed and there can be many. Series are read newest first and whatever is
-         * finished when the budget runs out is kept, which beats answering nothing.
-         */
-        const val HRV_BUDGET_MS = 20_000L
-
-        /** Newest series only, so a person with AFib History on cannot make this unbounded. */
-        const val MAX_HEARTBEAT_SERIES = 100
 
         /** The authorization sheet needs the app in front; a background try is given this long. */
         const val AUTHORIZATION_TIMEOUT_MS = 15_000L
@@ -211,13 +200,19 @@ class IosHealthKitPhysioRepository @Inject constructor(
         return healthStore
     }
 
-    /** Every type this class ever reads, asked for in one sheet. */
+    /**
+     * Every type this class ever reads, asked for in one sheet.
+     *
+     * Nothing more than that: the sheet must not ask for data the app no longer reads. The
+     * heartbeat series type was dropped here when HRV moved to the SDNN quantity.
+     */
     private fun readTypes(): Set<HKObjectType> {
         val types = mutableSetOf<HKObjectType>()
         listOf(
             HKQuantityTypeIdentifierStepCount,
             HKQuantityTypeIdentifierHeartRate,
             HKQuantityTypeIdentifierRestingHeartRate,
+            HKQuantityTypeIdentifierHeartRateVariabilitySDNN,
             HKQuantityTypeIdentifierAppleSleepingWristTemperature,
             HKQuantityTypeIdentifierBasalBodyTemperature,
         ).forEach { identifier ->
@@ -226,7 +221,6 @@ class IosHealthKitPhysioRepository @Inject constructor(
         HKCategoryTypeIdentifierSleepAnalysis?.let { identifier ->
             HKObjectType.categoryTypeForIdentifier(identifier)?.let { types += it }
         }
-        runCatching { HKSeriesType.heartbeatSeriesType() }.getOrNull()?.let { types += it }
         return types
     }
 
@@ -386,53 +380,44 @@ class IosHealthKitPhysioRepository @Inject constructor(
     // ═══════════════════════════════════════════════════════════════════════
 
     /**
-     * Real RMSSD per heartbeat series, newest first.
+     * SDNN over the window, oldest first, every point tagged [HrvMetric.SDNN].
      *
-     * Empty is the normal answer on most ticks: see the class KDoc for how rarely Apple records a
-     * heartbeat series. Empty is also the answer when the read was refused, because HealthKit does
-     * not separate the two.
+     * One plain sample query, the same shape as the Android read of the RMSSD record. HealthKit
+     * keeps this quantity in seconds, so it is converted to milliseconds here, which is what both
+     * platforms carry in [HRVDataMTR].
+     *
+     * An empty list means no HRV data, and it is also what a refused read gives, because HealthKit
+     * does not separate the two. A query that failed is not cached, so the next tick tries again;
+     * a window that really held no sample is cached, exactly as on Android.
      */
     override suspend fun fetchHRVData(daysBack: Int): List<HRVDataMTR> = withContext(aapsIoDispatcher) {
         hrvCache.load()?.takeIf { it.isValidFor(daysBack) }?.let { return@withContext it.data }
 
         val healthStore = authorizedStore() ?: return@withContext emptyList()
-        val seriesType = runCatching { HKSeriesType.heartbeatSeriesType() }.getOrNull()
+        val sdnnType = quantityType(HKQuantityTypeIdentifierHeartRateVariabilitySDNN)
             ?: return@withContext emptyList()
         val nowMs = aimiWallClockMs()
         val startMs = nowMs - daysBack * 24L * 60L * 60L * 1000L
 
-        val series = readHeartbeatSeries(healthStore, seriesType, startMs, nowMs)
-            .sortedByDescending { it.endDate.timeIntervalSince1970 }
-            .take(MAX_HEARTBEAT_SERIES)
-
-        val deadlineMs = nowMs + HRV_BUDGET_MS
-        val points = mutableListOf<HRVDataMTR>()
-        for (sample in series) {
-            if (aimiWallClockMs() >= deadlineMs) {
-                aapsLogger.info(
-                    LTag.APS,
-                    "[$TAG] HRV budget spent after ${points.size} of ${series.size} series",
-                )
-                break
-            }
-            val beats = readHeartbeats(healthStore, sample) ?: continue
-            val rmssd = IosHealthKitPhysioMath.rmssdMs(beats) ?: continue
-            points += HRVDataMTR(
-                timestamp = sample.endDate.toEpochMs(),
-                rmssd = rmssd,
-                source = "HealthKit(${sample.sourceRevision.source.name})",
+        val samples = readSamples(healthStore, sdnnType, startMs, nowMs) ?: return@withContext emptyList()
+        val millisecondUnit = HKUnit.secondUnitWithMetricPrefix(HKMetricPrefixMilli)
+        val readings = samples.filterIsInstance<HKQuantitySample>().map { sample ->
+            SdnnSample(
+                timestampMs = sample.endDate.toEpochMs(),
+                milliseconds = sample.quantity.doubleValueForUnit(millisecondUnit),
+                sourceName = sample.sourceRevision.source.name,
             )
         }
 
-        val sorted = points.sortedBy { it.timestamp }
-        hrvCache.store(CachedData(sorted, daysBack, aimiWallClockMs()))
-        if (sorted.isNotEmpty()) {
+        val points = IosHealthKitPhysioMath.hrvFrom(readings)
+        hrvCache.store(CachedData(points, daysBack, aimiWallClockMs()))
+        if (points.isNotEmpty()) {
             aapsLogger.info(
                 LTag.APS,
-                "[$TAG] HRV: ${sorted.size} series, avg RMSSD=${sorted.map { it.rmssd }.average()} ms",
+                "[$TAG] HRV: ${points.size} samples, avg SDNN=${points.map { it.sdnn }.average()} ms",
             )
         }
-        sorted
+        points
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -758,60 +743,6 @@ class IosHealthKitPhysioRepository @Inject constructor(
                 continuation.resume(
                     StatisticResult(statistics?.let(pick)?.doubleValueForUnit(unit)),
                 )
-            }
-        }
-    }
-
-    /**
-     * The heartbeat series samples in the window.
-     *
-     * A date predicate on this type has been reported to answer nothing on some iOS releases while
-     * the same query with no predicate answers everything. So an empty answer is retried without a
-     * predicate and filtered here. The retry costs one extra query only when there is no HRV data
-     * at all, which is the common case, and it is bounded by the same timeout.
-     */
-    private suspend fun readHeartbeatSeries(
-        healthStore: HKHealthStore,
-        seriesType: HKSeriesType,
-        startMs: Long,
-        endMs: Long,
-    ): List<HKHeartbeatSeriesSample> {
-        val inWindow = readSamples(healthStore, seriesType, startMs, endMs, HKQueryOptionNone)
-            ?.filterIsInstance<HKHeartbeatSeriesSample>()
-            .orEmpty()
-        if (inWindow.isNotEmpty()) return inWindow
-
-        val unfiltered = awaitQuery<List<HKSample>>(healthStore, "heartbeatSeries(all)") { continuation ->
-            HKSampleQuery(seriesType, null, HKObjectQueryNoLimit, null) { _, raw, error ->
-                if (error != null) {
-                    continuation.resume(null)
-                } else {
-                    continuation.resume(raw.orEmpty().filterIsInstance<HKSample>())
-                }
-            }
-        }.orEmpty()
-        return unfiltered
-            .filterIsInstance<HKHeartbeatSeriesSample>()
-            .filter { it.endDate.toEpochMs() in startMs..endMs }
-    }
-
-    /**
-     * Every beat in one series.
-     *
-     * `HKHeartbeatSeriesQuery` calls its handler once per beat and a last time with `done`, so the
-     * beats are gathered and the coroutine is resumed only at the end. The list is only touched
-     * from the handler, which HealthKit serialises.
-     */
-    private suspend fun readHeartbeats(
-        healthStore: HKHealthStore,
-        sample: HKHeartbeatSeriesSample,
-    ): List<Heartbeat>? = awaitQuery(healthStore, "heartbeats") { continuation ->
-        val beats = mutableListOf<Heartbeat>()
-        HKHeartbeatSeriesQuery(sample) { _, timeSinceSeriesStart, precededByGap, done, error ->
-            when {
-                error != null -> continuation.resume(null)
-                done          -> continuation.resume(beats.toList())
-                else          -> beats += Heartbeat(timeSinceSeriesStart, precededByGap)
             }
         }
     }

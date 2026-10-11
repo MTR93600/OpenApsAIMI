@@ -7,7 +7,6 @@ import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
-import kotlin.math.sqrt
 
 /**
  * The maths behind `IosHealthKitPhysioRepository`, with no HealthKit call in it.
@@ -146,78 +145,51 @@ internal object IosHealthKitPhysioMath {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // HRV - RMSSD FROM BEAT TO BEAT INTERVALS
+    // HRV - SDNN, THE ONLY HRV TYPE HEALTHKIT HAS
     // ═══════════════════════════════════════════════════════════════════════
 
-    /** Shortest believable beat to beat interval, 200 beats per minute. */
-    const val MIN_RR_MS = 300.0
-
-    /** Longest believable beat to beat interval, 30 beats per minute. */
-    const val MAX_RR_MS = 2000.0
-
-    /** Fewer successive differences than this is noise, not an RMSSD. */
-    const val MIN_SUCCESSIVE_DIFFS = 5
-
     /**
-     * One beat out of an `HKHeartbeatSeriesSample`.
+     * One `heartRateVariabilitySDNN` sample, already turned into milliseconds.
      *
-     * @param offsetSeconds seconds after the series start, as HealthKit reports it.
-     * @param precededByGap HealthKit lost one or more beats before this one.
+     * HealthKit stores this quantity in seconds, so the repository converts it before it gets
+     * here. Milliseconds is what both platforms carry in [HRVDataMTR].
      */
-    data class Heartbeat(
-        val offsetSeconds: Double,
-        val precededByGap: Boolean,
+    data class SdnnSample(
+        val timestampMs: Long,
+        val milliseconds: Double,
+        val sourceName: String,
     )
 
     /**
-     * RMSSD in milliseconds, the real one.
+     * Turns HealthKit SDNN samples into shared [HRVDataMTR] points.
      *
-     * RMSSD is the root mean square of the differences between successive beat to beat intervals.
-     * It is **not** SDNN, which is the metric HealthKit publishes as a ready made quantity. The two
-     * are different numbers from the same beats, and `hrvRmssd` scales insulin through `smbMult`,
-     * so the field has to hold what its name says.
+     * HealthKit defines exactly one HRV type, `heartRateVariabilitySDNN`. Health Connect defines
+     * an RMSSD record instead. The same wearable apps - Garmin, Oura, Samsung - fill whichever one
+     * their phone offers, so the two platforms genuinely hand over different metrics and neither
+     * can be converted into the other.
      *
-     * Two things break a run of beats, and both end the chain rather than bridging it:
+     * So the metric is carried along rather than hidden: the value goes in the `sdnn` field and
+     * the sample is tagged [HrvMetric.SDNN]. The `rmssd` field is left at zero on purpose, so code
+     * that reads it by name can never mistake an SDNN for an RMSSD. Consumers compare the reading
+     * against the person's own rolling baseline, which is what makes the metric identity stop
+     * mattering: "low" means low for this person.
      *
-     * - `precededByGap`. The beat after a gap is not one interval after its predecessor, it is
-     *   several. Differencing across it invents a huge interval and a huge RMSSD.
-     * - An interval outside [MIN_RR_MS] to [MAX_RR_MS]. The Apple Watch reads pulse from light, not
-     *   voltage, and drops beats; a measured 4 second interval is a miss, not a heart that stopped.
-     *
-     * @return null when the series holds fewer than [MIN_SUCCESSIVE_DIFFS] usable differences.
-     *   Null means no data and the caller must keep it as absence. A zero would read as a real
-     *   measurement of a body under total stress.
+     * A reading that is zero, negative or not a number is dropped rather than passed on. It is not
+     * a measurement, and a zero would read as a body under total stress. An empty answer means no
+     * HRV data, which the dose path already handles.
      */
-    fun rmssdMs(beats: List<Heartbeat>): Double? {
-        var sumSquares = 0.0
-        var count = 0
-        var previousOffset: Double? = null
-        var previousRr: Double? = null
-
-        for (beat in beats) {
-            val lastOffset = previousOffset
-            previousOffset = beat.offsetSeconds
-            if (beat.precededByGap || lastOffset == null) {
-                previousRr = null
-                continue
+    fun hrvFrom(samples: List<SdnnSample>): List<HRVDataMTR> =
+        samples
+            .filter { it.milliseconds.isFinite() && it.milliseconds > 0.0 }
+            .sortedBy { it.timestampMs }
+            .map { sample ->
+                HRVDataMTR(
+                    timestamp = sample.timestampMs,
+                    sdnn = sample.milliseconds,
+                    metric = HrvMetric.SDNN,
+                    source = "HealthKit(${sample.sourceName})",
+                )
             }
-            val rr = (beat.offsetSeconds - lastOffset) * 1000.0
-            if (rr < MIN_RR_MS || rr > MAX_RR_MS) {
-                previousRr = null
-                continue
-            }
-            val earlierRr = previousRr
-            if (earlierRr != null) {
-                val difference = rr - earlierRr
-                sumSquares += difference * difference
-                count++
-            }
-            previousRr = rr
-        }
-
-        if (count < MIN_SUCCESSIVE_DIFFS) return null
-        return sqrt(sumSquares / count)
-    }
 
     // ═══════════════════════════════════════════════════════════════════════
     // MORNING RESTING HEART RATE WINDOWS

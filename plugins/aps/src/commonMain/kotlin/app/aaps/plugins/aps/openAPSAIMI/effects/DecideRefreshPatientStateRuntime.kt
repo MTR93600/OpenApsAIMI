@@ -484,7 +484,7 @@ internal fun enrichPatientThermal(
         hrNowBpm = snapshot.hrNow,
         rhrRestingBpm = snapshot.rhrResting,
         sleepDebtMinutes = snapshot.sleepDebtMinutes,
-        hrvRmssd = snapshot.hrvRmssd,
+        hrvDepression = snapshot.hrvDepression,
         wCyclePhase = wCyclePhase,
     )
     return snapshot.copy(thermalBelief = thermalBelief)

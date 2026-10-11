@@ -194,7 +194,9 @@ class AIMIPhysioFeatureExtractorMTR @Inject constructor(
         }
         
         // Mean RMSSD
-        val meanRMSSD = targetSamples.map { it.rmssd }.average()
+        // `value`, not `rmssd`: a sample says which metric it carries, and an iPhone carries
+        // SDNN. The name below is kept so nothing downstream had to be renamed.
+        val meanRMSSD = targetSamples.map { it.value }.average()
         
         // Trend calculation (compare to previous mean)
         val trend = if (previousFeatures != null && previousFeatures.hrvMeanRMSSD > 0) {
@@ -204,7 +206,7 @@ class AIMIPhysioFeatureExtractorMTR @Inject constructor(
         
         // Variability (coefficient of variation)
         val variability = if (targetSamples.size > 1) {
-            val stdDev = calculateStdDev(targetSamples.map { it.rmssd })
+            val stdDev = calculateStdDev(targetSamples.map { it.value })
             if (meanRMSSD > 0) (stdDev / meanRMSSD).coerceIn(0.0, 1.0) else 0.0
         } else 0.0
         

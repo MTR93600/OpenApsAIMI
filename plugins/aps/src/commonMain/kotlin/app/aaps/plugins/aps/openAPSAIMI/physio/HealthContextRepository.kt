@@ -46,6 +46,9 @@ class HealthContextRepository @Inject constructor(
     private val aggregator: PhysioAggregator,
     private val unifiedProvider: app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR, // 🚀 NEW INJECTION
     private val persistenceLayer: PersistenceLayer,
+    // Reads the person's own rolling HRV baseline, so "low HRV" can mean low for them rather than
+    // below a fixed number. See HrvDepression.
+    private val baselineModel: AIMIPhysioBaselineModelMTR,
     private val aapsLogger: AAPSLogger
 ) : AimiHealthContext {
 
@@ -130,19 +133,27 @@ class HealthContextRepository @Inject constructor(
         val currentHR: Int = (hrResult?.bpm ?: 0.0).toInt()
 
         // Use FeatureExtractor logic to get normalized HRV (Nocturnal priority)
+        // `value`, not `rmssd`: a sample says which metric it carries, and an iPhone carries SDNN
+        // because that is the only HRV type HealthKit defines. See HrvMetric.
         val hrv = when {
             hrvList.isNotEmpty() -> {
                 if (sleepData != null && sleepData.hasValidData()) {
                     hrvList.filter { it.timestamp >= sleepData.startTime && it.timestamp <= sleepData.endTime }
-                        .map { it.rmssd }.average().takeIf { !it.isNaN() }
-                        ?: hrvList.lastOrNull()?.rmssd ?: 0.0
+                        .map { it.value }.average().takeIf { !it.isNaN() }
+                        ?: hrvList.lastOrNull()?.value ?: 0.0
                 } else {
-                    hrvList.lastOrNull()?.rmssd ?: 0.0
+                    hrvList.lastOrNull()?.value ?: 0.0
                 }
             }
             warmupHcPending -> lastSnapshot.hrvRmssd
             else -> 0.0
         }
+        // Carried forward with the value when a warm-up tick reuses the last snapshot, so the two
+        // never disagree about what the number means.
+        val hrvMetric = hrvList.lastOrNull()?.metric
+            ?: if (warmupHcPending) lastSnapshot.hrvMetric else HrvMetric.RMSSD
+        val hrvBaseline = baselineModel.getCurrentBaseline().hrvRMSSD
+        val hrvDepression = HrvDepression.of(hrv, hrvBaseline)
 
         val rhr = when {
             rhrList.isNotEmpty() -> rhrList.minByOrNull { it.bpm }?.bpm ?: 60
@@ -180,7 +191,7 @@ class HealthContextRepository @Inject constructor(
             hrNowBpm = currentHR,
             rhrRestingBpm = rhr,
             sleepDebtMinutes = sleepDebt,
-            hrvRmssd = hrv,
+            hrvDepression = hrvDepression,
             wCyclePhase = null,
         )
         if (thermalBelief.hasUsableData()) {
@@ -217,6 +228,11 @@ class HealthContextRepository @Inject constructor(
             hrAvg15m = currentHR, // Approximation if simple point
             hrMeasuredAtMs = if (currentHR > 0) aimiWallClockMs() else 0L,
             hrvRmssd = hrv,
+            hrvMetric = hrvMetric,
+            hrvDepression = hrvDepression,
+            hrvBaselineMean = hrvBaseline.mean,
+            hrvBaselineSd = hrvBaseline.stdDev,
+            hrvBaselineSamples = hrvBaseline.sampleCount,
             rhrResting = rhr,
             sleepDebtMinutes = sleepDebt,
             sleepEfficiency = sleepEfficiency,

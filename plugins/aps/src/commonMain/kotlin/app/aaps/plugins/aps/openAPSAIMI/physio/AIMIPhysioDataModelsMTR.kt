@@ -60,14 +60,37 @@ data class SleepDataMTR(
 /**
  * Raw HRV data from Health Connect
  */
+/**
+ * Which heart rate variability metric a sample carries.
+ *
+ * The two are not interchangeable. RMSSD and SDNN are both derived from beat-to-beat intervals but
+ * they measure different things and live in different ranges, so one cannot be read as the other.
+ *
+ * The platforms cannot agree here, and that is not a choice: Health Connect defines an RMSSD record
+ * and wearable apps fill it, while HealthKit defines **only** `heartRateVariabilitySDNN` and the
+ * same wearable apps fill that. So this field says which one arrived, and every consumer compares
+ * the value against the person's own rolling baseline rather than a fixed number - see
+ * [HealthContextSnapshot.hrvDepression]. That is what makes the metric identity stop mattering
+ * downstream: "low" means low for this person, in whichever metric their history is kept.
+ */
+enum class HrvMetric { RMSSD, SDNN }
+
 data class HRVDataMTR(
     val timestamp: Long,
     val rmssd: Double = 0.0, // Root Mean Square of Successive Differences (ms)
     val sdnn: Double = 0.0,  // Standard Deviation of NN intervals (ms)
+    /** Which of the two fields above is the real reading. See [HrvMetric]. */
+    val metric: HrvMetric = HrvMetric.RMSSD,
     val source: String = "Unknown"
 ) {
-    fun hasValidData(): Boolean = rmssd > 0.0
-    
+    /** The reading, whichever metric this sample carries. */
+    val value: Double get() = when (metric) {
+        HrvMetric.RMSSD -> rmssd
+        HrvMetric.SDNN  -> sdnn
+    }
+
+    fun hasValidData(): Boolean = value > 0.0
+
     companion object {
         val EMPTY = HRVDataMTR(0)
     }
@@ -602,7 +625,11 @@ class InflammationLatentEstimatorMTR {
         val autonomicScore = when {
             context.hrvDepressed && context.rhrElevated -> 0.9
             context.hrvDepressed || context.rhrElevated -> 0.6
-            snapshot.hrvRmssd in 1.0..22.0 -> 0.55
+            // Was `hrvRmssd in 1.0..22.0`, an RMSSD band that an iPhone's SDNN never enters and
+            // that a person with a naturally low RMSSD never left. hrvDepression says the same
+            // thing about the person instead of about the number. 0.5 is one sigma below their
+            // own mean, which is roughly where the old band sat for a typical adult.
+            snapshot.hrvDepression >= 0.5 -> 0.55
             else -> 0.15
         }
         add(0.35, autonomicScore, "autonomic_stress", context.hrvDepressed || context.rhrElevated)

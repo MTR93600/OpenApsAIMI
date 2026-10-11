@@ -4517,9 +4517,9 @@ themselves is not possible here.
 
 ### The HRV answer, now measured
 
-The user's decision was to derive real RMSSD from `HKHeartbeatSeriesSample` rather than pass
-HealthKit's SDNN off as RMSSD. That was the right call and it is implemented. What it costs is now
-known, which it was not when the decision was made:
+**Superseded on the same day - see 6bt.** The first decision was to derive real RMSSD from
+`HKHeartbeatSeriesSample` rather than pass HealthKit's SDNN off as RMSSD. It was implemented, and
+then the measurements below showed what it cost, which nobody knew when the decision was made:
 
 - **No API asks for a series.** Apple DTS states plainly that third-party apps cannot trigger an
   on-demand heartbeat series and cannot reach the raw beat data.
@@ -4584,3 +4584,69 @@ simulator half, HealthKit would have failed silently in the one place it gets te
 `NSHealthUpdateUsageDescription` is deliberately absent: nothing writes to HealthKit, and the plist
 says so to stop someone "fixing" it. Not proven: a device build now asks for an entitlement it did
 not before, and automatic signing should reissue the profile by itself, but no device build was run.
+
+## 6bt. 2026-10-11: HRV read against the person, not against a number
+
+The beat-series route of 6bs was measured and then dropped the same day. It was correct about the
+metric and wrong about the cost: Apple writes a heartbeat series roughly six minutes a day, so iOS
+would have had almost no HRV at all. Meanwhile HealthKit does carry abundant HRV - the same Garmin,
+Oura and Samsung apps that write `HeartRateVariabilityRmssdRecord` on Android write
+`heartRateVariabilitySDNN` on iPhone, because SDNN is the only HRV type Apple defines.
+
+So the choice was never "rare but correct" versus "frequent but wrong". There was a third option,
+and it is what shipped: **read SDNN, tag the metric, and compare against the person's own rolling
+baseline instead of a fixed number.** The metric identity then stops mattering downstream, as long
+as one person's history never mixes the two.
+
+### What changed
+
+- `HrvMetric { RMSSD, SDNN }`, and `HRVDataMTR` gained `metric` plus a `value` accessor that
+  answers whichever field is real. Every consumer that read `.rmssd` now reads `.value`:
+  `HealthContextRepository`, `AIMIPhysioFeatureExtractorMTR` and `HcRecoveryProxyThermalSource`.
+  Without that last one the recovery-proxy thermal tier would have stayed inert on an iPhone.
+- `HrvDepression.of(hrv, baseline)` - 0.0 at the person's mean, 1.0 at two standard deviations
+  below it. It answers 0.0, the same as "no HRV", in the three cases where there is nothing to
+  compare against: no reading, a baseline under three samples, or a baseline with no spread. A cold
+  start therefore behaves exactly as the engine did before any HRV arrived.
+- The three hardcoded bands are gone. They were `hrvRmssd in 1.0..22.0` in
+  `AIMIPhysioDataModelsMTR`, `hrvRmssd < 30` in `HealthContextSnapshot.toSNSDominance`, and
+  `hrvRmssd in 1.0..30.0` in `ThermalBeliefEngine`. The thermal engine now takes `hrvDepression`
+  directly and no longer needs to know which metric the phone reports.
+- **This fixes Android too.** A person whose own resting RMSSD is 25 sat inside the "stressed" band
+  every minute of every day; someone whose normal is 90 never entered it.
+- `AIMIPhysioBaselineModelMTR.updateBaseline` takes the metric and **drops the whole HRV history
+  when it changes**. Not hypothetical: someone moving from Android to iPhone keeps their AAPS data
+  and starts receiving SDNN where RMSSD used to arrive. A mixed history gives a mean and a spread
+  that describe neither.
+
+### Exported for later analysis, as asked
+
+`HealthContextSnapshot.toJSON` now carries `hrv_metric`, `hrv_depression`, `hrv_base_mean`,
+`hrv_base_sd`, `hrv_base_n`, and `hrv_was_low` - the verdict the old `< 30` band would have given,
+kept beside the new one so the two can be compared over real days. The baseline sample count is
+there for a specific reason: without it a reader cannot tell the two reasons `hrv_depression` is
+`0.0` apart - a cold start with no baseline, and an HRV sitting exactly at this person's normal.
+Those mean opposite things. The two-sigma threshold in `HrvDepression` is a starting point, not a
+tuned value; there was no previous figure to carry over, because the old bands were absolute.
+
+### Verified
+
+`:plugins:aps:compileAndroidMain` and `:compileKotlinIosArm64` green. `iosSimulatorArm64Test`
+**826 tests, 0 failures**. New `HrvDepressionTest` 10 of 10, `ThermalBeliefEngineTest` 4 of 4 after
+its four raw HRV arguments were translated to the exact depression the old band produced, so its
+assertions are unchanged. The Android suite moved from 89 to 93 failures, and a re-run of the two
+classes involved in isolation gave 1 and 0 - the LLM request-capture tests are order-dependent, not
+regressed.
+
+### The gap this leaves, and it is the important one
+
+**`hrvDepression` will be 0.0 on iOS forever as things stand.** `AIMIPhysioBaselineModelMTR.updateBaseline`
+has exactly one caller in the whole repository, `AIMIPhysioManagerMTR`, which is androidMain only.
+Nothing on iOS feeds the baseline, so there is no personal normal to compare against and the new
+reading answers "I do not know" on every tick.
+
+Feeding it from `HealthContextRepository`, which is shared and already holds the feature extractor,
+is the obvious route - but Android would then feed the same baseline twice, once from the manager
+and once from the repository, and the duplicate samples would skew the very distribution this
+change relies on. So the fix is to move the feed rather than add one, and that needs deciding
+rather than guessing.

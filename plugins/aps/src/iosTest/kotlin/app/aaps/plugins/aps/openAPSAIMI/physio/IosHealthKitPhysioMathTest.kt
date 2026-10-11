@@ -1,11 +1,10 @@
 package app.aaps.plugins.aps.openAPSAIMI.physio
 
-import app.aaps.plugins.aps.openAPSAIMI.physio.IosHealthKitPhysioMath.Heartbeat
+import app.aaps.plugins.aps.openAPSAIMI.physio.IosHealthKitPhysioMath.SdnnSample
 import app.aaps.plugins.aps.openAPSAIMI.physio.IosHealthKitPhysioMath.SleepSegment
 import app.aaps.plugins.aps.openAPSAIMI.physio.IosHealthKitPhysioMath.WristTemperatureSample
 import kotlinx.datetime.TimeZone
 import kotlin.math.abs
-import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -164,88 +163,84 @@ class IosHealthKitPhysioMathTest {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // RMSSD
+    // HRV - SDNN
     // ═══════════════════════════════════════════════════════════════════════
 
-    /** Beats at the given intervals in milliseconds, with no gaps. */
-    private fun beatsFromIntervals(intervalsMs: List<Double>): List<Heartbeat> {
-        val beats = mutableListOf(Heartbeat(0.0, precededByGap = false))
-        var offset = 0.0
-        for (interval in intervalsMs) {
-            offset += interval / 1000.0
-            beats += Heartbeat(offset, precededByGap = false)
-        }
-        return beats
-    }
-
-    @Test
-    fun `a steady heart has an RMSSD of zero`() {
-        val steady = beatsFromIntervals(List(20) { 1000.0 })
-
-        val rmssd = assertNotNull(IosHealthKitPhysioMath.rmssdMs(steady))
-
-        assertTrue(abs(rmssd) < 1e-9, "a perfectly regular series has no successive difference")
-    }
-
-    @Test
-    fun `RMSSD matches the textbook formula`() {
-        // Intervals alternate 800 and 850 ms, so every successive difference is 50 ms.
-        val intervals = List(20) { if (it % 2 == 0) 800.0 else 850.0 }
-
-        val rmssd = assertNotNull(IosHealthKitPhysioMath.rmssdMs(beatsFromIntervals(intervals)))
-
-        assertTrue(abs(rmssd - 50.0) < 1e-6, "expected 50 ms but was $rmssd")
-    }
-
-    @Test
-    fun `RMSSD of a known short series is the root mean square of its differences`() {
-        val intervals = listOf(800.0, 900.0, 850.0, 1000.0, 950.0, 900.0, 1000.0)
-        val expected = sqrt(
-            listOf(100.0, -50.0, 150.0, -50.0, -50.0, 100.0)
-                .sumOf { it * it } / 6.0,
-        )
-
-        val rmssd = assertNotNull(IosHealthKitPhysioMath.rmssdMs(beatsFromIntervals(intervals)))
-
-        assertTrue(abs(rmssd - expected) < 1e-6, "expected $expected but was $rmssd")
-    }
+    private fun sdnn(timestampMs: Long, milliseconds: Double, sourceName: String = "Apple Watch") =
+        SdnnSample(timestampMs, milliseconds, sourceName)
 
     /**
-     * The beat after a gap is several intervals away from its predecessor. Differencing across it
-     * invents a huge interval and a huge RMSSD - this is the classic bug in this code.
+     * The whole point of the tag: HealthKit only has SDNN, so the sample must say so and must not
+     * land in the RMSSD field, where code reading it by name would take it for the other metric.
      */
     @Test
-    fun `a gap does not create a false interval`() {
-        val withoutGap = beatsFromIntervals(List(20) { 1000.0 })
-        val spliced = withoutGap.take(10) +
-            listOf(Heartbeat(60.0, precededByGap = true)) +
-            (1..10).map { Heartbeat(60.0 + it, precededByGap = false) }
+    fun `every sample is tagged as SDNN and keeps the RMSSD field empty`() {
+        val readings = listOf(sdnn(1 * hour, 42.0), sdnn(2 * hour, 55.0))
 
-        val rmssd = assertNotNull(IosHealthKitPhysioMath.rmssdMs(spliced))
+        val points = IosHealthKitPhysioMath.hrvFrom(readings)
 
-        assertTrue(abs(rmssd) < 1e-9, "the 50 second hole must not become an interval")
+        assertEquals(2, points.size)
+        assertTrue(points.all { it.metric == HrvMetric.SDNN })
+        assertTrue(points.all { it.rmssd == 0.0 }, "an SDNN must never be readable as an RMSSD")
+        assertEquals(42.0, points.first().sdnn)
+        assertEquals(42.0, points.first().value, "the tagged metric is what `value` answers")
+        assertTrue(points.all { it.hasValidData() })
     }
 
     @Test
-    fun `an impossible interval is dropped rather than averaged in`() {
-        val beats = beatsFromIntervals(List(10) { 1000.0 }) +
-            listOf(Heartbeat(9.0 + 5.0, precededByGap = false)) +
-            (1..10).map { Heartbeat(14.0 + it, precededByGap = false) }
+    fun `the source name says where the reading came from`() {
+        val points = IosHealthKitPhysioMath.hrvFrom(listOf(sdnn(1 * hour, 42.0, "Oura")))
 
-        val rmssd = assertNotNull(IosHealthKitPhysioMath.rmssdMs(beats))
-
-        assertTrue(abs(rmssd) < 1e-9, "a five second interval is a missed beat not a heart beat")
+        assertEquals("HealthKit(Oura)", points.single().source)
     }
 
+    /** A zero would read as a body under total stress, so it is absence, not a measurement. */
     @Test
-    fun `too few beats give no answer rather than zero`() {
-        val short = beatsFromIntervals(List(3) { 1000.0 })
-
-        assertNull(
-            IosHealthKitPhysioMath.rmssdMs(short),
-            "zero would read as a body under total stress",
+    fun `a zero or negative reading is dropped rather than reported`() {
+        val readings = listOf(
+            sdnn(1 * hour, 0.0),
+            sdnn(2 * hour, -5.0),
+            sdnn(3 * hour, 40.0),
         )
-        assertNull(IosHealthKitPhysioMath.rmssdMs(emptyList()))
+
+        val points = IosHealthKitPhysioMath.hrvFrom(readings)
+
+        assertEquals(1, points.size)
+        assertEquals(40.0, points.single().sdnn)
+    }
+
+    @Test
+    fun `a reading that is not a number is dropped`() {
+        val readings = listOf(
+            sdnn(1 * hour, Double.NaN),
+            sdnn(2 * hour, Double.POSITIVE_INFINITY),
+            sdnn(3 * hour, 40.0),
+        )
+
+        val points = IosHealthKitPhysioMath.hrvFrom(readings)
+
+        assertEquals(listOf(40.0), points.map { it.sdnn })
+    }
+
+    @Test
+    fun `points come back in time order`() {
+        val shuffled = listOf(
+            sdnn(5 * hour, 50.0),
+            sdnn(1 * hour, 10.0),
+            sdnn(3 * hour, 30.0),
+        )
+
+        val points = IosHealthKitPhysioMath.hrvFrom(shuffled)
+
+        assertEquals(listOf(1 * hour, 3 * hour, 5 * hour), points.map { it.timestamp })
+    }
+
+    @Test
+    fun `no sample gives no HRV at all`() {
+        assertTrue(
+            IosHealthKitPhysioMath.hrvFrom(emptyList()).isEmpty(),
+            "absence stays absence; the dose path handles it",
+        )
     }
 
     // ═══════════════════════════════════════════════════════════════════════
