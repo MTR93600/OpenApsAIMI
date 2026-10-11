@@ -19,7 +19,7 @@
     <string name="objectives_maxiob_objective">Ajustar o loop fechado, aumentar a IA máxima acima de 0 e reduzir gradualmente os alvos de GLIC</string>
     <string name="objectives_maxiob_gate">Utilizar por alguns dias e pelo menos uma noite sem alarmes de GLIC baixa, antes de baixar GLIC</string>
     <string name="objectives_autosens_objective">Ajuste as basais e os rácios, se necessário, e, em seguida, active o auto-sens</string>
-    <string name="objectives_autosens_gate">1 semana de looping durante o dia com sucesso com entrada regular de hidratos de carbono</string>
+    <string name="objectives_autosens_gate">1 semana de looping durante o dia com sucesso com entrada regular de carboidratos</string>
     <string name="objectives_autosens_learned">Se o resultado do seu autosens não oscila à volta de 100% do seu perfil, então provavelmente está errado.</string>
     <string name="objectives_smb_objective">Activando recursos adicionais para uso durante o dia, como SMB</string>
     <string name="objectives_smb_gate">Deverá ler a wiki e aumentar a maxIA para que os SMBs funcionem devidamente! Inicialmente poderá considerar maxIA=média dos bólus + 3 x a basal diária máxima</string>
