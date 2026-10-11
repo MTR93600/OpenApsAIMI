@@ -672,7 +672,7 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
      * 
      * @return RawPhysioDataMTR with available data (never null)
      */
-    suspend fun fetchAllData(daysBack: Int = 7): RawPhysioDataMTR {
+    override suspend fun fetchAllData(daysBack: Int): RawPhysioDataMTR {
         val startTime = aimiWallClockMs()
         
         aapsLogger.info(LTag.APS, "[$TAG] 🔄 Fetching physiological data (${daysBack}d window)...")
@@ -721,7 +721,7 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
     /**
      * Clears all cached data
      */
-    fun clearCache() {
+    override fun clearCache() {
         cache.clear()
         aapsLogger.debug(LTag.APS, "[$TAG] Cache cleared")
     }
@@ -730,7 +730,7 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
      * Checks if Health Connect is available and permissions granted
      * Logs diagnostic info about permission state
      */
-    suspend fun isAvailable(): Boolean {
+    override suspend fun isAvailable(): Boolean {
         val client = healthConnectClient
         if (client == null) {
             aapsLogger.error(LTag.APS, "[$TAG] ❌ Health Connect client is NULL - not available on this device")

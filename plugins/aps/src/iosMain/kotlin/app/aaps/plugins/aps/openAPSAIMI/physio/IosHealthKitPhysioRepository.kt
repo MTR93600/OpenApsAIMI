@@ -334,6 +334,101 @@ class IosHealthKitPhysioRepository @Inject constructor(
         }
 
     // ═══════════════════════════════════════════════════════════════════════
+    // AimiPhysioDataSource - WHOLE READ, AVAILABILITY, CACHE
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /**
+     * Sleep, HRV, resting heart rate and steps in one read, for `PhysioPipeline`.
+     *
+     * Same shape as the Android `fetchAllData`: the four fetches run one after the other, each one
+     * is logged on its own line so a support log says which reading was missing, and any failure
+     * gives [RawPhysioDataMTR.EMPTY] rather than a partial answer with made up numbers. Steps are
+     * read with `ignoreUnifiedSourceMode = true`, as on Android, because this read feeds the
+     * seven day baseline rather than the live activity state.
+     *
+     * The warning when nothing came back names HealthKit reasons instead of Health Connect ones.
+     * On iOS a refused read and an empty store look exactly alike, so the line says both.
+     */
+    override suspend fun fetchAllData(daysBack: Int): RawPhysioDataMTR = withContext(aapsIoDispatcher) {
+        val startMs = aimiWallClockMs()
+        aapsLogger.info(LTag.APS, "[$TAG] Fetching physiological data (${daysBack}d window)")
+        try {
+            val sleep = fetchSleepData()
+            aapsLogger.info(
+                LTag.APS,
+                "[$TAG] FETCH RESULT - Sleep: ${if (sleep != null) "${sleep.durationHours} h" else "NULL (no data)"}",
+            )
+
+            val hrv = fetchHRVData(daysBack)
+            aapsLogger.info(
+                LTag.APS,
+                "[$TAG] FETCH RESULT - HRV: ${hrv.size} samples ${if (hrv.isEmpty()) "(empty - no HRV data in HealthKit)" else ""}",
+            )
+
+            val rhr = fetchMorningRHR(daysBack)
+            aapsLogger.info(
+                LTag.APS,
+                "[$TAG] FETCH RESULT - RHR: ${rhr.size} samples ${if (rhr.isEmpty()) "(empty - no morning HR data)" else ""}",
+            )
+
+            val steps = fetchStepsData(daysBack, ignoreUnifiedSourceMode = true)
+            aapsLogger.info(
+                LTag.APS,
+                "[$TAG] FETCH RESULT - Steps: $steps avg/day ${if (steps == 0) "(no steps data)" else ""}",
+            )
+
+            val elapsedMs = aimiWallClockMs() - startMs
+            val hasAnyData = sleep != null || hrv.isNotEmpty() || rhr.isNotEmpty() || steps > 0
+            if (!hasAnyData) {
+                aapsLogger.warn(LTag.APS, "[$TAG] FETCH SUMMARY: NO DATA from HealthKit!")
+                aapsLogger.warn(
+                    LTag.APS,
+                    "[$TAG] Check: 1) Health app > Sharing > AAPS read access 2) a watch or app writing sleep/HR/HRV 3) recent data exists",
+                )
+            } else {
+                aapsLogger.info(
+                    LTag.APS,
+                    "[$TAG] Fetch completed in ${elapsedMs}ms - Sleep=${sleep != null}, HRV=${hrv.size}, RHR=${rhr.size}, Steps=$steps",
+                )
+            }
+
+            RawPhysioDataMTR(
+                sleep = sleep,
+                hrv = hrv,
+                rhr = rhr,
+                steps = steps,
+                fetchTimestamp = aimiWallClockMs(),
+            )
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.APS, "[$TAG] Fetch failed: ${e.message}", e)
+            RawPhysioDataMTR.EMPTY
+        }
+    }
+
+    /**
+     * Whether HealthKit can be read on this device.
+     *
+     * Only `isHealthDataAvailable`, which is false on an iPad and in most simulator runs. It never
+     * goes through [authorizedStore], so this call cannot raise the permission sheet - the Android
+     * half does not ask the person anything here either. Whether the person said yes is not part
+     * of the answer, because HealthKit does not tell: a refused type simply reads as empty.
+     */
+    override suspend fun isAvailable(): Boolean =
+        runCatching { HKHealthStore.isHealthDataAvailable() }
+            .onFailure { aapsLogger.error(LTag.APS, "[$TAG] HealthKit availability check failed: ${it.message}") }
+            .getOrDefault(false)
+
+    /** Drops the five cached answers, so the next fetch reads HealthKit again. As on Android. */
+    override fun clearCache() {
+        sleepCache.store(null)
+        hrvCache.store(null)
+        rhrCache.store(null)
+        stepsCache.store(null)
+        thermalCache.store(null)
+        aapsLogger.debug(LTag.APS, "[$TAG] Cache cleared")
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
     // AimiPhysioDataSource - SLEEP
     // ═══════════════════════════════════════════════════════════════════════
 

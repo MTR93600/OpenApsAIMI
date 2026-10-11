@@ -4650,3 +4650,53 @@ is the obvious route - but Android would then feed the same baseline twice, once
 and once from the repository, and the duplicate samples would skew the very distribution this
 change relies on. So the fix is to move the feed rather than add one, and that needs deciding
 rather than guessing.
+
+### 6bt.1 The baseline feed made shared, and a lock Android never had
+
+`hrvDepression` was inert on iOS because nothing fed the baseline there. The fix was not to add a
+second feed but to move the one that exists: steps 1 to 4b of `AIMIPhysioManagerMTR.runPipeline`
+are now `PhysioPipeline` in commonMain, and the manager keeps only what is genuinely Android - the
+WorkManager schedule. `AimiPhysioDataSource` grew the three methods the pipeline needed
+(`fetchAllData`, `isAvailable`, `clearCache`); on iOS `isAvailable` is `HKHealthStore.isHealthDataAvailable()`
+alone, so it cannot raise a permission sheet.
+
+The trigger is one per platform, through a new `PhysioPipelineFeed`: `AndroidPhysioPipelineFeed`
+is `= Unit` because WorkManager owns the cadence, and `IosPhysioPipelineFeed` runs it from
+`HealthContextRepository.refreshCoreDataAsync`. An injected interface rather than `expect`/`actual`,
+because a platform with **no** binding then fails to build instead of silently picking an answer.
+
+**An adversarial review broke one claim, and it was the one that mattered.** "The baseline is never
+fed twice" was false on Android, and had been all along: five paths reach the run - the realtime,
+metabolic and daily workers, the bootstrap worker and the watchdog - with no mutual exclusion, and
+the 15-minute and 30-minute workers line up every half hour. Two overlapping runs add two history
+points for one reading, and that history is the mean and spread `HrvDepression` reads.
+
+Pre-existing, but it stopped being harmless the moment the baseline started driving a dose. So the
+guard now sits in `PhysioPipeline.run` itself rather than in either trigger: one gate, both
+platforms, and neither can forget it. A skipped call answers `false`; the next scheduled run comes
+round shortly, and a skipped duplicate is strictly better than a double-counted sample. This does
+change Android behaviour - an overlapping run is now skipped instead of running - and that is the
+point.
+
+The gate is `SingleFlightGate`, pulled out so the rule could be tested rather than argued in a
+comment, which is what the review found missing. `SingleFlightGateTest` includes a real race: 64
+coroutines on `Dispatchers.Default`, 50 times over, asserting exactly one entrant. **Verified by
+mutation**: replacing the compare-and-set with a read-then-write makes exactly that test fail, so
+it bites. That shape is not hypothetical - this repository has shipped it before, in
+`AimiSingleFlightCache`.
+
+Claims 2, 3, 4 survived the review. Android's step order, early returns, failure handling,
+preference keys, log tag and `previousFeatures` lifetime are unchanged; the only behavioural
+difference is `updateBaseline` now taking an explicit metric, which on Android is always `RMSSD` -
+the old implicit default. No tick sequence was found that wrongly drops a good HRV history.
+
+**Gates after the guard**: `iosSimulatorArm64Test` **849 tests, 0 failures**. Android
+`testAndroidHostTest` 2151 tests, 88 failures, **no new failing class** - the same five
+pre-existing ones, whose count drifts between 87 and 93 run to run because the LLM request-capture
+tests are order-dependent. `:app:compileFullDebugKotlin`, `:plugins:aps:compileAndroidMain` and
+`:plugins:aps:compileKotlinIosArm64` all green.
+
+Left open by the review, and worth doing: `IosPhysioPipelineFeed` checks `due()` before the gate,
+so a caller that passed `due()` can still enter after another run has finished and cleared the
+gate, repeating a window immediately. A second `due()` check after entering would close it. Rated
+very unlikely and not reproduced.

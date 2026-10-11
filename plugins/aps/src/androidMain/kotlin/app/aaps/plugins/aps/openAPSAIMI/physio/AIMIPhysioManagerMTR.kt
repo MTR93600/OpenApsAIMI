@@ -9,10 +9,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
-import app.aaps.core.keys.BooleanKey
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
-import app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import dev.zacsweers.metro.Inject
@@ -25,48 +22,44 @@ import kotlinx.coroutines.launch
 
 /**
  * 🎛️ AIMI Physiological Manager - MTR Implementation
- * 
- * Central orchestrator for physiological analysis pipeline.
- * Uses WorkManager for reliable periodic execution (every 15 minutes).
- * 
+ *
+ * The Android schedule for the physiological analysis run. The run itself is
+ * [PhysioPipeline], in shared code, so an iPhone goes through the same lines.
+ *
  * Responsibilities:
- * 1. Schedule data collection every 15 minutes via WorkManager
- * 2. Coordinate all pipeline components
+ * 1. Schedule data collection via WorkManager (realtime 15m, metabolic 30m, daily 24h)
+ * 2. Start [PhysioPipeline] from those jobs, and refresh the merged health snapshot after it
  * 3. Handle errors gracefully
- * 
+ *
+ * This class is the **only** thing that starts the run on Android. The shared
+ * [PhysioPipelineFeed] stands aside here (see [AndroidPhysioPipelineFeed]), because feeding the
+ * rolling baseline twice from the same readings would move the mean and the spread the dose path
+ * reads.
+ *
  * @author MTR & Lyra AI - AIMI Physiological Intelligence
  */
 @SingleIn(AppScope::class)
 class AIMIPhysioManagerMTR @Inject constructor(
     private val context: Context,
     val repo: HealthContextRepository, // Public for Workers
-    private val dataRepository: AIMIPhysioDataRepositoryMTR,
-    private val featureExtractor: AIMIPhysioFeatureExtractorMTR,
-    private val baselineModel: AIMIPhysioBaselineModelMTR,
-    private val contextEngine: AIMIPhysioContextEngineMTR,
+    private val pipeline: PhysioPipeline,
     private val contextStore: AIMIPhysioContextStoreMTR,
-    private val llmAnalyzer: AIMILLMPhysioAnalyzerMTR, // Optional
-    private val unifiedActivityProvider: UnifiedActivityProviderMTR,
     private val pipelineWatchdog: AIMIPhysioPipelineWatchdogMTR,
-    private val sp: KeyValueStore,
     private val aapsLogger: AAPSLogger
 ) {
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    
+
     companion object {
         private const val TAG = "PhysioManager"
         const val WORK_TAG = "AIMI_PHYSIO_15M" // Frequency increased for near real-time context
-        private const val PREF_KEY_LAST_UPDATE = "aimi_physio_last_update_ms"
-        
+
         // Static accessor for Worker
         var instance: AIMIPhysioManagerMTR? = null
             private set
     }
-    
+
     private val isRunning = AtomicBoolean(false)
-    private var lastUpdateTime: Long = 0
-    private var previousFeatures: PhysioFeaturesMTR? = null
-    
+
     init {
         instance = this
     }
@@ -90,8 +83,8 @@ class AIMIPhysioManagerMTR @Inject constructor(
         }
         
         // Restore last update time
-        lastUpdateTime = sp.getLong(PREF_KEY_LAST_UPDATE, 0)
-        
+        val lastUpdateTime = pipeline.restoreLastUpdateTime()
+
         // Schedule periodic updates
         schedulePeriodicWork()
 
@@ -233,6 +226,9 @@ class AIMIPhysioManagerMTR @Inject constructor(
     /** Used by workers to no-op when Physio is off (avoids work after stop/cancel races). */
     fun isPhysioAssistantEnabled(): Boolean = isEnabled()
 
+    /** The one reader of the physio preference now lives with the run. See [PhysioPipeline]. */
+    private fun isEnabled(): Boolean = pipeline.isPhysioAssistantEnabled()
+
     private fun cancelScheduledWork() {
         try {
             val wm = WorkManager.getInstance(context)
@@ -278,7 +274,7 @@ class AIMIPhysioManagerMTR @Inject constructor(
      */
     suspend fun performUpdate(daysBack: Int = 7, runLLM: Boolean = false): Boolean {
         return try {
-            runPhysioPipeline(daysBack, runLLM)
+            pipeline.run(daysBack, runLLM)
         } finally {
             // Restores pre–Mar 23 behavior: workers had fetchSnapshot(); pipeline alone never updated getLastSnapshot().
             try {
@@ -289,111 +285,6 @@ class AIMIPhysioManagerMTR @Inject constructor(
         }
     }
 
-    private suspend fun runPhysioPipeline(daysBack: Int, runLLM: Boolean): Boolean {
-        val startTime = aimiWallClockMs()
-        var fetchMs = 0L
-        var extractMs = 0L
-        var analyzeMs = 0L
-
-        aapsLogger.info(LTag.APS, "[$TAG] 🔄 Pipeline Start (daysBack=$daysBack runLLM=$runLLM)")
-
-        try {
-            val hcReady = dataRepository.isAvailable()
-            if (!hcReady) {
-                aapsLogger.warn(LTag.APS, "[$TAG] Health Connect SDK/client not fully available — HC reads may be empty; Wear/phone DB can still feed the pipeline")
-            }
-
-            // Step 1: Fetch raw data (HC) + optional enrichment from unified DB (Wear / HC sync rows)
-            val t0 = aimiWallClockMs()
-            val rawData = try {
-                enrichRawFromUnifiedIfNeeded(dataRepository.fetchAllData(daysBack = daysBack))
-            } catch (e: Exception) {
-                aapsLogger.error(LTag.APS, "[$TAG] ❌ Fetch error", e)
-                return false
-            }
-            fetchMs = aimiWallClockMs() - t0
-
-            if (!rawData.hasAnyData()) {
-                aapsLogger.warn(LTag.APS, "[$TAG] ⚠️ No physiological data available")
-                // Don't wipe context immediately, maybe transient
-                return false
-            }
-
-            // Step 2: Extract features
-            val t1 = aimiWallClockMs()
-            val features = featureExtractor.extractFeatures(rawData, previousFeatures)
-            previousFeatures = features
-            extractMs = aimiWallClockMs() - t1
-
-            // Step 3: Update baseline
-            val baseline = baselineModel.updateBaseline(features)
-
-            // Step 4: Analyze context
-            val t2 = aimiWallClockMs()
-            var context = contextEngine.analyze(features, baseline)
-            analyzeMs = aimiWallClockMs() - t2
-
-            // 🤖 Step 4b: Cognitive Analysis (LLM - Optional)
-            if (runLLM && isLLMEnabled()) {
-                // Only run LLM if Data is valid to avoid hallucination on empty data
-                if (features.hasValidData) {
-                    val narrative = llmAnalyzer.analyze(features, baseline, context)
-                    if (narrative.isNotBlank()) {
-                        context = context.copy(narrative = narrative)
-                        aapsLogger.info(LTag.APS, "[$TAG] 🤖 LLM Insight: $narrative")
-                    }
-                }
-            }
-
-            // Step 5: Store
-            contextStore.updateContext(context, baseline)
-
-            lastUpdateTime = aimiWallClockMs()
-            sp.putLong(PREF_KEY_LAST_UPDATE, lastUpdateTime)
-
-            val totalMs = aimiWallClockMs() - startTime
-
-            // STRUCTURED LOG (Production Level)
-            aapsLogger.info(
-                LTag.APS,
-                "[$TAG] ✅ RUN COMPLETE | State: ${context.state} | Conf: ${(context.confidence * 100).toInt()}% | " +
-                    "Qual: ${(features.dataQuality * 100).toInt()}% | " +
-                    "Counts: Sleep=${if (rawData.sleep?.hasValidData() == true) "Yes" else "No"}, HRV=${rawData.hrv.size}, RHR=${rawData.rhr.size}, Steps=${if (rawData.steps > 0) "Yes" else "No"} | " +
-                    "Timings: Fetch=${fetchMs}ms, Extr=${extractMs}ms, Analysis=${analyzeMs}ms (Total: ${totalMs}ms)"
-            )
-
-            return true
-        } catch (e: Exception) {
-            aapsLogger.error(LTag.APS, "[$TAG] ❌ Pipeline CRASH", e)
-            return false
-        }
-    }
-
-    /**
-     * When Health Connect returns no usable series but Wear / phone / HC-sync rows exist in the DB,
-     * merge those vitals so the pipeline and context store can still update (Mar 23 regression fix).
-     */
-    private fun enrichRawFromUnifiedIfNeeded(raw: RawPhysioDataMTR): RawPhysioDataMTR {
-        if (raw.hasAnyData()) return raw
-        val now = aimiWallClockMs()
-        val hr = unifiedActivityProvider.getLatestHeartRate(60 * 60 * 1000L)?.bpm?.toInt() ?: 0
-        val stepsWin = unifiedActivityProvider.getStepsTotalSince(now - 24 * 60 * 60 * 1000L)?.steps ?: 0
-        if (hr <= 0 && stepsWin <= 0) return raw
-        aapsLogger.info(LTag.APS, "[$TAG] Enriched physio input from unified DB: ambientHr=$hr ambientSteps24hWindow=$stepsWin")
-        return raw.copy(ambientHeartRateBpm = hr, ambientStepsAggregated = stepsWin)
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════
-    // PREFERENCES
-    // ═══════════════════════════════════════════════════════════════════════
-    
-    private fun isEnabled(): Boolean {
-        return sp.getBoolean(BooleanKey.AimiPhysioAssistantEnable.key, false)
-    }
-    
-    private fun isLLMEnabled(): Boolean {
-        return sp.getBoolean(BooleanKey.AimiPhysioLLMAnalysisEnable.key, false)
-    }
     
     // ═══════════════════════════════════════════════════════════════════════
     // STATUS & DEBUGGING
@@ -401,8 +292,8 @@ class AIMIPhysioManagerMTR @Inject constructor(
     
     fun getStatus(): Map<String, String> {
         val now = aimiWallClockMs()
-        val timeSinceUpdate = now - lastUpdateTime
-        
+        val timeSinceUpdate = now - pipeline.lastUpdateTimeMs
+
         return mapOf(
             "isRunning" to isRunning.get().toString(),
             "isEnabled" to isEnabled().toString(),
@@ -410,14 +301,7 @@ class AIMIPhysioManagerMTR @Inject constructor(
             "contextValid" to contextStore.isValid().toString()
         )
     }
-    
-    fun reset() {
-        aapsLogger.info(LTag.APS, "[$TAG] 🔄 Resetting Physiological Manager")
-        contextStore.clear()
-        baselineModel.clearHistory()
-        dataRepository.clearCache()
-        previousFeatures = null
-        lastUpdateTime = 0
-        sp.putLong(PREF_KEY_LAST_UPDATE, 0)
-    }
+
+    /** Forgets every learned baseline and stored context. See [PhysioPipeline.reset]. */
+    fun reset() = pipeline.reset()
 }

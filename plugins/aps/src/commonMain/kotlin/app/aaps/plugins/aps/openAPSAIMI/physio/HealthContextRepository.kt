@@ -49,6 +49,9 @@ class HealthContextRepository @Inject constructor(
     // Reads the person's own rolling HRV baseline, so "low HRV" can mean low for them rather than
     // below a fixed number. See HrvDepression.
     private val baselineModel: AIMIPhysioBaselineModelMTR,
+    // The platform's one owner of the physio run. It does nothing on Android, where WorkManager
+    // owns it. See PhysioPipelineFeed.
+    private val pipelineFeed: PhysioPipelineFeed,
     private val aapsLogger: AAPSLogger
 ) : AimiHealthContext {
 
@@ -399,6 +402,11 @@ class HealthContextRepository @Inject constructor(
     }
 
     private fun refreshCoreDataAsync(daysHrv: Int = 1, force: Boolean = false) {
+        // The only regular beat shared code has. On iOS this is what runs PhysioPipeline and feeds
+        // the rolling baseline; on Android it returns at once, because WorkManager already does.
+        // The call is before the in-flight guard on purpose: the feed keeps its own cadence, and a
+        // refresh that is already running must not hide the beat from it.
+        pipelineFeed.onHealthContextRefresh()
         if (!force && !refreshInFlight.compareAndSet(false, true)) return
         if (force) refreshInFlight.store(true)
         ioScope.launch {
