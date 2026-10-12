@@ -45,6 +45,9 @@ class TpoNotificationManager @Inject constructor(
     companion object {
         private const val CHANNEL_ID_STARTED = "AIMI_TPO_PROTECTION"
         private const val CHANNEL_ID_ENDED = "AIMI_TPO_PROTECTION_ENDED"
+        /** Keeps this notification's PendingIntent distinct from every other one in the app. */
+        private const val PENDING_INTENT_REQUEST_CODE = 8891
+
         private const val NOTIFICATION_ID_STARTED = 8891
         private const val NOTIFICATION_ID_ENDED = 8892
 
@@ -93,9 +96,16 @@ class TpoNotificationManager @Inject constructor(
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra(PendingNavigation.EXTRA_NAVIGATE_ROUTE, OPENAPS_AIMI_PLUGIN_ROUTE)
         }
+        // The request code must be ours alone. Android decides whether two PendingIntents are the
+        // same with `Intent.filterEquals`, which compares the component, action, data and
+        // categories - and **ignores the extras**. This intent names the main activity and sets no
+        // action, and so does the auditor's; with the same request code the two were one
+        // PendingIntent, and `FLAG_UPDATE_CURRENT` let whichever was posted last overwrite the
+        // other's extras. The route below would then vanish and a tap would open the app at
+        // whatever screen it was on, with nothing to show for it.
         return PendingIntent.getActivity(
             context,
-            0,
+            PENDING_INTENT_REQUEST_CODE,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )

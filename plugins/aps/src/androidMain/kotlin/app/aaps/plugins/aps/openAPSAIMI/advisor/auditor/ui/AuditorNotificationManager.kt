@@ -182,9 +182,13 @@ class AuditorNotificationManager @Inject constructor(
     val intent = Intent(context, uiInteraction.mainActivity.java).apply {
       flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
     }
+    // Its own request code, not 0. Android tells two PendingIntents apart with
+    // `Intent.filterEquals`, which ignores the extras, so this intent and the TPO one - same
+    // activity, no action on either - were a single PendingIntent while both used 0, and
+    // `FLAG_UPDATE_CURRENT` let the last one posted overwrite the other's extras.
     return PendingIntent.getActivity(
       context,
-      0,
+      NOTIFICATION_ID,
       intent,
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )

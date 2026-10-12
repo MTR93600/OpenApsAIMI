@@ -27,6 +27,7 @@ import app.aaps.core.data.ue.ValueWithUnit
 import app.aaps.core.interfaces.aps.APSResult
 import app.aaps.core.interfaces.db.DatabaseMaintenanceInfo
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.db.VacuumResult
 import app.aaps.core.interfaces.db.PersistenceLayer.Calibration
 import app.aaps.core.interfaces.db.PersistenceLayer.TransactionResult
 import kotlinx.coroutines.flow.Flow
@@ -50,8 +51,9 @@ internal class TherapyNotePersistence(
     override suspend fun clearDatabases() { unused() }
     override suspend fun clearApsResults() { unused() }
     override suspend fun cleanupDatabase(keepDays: Long, deleteTrackedChanges: Boolean): String = unused()
-    override suspend fun vacuumDatabase() { unused() }
+    override suspend fun vacuumDatabase(): VacuumResult = unused()
     override suspend fun databaseMaintenanceInfo(retentionDays: Long): DatabaseMaintenanceInfo = unused()
+    override suspend fun getVariableSensitivities(start: Long, end: Long): List<PersistenceLayer.VariableSensitivity> = unused()
     override fun <T : Any> observeChanges(type: KClass<T>): Flow<List<T>> = unused()
     override fun observeAnyChange(): Flow<Set<KClass<*>>> = unused()
     override val databaseClearedFlow: Flow<Unit> get() = unused()

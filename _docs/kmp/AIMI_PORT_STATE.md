@@ -4764,3 +4764,62 @@ per person - seven for the baseline to fill, three weeks of usable days after - 
 switch armed first**, because until then the baseline is not a personal normal and the data would
 measure the wrong thing. It also needs day labels (illness, poor sleep, hard effort) to validate
 against; without them there is only a distribution and nothing to check it against.
+
+## 6bv. 2026-10-12: second upstream merge, and a PendingIntent collision it uncovered
+
+`milos/dev` merged again at `2d95981235`: 70 commits, 318 files changed upstream, and only **11
+files touched on both sides** - down from 79 at the first merge, which is the two branches
+drifting apart less. One conflict, `NotificationId`, and the fork had already planned for it: the
+fork block carries a comment saying it sits after the upstream block on purpose so a merge
+renumbers only ids this fork owns. Resolved exactly that way.
+
+Two fakes followed an upstream interface change: `PersistenceLayer.vacuumDatabase` now answers
+`VacuumResult` and the interface gained `getVariableSensitivities`, so `LearnerColdPersistence`
+(the iOS neutral port) and `TherapyNotePersistence` (the shared test fake) were updated.
+
+### Two upstream commits landed on ground this branch had just built on
+
+- *"Notifications: a tap brings the running app back instead of rebuilding it"* rewrites
+  `NotificationHolderImpl.openAppIntent`, dropping `TaskStackBuilder` because it added
+  `FLAG_ACTIVITY_CLEAR_TASK` and every tap rebuilt the overview from zero.
+- *"Notifications: alarms vibrate, patterns on the channels"* reworks the alarm channels. Its
+  `OLD_CHANNEL_IDS` sweep only deletes `aaps_alarm_*`, so the two TPO channels are untouched.
+
+Neither conflicts with the notification deep link. But reading the first one closely turned up a
+defect of ours.
+
+### Two AIMI notifications were sharing one PendingIntent
+
+`TpoNotificationManager.createOpenAimiPrefsIntent` and
+`AuditorNotificationManager.createOpenReportIntent` both built
+`Intent(context, uiInteraction.mainActivity.java)` with **no action and no category**, and both
+called `PendingIntent.getActivity(context, 0, intent, FLAG_UPDATE_CURRENT or FLAG_IMMUTABLE)`.
+
+Android decides whether two PendingIntents are the same with `Intent.filterEquals`, which compares
+component, action, data and categories and **ignores the extras**. Same request code and
+filter-equal intents means one PendingIntent, and `FLAG_UPDATE_CURRENT` lets whichever was posted
+last overwrite the other's extras.
+
+So with both notifications live: the auditor posting after TPO strips
+`EXTRA_NAVIGATE_ROUTE`, and the deep link built in 6br.4 silently stops working - a tap opens the
+app at whatever screen it was on. The other order is worse in a quieter way: a tap on the auditor's
+notification carries the AIMI route and lands somewhere the user did not ask for.
+
+This only became reachable when the route started doing something. Before 6br.4 the extra was
+written and never read, so the collision was harmless, which is why nothing caught it.
+
+Fixed by giving each its own request code - TPO uses `8891`, the auditor its own `NOTIFICATION_ID`
+`8888` - with a comment at both sites explaining that the extras do not take part in the match,
+because that is the part nobody expects.
+
+### Verified
+
+`:plugins:aps:compileAndroidMain`, `:compileKotlinIosArm64`, `:app:compileFullDebugKotlin` and
+`:ios:shell:compileKotlinIosArm64` all green. `iosSimulatorArm64Test` 854 tests, 0 failures.
+`testAndroidHostTest` 2166 tests, 89 failures, same five pre-existing classes, **no new failing
+class** - it was 92 before the merge.
+
+A note on method: the first test run after the merge reported 854 iOS tests passing while
+`compileTestKotlinIosSimulatorArm64` had actually failed - those were stale XML files from the
+previous run. Every figure above was re-read with `--rerun-tasks` and the result files' mtimes
+checked against the clock.
