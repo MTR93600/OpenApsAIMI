@@ -178,6 +178,7 @@ import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer
 import kotlinx.coroutines.withContext
 import app.aaps.plugins.aps.openAPSAIMI.learning.AimiMlTrainingScheduler
+import app.aaps.plugins.aps.openAPSAIMI.hormonitor.viewer.AndroidDateFormatter
 import app.aaps.plugins.aps.openAPSAIMI.hormonitor.viewer.HormonitorViewerScreen
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiBackupManager
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
@@ -2203,7 +2204,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     private fun aimiComposeHormonitorViewerItem(): PreferenceItem =
         ApsIntentKey.HormonitorViewer.withCompose(
             ComposeScreenContent { onBack ->
-                HormonitorViewerScreen(storage = storage, onBack = onBack)
+                HormonitorViewerScreen(storage = storage, dateFormatter = AndroidDateFormatter(), onBack = onBack)
             }
         )
 
