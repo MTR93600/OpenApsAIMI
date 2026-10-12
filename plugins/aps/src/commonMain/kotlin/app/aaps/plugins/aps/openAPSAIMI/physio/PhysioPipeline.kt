@@ -70,6 +70,9 @@ class PhysioPipeline @Inject constructor(
          */
         private const val TAG = "PhysioManager"
 
+        /** Arms the per-day HRV baseline. Off by default - see `hrvPerDayBaseline`. */
+        const val PREF_KEY_HRV_PER_DAY_BASELINE = "aimi_hrv_baseline_per_night"
+
         const val PREF_KEY_LAST_UPDATE = "aimi_physio_last_update_ms"
 
         /**
@@ -130,6 +133,21 @@ class PhysioPipeline @Inject constructor(
 
     private fun isLLMEnabled(): Boolean =
         sp.getBoolean(BooleanKey.AimiPhysioLLMAnalysisEnable.key, false)
+
+    /**
+     * Whether the HRV baseline buckets by day instead of by run. **Off by default.**
+     *
+     * Off, the baseline keeps one point per pipeline run and caps at 28 of them. Both platforms
+     * run every 15 minutes, so that window is seven hours, not the seven days the class describes -
+     * and `HrvDepression` divides by its spread, so a reading barely below normal reads as a large
+     * deviation. On, a day contributes one value, its median, and the window is really seven days.
+     *
+     * It is a switch and not a straight fix because turning it on changes the mean and the spread,
+     * which changes `hrvDepression`, which reaches a dose. It has to be armed deliberately, on a
+     * phone whose owner is watching, not arrive with an update.
+     */
+    private fun hrvPerDayBaseline(): Boolean =
+        sp.getBoolean(PREF_KEY_HRV_PER_DAY_BASELINE, false)
 
     /**
      * Runs the five steps once.
@@ -210,7 +228,7 @@ class PhysioPipeline @Inject constructor(
             // history is never a mix of RMSSD and SDNN.
             val hrvMetric = hrvMetricOf(rawData.hrv, lastHrvMetric)
             lastHrvMetric = hrvMetric
-            val baseline = baselineModel.updateBaseline(features, hrvMetric)
+            val baseline = baselineModel.updateBaseline(features, hrvMetric, hrvPerDayBaseline())
 
             // Step 4: Analyze context
             val t2 = aimiWallClockMs()

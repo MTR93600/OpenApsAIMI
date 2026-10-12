@@ -4700,3 +4700,67 @@ Left open by the review, and worth doing: `IosPhysioPipelineFeed` checks `due()`
 so a caller that passed `due()` can still enter after another run has finished and cleared the
 gate, repeating a window immediately. A second `due()` check after entering would close it. Rated
 very unlikely and not reproduced.
+
+## 6bu. 2026-10-12: the HRV baseline measured seven hours, not seven days
+
+A study the user commissioned flagged that the baseline's "at least 3 samples" counts pipeline runs
+rather than days. Reading the code, the problem is larger and it is on **both** platforms, not just
+iOS:
+
+`cleanOldData` runs on every `updateBaseline` call and caps each history at
+`MAX_SAMPLES = WINDOW_DAYS * 4` = 28 - a constant written as "4 samples per day max". The pipeline's
+realtime window runs **every 15 minutes** on Android (`PeriodicWorkRequestBuilder<PhysioRealtimeWorker>(15, MINUTES)`)
+and on iOS (`REALTIME_PERIOD_MS`). That is 96 runs a day, so the 28 newest entries span **seven
+hours**. The class has described itself as a seven-day rolling baseline since it was written.
+
+That mattered little until 6bt made the baseline drive a dose. `HrvDepression` divides by its
+spread, and between HRV sample arrivals - a few a day - the input value repeats across runs. So the
+28 points are near copies of each other and the reading has two regimes, neither of which is a
+measurement: all identical gives a zero spread, which the guard answers `0.0`, inert; one value
+different gives a tiny spread, and a reading two milliseconds below normal divides out as full
+depression, feeding the autonomic stress score at weight 0.35 and the thermal belief.
+
+### What was built
+
+`AIMIPhysioBaselineModelMTR.updateBaseline` takes `hrvPerDayBaseline`, **off by default**. On, HRV
+readings go into day buckets keyed by local midnight, each day contributes its **median**, and the
+history is pruned to `WINDOW_DAYS` buckets. `sampleCount` is then a count of days, so the existing
+"at least 3" finally means what its comment always claimed. The metric-change guard clears the day
+buckets too, so an Android-to-iPhone move still cannot mix RMSSD with SDNN.
+
+It is a switch rather than a straight fix because arming it changes the mean and the spread, which
+changes `hrvDepression`, which reaches a dose. `PhysioPipeline` reads it from
+`aimi_hrv_baseline_per_night`, and one test asserts that the baseline is bit-identical with the
+switch off.
+
+### A clock seam, and two tests of mine that were worthless
+
+The model stamps every entry with `aimiWallClockMs()`, so a test loop writes several entries into
+one millisecond and they collapse into a single map key. **Two tests I wrote to prove the
+seven-hour window did not prove it** - one failed with a message that described the wrong cause,
+and I deleted them rather than leave a test that does not test what it says. `AIMIPhysioBaselineModelMTR`
+now takes `now: () -> Long = ::aimiWallClockMs`, which production never passes, and the tests drive
+it. The seven-hour window itself remains a reading of the constants, not a test result, and is
+stated that way.
+
+Three further test expectations of mine were wrong and the code was right: a single day cannot make
+a valid baseline, and below the three-sample threshold the model reports an empty baseline rather
+than a partial one. The expectations were corrected, not the code.
+
+### Verified
+
+`:plugins:aps:compileAndroidMain` and `:compileKotlinIosArm64` green. `iosSimulatorArm64Test`
+**854 tests, 0 failures**. Android `testAndroidHostTest` 2156 tests, 86 failures, **no new failing
+class** - the same five pre-existing ones.
+
+### Still to decide
+
+The seven-hour window applies equally to the sleep, resting-heart-rate and daily-step baselines,
+which feed `contextEngine.analyze`. Only HRV was changed, because only HRV reaches a dose through
+`HrvDepression` today. The other three are a known, unfixed instance of the same defect.
+
+The σ in `HrvDepression` stays at 2.0 and is still unmeasured. Calibrating it needs roughly 28 days
+per person - seven for the baseline to fill, three weeks of usable days after - **and the per-day
+switch armed first**, because until then the baseline is not a personal normal and the data would
+measure the wrong thing. It also needs day labels (illness, poor sleep, hard effort) to validate
+against; without them there is only a distribution and nothing to check it against.

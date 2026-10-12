@@ -11,6 +11,10 @@ import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
 import kotlin.concurrent.Volatile
 import kotlin.math.sqrt
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.toLocalDateTime
 
 /**
  * 📊 AIMI Physiological Baseline Model - MTR Implementation
@@ -28,7 +32,15 @@ import kotlin.math.sqrt
  */
 @SingleIn(AppScope::class)
 class AIMIPhysioBaselineModelMTR @Inject constructor(
-    private val aapsLogger: AAPSLogger
+    private val aapsLogger: AAPSLogger,
+    /**
+     * The clock, so a test can decide what "now" and therefore what "a day" means.
+     *
+     * Production never passes it. Without a seam here this class cannot be tested at all in the
+     * one dimension that defines it: every entry is stamped with the wall clock, so a test loop
+     * writes several entries into the same millisecond and they collapse into one.
+     */
+    private val now: () -> Long = ::aimiWallClockMs,
 ) {
     
     companion object {
@@ -41,8 +53,23 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
     // One lock for every history map (`synchronized` is JVM only).
     private val historyLock = AapsLock()
 
-    /** Which HRV metric [hrvRMSSDHistory] currently holds. See the guard in [updateBaseline]. */
+    /** Which HRV metric the HRV history currently holds. See the guard in [updateBaseline]. */
     private var lastHrvMetric: HrvMetric = HrvMetric.RMSSD
+
+    /**
+     * HRV readings bucketed by local day, used instead of [hrvRMSSDHistory] when the caller asks
+     * for the per-day baseline. One bucket per day, and the day contributes its median.
+     *
+     * The per-run map it replaces cannot describe a person's normal: it is capped at
+     * [MAX_SAMPLES] = 28 entries and the pipeline writes one on every run, every 15 minutes on
+     * both platforms. Twenty-eight runs is **seven hours**, not seven days, and within seven hours
+     * the same HRV reading repeats - so the spread collapses and a reading barely below normal
+     * divides out as a large one. A day is the unit this measurement was always meant to use.
+     */
+    private val hrvByDay = mutableMapOf<Long, MutableList<Double>>()
+
+    /** Whether the last [updateBaseline] asked for day buckets. Decides which history is read. */
+    private var hrvPerDay: Boolean = false
 
     // Rolling history for each metric (timestamp -> value)
     private val sleepDurationHistory = mutableMapOf<Long, Double>()
@@ -63,6 +90,7 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
     fun updateBaseline(
         features: PhysioFeaturesMTR,
         hrvMetric: HrvMetric = HrvMetric.RMSSD,
+        hrvPerDayBaseline: Boolean = false,
     ): PhysioBaselineMTR {
         if (!features.hasValidData) {
             aapsLogger.debug(LTag.AIMI, "[$TAG] No valid features - skipping baseline update")
@@ -70,7 +98,7 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
         }
 
         return historyLock.withLock {
-            val now = aimiWallClockMs()
+            val now = now()
 
             // Add new data points
             if (features.sleepDurationHours > 0) {
@@ -86,8 +114,10 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
             // So the history is dropped when the metric changes. The cost is a cold start - a few
             // days with no HRV contribution, which the dose path treats as neutral - and that is
             // much cheaper than silently reading the new numbers against the old distribution.
+            hrvPerDay = hrvPerDayBaseline
+
             if (hrvMetric != lastHrvMetric) {
-                if (hrvRMSSDHistory.isNotEmpty()) {
+                if (hrvRMSSDHistory.isNotEmpty() || hrvByDay.isNotEmpty()) {
                     aapsLogger.info(
                         LTag.AIMI,
                         "[$TAG] HRV metric changed $lastHrvMetric -> $hrvMetric, " +
@@ -95,11 +125,16 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
                     )
                 }
                 hrvRMSSDHistory.clear()
+                hrvByDay.clear()
                 lastHrvMetric = hrvMetric
             }
 
             if (features.hrvMeanRMSSD > 0) {
-                hrvRMSSDHistory[now] = features.hrvMeanRMSSD
+                if (hrvPerDayBaseline) {
+                    hrvByDay.getOrPut(localDayStartMs(now)) { mutableListOf() }.add(features.hrvMeanRMSSD)
+                } else {
+                    hrvRMSSDHistory[now] = features.hrvMeanRMSSD
+                }
             }
 
             if (features.rhrMorning > 0) {
@@ -135,7 +170,7 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
      * @param baseline Previously saved baseline
      */
     fun restoreBaseline(baseline: PhysioBaselineMTR) {
-        val ageHours = (aimiWallClockMs() - baseline.lastUpdateTimestamp) / (60 * 60 * 1000)
+        val ageHours = (now() - baseline.lastUpdateTimestamp) / (60 * 60 * 1000)
         var sleepSize = 0
         var hrvSize = 0
         var rhrSize = 0
@@ -171,10 +206,12 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
             sleepDurationHistory.values.toList()
         )
         
-        val hrvBaseline = calculateMetricBaseline(
-            "hrvRMSSD",
-            hrvRMSSDHistory.values.toList()
-        )
+        // One value per day when the day buckets are in use, so `sampleCount` really is a count
+        // of days and `isValid`'s "at least 3" means three days rather than three runs.
+        val hrvValues =
+            if (hrvPerDay) hrvByDay.toList().sortedBy { it.first }.map { medianOf(it.second) }
+            else hrvRMSSDHistory.values.toList()
+        val hrvBaseline = calculateMetricBaseline("hrvRMSSD", hrvValues)
         
         val rhrBaseline = calculateMetricBaseline(
             "morningRHR",
@@ -259,10 +296,35 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
         // Also limit max samples per metric
         limitSamples(sleepDurationHistory, MAX_SAMPLES)
         limitSamples(hrvRMSSDHistory, MAX_SAMPLES)
+        // Day buckets are pruned by day, not by run: at most one per day, at most WINDOW_DAYS of
+        // them. This is what makes the window seven days rather than seven hours.
+        hrvByDay.keys.removeAll { it < cutoff }
+        limitSamples(hrvByDay, WINDOW_DAYS)
         limitSamples(morningRHRHistory, MAX_SAMPLES)
         limitSamples(dailyStepsHistory, MAX_SAMPLES)
     }
     
+    /** Midnight of [timestampMs] in the phone's own time zone, which is where a "day" is decided. */
+    private fun localDayStartMs(timestampMs: Long): Long {
+        val zone = TimeZone.currentSystemDefault()
+        return Instant.fromEpochMilliseconds(timestampMs)
+            .toLocalDateTime(zone).date
+            .atStartOfDayIn(zone)
+            .toEpochMilliseconds()
+    }
+
+    /**
+     * The middle reading of a day.
+     *
+     * Median rather than mean, because a day holds many readings taken minutes apart and one odd
+     * value - a bad contact, a reading taken mid-effort - should not move the day.
+     */
+    private fun medianOf(values: List<Double>): Double {
+        val sorted = values.sorted()
+        val middle = sorted.size / 2
+        return if (sorted.size % 2 == 1) sorted[middle] else (sorted[middle - 1] + sorted[middle]) / 2.0
+    }
+
     private fun <T> limitSamples(history: MutableMap<Long, T>, maxSamples: Int) {
         if (history.size > maxSamples) {
             val toRemove = history.size - maxSamples
@@ -280,6 +342,7 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
         historyLock.withLock {
             sleepDurationHistory.clear()
             hrvRMSSDHistory.clear()
+            hrvByDay.clear()
             morningRHRHistory.clear()
             dailyStepsHistory.clear()
             cachedBaseline = PhysioBaselineMTR.EMPTY
