@@ -232,6 +232,11 @@ enum class NotificationId(
     // Appended at the END for the same reason as above.
     PUMP_DRIVER_NOT_RESPONDING(URGENT, PUMP),
 
+    // The Combo reported an error, so the driver does not connect until the user has handled it. Its own
+    // id, so that this hint does not replace the card that names the error (COMBO_PUMP_ALARM) (#5263).
+    // Appended at the END for the same reason as above.
+    COMBO_PUMP_ERROR_LOCKOUT(NORMAL, PUMP),
+
     // ---- Fork entries (ONE+/Libre 3 native, AIMI, calibration) ----
     // Kept after the upstream block on purpose: upstream keeps appending at its end, so a future
     // merge renumbers only these, which this fork controls, rather than any upstream id.

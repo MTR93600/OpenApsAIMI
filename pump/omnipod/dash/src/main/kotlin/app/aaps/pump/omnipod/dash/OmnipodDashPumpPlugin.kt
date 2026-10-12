@@ -75,9 +75,9 @@ import app.aaps.pump.omnipod.common.queue.command.CommandUpdateAlertConfiguratio
 import app.aaps.pump.omnipod.common.util.mapProfileToBasalProgram
 import app.aaps.pump.omnipod.dash.driver.OmnipodDashManager
 import app.aaps.pump.omnipod.dash.history.DashHistory
-import app.aaps.pump.omnipod.dash.history.data.BasalValuesRecord
-import app.aaps.pump.omnipod.dash.history.data.BolusRecord
-import app.aaps.pump.omnipod.dash.history.data.TempBasalRecord
+import app.aaps.pump.omnipod.common.history.data.BasalValuesRecord
+import app.aaps.pump.omnipod.common.history.data.BolusRecord
+import app.aaps.pump.omnipod.common.history.data.TempBasalRecord
 import app.aaps.pump.omnipod.dash.history.database.DashHistoryDatabase
 import app.aaps.pump.omnipod.dash.ui.compose.OmnipodDashComposeContent
 import app.aaps.pump.omnipod.dash.util.Constants
@@ -258,8 +258,11 @@ class OmnipodDashPumpPlugin(
 
     override fun isBusy(): Boolean {
         // prevents the queue from executing commands
-        return podStateManager.activationProgress != ActivationProgress.NOT_STARTED &&
-            podStateManager.activationProgress.isBefore(ActivationProgress.COMPLETED)
+        // The progress alone does not cover pairing: it is still NOT_STARTED until the first step is done,
+        // and the queue then ran and disconnected in the middle of the pairing (#5219).
+        return omnipodManager.isActivationRunning ||
+            (podStateManager.activationProgress != ActivationProgress.NOT_STARTED &&
+                podStateManager.activationProgress.isBefore(ActivationProgress.COMPLETED))
     }
 
     override fun isConnected(): Boolean {
@@ -313,6 +316,11 @@ class OmnipodDashPumpPlugin(
 
     override fun disconnect(reason: String) {
         aapsLogger.info(LTag.PUMP, "disconnect reason=$reason")
+        if (omnipodManager.isActivationRunning) {
+            // The activation uses the BLE link outside the queue. Closing it here broke the pairing (#5219).
+            aapsLogger.info(LTag.PUMP, "disconnect ignored, pod activation is running")
+            return
+        }
         stopConnecting?.countDown()
         omnipodManager.disconnect(false)
     }
@@ -1474,7 +1482,7 @@ class OmnipodDashPumpPlugin(
                     record as BolusRecord
 
                     podStateManager.createLastBolus(
-                        record.amout,
+                        record.amount,
                         command.historyId,
                         record.bolusType
                     )
