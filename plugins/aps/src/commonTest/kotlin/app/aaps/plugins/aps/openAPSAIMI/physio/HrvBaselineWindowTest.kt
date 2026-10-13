@@ -20,6 +20,12 @@ import kotlin.test.assertTrue
  */
 class HrvBaselineWindowTest {
 
+    // The per-day cases that used to live here were replaced by HrvNightBaselineTest when the
+    // baseline started reading the samples' own timestamps instead of counting pipeline runs.
+    // "three runs in one day", "a day contributes its median" and the metric purge are all asserted
+    // there now, against nights rather than runs. What is left here is the switch-off behaviour,
+    // which must not move: it is what production does today.
+
     /** A clock the test drives, so "a run" and "a day" can be told apart. */
     private class TestClock(var nowMs: Long) {
         fun advanceMinutes(minutes: Long) { nowMs += minutes * 60_000L }
@@ -27,7 +33,7 @@ class HrvBaselineWindowTest {
     }
 
     private fun modelAt(clock: TestClock) =
-        AIMIPhysioBaselineModelMTR(NoOpAapsLogger) { clock.nowMs }
+        AIMIPhysioBaselineModelMTR(NoOpAapsLogger, now = { clock.nowMs })
 
     private fun featuresWithHrv(hrv: Double) =
         PhysioFeaturesMTR(hrvMeanRMSSD = hrv, hasValidData = true)
@@ -53,51 +59,6 @@ class HrvBaselineWindowTest {
     }
 
     /**
-     * On, the same three runs land in one day bucket and contribute one point, so the baseline
-     * stays invalid - which is what "at least three days" was always supposed to mean.
-     */
-    @Test
-    fun `with the switch on three runs in one day are not enough`() {
-        val clock = TestClock(DAY_ONE_NOON)
-        val model = modelAt(clock)
-
-        repeat(3) {
-            model.updateBaseline(featuresWithHrv(50.0 + it), hrvPerDayBaseline = true)
-            clock.advanceMinutes(15)
-        }
-
-        val baseline = model.getCurrentBaseline().hrvRMSSD
-        assertEquals(0, baseline.sampleCount, "one day must contribute one point, not three")
-        assertTrue(!baseline.isValid(), "one day is not a personal normal")
-    }
-
-    /**
-     * A day contributes its median, not its last reading, so one odd value - a bad sensor contact,
-     * a reading taken mid-effort - cannot carry the day.
-     */
-    @Test
-    fun `a day contributes its median`() {
-        val clock = TestClock(DAY_ONE_NOON)
-        val model = modelAt(clock)
-
-        // Day 1 holds one odd reading among four good ones; two more days make the baseline valid.
-        listOf(50.0, 52.0, 9.0, 51.0, 50.0).forEach {
-            model.updateBaseline(featuresWithHrv(it), hrvPerDayBaseline = true)
-            clock.advanceMinutes(15)
-        }
-        clock.advanceDays(1)
-        model.updateBaseline(featuresWithHrv(50.0), hrvPerDayBaseline = true)
-        clock.advanceDays(1)
-        model.updateBaseline(featuresWithHrv(50.0), hrvPerDayBaseline = true)
-
-        val baseline = model.getCurrentBaseline().hrvRMSSD
-        assertEquals(3, baseline.sampleCount, "three days, three points")
-        // Day 1 contributes its median, 50.0. A mean would have been dragged to 42.4 by the 9.0,
-        // and the spread would have widened enough to hide a real dip later.
-        assertEquals(50.0, baseline.mean)
-    }
-
-    /**
      * The switch must be inert while it is off. Same readings, same baseline, to the digit.
      */
     @Test
@@ -120,30 +81,6 @@ class HrvBaselineWindowTest {
         assertEquals(a.mean, b.mean)
         assertEquals(a.stdDev, b.stdDev)
         assertEquals(a.sampleCount, b.sampleCount)
-    }
-
-    /** Changing the metric drops the day buckets too, not only the per-run history. */
-    @Test
-    fun `switching metric clears the day buckets`() {
-        val clock = TestClock(DAY_ONE_NOON)
-        val model = modelAt(clock)
-
-        // Three days of RMSSD: a valid baseline on one scale.
-        repeat(3) {
-            model.updateBaseline(featuresWithHrv(50.0), HrvMetric.RMSSD, hrvPerDayBaseline = true)
-            clock.advanceDays(1)
-        }
-        assertTrue(model.getCurrentBaseline().hrvRMSSD.isValid())
-
-        // The phone changes and SDNN starts arriving. The old scale must not survive beside it.
-        model.updateBaseline(featuresWithHrv(120.0), HrvMetric.SDNN, hrvPerDayBaseline = true)
-
-        // The three RMSSD days are gone, so the one SDNN day cannot reach the three-day threshold
-        // and the model reports an empty baseline. That is the cold start the metric guard intends:
-        // better no reading at all than this person's RMSSD normal applied to SDNN numbers.
-        val baseline = model.getCurrentBaseline().hrvRMSSD
-        assertTrue(!baseline.isValid(), "one day of the new metric is a cold start, by design")
-        assertEquals(0.0, baseline.mean, "no RMSSD value may survive into an SDNN baseline")
     }
 
     private companion object {

@@ -11,8 +11,12 @@ import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
 import kotlin.concurrent.Volatile
 import kotlin.math.sqrt
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.plus
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.toLocalDateTime
 
@@ -41,6 +45,11 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
      * writes several entries into the same millisecond and they collapse into one.
      */
     private val now: () -> Long = ::aimiWallClockMs,
+    /**
+     * The time zone a night is decided in. Injected for the same reason as the clock: a night is a
+     * local idea, and the iOS CI runs under `TZ=Europe/Prague` while a test needs to fix its own.
+     */
+    private val zone: () -> TimeZone = { TimeZone.currentSystemDefault() },
 ) {
     
     companion object {
@@ -48,6 +57,15 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
         private const val WINDOW_DAYS = 7
         private const val MAX_SAMPLES = WINDOW_DAYS * 4 // 4 samples per day max
         private const val MIN_SAMPLES_FOR_VALID_BASELINE = 3
+
+        /** A night starts at this local hour the evening before the date it is named after. */
+        private const val NIGHT_START_HOUR = 22
+
+        /** And ends at this local hour on that date. */
+        private const val NIGHT_END_HOUR = 6
+
+        /** How much wall time a night's readings must span before it counts. */
+        private const val MIN_NIGHT_COVERAGE_MS = 2L * 60 * 60 * 1000
     }
     
     // One lock for every history map (`synchronized` is JVM only).
@@ -66,7 +84,7 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
      * the same HRV reading repeats - so the spread collapses and a reading barely below normal
      * divides out as a large one. A day is the unit this measurement was always meant to use.
      */
-    private val hrvByDay = mutableMapOf<Long, MutableList<Double>>()
+    private val hrvByNight = mutableMapOf<LocalDate, Double>()
 
     /** Whether the last [updateBaseline] asked for day buckets. Decides which history is read. */
     private var hrvPerDay: Boolean = false
@@ -89,6 +107,7 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
      */
     fun updateBaseline(
         features: PhysioFeaturesMTR,
+        hrvSamples: List<HRVDataMTR> = emptyList(),
         hrvMetric: HrvMetric = HrvMetric.RMSSD,
         hrvPerDayBaseline: Boolean = false,
     ): PhysioBaselineMTR {
@@ -117,7 +136,7 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
             hrvPerDay = hrvPerDayBaseline
 
             if (hrvMetric != lastHrvMetric) {
-                if (hrvRMSSDHistory.isNotEmpty() || hrvByDay.isNotEmpty()) {
+                if (hrvRMSSDHistory.isNotEmpty() || hrvByNight.isNotEmpty()) {
                     aapsLogger.info(
                         LTag.AIMI,
                         "[$TAG] HRV metric changed $lastHrvMetric -> $hrvMetric, " +
@@ -125,16 +144,18 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
                     )
                 }
                 hrvRMSSDHistory.clear()
-                hrvByDay.clear()
+                hrvByNight.clear()
                 lastHrvMetric = hrvMetric
             }
 
-            if (features.hrvMeanRMSSD > 0) {
-                if (hrvPerDayBaseline) {
-                    hrvByDay.getOrPut(localDayStartMs(now)) { mutableListOf() }.add(features.hrvMeanRMSSD)
-                } else {
-                    hrvRMSSDHistory[now] = features.hrvMeanRMSSD
-                }
+            if (hrvPerDayBaseline) {
+                // Rebuilt from the samples, not appended to. The daily pass fetches seven days, so
+                // this reconstructs the whole window from source and the result does not depend on
+                // how many times the pipeline happened to run. Merged rather than replaced, because
+                // the 15-minute pass only fetches one day and must not drop the older nights.
+                hrvByNight.putAll(closedNightMedians(hrvSamples, now))
+            } else if (features.hrvMeanRMSSD > 0) {
+                hrvRMSSDHistory[now] = features.hrvMeanRMSSD
             }
 
             if (features.rhrMorning > 0) {
@@ -209,7 +230,7 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
         // One value per day when the day buckets are in use, so `sampleCount` really is a count
         // of days and `isValid`'s "at least 3" means three days rather than three runs.
         val hrvValues =
-            if (hrvPerDay) hrvByDay.toList().sortedBy { it.first }.map { medianOf(it.second) }
+            if (hrvPerDay) hrvByNight.toList().sortedBy { it.first }.map { it.second }
             else hrvRMSSDHistory.values.toList()
         val hrvBaseline = calculateMetricBaseline("hrvRMSSD", hrvValues)
         
@@ -229,10 +250,13 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
                            morningRHRHistory.keys + 
                            dailyStepsHistory.keys
         
+        // The nights count as days too. Without this someone whose only physiological signal is HRV
+        // would have a valid HRV baseline and a validDaysCount of zero, and the model would
+        // disagree with itself about whether it knows this person.
         val uniqueDays = allTimestamps
             .map { it / (24 * 60 * 60 * 1000) } // Convert to days
             .toSet()
-            .size
+            .size + if (hrvPerDay) hrvByNight.keys.size else 0
         
         return PhysioBaselineMTR(
             sleepDuration = sleepBaseline,
@@ -298,12 +322,65 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
         limitSamples(hrvRMSSDHistory, MAX_SAMPLES)
         // Day buckets are pruned by day, not by run: at most one per day, at most WINDOW_DAYS of
         // them. This is what makes the window seven days rather than seven hours.
-        hrvByDay.keys.removeAll { it < cutoff }
-        limitSamples(hrvByDay, WINDOW_DAYS)
+        // Nights are pruned by date. The oldest ones go first, and at most WINDOW_DAYS remain.
+        if (hrvByNight.size > WINDOW_DAYS) {
+            hrvByNight.keys.sorted().take(hrvByNight.size - WINDOW_DAYS).forEach { hrvByNight.remove(it) }
+        }
         limitSamples(morningRHRHistory, MAX_SAMPLES)
         limitSamples(dailyStepsHistory, MAX_SAMPLES)
     }
     
+
+    /**
+     * The median HRV of every **closed** night in [samples], keyed by the night's morning date.
+     *
+     * A night runs from [NIGHT_START_HOUR] to [NIGHT_END_HOUR] local time and is named after the
+     * morning it ends on, so a reading at 23:30 and one at 02:00 belong to the same night. Daytime
+     * readings are dropped: they say nothing about a resting normal, and a reading taken mid-effort
+     * would drag the night down and read later as stress.
+     *
+     * A night only counts once it is **closed** - the window has passed - so the reading being
+     * judged is never part of the baseline it is judged against.
+     *
+     * It also needs [MIN_NIGHT_COVERAGE_MS] between its first and last reading. Coverage, not a
+     * count: two readings taken minutes apart are one moment, and counting them as a night is the
+     * mistake the per-run history made at a larger scale.
+     *
+     * All of it is computed in `LocalDateTime`, never by adding milliseconds, so the short night in
+     * spring and the long one in autumn are each still one night.
+     */
+    private fun closedNightMedians(samples: List<HRVDataMTR>, nowMs: Long): Map<LocalDate, Double> {
+        if (samples.isEmpty()) return emptyMap()
+        val tz = zone()
+        val nowLocal = Instant.fromEpochMilliseconds(nowMs).toLocalDateTime(tz)
+
+        return samples
+            .filter { it.hasValidData() }
+            .groupBy { nightOf(it.timestamp, tz) }
+            .mapNotNull { (night, nightSamples) ->
+                if (night == null) return@mapNotNull null
+                if (!isClosed(night, nowLocal)) return@mapNotNull null
+                val times = nightSamples.map { it.timestamp }
+                if (times.max() - times.min() < MIN_NIGHT_COVERAGE_MS) return@mapNotNull null
+                night to medianOf(nightSamples.map { it.value })
+            }
+            .toMap()
+    }
+
+    /** The night a reading belongs to, named after its morning, or null when it is daytime. */
+    private fun nightOf(timestampMs: Long, tz: TimeZone): LocalDate? {
+        val local = Instant.fromEpochMilliseconds(timestampMs).toLocalDateTime(tz)
+        return when {
+            local.hour >= NIGHT_START_HOUR -> local.date.plus(1, DateTimeUnit.DAY)
+            local.hour < NIGHT_END_HOUR    -> local.date
+            else                           -> null
+        }
+    }
+
+    /** A night is closed once its morning end hour has passed. */
+    private fun isClosed(night: LocalDate, nowLocal: LocalDateTime): Boolean =
+        nowLocal.date > night || (nowLocal.date == night && nowLocal.hour >= NIGHT_END_HOUR)
+
     /** Midnight of [timestampMs] in the phone's own time zone, which is where a "day" is decided. */
     private fun localDayStartMs(timestampMs: Long): Long {
         val zone = TimeZone.currentSystemDefault()
@@ -342,7 +419,7 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
         historyLock.withLock {
             sleepDurationHistory.clear()
             hrvRMSSDHistory.clear()
-            hrvByDay.clear()
+            hrvByNight.clear()
             morningRHRHistory.clear()
             dailyStepsHistory.clear()
             cachedBaseline = PhysioBaselineMTR.EMPTY

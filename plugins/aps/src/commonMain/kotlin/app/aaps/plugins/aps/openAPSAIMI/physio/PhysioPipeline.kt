@@ -228,7 +228,7 @@ class PhysioPipeline @Inject constructor(
             // history is never a mix of RMSSD and SDNN.
             val hrvMetric = hrvMetricOf(rawData.hrv, lastHrvMetric)
             lastHrvMetric = hrvMetric
-            val baseline = baselineModel.updateBaseline(features, hrvMetric, hrvPerDayBaseline())
+            val baseline = baselineModel.updateBaseline(features, rawData.hrv, hrvMetric, hrvPerDayBaseline())
 
             // Step 4: Analyze context
             val t2 = aimiWallClockMs()

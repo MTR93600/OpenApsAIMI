@@ -4823,3 +4823,75 @@ A note on method: the first test run after the merge reported 854 iOS tests pass
 `compileTestKotlinIosSimulatorArm64` had actually failed - those were stale XML files from the
 previous run. Every figure above was re-read with `--rerun-tasks` and the result files' mtimes
 checked against the clock.
+
+## 6bw. 2026-10-13: the night baseline reads the samples, so most of the lot disappeared
+
+A brief for "lot 5" proposed persisting the per-day HRV buckets: a versioned schema, an open-night
+bucket, a migration, future-schema tolerance, a round-trip identity test, and wiring the restore
+path. It also reported something true and worse than the seven-hour window: **`restoreBaseline` has
+only its definition and no caller anywhere**, so the baseline starts empty after every restart.
+
+Before building any of it, one fact settled the design. `PhysioPipeline.run` already holds
+`rawData.hrv: List<HRVDataMTR>` - timestamped samples - on the very line that feeds the baseline,
+and already passes it to `hrvMetricOf`. The daily pass fetches **seven days** of them
+(`performUpdate(daysBack = 7)` on Android, `PhysioFeedWindow.DAILY` on iOS).
+
+So the baseline now reads the samples instead of counting pipeline runs, and most of the brief
+stopped being necessary:
+
+- **Idempotent.** A night's median is a property of the samples, so running the pipeline twice
+  gives the same answer. The Android double-feed documented in 6bt.1 cannot move the HRV baseline.
+- **Restart-proof without persistence.** The daily pass rebuilds the whole seven-night window from
+  source, so a restart costs at most until that pass - not three nights. No schema, no migration,
+  no open-night bucket, no `restoreBaseline` wiring.
+- **The repetition that collapsed the spread is gone at the root.** Each measurement counts once,
+  by its own timestamp, instead of once per 15-minute run.
+
+### The night
+
+22:00 to 06:00 local, named after the morning it ends on, so a reading at 23:30 and one at 02:00
+are one night. Computed in `LocalDateTime` through an **injected** time zone - the iOS CI runs under
+`TZ=Europe/Prague` - and never by adding milliseconds, so the short night in spring and the long one
+in autumn stay one night each. Daytime readings are dropped: a reading taken mid-effort would drag
+the night down and later read as stress.
+
+A night counts only once **closed**, so the reading being judged is never inside the baseline it is
+judged against. And it needs its readings to span at least two hours - **coverage, not a count**.
+That is a deliberate departure from the brief's "at least 4 readings": four pipeline runs can carry
+one HRV value, so counting them would repeat the mistake this whole change exists to fix.
+
+`validDaysCount` now counts the nights when the switch is on. Without that, someone whose only
+signal is HRV had a valid HRV baseline and a day count of zero - the model disagreeing with itself.
+
+### Answers to the brief's open questions
+
+Q1 night window: 22:00-06:00, not sleep-detected, because sleep data differs between the platforms
+and the window would too. Q2: coverage, not a count. Q3: yes, raw samples - this is the whole
+change. Q4: zone at reading time. Q5: no migration, honest cold start. Q6: **restore stays unwired**
+- with the switch off the baseline refills in three runs, about 45 minutes, which is the behaviour
+in production and not worth changing the Android dose for; with the switch on the daily pass makes
+restore unnecessary. Q7: nights are kept while the switch is off, and simply not read. Q8: separate
+lot.
+
+### Three mistakes of mine worth recording
+
+- A `s.replace` without an assertion **silently did nothing** - the `validDaysCount` block is
+  formatted across several lines - and the tests failed for a reason that looked like a logic bug.
+  Every scripted edit in this change now asserts its anchor.
+- Adding `zone` after `now` in the constructor silently re-bound the **trailing lambda** in an older
+  test from the clock to the zone. It compiled and meant something else.
+- Two test names contained a comma. They pass on the JVM and fail only on Kotlin/Native, which is
+  written in CLAUDE.md, and the iOS run is what caught it.
+
+Also caught by habit rather than luck: a test run reported 854 iOS tests passing while
+`compileTestKotlinIosSimulatorArm64` had failed. The result files were **16 hours old**. Every
+figure below was read with its mtime checked against the clock.
+
+### Verified
+
+`:plugins:aps:compileAndroidMain` and `:compileKotlinIosArm64` green. `iosSimulatorArm64Test`
+**864 tests, 0 failures** (newest result 0 s old). `testAndroidHostTest` 2184 tests, 89 failures in
+the same six pre-existing order-dependent classes, **no new failing class**.
+
+The switch `aimi_hrv_baseline_per_night` is still **off by default**, and a test pins that the
+switch-off path still counts runs exactly as production does.
