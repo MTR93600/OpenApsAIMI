@@ -604,6 +604,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.round
+import kotlin.math.round as mathRound
 import kotlin.math.roundToInt
 
 
@@ -9786,7 +9787,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             return 0
         }
         val scale = 10.0.pow(2.0)
-        return (round(value * scale) / scale).toInt()
+        // `mathRound`, not `round`: this function is itself named `round` and takes one Double, so
+        // a bare `round(...)` here resolves to this member rather than to kotlin.math.round - a
+        // member wins over an imported top-level function - and the call recursed until the stack
+        // ran out. Any finite value reaching this line crashed.
+        return (mathRound(value * scale) / scale).toInt()
     }
     private fun adjustBasalForMealHyper(
         suggestedBasalUph: Double,
@@ -14157,7 +14162,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun appendDecisionFinalTickLine(diag: DecisionFinalDiagSnapshot, activityThreshold: Double) {
         val tickLine =
             "TICK ts=${aimiWallClockMs()} bg=${diag.bgValue.roundToInt()} d=${aimiFmt1(diag.deltaValue)} iob=${aimiFmt2(work.iob)} act=${aimiFmt3(work.iobActivityNow)} th=${aimiFmt3(activityThreshold)} " +
-                "cob=${aimiFmt1(work.cob)} mode=${diag.modeLabel} autodriveState=$causalState.lastAutodriveState pred=${diag.predChunk} " +
+                "cob=${aimiFmt1(work.cob)} mode=${diag.modeLabel} autodriveState=${causalState.lastAutodriveState} pred=${diag.predChunk} " +
                 "safety=${work.lastSafetySource} ref=${diag.refractoryStatus} maxIOB=${aimiFmt2(work.maxIob)} maxSMB=${aimiFmt2(work.maxSMB)} " +
                 "smb=${aimiFmt2(work.lastSmbProposed)}->${aimiFmt2(work.lastSmbCapped)}->${aimiFmt2(diag.smbFinal)} " +
                 "tbr=${aimiFmt2(diag.tbrUph)} src=${work.lastDecisionSource}"

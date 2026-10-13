@@ -3243,6 +3243,8 @@ class ShellDecisionTraceTest {
 
     private fun innerTrace(block: () -> Unit): String {
         val probe = capture(block)
+        // `consoleLog` moved from the tick onto AimiTickWorkingState during the `work.` refactor,
+        // so it is reached through the tick's `work` field now.
         val logs = (getField(tick, "consoleLog") as List<*>).joinToString("\n") { it.toString() }
         val errors = (getField(tick, "consoleError") as List<*>).joinToString("\n") { it.toString() }
         return listOf(probe, logs, errors)
@@ -4174,7 +4176,8 @@ class ShellDecisionTraceTest {
         else -> value.toString()
     }
 
-    private fun getField(target: Any, name: String): Any? {
+    private fun getField(rawTarget: Any, name: String): Any? {
+        val target = fieldOwner(rawTarget, name)
         var type: Class<*>? = target.javaClass
         while (type != null) {
             try {
@@ -4241,7 +4244,40 @@ class ShellDecisionTraceTest {
         return ctor.newInstance(*args.toTypedArray())
     }
 
-    private fun setField(target: Any, name: String, value: Any?) {
+    /**
+     * Where a field named [name] actually lives on [target].
+     *
+     * The `work.` refactor moved a large part of the tick's state onto `AimiTickWorkingState`,
+     * reached through the tick's private `work` field. These tests drive the engine by reflection
+     * and name those fields, so every one of them broke at once. Rather than rewrite each name,
+     * this looks on the tick first and then inside `work`, which is exactly where they went.
+     */
+    private fun fieldOwner(target: Any, name: String): Any {
+        if (declaredField(target, name) != null) return target
+        // Two containers took the tick's state: AimiTickWorkingState through `work`, and
+        // AimiCausalState through `causalState`. A name is looked for in both.
+        for (container in listOf("work", "causalState")) {
+            val held = declaredField(target, container)?.get(target) ?: continue
+            if (declaredField(held, name) != null) return held
+        }
+        return target
+    }
+
+    /** The declared field [name] anywhere up [target]'s hierarchy, or null. */
+    private fun declaredField(target: Any, name: String): java.lang.reflect.Field? {
+        var type: Class<*>? = target.javaClass
+        while (type != null) {
+            try {
+                return type.getDeclaredField(name).also { it.isAccessible = true }
+            } catch (_: NoSuchFieldException) {
+                type = type.superclass
+            }
+        }
+        return null
+    }
+
+    private fun setField(rawTarget: Any, name: String, value: Any?) {
+        val target = fieldOwner(rawTarget, name)
         var type: Class<*>? = target.javaClass
         while (type != null) {
             try {

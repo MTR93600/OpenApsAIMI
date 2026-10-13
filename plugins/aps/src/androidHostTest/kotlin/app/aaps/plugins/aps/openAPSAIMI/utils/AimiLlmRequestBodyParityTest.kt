@@ -17,6 +17,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import java.lang.reflect.InvocationTargetException
+import app.aaps.plugins.aps.openAPSAIMI.llm.claude.ClaudeModelResolver
 
 /**
  * The bytes the two LLM clients put on the wire, before and after the move off `org.json`.
@@ -278,7 +279,11 @@ class AimiLlmRequestBodyParityTest {
                 })
             })
             put("generationConfig", JSONObject().apply {
-                put("maxOutputTokens", 150)
+                // Raised from 150 with the model that thinks: its reasoning tokens count against
+                // this limit, so 150 truncated every answer. Checked against dev_OAPSAIMI, where
+                // the same four providers carry the same four values, so this is the frozen
+                // fixture catching up with a deliberate change, not production drifting.
+                put("maxOutputTokens", 2000)
                 put("temperature", 0.3)
             })
         }
@@ -294,9 +299,20 @@ class AimiLlmRequestBodyParityTest {
 
         callPrivate(analyzer, "analyzeWithClaude", PhysioFeaturesMTR(), PhysioBaselineMTR(), PhysioContextMTR(), "key")
 
+        val claudeModel = ClaudeModelResolver.current()
         val before = JSONObject().apply {
-            put("model", "claude-3-5-sonnet-20241022")
-            put("max_tokens", 150)
+            // The resolver, not a frozen name. Production picks the current Claude model, so a
+            // literal here would fail on every model upgrade - an alarm that only ever means "the
+            // model changed, as designed". What this test is for is the shape of the body and what
+            // it asks for, which the lines below still pin.
+            put("model", claudeModel)
+            // 2000, raised from 150: on a model that thinks, the reasoning tokens count against
+            // this limit and 150 truncated every answer. Checked against dev_OAPSAIMI, where the
+            // same four providers carry the same four values - the fixture was the stale half.
+            put("max_tokens", 2000)
+            if (ClaudeModelResolver.supportsEffort(claudeModel)) {
+                put("output_config", JSONObject().apply { put("effort", "low") })
+            }
             put("messages", JSONArray().apply {
                 put(JSONObject().apply {
                     put("role", "user")

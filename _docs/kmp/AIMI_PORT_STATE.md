@@ -4895,3 +4895,84 @@ the same six pre-existing order-dependent classes, **no new failing class**.
 
 The switch `aimi_hrv_baseline_per_night` is still **off by default**, and a test pins that the
 switch-off path still counts runs exactly as production does.
+
+## 6bx. 2026-10-13: the 89 red tests were hiding two production bugs
+
+The Android suite had sat at 86-93 failures for days, written off as "pre-existing order-dependent
+test debt". It was not. Clearing it took the count to **9**, and two of the causes were defects in
+shipped code.
+
+### The harness first: 78 failures, one cause
+
+`ShellDecisionTraceTest` and `LegacyMealEffectTraceTest` drive the engine by reflection and name its
+fields. The `work.` refactor moved a large part of that state onto `AimiTickWorkingState`, and a
+later change moved more onto `AimiCausalState`, so every test in both files died in `setUp` on
+`no field consoleLog` before a single assertion ran.
+
+Rather than rewrite each name, the two reflection helpers now look on the tick first and then inside
+`work` and `causalState`. One change per file, and the field names in the tests stay as they read.
+
+### Production bug 1: the decision trace never recorded the autodrive state
+
+```kotlin
+"... autodriveState=$causalState.lastAutodriveState pred=..."
+```
+
+A Kotlin string template without braces: `$causalState` interpolates the object and `.lastAutodriveState`
+is then literal text. Every exported trace carried
+
+```
+autodriveState=app.aaps.plugins.aps.openAPSAIMI.AimiCausalState@248db1e8.lastAutodriveState
+```
+
+instead of `ENGAGED` or `IDLE`. This is the trace used to analyse what the engine decided, so that
+field has been useless for as long as the line has existed. Fixed to `${causalState.lastAutodriveState}`.
+
+A sweep for the same shape across `plugins/aps` found six other unbraced interpolations, all of them
+file extensions (`$ext.gz`, `$timestamp.csv`) where the dot is meant literally. This was the only
+defect of its kind.
+
+### Production bug 2: `round` called itself
+
+```kotlin
+fun round(value: Double): Int {
+    ...
+    return (round(value * scale) / scale).toInt()
+}
+```
+
+`kotlin.math.round` is imported, but a **member function wins over an imported top-level function**,
+so the call resolved to the enclosing function. Any finite value reaching that line recursed until
+the stack ran out. The test failed with `StackOverflowError` inside `DetermineBasalaimiSMB2.round`.
+
+Fixed with `import kotlin.math.round as mathRound` - an alias rather than a fully-qualified call,
+per the house rule on explicit imports - which keeps the rounding semantics exactly.
+
+**The frozen parity fixture is what proves both fixes.** `parityHarnessCanonicalTracesMatchTheFrozenAndroidFixture`
+compares a canonical trace byte for byte against a fixture frozen on Android. It failed, and it
+passes again now, untouched. The fixture was right and the code had drifted - which is what a frozen
+fixture is for.
+
+### The rest
+
+`AimiHttpClientMessageTest` passed three arguments to `makeAPICall` by reflection after it gained a
+fourth with a default; reflection does not apply Kotlin defaults, so the timeout is named explicitly
+now. 8 of 8 green.
+
+### Where it stands
+
+**2184 tests, 2173 pass, 9 fail**, down from 89, with results read at 0 s old. iOS simulator
+**864 of 864**. The nine left are in three classes, all LLM request-capture:
+`AimiPhysioLlmNarrativeDeliveryTest` (4), `AimiPhysioLlmKeyWiringTest` (3) and
+`AimiLlmRequestBodyParityTest` (2). The first two are the order-dependent ones that pass in
+isolation. The third is a frozen request body against `max_tokens` 150 while production sends 2000 -
+and the production change carries its own reason in a comment, that Gemini Pro's thinking tokens
+count against that limit and 150 truncates every answer. The fixture is the stale half, but
+refreshing a frozen fixture is a decision, not a cleanup, so it is left for the user.
+
+### A note on method
+
+Four times today a test task reported a pass from **stale result XML** while its compile step had
+failed - once by 16 hours, once by 75 minutes. Each number in this section was read with the result
+files' mtime checked against the clock, and the suites re-run with `--rerun-tasks`. A green number
+from a task that did not run is worse than a red one.

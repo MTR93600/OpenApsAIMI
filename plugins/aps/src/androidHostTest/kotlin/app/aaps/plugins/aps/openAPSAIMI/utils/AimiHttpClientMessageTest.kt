@@ -67,7 +67,9 @@ class AimiHttpClientMessageTest {
         )
 
         val thrown = assertThrows<Exception> {
-            callPrivate(analyzer, "makeAPICall", "https://example.invalid/v1", "{}", emptyMap<String, String>())
+            // The fourth argument is `timeoutMs`, which production defaults to TIMEOUT_MS. Reflection
+            // does not apply Kotlin defaults, so it is named here.
+            callPrivate(analyzer, "makeAPICall", "https://example.invalid/v1", "{}", emptyMap<String, String>(), 10_000L)
         }
 
         assertThat(thrown).hasMessageThat().isEqualTo("HTTP 500: Internal Server Error")
@@ -84,7 +86,9 @@ class AimiHttpClientMessageTest {
         )
 
         val thrown = assertThrows<Exception> {
-            callPrivate(analyzer, "makeAPICall", "https://example.invalid/v1", "{}", emptyMap<String, String>())
+            // The fourth argument is `timeoutMs`, which production defaults to TIMEOUT_MS. Reflection
+            // does not apply Kotlin defaults, so it is named here.
+            callPrivate(analyzer, "makeAPICall", "https://example.invalid/v1", "{}", emptyMap<String, String>(), 10_000L)
         }
 
         assertThat(thrown).hasMessageThat().isEqualTo("HTTP 503: null")
