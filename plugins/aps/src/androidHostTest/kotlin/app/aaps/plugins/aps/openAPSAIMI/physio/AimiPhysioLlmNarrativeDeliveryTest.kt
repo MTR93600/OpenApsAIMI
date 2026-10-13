@@ -9,7 +9,7 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpFailure
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpRequest
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpResponse
 import com.google.common.truth.Truth.assertThat
-import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
@@ -33,6 +33,12 @@ import org.mockito.kotlin.whenever
  * keep their meaning if the internals change again.
  */
 class AimiPhysioLlmNarrativeDeliveryTest {
+
+    // `runBlocking`, not `runTest`. The analyzer wraps its call in
+    // `withTimeout { withContext(aapsIoDispatcher) { ... } }`. Under `runTest` the virtual clock
+    // advances as soon as the body leaves the test scheduler for a real dispatcher, so the timeout
+    // fired at once, the exception was swallowed and every narrative came back empty. Nothing here
+    // needs virtual time - these tests only need a way to call a suspend function.
 
     private companion object {
 
@@ -116,7 +122,7 @@ class AimiPhysioLlmNarrativeDeliveryTest {
     // ── The answer lands on the run that paid for it ───────────────────────────────────────────
 
     @Test
-    fun `the very first run already gives back today's narrative`() = runTest {
+    fun `the very first run already gives back today's narrative`() = runBlocking {
         val http = FakeAimiHttp(openAiReply(quoted("Slept well, expect normal sensitivity.")))
 
         val narrative = analyzer(preferences(), http).run()
@@ -127,7 +133,7 @@ class AimiPhysioLlmNarrativeDeliveryTest {
     }
 
     @Test
-    fun `each run gives back its own answer, not the one before it`() = runTest {
+    fun `each run gives back its own answer, not the one before it`() = runBlocking {
         val http = FakeAimiHttp(openAiReply(quoted("day one")), openAiReply(quoted("day two")))
         val analyzer = analyzer(preferences(), http)
 
@@ -138,7 +144,7 @@ class AimiPhysioLlmNarrativeDeliveryTest {
     // ── A failure leaves the last good narrative alone ─────────────────────────────────────────
 
     @Test
-    fun `a failed call keeps the narrative from the last run that worked`() = runTest {
+    fun `a failed call keeps the narrative from the last run that worked`() = runBlocking {
         val http = FakeAimiHttp(openAiReply(quoted("the good one")), null)
         val analyzer = analyzer(preferences(), http)
 
@@ -148,7 +154,7 @@ class AimiPhysioLlmNarrativeDeliveryTest {
     }
 
     @Test
-    fun `a failure with nothing good before it gives back nothing`() = runTest {
+    fun `a failure with nothing good before it gives back nothing`() = runBlocking {
         val analyzer = analyzer(preferences(), FakeAimiHttp(null))
 
         assertThat(analyzer.run()).isEmpty()
@@ -157,7 +163,7 @@ class AimiPhysioLlmNarrativeDeliveryTest {
     // ── An empty answer is no answer, for every provider ───────────────────────────────────────
 
     @Test
-    fun `a JSON null from OpenAI is no answer, not the word null`() = runTest {
+    fun `a JSON null from OpenAI is no answer, not the word null`() = runBlocking {
         val narrative = analyzer(preferences(), FakeAimiHttp(openAiReply(JSON_NULL))).run()
 
         assertThat(narrative).isEmpty()
@@ -165,7 +171,7 @@ class AimiPhysioLlmNarrativeDeliveryTest {
     }
 
     @Test
-    fun `a JSON null from DeepSeek is no answer, not the word null`() = runTest {
+    fun `a JSON null from DeepSeek is no answer, not the word null`() = runBlocking {
         val http = FakeAimiHttp(openAiReply(JSON_NULL))
 
         val narrative = analyzer(preferences(provider = "DEEPSEEK"), http).run()
@@ -175,7 +181,7 @@ class AimiPhysioLlmNarrativeDeliveryTest {
     }
 
     @Test
-    fun `a JSON null from Gemini is no answer, not the word null`() = runTest {
+    fun `a JSON null from Gemini is no answer, not the word null`() = runBlocking {
         val http = FakeAimiHttp(geminiReply(JSON_NULL))
 
         val narrative = analyzer(preferences(provider = "GEMINI"), http, geminiResolver()).run()
@@ -185,7 +191,7 @@ class AimiPhysioLlmNarrativeDeliveryTest {
     }
 
     @Test
-    fun `a JSON null from Claude is no answer, not the word null`() = runTest {
+    fun `a JSON null from Claude is no answer, not the word null`() = runBlocking {
         val http = FakeAimiHttp(claudeReply(JSON_NULL))
 
         val narrative = analyzer(preferences(provider = "CLAUDE"), http).run()
@@ -195,21 +201,21 @@ class AimiPhysioLlmNarrativeDeliveryTest {
     }
 
     @Test
-    fun `an empty reply is no answer`() = runTest {
+    fun `an empty reply is no answer`() = runBlocking {
         val narrative = analyzer(preferences(), FakeAimiHttp(openAiReply(quoted("")))).run()
 
         assertThat(narrative).isEmpty()
     }
 
     @Test
-    fun `a reply of only spaces is no answer`() = runTest {
+    fun `a reply of only spaces is no answer`() = runBlocking {
         val narrative = analyzer(preferences(), FakeAimiHttp(openAiReply(quoted("   ")))).run()
 
         assertThat(narrative).isEmpty()
     }
 
     @Test
-    fun `an empty answer does not wipe the last good narrative`() = runTest {
+    fun `an empty answer does not wipe the last good narrative`() = runBlocking {
         val http = FakeAimiHttp(openAiReply(quoted("the good one")), openAiReply(JSON_NULL))
         val analyzer = analyzer(preferences(), http)
 
@@ -220,7 +226,7 @@ class AimiPhysioLlmNarrativeDeliveryTest {
     // ── The provider the user picked is the provider that is called ────────────────────────────
 
     @Test
-    fun `OPENAI sends the OpenAI key to the OpenAI endpoint`() = runTest {
+    fun `OPENAI sends the OpenAI key to the OpenAI endpoint`() = runBlocking {
         val http = FakeAimiHttp(openAiReply(quoted("ok")))
 
         analyzer(preferences(provider = "OPENAI"), http).run()
@@ -230,7 +236,7 @@ class AimiPhysioLlmNarrativeDeliveryTest {
     }
 
     @Test
-    fun `DEEPSEEK sends the DeepSeek key to the DeepSeek endpoint`() = runTest {
+    fun `DEEPSEEK sends the DeepSeek key to the DeepSeek endpoint`() = runBlocking {
         val http = FakeAimiHttp(openAiReply(quoted("ok")))
 
         analyzer(preferences(provider = "DEEPSEEK"), http).run()
@@ -240,7 +246,7 @@ class AimiPhysioLlmNarrativeDeliveryTest {
     }
 
     @Test
-    fun `CLAUDE sends the Claude key to the Claude endpoint`() = runTest {
+    fun `CLAUDE sends the Claude key to the Claude endpoint`() = runBlocking {
         val http = FakeAimiHttp(claudeReply(quoted("ok")))
 
         analyzer(preferences(provider = "CLAUDE"), http).run()
@@ -251,7 +257,7 @@ class AimiPhysioLlmNarrativeDeliveryTest {
     }
 
     @Test
-    fun `GEMINI sends the Gemini key to the Gemini endpoint`() = runTest {
+    fun `GEMINI sends the Gemini key to the Gemini endpoint`() = runBlocking {
         val http = FakeAimiHttp(geminiReply(quoted("ok")))
 
         analyzer(preferences(provider = "GEMINI"), http, geminiResolver()).run()
@@ -309,7 +315,7 @@ class AimiPhysioLlmNarrativeDeliveryTest {
     // ── With no key, nothing is sent ───────────────────────────────────────────────────────────
 
     @Test
-    fun `no key for the chosen provider means nothing is sent`() = runTest {
+    fun `no key for the chosen provider means nothing is sent`() = runBlocking {
         for (provider in listOf("OPENAI", "GEMINI", "CLAUDE", "DEEPSEEK", "bard")) {
             val http = FakeAimiHttp(openAiReply(quoted("should never be asked for")))
             val resolver = geminiResolver()
@@ -327,7 +333,7 @@ class AimiPhysioLlmNarrativeDeliveryTest {
     }
 
     @Test
-    fun `a key for a different provider does not wake the chosen one`() = runTest {
+    fun `a key for a different provider does not wake the chosen one`() = runBlocking {
         // Someone who filled in only the Gemini key but left the provider on OpenAI.
         val http = FakeAimiHttp(openAiReply(quoted("should never be asked for")))
         val preferences = preferences(

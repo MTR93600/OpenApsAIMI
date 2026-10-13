@@ -9,7 +9,7 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpFailure
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpRequest
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpResponse
 import com.google.common.truth.Truth.assertThat
-import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
@@ -36,6 +36,12 @@ import org.mockito.kotlin.whenever
  * screen at all and could only ever hold its default.
  */
 class AimiPhysioLlmKeyWiringTest {
+
+    // `runBlocking`, not `runTest`. The analyzer wraps its call in
+    // `withTimeout { withContext(aapsIoDispatcher) { ... } }`. Under `runTest` the virtual clock
+    // advances as soon as the body leaves the test scheduler for a real dispatcher, so the timeout
+    // fired at once, the exception was swallowed and every narrative came back empty. Nothing here
+    // needs virtual time - these tests only need a way to call a suspend function.
 
     private companion object {
 
@@ -139,7 +145,7 @@ class AimiPhysioLlmKeyWiringTest {
     // ── With no key configured the feature stays silent ────────────────────────────────────────
 
     @Test
-    fun `no key configured means nothing is sent`() = runTest {
+    fun `no key configured means nothing is sent`() = runBlocking {
         val http = RecordingAimiHttp(OPENAI_REPLY)
         val result = analyze(analyzer(preferences("OPENAI"), http))
 
@@ -148,7 +154,7 @@ class AimiPhysioLlmKeyWiringTest {
     }
 
     @Test
-    fun `no key configured means nothing is sent for any provider`() = runTest {
+    fun `no key configured means nothing is sent for any provider`() = runBlocking {
         for (provider in listOf("OPENAI", "GEMINI", "CLAUDE", "DEEPSEEK", "bard")) {
             val http = RecordingAimiHttp(OPENAI_REPLY)
             val resolver = mock<GeminiModelResolver>()
@@ -162,7 +168,7 @@ class AimiPhysioLlmKeyWiringTest {
     }
 
     @Test
-    fun `a key for another provider does not wake the selected one`() = runTest {
+    fun `a key for another provider does not wake the selected one`() = runBlocking {
         // Someone who filled in only the Gemini key but left the provider on its default.
         val http = RecordingAimiHttp(OPENAI_REPLY)
         val preferences = preferences(provider = "OPENAI", gemini = "gemini-key")
@@ -174,7 +180,7 @@ class AimiPhysioLlmKeyWiringTest {
     // ── The configured key is the one that reaches that provider ───────────────────────────────
 
     @Test
-    fun `the OpenAI key reaches the OpenAI endpoint and no other key does`() = runTest {
+    fun `the OpenAI key reaches the OpenAI endpoint and no other key does`() = runBlocking {
         val http = RecordingAimiHttp(OPENAI_REPLY)
         val preferences = preferences(
             provider = "OPENAI",
@@ -192,7 +198,7 @@ class AimiPhysioLlmKeyWiringTest {
     }
 
     @Test
-    fun `the DeepSeek key reaches the DeepSeek endpoint`() = runTest {
+    fun `the DeepSeek key reaches the DeepSeek endpoint`() = runBlocking {
         val http = RecordingAimiHttp(OPENAI_REPLY)
         val preferences = preferences(
             provider = "DEEPSEEK",
@@ -208,7 +214,7 @@ class AimiPhysioLlmKeyWiringTest {
     }
 
     @Test
-    fun `the Claude key reaches the Claude endpoint in the header Anthropic reads`() = runTest {
+    fun `the Claude key reaches the Claude endpoint in the header Anthropic reads`() = runBlocking {
         val http = RecordingAimiHttp("""{"content":[{"text":"ok"}]}""")
         val preferences = preferences(
             provider = "CLAUDE",
@@ -226,7 +232,7 @@ class AimiPhysioLlmKeyWiringTest {
     }
 
     @Test
-    fun `the Gemini key reaches the Gemini model resolver`() = runTest {
+    fun `the Gemini key reaches the Gemini model resolver`() = runBlocking {
         val http = RecordingAimiHttp("""{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}""")
         val resolver = mock<GeminiModelResolver>()
         whenever(resolver.resolveGenerateContentModel(any(), any())).thenReturn("gemini-pro-latest")
