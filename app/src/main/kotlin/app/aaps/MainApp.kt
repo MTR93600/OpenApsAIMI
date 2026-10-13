@@ -154,7 +154,7 @@ class MainApp : Application(), MetroMemberInjector, MetroViewModelFactoryOwner, 
     private val widgetUpdater get() = metroGraphs.widgetUpdater
     private val runningModeReconciler get() = metroGraphs.runningModeReconciler
     private val runningModeExpiryScheduler get() = metroGraphs.runningModeExpiryScheduler
-    private val profileSwitchExpiryScheduler get() = metroGraphs.profileSwitchExpiryScheduler
+    private val profileSwitchScheduler get() = metroGraphs.profileSwitchScheduler
     private val automationRuntime get() = metroGraphs.automationRuntime
     private val snackbarNotificationFallback get() = metroGraphs.snackbarNotificationFallback
     private val appScope get() = metroGraphs.applicationScope
@@ -254,7 +254,7 @@ class MainApp : Application(), MetroMemberInjector, MetroViewModelFactoryOwner, 
                 runningModeExpiryScheduler.start()
                 // Fires a profile change at the exact end of a temporary ProfileSwitch (master-only),
                 // removing the up-to-5-min KeepAlive latency. KeepAlive remains the backstop.
-                profileSwitchExpiryScheduler.start()
+                profileSwitchScheduler.start()
 
                 // Standalone automation runtime (no longer a plugin). Loads definitions on all
                 // flavors; the processing loop + location service are master-only (gated internally).
@@ -737,7 +737,10 @@ class MainApp : Application(), MetroMemberInjector, MetroViewModelFactoryOwner, 
             }
         }
 
-        if (!localInsulinManager.insulinAlreadyExists(runningICfg))
+        // Runs at every start, so it must match by curve, not by label. The running profile keeps the label it
+        // was made with, and the list rebuilds every label at start. A label match failed every time for a
+        // profile with an older label, and added one more copy of the same insulin at each start.
+        if (!localInsulinManager.insulinWithSameCurveExists(runningICfg))
             localInsulinManager.addNewInsulin(runningICfg, keepName = true)
 
         // The DIA these keys carry is now in the insulin list, so the old copies can go. This is the
