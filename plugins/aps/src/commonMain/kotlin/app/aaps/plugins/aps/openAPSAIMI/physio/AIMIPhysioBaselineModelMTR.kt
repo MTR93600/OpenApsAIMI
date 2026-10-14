@@ -17,7 +17,6 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.plus
-import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.toLocalDateTime
 
 /**
@@ -253,10 +252,30 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
         // The nights count as days too. Without this someone whose only physiological signal is HRV
         // would have a valid HRV baseline and a validDaysCount of zero, and the model would
         // disagree with itself about whether it knows this person.
-        val uniqueDays = allTimestamps
-            .map { it / (24 * 60 * 60 * 1000) } // Convert to days
-            .toSet()
-            .size + if (hrvPerDay) hrvByNight.keys.size else 0
+        //
+        // They have to be MERGED, not added. This used to add the night count to an already
+        // deduplicated set, so a day that had both a night and any other reading counted twice.
+        // Two real days then reported four, `isValid()` passed its "at least three days" test on
+        // two, and the confidence score read 4/7 instead of 2/7.
+        //
+        // Merging also needs one date frame for both sides. The histories are stamped with the wall
+        // clock, the nights are already local dates, so both are reduced to a local date in the
+        // injected zone - the same zone `nightOf` uses. A night is named by the date it ends on.
+        val uniqueDays = if (hrvPerDay) {
+            val tz = zone()
+            val historyDays = allTimestamps.map {
+                Instant.fromEpochMilliseconds(it).toLocalDateTime(tz).date
+            }
+            (historyDays + hrvByNight.keys).toSet().size
+        } else {
+            // Unchanged on purpose. With the switch off this must stay exactly what it was, down to
+            // the UTC day boundary. Moving that to a local day is a visible behaviour change for
+            // everyone and belongs in its own piece of work.
+            allTimestamps
+                .map { it / (24 * 60 * 60 * 1000) } // Convert to days
+                .toSet()
+                .size
+        }
         
         return PhysioBaselineMTR(
             sleepDuration = sleepBaseline,
@@ -380,15 +399,6 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
     /** A night is closed once its morning end hour has passed. */
     private fun isClosed(night: LocalDate, nowLocal: LocalDateTime): Boolean =
         nowLocal.date > night || (nowLocal.date == night && nowLocal.hour >= NIGHT_END_HOUR)
-
-    /** Midnight of [timestampMs] in the phone's own time zone, which is where a "day" is decided. */
-    private fun localDayStartMs(timestampMs: Long): Long {
-        val zone = TimeZone.currentSystemDefault()
-        return Instant.fromEpochMilliseconds(timestampMs)
-            .toLocalDateTime(zone).date
-            .atStartOfDayIn(zone)
-            .toEpochMilliseconds()
-    }
 
     /**
      * The middle reading of a day.

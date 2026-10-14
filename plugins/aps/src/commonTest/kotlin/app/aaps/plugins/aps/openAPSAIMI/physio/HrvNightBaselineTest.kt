@@ -245,6 +245,130 @@ class HrvNightBaselineTest {
         assertEquals(0.0, baseline.mean, "no RMSSD night may survive into an SDNN baseline")
     }
 
+    /**
+     * Features that also carry a resting heart rate and a step count, so the run reaches the other
+     * histories as well as the nights. That overlap is what the day count has to handle.
+     */
+    private fun featuresWithOtherSources() =
+        PhysioFeaturesMTR(hrvMeanRMSSD = 50.0, rhrMorning = 58, stepsDailyAverage = 6000, hasValidData = true)
+
+    private fun AIMIPhysioBaselineModelMTR.feedWithOtherSources(samples: List<HRVDataMTR>) =
+        updateBaseline(featuresWithOtherSources(), samples, HrvMetric.RMSSD, hrvPerDayBaseline = true)
+
+    /**
+     * One calendar day that has both a night and a reading from another source is one day.
+     *
+     * The count used to ADD the number of nights to an already deduplicated set of days, so this
+     * single day reported two.
+     */
+    @Test
+    fun `a date with both a night and another reading counts once`() {
+        val clock = Clock(at(2026, 3, 2, 12))
+        val model = modelAt(clock)
+
+        model.feedWithOtherSources(fullNight(2026, 3, 2, 50.0))
+
+        assertEquals(1, model.getCurrentBaseline().validDaysCount, "one day, not one plus one")
+    }
+
+    /** Two real days must not pass the "at least three days" test. */
+    @Test
+    fun `two real days do not make a valid baseline`() {
+        val clock = Clock(at(2026, 3, 2, 12))
+        val model = modelAt(clock)
+        model.feedWithOtherSources(fullNight(2026, 3, 2, 50.0))
+
+        clock.nowMs = at(2026, 3, 3, 12)
+        model.feedWithOtherSources(fullNight(2026, 3, 2, 50.0) + fullNight(2026, 3, 3, 50.0))
+
+        val baseline = model.getCurrentBaseline()
+        assertEquals(2, baseline.validDaysCount)
+        assertTrue(!baseline.isValid(), "two days is not three")
+    }
+
+    /** Three real days do. */
+    @Test
+    fun `three real days make a valid baseline`() {
+        val clock = Clock(at(2026, 3, 2, 12))
+        val model = modelAt(clock)
+        model.feedWithOtherSources(fullNight(2026, 3, 2, 50.0))
+
+        clock.nowMs = at(2026, 3, 3, 12)
+        model.feedWithOtherSources(fullNight(2026, 3, 3, 50.0))
+
+        clock.nowMs = at(2026, 3, 4, 12)
+        model.feedWithOtherSources(fullNight(2026, 3, 4, 50.0))
+
+        val baseline = model.getCurrentBaseline()
+        assertEquals(3, baseline.validDaysCount)
+        assertTrue(baseline.isValid())
+    }
+
+    /**
+     * The day count reaches an insulin decision through the confidence score, which adds
+     * `0.3 x (days / 7)`. A doubled count therefore buys confidence the data does not support.
+     */
+    @Test
+    fun `confidence is not inflated by a day counted twice`() {
+        val clock = Clock(at(2026, 3, 2, 12))
+        val model = modelAt(clock)
+        model.feedWithOtherSources(fullNight(2026, 3, 2, 50.0))
+
+        clock.nowMs = at(2026, 3, 3, 12)
+        val baseline = model.feedWithOtherSources(fullNight(2026, 3, 2, 50.0) + fullNight(2026, 3, 3, 50.0))
+
+        val engine = AIMIPhysioContextEngineMTR(NoOpAapsLogger)
+        val withTwoDays = engine.analyze(featuresWithOtherSources(), baseline).confidence
+        val withFourDays = engine.analyze(
+            featuresWithOtherSources(),
+            baseline.copy(validDaysCount = 4)
+        ).confidence
+
+        assertEquals(2, baseline.validDaysCount)
+        assertTrue(
+            withTwoDays < withFourDays,
+            "the score follows the day count, so the count must not be inflated"
+        )
+    }
+
+    /**
+     * A day is a local idea. At 00:30 in Paris the UTC date is still the day before, so a UTC
+     * boundary would split one day in two and the night would never line up with it.
+     */
+    @Test
+    fun `the day count uses the local date and not the UTC one`() {
+        val clock = Clock(at(2026, 3, 2, 0, 30))
+        val model = modelAt(clock)
+        // Writes the heart rate and steps at 00:30 local, which is 23:30 UTC the day before.
+        model.feedWithOtherSources(emptyList())
+
+        clock.nowMs = at(2026, 3, 2, 12)
+        model.feedWithOtherSources(
+            listOf(sample(at(2026, 3, 1, 23, 30), 50.0), sample(at(2026, 3, 2, 2, 0), 50.0))
+        )
+
+        assertEquals(1, model.getCurrentBaseline().validDaysCount, "both readings are the 2nd of March")
+    }
+
+    /**
+     * With the switch off the count must stay exactly what it always was, UTC day boundary and all.
+     * Three runs a day apart made three days before this change, and still do.
+     */
+    @Test
+    fun `the switch off counts days exactly as before`() {
+        val clock = Clock(at(2026, 3, 1, 12))
+        val model = modelAt(clock)
+
+        repeat(3) {
+            model.updateBaseline(
+                featuresWithOtherSources(), fullNight(2026, 3, 1, 50.0), HrvMetric.RMSSD, hrvPerDayBaseline = false
+            )
+            clock.nowMs += 24 * 60 * 60 * 1000L
+        }
+
+        assertEquals(3, model.getCurrentBaseline().validDaysCount)
+    }
+
     /** With the switch off nothing about the night path may run. */
     @Test
     fun `the switch off still counts runs rather than nights`() {
