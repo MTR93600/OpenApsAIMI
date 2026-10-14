@@ -48,6 +48,7 @@ import org.apache.commons.lang3.StringUtils
 import org.joda.time.LocalDateTime
 import java.util.GregorianCalendar
 import java.util.Locale
+import kotlin.math.abs
 
 /**
  * Created by andy on 10/12/18.
@@ -728,10 +729,13 @@ class MedtronicHistoryData(
 //        var readOldItem = false
 
         val oneMoreEntryFromHistory = getOneMoreEntryFromHistory(PumpHistoryEntryType.TempBasalCombined)
+        // A TBR from an earlier read, added again only to be limited by what follows it. It was synced then.
+        var alreadySynced: PumpHistoryEntry? = null
 
         if (tbr.isCancelTBR) { // if we have cancel we need to limit previous TBR with this cancel
             if (oneMoreEntryFromHistory != null) {
                 entryList.add(0, oneMoreEntryFromHistory)
+                alreadySynced = oneMoreEntryFromHistory
             } else {
                 entryList.removeAt(0)
             }
@@ -740,6 +744,7 @@ class MedtronicHistoryData(
                 val tbrPrev = oneMoreEntryFromHistory.getDecodedDataEntry("Object") as TempBasalPair
                 if (tbrPrev.isZeroTBR) {  // if we had Zero TBR in last previous TBR, then we need to limit it, so we need to process it too
                     entryList.add(0, oneMoreEntryFromHistory)
+                    alreadySynced = oneMoreEntryFromHistory
                 }
             }
         }
@@ -747,6 +752,9 @@ class MedtronicHistoryData(
         val tbrRecords = pumpSyncStorage.getTBRs()
 
         val processList: MutableList<TempBasalProcessDTO> = createTBRProcessList(entryList)
+        // The TBR that was synced before takes no entry and goes the pumpId path. Its own temp-id entry is gone, and
+        // the match by time took the entry of the next TBR and wrote this TBR into that row (#5271).
+        val tempIdEntries = matchTempIdEntries(processList.filter { it.itemOne !== alreadySynced }, tbrRecords)
 
         if (processList.isNotEmpty()) {
             for (tempBasalProcessDTO in processList) {
@@ -755,8 +763,7 @@ class MedtronicHistoryData(
                 //aapsLogger.debug(LTag.PUMP, "DD: tempBasalProcessDTO.itemOne: " + gson.toJson(tempBasalProcessDTO.itemOne))
                 //aapsLogger.debug(LTag.PUMP, "DD: tempBasalProcessDTO.itemTwo: " + (if (tempBasalProcessDTO.itemTwo == null) "null" else gson.toJson(tempBasalProcessDTO.itemTwo!!)))
 
-                @Suppress("Unchecked_Cast")
-                val entryWithTempId = findDbEntry(tempBasalProcessDTO.itemOne, tbrRecords as MutableList<PumpDbEntry>) as PumpDbEntryTBR?
+                val entryWithTempId = tempIdEntries[tempBasalProcessDTO]
 
                 aapsLogger.debug(LTag.PUMP, "DD: entryWithTempId: " + (entryWithTempId?.toString() ?: "null"))
 
@@ -805,10 +812,11 @@ class MedtronicHistoryData(
                         }
 
                         pumpSyncStorage.removeTemporaryBasalWithTemporaryId(entryWithTempId.temporaryId)
-                        tbrRecords.remove(entryWithTempId)
 
                         entryWithTempId.pumpId = tempBasalProcessDTO.pumpId
                         entryWithTempId.date = tryToGetByLocalTime(tempBasalProcessDTO.atechDateTime)
+                        // The length from history: with the planned one, an ended temp basal was taken as running.
+                        entryWithTempId.durationInSeconds = tempBasalProcessDTO.durationAsSeconds
 
                         if (isTBRActive(entryWithTempId)) {
                             medtronicPumpStatus.runningTBR = entryWithTempId
@@ -1004,6 +1012,60 @@ class MedtronicHistoryData(
     }
 
     /**
+     * Ends the temp basal that AAPS has running, after the pump stopped it at [now]: by a cancel, or by a
+     * new temp basal that replaced it. It only ends a temp basal that runs at [now], so it never makes one
+     * longer.
+     *
+     * The cancel used to end [MedtronicPumpStatus.runningTBR], the last temp basal read from history.
+     * When AAPS had set a newer one since, the older one was made longer than it ran, and the one that
+     * really ran stayed open in AAPS until the next history read.
+     */
+    suspend fun endRunningTbr(now: Long) {
+        val fromHistory = medtronicPumpStatus.runningTBR
+        // The pump does not run that one any more.
+        medtronicPumpStatus.runningTBR = null
+
+        val running = pumpSync.expectedPumpState().temporaryBasal ?: return
+
+        // Set by AAPS and not yet found in pump history, so it has only a temporary id. Its entry stays in
+        // storage: the next history read still gives it the pump id and the end time from the pump.
+        val pending = pumpSyncStorage.getTBRs().firstOrNull { it.date == running.timestamp }
+        if (pending != null) {
+            val result = pumpSync.syncTemporaryBasalWithTempId(
+                timestamp = pending.date,
+                rate = PumpRate(pending.rate),
+                duration = now - pending.date,
+                isAbsolute = pending.isAbsolute,
+                temporaryId = pending.temporaryId,
+                type = pending.tbrType,
+                pumpId = null,
+                pumpType = pending.pumpType,
+                pumpSerial = pending.serialNumber
+            )
+            aapsLogger.debug(LTag.PUMP, "endRunningTbr: syncTemporaryBasalWithTempId [date=${pending.date}, temporaryId=${pending.temporaryId}, duration=${now - pending.date} ms] - Result: $result")
+            return
+        }
+
+        // Already read from pump history, so it has a pump id.
+        val pumpId = fromHistory?.pumpId
+        if (fromHistory == null || pumpId == null || pumpId != running.pumpId) {
+            aapsLogger.info(LTag.PUMP, "endRunningTbr: the temp basal from ${running.timestamp} is not known to the driver. The next history read ends it.")
+            return
+        }
+        val result = pumpSync.syncTemporaryBasalWithPumpId(
+            timestamp = running.timestamp,
+            rate = PumpRate(fromHistory.rate),
+            duration = now - running.timestamp,
+            isAbsolute = fromHistory.isAbsolute,
+            type = fromHistory.tbrType,
+            pumpId = pumpId,
+            pumpType = fromHistory.pumpType,
+            pumpSerial = fromHistory.serialNumber
+        )
+        aapsLogger.debug(LTag.PUMP, "endRunningTbr: syncTemporaryBasalWithPumpId [date=${running.timestamp}, pumpId=$pumpId, duration=${now - running.timestamp} ms] - Result: $result")
+    }
+
+    /**
      * findDbEntry - finds Db entries in database, while theoretically this should have same dateTime they
      * don't. Entry on pump is few seconds before treatment in AAPS, and on manual boluses on pump there
      * is no treatment at all. For now we look fro treatment that was from 0s - 1m59s within pump entry.
@@ -1014,16 +1076,53 @@ class MedtronicHistoryData(
      *
      * Looks at all boluses that have temporaryId and find one that is correct for us (if such entry exists)
      */
+    /**
+     * Pairs the TBRs read from pump history with the temp-id entries AAPS stored when it set them. The pairs that fit
+     * best are taken first: the same rate before a different one (the pump may round the rate, so a different rate
+     * can still be the right entry), then the smaller time difference. An entry 2 minutes away or more is not taken.
+     *
+     * Looking at one TBR at a time failed in three ways. Two entries close together, or two that were both more than
+     * a minute away, gave no entry at all: the TBR got a new row and its temp-id row stayed open for the planned
+     * duration, so two basals overlapped (#1724). And a TBR set on the pump itself, which has no entry, took the
+     * entry of a TBR that AAPS set less than 2 minutes later (#5271).
+     */
+    private fun matchTempIdEntries(tbrs: List<TempBasalProcessDTO>, entries: List<PumpDbEntryTBR>): Map<TempBasalProcessDTO, PumpDbEntryTBR> {
+        class Candidate(val tbr: TempBasalProcessDTO, val entry: PumpDbEntryTBR, val sameRate: Boolean, val timeDiff: Long)
+
+        val candidates = tbrs.flatMap { tbr ->
+            val time = localTimeOf(tbr.itemOne)
+            val rate = tbr.itemOneTbr?.insulinRate
+            entries.mapNotNull { entry ->
+                val timeDiff = abs(entry.date - time)
+                if (timeDiff >= MAX_TEMP_ID_DISTANCE) null
+                else Candidate(tbr, entry, rate != null && abs(entry.rate - rate) < SAME_RATE_TOLERANCE, timeDiff)
+            }
+        }.sortedWith(compareBy({ !it.sameRate }, { it.timeDiff }))
+
+        val matches = mutableMapOf<TempBasalProcessDTO, PumpDbEntryTBR>()
+        val usedEntries = mutableSetOf<Long>()
+        for (candidate in candidates) {
+            if (candidate.tbr in matches || candidate.entry.temporaryId in usedEntries) continue
+            matches[candidate.tbr] = candidate.entry
+            usedEntries.add(candidate.entry.temporaryId)
+        }
+        return matches
+    }
+
+    /** The time of a pump history entry on the phone clock. */
+    private fun localTimeOf(entry: PumpHistoryEntry): Long {
+        val time = DateTimeUtil.toMillisFromATD(entry.atechDateTime)
+        // pumpTime should never be null, but it can theoretically happen if reading of time from pump fails
+        return pumpTime?.let { time + it.timeDifference * 1000 } ?: time
+    }
+
     private fun findDbEntry(treatment: PumpHistoryEntry, temporaryEntries: MutableList<PumpDbEntry>): PumpDbEntry? {
 
         if (temporaryEntries.isEmpty()) {
             return null
         }
 
-        var proposedTime = DateTimeUtil.toMillisFromATD(treatment.atechDateTime)
-
-        // pumpTime should never be null, but it can theoretically happen if reading of time from pump fails
-        this.pumpTime?.let { proposedTime += (it.timeDifference * 1000) }
+        val proposedTime = localTimeOf(treatment)
 
         val proposedTimeDiff: LongArray = longArrayOf(proposedTime - (2 * 60 * 1000), proposedTime + (2L * 60L * 1000L))
         val tempEntriesList: MutableList<PumpDbEntry> = mutableListOf()
@@ -1453,6 +1552,15 @@ class MedtronicHistoryData(
          */
         @Suppress("ConstPropertyName")
         const val doubleBolusDebug = false
+
+        /** A temp-id entry this far or more from a TBR in pump history is not its entry. */
+        private const val MAX_TEMP_ID_DISTANCE = 2 * 60 * 1000L
+
+        /**
+         * Rates closer than this count as the same. A rate can come back from the pump rounded to its step, but two
+         * different rates on the 0.05 U/h step of a x22 pump are still told apart.
+         */
+        private const val SAME_RATE_TOLERANCE = 0.025
     }
 
 }
