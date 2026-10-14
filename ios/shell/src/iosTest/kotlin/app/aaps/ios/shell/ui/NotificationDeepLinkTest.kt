@@ -84,7 +84,7 @@ class NotificationDeepLinkTest {
 
         relay.offer(NavigationRequest.PluginPreferences("A"))
 
-        assertEquals(listOf(NavigationRequest.PluginPreferences("A")), target.went)
+        assertEquals(listOf<NavigationRequest>(NavigationRequest.PluginPreferences("A")), target.went)
     }
 
     /**
@@ -101,7 +101,7 @@ class NotificationDeepLinkTest {
         assertEquals(emptyList<NavigationRequest>(), target.went)
 
         relay.attach(target::go)
-        assertEquals(listOf(NavigationRequest.PluginPreferences("A")), target.went)
+        assertEquals(listOf<NavigationRequest>(NavigationRequest.PluginPreferences("A")), target.went)
     }
 
     /** It must be acted on once. A second navigator must not repeat the first one's journey. */
@@ -115,7 +115,7 @@ class NotificationDeepLinkTest {
         relay.attach(null)
         relay.attach(target::go)
 
-        assertEquals(listOf(NavigationRequest.PluginPreferences("A")), target.went)
+        assertEquals(listOf<NavigationRequest>(NavigationRequest.PluginPreferences("A")), target.went)
     }
 
     /** Two taps before the app is open mean the user wants the second one. */
@@ -128,7 +128,7 @@ class NotificationDeepLinkTest {
         relay.offer(NavigationRequest.PluginPreferences("B"))
         relay.attach(target::go)
 
-        assertEquals(listOf(NavigationRequest.PluginPreferences("B")), target.went)
+        assertEquals(listOf<NavigationRequest>(NavigationRequest.PluginPreferences("B")), target.went)
     }
 
     /** The app locks itself when it goes to the background, and then there is nowhere to send one. */
@@ -143,6 +143,6 @@ class NotificationDeepLinkTest {
         assertEquals(emptyList<NavigationRequest>(), target.went)
 
         relay.attach(target::go)
-        assertEquals(listOf(NavigationRequest.PluginPreferences("A")), target.went)
+        assertEquals(listOf<NavigationRequest>(NavigationRequest.PluginPreferences("A")), target.went)
     }
 }

@@ -24,18 +24,18 @@ class IosMedtrumStateStore(
 ) {
 
     fun save(state: MedtrumSessionState) {
-        defaults.setLong(state.pumpSN, forKey = key("pumpSN"))
-        defaults.setLong(state.patchId, forKey = key("patchId"))
-        defaults.setLong(state.patchSessionToken, forKey = key("patchSessionToken"))
-        defaults.setLong(state.patchStartTime, forKey = key("patchStartTime"))
+        defaults.setInteger(state.pumpSN, forKey = key("pumpSN"))
+        defaults.setInteger(state.patchId, forKey = key("patchId"))
+        defaults.setInteger(state.patchSessionToken, forKey = key("patchSessionToken"))
+        defaults.setInteger(state.patchStartTime, forKey = key("patchStartTime"))
         defaults.setInteger(state.currentSequenceNumber.toLong(), forKey = key("currentSequenceNumber"))
         defaults.setInteger(state.syncedSequenceNumber.toLong(), forKey = key("syncedSequenceNumber"))
         defaults.setInteger(state.desiredAlarmSetting.ordinal.toLong(), forKey = key("desiredAlarmSetting"))
         defaults.setInteger(state.desiredHourlyMaxInsulin.toLong(), forKey = key("desiredHourlyMaxInsulin"))
         defaults.setInteger(state.desiredDailyMaxInsulin.toLong(), forKey = key("desiredDailyMaxInsulin"))
-        defaults.setString(state.actualBasalProfile.toHex(), forKey = key("actualBasalProfile"))
+        defaults.setObject(state.actualBasalProfile.toHex(), forKey = key("actualBasalProfile"))
         defaults.setDouble(state.reservoir, forKey = key("reservoir"))
-        state.lastBolusTime?.let { defaults.setLong(it, forKey = key("lastBolusTime")) }
+        state.lastBolusTime?.let { defaults.setInteger(it, forKey = key("lastBolusTime")) }
             ?: defaults.removeObjectForKey(key("lastBolusTime"))
         state.lastBolusAmount?.let { defaults.setDouble(it, forKey = key("lastBolusAmount")) }
             ?: defaults.removeObjectForKey(key("lastBolusAmount"))
@@ -44,10 +44,10 @@ class IosMedtrumStateStore(
 
     fun load(state: MedtrumSessionState) {
         if (defaults.objectForKey(key("pumpSN")) == null) return // nothing persisted yet
-        state.pumpSN = defaults.longForKey(key("pumpSN"))
-        state.patchId = defaults.longForKey(key("patchId"))
-        state.patchSessionToken = defaults.longForKey(key("patchSessionToken"))
-        state.patchStartTime = defaults.longForKey(key("patchStartTime"))
+        state.pumpSN = defaults.integerForKey(key("pumpSN"))
+        state.patchId = defaults.integerForKey(key("patchId"))
+        state.patchSessionToken = defaults.integerForKey(key("patchSessionToken"))
+        state.patchStartTime = defaults.integerForKey(key("patchStartTime"))
         state.currentSequenceNumber = defaults.integerForKey(key("currentSequenceNumber")).toInt()
         state.syncedSequenceNumber = defaults.integerForKey(key("syncedSequenceNumber")).toInt()
         state.desiredAlarmSetting = AlarmSetting.entries.getOrNull(
@@ -60,7 +60,7 @@ class IosMedtrumStateStore(
         }
         state.reservoir = defaults.doubleForKey(key("reservoir"))
         state.lastBolusTime = defaults.objectForKey(key("lastBolusTime"))?.let {
-            defaults.longForKey(key("lastBolusTime"))
+            defaults.integerForKey(key("lastBolusTime"))
         }
         state.lastBolusAmount = defaults.objectForKey(key("lastBolusAmount"))?.let {
             defaults.doubleForKey(key("lastBolusAmount"))

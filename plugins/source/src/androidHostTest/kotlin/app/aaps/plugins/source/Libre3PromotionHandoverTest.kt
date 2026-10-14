@@ -3,6 +3,7 @@ package app.aaps.plugins.source
 import android.content.Context
 import android.content.SharedPreferences
 import app.aaps.core.data.ue.Sources
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.core.interfaces.calibration.Calibration
 import app.aaps.core.interfaces.configuration.Config
@@ -61,6 +62,8 @@ class Libre3PromotionHandoverTest : TestBase() {
 
     private val bleRadioPriority: BleRadioPriority = mock()
 
+    private val notificationManager: NotificationManager = mock()
+
     /** Promotion tells the active calibration plugin to drop the retired sensor's fingersticks. */
     private val activeCalibration: Calibration = mock()
     private val activePlugin: ActivePlugin = mock<ActivePlugin>().also { whenever(it.activeCalibration).thenReturn(activeCalibration) }
@@ -88,7 +91,7 @@ class Libre3PromotionHandoverTest : TestBase() {
         Libre3MacArbiter.reset()
         Libre3CgmDrivers.releaseStagingInstance()?.let { runCatching { it.shutdown() } }
         plugin = Libre3NativePlugin(
-            rh, aapsLogger, preferences, config, context, persistenceLayer, availabilityProvider, bleRadioPriority, activePlugin,
+            rh, aapsLogger, preferences, config, notificationManager, context, persistenceLayer, availabilityProvider, bleRadioPriority, activePlugin,
         )
     }
 

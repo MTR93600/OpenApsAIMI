@@ -2,6 +2,7 @@ package app.aaps.plugins.source
 
 import android.content.Context
 import android.content.SharedPreferences
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.core.interfaces.calibration.Calibration
 import app.aaps.core.interfaces.configuration.Config
@@ -63,6 +64,8 @@ class DexcomOnePlusPromotionOrderTest : TestBase() {
     @Mock lateinit var warmupBasalGuard: DexcomOnePlusWarmupBasalGuard
 
     private val availabilityProvider: DexcomOnePlusAvailabilityProvider = mock()
+
+    private val notificationManager: NotificationManager = mock()
     private val bleRadioPriority: BleRadioPriority = mock()
     private val activeCalibration: Calibration = mock()
     private val activePlugin: ActivePlugin = mock<ActivePlugin>().also {
@@ -84,7 +87,7 @@ class DexcomOnePlusPromotionOrderTest : TestBase() {
         whenever(persistenceLayer.insertCgmSourceData(any(), any(), any(), anyOrNull()))
             .thenReturn(PersistenceLayer.TransactionResult())
         plugin = DexcomOnePlusPlugin(
-            rh, logger, preferences, config, context, persistenceLayer,
+            rh, logger, preferences, config, notificationManager, context, persistenceLayer,
             warmupBasalGuard, availabilityProvider, bleRadioPriority, activePlugin, rxBus,
         )
         plugin.promotionAlerter = { alerts += it }

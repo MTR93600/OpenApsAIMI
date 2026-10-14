@@ -3,6 +3,7 @@ package app.aaps.plugins.aimicontracts
 import app.aaps.core.interfaces.aps.OapsProfileAimi
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 

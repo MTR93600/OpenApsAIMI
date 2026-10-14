@@ -20,8 +20,10 @@ data class IosPumpEnactResult(
     override var isTempCancel: Boolean = false,
     override var bolusDelivered: Double = 0.0,
     override var queued: Boolean = false,
+    override var cancelled: Boolean = false,
 ) : PumpEnactResult {
 
+    override fun cancelled(cancelled: Boolean): PumpEnactResult = apply { this.cancelled = cancelled }
     override fun success(success: Boolean): PumpEnactResult = apply { this.success = success }
     override fun enacted(enacted: Boolean): PumpEnactResult = apply { this.enacted = enacted }
     override fun comment(comment: String): PumpEnactResult = apply { this.comment = comment }

@@ -15,7 +15,9 @@ import app.aaps.core.interfaces.overview.graph.IobGraphData
 import app.aaps.core.interfaces.overview.graph.OverviewDataCache
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.bus.RxBus
+import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
+import app.aaps.core.keys.interfaces.Preferences
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -41,6 +43,9 @@ internal class ChipsViewModelTest {
     @Mock private lateinit var sensitivityOverview: SensitivityOverview
     @Mock private lateinit var rh: ResourceHelper
     @Mock private lateinit var decimalFormatter: DecimalFormatter
+    @Mock private lateinit var dateUtil: DateUtil
+    @Mock private lateinit var aapsLogger: AAPSLogger
+    @Mock private lateinit var preferences: Preferences
     @Mock private lateinit var rxBus: RxBus
     @Mock private lateinit var pluginStatusBadgeSource: PluginStatusBadgeSource
 

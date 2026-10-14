@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import app.aaps.core.data.model.GV
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.TE
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
@@ -53,6 +54,8 @@ class DexcomOnePlusSensorAgeRepairTest : TestBase() {
     @Mock lateinit var warmupBasalGuard: DexcomOnePlusWarmupBasalGuard
 
     private val availabilityProvider: DexcomOnePlusAvailabilityProvider = mock()
+
+    private val notificationManager: NotificationManager = mock()
     private val bleRadioPriority: BleRadioPriority = mock()
     private val activePlugin: ActivePlugin = mock()
     private val prefs: SharedPreferences = SharedPreferencesMock()
@@ -77,7 +80,7 @@ class DexcomOnePlusSensorAgeRepairTest : TestBase() {
         whenever(persistenceLayer.getTherapyEventDataIncludingInvalidFromTime(any(), any()))
             .thenReturn(emptyList())
         plugin = DexcomOnePlusPlugin(
-            rh, aapsLogger, preferences, config, context, persistenceLayer,
+            rh, aapsLogger, preferences, config, notificationManager, context, persistenceLayer,
             warmupBasalGuard, availabilityProvider, bleRadioPriority, activePlugin, rxBus,
         )
         DexcomOnePlusIngest.reset()

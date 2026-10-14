@@ -1,12 +1,15 @@
 package app.aaps.pump.omnipod.dashctl.ios.pump
 
 import app.aaps.core.data.pump.defs.ManufacturerType
+import app.aaps.core.data.pump.defs.PumpDescription
 import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.interfaces.pump.Pump
 import app.aaps.core.interfaces.pump.PumpEnactResult
+import app.aaps.core.interfaces.pump.PumpInsulin
+import app.aaps.core.interfaces.pump.PumpRate
 import app.aaps.core.interfaces.pump.PumpSync
-import app.aaps.core.interfaces.queue.CustomAction
-import app.aaps.core.interfaces.queue.CustomActionType
+import app.aaps.core.interfaces.pump.actions.CustomAction
+import app.aaps.core.interfaces.pump.actions.CustomActionType
 import app.aaps.core.interfaces.queue.CustomCommand
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.pump.omnipod.dashctl.ios.crypto.IosAesCcmCipher
@@ -18,8 +21,8 @@ import app.aaps.pump.omnipod.dashctl.ios.store.DashKeychainStateStore
 import app.aaps.pump.omnipod.dashctl.pod.command.ProgramBolusCommand
 import app.aaps.pump.omnipod.dashctl.pod.command.ProgramTempBasalCommand
 import app.aaps.pump.omnipod.dashctl.pod.command.StopDeliveryCommand
+import app.aaps.pump.omnipod.dashctl.pod.command.StopDeliveryCommand.DeliveryType
 import app.aaps.pump.omnipod.dashctl.pod.definition.BeepType
-import app.aaps.pump.omnipod.dashctl.pod.definition.DeliveryType
 import app.aaps.pump.omnipod.dashctl.pod.definition.ProgramReminder
 import app.aaps.pump.omnipod.dashctl.crypto.DashEnDecrypt
 import app.aaps.pump.omnipod.dashctl.crypto.DashKeyExchange
@@ -30,6 +33,8 @@ import app.aaps.pump.omnipod.dashctl.session.DashPodStateManager
 import app.aaps.pump.omnipod.dashctl.session.DashPodStateStore
 import app.aaps.pump.omnipod.dashctl.session.DashSendResult
 import app.aaps.pump.omnipod.dashctl.session.DashSessionEstablisher
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -146,11 +151,29 @@ class IosDashPump(
     // -- Pump identity ------------------------------------------------------
 
     override fun manufacturer(): ManufacturerType = ManufacturerType.Insulet
-    override fun model(): PumpType = PumpType.OmnipodDash
+    override fun model(): PumpType = PumpType.OMNIPOD_DASH
     override fun serialNumber(): String =
         stateManager.currentState().uniqueId?.toString() ?: ""
 
+    override val pumpDescription: PumpDescription = PumpDescription().apply {
+        pumpType = PumpType.OMNIPOD_DASH
+        isBolusCapable = true
+        bolusStep = 0.05
+        isTempBasalCapable = true
+        isExtendedBolusCapable = false
+    }
+
+    override val isFakingTempsByExtendedBoluses: Boolean = false
+
     // -- State --------------------------------------------------------------
+
+    // Not tracked yet on iOS: these are placeholders, the same as in the iOS Medtrum driver.
+    override val lastDataTime: StateFlow<Long> = MutableStateFlow(0L)
+    override val lastBolusTime: StateFlow<Long?> = MutableStateFlow(null)
+    override val lastBolusAmount: StateFlow<PumpInsulin?> = MutableStateFlow(null)
+    override val baseBasalRate: PumpRate = PumpRate(0.0)
+    override val reservoirLevel: StateFlow<PumpInsulin> = MutableStateFlow(PumpInsulin(0.0))
+    override val batteryLevel: StateFlow<Int?> = MutableStateFlow(null)
 
     override fun isConfigured(): Boolean = isPaired()
     override fun isInitialized(): Boolean = isPaired() && session != null
@@ -187,7 +210,7 @@ class IosDashPump(
                     .setSequenceNumber(seq)
                     .setNonce(nonce)
                     .build()
-                val payload = command.encode()
+                val payload = command.encoded
                 when (val result = s.sendCommand(header(payload.size), payload)) {
                     is DashSendResult.Success -> DashPumpEnactResult(
                         success = true,
@@ -207,23 +230,25 @@ class IosDashPump(
             }
         }
 
-    override fun stopBolusDelivering() = runBlocking {
+    override fun stopBolusDelivering() {
+        runBlocking {
         commandMutex.withLock {
             try {
                 val s = requireSession()
                 val (uid, seq, nonce) = commandHeaders()
                 val command = StopDeliveryCommand.Builder()
                     .setDeliveryType(DeliveryType.BOLUS)
-                    .setBeepType(BeepType.NO_BEEP)
+                    .setBeepType(BeepType.SILENT)
                     .setUniqueId(uid)
                     .setSequenceNumber(seq)
                     .setNonce(nonce)
                     .build()
-                val payload = command.encode()
+                val payload = command.encoded
                 s.sendCommand(header(payload.size), payload)
             } catch (e: DashPumpNotPairedException) {
                 // Fail closed: nothing sent.
             }
+        }
         }
     }
 
@@ -245,7 +270,7 @@ class IosDashPump(
                 .setSequenceNumber(seq)
                 .setNonce(nonce)
                 .build()
-            val payload = command.encode()
+            val payload = command.encoded
                 when (val result = s.sendCommand(header(payload.size), payload)) {
                 is DashSendResult.Success -> DashPumpEnactResult(
                     success = true, enacted = true,
@@ -281,12 +306,12 @@ class IosDashPump(
                 val (uid, seq, nonce) = commandHeaders()
                 val command = StopDeliveryCommand.Builder()
                     .setDeliveryType(DeliveryType.TEMP_BASAL)
-                    .setBeepType(BeepType.NO_BEEP)
+                    .setBeepType(BeepType.SILENT)
                     .setUniqueId(uid)
                     .setSequenceNumber(seq)
                     .setNonce(nonce)
                     .build()
-                val payload = command.encode()
+                val payload = command.encoded
                 when (val result = s.sendCommand(header(payload.size), payload)) {
                     is DashSendResult.Success -> DashPumpEnactResult(
                         success = true, enacted = true,
@@ -325,12 +350,12 @@ class IosDashPump(
                 val (uid, seq, nonce) = commandHeaders()
                 val command = StopDeliveryCommand.Builder()
                     .setDeliveryType(DeliveryType.ALL)
-                    .setBeepType(BeepType.NO_BEEP)
+                    .setBeepType(BeepType.SILENT)
                     .setUniqueId(uid)
                     .setSequenceNumber(seq)
                     .setNonce(nonce)
                     .build()
-                val payload = command.encode()
+                val payload = command.encoded
                 when (val result = s.sendCommand(header(payload.size), payload)) {
                     is DashSendResult.Success -> DashPumpEnactResult(
                         success = true, enacted = true, comment = "All delivery stopped"
@@ -436,11 +461,20 @@ data class DashPumpEnactResult(
     override var isPercent: Boolean = false,
     override var isTempCancel: Boolean = false,
     override var bolusDelivered: Double = 0.0,
-    override var queued: Boolean = false
+    override var queued: Boolean = false,
+    override var cancelled: Boolean = false
 ) : PumpEnactResult {
 
     override fun success(success: Boolean): PumpEnactResult = apply { this.success = success }
     override fun enacted(enacted: Boolean): PumpEnactResult = apply { this.enacted = enacted }
     override fun comment(comment: String): PumpEnactResult = apply { this.comment = comment }
     override fun comment(ref: TextRef): PumpEnactResult = apply { /* TextRef resolution is UI work */ }
+    override fun cancelled(cancelled: Boolean): PumpEnactResult = apply { this.cancelled = cancelled }
+    override fun duration(duration: Int): PumpEnactResult = apply { this.duration = duration }
+    override fun absolute(absolute: Double): PumpEnactResult = apply { this.absolute = absolute }
+    override fun percent(percent: Int): PumpEnactResult = apply { this.percent = percent }
+    override fun isPercent(isPercent: Boolean): PumpEnactResult = apply { this.isPercent = isPercent }
+    override fun isTempCancel(isTempCancel: Boolean): PumpEnactResult = apply { this.isTempCancel = isTempCancel }
+    override fun bolusDelivered(bolusDelivered: Double): PumpEnactResult = apply { this.bolusDelivered = bolusDelivered }
+    override fun queued(queued: Boolean): PumpEnactResult = apply { this.queued = queued }
 }

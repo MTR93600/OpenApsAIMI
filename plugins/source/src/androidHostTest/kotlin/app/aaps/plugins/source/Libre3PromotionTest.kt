@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import app.aaps.core.data.iob.InMemoryGlucoseValue
 import app.aaps.core.data.ue.Sources
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.core.interfaces.calibration.AddEntryResult
 import app.aaps.core.interfaces.calibration.Calibration
@@ -63,6 +64,8 @@ class Libre3PromotionTest : TestBase() {
     @Mock lateinit var persistenceLayer: PersistenceLayer
 
     private val bleRadioPriority: BleRadioPriority = mock()
+
+    private val notificationManager: NotificationManager = mock()
     private val activeCalibration: Calibration = mock()
     private val availabilityProvider: Libre3AvailabilityProvider = mock()
 
@@ -132,7 +135,7 @@ class Libre3PromotionTest : TestBase() {
         val plugins = mock<ActivePlugin>()
         whenever(plugins.activeCalibration).thenReturn(calibration)
         return Libre3NativePlugin(
-            rh, logger, preferences, config, context, persistenceLayer, availabilityProvider, bleRadioPriority, plugins,
+            rh, logger, preferences, config, notificationManager, context, persistenceLayer, availabilityProvider, bleRadioPriority, plugins,
         )
     }
 

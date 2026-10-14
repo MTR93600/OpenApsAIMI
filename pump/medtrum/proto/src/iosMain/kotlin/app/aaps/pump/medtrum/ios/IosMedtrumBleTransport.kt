@@ -1,5 +1,7 @@
 package app.aaps.pump.medtrum.ios
 
+import app.aaps.core.interfaces.concurrent.AapsLock
+import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.core.interfaces.pump.ble.session.BleAdapterState
 import app.aaps.core.interfaces.pump.ble.session.BleCentral
 import app.aaps.core.interfaces.pump.ble.session.BleCentralEvent
@@ -53,7 +55,7 @@ class IosMedtrumBleTransport(
     private var writePackets: WriteCommandPackets? = null
     private var writeSequenceNumber = 0
     private var readPacket: ReadDataPacket? = null
-    private val readLock = Any()
+    private val readLock = AapsLock()
 
     /** Tracks descriptor writes so [MedtrumBleCallback.onConnected] fires once both are armed. */
     private var descriptorsArmed = 0
@@ -197,7 +199,7 @@ class IosMedtrumBleTransport(
     }
 
     private fun handleIndication(value: ByteArray) {
-        synchronized(readLock) {
+        readLock.withLock {
             if (readPacket == null) {
                 readPacket = ReadDataPacket(value)
             } else {

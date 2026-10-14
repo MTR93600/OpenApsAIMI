@@ -530,10 +530,7 @@ class Crypt {
     }
 
     fun generateRandomToken(): Long {
-        val randomBytes = ByteArray(4)
-        val random = java.security.SecureRandom()
-        random.nextBytes(randomBytes)
-        return randomBytes.toLong()
+        return secureRandomBytes(4).toLong()
     }
 
     private fun simpleCrypt(inputData: Long): Long {

@@ -9,6 +9,7 @@ import app.aaps.core.data.ue.Action
 import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.keys.BooleanKey
@@ -43,6 +44,7 @@ class DexcomOnePlusInsertionDateTest : TestBase() {
     @Mock lateinit var config: Config
     @Mock lateinit var context: Context
     @Mock lateinit var persistenceLayer: PersistenceLayer
+    @Mock lateinit var notificationManager: NotificationManager
     @Mock lateinit var warmupBasalGuard: DexcomOnePlusWarmupBasalGuard
 
     private val availabilityProvider: DexcomOnePlusAvailabilityProvider = mock()
@@ -68,7 +70,7 @@ class DexcomOnePlusInsertionDateTest : TestBase() {
         whenever(persistenceLayer.getTherapyEventDataFromToTime(any(), any())).thenReturn(emptyList())
         whenever(persistenceLayer.getTherapyEventDataIncludingInvalidFromTime(any(), any())).thenReturn(emptyList())
         plugin = DexcomOnePlusPlugin(
-            rh, aapsLogger, preferences, config, context, persistenceLayer,
+            rh, aapsLogger, preferences, config, notificationManager, context, persistenceLayer,
             warmupBasalGuard, availabilityProvider, bleRadioPriority, activePlugin, rxBus,
         )
     }

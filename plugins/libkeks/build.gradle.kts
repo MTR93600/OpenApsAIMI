@@ -20,5 +20,9 @@ dependencies {
     compileOnly("org.projectlombok:lombok:1.18.36")
     annotationProcessor("org.projectlombok:lombok:1.18.36")
 
+    // This module has no project dependency, so nothing brings the coroutines BOM in for it. The
+    // shared "test-module-dependencies" plugin adds kotlinx-coroutines-test without a version,
+    // because the BOM is meant to supply it, so the test classpath could not resolve at all.
+    testImplementation(platform(libs.kotlinx.coroutines.bom))
     testImplementation("junit:junit:4.13.2")
 }

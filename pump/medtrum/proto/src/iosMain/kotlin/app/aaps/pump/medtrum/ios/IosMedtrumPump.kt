@@ -10,8 +10,8 @@ import app.aaps.core.interfaces.pump.PumpProfile
 import app.aaps.core.interfaces.pump.PumpRate
 import app.aaps.core.interfaces.pump.PumpInsulin
 import app.aaps.core.interfaces.pump.PumpSync
-import app.aaps.core.interfaces.queue.CustomAction
-import app.aaps.core.interfaces.queue.CustomActionType
+import app.aaps.core.interfaces.pump.actions.CustomAction
+import app.aaps.core.interfaces.pump.actions.CustomActionType
 import app.aaps.core.interfaces.queue.CustomCommand
 import app.aaps.pump.medtrum.code.ConnectionState
 import app.aaps.pump.medtrum.session.MedtrumClock

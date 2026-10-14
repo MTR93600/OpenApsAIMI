@@ -42,6 +42,6 @@ enum class MedtrumPumpState(val state: Byte, val labelKey: String) {
     companion object {
 
         fun fromByte(state: Byte) = MedtrumPumpState.entries.find { it.state == state }
-            ?: throw IllegalAccessException("")
+            ?: throw IllegalArgumentException("")
     }
 }

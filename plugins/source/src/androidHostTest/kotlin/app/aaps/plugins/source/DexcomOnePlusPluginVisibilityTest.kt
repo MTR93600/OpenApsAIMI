@@ -2,13 +2,13 @@ package app.aaps.plugins.source
 
 import android.content.Context
 import androidx.documentfile.provider.DocumentFile
-import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.maintenance.FileListProvider
 import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.ActivePlugin
+import app.aaps.core.interfaces.plugin.EnforcedState
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.StringKey
@@ -56,19 +56,22 @@ class DexcomOnePlusPluginVisibilityTest : TestBase() {
         whenever(extraDir.findFile(ONE_PLUS_ACCESS_FILE_NAME)).thenReturn(markerFile)
         val availabilityProvider =
             DexcomOnePlusAvailabilityProvider(aapsLogger, { fileListProvider }, preferences, notificationManager, dateUtil)
-        plugin = DexcomOnePlusPlugin(rh, aapsLogger, preferences, config, context, persistenceLayer, warmupBasalGuard, availabilityProvider, bleRadioPriority, activePlugin, rxBus)
+        plugin = DexcomOnePlusPlugin(
+            rh, aapsLogger, preferences, config, notificationManager, context, persistenceLayer,
+            warmupBasalGuard, availabilityProvider, bleRadioPriority, activePlugin, rxBus
+        )
     }
 
     @Test
     fun `11 - ONE+ is visible when the exact marker file exists`() {
-        assertThat(plugin.showInList(PluginType.BGSOURCE)).isTrue()
+        assertThat(plugin.showInList()).isTrue()
     }
 
     @Test
     fun `12 - ONE+ is hidden when the marker file is absent`() {
         whenever(extraDir.findFile(ONE_PLUS_ACCESS_FILE_NAME)).thenReturn(null)
 
-        assertThat(plugin.showInList(PluginType.BGSOURCE)).isFalse()
+        assertThat(plugin.showInList()).isFalse()
     }
 
     @Test
@@ -76,28 +79,28 @@ class DexcomOnePlusPluginVisibilityTest : TestBase() {
         // `extra` freshly created by ensureExtraDirExists → empty → no marker.
         whenever(extraDir.findFile(ONE_PLUS_ACCESS_FILE_NAME)).thenReturn(null)
 
-        assertThat(plugin.showInList(PluginType.BGSOURCE)).isFalse()
+        assertThat(plugin.showInList()).isFalse()
     }
 
     @Test
     fun `14 - ONE+ is hidden when the SAF grant is gone`() {
         whenever(fileListProvider.isDirectoryAccessGranted()).thenReturn(false)
 
-        assertThat(plugin.showInList(PluginType.BGSOURCE)).isFalse()
+        assertThat(plugin.showInList()).isFalse()
     }
 
     @Test
     fun `14c - ONE+ is hidden when the directory throws while being read`() {
         whenever(fileListProvider.ensureExtraDirExists()).thenThrow(SecurityException("grant revoked"))
 
-        assertThat(plugin.showInList(PluginType.BGSOURCE)).isFalse()
+        assertThat(plugin.showInList()).isFalse()
     }
 
     @Test
     fun `14b - ONE+ is hidden when no AAPS directory is selected`() {
         whenever(preferences.getIfExists(StringKey.AapsDirectoryUri)).thenReturn(null)
 
-        assertThat(plugin.showInList(PluginType.BGSOURCE)).isFalse()
+        assertThat(plugin.showInList()).isFalse()
     }
 
     @Test
@@ -105,22 +108,22 @@ class DexcomOnePlusPluginVisibilityTest : TestBase() {
         val aidex = AidexPlugin(rh, aapsLogger, preferences, config, notificationManager)
         whenever(extraDir.findFile(ONE_PLUS_ACCESS_FILE_NAME)).thenReturn(null)
 
-        assertThat(plugin.showInList(PluginType.BGSOURCE)).isFalse()
-        assertThat(aidex.showInList(PluginType.BGSOURCE)).isTrue()
-        assertThat(aidex.specialEnableCondition()).isTrue()
+        assertThat(plugin.showInList()).isFalse()
+        assertThat(aidex.showInList()).isTrue()
+        assertThat(aidex.enforcedState()).isNotEqualTo(EnforcedState.Disabled)
     }
 
     @Test
     fun `20 - the gate does not touch the enable path, so a running sensor is unaffected`() {
-        // specialEnableCondition stays untouched in every state: hiding ONE+ never disables an
+        // The enforced state stays untouched in every state: hiding ONE+ never disables an
         // already-selected instance, never triggers a BG-source fallback, and changes no
         // insulin/sensor behaviour.
-        assertThat(plugin.specialEnableCondition()).isTrue()
+        assertThat(plugin.enforcedState()).isNotEqualTo(EnforcedState.Disabled)
 
         whenever(extraDir.findFile(ONE_PLUS_ACCESS_FILE_NAME)).thenReturn(null)
-        assertThat(plugin.specialEnableCondition()).isTrue()
+        assertThat(plugin.enforcedState()).isNotEqualTo(EnforcedState.Disabled)
 
         whenever(preferences.getIfExists(StringKey.AapsDirectoryUri)).thenReturn(null)
-        assertThat(plugin.specialEnableCondition()).isTrue()
+        assertThat(plugin.enforcedState()).isNotEqualTo(EnforcedState.Disabled)
     }
 }

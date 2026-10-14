@@ -7,6 +7,7 @@ import app.aaps.pump.omnipod.dashctl.pod.command.insulin.program.BolusShortInsul
 import app.aaps.pump.omnipod.dashctl.pod.definition.ProgramReminder
 import app.aaps.pump.omnipod.dashctl.pod.util.MessageUtil
 import app.aaps.pump.omnipod.dashctl.pod.util.PodByteBuffer
+import kotlin.math.floor
 
 // NOT SUPPORTED: extended bolus
 class ProgramBolusCommand private constructor(
@@ -87,7 +88,7 @@ class ProgramBolusCommand private constructor(
             requireNotNull(delayBetweenPulsesInEighthSeconds) { "delayBetweenPulsesInEighthSeconds can not be null" }
             requireNotNull(programReminder) { "programReminder can not be null" }
 
-            val numberOfPulses = Math.round(numberOfUnits!! * 20).toShort()
+            val numberOfPulses = floor(numberOfUnits!! * 20 + 0.5).toLong().toShort()
             val byte10And11 = (numberOfPulses * delayBetweenPulsesInEighthSeconds!!).toShort()
             val interlockCommand = ProgramInsulinCommand(
                 uniqueId!!,

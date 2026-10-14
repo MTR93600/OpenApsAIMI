@@ -3,6 +3,7 @@ package app.aaps.plugins.source
 import android.content.Context
 import android.content.SharedPreferences
 import app.aaps.core.data.ue.Sources
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
@@ -61,6 +62,8 @@ class Libre3PresoakPluginTest : TestBase() {
     @Mock lateinit var persistenceLayer: PersistenceLayer
 
     private val bleRadioPriority: BleRadioPriority = mock()
+
+    private val notificationManager: NotificationManager = mock()
     private val activePlugin: ActivePlugin = mock()
     private val availabilityProvider: Libre3AvailabilityProvider = mock()
 
@@ -109,7 +112,7 @@ class Libre3PresoakPluginTest : TestBase() {
     }
 
     private fun newPlugin() = Libre3NativePlugin(
-        rh, aapsLogger, preferences, config, context, persistenceLayer, availabilityProvider, bleRadioPriority, activePlugin,
+        rh, aapsLogger, preferences, config, notificationManager, context, persistenceLayer, availabilityProvider, bleRadioPriority, activePlugin,
     )
 
     private fun storeStagedSensor() {
@@ -363,7 +366,7 @@ class Libre3PresoakPluginTest : TestBase() {
     }
 
     private fun newPlugin(logger: AAPSLogger) = Libre3NativePlugin(
-        rh, logger, preferences, config, context, persistenceLayer, availabilityProvider, bleRadioPriority, activePlugin,
+        rh, logger, preferences, config, notificationManager, context, persistenceLayer, availabilityProvider, bleRadioPriority, activePlugin,
     )
 
     private class RecordingLogger : AAPSLogger by AAPSLoggerTest() {

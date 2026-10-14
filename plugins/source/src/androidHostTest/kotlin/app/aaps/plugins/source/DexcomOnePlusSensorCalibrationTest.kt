@@ -1,6 +1,7 @@
 package app.aaps.plugins.source
 
 import android.content.Context
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.core.interfaces.calibration.Calibration
 import app.aaps.core.interfaces.configuration.Config
@@ -44,6 +45,8 @@ class DexcomOnePlusSensorCalibrationTest : TestBase() {
     @Mock lateinit var warmupBasalGuard: DexcomOnePlusWarmupBasalGuard
 
     private val availabilityProvider: DexcomOnePlusAvailabilityProvider = mock()
+
+    private val notificationManager: NotificationManager = mock()
     private val bleRadioPriority: BleRadioPriority = mock()
     private val activePlugin: ActivePlugin = mock<ActivePlugin>().also {
         whenever(it.activeCalibration).thenReturn(mock<Calibration>())
@@ -56,7 +59,7 @@ class DexcomOnePlusSensorCalibrationTest : TestBase() {
         whenever(context.applicationContext).thenReturn(context)
         whenever(rh.gs(any<Int>())).thenReturn("not sent")
         plugin = DexcomOnePlusPlugin(
-            rh, aapsLogger, preferences, config, context, persistenceLayer,
+            rh, aapsLogger, preferences, config, notificationManager, context, persistenceLayer,
             warmupBasalGuard, availabilityProvider, bleRadioPriority, activePlugin, rxBus,
         )
         OnePlusCgmDrivers.select(useReal = true)
