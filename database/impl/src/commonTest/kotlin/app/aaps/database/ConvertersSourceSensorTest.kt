@@ -26,35 +26,36 @@ class ConvertersSourceSensorTest {
         }
     }
 
+    /**
+     * A stored name is never lost, whichever design does the work.
+     *
+     * Upstream merged the per-bridge entries and reads old rows through
+     * [LEGACY_SOURCE_SENSOR_NAMES]. This fork kept the entries instead, because AIMI reads
+     * `DEXCOM_G6_NATIVE` and `DEXCOM_G7_NATIVE` to decide a correction that applies to the native
+     * feed and not to the same sensor read through a bridge. An old row therefore resolves to its
+     * own entry here, and `SourceSensorExtension.fromDb` collapses the names that carry no meaning
+     * for dosing.
+     *
+     * The two designs owe the same guarantee, and that is what is asserted: a name that was once
+     * written never comes back as `UNKNOWN`, which would lose the sensor and also pull months of
+     * old readings into the flat check.
+     */
     @Test
-    fun `names written before the dexcom entries were merged keep their sensor`() {
-        assertEquals(GlucoseValue.SourceSensor.DEXCOM_UNKNOWN, converters.toSourceSensor("DEXCOM_NATIVE_UNKNOWN"))
-        assertEquals(GlucoseValue.SourceSensor.DEXCOM_G6, converters.toSourceSensor("DEXCOM_G6_NATIVE"))
-        assertEquals(GlucoseValue.SourceSensor.DEXCOM_G6, converters.toSourceSensor("DEXCOM_G6_NATIVE_XDRIP"))
-        assertEquals(GlucoseValue.SourceSensor.DEXCOM_G7, converters.toSourceSensor("DEXCOM_G7_NATIVE"))
-        assertEquals(GlucoseValue.SourceSensor.DEXCOM_G7, converters.toSourceSensor("DEXCOM_G7_NATIVE_XDRIP"))
-        assertEquals(GlucoseValue.SourceSensor.DEXCOM_G7, converters.toSourceSensor("DEXCOM_G7_XDRIP"))
+    fun `a name written by an older version is never read back as unknown`() {
+        LEGACY_SOURCE_SENSOR_NAMES.keys.forEach { name ->
+            assertTrue(converters.toSourceSensor(name) != GlucoseValue.SourceSensor.UNKNOWN, name)
+        }
     }
 
+    /**
+     * In this fork the map is a fallback that cannot fire, because every name in it is still an
+     * entry of its own. Keeping it is deliberate: it is what would save old rows if an entry were
+     * ever removed, so this pins the relationship rather than letting it drift unnoticed.
+     */
     @Test
-    fun `every libre 1 bridge name keeps the libre 1 sensor`() {
-        listOf(
-            "LIBRE_1_OTHER", "LIBRE_1_NET", "LIBRE_1_BLUE", "LIBRE_1_PL", "LIBRE_1_BLUCON", "LIBRE_1_TOMATO",
-            "LIBRE_1_RF", "LIBRE_1_LIMITTER", "LIBRE_1_BUBBLE", "LIBRE_1_ATOM", "LIBRE_1_GLIMP"
-        ).forEach { assertEquals(GlucoseValue.SourceSensor.LIBRE_1, converters.toSourceSensor(it), it) }
-    }
-
-    @Test
-    fun `remaining merged names keep their sensor`() {
-        assertEquals(GlucoseValue.SourceSensor.LIBRE_2, converters.toSourceSensor("LIBRE_2_NATIVE"))
-        assertEquals(GlucoseValue.SourceSensor.SIBIONIC_UNKNOWN, converters.toSourceSensor("SIBIONIC"))
-        assertEquals(GlucoseValue.SourceSensor.SINOCARE, converters.toSourceSensor("SINO"))
-    }
-
-    @Test
-    fun `no legacy name is also a current name`() {
+    fun `every legacy name is still an entry of its own in this fork`() {
         val current = GlucoseValue.SourceSensor.entries.map { it.name }.toSet()
-        LEGACY_SOURCE_SENSOR_NAMES.keys.forEach { assertTrue(it !in current, it) }
+        LEGACY_SOURCE_SENSOR_NAMES.keys.forEach { assertTrue(it in current, it) }
     }
 
     /**

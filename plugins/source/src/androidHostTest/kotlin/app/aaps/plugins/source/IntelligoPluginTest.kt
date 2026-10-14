@@ -2,6 +2,7 @@ package app.aaps.plugins.source
 
 import android.content.ContentResolver
 import android.database.Cursor
+import android.net.Uri
 import app.aaps.core.data.configuration.Constants
 import app.aaps.core.data.model.GV
 import app.aaps.core.data.model.GlucoseUnit
@@ -16,8 +17,12 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
+import org.mockito.MockedStatic
+import org.mockito.Mockito
+import org.mockito.ArgumentMatchers.anyString
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
@@ -31,10 +36,16 @@ class IntelligoPluginTest : TestBaseWithProfile() {
     @Mock lateinit var contentResolver: ContentResolver
     @Mock lateinit var cursor: Cursor
 
+    private lateinit var uriStatic: MockedStatic<Uri>
     private lateinit var intelligoPlugin: IntelligoPlugin
 
     @BeforeEach
     fun setup() {
+        // Uri.parse is a stub in a host test and gives back null, and the null check inside
+        // String.toUri() turns that into an exception before the plugin can even be built.
+        // The value does not matter here: the query is stubbed with anyOrNull().
+        uriStatic = Mockito.mockStatic(Uri::class.java)
+        uriStatic.`when`<Uri> { Uri.parse(anyString()) }.thenReturn(mock())
         whenever(context.contentResolver).thenReturn(contentResolver)
         whenever(contentResolver.query(anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(cursor)
         runTest {
@@ -47,6 +58,9 @@ class IntelligoPluginTest : TestBaseWithProfile() {
         whenever(cursor.isAfterLast).thenReturn(true)
         whenever(cursor.moveToFirst()).thenReturn(false)
     }
+
+    @AfterEach
+    fun closeUriStatic() = uriStatic.close()
 
     @Test
     fun `When plugin disabled then do nothing`() {

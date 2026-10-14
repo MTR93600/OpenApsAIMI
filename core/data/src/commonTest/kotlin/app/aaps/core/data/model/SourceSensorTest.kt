@@ -24,8 +24,11 @@ class SourceSensorTest {
     @Test
     fun `older aaps names still resolve`() {
         assertEquals(SourceSensor.DEXCOM_UNKNOWN, SourceSensor.fromString("AAPS-Dexcom"))
-        assertEquals(SourceSensor.DEXCOM_G6, SourceSensor.fromString("AAPS-DexcomG6"))
-        assertEquals(SourceSensor.DEXCOM_G7, SourceSensor.fromString("AAPS-DexcomG7"))
+        // The BYODA app sends these two, and this fork keeps them apart from a G6 or G7 read
+        // through a bridge: AIMI applies a correction to the native feed only. See
+        // `SourceSensorExtensionsTest`, which states the reason the entries still exist.
+        assertEquals(SourceSensor.DEXCOM_G6_NATIVE, SourceSensor.fromString("AAPS-DexcomG6"))
+        assertEquals(SourceSensor.DEXCOM_G7_NATIVE, SourceSensor.fromString("AAPS-DexcomG7"))
         assertEquals(SourceSensor.DEXCOM_UNKNOWN, SourceSensor.fromString("Share Follow"))
         assertEquals(SourceSensor.MM_UNKNOWN, SourceSensor.fromString("CareLink Follow"))
         assertEquals(SourceSensor.MEDTRUM_UNKNOWN, SourceSensor.fromString("Medtrum Native"))

@@ -76,7 +76,10 @@ class GlunovoPlugin(
     @VisibleForTesting
     var refreshLoop: Runnable
 
-    private val contentUri: Uri = "content://$AUTHORITY/$TABLE_NAME".toUri()
+    // Built on first use, not in the constructor. `Uri.parse` needs the Android framework, so an
+    // eager value made this plugin impossible to build in a plain unit test, and every test that
+    // builds the whole plugin graph failed here instead of testing what it meant to test.
+    private val contentUri: Uri by lazy { "content://$AUTHORITY/$TABLE_NAME".toUri() }
 
     init {
         refreshLoop = Runnable {

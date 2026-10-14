@@ -14,10 +14,23 @@ internal class SourceSensorExtensionTest {
         }
     }
 
+    /**
+     * Going the other way cannot be an identity here, and that is by design.
+     *
+     * This fork kept the per-bridge entity entries that upstream merged away, so several of them
+     * mean the same sensor to the rest of the app: `DEXCOM_NATIVE_UNKNOWN` and `DEXCOM_UNKNOWN`
+     * both read as `DEXCOM_UNKNOWN`, and only one of the two can come back from it. The entries
+     * stay because AIMI reads `DEXCOM_G6_NATIVE` and `DEXCOM_G7_NATIVE` to decide a correction for
+     * the native feed, and because an old row should keep the name it was written with.
+     *
+     * What the boundary does owe is that the meaning survives: once a row is read, writing it back
+     * and reading it again gives the same sensor.
+     */
     @Test
-    fun `entity fromDb then toDb is stable for all values`() {
+    fun `an entity value keeps its meaning through a round trip`() {
         GlucoseValue.SourceSensor.entries.forEach { value ->
-            assertEquals(value, value.fromDb().toDb())
+            val domain = value.fromDb()
+            assertEquals(domain, domain.toDb().fromDb(), value.name)
         }
     }
 
