@@ -308,9 +308,18 @@ private val migration34to35 = object : Migration(34, 35) {
  */
 internal val MIGRATION_35_TO_36_PAIRS: Map<String, String> = mapOf(
     "DEXCOM_NATIVE_UNKNOWN" to "DEXCOM_UNKNOWN",
-    "DEXCOM_G6_NATIVE" to "DEXCOM_G6",
+    // DEXCOM_G6_NATIVE and DEXCOM_G7_NATIVE are deliberately NOT rewritten here.
+    //
+    // Upstream merged those two entries away, so no query can bind their names any more and a row
+    // that kept one would never match again - which is why it rewrites them. This fork still has
+    // both entries, because AIMI reads them to decide a correction that applies to the native BYODA
+    // feed and not to the same sensor read through a bridge. Queries still bind these names, so the
+    // rows stay matchable, and rewriting them would throw that distinction away for every reading
+    // already recorded.
+    //
+    // The `_XDRIP` names below are rewritten, because `SourceSensorExtension.fromDb` maps them to
+    // the merged sensor anyway, so nothing is lost.
     "DEXCOM_G6_NATIVE_XDRIP" to "DEXCOM_G6",
-    "DEXCOM_G7_NATIVE" to "DEXCOM_G7",
     "DEXCOM_G7_NATIVE_XDRIP" to "DEXCOM_G7",
     "DEXCOM_G7_XDRIP" to "DEXCOM_G7",
     "LIBRE_1_OTHER" to "LIBRE_1",

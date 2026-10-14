@@ -36,13 +36,16 @@ class ContributedPluginsTest {
             10,
             // sensitivity
             100, 110, 120,
-            200, 210, 220, 230, 240,
-            400, 410, 420, 430, 440, 450, 460, 470, 480, 490, 500, 510, 520, 530, 540, 550,
+            // APS algorithms. 250 is AIMI, this fork's own, after 240.
+            200, 210, 220, 230, 240, 250,
+            // BG sources. 446 and 447 are this fork's native Dexcom ONE+ and Libre 3 drivers, which
+            // sit beside the other Dexcom and Libre entries.
+            400, 410, 420, 430, 440, 446, 447, 450, 460, 470, 480, 490, 500, 510, 520, 530, 540, 550,
             // sync - the every-build part of the 300 block. SmsCommunicator 300 and Tidepool 320 are
             // @NotNSClient; 340 (OpenHumans) comes from its own graph extension.
             310, 330, 350, 360, 370,
-            // smoothing
-            600, 610, 620, 630,
+            // smoothing. 615 is this fork's AdaptiveSmoothingPlugin.
+            600, 610, 615, 620, 630,
             // calibration
             700, 710,
             // constraints, every-build bucket only
