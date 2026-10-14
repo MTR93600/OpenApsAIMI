@@ -28,6 +28,7 @@ class AdaptiveSmoothingPluginTest : TestBaseWithProfile() {
 
     @Mock lateinit var persistenceLayer: PersistenceLayer
 
+
     private lateinit var plugin: AdaptiveSmoothingPlugin
 
     @BeforeEach
@@ -51,6 +52,7 @@ class AdaptiveSmoothingPluginTest : TestBaseWithProfile() {
         plugin = AdaptiveSmoothingPlugin(
             aapsLogger = aapsLogger,
             rh = rh,
+            notificationManager = notificationManager,
             rxBus = rxBus,
             config = config,
             persistenceLayer = persistenceLayer,

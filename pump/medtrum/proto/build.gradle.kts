@@ -43,6 +43,10 @@ kotlin {
         iosTest {
             dependencies {
                 implementation(kotlin("test"))
+                // The driver test drives suspend functions, so it needs runTest. Same BOM reason as
+                // above: this source set depends on no module that exports the coroutines BOM.
+                implementation(project.dependencies.platform(libs.kotlinx.coroutines.bom))
+                implementation(libs.kotlinx.coroutines.test)
             }
         }
 
