@@ -93,7 +93,9 @@ class PluginEnforcementTest {
 
     /** Production Kotlin sources, keyed by `<package path>/<SimpleName>.kt`. */
     private fun sourceIndex(root: File): Map<String, File> {
-        val skip = listOf("/build/", "/src/test", "/src/androidTest", "/src/androidHostTest", "/src/commonTest", "/src/iosTest")
+        // "/." skips every hidden directory, so a copy of the repository inside the repository -
+        // a tool worktree under `.claude/` - cannot replace the real file in this index.
+        val skip = listOf("/build/", "/.", "/src/test", "/src/androidTest", "/src/androidHostTest", "/src/commonTest", "/src/iosTest")
         return root.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .map { it to it.invariantSeparatorsPath }

@@ -138,7 +138,9 @@ class RawPreferenceStoreScanTest {
 
     /** Production Kotlin, excluding tests, build output, and `wear` - which has its own store. */
     private fun scan(): List<String> {
-        val skip = listOf("/build/", "/src/test", "/src/androidTest", "/src/androidHostTest", "/src/commonTest", "/src/iosTest", "/wear/")
+        // "/." skips every hidden directory, so a copy of the repository inside the repository -
+        // a tool worktree under `.claude/` - cannot replace the real file in this index.
+        val skip = listOf("/build/", "/.", "/src/test", "/src/androidTest", "/src/androidHostTest", "/src/commonTest", "/src/iosTest", "/wear/")
         val root = repoRoot()
         val files = root.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }

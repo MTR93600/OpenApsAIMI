@@ -109,7 +109,11 @@ class PluginLifetimeWorkScanTest {
 
     /** Production Kotlin sources, keyed by `<package path>/<SimpleName>.kt`, so a class maps to its file. */
     private fun sourceIndex(root: File): Map<String, File> {
-        val skip = listOf("/build/", "/src/test", "/src/androidTest", "/src/androidHostTest", "/src/commonTest", "/src/iosTest")
+        // "/." skips every hidden directory. A copy of the repository inside the repository must
+        // not be indexed: this index is keyed by package path, so a copy silently replaces the
+        // real file. Tool worktrees under `.claude/` did exactly that, and the scan then reported
+        // line numbers that do not exist and a waiver that only looked stale.
+        val skip = listOf("/build/", "/.", "/src/test", "/src/androidTest", "/src/androidHostTest", "/src/commonTest", "/src/iosTest")
         return root.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .map { it to it.invariantSeparatorsPath }
