@@ -38,7 +38,10 @@ data class MedtrumBasalRecord(
 
 data class MedtrumTddRecord(
     val timestamp: Long,
-    val tdd: Double
+    val tdd: Double,
+    val basalTdd: Double,
+    /** Android computes this as a Float subtraction (`tdd - basalTdd`), so the packet does the same. */
+    val bolusTdd: Double
 )
 
 /**
@@ -52,6 +55,23 @@ interface MedtrumRecordSync {
     fun syncBolusRecord(record: MedtrumBolusRecord, pumpSerialHex: String)
     fun syncBasalRecord(record: MedtrumBasalRecord, pumpSerialHex: String)
     fun syncTddRecord(record: MedtrumTddRecord, pumpSerialHex: String)
+
+    /**
+     * Android asks `pumpSync.expectedPumpState()` before it treats a basal record end reason as a
+     * pump suspend. Return false when the record is too old and a newer temp basal is running.
+     */
+    fun shouldSyncPumpSuspend(basalEndTime: Long): Boolean = true
+
+    /**
+     * The pump reported a basal status (from a notification or from a command answer). Android
+     * reconciles the temp basal history here (`MedtrumPump.handleBasalStatusUpdate`).
+     * [baseBasalRate] is the profile rate now, used to turn a relative rate into a percent.
+     * Returns the duration of the temp basal in minutes, 0 when none was started.
+     */
+    fun syncBasalStatus(basalType: BasalType, basalRate: Double, basalStartTime: Long, baseBasalRate: Double): Int = 0
+
+    /** A new patch was activated. Android adds a cannula change and an insulin change event. */
+    fun syncNewPatch(newStartTime: Long) = Unit
 
     companion object {
         val NO_OP: MedtrumRecordSync = object : MedtrumRecordSync {

@@ -230,10 +230,11 @@ class GetRecordPacket(
             logger.error("PUMPCOMM", "GetRecordPacket HandleResponse: BASAL_RECORD: Unknown basal end reason: $basalEndReasonInt")
         } else if (basalEndReason.isSuspendedByPump()) {
             // Pump doesn't seem to sync suspend/stop explicitly, so we need to do it here.
-            // The Android version queried pumpSync.expectedPumpState() to decide; in M1 the
-            // state update is delivered unconditionally via the state seam and M2/M3 refine it.
-            logger.warn("PUMPCOMM", "GetRecordPacket HandleResponse: Got suspended end reason, syncing suspend")
-            state.handleBasalStatusUpdate(BasalType.fromBasalEndReason(basalEndReason), 0.0, recordSequence, recordPatchId, basalEndTime)
+            // Same check as Android: skip when a newer, real temp basal is running (old record).
+            if (recordSync.shouldSyncPumpSuspend(basalEndTime)) {
+                logger.warn("PUMPCOMM", "GetRecordPacket HandleResponse: Got suspended end reason, syncing suspend")
+                state.handleBasalStatusUpdate(BasalType.fromBasalEndReason(basalEndReason), 0.0, recordSequence, recordPatchId, basalEndTime)
+            }
         }
     }
 
@@ -264,7 +265,12 @@ class GetRecordPacket(
         )
 
         recordSync.syncTddRecord(
-            MedtrumTddRecord(timestamp = timestamp, tdd = tdd.toDouble()),
+            MedtrumTddRecord(
+                timestamp = timestamp,
+                tdd = tdd.toDouble(),
+                basalTdd = basalTdd.toDouble(),
+                bolusTdd = (tdd - basalTdd).toDouble()
+            ),
             state.pumpSN.toString(radix = 16)
         )
     }

@@ -349,7 +349,7 @@ class MedtrumSession(
      * send the command, then await the pump-reported completion via
      * [waitForBolusProgress].
      */
-    suspend fun setBolus(insulin: Double): BolusResult {
+    suspend fun setBolus(insulin: Double, onStarted: suspend (startTime: Long) -> Unit = {}): BolusResult {
         // Reset the per-bolus verdict inputs FIRST (Android comment preserved in intent)
         state.bolusAmountDelivered = 0.0
         state.bolusStopped = false
@@ -377,6 +377,9 @@ class MedtrumSession(
             state.bolusErrorReason = "send_failed"
             return BolusResult.SEND_FAILED
         }
+        // Same place as Android: the command is sent, the bolus has started. The caller writes the
+        // temporary bolus so the loop counts the insulin while it is still being delivered.
+        onStarted(state.bolusStartTime)
         // The pump reports progress via notifications → handleBolusStatusUpdate.
         val progressOk = waitForBolusProgress()
         return when {

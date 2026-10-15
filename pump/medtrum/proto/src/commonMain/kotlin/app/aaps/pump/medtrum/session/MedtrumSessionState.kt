@@ -3,6 +3,7 @@ package app.aaps.pump.medtrum.session
 import app.aaps.pump.medtrum.code.ConnectionState
 import app.aaps.pump.medtrum.comm.MedtrumLogger
 import app.aaps.pump.medtrum.comm.MedtrumProtocolState
+import app.aaps.pump.medtrum.comm.MedtrumRecordSync
 import app.aaps.pump.medtrum.comm.enums.AlarmSetting
 import app.aaps.pump.medtrum.comm.enums.AlarmState
 import app.aaps.pump.medtrum.comm.enums.BasalType
@@ -26,6 +27,9 @@ class MedtrumSessionState(
     private val logger: MedtrumLogger = MedtrumLogger.NO_OP,
     val clock: MedtrumClock,
 ) : MedtrumProtocolState {
+
+    /** Where pump history goes. The pump driver sets it. The default drops everything. */
+    var recordSync: MedtrumRecordSync = MedtrumRecordSync.NO_OP
 
     // Identity
     override var pumpSN: Long = 0L
@@ -124,9 +128,11 @@ class MedtrumSessionState(
             "handleBasalStatusUpdate: basalType: $basalType basalValue: $basalRate basalSequence: $basalSequence " +
                 "basalPatchId: $basalPatchId basalStartTime: $basalStartTime receivedTime: $receivedTime"
         )
-        // Note: the Android version reconciles the AAPS temp-basal history here
-        // (pumpSync/temporaryBasalStorage). That is M3 — the session keeps the
-        // pump-reported state, which is what the protocol needs.
+        // Like Android: reconcile the AAPS temp basal history first, then keep the pump state.
+        val durationInMin = recordSync.syncBasalStatus(
+            basalType, basalRate, basalStartTime,
+            getHourlyBasalFromMedtrumProfileArray(actualBasalProfile, clock.nowMillis())
+        )
         lastBasalType = basalType
         lastBasalRate = basalRate
         lastBasalSequence = basalSequence
@@ -138,7 +144,7 @@ class MedtrumSessionState(
             logger.error("PUMPCOMM", "handleBasalStatusUpdate: PatchId in status update does not match current patchId!")
         }
         lastBasalStartTime = basalStartTime
-        lastBasalDuration = 0
+        lastBasalDuration = durationInMin
         // Interface members (kept in sync for packet consumers)
         this.lastBasalStartTime = basalStartTime
         this.lastBasalRate = basalRate
@@ -172,8 +178,8 @@ class MedtrumSessionState(
         patchStartTime = newStartTime
         currentSequenceNumber = sequenceNumber
         syncedSequenceNumber = 1
-        // Note: the Android version inserts CANNULA_CHANGE / INSULIN_CHANGE therapy
-        // events into pumpSync here — M3 via MedtrumRecordSync consumers.
+        // Like Android: cannula change and insulin change events.
+        recordSync.syncNewPatch(newStartTime)
     }
 
     override fun addAlarm(alarmState: AlarmState) {

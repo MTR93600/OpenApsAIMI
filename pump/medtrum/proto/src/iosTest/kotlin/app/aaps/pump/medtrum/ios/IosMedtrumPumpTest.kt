@@ -1,11 +1,14 @@
 package app.aaps.pump.medtrum.ios
 
 import app.aaps.core.data.pump.defs.PumpDescription
+import app.aaps.core.data.model.BS
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
+import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.pump.medtrum.code.ConnectionState
 import app.aaps.pump.medtrum.comm.MedtrumLogger
+import app.aaps.pump.medtrum.comm.enums.AlarmState
 import app.aaps.pump.medtrum.comm.enums.CommandType
 import app.aaps.pump.medtrum.comm.enums.MedtrumPumpState
 import app.aaps.pump.medtrum.session.FakeMedtrumBleTransport
@@ -54,12 +57,16 @@ class IosMedtrumPumpTest {
         val state: MedtrumSessionState,
         val pump: IosMedtrumPump,
         val logs: MutableList<String>,
+        val sync: RecordingPumpSync,
+        val infos: FakeDetailedBolusInfoStorage,
+        val tbrs: FakeTemporaryBasalStorage,
     )
 
     private fun CoroutineScope.newRig(clock: MedtrumClock = MedtrumClock.fixed(nowMs, minuteOfDay = 600, utcOffsetMinutes = 120)): Rig {
         val fake = FakeMedtrumBleTransport()
         val state = MedtrumSessionState(MedtrumLogger.NO_OP, clock).apply {
             pumpSN = 0x12345678L
+            deviceType = 80 // MD0201, a Nano
             patchSessionToken = 0xABCDEF01L
             pumpState = MedtrumPumpState.ACTIVE
         }
@@ -69,8 +76,15 @@ class IosMedtrumPumpTest {
             override fun error(tag: String, message: String) { logs.add("E $message") }
             override fun warn(tag: String, message: String) { logs.add("W $message") }
         }
-        val pump = IosMedtrumPump(fake, state, clock, TestTextResolver, scope = this, store = null, logger = logger)
-        return Rig(fake, state, pump, logs)
+        val sync = RecordingPumpSync()
+        val infos = FakeDetailedBolusInfoStorage()
+        val tbrs = FakeTemporaryBasalStorage()
+        val pump = IosMedtrumPump(
+            fake, state, clock, TestTextResolver,
+            pumpSync = sync, detailedBolusInfoStorage = infos, temporaryBasalStorage = tbrs,
+            scope = this, store = null, logger = logger
+        )
+        return Rig(fake, state, pump, logs, sync, infos, tbrs)
     }
 
     private fun scriptAuthSuccess(fake: FakeMedtrumBleTransport) {
@@ -101,6 +115,8 @@ class IosMedtrumPumpTest {
         scriptAuthSuccess(rig.fake)
         rig.pump.connect("test")
         assertTrue(waitUntil { rig.pump.isReady() }, "pump should reach READY")
+        // The scripted auth answer gives an unknown device type. A real Nano reports 80.
+        rig.state.deviceType = 80
         return rig
     }
 
@@ -379,6 +395,83 @@ class IosMedtrumPumpTest {
         // Without a resolver the text is not lost either.
         val plain = IosPumpEnactResult().comment(ref)
         assertEquals(ref.toString(), plain.comment)
+    }
+
+    // -- History: what the loop is told -------------------------------------------------------------
+
+    @Test
+    fun startedBolusIsWrittenAsTemporaryBolusWithTheAppInfo() = runBlocking {
+        val rig = readyRig()
+        rig.sync.calls.clear()
+        rig.fake.responses[CommandType.SET_BOLUS.code] = successResponse(CommandType.SET_BOLUS.code)
+        val info = bolusInfo(1.0).apply { bolusType = BS.Type.SMB }
+        val delivery = async { rig.pump.deliverTreatment(info) }
+        assertTrue(waitUntil { rig.sent(CommandType.SET_BOLUS) })
+        // The bolus is still running: the loop must already count it.
+        assertEquals(
+            listOf("addBolusWithTempId(timestamp=$nowMs, amount=1.0, temporaryId=$nowMs, type=SMB, pumpType=MEDTRUM_NANO, pumpSerial=12345678)"),
+            rig.sync.calls
+        )
+        assertEquals(listOf(info), rig.infos.infos)
+        assertEquals(nowMs, info.timestamp)
+        rig.state.handleBolusStatusUpdate(1, true, 1.0)
+        delivery.await()
+        Unit
+    }
+
+    @Test
+    fun bolusStoppedBeforeAnyInsulinSyncsZeroUnits() = runBlocking {
+        val rig = readyRig()
+        rig.sync.calls.clear()
+        rig.fake.responses[CommandType.SET_BOLUS.code] = successResponse(CommandType.SET_BOLUS.code)
+        rig.fake.responses[CommandType.CANCEL_BOLUS.code] = successResponse(CommandType.CANCEL_BOLUS.code)
+        val delivery = async { rig.pump.deliverTreatment(bolusInfo(2.0).apply { bolusType = BS.Type.SMB }) }
+        assertTrue(waitUntil { rig.sent(CommandType.SET_BOLUS) })
+        rig.pump.stopBolusDelivering()
+        val cancelSent = waitUntil(2_000) { rig.sent(CommandType.CANCEL_BOLUS) }
+        if (!cancelSent) rig.state.handleBolusStatusUpdate(1, true, 2.0)
+        delivery.await()
+        assertTrue(cancelSent)
+        assertEquals(2, rig.sync.calls.size, rig.sync.calls.toString())
+        assertEquals(
+            "syncBolusWithTempId(timestamp=$nowMs, amount=0.0, temporaryId=$nowMs, type=SMB, pumpId=$nowMs, pumpType=MEDTRUM_NANO, pumpSerial=12345678)",
+            rig.sync.calls[1]
+        )
+        assertTrue(rig.infos.infos.isEmpty())
+    }
+
+    @Test
+    fun tempBasalRequestIsStoredAndTheStatusFromThePumpIsSynced() = runBlocking {
+        val rig = readyRig()
+        rig.sync.calls.clear()
+        val pumpSeconds = (nowMs - MedtrumTimeUtil.PUMP_EPOCH_MILLIS) / 1000
+        // Answer: basal type 6 (absolute temp), rate 20 * 0.05 = 1.0, sequence 3, patch 0, start time.
+        rig.fake.responses[CommandType.SET_TEMP_BASAL.code] = successResponse(
+            CommandType.SET_TEMP_BASAL.code, 6, 20, 0, 3, 0, 0, 0,
+            pumpSeconds.toByte(), (pumpSeconds shr 8).toByte(), (pumpSeconds shr 16).toByte(), (pumpSeconds shr 24).toByte()
+        )
+        val result = rig.pump.setTempBasalAbsolute(1.0, 30, false, PumpSync.TemporaryBasalType.NORMAL)
+        assertTrue(result.success, result.comment)
+        assertEquals(
+            listOf("syncTemporaryBasalWithPumpId(timestamp=$nowMs, rate=1.0, duration=${30 * 60_000L}, isAbsolute=true, type=NORMAL, pumpId=$nowMs, pumpType=MEDTRUM_NANO, pumpSerial=12345678)"),
+            rig.sync.calls
+        )
+        assertTrue(rig.tbrs.items.isEmpty(), "the request was used")
+    }
+
+    @Test
+    fun pumpStateChangeToAnAlarmIsAnnouncedAndAFakeTempBasalIsSet() = runBlocking {
+        val rig = readyRig()
+        rig.sync.calls.clear()
+        rig.state.pumpState = MedtrumPumpState.OCCLUSION
+        rig.pump.publishState()
+        assertEquals(2, rig.sync.calls.size, rig.sync.calls.toString())
+        assertEquals("insertAnnouncement(error=Occlusion, pumpId=null, pumpType=MEDTRUM_NANO, pumpSerial=12345678)", rig.sync.calls[0])
+        assertTrue(rig.sync.calls[1].startsWith("syncTemporaryBasalWithPumpId(timestamp=$nowMs, rate=0.0, duration=${4800 * 60_000L}, isAbsolute=true, type=PUMP_SUSPEND"))
+        assertTrue(AlarmState.OCCLUSION in rig.state.activeAlarms)
+        // The same state again writes nothing more.
+        rig.pump.publishState()
+        assertEquals(2, rig.sync.calls.size)
     }
 
     // -- Store: patch state survives a restart -------------------------------------------

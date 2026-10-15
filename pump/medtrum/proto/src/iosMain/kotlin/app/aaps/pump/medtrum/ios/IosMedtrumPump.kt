@@ -6,17 +6,20 @@ import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.interfaces.pump.defs.fillFor
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
+import app.aaps.core.interfaces.pump.DetailedBolusInfoStorage
 import app.aaps.core.interfaces.pump.Pump
 import app.aaps.core.interfaces.pump.PumpEnactResult
 import app.aaps.core.interfaces.pump.PumpProfile
 import app.aaps.core.interfaces.pump.PumpRate
 import app.aaps.core.interfaces.pump.PumpInsulin
 import app.aaps.core.interfaces.pump.PumpSync
+import app.aaps.core.interfaces.pump.TemporaryBasalStorage
 import app.aaps.core.interfaces.pump.actions.CustomAction
 import app.aaps.core.interfaces.pump.actions.CustomActionType
 import app.aaps.core.interfaces.queue.CustomCommand
 import app.aaps.pump.medtrum.code.ConnectionState
 import app.aaps.pump.medtrum.comm.MedtrumLogger
+import app.aaps.pump.medtrum.comm.enums.BasalType
 import app.aaps.pump.medtrum.comm.enums.MedtrumPumpState
 import app.aaps.pump.medtrum.session.MedtrumBleTransport
 import app.aaps.pump.medtrum.session.MedtrumClock
@@ -50,6 +53,10 @@ class IosMedtrumPump(
     val state: MedtrumSessionState,
     private val clock: MedtrumClock,
     private val textResolver: TextResolver,
+    /** The loop reads the pump history from here. The driver writes every bolus, temp basal and alarm to it. */
+    pumpSync: PumpSync,
+    detailedBolusInfoStorage: DetailedBolusInfoStorage,
+    temporaryBasalStorage: TemporaryBasalStorage,
     /**
      * Scope for the work the driver starts itself (connect, stop bolus). The owner creates it and
      * cancels it. Cancel it together with [close].
@@ -59,9 +66,20 @@ class IosMedtrumPump(
     private val logger: MedtrumLogger = MedtrumLogger.NO_OP,
 ) : Pump {
 
+    private val history = MedtrumPumpSyncHistory(
+        pumpSync = pumpSync,
+        detailedBolusInfoStorage = detailedBolusInfoStorage,
+        temporaryBasalStorage = temporaryBasalStorage,
+        deviceType = { state.deviceType },
+        serialProvider = { state.pumpSN.toString(radix = 16) },
+        nowMillis = clock::nowMillis,
+        logger = logger,
+    ).also { state.recordSync = it }
+
     private val session = MedtrumSession(
         transport = transport,
         state = state,
+        recordSync = history,
         logger = logger,
         clock = clock,
         // Medtrum basal schedules run on the pump local time. The clock knows the phone offset.
@@ -157,6 +175,33 @@ class IosMedtrumPump(
         if (state.pumpState != publishedPumpState) {
             publishedPumpState = state.pumpState
             store?.save(state)
+            onPumpStateChanged(state.pumpState)
+        }
+    }
+
+    /**
+     * Android `MedtrumService.handlePumpStateUpdate`, the part that writes history: an alarm state
+     * adds the alarm and an announcement. Without a running patch, and after an error, a fake zero
+     * temp basal is set so the loop knows that no insulin comes out.
+     */
+    private fun onPumpStateChanged(newState: MedtrumPumpState) {
+        val alarm = history.announcePumpState(newState)
+        if (alarm != null) state.addAlarm(alarm)
+        val needsFakeTbr = when (newState) {
+            MedtrumPumpState.NONE, MedtrumPumpState.STOPPED,
+            MedtrumPumpState.IDLE, MedtrumPumpState.FILLED,
+            MedtrumPumpState.PRIMING, MedtrumPumpState.PRIMED,
+            MedtrumPumpState.EJECTING, MedtrumPumpState.EJECTED,
+            MedtrumPumpState.OCCLUSION, MedtrumPumpState.EXPIRED,
+            MedtrumPumpState.RESERVOIR_EMPTY, MedtrumPumpState.PATCH_FAULT,
+            MedtrumPumpState.PATCH_FAULT2, MedtrumPumpState.BASE_FAULT,
+            MedtrumPumpState.BATTERY_OUT, MedtrumPumpState.NO_CALIBRATION -> true
+            else -> false
+        }
+        if (needsFakeTbr && history.setFakeTbrIfNotSet()) {
+            state.lastBasalType = BasalType.NONE
+            state.lastBasalRate = 0.0
+            state.lastBasalDuration = MedtrumPumpSyncHistory.FAKE_TBR_LENGTH_MIN.toInt()
         }
     }
 
@@ -199,9 +244,18 @@ class IosMedtrumPump(
             if (!isReady()) return failClosed("Pump not ready — bolus refused")
             busy = true
             try {
-                val result = session.setBolus(detailedBolusInfo.insulin)
+                var bolusStart: Long? = null
+                val result = session.setBolus(detailedBolusInfo.insulin) { start ->
+                    bolusStart = start
+                    history.bolusStarted(detailedBolusInfo, start)
+                }
                 // The amount comes from the pump, never from the request.
                 val delivered = state.bolusAmountDelivered
+                // Android: stopped before any insulin came out. The pump writes no record for this.
+                val startedAt = bolusStart
+                if (startedAt != null && state.bolusStopped && delivered == 0.0) {
+                    history.bolusStoppedWithoutInsulin(detailedBolusInfo, startedAt)
+                }
                 val verdict = bolusVerdict(result, detailedBolusInfo.insulin, delivered, pumpDescription.bolusStep)
                 if (verdict && delivered > 0.0) {
                     state.lastBolusAmount = delivered
@@ -241,6 +295,8 @@ class IosMedtrumPump(
         if (!isReady()) return failClosed("Pump not ready — TBR refused")
         busy = true
         try {
+            // Android stores the request first. The status from the pump is matched with it.
+            history.rememberTempBasalRequest(absoluteRate, durationInMinutes, tbrType)
             if (session.setTempBasal(absoluteRate, durationInMinutes)) {
                 enactResult(
                     success = true, enacted = true,
