@@ -6,7 +6,7 @@ import app.aaps.core.data.json.OrgJsonCompat.optDoubleCompat
 import app.aaps.core.data.json.OrgJsonCompat.optStringCompat
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.StringKey
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AiCoachingService
@@ -24,7 +24,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 
 internal class TpoLlmValidator(
-    private val sp: KeyValueStore,
+    private val preferences: Preferences,
     private val aiCoachingService: AiCoachingService,
     private val aapsLogger: AAPSLogger,
 ) {
@@ -39,7 +39,7 @@ internal class TpoLlmValidator(
         ledger: TpoEpisodeLedger,
     ): TpoLlmResult = withContext(aapsIoDispatcher) {
         val started = aimiWallClockMs()
-        if (!sp.getBoolean(BooleanKey.OApsAIMIContextLLMEnabled.key, false)) {
+        if (!preferences.get(BooleanKey.OApsAIMIContextLLMEnabled)) {
             return@withContext TpoLlmResult(
                 verdict = TpoLlmVerdict.CONFIRM,
                 confidence = 1.0,
@@ -172,7 +172,7 @@ Rules:
     }
 
     private fun resolveProvider(): AiCoachingService.Provider {
-        val providerStr = sp.getString(StringKey.AimiAdvisorProvider.key, "OPENAI")
+        val providerStr = preferences.get(StringKey.AimiAdvisorProvider)
         return when (providerStr) {
             "GEMINI" -> AiCoachingService.Provider.GEMINI
             "DEEPSEEK" -> AiCoachingService.Provider.DEEPSEEK
@@ -183,9 +183,9 @@ Rules:
 
     private fun resolveApiKey(provider: AiCoachingService.Provider): String =
         when (provider) {
-            AiCoachingService.Provider.OPENAI -> sp.getString(StringKey.AimiAdvisorOpenAIKey.key, "")
-            AiCoachingService.Provider.GEMINI -> sp.getString(StringKey.AimiAdvisorGeminiKey.key, "")
-            AiCoachingService.Provider.DEEPSEEK -> sp.getString(StringKey.AimiAdvisorDeepSeekKey.key, "")
-            AiCoachingService.Provider.CLAUDE -> sp.getString(StringKey.AimiAdvisorClaudeKey.key, "")
+            AiCoachingService.Provider.OPENAI -> preferences.get(StringKey.AimiAdvisorOpenAIKey)
+            AiCoachingService.Provider.GEMINI -> preferences.get(StringKey.AimiAdvisorGeminiKey)
+            AiCoachingService.Provider.DEEPSEEK -> preferences.get(StringKey.AimiAdvisorDeepSeekKey)
+            AiCoachingService.Provider.CLAUDE -> preferences.get(StringKey.AimiAdvisorClaudeKey)
         }
 }

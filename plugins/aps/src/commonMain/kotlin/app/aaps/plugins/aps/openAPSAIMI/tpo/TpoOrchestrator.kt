@@ -7,7 +7,6 @@ import app.aaps.plugins.aps.openAPSAIMI.ports.AimiTpo
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.resources.TextResolver
-import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AiCoachingService
@@ -35,7 +34,6 @@ class TpoOrchestrator @Inject constructor(
     private val preferences: Preferences,
     private val storage: AimiStorage,
     private val aiCoachingService: AiCoachingService,
-    private val sp: KeyValueStore,
     private val aapsLogger: AAPSLogger,
     private val tpoNotifications: TpoNotifications,
     private val keyValueCache: AimiKeyValueCache,
@@ -43,7 +41,7 @@ class TpoOrchestrator @Inject constructor(
 ) : AimiTpo {
     private val persistence = TpoPersistence(storage)
     private val sessionManager = TpoSessionManager(persistence)
-    private val llmValidator = TpoLlmValidator(sp, aiCoachingService, aapsLogger)
+    private val llmValidator = TpoLlmValidator(preferences, aiCoachingService, aapsLogger)
     private val scope = CoroutineScope(SupervisorJob() + aapsIoDispatcher)
     private val historyRepo by lazy { AdvisorHistoryRepository(keyValueCache) }
 

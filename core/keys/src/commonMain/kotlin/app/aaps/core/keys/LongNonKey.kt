@@ -49,5 +49,11 @@ enum class LongNonKey(
      * exportable: it describes this phone's last run and means nothing on another one.
      */
     AimiPhysioLastUpdate("aimi_physio_last_update_ms", 0L, exportable = false),
+
+    /**
+     * When Health Connect steps were last synced. Runtime state, not a setting, and not exportable:
+     * it describes this phone's last sync and means nothing on another one.
+     */
+    AimiHealthConnectLastSync("aimi_health_connect_last_sync_ms", 0L, exportable = false),
 }
 

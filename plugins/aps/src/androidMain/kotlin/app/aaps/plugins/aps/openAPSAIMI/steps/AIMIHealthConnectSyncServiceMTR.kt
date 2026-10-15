@@ -6,12 +6,14 @@ import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
+import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.keys.LongNonKey
+import app.aaps.core.keys.BooleanKey
 import app.aaps.core.data.model.HR
 import app.aaps.core.data.model.SC
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
@@ -54,7 +56,7 @@ import dev.zacsweers.metro.AppScope
 class AIMIHealthConnectSyncServiceMTR @Inject constructor(
     private val context: Context,
     private val persistenceLayer: PersistenceLayer,
-    private val sp: KeyValueStore,
+    private val preferences: Preferences,
     private val aapsLogger: AAPSLogger
 ) {
     
@@ -72,8 +74,6 @@ class AIMIHealthConnectSyncServiceMTR @Inject constructor(
         /** HR must use a wide lookback: periodic sync runs every 4h; a 5min window often contains zero samples. */
         private const val HR_LOOKBACK_MS = 24 * 60 * 60 * 1000L
         private const val SOURCE_DEVICE = "HealthConnect"
-        private const val PREF_KEY_ENABLED = "aimi_health_connect_steps_enable"
-        private const val PREF_KEY_LAST_SYNC = "aimi_health_connect_last_sync_ms"
     }
 
     // Timer removed in favor of WorkManager
@@ -101,7 +101,7 @@ class AIMIHealthConnectSyncServiceMTR @Inject constructor(
         aapsLogger.info(LTag.APS, "[$TAG] Scheduling Health Connect sync (every 4h)")
         
         // Restore last sync timestamp
-        lastSyncTimestamp = sp.getLong(PREF_KEY_LAST_SYNC, 0L)
+        lastSyncTimestamp = preferences.get(LongNonKey.AimiHealthConnectLastSync)
         
         schedulePeriodicSync()
     }
@@ -175,7 +175,7 @@ class AIMIHealthConnectSyncServiceMTR @Inject constructor(
             syncHeartRate(client, now, now - HR_LOOKBACK_MS)
 
             lastSyncTimestamp = now
-            sp.putLong(PREF_KEY_LAST_SYNC, now)
+            preferences.put(LongNonKey.AimiHealthConnectLastSync, now)
             
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "[$TAG] Sync failed", e)
@@ -353,7 +353,7 @@ class AIMIHealthConnectSyncServiceMTR @Inject constructor(
      * Checks if Health Connect sync is enabled in preferences
      */
     private fun isEnabled(): Boolean {
-        return sp.getBoolean(PREF_KEY_ENABLED, true) // Default: enabled
+        return preferences.get(BooleanKey.AimiHealthConnectStepsEnable) // Default: enabled
     }
     
     /**

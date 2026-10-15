@@ -12,8 +12,9 @@ import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.StringKey
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent.*
 import app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey
@@ -75,7 +76,7 @@ import kotlin.time.Duration.Companion.minutes
 class ContextManager @Inject constructor(
     private val contextLLMClient: AimiContextLlm,
     private val contextParser: ContextParser,
-    private val sp: KeyValueStore,
+    private val preferences: Preferences,
     internal val aapsLogger: AAPSLogger,  // Internal for inline functions
     private val persistenceLayer: PersistenceLayer,  // For NS sync
     private val dateUtil: DateUtil
@@ -396,23 +397,23 @@ class ContextManager @Inject constructor(
      * Check if context module is enabled.
      */
     fun isEnabled(): Boolean {
-        return sp.getBoolean(app.aaps.core.keys.BooleanKey.OApsAIMIContextEnabled.key, false)
+        return preferences.get(BooleanKey.OApsAIMIContextEnabled)
     }
 
     // Private helpers
 
     private fun shouldUseLLM(): Boolean {
-        if (!sp.getBoolean(app.aaps.core.keys.BooleanKey.OApsAIMIContextLLMEnabled.key, false)) {
+        if (!preferences.get(BooleanKey.OApsAIMIContextLLMEnabled)) {
             return false
         }
 
         // CHECK SHARED/ADVISOR KEYS instead of legacy Context Keys
-        val provider = sp.getString(StringKey.AimiAdvisorProvider.key, "OPENAI")
+        val provider = preferences.get(StringKey.AimiAdvisorProvider)
         val apiKey = when (provider) {
-            "OPENAI" -> sp.getString(StringKey.AimiAdvisorOpenAIKey.key, "")
-            "GEMINI" -> sp.getString(StringKey.AimiAdvisorGeminiKey.key, "")
-            "DEEPSEEK" -> sp.getString(StringKey.AimiAdvisorDeepSeekKey.key, "")
-            "CLAUDE" -> sp.getString(StringKey.AimiAdvisorClaudeKey.key, "")
+            "OPENAI" -> preferences.get(StringKey.AimiAdvisorOpenAIKey)
+            "GEMINI" -> preferences.get(StringKey.AimiAdvisorGeminiKey)
+            "DEEPSEEK" -> preferences.get(StringKey.AimiAdvisorDeepSeekKey)
+            "CLAUDE" -> preferences.get(StringKey.AimiAdvisorClaudeKey)
             else -> ""
         }
 
@@ -483,7 +484,7 @@ class ContextManager @Inject constructor(
                 }
             }
 
-            sp.putString(StringKey.OApsAIMIContextStorage.key, jsonArray.toString())
+            preferences.put(StringKey.OApsAIMIContextStorage, jsonArray.toString())
 
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "[ContextManager] Save failed: ${e.message}")
@@ -493,7 +494,7 @@ class ContextManager @Inject constructor(
     private fun loadFromStorage() {
         try {
             // Read and parse outside the lock; only the handover to the map is guarded.
-            val jsonStr = sp.getString(StringKey.OApsAIMIContextStorage.key, "")
+            val jsonStr = preferences.get(StringKey.OApsAIMIContextStorage)
             if (jsonStr.isBlank()) return
 
             val jsonArray = Json.parseToJsonElement(jsonStr).jsonArray
@@ -673,7 +674,7 @@ class ContextManager @Inject constructor(
      * Skips local parsing, direct injection.
      */
     fun injectContextFromNS(intentId: String, intent: ContextIntent, receivedPin: String? = null) {
-        val configuredPin = sp.getString(AimiStringKey.RemoteControlPin.key, "").trim()
+        val configuredPin = preferences.get(AimiStringKey.RemoteControlPin).trim()
         val incomingPin = receivedPin?.trim().orEmpty()
         if (configuredPin.isBlank()) {
             aapsLogger.warn(LTag.APS, "[ContextManager] Rejecting NS context $intentId: AIMI remote PIN not configured")

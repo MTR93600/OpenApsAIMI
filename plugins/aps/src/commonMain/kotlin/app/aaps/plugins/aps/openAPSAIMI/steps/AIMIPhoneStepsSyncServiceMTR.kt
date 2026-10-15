@@ -1,12 +1,13 @@
 package app.aaps.plugins.aps.openAPSAIMI.steps
 
+import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.keys.BooleanKey
 import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 
 import app.aaps.core.data.model.SC
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import app.aaps.plugins.aps.openAPSAIMI.StepService
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import dev.zacsweers.metro.Inject
@@ -36,7 +37,7 @@ import kotlinx.coroutines.launch
 @SingleIn(AppScope::class)
 class AIMIPhoneStepsSyncServiceMTR @Inject constructor(
     private val persistenceLayer: PersistenceLayer,
-    private val sp: KeyValueStore,
+    private val preferences: Preferences,
     private val aapsLogger: AAPSLogger
 ) {
     private val ioScope = CoroutineScope(SupervisorJob() + aapsIoDispatcher)
@@ -45,7 +46,6 @@ class AIMIPhoneStepsSyncServiceMTR @Inject constructor(
         private const val TAG = "PhoneStepsSync"
         private const val SYNC_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
         private const val SOURCE_DEVICE = "PhoneSensor"
-        private const val PREF_KEY_ENABLED = "aimi_phone_steps_sync_enable"
     }
 
     private var syncJob: Job? = null
@@ -145,6 +145,6 @@ class AIMIPhoneStepsSyncServiceMTR @Inject constructor(
      * Checks if phone steps sync is enabled
      */
     private fun isEnabled(): Boolean {
-        return sp.getBoolean(PREF_KEY_ENABLED, true) // Default: enabled
+        return preferences.get(BooleanKey.AimiPhoneStepsSyncEnable)
     }
 }

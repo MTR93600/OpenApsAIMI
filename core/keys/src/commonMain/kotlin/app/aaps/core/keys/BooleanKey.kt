@@ -839,6 +839,12 @@ enum class BooleanKey(
      * multiplier. Off by default: the night path is newer and has not been measured on real days yet.
      */
     AimiHrvBaselinePerNight("aimi_hrv_baseline_per_night", false, title = KeysStrings.pref_title_aimi_hrv_baseline_per_night),
+
+    /** Sync step counts from the phone's own sensor. */
+    AimiPhoneStepsSyncEnable("aimi_phone_steps_sync_enable", true, title = KeysStrings.pref_title_aimi_phone_steps_sync_enable),
+
+    /** Sync step counts from Health Connect. */
+    AimiHealthConnectStepsEnable("aimi_health_connect_steps_enable", true, title = KeysStrings.pref_title_aimi_health_connect_steps_enable),
     AimiPhysioDebugLogs("aimi_physio_debug_logs", false, title = KeysStrings.pref_title_aimi_physio_debug_logs),
     // 🌸 Endometriosis & Cycle Management (MTR)
     AimiEndometriosisEnable("aimi_endo_enable", false, title = KeysStrings.pref_title_aimi_endometriosis_enable),

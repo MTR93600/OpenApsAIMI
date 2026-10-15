@@ -53,6 +53,16 @@ class RawPreferenceStoreScanTest {
         "implementation/src/commonMain/kotlin/app/aaps/implementation/sharedPreferences/PreferencesImpl.kt" to "Preferences itself, which is what everything else is supposed to use",
         "shared/tests/src/androidMain/kotlin/app/aaps/shared/tests/SharedPreferencesMock.kt" to "the test double for the store; it lives in a main source set so tests in other modules can use it",
 
+        "implementation/src/iosMain/kotlin/app/aaps/implementation/sharedPreferences/IosKeyValueStore.kt" to "the iOS key-value store implementation",
+        "plugins/aps/src/androidMain/kotlin/app/aaps/plugins/aps/openAPSAIMI/utils/AndroidAimiKeyValueCache.kt" to "the AIMI cache over the store; it is the thing that holds the store",
+        "ios/shell/src/iosMain/kotlin/app/aaps/ios/shell/di/IosAppGraph.kt" to "DI wiring, iOS app graph",
+        "plugins/aps/src/iosMain/kotlin/app/aaps/plugins/aps/openAPSAIMI/di/IosAimiEngineGraph.kt" to "DI wiring, iOS AIMI engine graph",
+        "plugins/aps/src/androidMain/kotlin/app/aaps/plugins/aps/openAPSAIMI/advisor/diag/AndroidAimiDiagPlatform.kt" to
+            "allPreferences() dumps every stored key for a diagnostic, including keys it has never heard of, which Preferences cannot do by design",
+        "plugins/aps/src/androidMain/kotlin/app/aaps/plugins/aps/openAPSAIMI/OpenAPSAIMIPlugin.kt" to
+            "reads the retired key key_use_Aimi_autoDrive once, to migrate it to BooleanKey.OApsAIMIautoDriveActive. A key that no longer exists cannot be read through Preferences",
+        "tools/aimi_viewer/android/app/src/main/kotlin/app/aaps/aimi_viewer/MainActivity.kt" to "a separate viewer app, not part of AAPS and with no access to its key registry",
+
         // --- Moves the whole store, not a setting ---
         // These are the import, the export and the cloud copies of them. They are SUPPOSED to see every
         // key, including ones they have never heard of, so going through `Preferences` would defeat
@@ -104,6 +114,14 @@ class RawPreferenceStoreScanTest {
      * would delete. **This map may only ever get shorter.**
      */
     private val toDo: Map<String, String> = mapOf(
+        "plugins/aps/src/androidMain/kotlin/app/aaps/plugins/aps/openAPSAIMI/advisor/modesettings/ui/AimiModeSettingsScreen.kt" to
+            "AIMI mode settings keep their own preference file. Moving them into registered keys needs a migration, because the values are live user settings that have to be carried across, not abandoned.",
+        "plugins/aps/src/androidMain/kotlin/app/aaps/plugins/aps/openAPSAIMI/sos/EmergencySosManager.kt" to
+            "Emergency SOS keeps its own preference file. Same migration question as the mode settings above.",
+        "plugins/dexcom_oneplus/src/main/kotlin/app/aaps/plugins/dexcomoneplus/identity/OnePlusSensorStore.kt" to
+            "ONE+ sensor identity, including the pairing key. Same shape as the pump drivers below: live device state, so it needs a migration, and a sensor secret in the export file needs an answer first.",
+        "plugins/libre3/src/main/kotlin/app/aaps/plugins/libre3/identity/Libre3SensorStore.kt" to
+            "Libre 3 sensor identity, same question as the ONE+ store above.",
         "pump/combov2/src/main/kotlin/info/nightscout/pump/combov2/AAPSPumpStateStore.kt" to
             "ComboV2 pump state. Deferred WITH a migration (agreed 2026-09-22) - the values are live pump state, so they have to be carried across, not abandoned. Plan 3.1.2.",
         "pump/combov2/src/main/kotlin/info/nightscout/pump/combov2/ComboV2Plugin.kt" to "ComboV2, same migration",

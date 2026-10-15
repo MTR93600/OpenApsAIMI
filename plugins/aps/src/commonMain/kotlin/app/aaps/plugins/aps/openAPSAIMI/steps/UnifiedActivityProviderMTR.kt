@@ -1,11 +1,11 @@
 package app.aaps.plugins.aps.openAPSAIMI.steps
 
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.data.model.SC
 import app.aaps.core.data.model.HR
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import app.aaps.plugins.aps.openAPSAIMI.aimiIsMainThread
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.keys.ACTIVITY_SOURCE_MODE_DISABLED
@@ -36,7 +36,7 @@ import kotlinx.coroutines.runBlocking
 @SingleIn(AppScope::class)
 class UnifiedActivityProviderMTR @Inject constructor(
     private val persistenceLayer: PersistenceLayer,
-    private val sp: KeyValueStore,
+    private val preferences: Preferences,
     private val aapsLogger: AAPSLogger
 ) : ActivityVitalsProvider {
 
@@ -257,7 +257,7 @@ class UnifiedActivityProviderMTR @Inject constructor(
     }
 
     private fun getMode(): String {
-        return sp.getString(PREF_KEY_SOURCE_MODE, DEFAULT_MODE)
+        return preferences.get(AimiStringKey.ActivitySourceMode)
     }
 
     private fun toStepsResult(sc: SC): StepsResult {

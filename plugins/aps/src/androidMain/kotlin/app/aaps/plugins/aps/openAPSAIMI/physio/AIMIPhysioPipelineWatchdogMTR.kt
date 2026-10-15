@@ -1,9 +1,10 @@
 package app.aaps.plugins.aps.openAPSAIMI.physio
 
+import app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.steps.AIMIHealthConnectSyncServiceMTR
 import app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR
@@ -21,7 +22,7 @@ class AIMIPhysioPipelineWatchdogMTR @Inject constructor(
     private val permissionsHandler: AIMIHealthConnectPermissionsHandlerMTR,
     private val healthConnectSync: AIMIHealthConnectSyncServiceMTR,
     private val healthRepo: HealthContextRepository,
-    private val sp: KeyValueStore,
+    private val preferences: Preferences,
     private val aapsLogger: AAPSLogger
 ) {
 
@@ -72,8 +73,7 @@ class AIMIPhysioPipelineWatchdogMTR @Inject constructor(
         }
 
         val snap = healthRepo.getLastSnapshot()
-        val mode = sp.getString(UnifiedActivityProviderMTR.PREF_KEY_SOURCE_MODE, UnifiedActivityProviderMTR.DEFAULT_MODE)
-            ?: UnifiedActivityProviderMTR.DEFAULT_MODE
+        val mode = preferences.get(AimiStringKey.ActivitySourceMode)
         val activityDisabled = mode == UnifiedActivityProviderMTR.MODE_DISABLED
 
         val issues = mutableListOf<String>()
