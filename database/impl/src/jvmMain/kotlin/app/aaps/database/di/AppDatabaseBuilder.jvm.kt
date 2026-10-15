@@ -44,6 +44,14 @@ class JvmAppDatabaseBuilder {
     fun provideAppRepository(fileName: String): AppRepository =
         AppRepository { provideAppDatabase(fileName) }
 
+    /**
+     * The three therapy windows, read on the calling thread via [RoomTherapyWindowReads].
+     *
+     * Same shape as the iOS builder, so the shared caller gets the same object on both targets.
+     */
+    fun provideTherapyWindowReads(fileName: String): RoomTherapyWindowReads =
+        RoomTherapyWindowReads(provideAppDatabase(fileName))
+
     /** [driver] is only changed by tests, which wrap it to see the SQL the DAOs run. */
     internal fun provideAppDatabase(fileName: String, driver: SQLiteDriver = BundledSQLiteDriver()): AppDatabase =
         Room
