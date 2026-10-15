@@ -7,6 +7,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -100,5 +101,72 @@ class KalmanFilterTest {
 
         assertEquals(223.3, isf, 1.0)
         assertTrue(isf < 300.0, "the floor must not have been pushed to MAX_ISF, isf was $isf")
+    }
+
+    /**
+     * When the caller knows the profile ISF, the floor follows it:
+     * `min(30, 1800/55) * 0.5 = 15.0`.
+     */
+    @Test
+    fun `the floor is relative to the profile when the profile is known`() {
+        val tddCalculator = mock<TddCalculator>()
+        val preferences = mock<Preferences>()
+        val logger = mock<AAPSLogger>()
+        whenever(preferences.get(DoubleKey.OApsAIMITDD7)).thenReturn(55.0)
+
+        val calculator = KalmanISFCalculator(tddCalculator, preferences, logger)
+
+        val isf = calculator.calculateISF(250.0, 0.0, 0.0, profileIsfMgdl = 30.0)
+
+        assertEquals(15.0, isf, 0.2)
+    }
+
+    /**
+     * Safety invariant. The floor must stay under what the `IsfAdjustmentEngine` blend produces
+     * before its rate limiter (at least 0.58 x profile ISF), so in steady state
+     * `max(kalmanFastIsf, isfAdj)` in the plugin keeps discarding the Kalman value. It is a
+     * steady-state property only: the engine rate-limits against its own previous anchor, so just
+     * after the profile ISF steps up at a block boundary `isfAdj` can sit below the floor for about
+     * an hour and a half. At BG 250 the raw value is far under the floor, so the value returned is
+     * the floor itself.
+     */
+    @Test
+    fun `the floor stays under the IsfAdjustmentEngine blend in steady state`() {
+        val tddCalculator = mock<TddCalculator>()
+        val preferences = mock<Preferences>()
+        val logger = mock<AAPSLogger>()
+        whenever(preferences.get(DoubleKey.OApsAIMITDD7)).thenReturn(55.0)
+        val profileIsf = 30.0
+
+        val calculator = KalmanISFCalculator(tddCalculator, preferences, logger)
+
+        val floorAtSaturation = calculator.calculateISF(250.0, 0.0, 0.0, profileIsfMgdl = profileIsf)
+
+        assertTrue(floorAtSaturation <= 0.5 * profileIsf, "floor was $floorAtSaturation")
+        assertTrue(floorAtSaturation < 0.58 * profileIsf, "floor was $floorAtSaturation")
+    }
+
+    @Test
+    fun `a total daily dose of zero or less is not usable`() {
+        assertFalse(KalmanISFCalculator.isUsableTdd(0.0))
+        assertFalse(KalmanISFCalculator.isUsableTdd(-5.0))
+    }
+
+    @Test
+    fun `a total daily dose that is not a number is not usable`() {
+        assertFalse(KalmanISFCalculator.isUsableTdd(null))
+        assertFalse(KalmanISFCalculator.isUsableTdd(Double.NaN))
+        assertFalse(KalmanISFCalculator.isUsableTdd(Double.POSITIVE_INFINITY))
+    }
+
+    @Test
+    fun `an implausibly small total daily dose is not usable`() {
+        assertFalse(KalmanISFCalculator.isUsableTdd(KalmanISFCalculator.MIN_USABLE_TDD_U - 0.01))
+    }
+
+    @Test
+    fun `a real total daily dose is usable`() {
+        assertTrue(KalmanISFCalculator.isUsableTdd(KalmanISFCalculator.MIN_USABLE_TDD_U))
+        assertTrue(KalmanISFCalculator.isUsableTdd(55.0))
     }
 }

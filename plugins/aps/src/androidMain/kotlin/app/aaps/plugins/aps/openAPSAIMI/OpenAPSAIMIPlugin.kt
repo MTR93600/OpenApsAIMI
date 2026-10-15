@@ -933,12 +933,16 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         // 2) facteur historique (comme avant)
         val dynamicFactor = dynamicDeltaCorrectionFactor(currentDelta, predictedDelta, glucose)
 
+        // The static profile ISF is read here, before the Kalman call, so it can bound the fast
+        // estimator from below. `getProfileIsfMgdl()` only reads the profile ISF blocks: it is pure,
+        // and it does not call back into `getIsfMgdl`, so there is no re-entrancy.
+        val profileIsf = profileFunction.getProfile()?.getProfileIsfMgdl() ?: 20.0
+
         // 3) ISF rapide #1 : Kalman existant
-        val kalmanFastIsf = kalmanISFCalculator.calculateISF(glucose, currentDelta, predictedDelta)
+        val kalmanFastIsf = kalmanISFCalculator.calculateISF(glucose, currentDelta, predictedDelta, profileIsf)
         aapsLogger.debug(LTag.APS, "Adaptive ISF via Kalman: $kalmanFastIsf for BG: $glucose")
 
         // 4) ISF lent (socle) : profil/TDD fusionn? + pkpdScale (inchang?)
-        val profileIsf = profileFunction.getProfile()?.getProfileIsfMgdl() ?: 20.0
         val tddIsf = tddIsf24hOr(profileIsf)
         val fusedSlowIsf = fusedSlowIsfOverride?.takeIf { it.isFinite() && it > 0.0 }
             // isfFusion() builds a throwaway instance, so its slew limiter is inert anyway:

@@ -15,6 +15,7 @@ import kotlin.concurrent.Volatile
 import kotlin.math.abs
 import kotlin.math.ln
 import kotlin.math.max
+import kotlin.math.min
 
 /**
  * Classe de filtre de Kalman simple permettant de lisser les mesures d'ISF.
@@ -56,10 +57,44 @@ class KalmanISFCalculator(
     private val logger: AAPSLogger
 ) {
     companion object {
+
+        /**
+         * Smallest total daily dose this calculator will treat as a measurement, in units.
+         *
+         * Below it the value is missing data, not a small dose: nobody on insulin therapy has a real
+         * daily total under this, and a near-zero one collapses the effective dose that scales the
+         * whole sensitivity estimate.
+         */
+        const val MIN_USABLE_TDD_U: Double = 1.0
+
+        /**
+         * True when a total daily dose can be used as a measurement.
+         *
+         * `averageTDD(...)?.data?.totalAmount` gives 0.0 when there is no history yet, and a relaxed
+         * test double gives 0.0 too. Caching that made the effective dose zero and the sensitivity it
+         * produced was out by more than a factor of ten.
+         */
+        fun isUsableTdd(value: Double?): Boolean =
+            value != null && value.isFinite() && value >= MIN_USABLE_TDD_U
+
         private const val MIN_ISF = 5.0
         private const val MAX_ISF = 300.0
         private const val BASE_CONSTANT = 75.0
         private const val SCALING_FACTOR = 1800.0
+
+        /**
+         * Physiological floor, as a fraction of the smaller of the profile ISF and the TDD-implied ISF.
+         *
+         * [computeRawISF] multiplies by a `bgFactor` of 0.2 above BG 180, so at a TDD of 55 U/day the
+         * raw value drops under [MIN_ISF] from about BG 200 on and the result saturates on the absolute
+         * clamp of 5.0 mg/dL/U. That is an artefact of the clamp, not a sensitivity: it makes the loop
+         * read "one unit moves glucose by 5" and ask for far more insulin than the person needs.
+         *
+         * 0.5 sits well under any sensitivity observed for this patient, on purpose. The floor is
+         * relative to the person, never an absolute number: it follows the profile ISF and the TDD, so
+         * it moves with them. It can only raise the reported ISF, so it can only lower a dose.
+         */
+        private const val PHYSIO_FLOOR_FACTOR = 0.5
     }
 
     // Augmente la variance de processus pour plus de réactivité
@@ -92,23 +127,42 @@ class KalmanISFCalculator(
         }
         ioScope.launch {
             try {
-                cachedTdd7Days = tddCalculator.averageTDD(
+                // A value that is not usable is refused rather than cached, see [isUsableTdd]. A
+                // refused value leaves the previous cache in place, or the preference fallback.
+                tddCalculator.averageTDD(
                     tddCalculator.calculate(7, allowMissingDays = false)
-                )?.data?.totalAmount
-                cachedTdd2Days = tddCalculator.averageTDD(
+                )?.data?.totalAmount?.takeIf { isUsableTdd(it) }?.let { cachedTdd7Days = it }
+                tddCalculator.averageTDD(
                     tddCalculator.calculate(2, allowMissingDays = false)
-                )?.data?.totalAmount
-                cachedTdd1Day = tddCalculator.averageTDD(
+                )?.data?.totalAmount?.takeIf { isUsableTdd(it) }?.let { cachedTdd2Days = it }
+                tddCalculator.averageTDD(
                     tddCalculator.calculate(1, allowMissingDays = false)
-                )?.data?.totalAmount
+                )?.data?.totalAmount?.takeIf { isUsableTdd(it) }?.let { cachedTdd1Day = it }
             } finally {
                 tddLock.withLock { tddRefreshInFlight = false }
             }
         }
     }
 
-    private fun computeRawISF(glucose: Double): Double {
-        val effectiveTDD = computeEffectiveTDD()
+    /**
+     * Lowest sensitivity this calculator is allowed to report.
+     *
+     * Falls back to the absolute [MIN_ISF] when the TDD is unusable, so the behaviour is unchanged in
+     * that case. Without the guard, `SCALING_FACTOR / 0.0` would be infinite and every value would be
+     * pushed to [MAX_ISF].
+     *
+     * @param profileIsfMgdl the static profile ISF for the current time of day, when the caller has
+     *   it. It only lowers the floor, never raises it.
+     */
+    private fun physiologicalFloor(effectiveTdd: Double, profileIsfMgdl: Double?): Double {
+        if (!effectiveTdd.isFinite() || effectiveTdd < 1.0) return MIN_ISF
+        val tddIsf = SCALING_FACTOR / effectiveTdd
+        val profile = profileIsfMgdl?.takeIf { it.isFinite() && it > 0.0 }
+        val base = if (profile != null) min(profile, tddIsf) else tddIsf
+        return (base * PHYSIO_FLOOR_FACTOR).coerceIn(MIN_ISF, MAX_ISF)
+    }
+
+    private fun computeRawISF(glucose: Double, effectiveTDD: Double, floorIsf: Double): Double {
         val safeTDD = if (effectiveTDD < 1.0) 1.0 else effectiveTDD
 
         // Apply a progressive reduction in ISF based on increasing glucose levels
@@ -123,11 +177,20 @@ class KalmanISFCalculator(
         }
 
         val rawISF = (SCALING_FACTOR / (safeTDD * ln(glucose / BASE_CONSTANT + 1))) * bgFactor
-        return rawISF.coerceIn(MIN_ISF, MAX_ISF)
+        return rawISF.coerceIn(floorIsf, MAX_ISF)
     }
 
-    fun calculateISF(glucose: Double, currentDelta: Double?, predictedDelta: Double?): Double {
-        val rawISF = computeRawISF(glucose)
+    fun calculateISF(
+        glucose: Double,
+        currentDelta: Double?,
+        predictedDelta: Double?,
+        profileIsfMgdl: Double? = null
+    ): Double {
+        // Computed once: it drives both the raw value and the floor, and it must be the same number
+        // in both.
+        val effectiveTDD = computeEffectiveTDD()
+        val floorIsf = physiologicalFloor(effectiveTDD, profileIsfMgdl)
+        val rawISF = computeRawISF(glucose, effectiveTDD, floorIsf)
         logger.debug(LTag.AIMI, "Raw ISF calculé : $rawISF pour BG = $glucose")
 
         // Calculate the combined influence of current and predicted deltas
@@ -155,7 +218,10 @@ class KalmanISFCalculator(
 
         kalmanFilter.measurementVariance = newMeasurementVariance
 
-        val filteredISF = kalmanFilter.update(rawISF).coerceIn(MIN_ISF, MAX_ISF)
+        // The floor is applied to the filtered value too, not only to the raw one. The filter carries
+        // its own state, so the first call of the process would otherwise return a value under the
+        // floor even though the measurement that went in respected it.
+        val filteredISF = kalmanFilter.update(rawISF).coerceIn(floorIsf, MAX_ISF)
         logger.debug(LTag.AIMI, "ISF filtré par Kalman : $filteredISF (variance de mesure = ${kalmanFilter.measurementVariance})")
         return filteredISF
     }
