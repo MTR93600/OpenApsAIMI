@@ -1,0 +1,58 @@
+package app.aaps.plugins.aps.openAPSAIMI.pkpd
+
+import app.aaps.core.interfaces.aps.OapsProfileAimi
+
+/**
+ * A profile where every field is zero, false or empty except the two the caller sets.
+ * The reference tests used a relaxed mock, which answers the same way for any field not stubbed.
+ */
+internal fun zeroedAimiProfile(carbRatio: Double = 0.0, peakTime: Double = 0.0) = OapsProfileAimi(
+    dia = 0.0,
+    min_5m_carbimpact = 0.0,
+    max_iob = 0.0,
+    max_daily_basal = 0.0,
+    max_basal = 0.0,
+    min_bg = 0.0,
+    max_bg = 0.0,
+    target_bg = 0.0,
+    carb_ratio = carbRatio,
+    sens = 0.0,
+    autosens_adjust_targets = false,
+    max_daily_safety_multiplier = 0.0,
+    current_basal_safety_multiplier = 0.0,
+    high_temptarget_raises_sensitivity = false,
+    low_temptarget_lowers_sensitivity = false,
+    sensitivity_raises_target = false,
+    resistance_lowers_target = false,
+    adv_target_adjustments = false,
+    exercise_mode = false,
+    half_basal_exercise_target = 0,
+    maxCOB = 0,
+    skip_neutral_temps = false,
+    remainingCarbsCap = 0,
+    enableUAM = false,
+    A52_risk_enable = false,
+    SMBInterval = 0,
+    enableSMB_with_COB = false,
+    enableSMB_with_temptarget = false,
+    allowSMB_with_high_temptarget = false,
+    enableSMB_always = false,
+    enableSMB_after_carbs = false,
+    maxSMBBasalMinutes = 0,
+    maxUAMSMBBasalMinutes = 0,
+    bolus_increment = 0.0,
+    carbsReqThreshold = 0,
+    current_basal = 0.0,
+    temptargetSet = false,
+    autosens_max = 0.0,
+    out_units = "",
+    lgsThreshold = 0,
+    variable_sens = 0.0,
+    insulinDivisor = 0,
+    TDD = 0.0,
+    peakTime = peakTime,
+    futureActivity = 0.0,
+    sensorLagActivity = 0.0,
+    historicActivity = 0.0,
+    currentActivity = 0.0,
+)
