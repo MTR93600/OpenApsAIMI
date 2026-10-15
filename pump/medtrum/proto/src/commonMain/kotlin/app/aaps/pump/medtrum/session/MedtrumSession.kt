@@ -455,7 +455,8 @@ class MedtrumSession(
 
         // Allow time for the notification packet with the new sequence number to arrive.
         sleeper(2000)
-        // M3: loadEvents() after bolus (needs plugin/pump state).
+        // Android also reads the pump records here. The driver does it after `setBolus` returns, because
+        // it must keep the command lock and the AAPS history (see `IosMedtrumPump.deliverTreatment`).
 
         return true
     }

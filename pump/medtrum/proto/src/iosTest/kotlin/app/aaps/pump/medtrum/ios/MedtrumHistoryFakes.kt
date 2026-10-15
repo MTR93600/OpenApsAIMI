@@ -11,6 +11,7 @@ import app.aaps.core.interfaces.pump.PumpInsulin
 import app.aaps.core.interfaces.pump.PumpRate
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.interfaces.pump.TemporaryBasalStorage
+import kotlin.math.abs
 
 /**
  * A [PumpSync] that writes every call as one text line to [calls], so a test can assert the exact
@@ -119,7 +120,10 @@ class RecordingPumpSync : PumpSync {
     override suspend fun isProfileRunning(time: Long): Boolean = true
 }
 
-/** Keeps the infos in a list. `find` returns the first one with this amount and removes it, like the real storage does for a match. */
+/**
+ * Keeps the infos in a list. `find` follows the real storage: first a match on time and amount, then
+ * a match on time only when the pump delivered no more than was asked. The match is removed.
+ */
 class FakeDetailedBolusInfoStorage : DetailedBolusInfoStorage {
 
     val infos = mutableListOf<DetailedBolusInfo>()
@@ -129,7 +133,11 @@ class FakeDetailedBolusInfoStorage : DetailedBolusInfoStorage {
 
     override fun findDetailedBolusInfo(bolusTime: Long, bolus: Double): DetailedBolusInfo? {
         findCalls += bolusTime to bolus
-        val found = infos.firstOrNull { it.insulin == bolus } ?: return null
+        val oneMinute = 60_000L
+        fun inWindow(d: DetailedBolusInfo) = bolusTime > d.timestamp - oneMinute && bolusTime < d.timestamp + oneMinute
+        val found = infos.firstOrNull { inWindow(it) && abs(it.insulin - bolus) < 0.01 }
+            ?: infos.firstOrNull { inWindow(it) && bolus <= it.insulin + 0.01 }
+            ?: return null
         infos.remove(found)
         return found
     }

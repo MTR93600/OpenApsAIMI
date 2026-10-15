@@ -52,6 +52,13 @@ kotlin {
             }
         }
 
+        // Parity vectors recorded from the Android driver run here, on the JVM and on iOS.
+        commonTest {
+            dependencies {
+                implementation(kotlin("test"))
+            }
+        }
+
         iosTest {
             dependencies {
                 implementation(kotlin("test"))

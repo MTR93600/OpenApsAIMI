@@ -232,9 +232,25 @@ class IosMedtrumPump(
     }
 
     override suspend fun getPumpStatus(reason: String) {
-        if (!isReady()) return
-        // Status arrives via notifications; the session already polls on its schedule.
-        // A manual refresh is a no-op here — kept for interface conformance.
+        // Android `MedtrumService.readPumpStatus` ends with `loadEvents()`. This is the call that runs
+        // after every connect, so it also catches up records that could not be read while the link was down.
+        // The mutex makes it wait for a running bolus, like the Android command queue does.
+        commandMutex.withLock {
+            if (!isReady()) return
+            loadEvents()
+        }
+    }
+
+    /**
+     * Android `MedtrumService.loadEvents`: read the records of the pump that AAPS has not seen yet.
+     * Call it only with [commandMutex] held and the pump ready.
+     * A record of a bolus replaces the temporary bolus that was written when the bolus started.
+     */
+    private suspend fun loadEvents() {
+        val ok = session.syncRecords()
+        if (!ok) logger.error("PUMPCOMM", "Failed to load events")
+        publishState()
+        store?.save(state)
     }
 
     // -- Therapy ---------------------------------------------------------------
@@ -256,6 +272,14 @@ class IosMedtrumPump(
                 if (startedAt != null && state.bolusStopped && delivered == 0.0) {
                     history.bolusStoppedWithoutInsulin(detailedBolusInfo, startedAt)
                 }
+                // Android queues `loadEvents()` at the end of `waitForBolusProgress`, on every way out of the
+                // wait, and `readStatus` after a failed send. Here it runs at the same point, inside the
+                // command lock. The record has the amount that was really delivered and replaces the
+                // temporary bolus. If the link is down (communication lost) the read cannot run now.
+                // `getPumpStatus` does it after the next connect.
+                val commandWasSent = result != MedtrumSession.BolusResult.NOT_CONNECTED &&
+                    result != MedtrumSession.BolusResult.ALREADY_IN_PROGRESS
+                if (commandWasSent && isReady()) loadEvents()
                 val verdict = bolusVerdict(result, detailedBolusInfo.insulin, delivered, pumpDescription.bolusStep)
                 if (verdict && delivered > 0.0) {
                     state.lastBolusAmount = delivered
