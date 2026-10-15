@@ -1,6 +1,7 @@
 package app.aaps.pump.medtrum.ios
 
 import app.aaps.pump.medtrum.comm.enums.AlarmSetting
+import app.aaps.pump.medtrum.comm.enums.MedtrumPumpState
 import app.aaps.pump.medtrum.session.MedtrumSessionState
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.Foundation.NSUserDefaults
@@ -30,6 +31,8 @@ class IosMedtrumStateStore(
         defaults.setInteger(state.patchStartTime, forKey = key("patchStartTime"))
         defaults.setInteger(state.currentSequenceNumber.toLong(), forKey = key("currentSequenceNumber"))
         defaults.setInteger(state.syncedSequenceNumber.toLong(), forKey = key("syncedSequenceNumber"))
+        // The patch state. Without it the driver does not know after a restart that a patch is active.
+        defaults.setInteger(state.pumpState.state.toLong(), forKey = key("pumpState"))
         defaults.setInteger(state.desiredAlarmSetting.ordinal.toLong(), forKey = key("desiredAlarmSetting"))
         defaults.setInteger(state.desiredHourlyMaxInsulin.toLong(), forKey = key("desiredHourlyMaxInsulin"))
         defaults.setInteger(state.desiredDailyMaxInsulin.toLong(), forKey = key("desiredDailyMaxInsulin"))
@@ -50,6 +53,12 @@ class IosMedtrumStateStore(
         state.patchStartTime = defaults.integerForKey(key("patchStartTime"))
         state.currentSequenceNumber = defaults.integerForKey(key("currentSequenceNumber")).toInt()
         state.syncedSequenceNumber = defaults.integerForKey(key("syncedSequenceNumber")).toInt()
+        // Only when saved: a missing key must stay NONE (not active), not become a made-up state.
+        if (defaults.objectForKey(key("pumpState")) != null) {
+            val saved = defaults.integerForKey(key("pumpState")).toByte()
+            // An unknown byte is not trusted: stay NONE (not active).
+            state.pumpState = MedtrumPumpState.entries.find { it.state == saved } ?: MedtrumPumpState.NONE
+        }
         state.desiredAlarmSetting = AlarmSetting.entries.getOrNull(
             defaults.integerForKey(key("desiredAlarmSetting")).toInt()
         ) ?: AlarmSetting.LIGHT_VIBRATE_AND_BEEP
@@ -71,7 +80,7 @@ class IosMedtrumStateStore(
     fun clear() {
         listOf(
             "pumpSN", "patchId", "patchSessionToken", "patchStartTime",
-            "currentSequenceNumber", "syncedSequenceNumber", "desiredAlarmSetting",
+            "currentSequenceNumber", "syncedSequenceNumber", "pumpState", "desiredAlarmSetting",
             "desiredHourlyMaxInsulin", "desiredDailyMaxInsulin", "actualBasalProfile",
             "reservoir", "lastBolusTime", "lastBolusAmount",
         ).forEach { defaults.removeObjectForKey(key(it)) }

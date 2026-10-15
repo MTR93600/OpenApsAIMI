@@ -1,13 +1,14 @@
 package app.aaps.pump.medtrum.ios
 
 import app.aaps.core.interfaces.pump.PumpEnactResult
+import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.keys.interfaces.TextRef
 
 /**
  * Standalone [PumpEnactResult] for the iOS Medtrum driver.
  *
- * The shared `PumpEnactResultObject` needs Metro + a TextResolver; this data
- * class carries the same fields with plain-String comments.
+ * The shared `PumpEnactResultObject` needs Metro; this data class carries the same fields with
+ * plain-String comments. A [TextRef] comment is turned into text at once with [textResolver].
  */
 data class IosPumpEnactResult(
     override var success: Boolean = false,
@@ -21,13 +22,17 @@ data class IosPumpEnactResult(
     override var bolusDelivered: Double = 0.0,
     override var queued: Boolean = false,
     override var cancelled: Boolean = false,
+    private val textResolver: TextResolver? = null,
 ) : PumpEnactResult {
 
     override fun cancelled(cancelled: Boolean): PumpEnactResult = apply { this.cancelled = cancelled }
     override fun success(success: Boolean): PumpEnactResult = apply { this.success = success }
     override fun enacted(enacted: Boolean): PumpEnactResult = apply { this.enacted = enacted }
     override fun comment(comment: String): PumpEnactResult = apply { this.comment = comment }
-    override fun comment(ref: TextRef): PumpEnactResult = apply { /* TextRef resolution is UI work */ }
+    override fun comment(ref: TextRef): PumpEnactResult = apply {
+        // Never drop the text. Without a resolver, show the reference itself.
+        this.comment = textResolver?.gs(ref) ?: ref.toString()
+    }
     override fun duration(duration: Int): PumpEnactResult = apply { this.duration = duration }
     override fun absolute(absolute: Double): PumpEnactResult = apply { this.absolute = absolute }
     override fun percent(percent: Int): PumpEnactResult = apply { this.percent = percent }

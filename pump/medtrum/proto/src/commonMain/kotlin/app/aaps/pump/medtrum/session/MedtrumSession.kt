@@ -61,7 +61,7 @@ class MedtrumSession(
     private val logger: MedtrumLogger = MedtrumLogger.NO_OP,
     private val clock: MedtrumClock,
     private val timeUtil: MedtrumTimeUtil = MedtrumTimeUtil(clock::nowMillis),
-    private val timeZoneOffsetMinutes: () -> Int = { 0 },
+    private val timeZoneOffsetMinutes: () -> Int = { clock.utcOffsetMinutes(clock.nowMillis()) },
     /**
      * Suspends for the given millis. Defaults to [delay]; tests pass a
      * clock-advancing lambda for virtual-time verification of the
@@ -85,6 +85,12 @@ class MedtrumSession(
 
     var phase: Phase = Phase.IDLE
         private set
+
+    /**
+     * Called after the pump gave us data: a notification, an answer or a finished connect.
+     * The driver uses it to copy the new values to what the loop reads.
+     */
+    var onStateChanged: (() -> Unit)? = null
 
     private val scope = CoroutineScope(SupervisorJob())
 
@@ -151,10 +157,31 @@ class MedtrumSession(
         } catch (e: TimeoutCancellationException) {
             logger.error("PUMPCOMM", "connect: auth flow timeout ($from)")
             disconnect("connect timeout")
+            // No link was made when the pump never showed up, so no onDisconnected comes.
+            // Without this the session would stay in CONNECTING and refuse every new connect.
+            resetToIdle()
             false
         } finally {
             authResult = null
         }
+    }
+
+    /**
+     * Mirrors `MedtrumService.stopConnecting`: drop the BLE attempt. A connect that still waits
+     * for the pump ends at once, because a scan that never found a link sends no callback.
+     */
+    fun stopConnecting() {
+        logger.debug("PUMPCOMM", "stopConnecting")
+        transport.disconnect("stopConnecting")
+        if (phase == Phase.CONNECTING) {
+            resetToIdle()
+            authResult?.complete(false)
+        }
+    }
+
+    private fun resetToIdle() {
+        state.connectionState = ConnectionState.DISCONNECTED
+        phase = Phase.IDLE
     }
 
     fun disconnect(from: String) {
@@ -181,6 +208,7 @@ class MedtrumSession(
                 phase = Phase.IDLE
             }
             authResult?.complete(ok)
+            if (ok) onStateChanged?.invoke()
         }
     }
 
@@ -278,6 +306,7 @@ class MedtrumSession(
         val packet = pending.packet
         if (packet.handleResponse(data)) {
             pending.deferred.complete(PacketResult.Success)
+            onStateChanged?.invoke()
         } else if (packet.failed) {
             pending.deferred.complete(PacketResult.Failed)
         }
@@ -287,6 +316,7 @@ class MedtrumSession(
     override fun onNotification(data: ByteArray) {
         logger.debug("PUMPCOMM", "<<<<< onNotification")
         NotificationPacket(state, timeUtil, logger).handleNotification(data)
+        onStateChanged?.invoke()
     }
 
     override fun onSendMessageError(reason: String, isRetryAble: Boolean) {
@@ -435,6 +465,9 @@ class MedtrumSession(
             return false
         }
         val deadline = clock.nowMillis() + 30_000
+        // Only one command can wait for an answer. The stop can come while the bolus command itself
+        // is still waiting, so let that one finish first. We never wait for the whole bolus here.
+        while (pendingCommand != null && clock.nowMillis() < deadline) sleeper(50)
         var success = sendCommand(CancelBolusPacket())
         while (!success && clock.nowMillis() < deadline) {
             success = sendCommand(CancelBolusPacket())

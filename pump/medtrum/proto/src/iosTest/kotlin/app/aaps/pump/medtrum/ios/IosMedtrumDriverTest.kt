@@ -11,6 +11,8 @@ import app.aaps.pump.medtrum.session.MedtrumBleCallback
 import app.aaps.pump.medtrum.session.MedtrumClock
 import app.aaps.pump.medtrum.session.MedtrumSession
 import app.aaps.pump.medtrum.session.MedtrumSessionState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -223,7 +225,7 @@ class IosMedtrumDriverTest {
         val (central, transport, _) = setup()
         val state = MedtrumSessionState(clock = MedtrumClock.fixed(0L))
         // Never connected: phase IDLE, connection DISCONNECTED
-        return IosMedtrumPump(transport, state, MedtrumClock.fixed(0L), store = null)
+        return IosMedtrumPump(transport, state, MedtrumClock.fixed(0L), TestTextResolver, CoroutineScope(SupervisorJob()), store = null)
     }
 
     @Test
@@ -253,7 +255,7 @@ class IosMedtrumDriverTest {
     fun zeroRadioWritesWhenNotReady() = runTest {
         val (central, transport, _) = setup()
         val state = MedtrumSessionState(clock = MedtrumClock.fixed(0L))
-        val pump = IosMedtrumPump(transport, state, MedtrumClock.fixed(0L), store = null)
+        val pump = IosMedtrumPump(transport, state, MedtrumClock.fixed(0L), TestTextResolver, CoroutineScope(SupervisorJob()), store = null)
         pump.deliverTreatment(app.aaps.core.interfaces.pump.DetailedBolusInfo().apply { insulin = 2.0 })
         pump.setTempBasalAbsolute(1.5, 60, false, app.aaps.core.interfaces.pump.PumpSync.TemporaryBasalType.NORMAL)
         pump.cancelTempBasal(false)

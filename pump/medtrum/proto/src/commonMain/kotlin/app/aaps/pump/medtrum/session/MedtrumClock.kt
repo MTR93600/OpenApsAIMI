@@ -18,12 +18,20 @@ fun interface MedtrumClock {
      */
     fun minuteOfDay(millis: Long): Int = 0
 
+    /**
+     * Phone offset from UTC at [millis], in minutes, daylight saving included.
+     * Same value as `DateUtil.getTimeZoneOffsetMinutes` on Android. The session sends it to the pump.
+     * Default 0 — tests pin it; [LocalMedtrumClock] gives the real one.
+     */
+    fun utcOffsetMinutes(millis: Long): Int = 0
+
     companion object {
 
         /** Fixed clock for tests. */
-        fun fixed(millis: Long, minuteOfDay: Int = 0): MedtrumClock = object : MedtrumClock {
+        fun fixed(millis: Long, minuteOfDay: Int = 0, utcOffsetMinutes: Int = 0): MedtrumClock = object : MedtrumClock {
             override fun nowMillis(): Long = millis
             override fun minuteOfDay(millis: Long): Int = minuteOfDay
+            override fun utcOffsetMinutes(millis: Long): Int = utcOffsetMinutes
         }
     }
 }

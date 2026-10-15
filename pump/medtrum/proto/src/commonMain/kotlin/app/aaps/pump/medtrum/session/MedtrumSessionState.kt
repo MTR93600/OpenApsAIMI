@@ -227,7 +227,8 @@ class MedtrumSessionState(
      * Android `GregorianCalendar` is replaced by [MedtrumClock.minuteOfDay].
      */
     fun getHourlyBasalFromMedtrumProfileArray(basalProfile: ByteArray, timestamp: Long): Double {
-        val basalCount = basalProfile[0].toInt()
+        // An empty array can come from a stored profile that was cut. Do not crash on it.
+        val basalCount = basalProfile.firstOrNull()?.toInt() ?: return 0.0
         var basal = 0.0
         if (basalProfile.size < 4 || (basalProfile.size - 1) % 3 != 0 || basalCount > 24) {
             logger.debug("PUMP", "getHourlyBasalFromMedtrumProfileArray: No valid basal profile set")

@@ -3,6 +3,8 @@ package app.aaps.pump.medtrum.ios
 import app.aaps.core.data.pump.defs.ManufacturerType
 import app.aaps.core.data.pump.defs.PumpDescription
 import app.aaps.core.data.pump.defs.PumpType
+import app.aaps.core.interfaces.pump.defs.fillFor
+import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.Pump
 import app.aaps.core.interfaces.pump.PumpEnactResult
@@ -14,15 +16,20 @@ import app.aaps.core.interfaces.pump.actions.CustomAction
 import app.aaps.core.interfaces.pump.actions.CustomActionType
 import app.aaps.core.interfaces.queue.CustomCommand
 import app.aaps.pump.medtrum.code.ConnectionState
+import app.aaps.pump.medtrum.comm.MedtrumLogger
+import app.aaps.pump.medtrum.comm.enums.MedtrumPumpState
+import app.aaps.pump.medtrum.session.MedtrumBleTransport
 import app.aaps.pump.medtrum.session.MedtrumClock
 import app.aaps.pump.medtrum.session.MedtrumSession
 import app.aaps.pump.medtrum.session.MedtrumSessionState
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.math.abs
 
 /**
  * Omnipod Medtrum [Pump] for iOS, driving the M2 [MedtrumSession].
@@ -39,23 +46,41 @@ import kotlinx.coroutines.sync.withLock
  * Threading: therapeutic commands are serialized by [commandMutex].
  */
 class IosMedtrumPump(
-    private val transport: IosMedtrumBleTransport,
+    private val transport: MedtrumBleTransport,
     val state: MedtrumSessionState,
     private val clock: MedtrumClock,
+    private val textResolver: TextResolver,
+    /**
+     * Scope for the work the driver starts itself (connect, stop bolus). The owner creates it and
+     * cancels it. Cancel it together with [close].
+     */
+    private val scope: CoroutineScope,
     private val store: IosMedtrumStateStore? = null,
+    private val logger: MedtrumLogger = MedtrumLogger.NO_OP,
 ) : Pump {
 
     private val session = MedtrumSession(
         transport = transport,
         state = state,
+        logger = logger,
         clock = clock,
-    ).also { transport.setCallback(it) }
+        // Medtrum basal schedules run on the pump local time. The clock knows the phone offset.
+        timeZoneOffsetMinutes = { clock.utcOffsetMinutes(clock.nowMillis()) },
+    ).also {
+        transport.setCallback(it)
+        it.onStateChanged = ::onSessionData
+    }
 
     private val commandMutex = Mutex()
     private var busy = false
 
     init {
         store?.load(state)
+    }
+
+    /** Release the session. The owner cancels [scope] itself. */
+    fun close() {
+        session.close()
     }
 
     // -- Safety guard --------------------------------------------------------
@@ -69,40 +94,85 @@ class IosMedtrumPump(
 
     override fun manufacturer(): ManufacturerType = ManufacturerType.Medtrum
     override fun model(): PumpType = PumpType.MEDTRUM_NANO
-    override fun serialNumber(): String = state.pumpSN.toString()
+    // Same as Android: the serial number as upper case hex.
+    override fun serialNumber(): String = state.pumpSN.toString(radix = 16).uppercase()
 
-    override val pumpDescription: PumpDescription = PumpDescription().apply {
-        pumpType = PumpType.MEDTRUM_NANO
-        isBolusCapable = true
-        bolusStep = 0.05
-        isTempBasalCapable = true
-        isExtendedBolusCapable = false
-    }
+    // Filled from the pump type, like Android. Building it by hand left wrong defaults, for example
+    // a PERCENT temp basal style, which makes the safety checks skip the absolute limit.
+    override val pumpDescription: PumpDescription = PumpDescription().fillFor(PumpType.MEDTRUM_NANO)
 
     override val isFakingTempsByExtendedBoluses: Boolean = false
 
     // -- State ----------------------------------------------------------------
 
-    override fun isConfigured(): Boolean = state.pumpSN != 0L
-    override fun isInitialized(): Boolean = isReady()
-    override fun isSuspended(): Boolean = false
+    // Android: the pump has a serial number and a patch that was filled at least once.
+    override fun isConfigured(): Boolean =
+        state.pumpSN != 0L && state.pumpState > MedtrumPumpState.EJECTED
+
+    // Android: from the stored patch state, NOT from the BLE link. The loop must still run when
+    // the link is down.
+    override fun isInitialized(): Boolean =
+        isConfigured() && state.pumpState < MedtrumPumpState.STOPPED
+
+    // Android: only ACTIVE and ACTIVE_ALT can deliver. Everything else counts as suspended.
+    override fun isSuspended(): Boolean =
+        state.pumpState < MedtrumPumpState.ACTIVE || state.pumpState > MedtrumPumpState.ACTIVE_ALT
+
     override fun isBusy(): Boolean = busy
-    override fun isConnected(): Boolean = state.connectionState == ConnectionState.CONNECTED
+
+    // Android: without an active patch we say "connected", so the queue does not start connects.
+    override fun isConnected(): Boolean =
+        if (!isInitialized()) true else state.connectionState == ConnectionState.CONNECTED
+
     override fun isConnecting(): Boolean = state.connectionState == ConnectionState.CONNECTING
     override fun isHandshakeInProgress(): Boolean = session.phase == MedtrumSession.Phase.CONNECTING
 
-    override val lastDataTime: StateFlow<Long> = MutableStateFlow(0L)
-    override val lastBolusTime: StateFlow<Long?> = MutableStateFlow(null)
-    override val lastBolusAmount: StateFlow<PumpInsulin?> = MutableStateFlow(null)
-    override val baseBasalRate: PumpRate = PumpRate(0.0)
-    override val reservoirLevel: StateFlow<PumpInsulin> = MutableStateFlow(PumpInsulin(0.0))
+    private val lastDataTimeFlow = MutableStateFlow(0L)
+    private val lastBolusTimeFlow = MutableStateFlow<Long?>(state.lastBolusTime)
+    private val lastBolusAmountFlow = MutableStateFlow(state.lastBolusAmount?.let(::PumpInsulin))
+    private val reservoirFlow = MutableStateFlow(PumpInsulin(state.reservoir))
+    private var publishedPumpState = state.pumpState
+
+    override val lastDataTime: StateFlow<Long> = lastDataTimeFlow
+    override val lastBolusTime: StateFlow<Long?> = lastBolusTimeFlow
+    override val lastBolusAmount: StateFlow<PumpInsulin?> = lastBolusAmountFlow
+    override val baseBasalRate: PumpRate
+        get() = PumpRate(state.getHourlyBasalFromMedtrumProfileArray(state.actualBasalProfile, clock.nowMillis()))
+    override val reservoirLevel: StateFlow<PumpInsulin> = reservoirFlow
+
+    // Android also has no battery value for this pump.
     override val batteryLevel: StateFlow<Int?> = MutableStateFlow(null)
 
+    /** The session got data from the pump: a notification, an answer or a finished connect. */
+    private fun onSessionData() {
+        lastDataTimeFlow.value = clock.nowMillis()
+        publishState()
+    }
+
+    /** Copy the values the loop reads from [state] to the flows. Save the patch state when it changed. */
+    internal fun publishState() {
+        lastBolusTimeFlow.value = state.lastBolusTime
+        lastBolusAmountFlow.value = state.lastBolusAmount?.let(::PumpInsulin)
+        reservoirFlow.value = PumpInsulin(state.reservoir)
+        if (state.pumpState != publishedPumpState) {
+            publishedPumpState = state.pumpState
+            store?.save(state)
+        }
+    }
+
     override fun connect(reason: String) {
-        // Fire-and-forget: the session suspends internally; callers use isReady().
-        // A structured scope is the shell's job (M4); here we just kick the flow.
-        GlobalScope.launch {
-            session.connect(reason)
+        // The session suspends inside, so run it on the owner scope. Callers use isReady().
+        scope.launch {
+            val connected = try {
+                session.connect(reason)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                logger.error("PUMPCOMM", "connect crashed ($reason): ${e.message}")
+                false
+            }
+            if (!connected) logger.warn("PUMPCOMM", "connect failed ($reason)")
+            publishState()
             store?.save(state)
         }
     }
@@ -111,7 +181,10 @@ class IosMedtrumPump(
         session.disconnect(reason)
     }
 
-    override fun stopConnecting() = Unit
+    // Android: drop the BLE attempt. The session also ends a connect that is still waiting.
+    override fun stopConnecting() {
+        session.stopConnecting()
+    }
 
     override suspend fun getPumpStatus(reason: String) {
         if (!isReady()) return
@@ -126,38 +199,36 @@ class IosMedtrumPump(
             if (!isReady()) return failClosed("Pump not ready — bolus refused")
             busy = true
             try {
-                when (val result = session.setBolus(detailedBolusInfo.insulin)) {
-                    MedtrumSession.BolusResult.DELIVERED ->
-                        IosPumpEnactResult(
-                            success = true, enacted = true,
-                            comment = "Bolus ${detailedBolusInfo.insulin} U delivered",
-                            bolusDelivered = detailedBolusInfo.insulin,
-                        )
-                    MedtrumSession.BolusResult.STOPPED ->
-                        IosPumpEnactResult(
-                            success = true, enacted = true,
-                            comment = "Bolus stopped",
-                            bolusDelivered = state.bolusAmountDelivered,
-                        )
-                    else ->
-                        IosPumpEnactResult(
-                            success = false, enacted = false,
-                            comment = "Bolus failed: $result",
-                        )
+                val result = session.setBolus(detailedBolusInfo.insulin)
+                // The amount comes from the pump, never from the request.
+                val delivered = state.bolusAmountDelivered
+                val verdict = bolusVerdict(result, detailedBolusInfo.insulin, delivered, pumpDescription.bolusStep)
+                if (verdict && delivered > 0.0) {
+                    state.lastBolusAmount = delivered
+                    state.lastBolusTime = state.bolusStartTime
+                    publishState()
                 }
+                enactResult(
+                    success = verdict,
+                    enacted = delivered > 0.0,
+                    comment = if (verdict) "Bolus $delivered U delivered"
+                    else "Bolus failed: $result, asked ${detailedBolusInfo.insulin} U, delivered $delivered U",
+                    bolusDelivered = delivered,
+                )
             } finally {
                 busy = false
                 store?.save(state)
             }
         }
 
+    // Not under commandMutex. deliverTreatment holds the mutex for the whole bolus, so a stop that
+    // waited for it would run only after the bolus was finished. The session sends the cancel at
+    // once, like Android. It only waits for a command that is in flight at that moment.
     override fun stopBolusDelivering() {
-        GlobalScope.launch {
-            commandMutex.withLock {
-                if (!isReady()) return@withLock
-                session.stopBolus()
-                store?.save(state)
-            }
+        if (!isInitialized()) return
+        scope.launch {
+            session.stopBolus()
+            store?.save(state)
         }
     }
 
@@ -171,13 +242,13 @@ class IosMedtrumPump(
         busy = true
         try {
             if (session.setTempBasal(absoluteRate, durationInMinutes)) {
-                IosPumpEnactResult(
+                enactResult(
                     success = true, enacted = true,
                     comment = "TBR $absoluteRate U/h for $durationInMinutes min",
                     duration = durationInMinutes, absolute = absoluteRate,
                 )
             } else {
-                IosPumpEnactResult(success = false, enacted = false, comment = "TBR failed")
+                enactResult(success = false, enacted = false, comment = "TBR failed")
             }
         } finally {
             busy = false
@@ -192,7 +263,7 @@ class IosMedtrumPump(
         tbrType: PumpSync.TemporaryBasalType,
     ): PumpEnactResult =
         // Mirrors Android: Medtrum does not support percent TBR — fail closed, no approximation.
-        IosPumpEnactResult(success = false, enacted = false, comment = "Percent TBR not supported on Medtrum")
+        enactResult(success = false, enacted = false, comment = "Percent TBR not supported on Medtrum")
 
     override suspend fun cancelTempBasal(enforceNew: Boolean): PumpEnactResult =
         commandMutex.withLock {
@@ -200,9 +271,9 @@ class IosMedtrumPump(
             busy = true
             try {
                 if (session.cancelTempBasal()) {
-                    IosPumpEnactResult(success = true, enacted = true, comment = "TBR cancelled", isTempCancel = true)
+                    enactResult(success = true, enacted = true, comment = "TBR cancelled", isTempCancel = true)
                 } else {
-                    IosPumpEnactResult(success = false, enacted = false, comment = "Cancel TBR failed")
+                    enactResult(success = false, enacted = false, comment = "Cancel TBR failed")
                 }
             } finally {
                 busy = false
@@ -217,9 +288,9 @@ class IosMedtrumPump(
             busy = true
             try {
                 if (session.updateBasalProfile(pairs)) {
-                    IosPumpEnactResult(success = true, enacted = true, comment = "Basal profile updated")
+                    enactResult(success = true, enacted = true, comment = "Basal profile updated")
                 } else {
-                    IosPumpEnactResult(success = false, enacted = false, comment = "Basal profile update failed")
+                    enactResult(success = false, enacted = false, comment = "Basal profile update failed")
                 }
             } finally {
                 busy = false
@@ -235,22 +306,57 @@ class IosMedtrumPump(
     }
 
     override suspend fun setExtendedBolus(insulin: Double, durationInMinutes: Int): PumpEnactResult =
-        IosPumpEnactResult(success = false, enacted = false, comment = "Extended bolus not supported on Medtrum")
+        enactResult(success = false, enacted = false, comment = "Extended bolus not supported on Medtrum")
 
     override suspend fun cancelExtendedBolus(): PumpEnactResult =
-        IosPumpEnactResult(success = false, enacted = false, comment = "Extended bolus not supported on Medtrum")
+        enactResult(success = false, enacted = false, comment = "Extended bolus not supported on Medtrum")
 
     // -- Plumbing ---------------------------------------------------------------
 
     private fun failClosed(comment: String): PumpEnactResult =
-        IosPumpEnactResult(success = false, enacted = false, comment = comment)
+        enactResult(success = false, enacted = false, comment = comment)
+
+    private fun enactResult(
+        success: Boolean = false,
+        enacted: Boolean = false,
+        comment: String = "",
+        duration: Int = 0,
+        absolute: Double = 0.0,
+        isTempCancel: Boolean = false,
+        bolusDelivered: Double = 0.0,
+    ): PumpEnactResult = IosPumpEnactResult(
+        success = success, enacted = enacted, comment = comment, duration = duration,
+        absolute = absolute, isTempCancel = isTempCancel, bolusDelivered = bolusDelivered,
+        textResolver = textResolver,
+    )
 
     override suspend fun loadTDDs(): PumpEnactResult =
-        IosPumpEnactResult(success = false, enacted = false, comment = "TDD not yet wired")
+        enactResult(success = false, enacted = false, comment = "TDD not yet wired")
 
     override fun canHandleDST(): Boolean = false
 
     override fun getCustomActions(): List<CustomAction>? = null
     override fun executeCustomAction(customActionType: CustomActionType) = Unit
     override fun executeCustomCommand(customCommand: CustomCommand): PumpEnactResult? = null
+}
+
+/**
+ * The bolus verdict, same rule as the Android `MedtrumPlugin.deliverTreatment`: the pump must
+ * report the asked amount (within one [bolusStep]), or the user stopped the bolus.
+ *
+ * [delivered] is the amount the pump tracked, not the amount that was asked for.
+ */
+internal fun bolusVerdict(
+    result: MedtrumSession.BolusResult,
+    requested: Double,
+    delivered: Double,
+    bolusStep: Double,
+): Boolean = when (result) {
+    MedtrumSession.BolusResult.STOPPED -> true
+    // The link was fine when the command went out, so the amount decides (Android: connectionOK).
+    MedtrumSession.BolusResult.DELIVERED,
+    MedtrumSession.BolusResult.TIMEOUT -> abs(requested - delivered) < bolusStep
+    MedtrumSession.BolusResult.NOT_CONNECTED,
+    MedtrumSession.BolusResult.ALREADY_IN_PROGRESS,
+    MedtrumSession.BolusResult.SEND_FAILED -> false
 }

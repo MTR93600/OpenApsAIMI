@@ -423,4 +423,74 @@ class MedtrumSessionTest {
             "should have waited through 3 retries, got ${testClock.nowMs - nowMs} ms"
         )
     }
+
+    @Test
+    fun timeZoneOffsetDefaultsToTheClockOffset() = runBlocking {
+        val tzClock = MedtrumClock.fixed(nowMs, minuteOfDay = 600, utcOffsetMinutes = 150)
+        val fake = FakeMedtrumBleTransport()
+        val state = MedtrumSessionState(MedtrumLogger.NO_OP, tzClock).apply {
+            pumpSN = 0x12345678L
+            patchSessionToken = 0xABCDEF01L
+        }
+        // No timeZoneOffsetMinutes argument: the default must come from the clock, not be 0.
+        val session = MedtrumSession(transport = fake, state = state, clock = tzClock)
+        scriptAuthSuccess(fake)
+        // Pump clock far off: the flow sets time and time zone.
+        fake.responses[CommandType.GET_TIME.code] = successResponse(CommandType.GET_TIME.code, 0, 0, 0, 0)
+        fake.responses[CommandType.SET_TIME.code] = successResponse(CommandType.SET_TIME.code)
+        fake.responses[CommandType.SET_TIME_ZONE.code] = successResponse(CommandType.SET_TIME_ZONE.code)
+
+        assertTrue(session.connect("test"))
+
+        val tz = fake.sentMessages.first { it[0] == CommandType.SET_TIME_ZONE.code }
+        assertEquals(150, (tz[1].toInt() and 0xFF) or ((tz[2].toInt() and 0xFF) shl 8))
+    }
+
+    @Test
+    fun stopConnectingEndsAConnectThatNeverGetsALink() = runBlocking {
+        // A transport that starts a scan but never calls back, like a pump that is out of range.
+        val silent = object : MedtrumBleTransport {
+            val disconnects = mutableListOf<String>()
+            override fun connect(from: String, deviceSN: Long): Boolean = true
+            override fun disconnect(from: String) { disconnects.add(from) }
+            override fun sendMessage(message: ByteArray) = Unit
+            override fun setCallback(callback: MedtrumBleCallback?) = Unit
+        }
+        val session = MedtrumSession(transport = silent, state = newState(), clock = clock)
+        val connecting = launch { assertFalse(session.connect("test")) }
+        var tries = 0
+        while (session.phase != MedtrumSession.Phase.CONNECTING && tries++ < 100) kotlinx.coroutines.delay(10)
+        assertEquals(MedtrumSession.Phase.CONNECTING, session.phase)
+
+        session.stopConnecting()
+        connecting.join()
+
+        assertEquals(listOf("stopConnecting"), silent.disconnects)
+        assertEquals(MedtrumSession.Phase.IDLE, session.phase)
+        assertEquals(ConnectionState.DISCONNECTED, session.state.connectionState)
+    }
+
+    @Test
+    fun stopBolusWaitsForTheCommandInFlightButNotForTheBolus() = runBlocking {
+        val fake = FakeMedtrumBleTransport()
+        val session = newSession(fake)
+        scriptAuthSuccess(fake)
+        assertTrue(session.connect("test"))
+        fake.responses[CommandType.CANCEL_BOLUS.code] = successResponse(CommandType.CANCEL_BOLUS.code)
+        // No scripted answer for SET_BOLUS: its command stays in flight.
+        val bolus = launch { session.setBolus(1.0) }
+        var tries = 0
+        while (fake.sentMessages.none { it[0] == CommandType.SET_BOLUS.code } && tries++ < 100) kotlinx.coroutines.delay(10)
+        val stop = launch { session.stopBolus() }
+        kotlinx.coroutines.delay(300)
+        assertTrue(fake.sentMessages.none { it[0] == CommandType.CANCEL_BOLUS.code }, "cancel must not overwrite the command in flight")
+
+        // The pump answers the bolus command. The stop now goes out while the bolus is still running.
+        session.onIndication(successResponse(CommandType.SET_BOLUS.code))
+        tries = 0
+        while (fake.sentMessages.none { it[0] == CommandType.CANCEL_BOLUS.code } && tries++ < 100) kotlinx.coroutines.delay(10)
+        assertTrue(fake.sentMessages.any { it[0] == CommandType.CANCEL_BOLUS.code })
+        stop.join()
+        bolus.join()
+    }
 }
