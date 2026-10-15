@@ -201,6 +201,11 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
             hrvRMSSDHistory.putAll(baseline.hrvHistory)
             morningRHRHistory.putAll(baseline.rhrHistory)
             dailyStepsHistory.putAll(baseline.stepsHistory)
+            // A date this version cannot parse is dropped rather than failing the whole restore:
+            // one bad entry must not cost the user every other night.
+            baseline.hrvNights.forEach { (iso, value) ->
+                runCatching { LocalDate.parse(iso) }.getOrNull()?.let { hrvByNight[it] = value }
+            }
             sleepSize = sleepDurationHistory.size
             hrvSize = hrvRMSSDHistory.size
             rhrSize = morningRHRHistory.size
@@ -289,7 +294,10 @@ class AIMIPhysioBaselineModelMTR @Inject constructor(
             sleepHistory = sleepDurationHistory.toMap(),
             hrvHistory = hrvRMSSDHistory.toMap(),
             rhrHistory = morningRHRHistory.toMap(),
-            stepsHistory = dailyStepsHistory.toMap()
+            stepsHistory = dailyStepsHistory.toMap(),
+            // The night map is what the per-night baseline reads, so it has to survive a restart
+            // too. Keyed by the night's local date, written as ISO text.
+            hrvNights = hrvByNight.entries.associate { (date, value) -> date.toString() to value }
         )
     }
     

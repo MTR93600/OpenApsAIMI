@@ -1,7 +1,9 @@
 package app.aaps.plugins.aps.openAPSAIMI.context
 
+import app.aaps.core.keys.interfaces.StringPreferenceKey
+import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.keys.interfaces.BooleanPreferenceKey
 import app.aaps.core.interfaces.db.PersistenceLayer
-import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent.Activity
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent.Intensity
@@ -71,59 +73,34 @@ class ContextManagerAtomicityTest {
     private val wellPastMs = startMs + 2 * oneHourMs
 
     /**
-     * A plain in-memory [KeyValueStore]. Hand written rather than mocked: the manager saves on every
-     * change, so a recording mock would be the slowest thing in the test.
+     * An in-memory [Preferences], built the way the other tests here build one: a mock backed by a
+     * map. Only the keys this test touches are answered.
+     *
+     * [blockWritesOn] holds a storage write open, which is how the atomicity cases are driven.
      */
-    private class FakeStore(private val configuredPin: String) : KeyValueStore {
+    private class FakePrefs(private val configuredPin: String) {
 
         private val values = ConcurrentHashMap<String, Any>()
 
-        /** When set, [putString] blocks on it. Used to hold a storage write open. */
         @Volatile var blockWritesOn: CountDownLatch? = null
 
-        override fun edit(commit: Boolean, block: KeyValueStore.Editor.() -> Unit) {
-            val editor = object : KeyValueStore.Editor {
-                override fun clear() = values.clear()
-                override fun remove(key: String) { values.remove(key) }
-                override fun putBoolean(key: String, value: Boolean) { values[key] = value }
-                override fun putDouble(key: String, value: Double) { values[key] = value }
-                override fun putLong(key: String, value: Long) { values[key] = value }
-                override fun putInt(key: String, value: Int) { values[key] = value }
-                override fun putString(key: String, value: String) { values[key] = value }
+        val preferences: Preferences = mock<Preferences>().also { prefs ->
+            whenever(prefs.get(any<StringPreferenceKey>())).thenAnswer { invocation ->
+                val key = invocation.getArgument<StringPreferenceKey>(0)
+                if (key.key == AimiStringKey.RemoteControlPin.key) configuredPin
+                else values[key.key] as? String ?: key.defaultValue
             }
-            editor.block()
+            whenever(prefs.get(any<BooleanPreferenceKey>())).thenAnswer { invocation ->
+                val key = invocation.getArgument<BooleanPreferenceKey>(0)
+                values[key.key] as? Boolean ?: key.defaultValue
+            }
+            whenever(prefs.put(any<StringPreferenceKey>(), any())).thenAnswer { invocation ->
+                val key = invocation.getArgument<StringPreferenceKey>(0)
+                blockWritesOn?.await()
+                values[key.key] = invocation.getArgument<String>(1)
+                Unit
+            }
         }
-
-        override fun getAll(): Map<String, *> = values.toMap()
-        override fun clear() = values.clear()
-        override fun contains(key: String): Boolean = values.containsKey(key)
-        override fun remove(key: String) { values.remove(key) }
-
-        override fun getString(key: String, defaultValue: String): String {
-            if (key == AimiStringKey.RemoteControlPin.key) return configuredPin
-            return values[key] as? String ?: defaultValue
-        }
-
-        override fun getStringOrNull(key: String, defaultValue: String?): String? =
-            values[key] as? String ?: defaultValue
-
-        override fun getBoolean(key: String, defaultValue: Boolean): Boolean = values[key] as? Boolean ?: defaultValue
-        override fun getDouble(key: String, defaultValue: Double): Double = values[key] as? Double ?: defaultValue
-        override fun getInt(key: String, defaultValue: Int): Int = values[key] as? Int ?: defaultValue
-        override fun getLong(key: String, defaultValue: Long): Long = values[key] as? Long ?: defaultValue
-
-        override fun putString(key: String, value: String) {
-            blockWritesOn?.await()
-            values[key] = value
-        }
-
-        override fun putBoolean(key: String, value: Boolean) { values[key] = value }
-        override fun putDouble(key: String, value: Double) { values[key] = value }
-        override fun putInt(key: String, value: Int) { values[key] = value }
-        override fun putLong(key: String, value: Long) { values[key] = value }
-
-        override fun incInt(key: String) { values[key] = (values[key] as? Int ?: 0) + 1 }
-        override fun incLong(key: String) { values[key] = (values[key] as? Long ?: 0L) + 1L }
     }
 
     /**
@@ -154,7 +131,7 @@ class ContextManagerAtomicityTest {
         override fun error(className: String, methodName: String, lineNumber: Int, tag: LTag, message: String) {}
     }
 
-    private fun newManager(store: KeyValueStore, parser: ContextParser = mock()): ContextManager {
+    private fun newManager(store: FakePrefs, parser: ContextParser = mock()): ContextManager {
         val dateUtil: DateUtil = mock()
         whenever(dateUtil.now()).thenReturn(nowMs)
         val persistenceLayer: PersistenceLayer = mock()
@@ -162,7 +139,7 @@ class ContextManagerAtomicityTest {
         return ContextManager(
             contextLLMClient = llm,
             contextParser = parser,
-            sp = store,
+            preferences = store.preferences,
             aapsLogger = SilentLogger,
             persistenceLayer = persistenceLayer,
             dateUtil = dateUtil,
@@ -197,7 +174,7 @@ class ContextManagerAtomicityTest {
             whenever(parser.parsePreset(any())).thenReturn(anActivity())
             whenever(parser.parse(any())).thenReturn(listOf(anActivity()))
 
-            val manager = newManager(FakeStore(pin), parser)
+            val manager = newManager(FakePrefs(pin), parser)
             val barrier = CyclicBarrier(2)
             val adder = Thread {
                 barrier.await()
@@ -224,7 +201,7 @@ class ContextManagerAtomicityTest {
      */
     @Test
     fun `removeByType reports each removal once when two threads run it together`() {
-        val manager = newManager(FakeStore(pin))
+        val manager = newManager(FakePrefs(pin))
         val barrier = CyclicBarrier(2)
 
         for (round in 0 until rounds) {
@@ -257,7 +234,7 @@ class ContextManagerAtomicityTest {
      */
     @Test
     fun `cleanupExpired keeps an intent that was extended while it ran`() {
-        val manager = newManager(FakeStore(pin))
+        val manager = newManager(FakePrefs(pin))
         val barrier = CyclicBarrier(2)
 
         for (round in 0 until rounds) {
@@ -301,7 +278,7 @@ class ContextManagerAtomicityTest {
      */
     @Test
     fun `a blocked storage write does not block a reader`() {
-        val store = FakeStore(pin)
+        val store = FakePrefs(pin)
         val manager = newManager(store)
         manager.injectContextFromNS("S1", anActivity(), pin)
 

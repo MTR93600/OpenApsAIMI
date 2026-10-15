@@ -119,9 +119,9 @@ class RawPreferenceStoreScanTest {
         "plugins/aps/src/androidMain/kotlin/app/aaps/plugins/aps/openAPSAIMI/sos/EmergencySosManager.kt" to
             "Emergency SOS keeps its own preference file. Same migration question as the mode settings above.",
         "plugins/dexcom_oneplus/src/main/kotlin/app/aaps/plugins/dexcomoneplus/identity/OnePlusSensorStore.kt" to
-            "ONE+ sensor identity, including the pairing key. Same shape as the pump drivers below: live device state, so it needs a migration, and a sensor secret in the export file needs an answer first.",
+            "ONE+ sensor identity, including the pairing key. Live device state, so it needs a migration. The export question IS answered (owner, 2026-10-15): the key MUST be exportable, because a sensor has to survive a change of phone - so these move to registered, exportable keys.",
         "plugins/libre3/src/main/kotlin/app/aaps/plugins/libre3/identity/Libre3SensorStore.kt" to
-            "Libre 3 sensor identity, same question as the ONE+ store above.",
+            "Libre 3 sensor identity, same as the ONE+ store above, and exportable for the same reason.",
         "pump/combov2/src/main/kotlin/info/nightscout/pump/combov2/AAPSPumpStateStore.kt" to
             "ComboV2 pump state. Deferred WITH a migration (agreed 2026-09-22) - the values are live pump state, so they have to be carried across, not abandoned. Plan 3.1.2.",
         "pump/combov2/src/main/kotlin/info/nightscout/pump/combov2/ComboV2Plugin.kt" to "ComboV2, same migration",

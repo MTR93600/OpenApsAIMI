@@ -244,7 +244,17 @@ data class PhysioBaselineMTR(
     val sleepHistory: Map<Long, Double> = emptyMap(),
     val hrvHistory: Map<Long, Double> = emptyMap(),
     val rhrHistory: Map<Long, Int> = emptyMap(),
-    val stepsHistory: Map<Long, Int> = emptyMap()
+    val stepsHistory: Map<Long, Int> = emptyMap(),
+
+    /**
+     * One HRV value per night, keyed by the night's local date in ISO form.
+     *
+     * Kept separately from [hrvHistory], which holds one value per pipeline run. The two are not
+     * interchangeable: the night map is what the per-night baseline reads, and without it here the
+     * baseline started empty after every restart and needed three fresh nights to become valid
+     * again - up to a day, because only the daily pass fetches a week of readings.
+     */
+    val hrvNights: Map<String, Double> = emptyMap()
 ) {
     fun isValid(): Boolean = validDaysCount >= 3
     
@@ -282,6 +292,7 @@ data class PhysioBaselineMTR(
             put("hrv", buildJsonObject { hrvHistory.forEach { (k, v) -> put(k.toString(), v) } })
             put("rhr", buildJsonObject { rhrHistory.forEach { (k, v) -> put(k.toString(), v) } })
             put("steps", buildJsonObject { stepsHistory.forEach { (k, v) -> put(k.toString(), v) } })
+            put("hrvNights", buildJsonObject { hrvNights.forEach { (k, v) -> put(k, v) } })
         })
     }
     
@@ -325,6 +336,12 @@ data class PhysioBaselineMTR(
                 
                 stepsHistory = json.optJsonObjectCompat("history")?.optJsonObjectCompat("steps")?.let { obj ->
                     obj.keys.asSequence().associate { it.toLong() to obj.optIntCompat(it, 0) }
+                } ?: emptyMap(),
+
+                // Absent from a file written before the night baseline existed, which reads as an
+                // empty map - the behaviour this had before, so an old file still loads.
+                hrvNights = json.optJsonObjectCompat("history")?.optJsonObjectCompat("hrvNights")?.let { obj ->
+                    obj.keys.asSequence().associate { it to obj.optDoubleCompat(it, 0.0) }
                 } ?: emptyMap()
             )
         } catch (e: Exception) {

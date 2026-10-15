@@ -369,6 +369,45 @@ class HrvNightBaselineTest {
         assertEquals(3, model.getCurrentBaseline().validDaysCount)
     }
 
+    /**
+     * The nights survive a restart.
+     *
+     * The per-night baseline reads [AIMIPhysioBaselineModelMTR] nights only. They used to live in
+     * memory alone, so after a restart the baseline was empty and needed three fresh nights to be
+     * valid again - up to a day, because only the daily pass fetches a week of readings.
+     */
+    @Test
+    fun `the nights are restored into a fresh model`() {
+        val clock = Clock(at(2026, 3, 4, 12))
+        val saved = modelAt(clock).feed(
+            fullNight(2026, 3, 1, 40.0) + fullNight(2026, 3, 2, 50.0) + fullNight(2026, 3, 3, 60.0)
+        )
+        assertEquals(3, saved.hrvNights.size, "the nights must be written out")
+
+        val restored = modelAt(clock)
+        restored.restoreBaseline(saved)
+
+        val baseline = restored.getCurrentBaseline().hrvRMSSD
+        assertTrue(baseline.isValid(), "a restart must not cost the personal normal")
+        assertEquals(3, baseline.sampleCount)
+        assertEquals(50.0, baseline.mean)
+    }
+
+    /** A night this version cannot read must not cost the others. */
+    @Test
+    fun `an unreadable night date is dropped and the rest survive`() {
+        val clock = Clock(at(2026, 3, 4, 12))
+        val saved = modelAt(clock).feed(
+            fullNight(2026, 3, 1, 40.0) + fullNight(2026, 3, 2, 50.0) + fullNight(2026, 3, 3, 60.0)
+        )
+        val damaged = saved.copy(hrvNights = saved.hrvNights + ("not-a-date" to 99.0))
+
+        val restored = modelAt(clock)
+        restored.restoreBaseline(damaged)
+
+        assertEquals(3, restored.getCurrentBaseline().hrvRMSSD.sampleCount)
+    }
+
     /** With the switch off nothing about the night path may run. */
     @Test
     fun `the switch off still counts runs rather than nights`() {
