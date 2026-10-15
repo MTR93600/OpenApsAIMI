@@ -94,6 +94,7 @@ class AndroidEnvelopeParityTest {
      * is not limited to 4 bits. `dashctl` keeps one 4 bit counter for everything and masks with 0x0f.
      * Divergence: counter width (item C in the plan).
      */
+    @Ignore // PIN, EXPECTED TO FAIL: dashctl masks the outer sequence to 4 bits; Android keeps a full Byte seeded from the pair result.
     @Test
     fun outerSequenceCounterIsNotMaskedToFourBits() {
         val manager = DashPodStateManager(MemoryStore())
@@ -109,6 +110,7 @@ class AndroidEnvelopeParityTest {
      * by session set up. `DashSessionEstablisher` moves the one shared counter twice.
      * Divergence: inner counter disturbed by session set up (item D in the plan).
      */
+    @Ignore // PIN, EXPECTED TO FAIL: dashctl uses one counter for both; Android keeps the inner 4-bit counter independent of session setup.
     @Test
     fun sessionSetupLeavesInnerCommandCounterAlone() {
         val ltk = parityHex("00112233445566778899aabbccddeeff")

@@ -21,7 +21,7 @@ internal interface AimiTrajectorySpiralCalls {
     fun maxIob(): Double
     fun uamConfidence(): Double
     fun hyperTier(rT: RT, combinedDelta: Float, tdd24hU: Double): HyperSeverityTier
-    fun setPending(rateUph: Double, durationMin: Int, reason: String, tierLabel: String)
+    fun setPending(rateUph: Double, durationMin: Int, reason: String, tierLabel: String, tag: String)
     fun applySmbCap(
         energy: Double,
         iobNow: Double,
@@ -122,6 +122,12 @@ internal fun decideTrajectoryTightSpiralSafetyBridge(
 
     val proactiveBasal = profile.current_basal * effectiveFraction
     val cgateNote = if (cgateAmplified) " [CGate ISF↑ → amplification]" else ""
+    val spiralTag = when {
+        hyperTrajectorySpiral -> "HTR_HYPER_SPIRAL"
+        mealPriorityAlign -> "MEAL_PRIORITY_RELAX"
+        stackingSpiral -> "STACKING_SPIRAL"
+        else -> ""
+    }
     val spiralNote = when {
         hyperTrajectorySpiral -> " [HTR_HYPER_SPIRAL tier=${bridgeHyperTier.name}]"
         mealPriorityAlign -> " [MEAL_PRIORITY_RELAX]"
@@ -137,6 +143,7 @@ internal fun decideTrajectoryTightSpiralSafetyBridge(
         durationMin = if (energy > 3.5) 30 else 15,
         reason = reason,
         tierLabel = "TrajBridge_Tier${when { energy > 3.5 -> 1; energy > 2.5 -> 2; else -> 3 }}",
+        tag = spiralTag,
     )
     calls.applySmbCap(
         energy = energy,

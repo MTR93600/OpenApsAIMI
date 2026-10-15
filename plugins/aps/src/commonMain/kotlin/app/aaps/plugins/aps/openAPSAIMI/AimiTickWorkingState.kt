@@ -81,6 +81,15 @@ internal class AimiTickWorkingState {
     var lastFusedPhysioMultipliers: PhysioMultipliersMTR? = null
     var lastScenarioBestCappedForPhysio: Boolean = false
     var pendingTrajSpiralBasal: DetermineBasalaimiSMB2.PendingTrajSpiralBasal? = null
+
+    /** What the Traj-Bridge asked for on this tick. Null when it never fired. Reset at tick start. */
+    var lastTrajBridgeRequest: DetermineBasalaimiSMB2.TrajBridgeRequest? = null
+
+    /** True when `TrajBridgeSurvival` really lowered the delivered rate on this tick. */
+    var trajBridgeSurvivedThisTick: Boolean = false
+
+    /** The rate `TrajBridgeSurvival` would produce, whether or not the key let it through. */
+    var trajBridgeWouldReduceToUph: Double? = null
     var tags60to120minAgo = ""
     var tags120to180minAgo = ""
     var tags180to240minAgo = ""

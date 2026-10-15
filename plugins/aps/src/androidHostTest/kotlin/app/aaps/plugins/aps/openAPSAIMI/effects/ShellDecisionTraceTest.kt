@@ -156,6 +156,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalTime
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.double
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -2625,6 +2626,148 @@ class ShellDecisionTraceTest {
         assertEquals("true", trace["veto_on_floor_artefact_strict"].toString())
         assertEquals("true", trace["veto_on_floor_artefact_wide"].toString())
         assertEquals("false", trace["veto_lift_key_armed"].toString())
+    }
+
+    // --- TrajBridgeSurvival wired into setTempBasal ---
+
+    /** What one bridge tick did: the rate the pump request ends with, the reason text, the trace. */
+    private class TrajBridgeSceneResult(
+        val rate: Double,
+        val reason: String,
+        private val readTrace: () -> JsonObject?,
+    ) {
+        /** Read on demand, so a missing trace fails the assertion that needs it and no other. */
+        val trace: JsonObject? get() = readTrace()
+    }
+
+    /**
+     * One tick of the bridge path. The bridge asks for [bridgeRateUph] (when [bridgeFires]), the
+     * deferred request is applied to `rT`, and then `setTempBasal` runs the whole basal schedule.
+     * Same scene every time, so a baseline and a test run differ only by the key and the request.
+     */
+    private fun runTrajBridgeScene(
+        keyArmed: Boolean,
+        bridgeFires: Boolean,
+        bridgeRateUph: Double = 0.13,
+    ): TrajBridgeSceneResult {
+        tick = newTick(
+            recordingPreferences(
+                doubles = emptyMap(),
+                bools = mapOf(BooleanKey.OApsAIMITrajBridgeBasalSurvives to keyArmed),
+            ),
+        )
+        armShell()
+        val persistence = mock(PersistenceLayer::class.java)
+        runBlocking {
+            whenever(persistence.getTherapyEventDataFromTime(any(), any())).thenReturn(emptyList())
+            whenever(persistence.getBolusesFromTime(any(), any())).thenReturn(emptyList())
+        }
+        setField(tick, "persistenceLayer", persistence)
+        val storage = getField(tick, "storage") as AimiStorage
+        whenever(storage.file(any<String>())).thenReturn(AimiPath("circadian"))
+        whenever(storage.exists(any())).thenReturn(false)
+        val controller = mock(DynamicBasalController::class.java)
+        whenever(controller.calculateDynamicRate(any(), any(), any(), any(), any(), anyOrNull())).thenReturn(
+            DynamicBasalController.ControllerState(
+                errorP = 0.0,
+                errorD = 0.0,
+                totalError = 0.0,
+                sigmoidMultiplier = 1.0,
+                finalRate = 2.0,
+                isBraking = false,
+            ),
+        )
+        setField(tick, "dynamicBasalController", controller)
+        val cycle = getField(tick, "wCyclePreferences") as WCyclePreferences
+        whenever(cycle.trackingMode()).thenReturn(CycleTrackingMode.FIXED_28)
+        whenever(cycle.contraceptive()).thenReturn(ContraceptiveType.NONE)
+        whenever(cycle.thyroid()).thenReturn(ThyroidStatus.EUTHYROID)
+        whenever(cycle.verneuil()).thenReturn(VerneuilStatus.NONE)
+        val facade = getField(tick, "wCycleFacade") as WCycleFacade
+        whenever(facade.infoAndLog(any())).thenReturn(
+            WCycleInfo(
+                enabled = false,
+                dayInCycle = 0,
+                phase = CyclePhase.UNKNOWN,
+                baseBasalMultiplier = 1.0,
+                baseSmbMultiplier = 1.0,
+                learnedBasalMultiplier = 1.0,
+                learnedSmbMultiplier = 1.0,
+                basalMultiplier = 1.0,
+                smbMultiplier = 1.0,
+                icMultiplier = 1.0,
+                applied = false,
+                reason = "",
+            ),
+        )
+        setField(tick, "bg", 160.0)
+        setField(tick, "delta", 0.0f)
+        setField(tick, "targetBg", 100.0f)
+        val profile = profileStub()
+        whenever(profile.max_daily_safety_multiplier).thenReturn(3.0)
+        whenever(profile.current_basal_safety_multiplier).thenReturn(4.0)
+        whenever(profile.max_daily_basal).thenReturn(1.0)
+        val rT = RT(runningDynamicIsf = false)
+        val sceneTick = tick
+        if (bridgeFires) {
+            setField(
+                tick,
+                "pendingTrajSpiralBasal",
+                privateData("PendingTrajSpiralBasal", listOf(bridgeRateUph, 15, "reason", "TrajBridge_Tier3", "STACKING_SPIRAL")),
+            )
+            invokeNamed("applyPendingTrajSpiralBasalIfNotSuppressed", listOf(rT, 160.0, 0.0f))
+        }
+        invokeNamed(
+            "setTempBasal",
+            listOf(2.0, 30, profile, rT, CurrentTemp(duration = 0, rate = 1.0, minutesrunning = 0), false, false, 1.0, false, null),
+        )
+        return TrajBridgeSceneResult(
+            rate = rT.rate!!,
+            reason = rT.reason.toString(),
+            readTrace = {
+                val method = sceneTick.javaClass.getDeclaredMethod("buildTrajBridgeTelemetry")
+                method.isAccessible = true
+                method.invoke(sceneTick) as JsonObject?
+            },
+        )
+    }
+
+    @Test
+    fun trajBridgeRequestSurvivesTheBasalScheduleWhenTheKeyIsOn() {
+        val scheduled = runTrajBridgeScene(keyArmed = false, bridgeFires = false).rate
+        assertTrue("the schedule must give more than the bridge asks, or the scene proves nothing", scheduled > 0.13)
+        val result = runTrajBridgeScene(keyArmed = true, bridgeFires = true)
+        assertEquals(0.13, result.rate, 1e-9)
+        assertTrue(result.reason, result.reason.contains("TRAJ_BRIDGE:STACKING_SPIRAL"))
+        val trace = result.trace!!
+        assertEquals(0.13, trace["requested_uph"]!!.jsonPrimitive.double, 1e-9)
+        assertEquals("STACKING_SPIRAL", trace["tag"]!!.jsonPrimitive.content)
+        assertEquals(15, trace["duration_min"]!!.jsonPrimitive.int)
+        assertEquals(0.13, trace["would_reduce_to_uph"]!!.jsonPrimitive.double, 1e-9)
+        assertEquals("true", trace["survived"].toString())
+        assertEquals("true", trace["key_armed"].toString())
+    }
+
+    @Test
+    fun trajBridgeKeyOffLeavesTheDoseUnchangedButStillWritesTheTrace() {
+        val baseline = runTrajBridgeScene(keyArmed = false, bridgeFires = false)
+        val result = runTrajBridgeScene(keyArmed = false, bridgeFires = true)
+        assertEquals(baseline.rate, result.rate, 1e-12)
+        assertFalse(result.reason, result.reason.contains("TRAJ_BRIDGE"))
+        assertEquals(null, baseline.trace)
+        val trace = result.trace!!
+        assertEquals(0.13, trace["requested_uph"]!!.jsonPrimitive.double, 1e-9)
+        assertEquals(0.13, trace["would_reduce_to_uph"]!!.jsonPrimitive.double, 1e-9)
+        assertEquals("false", trace["survived"].toString())
+        assertEquals("false", trace["key_armed"].toString())
+    }
+
+    @Test
+    fun trajBridgeNeverRaisesTheRate() {
+        val baseline = runTrajBridgeScene(keyArmed = false, bridgeFires = false).rate
+        val result = runTrajBridgeScene(keyArmed = true, bridgeFires = true, bridgeRateUph = baseline + 1.0)
+        assertEquals(baseline, result.rate, 1e-12)
+        assertEquals("false", result.trace!!["survived"].toString())
     }
 
     @Test

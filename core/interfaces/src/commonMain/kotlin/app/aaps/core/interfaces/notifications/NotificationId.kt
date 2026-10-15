@@ -260,7 +260,13 @@ enum class NotificationId(
      * is dismissed once the situation resolves. Appended last on purpose, because the system
      * notification id is the ordinal.
      */
-    CALIBRATION_HEALTH(NORMAL, CGM);
+    CALIBRATION_HEALTH(NORMAL, CGM),
+
+    /**
+     * A pre-soak sensor (ONE+ / G7 or Libre 3) was switched to production by itself, without the
+     * user pressing the promote button. Appended last on purpose, see the comment above.
+     */
+    CGM_STAGING_AUTO_PROMOTED(NORMAL, CGM);
 
     companion object {
 

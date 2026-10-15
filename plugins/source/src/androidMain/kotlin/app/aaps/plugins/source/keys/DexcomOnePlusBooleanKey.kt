@@ -99,7 +99,22 @@ enum class DexcomOnePlusBooleanKey(
         summaryResId = R.string.dexcom_oneplus_anchor_session_to_manual_sensor_change_summary,
         engineeringModeOnly = true,
         exportable = false,
-    )
+    ),
+
+    /**
+     * Switches the pre-soak sensor to production by itself, [DexcomOnePlusIntKey.AutoPromoteHours]
+     * after the pre-soak start, when its readings are recent and real. The promote button still works.
+     *
+     * Off by default: the switch stops the sensor in use, and the rest of its life is lost.
+     *
+     * Provenance: ref `DexcomOnePlusBooleanKey.AutoPromote` at `a88a0e588c`.
+     */
+    AutoPromote(
+        key = "dexcom_oneplus_staging_auto_promote",
+        defaultValue = false,
+        titleResId = R.string.staging_auto_promote_title,
+        summaryResId = R.string.staging_auto_promote_summary,
+    ),
     ;
 
     override val title: TextRef = TextRef.AndroidRes(titleResId)

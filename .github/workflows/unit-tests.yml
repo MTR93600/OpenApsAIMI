@@ -21,6 +21,7 @@ on:
   workflow_dispatch:
   push:
     branches:
+      - kmp-aimi-merge-dev-2026-10-10
       - dev
       - master
   pull_request:

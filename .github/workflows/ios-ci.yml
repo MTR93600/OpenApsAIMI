@@ -26,6 +26,7 @@ on:
   # If such a branch appears again, add it here.
   push:
     branches:
+      - kmp-aimi-merge-dev-2026-10-10
       - kmp-aimi-migration-study
       - dev
       - master

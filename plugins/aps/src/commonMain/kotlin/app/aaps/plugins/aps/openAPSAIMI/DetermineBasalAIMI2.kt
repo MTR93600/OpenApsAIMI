@@ -256,6 +256,7 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AimiContextModuleCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPhysioLatentCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTubeAdvisorCalls
 import app.aaps.plugins.aps.openAPSAIMI.safety.HyperClampTubeBound
+import app.aaps.plugins.aps.openAPSAIMI.safety.TrajBridgeSurvival
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTubeDoseBaseline
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideApplyTubeAdvisorFromDoseSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiAdvancedPredictionCalls
@@ -1580,6 +1581,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // holdTicks every loop and made 15–20 min holds dead on arrival. reset() belongs in
         // tests / plugin restart only.
         work.pendingTrajSpiralBasal = null
+        // What the Traj-Bridge asked for belongs to this tick only. A null here is the honest answer
+        // for a tick where the bridge never fired, and it keeps the survival rule in setTempBasal inert.
+        work.lastTrajBridgeRequest = null
+        work.trajBridgeSurvivedThisTick = false
+        work.trajBridgeWouldReduceToUph = null
         // 🔭 Lot 0 — l'export JSONL doit avoir lieu sur TOUS les chemins de sortie du tick, pas seulement
         // sur les deux qui appellent explicitement le stage. On repart d'un état non exporté à chaque tick.
         work.aimiDecisionExportedThisTick = false
@@ -3406,6 +3412,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         val tbrFrac = work.lastRecursiveBeliefSnapshot?.resolutions?.tbrDemandFraction ?: 1.0
         rT.rate = pending.proactiveBasalUph * tbrFrac
+        // Keep the request for the end of setTempBasal, where the basal schedule can no longer write
+        // over it. Only a finite request is kept: a broken number must never reach a rate decision.
+        work.lastTrajBridgeRequest = rT.rate?.takeIf { it.isFinite() && it >= 0.0 }?.let { requested ->
+            TrajBridgeRequest(requestedUph = requested, tag = pending.tag, durationMin = pending.durationMin)
+        }
         rT.duration = pending.durationMin
         rT.reason.append(" | 🌀 Traj-Bridge: ${pending.reason}")
         work.lastSafetySource = pending.safetyTierLabel
@@ -7165,6 +7176,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         decisionCtx.adjustments.tube_advisor = lastTubeAdvisorTrace
         decisionCtx.adjustments.pkpd_soft_floor = lastPkpdSoftFloorTelemetry?.toJsonObject()
         decisionCtx.adjustments.basal_terminal = lastBasalTerminalTelemetry
+        decisionCtx.adjustments.traj_bridge = buildTrajBridgeTelemetry()
         decisionCtx.adjustments.adaptive_basal = lastAdaptiveBasalTrace
         decisionCtx.adjustments.harmonia_simulation = work.lastHarmoniaDecision?.toJsonObject()
         decisionCtx.adjustments.harmonia_production = work.lastHarmoniaProductionDecision?.toJsonObject()
@@ -7585,12 +7597,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 override fun uamConfidence() = AimiUamHandler.confidenceOrZero()
                 override fun hyperTier(rT: RT, combinedDelta: Float, tdd24hU: Double) =
                     classifyHyperSeverityForTick(rT, combinedDelta, tdd24hU).tier
-                override fun setPending(rateUph: Double, durationMin: Int, reason: String, tierLabel: String) {
+                override fun setPending(rateUph: Double, durationMin: Int, reason: String, tierLabel: String, tag: String) {
                     work.pendingTrajSpiralBasal = PendingTrajSpiralBasal(
                         proactiveBasalUph = rateUph,
                         durationMin = durationMin,
                         reason = reason,
                         safetyTierLabel = tierLabel,
+                        tag = tag,
                     )
                 }
                 override fun applySmbCap(
@@ -8690,6 +8703,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val durationMin: Int,
         val reason: String,
         val safetyTierLabel: String,
+        /** Short name of the branch that sized the request, for the JSONL (`traj_bridge.tag`). */
+        val tag: String,
+    )
+
+    /**
+     * What the Traj-Bridge asked for on this tick, after the TBR demand fraction.
+     *
+     * Written only when [applyPendingTrajSpiralBasalIfNotSuppressed] really applied the request, so
+     * a suppressed bridge and a bridge that never fired both leave it null. Read once, at the end of
+     * `setTempBasal`, where the opt-in re-apply can still lower the rate.
+     */
+    internal data class TrajBridgeRequest(
+        val requestedUph: Double,
+        val tag: String,
+        val durationMin: Int,
     )
     private var tir1DAYabove: Double = 0.0
     private var currentTIRLow: Double = 0.0
@@ -8772,6 +8800,29 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     /** 🔒 Lot 2 — dernier verdict des invariants terminaux du tick, exporté en JSON structuré. */
     private var lastBasalTerminalTelemetry: JsonObject? = null
+
+    /**
+     * The `adjustments.traj_bridge` block, written whether the key is armed or not.
+     *
+     * `would_reduce_to_uph` is what the survival rule would produce, so a support package can count
+     * how often it bites before anyone arms the key. `survived` is true only when the rate was
+     * really lowered on this tick, so a shadow tick and an armed tick cannot be mixed up.
+     * A number that is not finite becomes JSON null, so the whole tick record never turns into an
+     * error object.
+     */
+    private fun buildTrajBridgeTelemetry(): JsonObject? {
+        val request = work.lastTrajBridgeRequest
+        val wouldReduce = work.trajBridgeWouldReduceToUph
+        if (request == null && wouldReduce == null) return null
+        return JsonObj().apply {
+            putFiniteOrNull("requested_uph", request?.requestedUph)
+            put("tag", request?.tag?.takeIf { it.isNotEmpty() } ?: AimiJson.NULL)
+            put("duration_min", request?.durationMin ?: AimiJson.NULL)
+            putFiniteOrNull("would_reduce_to_uph", wouldReduce)
+            put("survived", work.trajBridgeSurvivedThisTick)
+            put("key_armed", preferences.get(BooleanKey.OApsAIMITrajBridgeBasalSurvives))
+        }.build()
+    }
 
     /** Universal Adaptive Basal scaling trace for this tick; exported as `adjustments.adaptive_basal`. */
     private var lastAdaptiveBasalTrace: JsonObject? = null
@@ -10320,6 +10371,29 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             causalState.lastWCycleBelief = causalState.lastWCycleBelief?.copy(
                 dosePathOwner = EndocrineDosePathOwner.HARMONIA_PRODUCTION_BASAL_FIRST,
             )
+        }
+
+        // 🌀 Traj-Bridge survival: the bridge wrote its rate before the basal schedule ran, so the
+        // schedule overwrote it (measured: asked 0.13 U/h, pump got 4.84 U/h). Re-apply the request
+        // here, after every stage that can raise the rate. Lowers only, and only on a tick where the
+        // bridge fired. Off by default. The shadow numbers are written whether the key is on or off.
+        work.lastTrajBridgeRequest?.let { bridge ->
+            val survival = TrajBridgeSurvival.resolve(
+                scheduledUph = rate,
+                requestedUph = bridge.requestedUph,
+                keyArmed = preferences.get(BooleanKey.OApsAIMITrajBridgeBasalSurvives),
+            )
+            work.trajBridgeWouldReduceToUph = survival.wouldReduceToUph
+            work.trajBridgeSurvivedThisTick = survival.survived
+            if (survival.survived) {
+                work.consoleLog.add(
+                    "🌀 TRAJ_BRIDGE_SURVIVES[${bridge.tag}] ${aimiFmt2(rate)}→${aimiFmt2(survival.rateUph)}U/h",
+                )
+                rT.reason.append(
+                    " [TRAJ_BRIDGE:${bridge.tag} ${aimiFmt2(rate)}→${aimiFmt2(survival.rateUph)}U/h]",
+                )
+                rate = survival.rateUph
+            }
         }
 
         // 🔒 Lot 2 — invariants terminaux : dernier point où le taux peut encore être borné. Tout ce qui
