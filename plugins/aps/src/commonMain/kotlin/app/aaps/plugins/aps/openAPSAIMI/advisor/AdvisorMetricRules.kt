@@ -67,8 +67,17 @@ fun metricRecommendations(
 ): List<AimiRecommendation> {
     val recs = mutableListOf<AimiRecommendation>()
 
+    // A metric that was not measured is null. A rule that needs it is skipped: no number is
+    // guessed, so no recommendation can rest on one.
+    val below70 = metrics.timeBelow70
+    val below54 = metrics.timeBelow54
+    val tir = metrics.tir70_180
+    val above180 = metrics.timeAbove180
+    val basalPercent = metrics.basalPercent
+
     // 1) Critical: too much time low -> propose a smaller Max SMB.
-    if (metrics.timeBelow70 > AdvisorMetricRules.HYPO_PRESSURE_FRACTION) {
+    // The text names the time below 54 mg/dL, so this rule needs that number as well.
+    if (below70 != null && below54 != null && below70 > AdvisorMetricRules.HYPO_PRESSURE_FRACTION) {
         val action = if (prefs.maxSmb > AdvisorMetricRules.MAX_SMB_CUT_FLOOR) {
             val newValue = (prefs.maxSmb * AdvisorMetricRules.MAX_SMB_CUT_FACTOR * 10.0).roundToInt() / 10.0
             AimiAction.PreferenceUpdate(
@@ -84,7 +93,7 @@ fun metricRecommendations(
         }
         recs += AimiRecommendation(
             title = ApsStrings.aimi_adv_rec_hypos_title,
-            description = ApsStrings.aimi_adv_rec_hypos_desc.withArgs((metrics.timeBelow54 * 100).roundToInt()),
+            description = ApsStrings.aimi_adv_rec_hypos_desc.withArgs((below54 * 100).roundToInt()),
             priority = AimiPriority.Critical,
             domain = AimiDomain.Safety,
             action = action,
@@ -92,7 +101,7 @@ fun metricRecommendations(
     }
 
     // 2) High: low time in range while lows are rare -> propose a stronger lunch factor.
-    if (metrics.tir70_180 < AdvisorMetricRules.LOW_TIR_FRACTION && metrics.timeBelow70 <= AdvisorMetricRules.SAFE_HYPO_FRACTION) {
+    if (tir != null && below70 != null && tir < AdvisorMetricRules.LOW_TIR_FRACTION && below70 <= AdvisorMetricRules.SAFE_HYPO_FRACTION) {
         val action = if (prefs.lunchFactor < AdvisorMetricRules.LUNCH_FACTOR_RAISE_CEILING) {
             // The brackets matter. The original line was `(prefs.lunchFactor + 0.1 * 10.0).roundToInt() / 10.0`,
             // which by operator precedence is `lunchFactor + 1.0` and then `/ 10`, so a lunch factor of
@@ -111,7 +120,7 @@ fun metricRecommendations(
         }
         recs += AimiRecommendation(
             title = ApsStrings.aimi_adv_rec_control_title,
-            description = ApsStrings.aimi_adv_rec_control_desc.withArgs((metrics.tir70_180 * 100).roundToInt()),
+            description = ApsStrings.aimi_adv_rec_control_desc.withArgs((tir * 100).roundToInt()),
             priority = AimiPriority.High,
             domain = AimiDomain.Basal,
             action = action,
@@ -119,10 +128,10 @@ fun metricRecommendations(
     }
 
     // 3) Medium: highs dominate while lows are rare. No safe automatic change, so this one only informs.
-    if (metrics.timeAbove180 > AdvisorMetricRules.HIGH_TIME_ABOVE_180_FRACTION && metrics.timeBelow70 <= AdvisorMetricRules.SAFE_HYPO_FRACTION) {
+    if (above180 != null && below70 != null && above180 > AdvisorMetricRules.HIGH_TIME_ABOVE_180_FRACTION && below70 <= AdvisorMetricRules.SAFE_HYPO_FRACTION) {
         recs += AimiRecommendation(
             title = ApsStrings.aimi_adv_rec_hypers_title,
-            description = ApsStrings.aimi_adv_rec_hypers_desc.withArgs((metrics.timeAbove180 * 100).roundToInt()),
+            description = ApsStrings.aimi_adv_rec_hypers_desc.withArgs((above180 * 100).roundToInt()),
             priority = AimiPriority.Medium,
             domain = AimiDomain.Isf,
             action = null,
@@ -130,10 +139,10 @@ fun metricRecommendations(
     }
 
     // 4) Medium: basal carries most of the daily dose. Informational only.
-    if (metrics.basalPercent > AdvisorMetricRules.BASAL_DOMINANT_FRACTION) {
+    if (basalPercent != null && basalPercent > AdvisorMetricRules.BASAL_DOMINANT_FRACTION) {
         recs += AimiRecommendation(
             title = ApsStrings.aimi_adv_rec_basal_title,
-            description = ApsStrings.aimi_adv_rec_basal_desc.withArgs((metrics.basalPercent * 100).roundToInt()),
+            description = ApsStrings.aimi_adv_rec_basal_desc.withArgs((basalPercent * 100).roundToInt()),
             priority = AimiPriority.Medium,
             domain = AimiDomain.Basal,
             action = null,

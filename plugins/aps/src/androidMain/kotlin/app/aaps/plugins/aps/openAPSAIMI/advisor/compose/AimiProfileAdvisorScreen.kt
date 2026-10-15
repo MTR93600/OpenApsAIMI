@@ -699,6 +699,8 @@ private fun SectionHeader(title: String) {
 @Composable
 private fun MetricsCard(metrics: AdvisorMetrics) {
     val percent = CoreUiR.string.format_percent
+    // A metric that was not measured shows this text. It is never shown as a number.
+    val missing = stringResource(R.string.aimi_adv_metric_value_missing)
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(AapsSpacing.extraLarge),
@@ -711,13 +713,13 @@ private fun MetricsCard(metrics: AdvisorMetrics) {
                 MetricCell(
                     modifier = Modifier.weight(1f),
                     label = stringResource(R.string.aimi_adv_metric_tir),
-                    value = stringResource(percent, (metrics.tir70_180 * 100).roundToInt()),
+                    value = metrics.tir70_180?.let { stringResource(percent, (it * 100).roundToInt()) } ?: missing,
                     valueColor = AapsTheme.generalColors.bgInRange,
                 )
                 MetricCell(
                     modifier = Modifier.weight(1f),
                     label = stringResource(R.string.aimi_adv_metric_tdd),
-                    value = stringResource(CoreUiR.string.units_format_insulin_int, metrics.tdd.roundToInt()),
+                    value = metrics.tdd?.let { stringResource(CoreUiR.string.units_format_insulin_int, it.roundToInt()) } ?: missing,
                     valueColor = AapsTheme.generalColors.activeInsulinText,
                 )
             }
@@ -728,20 +730,19 @@ private fun MetricsCard(metrics: AdvisorMetrics) {
                 MetricCell(
                     modifier = Modifier.weight(1f),
                     label = stringResource(R.string.aimi_adv_metric_gmi),
-                    value = stringResource(R.string.aimi_adv_metric_value_gmi, metrics.gmi),
+                    value = metrics.gmi?.let { stringResource(R.string.aimi_adv_metric_value_gmi, it) } ?: missing,
                     valueColor = AapsTheme.generalColors.bgHigh,
                 )
                 MetricCell(
                     modifier = Modifier.weight(1f),
                     label = stringResource(R.string.aimi_adv_metric_hypo54),
-                    value = stringResource(percent, (metrics.timeBelow54 * 100).roundToInt()),
+                    value = metrics.timeBelow54?.let { stringResource(percent, (it * 100).roundToInt()) } ?: missing,
                     valueColor = AapsTheme.generalColors.bgLow,
                 )
             }
             val todayTir = metrics.todayTir
             val todayTdd = metrics.todayTdd
             if (todayTir != null || todayTdd != null) {
-                val missing = stringResource(R.string.aimi_adv_metric_value_missing)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(AapsSpacing.medium),
@@ -841,13 +842,15 @@ private fun buildTuningResultMessage(result: TuningApplyResult): String {
 @Composable
 private fun DashboardHeader(
     periodLabel: String,
-    overallScore: Double,
-    overallSeverity: AdvisorSeverity,
+    overallScore: Double?,
+    overallSeverity: AdvisorSeverity?,
 ) {
+    // No score means the period was not measured: the pill says so and shows no number.
     val severityColor = when (overallSeverity) {
         AdvisorSeverity.Good     -> AapsTheme.generalColors.statusNormal
         AdvisorSeverity.Warning  -> AapsTheme.generalColors.statusWarning
         AdvisorSeverity.Critical -> AapsTheme.generalColors.statusCritical
+        null                     -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -867,7 +870,8 @@ private fun DashboardHeader(
             color = severityColor.copy(alpha = 0.15f),
         ) {
             Text(
-                text = stringResource(R.string.aimi_adv_score_label, overallScore),
+                text = overallScore?.let { stringResource(R.string.aimi_adv_score_label, it) }
+                    ?: stringResource(R.string.aimi_adv_not_enough_data),
                 style = MaterialTheme.typography.labelLarge,
                 color = severityColor,
                 modifier = Modifier.padding(horizontal = AapsSpacing.medium, vertical = AapsSpacing.small),

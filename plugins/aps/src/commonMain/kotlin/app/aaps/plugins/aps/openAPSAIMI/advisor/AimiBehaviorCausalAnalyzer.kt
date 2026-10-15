@@ -27,23 +27,26 @@ internal fun buildAimiBehaviorCausalInsights(
     // Insights are read as statements about the user's own period. With no measured numbers we say
     // nothing instead of describing an average patient.
     if (metrics.isInsufficient) return insights
+    val variabilityCv = metrics.variabilityCv ?: return insights
+    val timeBelow70 = metrics.timeBelow70 ?: return insights
+    val timeAbove180 = metrics.timeAbove180 ?: return insights
 
-    if (metrics.variabilityCv >= 0.36 && metrics.timeBelow70 >= 0.03 && metrics.timeAbove180 >= 0.12) {
+    if (variabilityCv >= 0.36 && timeBelow70 >= 0.03 && timeAbove180 >= 0.12) {
         insights += AimiBehaviorCausalInsight(
             id = "yoyo_instability",
             primaryFamily = AimiBehaviorFamilyId.Stability,
             secondaryFamilies = listOf(AimiBehaviorFamilyId.Protection, AimiBehaviorFamilyId.MealCapture),
             confidence = 0.90f,
             evidence = listOf(
-                "CV ${pct(metrics.variabilityCv)}% with lows ${pct(metrics.timeBelow70)}% and highs ${pct(metrics.timeAbove180)}%.",
+                "CV ${pct(variabilityCv)}% with lows ${pct(timeBelow70)}% and highs ${pct(timeAbove180)}%.",
                 "This pattern usually reflects sequencing issues more than a single isolated threshold.",
             ),
             relatedSuggestionId = "swing_variability".takeIf { it in availableSuggestionIds },
         )
     }
 
-    if (metrics.timeAbove180 >= 0.20 &&
-        metrics.timeBelow70 <= 0.04 &&
+    if (timeAbove180 >= 0.20 &&
+        timeBelow70 <= 0.04 &&
         (draft.mealCaptureLevel <= 2 || draft.autonomyMode.authorityRank() < AimiAutonomyMode.AssistedApplication.authorityRank())
     ) {
         insights += AimiBehaviorCausalInsight(
@@ -52,29 +55,29 @@ internal fun buildAimiBehaviorCausalInsights(
             secondaryFamilies = listOf(AimiBehaviorFamilyId.Autonomy, AimiBehaviorFamilyId.Protection),
             confidence = if (draft.mealCaptureLevel <= 1) 0.88f else 0.80f,
             evidence = listOf(
-                "Hyper burden ${pct(metrics.timeAbove180)}% with low hypo pressure ${pct(metrics.timeBelow70)}%.",
+                "Hyper burden ${pct(timeAbove180)}% with low hypo pressure ${pct(timeBelow70)}%.",
                 "Current meal posture is not strongly assertive enough for late undeclared-meal trajectories.",
             ),
             relatedSuggestionId = "meal_rise".takeIf { it in availableSuggestionIds },
         )
     }
 
-    if (metrics.timeBelow70 >= 0.05 || metrics.severeHypoEvents > 0) {
+    if (timeBelow70 >= 0.05 || metrics.severeHypoEvents > 0) {
         insights += AimiBehaviorCausalInsight(
             id = "hypo_overshoot",
             primaryFamily = AimiBehaviorFamilyId.Protection,
             secondaryFamilies = listOf(AimiBehaviorFamilyId.Stability),
-            confidence = if (metrics.timeBelow70 >= 0.07 || metrics.severeHypoEvents > 0) 0.92f else 0.82f,
+            confidence = if (timeBelow70 >= 0.07 || metrics.severeHypoEvents > 0) 0.92f else 0.82f,
             evidence = listOf(
-                "Hypo burden ${pct(metrics.timeBelow70)}% with ${metrics.severeHypoEvents} severe events.",
+                "Hypo burden ${pct(timeBelow70)}% with ${metrics.severeHypoEvents} severe events.",
                 "The product should reduce overshoot before asking for more correction authority.",
             ),
             relatedSuggestionId = "hypo_guard".takeIf { it in availableSuggestionIds },
         )
     }
 
-    if (metrics.timeAbove180 >= 0.28 &&
-        metrics.timeBelow70 <= 0.03 &&
+    if (timeAbove180 >= 0.28 &&
+        timeBelow70 <= 0.03 &&
         draft.protectionLevel <= 2
     ) {
         insights += AimiBehaviorCausalInsight(
@@ -83,7 +86,7 @@ internal fun buildAimiBehaviorCausalInsights(
             secondaryFamilies = listOf(AimiBehaviorFamilyId.Autonomy),
             confidence = 0.84f,
             evidence = listOf(
-                "Persistent hyperglycemia ${pct(metrics.timeAbove180)}% with limited low pressure ${pct(metrics.timeBelow70)}%.",
+                "Persistent hyperglycemia ${pct(timeAbove180)}% with limited low pressure ${pct(timeBelow70)}%.",
                 "This usually means correction headroom is too conservative for the current profile.",
             ),
             relatedSuggestionId = "hyper_stable".takeIf { it in availableSuggestionIds },
@@ -92,7 +95,7 @@ internal fun buildAimiBehaviorCausalInsights(
 
     if (draft.physioLevel == 0 &&
         draft.mealCaptureLevel >= 3 &&
-        metrics.variabilityCv >= 0.28
+        variabilityCv >= 0.28
     ) {
         insights += AimiBehaviorCausalInsight(
             id = "physio_ambiguity",

@@ -26,6 +26,9 @@ interface AimiAdvisorStrings : TextResolver {
     val scoreLabelAttention: String
     val scoreLabelCritical: String
 
+    /** Plain sentence for "this period has no measured glucose data" (no score, no advice). */
+    val notEnoughData: String
+
     val analysisIntroExcellent: String
     val analysisIntroGood: String
     val analysisIntroPoor: String

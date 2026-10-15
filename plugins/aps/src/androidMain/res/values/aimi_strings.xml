@@ -1096,6 +1096,7 @@
 <string name="aimi_adv_report_weekly">Weekly Report</string>
 
 <string name="aimi_adv_score_label">Score: %1$.1f/10</string>
+<string name="aimi_adv_not_enough_data">Not enough glucose data for this period. No score and no settings advice.</string>
 
 <string name="aimi_adv_apply_btn">APPLY</string>
 

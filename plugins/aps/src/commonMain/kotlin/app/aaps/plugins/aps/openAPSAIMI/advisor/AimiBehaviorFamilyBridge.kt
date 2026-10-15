@@ -31,6 +31,13 @@ internal fun buildAimiFamilyBridgeSuggestions(
     preferences: Preferences,
     metrics: AdvisorMetrics,
 ): List<AimiFamilyBridgeSuggestion> {
+    val suggestions = mutableListOf<AimiFamilyBridgeSuggestion>()
+    // These suggestions end in a preference write, so an unknown period must produce none.
+    if (metrics.isInsufficient) return suggestions
+    val variabilityCv = metrics.variabilityCv ?: return suggestions
+    val timeBelow70 = metrics.timeBelow70 ?: return suggestions
+    val timeAbove180 = metrics.timeAbove180 ?: return suggestions
+
     val currentDraft = readAimiControlCenterDraft(preferences)
     val t3cBrittle = preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
     val autoPlan = TuningContextEngine.computePlan(
@@ -39,16 +46,13 @@ internal fun buildAimiFamilyBridgeSuggestions(
         preferences = preferences,
         t3cBrittleMode = t3cBrittle,
     )
-    val suggestions = mutableListOf<AimiFamilyBridgeSuggestion>()
-    // These suggestions end in a preference write, so an unknown period must produce none.
-    if (metrics.isInsufficient) return suggestions
 
-    if (metrics.variabilityCv >= 0.36 && metrics.timeBelow70 >= 0.035 && metrics.timeAbove180 >= 0.12) {
+    if (variabilityCv >= 0.36 && timeBelow70 >= 0.035 && timeAbove180 >= 0.12) {
         val draft = harmonizeDraft(
             preferences = preferences,
             draft = currentDraft.copy(
                 stabilityLevel = (currentDraft.stabilityLevel - 1).coerceAtLeast(0),
-                protectionLevel = if (metrics.timeBelow70 >= 0.045) {
+                protectionLevel = if (timeBelow70 >= 0.045) {
                     (currentDraft.protectionLevel - 1).coerceAtLeast(0)
                 } else {
                     currentDraft.protectionLevel
@@ -123,7 +127,7 @@ internal fun buildAimiFamilyBridgeSuggestions(
                 preferences = preferences,
                 draft = currentDraft.copy(
                     protectionLevel = (currentDraft.protectionLevel + 1).coerceAtMost(4),
-                    autonomyMode = if (metrics.timeAbove180 >= 0.30 && currentDraft.autonomyMode == AimiAutonomyMode.Observation) {
+                    autonomyMode = if (timeAbove180 >= 0.30 && currentDraft.autonomyMode == AimiAutonomyMode.Observation) {
                         AimiAutonomyMode.Recommendations
                     } else {
                         currentDraft.autonomyMode
@@ -149,7 +153,7 @@ internal fun buildAimiFamilyBridgeSuggestions(
                 preferences = preferences,
                 draft = currentDraft.copy(
                     stabilityLevel = (currentDraft.stabilityLevel - 1).coerceAtLeast(0),
-                    protectionLevel = if (metrics.timeBelow70 >= 0.04) {
+                    protectionLevel = if (timeBelow70 >= 0.04) {
                         (currentDraft.protectionLevel - 1).coerceAtLeast(0)
                     } else {
                         currentDraft.protectionLevel

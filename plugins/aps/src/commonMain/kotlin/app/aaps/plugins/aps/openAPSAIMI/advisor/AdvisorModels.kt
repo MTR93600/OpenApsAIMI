@@ -35,20 +35,27 @@ enum class AdvisorDataSufficiency {
     /** The glucose sources answered, so the numbers are real measurements. */
     GOOD,
 }
-
+/**
+ * Metrics collected for analysis.
+ *
+ * Every `Double?` here is `null` when the source could not give a value: no calculator, a failed
+ * query, or an empty history. A reader must handle that case and must never substitute a number of
+ * its own - see [dataSufficiency]. The point is that "not measured" cannot be mistaken for a
+ * measurement, anywhere.
+ */
 data class AdvisorMetrics(
     val periodLabel: String,
-    val tir70_180: Double,          // Fraction (0-1)
-    val tir70_140: Double,
-    val timeBelow70: Double,
-    val timeBelow54: Double,
-    val timeAbove180: Double,
-    val timeAbove250: Double,
-    val meanBg: Double,             // mg/dL
-    val variabilityCv: Double,      // fraction (0-1), CV = sd / mean
-    val gmi: Double,                // % (derived)
-    val tdd: Double,                // U/day
-    val basalPercent: Double,       // Basal as fraction of TDD
+    val tir70_180: Double?,        // Fraction (0-1), null = not measured
+    val tir70_140: Double?,
+    val timeBelow70: Double?,
+    val timeBelow54: Double?,
+    val timeAbove180: Double?,
+    val timeAbove250: Double?,
+    val meanBg: Double?,           // mg/dL, null = not measured
+    val variabilityCv: Double?,    // fraction (0-1), CV = sd / mean
+    val gmi: Double?,              // % (derived from meanBg)
+    val tdd: Double?,              // U/day
+    val basalPercent: Double?,     // Basal as fraction of TDD
     val hypoEvents: Int,
     val severeHypoEvents: Int,
     val hyperEvents: Int,
@@ -60,8 +67,7 @@ data class AdvisorMetrics(
      *
      * It defaults to INSUFFICIENT on purpose: a caller that forgets to set it gets the safe answer,
      * which is "propose nothing", rather than a plan built on whatever the other fields happen to
-     * hold. Those fields are still non-null here, so a block with no data carries stand-in values;
-     * this flag is what tells a reader not to believe them.
+     * hold. A field that was not measured is `null`.
      */
     val dataSufficiency: AdvisorDataSufficiency = AdvisorDataSufficiency.INSUFFICIENT,
     /** How many glucose readings [meanBg] and [variabilityCv] were built on. */
@@ -128,8 +134,10 @@ data class AimiRecommendation(
 data class AdvisorReport(
     val generatedAt: Long,
     val metrics: AdvisorMetrics,
-    val overallScore: Double,           // 0-10 score
-    val overallSeverity: AdvisorSeverity,
+    /** 0-10 score, or `null` when the glucose numbers were not measured. */
+    val overallScore: Double?,
+    /** `null` when [overallScore] is `null`. */
+    val overallSeverity: AdvisorSeverity?,
     val overallAssessment: String,
     val recommendations: List<AimiRecommendation>,
     // PkpdSuggestions merged into recommendations with Domain.PKPD

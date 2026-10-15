@@ -16,6 +16,7 @@ class AimiAdvisorStringsAndroid(private val rh: ResourceHelper) : AimiAdvisorStr
     override val scoreLabelWarning: String get() = rh.gs(R.string.aimi_advisor_score_label_warning)
     override val scoreLabelAttention: String get() = rh.gs(R.string.aimi_advisor_score_label_attention)
     override val scoreLabelCritical: String get() = rh.gs(R.string.aimi_advisor_score_label_critical)
+    override val notEnoughData: String get() = rh.gs(R.string.aimi_adv_not_enough_data)
 
     override val analysisIntroExcellent: String get() = rh.gs(R.string.aimi_adv_analysis_intro_excellent)
     override val analysisIntroGood: String get() = rh.gs(R.string.aimi_adv_analysis_intro_good)
