@@ -239,4 +239,49 @@ class SmbRefinementFeatureSchemaTest {
         assertThat(parsed).isNotNull()
         assertThat(SmbRefinementFeatureSchema.shouldUseCsvRowForTraining(headers, cols, parsed!!)).isFalse()
     }
+
+    @Test
+    fun should_use_for_training_uses_the_learning_quality_threshold() {
+        val causalStart = SmbRefinementFeatureSchema.BASE_FEATURE_COUNT + 4 + 3
+        fun features(protective: Float, quality: Float) = FloatArray(SmbRefinementFeatureSchema.INPUT_SIZE - 1).also {
+            it[causalStart + 1] = protective
+            it[causalStart + 2] = quality
+        }
+
+        val threshold = SmbRefinementFeatureSchema.MIN_TRAINING_LEARNING_QUALITY
+
+        assertThat(SmbRefinementFeatureSchema.shouldUseForTraining(features(0.2f, threshold))).isTrue()
+        assertThat(SmbRefinementFeatureSchema.shouldUseForTraining(features(0.2f, threshold - 0.01f))).isFalse()
+        // A real phone had quality 0.40 on average: such a row must be usable.
+        assertThat(SmbRefinementFeatureSchema.shouldUseForTraining(features(0.2f, 0.45f))).isTrue()
+        assertThat(SmbRefinementFeatureSchema.shouldUseForTraining(features(0.9f, 0.60f))).isFalse()
+    }
+
+    @Test
+    fun should_use_csv_row_for_training_keeps_rows_with_only_dual_delivery_flags() {
+        val headers = listOf(
+            "dateStr", "bg", "iob", "cob", "delta", "shortAvgDelta", "longAvgDelta",
+            "tdd7DaysPerHour", "tdd2DaysPerHour", "tddPerHour", "tdd24HrsPerHour",
+            "mealProb", "endogenousGlucoseDrive", "circadianSiFactor", "transientResistanceProb",
+            "patientModeMealBias", "patientModeProtectionBias", "contextIntentConfidence",
+            "causalMealConfidence", "causalProtectiveConfidence", "causalLearningQuality",
+            "eventMemoryPostHyperExhaustionScore", "eventMemoryCorrectionFragilityScore", "decisionConflictFlags",
+        )
+        fun cols(flags: String) = listOf(
+            "06/11/2026 08:00", "182", "1.8", "0.0", "2.5", "2.1", "1.5", "0.8", "0.7", "0.9", "1.0",
+            "1.0", "0.18", "0.93", "0.28", "0.80", "0.20", "0.54", "0.72", "0.22", "0.78", "0.10", "0.10", flags,
+        )
+
+        fun used(flags: String): Boolean {
+            val c = cols(flags)
+            val parsed = SmbRefinementFeatureSchema.parseTrainingFeatures(headers, c)!!
+            return SmbRefinementFeatureSchema.shouldUseCsvRowForTraining(headers, c, parsed)
+        }
+
+        assertThat(used("")).isTrue()
+        assertThat(used("dual_delivery|dual_delivery_tbr_up")).isTrue()
+        assertThat(used("dual_delivery|dual_delivery_tbr_down")).isTrue()
+        assertThat(used("dual_delivery|dual_delivery_suspend")).isFalse()
+        assertThat(used("some_other_conflict")).isFalse()
+    }
 }
