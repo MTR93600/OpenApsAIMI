@@ -11,6 +11,7 @@ import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.AsyncDataState
+import app.aaps.plugins.aps.openAPSAIMI.Therapy
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt0
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
@@ -93,6 +94,8 @@ internal interface AimiSignalPrepPkpdCalls {
     fun lastRa(): Double
     fun causalPosterior(): CausalStatePosterior?
     fun eventMemory(): PatientEventMemory?
+    /** Last declared meal note (up to 5 h back), `null` when none. Feeds the PK/PD curve learning gate only. */
+    fun declaredMeal(): Therapy.DeclaredMeal?
     /** Keeps the original error log and writes the visible decision line. */
     fun logPkpdRuntimeFailure(error: Exception)
     fun setCachedPkpdRuntime(runtime: PkPdRuntime)
@@ -235,6 +238,7 @@ internal fun decideSignalPreparationPkpdRuntime(
             fallbackWindowMin = windowSinceDoseInt,
         )
     )
+    val declaredMeal = calls.declaredMeal()
     val pkpdRuntimeTemp = try {
         pkpdIntegration.computeRuntime(
             epochMillis = ctx.currentTime,
@@ -256,6 +260,8 @@ internal fun decideSignalPreparationPkpdRuntime(
             causalStatePosterior = calls.causalPosterior(),
             patientEventMemory = calls.eventMemory(),
             allowLearning = true,
+            declaredMealAgeMin = declaredMeal?.ageMin,
+            declaredMealHighCarb = declaredMeal?.highCarb == true,
         )
     } catch (e: Exception) {
         calls.logPkpdRuntimeFailure(e)

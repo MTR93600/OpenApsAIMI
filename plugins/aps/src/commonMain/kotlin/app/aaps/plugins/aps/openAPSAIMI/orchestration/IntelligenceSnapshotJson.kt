@@ -66,6 +66,13 @@ object IntelligenceSnapshotJson {
                     put("dia_accepted_updates", trace.diaAcceptedUpdates)
                     val blocked = trace.diaLearnBlockedBy
                     if (blocked != null) put("dia_learn_blocked_by", blocked) else put("dia_learn_blocked_by", JsonNull)
+                    put("dia_curve_gate_armed", trace.curveGateArmed)
+                    // Shadow when not armed: what the curve gate would have refused. Like the reference
+                    // (org.json drops a null put), the key is left out when the tick would pass.
+                    trace.curveGateWouldBlock?.let { put("dia_curve_gate_would_block", it) }
+                    trace.curveGateMaxRecentDeltaMgdl?.let { put("dia_curve_gate_max_recent_delta", it) }
+                    trace.curveGateDeclaredMealAgeMin?.let { put("dia_curve_gate_declared_meal_age_min", it) }
+                    trace.curveGateDetectedRiseAgeMin?.let { put("dia_curve_gate_detected_rise_age_min", it) }
                 }
             })
             put("isf", buildJsonObject {

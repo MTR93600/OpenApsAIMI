@@ -28,6 +28,7 @@ import app.aaps.plugins.aps.openAPSAIMI.release.HyperTrajectoryReleaseResult
 import app.aaps.plugins.aps.openAPSAIMI.risk.DecisionPredictionAuthority
 import app.aaps.plugins.aps.openAPSAIMI.risk.SafetyPredictionTerminals
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
+import app.aaps.plugins.aps.openAPSAIMI.safety.HyperClampTubeBound
 import app.aaps.plugins.aps.openAPSAIMI.safety.InsulinStackingStance
 import app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoDeliveryAuthority
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleInfo
@@ -122,6 +123,9 @@ internal class AimiTickWorkingState {
     var dinnerruntime: Long = 0
     var highCarbrunTime: Long = 0
     var snackrunTime: Long = 0
+
+    /** Last declared meal note, up to 5 h back. The *runtime clocks above stop at 60 min. PK/PD curve gate only. */
+    var lastDeclaredMeal: Therapy.DeclaredMeal? = null
     var peakintermediaire = 0.0
     var latestAdjustedDia: Double = 0.0 // Captured for logging
     var insulinPeakTime = 0.0
@@ -155,6 +159,15 @@ internal class AimiTickWorkingState {
     var lastEffortSmbAfterU: Double? = null
     var mealAdvisorOneShotThisTick: Boolean = false
     var lastTubeAdvisorSmbCapScale: Double? = null
+
+    /** True when the tube veto fired on a railed min-pred AND the plateau band accepted the tick. */
+    var lastTubeFloorArtefactStrict: Boolean = false
+
+    /** Same test without the 160 mg/dL plateau band. Exported only, never applied. */
+    var lastTubeFloorArtefactWide: Boolean = false
+
+    /** This tick's `HyperClampTubeBound` verdict, exported in `tube_advisor`. Reset at tick start. */
+    var lastHyperClampVerdict: HyperClampTubeBound.Verdict? = null
     var lastInflammationResult: InflammationAdjuster.InflammationResult? = null
     var tickInsulinActionState: InsulinActionState? = null
     var tickEffectiveDiaHours: Double? = null

@@ -154,6 +154,9 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalTime
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.double
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -2472,6 +2475,156 @@ class ShellDecisionTraceTest {
         assertEquals(1.0, getField(tick, "maxSMB") as Double, 1e-9)
         assertEquals(1.0, getField(tick, "maxSMBHB") as Double, 1e-9)
         assertEquals(TUBE_ADVISOR_HALF_CAP_TRACE, trace)
+    }
+
+    // --- Tube safety rules wired into the shell: HyperClampTubeBound and TubeFloorArtefactRule ---
+
+    /** What the tube advisor was handed and what the shell did with the answer. */
+    private class TubeSceneResult(
+        val minPredHandedToAdvisor: Double,
+        val maxSmb: Double,
+        val maxSmbHb: Double,
+        val trace: JsonObject?,
+    )
+
+    private fun runTubeScene(
+        bg: Double,
+        delta: Float,
+        iob: Float,
+        snapshotMinPred: Double,
+        advisorOutcome: StraightLineTubeAdvisor.Outcome,
+        bools: Map<BooleanKey, Boolean>,
+    ): TubeSceneResult {
+        val prefs = recordingPreferences(
+            doubles = mapOf(DoubleKey.AimiTubeHypoFloorMgdl to 72.0),
+            bools = mapOf(BooleanKey.OApsAIMIStraightLineTubeAdvisorEnabled to true) + bools,
+        )
+        tick = newTick(prefs)
+        armShell()
+        setField(tick, "bg", bg)
+        setField(tick, "delta", delta)
+        setField(tick, "iob", iob)
+        setField(tick, "maxSMB", 2.0)
+        setField(tick, "maxSMBHB", 2.0)
+        setField(tick, "variableSensitivity", 50.0f)
+        setField(tick, "tickEffectiveDiaHours", 5.0)
+        setField(
+            tick,
+            "lastDoseTerminalSnapshot",
+            DoseTerminalSnapshot(
+                eventualMgdl = 200.0,
+                minPredMgdl = snapshotMinPred,
+                source = "trace",
+                authorityApplied = true,
+                clampReconciled = false,
+                clampReason = null,
+                predBGsRemapped = true,
+            ),
+        )
+        val advisor = mock(StraightLineTubeAdvisor::class.java)
+        val seen = mutableListOf<StraightLineTubeAdvisor.Input>()
+        whenever(advisor.advise(any())).thenAnswer { inv ->
+            seen += inv.getArgument<StraightLineTubeAdvisor.Input>(0)
+            advisorOutcome
+        }
+        setField(tick, "straightLineTubeAdvisor", advisor)
+        invokeNamed(
+            "applyTubeAdvisorFromDoseSnapshot",
+            listOf(profileStub(), MealData(mealCOB = 0.0), 100.0, "pre_rbt"),
+        )
+        return TubeSceneResult(
+            minPredHandedToAdvisor = seen.single().minPredictedBg!!,
+            maxSmb = getField(tick, "maxSMB") as Double,
+            maxSmbHb = getField(tick, "maxSMBHB") as Double,
+            trace = getField(tick, "lastTubeAdvisorTrace") as JsonObject?,
+        )
+    }
+
+    private fun clampScene(armed: Boolean) = runTubeScene(
+        bg = 200.0,
+        delta = 0.0f,
+        iob = 5.0f,
+        snapshotMinPred = 80.0,
+        advisorOutcome = StraightLineTubeAdvisor.Outcome(
+            smbCapScale = 1.0,
+            basalCapScale = 1.0,
+            feasible = true,
+            chosenCost = 0.0,
+            reason = "graded",
+        ),
+        bools = mapOf(
+            BooleanKey.OApsAIMIPkpdEndogenousReversion to true,
+            BooleanKey.OApsAIMIPkpdHyperReversion to true,
+            BooleanKey.OApsAIMITubeHyperClampPhysicalBound to armed,
+        ),
+    )
+
+    @Test
+    fun hyperClampBoundReachesTheAdvisorWhenTheKeyIsOn() {
+        // BG 200, IOB 5 U, ISF 50: the physical minimum is 200 - 5 * 50 = -50, not the clamp value 80.
+        val result = clampScene(armed = true)
+        assertEquals(-50.0, result.minPredHandedToAdvisor, 1e-9)
+        val trace = result.trace!!
+        assertEquals("true", trace["hyper_clamp_detected"].toString())
+        assertEquals("true", trace["hyper_clamp_applied"].toString())
+        assertEquals("true", trace["hyper_clamp_key_armed"].toString())
+        assertEquals(-50.0, trace["hyper_clamp_physical_min_mgdl"]!!.jsonPrimitive.double, 1e-9)
+        assertEquals(50.0, trace["hyper_clamp_isf_mgdl_per_u"]!!.jsonPrimitive.double, 1e-9)
+        assertEquals("true", trace["hyper_clamp_stack_can_breach"].toString())
+        assertEquals(80.0, trace["snapshot_min_pred_mgdl"]!!.jsonPrimitive.double, 1e-9)
+    }
+
+    @Test
+    fun hyperClampBoundIsOnlyExportedWhenTheKeyIsOff() {
+        val result = clampScene(armed = false)
+        assertEquals(80.0, result.minPredHandedToAdvisor, 1e-9)
+        val trace = result.trace!!
+        assertEquals("true", trace["hyper_clamp_detected"].toString())
+        assertEquals("false", trace["hyper_clamp_applied"].toString())
+        assertEquals("false", trace["hyper_clamp_key_armed"].toString())
+        assertEquals(-50.0, trace["hyper_clamp_physical_min_mgdl"]!!.jsonPrimitive.double, 1e-9)
+    }
+
+    private fun floorArtefactScene(liftKey: Boolean, hyperClampArmed: Boolean = true) = runTubeScene(
+        bg = 200.0,
+        delta = 0.0f,
+        iob = 1.0f,
+        snapshotMinPred = 40.0,
+        advisorOutcome = StraightLineTubeAdvisor.Outcome(
+            smbCapScale = 0.0,
+            basalCapScale = 1.0,
+            feasible = false,
+            chosenCost = 0.0,
+            reason = "veto",
+            minPredUsedMgdl = 40.0,
+        ),
+        bools = mapOf(
+            BooleanKey.OApsAIMITubeVetoIgnoreFloorArtefact to liftKey,
+            BooleanKey.OApsAIMITubeHyperClampPhysicalBound to hyperClampArmed,
+        ),
+    )
+
+    @Test
+    fun floorArtefactVetoIsLiftedWhenTheKeyIsOn() {
+        val result = floorArtefactScene(liftKey = true)
+        // The SMB cap goes back to the baseline instead of the 0.05 veto cap.
+        assertEquals(2.0, result.maxSmb, 1e-9)
+        assertEquals(2.0, result.maxSmbHb, 1e-9)
+        val trace = result.trace!!
+        assertEquals("true", trace["veto_on_floor_artefact_strict"].toString())
+        assertEquals("true", trace["veto_on_floor_artefact_wide"].toString())
+        assertEquals("true", trace["veto_lift_key_armed"].toString())
+    }
+
+    @Test
+    fun floorArtefactVetoStaysWhenTheKeyIsOffButIsStillExported() {
+        val result = floorArtefactScene(liftKey = false)
+        assertEquals(0.05, result.maxSmb, 1e-9)
+        assertEquals(0.05, result.maxSmbHb, 1e-9)
+        val trace = result.trace!!
+        assertEquals("true", trace["veto_on_floor_artefact_strict"].toString())
+        assertEquals("true", trace["veto_on_floor_artefact_wide"].toString())
+        assertEquals("false", trace["veto_lift_key_armed"].toString())
     }
 
     @Test
@@ -6078,7 +6231,12 @@ Failed to save AIMI Decision JSON: lateinit property appendCap has not been init
 
         private val TUBE_ADVISOR_HALF_CAP_TRACE = """
             READ key=BooleanKey.OApsAIMIStraightLineTubeAdvisorEnabled value=true
+            READ key=DoubleKey.AimiTubeHypoFloorMgdl value=0.00
+            READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
+            READ key=BooleanKey.OApsAIMITubeHyperClampPhysicalBound value=false
             LOG 📐 TUBE-LINE-D4[pre_rbt]: maxSMB=1.00 basal×1.000 | graded
+            READ key=BooleanKey.OApsAIMITubeVetoIgnoreFloorArtefact value=false
+            READ key=BooleanKey.OApsAIMITubeHyperClampPhysicalBound value=false
         """.trimIndent()
 
         private val PHYSIO_LATENT_SMB_CEILING_TRACE = """
@@ -6565,6 +6723,7 @@ Failed to save AIMI Decision JSON: lateinit property appendCap has not been init
             READ key=LongNonKey.OApsAIMIPkpdLearnedStateGeneration value=0
             READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=5.00
             READ key=DoubleKey.OApsAIMIPkpdStatePeakMin value=75.00
+            READ key=BooleanKey.OApsAIMIPkpdCurveLearningGate value=false
             LOG PKPD_FAMILY: prot=1 meal=1 stab=1 phys=1 auto=0 mealF=1.00 physBlend=0.73
             LOG Debug: computePkpdPredictions called with delta=4.0
             LOG PKPD_PRED_MOD: src=runtime sens=73.50 ins=1.07 carb=1.00 uam=1.00 hyb=0.96 decay=1.03 meal=0.00 nonMeal=0.00 suppress=false

@@ -255,6 +255,7 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.decideRecordPkpdSoftFloor
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiContextModuleCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiPhysioLatentCalls
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTubeAdvisorCalls
+import app.aaps.plugins.aps.openAPSAIMI.safety.HyperClampTubeBound
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiTubeDoseBaseline
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideApplyTubeAdvisorFromDoseSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiAdvancedPredictionCalls
@@ -1359,6 +1360,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     work.correctionAggressionDecision = null
                     work.mealAdvisorOneShotThisTick = false
                     work.lastTubeAdvisorSmbCapScale = null
+                    // A floor-artefact or hyper-clamp verdict belongs to the tick that made it. Without
+                    // this a tick whose tube advisor never ran would export the previous tick's answer.
+                    work.lastTubeFloorArtefactStrict = false
+                    work.lastTubeFloorArtefactWide = false
+                    work.lastHyperClampVerdict = null
                     lastTubeAdvisorTrace = null
                     work.lastInflammationResult = null
                     work.tickInsulinActionState = null
@@ -2085,6 +2091,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     work.dinnerruntime = therapy.getTimeElapsedSinceLastEvent("dinner")
                     work.highCarbrunTime = therapy.getTimeElapsedSinceLastEvent("highcarb")
                     work.snackrunTime = therapy.getTimeElapsedSinceLastEvent("snack")
+                    // The *runtime fields above stop at 60 min; the PK/PD learning gate needs the whole meal.
+                    work.lastDeclaredMeal = therapy.lastDeclaredMeal(ctx.currentTime)
                     observeCircadianMealProfile(ctx.currentTime)
                     work.iscalibration = therapy.calibrationTime
                     val fieldDelta = this@DetermineBasalaimiSMB2.delta
@@ -7782,6 +7790,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 override fun lastRa() = continuousStateEstimator.getLastRa()
                 override fun causalPosterior() = work.lastPatientState?.causalPosterior
                 override fun eventMemory() = work.lastPatientState?.eventMemory
+                override fun declaredMeal() = work.lastDeclaredMeal
                 override fun logPkpdRuntimeFailure(error: Exception) {
                     work.consoleError.add("❌ PKPD runtime failed: ${error.message}")
                     aapsLogger.error(LTag.APS, "PKPD computeRuntime failed", error)
@@ -8432,6 +8441,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             override fun bg() = this@DetermineBasalaimiSMB2.bg
             override fun delta() = this@DetermineBasalaimiSMB2.delta.toDouble()
             override fun iob() = work.iob.toDouble()
+            override fun doseIsf() = cachedPkpdRuntime?.fusedIsf
+            override fun sportActive() = work.sportTime
+            override fun postHypoActive() = work.lastPostHypoDeliveryAuthority.active
+            override fun writeHyperClamp(verdict: HyperClampTubeBound.Verdict) {
+                work.lastHyperClampVerdict = verdict
+            }
+            override fun writeFloorArtefact(strict: Boolean, wide: Boolean) {
+                work.lastTubeFloorArtefactStrict = strict
+                work.lastTubeFloorArtefactWide = wide
+            }
             override fun advise(input: StraightLineTubeAdvisor.Input) = straightLineTubeAdvisor.advise(input)
             override fun noteTrace(
                 outcome: StraightLineTubeAdvisor.Outcome,
@@ -8486,6 +8505,25 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             outcome.minPredUsedMgdl?.let { put("min_pred_used_mgdl", it) }
             put("eventual_used_mgdl", snapshot.eventualMgdl)
             put("snapshot_source_used", snapshot.source)
+            // Was this veto resting on a prediction that hit its own 39 mg/dL floor? `_strict` keeps
+            // the 160 mg/dL plateau band and is the only one the opt-in key can act on; `_wide` drops
+            // that band and is exported only. See `OApsAIMITubeVetoIgnoreFloorArtefact`.
+            put("veto_on_floor_artefact_strict", work.lastTubeFloorArtefactStrict)
+            put("veto_on_floor_artefact_wide", work.lastTubeFloorArtefactWide)
+            put("veto_lift_key_armed", preferences.get(BooleanKey.OApsAIMITubeVetoIgnoreFloorArtefact))
+            // Hyper-clamp bound (HyperClampTubeBound). Written on every tube tick so it can be reviewed:
+            // `_detected` = the snapshot min-pred was the 80 clamp, `_applied` = the tube used the bound.
+            // Compare `snapshot_min_pred_mgdl` with `min_pred_used_mgdl` to see what it changed.
+            work.lastHyperClampVerdict?.let { v ->
+                put("snapshot_min_pred_mgdl", snapshot.minPredMgdl)
+                put("hyper_clamp_detected", v.clampDetected)
+                put("hyper_clamp_applied", v.applied)
+                put("hyper_clamp_key_armed", preferences.get(BooleanKey.OApsAIMITubeHyperClampPhysicalBound))
+                v.physicalMinMgdl?.let { put("hyper_clamp_physical_min_mgdl", it) }
+                v.isfUsedMgdlPerU?.let { put("hyper_clamp_isf_mgdl_per_u", it) }
+                v.stackCanBreachFloor?.let { put("hyper_clamp_stack_can_breach", it) }
+                v.physicalMinDoseIsfMgdl?.let { put("hyper_clamp_physical_min_dose_isf_mgdl", it) }
+            }
             put("hypo_floor_mgdl", outcome.hypoFloorMgdl)
             put("kappa_mgdl_per_u", outcome.kappaMgdlPerU)
             // The dose-facing sensitivity the tube reasoned with. kappa cannot stand in for it: the

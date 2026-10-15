@@ -20,6 +20,16 @@ data class PkpdLearningTrace(
     val iobResidual120Min: Double,
     val diaAcceptedUpdates: Long = 0L,
     val diaLearnBlockedBy: String? = null,
+    /** `true` when `OApsAIMIPkpdCurveLearningGate` decides; `false` when the verdict below is a shadow. */
+    val curveGateArmed: Boolean = false,
+    /** What [PkpdLearningWindowGate] refused this tick for, armed or not; `null` = it would pass, or a read-only call. */
+    val curveGateWouldBlock: String? = null,
+    /** Largest 5-min delta in the gate's 60-min window, `null` with no history. */
+    val curveGateMaxRecentDeltaMgdl: Double? = null,
+    /** Minutes since the last declared meal the gate saw, `null` when none. */
+    val curveGateDeclaredMealAgeMin: Long? = null,
+    /** Minutes since the last meal-sized rise the gate detected, `null` when none. */
+    val curveGateDetectedRiseAgeMin: Long? = null,
 )
 
 class PkPdRuntime(

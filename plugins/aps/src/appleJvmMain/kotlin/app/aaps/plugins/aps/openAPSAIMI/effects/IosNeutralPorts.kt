@@ -12,6 +12,7 @@ import app.aaps.core.interfaces.aps.RT
 import app.aaps.core.interfaces.notifications.AlarmSound
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.plugins.aps.openAPSAIMI.AsyncDataState
+import app.aaps.plugins.aps.openAPSAIMI.Therapy
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiAutonomyMode
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorRuntimeProfile
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiTickContext
@@ -750,6 +751,8 @@ internal fun iosNeutralSensorGapSignal(log: MutableList<String>): AimiSignalPrep
             }
             override fun markFinalLoopDecision(rT: RT) = Unit
             // Everything below runs after the staleness check; the abort never reaches it.
+            override fun declaredMeal(): Therapy.DeclaredMeal? =
+                error("IOS_NEUTRAL sensor-gap: unexpected declaredMeal")
             override fun internalLastSmbMillis(): Long =
                 error("IOS_NEUTRAL sensor-gap: unexpected internalLastSmbMillis")
             override fun setLastBolusAgeMinutes(minutes: Double) =
