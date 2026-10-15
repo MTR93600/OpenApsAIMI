@@ -512,7 +512,7 @@ object AimiSmbTrainer {
         var lastGateMessage = ""
         val net = NeuralModelTrainer.trainAndPublish(
             weightsFile = AimiSmbModelStore.modelFile(dir),
-            split = NeuralModelTrainer.split80_20(inputs, targets),
+            split = NeuralModelTrainer.splitInBlocks(inputs, targets),
             config = TrainingConfig(learningRate = 0.001, epochs = 300),
             inputSize = INPUT_SIZE,
             regularizationLambda = 0.01,
