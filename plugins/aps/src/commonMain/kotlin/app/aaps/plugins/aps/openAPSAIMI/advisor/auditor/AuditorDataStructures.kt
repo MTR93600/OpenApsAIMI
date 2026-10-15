@@ -339,15 +339,22 @@ data class History(
 /**
  * C) Stats: 7-day summary (compressed)
  */
+/**
+ * The seven-day picture sent to the auditor.
+ *
+ * Every field is `null` when it could not be measured, and it is written to JSON as `null`. A zero
+ * here would read as a real measurement - no time below range, no variability - which is the
+ * opposite of "we do not know", and the auditor reasons on exactly these numbers.
+ */
 data class Stats7d(
-    val tir: Double,
-    val hypoPct: Double,
-    val hyperPct: Double,
-    val meanBG: Double,
-    val cv: Double,
-    val tdd7dAvg: Double,
-    val basalPct: Double,
-    val bolusPct: Double
+    val tir: Double?,
+    val hypoPct: Double?,
+    val hyperPct: Double?,
+    val meanBG: Double?,
+    val cv: Double?,
+    val tdd7dAvg: Double?,
+    val basalPct: Double?,
+    val bolusPct: Double?
 ) {
     fun toJSON(): JsonObject = buildJsonObject {
         put("tir", tir)

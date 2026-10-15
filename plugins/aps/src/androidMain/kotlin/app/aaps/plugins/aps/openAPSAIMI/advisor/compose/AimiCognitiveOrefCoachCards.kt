@@ -171,9 +171,15 @@ internal fun OrefAnalysisCard(oref: OrefAnalysisReport, rh: ResourceHelper) {
  */
 @Composable
 private fun OrefCgmRangeChart(oref: OrefAnalysisReport) {
-    val belowPct = oref.timeBelow70Pct ?: 0.0
-    val inRangePct = oref.timeInRange70180Pct ?: 0.0
-    val abovePct = oref.timeAbove180Pct ?: 0.0
+    // Three bars at zero look like a measured period with nothing in range, which is the opposite
+    // of "this period was not measured". When a share is missing, say so instead of drawing it.
+    val belowPct = oref.timeBelow70Pct
+    val inRangePct = oref.timeInRange70180Pct
+    val abovePct = oref.timeAbove180Pct
+    if (belowPct == null || inRangePct == null || abovePct == null) {
+        Text(stringResource(R.string.aimi_adv_not_enough_data))
+        return
+    }
 
     val modelProducer = remember { CartesianChartModelProducer() }
     LaunchedEffect(belowPct, inRangePct, abovePct) {
