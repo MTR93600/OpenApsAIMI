@@ -830,6 +830,15 @@ enum class BooleanKey(
     AimiPhysioSleepDataEnable("aimi_physio_sleep_enable", true, title = KeysStrings.pref_title_aimi_physio_sleep_data_enable),
     AimiPhysioHRVDataEnable("aimi_physio_hrv_enable", true, title = KeysStrings.pref_title_aimi_physio_hrv_data_enable),
     AimiPhysioLLMAnalysisEnable("aimi_physio_llm_enable", false, title = KeysStrings.pref_title_aimi_physio_llm_analysis_enable),
+
+    /**
+     * Build the HRV baseline from one value per night instead of one per pipeline run.
+     *
+     * The pipeline runs every 15 minutes while HRV itself arrives a few times a night, so counting
+     * runs collapses the spread, and `HrvDepression` divides by that spread to reach an insulin
+     * multiplier. Off by default: the night path is newer and has not been measured on real days yet.
+     */
+    AimiHrvBaselinePerNight("aimi_hrv_baseline_per_night", false, title = KeysStrings.pref_title_aimi_hrv_baseline_per_night),
     AimiPhysioDebugLogs("aimi_physio_debug_logs", false, title = KeysStrings.pref_title_aimi_physio_debug_logs),
     // 🌸 Endometriosis & Cycle Management (MTR)
     AimiEndometriosisEnable("aimi_endo_enable", false, title = KeysStrings.pref_title_aimi_endometriosis_enable),

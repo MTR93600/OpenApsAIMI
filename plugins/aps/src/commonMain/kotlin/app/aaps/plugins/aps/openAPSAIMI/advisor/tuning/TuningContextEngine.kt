@@ -24,12 +24,21 @@ object TuningContextEngine {
         runCatching { AimiTuningContext.valueOf(raw?.trim()?.uppercase() ?: "") }
             .getOrDefault(AimiTuningContext.AUTO_BALANCE)
 
+    /** Shown instead of a plan when the period could not be measured. */
+    const val NO_DATA_BLOCK = "Tuning blocked: not enough glucose data in this period to propose a change."
+
     fun computePlan(
         requestedContext: AimiTuningContext,
         metrics: AdvisorMetrics,
         preferences: Preferences,
         t3cBrittleMode: Boolean,
     ): TuningPlan {
+        // These changes reach insulin settings, so an unknown period must produce no change at all.
+        // Without this the metric block's stand-in values - a made-up 5 % low and 30 % high, or the
+        // all-zero "N/A" block - resolve to a context and produce a plan from numbers nobody measured.
+        if (metrics.isInsufficient) {
+            return TuningPlan(requestedContext, requestedContext, TuningStepTier.MICRO, emptyList(), NO_DATA_BLOCK)
+        }
         val effective = when (requestedContext) {
             AimiTuningContext.AUTO_BALANCE -> resolveAutoContext(metrics)
             else -> requestedContext

@@ -33,6 +33,9 @@ class PkpdAdvisor {
         oref: OrefAnalysisReport? = null,
     ): List<AimiRecommendation> {
         val suggestions = mutableListOf<AimiRecommendation>()
+        // Stop when the period was not measured. These suggestions change insulin settings, so a
+        // missing number must mean "say nothing", never "assume an average patient".
+        if (metrics.isInsufficient) return suggestions
 
         // 1. Check if Enabled
         if (!pkpd.pkpdEnabled) {

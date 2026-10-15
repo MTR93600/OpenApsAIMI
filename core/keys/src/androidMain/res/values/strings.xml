@@ -625,6 +625,7 @@
     <string name="pref_title_aimi_physio_sleep_data_enable">AIMI physio sleep data enable</string>
     <string name="pref_title_aimi_physio_hrv_data_enable">AIMI physio HRV data enable</string>
     <string name="pref_title_aimi_physio_llm_analysis_enable">AIMI physio LLM analysis enable</string>
+    <string name="pref_title_aimi_hrv_baseline_per_night">AIMI HRV baseline per night</string>
     <string name="pref_title_aimi_physio_debug_logs">AIMI physio debug logs</string>
     <string name="pref_title_aimi_endometriosis_enable">AIMI endometriosis enable</string>
     <string name="pref_title_aimi_endometriosis_hormonal_suppression">AIMI endometriosis hormonal suppression</string>

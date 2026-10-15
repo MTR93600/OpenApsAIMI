@@ -48,6 +48,9 @@ class PkpdAdvisorTailDampingTest {
         hyperEvents = 5,
         todayTir = null,
         todayTdd = null,
+        // These cases describe a period that really was measured, so the guard in
+        // analysePkpd must not stop them. The default is INSUFFICIENT on purpose.
+        dataSufficiency = AdvisorDataSufficiency.GOOD,
     )
 
     private fun pkpd(smbTailDamping: Double) = PkpdPrefsSnapshot(

@@ -24,6 +24,9 @@ internal fun buildAimiBehaviorCausalInsights(
     val draft = readAimiControlCenterDraft(preferences)
     val availableSuggestionIds = familyBridgeSuggestions.map { it.id }.toSet()
     val insights = mutableListOf<AimiBehaviorCausalInsight>()
+    // Insights are read as statements about the user's own period. With no measured numbers we say
+    // nothing instead of describing an average patient.
+    if (metrics.isInsufficient) return insights
 
     if (metrics.variabilityCv >= 0.36 && metrics.timeBelow70 >= 0.03 && metrics.timeAbove180 >= 0.12) {
         insights += AimiBehaviorCausalInsight(

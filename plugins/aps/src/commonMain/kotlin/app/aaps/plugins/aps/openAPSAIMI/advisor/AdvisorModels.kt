@@ -20,6 +20,22 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecision
 /**
  * Metrics collected for analysis.
  */
+/**
+ * How much real data a metric block is built on.
+ *
+ * Code that proposes a settings change must stop when this is [INSUFFICIENT]; it must never fall
+ * back to a default value. Text shown to the user must say there is not enough data instead of
+ * printing a number.
+ */
+enum class AdvisorDataSufficiency {
+
+    /** No usable glucose history, so no number in the block can be trusted. */
+    INSUFFICIENT,
+
+    /** The glucose sources answered, so the numbers are real measurements. */
+    GOOD,
+}
+
 data class AdvisorMetrics(
     val periodLabel: String,
     val tir70_180: Double,          // Fraction (0-1)
@@ -37,8 +53,26 @@ data class AdvisorMetrics(
     val severeHypoEvents: Int,
     val hyperEvents: Int,
     val todayTir: Double?,    // (0-1) or null
-    val todayTdd: Double?     // U or null
-)
+    val todayTdd: Double?,    // U or null
+    /**
+     * Whether the glucose picture is real. Decision code must stop on
+     * [AdvisorDataSufficiency.INSUFFICIENT].
+     *
+     * It defaults to INSUFFICIENT on purpose: a caller that forgets to set it gets the safe answer,
+     * which is "propose nothing", rather than a plan built on whatever the other fields happen to
+     * hold. Those fields are still non-null here, so a block with no data carries stand-in values;
+     * this flag is what tells a reader not to believe them.
+     */
+    val dataSufficiency: AdvisorDataSufficiency = AdvisorDataSufficiency.INSUFFICIENT,
+    /** How many glucose readings [meanBg] and [variabilityCv] were built on. */
+    val bgReadingCount: Int = 0,
+    /** How many days the [tir70_180] average really covers (0 when no day could be read). */
+    val daysCovered: Int = 0
+) {
+
+    /** True when no settings change may be proposed from this block. */
+    val isInsufficient: Boolean get() = dataSufficiency == AdvisorDataSufficiency.INSUFFICIENT
+}
 
 /**
  * Severity classification for the overall score.

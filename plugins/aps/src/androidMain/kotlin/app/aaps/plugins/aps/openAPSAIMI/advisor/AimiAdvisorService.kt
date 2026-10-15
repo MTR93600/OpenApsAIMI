@@ -308,6 +308,9 @@ class AimiAdvisorService {
         var basalPercent = 0.50
         var todayTir: Double? = null
         var todayTdd: Double? = null
+        // How many glucose readings the block really rests on. The values above are stand-ins, so
+        // this is what tells a reader whether any of them mean anything.
+        var bgReadingCount = 0
 
         // 1. Calculate Real TIR (70-180)
         if (tirCalculator != null) {
@@ -399,6 +402,7 @@ class AimiAdvisorService {
                 val now = aimiWallClockMs()
                 val fromTime = now - (days * 24 * 3600 * 1000L)
                 val bgReadings = persistenceLayer.getBgReadingsDataFromTimeToTime(fromTime, now, ascending = false)
+                bgReadingCount = bgReadings.size
                 
                 aapsLogger?.debug(LTag.APS, "📊 Mean BG calculation: fetched ${bgReadings.size} BG readings")
                 
@@ -447,7 +451,12 @@ class AimiAdvisorService {
             severeHypoEvents = 0,
             hyperEvents = 0,
             todayTir = todayTir,
-            todayTdd = todayTdd
+            todayTdd = todayTdd,
+            // Without a single glucose reading every number above is a stand-in, so nothing may
+            // propose a settings change from this block.
+            dataSufficiency = if (bgReadingCount > 0) AdvisorDataSufficiency.GOOD else AdvisorDataSufficiency.INSUFFICIENT,
+            bgReadingCount = bgReadingCount,
+            daysCovered = if (bgReadingCount > 0) days else 0
         )
     }
 

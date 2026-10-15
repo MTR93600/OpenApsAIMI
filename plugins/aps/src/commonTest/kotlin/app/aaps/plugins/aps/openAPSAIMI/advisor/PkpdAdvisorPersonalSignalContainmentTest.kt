@@ -55,6 +55,9 @@ class PkpdAdvisorPersonalSignalContainmentTest {
         hyperEvents = 5,
         todayTir = todayTir,
         todayTdd = null,
+        // This case describes a period that really was measured, so the guard in analysePkpd
+        // must not stop it. The default is INSUFFICIENT on purpose.
+        dataSufficiency = AdvisorDataSufficiency.GOOD,
     )
 
     private fun pkpd() = PkpdPrefsSnapshot(

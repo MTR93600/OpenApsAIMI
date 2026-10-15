@@ -40,6 +40,8 @@ internal fun buildAimiFamilyBridgeSuggestions(
         t3cBrittleMode = t3cBrittle,
     )
     val suggestions = mutableListOf<AimiFamilyBridgeSuggestion>()
+    // These suggestions end in a preference write, so an unknown period must produce none.
+    if (metrics.isInsufficient) return suggestions
 
     if (metrics.variabilityCv >= 0.36 && metrics.timeBelow70 >= 0.035 && metrics.timeAbove180 >= 0.12) {
         val draft = harmonizeDraft(

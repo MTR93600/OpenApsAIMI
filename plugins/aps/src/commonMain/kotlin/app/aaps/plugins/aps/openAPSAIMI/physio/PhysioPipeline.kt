@@ -2,8 +2,9 @@ package app.aaps.plugins.aps.openAPSAIMI.physio
 
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import app.aaps.core.keys.BooleanKey
+import app.aaps.core.keys.LongNonKey
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR
 import dev.zacsweers.metro.AppScope
@@ -52,7 +53,7 @@ class PhysioPipeline @Inject constructor(
     private val contextStore: AIMIPhysioContextStoreMTR,
     private val llmAnalyzer: AIMILLMPhysioAnalyzerMTR, // Optional
     private val unifiedActivityProvider: UnifiedActivityProviderMTR,
-    private val sp: KeyValueStore,
+    private val preferences: Preferences,
     private val aapsLogger: AAPSLogger,
 ) {
 
@@ -69,11 +70,6 @@ class PhysioPipeline @Inject constructor(
          * every saved search over older logs for no gain.
          */
         private const val TAG = "PhysioManager"
-
-        /** Arms the per-day HRV baseline. Off by default - see `hrvPerDayBaseline`. */
-        const val PREF_KEY_HRV_PER_DAY_BASELINE = "aimi_hrv_baseline_per_night"
-
-        const val PREF_KEY_LAST_UPDATE = "aimi_physio_last_update_ms"
 
         /**
          * Which HRV metric a set of readings carries.
@@ -123,16 +119,16 @@ class PhysioPipeline @Inject constructor(
 
     /** Reads the stored time of the last run back into memory. Called when the owner starts. */
     fun restoreLastUpdateTime(): Long {
-        lastUpdateTimeMs = sp.getLong(PREF_KEY_LAST_UPDATE, 0)
+        lastUpdateTimeMs = preferences.get(LongNonKey.AimiPhysioLastUpdate)
         return lastUpdateTimeMs
     }
 
     /** Whether the person switched the physio assistant on. The owner checks this before a run. */
     fun isPhysioAssistantEnabled(): Boolean =
-        sp.getBoolean(BooleanKey.AimiPhysioAssistantEnable.key, false)
+        preferences.get(BooleanKey.AimiPhysioAssistantEnable)
 
     private fun isLLMEnabled(): Boolean =
-        sp.getBoolean(BooleanKey.AimiPhysioLLMAnalysisEnable.key, false)
+        preferences.get(BooleanKey.AimiPhysioLLMAnalysisEnable)
 
     /**
      * Whether the HRV baseline buckets by day instead of by run. **Off by default.**
@@ -147,7 +143,7 @@ class PhysioPipeline @Inject constructor(
      * phone whose owner is watching, not arrive with an update.
      */
     private fun hrvPerDayBaseline(): Boolean =
-        sp.getBoolean(PREF_KEY_HRV_PER_DAY_BASELINE, false)
+        preferences.get(BooleanKey.AimiHrvBaselinePerNight)
 
     /**
      * Runs the five steps once.
@@ -251,7 +247,7 @@ class PhysioPipeline @Inject constructor(
             contextStore.updateContext(context, baseline)
 
             lastUpdateTimeMs = aimiWallClockMs()
-            sp.putLong(PREF_KEY_LAST_UPDATE, lastUpdateTimeMs)
+            preferences.put(LongNonKey.AimiPhysioLastUpdate, lastUpdateTimeMs)
 
             val totalMs = aimiWallClockMs() - startTime
 
@@ -285,7 +281,7 @@ class PhysioPipeline @Inject constructor(
         previousFeatures = null
         lastHrvMetric = HrvMetric.RMSSD
         lastUpdateTimeMs = 0
-        sp.putLong(PREF_KEY_LAST_UPDATE, 0)
+        preferences.put(LongNonKey.AimiPhysioLastUpdate, 0L)
     }
 
     /**

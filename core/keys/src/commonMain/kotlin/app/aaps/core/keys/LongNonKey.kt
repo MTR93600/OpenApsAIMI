@@ -43,5 +43,11 @@ enum class LongNonKey(
     // prefs. Any change is a signal, up or down. So an overflow or a restore from backup are
     // both safe.
     OApsAIMIPkpdLearnedStateGeneration("aimi_pkpd_learned_state_generation", 0L),
+
+    /**
+     * When the physiological pipeline last finished a run. Runtime state, not a setting, and not
+     * exportable: it describes this phone's last run and means nothing on another one.
+     */
+    AimiPhysioLastUpdate("aimi_physio_last_update_ms", 0L, exportable = false),
 }
 
