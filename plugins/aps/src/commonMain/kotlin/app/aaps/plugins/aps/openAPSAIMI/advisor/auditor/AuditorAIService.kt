@@ -6,6 +6,7 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.aimiWaitMs
+import app.aaps.plugins.aps.openAPSAIMI.llm.claude.ClaudeModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmHttpRetry
 import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.model.VerdictType
@@ -60,7 +61,7 @@ class AuditorAIService @Inject constructor(
         OPENAI("openai", "ChatGPT (GPT-5.2)"),
         GEMINI("gemini", "Gemini (3.0 Flash)"),
         DEEPSEEK("deepseek", "DeepSeek (Chat)"),
-        CLAUDE("claude", "Claude (3.5 Sonnet)")
+        CLAUDE("claude", "Claude (model chosen in settings)")
     }
     
     /**
@@ -309,11 +310,11 @@ class AuditorAIService @Inject constructor(
      * Call Claude API
      */
     private fun callClaude(apiKey: String, prompt: String, useHighPerf: Boolean): String {
-        val model = if (useHighPerf) "claude-3-5-sonnet-20241022" else "claude-3-haiku-20240307"
+        // One user-selected model for every audit (useHighPerf no longer switches tiers for Claude).
+        val model = ClaudeModelResolver.current()
         val requestBody = buildJsonObject {
             put("model", model)
-            put("max_tokens", 2048)
-            put("temperature", 0.3)
+            put("max_tokens", 8192) // thinking tokens count in this limit on newer Claude models
             put("messages", buildJsonArray {
                 add(buildJsonObject {
                     put("role", "user")
@@ -327,7 +328,7 @@ class AuditorAIService @Inject constructor(
                 url = CLAUDE_URL,
                 method = "POST",
                 connectTimeoutMs = 15_000, // Reduced per audit
-                readTimeoutMs = DEFAULT_TIMEOUT_MS.toInt(), // Reduced per audit
+                readTimeoutMs = 90_000, // larger Claude models (Sonnet 5 / Fable 5.1) need more time; the verdict is async anyway
                 headers = mapOf(
                     "Content-Type" to "application/json",
                     "x-api-key" to apiKey,
@@ -402,8 +403,7 @@ class AuditorAIService @Inject constructor(
                     .getValue("text").jsonPrimitive.content
             }
             Provider.CLAUDE                    -> {
-                root.getValue("content").jsonArray[0].jsonObject
-                    .getValue("text").jsonPrimitive.content
+                ClaudeModelResolver.extractText(root)
             }
         }
 

@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.meal
 
 import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
+import app.aaps.plugins.aps.openAPSAIMI.llm.claude.ClaudeModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttp
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttpRequest
 import kotlinx.coroutines.withContext
@@ -9,15 +10,13 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 class ClaudeVisionProvider(
     private val aimiHttp: AimiHttp
 ) : AIVisionProvider {
-    override val displayName = "Claude (3.5 Sonnet)"
+    override val displayName = "Claude (model chosen in settings)"
     override val providerId = "CLAUDE"
 
     override suspend fun estimateFromImage(image: AimiImage, userDescription: String, apiKey: String): EstimationResult =
@@ -35,9 +34,8 @@ class ClaudeVisionProvider(
         val userPrompt = MealVisionUserPrompt.buildAnalysisUserPrompt(userDescription)
 
         val jsonBody = buildJsonObject {
-            put("model", "claude-3-5-sonnet-20240620")
-            put("max_tokens", 2048)
-            put("temperature", 0.0)
+            put("model", ClaudeModelResolver.current())
+            put("max_tokens", 8192) // thinking tokens count in this limit on newer Claude models
             put("system", FoodAnalysisPrompt.SYSTEM_PROMPT)
             put("messages", buildJsonArray {
                 add(buildJsonObject {
@@ -65,7 +63,7 @@ class ClaudeVisionProvider(
                 url = "https://api.anthropic.com/v1/messages",
                 method = "POST",
                 connectTimeoutMs = 30000,
-                readTimeoutMs = 45000,
+                readTimeoutMs = 90000,
                 headers = mapOf(
                     "Content-Type" to "application/json",
                     "x-api-key" to apiKey,
@@ -83,10 +81,11 @@ class ClaudeVisionProvider(
 
     private fun parseResponse(jsonStr: String): EstimationResult {
         val root = kotlinx.serialization.json.Json.parseToJsonElement(jsonStr).jsonObject
-        val content = root["content"]?.jsonArray
-            ?.get(0)?.jsonObject
-            ?.get("text")?.jsonPrimitive?.content
-            ?: return FoodAnalysisPrompt.emptyErrorResult("Claude Error", "Missing content text")
+        val content = try {
+            ClaudeModelResolver.extractText(root)
+        } catch (e: IllegalStateException) {
+            return FoodAnalysisPrompt.emptyErrorResult("Claude Error", e.message ?: "Missing content text")
+        }
         return MealVisionJsonParser.parseModelContentToEstimation(content)
     }
 }

@@ -52,6 +52,16 @@ class SmbTrainingRowBufferTest {
         }
     }
 
+    /**
+     * The row as the buffer now takes it: two halves with the label's place between them.
+     *
+     * The label is no longer part of what the tick builds. It is stamped at the end of the tick,
+     * because the dose is only final after capping.
+     */
+    private val labelIndex: Int = legacyHeaders.indexOf("smbGiven")
+    private val legacyHead: String = legacyCols.take(labelIndex).joinToString(",")
+    private val legacyTail: String = legacyCols.drop(labelIndex + 1).joinToString(",")
+
     @Test
     fun `the enriched CSV stays readable by the existing parser`() {
         val enrichedCols = legacyCols + listOf("0.0000", "0.3000", "AUTODRIVE_FLOOR", "GlobalAIMI", "142.0", "1.5000")
@@ -76,7 +86,7 @@ class SmbTrainingRowBufferTest {
     fun `an empty origin column is not read as zero`() {
         val buffer = SmbTrainingRowBuffer()
         val t0 = 1_000_000L
-        buffer.enqueue(timestampMs = t0, valuesPrefix = legacyCols.joinToString(","))
+        buffer.enqueue(timestampMs = t0, valuesHead = legacyHead, valuesTail = legacyTail)
 
         // No stampOrigin call: the tick never reached the export point.
         val written = buffer.drainWritableRows(t0 + SmbTrainingRowBuffer.OUTCOME_HORIZON_MAX_MS + 1)
@@ -96,7 +106,7 @@ class SmbTrainingRowBufferTest {
     fun `a stamped origin keeps the model output and the floor apart`() {
         val buffer = SmbTrainingRowBuffer()
         val t0 = 2_000_000L
-        buffer.enqueue(timestampMs = t0, valuesPrefix = legacyCols.joinToString(","))
+        buffer.enqueue(timestampMs = t0, valuesHead = legacyHead, valuesTail = legacyTail)
         buffer.stampOrigin(
             tickKey = t0,
             smbModelU = 0.0,
@@ -120,7 +130,7 @@ class SmbTrainingRowBufferTest {
     fun `the pre-barrier request is kept apart from the post-barrier model output`() {
         val buffer = SmbTrainingRowBuffer()
         val t0 = 8_000_000L
-        buffer.enqueue(timestampMs = t0, valuesPrefix = legacyCols.joinToString(","))
+        buffer.enqueue(timestampMs = t0, valuesHead = legacyHead, valuesTail = legacyTail)
         // The solver asked for 1.5 U and the barrier allowed nothing.
         buffer.stampOrigin(
             tickKey = t0,
@@ -143,7 +153,7 @@ class SmbTrainingRowBufferTest {
     fun `an unknown pre-barrier request stays empty and is never read as zero`() {
         val buffer = SmbTrainingRowBuffer()
         val t0 = 9_000_000L
-        buffer.enqueue(timestampMs = t0, valuesPrefix = legacyCols.joinToString(","))
+        buffer.enqueue(timestampMs = t0, valuesHead = legacyHead, valuesTail = legacyTail)
         // A tick that did not engage Autodrive: the model output is known, the request is not.
         buffer.stampOrigin(
             tickKey = t0,
@@ -167,6 +177,77 @@ class SmbTrainingRowBufferTest {
     }
 
     @Test
+    fun `the stamped label lands in the smbGiven column and keeps every other column in place`() {
+        val buffer = SmbTrainingRowBuffer()
+        val t0 = 11_000_000L
+        buffer.enqueue(timestampMs = t0, valuesHead = legacyHead, valuesTail = legacyTail)
+        buffer.stampDeliveredUnits(tickKey = t0, deliveredUnits = 0.45)
+
+        val cols = buffer.drainWritableRows(t0 + SmbTrainingRowBuffer.OUTCOME_HORIZON_MAX_MS + 1)
+            .single()
+            .split(",")
+
+        assertEquals(enrichedHeaders.size, cols.size)
+        assertEquals(0.45, cols[enrichedHeaders.indexOf("smbGiven")].toDouble(), 1e-9)
+        // The neighbours on both sides must be untouched, or the label was spliced at the wrong place.
+        assertEquals(legacyCols[legacyHeaders.indexOf("predictedSMB")], cols[enrichedHeaders.indexOf("predictedSMB")])
+        assertEquals(legacyCols[legacyHeaders.indexOf("dynamicPeak")], cols[enrichedHeaders.indexOf("dynamicPeak")])
+        assertEquals(legacyCols[legacyHeaders.indexOf("adjustedDia")], cols[enrichedHeaders.indexOf("adjustedDia")])
+    }
+
+    @Test
+    fun `a tick that gave nothing is labelled zero and not left empty`() {
+        // An empty cell says "the dose of this tick is unknown" and the trainer drops the row. A tick
+        // that ran and chose to give nothing must say so, because "here nothing was needed" is half
+        // of what the model has to learn.
+        val buffer = SmbTrainingRowBuffer()
+        val t0 = 14_000_000L
+        buffer.enqueue(timestampMs = t0, valuesHead = legacyHead, valuesTail = legacyTail)
+        buffer.stampDeliveredUnits(tickKey = t0, deliveredUnits = 0.0)
+
+        val cols = buffer.drainWritableRows(t0 + SmbTrainingRowBuffer.OUTCOME_HORIZON_MAX_MS + 1)
+            .single()
+            .split(",")
+
+        val cell = cols[enrichedHeaders.indexOf("smbGiven")]
+        assertTrue(cell.isNotEmpty())
+        assertEquals(0.0, cell.toDouble(), 1e-9)
+    }
+
+    @Test
+    fun `an unlabelled row is written with an empty label and never a zero`() {
+        // A zero would teach the model that this tick gave nothing, which is the lie that censored
+        // the old corpus. An empty cell is dropped by the trainer instead.
+        val buffer = SmbTrainingRowBuffer()
+        val t0 = 12_000_000L
+        buffer.enqueue(timestampMs = t0, valuesHead = legacyHead, valuesTail = legacyTail)
+
+        val cols = buffer.drainWritableRows(t0 + SmbTrainingRowBuffer.OUTCOME_HORIZON_MAX_MS + 1)
+            .single()
+            .split(",")
+
+        val cell = cols[enrichedHeaders.indexOf("smbGiven")]
+        assertEquals("", cell)
+        assertNotEquals("0", cell)
+        assertNull(cell.toDoubleOrNull())
+    }
+
+    @Test
+    fun `a tick that queued no row never labels the row of another tick`() {
+        val buffer = SmbTrainingRowBuffer()
+        val t0 = 13_000_000L
+        buffer.enqueue(timestampMs = t0, valuesHead = legacyHead, valuesTail = legacyTail)
+        // A later tick delivered 3 U but staged no row of its own. That dose belongs to no row here.
+        buffer.stampDeliveredUnits(tickKey = t0 + 300_000, deliveredUnits = 3.0)
+
+        val cols = buffer.drainWritableRows(t0 + SmbTrainingRowBuffer.OUTCOME_HORIZON_MAX_MS + 1)
+            .single()
+            .split(",")
+
+        assertEquals("", cols[enrichedHeaders.indexOf("smbGiven")])
+    }
+
+    @Test
     fun `the new column is added last so existing column indexes do not move`() {
         assertEquals("smbMpcRequestedU", SmbTrainingRowBuffer.ADDED_COLUMN_NAMES.last())
         assertEquals(legacyHeaders.size, enrichedHeaders.indexOf("smbModelU"))
@@ -177,7 +258,7 @@ class SmbTrainingRowBufferTest {
     fun `an outcome outside the acceptance window is not written`() {
         val buffer = SmbTrainingRowBuffer()
         val t0 = 3_000_000L
-        buffer.enqueue(timestampMs = t0, valuesPrefix = legacyCols.joinToString(","))
+        buffer.enqueue(timestampMs = t0, valuesHead = legacyHead, valuesTail = legacyTail)
 
         // Too early, then too late: neither reading may be used as the outcome of this row.
         buffer.fillRealisedOutcomes(nowMs = t0 + SmbTrainingRowBuffer.OUTCOME_HORIZON_MIN_MS - 1, observedBg = 111.0)
@@ -193,7 +274,7 @@ class SmbTrainingRowBufferTest {
     fun `an outcome inside the acceptance window is written`() {
         val buffer = SmbTrainingRowBuffer()
         val t0 = 4_000_000L
-        buffer.enqueue(timestampMs = t0, valuesPrefix = legacyCols.joinToString(","))
+        buffer.enqueue(timestampMs = t0, valuesHead = legacyHead, valuesTail = legacyTail)
 
         buffer.fillRealisedOutcomes(nowMs = t0 + SmbTrainingRowBuffer.OUTCOME_HORIZON_MS, observedBg = 142.0)
         // A later reading must not overwrite the one already accepted.
@@ -209,7 +290,7 @@ class SmbTrainingRowBufferTest {
     fun `a row still inside its window is not written yet`() {
         val buffer = SmbTrainingRowBuffer()
         val t0 = 5_000_000L
-        buffer.enqueue(timestampMs = t0, valuesPrefix = legacyCols.joinToString(","))
+        buffer.enqueue(timestampMs = t0, valuesHead = legacyHead, valuesTail = legacyTail)
 
         assertTrue(buffer.drainWritableRows(t0 + SmbTrainingRowBuffer.OUTCOME_HORIZON_MS).isEmpty())
         assertEquals(1, buffer.pendingCount())
@@ -219,7 +300,7 @@ class SmbTrainingRowBufferTest {
     fun `each tick stamps its own row`() {
         val buffer = SmbTrainingRowBuffer()
         val t0 = 6_000_000L
-        buffer.enqueue(timestampMs = t0, valuesPrefix = legacyCols.joinToString(","))
+        buffer.enqueue(timestampMs = t0, valuesHead = legacyHead, valuesTail = legacyTail)
         buffer.stampOrigin(
             tickKey = t0,
             smbModelU = 0.10,
@@ -228,7 +309,7 @@ class SmbTrainingRowBufferTest {
             originOwner = "A",
             smbMpcRequestedU = null,
         )
-        buffer.enqueue(timestampMs = t0 + 300_000, valuesPrefix = legacyCols.joinToString(","))
+        buffer.enqueue(timestampMs = t0 + 300_000, valuesHead = legacyHead, valuesTail = legacyTail)
         buffer.stampOrigin(
             tickKey = t0 + 300_000,
             smbModelU = 0.20,
@@ -249,7 +330,7 @@ class SmbTrainingRowBufferTest {
         val buffer = SmbTrainingRowBuffer()
         val t0 = 7_000_000L
         // The tick at t0 queues a row but leaves before the export point, so it stays unstamped.
-        buffer.enqueue(timestampMs = t0, valuesPrefix = legacyCols.joinToString(","))
+        buffer.enqueue(timestampMs = t0, valuesHead = legacyHead, valuesTail = legacyTail)
         // The next tick queues nothing yet reaches the export point.
         buffer.stampOrigin(
             tickKey = t0 + 300_000,

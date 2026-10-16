@@ -13,6 +13,7 @@ import app.aaps.plugins.aps.openAPSAIMI.aimiDeviceLanguageName
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorFamilyId
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmHttpRetry
 import app.aaps.plugins.aps.openAPSAIMI.llm.LlmWorldConservativePreamble
+import app.aaps.plugins.aps.openAPSAIMI.llm.claude.ClaudeModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiAction
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttp
@@ -100,9 +101,7 @@ class AiCoachingService @Inject constructor(
         private const val DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
         private const val DEEPSEEK_MODEL = "deepseek-chat"
 
-        // Claude Haiku (Fast & Cheap) — current GA fast tier (claude-3-haiku-20240307 was retired).
         private const val CLAUDE_URL = "https://api.anthropic.com/v1/messages"
-        private const val CLAUDE_MODEL = "claude-haiku-4-5"
     }
 
     /**
@@ -485,9 +484,8 @@ class AiCoachingService @Inject constructor(
     private fun callClaude(apiKey: String, prompt: String): String = LlmHttpRetry.withTransientRetry(aapsLogger) {
         // Claude expects a messages array with role/content.
         val jsonBody = buildJsonObject {
-            put("model", CLAUDE_MODEL)
-            put("max_tokens", 4096)
-            put("temperature", 0.7)
+            put("model", ClaudeModelResolver.current())
+            put("max_tokens", 8192) // thinking tokens count in this limit on newer Claude models
             put(
                 "messages",
                 buildJsonArray {
@@ -506,7 +504,7 @@ class AiCoachingService @Inject constructor(
                 url = CLAUDE_URL,
                 method = "POST",
                 connectTimeoutMs = 15000,
-                readTimeoutMs = 60000,
+                readTimeoutMs = 120000, // Sonnet 5 / Fable 5.1 can take more than 60 s on long coaching prompts
                 headers = mapOf(
                     "Content-Type" to "application/json",
                     "x-api-key" to apiKey,
@@ -530,8 +528,7 @@ class AiCoachingService @Inject constructor(
     private fun parseClaudeResponse(jsonStr: String): String {
         return try {
             val root = Json.parseToJsonElement(jsonStr).jsonObject
-            val content = root.getValue("content").jsonArray
-            content[0].jsonObject.getValue("text").jsonPrimitive.content.trim()
+            ClaudeModelResolver.extractText(root)
         } catch (e: Exception) {
             rh.gs(ApsStrings.aimi_coach_svc_read_error_claude)
         }

@@ -52,6 +52,18 @@ internal class AimiTickWorkingState {
     var consoleLog = mutableListOf<String>()
     var bgacc = 0.0
     var predictedSMB = 0.0f
+
+    /** True once this tick has staged its training row, so the tick tail does not stage a second one. */
+    var smbTrainingRowEnqueuedThisTick: Boolean = false
+
+    /**
+     * The model output of this tick, or `null` when the SMB stage never ran.
+     *
+     * Not read from [predictedSMB]: that field keeps the previous tick's value on a tick that
+     * returns early, and writing a stale model output next to a fresh label would be worse than
+     * writing a zero.
+     */
+    var predictedSmbForTrainingThisTick: Float? = null
     var eventualBG = 0.0
     var iob = 0.0f
     var cob = 0.0f

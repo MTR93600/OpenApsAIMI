@@ -1,8 +1,11 @@
 package app.aaps.plugins.aps.openAPSAIMI.utils
 
 import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.aps.openAPSAIMI.advisor.AiCoachingService
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorAIService
+import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.ClaudeVisionProvider
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorStatusNotifier
 import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.physio.AIMILLMPhysioAnalyzerMTR
@@ -195,9 +198,9 @@ class AimiLlmRequestBodyParityTest {
         callPrivate(auditor(http), "callClaude", "key", awkwardPrompt, true)
 
         val before = JSONObject().apply {
-            put("model", "claude-3-5-sonnet-20241022")
-            put("max_tokens", 2048)
-            put("temperature", 0.3)
+            // One user-selected model for every audit; the old high-performance switch is gone.
+            put("model", ClaudeModelResolver.current())
+            put("max_tokens", 8192)
             put("messages", JSONArray().apply {
                 put(JSONObject().apply {
                     put("role", "user")
@@ -207,6 +210,46 @@ class AimiLlmRequestBodyParityTest {
         }
 
         assertSameMeaning(before, http.sentBody)
+    }
+
+    // ── The AI coach and the meal vision call ──────────────────────────────────────────────────
+
+    @Test
+    fun `the coach Claude body uses the chosen model and no temperature`() {
+        val http = RecordingAimiHttp("{}")
+        val coach = AiCoachingService(
+            rh = mock<TextResolver>(),
+            aapsLogger = mock<AAPSLogger>(),
+            geminiModelResolver = mock<GeminiModelResolver>(),
+            aimiHttp = http
+        )
+        callPrivate(coach, "callClaude", "key", awkwardPrompt)
+
+        val before = JSONObject().apply {
+            put("model", ClaudeModelResolver.current())
+            put("max_tokens", 8192)
+            put("messages", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("role", "user")
+                    put("content", awkwardPrompt)
+                })
+            })
+        }
+        assertSameMeaning(before, http.sentBody)
+        assertThat(http.requests.single().readTimeoutMs).isEqualTo(120000)
+    }
+
+    @Test
+    fun `the vision Claude body uses the chosen model and no temperature`() {
+        val http = RecordingAimiHttp("{}")
+        callPrivate(ClaudeVisionProvider(http), "callClaudeAPI", "key", "AAAA", "a plate of rice")
+
+        val sent = JSONObject(http.sentBody)
+        assertThat(sent.getString("model")).isEqualTo(ClaudeModelResolver.current())
+        assertThat(sent.getInt("max_tokens")).isEqualTo(8192)
+        assertThat(sent.has("temperature")).isFalse()
+        assertThat(sent.has("system")).isTrue()
+        assertThat(http.requests.single().readTimeoutMs).isEqualTo(90000)
     }
 
     // ── The physiology analyser ────────────────────────────────────────────────────────────────
@@ -360,7 +403,7 @@ class AimiLlmRequestBodyParityTest {
 
         val openAi = """{"choices":[{"message":{"content":${JSONObject.quote(text)}}}]}"""
         val gemini = """{"candidates":[{"content":{"parts":[{"text":${JSONObject.quote(text)}}]}}]}"""
-        val claude = """{"content":[{"text":${JSONObject.quote(text)}}]}"""
+        val claude = """{"content":[{"type":"text","text":${JSONObject.quote(text)}}]}"""
 
         assertThat(callPrivate(service, "extractContentText", openAi, AuditorAIService.Provider.OPENAI)).isEqualTo(text)
         assertThat(callPrivate(service, "extractContentText", openAi, AuditorAIService.Provider.DEEPSEEK)).isEqualTo(text)

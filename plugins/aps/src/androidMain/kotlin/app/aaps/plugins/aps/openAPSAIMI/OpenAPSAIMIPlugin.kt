@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
+import app.aaps.plugins.aps.openAPSAIMI.llm.claude.ClaudeModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiKeyValueCache
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
@@ -310,6 +311,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         EndogenousPhaseHysteresis.reset()
         InsulinSlopePreserveHysteresis.reset()
         migrateClassicAutodriveToV3()
+        ClaudeModelResolver.bind(preferences)
         preferences.registerPreferences(app.aaps.plugins.aps.openAPSAIMI.keys.AimiLongKey.entries)
         preferences.registerPreferences(app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey.entries)
 
@@ -2025,6 +2027,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     StringKey.AimiAdvisorGeminiKey,
                     StringKey.AimiAdvisorDeepSeekKey,
                     StringKey.AimiAdvisorClaudeKey,
+                    AimiStringKey.AimiAdvisorClaudeModel,
                     BooleanKey.OApsAIMIAdvisorPersonalOrefMl,
                     BooleanKey.OApsAIMIAdvisorLlmRichOref,
                 ),
