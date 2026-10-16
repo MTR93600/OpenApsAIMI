@@ -16,6 +16,8 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalDataWindowMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalSampleMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalSourceTier
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiPhysioSource
+import app.aaps.plugins.aps.openAPSAIMI.steps.IosStepBucketSource
+import app.aaps.plugins.aps.openAPSAIMI.steps.IosStepBuckets
 import app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiKeyValueCache
 import dev.zacsweers.metro.AppScope
@@ -24,6 +26,7 @@ import dev.zacsweers.metro.SingleIn
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.coroutines.resume
+import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
@@ -31,6 +34,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.TimeZone
 import platform.Foundation.NSDate
+import platform.Foundation.NSDateComponents
 import platform.Foundation.NSPredicate
 import platform.Foundation.dateWithTimeIntervalSince1970
 import platform.Foundation.timeIntervalSince1970
@@ -56,6 +60,7 @@ import platform.HealthKit.HKSample
 import platform.HealthKit.HKSampleQuery
 import platform.HealthKit.HKSampleType
 import platform.HealthKit.HKStatistics
+import platform.HealthKit.HKStatisticsCollectionQuery
 import platform.HealthKit.HKStatisticsOptionCumulativeSum
 import platform.HealthKit.HKStatisticsOptionDiscreteMin
 import platform.HealthKit.HKStatisticsQuery
@@ -110,7 +115,7 @@ class IosHealthKitPhysioRepository @Inject constructor(
     private val aapsLogger: AAPSLogger,
     private val ouraApiThermalClient: OuraApiThermalClient,
     private val keyValueCache: AimiKeyValueCache,
-) : AimiPhysioSource, AimiPhysioDataSource {
+) : AimiPhysioSource, AimiPhysioDataSource, IosStepBucketSource {
 
     private companion object {
 
@@ -332,6 +337,56 @@ class IosHealthKitPhysioRepository @Inject constructor(
             aapsLogger.info(LTag.APS, "[$TAG] Steps: total=$total, avg=$average/day")
             average
         }
+
+    /**
+     * Steps per 5 minute bucket for the last 180 minutes, for the iOS `StepService` cache.
+     *
+     * One `HKStatisticsCollectionQuery` with 5 minute intervals. HealthKit merges the iPhone and
+     * the Watch itself, so steps seen by both are not counted twice. The intervals are anchored
+     * half a bucket before the epoch so that each one matches an [IosStepBuckets] key.
+     *
+     * Returns `null` when the answer is unknown: no HealthKit store, no step type, a query error or
+     * a timeout. An empty map is a real answer: HealthKit answered and saw no steps. HealthKit does
+     * not say whether the person refused the read, so a refused read looks like an empty map.
+     */
+    @OptIn(ExperimentalForeignApi::class)
+    override suspend fun fetchStepBuckets(nowMs: Long): Map<Long, Int>? = withContext(aapsIoDispatcher) {
+        val healthStore = authorizedStore() ?: return@withContext null
+        val stepCount = quantityType(HKQuantityTypeIdentifierStepCount) ?: return@withContext null
+        val startMs = IosStepBuckets.windowStartMs(nowMs)
+        awaitQuery<Map<Long, Int>>(healthStore, "stepBuckets") { continuation ->
+            val interval = NSDateComponents().apply { minute = 5 }
+            val query = HKStatisticsCollectionQuery(
+                quantityType = stepCount,
+                quantitySamplePredicate = predicate(startMs, nowMs, HKQueryOptionNone),
+                options = HKStatisticsOptionCumulativeSum,
+                anchorDate = NSDate.dateWithTimeIntervalSince1970(-IosStepBuckets.HALF_BUCKET_MS / 1000.0),
+                intervalComponents = interval,
+            )
+            query.initialResultsHandler = { _, results, error ->
+                if (error != null || results == null) {
+                    aapsLogger.warn(
+                        LTag.APS,
+                        "[$TAG] step buckets failed: ${error?.localizedDescription ?: "no result"}",
+                    )
+                    continuation.resume(null)
+                } else {
+                    val buckets = HashMap<Long, Int>()
+                    results.enumerateStatisticsFromDate(
+                        NSDate.dateWithTimeIntervalSince1970(startMs / 1000.0),
+                        NSDate.dateWithTimeIntervalSince1970(nowMs / 1000.0),
+                    ) { statistics, _ ->
+                        val steps = statistics?.sumQuantity()?.doubleValueForUnit(HKUnit.countUnit())
+                        if (statistics != null && steps != null && steps > 0.0) {
+                            buckets[IosStepBuckets.keyOf(statistics.startDate.toEpochMs())] = steps.toInt()
+                        }
+                    }
+                    continuation.resume(buckets)
+                }
+            }
+            query
+        }
+    }
 
     // ═══════════════════════════════════════════════════════════════════════
     // AimiPhysioDataSource - WHOLE READ, AVAILABILITY, CACHE

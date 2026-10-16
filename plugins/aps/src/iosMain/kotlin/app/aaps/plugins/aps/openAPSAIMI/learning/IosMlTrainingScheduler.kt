@@ -16,8 +16,17 @@ import platform.Foundation.dateWithTimeIntervalSinceNow
 /**
  * iOS training scheduler for the AIMI ML learners.
  *
- * Mirrors Android's `BasalMlTrainerWorker` (WorkManager, every 6h, idle + charging) using
- * BGTaskScheduler with a `BGProcessingTask` that requires external power.
+ * Follows Android's `BasalMlTrainerWorker`: every hour, with no condition on charging or on the
+ * phone being idle. This file used to ask for every 6 hours and external power, and said it was
+ * copying Android. It was copying an older Android that had already been fixed: the comment in
+ * `AimiMlTrainingScheduler` records that "charging and idle" almost never happened together on a
+ * real phone, so the worker never ran and the weights were never produced. Adding the same
+ * condition here would repeat that, and the person would never know, because nothing reports a
+ * training run that did not happen.
+ *
+ * iOS still decides for itself when a background task runs, so the hour is a request and not a
+ * promise. The point of the change is to stop asking for a condition Android removed as harmful,
+ * not to claim the two phones train on the same clock.
  *
  * The task identifier `app.aaps.aimi.ml-training` must be listed in the app's Info.plist under
  * `BGTaskSchedulerPermittedIdentifiers`, and the `processing` background mode must be enabled.
@@ -37,10 +46,13 @@ object IosMlTrainingScheduler {
     /** BGTaskScheduler identifier. Must match Info.plist `BGTaskSchedulerPermittedIdentifiers`. */
     const val TASK_IDENTIFIER = "app.aaps.aimi.ml-training"
 
-    /** Training cadence, mirroring Android's 6h worker. */
-    const val TRAIN_INTERVAL_SECONDS = 6.0 * 60.0 * 60.0
+    /** Training cadence, the same hour Android asks for. */
+    const val TRAIN_INTERVAL_SECONDS = 60.0 * 60.0
 
-    /** Minimum delay before the system may run the task. */
+    /**
+     * Minimum delay before the system may run the task. The hourly cadence above is what we ask
+     * for; this is the soonest the system is allowed to say yes.
+     */
     const val EARLIEST_BEGIN_SECONDS = 15.0 * 60.0
 
     enum class TrainingResult {
@@ -105,17 +117,28 @@ object IosMlTrainingScheduler {
     }
 
     /**
+     * The request [schedule] submits, built on its own so a test can read back what we asked the
+     * system for. Pinning it matters: the conditions on this request are the whole difference
+     * between training that runs and training that quietly never does.
+     */
+    internal fun newTrainingRequest(): BGProcessingTaskRequest =
+        BGProcessingTaskRequest(TASK_IDENTIFIER).apply {
+            setEarliestBeginDate(NSDate.dateWithTimeIntervalSinceNow(EARLIEST_BEGIN_SECONDS))
+            setRequiresExternalPower(false)
+            setRequiresNetworkConnectivity(false)
+        }
+
+    /**
      * Enqueues the next training run.
      *
-     * Uses `requiresExternalPower = true` to mirror Android's "idle + charging" constraint.
+     * `requiresExternalPower` stays false on purpose. Asking for a charger is what stopped Android
+     * from ever training, and training is a short on-device job, so there is nothing to protect the
+     * battery from here. Do not add the condition back.
+     *
      * `requiresNetworkConnectivity` stays false: training is fully on-device.
      */
     fun schedule(): Boolean {
-        val request = BGProcessingTaskRequest(TASK_IDENTIFIER).apply {
-            setEarliestBeginDate(NSDate.dateWithTimeIntervalSinceNow(EARLIEST_BEGIN_SECONDS))
-            setRequiresExternalPower(true)
-            setRequiresNetworkConnectivity(false)
-        }
+        val request = newTrainingRequest()
         return try {
             BGTaskScheduler.sharedScheduler.submitTaskRequest(request, error = null)
             true

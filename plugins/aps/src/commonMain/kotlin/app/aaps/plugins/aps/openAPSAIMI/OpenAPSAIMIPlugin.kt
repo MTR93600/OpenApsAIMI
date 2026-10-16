@@ -225,8 +225,14 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     // The settings entries that only the platform can build. Android also builds the cloud backup
     // manager through this port, see `AndroidAimiPlatformPreferenceItems`.
     private val platformItems: AimiPlatformPreferenceItems,
-    // Optional: only Android has a tick recorder. Metro leaves this null where no platform binds one.
-    private val tickCaptureHook: AimiTickCaptureHook? = null,
+    // Not nullable, and no default value, on purpose. This was written as
+    // `AimiTickCaptureHook? = null` first, on the idea that Metro would inject the binding where a
+    // platform has one and leave null where none does. It does not: it took the default even on
+    // Android, where `AndroidAimiTickCaptureHook` is bound, so the parity recorder stopped running
+    // without any error. A required parameter makes the compiler check it instead. A platform that
+    // has no recorder keeps the whole plugin out of its graph rather than passing a silent null -
+    // see the `excludes` on `DesktopAppGraph` and `IosAppGraph`.
+    private val tickCaptureHook: AimiTickCaptureHook,
     private val aimiMlTrainingScheduler: AimiTrainingScheduler,
     private val storageHelper: AimiStorageStatusSource,
     private val storage: AimiStorage,
@@ -1726,7 +1732,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 // Parity capture: records this tick's inputs + RT for byte-for-byte
                 // replay. Disabled by default (AimiParityCaptureHook.enabled = false).
                 // Zero behavior change when off: single volatile read.
-                tickCaptureHook?.maybeCapture(
+                tickCaptureHook.maybeCapture(
                     storage = storage,
                     glucoseStatusAimi = glucoseStatusAimi,
                     currentTemp = currentTemp,

@@ -41,6 +41,7 @@ import app.aaps.implementation.maintenance.PeriodicMaintenance
 import app.aaps.implementation.maintenance.cloud.AuthBrowser
 import app.aaps.implementation.notifications.SnackbarNotificationFallback
 import app.aaps.implementation.plugin.PluginStore
+import app.aaps.plugins.aps.openAPSAIMI.OpenAPSAIMIPlugin
 import app.aaps.plugins.automation.AutomationRuntime
 import app.aaps.plugins.configuration.setupwizard.SWDefinition
 import app.aaps.shared.clientbindings.ClientGraphBindings
@@ -93,7 +94,16 @@ import java.io.File
  * The pattern to follow for the first group is `app.aaps.ios.shell.missing`: nothing returns a
  * plausible value, and nothing is silent.
  */
-@DependencyGraph(AppScope::class)
+/*
+ * `OpenAPSAIMIPlugin` is excluded on purpose. It moved to commonMain so that iOS can share it, and
+ * it contributes itself to every `AppScope` graph, this one included. Desktop has none of the
+ * Android helpers it asks for - the step counter, the health data, the training scheduler, the
+ * notifier - so the graph would need seventeen bindings that desktop cannot honour. Writing them as
+ * do-nothing stubs would give desktop a dosing plugin that looks present and decides nothing, which
+ * is the worse answer. The plugin is absent here instead, and says so by being excluded in one
+ * place rather than hidden behind empty implementations.
+ */
+@DependencyGraph(AppScope::class, excludes = [OpenAPSAIMIPlugin::class])
 interface DesktopAppGraph : MetroViewModelMultibindings {
 
     // Everything AapsAppRoot takes.

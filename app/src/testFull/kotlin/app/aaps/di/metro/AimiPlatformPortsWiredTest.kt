@@ -2,6 +2,7 @@ package app.aaps.di.metro
 
 import app.aaps.plugins.aps.openAPSAIMI.OpenAPSAIMIPlugin
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.jupiter.api.Test
 
 /**
@@ -34,7 +35,9 @@ class AimiPlatformPortsWiredTest {
             val value = OpenAPSAIMIPlugin::class.java.getDeclaredField(field)
                 .apply { isAccessible = true }
                 .get(plugin)
-            assertThat(value).isNotNull()
+            assertWithMessage("port '%s' was not injected, so the feature behind it is dead", field)
+                .that(value)
+                .isNotNull()
         }
     }
 

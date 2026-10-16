@@ -49,6 +49,7 @@ import app.aaps.implementation.maintenance.cloud.AuthBrowser
 import app.aaps.implementation.notifications.SnackbarNotificationFallback
 import app.aaps.implementation.plugin.PluginStore
 import app.aaps.implementation.receivers.IosReceiverStatusStore
+import app.aaps.plugins.aps.openAPSAIMI.OpenAPSAIMIPlugin
 import app.aaps.plugins.automation.AutomationRuntime
 import app.aaps.plugins.configuration.setupwizard.SWDefinition
 import app.aaps.plugins.sync.nsclientV3.ws.NsSocketFactory
@@ -79,7 +80,23 @@ import kotlinx.coroutines.CoroutineScope
  * answer that a screen would act on. They are listed in `_docs/ios_blockers.md` and are meant to be
  * deleted one at a time.
  */
-@DependencyGraph(AppScope::class)
+/*
+ * `OpenAPSAIMIPlugin` is excluded for now, and this is meant to be undone.
+ *
+ * The plugin moved to commonMain so that iPhone and Android can run the same AIMI, and it
+ * contributes itself to every `AppScope` graph, so it now reaches this one. iOS cannot honour all
+ * of its ports yet. The blocking one is step counts: `StepService` returns 0 on iOS, and zero is
+ * not "no data" to this engine - it is one of the conditions that raises basal, and it makes the
+ * activity branch that lowers basal unreachable. A plugin wired up on those terms would dose an
+ * iPhone differently from an Android phone, in the direction of more insulin.
+ *
+ * So the plugin is absent here rather than present and half fed. Remove this exclusion when the
+ * iOS ports are real: `AimiStepsLifecycle` over HealthKit first, then `AimiPhysioLifecycle`,
+ * `AimiTrainingScheduler`, `AimiStorageStatusSource`, `AimiAuditorNotifier`,
+ * `AimiPlatformPreferenceItems` and `AimiTickCaptureHook`. `IosClientConfig.APS` stays false until
+ * then as well.
+ */
+@DependencyGraph(AppScope::class, excludes = [OpenAPSAIMIPlugin::class])
 interface IosAppGraph : MetroViewModelMultibindings {
 
     // Everything AapsAppRoot needs.
