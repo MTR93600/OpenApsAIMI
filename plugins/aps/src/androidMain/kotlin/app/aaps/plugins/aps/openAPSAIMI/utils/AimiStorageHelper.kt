@@ -5,6 +5,9 @@ import android.os.Environment
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.ContributesBinding
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiStorageStatusSource
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiStorageStatus
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import java.io.File
@@ -26,35 +29,26 @@ import java.io.File
  * private val file by lazy { storageHelper.getAimiFile("my_data.json") }
  * ```
  */
+@ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
 class AimiStorageHelper @Inject constructor(
     private val context: Context,
     private val log: AAPSLogger
-) {
+) : AimiStorageStatusSource {
 
     companion object {
         /** Same cap as dump `AimiBackupManager.MAX_BACKUP_FILE_BYTES` (SAF manager stays dump). */
         const val MAX_BACKUP_FILE_BYTES: Long = 16L * 1024L * 1024L
     }
 
-    /**
-     * État du stockage utilisé (pour logs de santé)
-     */
-    enum class StorageStatus {
-        DOCUMENTS_AAPS,      // ✅ Documents/AAPS accessible
-        APP_SCOPED_EXTERNAL, // ⚠️ Fallback app-scoped external
-        INTERNAL_ONLY,       // ⚠️ Dernier recours internal
-        ERROR                // ❌ Erreur (ne devrait jamais arriver)
-    }
-
-    private var currentStatus: StorageStatus = StorageStatus.ERROR
+    private var currentStatus: AimiStorageStatus = AimiStorageStatus.ERROR
     private var currentDirectory: File? = null
     private var lastError: String? = null
 
     /**
      * Obtient le statut actuel du stockage (pour monitoring)
      */
-    fun getStorageStatus(): Triple<StorageStatus, String?, String?> {
+    override fun getStorageStatus(): Triple<AimiStorageStatus, String?, String?> {
         return Triple(currentStatus, currentDirectory?.absolutePath, lastError)
     }
 
@@ -84,9 +78,9 @@ class AimiStorageHelper @Inject constructor(
         )
 
         currentStatus = when (selection.tier) {
-            AimiStorageTier.DOCUMENTS_AAPS -> StorageStatus.DOCUMENTS_AAPS
-            AimiStorageTier.APP_SCOPED_EXTERNAL -> StorageStatus.APP_SCOPED_EXTERNAL
-            AimiStorageTier.INTERNAL_ONLY -> StorageStatus.INTERNAL_ONLY
+            AimiStorageTier.DOCUMENTS_AAPS -> AimiStorageStatus.DOCUMENTS_AAPS
+            AimiStorageTier.APP_SCOPED_EXTERNAL -> AimiStorageStatus.APP_SCOPED_EXTERNAL
+            AimiStorageTier.INTERNAL_ONLY -> AimiStorageStatus.INTERNAL_ONLY
         }
         lastError = selection.reason
         val dir = File(selection.path)
@@ -257,13 +251,13 @@ class AimiStorageHelper @Inject constructor(
     fun getHealthReport(): String {
         val (status, path, error) = getStorageStatus()
         return when (status) {
-            StorageStatus.DOCUMENTS_AAPS ->
+            AimiStorageStatus.DOCUMENTS_AAPS ->
                 "✅ Storage: Documents/AAPS"
-            StorageStatus.APP_SCOPED_EXTERNAL ->
+            AimiStorageStatus.APP_SCOPED_EXTERNAL ->
                 "⚠️ Storage: App-scoped (fallback) - Reason: ${error ?: "unknown"}"
-            StorageStatus.INTERNAL_ONLY ->
+            AimiStorageStatus.INTERNAL_ONLY ->
                 "⚠️ Storage: Internal only (degraded) - Reason: ${error ?: "unknown"}"
-            StorageStatus.ERROR ->
+            AimiStorageStatus.ERROR ->
                 "❌ Storage: ERROR - ${error ?: "unknown"}"
         }
     }

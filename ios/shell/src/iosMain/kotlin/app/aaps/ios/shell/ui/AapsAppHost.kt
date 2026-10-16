@@ -50,6 +50,7 @@ import app.aaps.ios.shell.PluginStoreRegistry
 import app.aaps.ios.shell.di.IosAppGraph
 import app.aaps.ios.shell.platform.IosLanguage
 import app.aaps.ios.shell.platform.notOnThisPlatform
+import app.aaps.plugins.aps.openAPSAIMI.background.IosAimiBackgroundTasks
 import app.aaps.plugins.aps.openAPSAIMI.di.IosAimiEngineGraph
 import app.aaps.plugins.aps.openAPSAIMI.di.IosAimiEngineHolder
 import app.aaps.plugins.sync.nsclientV3.ws.NsSocketFactory
@@ -148,6 +149,13 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
         )
         IosAimiEngineHolder.install(engineGraph)
         logger.debug(LTag.APS, "AIMI engine graph installed")
+
+        // The background jobs (ML training, telemetry retention) need the coordinator from this
+        // graph, so they are configured and queued here. Their handlers were registered earlier by
+        // `registerAimiBackgroundTasks`, from the Swift `init`: iOS only allows that before launch
+        // ends, and this function runs later. `install` catches its own failures, for the same
+        // reason as the try around it: a background job must not take the app down.
+        IosAimiBackgroundTasks.install(engineGraph.mlTrainingCoordinator, logger)
     } catch (e: Exception) {
         logger.error(LTag.APS, "AIMI engine graph failed to build; neutral engine remains the fallback", e)
     }
@@ -523,6 +531,20 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
         }
         }
     }
+}
+
+/**
+ * Registers the AIMI background task handlers (ML training and telemetry retention) and nothing else.
+ *
+ * Called from the Swift `ClientApp.init`, never from [aapsAppViewController]. iOS requires
+ * `BGTaskScheduler` handlers to be registered before the app finishes launching, and the view
+ * controller is made later than that: registering there can crash the app. For the same reason this
+ * needs no graph - none exists yet. The part that needs the graph is
+ * `IosAimiBackgroundTasks.install`, which `aapsAppViewController` calls once the graph is built.
+ * Keep the two apart.
+ */
+fun registerAimiBackgroundTasks() {
+    IosAimiBackgroundTasks.register()
 }
 
 /** One line, one shape, so a run makes it obvious which platform callbacks are still placeholders. */

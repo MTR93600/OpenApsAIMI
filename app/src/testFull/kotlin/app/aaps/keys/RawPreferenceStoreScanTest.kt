@@ -59,7 +59,7 @@ class RawPreferenceStoreScanTest {
         "plugins/aps/src/iosMain/kotlin/app/aaps/plugins/aps/openAPSAIMI/di/IosAimiEngineGraph.kt" to "DI wiring, iOS AIMI engine graph",
         "plugins/aps/src/androidMain/kotlin/app/aaps/plugins/aps/openAPSAIMI/advisor/diag/AndroidAimiDiagPlatform.kt" to
             "allPreferences() dumps every stored key for a diagnostic, including keys it has never heard of, which Preferences cannot do by design",
-        "plugins/aps/src/androidMain/kotlin/app/aaps/plugins/aps/openAPSAIMI/OpenAPSAIMIPlugin.kt" to
+        "plugins/aps/src/commonMain/kotlin/app/aaps/plugins/aps/openAPSAIMI/OpenAPSAIMIPlugin.kt" to
             "reads the retired key key_use_Aimi_autoDrive once, to migrate it to BooleanKey.OApsAIMIautoDriveActive. A key that no longer exists cannot be read through Preferences",
         "tools/aimi_viewer/android/app/src/main/kotlin/app/aaps/aimi_viewer/MainActivity.kt" to "a separate viewer app, not part of AAPS and with no access to its key registry",
 

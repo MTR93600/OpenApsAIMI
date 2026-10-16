@@ -15,6 +15,8 @@ import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveNeuralTraine
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import app.aaps.plugins.aps.openAPSAIMI.retention.AimiRetentionWorker
 import java.util.concurrent.TimeUnit
+import dev.zacsweers.metro.ContributesBinding
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiTrainingScheduler
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
@@ -25,6 +27,7 @@ import dev.zacsweers.metro.AppScope
  * - Basal / T3C: every 1h, no constraints (runs regardless of charging / device-idle / battery) + one-time bootstrap
  * - Autodrive attention: 24h via [app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveNeuralTrainer]
  */
+@ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
 class AimiMlTrainingScheduler @Inject constructor(
     private val context: Context,
@@ -35,9 +38,9 @@ class AimiMlTrainingScheduler @Inject constructor(
     // was never enqueued and the attention weights were never produced.
     @Suppress("unused") private val autodriveNeuralTrainer: AutodriveNeuralTrainer,
     @Suppress("unused") private val autodriveDataBackfiller: AutodriveDataBackfiller,
-) {
+) : AimiTrainingScheduler {
 
-    fun schedule() {
+    override fun schedule() {
         // Runs every 1h with NO constraints — must execute regardless of charging / device-idle / battery. The old
         // setRequiresCharging + setRequiresDeviceIdle combo almost never coincided on real phones, so the worker never
         // fired and the weights were never produced. WorkManager may still defer during deep Doze to a maintenance
@@ -111,7 +114,7 @@ class AimiMlTrainingScheduler @Inject constructor(
         }
     }
 
-    fun cancel() {
+    override fun cancel() {
         try {
             val wm = WorkManager.getInstance(context)
             wm.cancelUniqueWork(WORK_BASAL_ML)

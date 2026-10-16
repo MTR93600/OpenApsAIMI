@@ -3,6 +3,8 @@ package app.aaps.plugins.aps.openAPSAIMI.steps
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.ContributesBinding
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiStepsLifecycle
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 
@@ -22,12 +24,13 @@ import dev.zacsweers.metro.SingleIn
  *
  * @author MTR & Lyra AI - AIMI Steps Integration
  */
+@ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
 class AIMIStepsManagerMTR @Inject constructor(
     private val healthConnectSync: AIMIHealthConnectSyncServiceMTR,
     private val phoneStepsSync: AIMIPhoneStepsSyncServiceMTR,
     private val aapsLogger: AAPSLogger
-) {
+) : AimiStepsLifecycle {
 
     companion object {
         private const val TAG = "StepsManager"
@@ -38,7 +41,7 @@ class AIMIStepsManagerMTR @Inject constructor(
     /**
      * Starts all steps sync services
      */
-    fun start() {
+    override fun start() {
         if (isStarted) {
             aapsLogger.debug(LTag.APS, "[$TAG] Already started")
             return
@@ -74,7 +77,7 @@ class AIMIStepsManagerMTR @Inject constructor(
     /**
      * Stops all steps sync services
      */
-    fun stop() {
+    override fun stop() {
         if (!isStarted) {
             return
         }

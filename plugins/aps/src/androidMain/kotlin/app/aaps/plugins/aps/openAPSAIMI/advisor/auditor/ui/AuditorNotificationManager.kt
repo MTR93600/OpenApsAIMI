@@ -23,12 +23,15 @@ import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdictCache
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.model.AuditorUIState
 import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.ContributesBinding
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiAuditorNotifier
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 
 /**
  * System + in-app notifications when new AIMI Auditor insights are available.
  */
+@ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
 class AuditorNotificationManager @Inject constructor(
   private val context: Context,
@@ -38,7 +41,7 @@ class AuditorNotificationManager @Inject constructor(
   private val rxBus: RxBus,
   private val rh: TextResolver,
   private val aapsLogger: AAPSLogger,
-) {
+) : AimiAuditorNotifier {
 
   @Volatile
   private var lastNotifiedVerdictTimestampMs: Long = 0L
@@ -63,7 +66,7 @@ class AuditorNotificationManager @Inject constructor(
    *
    * @return true if notifications were posted for this verdict.
    */
-  fun showInsightAvailable(uiState: AuditorUIState): Boolean {
+  override fun showInsightAvailable(uiState: AuditorUIState): Boolean {
     if (!uiState.shouldNotify || !uiState.isActive()) return false
 
     val cached = AuditorVerdictCache.resolveForDisplay() ?: return false

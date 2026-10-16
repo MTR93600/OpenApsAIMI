@@ -12,6 +12,8 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import dev.zacsweers.metro.ContributesBinding
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiPhysioLifecycle
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.AppScope
@@ -38,6 +40,7 @@ import kotlinx.coroutines.launch
  *
  * @author MTR & Lyra AI - AIMI Physiological Intelligence
  */
+@ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
 class AIMIPhysioManagerMTR @Inject constructor(
     private val context: Context,
@@ -46,7 +49,7 @@ class AIMIPhysioManagerMTR @Inject constructor(
     private val contextStore: AIMIPhysioContextStoreMTR,
     private val pipelineWatchdog: AIMIPhysioPipelineWatchdogMTR,
     private val aapsLogger: AAPSLogger
-) {
+) : AimiPhysioLifecycle {
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     companion object {
@@ -68,7 +71,7 @@ class AIMIPhysioManagerMTR @Inject constructor(
      * Starts the physiological analysis manager
      * Called by OpenAPSAIMIPlugin.onStart()
      */
-    fun start() {
+    override fun start() {
         val enabled = isEnabled()
         aapsLogger.info(LTag.APS, "[$TAG] 🚀 Starting AIMI Physiological Manager (Enabled: $enabled)")
 
@@ -217,7 +220,7 @@ class AIMIPhysioManagerMTR @Inject constructor(
      * Stops the manager and cancels periodic physio WorkManager jobs.
      * Called by OpenAPSAIMIPlugin.onStop() or when the user disables Physio in preferences.
      */
-    fun stop() {
+    override fun stop() {
         cancelScheduledWork()
         isRunning.set(false)
         aapsLogger.info(LTag.APS, "[$TAG] Manager stopped; WorkManager physio jobs cancelled")

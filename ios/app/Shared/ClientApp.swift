@@ -10,6 +10,13 @@ import AapsShared
 @main
 struct ClientApp: App {
 
+    init() {
+        // Must happen here. iOS only lets background task handlers be registered before the app
+        // finishes launching, and `makeUIViewController` below runs later. This call needs no
+        // graph; the Kotlin side queues the tasks once its graph is built.
+        AapsAppHostKt.registerAimiBackgroundTasks()
+    }
+
     var body: some SwiftUI.Scene {
         WindowGroup {
             ShellView()

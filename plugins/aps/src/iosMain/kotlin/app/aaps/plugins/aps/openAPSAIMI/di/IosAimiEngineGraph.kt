@@ -20,6 +20,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.database.persistence.PersistenceLayerImpl
 import app.aaps.plugins.aps.openAPSAIMI.DetermineBasalAimiEngine
 import app.aaps.plugins.aps.openAPSAIMI.DetermineBasalaimiSMB2
+import app.aaps.plugins.aps.openAPSAIMI.learning.BasalMlTrainingCoordinator
 import app.aaps.plugins.aps.openAPSAIMI.physio.HormonitorStudyExporter
 import app.aaps.plugins.aps.openAPSAIMI.physio.HormonitorStudyExporterProvider
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
@@ -64,6 +65,13 @@ interface IosAimiEngineGraph {
 
     /** The underlying plugin, exposed for shells that need the full `RT` result. */
     val plugin: DetermineBasalaimiSMB2
+
+    /**
+     * The ML training coordinator, for the iOS background task. Its three inputs
+     * (`AimiStorage`, `BasalNeuralLearner`, `AAPSLogger`) are all bound in this graph.
+     * The shell hands it to `IosAimiBackgroundTasks.install` once the graph is built.
+     */
+    val mlTrainingCoordinator: BasalMlTrainingCoordinator
 
     @Provides
     @SingleIn(AppScope::class)
