@@ -20,8 +20,9 @@ import kotlin.concurrent.Volatile
  * Do not read this 0 as "neutral". The engine treats 0 steps as a direction: in
  * `BasalDecisionEngine` the test `recentSteps5Minutes < 100` is one of the conditions that raises
  * basal to 1.5 times the profile, the lowering branch `recentSteps5Minutes > 100` can never be
- * reached, and `calculateAdjustedDIA` lengthens the DIA by 30 percent on exactly 0 steps when the
- * heart rate is above its hour average. Making the engine tell "no data" from "no steps" is a
+ * reached, and `AimiHypoSmbSafety.adjustedDiaMinutes` lengthens the DIA by 20 percent when steps
+ * are under 100 and the heart rate is over 95, while its `steps > 350` branch that shortens the
+ * DIA can never be taken. Making the engine tell "no data" from "no steps" is a
  * separate decision that is not made here.
  */
 actual object StepService {

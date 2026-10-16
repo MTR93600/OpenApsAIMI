@@ -39,6 +39,7 @@ import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.ApsStrings
+import app.aaps.plugins.aps.openAPSAIMI.activity.ActivityContext
 import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
 import app.aaps.plugins.aps.openAPSAIMI.effects.basalGovLine
 import app.aaps.plugins.aps.openAPSAIMI.effects.learnerHealthLines
@@ -5645,7 +5646,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             state = object : AimiMaxIobGateState {
                 override fun studyExporter() = hormonitorStudyExporter
                 override fun activityContext() =
-                    cachedActivityContext ?: app.aaps.plugins.aps.openAPSAIMI.activity.ActivityContext()
+                    cachedActivityContext ?: ActivityContext()
                 override fun adaptiveMult() = this@DetermineBasalaimiSMB2.causalState.adaptiveMult
                 override fun withoutZeros(value: Double) = value.withoutZeros()
             },
@@ -8752,7 +8753,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var recentSteps30Minutes: Int = 0
     private var recentSteps60Minutes: Int = 0
     private var recentSteps180Minutes: Int = 0
-    private var cachedActivityContext: app.aaps.plugins.aps.openAPSAIMI.activity.ActivityContext? = null  // Written by applyEndoAndActivityAdjustments
+    private var cachedActivityContext: ActivityContext? = null  // Written by applyEndoAndActivityAdjustments
     private var cachedBasalFirstActive = false    // Written by applyBasalFirstPolicy
     private var cachedIsFragileBg = false         // Written by applyBasalFirstPolicy
     /** Intent contexte AIMI : activité déclarée (snapshot.hasActivity). */
@@ -9498,31 +9499,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     fun adjustDIAForIOB(diaMinutes: Float, currentIOB: Float, threshold: Float = 2f): Float =
         AimiTickPolicyMath.adjustDIAForIOB(diaMinutes, currentIOB, threshold)
     /**
-     * Calcule le DIA ajusté en minutes en fonction de plusieurs paramètres :
-     * - baseDIAHours : le DIA de base en heures (par exemple, 9.0 pour 9 heures)
-     * - currentHour : l'heure actuelle (0 à 23)
-     * - recentSteps5Minutes : nombre de pas sur les 5 dernières minutes
-     * - currentHR : fréquence cardiaque actuelle (bpm)
-     * - averageHR60 : fréquence cardiaque moyenne sur les 60 dernières minutes (bpm)
+     * Adjusted DIA in minutes. The rules live in `AimiHypoSmbSafety.adjustedDiaMinutes`; this only
+     * calls it, logs the reason and keeps the value for the tick.
      *
-     * La logique appliquée :
-     * 1. Conversion du DIA de base en minutes.
-     * 2. Ajustement selon l'heure de la journée :
-     *    - Matin (6-10h) : réduction de 20% (×0.8),
-     *    - Soir/Nuit (22-23h et 0-5h) : augmentation de 20% (×1.2).
-     * 3. Ajustement en fonction de l'activité physique :
-     *    - Si recentSteps5Minutes > 200 et que currentHR > averageHR60, on réduit le DIA de 30% (×0.7).
-     *    - Si recentSteps5Minutes == 0 et que currentHR > averageHR60, on augmente le DIA de 30% (×1.3).
-     * 4. Ajustement selon la fréquence cardiaque absolue :
-     *    - Si currentHR > 130 bpm, on réduit le DIA de 30% (×0.7).
-     * 5. Le résultat final est contraint entre 180 minutes (3h) et 720 minutes (12h).
+     * This block used to describe the rules itself, in French, and had drifted: it said steps
+     * above 200 with a heart rate over the hour average shortened the DIA by 30 percent, and that
+     * exactly 0 steps with the same heart rate lengthened it by 30 percent. The real code uses an
+     * absolute heart rate and different thresholds, and the factors are 0.90 and 1.2. Two readers
+     * took the old text for the behaviour on 2026-10-16 before anyone opened the real function, so
+     * the rules are deliberately not repeated here. Read them where they run.
      */
     fun calculateAdjustedDIA(
         baseDIAHours: Float,
         currentHour: Int,
         pumpAgeDays: Float,
         iob: Double = 0.0,
-        activityContext: app.aaps.plugins.aps.openAPSAIMI.activity.ActivityContext,
+        activityContext: ActivityContext,
         steps: Int? = null,
         heartRate: Int? = null
     ): Double {
@@ -12274,7 +12266,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     calculateAdjustedDIA(
                         baseDIAHours = effectiveBaseDia, currentHour = currentHour,
                         pumpAgeDays = pumpAge, iob = iobValue,
-                        activityContext = cachedActivityContext ?: app.aaps.plugins.aps.openAPSAIMI.activity.ActivityContext(),
+                        activityContext = cachedActivityContext ?: ActivityContext(),
                         steps = steps5, heartRate = currentHr?.toInt()
                     )
                 },
@@ -14140,7 +14132,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         suggestedRate: Double,
         profileBasal: Double,
         safetyDecision: SafetyDecision,
-        activityContext: app.aaps.plugins.aps.openAPSAIMI.activity.ActivityContext,
+        activityContext: ActivityContext,
         bg: Double,
         delta: Double,
         shortAvgDelta: Double,

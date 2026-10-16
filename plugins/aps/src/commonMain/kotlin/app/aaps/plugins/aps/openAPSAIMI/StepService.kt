@@ -10,8 +10,9 @@ package app.aaps.plugins.aps.openAPSAIMI
  * **0 is not "no data" and it is not neutral.** The engine reads 0 steps as a real signal: in
  * `BasalDecisionEngine` the test `recentSteps5Minutes < 100` is one of the conditions that raises
  * basal to 1.5 times the profile, the branch `recentSteps5Minutes > 100` that lowers it is then
- * unreachable, and `calculateAdjustedDIA` lengthens the DIA by 30 percent on exactly 0 steps when
- * the heart rate is above its hour average. So a platform that has no step data and answers 0
+ * unreachable, and `AimiHypoSmbSafety.adjustedDiaMinutes` lengthens the DIA by 20 percent when
+ * steps are under 100 and the heart rate is over 95, while its `steps > 350` branch that shortens
+ * the DIA can never be taken. So a platform that has no step data and answers 0
  * pushes dosing toward more insulin. This signature is a plain `Int` and cannot say "unknown";
  * a platform that can be without data must expose that state itself (the iOS actual has
  * `dataStatus`) until the engine learns to tell "no data" from "no steps".
