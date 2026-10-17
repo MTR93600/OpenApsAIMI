@@ -38,7 +38,7 @@ import kotlin.test.assertTrue
  */
 class MealWindowBasalBoostTest {
 
-    private val engine = BasalDecisionEngine(
+    internal val engine = BasalDecisionEngine(
         rh = StubText,
         aimiAdaptiveBasal = AIMIAdaptiveBasal(NoOpLogger, StubFormatter),
         basalPlanner = BasalPlanner(AIMIAdaptiveBasal(NoOpLogger, StubFormatter), NoOpLogger),
@@ -49,7 +49,7 @@ class MealWindowBasalBoostTest {
         BasalHistoryUtils.historyProvider = BasalHistoryUtils.EmptyProvider
     }
 
-    private fun noMealOnsetHelpers() = BasalDecisionEngine.Helpers(
+    internal fun noMealOnsetHelpers() = BasalDecisionEngine.Helpers(
         calculateRate = { _, _, mult, _ -> 1.0 * mult },
         calculateBasalRate = { _, _, mult -> 1.0 * mult },
         detectMealOnset = { _, _, _, _, _ -> false },
@@ -95,7 +95,8 @@ class MealWindowBasalBoostTest {
         assertEquals(3.0, decision.rate, absoluteTolerance = 0.001)
     }
 
-    private fun lunchInput(
+    /** Shared with `StepDataAbsenceBasalTest`. */
+    internal fun lunchInput(
         variableSensitivity: Double,
         profileSens: Double,
         preFloorCommandedSens: Double?,

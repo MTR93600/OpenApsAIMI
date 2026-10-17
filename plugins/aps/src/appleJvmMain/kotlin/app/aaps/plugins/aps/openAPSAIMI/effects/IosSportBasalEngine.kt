@@ -133,7 +133,7 @@ internal fun iosNeutralSportBasal(
             override fun dinnerRuntime() = 0L
             override fun highCarbTime() = false
             override fun highCarbRuntime() = 0L
-            override fun recentSteps5Minutes() = 0
+            override fun recentSteps5Minutes(): Int? = null
             override fun calculateRate(
                 basal: Double,
                 currentBasal: Double,

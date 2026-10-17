@@ -37,8 +37,8 @@ class IosStepCacheTest {
         assertEquals(IosStepDataStatus.NEVER_REFRESHED, cache.status())
         assertFalse(cache.hasData())
         assertEquals(null, cache.lastRefreshMs())
-        assertEquals(0, cache.singleBucket(1))
-        assertEquals(0, cache.windowSum(34))
+        assertEquals(null, cache.singleBucket(1))
+        assertEquals(null, cache.windowSum(34))
     }
 
     @Test
@@ -84,7 +84,7 @@ class IosStepCacheTest {
         now += IosStepCache.MAX_AGE_MS + 1
         assertEquals(IosStepDataStatus.STALE, cache.status())
         assertFalse(cache.hasData())
-        assertEquals(0, cache.singleBucket(1))
+        assertEquals(null, cache.singleBucket(1))
     }
 
     @Test
@@ -93,6 +93,7 @@ class IosStepCacheTest {
         assertEquals(IosStepDataStatus.AVAILABLE, cache.status())
         assertTrue(cache.hasData())
         assertEquals(0, cache.windowSum(12))
+        assertEquals(0, cache.singleBucket(1))
     }
 
     @Test
@@ -116,7 +117,7 @@ class IosStepCacheTest {
     fun `step service getters read the cache and expose the status`() {
         StepService.cache = cache
         assertEquals(IosStepDataStatus.NEVER_REFRESHED, StepService.dataStatus)
-        assertEquals(0, StepService.getRecentStepCount5Min())
+        assertEquals(null, StepService.getRecentStepCount5Min())
         feed(1 to 120, 2 to 30, 3 to 7, 8 to 200, 20 to 3000)
         assertEquals(IosStepDataStatus.AVAILABLE, StepService.dataStatus)
         assertEquals(120, StepService.getRecentStepCount5Min())

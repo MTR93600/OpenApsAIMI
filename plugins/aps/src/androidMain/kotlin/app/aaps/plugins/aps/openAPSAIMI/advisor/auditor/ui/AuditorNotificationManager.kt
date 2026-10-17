@@ -72,7 +72,15 @@ class AuditorNotificationManager @Inject constructor(
     val cached = AuditorVerdictCache.resolveForDisplay() ?: return false
     if (cached.cached.timestamp == lastNotifiedVerdictTimestampMs) return false
 
-    val posted = postInAppNotification() || postSystemNotification(uiState)
+    // Both, and each one evaluated. This used to be
+    // `postInAppNotification() || postSystemNotification(uiState)`, and `postInAppNotification`
+    // always returns true, so `||` short-circuited and the system notification was never posted
+    // once. The whole `postSystemNotification` path below was dead code, which is why nobody ever
+    // saw an auditor notification outside the app. Keep the two calls on their own lines: writing
+    // this back as an `||` would silently kill one of them again.
+    val postedInApp = postInAppNotification()
+    val postedSystem = postSystemNotification(uiState)
+    val posted = postedInApp || postedSystem
     if (posted) {
       lastNotifiedVerdictTimestampMs = cached.cached.timestamp
     }

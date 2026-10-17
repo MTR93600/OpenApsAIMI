@@ -76,15 +76,15 @@ internal fun decideHeartRateIsfFromTherapyReads(
             override fun roundDisplay(value: Double): Int = value.roundToInt()
             override fun stepsCached(now: Long): List<SC> = caches.steps
             override fun logSteps(samples: List<SC>) = Unit
-            override fun setRecentSteps(steps5: Int, steps10: Int, steps15: Int, steps30: Int, steps60: Int, steps180: Int) {
-                recentSteps10 = steps10
+            override fun setRecentSteps(steps5: Int?, steps10: Int?, steps15: Int?, steps30: Int?, steps60: Int?, steps180: Int?) {
+                recentSteps10 = steps10 ?: 0
             }
-            override fun phoneSteps5(): Int = 0
-            override fun phoneSteps10(): Int = 0
-            override fun phoneSteps15(): Int = 0
-            override fun phoneSteps30(): Int = 0
-            override fun phoneSteps60(): Int = 0
-            override fun phoneSteps180(): Int = 0
+            override fun phoneSteps5(): Int? = null
+            override fun phoneSteps10(): Int? = null
+            override fun phoneSteps15(): Int? = null
+            override fun phoneSteps30(): Int? = null
+            override fun phoneSteps60(): Int? = null
+            override fun phoneSteps180(): Int? = null
             override fun heartRatesCached(now: Long): List<HR> = caches.heartRates
             override fun logHeartRates(samples: List<HR>) = Unit
             override fun setAverageBpm(value: Double) { averageBpm = value }

@@ -121,6 +121,43 @@ class AimiHypoSmbSafetyTest {
         assertTrue(out.reason.contains("morning_adjustment"))
     }
 
+    /** 5 hours at 14:00 with no IOB and no pump age: no other rule moves the DIA, so the base is 300 minutes. */
+    private fun diaWith(steps: Int?, heartRate: Int?, state: ActivityState = ActivityState.REST): Double =
+        AimiHypoSmbSafety.adjustedDiaMinutes(
+            baseDIAHours = 5f,
+            currentHour = 14,
+            pumpAgeDays = 0f,
+            iob = 0.0,
+            activityContext = ActivityContext(state = state),
+            steps = steps,
+            heartRate = heartRate,
+            phrase = echo,
+        ).minutes
+
+    @Test
+    fun `unknown steps apply neither the stress factor nor the flow factor`() {
+        assertNear(300.0, diaWith(steps = null, heartRate = 100))
+        assertNear(300.0, diaWith(steps = null, heartRate = 0))
+        assertNear(300.0, diaWith(steps = null, heartRate = null))
+    }
+
+    @Test
+    fun `real steps under 100 with a high heart rate lengthen the DIA by 1 point 2`() {
+        assertNear(360.0, diaWith(steps = 0, heartRate = 96))
+        assertNear(360.0, diaWith(steps = 99, heartRate = 96))
+        // At exactly 100 steps or at exactly 95 bpm the rule does not fire.
+        assertNear(300.0, diaWith(steps = 100, heartRate = 96))
+        assertNear(300.0, diaWith(steps = 50, heartRate = 95))
+    }
+
+    @Test
+    fun `real steps over 350 shorten the DIA by 0 point 90`() {
+        assertNear(270.0, diaWith(steps = 351, heartRate = 0))
+        assertNear(300.0, diaWith(steps = 350, heartRate = 0))
+        // In an INTENSE state only the activity factor 0.85 applies and the 0.90 is skipped.
+        assertNear(255.0, diaWith(steps = 351, heartRate = 0, state = ActivityState.INTENSE))
+    }
+
     @Test
     fun `a very fast rise asks for an SMB every minute`() {
         val out = AimiHypoSmbSafety.smbInterval(quietInterval(delta = 16f))

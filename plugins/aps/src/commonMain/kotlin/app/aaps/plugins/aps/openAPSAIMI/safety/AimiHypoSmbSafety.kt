@@ -150,15 +150,16 @@ internal object AimiHypoSmbSafety {
             }
             else -> Unit
         }
-        val s = steps ?: 0
         val h = heartRate ?: 0
-        if (h > 95 && s < 100) {
+        // `steps == null` means the platform has no step data. Then neither factor may apply:
+        // without data we can claim neither a still person nor an active one.
+        if (steps != null && h > 95 && steps < 100) {
             diaMinutes *= 1.2f
-            reasonBuilder.append(phrase.line("reason_bio_sync_stress", h, s))
-        } else if (s > 350) {
+            reasonBuilder.append(phrase.line("reason_bio_sync_stress", h, steps))
+        } else if (steps != null && steps > 350) {
             if (activityContext.state != ActivityState.INTENSE) {
                 diaMinutes *= 0.90f
-                reasonBuilder.append(phrase.line("reason_bio_sync_flow", s, h, 0.90f))
+                reasonBuilder.append(phrase.line("reason_bio_sync_flow", steps, h, 0.90f))
             }
         }
         diaMinutes = AimiTickPolicyMath.adjustDIAForIOB(diaMinutes, iob.toFloat())

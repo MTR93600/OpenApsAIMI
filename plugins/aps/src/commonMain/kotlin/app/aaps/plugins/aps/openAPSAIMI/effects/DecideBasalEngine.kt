@@ -37,7 +37,7 @@ internal interface AimiBasalDecisionEngineCalls {
     fun dinnerRuntime(): Long
     fun highCarbTime(): Boolean
     fun highCarbRuntime(): Long
-    fun recentSteps5Minutes(): Int
+    fun recentSteps5Minutes(): Int?
     fun calculateRate(
         basal: Double,
         currentBasal: Double,

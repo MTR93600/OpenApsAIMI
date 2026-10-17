@@ -84,17 +84,24 @@ import kotlinx.coroutines.CoroutineScope
  * `OpenAPSAIMIPlugin` is excluded for now, and this is meant to be undone.
  *
  * The plugin moved to commonMain so that iPhone and Android can run the same AIMI, and it
- * contributes itself to every `AppScope` graph, so it now reaches this one. iOS cannot honour all
- * of its ports yet. The blocking one is step counts: `StepService` returns 0 on iOS, and zero is
- * not "no data" to this engine - it is one of the conditions that raises basal, and it makes the
- * activity branch that lowers basal unreachable. A plugin wired up on those terms would dose an
- * iPhone differently from an Android phone, in the direction of more insulin.
+ * contributes itself to every `AppScope` graph, so it now reaches this one. It is held out until
+ * iOS can honour all of its ports, because a plugin that is wired up and half fed would dose an
+ * iPhone differently from an Android phone.
  *
- * So the plugin is absent here rather than present and half fed. Remove this exclusion when the
- * iOS ports are real: `AimiStepsLifecycle` over HealthKit first, then `AimiPhysioLifecycle`,
- * `AimiTrainingScheduler`, `AimiStorageStatusSource`, `AimiAuditorNotifier`,
- * `AimiPlatformPreferenceItems` and `AimiTickCaptureHook`. `IosClientConfig.APS` stays false until
- * then as well.
+ * Six of the seven ports now have a real iOS side: `AimiStepsLifecycle` over HealthKit,
+ * `AimiPhysioLifecycle`, `AimiTrainingScheduler`, `AimiStorageStatusSource`, `AimiAuditorNotifier`
+ * and `AimiPlatformPreferenceItems`.
+ *
+ * What is still missing, as of 2026-10-17:
+ * - `AimiTickCaptureHook` has no iOS side. Its switch, `AimiParityCaptureHook.enabled`, has no
+ *   writer anywhere in the repo, so the recorder cannot run on Android either. An EXPERT
+ *   preference key for it was agreed; the iOS recorder waits for that key.
+ * - Step counts are read from HealthKit now, but when there is no data `StepService` still answers
+ *   0, and this engine reads 0 as a measurement: it is one of the conditions that raise basal to
+ *   1.5 times the profile, and it makes the branch that lowers basal unreachable. Making the
+ *   engine tell "no data" from "no steps" was agreed and is the real gate on this exclusion.
+ *
+ * `IosClientConfig.APS` stays false until then as well.
  */
 @DependencyGraph(AppScope::class, excludes = [OpenAPSAIMIPlugin::class])
 interface IosAppGraph : MetroViewModelMultibindings {

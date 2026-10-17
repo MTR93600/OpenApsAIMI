@@ -21,10 +21,6 @@ import app.aaps.database.persistence.PersistenceLayerImpl
 import app.aaps.plugins.aps.openAPSAIMI.DetermineBasalAimiEngine
 import app.aaps.plugins.aps.openAPSAIMI.DetermineBasalaimiSMB2
 import app.aaps.plugins.aps.openAPSAIMI.learning.BasalMlTrainingCoordinator
-import app.aaps.plugins.aps.openAPSAIMI.physio.HormonitorStudyExporter
-import app.aaps.plugins.aps.openAPSAIMI.physio.HormonitorStudyExporterProvider
-import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
-import app.aaps.plugins.aps.openAPSAIMI.utils.iosAimiStorage
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.DependencyGraph
 import dev.zacsweers.metro.Provides
@@ -56,6 +52,10 @@ import dev.zacsweers.metro.SingleIn
  * which would be a second one next to the instance the shell passes in. The shell owns
  * the database, so its instance is the one that must win; excluding the contributed
  * binding says that in one place instead of leaving Metro to report a duplicate.
+ *
+ * `AimiStorage` and `HormonitorStudyExporterProvider` are not provided here. They come from
+ * `IosAimiPlatformBindings`, which is contributed to `AppScope` and so reaches this graph and the
+ * shell graph from one place. Providing them here as well would be a duplicate in the shell.
  */
 @DependencyGraph(AppScope::class, excludes = [PersistenceLayerImpl::class])
 interface IosAimiEngineGraph {
@@ -77,27 +77,6 @@ interface IosAimiEngineGraph {
     @SingleIn(AppScope::class)
     fun engine(plugin: DetermineBasalaimiSMB2): DetermineBasalAimiEngine =
         DetermineBasalAimiEngine(plugin)
-
-    /**
-     * File storage for the learners (CSV journal, model weights).
-     * `iosAimiStorage()` assembles the existing `DirectoryAimiStorage` over
-     * `Documents/AAPS`; the factory is a plain function, so it needs this
-     * explicit binding for Metro to see it.
-     */
-    @Provides
-    @SingleIn(AppScope::class)
-    fun aimiStorage(): AimiStorage = iosAimiStorage()
-
-    /**
-     * Study telemetry is unavailable on iOS. `null` is a normal answer by
-     * design: the interface documents that a platform with no implementation
-     * returns null, and the engine treats it as "telemetry off".
-     */
-    @Provides
-    fun hormonitorStudyExporterProvider(): HormonitorStudyExporterProvider =
-        object : HormonitorStudyExporterProvider {
-            override fun exporter(): HormonitorStudyExporter? = null
-        }
 
     @DependencyGraph.Factory
     fun interface Factory {

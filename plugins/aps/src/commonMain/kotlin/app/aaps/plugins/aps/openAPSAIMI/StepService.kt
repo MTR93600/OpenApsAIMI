@@ -7,21 +7,18 @@ package app.aaps.plugins.aps.openAPSAIMI
  * - Android: live step-detector sensor listener ([StepService] actual).
  * - iOS: HealthKit, read through an in-memory cache that a background refresh fills.
  *
- * **0 is not "no data" and it is not neutral.** The engine reads 0 steps as a real signal: in
- * `BasalDecisionEngine` the test `recentSteps5Minutes < 100` is one of the conditions that raises
- * basal to 1.5 times the profile, the branch `recentSteps5Minutes > 100` that lowers it is then
- * unreachable, and `AimiHypoSmbSafety.adjustedDiaMinutes` lengthens the DIA by 20 percent when
- * steps are under 100 and the heart rate is over 95, while its `steps > 350` branch that shortens
- * the DIA can never be taken. So a platform that has no step data and answers 0
- * pushes dosing toward more insulin. This signature is a plain `Int` and cannot say "unknown";
- * a platform that can be without data must expose that state itself (the iOS actual has
- * `dataStatus`) until the engine learns to tell "no data" from "no steps".
+ * **`null` means unknown, and 0 means the person really took no steps.** A platform with no step
+ * data (no sensor, HealthKit not answering, data too old) answers `null`. The engine does not take
+ * a step-driven decision from `null`: in `BasalDecisionEngine` neither the 1.5 times raise (steps
+ * under 100) nor the 0.5 times lowering (steps over 100) can fire, and in
+ * `AimiHypoSmbSafety.adjustedDiaMinutes` neither the 1.2 nor the 0.90 DIA factor is applied.
+ * A real 0 still counts as a measurement and keeps the old behaviour.
  */
 expect object StepService {
-    fun getRecentStepCount5Min(): Int
-    fun getRecentStepCount10Min(): Int
-    fun getRecentStepCount15Min(): Int
-    fun getRecentStepCount30Min(): Int
-    fun getRecentStepCount60Min(): Int
-    fun getRecentStepCount180Min(): Int
+    fun getRecentStepCount5Min(): Int?
+    fun getRecentStepCount10Min(): Int?
+    fun getRecentStepCount15Min(): Int?
+    fun getRecentStepCount30Min(): Int?
+    fun getRecentStepCount60Min(): Int?
+    fun getRecentStepCount180Min(): Int?
 }

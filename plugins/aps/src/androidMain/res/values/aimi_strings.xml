@@ -2377,4 +2377,6 @@
 <string name="training_ml_snack_modes_preferences">Snack</string>
 <string name="user_preferences">Preferences user</string>
 <string name="zero_basal_forced">Zero basal duration (%1$d min) exceeded, forcing minimal basal; </string>
+<string name="aimi_permission_steps_title">Physical activity</string>
+<string name="aimi_permission_steps_description">AIMI reads the step counter of this phone to see when you are active. Without this permission the phone steps stay unknown.</string>
 </resources>

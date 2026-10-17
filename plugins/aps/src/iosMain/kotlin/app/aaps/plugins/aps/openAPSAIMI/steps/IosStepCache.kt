@@ -5,18 +5,18 @@ import kotlin.concurrent.Volatile
 /**
  * What the iOS step cache knows right now.
  *
- * The three states are kept apart on purpose. The engine reads steps as a plain `Int`, so it
- * cannot tell "no data" from "the person did not move" - both are `0`. This enum is the only place
- * where the difference is visible, so a log line or a test can read it.
+ * The three states are kept apart on purpose. Only [AVAILABLE] lets a step count be a reading.
+ * In the other two states the cache answers `null` ("unknown"), never `0`, so the engine can tell
+ * "no data" from "the person did not move".
  */
 enum class IosStepDataStatus {
-    /** No refresh has finished yet since the app started. Getters answer 0, and 0 means unknown. */
+    /** No refresh has finished yet since the app started. Getters answer `null` (unknown). */
     NEVER_REFRESHED,
 
-    /** The last good refresh is too old to trust. Getters answer 0, and 0 means unknown. */
+    /** The last good refresh is too old to trust. Getters answer `null` (unknown). */
     STALE,
 
-    /** A recent refresh worked. A 0 from a getter now means HealthKit saw no steps. */
+    /** A recent refresh worked. A 0 from a getter now is real: HealthKit saw no steps. */
     AVAILABLE,
 }
 
@@ -54,8 +54,8 @@ internal object IosStepBuckets {
  * read this cache. Every method here is plain memory work.
  *
  * **Unknown is not zero.** Before the first good refresh, and when the last good refresh is older
- * than [MAX_AGE_MS], [status] is not [IosStepDataStatus.AVAILABLE]. The getters still return `0`,
- * because the common `expect` signature has no way to say "unknown". That `0` is NOT a measurement.
+ * than [MAX_AGE_MS], [status] is not [IosStepDataStatus.AVAILABLE]. The getters then return `null`.
+ * Only when the status is available is a `0` a measurement.
  *
  * @param nowMs the clock, a parameter so a test can move time.
  */
@@ -88,28 +88,28 @@ internal class IosStepCache(private val nowMs: () -> Long) {
         }
     }
 
-    /** `true` when a getter answer is a real reading and not the placeholder 0. */
+    /** `true` when a getter answer is a real reading, and `false` when the getters answer `null`. */
     fun hasData(): Boolean = status() == IosStepDataStatus.AVAILABLE
 
     /**
      * Steps in the one bucket that is [bucketsBack] buckets before the current one.
      * Like Android, the 5, 10 and 15 minute getters are single buckets, not running totals.
-     * Returns 0 when the status is not available - see the class comment.
+     * Returns `null` when the status is not available - see the class comment.
      */
-    fun singleBucket(bucketsBack: Int): Int {
-        val current = snapshot ?: return 0
-        if (!hasData()) return 0
+    fun singleBucket(bucketsBack: Int): Int? {
+        val current = snapshot ?: return null
+        if (!hasData()) return null
         return current.buckets[IosStepBuckets.keyOf(nowMs()) - bucketsBack] ?: 0
     }
 
     /**
      * Steps in the last [bucketCount] buckets, counting the current one. Same rule as Android:
      * a bucket counts when its key is greater than `currentKey - bucketCount`.
-     * Returns 0 when the status is not available - see the class comment.
+     * Returns `null` when the status is not available - see the class comment.
      */
-    fun windowSum(bucketCount: Int): Int {
-        val current = snapshot ?: return 0
-        if (!hasData()) return 0
+    fun windowSum(bucketCount: Int): Int? {
+        val current = snapshot ?: return null
+        if (!hasData()) return null
         val oldestExcluded = IosStepBuckets.keyOf(nowMs()) - bucketCount
         var total = 0
         for ((key, steps) in current.buckets) {

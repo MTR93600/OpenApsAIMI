@@ -1906,7 +1906,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 sensorLagActivity = profile.sensorLagActivity,
                 historicActivity = profile.historicActivity,
                 profile,
-                recentSteps15Minutes,
+                recentSteps15Minutes ?: 0,
                 averageBeatsPerMinute.toInt(),
                 bg,
                 combinedDelta.toDouble(),
@@ -4102,10 +4102,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 override fun validateBasal(rate: Double, caps: PumpCaps) =
                     pumpCapabilityValidator.validateBasal(rate, caps)
                 override fun maxIob() = work.maxIob
-                override fun recentSteps5() = recentSteps5Minutes
-                override fun recentSteps10() = recentSteps10Minutes
-                override fun recentSteps30() = recentSteps30Minutes
-                override fun recentSteps180() = recentSteps180Minutes
+                override fun recentSteps5() = recentSteps5Minutes ?: 0
+                override fun recentSteps10() = recentSteps10Minutes ?: 0
+                override fun recentSteps30() = recentSteps30Minutes ?: 0
+                override fun recentSteps180() = recentSteps180Minutes ?: 0
                 override fun setTargetBg(value: Float) { targetBg = value }
                 override fun targetBg() = this@DetermineBasalaimiSMB2.targetBg
             },
@@ -4154,7 +4154,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         aapsLogger.debug(LTag.APS, "Steps Data: No records found in last 210 mins")
                     }
                 }
-                override fun setRecentSteps(steps5: Int, steps10: Int, steps15: Int, steps30: Int, steps60: Int, steps180: Int) {
+                override fun setRecentSteps(steps5: Int?, steps10: Int?, steps15: Int?, steps30: Int?, steps60: Int?, steps180: Int?) {
                     recentSteps5Minutes = steps5
                     recentSteps10Minutes = steps10
                     recentSteps15Minutes = steps15
@@ -4189,7 +4189,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         "HR windows failed (${error::class.simpleName}): ${error.message.orEmpty()} — averages 80, baseline not real",
                     )
                 }
-                override fun recentSteps10() = recentSteps10Minutes
+                override fun recentSteps10() = recentSteps10Minutes ?: 0
                 override fun averageBpm10() = averageBeatsPerMinute10
                 override fun averageBpm60() = averageBeatsPerMinute60
                 override fun baselineReal() = heartRateBaselineIsReal
@@ -8747,12 +8747,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * Tests set a fixed epoch so `hourOfDay` and `nightbis` do not follow the machine clock.
      */
     internal var injectedTickEpochMs: Long? = null
-    private var recentSteps5Minutes: Int = 0
-    private var recentSteps10Minutes: Int = 0
-    private var recentSteps15Minutes: Int = 0
-    private var recentSteps30Minutes: Int = 0
-    private var recentSteps60Minutes: Int = 0
-    private var recentSteps180Minutes: Int = 0
+    private var recentSteps5Minutes: Int? = null
+    private var recentSteps10Minutes: Int? = null
+    private var recentSteps15Minutes: Int? = null
+    private var recentSteps30Minutes: Int? = null
+    private var recentSteps60Minutes: Int? = null
+    private var recentSteps180Minutes: Int? = null
     private var cachedActivityContext: ActivityContext? = null  // Written by applyEndoAndActivityAdjustments
     private var cachedBasalFirstActive = false    // Written by applyBasalFirstPolicy
     private var cachedIsFragileBg = false         // Written by applyBasalFirstPolicy
@@ -9813,7 +9813,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         tp: Double,
         bg: Double,
         delta: Float,
-        recentSteps5Minutes: Int,
+        recentSteps5Minutes: Int?,
         averageBeatsPerMinute: Double,
     ) {
         rT.reason.appendLine(
@@ -9822,7 +9822,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         rT.reason.appendLine(
             "📊 TIR: <70: ${aimiFmt1(currentTIRLow)}% | 70–180: ${aimiFmt1(currentTIRRange)}% | >180: ${aimiFmt1(currentTIRAbove)}%",
         )
-        appendCompactLog(reasonAimi, tp, bg, delta, recentSteps5Minutes, averageBeatsPerMinute)
+        appendCompactLog(reasonAimi, tp, bg, delta, recentSteps5Minutes ?: 0, averageBeatsPerMinute)
         rT.reason.append(reasonAimi.toString())
     }
 
@@ -10630,7 +10630,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val valuesToRecord = "$dateStr,${work.hourOfDay},${work.weekend}," +
             "$bg,$targetBg,${work.iob},$delta,$shortAvgDelta,$longAvgDelta," +
             "$tdd7DaysPerHour,$tdd2DaysPerHour,$tddPerHour,$tdd24HrsPerHour," +
-            "$recentSteps5Minutes,$recentSteps10Minutes,$recentSteps15Minutes,$recentSteps30Minutes,$recentSteps60Minutes,$recentSteps180Minutes," +
+            "${recentSteps5Minutes ?: 0},${recentSteps10Minutes ?: 0},${recentSteps15Minutes ?: 0},${recentSteps30Minutes ?: 0},${recentSteps60Minutes ?: 0},${recentSteps180Minutes ?: 0}," +
             "${work.tags0to60minAgo},${work.tags60to120minAgo},${work.tags120to180minAgo},${work.tags180to240minAgo}," +
             "$predictedSMB,${work.maxIob},${work.maxSMB},$smbToGive,${work.peakintermediaire},${work.latestAdjustedDia}"
         trainingCsvWriter.appendRowWithFallback(
@@ -11471,11 +11471,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private fun isSportSafetyCondition(): Boolean = AimiHypoSmbSafety.sportSafety(
         AimiHypoSmbSafety.SportSafetyInput(
-            recentSteps5 = recentSteps5Minutes,
-            recentSteps10 = recentSteps10Minutes,
-            recentSteps30 = recentSteps30Minutes,
-            recentSteps60 = recentSteps60Minutes,
-            recentSteps180 = recentSteps180Minutes,
+            recentSteps5 = recentSteps5Minutes ?: 0,
+            recentSteps10 = recentSteps10Minutes ?: 0,
+            recentSteps30 = recentSteps30Minutes ?: 0,
+            recentSteps60 = recentSteps60Minutes ?: 0,
+            recentSteps180 = recentSteps180Minutes ?: 0,
             sportTime = work.sportTime,
             activityActive = work.aimiContextActivityActive,
             averageHr = averageBeatsPerMinute,
@@ -11513,9 +11513,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     highBG = preferences.get(IntKey.OApsAIMIHighBGinterval),
                 ),
                 pkpdThrottleIntervalAdd = work.pkpdThrottleIntervalAdd,
-                recentSteps5 = recentSteps5Minutes,
-                recentSteps30 = recentSteps30Minutes,
-                recentSteps180 = recentSteps180Minutes,
+                recentSteps5 = recentSteps5Minutes ?: 0,
+                recentSteps30 = recentSteps30Minutes ?: 0,
+                recentSteps180 = recentSteps180Minutes ?: 0,
                 lastSmbTime = work.lastsmbtime,
             ),
         )
@@ -11590,9 +11590,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 bg.toFloat(), targetBg, work.iob,
                 delta, shortAvgDelta, longAvgDelta,
                 tdd7DaysPerHour, tdd2DaysPerHour, tddPerHour, tdd24HrsPerHour,
-                recentSteps5Minutes.toFloat(), recentSteps10Minutes.toFloat(),
-                recentSteps15Minutes.toFloat(), recentSteps30Minutes.toFloat(),
-                recentSteps60Minutes.toFloat(), recentSteps180Minutes.toFloat()
+                (recentSteps5Minutes ?: 0).toFloat(), (recentSteps10Minutes ?: 0).toFloat(),
+                (recentSteps15Minutes ?: 0).toFloat(), (recentSteps30Minutes ?: 0).toFloat(),
+                (recentSteps60Minutes ?: 0).toFloat(), (recentSteps180Minutes ?: 0).toFloat()
             ),
             reason, // 👈 logs visibles si non-null
             rh
@@ -11677,8 +11677,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val trendIndicator = calculateTrendIndicator(
             delta, shortAvgDelta, longAvgDelta,
             bg.toFloat(), work.iob, variableSensitivity, work.cob, work.normalBgThreshold,
-            recentSteps180Minutes, averageBeatsPerMinute.toFloat(), averageBeatsPerMinute10.toFloat(),
-            profile.insulinDivisor.toFloat(), recentSteps5Minutes, recentSteps10Minutes
+            recentSteps180Minutes ?: 0, averageBeatsPerMinute.toFloat(), averageBeatsPerMinute10.toFloat(),
+            profile.insulinDivisor.toFloat(), recentSteps5Minutes ?: 0, recentSteps10Minutes ?: 0
         )
         val baseFeatures = floatArrayOf(
             bg.toFloat(), work.iob.toFloat(), work.cob.toFloat(), delta, shortAvgDelta, longAvgDelta,
@@ -11788,7 +11788,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             cob = cob,
             normalBgThreshold = normalBgThreshold,
             recentSteps180Min = recentSteps180Min,
-            memberRecentSteps180 = recentSteps180Minutes,
+            memberRecentSteps180 = recentSteps180Minutes ?: 0,
             averageHr = averageBeatsPerMinute,
             averageHr10 = averageBeatsPerMinute10,
             insulinDivisor = insulinDivisor,
@@ -11823,7 +11823,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 cob = cob,
                 normalBgThreshold = normalBgThreshold,
                 recentSteps180Min = recentSteps180Min,
-                memberRecentSteps180 = recentSteps180Minutes,
+                memberRecentSteps180 = recentSteps180Minutes ?: 0,
                 averageHr = averageBeatsPerMinute,
                 averageHr10 = averageBeatsPerMinute10,
                 insulinDivisor = insulinDivisor,
@@ -12227,9 +12227,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 mealTime = mealTime, bfastTime = bfastTime, lunchTime = lunchTime,
                 dinnerTime = dinnerTime, highCarbTime = highCarbTime, snackTime = snackTime,
                 sleepTime = work.sleepTime,
-                recentSteps5Minutes = recentSteps5Minutes, recentSteps10Minutes = recentSteps10Minutes,
-                recentSteps30Minutes = recentSteps30Minutes, recentSteps60Minutes = recentSteps60Minutes,
-                recentSteps180Minutes = recentSteps180Minutes,
+                recentSteps5Minutes = recentSteps5Minutes, recentSteps10Minutes = recentSteps10Minutes ?: 0,
+                recentSteps30Minutes = recentSteps30Minutes ?: 0, recentSteps60Minutes = recentSteps60Minutes ?: 0,
+                recentSteps180Minutes = recentSteps180Minutes ?: 0,
                 averageBeatsPerMinute = averageBeatsPerMinute, averageBeatsPerMinute60 = averageBeatsPerMinute60,
                 pumpAgeDays = pumpAgeDaysLocal.toInt(),
                 sens = sens, tp = tp.toInt(), variableSensitivity = variableSensitivity,
@@ -13508,7 +13508,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         bg = bg, delta = delta,
                         mealTime = work.mealTime, bfastTime = bfastTime, lunchTime = lunchTime,
                         dinnerTime = dinnerTime, highCarbTime = highCarbTime, snackTime = work.snackTime,
-                        recentSteps5Minutes = recentSteps5Minutes, recentSteps10Minutes = recentSteps10Minutes,
+                        recentSteps5Minutes = recentSteps5Minutes ?: 0, recentSteps10Minutes = recentSteps10Minutes ?: 0,
                         averageBeatsPerMinute = averageBeatsPerMinute.toDouble(), averageBeatsPerMinute60 = averageBeatsPerMinute60,
                     )
                 }

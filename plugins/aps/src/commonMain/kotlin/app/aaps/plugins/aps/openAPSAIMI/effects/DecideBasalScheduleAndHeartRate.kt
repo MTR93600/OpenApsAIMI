@@ -222,13 +222,13 @@ internal interface AimiHeartRateIsfCalls {
     fun roundDisplay(value: Double): Int
     fun stepsCached(now: Long): List<SC>
     fun logSteps(samples: List<SC>)
-    fun setRecentSteps(steps5: Int, steps10: Int, steps15: Int, steps30: Int, steps60: Int, steps180: Int)
-    fun phoneSteps5(): Int
-    fun phoneSteps10(): Int
-    fun phoneSteps15(): Int
-    fun phoneSteps30(): Int
-    fun phoneSteps60(): Int
-    fun phoneSteps180(): Int
+    fun setRecentSteps(steps5: Int?, steps10: Int?, steps15: Int?, steps30: Int?, steps60: Int?, steps180: Int?)
+    fun phoneSteps5(): Int?
+    fun phoneSteps10(): Int?
+    fun phoneSteps15(): Int?
+    fun phoneSteps30(): Int?
+    fun phoneSteps60(): Int?
+    fun phoneSteps180(): Int?
     fun heartRatesCached(now: Long): List<HR>
     fun logHeartRates(samples: List<HR>)
     fun setAverageBpm(value: Double)
@@ -295,12 +295,12 @@ internal fun decideHeartRateIsf(
         } else null
 
         calls.setRecentSteps(
-            steps5 = valid5?.steps5min ?: fallbackRecord?.steps5min ?: 0,
-            steps10 = allStepsCounts.filter { it.timestamp >= timeMillis10 }.maxByOrNull { it.timestamp }?.steps10min ?: 0,
-            steps15 = allStepsCounts.filter { it.timestamp >= timeMillis15 }.maxByOrNull { it.timestamp }?.steps15min ?: 0,
-            steps30 = allStepsCounts.filter { it.timestamp >= timeMillis30 }.maxByOrNull { it.timestamp }?.steps30min ?: 0,
-            steps60 = allStepsCounts.filter { it.timestamp >= timeMillis60 }.maxByOrNull { it.timestamp }?.steps60min ?: 0,
-            steps180 = allStepsCounts.filter { it.timestamp >= timeMillis180 }.maxByOrNull { it.timestamp }?.steps180min ?: 0,
+            steps5 = valid5?.steps5min ?: fallbackRecord?.steps5min,
+            steps10 = allStepsCounts.filter { it.timestamp >= timeMillis10 }.maxByOrNull { it.timestamp }?.steps10min,
+            steps15 = allStepsCounts.filter { it.timestamp >= timeMillis15 }.maxByOrNull { it.timestamp }?.steps15min,
+            steps30 = allStepsCounts.filter { it.timestamp >= timeMillis30 }.maxByOrNull { it.timestamp }?.steps30min,
+            steps60 = allStepsCounts.filter { it.timestamp >= timeMillis60 }.maxByOrNull { it.timestamp }?.steps60min,
+            steps180 = allStepsCounts.filter { it.timestamp >= timeMillis180 }.maxByOrNull { it.timestamp }?.steps180min,
         )
     } else {
         calls.setRecentSteps(

@@ -98,12 +98,18 @@ internal class PhysioFeedCadence(startedAtMs: Long) {
  *
  * The caller is on the loop's path, so the run is launched on the IO dispatcher and never joined.
  * A run already in flight means this tick does nothing at all.
+ *
+ * ### Start and stop
+ *
+ * Nothing runs until `IosPhysioLifecycle.start()` has opened its gate, and nothing new runs after
+ * `stop()`. This is the iOS form of Android cancelling its WorkManager jobs.
  */
 @OptIn(ExperimentalAtomicApi::class)
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
 class IosPhysioPipelineFeed @Inject constructor(
     private val pipeline: PhysioPipeline,
+    private val lifecycle: IosPhysioLifecycle,
     private val aapsLogger: AAPSLogger,
 ) : PhysioPipelineFeed {
 
@@ -117,6 +123,7 @@ class IosPhysioPipelineFeed @Inject constructor(
     private val cadence = PhysioFeedCadence(aimiWallClockMs())
 
     override fun onHealthContextRefresh() {
+        if (!lifecycle.isRunning) return
         if (!pipeline.isPhysioAssistantEnabled()) return
         if (running.load()) return
 
