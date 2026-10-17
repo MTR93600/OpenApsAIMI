@@ -109,6 +109,10 @@ kotlin {
                 implementation(project(":core:objects"))
                 implementation(project(":core:utils"))
                 implementation(project(":core:ui"))
+                // Only for AimiParityCaptureBuilder, the one builder of parity captures that both
+                // phones share. Not a new module edge for the module: it already depends on this
+                // module in appleJvmMain and androidMain. The same build, now seen by commonMain.
+                implementation(project(":plugins:aimi-contracts"))
 
                 implementation(libs.androidx.collection)
                 implementation(libs.kotlinx.coroutines.core)

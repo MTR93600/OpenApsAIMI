@@ -202,6 +202,9 @@ internal object AimiSettingsManifest {
         BooleanKey.OApsAIMIEffectiveIobReleaseEnabled.key,
         BooleanKey.OApsAIMIEnableBasal.key,
         BooleanKey.OApsAIMIEnableStepsFromWatch.key,
+        BooleanKey.AimiHrvBaselinePerNight.key,
+        BooleanKey.AimiPhoneStepsSyncEnable.key,
+        BooleanKey.AimiHealthConnectStepsEnable.key,
         DoubleKey.OApsAIMIFCLFactor.key,
         IntKey.OApsAIMIHighBGinterval.key,
         BooleanKey.OApsAIMIHyperDroppingExemptEnabled.key,
@@ -513,6 +516,13 @@ internal object AimiSettingsManifest {
         AimiSettingEntry(BooleanKey.AimiPhysioHRVDataEnable, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.AimiPhysioLLMAnalysisEnable, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.AimiPhysioDebugLogs, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
+        // Added during the KMP work and never classified until the manifest tests came back. None has a
+        // switch on any screen yet, so all three are in REACHABILITY_DEBT.
+        // Off by default, newer path, feeds the HRV insulin multiplier: EXPERT.
+        AimiSettingEntry(BooleanKey.AimiHrvBaselinePerNight, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
+        // Step input source switches. EXPERT is the safe default for an unreviewed key.
+        AimiSettingEntry(BooleanKey.AimiPhoneStepsSyncEnable, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
+        AimiSettingEntry(BooleanKey.AimiHealthConnectStepsEnable, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.AimiEndometriosisEnable, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.AimiEndometriosisPainFlare, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.AimiParityCaptureEnable, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),

@@ -12,10 +12,19 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 /**
  * Records one real AIMI tick so it can be replayed later and compared (the parity check).
  *
- * This is a developer tool and it is off by default. It only exists on Android, because the
- * recorder is built on JVM classes. The plugin takes this port as an optional parameter: where no
- * platform provides one, the plugin does not record. That is the honest answer on iOS, where the
- * tool does not exist, so nothing pretends to record.
+ * This is a developer tool and it is off by default on both phones. The switch is the preference
+ * `BooleanKey.AimiParityCaptureEnable`, read again on every tick, so turning it on or off takes
+ * effect at the next tick with no restart.
+ *
+ * Android records through `AimiParityCaptureHook`, iOS through `IosAimiParityRecorder`. Both build
+ * the capture with the same shared `AimiParityCaptureBuilder` and write the same file names into
+ * the same `parity/` folder, which is the point: a trace from one phone is meant to be compared
+ * with a trace from the other. Only the background writer differs, because a daemon thread and a
+ * blocking queue have no Kotlin/Native equivalent.
+ *
+ * The parameter is required, not optional. It was nullable with a default at first, and Metro then
+ * took the default even on Android where a binding existed, so the recorder quietly stopped. A
+ * platform that cannot record keeps the whole plugin out of its graph instead, which fails loudly.
  */
 interface AimiTickCaptureHook {
 

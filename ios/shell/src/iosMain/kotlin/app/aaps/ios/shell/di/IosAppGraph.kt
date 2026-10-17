@@ -88,20 +88,23 @@ import kotlinx.coroutines.CoroutineScope
  * iOS can honour all of its ports, because a plugin that is wired up and half fed would dose an
  * iPhone differently from an Android phone.
  *
- * Six of the seven ports now have a real iOS side: `AimiStepsLifecycle` over HealthKit,
- * `AimiPhysioLifecycle`, `AimiTrainingScheduler`, `AimiStorageStatusSource`, `AimiAuditorNotifier`
- * and `AimiPlatformPreferenceItems`.
+ * All seven ports now have a real iOS side: `AimiStepsLifecycle` over HealthKit,
+ * `AimiPhysioLifecycle`, `AimiTrainingScheduler`, `AimiStorageStatusSource`, `AimiAuditorNotifier`,
+ * `AimiPlatformPreferenceItems` and `AimiTickCaptureHook`. `AimiStorage` and
+ * `HormonitorStudyExporterProvider` are in `IosAimiPlatformBindings`. No binding is known to be
+ * missing, though nobody has yet built this graph with the exclusion removed.
  *
- * What is still missing, as of 2026-10-17:
- * - `AimiTickCaptureHook` has no iOS side. Its switch, `AimiParityCaptureHook.enabled`, has no
- *   writer anywhere in the repo, so the recorder cannot run on Android either. An EXPERT
- *   preference key for it was agreed; the iOS recorder waits for that key.
- * - Step counts are read from HealthKit now, but when there is no data `StepService` still answers
- *   0, and this engine reads 0 as a measurement: it is one of the conditions that raise basal to
- *   1.5 times the profile, and it makes the branch that lowers basal unreachable. Making the
- *   engine tell "no data" from "no steps" was agreed and is the real gate on this exclusion.
+ * What is left, as of 2026-10-17, is not a binding:
+ * - iOS has no native CGM and no pump driver registered with Metro. The only pump plugin it can
+ *   contribute is `VirtualPumpPlugin`, and the only glucose source is `NSClientSourcePlugin`,
+ *   which follows Nightscout. So AIMI here would decide doses with nothing to deliver them.
+ * - `IosClientConfig.APS` therefore stays false. Its own KDoc says getting that flag wrong "would
+ *   make shared code offer features the app cannot perform", and that is exactly what turning it
+ *   on today would do.
  *
- * `IosClientConfig.APS` stays false until then as well.
+ * Remove this exclusion when AIMI should run on the phone and be compared against an Android run
+ * through the parity recorder. Turn `APS` on later still, when a real sensor and a real pump are
+ * wired.
  */
 @DependencyGraph(AppScope::class, excludes = [OpenAPSAIMIPlugin::class])
 interface IosAppGraph : MetroViewModelMultibindings {
