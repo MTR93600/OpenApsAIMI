@@ -5,7 +5,6 @@ import app.aaps.plugins.aps.openAPSAIMI.AimiNeuralNetwork
 import app.aaps.plugins.aps.openAPSAIMI.TrainingConfig
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorRuntimeProfile
-import app.aaps.plugins.aps.openAPSAIMI.learning.BasalNeuralLearner
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import kotlinx.coroutines.CoroutineScope
@@ -40,9 +39,6 @@ object AimiSmbTrainer {
     // Training rate limit and the 24h stale-attempt gate live in [AimiSmbTrainingSchedule].
     // The numbers are the reference trainer's (`6a6561caab`); this object only applies them.
 
-    /** Index of the bg column in the SMB feature vector (`SmbRefinementFeatureSchema` lists it first). */
-    private const val BG_FEATURE_INDEX = 0
-
     /**
      * Accepted output band for a published SMB model, in insulin units.
      *
@@ -53,24 +49,31 @@ object AimiSmbTrainer {
     private val SMB_OUTPUT_RANGE = 0.0..5.0
 
     /**
-     * Smallest bg response we accept from a published SMB model, in insulin units.
+     * Smallest change of answer we accept from a published SMB model across real situations, in insulin
+     * units (see `NeuralModelTrainer.heldOutPredictionSpread`).
      *
      * It is set to the runtime correction clamp on purpose. `refine` only ever moves the dose by
-     * `min(0.05 U, 25 % of the dose)`, so a model whose answer moves less than 0.05 U across the bg
-     * anchors cannot change what the pump does — it can only add the same small offset to every dose.
-     * That is the failure this gate exists to catch: the basal head shipped a constant model that ran
-     * for 40 days on two devices because nothing checked whether the answer moved at all.
+     * `min(0.05 U, 25 % of the dose)`, so a model whose answer moves less than 0.05 U cannot change what
+     * the pump does — it can only add the same small offset to every dose. That is the failure this gate
+     * exists to catch: the basal head shipped a constant model that ran for 40 days on two devices
+     * because nothing checked whether the answer moved at all.
+     *
+     * It used to be measured along bg alone, with every other input at its median. For SMB that median is
+     * a quiet moment where the true dose is about 0 at every bg, so even a perfect model failed (2026-10-15
+     * corpus: true dose 0.000 / 0.011 / 0.020 U at bg 70 / 140 / 250). It is now measured on the held-out
+     * rows, where the rises are.
      */
     private const val SMB_MIN_OUTPUT_SPREAD = 0.05
 
     /**
-     * A published model must beat the best constant predictor on the held-out rows by this factor.
+     * A published model must beat the best constant predictor on the held-out rows by this factor, in
+     * root mean squared error against the mean label.
      *
-     * The spread probe alone cannot reject noise: over a wide bg sweep a model fitted to pure label
-     * noise moves MORE than one that found the real function. Held-out error against the best constant
-     * is what separates them.
+     * The SMB label is zero on most rows, so under absolute error the median (0) cannot be beaten even by a
+     * sensible model: 1.10 measured, against 0.91 under squared error against the mean. A model that
+     * fitted noise still loses to the mean here. See `NeuralModelTrainer.heldOutRmseAgainstMean`.
      */
-    private const val SMB_MAX_BASELINE_MAE_RATIO = 0.95
+    private const val SMB_MAX_BASELINE_ERROR_RATIO = 0.95
 
     // ---- State ---------------------------------------------------------------
     private val modelRef   = AtomicReference<AimiNeuralNetwork?>(null)
@@ -426,10 +429,9 @@ object AimiSmbTrainer {
             inputSize = INPUT_SIZE,
             regularizationLambda = 0.01,
             outputRange = SMB_OUTPUT_RANGE,
-            spreadFeatureIndex = BG_FEATURE_INDEX,
-            spreadSweepValues = BasalNeuralLearner.ClinicalBgAnchors.PROBE_BG_MGDL,
-            minOutputSpread = SMB_MIN_OUTPUT_SPREAD,
-            maxBaselineMaeRatio = SMB_MAX_BASELINE_MAE_RATIO,
+            minHeldOutSpread = SMB_MIN_OUTPUT_SPREAD,
+            maxBaselineErrorRatio = SMB_MAX_BASELINE_ERROR_RATIO,
+            constantBaseline = NeuralModelTrainer.ConstantBaseline.RMSE_VS_MEAN,
             log = { message ->
                 println("$TAG: $message")
                 lastGateMessage = message

@@ -363,7 +363,7 @@ class BasalMlTrainingCoordinator @Inject constructor(
             spreadFeatureIndex = BG_FEATURE_INDEX,
             spreadSweepValues = SPREAD_SWEEP_BG_MGDL,
             minOutputSpread = minOutputSpread,
-            maxBaselineMaeRatio = MAX_BASELINE_MAE_RATIO,
+            maxBaselineErrorRatio = MAX_BASELINE_MAE_RATIO,
             log = { log.info(LTag.AIMI, "$TAG: $it") },
         ) != null
     }

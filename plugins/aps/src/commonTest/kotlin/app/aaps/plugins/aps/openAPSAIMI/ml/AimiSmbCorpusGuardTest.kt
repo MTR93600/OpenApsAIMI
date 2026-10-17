@@ -136,6 +136,33 @@ class AimiSmbCorpusGuardTest {
         assertEquals(SmbRefinementFeatureSchema.INPUT_SIZE, corpus.inputs.single().size)
     }
 
+    /** A dose with no SMB owner is a prebolus (3.0 U shots on the 2026-10-15 corpus): it must not teach the SMB model. */
+    @Test
+    fun `a dose with no smb owner is dropped from the labels`() {
+        val prebolus = currentShapeRow(smbGiven = "3.0000").replace(",harmonia,", ",NONE,")
+        val smb = currentShapeRow(smbGiven = "0.4500")
+
+        val corpus = AimiSmbCorpus.buildTrainingCorpus(currentHeader, listOf(prebolus, smb))
+
+        assertNotNull(corpus)
+        assertEquals(0.45, corpus.targets.single().single(), 1e-9)
+    }
+
+    /** No owner and no dose is a real "no SMB" answer; an empty owner is an older row. Both stay. */
+    @Test
+    fun `a zero dose with no owner and a row with an empty owner are kept`() {
+        val noSmb = currentShapeRow(smbGiven = "0.0000").replace(",harmonia,", ",NONE,")
+        val older = currentShapeRow(smbGiven = "0.3000").replace(",harmonia,", ",,")
+
+        val corpus = AimiSmbCorpus.buildTrainingCorpus(currentHeader, listOf(noSmb, older))
+
+        assertNotNull(corpus)
+        assertEquals(2, corpus.targets.size)
+        assertFalse(AimiSmbCorpus.isDoseFromOutsideSmb("NONE", 0.0))
+        assertTrue(AimiSmbCorpus.isDoseFromOutsideSmb(" NONE ", 3.0))
+        assertFalse(AimiSmbCorpus.isDoseFromOutsideSmb("", 3.0))
+    }
+
     @Test
     fun `a row wider than the header is dropped and the others are kept`() {
         // Two writes that got interleaved: the production file holds exactly one such row, 65 fields wide.

@@ -72,6 +72,7 @@ internal object AimiSmbCorpus {
         val headerCheck = checkCorpusHeader(headers)
         if (!headerCheck.valid) return null
         val targetIndex = SmbRefinementFeatureSchema.targetColumnIndex
+        val originOwnerIndex = headers.indexOf(ORIGIN_OWNER_COLUMN)
 
         val inputs = mutableListOf<FloatArray>()
         val targets = mutableListOf<DoubleArray>()
@@ -88,12 +89,31 @@ internal object AimiSmbCorpus {
             val trendIndicator = computeTrendIndicator(raw)
             val enhanced = raw.copyOf(raw.size + 1).also { it[raw.size] = trendIndicator }
 
-            targets.add(doubleArrayOf(cols[targetIndex].toDoubleOrNull() ?: continue))
+            val label = cols[targetIndex].toDoubleOrNull() ?: continue
+            if (isDoseFromOutsideSmb(cols.getOrNull(originOwnerIndex), label)) continue
+            targets.add(doubleArrayOf(label))
             inputs.add(enhanced)
         }
 
         return TrainingCorpus(inputs = inputs, targets = targets)
     }
+
+    /** Column that names which SMB channel owned the dose of the tick. */
+    const val ORIGIN_OWNER_COLUMN = "smbOriginOwner"
+
+    /** Value of [ORIGIN_OWNER_COLUMN] when no SMB channel owned the dose. */
+    const val NO_SMB_OWNER = "NONE"
+
+    /**
+     * True when the row's dose did not come from an SMB decision, so it must not teach the SMB model.
+     *
+     * A dose with no SMB owner is a prebolus (FCL, meal mode): on the 2026-10-04 → 10-15 corpus every such
+     * row is a 3.0 U shot, at bg 85-115 and often falling. Kept as a label it teaches "flat or falling bg,
+     * give 3 U". A row with no owner and no dose is a real "no SMB" answer and stays. An empty owner is an
+     * older row written before the column existed: it stays too, because nothing says it is not an SMB.
+     */
+    fun isDoseFromOutsideSmb(originOwner: String?, label: Double): Boolean =
+        label > 0.0 && originOwner?.trim() == NO_SMB_OWNER
 
     private fun computeTrendIndicator(raw: FloatArray): Float {
         // raw: [bg, iob, cob, delta, shortAvgDelta, longAvgDelta, ...]
