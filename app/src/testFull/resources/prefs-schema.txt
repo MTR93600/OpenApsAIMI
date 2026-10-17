@@ -150,6 +150,7 @@ aimi_meal_advisor_trigger|BooleanKey|true
 aimi_mode_settings_compose|ApsIntentKey|false
 aimi_mpc_insulin_u_per_kg_per_5min|DoubleKey|true
 aimi_oura_personal_access_token|AimiStringKey|false
+aimi_parity_capture_enable|BooleanKey|true
 aimi_peak_governor_learned_weight|DoubleKey|true
 aimi_phone_steps_sync_enable|BooleanKey|true
 aimi_physio_assistant_enable|BooleanKey|true

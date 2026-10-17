@@ -1730,7 +1730,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 extraDebug = physioMults.detailedReason
             ).also {
                 // Parity capture: records this tick's inputs + RT for byte-for-byte
-                // replay. Disabled by default (AimiParityCaptureHook.enabled = false).
+                // replay. Off by default: the expert preference AimiParityCaptureEnable is false.
                 // Zero behavior change when off: single volatile read.
                 tickCaptureHook.maybeCapture(
                     storage = storage,
@@ -2166,6 +2166,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 add(aimiComposeAutodriveSubScreen())
                 add(BooleanKey.OApsxdriponeminute)
                 add(BooleanKey.OApsAIMIUnifiedReactivityEnabled)
+                add(BooleanKey.AimiParityCaptureEnable)
                 add(aimiComposeAiAuditorSubScreen())
             },
         )

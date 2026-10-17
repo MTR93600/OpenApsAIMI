@@ -149,9 +149,20 @@ class AIMIStepsManagerMTR @Inject constructor(
      * events. The central permission list calls this on every pass, so it also retries the
      * registration once the user has granted the permission.
      */
+    /**
+     * Note that this does more than answer: it also retries the sensor registration once the
+     * permission has arrived. That is a side effect in what looks like a query, so it is pulled
+     * out into its own named call below rather than hidden in the condition.
+     *
+     * The reason is that `PermissionProvider` has no "permission granted" callback, and this
+     * method is the only thing the host calls again after the user answers the sheet. Without the
+     * retry the grant would do nothing until the next `start()`, so the person would allow the
+     * permission and still get no steps. If `PermissionProvider` ever gains a grant hook, move the
+     * retry there and make this a plain query again.
+     */
     override fun requiredPermissions(): List<PermissionGroup> {
         if (!isStarted) return emptyList()
-        if (sensorState == StepSensorState.PERMISSION_MISSING && hasActivityRecognition()) registerStepSensor()
+        retryRegistrationIfPermissionArrived()
         if (sensorState != StepSensorState.PERMISSION_MISSING) return emptyList()
         return listOf(
             PermissionGroup(
@@ -160,6 +171,14 @@ class AIMIStepsManagerMTR @Inject constructor(
                 rationaleDescription = TextRef.AndroidRes(R.string.aimi_permission_steps_description),
             )
         )
+    }
+
+    /**
+     * Registers the sensor if the only thing that was missing is now granted. Does nothing in any
+     * other state, so it is safe to call on every pass.
+     */
+    private fun retryRegistrationIfPermissionArrived() {
+        if (sensorState == StepSensorState.PERMISSION_MISSING && hasActivityRecognition()) registerStepSensor()
     }
 
     private fun hasActivityRecognition(): Boolean =

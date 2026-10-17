@@ -53,7 +53,12 @@ import kotlin.concurrent.Volatile
  */
 object AimiParityCaptureHook {
 
-    /** Master switch. Default false: capture is opt-in. */
+    /**
+     * Master switch. Default false: capture is opt-in.
+     *
+     * Do not set it by hand. `AndroidAimiTickCaptureHook` writes it at every tick from the expert
+     * preference `BooleanKey.AimiParityCaptureEnable`, so the preference decides.
+     */
     @Volatile
     var enabled: Boolean = false
 

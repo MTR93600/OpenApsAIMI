@@ -515,6 +515,7 @@ internal object AimiSettingsManifest {
         AimiSettingEntry(BooleanKey.AimiPhysioDebugLogs, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.AimiEndometriosisEnable, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.AimiEndometriosisPainFlare, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
+        AimiSettingEntry(BooleanKey.AimiParityCaptureEnable, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.AimiCosineGateEnabled, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
         AimiSettingEntry(
             BooleanKey.AimiEmergencySosEnable, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Protection, AimiSettingsWriter.USER

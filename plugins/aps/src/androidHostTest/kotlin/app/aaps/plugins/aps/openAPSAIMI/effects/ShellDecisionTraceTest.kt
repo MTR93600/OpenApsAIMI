@@ -2,6 +2,7 @@ package app.aaps.plugins.aps.openAPSAIMI.effects
 
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.HR
+import app.aaps.core.data.model.SC
 import app.aaps.core.data.model.TE
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.data.pump.defs.PumpDescription
@@ -1360,8 +1361,29 @@ class ShellDecisionTraceTest {
         setField(tick, "maxIob", 10.0)
         holdRefresh("stepsCache")
         holdRefresh("heartRatesCache")
-        seedCache("stepsCache", emptyList<Any>())
         val wall = aimiWallClockMs()
+        // A real measured zero, two minutes back. This cache used to be seeded empty, and the test
+        // still locked the heart-rate gesture firing with "steps10 0": the adapter turned "no
+        // record" into 0, and the gesture reads 0 as "the person is still" before it strengthens
+        // the dose. Since 2026-10-17 an unknown stands the gesture down, so the zero has to be a
+        // measurement. This is the trace the Room and HealthKit parity tests mirror, so it has to
+        // say the same thing they do.
+        seedCache(
+            "stepsCache",
+            listOf(
+                SC(
+                    duration = 60_000L,
+                    timestamp = wall - 2 * 60_000L,
+                    steps5min = 0,
+                    steps10min = 0,
+                    steps15min = 0,
+                    steps30min = 0,
+                    steps60min = 0,
+                    steps180min = 0,
+                    device = "watch",
+                )
+            ),
+        )
         seedCache(
             "heartRatesCache",
             listOf(

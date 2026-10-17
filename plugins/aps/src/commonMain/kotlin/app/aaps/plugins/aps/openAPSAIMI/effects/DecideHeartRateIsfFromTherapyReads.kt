@@ -49,7 +49,7 @@ internal fun decideHeartRateIsfFromTherapyReads(
         consoleLog = consoleLog,
     )
     var sensitivity = startingSensitivity
-    var recentSteps10 = 0
+    var recentSteps10: Int? = null
     var averageBpm = Double.NaN
     var averageBpm10 = Double.NaN
     var averageBpm60 = 80.0
@@ -77,7 +77,7 @@ internal fun decideHeartRateIsfFromTherapyReads(
             override fun stepsCached(now: Long): List<SC> = caches.steps
             override fun logSteps(samples: List<SC>) = Unit
             override fun setRecentSteps(steps5: Int?, steps10: Int?, steps15: Int?, steps30: Int?, steps60: Int?, steps180: Int?) {
-                recentSteps10 = steps10 ?: 0
+                recentSteps10 = steps10
             }
             override fun phoneSteps5(): Int? = null
             override fun phoneSteps10(): Int? = null
@@ -98,7 +98,7 @@ internal fun decideHeartRateIsfFromTherapyReads(
                     "HR windows failed (${error::class.simpleName}): ${error.message.orEmpty()} — averages 80, baseline not real",
                 )
             }
-            override fun recentSteps10(): Int = recentSteps10
+            override fun recentSteps10(): Int? = recentSteps10
             override fun averageBpm10(): Double = averageBpm10
             override fun averageBpm60(): Double = averageBpm60
             override fun baselineReal(): Boolean = baselineReal

@@ -75,7 +75,11 @@ class RoomTherapyIsfParityTest {
             hr(now - 20 * 60_000L, 80.0),
             hr(now - 2 * 60_000L, 110.0),
         ).forEach { reads.windows.insertHeartRate(it.toDb()) }
-        reads.windows.insertSteps(steps(now - 10 * 60_000L).toDb())
+        // Two minutes back, not ten. At exactly ten the row sits on the edge of the ten-minute
+        // window and the engine's own `now` is a moment later, so it fell outside and the step
+        // count came back as "no record". Until 2026-10-17 that was turned into 0 and the gesture
+        // fired anyway; now an unknown stands the gesture down, so the row has to be really inside.
+        reads.windows.insertSteps(steps(now - 2 * 60_000L).toDb())
         reads.windows.insertBolus(bolus(timestamp = now - 60_000L, valid = false).toDb())
         reads.windows.insertBolus(bolus(timestamp = now - 30_000L, valid = true).toDb())
 

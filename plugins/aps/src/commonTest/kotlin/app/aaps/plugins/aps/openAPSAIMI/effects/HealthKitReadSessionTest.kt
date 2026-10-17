@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.effects
 
 import app.aaps.core.data.model.HR
+import app.aaps.core.data.model.SC
 import app.aaps.core.interfaces.aps.OapsProfileAimi
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import kotlin.test.Test
@@ -78,7 +79,14 @@ class HealthKitReadSessionTest {
 
         val isfLog = mutableListOf<String>()
         val result = decideHeartRateIsfFromTherapyReads(
-            reads = MemoryAimiTherapyReads(heartRates = session.heartRates),
+            // The steps row carries the zero the HealthKit mock just measured (asserted above as
+            // `stepsLast5m == 0`). Until 2026-10-17 this store had no steps at all and the test
+            // still locked "steps10 0", because the adapter read "no record" as 0. That made the
+            // parity claim hollow: the HealthKit side measured a zero, the ISF side invented one.
+            reads = MemoryAimiTherapyReads(
+                heartRates = session.heartRates,
+                steps = listOf(steps(now - 2 * 60_000L, steps10 = 0)),
+            ),
             nowMs = now,
             stepsFromWatch = true,
             startingSensitivity = 50.0f,
@@ -184,6 +192,19 @@ class HealthKitReadSessionTest {
         duration = 60_000L,
         timestamp = timestamp,
         beatsPerMinute = bpm,
+        device = "HealthKit",
+    )
+
+    /** A measured step count, so the ISF side reads the same zero HealthKit reported. */
+    private fun steps(timestamp: Long, steps10: Int) = SC(
+        duration = 60_000L,
+        timestamp = timestamp,
+        steps5min = 0,
+        steps10min = steps10,
+        steps15min = 0,
+        steps30min = 0,
+        steps60min = 0,
+        steps180min = 0,
         device = "HealthKit",
     )
 

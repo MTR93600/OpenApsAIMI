@@ -4189,7 +4189,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         "HR windows failed (${error::class.simpleName}): ${error.message.orEmpty()} — averages 80, baseline not real",
                     )
                 }
-                override fun recentSteps10() = recentSteps10Minutes ?: 0
+                // No `?: 0` here, unlike the schedule's copy above: the heart-rate gesture must
+                // see the unknown rather than read it as stillness.
+                override fun recentSteps10() = recentSteps10Minutes
                 override fun averageBpm10() = averageBeatsPerMinute10
                 override fun averageBpm60() = averageBeatsPerMinute60
                 override fun baselineReal() = heartRateBaselineIsReal

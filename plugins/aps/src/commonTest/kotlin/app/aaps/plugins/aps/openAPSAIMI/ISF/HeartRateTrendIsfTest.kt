@@ -21,7 +21,7 @@ import kotlin.test.assertTrue
 class HeartRateTrendIsfTest {
 
     private fun multiplier(
-        steps10m: Int = 0,
+        steps10m: Int? = 0,
         avgBpm10: Double = 100.0,
         avgBpm60: Double = 70.0,
         baselineIsReal: Boolean = true,
@@ -46,6 +46,22 @@ class HeartRateTrendIsfTest {
     @Test
     fun walkingStopsIt() {
         assertEquals(1.0, multiplier(steps10m = HeartRateTrendIsf.MAX_STEPS_10M))
+    }
+
+    @Test
+    fun unknownStepsStopIt() {
+        // Not the same as zero steps. "The person is still" is a premise of this gesture, and with
+        // no step data we cannot claim it. Before 2026-10-17 the caller passed 0 for unknown, so a
+        // platform with no step source read as perfect stillness and this path strengthened the
+        // dose of someone who might have been walking.
+        assertEquals(1.0, multiplier(steps10m = null))
+    }
+
+    @Test
+    fun unknownStepsStopItEvenWhenEveryOtherConditionHolds() {
+        // The defaults are the firing case, so only the null makes the difference here.
+        assertEquals(HeartRateTrendIsf.ISF_MULTIPLIER, multiplier(steps10m = 0))
+        assertEquals(1.0, multiplier(steps10m = null))
     }
 
     @Test

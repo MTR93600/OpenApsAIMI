@@ -840,6 +840,15 @@ enum class BooleanKey(
      */
     AimiHrvBaselinePerNight("aimi_hrv_baseline_per_night", false, title = KeysStrings.pref_title_aimi_hrv_baseline_per_night),
 
+    /**
+     * Record the inputs and the result of each loop tick to files, for comparing two runs of the engine.
+     *
+     * Used to check that the iPhone and the Android phone make the same decisions. Expert only. It writes
+     * files and changes no dosing. The recorder stops by itself after a fixed number of ticks. The Android
+     * app follows this switch at every tick, so a change needs no restart.
+     */
+    AimiParityCaptureEnable("aimi_parity_capture_enable", false, title = KeysStrings.pref_title_aimi_parity_capture_enable),
+
     /** Sync step counts from the phone's own sensor. */
     AimiPhoneStepsSyncEnable("aimi_phone_steps_sync_enable", true, title = KeysStrings.pref_title_aimi_phone_steps_sync_enable),
 

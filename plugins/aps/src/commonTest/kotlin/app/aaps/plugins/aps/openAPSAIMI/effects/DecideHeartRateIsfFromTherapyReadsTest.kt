@@ -86,6 +86,11 @@ class DecideHeartRateIsfFromTherapyReadsTest {
                 hr(now - 20 * 60_000L, 80.0),
                 hr(now - 2 * 60_000L, 110.0),
             ),
+            // A real measured zero, inside the ten-minute window. Until 2026-10-17 this list was
+            // empty and the test still saw "steps10 0", because the adapter turned "no record" into
+            // 0 and the gesture fired on a number nobody had measured. The gesture reads this as
+            // "the person is still" and then strengthens the dose, so the zero has to be real.
+            steps = listOf(steps(now - 2 * 60_000L, steps10 = 0)),
         )
         val log = mutableListOf<String>()
         val result = decideHeartRateIsfFromTherapyReads(

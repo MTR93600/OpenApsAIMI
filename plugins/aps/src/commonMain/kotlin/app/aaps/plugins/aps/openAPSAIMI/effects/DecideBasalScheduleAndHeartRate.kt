@@ -238,7 +238,16 @@ internal interface AimiHeartRateIsfCalls {
     fun setAverageBpm180(value: Double)
     fun setBaselineReal(value: Boolean)
     fun logHeartRateFailure(error: Exception)
-    fun recentSteps10(): Int
+
+    /**
+     * Steps in the last ten minutes, or null when the platform has no step data.
+     *
+     * Nullable only here, not in `AimiBasalScheduleCalls`. The heart-rate gesture reads "the
+     * person is still" from this number and then strengthens a dose, so an unknown must not look
+     * like stillness. The schedule's own copy treats 0 and unknown the same way, so it stays an
+     * `Int`.
+     */
+    fun recentSteps10(): Int?
     fun averageBpm10(): Double
     fun averageBpm60(): Double
     fun baselineReal(): Boolean

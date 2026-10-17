@@ -139,6 +139,7 @@ internal enum class AimiSettingsSectionId {
     ContextIntentStore,
     // --- Widened scope batch (2026-10-03) ---
     LabXdripOneMinute,
+    LabParityCapture,
     AdaptiveBasalLimits,
     PhysioModuleToggles,
     PhysioAiAnalysis,
@@ -770,6 +771,16 @@ internal object AimiSettingsScreens {
             kind = AimiSettingsSectionKind.FIELDS,
             keys = listOf(
                 BooleanKey.OApsxdriponeminute,
+            ),
+        ),
+        AimiSettingsSection(
+            // Declared mirror of the `AimiParityCaptureEnable` item in `aimiComposeLabSubScreen()`.
+            id = AimiSettingsSectionId.LabParityCapture,
+            content = AimiSettingsContentId.PreferencesLab,
+            level = AimiSettingsLevel.EXPERT,
+            kind = AimiSettingsSectionKind.FIELDS,
+            keys = listOf(
+                BooleanKey.AimiParityCaptureEnable,
             ),
         ),
         AimiSettingsSection(
