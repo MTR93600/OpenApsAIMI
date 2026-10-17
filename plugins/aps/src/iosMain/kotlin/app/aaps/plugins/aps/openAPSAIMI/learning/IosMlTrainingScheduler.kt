@@ -148,6 +148,17 @@ object IosMlTrainingScheduler {
     }
 
     /**
+     * Removes the planned training request, if there is one.
+     *
+     * This stops the next run only. A run that already started is not cut short, and the task
+     * handler stays registered (iOS allows one registration per identifier, for the whole life of
+     * the process). Calling [schedule] again plans a new run.
+     */
+    fun cancel() {
+        BGTaskScheduler.sharedScheduler.cancelTaskRequestWithIdentifier(TASK_IDENTIFIER)
+    }
+
+    /**
      * Runs one training pass through the commonMain pipeline.
      *
      * Returns [TrainingResult.NOT_CONFIGURED] if [configure] was not called. This keeps the
