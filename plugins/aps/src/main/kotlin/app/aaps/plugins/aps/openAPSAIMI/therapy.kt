@@ -329,8 +329,11 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
         return lastEvent?.let { (now - it.timestamp) / 60000 } ?: -1L
     }
 
-    /** The last declared meal: how long ago, and whether it was a high-carb one. */
-    data class DeclaredMeal(val ageMin: Long, val highCarb: Boolean)
+    /**
+     * The last declared meal: how long ago, whether it was a high-carb one, and the keyword that matched
+     * (the first one of [DECLARED_MEAL_KEYWORDS] found in the note).
+     */
+    data class DeclaredMeal(val ageMin: Long, val highCarb: Boolean, val keyword: String)
 
     /**
      * The most recent declared-meal note within [lookbackMin], or `null`.
@@ -347,9 +350,11 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
             .filter { event -> DECLARED_MEAL_KEYWORDS.any { event.note?.contains(it, ignoreCase = true) == true } }
             .maxByOrNull { it.timestamp }
             ?: return null
+        val note = event.note.orEmpty()
         return DeclaredMeal(
             ageMin = (nowMs - event.timestamp) / 60_000L,
-            highCarb = event.note?.contains("highcarb", ignoreCase = true) == true,
+            highCarb = note.contains("highcarb", ignoreCase = true),
+            keyword = DECLARED_MEAL_KEYWORDS.first { note.contains(it, ignoreCase = true) },
         )
     }
 

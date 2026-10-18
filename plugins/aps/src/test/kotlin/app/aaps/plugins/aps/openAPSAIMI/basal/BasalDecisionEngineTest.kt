@@ -306,4 +306,23 @@ class BasalDecisionEngineTest {
         assertTrue(reason.contains("AD_EARLY_TBR_BLOCKED")) { reason }
         assertTrue(reason.contains("evBG=")) { reason }
     }
+
+    /** The meal-onset detector gets the real predicted delta when given; the old call passed the delta twice. */
+    @Test
+    fun `forced TBR detector receives the predicted delta, or the delta when none is given`() {
+        var seenPredicted: Float? = null
+        val helpers = BasalDecisionEngine.Helpers(
+            calculateRate = { _, _, mult, _ -> 1.0 * mult },
+            calculateBasalRate = { _, _, mult -> 1.0 * mult },
+            detectMealOnset = { _, predicted, _, _, _ -> seenPredicted = predicted; false },
+            round = { v, _ -> v }
+        )
+        every { basalPlanner.plan(any()) } returns null
+
+        engine.decide(forcedTbrInput(delta = 3.0).copy(predictedDelta = 0.5), RT(algorithm = APSResult.Algorithm.AIMI, runningDynamicIsf = true), helpers)
+        assertEquals(0.5f, seenPredicted!!, 1e-6f)
+
+        engine.decide(forcedTbrInput(delta = 3.0), RT(algorithm = APSResult.Algorithm.AIMI, runningDynamicIsf = true), helpers)
+        assertEquals(3.0f, seenPredicted!!, 1e-6f)
+    }
 }

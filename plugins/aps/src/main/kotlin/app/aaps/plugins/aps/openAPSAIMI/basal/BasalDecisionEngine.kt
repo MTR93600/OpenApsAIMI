@@ -101,6 +101,18 @@ class BasalDecisionEngine @Inject constructor(
          * [DynamicBasalController]. Renseigné depuis `BooleanKey.OApsAIMIBasalProjectedError`.
          */
         val projectionHorizonMin: Double? = null,
+        /**
+         * Predicted 5-min delta for the meal-onset detector of the forced early-meal TBR. `null` = the
+         * old behaviour, which passed [delta] twice, so one noisy 5-min step decided alone.
+         * Set from `BooleanKey.OApsAIMIForcedTbrRealPredDelta`.
+         */
+        val predictedDelta: Double? = null,
+        /** Hold the PI fallback multiplier at ×1.0 when the stack can reach 70, see [DynamicBasalStackCap]. */
+        val dynamicStackCapArmed: Boolean = false,
+        /** A meal is declared (mode active or note in the last 3–4 h): the stack cap never acts. */
+        val declaredMealActive: Boolean = false,
+        /** ISF used by the stack cap; `null` disables it. */
+        val stackCapIsf: Double? = null,
     )
 
     data class Helpers(
@@ -113,7 +125,9 @@ class BasalDecisionEngine @Inject constructor(
     data class Decision(
         val rate: Double,
         val duration: Int,
-        val overrideSafety: Boolean
+        val overrideSafety: Boolean,
+        /** Stack cap verdict on the PI fallback, `null` when that path did not run. Export only. */
+        val piStackCap: DynamicBasalStackCap.Verdict? = null,
     )
 
     companion object {
@@ -261,7 +275,7 @@ class BasalDecisionEngine @Inject constructor(
 
         val mealOnsetDetected = helpers.detectMealOnset(
             input.delta.toFloat(),
-            input.delta.toFloat(), // predictedDelta placeholder
+            (input.predictedDelta ?: input.delta).toFloat(),
             input.bgAcceleration.toFloat(),
             input.predictedBg.toFloat(),
             input.targetBg.toFloat()
@@ -590,6 +604,7 @@ class BasalDecisionEngine @Inject constructor(
         // All rule blocks above returned null. Instead of silently falling back to
         // profile basal, use the DynamicBasalController to compute a continuously
         // modulated rate based on BG error, trajectory, and IOB.
+        var piStackCap: DynamicBasalStackCap.Verdict? = null
         if (chosenRate == null) {
             val piInput = DynamicBasalController.Input(
                 bg = input.bg,
@@ -610,10 +625,27 @@ class BasalDecisionEngine @Inject constructor(
             chosenRate = piDecision.rate
             rT.duration = piDecision.durationMin
             rT.reason.append(" | ").append(piDecision.reason)
+            if (input.profileCurrentBasal > 0.0) {
+                val verdict = DynamicBasalStackCap.evaluate(
+                    multiplier = piDecision.rate / input.profileCurrentBasal,
+                    bgMgdl = input.bg,
+                    iobU = input.iob,
+                    isfMgdlPerU = input.stackCapIsf,
+                    declaredMealActive = input.declaredMealActive,
+                    armed = input.dynamicStackCapArmed,
+                )
+                piStackCap = verdict
+                if (verdict.applied) {
+                    chosenRate = input.profileCurrentBasal
+                    rT.reason.append(" | STACK_CAP: Mult=%.2fx→1.00x (IOB×ISF=%.0f ≥ BG−70)".format(
+                        verdict.multiplierIn, verdict.stackDropMgdl ?: 0.0,
+                    ))
+                }
+            }
         }
 
         val finalRate = chosenRate ?: input.profileCurrentBasal
-        return Decision(finalRate, rT.duration ?: 30, overrideSafety)
+        return Decision(finalRate, rT.duration ?: 30, overrideSafety, piStackCap)
     }
 
     // ===== utilitaires existants inchangés =====

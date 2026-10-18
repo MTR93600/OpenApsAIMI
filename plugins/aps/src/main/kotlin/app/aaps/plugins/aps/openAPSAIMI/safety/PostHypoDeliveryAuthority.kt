@@ -19,6 +19,13 @@ object PostHypoDeliveryAuthority {
         val gate: CorrectionAggressionGate.Decision?,
         val patientMode: PatientMode?,
         val aggressionInput: CorrectionAggressionGate.Input,
+        /**
+         * An "fcl" or "anticip" note is live. Those two meal modes are not in
+         * `CorrectionAggressionGate.Input.explicitMealMode` on purpose (the FCL must not buy a weaker LGS
+         * interlock), so without this a meal declared with them right after a low would have its SMB
+         * capped to 0 here, while the same meal declared as "lunch" would not. Read by this authority only.
+         */
+        val declaredMealNote: Boolean = false,
     )
 
     data class Decision(
@@ -27,6 +34,8 @@ object PostHypoDeliveryAuthority {
         val suppressMealDelivery: Boolean,
         val maxSmbU: Double,
         val reasonTag: String,
+        /** The patient mode this decision was taken on. Exported, so a support package can check it. */
+        val patientModeSeen: PatientMode? = null,
     ) {
         fun capSmbU(requestedU: Double): Double =
             if (!active || !suppressMealDelivery) requestedU else minOf(requestedU, maxSmbU)
@@ -56,13 +65,19 @@ object PostHypoDeliveryAuthority {
     /** Independent meal evidence (COB, declared mode, carb estimate, confirmed rise) was found. */
     const val REASON_MEAL_EVIDENCE = "inactive_meal_evidence"
 
-    fun evaluate(input: Input): Decision {
+    /** An "fcl" or "anticip" meal is declared: a meal the person announced is not a rebound. */
+    const val REASON_DECLARED_MEAL_NOTE = "inactive_declared_meal_note"
+
+    fun evaluate(input: Input): Decision = decide(input).copy(patientModeSeen = input.patientMode)
+
+    private fun decide(input: Input): Decision {
         if (input.gate?.tier != CorrectionAggressionGate.Tier.REBOUND_GUARD)
             return inactiveBecause(REASON_TIER_NOT_REBOUND)
         if (input.patientMode != PatientMode.POST_HYPO_RECOVERY)
             return inactiveBecause(REASON_MODE_NOT_POST_HYPO)
         if (CorrectionAggressionGate.hasIndependentMealEvidence(input.aggressionInput))
             return inactiveBecause(REASON_MEAL_EVIDENCE)
+        if (input.declaredMealNote) return inactiveBecause(REASON_DECLARED_MEAL_NOTE)
         // Aggressive rise past target+30 with Δ>15 → act normally (product 2026-07-17).
         if (
             PostHypoAggressiveRiseExit.shouldExit(
@@ -121,5 +136,6 @@ object PostHypoDeliveryAuthority {
         put("max_smb_u", if (decision.maxSmbU.isFinite()) decision.maxSmbU else JSONObject.NULL)
         put("smb_before_cap_u", smbBeforeCapU ?: JSONObject.NULL)
         put("smb_after_cap_u", smbAfterCapU ?: JSONObject.NULL)
+        put("patient_mode_seen", decision.patientModeSeen?.name ?: JSONObject.NULL)
     }
 }

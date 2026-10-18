@@ -215,7 +215,7 @@ class AdversarialBasalLearningTest {
             spreadFeatureIndex = BG_INDEX,
             spreadSweepValues = BasalNeuralLearner.ClinicalBgAnchors.PROBE_BG_MGDL,
             minOutputSpread = BASAL_GATE,
-            maxBaselineMaeRatio = BASELINE_GATE,
+            maxBaselineErrorRatio = BASELINE_GATE,
             log = { reasons += it },
         )
         return published != null

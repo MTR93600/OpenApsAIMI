@@ -249,7 +249,7 @@ class NeuralModelPublishGateTest {
             spreadFeatureIndex = bgIndex,
             spreadSweepValues = anchors,
             minOutputSpread = minSpread,
-            maxBaselineMaeRatio = 0.95,
+            maxBaselineErrorRatio = 0.95,
             log = { lines += it },
         )
 
@@ -273,7 +273,7 @@ class NeuralModelPublishGateTest {
             inputSize = inputSize,
             outputRange = basalRange,
             probeInput = rows.first(),
-            maxBaselineMaeRatio = 0.95,
+            maxBaselineErrorRatio = 0.95,
             log = { lines += it },
         )
 
@@ -297,7 +297,7 @@ class NeuralModelPublishGateTest {
             spreadFeatureIndex = bgIndex,
             spreadSweepValues = anchors,
             minOutputSpread = minSpread,
-            maxBaselineMaeRatio = 0.95,
+            maxBaselineErrorRatio = 0.95,
             log = { lines += it },
         )
 
@@ -519,7 +519,7 @@ class NeuralModelPublishGateTest {
         spreadFeatureIndex = bgIndex,
         spreadSweepValues = anchors,
         minOutputSpread = 0.05,
-        maxBaselineMaeRatio = 0.95,
+        maxBaselineErrorRatio = 0.95,
         log = log,
     )
 

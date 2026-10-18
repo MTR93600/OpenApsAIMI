@@ -54,6 +54,41 @@ class PostHypoDeliveryAuthorityTest {
         assertEquals(0.0, decision.capSmbU(0.77), 0.001)
     }
 
+    /** An FCL (or anticip) meal declared right after a low is a meal, like "lunch": its SMB is not capped. */
+    @Test
+    fun inactive_whenFclOrAnticipMealDeclared() {
+        val decision = PostHypoDeliveryAuthority.evaluate(
+            PostHypoDeliveryAuthority.Input(
+                gate = reboundGuardGate(),
+                patientMode = PatientMode.POST_HYPO_RECOVERY,
+                aggressionInput = aggressionInput(),
+                declaredMealNote = true,
+            ),
+        )
+
+        assertFalse(decision.active)
+        assertEquals(PostHypoDeliveryAuthority.REASON_DECLARED_MEAL_NOTE, decision.reasonTag)
+        assertEquals(0.77, decision.capSmbU(0.77), 0.001)
+    }
+
+    /** The mode the decision was taken on is kept, active or not, so the export can show it. */
+    @Test
+    fun decision_carriesThePatientModeItSaw() {
+        val active = PostHypoDeliveryAuthority.evaluate(
+            PostHypoDeliveryAuthority.Input(reboundGuardGate(), PatientMode.POST_HYPO_RECOVERY, aggressionInput()),
+        )
+        val inactive = PostHypoDeliveryAuthority.evaluate(
+            PostHypoDeliveryAuthority.Input(reboundGuardGate(), PatientMode.STABLE_BASELINE, aggressionInput()),
+        )
+
+        assertEquals(PatientMode.POST_HYPO_RECOVERY, active.patientModeSeen)
+        assertEquals(PatientMode.STABLE_BASELINE, inactive.patientModeSeen)
+        assertEquals(
+            "STABLE_BASELINE",
+            PostHypoDeliveryAuthority.toJsonObject(inactive, null, null).getString("patient_mode_seen"),
+        )
+    }
+
     @Test
     fun inactive_whenTierFull() {
         val fullGate = CorrectionAggressionGate.evaluate(

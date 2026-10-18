@@ -347,6 +347,8 @@ internal object AimiSettingsManifest {
         AimiSettingEntry(BooleanKey.OApsAIMIPkpdCurveLearningGate, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIBasalChannelSafetyGuards, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Protection, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIBasalProjectedError, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
+        AimiSettingEntry(BooleanKey.OApsAIMIDynamicBasalStackCap, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
+        AimiSettingEntry(BooleanKey.OApsAIMIForcedTbrRealPredDelta, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIBasalTerminalInvariants, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Protection, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMITrajBridgeBasalSurvives, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Protection, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMITubeVetoIgnoreFloorArtefact, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),

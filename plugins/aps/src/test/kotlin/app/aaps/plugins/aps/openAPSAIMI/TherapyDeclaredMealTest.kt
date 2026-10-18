@@ -34,6 +34,7 @@ class TherapyDeclaredMealTest {
         assertThat(meal).isNotNull()
         assertThat(meal!!.ageMin).isEqualTo(150L)
         assertThat(meal.highCarb).isFalse()
+        assertThat(meal.keyword).isEqualTo("fcl")
     }
 
     @Test
@@ -41,6 +42,7 @@ class TherapyDeclaredMealTest {
         val meal = therapyWith("lunch" to 200L, "highcarb" to 30L).lastDeclaredMeal(now)
         assertThat(meal!!.ageMin).isEqualTo(30L)
         assertThat(meal.highCarb).isTrue()
+        assertThat(meal.keyword).isEqualTo("highcarb")
     }
 
     @Test

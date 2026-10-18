@@ -192,6 +192,89 @@ internal object NeuralModelTrainer {
     }
 
     /**
+     * Root mean squared error of [predict] over the held-out rows, and the same number for the best constant
+     * under that error, which is the MEAN of the training labels. Returns (model, baseline).
+     *
+     * For a label that is mostly zero, [heldOutMaeAgainstConstant] cannot be beaten. The SMB label is zero on
+     * about 78 % of the rows (2026-10-15 corpus), so its median is 0, and "always answer 0" costs only the
+     * few rows that did get a dose. Measured on that corpus, a simple and sensible predictor (mean dose per
+     * class of delta and bg) scored 1.10 against the median under MAE, but 0.91 against the mean under RMSE.
+     * The network trains on a loss that is mostly squared error, so this is also the fairer comparison. A
+     * model that fitted noise still loses to the mean here: noise adds variance, and RMSE counts it.
+     */
+    fun heldOutRmseAgainstMean(
+        predict: (FloatArray) -> DoubleArray,
+        split: Split,
+    ): Pair<Double, Double> {
+        if (split.valInputs.isEmpty() || split.trainTargets.isEmpty()) return Double.NaN to Double.NaN
+        val outputs = split.trainTargets.first().size
+        if (outputs == 0) return Double.NaN to Double.NaN
+
+        val mean = DoubleArray(outputs) { o ->
+            val column = split.trainTargets.mapNotNull { it.getOrNull(o) }
+            if (column.isEmpty()) 0.0 else column.sum() / column.size
+        }
+
+        var modelError = 0.0
+        var baselineError = 0.0
+        var counted = 0
+        for (i in split.valInputs.indices) {
+            val target = split.valTargets.getOrNull(i) ?: continue
+            val out = try {
+                predict(split.valInputs[i])
+            } catch (_: Exception) {
+                return Double.NaN to Double.NaN
+            }
+            for (o in 0 until outputs) {
+                val t = target.getOrNull(o) ?: continue
+                val p = out.getOrNull(o) ?: return Double.NaN to Double.NaN
+                modelError += (p - t) * (p - t)
+                baselineError += (mean[o] - t) * (mean[o] - t)
+                counted++
+            }
+        }
+        if (counted == 0) return Double.NaN to Double.NaN
+        return sqrt(modelError / counted) to sqrt(baselineError / counted)
+    }
+
+    /**
+     * How much the answer changes between real situations: the mean of the top [HELD_OUT_SPREAD_FRACTION] of
+     * the predictions on the held-out rows, minus the mean of the bottom [HELD_OUT_SPREAD_FRACTION].
+     * `NaN` when it cannot be measured.
+     *
+     * The one-axis probe of [spreadProbeVectors] holds every other feature at its median. For SMB that median is
+     * a quiet moment (delta about -1.4, 2026-10-15 corpus) where the true dose is about 0 at every bg: 0.000,
+     * 0.011 and 0.020 U. Even a perfect model fails that probe. The dose is driven by the rise, so the question
+     * "does the answer move?" has to be asked across real situations, not along bg alone. A constant model
+     * still scores 0 here.
+     */
+    fun heldOutPredictionSpread(predict: (FloatArray) -> DoubleArray, split: Split): Double {
+        if (split.valInputs.isEmpty()) return Double.NaN
+        val predictions = try {
+            split.valInputs.map { predict(it).firstOrNull() ?: return Double.NaN }
+        } catch (_: Exception) {
+            return Double.NaN
+        }
+        if (predictions.any { !it.isFinite() }) return Double.NaN
+        val sorted = predictions.sorted()
+        val k = (sorted.size * HELD_OUT_SPREAD_FRACTION).toInt().coerceAtLeast(1)
+        return sorted.takeLast(k).average() - sorted.take(k).average()
+    }
+
+    /** Share of the held-out predictions used at each end by [heldOutPredictionSpread]. */
+    const val HELD_OUT_SPREAD_FRACTION = 0.10
+
+    /** How [trainAndPublish] compares a candidate with the best constant answer. */
+    enum class ConstantBaseline {
+
+        /** Mean absolute error against the median training label: for a continuous label (basal). */
+        MAE_VS_MEDIAN,
+
+        /** Root mean squared error against the mean training label: for a label that is mostly zero (SMB). */
+        RMSE_VS_MEAN,
+    }
+
+    /**
      * Runs every "is this model alive?" gate on one predictor and returns true only if all of them pass.
      *
      * 1. **Finite probe** — the output on [probeInput] must be a real number.
@@ -267,8 +350,8 @@ internal object NeuralModelTrainer {
      * candidate, so training and later inference see the same scaling.
      *
      * A candidate publishes only if it passes the probes described in [passesPublishProbes] and, when
-     * [maxBaselineMaeRatio] is set, only if it beats the best constant predictor on the held-out rows (see
-     * [heldOutMaeAgainstConstant]). If
+     * [maxBaselineErrorRatio] is set, only if it beats the best constant predictor on the held-out rows (see
+     * [heldOutMaeAgainstConstant] and [heldOutRmseAgainstMean]). If
      * [requireIncumbentBeat] is set, the incumbent runs the very same probes first:
      * - an incumbent that fails them is **not** allowed to gate the candidate by validation loss, and its weight
      *   file (plus its `.bak`) is deleted, so a dead model cannot keep being served;
@@ -285,11 +368,14 @@ internal object NeuralModelTrainer {
      *   to the per-patient p10..p90 window, which measured a different window on every patient. See
      *   [spreadProbeVectors].
      * @param minOutputSpread minimum accepted output spread over [spreadSweepValues], in the label's own unit.
-     * @param maxBaselineMaeRatio if greater than 0, the candidate's held-out mean absolute error must be at most
-     *   this fraction of the best constant predictor's (0.95 = at least 5% better than always answering the median
-     *   training label). 0 switches the check off, which is what the SMB head still does. This is the only gate
-     *   measured to separate a model that learned from a model that fitted noise; the spread probe does not, see
+     * @param minHeldOutSpread if greater than 0, the candidate must also move by at least this much across the
+     *   held-out rows, see [heldOutPredictionSpread]. In the label's own unit. 0 switches it off.
+     * @param maxBaselineErrorRatio if greater than 0, the candidate's held-out error must be at most this fraction
+     *   of the best constant predictor's (0.95 = at least 5% better). Which error and which constant is set by
+     *   [constantBaseline]. 0 switches the check off. This is the only gate measured to separate a model that
+     *   learned from a model that fitted noise; the one-axis spread probe does not, see
      *   [heldOutMaeAgainstConstant].
+     * @param constantBaseline the error measure and the constant used by [maxBaselineErrorRatio].
      * @param requireIncumbentBeat if true, the candidate's best validation loss must not exceed the incumbent's by
      *   more than [valLossTolerance] (keep the better model); if false, any finite / in-range candidate publishes.
      * @param valLossTolerance a **tolerance**, not a hurdle: the candidate may be up to this factor WORSE than the
@@ -310,7 +396,9 @@ internal object NeuralModelTrainer {
         spreadFeatureIndex: Int? = null,
         spreadSweepValues: List<Double> = emptyList(),
         minOutputSpread: Double = 0.0,
-        maxBaselineMaeRatio: Double = 0.0,
+        minHeldOutSpread: Double = 0.0,
+        maxBaselineErrorRatio: Double = 0.0,
+        constantBaseline: ConstantBaseline = ConstantBaseline.MAE_VS_MEDIAN,
         requireIncumbentBeat: Boolean = false,
         valLossTolerance: Double = 1.0,
         log: (String) -> Unit = {},
@@ -370,22 +458,38 @@ internal object NeuralModelTrainer {
         )
         if (!candidateOk) return null
 
-        // The candidate must be worth more than "always answer the median label". Only the candidate is checked:
+        if (minHeldOutSpread > 0.0) {
+            val spread = heldOutPredictionSpread(candidate::predict, split)
+            if (!spread.isFinite()) {
+                log("cannot measure the held-out spread of ${weightsFile.name} — discard")
+                return null
+            }
+            if (spread < minHeldOutSpread) {
+                log("candidate answers almost the same in every real situation: held-out spread $spread < $minHeldOutSpread — discard")
+                return null
+            }
+        }
+
+        // The candidate must be worth more than "always answer the constant". Only the candidate is checked:
         // an incumbent that cannot beat the constant cannot block a candidate that can, because the validation
         // loss comparison below already prefers the better fit on the very same held-out rows.
-        if (maxBaselineMaeRatio > 0.0) {
-            val (candidateMae, baselineMae) = heldOutMaeAgainstConstant(candidate::predict, split)
-            if (!candidateMae.isFinite() || !baselineMae.isFinite()) {
+        if (maxBaselineErrorRatio > 0.0) {
+            val (candidateError, baselineError) = when (constantBaseline) {
+                ConstantBaseline.MAE_VS_MEDIAN -> heldOutMaeAgainstConstant(candidate::predict, split)
+                ConstantBaseline.RMSE_VS_MEAN -> heldOutRmseAgainstMean(candidate::predict, split)
+            }
+            if (!candidateError.isFinite() || !baselineError.isFinite()) {
                 log("cannot measure the held-out error of ${weightsFile.name} — discard")
                 return null
             }
-            if (baselineMae <= 0.0) {
+            if (baselineError <= 0.0) {
                 log("every training label is the same number, there is nothing to learn — discard")
                 return null
             }
-            val ratio = candidateMae / baselineMae
-            if (ratio > maxBaselineMaeRatio) {
-                log("candidate does not beat the median label: mae=$candidateMae baseline=$baselineMae ratio=$ratio > $maxBaselineMaeRatio — discard")
+            val ratio = candidateError / baselineError
+            if (ratio > maxBaselineErrorRatio) {
+                val what = if (constantBaseline == ConstantBaseline.MAE_VS_MEDIAN) "median label: mae" else "mean label: rmse"
+                log("candidate does not beat the $what=$candidateError baseline=$baselineError ratio=$ratio > $maxBaselineErrorRatio — discard")
                 return null
             }
         }
