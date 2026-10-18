@@ -2,6 +2,10 @@ plugins {
     id("kmp-test-defaults")
     kotlin("multiplatform")
     alias(libs.plugins.android.kmp.library)
+    // Metro, because `IosMedtrumPlugin` in iosMain registers itself with `@ContributesIntoMap` and
+    // is built by the iOS graph. Nothing in commonMain, androidMain or jvmMain is annotated, so the
+    // other targets are unaffected.
+    alias(libs.plugins.metro)
 }
 
 kotlin {

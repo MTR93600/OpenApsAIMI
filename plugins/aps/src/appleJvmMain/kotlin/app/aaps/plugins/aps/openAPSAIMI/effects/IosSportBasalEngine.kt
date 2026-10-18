@@ -134,6 +134,14 @@ internal fun iosNeutralSportBasal(
             override fun highCarbTime() = false
             override fun highCarbRuntime() = 0L
             override fun recentSteps5Minutes(): Int? = null
+
+            // This scene has no predictor, so the detector keeps its old input (the measured delta).
+            override fun predictedDelta5m(): Double? = null
+
+            // A sport scene declares no meal, and the ISF is the one the scene feeds the engine, so
+            // DynamicBasalStackCap sees the same numbers it would on Android.
+            override fun declaredMealWindowActive() = false
+            override fun stackCapIsf(): Double = 50.0
             override fun calculateRate(
                 basal: Double,
                 currentBasal: Double,

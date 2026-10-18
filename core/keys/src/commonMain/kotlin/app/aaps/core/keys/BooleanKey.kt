@@ -705,6 +705,22 @@ enum class BooleanKey(
         title = KeysStrings.pref_title_aimi_basal_projected_error,
         summary = KeysStrings.pref_summary_aimi_basal_projected_error,
     ),
+    /** 🩸 Dynamic basal: no up-multiplier (held at ×1.0) when IOB × ISF ≥ BG − 70, never during a declared meal.
+     *  Field data 2026-09-01..10-15: multiplier > ×1.05 with that stack → 23 % lows within 3 h vs 3 %.
+     *  ON by default; exported in `dynamic_basal_stack_cap`. See `DynamicBasalStackCap`. */
+    OApsAIMIDynamicBasalStackCap(
+        "key_aimi_dynamic_basal_stack_cap", true,
+        title = KeysStrings.pref_title_aimi_dynamic_basal_stack_cap,
+        summary = KeysStrings.pref_summary_aimi_dynamic_basal_stack_cap,
+    ),
+
+    /** 🩸 Forced early-meal TBR: give the meal-onset detector a real predicted delta instead of the same
+     *  5-min delta twice, so one noisy step cannot trigger it alone. Undeclared meals only. ON by default. */
+    OApsAIMIForcedTbrRealPredDelta(
+        "key_aimi_forced_tbr_real_pred_delta", true,
+        title = KeysStrings.pref_title_aimi_forced_tbr_real_pred_delta,
+        summary = KeysStrings.pref_summary_aimi_forced_tbr_real_pred_delta,
+    ),
     OApsAIMIBasalTerminalInvariants(
         "key_aimi_basal_terminal_invariants", true,
         title = KeysStrings.pref_title_aimi_basal_terminal_invariants,

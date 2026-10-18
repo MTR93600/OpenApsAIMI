@@ -4998,6 +4998,8 @@ class ShellDecisionTraceTest {
             READ key=StringKey.AimiTuningContextSelection value=
             READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
             READ key=DoubleKey.autodriveMaxBasal value=0.00
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=<clock>
             READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=<clock>
             READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
             READ key=AimiLongKey.LastPrebolusTime value=0
@@ -5301,6 +5303,8 @@ class ShellDecisionTraceTest {
             READ key=StringKey.AimiTuningContextSelection value=
             READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
             READ key=DoubleKey.autodriveMaxBasal value=0.00
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=<clock>
             READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=<clock>
             READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
             READ key=AimiLongKey.LastPrebolusTime value=0
@@ -5413,6 +5417,8 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.autodriveMaxBasal value=0.00
             READ key=BooleanKey.OApsAIMIhoneymoon value=false
             READ key=BooleanKey.OApsAIMIBasalProjectedError value=false
+            READ key=BooleanKey.OApsAIMIForcedTbrRealPredDelta value=false
+            READ key=BooleanKey.OApsAIMIDynamicBasalStackCap value=false
             READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
             READ key=BooleanKey.OApsAIMIBasalSlewLimitEnabled value=false
             READ key=BooleanKey.OApsAIMIAnticipBasalFloor value=false
@@ -5429,6 +5435,7 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMIPeakGovernorEnabled value=false
             READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
             READ key=BooleanKey.OApsAIMIBasalChannelSafetyGuards value=false
+            READ key=BooleanKey.OApsAIMIDynamicBasalStackCap value=false
             READ key=BooleanKey.OApsAIMIRecursiveBeliefShadow value=false
             READ key=BooleanKey.OApsAIMIRecursiveBeliefAuthority value=false
             READ key=BooleanKey.OApsAIMIRecursiveBeliefWavelet value=false
@@ -5688,6 +5695,8 @@ class ShellDecisionTraceTest {
             READ key=StringKey.AimiTuningContextSelection value=
             READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
             READ key=DoubleKey.autodriveMaxBasal value=0.00
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=40.00
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=<clock>
             READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=<clock>
             READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=40.00
             READ key=AimiLongKey.LastPrebolusTime value=0
@@ -5896,6 +5905,8 @@ class ShellDecisionTraceTest {
             READ key=StringKey.AimiTuningContextSelection value=
             READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
             READ key=DoubleKey.autodriveMaxBasal value=0.00
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
+            READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=<clock>
             READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=<clock>
             READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
             READ key=AimiLongKey.LastPrebolusTime value=0
@@ -6168,6 +6179,8 @@ READ key=BooleanKey.OApsAIMIT3cBrittleMode value=true
 READ key=StringKey.AimiTuningContextSelection value=
 READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
 READ key=DoubleKey.autodriveMaxBasal value=3.00
+READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
+READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
 READ key=DoubleKey.OApsAIMIweight value=0.00
 READ key=AimiLongKey.LastPrebolusTime value=0
 READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
@@ -6198,6 +6211,7 @@ READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
 READ key=BooleanKey.OApsAIMIPeakGovernorEnabled value=false
 READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
 READ key=BooleanKey.OApsAIMIBasalChannelSafetyGuards value=false
+READ key=BooleanKey.OApsAIMIDynamicBasalStackCap value=false
 READ key=BooleanKey.OApsAIMIRecursiveBeliefShadow value=false
 READ key=BooleanKey.OApsAIMIRecursiveBeliefAuthority value=false
 READ key=BooleanKey.OApsAIMIRecursiveBeliefWavelet value=false
@@ -6445,6 +6459,8 @@ Failed to save AIMI Decision JSON: lateinit property appendCap has not been init
 
         private val BASAL_ENGINE_SPORT_TRACE = """
             READ key=BooleanKey.OApsAIMIBasalProjectedError value=false
+            READ key=BooleanKey.OApsAIMIForcedTbrRealPredDelta value=false
+            READ key=BooleanKey.OApsAIMIDynamicBasalStackCap value=false
         """.trimIndent()
 
         private val DOSE_TERMINAL_MEAL_UPLIFT_TRACE = """

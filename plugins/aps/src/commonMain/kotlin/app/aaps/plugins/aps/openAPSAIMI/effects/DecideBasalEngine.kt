@@ -10,6 +10,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdictCache
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController
+import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalStackCap
 import app.aaps.plugins.aps.openAPSAIMI.math.AimiTickPolicyMath
 import app.aaps.plugins.aps.openAPSAIMI.model.PumpCaps
 import app.aaps.plugins.aps.openAPSAIMI.safety.HypoThresholdMath
@@ -38,6 +39,18 @@ internal interface AimiBasalDecisionEngineCalls {
     fun highCarbTime(): Boolean
     fun highCarbRuntime(): Long
     fun recentSteps5Minutes(): Int?
+
+    /**
+     * Predicted 5-min delta for the meal-onset detector, or `null` to keep the old behaviour of
+     * passing the measured delta twice. Gated by `BooleanKey.OApsAIMIForcedTbrRealPredDelta`.
+     */
+    fun predictedDelta5m(): Double?
+
+    /** A meal is declared now, so [DynamicBasalStackCap] must stand down. */
+    fun declaredMealWindowActive(): Boolean
+
+    /** ISF the stack cap compares the insulin on board with; `null` disables the cap. */
+    fun stackCapIsf(): Double?
     fun calculateRate(
         basal: Double,
         currentBasal: Double,
@@ -176,6 +189,11 @@ internal fun decideBasalDecisionEngine(
         auditorConfidence = auditorConfidence,
         projectionHorizonMin = DynamicBasalController.PROJECTION_HORIZON_MIN
             .takeIf { preferences.get(BooleanKey.OApsAIMIBasalProjectedError) },
+        predictedDelta = calls.predictedDelta5m()
+            ?.takeIf { preferences.get(BooleanKey.OApsAIMIForcedTbrRealPredDelta) && it.isFinite() },
+        dynamicStackCapArmed = preferences.get(BooleanKey.OApsAIMIDynamicBasalStackCap),
+        declaredMealActive = calls.declaredMealWindowActive(),
+        stackCapIsf = calls.stackCapIsf(),
     )
     val helpers = BasalDecisionEngine.Helpers(
         calculateRate = { basalValue, currentBasalValue, multiplier, label ->

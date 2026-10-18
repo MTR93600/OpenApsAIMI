@@ -385,6 +385,12 @@ internal data class AimiDecisionContext(
         var physiological_patterns: JsonObject? = null,
         /** Unified meal absorption belief + phase (IOB / HTR / SMB priority) */
         var meal_absorption_phase: MealAbsorptionPhaseExport? = null,
+        /** Meals the person declared with a mode note (FCL, lunch, …): active modes and last declaration. */
+        var declared_meal: JsonObject? = null,
+        /** Which tick the meal blocks come from: this one, or the previous one on an early exit. */
+        var meal_blocks_origin: JsonObject? = null,
+        /** DynamicBasalStackCap on the engine PI fallback and on setTempBasal. */
+        var dynamic_basal_stack_cap: JsonObject? = null,
         /** PKPD vs scenario eventual-BG divergence audit (PredictionDivergenceAuditor) */
         var pred_divergence: JsonObject? = null,
         /** Recursive Belief Tree — full JSON object for AIMI_Decisions.jsonl */
@@ -841,6 +847,9 @@ internal data class AimiDecisionContext(
                 mJson.put("physio_score", m.physio_score)
                 adj.put("meal_absorption_phase", mJson)
             }
+            adjustments.declared_meal?.let { adj.put("declared_meal", it) }
+            adjustments.meal_blocks_origin?.let { adj.put("meal_blocks_origin", it) }
+            adjustments.dynamic_basal_stack_cap?.let { adj.put("dynamic_basal_stack_cap", it) }
             adjustments.pred_divergence?.let { pd ->
                 adj.put("pred_divergence", pd)
             }

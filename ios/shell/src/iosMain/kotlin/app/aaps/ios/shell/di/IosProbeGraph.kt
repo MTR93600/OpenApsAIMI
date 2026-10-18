@@ -18,6 +18,7 @@ import app.aaps.plugins.smoothing.AvgSmoothingPlugin
 import app.aaps.plugins.smoothing.ExponentialSmoothingPlugin
 import app.aaps.plugins.smoothing.NoSmoothingPlugin
 import app.aaps.plugins.smoothing.UnscentedKalmanFilterPlugin
+import app.aaps.pump.medtrum.ios.IosMedtrumPlugin
 import app.aaps.shared.clientbindings.ClientGraphBindings
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.DependencyGraph
@@ -72,6 +73,15 @@ interface IosProbeGraph {
     val sensitivityWeightedAverage: SensitivityWeightedAveragePlugin
     val unscentedKalmanFilter: UnscentedKalmanFilterPlugin
     val linearCalibration: LinearCalibrationPlugin
+
+    /**
+     * The iOS Medtrum pump plugin.
+     *
+     * Named here so a test can make the graph build it. Linking only proves the symbols resolve;
+     * this proves the graph can really hand over a pump plugin with its driver, its radio and its
+     * history writer underneath. Building it does not start Bluetooth - see `IosMedtrumDriverHost`.
+     */
+    val medtrumPump: IosMedtrumPlugin
 
     /** Real AAPS classes, built from the iOS implementations underneath them. */
     val dateUtil: DateUtil

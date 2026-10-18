@@ -118,9 +118,14 @@ class RawPreferenceStoreScanTest {
             "AIMI mode settings keep their own preference file. Moving them into registered keys needs a migration, because the values are live user settings that have to be carried across, not abandoned.",
         "plugins/aps/src/androidMain/kotlin/app/aaps/plugins/aps/openAPSAIMI/sos/EmergencySosManager.kt" to
             "Emergency SOS keeps its own preference file. Same migration question as the mode settings above.",
-        "plugins/dexcom_oneplus/src/main/kotlin/app/aaps/plugins/dexcomoneplus/identity/OnePlusSensorStore.kt" to
+        // Both paths moved when these two modules were flipped to Kotlin Multiplatform on
+        // 2026-10-17/18: `src/main` became `src/androidMain`, and the `SharedPreferences` call
+        // itself was lifted out of the store into a small `*SensorPrefsAndroid` adapter so the
+        // store could go to commonMain. The store no longer touches the preference file; the
+        // adapter does. The reason below is unchanged, because the question it records is.
+        "plugins/dexcom_oneplus/src/androidMain/kotlin/app/aaps/plugins/dexcomoneplus/identity/OnePlusSensorPrefsAndroid.kt" to
             "ONE+ sensor identity, including the pairing key. Live device state, so it needs a migration. The export question IS answered (owner, 2026-10-15): ALL of these keys are exportable, identity and session state alike, because a sensor has to survive a change of phone. 14 keys here and 18 in the Libre 3 store, each composed with the store namespace, so the move needs registered composed keys plus a migration that COPIES from the old file and leaves it in place until the move is confirmed on a real sensor.",
-        "plugins/libre3/src/main/kotlin/app/aaps/plugins/libre3/identity/Libre3SensorStore.kt" to
+        "plugins/libre3/src/androidMain/kotlin/app/aaps/plugins/libre3/identity/Libre3SensorPrefsAndroid.kt" to
             "Libre 3 sensor identity, same as the ONE+ store above, and exportable for the same reason.",
         "pump/combov2/src/main/kotlin/info/nightscout/pump/combov2/AAPSPumpStateStore.kt" to
             "ComboV2 pump state. Deferred WITH a migration (agreed 2026-09-22) - the values are live pump state, so they have to be carried across, not abandoned. Plan 3.1.2.",

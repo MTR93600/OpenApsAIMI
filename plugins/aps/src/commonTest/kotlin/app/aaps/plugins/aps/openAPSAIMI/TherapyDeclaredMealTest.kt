@@ -45,6 +45,7 @@ class TherapyDeclaredMealTest {
         assertNotNull(meal)
         assertTrue(meal.ageMin in 119L..121L)
         assertFalse(meal.highCarb)
+        assertEquals("lunch", meal.keyword)
     }
 
     @Test
@@ -60,6 +61,7 @@ class TherapyDeclaredMealTest {
         val meal = therapyWith("highcarb" to 10L).lastDeclaredMeal(aimiWallClockMs())
         assertNotNull(meal)
         assertTrue(meal.highCarb)
+        assertEquals("highcarb", meal.keyword)
     }
 
     @Test

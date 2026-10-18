@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
 import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
+import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalStackCap
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.effects.RbtLiveCommitResult
 import app.aaps.plugins.aps.openAPSAIMI.inflammatory.InflammationAdjuster
@@ -161,6 +162,13 @@ internal class AimiTickWorkingState {
     var basalChannelGuardBlockedT3cCount: Int = 0
     var basalChannelGuardBlockedHarmoniaCount: Int = 0
     var correctionAggressionDecision: CorrectionAggressionGate.Decision? = null
+
+    /** Inputs of this tick's last post-hypo authority evaluation, to re-evaluate it when the mode changes. */
+    var lastPostHypoAuthorityInputs: Pair<Float, CorrectionAggressionGate.PostHypoHint>? = null
+
+    // DynamicBasalStackCap verdicts of this tick (engine PI fallback, setTempBasal). Export only.
+    var lastDynamicStackCapEngine: DynamicBasalStackCap.Verdict? = null
+    var lastDynamicStackCapSetTemp: DynamicBasalStackCap.Verdict? = null
     var raEstimatorRunCountAtTickStart: Long = -1L
     var mealAbsorptionDeltaPrevForTick: Double? = null
     var mealAbsorptionDeltaPrevLatched: Boolean = false

@@ -49,7 +49,12 @@ internal class AutodriveV3TickState(
     val iob: Float,
     val maxSmb: Double,
     val maxSmbHb: Double,
-    val postHypo: PostHypoDeliveryAuthority.Decision,
+    /**
+     * Read live, not captured: [AimiPatientStateRefresh] can change the patient mode in the middle of
+     * this branch, and the authority is then evaluated again on the new mode. A snapshot taken when
+     * this state object was built would cap the SMB on a mode the tick no longer ends with.
+     */
+    val postHypo: () -> PostHypoDeliveryAuthority.Decision,
     val mealChannelHint: MealChannelHint?,
     val basePhysioMultipliers: PhysioMultipliersMTR,
     val eventualBg: Double,
@@ -359,7 +364,19 @@ internal fun runAutodriveV3MultiVariableBranch(
                     "floor=${aimiFmt2(v3SmbFloor)} U",
             )
         }
-        val v3Smb = state.postHypo.capSmbU(v3SmbRaw)
+        // V3 refreshed meal/physio after the tick-level pre_rbt publish - rebuild MealCertainty
+        // and re-publish gated terminals so RBT stacking + deliver see post-refresh evidence.
+        // Done BEFORE the post-hypo cap: the patient mode can change here, and the cap must use the
+        // mode this tick exports (field report 2026-10-17: 1,713 of 3,446 ticks exported as
+        // POST_HYPO_RECOVERY had an authority that had seen another mode). The refresh re-evaluates
+        // the authority itself when the mode changes.
+        patient.refreshPatientStateRuntime(
+            nowMs = dateUtil.now(),
+            healthSnapshot = snapshot,
+            sourceSensor = ctx.glucoseStatus.sourceSensor,
+            refreshSource = PatientRefreshSource.PHYSIO_SIGNAL,
+        )
+        val v3Smb = state.postHypo().capSmbU(v3SmbRaw)
         writes.setPostHypoSmbBeforeCapU(v3SmbRaw)
         writes.setPostHypoSmbAfterCapU(v3Smb)
         smbDraft = smbDraft.appendStage(
@@ -377,12 +394,6 @@ internal fun runAutodriveV3MultiVariableBranch(
             )
         }
         val cbfShieldDeltaU = adCommand?.scheduledMicroBolus?.takeIf { !v3CommandSafe && it > 0.01 }
-        patient.refreshPatientStateRuntime(
-            nowMs = dateUtil.now(),
-            healthSnapshot = snapshot,
-            sourceSensor = ctx.glucoseStatus.sourceSensor,
-            refreshSource = PatientRefreshSource.PHYSIO_SIGNAL,
-        )
         val preV3Eventual =
             state.eventualBg.takeIf { it.isFinite() && it > 1.0 }
                 ?: rT.eventualBG?.takeIf { it.isFinite() && it > 1.0 }
