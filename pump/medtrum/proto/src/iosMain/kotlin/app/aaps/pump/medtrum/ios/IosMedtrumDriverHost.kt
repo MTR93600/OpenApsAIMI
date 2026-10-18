@@ -8,6 +8,7 @@ import app.aaps.core.interfaces.pump.TemporaryBasalStorage
 import app.aaps.core.interfaces.pump.ble.session.CoreBluetoothCentral
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.pump.medtrum.comm.MedtrumLogger
+import app.aaps.pump.medtrum.session.MedtrumPatchSession
 import app.aaps.pump.medtrum.session.MedtrumSessionState
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
@@ -37,7 +38,7 @@ import kotlinx.coroutines.cancel
 class IosMedtrumDriverHost(
     private val aapsLogger: AAPSLogger,
     textResolver: TextResolver,
-    pumpSync: PumpSync,
+    private val pumpSync: PumpSync,
     detailedBolusInfoStorage: DetailedBolusInfoStorage,
     temporaryBasalStorage: TemporaryBasalStorage
 ) {
@@ -72,6 +73,31 @@ class IosMedtrumDriverHost(
         logger = logger
     )
 
+    /**
+     * Finding a pump and keeping its serial number. A screen drives this; until there is one, a
+     * test does. [openRadio] has to have run first, or Bluetooth is not on and the scan refuses
+     * to start.
+     */
+    val discovery = IosMedtrumDiscoverySession(transport.scanner, store, state)
+
+    /**
+     * Priming, activating and deactivating a patch. A screen drives this; until there is one, a
+     * test does. It is headless on purpose: it sends a command only when it is asked to.
+     *
+     * The basal profile is the one the loop expects the pump to run, the same source the Android
+     * `MedtrumService.startActivate` reads. When there is none, the patch session refuses to
+     * activate instead of inventing one.
+     */
+    val patch = MedtrumPatchSession(
+        session = driver.session,
+        basalProfile = {
+            pumpSync.expectedPumpState().profile?.getBasalValues()?.map { it.value to it.timeAsSeconds }
+        },
+        clock = clock,
+        logger = logger,
+        onStateChanged = driver::publishState
+    )
+
     init {
         // The transport reads central events; the central has to know where to send them.
         central.events = transport::onEvent
@@ -91,6 +117,7 @@ class IosMedtrumDriverHost(
      */
     fun shutdown() {
         aapsLogger.debug(LTag.PUMP, "IosMedtrumDriverHost: shutting down")
+        discovery.stop()
         driver.disconnect("plugin stopped")
         driver.close()
         scope.cancel()

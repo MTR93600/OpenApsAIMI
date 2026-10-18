@@ -515,9 +515,15 @@ class MedtrumSession(
     suspend fun prime(): Boolean =
         sendCommand(PrimePacket())
 
-    /** Mirrors `MedtrumService.startActivate` (profile bytes built by the caller). */
+    /**
+     * Mirrors `MedtrumService.startActivate` (profile bytes built by the caller).
+     *
+     * The clock has to be passed on: the answer carries the new patch, and the packet writes the
+     * patch start time with it. Android passes `System.currentTimeMillis()` there. Without it the
+     * packet default of 0 would date the new patch, and its cannula change event, to 1970.
+     */
     suspend fun activate(basalProfile: ByteArray): Boolean =
-        sendCommand(ActivatePacket(state, basalProfile, logger = logger))
+        sendCommand(ActivatePacket(state, basalProfile, timeUtil = timeUtil, nowMs = clock::nowMillis, logger = logger))
 
     /** Mirrors `MedtrumService.deactivatePatch`. */
     suspend fun deactivatePatch(): Boolean {

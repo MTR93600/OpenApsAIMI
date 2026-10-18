@@ -32,18 +32,20 @@ import dev.zacsweers.metro.IntKey as MetroIntKey
  *
  * The plugin declares [EnforcedState.Disabled], so the user cannot select it and the loop can never
  * reach it. That is not a placeholder, it is the honest answer to a missing piece: **an iPhone
- * cannot start a Medtrum patch.** On Android the user types the pump serial number in the driver's
- * settings and then runs a wizard that fills, primes and activates the patch. Neither exists here:
+ * cannot start a Medtrum patch.** On Android the user picks the pump in a Bluetooth scan step and
+ * then runs a wizard that fills, primes and activates the patch. Only the first half exists here:
  *
- * - there is no screen to enter the serial number, so `MedtrumSessionState.pumpSN` stays `0` and
- *   the transport can never match a pump in an advertisement;
+ * - the serial number can be learned over Bluetooth: [IosMedtrumDiscoverySession] lists the pumps
+ *   nearby and saves the serial of the one that is chosen, so `MedtrumSessionState.pumpSN` can
+ *   hold a real value and the transport can match that pump in an advertisement. What is missing
+ *   is a screen on top of it, so today only a test drives that session;
  * - nothing calls `MedtrumSession.prime` or `MedtrumSession.activate`, so a fresh patch stays dead;
  * - nothing calls `MedtrumSession.deactivatePatch`, so a patch could not be ended from here either.
  *
  * A pump the user can pick but that can never pair is the worst shape this could take: the loop
  * would look closed and no insulin would be delivered. So the plugin is listed, visibly locked, and
  * says why in its own description. Lifting the enforcement is one line, and the work it waits for
- * is a serial number input and a patch activation flow.
+ * is a pump picking screen and a patch activation flow.
  *
  * ## Keys and buckets
  *

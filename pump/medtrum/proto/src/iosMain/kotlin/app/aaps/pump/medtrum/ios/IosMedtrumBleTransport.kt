@@ -42,10 +42,13 @@ class IosMedtrumBleTransport(
 
         /** Medtrum company ID in BLE manufacturer data (0x4781). */
         const val MANUFACTURER_ID = 18305
-
-        /** iOS manufacturer payload = 2-byte LE company ID + company data. */
-        private const val COMPANY_ID_BYTES = 2
     }
+
+    /**
+     * Discovery: finds pumps nearby without knowing a serial first. It sits beside the shared
+     * interface, not inside it, exactly as the Android driver's own `scanner` property does.
+     */
+    val scanner: IosMedtrumPumpScanner = IosMedtrumPumpScanner(central) { scanning }
 
     private var callback: MedtrumBleCallback? = null
     private var targetSN: Long = 0L
@@ -119,16 +122,10 @@ class IosMedtrumBleTransport(
     }
 
     private fun onScanResult(event: BleCentralEvent.ScanResult) {
+        // Discovery reads the same advertisements. It only looks when it is scanning itself.
+        scanner.onScanResult(event)
         if (!scanning) return
-        val mfBytes = event.advertisementBytes ?: return
-        if (mfBytes.size < COMPANY_ID_BYTES + 6) return
-        val companyId = (mfBytes[0].toInt() and 0xFF) or ((mfBytes[1].toInt() and 0xFF) shl 8)
-        if (companyId != MANUFACTURER_ID) return
-        val sn = try {
-            ManufacturerData(mfBytes.copyOfRange(COMPANY_ID_BYTES, mfBytes.size)).getDeviceSN()
-        } catch (e: Exception) {
-            return
-        }
+        val sn = medtrumSerialFromAdvertisement(event.advertisementBytes) ?: return
         if (sn == targetSN) {
             scanning = false
             central.stopScan()

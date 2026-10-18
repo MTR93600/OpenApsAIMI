@@ -3,6 +3,7 @@ package app.aaps.pump.medtrum.ios
 import app.aaps.pump.medtrum.comm.enums.AlarmSetting
 import app.aaps.pump.medtrum.comm.enums.MedtrumPumpState
 import app.aaps.pump.medtrum.session.MedtrumSessionState
+import app.aaps.pump.medtrum.util.MedtrumDeviceName
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.Foundation.NSUserDefaults
 
@@ -45,9 +46,30 @@ class IosMedtrumStateStore(
         defaults.synchronize()
     }
 
+    /**
+     * Saves the serial of the pump the person picked in the scan step.
+     *
+     * It is kept as hex text, which is what the Android driver keeps under
+     * `MedtrumStringNonKey.SnInput`, so the two platforms store the same thing and read back the
+     * same number. Use [MedtrumDeviceName.serialHex] to make the text.
+     */
+    fun savePumpSerial(serialHex: String) {
+        defaults.setObject(serialHex, forKey = key("snInput"))
+        defaults.synchronize()
+    }
+
+    /** The saved serial, or null when none was saved or the saved text is not a usable serial. */
+    fun loadPumpSerial(): Long? = MedtrumDeviceName.serialFromHex(defaults.stringForKey(key("snInput")))
+
     fun load(state: MedtrumSessionState) {
-        if (defaults.objectForKey(key("pumpSN")) == null) return // nothing persisted yet
-        state.pumpSN = defaults.integerForKey(key("pumpSN"))
+        // The serial can be there on its own: a pump was picked in the scan step but no patch has
+        // run yet, so nothing else has been saved.
+        val serial = loadPumpSerial()
+        if (defaults.objectForKey(key("pumpSN")) == null) {
+            if (serial != null) state.pumpSN = serial
+            return // nothing else persisted yet
+        }
+        state.pumpSN = serial ?: defaults.integerForKey(key("pumpSN"))
         state.patchId = defaults.integerForKey(key("patchId"))
         state.patchSessionToken = defaults.integerForKey(key("patchSessionToken"))
         state.patchStartTime = defaults.integerForKey(key("patchStartTime"))
@@ -79,7 +101,7 @@ class IosMedtrumStateStore(
 
     fun clear() {
         listOf(
-            "pumpSN", "patchId", "patchSessionToken", "patchStartTime",
+            "snInput", "pumpSN", "patchId", "patchSessionToken", "patchStartTime",
             "currentSequenceNumber", "syncedSequenceNumber", "pumpState", "desiredAlarmSetting",
             "desiredHourlyMaxInsulin", "desiredDailyMaxInsulin", "actualBasalProfile",
             "reservoir", "lastBolusTime", "lastBolusAmount",

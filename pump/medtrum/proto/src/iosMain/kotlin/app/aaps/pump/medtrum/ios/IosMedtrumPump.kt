@@ -76,7 +76,12 @@ class IosMedtrumPump(
         logger = logger,
     ).also { state.recordSync = it }
 
-    private val session = MedtrumSession(
+    /**
+     * The link and the command flow. The driver owns it; `IosMedtrumDriverHost` also hands it to
+     * the patch session, so that priming and activation go through the same connection and the
+     * same state as every other command.
+     */
+    internal val session = MedtrumSession(
         transport = transport,
         state = state,
         recordSync = history,
@@ -174,8 +179,10 @@ class IosMedtrumPump(
         reservoirFlow.value = PumpInsulin(state.reservoir)
         if (state.pumpState != publishedPumpState) {
             publishedPumpState = state.pumpState
-            store?.save(state)
+            // Handle the new state first: it resets the patch parameters and the fake temp basal,
+            // and those changes have to reach the store too.
             onPumpStateChanged(state.pumpState)
+            store?.save(state)
         }
     }
 
@@ -197,6 +204,12 @@ class IosMedtrumPump(
             MedtrumPumpState.PATCH_FAULT2, MedtrumPumpState.BASE_FAULT,
             MedtrumPumpState.BATTERY_OUT, MedtrumPumpState.NO_CALIBRATION -> true
             else -> false
+        }
+        if (newState == MedtrumPumpState.NONE || newState == MedtrumPumpState.STOPPED) {
+            // Android `handlePumpStateUpdate`: with no patch left, drop the alarms and the
+            // sequence numbers, so the history of the next patch can be synced from its start.
+            state.clearAlarmState()
+            state.resetPatchParameters()
         }
         if (needsFakeTbr && history.setFakeTbrIfNotSet()) {
             state.lastBasalType = BasalType.NONE
