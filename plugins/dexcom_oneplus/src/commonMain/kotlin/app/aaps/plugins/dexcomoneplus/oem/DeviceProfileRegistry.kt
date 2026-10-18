@@ -1,10 +1,9 @@
 package app.aaps.plugins.dexcomoneplus.oem
 
-import android.os.Build
 import app.aaps.plugins.dexcomoneplus.OnePlusLog
 
 /**
- * Resolves OEM BLE defaults from [Build.MANUFACTURER] / [Build.MODEL].
+ * Resolves OEM BLE defaults from [onePlusDeviceManufacturer] / [onePlusDeviceModel].
  * Optional [override] supports future debug pref wiring (A8/A9) without UI here.
  */
 object DeviceProfileRegistry {
@@ -123,8 +122,8 @@ object DeviceProfileRegistry {
      * Always logs [LOG_MARKER] for logcat / QA grepping.
      */
     fun resolve(
-        manufacturer: String = Build.MANUFACTURER,
-        model: String = Build.MODEL,
+        manufacturer: String = onePlusDeviceManufacturer(),
+        model: String = onePlusDeviceModel(),
         override: OemProfileId? = null,
     ): OemDeviceProfile {
         val profile = when {
@@ -156,7 +155,7 @@ object DeviceProfileRegistry {
         return m.contains("samsung")
     }
 
-    /** `Build.MANUFACTURER` stays "motorola" on these phones, whoever owns the brand. */
+    /** The reported manufacturer stays "motorola" on these phones, whoever owns the brand. */
     private fun isMotorola(manufacturer: String): Boolean {
         val m = manufacturer.lowercase()
         return m.contains("motorola")

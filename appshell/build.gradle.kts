@@ -32,13 +32,17 @@ plugins {
  * `:plugins:sync` is multiplatform now too - an older note here said otherwise.
  */
 /**
- * Feature plugins that are Android only and have no iOS variant to resolve.
+ * Feature plugins this shell reaches from Android only.
  *
- * They are the fork's native CGM drivers, built on Android Bluetooth and NFC, so there is nothing to
- * build for Apple targets. Listing them in `commonMain` made every iOS compilation of `:appshell`
- * (and of `:ios:shell` behind it) fail at dependency resolution, before a single source file was
- * read: Gradle cannot choose an `ios_arm64` variant of a plain Android library. They belong to
- * `androidMain`, which is the only place that can use them.
+ * They are the fork's native CGM drivers, built on Android Bluetooth and NFC. Listing an Android
+ * only library in `commonMain` made every iOS compilation of `:appshell` (and of `:ios:shell`
+ * behind it) fail at dependency resolution, before a single source file was read: Gradle cannot
+ * choose an `ios_arm64` variant of a plain Android library.
+ *
+ * `:plugins:dexcom_oneplus` and `:plugins:libre3` are multiplatform now and do build for Apple
+ * targets, but what reaches them from here is still Android only - the plugin wrappers in
+ * `:plugins:source/androidMain` - so they stay in this list until an iOS caller exists.
+ * `:plugins:libkeks` is a plain Android library and has no Apple variant at all.
  */
 val ANDROID_ONLY_PLUGINS = listOf(
     ":plugins:dexcom_oneplus",

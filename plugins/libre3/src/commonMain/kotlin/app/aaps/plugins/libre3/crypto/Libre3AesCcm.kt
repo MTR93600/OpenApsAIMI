@@ -1,8 +1,5 @@
 package app.aaps.plugins.libre3.crypto
 
-import javax.crypto.Cipher
-import javax.crypto.spec.SecretKeySpec
-
 /**
  * One AES block, 16 bytes in and 16 bytes out.
  *
@@ -76,17 +73,15 @@ object Libre3AesCcm {
         return plaintext
     }
 
-    /** The ordinary AES of the phone, used for the glucose data plane only. */
+    /**
+     * The ordinary AES of the phone, used for the glucose data plane only.
+     *
+     * The block maker itself is the one thing here that each platform has to supply, see
+     * [libre3StandardAesBlock]. Everything above - the CCM rule, the nonce, the tag - is shared.
+     */
     fun standardAes(key: ByteArray): Libre3AesBlock {
         require(key.size == 16) { "AES-128 needs a 16 byte key" }
-        val keySpec = SecretKeySpec(key, "AES")
-        return Libre3AesBlock { input ->
-            require(input.size == BLOCK_SIZE) { "an AES block is 16 bytes" }
-            // No padding, one block at a time: this is the raw block maker that CCM needs.
-            val cipher = Cipher.getInstance("AES/ECB/NoPadding")
-            cipher.init(Cipher.ENCRYPT_MODE, keySpec)
-            cipher.doFinal(input)
-        }
+        return libre3StandardAesBlock(key)
     }
 
     private fun checkParameters(nonce: ByteArray, tagLength: Int, plaintextLength: Int) {

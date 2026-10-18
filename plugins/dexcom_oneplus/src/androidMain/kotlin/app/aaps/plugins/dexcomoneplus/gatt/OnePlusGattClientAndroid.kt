@@ -254,12 +254,12 @@ class OnePlusGattClientAndroid(
             if (value == null) return
             val copy = value.copyOf()
             when (uuid) {
-                OnePlusBluetoothUuids.Authentication ->
+                OnePlusGattUuids.Authentication ->
                     keksQueue.offer(TaggedKeksNotify(OnePlusKeksNotifySource.AUTHENTICATION, copy))
-                OnePlusBluetoothUuids.ExtraData ->
+                OnePlusGattUuids.ExtraData ->
                     keksQueue.offer(TaggedKeksNotify(OnePlusKeksNotifySource.EXTRA_DATA, copy))
-                OnePlusBluetoothUuids.Control -> controlQueue.offer(copy)
-                OnePlusBluetoothUuids.ProbablyBackfill -> backfillQueue.offer(copy)
+                OnePlusGattUuids.Control -> controlQueue.offer(copy)
+                OnePlusGattUuids.ProbablyBackfill -> backfillQueue.offer(copy)
             }
         }
     }
@@ -712,7 +712,7 @@ class OnePlusGattClientAndroid(
             pendingOpLatch.reset()
             pendingOpStatus.set(BluetoothGatt.GATT_SUCCESS)
             g.setCharacteristicNotification(characteristic, false)
-            val cccd = characteristic.getDescriptor(OnePlusBluetoothUuids.CharacteristicUpdateNotification)
+            val cccd = characteristic.getDescriptor(OnePlusGattUuids.CharacteristicUpdateNotification)
                 ?: return
             val disable = BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE
             val submitted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -766,15 +766,15 @@ class OnePlusGattClientAndroid(
 
     private fun beginCccdSetup(g: BluetoothGatt) {
         if (!isCurrentGatt(g)) return
-        val service = g.getService(OnePlusBluetoothUuids.CgmService)
+        val service = g.getService(OnePlusGattUuids.CgmService)
         if (service == null) {
             readyLatch.fail("CGM service missing")
             return
         }
-        authChar = service.getCharacteristic(OnePlusBluetoothUuids.Authentication)
-        extraChar = service.getCharacteristic(OnePlusBluetoothUuids.ExtraData)
-        controlChar = service.getCharacteristic(OnePlusBluetoothUuids.Control)
-        backfillChar = service.getCharacteristic(OnePlusBluetoothUuids.ProbablyBackfill)
+        authChar = service.getCharacteristic(OnePlusGattUuids.Authentication)
+        extraChar = service.getCharacteristic(OnePlusGattUuids.ExtraData)
+        controlChar = service.getCharacteristic(OnePlusGattUuids.Control)
+        backfillChar = service.getCharacteristic(OnePlusGattUuids.ProbablyBackfill)
         if (authChar == null) {
             readyLatch.fail("Authentication characteristic missing")
             return
@@ -848,7 +848,7 @@ class OnePlusGattClientAndroid(
         indicate: Boolean,
     ): Boolean {
         g.setCharacteristicNotification(characteristic, true)
-        val cccd = characteristic.getDescriptor(OnePlusBluetoothUuids.CharacteristicUpdateNotification)
+        val cccd = characteristic.getDescriptor(OnePlusGattUuids.CharacteristicUpdateNotification)
             ?: return false
         val enable = if (indicate) {
             BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
@@ -875,7 +875,7 @@ class OnePlusGattClientAndroid(
             pendingOpLatch.reset()
             pendingOpStatus.set(BluetoothGatt.GATT_SUCCESS)
             g.setCharacteristicNotification(characteristic, true)
-            val cccd = characteristic.getDescriptor(OnePlusBluetoothUuids.CharacteristicUpdateNotification)
+            val cccd = characteristic.getDescriptor(OnePlusGattUuids.CharacteristicUpdateNotification)
                 ?: error("ONEPLUS_GATT: CCCD missing")
             val enable = if (indicate) {
                 BluetoothGattDescriptor.ENABLE_INDICATION_VALUE

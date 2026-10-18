@@ -1,5 +1,7 @@
 package app.aaps.plugins.dexcomoneplus.scan
 
+import kotlin.concurrent.Volatile
+
 /**
  * LE advertisement hit for ONE+ / G7-family transmitters.
  */
@@ -9,7 +11,8 @@ data class OnePlusScanResult(
     val rssi: Int,
 ) {
     /**
-     * `SystemClock.elapsedRealtime()` when this ADV was last seen, for UI→driver handoff freshness.
+     * The platform's monotonic clock in milliseconds when this ADV was last seen, for UI→driver
+     * handoff freshness. On Android that is `SystemClock.elapsedRealtime()`.
      * Intentionally **not** a constructor property: excluded from `equals`/`hashCode`/`copy` so it
      * never affects list keys or the scanner's field-diff dedup.
      */

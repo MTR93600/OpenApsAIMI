@@ -1,5 +1,8 @@
 package app.aaps.plugins.libre3.parse
 
+import app.aaps.core.interfaces.concurrent.AapsLock
+import app.aaps.core.interfaces.concurrent.withLock
+
 /**
  * Joins the two pieces of a glucose message before anything tries to read it.
  *
@@ -17,7 +20,8 @@ package app.aaps.plugins.libre3.parse
  */
 class Libre3GlucoseFrameAssembler {
 
-    private val lock = Any()
+    /** Guards [heldPrefix]. An [AapsLock] rather than `synchronized`, which is JVM only. */
+    private val lock = AapsLock()
     private var heldPrefix: ByteArray? = null
 
     /**
@@ -26,7 +30,7 @@ class Libre3GlucoseFrameAssembler {
      */
     fun feed(fragment: ByteArray, isGlucoseChannel: Boolean): ByteArray? {
         if (!isGlucoseChannel) return fragment
-        synchronized(lock) {
+        lock.withLock {
             heldPrefix?.let { prefix ->
                 heldPrefix = null
                 return prefix + fragment
@@ -41,11 +45,11 @@ class Libre3GlucoseFrameAssembler {
 
     /** Throws away a piece that is waiting. Called whenever a link drops. */
     fun reset() {
-        synchronized(lock) { heldPrefix = null }
+        lock.withLock { heldPrefix = null }
     }
 
     /** True while a first piece is being held. Used by the log and by tests. */
-    val isWaitingForSecondPiece: Boolean get() = synchronized(lock) { heldPrefix != null }
+    val isWaitingForSecondPiece: Boolean get() = lock.withLock { heldPrefix != null }
 
     companion object {
 

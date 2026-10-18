@@ -1,8 +1,5 @@
 package app.aaps.plugins.dexcomoneplus.parse
 
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-
 /**
  * Control Calibrate request (opcode 0x34) — hands a fingerstick to the sensor's own algorithm.
  *
@@ -36,7 +33,7 @@ object OnePlusCalibrateTx {
     fun build(glucoseMgdl: Int, dexTimeSeconds: Int): ByteArray? {
         if (glucoseMgdl < MIN_GLUCOSE_MGDL || glucoseMgdl > MAX_GLUCOSE_MGDL) return null
         if (dexTimeSeconds < 0) return null
-        val buf = ByteBuffer.allocate(PACKET_LENGTH).order(ByteOrder.LITTLE_ENDIAN)
+        val buf = OnePlusByteWriter(PACKET_LENGTH)
         buf.put(OPCODE)
         buf.putShort(glucoseMgdl.toShort())
         buf.putInt(dexTimeSeconds)

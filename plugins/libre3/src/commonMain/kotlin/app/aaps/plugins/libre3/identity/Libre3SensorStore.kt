@@ -1,11 +1,14 @@
 package app.aaps.plugins.libre3.identity
 
-import android.content.Context
+import app.aaps.core.interfaces.concurrent.AapsLock
+import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.plugins.libre3.Libre3Log
 import app.aaps.plugins.libre3.Libre3LogMarkers
 import app.aaps.plugins.libre3.nfc.Libre3NfcCommands
-import java.util.Base64
-import java.util.UUID
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 /**
  * The small part of the store that the NFC step needs.
@@ -75,39 +78,39 @@ interface Libre3SessionStore {
 /**
  * Keeps the sensor identity, the session keys and the ingest high-water mark on disk.
  *
- * A private SharedPreferences file is used, not the exportable AAPS settings, so the PIN and the
- * keys never leave the phone in a settings export.
+ * A private key-value file is used, not the exportable AAPS settings, so the PIN and the keys
+ * never leave the phone in a settings export.
  *
- * The writes that the Bluetooth work depends on use `commit`, not `apply`. The rule is that the PIN
- * must really be on disk before any connect starts, so a crash in the middle can never leave a
- * sensor that was taken over but whose PIN is lost.
+ * The writes that the Bluetooth work depends on use [Libre3SensorPrefs.editAndWait], not
+ * [Libre3SensorPrefs.edit]. The rule is that the PIN must really be on disk before any connect
+ * starts, so a crash in the middle can never leave a sensor that was taken over but whose PIN is
+ * lost.
  *
- * @param namespace which slot this store belongs to. null or blank is the production slot and maps
- *   to the file every install already has, so nothing is copied and nothing can be half copied. A
- *   name gives a second, separate file, used by the pre-soak slot. A pre-soak write must never be
- *   able to reach the production keys, because `saveIdentityAndWait` drops the pairing key when the
- *   serial changes and a running sensor refuses a fresh first pairing.
+ * Which slot this store belongs to is decided by which file it is given, see [prefsFileName]. A
+ * pre-soak write must never be able to reach the production keys, because [saveIdentityAndWait]
+ * drops the pairing key when the serial changes and a running sensor refuses a fresh first pairing.
  */
+@OptIn(ExperimentalEncodingApi::class, ExperimentalUuidApi::class)
 class Libre3SensorStore(
-    context: Context,
-    namespace: String? = null,
-) : Libre3IdentityStore, Libre3SessionStore {
-
-    private val appContext = context.applicationContext
-
-    private val prefsName = if (namespace.isNullOrBlank()) PREFS_NAME else "${PREFS_NAME}_$namespace"
-
-    private val prefs = appContext.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
-
+    /** This slot's own file, named by [prefsFileName]. */
+    private val prefs: Libre3SensorPrefs,
     /**
-     * The phone's own identity, always in the production file.
+     * The phone's own identity, always the production file.
      *
      * The receiver id is the phone's identity, not a sensor's. A second file with a second id would
      * give one phone two identities, and a sensor binds itself to the receiver that activated it.
+     * For the production slot this is the same object as [prefs].
      */
-    private val identityPrefs =
-        if (namespace.isNullOrBlank()) prefs
-        else appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val identityPrefs: Libre3SensorPrefs = prefs,
+    /** Only for log lines, so a bug report says which file was written. */
+    private val prefsName: String = PREFS_NAME,
+) : Libre3IdentityStore, Libre3SessionStore {
+
+    /**
+     * Guards the writes that used to be `@Synchronized`, which is JVM only. Reentrant the same way
+     * the object monitor was, so a guarded method may still call another one.
+     */
+    private val lock = AapsLock()
 
     /**
      * Identifier this phone shows to sensors, kept for the whole install.
@@ -119,16 +122,15 @@ class Libre3SensorStore(
      * text, so this value lives in the app private settings file instead. It is not a secret. It
      * only has to be stable and different from other installs.
      */
-    @Synchronized
-    override fun receiverId(): Int {
-        val storedUuid = identityPrefs.getString(KEY_APP_UUID, null)
+    override fun receiverId(): Int = lock.withLock {
+        val storedUuid = identityPrefs.getString(KEY_APP_UUID)
         if (storedUuid != null) return identityPrefs.getInt(KEY_RECEIVER_ID, Libre3NfcCommands.receiverIdFrom(storedUuid))
-        val uuid = UUID.randomUUID().toString()
+        val uuid = Uuid.random().toString()
         val receiverId = Libre3NfcCommands.receiverIdFrom(uuid)
-        val written = identityPrefs.edit()
-            .putString(KEY_APP_UUID, uuid)
-            .putInt(KEY_RECEIVER_ID, receiverId)
-            .commit()
+        val written = identityPrefs.editAndWait {
+            putString(KEY_APP_UUID, uuid)
+            putInt(KEY_RECEIVER_ID, receiverId)
+        }
         // Sending an id that was not stored would bind the sensor to a number this phone can never
         // build again, and the sensor would stop answering us.
         check(written) { "the receiver id of this phone could not be stored" }
@@ -142,29 +144,29 @@ class Libre3SensorStore(
      * @return true when the write really reached the disk. The caller must not start Bluetooth when
      *   this is false.
      */
-    @Synchronized
-    override fun saveIdentityAndWait(identity: Libre3SensorIdentity): Boolean {
-        val serialChanged = identity.serialNumber != prefs.getString(KEY_SERIAL, null)
-        val editor = prefs.edit()
-            .putString(KEY_SERIAL, identity.serialNumber)
-            .putString(KEY_MAC, identity.bleAddress)
-            .putString(KEY_PIN, encode(identity.blePin))
-            .putInt(KEY_RECEIVER_ID, identity.receiverId)
-            .putInt(KEY_GENERATION, identity.generation)
-            .putInt(KEY_WARMUP_MINUTES, identity.warmupMinutes)
-            .putInt(KEY_WEAR_MINUTES, identity.wearDurationMinutes)
-            .putLong(KEY_ACTIVATED_AT, identity.activatedAtMs)
-        if (serialChanged) {
-            // A different sensor starts its own life counter and needs its own keys. Keeping the old
-            // ones would either block every new reading as "already seen" or send a stale key. The
-            // sensor change mark goes too, so a sensor that is put back on later is written again.
-            editor.remove(KEY_LAST_LIFE_COUNT)
-                .remove(KEY_PHASE5_RAW_KEY)
-                .remove(KEY_K_ENC)
-                .remove(KEY_IV_ENC)
-                .remove(KEY_SENSOR_CHANGE_SERIAL)
+    override fun saveIdentityAndWait(identity: Libre3SensorIdentity): Boolean = lock.withLock {
+        val serialChanged = identity.serialNumber != prefs.getString(KEY_SERIAL)
+        val written = prefs.editAndWait {
+            putString(KEY_SERIAL, identity.serialNumber)
+            putString(KEY_MAC, identity.bleAddress)
+            putString(KEY_PIN, encode(identity.blePin))
+            putInt(KEY_RECEIVER_ID, identity.receiverId)
+            putInt(KEY_GENERATION, identity.generation)
+            putInt(KEY_WARMUP_MINUTES, identity.warmupMinutes)
+            putInt(KEY_WEAR_MINUTES, identity.wearDurationMinutes)
+            putLong(KEY_ACTIVATED_AT, identity.activatedAtMs)
+            if (serialChanged) {
+                // A different sensor starts its own life counter and needs its own keys. Keeping the
+                // old ones would either block every new reading as "already seen" or send a stale
+                // key. The sensor change mark goes too, so a sensor that is put back on later is
+                // written again.
+                remove(KEY_LAST_LIFE_COUNT)
+                remove(KEY_PHASE5_RAW_KEY)
+                remove(KEY_K_ENC)
+                remove(KEY_IV_ENC)
+                remove(KEY_SENSOR_CHANGE_SERIAL)
+            }
         }
-        val written = editor.commit()
         Libre3Log.i(
             "${Libre3LogMarkers.NFC}: sensor stored serialChanged=$serialChanged written=$written",
         )
@@ -173,9 +175,9 @@ class Libre3SensorStore(
 
     /** The stored sensor, or null when no sensor was ever scanned. */
     override fun loadIdentity(): Libre3SensorIdentity? {
-        val serial = prefs.getString(KEY_SERIAL, null)?.takeIf { it.isNotBlank() } ?: return null
-        val mac = prefs.getString(KEY_MAC, null)?.takeIf { it.isNotBlank() } ?: return null
-        val pin = decode(prefs.getString(KEY_PIN, null))?.takeIf { it.size == PIN_SIZE } ?: return null
+        val serial = prefs.getString(KEY_SERIAL)?.takeIf { it.isNotBlank() } ?: return null
+        val mac = prefs.getString(KEY_MAC)?.takeIf { it.isNotBlank() } ?: return null
+        val pin = decode(prefs.getString(KEY_PIN))?.takeIf { it.size == PIN_SIZE } ?: return null
         return Libre3SensorIdentity(
             serialNumber = serial,
             bleAddress = mac,
@@ -194,31 +196,30 @@ class Libre3SensorStore(
     /** Session keys of the stored sensor. All three parts may be null. */
     override fun loadSessionKeys(): Libre3SessionKeys =
         Libre3SessionKeys(
-            phase5RawKey = decode(prefs.getString(KEY_PHASE5_RAW_KEY, null))?.takeIf { it.size == PHASE5_KEY_SIZE },
-            kEnc = decode(prefs.getString(KEY_K_ENC, null))?.takeIf { it.size == K_ENC_SIZE },
-            ivEnc = decode(prefs.getString(KEY_IV_ENC, null))?.takeIf { it.size == IV_ENC_SIZE },
+            phase5RawKey = decode(prefs.getString(KEY_PHASE5_RAW_KEY))?.takeIf { it.size == PHASE5_KEY_SIZE },
+            kEnc = decode(prefs.getString(KEY_K_ENC))?.takeIf { it.size == K_ENC_SIZE },
+            ivEnc = decode(prefs.getString(KEY_IV_ENC))?.takeIf { it.size == IV_ENC_SIZE },
         )
 
     /**
      * Stores the key of the first pairing. It is written once per sensor and then reused by every
      * reconnect, so it must survive the app being killed.
      */
-    @Synchronized
-    override fun savePhase5RawKeyAndWait(phase5RawKey: ByteArray): Boolean =
-        prefs.edit().putString(KEY_PHASE5_RAW_KEY, encode(phase5RawKey)).commit()
+    override fun savePhase5RawKeyAndWait(phase5RawKey: ByteArray): Boolean = lock.withLock {
+        prefs.editAndWait { putString(KEY_PHASE5_RAW_KEY, encode(phase5RawKey)) }
+    }
 
     /** Drops the pairing key of a pairing the sensor refused. */
-    @Synchronized
-    override fun clearPhase5RawKeyAndWait(): Boolean =
-        prefs.edit().remove(KEY_PHASE5_RAW_KEY).commit()
+    override fun clearPhase5RawKeyAndWait(): Boolean = lock.withLock {
+        prefs.editAndWait { remove(KEY_PHASE5_RAW_KEY) }
+    }
 
     /** Stores the keys of the current session. A new handshake replaces them. */
-    @Synchronized
-    override fun saveSessionKeys(kEnc: ByteArray, ivEnc: ByteArray) {
-        prefs.edit()
-            .putString(KEY_K_ENC, encode(kEnc))
-            .putString(KEY_IV_ENC, encode(ivEnc))
-            .apply()
+    override fun saveSessionKeys(kEnc: ByteArray, ivEnc: ByteArray) = lock.withLock {
+        prefs.edit {
+            putString(KEY_K_ENC, encode(kEnc))
+            putString(KEY_IV_ENC, encode(ivEnc))
+        }
     }
 
     /**
@@ -231,12 +232,11 @@ class Libre3SensorStore(
      *
      * @return the wear time to use from now on.
      */
-    @Synchronized
-    fun extendWearIfStillAlive(lifeCountMinutes: Int): Int {
+    fun extendWearIfStillAlive(lifeCountMinutes: Int): Int = lock.withLock {
         val stored = prefs.getInt(KEY_WEAR_MINUTES, 0)
         if (stored <= 0 || lifeCountMinutes < stored) return stored
         val extended = lifeCountMinutes + WEAR_EXTENSION_MINUTES
-        prefs.edit().putInt(KEY_WEAR_MINUTES, extended).commit()
+        prefs.editAndWait { putInt(KEY_WEAR_MINUTES, extended) }
         Libre3Log.i(
             "${Libre3LogMarkers.SESSION}: the sensor is still sending past its stored end, " +
                 "wear time moved from $stored to $extended minutes",
@@ -254,7 +254,7 @@ class Libre3SensorStore(
      * would let the same reading in again, and the loop treats a repeated reading as an error.
      */
     fun saveLastLifeCount(lifeCount: Int) {
-        prefs.edit().putInt(KEY_LAST_LIFE_COUNT, lifeCount).commit()
+        prefs.editAndWait { putInt(KEY_LAST_LIFE_COUNT, lifeCount) }
     }
 
     /**
@@ -262,7 +262,7 @@ class Libre3SensorStore(
      * was written yet. It is what keeps that event unique per sensor across restarts.
      */
     fun loadSensorChangeLoggedSerial(): String? =
-        prefs.getString(KEY_SENSOR_CHANGE_SERIAL, null)?.takeIf { it.isNotBlank() }
+        prefs.getString(KEY_SENSOR_CHANGE_SERIAL)?.takeIf { it.isNotBlank() }
 
     /**
      * Remembers that the start of [serialNumber] has been written as a sensor change.
@@ -271,30 +271,30 @@ class Libre3SensorStore(
      * itself is already in the database and a second write of the same moment is refused there, so
      * a lost mark can only cost one repeated and harmless insert.
      */
-    @Synchronized
     fun saveSensorChangeLoggedSerial(serialNumber: String) {
         if (serialNumber.isBlank()) return
-        prefs.edit().putString(KEY_SENSOR_CHANGE_SERIAL, serialNumber).apply()
+        lock.withLock { prefs.edit { putString(KEY_SENSOR_CHANGE_SERIAL, serialNumber) } }
     }
 
     /** Forgets the sensor and its keys. Used when the user starts a different sensor. */
-    @Synchronized
     fun clear() {
         // The receiver id and its unique text stay, because this phone keeps its identity.
-        prefs.edit()
-            .remove(KEY_SERIAL)
-            .remove(KEY_MAC)
-            .remove(KEY_PIN)
-            .remove(KEY_GENERATION)
-            .remove(KEY_WARMUP_MINUTES)
-            .remove(KEY_WEAR_MINUTES)
-            .remove(KEY_ACTIVATED_AT)
-            .remove(KEY_LAST_LIFE_COUNT)
-            .remove(KEY_PHASE5_RAW_KEY)
-            .remove(KEY_K_ENC)
-            .remove(KEY_IV_ENC)
-            .remove(KEY_SENSOR_CHANGE_SERIAL)
-            .commit()
+        lock.withLock {
+            prefs.editAndWait {
+                remove(KEY_SERIAL)
+                remove(KEY_MAC)
+                remove(KEY_PIN)
+                remove(KEY_GENERATION)
+                remove(KEY_WARMUP_MINUTES)
+                remove(KEY_WEAR_MINUTES)
+                remove(KEY_ACTIVATED_AT)
+                remove(KEY_LAST_LIFE_COUNT)
+                remove(KEY_PHASE5_RAW_KEY)
+                remove(KEY_K_ENC)
+                remove(KEY_IV_ENC)
+                remove(KEY_SENSOR_CHANGE_SERIAL)
+            }
+        }
     }
 
     /**
@@ -306,19 +306,19 @@ class Libre3SensorStore(
      *
      * @return true only when the change really reached the disk.
      */
-    @Synchronized
-    fun clearAll(): Boolean = prefs.edit().clear().commit()
+    fun clearAll(): Boolean = lock.withLock { prefs.editAndWait { clear() } }
 
     /**
      * Keeps this slot's collect-only progress, so a restart does not send a warming pre-soak back to
      * "no sensor".
      */
-    @Synchronized
     fun saveSlotProgress(present: Boolean, validReadingCount: Int) {
-        prefs.edit()
-            .putBoolean(KEY_SLOT_PRESENT, present)
-            .putInt(KEY_SLOT_VALID_READINGS, validReadingCount)
-            .commit()
+        lock.withLock {
+            prefs.editAndWait {
+                putBoolean(KEY_SLOT_PRESENT, present)
+                putInt(KEY_SLOT_VALID_READINGS, validReadingCount)
+            }
+        }
     }
 
     /** True when this slot holds a sensor the plugin should pick up again after a restart. */
@@ -333,18 +333,16 @@ class Libre3SensorStore(
      * It is a latch and not a live reading of the driver phase, because a healthy sensor reconnects
      * for its whole life and a reconnect must not look like a new warm-up.
      */
-    @Synchronized
     fun saveSlotWarmupDone(done: Boolean) {
-        prefs.edit().putBoolean(KEY_SLOT_WARMUP_DONE, done).commit()
+        lock.withLock { prefs.editAndWait { putBoolean(KEY_SLOT_WARMUP_DONE, done) } }
     }
 
     /** True once this slot's sensor has left warm-up. */
     fun loadSlotWarmupDone(): Boolean = prefs.getBoolean(KEY_SLOT_WARMUP_DONE, false)
 
     /** Time this slot's sensor was really activated, in epoch milliseconds. */
-    @Synchronized
     fun saveSlotActivatedAt(epochMs: Long) {
-        prefs.edit().putLong(KEY_SLOT_ACTIVATED_AT, epochMs).commit()
+        lock.withLock { prefs.editAndWait { putLong(KEY_SLOT_ACTIVATED_AT, epochMs) } }
     }
 
     /** Time this slot's sensor was really activated, or 0 when it is not known. */
@@ -371,22 +369,21 @@ class Libre3SensorStore(
      *   sensor taken over in mid life does not get an empty value where a key is expected.
      * @return true only when the write really reached the disk.
      */
-    @Synchronized
-    fun adopt(identity: Libre3SensorIdentity, keys: Libre3SessionKeys): Boolean {
-        val editor = prefs.edit()
-            .putString(KEY_SERIAL, identity.serialNumber)
-            .putString(KEY_MAC, identity.bleAddress)
-            .putString(KEY_PIN, encode(identity.blePin))
-            .putInt(KEY_GENERATION, identity.generation)
-            .putInt(KEY_WARMUP_MINUTES, identity.warmupMinutes)
-            .putInt(KEY_WEAR_MINUTES, identity.wearDurationMinutes)
-            .putLong(KEY_ACTIVATED_AT, identity.activatedAtMs)
-            .remove(KEY_LAST_LIFE_COUNT)
-            .remove(KEY_SENSOR_CHANGE_SERIAL)
-        keys.phase5RawKey?.let { editor.putString(KEY_PHASE5_RAW_KEY, encode(it)) }
-        keys.kEnc?.let { editor.putString(KEY_K_ENC, encode(it)) }
-        keys.ivEnc?.let { editor.putString(KEY_IV_ENC, encode(it)) }
-        val written = editor.commit()
+    fun adopt(identity: Libre3SensorIdentity, keys: Libre3SessionKeys): Boolean = lock.withLock {
+        val written = prefs.editAndWait {
+            putString(KEY_SERIAL, identity.serialNumber)
+            putString(KEY_MAC, identity.bleAddress)
+            putString(KEY_PIN, encode(identity.blePin))
+            putInt(KEY_GENERATION, identity.generation)
+            putInt(KEY_WARMUP_MINUTES, identity.warmupMinutes)
+            putInt(KEY_WEAR_MINUTES, identity.wearDurationMinutes)
+            putLong(KEY_ACTIVATED_AT, identity.activatedAtMs)
+            remove(KEY_LAST_LIFE_COUNT)
+            remove(KEY_SENSOR_CHANGE_SERIAL)
+            keys.phase5RawKey?.let { putString(KEY_PHASE5_RAW_KEY, encode(it)) }
+            keys.kEnc?.let { putString(KEY_K_ENC, encode(it)) }
+            keys.ivEnc?.let { putString(KEY_IV_ENC, encode(it)) }
+        }
         Libre3Log.i(
             "${Libre3LogMarkers.SESSION}: sensor taken over into $prefsName, " +
                 "pairingKey=${keys.phase5RawKey != null} written=$written",
@@ -394,14 +391,14 @@ class Libre3SensorStore(
         return written
     }
 
-    // java.util.Base64 rather than android.util.Base64: same result, and it also runs in a plain
-    // unit test, so the "write and wait" rule can be checked without a device.
-    private fun encode(value: ByteArray): String = Base64.getEncoder().encodeToString(value)
+    // The shared Base64: the same alphabet, padded, with no line breaks, so the text already on
+    // the disk reads back byte for byte.
+    private fun encode(value: ByteArray): String = Base64.encode(value)
 
     private fun decode(value: String?): ByteArray? =
         value?.let {
             try {
-                Base64.getDecoder().decode(it)
+                Base64.decode(it)
             } catch (_: Throwable) {
                 null
             }
@@ -410,6 +407,16 @@ class Libre3SensorStore(
     companion object {
 
         private const val PREFS_NAME = "libre3_sensor_store"
+
+        /**
+         * The file name of one slot.
+         *
+         * @param namespace null or blank is the production slot and maps to the file every install
+         *   already has, so nothing is copied and nothing can be half copied. A name gives a
+         *   second, separate file, used by the pre-soak slot.
+         */
+        fun prefsFileName(namespace: String? = null): String =
+            if (namespace.isNullOrBlank()) PREFS_NAME else "${PREFS_NAME}_$namespace"
 
         private const val KEY_APP_UUID = "app_uuid"
         private const val KEY_RECEIVER_ID = "receiver_id"

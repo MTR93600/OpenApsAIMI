@@ -1,8 +1,5 @@
 package app.aaps.plugins.dexcomoneplus.parse
 
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-
 /**
  * Control SessionStop response (opcode 0x29).
  *
@@ -28,13 +25,13 @@ data class OnePlusSessionStopRx(
             if (packet.size != PACKET_LENGTH) return null
             if (packet[0] != OPCODE) return null
             if (!OnePlusFastCrc16.check(packet)) return null
-            val data = ByteBuffer.wrap(packet).order(ByteOrder.LITTLE_ENDIAN)
-            data.get() // opcode
-            val status = data.get().toInt() and 0xff
-            val received = data.get().toInt() and 0xff
-            val stop = data.int
-            val start = data.int
-            val txTime = data.int
+            val data = OnePlusByteReader(packet)
+            data.skip(1) // opcode
+            val status = data.u8()
+            val received = data.u8()
+            val stop = data.int()
+            val start = data.int()
+            val txTime = data.int()
             return OnePlusSessionStopRx(
                 status = status,
                 received = received,

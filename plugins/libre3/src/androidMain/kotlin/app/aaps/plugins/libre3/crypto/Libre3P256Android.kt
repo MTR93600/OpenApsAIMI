@@ -1,10 +1,9 @@
-package app.aaps.plugins.libre3.crypto.firstpair
+package app.aaps.plugins.libre3.crypto
 
-import app.aaps.plugins.libre3.crypto.Libre3CryptoException
 import java.math.BigInteger
 
 /*
- * The point multiply of the first pairing scheme, on the P-256 curve.
+ * The Android half of the point multiply of the first pairing scheme, on the P-256 curve.
  *
  * Ported from LibreCRKit `Crypto/P256ScalarMultiplier.swift` at pin `a86b92f`.
  *
@@ -22,9 +21,6 @@ import java.math.BigInteger
  * reader who could time this loop already has an easier way in. It is written down so the next
  * reader does not have to work it out.
  */
-
-/** The two coordinates of the product point, each in a seventy byte window, low byte first. */
-internal class Builder5bcf98P256Outputs(val xOutput70: ByteArray, val yOutput70: ByteArray)
 
 private val p256Prime = BigInteger(
     "115792089210356248762697446949407573530086143415290314195533631308867097853951"
@@ -87,11 +83,11 @@ private fun littleEndianPadded70(value: BigInteger): ByteArray {
 
 /**
  * Multiplies the sensor's point by the scalar of the seventy byte window.
- *
- * @param scalarWindowLE the scalar, low byte first, at least seventy bytes.
- * @param sensorPointXYBE the sensor's point as X then Y, high byte first, at least sixty four bytes.
  */
-internal fun builder5bcf98P256Outputs(scalarWindowLE: ByteArray, sensorPointXYBE: ByteArray): Builder5bcf98P256Outputs {
+internal actual fun libre3P256ScalarMultiply(
+    scalarWindowLE: ByteArray,
+    sensorPointXYBE: ByteArray,
+): Libre3P256Window70 {
     if (scalarWindowLE.size < 70) {
         throw Libre3CryptoException("the scalar window must be at least 70 bytes, not ${scalarWindowLE.size}")
     }
@@ -124,19 +120,5 @@ internal fun builder5bcf98P256Outputs(scalarWindowLE: ByteArray, sensorPointXYBE
         throw Libre3CryptoException("the point multiply of the first pairing ended at infinity")
     }
 
-    return Builder5bcf98P256Outputs(littleEndianPadded70(result.x!!), littleEndianPadded70(result.y!!))
-}
-
-/** The point multiply, then the two high seeds it feeds. */
-internal fun builder6388f0HighSeedStreamStartSeedsFromScalarP256(
-    scalarWindowLE: ByteArray,
-    sensorPointXYBE: ByteArray,
-    x1Source: ByteArray? = null,
-    x2Source: ByteArray? = null,
-    scalar: ULong? = null,
-): Builder6388f0HighSeedStreamStartSeeds {
-    val outputs = builder5bcf98P256Outputs(scalarWindowLE, sensorPointXYBE)
-    return builder6388f0HighSeedStreamStartSeedsFrom5bcf98Outputs(
-        outputs.xOutput70, outputs.yOutput70, x1Source, x2Source, scalar,
-    )
+    return Libre3P256Window70(littleEndianPadded70(result.x!!), littleEndianPadded70(result.y!!))
 }

@@ -1,5 +1,8 @@
 package app.aaps.plugins.libre3.reconnect
 
+import app.aaps.core.interfaces.concurrent.AapsLock
+import app.aaps.core.interfaces.concurrent.withLock
+
 /**
  * Budget for Bluetooth scan starts, shared by every Libre 3 slot in this process.
  *
@@ -25,6 +28,12 @@ object Libre3ScanBudget {
     /** The window the platform counts scan starts in. */
     const val WINDOW_MS = 30_000L
 
+    /**
+     * Guards [starts]. An [AapsLock] rather than `@Synchronized`, which is JVM only, and reentrant
+     * the same way the object monitor was, so a guarded method may still call another one.
+     */
+    private val lock = AapsLock()
+
     private val starts = ArrayDeque<Long>()
 
     /**
@@ -35,8 +44,7 @@ object Libre3ScanBudget {
      *
      * @return true when a scan may start now. It then counts against the window.
      */
-    @Synchronized
-    fun tryAcquire(nowMs: Long): Boolean {
+    fun tryAcquire(nowMs: Long): Boolean = lock.withLock {
         prune(nowMs)
         if (starts.size >= MAX_SCAN_STARTS) return false
         starts.addLast(nowMs)
@@ -44,23 +52,20 @@ object Libre3ScanBudget {
     }
 
     /** How long to wait before a start would be allowed, 0 when one is allowed now. */
-    @Synchronized
-    fun waitMsUntilNextStart(nowMs: Long): Long {
+    fun waitMsUntilNextStart(nowMs: Long): Long = lock.withLock {
         prune(nowMs)
         if (starts.size < MAX_SCAN_STARTS) return 0L
         return (WINDOW_MS - (nowMs - starts.first())).coerceAtLeast(0L)
     }
 
     /** How many starts are still inside the window. For logs and tests. */
-    @Synchronized
-    fun startsInWindow(nowMs: Long): Int {
+    fun startsInWindow(nowMs: Long): Int = lock.withLock {
         prune(nowMs)
         return starts.size
     }
 
     /** Test hook: forget the window. */
-    @Synchronized
-    fun reset() {
+    fun reset() = lock.withLock {
         starts.clear()
     }
 

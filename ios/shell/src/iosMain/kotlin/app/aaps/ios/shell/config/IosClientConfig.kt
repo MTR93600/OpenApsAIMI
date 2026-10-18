@@ -46,9 +46,20 @@ class IosClientConfig(
 
     override val SUPPORTED_NS_VERSION: Int = 150000
 
-    // No loop on iOS: this is a follower. Pump drivers are present (Medtrum/Dash
-    // iOS drivers, constructed by hand — not registered with Metro; fail closed).
-    override val APS: Boolean = false
+    /*
+     * APS is on at the owner's explicit decision, taken on 2026-10-18 after being shown what
+     * follows. It says shared code may offer the loop, and AIMI is now a real plugin here.
+     *
+     * What is NOT yet true, and must be read before trusting this flag: no pump driver is
+     * registered with Metro on iOS. The Medtrum and Dash iOS drivers exist but are built by hand,
+     * so the only pump plugin this graph can contribute is `VirtualPumpPlugin`, and the only
+     * glucose source is `NSClientSourcePlugin` following Nightscout. So the engine decides, and
+     * for now there is nothing underneath to carry the decision out.
+     *
+     * PUMPCONTROL stays false: that flavour means "pump remote control without a loop", which is
+     * the opposite of what this build now is.
+     */
+    override val APS: Boolean = true
     override val PUMPCONTROL: Boolean = false
     override val PUMPDRIVERS: Boolean = true
 

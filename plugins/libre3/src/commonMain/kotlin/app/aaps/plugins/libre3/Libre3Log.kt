@@ -1,16 +1,26 @@
 package app.aaps.plugins.libre3
 
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
+/**
+ * How bad a driver log line is, so each platform can map it onto its own levels.
+ */
+internal enum class Libre3LogLevel { INFO, WARN, ERROR }
+
+/**
+ * Writes one driver log line on the platform the driver is running on.
+ *
+ * This is the only part of the driver's logging that is platform specific. Everything else - what
+ * is logged, when, and under which marker - is shared code, so the two platforms cannot drift.
+ */
+internal expect fun libre3LogWrite(level: Libre3LogLevel, message: String, cause: Throwable?)
 
 /**
  * Where this driver writes what it is doing.
  *
- * It goes through slf4j rather than `android.util.Log` for one reason: AAPS already writes
- * everything that comes through slf4j to `AndroidAPS.log`, a rolling file with months of history,
- * and **Maintenance, Send logs** already collects those files. A driver that logged straight to
- * Android would be invisible to that: its lines would live only in the phone's own ring buffer,
- * which holds minutes on a busy phone and which an app may not even be allowed to read back.
+ * On Android it goes through slf4j rather than `android.util.Log` for one reason: AAPS already
+ * writes everything that comes through slf4j to `AndroidAPS.log`, a rolling file with months of
+ * history, and **Maintenance, Send logs** already collects those files. A driver that logged
+ * straight to Android would be invisible to that: its lines would live only in the phone's own ring
+ * buffer, which holds minutes on a busy phone and which an app may not even be allowed to read back.
  *
  * The line still reaches the phone's log as well, under the same tag as before, so
  * `adb logcat | grep LIBRE3_` keeps working while a developer is watching.
@@ -21,13 +31,11 @@ import org.slf4j.LoggerFactory
  */
 internal object Libre3Log {
 
-    private val logger: Logger = LoggerFactory.getLogger(Libre3LogMarkers.TAG)
+    fun i(message: String) = libre3LogWrite(Libre3LogLevel.INFO, message, null)
 
-    fun i(message: String) = logger.info(message)
+    fun w(message: String) = libre3LogWrite(Libre3LogLevel.WARN, message, null)
 
-    fun w(message: String) = logger.warn(message)
+    fun e(message: String) = libre3LogWrite(Libre3LogLevel.ERROR, message, null)
 
-    fun e(message: String) = logger.error(message)
-
-    fun e(message: String, cause: Throwable) = logger.error(message, cause)
+    fun e(message: String, cause: Throwable) = libre3LogWrite(Libre3LogLevel.ERROR, message, cause)
 }

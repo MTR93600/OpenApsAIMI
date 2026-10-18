@@ -1,15 +1,5 @@
 package app.aaps.plugins.libre3.crypto
 
-import java.math.BigInteger
-import java.security.AlgorithmParameters
-import java.security.KeyFactory
-import java.security.Signature
-import java.security.interfaces.ECPublicKey
-import java.security.spec.ECGenParameterSpec
-import java.security.spec.ECParameterSpec
-import java.security.spec.ECPoint
-import java.security.spec.ECPublicKeySpec
-
 /**
  * The sensor's own certificate, 140 bytes, read during a first pairing.
  *
@@ -42,30 +32,13 @@ class Libre3SensorCert private constructor(val raw: ByteArray) {
 
     private fun verifiedBy(signingKey65: ByteArray): Boolean {
         if (signingKey65.size != 65 || signingKey65[0] != 0x04.toByte()) return false
-        return try {
-            val verifier = Signature.getInstance("SHA256withECDSA")
-            verifier.initVerify(publicKeyOf(signingKey65))
-            verifier.update(signedPayload)
-            verifier.verify(derSignature(signature))
-        } catch (_: java.security.GeneralSecurityException) {
-            // A key or a signature this phone's provider cannot read is not a verified one.
-            false
-        }
-    }
-
-    private fun publicKeyOf(point65: ByteArray): ECPublicKey {
-        val parameters = AlgorithmParameters.getInstance("EC")
-        parameters.init(ECGenParameterSpec("secp256r1"))
-        val curve = parameters.getParameterSpec(ECParameterSpec::class.java)
-        val x = BigInteger(1, point65.copyOfRange(1, 33))
-        val y = BigInteger(1, point65.copyOfRange(33, 65))
-        return KeyFactory.getInstance("EC").generatePublic(ECPublicKeySpec(ECPoint(x, y), curve)) as ECPublicKey
+        return libre3VerifyEcdsaSha256(signingKey65, signedPayload, derSignature(signature))
     }
 
     /**
-     * Turns the plain 64 byte `r || s` of the wire into the shape the phone's verifier wants.
+     * Turns the plain 64 byte `r || s` of the wire into the tagged shape a verifier wants.
      *
-     * Java only reads the tagged form, so the two numbers have to be wrapped, each with a leading
+     * Verifiers read the tagged form, so the two numbers have to be wrapped, each with a leading
      * zero byte when its top bit is set, or it would be read as a negative number.
      */
     private fun derSignature(rawSignature: ByteArray): ByteArray {

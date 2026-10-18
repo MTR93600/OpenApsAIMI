@@ -1,8 +1,5 @@
 package app.aaps.plugins.dexcomoneplus.parse
 
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-
 /**
  * Control BackFill request for short-TxId / G7 / ONE+ (opcode 0x59).
  *
@@ -17,7 +14,7 @@ object OnePlusBackFillTx {
     const val PACKET_LENGTH: Int = 9
 
     fun build(startDexTimeSeconds: Int, endDexTimeSeconds: Int): ByteArray {
-        val buf = ByteBuffer.allocate(PACKET_LENGTH).order(ByteOrder.LITTLE_ENDIAN)
+        val buf = OnePlusByteWriter(PACKET_LENGTH)
         buf.put(OPCODE)
         buf.putInt(startDexTimeSeconds)
         buf.putInt(endDexTimeSeconds)

@@ -84,7 +84,15 @@ La pompe virtuelle n'est pas un lot driver. L'allumer serait quitter le mode sui
 - ONE+ : l'envoi de calibration, la réparation de `SENSOR_CHANGE`, la correction de date d'insertion et l'ancre manuelle sont à `false`, engineering seulement. `dexcom_oneplus_use_real_skeleton` vaut `true` mais reste engineering, et son commentaire dit que le squelette échoue fermé au GATT et à l'authentification. Ce n'est pas une claim BLE de production, et ce n'est pas iOS.
 - `PUMPDRIVERS` est toujours `false` dans `IosClientConfig`.
 
-**Propriété intellectuelle Abbott (Libre 3).** Les tables binaires sont toujours dans `plugins/libre3/src/main/resources/libre3/`, y compris `phone_cert_162b.bin` et les programmes `firstpair_*.bin`. `plugins/libre3/NOTICE` les rattache à un portage de LibreCRKit. La licence MIT du code ne couvre pas ces tables. On ne copie rien depuis LibreCRKit. P5 ne lève pas ce risque : Libre 3 reste dans le paquet XL et ne se porte pas sur iOS tant que ce risque n'est pas traité à part.
+**Propriété intellectuelle Abbott (Libre 3).** Les 36 tables binaires (1,8 Mo) sont dans `plugins/libre3/src/commonMain/resources/libre3/`, y compris `phone_cert_162b.bin` et les programmes `firstpair_*.bin`. `plugins/libre3/NOTICE` les rattache à un portage de LibreCRKit. La licence MIT du code ne couvre pas ces tables. On ne copie rien depuis LibreCRKit. P5 ne lève pas ce risque : Libre 3 reste dans le paquet XL et ne se porte pas sur iOS tant que ce risque n'est pas traité à part.
+
+> **Mise à jour du 2026-10-18 (décision du propriétaire).** La phrase ci-dessus est tenue pour le texte du 2026-10-03 ; elle n'est plus la règle. Les faits d'aujourd'hui :
+>
+> - Ces tables sont **déjà** dans l'APK Android, et elles l'ont toujours été : `unzip -l app-full-debug.apk | grep -c "libre3/.*\.bin"` répond 36. Le risque décrit plus haut existe donc dans ce que le build Android distribue depuis le début.
+> - Le propriétaire a comparé iOS à cette pratique Android déjà en place et a décidé que iOS embarque les mêmes tables, pour qu'un Libre 3 marche sur un iPhone exactement comme sur un téléphone Android.
+> - Il n'y a qu'une seule copie des octets dans le dépôt, sous `plugins/libre3/src/commonMain/resources/libre3/` (le dossier était sous `androidMain` avant le passage du module en KMP, et avant cela sous `src/main/resources/libre3/`). Android la lit depuis le classpath ; `ios/app/AAPSClient.xcodeproj` pointe sur le même dossier par une référence de dossier, donc l'app iOS porte `libre3/<nom>.bin` dans son bundle. Deux copies pourraient diverger, et une table qui a divergé ne tombe pas en panne bruyamment : elle apparie mal.
+> - La question juridique, elle, ne dépend pas de la plateforme. Elle reste ouverte, dans les mêmes termes qu'au 2026-10-03, et `docs/LIBRE3_NATIVE_LICENCE_MEMO.md` section 4 reste la référence.
+> - À noter pour la lecture du P5 ci-dessus, daté de `7c13732990` : `:plugins:libre3` est depuis passé en Kotlin Multiplatform et a un `iosMain`.
 
 **Alarmes sonores.** `_docs/ios_blockers.md` dit encore que `setAudibleAlarm` se contente de journaliser. C'est périmé sur ce tip : `IosSystemNotificationPlatform.setAudibleAlarm` appelle `IosAlarmSoundPlayer.play` (`implementation/src/iosMain/kotlin/app/aaps/implementation/notifications/IosAlarmSoundPlayer.kt`), un `AVAudioPlayer` en catégorie `playback`, donc audible téléphone en silencieux **tant que le processus vit**. Il n'y a toujours pas de son si l'app n'est pas lancée (pas d'équivalent du service de premier plan, entitlement Critical Alerts non décidé — question laissée ouverte par G0). Aucun driver ne pilote une boucle réelle tant que ce trou-là n'est pas assumé.
 
@@ -113,4 +121,4 @@ Le décompte « sept fichiers » de `pump/virtual/src/commonMain/` est juste. Le
 - Le lot transport doit dire, sans changer le contrat si ce n'est pas indispensable, comment il aligne écriture avec et sans réponse, identifiant opaque, `createBond`, et la restauration d'état. S'il ne peut pas s'aligner sur Android, il s'arrête et le décrit.
 - Ordre interne du paquet XL.
 - Critical Alerts, et donc le son quand l'app est tuée.
-- Tables Abbott : décision juridique séparée, avant tout portage Libre 3.
+- Tables Abbott : décision juridique séparée. Toujours ouverte, et toujours indépendante de la plateforme. Elle ne bloque plus le portage : le 2026-10-18 le propriétaire a décidé que iOS embarque les mêmes tables que l'APK Android, qui les distribue depuis le début (voir Risques, mise à jour du 2026-10-18).

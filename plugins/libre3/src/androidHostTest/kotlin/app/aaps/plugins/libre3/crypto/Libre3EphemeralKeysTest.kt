@@ -3,7 +3,6 @@ package app.aaps.plugins.libre3.crypto
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import java.security.SecureRandom
 
 /** Key pair rules, and the guard that keeps a random key pair out of a first pairing. */
 class Libre3EphemeralKeysTest {
@@ -93,11 +92,11 @@ class Libre3EphemeralKeysTest {
     }
 
     /** A source of "random" bytes that always hands back the same draw, for a repeatable test. */
-    private class FixedRandom(private val fixed: ByteArray) : SecureRandom() {
+    private class FixedRandom(private val fixed: ByteArray) : Libre3RandomSource {
 
-        override fun nextBytes(bytes: ByteArray) {
-            require(bytes.size == fixed.size) { "this test source only makes ${fixed.size} bytes" }
-            fixed.copyInto(bytes)
+        override fun nextBytes(out: ByteArray) {
+            require(out.size == fixed.size) { "this test source only makes ${fixed.size} bytes" }
+            fixed.copyInto(out)
         }
     }
 

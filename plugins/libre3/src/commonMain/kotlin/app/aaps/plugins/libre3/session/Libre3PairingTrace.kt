@@ -2,6 +2,8 @@ package app.aaps.plugins.libre3.session
 
 import app.aaps.plugins.libre3.Libre3Log
 import app.aaps.plugins.libre3.Libre3LogMarkers
+import app.aaps.plugins.libre3.libre3HexLower
+import kotlin.time.Clock
 
 /**
  * Step by step trace of one pairing attempt.
@@ -24,7 +26,7 @@ import app.aaps.plugins.libre3.Libre3LogMarkers
  * once the first pairing works, and remember that a log taken with it on must not be shared
  * outside the people debugging this sensor.
  */
-class Libre3PairingTrace(private val nowMs: () -> Long = System::currentTimeMillis) {
+class Libre3PairingTrace(private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() }) {
 
     private val startedAt = nowMs()
     private var lastStepAt = startedAt
@@ -64,6 +66,6 @@ class Libre3PairingTrace(private val nowMs: () -> Long = System::currentTimeMill
         /** Whether key material is written to the log. See the warning on this class. */
         const val TRACE_SECRETS = true
 
-        fun hex(value: ByteArray): String = value.joinToString("") { "%02x".format(it) }
+        fun hex(value: ByteArray): String = value.libre3HexLower()
     }
 }

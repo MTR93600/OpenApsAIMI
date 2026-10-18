@@ -16,6 +16,7 @@ import app.aaps.core.interfaces.source.PromotionResult
 import app.aaps.core.interfaces.source.StagingState
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.dexcomoneplus.OnePlusAndroidPlatform
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriverReal
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriverStub
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers
@@ -465,10 +466,10 @@ class DexcomOnePlusPromotionOrderTest : TestBase() {
         DexcomOnePlusPlugin::class.java.getDeclaredField(name).apply { isAccessible = true }.set(plugin, value)
     }
 
-    /** Context and store, without `setContext`: that call reads `Build.MANUFACTURER`. */
+    /** Platform and store, without `attach`: that call reads `Build.MANUFACTURER`. */
     private fun bindDriverContext(driver: OnePlusCgmDriverReal) {
-        OnePlusCgmDriverReal::class.java.getDeclaredField("context")
-            .apply { isAccessible = true }.set(driver, context)
+        OnePlusCgmDriverReal::class.java.getDeclaredField("platform")
+            .apply { isAccessible = true }.set(driver, OnePlusAndroidPlatform(context))
         OnePlusCgmDriverReal::class.java.getDeclaredField("sensorStore")
             .apply { isAccessible = true }
             .set(driver, OnePlusSensorStore(context, OnePlusCgmDrivers.STAGING_NAMESPACE))

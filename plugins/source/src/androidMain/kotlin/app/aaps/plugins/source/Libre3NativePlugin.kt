@@ -10,9 +10,9 @@ import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.interfaces.notifications.NotificationManager
+import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -42,6 +42,7 @@ import app.aaps.plugins.libre3.identity.Libre3SensorIdentity
 import app.aaps.plugins.libre3.identity.Libre3SensorStore
 import app.aaps.plugins.libre3.nfc.Libre3NfcSession
 import app.aaps.plugins.libre3.session.Libre3DisconnectPolicy
+import app.aaps.plugins.libre3.setContext
 import app.aaps.plugins.libre3.warmup.Libre3WarmupClock
 import app.aaps.plugins.source.activities.Libre3StartActivity
 import app.aaps.plugins.source.activities.Libre3StatusActivity
@@ -51,28 +52,28 @@ import app.aaps.plugins.source.keys.Libre3BooleanKey
 import app.aaps.plugins.source.keys.Libre3IntKey
 import app.aaps.plugins.source.keys.Libre3IntentKey
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.ContributesIntoMap
+import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.IntKey
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.binding
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Native Libre 3 and Libre 3 Plus BG source, driven by an in process BLE driver.

@@ -4,9 +4,11 @@ import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseSample
 import app.aaps.plugins.dexcomoneplus.OnePlusLog
 import app.aaps.plugins.dexcomoneplus.OnePlusLogMarkers
 import app.aaps.plugins.dexcomoneplus.gatt.OnePlusGattClient
+import app.aaps.plugins.dexcomoneplus.onePlusSleep
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusBackFillControlRx
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusBackFillStream
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusBackFillTx
+import kotlin.time.Clock
 
 /**
  * Short history pull after session up (A6.8) — G7/ONE+ BackFillTxMessage2 path.
@@ -61,12 +63,7 @@ class OnePlusBackfillSession(
             onError(msg, false)
             return 0
         }
-        try {
-            Thread.sleep(CCCD_SETTLE_MS)
-        } catch (_: InterruptedException) {
-            Thread.currentThread().interrupt()
-            return 0
-        }
+        if (!onePlusSleep(CCCD_SETTLE_MS)) return 0
 
         val tx = OnePlusBackFillTx.build(startDex, endDex)
         try {
@@ -94,28 +91,28 @@ class OnePlusBackfillSession(
         }
 
         val stream = OnePlusBackFillStream()
-        val deadline = System.currentTimeMillis() + COLLECT_TIMEOUT_MS
+        val deadline = Clock.System.now().toEpochMilliseconds() + COLLECT_TIMEOUT_MS
         var lastPacketMs = 0L
-        while (shouldContinue() && gatt.isConnected() && System.currentTimeMillis() < deadline) {
+        while (shouldContinue() && gatt.isConnected() && Clock.System.now().toEpochMilliseconds() < deadline) {
             val wait = if (stream.hasData()) QUIET_TIMEOUT_MS else 1_000L
             val packet = gatt.awaitBackfillNotify(wait)
             if (!shouldContinue()) break
             if (packet == null) {
                 if (stream.hasData() && lastPacketMs > 0L &&
-                    System.currentTimeMillis() - lastPacketMs >= QUIET_TIMEOUT_MS
+                    Clock.System.now().toEpochMilliseconds() - lastPacketMs >= QUIET_TIMEOUT_MS
                 ) {
                     break
                 }
                 continue
             }
             stream.pushG7(packet)
-            lastPacketMs = System.currentTimeMillis()
+            lastPacketMs = Clock.System.now().toEpochMilliseconds()
             OnePlusLog.d(
                 "${OnePlusLogMarkers.SESSION}: backfill chunk ${packet.size}b total=${stream.byteCount()}",
             )
         }
 
-        val nowMs = System.currentTimeMillis()
+        val nowMs = Clock.System.now().toEpochMilliseconds()
         val samples = stream.decode(currentDexTimeSeconds, nowMs)
         for (sample in samples) {
             OnePlusLog.i(

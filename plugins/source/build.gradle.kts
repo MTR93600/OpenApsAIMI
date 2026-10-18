@@ -97,8 +97,9 @@ kotlin {
         androidMain {
             kotlin.srcDir(generateSourceStrings.flatMap { it.androidOutputDir })
             dependencies {
-                // Fork-only CGM source plugins. Both are plain Android libraries, so they can
-                // only be reached from androidMain.
+                // Fork-only CGM source plugins. Both are multiplatform now, but the plugin
+                // wrappers that use them are still Android only, so they stay here until a shared
+                // caller exists.
                 implementation(project(":plugins:dexcom_oneplus"))
                 implementation(project(":plugins:libre3"))
 

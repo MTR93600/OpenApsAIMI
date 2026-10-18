@@ -42,11 +42,20 @@ val migratedModules = listOf(
     ":plugins:calibration",
     ":plugins:configuration",
     ":plugins:constraints",
+    ":plugins:dexcom_oneplus",
+    ":plugins:libre3",
     ":plugins:main",
     ":plugins:sensitivity",
     ":plugins:smoothing",
     ":plugins:source",
     ":plugins:sync",
+    // These three build for iOS and were never listed. The guard could not say so, because the
+    // `.claude` walk above drowned them among ~47 phantom modules, so the real message was never
+    // read. Not listing a module that builds for iOS means its code is simply absent from the
+    // framework Swift sees - which for `:pump:medtrum:proto` is the whole iOS Medtrum driver.
+    ":pump:medtrum:proto",
+    ":pump:omnipod:dashctl",
+    ":pump:ui",
     ":pump:virtual",
     ":shared:clientbindings",
     ":shared:impl",
@@ -78,7 +87,11 @@ val exportMigratedApi = true
 val checkMigratedModules = tasks.register("checkMigratedModules") {
     val listed = migratedModules.toSet()
     val buildFiles = rootProject.projectDir.walkTopDown()
-        .onEnter { it.name != "build" && it.name != ".git" }
+        // `.claude` holds agent worktrees - full copies of this repository. Without skipping it the
+        // walk finds every copy's build files and demands that ~47 phantom modules be listed here,
+        // so the task can never pass on a machine that has ever run an agent. It is not a module
+        // directory and never contains one.
+        .onEnter { it.name != "build" && it.name != ".git" && it.name != ".claude" }
         .filter { it.name == "build.gradle.kts" }
         .toList()
     val rootDir = rootProject.projectDir

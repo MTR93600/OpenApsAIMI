@@ -81,32 +81,26 @@ import kotlinx.coroutines.CoroutineScope
  * deleted one at a time.
  */
 /*
- * `OpenAPSAIMIPlugin` is excluded for now, and this is meant to be undone.
- *
- * The plugin moved to commonMain so that iPhone and Android can run the same AIMI, and it
- * contributes itself to every `AppScope` graph, so it now reaches this one. It is held out until
- * iOS can honour all of its ports, because a plugin that is wired up and half fed would dose an
- * iPhone differently from an Android phone.
+ * `OpenAPSAIMIPlugin` is IN this graph since 2026-10-18. It was held out while iOS could not
+ * honour its ports, because a plugin that is wired up and half fed would dose an iPhone
+ * differently from an Android phone.
  *
  * All seven ports now have a real iOS side: `AimiStepsLifecycle` over HealthKit,
  * `AimiPhysioLifecycle`, `AimiTrainingScheduler`, `AimiStorageStatusSource`, `AimiAuditorNotifier`,
  * `AimiPlatformPreferenceItems` and `AimiTickCaptureHook`. `AimiStorage` and
- * `HormonitorStudyExporterProvider` are in `IosAimiPlatformBindings`. No binding is known to be
- * missing, though nobody has yet built this graph with the exclusion removed.
+ * `HormonitorStudyExporterProvider` are in `IosAimiPlatformBindings`.
  *
- * What is left, as of 2026-10-17, is not a binding:
- * - iOS has no native CGM and no pump driver registered with Metro. The only pump plugin it can
- *   contribute is `VirtualPumpPlugin`, and the only glucose source is `NSClientSourcePlugin`,
- *   which follows Nightscout. So AIMI here would decide doses with nothing to deliver them.
- * - `IosClientConfig.APS` therefore stays false. Its own KDoc says getting that flag wrong "would
- *   make shared code offer features the app cannot perform", and that is exactly what turning it
- *   on today would do.
+ * What is still missing is not a binding, and matters more than one:
+ * - No pump driver is registered with Metro on iOS. The Medtrum and Dash iOS drivers exist but
+ *   are built by hand, so the only pump plugin this graph contributes is `VirtualPumpPlugin`.
+ * - There is no native CGM. The only glucose source is `NSClientSourcePlugin`, following
+ *   Nightscout.
  *
- * Remove this exclusion when AIMI should run on the phone and be compared against an Android run
- * through the parity recorder. Turn `APS` on later still, when a real sensor and a real pump are
- * wired.
+ * So AIMI decides here, and for now nothing underneath carries the decision out. `IosClientConfig`
+ * says the same thing next to `APS`, which the owner turned on knowing this. Read both before
+ * concluding that an iPhone loops.
  */
-@DependencyGraph(AppScope::class, excludes = [OpenAPSAIMIPlugin::class])
+@DependencyGraph(AppScope::class)
 interface IosAppGraph : MetroViewModelMultibindings {
 
     // Everything AapsAppRoot needs.

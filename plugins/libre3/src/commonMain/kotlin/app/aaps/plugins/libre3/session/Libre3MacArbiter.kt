@@ -1,5 +1,7 @@
 package app.aaps.plugins.libre3.session
 
+import app.aaps.core.interfaces.concurrent.AapsLock
+import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.plugins.libre3.Libre3Log
 import app.aaps.plugins.libre3.Libre3LogMarkers
 
@@ -29,7 +31,8 @@ import app.aaps.plugins.libre3.Libre3LogMarkers
  */
 object Libre3MacArbiter {
 
-    private val lock = Any()
+    /** Guards [owners]. An [AapsLock] rather than `synchronized`, which is JVM only. */
+    private val lock = AapsLock()
 
     /** Normalised MAC → the token of the driver instance that owns it. At most one owner per sensor. */
     private val owners = mutableMapOf<String, String>()
@@ -46,7 +49,7 @@ object Libre3MacArbiter {
      */
     fun claim(mac: String, owner: String): Boolean {
         val key = normalize(mac).takeIf { it.isNotEmpty() } ?: return false
-        synchronized(lock) {
+        lock.withLock {
             val current = owners[key]
             if (current != null && current != owner) {
                 Libre3Log.w(
@@ -64,7 +67,7 @@ object Libre3MacArbiter {
 
     /** Give up whatever [owner] holds. Safe when it holds nothing. */
     fun release(owner: String) {
-        synchronized(lock) {
+        lock.withLock {
             owners.entries.removeAll { it.value == owner }
         }
     }
@@ -72,11 +75,11 @@ object Libre3MacArbiter {
     /** Which owner holds [mac], or null when nobody does. */
     fun ownerOf(mac: String): String? {
         val key = normalize(mac).takeIf { it.isNotEmpty() } ?: return null
-        return synchronized(lock) { owners[key] }
+        return lock.withLock { owners[key] }
     }
 
     /** Test hook: forget every claim. */
     fun reset() {
-        synchronized(lock) { owners.clear() }
+        lock.withLock { owners.clear() }
     }
 }

@@ -433,6 +433,22 @@ nothing:
 `:app:assembleFullDebug` is required, not a nicety: a missing or duplicated Metro binding only fails
 when the app graph is linked, so no module-level task can catch it.
 
+**A module whose tests all live in `androidHostTest` reports `iosSimulatorArm64Test` as SKIPPED with
+`linkDebugTestIosSimulatorArm64 NO-SOURCE`, and the build still says BUILD SUCCESSFUL.** That is not
+a pass, it is an empty run, and reporting it as a pass claims the shared code was executed on Apple
+when only the compiler saw it. Either say plainly that the iOS side is compile only, or add a
+`commonTest` for the shared code the flip introduced - which is the better answer when the flip
+rewrote something that goes on a wire. Worth knowing how cheap that proof is: the first Native run of
+a ten test `commonTest` added during the ONE+ flip failed immediately, on a wrong expected byte
+string in the new test itself. Nine lines of build file:
+
+```kotlin
+getByName("commonTest") { dependencies { implementation(kotlin("test")) } }
+```
+
+`commonTest` is pulled into the Android compilation too, so those tests then run on both and the
+`testAndroidHostTest` count goes up by the same number.
+
 `iosSimulatorArm64Test` used to be skipped on every machine, which is why several traps below went
 unnoticed for months. It runs on macOS **once a simulator runtime is installed** - that is a separate
 download from Xcode (`xcodebuild -downloadPlatform iOS`). If gradle says *"Xcode does not support
@@ -579,6 +595,154 @@ wait but never publishes its owner, so an actual that needs the owner has to tra
 hold count itself. Keep the Android actual byte-identical to the code you replaced, so the shipping
 platform cannot change.
 
+### A device driver: the blockers a protocol module hits, and what each one costs
+
+`:plugins:dexcom_oneplus` (the native Dexcom ONE+/G7 BLE driver, 54 files) went from 0 to 51 files in
+commonMain in one pass. None of its blockers was a design question; all five were substitutions, and
+all five are invisible to an import scan or look worse than they are.
+
+- **`java.nio.ByteBuffer` is the whole of a packet module and is not a blocker.** Ten of its files
+  imported it, and every single use was a sequential little endian read or write. About 100 lines of
+  shared `OnePlusByteReader` / `OnePlusByteWriter` replaced it, and the module's existing packet
+  tests are what prove the bytes did not change - so write the helper, move the files, and let the
+  **Android** test run be the proof. Two behaviours must be copied on purpose, because code depends
+  on them: `allocate(n)` zero fills, which is what leaves room for a CRC trailer written afterwards;
+  and `get()` past the end **throws**, which is what a `catch (_: Exception)` around a decode loop is
+  there for. A reader that returns a quiet zero instead would turn a short packet into a plausible
+  reading.
+- **A JVM only logging facade blocks every file that logs.** `OnePlusLog` was one `org.slf4j` object
+  that 14 files called. The fix is an `internal expect fun` sink in commonMain with the slf4j call in
+  the androidMain `actual`, **not** a settable sink installed at startup: this file already warns
+  that a start call reaches one shell out of three, and a logger that silently stops writing on one
+  platform is exactly the kind of loss nobody notices.
+- **`Thread.sleep` in a blocking driver loop** becomes a module local
+  `internal expect fun xSleep(millis: Long): Boolean`. Return whether the wait was served and keep
+  every caller's early return: the Android code was
+  `catch (_: InterruptedException) { Thread.currentThread().interrupt(); return }`, and that return
+  is a stop signal, not tidiness. Dropping it would make a stopped session carry on sleeping.
+- **`java.util.UUID` for BLE: keep the text, not the type.** Android wants `java.util.UUID`, iOS
+  wants `CBUUID`. Put the UUID **strings** in commonMain under the old object's name, and add an
+  androidMain object with the same member names that builds the platform values once
+  (`val Control: UUID = UUID.fromString(OnePlusBluetoothUuids.Control)`). Every call site is then a
+  one word rename and the `when` branches still compare built objects, not strings.
+- **`@Synchronized` and `synchronized(lock)` become `AapsLock` + `withLock`.** Two things to check.
+  One guarded method calling another needs the lock to be reentrant, which `AapsLock` is - the same
+  way the object monitor was. And `withLock` is inline, so a body turned into an expression needs
+  `return@withLock` where it used to say `return`; leave the last expression bare.
+
+#### Keep the call sites by naming a function after the class
+
+`OnePlusSensorStore(context, namespace)` was constructed at 13 sites, 11 of them in the **consumer**
+module. The class itself was only Android because of `SharedPreferences` and `android.util.Base64`.
+
+Moving it looks like it has to churn every caller. It does not:
+
+1. The class moves to commonMain and takes a small `OnePlusSensorPrefs` interface instead of a
+   `Context`, with a `companion` function for the parts the platform needs to know (here the file
+   name per slot).
+2. androidMain gets the `SharedPreferences` implementation **and a top level function with the same
+   name as the class**:
+   ```kotlin
+   fun OnePlusSensorStore(context: Context, namespace: String? = null): OnePlusSensorStore =
+       OnePlusSensorStore(OnePlusSensorPrefsAndroid(context, OnePlusSensorStore.prefsFileName(namespace)))
+   ```
+
+Kotlin allows that, every existing `OnePlusSensorStore(context)` keeps compiling, and the diff stays
+inside the module. The same trick fits any class whose only Android part is how it is built.
+
+Two notes on the storage itself. `kotlin.io.encoding.Base64` with `@OptIn(ExperimentalEncodingApi::class)`
+is the repo's shared Base64 and matches `android.util.Base64` with `NO_WRAP` byte for byte - same
+alphabet, padded, no line breaks. And writing a **null** string through `SharedPreferences.Editor`
+removes the key; say so in the interface's KDoc and keep it, because a store that writes `"null"`
+instead would resurrect a sensor identity that was meant to be cleared.
+
+#### Lift one platform call, keep a thousand lines
+
+The 1 059 line session class imported exactly two Android types, both for a wake lock. Replacing them
+with an `OnePlusCpuLease` interface (`hold(maxMillis): Hold?`, `Hold.release()`) moved the whole
+lifecycle - connect, authenticate, duty cycle, reconnect ladder, warm up - into shared code. Judge a
+file by how many lines the platform actually decides, never by the import list: here it was six.
+
+#### A second driver: tables on the classpath, and crypto the platform owns
+
+`:plugins:libre3` (the native Libre 3 BLE and NFC driver, 73 files) went to 75 files in commonMain,
+14 in androidMain, 5 in iosMain, with the Android tests unchanged at 273 and the consumer's at 510.
+It is the same shape as the ONE+ driver and hit four blockers that one did not.
+
+- **Fixed byte tables read with `getResourceAsStream` block a whole package, and no import scan
+  sees it.** Thirty-six `.bin` files under `src/main/resources/` fed every pairing class. The read
+  is two lines - `internal expect fun xReadTable(path): ByteArray?` and a `xHasTable(path)` - with
+  the classpath call in the androidMain actual. The sources move `src/main/resources` →
+  `src/androidMain/resources` and the KMP android plugin packages them exactly as before; check it
+  with `unzip -l <apk> | grep <folder>/` and count, because a dropped resource fails at runtime on
+  a user's phone and nowhere in the build.
+  An iOS actual that answers **null** is honourable here and only here: the caller already treats a
+  missing table as "this part of the driver cannot run" and turns it into a line the user reads. If
+  the caller had no such path, null would be a silent no-op and the wrong answer.
+- **`java.security`, `javax.crypto` and `java.math.BigInteger`: the rule is shareable, the
+  primitives are not.** Five `expect` functions - generate a P-256 key pair, validate key material,
+  ECDH, verify ECDSA, multiply a point - moved the 366 line session class, both certificate classes
+  and the key pair class into commonMain. Three rules came out of it:
+  - **Hold keys as bytes, not as a platform key object.** `Libre3EphemeralKeyPair` wrapped a
+    `java.security.KeyPair`; holding a 32 byte scalar and a 65 byte point instead is what let the
+    class move, and the behaviour is the same because the JVM object was only ever read back as
+    bytes.
+  - **Name the checks the provider used to make as a side effect.** `KeyFactory.generatePrivate`
+    refused a scalar outside the group order and `generatePublic` refused a point off the curve. A
+    port that only checks sizes loses both silently, so they become their own `expect`.
+  - **Some primitives have a real iOS answer and some must throw.** A single AES block is a fixed
+    answer, so `CCCrypt` with `kCCOptionECBMode` from `platform.CoreCrypto` is a genuine actual and
+    a FIPS-197 known answer vector in `commonTest` proves it matches Android. Curve arithmetic has
+    no shared big whole number type at all - this repo has no multiplatform bignum - so the P-256
+    actual throws, out loud, naming what is missing. **Never answer with something made up here**: a
+    wrong point does not fail, it pairs wrongly, and a wrongly paired sensor can report a glucose
+    value the body does not have.
+- **`java.util.UUID` in an interface *signature* is harder than ONE+'s UUID table.** The ONE+ GATT
+  client has a named method per characteristic, so only the UUID text had to move. This one took
+  `characteristic: UUID` in eight methods, so the parameter type itself becomes `String` and the
+  Android client converts at the boundary. The trap is case: `UUID.toString()` is lower case and a
+  hand-written table is usually upper case, so the Android side needs a `textOf(uuid)` that puts the
+  case back. Without it a channel the sensor really sent on stops matching the constant it is, and
+  the driver drops glucose as if it came from a channel it does not know.
+- **`commit()` versus `apply()` is a contract, not a detail.** This driver's rule is that the PIN
+  must be on the disk before any connect starts, so its prefs interface needs
+  `editAndWait(block): Boolean` **as well as** `edit(block)`. `OnePlusSensorPrefs` has only `edit`,
+  which is why the two modules do not share one interface.
+
+#### Blockers this campaign has now seen that an import scan still cannot
+
+Add these to the list that `java.lang` and same-package neighbours are already on:
+
+- **`getResourceAsStream` / `getResource`** - a classpath read, no import needed.
+- **`String(bytes, Charsets.US_ASCII)`** - `Charsets` is `kotlin.text`, but the `String(ByteArray,
+  Charset)` constructor is JVM only. Replicate the decoder, do not reach for `decodeToString()`:
+  that is UTF-8, and it differs from US-ASCII on exactly the bytes a damaged frame carries.
+- **`System::currentTimeMillis` as a method reference** in a default parameter value. Greps for
+  `System.currentTimeMillis` miss it.
+- **A `java.security.SecureRandom` constructor parameter.** Replace it with a module local
+  `fun interface XRandomSource { fun nextBytes(out: ByteArray) }` plus an `expect` for the real one.
+  Remember the **test fakes subclass `SecureRandom`** and have to change with it.
+- **`"%02x".format(b)` and `"0x%02X".format(b)`** - per byte hex, JVM only. Both ONE+ and Libre 3
+  needed their own helper, because each one's is `internal` to its module.
+
+Two smaller ones, both measured here:
+
+- **A `@Volatile` field with a `@Synchronized` loader that caches is just `by lazy`.** Same thread
+  safety, and the same behaviour on a throw: nothing is cached, so the next call tries again. Look
+  at the sibling class in the same package first - one of them often already uses `by lazy`.
+- **`fun f() = lock.withLock { ... return x ... }`** with no explicit return type is
+  `RETURN_IN_FUNCTION_WITH_EXPRESSION_BODY_WARNING`, and an error from language version 2.5. Give
+  it a block body, or state the return type.
+
+And the shared clock in this repo is **`kotlin.time.Clock`**, not `kotlinx.datetime.Clock`, even
+though `:core:interfaces` exposes kotlinx-datetime as `api`.
+
+#### The shell: zsh does not split an unquoted variable
+
+`for f in $FILES` over a multi-line list of paths is one giant filename on this machine, and `git mv`
+answers `File name too long`. Write the list to a file in the scratchpad and loop with
+`while read -r f`. One wasted round each time it is forgotten.
+
 ### Other common blockers
 
 `javax.inject` (swap to `dev.zacsweers.metro.Inject` only for a class Metro already builds),
@@ -667,6 +831,14 @@ the Metro migration. Recompiling does not help, because KSP considers it up to d
 Once a module builds for iOS, the ios-branch guard fails until it is listed. It names the module and
 what to do: add it to `migratedModules` in `ios/shell/build.gradle.kts` and bump
 `ShellInfo.LINKED_MODULES`. Expect this on every flip.
+
+**On a machine with agent worktrees the task cannot pass at all, and that is not your flip.** It
+walks the whole repository looking for `build.gradle.kts` files and only skips `build` and `.git`, so
+every copy under `.claude/worktrees` is counted as a module of its own and the failure lists dozens
+of `:.claude:worktrees:agent-…:core:data` style paths. Read the output with the worktree entries
+filtered out before believing anything it says. Measured on 2026-10-18, the real entries left over
+were `:pump:medtrum:proto`, `:pump:omnipod:dashctl` and `:pump:ui` - three modules that gained iOS
+targets and were never listed, unrelated to any flip being done at the time.
 
 ## Do not run a javax-stripping sweep over `:app`'s DI files
 

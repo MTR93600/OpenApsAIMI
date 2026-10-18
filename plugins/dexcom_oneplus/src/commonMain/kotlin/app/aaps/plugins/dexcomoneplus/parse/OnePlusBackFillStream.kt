@@ -1,8 +1,7 @@
 package app.aaps.plugins.dexcomoneplus.parse
 
 import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseSample
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
+import kotlin.time.Clock
 
 /**
  * Assembles ProbablyBackfill notifications and decodes G7/ONE+ records.
@@ -15,23 +14,27 @@ import java.nio.ByteOrder
  */
 class OnePlusBackFillStream {
 
-    private val buffer = ByteBuffer.allocate(MAX_BUFFER).order(ByteOrder.LITTLE_ENDIAN)
+    private val buffer = ByteArray(MAX_BUFFER)
 
-    fun hasData(): Boolean = buffer.position() > 0
+    /** How much of [buffer] holds bytes, the same thing `ByteBuffer.position()` told us. */
+    private var filled = 0
 
-    fun byteCount(): Int = buffer.position()
+    fun hasData(): Boolean = filled > 0
+
+    fun byteCount(): Int = filled
 
     fun reset() {
-        buffer.clear()
+        filled = 0
     }
 
     /** Append a G7/ONE+ backfill notification (full packet). */
     fun pushG7(packet: ByteArray) {
         if (packet.isEmpty()) return
-        val remaining = buffer.remaining()
+        val remaining = MAX_BUFFER - filled
         if (remaining <= 0) return
         val n = minOf(packet.size, remaining)
-        buffer.put(packet, 0, n)
+        packet.copyInto(buffer, destinationOffset = filled, startIndex = 0, endIndex = n)
+        filled += n
     }
 
     /**
@@ -42,21 +45,21 @@ class OnePlusBackFillStream {
      */
     fun decode(
         currentDexTimeSeconds: Int,
-        nowMs: Long = System.currentTimeMillis(),
+        nowMs: Long = Clock.System.now().toEpochMilliseconds(),
         maxAgeMs: Long = MAX_AGE_MS,
     ): List<OnePlusGlucoseSample> {
-        val extent = buffer.position()
+        val extent = filled
         if (extent < G7_RECORD_SIZE) return emptyList()
-        val view = buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN)
-        view.flip()
+        // A reader over the filled part only, which is what flipping the old buffer gave.
+        val view = OnePlusByteReader(buffer.copyOf(extent))
         val out = ArrayList<OnePlusGlucoseSample>()
         try {
-            while (view.remaining() >= G7_RECORD_SIZE) {
-                val dexTime = view.int
-                val glucose = view.short.toInt() and 0x0fff
-                val type = view.get().toInt() and 0xff
-                view.get() // extra (G7)
-                val trend = view.get().toInt()
+            while (view.remaining >= G7_RECORD_SIZE) {
+                val dexTime = view.int()
+                val glucose = view.short().toInt() and 0x0fff
+                val type = view.u8()
+                view.skip(1) // extra (G7)
+                val trend = view.byte().toInt()
                 val state = OnePlusCalibrationState.parse(type)
                 if (!state.usableGlucose()) continue
                 if (dexTime == 0) continue

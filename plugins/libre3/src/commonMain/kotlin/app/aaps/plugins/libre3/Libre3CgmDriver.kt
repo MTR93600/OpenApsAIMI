@@ -1,7 +1,5 @@
 package app.aaps.plugins.libre3
 
-import android.content.Context
-
 /**
  * Native Libre 3 / Libre 3 Plus driver façade.
  *
@@ -15,7 +13,14 @@ import android.content.Context
  */
 interface Libre3CgmDriver {
 
-    fun setContext(context: Context)
+    /**
+     * Gives the driver what it needs from the phone it is running on.
+     *
+     * Called once per instance, before anything else. The driver keeps the platform for as long
+     * as it lives: a session is rebuilt on every reconnect and needs a fresh GATT client each
+     * time. On Android a `setContext(context)` extension calls this.
+     */
+    fun attach(platform: Libre3Platform)
 
     fun addWatcher(watcher: Libre3GlucoseWatcher)
 

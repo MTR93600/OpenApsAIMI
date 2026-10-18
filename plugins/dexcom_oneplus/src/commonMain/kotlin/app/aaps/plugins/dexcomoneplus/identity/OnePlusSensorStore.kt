@@ -1,33 +1,30 @@
 package app.aaps.plugins.dexcomoneplus.identity
 
-import android.content.Context
-import android.util.Base64
 import app.aaps.plugins.dexcomoneplus.OnePlusLog
 import app.aaps.plugins.dexcomoneplus.OnePlusLogMarkers
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
  * Persist ONE+ identity + last good MAC + KEKS shared key for Juggluco-style reconnect.
  *
- * Uses a private SharedPreferences file (not exportable AAPS prefs) — PIN / key stay local.
+ * Uses the slot's own private key-value file ([OnePlusSensorPrefs]), never the exportable AAPS
+ * preferences — PIN / key stay local.
  */
-class OnePlusSensorStore(context: Context, namespace: String? = null) {
-
-    // Per-slot isolation: the STAGING sensor must not share identity / MAC / KEKS key / ingest
-    // markers with PRODUCTION. namespace == null → the original single-sensor file (non-breaking).
-    private val prefsName = if (namespace.isNullOrBlank()) PREFS_NAME else "${PREFS_NAME}_$namespace"
-    private val prefs = context.applicationContext.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+@OptIn(ExperimentalEncodingApi::class)
+class OnePlusSensorStore(private val prefs: OnePlusSensorPrefs) {
 
     fun load(): OnePlusStoredSession? {
-        val pin = prefs.getString(KEY_PIN, null)?.takeIf { it.length == 4 } ?: return null
-        val serial = prefs.getString(KEY_SERIAL, null)?.takeIf { it.isNotBlank() }
-        val gtin = prefs.getString(KEY_GTIN, null)?.takeIf { it.isNotBlank() }
-        val raw = prefs.getString(KEY_RAW_GS1, null)?.takeIf { it.isNotBlank() }
-        val mac = prefs.getString(KEY_MAC, null)?.takeIf { it.isNotBlank() }
-        val deviceName = prefs.getString(KEY_DEVICE_NAME, null)?.takeIf { it.isNotBlank() }
-        val keyB64 = prefs.getString(KEY_SHARED, null)
+        val pin = prefs.getString(KEY_PIN)?.takeIf { it.length == 4 } ?: return null
+        val serial = prefs.getString(KEY_SERIAL)?.takeIf { it.isNotBlank() }
+        val gtin = prefs.getString(KEY_GTIN)?.takeIf { it.isNotBlank() }
+        val raw = prefs.getString(KEY_RAW_GS1)?.takeIf { it.isNotBlank() }
+        val mac = prefs.getString(KEY_MAC)?.takeIf { it.isNotBlank() }
+        val deviceName = prefs.getString(KEY_DEVICE_NAME)?.takeIf { it.isNotBlank() }
+        val keyB64 = prefs.getString(KEY_SHARED)
         val shared = keyB64?.let {
             try {
-                Base64.decode(it, Base64.NO_WRAP)
+                Base64.decode(it)
             } catch (_: Throwable) {
                 null
             }
@@ -44,13 +41,13 @@ class OnePlusSensorStore(context: Context, namespace: String? = null) {
         // A new sensor restarts its EGV sequence counter from a low value, so the persisted ingest
         // high-water mark (last sequence/timestamp) MUST be reset — otherwise the new sensor's early
         // readings would be wrongly rejected as "already seen". Reset only on an actual serial change.
-        val serialChanged = identity.serial != null && identity.serial != prefs.getString(KEY_SERIAL, null)
-        prefs.edit()
-            .putString(KEY_PIN, identity.pin)
-            .putString(KEY_SERIAL, identity.serial)
-            .putString(KEY_GTIN, identity.gtin)
-            .putString(KEY_RAW_GS1, identity.rawGs1)
-            .apply()
+        val serialChanged = identity.serial != null && identity.serial != prefs.getString(KEY_SERIAL)
+        prefs.edit {
+            putString(KEY_PIN, identity.pin)
+            putString(KEY_SERIAL, identity.serial)
+            putString(KEY_GTIN, identity.gtin)
+            putString(KEY_RAW_GS1, identity.rawGs1)
+        }
         // The session start is NOT cleared here. It is owned solely by [startSessionForSensor], which
         // decides from the MAC whether this is the same sensor. Clearing it here made the write order
         // matter: the staging start recorded the session start first, then saveIdentity wiped it
@@ -68,10 +65,10 @@ class OnePlusSensorStore(context: Context, namespace: String? = null) {
      * EGV counter; [timestampMs] backs the near-duplicate time window.
      */
     fun saveLastIngest(sequence: Long?, timestampMs: Long) {
-        prefs.edit().apply {
+        prefs.edit {
             if (sequence != null) putLong(KEY_LAST_SEQ, sequence)
             putLong(KEY_LAST_TS, timestampMs)
-        }.apply()
+        }
     }
 
     /** Last ingested EGV sequence, or -1 when none recorded (accept everything). */
@@ -81,7 +78,10 @@ class OnePlusSensorStore(context: Context, namespace: String? = null) {
     fun loadLastIngestTimestamp(): Long = prefs.getLong(KEY_LAST_TS, 0L)
 
     private fun clearLastIngest() {
-        prefs.edit().remove(KEY_LAST_SEQ).remove(KEY_LAST_TS).apply()
+        prefs.edit {
+            remove(KEY_LAST_SEQ)
+            remove(KEY_LAST_TS)
+        }
     }
 
     /**
@@ -91,10 +91,10 @@ class OnePlusSensorStore(context: Context, namespace: String? = null) {
      * promoted, even though this store still held its identity, MAC and KEKS key.
      */
     fun saveSlotProgress(present: Boolean, validEgvCount: Int) {
-        prefs.edit()
-            .putBoolean(KEY_SLOT_PRESENT, present)
-            .putInt(KEY_SLOT_EGV_COUNT, validEgvCount.coerceAtLeast(0))
-            .apply()
+        prefs.edit {
+            putBoolean(KEY_SLOT_PRESENT, present)
+            putInt(KEY_SLOT_EGV_COUNT, validEgvCount.coerceAtLeast(0))
+        }
     }
 
     /** A sensor was started in this slot and not cancelled/promoted. */
@@ -111,7 +111,7 @@ class OnePlusSensorStore(context: Context, namespace: String? = null) {
      * a restart does not send a settled sensor back to "warming up".
      */
     fun saveSlotWarmupDone(done: Boolean) {
-        prefs.edit().putBoolean(KEY_SLOT_WARMUP_DONE, done).apply()
+        prefs.edit { putBoolean(KEY_SLOT_WARMUP_DONE, done) }
     }
 
     /** True once this slot's sensor has left warm-up (see [saveSlotWarmupDone]). */
@@ -119,7 +119,7 @@ class OnePlusSensorStore(context: Context, namespace: String? = null) {
 
     /** Record the sensor session start (epoch ms) once — used to derive early/end-of-life age. */
     fun saveSessionStartIfAbsent(epochMs: Long) {
-        if (!prefs.contains(KEY_SESSION_START)) prefs.edit().putLong(KEY_SESSION_START, epochMs).apply()
+        if (!prefs.contains(KEY_SESSION_START)) prefs.edit { putLong(KEY_SESSION_START, epochMs) }
     }
 
     /**
@@ -140,20 +140,20 @@ class OnePlusSensorStore(context: Context, namespace: String? = null) {
         val address = deviceAddress.uppercase()
         val isNewSession = startsNewSession(
             storedStartMs = prefs.getLong(KEY_SESSION_START, 0L),
-            storedOwnerMac = prefs.getString(KEY_SESSION_START_MAC, null),
+            storedOwnerMac = prefs.getString(KEY_SESSION_START_MAC),
             previousMac = previousMac,
             deviceAddress = address,
         )
         if (!isNewSession) {
             // Same sensor: keep its age, and adopt the owner key so a session anchored before that
             // key existed is recognised directly next time.
-            prefs.edit().putString(KEY_SESSION_START_MAC, address).apply()
+            prefs.edit { putString(KEY_SESSION_START_MAC, address) }
             return false
         }
-        prefs.edit()
-            .putLong(KEY_SESSION_START, epochMs)
-            .putString(KEY_SESSION_START_MAC, address)
-            .apply()
+        prefs.edit {
+            putLong(KEY_SESSION_START, epochMs)
+            putString(KEY_SESSION_START_MAC, address)
+        }
         OnePlusLog.i(
             "${OnePlusLogMarkers.SESSION}: sensor session start recorded startMs=$epochMs",
         )
@@ -174,7 +174,7 @@ class OnePlusSensorStore(context: Context, namespace: String? = null) {
      */
     fun overwriteSessionStart(epochMs: Long) {
         if (epochMs <= 0L) return
-        prefs.edit().putLong(KEY_SESSION_START, epochMs).apply()
+        prefs.edit { putLong(KEY_SESSION_START, epochMs) }
         OnePlusLog.i(
             "${OnePlusLogMarkers.SESSION}: sensor session start corrected by user startMs=$epochMs",
         )
@@ -182,30 +182,28 @@ class OnePlusSensorStore(context: Context, namespace: String? = null) {
 
     fun saveLastMac(address: String) {
         if (address.isBlank()) return
-        prefs.edit().putString(KEY_MAC, address.uppercase()).apply()
+        prefs.edit { putString(KEY_MAC, address.uppercase()) }
     }
 
     fun saveLastDeviceName(name: String?) {
         if (name.isNullOrBlank()) return
-        prefs.edit().putString(KEY_DEVICE_NAME, name).apply()
+        prefs.edit { putString(KEY_DEVICE_NAME, name) }
     }
 
     fun saveSharedKey(key: ByteArray) {
         if (key.size != 16) return
-        prefs.edit()
-            .putString(KEY_SHARED, Base64.encodeToString(key, Base64.NO_WRAP))
-            .apply()
+        prefs.edit { putString(KEY_SHARED, Base64.encode(key)) }
         OnePlusLog.i(
             "${OnePlusLogMarkers.SESSION}: KEKS shared key persisted (16b)",
         )
     }
 
     fun clearSharedKey() {
-        prefs.edit().remove(KEY_SHARED).apply()
+        prefs.edit { remove(KEY_SHARED) }
     }
 
     fun clearAll() {
-        prefs.edit().clear().apply()
+        prefs.edit { clear() }
     }
 
     /**
@@ -215,23 +213,23 @@ class OnePlusSensorStore(context: Context, namespace: String? = null) {
      * promoted sensor has a fresh EGV sequence space, so no old floor must survive).
      */
     fun adopt(session: OnePlusStoredSession, sessionStartMs: Long) {
-        val edit = prefs.edit()
-            .putString(KEY_PIN, session.identity.pin)
-            .putString(KEY_SERIAL, session.identity.serial)
-            .putString(KEY_GTIN, session.identity.gtin)
-            .putString(KEY_RAW_GS1, session.identity.rawGs1)
-            .remove(KEY_LAST_SEQ)
-            .remove(KEY_LAST_TS)
-        session.lastMac?.let { edit.putString(KEY_MAC, it) }
-        session.lastDeviceName?.let { edit.putString(KEY_DEVICE_NAME, it) }
-        session.sharedKey?.let { edit.putString(KEY_SHARED, Base64.encodeToString(it, Base64.NO_WRAP)) }
-        if (sessionStartMs > 0L) {
-            edit.putLong(KEY_SESSION_START, sessionStartMs)
-            // Keep the start owned by the promoted sensor's MAC, so re-connecting it later is seen as
-            // the same sensor and does not restart the age clock (see startSessionForSensor).
-            session.lastMac?.let { edit.putString(KEY_SESSION_START_MAC, it.uppercase()) }
+        prefs.edit {
+            putString(KEY_PIN, session.identity.pin)
+            putString(KEY_SERIAL, session.identity.serial)
+            putString(KEY_GTIN, session.identity.gtin)
+            putString(KEY_RAW_GS1, session.identity.rawGs1)
+            remove(KEY_LAST_SEQ)
+            remove(KEY_LAST_TS)
+            session.lastMac?.let { putString(KEY_MAC, it) }
+            session.lastDeviceName?.let { putString(KEY_DEVICE_NAME, it) }
+            session.sharedKey?.let { putString(KEY_SHARED, Base64.encode(it)) }
+            if (sessionStartMs > 0L) {
+                putLong(KEY_SESSION_START, sessionStartMs)
+                // Keep the start owned by the promoted sensor's MAC, so re-connecting it later is
+                // seen as the same sensor and does not restart the age clock (startSessionForSensor).
+                session.lastMac?.let { putString(KEY_SESSION_START_MAC, it.uppercase()) }
+            }
         }
-        edit.apply()
         OnePlusLog.i("${OnePlusLogMarkers.SESSION}: adopted promoted sensor serial=${session.identity.serial ?: "-"}")
     }
 
@@ -259,6 +257,16 @@ class OnePlusSensorStore(context: Context, namespace: String? = null) {
                 ?: return true
             return !owner.equals(deviceAddress, ignoreCase = true)
         }
+
+        /**
+         * Name of the slot's own file.
+         *
+         * Per-slot isolation: the STAGING sensor must not share identity / MAC / KEKS key / ingest
+         * markers with PRODUCTION. A null or blank [namespace] gives the original single-sensor
+         * file, so an install that predates the staging slot keeps its stored sensor.
+         */
+        fun prefsFileName(namespace: String?): String =
+            if (namespace.isNullOrBlank()) PREFS_NAME else "${PREFS_NAME}_$namespace"
 
         private const val PREFS_NAME = "dexcom_oneplus_sensor"
         private const val KEY_PIN = "pin"

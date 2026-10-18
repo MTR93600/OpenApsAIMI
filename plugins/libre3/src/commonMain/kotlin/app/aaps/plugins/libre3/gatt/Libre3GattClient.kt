@@ -1,7 +1,5 @@
 package app.aaps.plugins.libre3.gatt
 
-import java.util.UUID
-
 /**
  * The Bluetooth link, seen from the driver.
  *
@@ -42,7 +40,7 @@ interface Libre3GattClient {
     fun setLowPower(enabled: Boolean) = Unit
 
     /** Turns a channel on or off, and waits for the sensor to confirm. */
-    fun setNotify(characteristic: UUID, enabled: Boolean): Boolean
+    fun setNotify(characteristic: String, enabled: Boolean): Boolean
 
     /**
      * Writes one whole message, cut into pieces by [Libre3BleFraming], each piece carrying the
@@ -50,7 +48,7 @@ interface Libre3GattClient {
      *
      * For the certificate and the challenge channels only.
      */
-    fun write(characteristic: UUID, payload: ByteArray)
+    fun write(characteristic: String, payload: ByteArray)
 
     /**
      * Writes bytes exactly as they are, with no place marker in front.
@@ -58,7 +56,7 @@ interface Libre3GattClient {
      * The command channel works this way. A command sent through [write] would arrive as
      * `00 00 11` instead of `11`, and the sensor would not understand it.
      */
-    fun writeRaw(characteristic: UUID, payload: ByteArray)
+    fun writeRaw(characteristic: String, payload: ByteArray)
 
     /**
      * Waits for one message piece exactly as the sensor sent it.
@@ -68,7 +66,7 @@ interface Libre3GattClient {
      *
      * @return the piece, or null when the wait ran out or the link dropped.
      */
-    fun awaitNotifyRaw(characteristic: UUID, timeoutMs: Long): ByteArray?
+    fun awaitNotifyRaw(characteristic: String, timeoutMs: Long): ByteArray?
 
     /**
      * Waits until a channel has delivered a whole message of [exactly] bytes.
@@ -78,7 +76,7 @@ interface Libre3GattClient {
      *
      * @return the message, or null when the wait ran out or the link dropped.
      */
-    fun awaitNotify(characteristic: UUID, exactly: Int, timeoutMs: Long): ByteArray?
+    fun awaitNotify(characteristic: String, exactly: Int, timeoutMs: Long): ByteArray?
 
     /**
      * Waits for the next piece from any of the seven data channels of a running session.
@@ -86,8 +84,8 @@ interface Libre3GattClient {
      * One stream is used rather than one wait per channel, because a session receives glucose and
      * sensor health messages mixed together and must not miss either.
      *
-     * @return which channel it came from and the piece as sent, or null when the wait ran out or
-     *   the link dropped.
+     * @return which channel it came from, as one of the [Libre3BluetoothUuids] texts, and the
+     *   piece as sent. Null when the wait ran out or the link dropped.
      */
-    fun awaitDataPlaneNotify(timeoutMs: Long): Pair<UUID, ByteArray>?
+    fun awaitDataPlaneNotify(timeoutMs: Long): Pair<String, ByteArray>?
 }

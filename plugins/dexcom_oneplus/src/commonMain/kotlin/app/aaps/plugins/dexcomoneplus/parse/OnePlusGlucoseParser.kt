@@ -1,8 +1,7 @@
 package app.aaps.plugins.dexcomoneplus.parse
 
 import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseSample
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
+import kotlin.time.Clock
 
 /**
  * Pure glucose parse / bounds helpers + Control EGV packet decode (A6.7).
@@ -59,7 +58,7 @@ object OnePlusGlucoseParser {
     /**
      * Decode Control EGV notify bytes → [OnePlusGlucoseSample], or null when opcode/layout/bounds fail.
      */
-    fun parse(packet: ByteArray, nowMs: Long = System.currentTimeMillis()): OnePlusGlucoseSample? =
+    fun parse(packet: ByteArray, nowMs: Long = Clock.System.now().toEpochMilliseconds()): OnePlusGlucoseSample? =
         parseControlPacket(packet, nowMs)?.sample
 
     data class ParsedEgv(
@@ -77,7 +76,7 @@ object OnePlusGlucoseParser {
      * Parse a Control characteristic notification with calibration metadata.
      * Returns null if not an EGV opcode / too short / CRC fail (EGV1).
      */
-    fun parseControlPacket(packet: ByteArray, nowMs: Long = System.currentTimeMillis()): ParsedEgv? {
+    fun parseControlPacket(packet: ByteArray, nowMs: Long = Clock.System.now().toEpochMilliseconds()): ParsedEgv? {
         if (packet.isEmpty()) return null
         val opcode = packet[0].toInt() and 0xff
         return when (opcode) {
@@ -94,17 +93,17 @@ object OnePlusGlucoseParser {
     private fun parseEgv1(packet: ByteArray, nowMs: Long): ParsedEgv? {
         if (packet.size < 14) return null
         if (!OnePlusFastCrc16.check(packet)) return null
-        val data = ByteBuffer.wrap(packet).order(ByteOrder.LITTLE_ENDIAN)
-        data.get() // opcode
-        data.get() // status / battery raw
-        val sequence = data.int.toLong() and 0xffffffffL
-        val txTimestamp = data.int // dex relative seconds
-        val glucoseBytes = data.short.toInt() and 0xffff
+        val data = OnePlusByteReader(packet)
+        data.skip(1) // opcode
+        data.skip(1) // status / battery raw
+        val sequence = data.int().toLong() and 0xffffffffL
+        val txTimestamp = data.int() // dex relative seconds
+        val glucoseBytes = data.short().toInt() and 0xffff
         val glucoseIsDisplayOnly = (glucoseBytes and 0xf000) != 0
         val glucose = glucoseBytes and 0x0fff
-        val state = data.get().toInt() and 0xff
-        val trend = data.get().toInt() // signed byte promoted
-        val predicted = if (data.remaining() >= 2) data.short.toInt() and 0x03ff else null
+        val state = data.u8()
+        val trend = data.byte().toInt() // signed byte promoted
+        val predicted = if (data.remaining >= 2) data.short().toInt() and 0x03ff else null
         val cal = OnePlusCalibrationState.parse(state)
         val sample = if (cal.usableGlucose() && glucose > 13) {
             toSample(
@@ -135,19 +134,19 @@ object OnePlusGlucoseParser {
     private fun parseEgv2(packet: ByteArray, nowMs: Long): ParsedEgv? {
         if (packet.size < 19) return null
         // Ob1 path matches opcode only (no CRC).
-        val data = ByteBuffer.wrap(packet).order(ByteOrder.LITTLE_ENDIAN)
-        data.get() // opcode 0x4e
-        data.get() // status_raw
+        val data = OnePlusByteReader(packet)
+        data.skip(1) // opcode 0x4e
+        data.skip(1) // status_raw
         val sessionAge = readUnsignedInt(data).toInt()
         val sequence = readUnsignedShort(data).toLong()
         readUnsignedShort(data) // unused / "bogus" upstream
         val age = readUnsignedShort(data)
-        val glucoseBytes = data.short.toInt() and 0xffff
+        val glucoseBytes = data.short().toInt() and 0xffff
         val glucoseIsDisplayOnly = (glucoseBytes and 0xf000) != 0
         val glucose = glucoseBytes and 0x0fff
-        val state = data.get().toInt() and 0xff
-        val trend = data.get().toInt() // signed byte promoted
-        var predicted: Int? = data.short.toInt() and 0x03ff
+        val state = data.u8()
+        val trend = data.byte().toInt() // signed byte promoted
+        var predicted: Int? = data.short().toInt() and 0x03ff
         if (predicted == 0x3ff) predicted = null // Message2 invalid marker
         val cal = OnePlusCalibrationState.parse(state)
         val adjusted = if (cal == OnePlusCalibrationState.Stopped && sessionAge * 1000L < 30L * 60L * 1000L) {
@@ -189,18 +188,18 @@ object OnePlusGlucoseParser {
     }
 
     /** Matches `cgm/dex/g7/BaseMessage.getUnsignedInt`. */
-    private fun readUnsignedInt(data: ByteBuffer): Long {
-        val b0 = data.get().toLong() and 0xff
-        val b1 = data.get().toLong() and 0xff
-        val b2 = data.get().toLong() and 0xff
-        val b3 = data.get().toLong() and 0xff
+    private fun readUnsignedInt(data: OnePlusByteReader): Long {
+        val b0 = data.u8().toLong()
+        val b1 = data.u8().toLong()
+        val b2 = data.u8().toLong()
+        val b3 = data.u8().toLong()
         return b0 + (b1 shl 8) + (b2 shl 16) + (b3 shl 24)
     }
 
     /** Matches `cgm/dex/g7/BaseMessage.getUnsignedShort`. */
-    private fun readUnsignedShort(data: ByteBuffer): Int {
-        val b0 = data.get().toInt() and 0xff
-        val b1 = data.get().toInt() and 0xff
+    private fun readUnsignedShort(data: OnePlusByteReader): Int {
+        val b0 = data.u8()
+        val b1 = data.u8()
         return b0 + (b1 shl 8)
     }
 }

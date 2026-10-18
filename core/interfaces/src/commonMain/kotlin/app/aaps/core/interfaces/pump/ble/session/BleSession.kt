@@ -74,7 +74,20 @@ fun bleStackFailure(operation: String, status: Int, message: String?): BleFailur
 
 sealed class BleCentralEvent {
     data class AdapterState(val state: BleAdapterState) : BleCentralEvent()
-    data class ScanResult(val name: String?, val id: String, val advertisementBytes: ByteArray?) : BleCentralEvent()
+    /**
+     * One advertisement.
+     *
+     * [serviceUuids] is what the advertisement itself listed, not what a later service discovery
+     * would find. A Dexcom ONE+ often advertises with no name at all and is recognised only by the
+     * service UUID it carries, so a scanner that cannot read this list cannot find that sensor.
+     * Empty means the platform reported none.
+     */
+    data class ScanResult(
+        val name: String?,
+        val id: String,
+        val advertisementBytes: ByteArray?,
+        val serviceUuids: List<String> = emptyList()
+    ) : BleCentralEvent()
     data class ScanFailed(val message: String) : BleCentralEvent()
     data class OperationFailed(val operation: String, val message: String) : BleCentralEvent()
     data class Link(val id: String, val connected: Boolean, val status: Int) : BleCentralEvent()

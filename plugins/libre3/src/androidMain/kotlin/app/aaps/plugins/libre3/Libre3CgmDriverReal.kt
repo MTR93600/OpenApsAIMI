@@ -1,10 +1,8 @@
 package app.aaps.plugins.libre3
 
-import android.content.Context
 import app.aaps.core.interfaces.source.SensorSlot
 import app.aaps.plugins.libre3.crypto.Libre3FirstPairEphemeral
 import app.aaps.plugins.libre3.gatt.Libre3BluetoothUuids
-import app.aaps.plugins.libre3.gatt.Libre3GattClientAndroid
 import app.aaps.plugins.libre3.gatt.Libre3GattClient
 import app.aaps.plugins.libre3.identity.Libre3SensorIdentity
 import app.aaps.plugins.libre3.identity.Libre3SensorStore
@@ -96,7 +94,7 @@ class Libre3CgmDriverReal(
     }
 
     @Volatile
-    private var context: Context? = null
+    private var platform: Libre3Platform? = null
 
     @Volatile
     private var store: Libre3SensorStore? = null
@@ -127,9 +125,9 @@ class Libre3CgmDriverReal(
     @Volatile
     private var connectGeneration = 0
 
-    override fun setContext(context: Context) {
-        this.context = context.applicationContext
-        this.store = Libre3SensorStore(context.applicationContext, storeNamespace)
+    override fun attach(platform: Libre3Platform) {
+        this.platform = platform
+        this.store = platform.sensorStore(storeNamespace)
     }
 
     /**
@@ -146,7 +144,7 @@ class Libre3CgmDriverReal(
     fun rebindStore(namespace: String?) {
         storeNamespace = namespace
         role = if (namespace.isNullOrBlank()) SensorSlot.PRODUCTION else SensorSlot.STAGING
-        context?.let { store = Libre3SensorStore(it, namespace) }
+        platform?.let { store = it.sensorStore(namespace) }
     }
 
     /** True when this instance is the one the arbiter says owns [mac]. */
@@ -266,7 +264,7 @@ class Libre3CgmDriverReal(
             scheduleRetry(generation)
             return
         }
-        val appContext = context ?: return
+        val host = platform ?: return
         val sensorStore = store ?: return
         // One sensor, one driver instance. Taken before the scan, because from the scan on there is
         // a link, and two links on one sensor break both pairings. A refusal is final on purpose: a
@@ -301,7 +299,7 @@ class Libre3CgmDriverReal(
             scheduleRetryAfter(generation, waitMs)
             return
         }
-        val client = Libre3GattClientAndroid(appContext)
+        val client = host.gattClient()
         gatt = client
         val newSession = Libre3BleSession(client, sensorStore, pairingBlocks)
         session = newSession

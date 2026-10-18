@@ -7,6 +7,7 @@ import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
 import platform.CoreBluetooth.CBAdvertisementDataLocalNameKey
 import platform.CoreBluetooth.CBAdvertisementDataManufacturerDataKey
+import platform.CoreBluetooth.CBAdvertisementDataServiceUUIDsKey
 import platform.CoreBluetooth.CBCentralManager
 import platform.CoreBluetooth.CBCentralManagerDelegateProtocol
 import platform.CoreBluetooth.CBCharacteristic
@@ -26,6 +27,7 @@ import platform.CoreBluetooth.CBManagerStateUnsupported
 import platform.CoreBluetooth.CBPeripheral
 import platform.CoreBluetooth.CBPeripheralDelegateProtocol
 import platform.CoreBluetooth.CBService
+import platform.CoreBluetooth.CBUUID
 import platform.Foundation.NSData
 import platform.Foundation.NSError
 import platform.Foundation.NSUUID
@@ -210,7 +212,18 @@ class CoreBluetoothCentral : BleCentral {
             val local = advertisementData[CBAdvertisementDataLocalNameKey] as? String
             val name = local?.takeIf { it.isNotEmpty() } ?: didDiscoverPeripheral.name
             val manufacturer = advertisementData[CBAdvertisementDataManufacturerDataKey] as? NSData
-            emit(BleCentralEvent.ScanResult(name = name, id = id, advertisementBytes = manufacturer?.toByteArray()))
+            val advertised = (advertisementData[CBAdvertisementDataServiceUUIDsKey] as? List<*>)
+                .orEmpty()
+                .filterIsInstance<CBUUID>()
+                .map { expandUuid(it.UUIDString) }
+            emit(
+                BleCentralEvent.ScanResult(
+                    name = name,
+                    id = id,
+                    advertisementBytes = manufacturer?.toByteArray(),
+                    serviceUuids = advertised
+                )
+            )
         }
 
         override fun centralManager(central: CBCentralManager, didConnectPeripheral: CBPeripheral) {

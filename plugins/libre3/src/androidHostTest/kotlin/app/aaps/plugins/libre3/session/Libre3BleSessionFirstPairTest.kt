@@ -4,8 +4,9 @@ import app.aaps.plugins.libre3.crypto.Libre3AesCcm
 import app.aaps.plugins.libre3.crypto.Libre3EphemeralKeyPair
 import app.aaps.plugins.libre3.crypto.Libre3FirstPairEphemeral
 import app.aaps.plugins.libre3.crypto.Libre3FirstPairPhase5Source
-import app.aaps.plugins.libre3.crypto.Libre3PhoneCert
 import app.aaps.plugins.libre3.crypto.Libre3Phase6Response
+import app.aaps.plugins.libre3.crypto.Libre3PhoneCert
+import app.aaps.plugins.libre3.crypto.Libre3RandomSource
 import app.aaps.plugins.libre3.crypto.Libre3SensorCert
 import app.aaps.plugins.libre3.gatt.Libre3BluetoothUuids
 import app.aaps.plugins.libre3.gatt.Libre3GattClient
@@ -13,15 +14,13 @@ import app.aaps.plugins.libre3.identity.Libre3SensorIdentity
 import app.aaps.plugins.libre3.identity.Libre3SessionKeys
 import app.aaps.plugins.libre3.identity.Libre3SessionStore
 import com.google.common.truth.Truth.assertThat
-import org.junit.jupiter.api.Test
 import java.math.BigInteger
 import java.security.KeyPair
 import java.security.KeyPairGenerator
-import java.security.SecureRandom
 import java.security.Signature
 import java.security.interfaces.ECPublicKey
 import java.security.spec.ECGenParameterSpec
-import java.util.UUID
+import org.junit.jupiter.api.Test
 
 /**
  * The first pairing, run end to end against a written down sensor.
@@ -94,7 +93,7 @@ class Libre3BleSessionFirstPairTest {
     private class ScriptedSensorLink(private val sensorCert: ByteArray, private val sensorEphemeral: ByteArray) : Libre3GattClient {
 
         val commandsSent = mutableListOf<Byte>()
-        val notifiesTurnedOn = mutableListOf<UUID>()
+        val notifiesTurnedOn = mutableListOf<String>()
         var connected = false
         var disconnects = 0
         var phase5Wire: ByteArray? = null
@@ -116,20 +115,20 @@ class Libre3BleSessionFirstPairTest {
 
         override fun isConnected() = connected
 
-        override fun setNotify(characteristic: UUID, enabled: Boolean): Boolean {
+        override fun setNotify(characteristic: String, enabled: Boolean): Boolean {
             if (enabled) notifiesTurnedOn.add(characteristic)
             return true
         }
 
-        override fun write(characteristic: UUID, payload: ByteArray) {
+        override fun write(characteristic: String, payload: ByteArray) {
             if (characteristic == Libre3BluetoothUuids.SEC_CHALLENGE_DATA) phase5Wire = payload
         }
 
-        override fun writeRaw(characteristic: UUID, payload: ByteArray) {
+        override fun writeRaw(characteristic: String, payload: ByteArray) {
             commandsSent.add(payload[0])
         }
 
-        override fun awaitNotifyRaw(characteristic: UUID, timeoutMs: Long): ByteArray {
+        override fun awaitNotifyRaw(characteristic: String, timeoutMs: Long): ByteArray {
             // The answer the sensor gives to the command that was just sent. This is the clock of
             // section 3.3 of the plan, written the other way round.
             val answer = when (commandsSent.last()) {
@@ -144,20 +143,20 @@ class Libre3BleSessionFirstPairTest {
             return byteArrayOf(answer)
         }
 
-        override fun awaitNotify(characteristic: UUID, exactly: Int, timeoutMs: Long): ByteArray = when {
+        override fun awaitNotify(characteristic: String, exactly: Int, timeoutMs: Long): ByteArray = when {
             characteristic == Libre3BluetoothUuids.SEC_CERT_DATA      -> certQueue.removeFirst()
             exactly == Libre3SessionAuth.CHALLENGE_SIZE               -> ByteArray(23) { (it + 0x80).toByte() }
             else                                                      -> phase6Wire
         }
 
-        override fun awaitDataPlaneNotify(timeoutMs: Long): Pair<UUID, ByteArray>? = null
+        override fun awaitDataPlaneNotify(timeoutMs: Long): Pair<String, ByteArray>? = null
     }
 
     /** A source of bytes that always hands back the same draw, so the pairing is repeatable. */
-    private class FixedRandom(private val entropy: ByteArray) : SecureRandom() {
+    private class FixedRandom(private val entropy: ByteArray) : Libre3RandomSource {
 
-        override fun nextBytes(bytes: ByteArray) {
-            if (bytes.size == entropy.size) entropy.copyInto(bytes) else bytes.fill(0x5A)
+        override fun nextBytes(out: ByteArray) {
+            if (out.size == entropy.size) entropy.copyInto(out) else out.fill(0x5A)
         }
     }
 

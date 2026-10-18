@@ -1,5 +1,8 @@
 package app.aaps.plugins.dexcomoneplus.scan
 
+import app.aaps.plugins.dexcomoneplus.identity.OnePlusStoredSession
+import kotlin.concurrent.Volatile
+
 /**
  * BLE scan façade for ONE+ / G7-family ADV (A6.2).
  *
@@ -33,11 +36,23 @@ interface OnePlusBleScanner {
     fun isScanning(): Boolean
 
     /**
-     * Block until [address] is seen in ADV (or timeout), also reporting any other ONE+ family
-     * transmitter heard in the same window. Uses a **private** LE `ScanCallback` so UI [stopScan]
-     * cannot cancel it.
+     * Tell the scanner what the slot's store now knows about its sensor, so later advertisements
+     * are ranked and sticky-matched against it.
      *
-     * ⚠️ ASYNC IMPACT: blocks caller; binder delivers results.
+     * Called after a successful authentication and after the identity is saved. The default does
+     * nothing, which is right for a scanner that does not rank anything.
+     */
+    fun updateSessionHint(session: OnePlusStoredSession?) = Unit
+
+    /**
+     * Block until [address] is seen in ADV (or timeout), also reporting any other ONE+ family
+     * transmitter heard in the same window.
+     *
+     * A [stopScan] from the screen must not cut this wait short. Android gets that from a private
+     * `ScanCallback`; on iOS the whole app shares one scan, so the scanner keeps the radio on until
+     * this wait is over. Each platform owes the guarantee, not the mechanism.
+     *
+     * ⚠️ ASYNC IMPACT: blocks the calling thread; the platform delivers results on its own thread.
      */
     fun awaitTarget(address: String, timeoutMs: Long): OnePlusAdvWaitResult = OnePlusAdvWaitResult()
 }

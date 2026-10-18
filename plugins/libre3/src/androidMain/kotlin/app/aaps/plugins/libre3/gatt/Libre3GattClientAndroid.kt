@@ -17,7 +17,6 @@ import android.content.Context
 import android.os.Build
 import app.aaps.plugins.libre3.Libre3Log
 import app.aaps.plugins.libre3.Libre3LogMarkers
-import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
@@ -54,10 +53,10 @@ class Libre3GattClientAndroid(context: Context) : Libre3GattClient {
      * a message sent right after a command answer cannot be lost. Whoever waits decides what to do
      * with the pieces, because the three kinds of channel need three different things.
      */
-    private val inboxes = ConcurrentHashMap<UUID, LinkedBlockingQueue<ByteArray>>()
+    private val inboxes = ConcurrentHashMap<String, LinkedBlockingQueue<ByteArray>>()
 
     /** One mixed stream for the seven channels of a running session. */
-    private val dataPlaneInbox = LinkedBlockingQueue<Pair<UUID, ByteArray>>()
+    private val dataPlaneInbox = LinkedBlockingQueue<Pair<String, ByteArray>>()
 
     @Volatile
     private var operationLatch: CountDownLatch? = null
@@ -125,7 +124,7 @@ class Libre3GattClientAndroid(context: Context) : Libre3GattClient {
         @Suppress("DEPRECATION")
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                onPiece(characteristic.uuid, characteristic.value ?: ByteArray(0))
+                onPiece(Libre3GattUuids.textOf(characteristic.uuid), characteristic.value ?: ByteArray(0))
             }
         }
 
@@ -134,7 +133,7 @@ class Libre3GattClientAndroid(context: Context) : Libre3GattClient {
             characteristic: BluetoothGattCharacteristic,
             value: ByteArray,
         ) {
-            onPiece(characteristic.uuid, value)
+            onPiece(Libre3GattUuids.textOf(characteristic.uuid), value)
         }
     }
 
@@ -276,11 +275,11 @@ class Libre3GattClientAndroid(context: Context) : Libre3GattClient {
      * the link open while nothing ever arrives. That mistake cost a long hunt on the Dexcom ONE+
      * work in this same project, so it is spelled out here.
      */
-    override fun setNotify(characteristic: UUID, enabled: Boolean): Boolean {
+    override fun setNotify(characteristic: String, enabled: Boolean): Boolean {
         val gattRef = gatt ?: return false
         val target = findCharacteristic(gattRef, characteristic) ?: return false
         if (!gattRef.setCharacteristicNotification(target, enabled)) return false
-        val descriptor = target.getDescriptor(Libre3BluetoothUuids.CLIENT_CHARACTERISTIC_CONFIG) ?: return false
+        val descriptor = target.getDescriptor(Libre3GattUuids.CLIENT_CHARACTERISTIC_CONFIG) ?: return false
         val wantsConfirmed =
             target.properties and BluetoothGattCharacteristic.PROPERTY_INDICATE != 0 &&
                 target.properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY == 0
@@ -295,16 +294,16 @@ class Libre3GattClientAndroid(context: Context) : Libre3GattClient {
         return waitForOperation(OPERATION_TIMEOUT_MS)
     }
 
-    override fun write(characteristic: UUID, payload: ByteArray) {
+    override fun write(characteristic: String, payload: ByteArray) {
         // One piece at a time. Android refuses a second write while the first is still running.
         for (piece in Libre3BleFraming.fragmentForWrite(payload)) writeOnce(characteristic, piece)
     }
 
-    override fun writeRaw(characteristic: UUID, payload: ByteArray) {
+    override fun writeRaw(characteristic: String, payload: ByteArray) {
         writeOnce(characteristic, payload)
     }
 
-    private fun writeOnce(characteristic: UUID, bytes: ByteArray) {
+    private fun writeOnce(characteristic: String, bytes: ByteArray) {
         val gattRef = gatt ?: return
         val target = findCharacteristic(gattRef, characteristic) ?: return
         startOperation()
@@ -312,10 +311,10 @@ class Libre3GattClientAndroid(context: Context) : Libre3GattClient {
         waitForOperation(OPERATION_TIMEOUT_MS)
     }
 
-    override fun awaitNotifyRaw(characteristic: UUID, timeoutMs: Long): ByteArray? =
+    override fun awaitNotifyRaw(characteristic: String, timeoutMs: Long): ByteArray? =
         nextPiece(characteristic, timeoutMs)
 
-    override fun awaitNotify(characteristic: UUID, exactly: Int, timeoutMs: Long): ByteArray? {
+    override fun awaitNotify(characteristic: String, exactly: Int, timeoutMs: Long): ByteArray? {
         // A fresh holder per message, exactly like the upstream code. A message that was cut short
         // by a lost link must not leave anything behind for the next one.
         val assembler = Libre3BleFraming.NotifyReassembler()
@@ -338,7 +337,7 @@ class Libre3GattClientAndroid(context: Context) : Libre3GattClient {
         }
     }
 
-    override fun awaitDataPlaneNotify(timeoutMs: Long): Pair<UUID, ByteArray>? {
+    override fun awaitDataPlaneNotify(timeoutMs: Long): Pair<String, ByteArray>? {
         if (linkDown) return null
         return try {
             dataPlaneInbox.poll(timeoutMs, TimeUnit.MILLISECONDS)
@@ -348,7 +347,7 @@ class Libre3GattClientAndroid(context: Context) : Libre3GattClient {
         }
     }
 
-    private fun nextPiece(characteristic: UUID, timeoutMs: Long): ByteArray? {
+    private fun nextPiece(characteristic: String, timeoutMs: Long): ByteArray? {
         // A wait that starts after the link is already gone would otherwise sit for the whole
         // timeout on a queue that nothing can ever fill.
         if (linkDown) return null
@@ -369,7 +368,7 @@ class Libre3GattClientAndroid(context: Context) : Libre3GattClient {
      * carry a counter, and the data channels send pieces whose length is part of the meaning. One
      * rule for all three would break two of them.
      */
-    private fun onPiece(characteristic: UUID, piece: ByteArray) {
+    private fun onPiece(characteristic: String, piece: ByteArray) {
         if (characteristic in Libre3BluetoothUuids.DATA_PLANE_CHANNELS) {
             dataPlaneInbox.offer(characteristic to piece)
             return
@@ -377,9 +376,10 @@ class Libre3GattClientAndroid(context: Context) : Libre3GattClient {
         inboxes.getOrPut(characteristic) { LinkedBlockingQueue() }.offer(piece)
     }
 
-    private fun findCharacteristic(gattRef: BluetoothGatt, uuid: UUID): BluetoothGattCharacteristic? {
+    private fun findCharacteristic(gattRef: BluetoothGatt, uuid: String): BluetoothGattCharacteristic? {
+        val platformUuid = Libre3GattUuids.uuidOf(uuid)
         for (service in gattRef.services) {
-            service.getCharacteristic(uuid)?.let { return it }
+            service.getCharacteristic(platformUuid)?.let { return it }
         }
         Libre3Log.w("${Libre3LogMarkers.SESSION}: the sensor has no channel $uuid")
         return null

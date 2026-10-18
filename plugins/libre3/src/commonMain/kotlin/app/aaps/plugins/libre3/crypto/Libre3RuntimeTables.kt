@@ -3,15 +3,24 @@ package app.aaps.plugins.libre3.crypto
 /**
  * Loads the fixed byte tables that ship with the app.
  *
- * They live under `src/main/resources/libre3/` and are read from the classpath, not from Android
- * assets. That choice is deliberate: a classpath resource can also be read by a plain unit test,
- * so the tables can be checked against the published vectors without a device.
+ * The bytes live once in the repository, under `src/commonMain/resources/libre3/`. Both platforms
+ * read that one folder, so the two sides cannot drift apart:
+ *
+ *  * Android packages it as classpath resources, not as Android assets. That choice is deliberate:
+ *    a classpath resource can also be read by a plain unit test, so the tables can be checked
+ *    against the published vectors without a device.
+ *  * The Xcode project adds the same folder as a folder reference, so the iOS app bundle carries
+ *    `libre3/<name>.bin` and a Libre 3 pairs on an iPhone exactly as it does on an Android phone.
+ *
+ * Where the bytes come from is the only platform specific part, see [libre3ReadTable]. Which files
+ * are needed, and what happens when one is missing, is shared.
  *
  * All of these files come from the MIT LibreCRKit tree. See `plugins/libre3/NOTICE` and
  * `docs/LIBRE3_NATIVE_LICENCE_MEMO.md` for where each one comes from.
  */
 object Libre3RuntimeTables {
 
+    /** Path of the folder the tables sit in, as the platform sees it. */
     private const val FOLDER = "/libre3"
 
     /** The phone certificate used when a sensor is paired for the first time. */
@@ -39,8 +48,7 @@ object Libre3RuntimeTables {
      * Callers must treat null as "this part of the driver cannot run", never as a reason to make
      * up their own bytes.
      */
-    fun load(name: String): ByteArray? =
-        Libre3RuntimeTables::class.java.getResourceAsStream("$FOLDER/$name")?.use { it.readBytes() }
+    fun load(name: String): ByteArray? = libre3ReadTable("$FOLDER/$name")
 
     /**
      * True when a table file really ships with this build.
@@ -48,7 +56,7 @@ object Libre3RuntimeTables {
      * This asks the class loader for the entry only. It does **not** read the bytes, because some
      * of these files are hundreds of kilobytes and the answer is needed on every session start.
      */
-    fun isPresent(name: String): Boolean = Libre3RuntimeTables::class.java.getResource("$FOLDER/$name") != null
+    fun isPresent(name: String): Boolean = libre3HasTable("$FOLDER/$name")
 
     /** True when every file the pairing needs is really in this build. */
     fun pairingTablesPresent(): Boolean =

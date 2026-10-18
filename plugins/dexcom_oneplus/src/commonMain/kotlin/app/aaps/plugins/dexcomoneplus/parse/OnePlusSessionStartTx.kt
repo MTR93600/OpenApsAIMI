@@ -1,8 +1,5 @@
 package app.aaps.plugins.dexcomoneplus.parse
 
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-
 /**
  * Control SessionStart request (opcode 0x26) — ONE+ / short-TxId form (no G6 sensor code).
  *
@@ -21,7 +18,7 @@ object OnePlusSessionStartTx {
      * @param startTimeEpochMs wall-clock session start (ms); encoded as seconds in the packet
      */
     fun build(dexTimeSeconds: Int, startTimeEpochMs: Long): ByteArray {
-        val buf = ByteBuffer.allocate(PACKET_LENGTH).order(ByteOrder.LITTLE_ENDIAN)
+        val buf = OnePlusByteWriter(PACKET_LENGTH)
         buf.put(OPCODE)
         buf.putInt(dexTimeSeconds)
         buf.putInt((startTimeEpochMs / 1000L).toInt())

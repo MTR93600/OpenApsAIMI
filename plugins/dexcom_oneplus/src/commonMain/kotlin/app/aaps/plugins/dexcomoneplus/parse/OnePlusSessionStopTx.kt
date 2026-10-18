@@ -1,8 +1,5 @@
 package app.aaps.plugins.dexcomoneplus.parse
 
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-
 /**
  * Control SessionStop request (opcode 0x28).
  *
@@ -18,7 +15,7 @@ object OnePlusSessionStopTx {
 
     /** @param stopTimeDexSeconds transmitter clock seconds at stop */
     fun build(stopTimeDexSeconds: Int): ByteArray {
-        val buf = ByteBuffer.allocate(PACKET_LENGTH).order(ByteOrder.LITTLE_ENDIAN)
+        val buf = OnePlusByteWriter(PACKET_LENGTH)
         buf.put(OPCODE)
         buf.putInt(stopTimeDexSeconds)
         val packet = buf.array()

@@ -1,10 +1,8 @@
 package app.aaps.plugins.dexcomoneplus
 
-import android.content.Context
 import android.os.SystemClock
 import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.plugins.dexcomoneplus.gatt.OnePlusGattClient
-import app.aaps.plugins.dexcomoneplus.gatt.OnePlusGattClientAndroid
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorIdentity
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusStoredSession
@@ -12,7 +10,6 @@ import app.aaps.plugins.dexcomoneplus.oem.DeviceProfileRegistry
 import app.aaps.plugins.dexcomoneplus.oem.OemDeviceProfile
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrateRx
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScanner
-import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScannerAndroid
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScannerStub
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusScanBudget
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusScanListener
@@ -83,7 +80,10 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
 
     private val watchers = CopyOnWriteArrayList<OnePlusGlucoseWatcher>()
     private val lifecycleLock = Any()
-    private var context: Context? = null
+
+    /** The host this driver is attached to. Null until [attach]. */
+    @Volatile
+    private var platform: OnePlusPlatform? = null
     private var operationGeneration = 0L
     private var resumeQueued = false
 
@@ -191,14 +191,16 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
 
     override fun calibrationPending(): Boolean = calibrationQueue.peek() != null
 
-    override fun setContext(context: Context) {
-        val app = context.applicationContext
-        this.context = app
-        val store = OnePlusSensorStore(app, storeNamespace)
+    override fun attach(platform: OnePlusPlatform) {
+        this.platform = platform
+        val store = storeFor(platform, storeNamespace)
         sensorStore = store
-        scanner = OnePlusBleScannerAndroid(app, sessionHint = store.load(), slot = slot)
+        scanner = platform.scanner(hint = store.load(), slot = slot)
         profile = DeviceProfileRegistry.resolve()
     }
+
+    private fun storeFor(platform: OnePlusPlatform, namespace: String?): OnePlusSensorStore =
+        OnePlusSensorStore(platform.sensorPrefs(OnePlusSensorStore.prefsFileName(namespace)))
 
     fun sensorStore(): OnePlusSensorStore? = sensorStore
 
@@ -212,12 +214,12 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
      */
     fun rebindStore(namespace: String?) {
         storeNamespace = namespace
-        context?.let { sensorStore = OnePlusSensorStore(it, namespace) }
+        platform?.let { sensorStore = storeFor(it, namespace) }
     }
 
     fun saveIdentity(identity: OnePlusSensorIdentity) {
         sensorStore?.saveIdentity(identity)
-        (scanner as? OnePlusBleScannerAndroid)?.sessionHint = sensorStore?.load()
+        scanner.updateSessionHint(sensorStore?.load())
     }
 
     /**
@@ -234,14 +236,14 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
         store?.saveLastMac(address)
         store?.saveSharedKey(key)
         pendingDeviceName?.let { store?.saveLastDeviceName(it) }
-        (scanner as? OnePlusBleScannerAndroid)?.sessionHint = store?.load()
+        scanner.updateSessionHint(store?.load())
     }
 
     /** Forget the stored KEKS key of the slot this instance owns right now (auth refused it). */
     fun onAuthInvalidated() {
         val store = sensorStore
         store?.clearSharedKey()
-        (scanner as? OnePlusBleScannerAndroid)?.sessionHint = store?.load()
+        scanner.updateSessionHint(store?.load())
     }
 
     override fun addWatcher(watcher: OnePlusGlucoseWatcher) {
@@ -303,7 +305,7 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
         // auth=2 → a wasted connect cycle + FAILED). A successful auth re-persists a new key, so
         // silent reconnects inside the session loop still short-auth.
         sensorStore?.clearSharedKey()
-        (scanner as? OnePlusBleScannerAndroid)?.sessionHint = sensorStore?.load()
+        scanner.updateSessionHint(sensorStore?.load())
         try {
             synchronized(lifecycleLock) {
                 if (generation != operationGeneration || executor !== bleExecutor) return
@@ -380,7 +382,7 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
             // A stored device name is identity metadata, not a fresh UI ADV selection.
             pendingDeviceName = null
             pendingAdvSightingElapsedMs = 0L
-            (scanner as? OnePlusBleScannerAndroid)?.sessionHint = stored
+            scanner.updateSessionHint(stored)
         }
         OnePlusLog.i(
             "${OnePlusLogMarkers.SESSION}: [$slot] auto-resume queued mac=***${deviceAddress.takeLast(5)} " +
@@ -514,8 +516,8 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
         requestNewSensorStart: Boolean,
         generation: Long,
     ): OnePlusBleSession {
-        val ctx = context ?: error("ONEPLUS_SESSION: setContext required")
-        val gatt = OnePlusGattClientAndroid(ctx, profile)
+        val host = platform ?: error("ONEPLUS_SESSION: attach required")
+        val gatt = host.gattClient(profile)
         currentGatt = gatt
         // The lease may have been taken while this session was being built.
         if (radioBackOff) gatt.setLowPower(true)
@@ -565,7 +567,7 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
                     )
                 }
             },
-            appContext = ctx,
+            cpuLease = host.cpuLease(slot),
             slot = slot,
             // Always passed, see [calibrationQueue]: the pre-soak refusal lives in offerCalibration.
             calibrationQueue = calibrationQueue,

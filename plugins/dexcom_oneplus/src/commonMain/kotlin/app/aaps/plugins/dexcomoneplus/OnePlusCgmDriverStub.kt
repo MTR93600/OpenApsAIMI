@@ -1,32 +1,54 @@
 package app.aaps.plugins.dexcomoneplus
 
-import android.content.Context
+import app.aaps.core.interfaces.concurrent.AapsLock
+import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusScanListener
-import java.util.concurrent.CopyOnWriteArrayList
+import kotlin.concurrent.Volatile
 
 /**
  * Stub driver until A6 ports the Direct session stack and A3 GO unlocks Real.
  * Emits FAILED on connect so UI can show "protocol not yet wired".
- * Remains the **default** via [instance] / [OnePlusCgmDrivers.default].
+ * Remains the **default** via [instance] / `OnePlusCgmDrivers.default`.
+ *
+ * It is shared code, not Android code: the Apple build has no real driver yet, and this is what it
+ * gets. It never reports a reading and never claims a session, so nothing downstream can mistake
+ * it for a working sensor.
  */
 class OnePlusCgmDriverStub : OnePlusCgmDriver {
 
-    private val watchers = CopyOnWriteArrayList<OnePlusGlucoseWatcher>()
-    private var context: Context? = null
+    /**
+     * Watchers, copied before every walk.
+     *
+     * Was a `CopyOnWriteArrayList`, which is JVM only. The list is read far more often than it is
+     * written, so a lock around the two writes plus a copy on read is the same bargain.
+     */
+    private val watcherLock = AapsLock()
+    private val watchers = mutableListOf<OnePlusGlucoseWatcher>()
+
+    @Volatile
+    private var platform: OnePlusPlatform? = null
+
+    @Volatile
     private var warmup = OnePlusWarmupState(phase = OnePlusWarmupState.Phase.IDLE)
+
+    @Volatile
     private var sessionUp = false
 
-    override fun setContext(context: Context) {
-        this.context = context.applicationContext
+    override fun attach(platform: OnePlusPlatform) {
+        this.platform = platform
     }
 
-    override fun addWatcher(watcher: OnePlusGlucoseWatcher) {
+    override fun addWatcher(watcher: OnePlusGlucoseWatcher) = watcherLock.withLock {
         if (!watchers.contains(watcher)) watchers.add(watcher)
+        Unit
     }
 
-    override fun removeWatcher(watcher: OnePlusGlucoseWatcher) {
+    override fun removeWatcher(watcher: OnePlusGlucoseWatcher) = watcherLock.withLock {
         watchers.remove(watcher)
+        Unit
     }
+
+    private fun watcherSnapshot(): List<OnePlusGlucoseWatcher> = watcherLock.withLock { watchers.toList() }
 
     override fun startScan(listener: OnePlusScanListener) {
         OnePlusLog.i("${OnePlusLogMarkers.SCAN}: stub start (no LE scan)")
@@ -48,21 +70,22 @@ class OnePlusCgmDriverStub : OnePlusCgmDriver {
             "${OnePlusLogMarkers.WARMUP}: phase=${warmup.phase} remainingMs=null msg=${warmup.message}",
         )
         OnePlusLog.e("${OnePlusLogMarkers.ERROR}: $msg fatal=false")
-        watchers.forEach { it.onWarmup(warmup) }
-        watchers.forEach { it.onError(msg, fatal = false) }
-        watchers.forEach { it.onSession(false, msg) }
+        val current = watcherSnapshot()
+        current.forEach { it.onWarmup(warmup) }
+        current.forEach { it.onError(msg, fatal = false) }
+        current.forEach { it.onSession(false, msg) }
     }
 
     override fun disconnect() {
         sessionUp = false
         warmup = OnePlusWarmupState(phase = OnePlusWarmupState.Phase.IDLE)
         OnePlusLog.i("${OnePlusLogMarkers.SESSION}: stub disconnect")
-        watchers.forEach { it.onSession(false, "disconnect") }
+        watcherSnapshot().forEach { it.onSession(false, "disconnect") }
     }
 
     override fun shutdown() {
         disconnect()
-        watchers.clear()
+        watcherLock.withLock { watchers.clear() }
         OnePlusLog.i("${OnePlusLogMarkers.SESSION}: stub shutdown")
     }
 

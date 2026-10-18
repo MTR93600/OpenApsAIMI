@@ -1,5 +1,9 @@
 package app.aaps.plugins.libre3.nfc
 
+import app.aaps.plugins.libre3.libre3AsciiToString
+import app.aaps.plugins.libre3.libre3HexLower
+import app.aaps.plugins.libre3.libre3HexUpper
+
 /**
  * Patch info read with the `A1` command.
  *
@@ -55,7 +59,7 @@ data class Libre3ActivationResponse(
 
     /** Bluetooth address the way Android writes it: reversed, upper case, split by colons. */
     val bleAddressDisplay: String
-        get() = bleAddressLittleEndian.reversed().joinToString(":") { "%02X".format(it) }
+        get() = bleAddressLittleEndian.reversed().joinToString(":") { it.libre3HexUpper() }
 
     /**
      * Moment the sensor was activated, in whole seconds since 1970, or 0 when the sensor did not
@@ -223,7 +227,7 @@ object Libre3NfcCommands {
             productType = frame[15].toInt() and 0xFF,
             firmwareVersion = "${byteAt(frame, 14)}.${byteAt(frame, 13)}.${byteAt(frame, 12)}.${byteAt(frame, 11)}",
             state = frame[17],
-            serialNumber = String(serialBytes, Charsets.US_ASCII),
+            serialNumber = serialBytes.libre3AsciiToString(),
         )
     }
 
@@ -277,7 +281,7 @@ object Libre3NfcCommands {
     }
 
     private fun hexHead(raw: ByteArray, maxBytes: Int = 40): String =
-        raw.take(maxBytes).joinToString("") { "%02x".format(it) }
+        raw.take(maxBytes).joinToString("") { it.libre3HexLower() }
 
     private fun normalizeActivationResponse(raw: ByteArray): ByteArray {
         if (raw.size >= 2 && raw[0] == 0x00.toByte() && raw[1] == 0xA5.toByte()) return raw
@@ -306,5 +310,25 @@ object Libre3NfcCommands {
             x = x shr 1
         }
         return out
+    }
+
+    /**
+     * Checks the answer flag of one ISO 15693 answer and hands the answer back unchanged.
+     *
+     * The first byte is the answer flag. Bit 0 set means the sensor refused the command, and the
+     * byte after it says why. This is protocol, not platform: it is the same check whichever radio
+     * carried the bytes.
+     *
+     * @throws Libre3NfcException on an empty answer or on a refusal.
+     */
+    fun checkAnswerFlag(answer: ByteArray): ByteArray {
+        if (answer.isEmpty()) {
+            throw Libre3NfcException("the sensor sent an empty answer", Libre3NfcFailure.LINK_LOST)
+        }
+        if (answer[0].toInt() and 0x01 != 0) {
+            val code = if (answer.size > 1) "0x${answer[1].libre3HexUpper()}" else "unknown"
+            throw Libre3NfcException("the sensor refused the command, error $code", Libre3NfcFailure.SENSOR_REFUSED)
+        }
+        return answer
     }
 }

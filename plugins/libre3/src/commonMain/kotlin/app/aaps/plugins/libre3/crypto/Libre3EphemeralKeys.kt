@@ -3,19 +3,6 @@ package app.aaps.plugins.libre3.crypto
 import app.aaps.plugins.libre3.crypto.firstpair.Libre3FirstPairTables
 import app.aaps.plugins.libre3.crypto.firstpair.builder633fa8NullScalarWindowFromEntropySource
 import app.aaps.plugins.libre3.crypto.firstpair.builderProcess2P5PublicKey65FromEntropy
-import java.math.BigInteger
-import java.security.AlgorithmParameters
-import java.security.KeyFactory
-import java.security.KeyPair
-import java.security.KeyPairGenerator
-import java.security.spec.ECGenParameterSpec
-import java.security.spec.ECPoint
-import java.security.SecureRandom
-import java.security.interfaces.ECPublicKey
-import java.security.spec.ECParameterSpec
-import java.security.spec.ECPrivateKeySpec
-import java.security.spec.ECPublicKeySpec
-import javax.crypto.KeyAgreement
 
 /**
  * Short lived key pair of one session, on the P-256 curve.
@@ -29,7 +16,10 @@ import javax.crypto.KeyAgreement
  *   one would look like a working driver while never pairing anything.
  */
 class Libre3EphemeralKeyPair internal constructor(
-    private val keyPair: KeyPair,
+    /** The private scalar, 32 bytes, high byte first. */
+    private val privateScalarBE: ByteArray,
+    /** The public point of this key pair, 65 bytes, `0x04` then X then Y. */
+    private val ownPublicKey65: ByteArray,
     /** True only for a key pair that came from the first pairing scheme. */
     val isFirstPairMaterial: Boolean,
     /** The point the first pairing scheme sends, when it is not the point of the private key. */
@@ -37,12 +27,7 @@ class Libre3EphemeralKeyPair internal constructor(
 ) {
 
     /** The public point, 65 bytes, `0x04` then X then Y. */
-    val publicKey65: ByteArray
-        get() {
-            publicKeyOverride?.let { return it.copyOf() }
-            val point = (keyPair.public as ECPublicKey).w
-            return byteArrayOf(0x04) + fixedLength(point.affineX.toByteArray()) + fixedLength(point.affineY.toByteArray())
-        }
+    val publicKey65: ByteArray get() = (publicKeyOverride ?: ownPublicKey65).copyOf()
 
     /** The public point padded to the 72 bytes that the sensor expects on the wire. */
     val publicKeyPadded72: ByteArray get() = publicKey65 + ByteArray(PADDED_PUBLIC_KEY_SIZE - PUBLIC_KEY_SIZE)
@@ -53,8 +38,8 @@ class Libre3EphemeralKeyPair internal constructor(
      * Only for a key pair whose point really belongs to its private key. A first pairing key pair
      * is refused here: its point on the wire is the scheme's own and does not match its scalar, so
      * an ordinary key agreement would hand back a number that looks fine and means nothing. The
-     * first pairing does its own point multiply in `Libre3FirstPairP256`, over the whole seventy
-     * byte window, and never comes through here.
+     * first pairing does its own point multiply in `libre3P256ScalarMultiply`, over the whole
+     * seventy byte window, and never comes through here.
      *
      * @param sensorPublicKey65 the sensor's point, 65 bytes, starting with `0x04`.
      * @throws Libre3CryptoException on a wrong point, or on a first pairing key pair.
@@ -68,24 +53,7 @@ class Libre3EphemeralKeyPair internal constructor(
         if (sensorPublicKey65.size != PUBLIC_KEY_SIZE || sensorPublicKey65[0] != 0x04.toByte()) {
             throw Libre3CryptoException("the sensor point must be 65 bytes and start with 0x04")
         }
-        val parameters = (keyPair.public as ECPublicKey).params
-        val agreement = KeyAgreement.getInstance("ECDH")
-        agreement.init(keyPair.private)
-        agreement.doPhase(publicKeyFrom(sensorPublicKey65, parameters), true)
-        return agreement.generateSecret()
-    }
-
-    private fun fixedLength(value: ByteArray): ByteArray {
-        // A big number can carry a leading zero byte for its sign, or be shorter than the curve.
-        val trimmed = if (value.size > COORDINATE_SIZE) value.copyOfRange(value.size - COORDINATE_SIZE, value.size) else value
-        return ByteArray(COORDINATE_SIZE - trimmed.size) + trimmed
-    }
-
-    private fun publicKeyFrom(point65: ByteArray, parameters: ECParameterSpec): ECPublicKey {
-        val x = BigInteger(1, point65.copyOfRange(1, 1 + COORDINATE_SIZE))
-        val y = BigInteger(1, point65.copyOfRange(1 + COORDINATE_SIZE, PUBLIC_KEY_SIZE))
-        val spec = ECPublicKeySpec(ECPoint(x, y), parameters)
-        return KeyFactory.getInstance("EC").generatePublic(spec) as ECPublicKey
+        return libre3P256SharedSecret(privateScalarBE, sensorPublicKey65)
     }
 
     companion object {
@@ -104,9 +72,12 @@ class Libre3EphemeralKeyPair internal constructor(
          * [Libre3EphemeralKeyPair.isFirstPairMaterial] and [sharedSecret] are what enforce it.
          */
         fun randomForReconnect(): Libre3EphemeralKeyPair {
-            val generator = KeyPairGenerator.getInstance("EC")
-            generator.initialize(ECGenParameterSpec("secp256r1"))
-            return Libre3EphemeralKeyPair(generator.generateKeyPair(), isFirstPairMaterial = false)
+            val generated = libre3P256GenerateKeyPair()
+            return Libre3EphemeralKeyPair(
+                privateScalarBE = generated.privateScalarBE,
+                ownPublicKey65 = generated.publicKey65,
+                isFirstPairMaterial = false,
+            )
         }
 
         /**
@@ -126,32 +97,17 @@ class Libre3EphemeralKeyPair internal constructor(
                 throw Libre3CryptoException("the first pairing scalar window must be at least 32 bytes")
             }
             val scalarBE = scalarWindowLE.copyOfRange(0, COORDINATE_SIZE).reversedArray()
-            val scalar = BigInteger(1, scalarBE)
-            if (scalar.signum() == 0) {
+            if (scalarBE.all { it == 0.toByte() }) {
                 throw Libre3CryptoException("the first pairing scalar is zero")
             }
-            val parameters = curveParameters()
-            val privateKey = KeyFactory.getInstance("EC")
-                .generatePrivate(ECPrivateKeySpec(scalar, parameters))
+            // Same refusal the phone's provider used to make when the two keys were built here.
+            libre3P256ValidateKeyMaterial(scalarBE, publicKey65Override)
             return Libre3EphemeralKeyPair(
-                KeyPair(publicKeyFor(publicKey65Override, parameters), privateKey),
+                privateScalarBE = scalarBE,
+                ownPublicKey65 = publicKey65Override,
                 isFirstPairMaterial = true,
                 publicKeyOverride = publicKey65Override,
             )
-        }
-
-        /** The P-256 numbers, asked of the phone's own provider without making a key. */
-        private fun curveParameters(): ECParameterSpec {
-            val parameters = AlgorithmParameters.getInstance("EC")
-            parameters.init(ECGenParameterSpec("secp256r1"))
-            return parameters.getParameterSpec(ECParameterSpec::class.java)
-        }
-
-        private fun publicKeyFor(point65: ByteArray, parameters: ECParameterSpec): ECPublicKey {
-            val x = BigInteger(1, point65.copyOfRange(1, 1 + COORDINATE_SIZE))
-            val y = BigInteger(1, point65.copyOfRange(1 + COORDINATE_SIZE, PUBLIC_KEY_SIZE))
-            return KeyFactory.getInstance("EC")
-                .generatePublic(ECPublicKeySpec(ECPoint(x, y), parameters)) as ECPublicKey
         }
     }
 }
@@ -178,7 +134,7 @@ object Libre3FirstPairEphemeral {
      * @throws Libre3CryptoException when this build cannot run the scheme, or when no draw is
      *   accepted.
      */
-    fun make(random: SecureRandom = SecureRandom()): Libre3FirstPairMaterial {
+    fun make(random: Libre3RandomSource = Libre3RandomSource.secure()): Libre3FirstPairMaterial {
         if (!isAvailable) {
             throw Libre3CryptoException(unavailableReason())
         }

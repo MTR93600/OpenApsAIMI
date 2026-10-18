@@ -9,10 +9,12 @@
 /* Begin PBXBuildFile section */
 		AA2000300000000000000 /* ClientApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000100000000000000 /* ClientApp.swift */; };
 		AA2000400000000000000 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA2000200000000000000 /* Assets.xcassets */; };
+		AA2005000000000000000 /* libre3 in Resources */ = {isa = PBXBuildFile; fileRef = AA1005000000000000000 /* libre3 */; };
 		AA2000500000000000000 /* AapsShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA1000200000000000000 /* AapsShared.framework */; };
 		AA2009900000000000000 /* NsSocketBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1009900000000000000 /* NsSocketBridge.swift */; };
 		AA3000300000000000000 /* ClientApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000100000000000000 /* ClientApp.swift */; };
 		AA3000400000000000000 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA3000200000000000000 /* Assets.xcassets */; };
+		AA3005000000000000000 /* libre3 in Resources */ = {isa = PBXBuildFile; fileRef = AA1005000000000000000 /* libre3 */; };
 		AA3000500000000000000 /* AapsShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA1000200000000000000 /* AapsShared.framework */; };
 		AA3009900000000000000 /* NsSocketBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1009900000000000000 /* NsSocketBridge.swift */; };
 		D32B0F773048851500FAFE85 /* SocketIO in Frameworks */ = {isa = PBXBuildFile; productRef = AA00SP02000000000000001 /* SocketIO */; };
@@ -28,6 +30,7 @@
 		AA2000200000000000000 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = AAPSClient/Assets.xcassets; sourceTree = "<group>"; };
 		AA3000100000000000000 /* AAPSClient2.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AAPSClient2.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA3000200000000000000 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = AAPSClient2/Assets.xcassets; sourceTree = "<group>"; };
+		AA1005000000000000000 /* libre3 */ = {isa = PBXFileReference; lastKnownFileType = folder; name = libre3; path = ../../plugins/libre3/src/commonMain/resources/libre3; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -60,6 +63,7 @@
 				AA2001200000000000000 /* AAPSClient */,
 				AA3001200000000000000 /* AAPSClient2 */,
 				AA1000300000000000000 /* Signing.xcconfig */,
+				AA1005000000000000000 /* libre3 */,
 				AA1000200000000000000 /* AapsShared.framework */,
 				AA1001400000000000000 /* Products */,
 			);
@@ -173,6 +177,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA2000400000000000000 /* Assets.xcassets in Resources */,
+				AA2005000000000000000 /* libre3 in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -181,6 +186,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA3000400000000000000 /* Assets.xcassets in Resources */,
+				AA3005000000000000000 /* libre3 in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -199,7 +205,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Keep the framework in step with the Kotlin sources.\n# The simulator and a real phone are different architectures, so the Gradle target follows\n# whatever Xcode is building rather than being fixed to one of them.\ncase \"$PLATFORM_NAME\" in\n  iphonesimulator) KOTLIN_TARGET=IosSimulatorArm64 ;;\n  iphoneos)        KOTLIN_TARGET=IosArm64 ;;\n  *) echo \"error: unsupported platform $PLATFORM_NAME\" >&2; exit 1 ;;\nesac\n# Xcode does not inherit a login shell, so JAVA_HOME is set here rather than assumed.\nexport JAVA_HOME=\"$(/usr/libexec/java_home -v 21)\"\n# Debug or Release Kotlin, following what Xcode is building. Pinned to Debug before, which meant an\n# archive for TestFlight shipped unoptimised Kotlin - the whole app logic - while everything\n# around it was built as a release.\ncase \"$CONFIGURATION\" in\n  Release) KOTLIN_BUILD=Release ;;\n  *)       KOTLIN_BUILD=Debug ;;\nesac\n\"$SRCROOT/../../gradlew\" -p \"$SRCROOT/../..\" \":ios:shell:link${KOTLIN_BUILD}Framework$KOTLIN_TARGET\" --no-daemon\n\n# The alarm sounds live once, in :core:ui's Android resources. Copying them at build time rather\n# than keeping a second set under ios/ means the two cannot drift - a replaced alarm tone stays one\n# edit, not two.\nSOUNDS=\"$SRCROOT/../../core/ui/src/androidMain/res/raw\"\nDEST=\"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nmkdir -p \"$DEST\"\nfor s in alarm urgentalarm error boluserror; do\n  if [ ! -f \"$SOUNDS/$s.mp3\" ]; then\n    echo \"error: alarm sound $s.mp3 missing from $SOUNDS\" >&2; exit 1\n  fi\n  cp \"$SOUNDS/$s.mp3\" \"$DEST/\"\ndone\n";
+			shellScript = "set -e\n# Without this the phase cannot fail. Xcode runs it with /bin/sh, and the gradle call below\n# is not the last command - the alarm-sound copy follows it - so the phase used to exit with\n# the copy's status. A failing gradle was invisible and Xcode linked whatever framework was\n# already on disk, which means a build could ship a stale Kotlin engine while looking fresh.\n# Keep the framework in step with the Kotlin sources.\n# The simulator and a real phone are different architectures, so the Gradle target follows\n# whatever Xcode is building rather than being fixed to one of them.\ncase \"$PLATFORM_NAME\" in\n  iphonesimulator) KOTLIN_TARGET=IosSimulatorArm64 ;;\n  iphoneos)        KOTLIN_TARGET=IosArm64 ;;\n  *) echo \"error: unsupported platform $PLATFORM_NAME\" >&2; exit 1 ;;\nesac\n# Xcode does not inherit a login shell, so JAVA_HOME is set here rather than assumed.\nexport JAVA_HOME=\"$(/usr/libexec/java_home -v 21)\"\n# Debug or Release Kotlin, following what Xcode is building. Pinned to Debug before, which meant an\n# archive for TestFlight shipped unoptimised Kotlin - the whole app logic - while everything\n# around it was built as a release.\ncase \"$CONFIGURATION\" in\n  Release) KOTLIN_BUILD=Release ;;\n  *)       KOTLIN_BUILD=Debug ;;\nesac\n\"$SRCROOT/../../gradlew\" -p \"$SRCROOT/../..\" \":ios:shell:link${KOTLIN_BUILD}Framework$KOTLIN_TARGET\" --no-daemon\n\n# The alarm sounds live once, in :core:ui's Android resources. Copying them at build time rather\n# than keeping a second set under ios/ means the two cannot drift - a replaced alarm tone stays one\n# edit, not two.\nSOUNDS=\"$SRCROOT/../../core/ui/src/androidMain/res/raw\"\nDEST=\"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nmkdir -p \"$DEST\"\nfor s in alarm urgentalarm error boluserror; do\n  if [ ! -f \"$SOUNDS/$s.mp3\" ]; then\n    echo \"error: alarm sound $s.mp3 missing from $SOUNDS\" >&2; exit 1\n  fi\n  cp \"$SOUNDS/$s.mp3\" \"$DEST/\"\ndone\n";
 		};
 		AA3000900000000000000 /* Build shared framework */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -213,7 +219,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Keep the framework in step with the Kotlin sources.\n# The simulator and a real phone are different architectures, so the Gradle target follows\n# whatever Xcode is building rather than being fixed to one of them.\ncase \"$PLATFORM_NAME\" in\n  iphonesimulator) KOTLIN_TARGET=IosSimulatorArm64 ;;\n  iphoneos)        KOTLIN_TARGET=IosArm64 ;;\n  *) echo \"error: unsupported platform $PLATFORM_NAME\" >&2; exit 1 ;;\nesac\n# Xcode does not inherit a login shell, so JAVA_HOME is set here rather than assumed.\nexport JAVA_HOME=\"$(/usr/libexec/java_home -v 21)\"\n# Debug or Release Kotlin, following what Xcode is building. Pinned to Debug before, which meant an\n# archive for TestFlight shipped unoptimised Kotlin - the whole app logic - while everything\n# around it was built as a release.\ncase \"$CONFIGURATION\" in\n  Release) KOTLIN_BUILD=Release ;;\n  *)       KOTLIN_BUILD=Debug ;;\nesac\n\"$SRCROOT/../../gradlew\" -p \"$SRCROOT/../..\" \":ios:shell:link${KOTLIN_BUILD}Framework$KOTLIN_TARGET\" --no-daemon\n\n# The alarm sounds live once, in :core:ui's Android resources. Copying them at build time rather\n# than keeping a second set under ios/ means the two cannot drift - a replaced alarm tone stays one\n# edit, not two.\nSOUNDS=\"$SRCROOT/../../core/ui/src/androidMain/res/raw\"\nDEST=\"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nmkdir -p \"$DEST\"\nfor s in alarm urgentalarm error boluserror; do\n  if [ ! -f \"$SOUNDS/$s.mp3\" ]; then\n    echo \"error: alarm sound $s.mp3 missing from $SOUNDS\" >&2; exit 1\n  fi\n  cp \"$SOUNDS/$s.mp3\" \"$DEST/\"\ndone\n";
+			shellScript = "set -e\n# Without this the phase cannot fail. Xcode runs it with /bin/sh, and the gradle call below\n# is not the last command - the alarm-sound copy follows it - so the phase used to exit with\n# the copy's status. A failing gradle was invisible and Xcode linked whatever framework was\n# already on disk, which means a build could ship a stale Kotlin engine while looking fresh.\n# Keep the framework in step with the Kotlin sources.\n# The simulator and a real phone are different architectures, so the Gradle target follows\n# whatever Xcode is building rather than being fixed to one of them.\ncase \"$PLATFORM_NAME\" in\n  iphonesimulator) KOTLIN_TARGET=IosSimulatorArm64 ;;\n  iphoneos)        KOTLIN_TARGET=IosArm64 ;;\n  *) echo \"error: unsupported platform $PLATFORM_NAME\" >&2; exit 1 ;;\nesac\n# Xcode does not inherit a login shell, so JAVA_HOME is set here rather than assumed.\nexport JAVA_HOME=\"$(/usr/libexec/java_home -v 21)\"\n# Debug or Release Kotlin, following what Xcode is building. Pinned to Debug before, which meant an\n# archive for TestFlight shipped unoptimised Kotlin - the whole app logic - while everything\n# around it was built as a release.\ncase \"$CONFIGURATION\" in\n  Release) KOTLIN_BUILD=Release ;;\n  *)       KOTLIN_BUILD=Debug ;;\nesac\n\"$SRCROOT/../../gradlew\" -p \"$SRCROOT/../..\" \":ios:shell:link${KOTLIN_BUILD}Framework$KOTLIN_TARGET\" --no-daemon\n\n# The alarm sounds live once, in :core:ui's Android resources. Copying them at build time rather\n# than keeping a second set under ios/ means the two cannot drift - a replaced alarm tone stays one\n# edit, not two.\nSOUNDS=\"$SRCROOT/../../core/ui/src/androidMain/res/raw\"\nDEST=\"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nmkdir -p \"$DEST\"\nfor s in alarm urgentalarm error boluserror; do\n  if [ ! -f \"$SOUNDS/$s.mp3\" ]; then\n    echo \"error: alarm sound $s.mp3 missing from $SOUNDS\" >&2; exit 1\n  fi\n  cp \"$SOUNDS/$s.mp3\" \"$DEST/\"\ndone\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

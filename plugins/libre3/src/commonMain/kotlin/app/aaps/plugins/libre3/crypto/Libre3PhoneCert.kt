@@ -1,5 +1,7 @@
 package app.aaps.plugins.libre3.crypto
 
+import app.aaps.plugins.libre3.libre3HexUpper
+
 /**
  * The certificate this phone shows to a sensor during a first pairing.
  *
@@ -66,7 +68,7 @@ class Libre3PhoneCert private constructor(val raw: ByteArray) {
             if (raw[0] != ACCEPTED_FAMILY[0] || raw[1] != ACCEPTED_FAMILY[1]) {
                 throw Libre3CryptoException(
                     "this phone certificate family is refused by live sensors, " +
-                        "found ${"%02X %02X".format(raw[0], raw[1])}"
+                        "found ${raw[0].libre3HexUpper()} ${raw[1].libre3HexUpper()}"
                 )
             }
             if (raw[PUBLIC_KEY_START] != 0x04.toByte()) {

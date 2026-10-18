@@ -1,19 +1,28 @@
 package app.aaps.plugins.dexcomoneplus
 
-import android.content.Context
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusScanListener
 
 /**
  * Native Dexcom ONE+ BLE driver façade.
  *
- * Default impl: [OnePlusCgmDriverStub]. Real stack: [OnePlusCgmDriverReal] (skeleton until A3).
+ * Default impl: [OnePlusCgmDriverStub]. Real stack: `OnePlusCgmDriverReal`, which is Android only:
+ * the KEKS handshake it needs is a Java library (`:plugins:libkeks`) with no Apple build.
  * See docs/spikes/ONEPLUS_BLE_PORT_MAP.md.
  *
  * ⚠️ ASYNC IMPACT: Real driver may invoke [OnePlusGlucoseWatcher] / scan listeners off the main
  * thread (bleExecutor / binder). Callers must not assume main; do not run AIMI dose logic there.
  */
 interface OnePlusCgmDriver {
-    fun setContext(context: Context)
+
+    /**
+     * Give the driver the phone it runs on, before anything else is asked of it.
+     *
+     * This replaced `setContext(Context)`. The driver needs four favours from its host and only a
+     * file store means the same thing on both platforms, so the favours are named one by one in
+     * [OnePlusPlatform] instead of being hidden behind one Android type. Calling it again is
+     * allowed and rebuilds the scanner and the store; a link that is already up is not dropped.
+     */
+    fun attach(platform: OnePlusPlatform)
     fun addWatcher(watcher: OnePlusGlucoseWatcher)
     fun removeWatcher(watcher: OnePlusGlucoseWatcher)
     fun startScan(listener: OnePlusScanListener)

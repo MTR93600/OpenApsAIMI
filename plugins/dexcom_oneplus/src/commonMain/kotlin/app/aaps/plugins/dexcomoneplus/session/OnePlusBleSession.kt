@@ -1,7 +1,7 @@
 package app.aaps.plugins.dexcomoneplus.session
 
-import android.content.Context
-import android.os.PowerManager
+import app.aaps.core.interfaces.concurrent.AapsLock
+import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseSample
 import app.aaps.plugins.dexcomoneplus.OnePlusLog
 import app.aaps.plugins.dexcomoneplus.OnePlusLogMarkers
@@ -10,10 +10,13 @@ import app.aaps.plugins.dexcomoneplus.gatt.OnePlusGattClient
 import app.aaps.plugins.dexcomoneplus.gatt.OnePlusGattClientUnimplemented
 import app.aaps.plugins.dexcomoneplus.oem.DeviceProfileRegistry
 import app.aaps.plugins.dexcomoneplus.oem.OemDeviceProfile
+import app.aaps.plugins.dexcomoneplus.onePlusSleep
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrateRx
 import app.aaps.plugins.dexcomoneplus.reconnect.OemAwareReconnectPolicy
 import app.aaps.plugins.dexcomoneplus.reconnect.OnePlusReconnectPolicy
 import app.aaps.plugins.dexcomoneplus.warmup.OnePlusWarmupClock
+import kotlin.concurrent.Volatile
+import kotlin.time.Clock
 
 /**
  * ONE+ BLE session lifecycle (scan already done → connect → auth → Control EGV → warm-up/glucose).
@@ -294,8 +297,8 @@ class OnePlusBleSessionSkeleton(
     private val onAuthSuccess: (deviceAddress: String, sharedKey: ByteArray) -> Unit = { _, _ -> },
     /** Clear persisted shared key when short-auth / bond path is invalidated. */
     private val onAuthInvalidate: () -> Unit = {},
-    /** Optional app context for PARTIAL_WAKE_LOCK during connect/auth (Juggluco). */
-    private val appContext: Context? = null,
+    /** Keeps the processor awake during connect / auth (Juggluco does the same). */
+    private val cpuLease: OnePlusCpuLease? = null,
     /** Sensor slot owning this session (`prod` / `staging`) — logged on every marker. */
     private val slot: String = OnePlusLogMarkers.SLOT_PRODUCTION,
     /**
@@ -321,7 +324,7 @@ class OnePlusBleSessionSkeleton(
     @Volatile
     private var cancelled = false
 
-    private val lifecycleLock = Any()
+    private val lifecycleLock = AapsLock()
 
     @Volatile
     private var warmup = OnePlusWarmupState(phase = OnePlusWarmupState.Phase.IDLE)
@@ -382,7 +385,7 @@ class OnePlusBleSessionSkeleton(
             )
         }
 
-        val startAllowed = synchronized(lifecycleLock) {
+        val startAllowed = lifecycleLock.withLock {
             if (cancelled) {
                 false
             } else {
@@ -548,10 +551,10 @@ class OnePlusBleSessionSkeleton(
      * Safe to call from any thread. Clears [running] and disconnects GATT so Control awaits unblock.
      *
      * ⚠️ ASYNC IMPACT: Must not be queued behind [startWithPairingCode] on the same single-thread
-     * executor alone — callers should invoke [stop] directly (see [OnePlusCgmDriverReal.disconnect]).
+     * executor alone — callers should invoke [stop] directly (see `OnePlusCgmDriverReal.disconnect`).
      */
     override fun stop(reason: String?) {
-        synchronized(lifecycleLock) {
+        lifecycleLock.withLock {
             cancelled = true
             running = false
             up = false
@@ -626,11 +629,11 @@ class OnePlusBleSessionSkeleton(
                 "autoConnect=$useAutoConnect attempt=$attempt profile=${profile.id}",
         )
         // Hold the CPU awake through settle, scan→connect handoff, connectGatt and discovery.
-        // Thread.sleep uses CLOCK_MONOTONIC, which freezes under suspend: field log 26/08/2026
+        // The wait clock freezes under suspend (Android sleeps on CLOCK_MONOTONIC): field log 26/08/2026
         // showed a 500 ms handoff taking 27.7 s with the screen off, so the in-window connect
         // missed the ADV the wait had just caught. The lock used to start only after connect
         // returned, which was too late.
-        val wakeLock = acquireAuthWakeLock()
+        val wakeLock = cpuLease?.hold(AUTH_WAKE_LOCK_MS)
         try {
             try {
                 gatt.connect(deviceAddress, autoConnect = useAutoConnect)
@@ -729,30 +732,7 @@ class OnePlusBleSessionSkeleton(
             }
         } finally {
             // Held from before connect through the first EGV cycle; Juggluco holds it unbounded.
-            releaseWakeLock(wakeLock)
-        }
-    }
-
-    private fun acquireAuthWakeLock(): PowerManager.WakeLock? {
-        val ctx = appContext ?: return null
-        return try {
-            val pm = ctx.getSystemService(Context.POWER_SERVICE) as PowerManager
-            pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "OpenApsAIMI::DexcomOnePlusAuth").apply {
-                setReferenceCounted(false)
-                acquire(AUTH_WAKE_LOCK_MS)
-                OnePlusLog.i("${OnePlusLogMarkers.SESSION}: [$slot] wakeLock acquired ${AUTH_WAKE_LOCK_MS}ms")
-            }
-        } catch (t: Throwable) {
-            OnePlusLog.w("${OnePlusLogMarkers.SESSION}: [$slot] wakeLock ${t.message}")
-            null
-        }
-    }
-
-    private fun releaseWakeLock(lock: PowerManager.WakeLock?) {
-        if (lock == null) return
-        try {
-            if (lock.isHeld) lock.release()
-        } catch (_: Throwable) {
+            wakeLock?.release()
         }
     }
 
@@ -797,7 +777,7 @@ class OnePlusBleSessionSkeleton(
                 "${OnePlusLogMarkers.RECONNECT}: [$slot] skip ADV wait — previous was hard connect, " +
                     "retry autoConnect attempt=$nextAttempt profile=${profile.id}",
             )
-            lastBlindConnectAtMs = System.currentTimeMillis()
+            lastBlindConnectAtMs = Clock.System.now().toEpochMilliseconds()
             return PersistentRetry(
                 attempt = nextAttempt,
                 prep = OnePlusConnectPrep(advFresh = false, blindFallback = true),
@@ -885,7 +865,7 @@ class OnePlusBleSessionSkeleton(
      */
     private fun awaitFreshAdvertisement(deviceAddress: String): OnePlusConnectPrep? {
         if (advSilenceStartedMs == 0L) {
-            advSilenceStartedMs = System.currentTimeMillis()
+            advSilenceStartedMs = Clock.System.now().toEpochMilliseconds()
         }
         val silenceStartedMs = advSilenceStartedMs
         var lastEmittedMinute = -1L
@@ -913,7 +893,7 @@ class OnePlusBleSessionSkeleton(
                 return prep
             }
 
-            val nowMs = System.currentTimeMillis()
+            val nowMs = Clock.System.now().toEpochMilliseconds()
             val silenceMs = nowMs - silenceStartedMs
             val silenceMinutes = OnePlusBleSessionCyclePolicy.advSilenceMinutes(silenceMs)
             // A transmitter only advertises in short windows, so a foreign sighting is sporadic:
@@ -994,7 +974,7 @@ class OnePlusBleSessionSkeleton(
      * duty cycle and only came back with the next EGV packet.
      */
     private fun setWarmup(state: OnePlusWarmupState) {
-        val published = synchronized(lifecycleLock) {
+        val published = lifecycleLock.withLock {
             // A stopped / superseded session must not be resurrected by a late callback still queued
             // on the BLE executor: it would republish a stale phase and, worse, bring the sticky
             // deadline back for every later state. [stop] owns the final IDLE state.
@@ -1009,7 +989,7 @@ class OnePlusBleSessionSkeleton(
 
     /** Logs and publishes [state] to the watcher — outside [lifecycleLock], callbacks are foreign code. */
     private fun emitWarmup(state: OnePlusWarmupState = warmup) {
-        val remaining = OnePlusWarmupClock.resolveRemainingMs(state, System.currentTimeMillis())
+        val remaining = OnePlusWarmupClock.resolveRemainingMs(state, Clock.System.now().toEpochMilliseconds())
         OnePlusLog.i(
             "${OnePlusLogMarkers.WARMUP}: [$slot] phase=${state.phase} remainingMs=$remaining " +
                 "msg=${state.message} advSilenceMin=${state.advSilenceMinutes ?: "-"} " +
@@ -1021,15 +1001,10 @@ class OnePlusBleSessionSkeleton(
     /** Interruptible sleep that exits early when [stop] clears [running]. */
     private fun sleepWhileRunning(delayMs: Long): Boolean {
         if (delayMs <= 0L) return running
-        val end = System.currentTimeMillis() + delayMs
-        while (running && System.currentTimeMillis() < end) {
-            val slice = (end - System.currentTimeMillis()).coerceAtMost(200L).coerceAtLeast(1L)
-            try {
-                Thread.sleep(slice)
-            } catch (_: InterruptedException) {
-                Thread.currentThread().interrupt()
-                return false
-            }
+        val end = Clock.System.now().toEpochMilliseconds() + delayMs
+        while (running && Clock.System.now().toEpochMilliseconds() < end) {
+            val slice = (end - Clock.System.now().toEpochMilliseconds()).coerceAtMost(200L).coerceAtLeast(1L)
+            if (!onePlusSleep(slice)) return false
         }
         return running
     }
@@ -1051,7 +1026,7 @@ class OnePlusBleSessionSkeleton(
     companion object {
         /**
          * Cover settle, scan→connect handoff, connectGatt + discovery, KEKS, bond, first EGV.
-         * Must be held before those Thread.sleeps: CLOCK_MONOTONIC freezes under CPU suspend.
+         * Must be held before those waits: the clock they use freezes under CPU suspend.
          * Juggluco uses an unbounded wake lock for the whole connection; we bound it.
          */
         private const val AUTH_WAKE_LOCK_MS = 600_000L

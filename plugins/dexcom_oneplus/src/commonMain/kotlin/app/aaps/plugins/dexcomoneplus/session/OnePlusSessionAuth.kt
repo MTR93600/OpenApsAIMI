@@ -3,7 +3,8 @@ package app.aaps.plugins.dexcomoneplus.session
 /**
  * Session authentication / J-PAKE key exchange (A6.4).
  *
- * Production path: [OnePlusSessionAuthKeks] via `:plugins:libkeks` (GPL-3 xDrip pin).
+ * Production path: `OnePlusSessionAuthKeks` via `:plugins:libkeks` (GPL-3 xDrip pin), which is
+ * Android only because that library is plain Java.
  * **No proprietary Dexcom secrets or hard-coded session keys belong in this module.**
  */
 interface OnePlusSessionAuth {

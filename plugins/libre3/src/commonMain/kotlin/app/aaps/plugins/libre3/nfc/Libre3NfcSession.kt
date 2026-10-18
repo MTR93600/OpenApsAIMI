@@ -5,6 +5,8 @@ import app.aaps.plugins.libre3.Libre3LogMarkers
 import app.aaps.plugins.libre3.identity.Libre3IdentityStore
 import app.aaps.plugins.libre3.identity.Libre3SensorIdentity
 import app.aaps.plugins.libre3.identity.Libre3SensorStore
+import app.aaps.plugins.libre3.libre3HexUpper
+import kotlin.time.Clock
 
 /**
  * Sends one command to the tag and returns the raw answer.
@@ -45,7 +47,7 @@ data class Libre3NfcScanResult(
  */
 class Libre3NfcSession(
     private val store: () -> Libre3IdentityStore,
-    private val nowMs: () -> Long = { System.currentTimeMillis() },
+    private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     /**
      * Asked before the activation command is sent, with the serial just read from the patch info.
      * Returning true stops the scan there — the sensor is untouched and no PIN is written.
@@ -54,7 +56,7 @@ class Libre3NfcSession(
 ) {
 
     /** The old shape, for every caller that has one fixed store and nothing to veto. */
-    constructor(store: Libre3IdentityStore, nowMs: () -> Long = { System.currentTimeMillis() }) :
+    constructor(store: Libre3IdentityStore, nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() }) :
         this({ store }, nowMs)
 
     /**
@@ -84,7 +86,7 @@ class Libre3NfcSession(
         val patchInfo = Libre3NfcCommands.parsePatchInfo(transceiver.transceive(Libre3NfcCommands.patchInfoFrame()))
         Libre3Log.i(
             "${Libre3LogMarkers.NFC}: sensor read serial=${patchInfo.serialNumber} " +
-                "generation=${patchInfo.generation} state=${"0x%02X".format(patchInfo.state)} " +
+                "generation=${patchInfo.generation} state=0x${patchInfo.state.libre3HexUpper()} " +
                 "warmupMinutes=${patchInfo.warmupMinutes} wearMinutes=${patchInfo.wearDurationMinutes}",
         )
 
@@ -110,7 +112,7 @@ class Libre3NfcSession(
         val frame = Libre3NfcCommands.activationFrame(command, timeSeconds, receiverId)
         val activation = Libre3NfcCommands.parseActivationResponse(transceiver.transceive(frame))
         Libre3Log.i(
-            "${Libre3LogMarkers.NFC}: command=${"0x%02X".format(command)} answered, " +
+            "${Libre3LogMarkers.NFC}: command=0x${command.libre3HexUpper()} answered, " +
                 "address=${activation.bleAddressDisplay}",
         )
 

@@ -5,7 +5,6 @@ import app.aaps.plugins.libre3.gatt.Libre3GattClient
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import java.util.UUID
 
 /**
  * How the handshake reaches the wire.
@@ -26,10 +25,10 @@ class Libre3GattHandshakeTransportTest {
     /** Records what was asked of the link, and answers from a script. */
     private class RecordingGatt : Libre3GattClient {
 
-        val framedWrites = mutableListOf<Pair<UUID, ByteArray>>()
-        val rawWrites = mutableListOf<Pair<UUID, ByteArray>>()
-        val rawWaits = mutableListOf<UUID>()
-        val sizedWaits = mutableListOf<Pair<UUID, Int>>()
+        val framedWrites = mutableListOf<Pair<String, ByteArray>>()
+        val rawWrites = mutableListOf<Pair<String, ByteArray>>()
+        val rawWaits = mutableListOf<String>()
+        val sizedWaits = mutableListOf<Pair<String, Int>>()
 
         var rawAnswer: ByteArray? = byteArrayOf(0x08)
         var sizedAnswer: ByteArray? = ByteArray(23)
@@ -37,27 +36,27 @@ class Libre3GattHandshakeTransportTest {
         override fun connect(deviceAddress: String) = Unit
         override fun disconnect() = Unit
         override fun isConnected(): Boolean = true
-        override fun setNotify(characteristic: UUID, enabled: Boolean): Boolean = true
+        override fun setNotify(characteristic: String, enabled: Boolean): Boolean = true
 
-        override fun write(characteristic: UUID, payload: ByteArray) {
+        override fun write(characteristic: String, payload: ByteArray) {
             framedWrites.add(characteristic to payload)
         }
 
-        override fun writeRaw(characteristic: UUID, payload: ByteArray) {
+        override fun writeRaw(characteristic: String, payload: ByteArray) {
             rawWrites.add(characteristic to payload)
         }
 
-        override fun awaitNotifyRaw(characteristic: UUID, timeoutMs: Long): ByteArray? {
+        override fun awaitNotifyRaw(characteristic: String, timeoutMs: Long): ByteArray? {
             rawWaits.add(characteristic)
             return rawAnswer
         }
 
-        override fun awaitNotify(characteristic: UUID, exactly: Int, timeoutMs: Long): ByteArray? {
+        override fun awaitNotify(characteristic: String, exactly: Int, timeoutMs: Long): ByteArray? {
             sizedWaits.add(characteristic to exactly)
             return sizedAnswer
         }
 
-        override fun awaitDataPlaneNotify(timeoutMs: Long): Pair<UUID, ByteArray>? = null
+        override fun awaitDataPlaneNotify(timeoutMs: Long): Pair<String, ByteArray>? = null
     }
 
     @Test

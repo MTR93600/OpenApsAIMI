@@ -1,6 +1,7 @@
 package app.aaps.plugins.dexcomoneplus.session
 
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrateTx
+import kotlin.concurrent.Volatile
 
 /**
  * The one command a caller outside the BLE thread may ask a running session to send.

@@ -5,6 +5,7 @@ import app.aaps.plugins.libre3.crypto.Libre3CryptoException
 import app.aaps.plugins.libre3.crypto.Libre3Phase5Challenge
 import app.aaps.plugins.libre3.crypto.Libre3Phase6Response
 import app.aaps.plugins.libre3.crypto.Libre3SessionMaterial
+import app.aaps.plugins.libre3.libre3HexUpper
 
 /** The three channels the handshake talks on. */
 enum class Libre3HandshakeChannel { CERT, CHALLENGE, COMMAND }
@@ -216,8 +217,8 @@ class Libre3SessionAuth(
     private fun expectCommandAnswer(expectedFirstByte: Byte, whatWentWrong: String) {
         val answer = transport.awaitNotify(Libre3HandshakeChannel.COMMAND)
         if (answer.isEmpty() || answer[0] != expectedFirstByte) {
-            val seen = if (answer.isEmpty()) "nothing" else "0x%02X".format(answer[0])
-            throw Libre3HandshakeException("$whatWentWrong, expected 0x%02X but got %s".format(expectedFirstByte, seen))
+            val seen = if (answer.isEmpty()) "nothing" else "0x${answer[0].libre3HexUpper()}"
+            throw Libre3HandshakeException("$whatWentWrong, expected 0x${expectedFirstByte.libre3HexUpper()} but got $seen")
         }
     }
 

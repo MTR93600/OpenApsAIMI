@@ -12,7 +12,7 @@ import android.os.PowerManager
 import android.os.SystemClock
 import app.aaps.plugins.dexcomoneplus.OnePlusLog
 import app.aaps.plugins.dexcomoneplus.OnePlusLogMarkers
-import app.aaps.plugins.dexcomoneplus.gatt.OnePlusBluetoothUuids
+import app.aaps.plugins.dexcomoneplus.gatt.OnePlusGattUuids
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusAdvCandidate
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusStoredSession
 import java.util.concurrent.ConcurrentHashMap
@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicReference
  *
  * Soft filters (Juggluco `isG7`):
  * - Local name `DXCM` / `DX02` / `DX01`, and/or
- * - Advertisement includes service UUID FEBC ([OnePlusBluetoothUuids.Advertisement])
+ * - Advertisement includes service UUID FEBC ([OnePlusGattUuids.Advertisement])
  *   **without** a G6-style `Dexcom*` marketing name.
  * - Optional [sessionHint] sticky-matches last MAC / ADV name / serial.
  *
@@ -121,6 +121,10 @@ class OnePlusBleScannerAndroid(
 
     override fun isScanning(): Boolean = scanning.get()
 
+    override fun updateSessionHint(session: OnePlusStoredSession?) {
+        sessionHint = session
+    }
+
     /**
      * Pre-connect ADV wait isolated from UI [stopScan] (own [ScanCallback]).
      * Field log: StartActivity onDispose stopped shared scan ~0.6s into prepareConnect.
@@ -197,7 +201,7 @@ class OnePlusBleScannerAndroid(
                 .setDeviceAddress(target)
                 .build()
             val familyFilter = ScanFilter.Builder()
-                .setServiceUuid(ParcelUuid(OnePlusBluetoothUuids.Advertisement))
+                .setServiceUuid(ParcelUuid(OnePlusGattUuids.Advertisement))
                 .build()
             leScanner.startScan(listOf(targetFilter, familyFilter), settings, cb)
             OnePlusLog.i(
@@ -367,7 +371,7 @@ class OnePlusBleScannerAndroid(
         val address = device.address ?: return
         val name = device.name ?: result.scanRecord?.deviceName
         val hasAdvUuid = result.scanRecord?.serviceUuids?.any {
-            it.uuid == OnePlusBluetoothUuids.Advertisement
+            it.uuid == OnePlusGattUuids.Advertisement
         } == true
         val hint = sessionHint
         val candidate = OnePlusAdvCandidate.isCandidate(name, address, hint)

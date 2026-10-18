@@ -2,6 +2,7 @@ package app.aaps.plugins.dexcomoneplus.parse
 
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.dexcomoneplus.warmup.OnePlusWarmupClock
+import kotlin.time.Clock
 
 /**
  * Calibration / sensor state byte from EGV packets.
@@ -48,7 +49,7 @@ object OnePlusCalibrationMapper {
      */
     fun toWarmupState(
         state: OnePlusCalibrationState,
-        nowMs: Long = System.currentTimeMillis(),
+        nowMs: Long = Clock.System.now().toEpochMilliseconds(),
         sessionAgeSeconds: Int? = null,
     ): OnePlusWarmupState {
         return when {

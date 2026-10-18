@@ -1,5 +1,8 @@
 package app.aaps.plugins.dexcomoneplus.scan
 
+import app.aaps.core.interfaces.concurrent.AapsLock
+import app.aaps.core.interfaces.concurrent.withLock
+
 /**
  * Process-wide LE scan start budget shared by **all** ONE+ slots (production + staging) and the UI
  * discovery scan.
@@ -24,7 +27,7 @@ package app.aaps.plugins.dexcomoneplus.scan
  * This budget keeps one slot free for the UI discovery scan, so opening the Start screen can never
  * be starved by the background waits either.
  *
- * ⚠️ ASYNC IMPACT: [waitMsFor] / [record] are synchronized and non-blocking; the *caller* decides
+ * ⚠️ ASYNC IMPACT: [waitMsFor] / [record] take [lock] and are non-blocking; the *caller* decides
  * whether it may sleep (background BLE executor: yes — UI thread: never, it only [record]s).
  */
 object OnePlusScanBudget {
@@ -41,6 +44,13 @@ object OnePlusScanBudget {
     /** Longest single sleep a waiting caller does before re-checking (keeps `stop` responsive). */
     const val MAX_SLEEP_SLICE_MS = 500L
 
+    /**
+     * Guards everything below. An [AapsLock] rather than `@Synchronized`, which is JVM only, so
+     * this budget can be shared with the iOS driver. It is reentrant, like the object monitor it
+     * replaces, which [reserve] relies on when it calls [waitMsFor].
+     */
+    private val lock = AapsLock()
+
     private val starts = ArrayDeque<Long>()
 
     /** Elapsed-time until which no start is granted at all — see [blockFor]. */
@@ -56,8 +66,7 @@ object OnePlusScanBudget {
      * of the platform quota is then known to be too optimistic on this device, and the only safe
      * reaction is to scan less until the platform window has certainly rolled over.
      */
-    @Synchronized
-    fun blockFor(nowMs: Long, durationMs: Long) {
+    fun blockFor(nowMs: Long, durationMs: Long) = lock.withLock {
         val until = nowMs + durationMs.coerceAtLeast(0L)
         if (until > blockedUntilMs) blockedUntilMs = until
     }
@@ -73,14 +82,12 @@ object OnePlusScanBudget {
      * @param maxDurationMs a safety net only: the hold also ends on [takeRadioBack], and it must
      *   never outlive the longest lease.
      */
-    @Synchronized
-    fun lendRadioOut(nowMs: Long, maxDurationMs: Long) {
+    fun lendRadioOut(nowMs: Long, maxDurationMs: Long) = lock.withLock {
         lentOutUntilMs = nowMs + maxDurationMs.coerceAtLeast(0L)
     }
 
     /** The other job has given the radio back. Any [blockFor] hold is left alone. */
-    @Synchronized
-    fun takeRadioBack() {
+    fun takeRadioBack() = lock.withLock {
         lentOutUntilMs = 0L
     }
 
@@ -88,21 +95,19 @@ object OnePlusScanBudget {
      * Milliseconds to wait before another `startScan` may be issued (0 = free slot available now).
      * Pure function of the recorded history — safe to call from any thread.
      */
-    @Synchronized
-    fun waitMsFor(nowMs: Long): Long {
+    fun waitMsFor(nowMs: Long): Long = lock.withLock {
         prune(nowMs)
         val blocked = (blockedUntilMs - nowMs).coerceAtLeast(0L)
         val lentOut = (lentOutUntilMs - nowMs).coerceAtLeast(0L)
         val held = maxOf(blocked, lentOut)
-        if (held > 0L) return held
-        if (starts.size < MAX_STARTS_PER_WINDOW) return 0L
+        if (held > 0L) return@withLock held
+        if (starts.size < MAX_STARTS_PER_WINDOW) return@withLock 0L
         val oldest = starts.first()
-        return (WINDOW_MS - (nowMs - oldest)).coerceAtLeast(0L)
+        (WINDOW_MS - (nowMs - oldest)).coerceAtLeast(0L)
     }
 
     /** Book a scan start at [nowMs]. Callers must invoke this for **every** `startScan`. */
-    @Synchronized
-    fun record(nowMs: Long) {
+    fun record(nowMs: Long) = lock.withLock {
         prune(nowMs)
         starts.addLast(nowMs)
     }
@@ -112,24 +117,21 @@ object OnePlusScanBudget {
      * before retrying. Checking [waitMsFor] and then [record] separately would let two slots racing
      * on their own BLE executors both pass the same free slot.
      */
-    @Synchronized
-    fun reserve(nowMs: Long): Long {
+    fun reserve(nowMs: Long): Long = lock.withLock {
         val wait = waitMsFor(nowMs)
-        if (wait > 0L) return wait
+        if (wait > 0L) return@withLock wait
         starts.addLast(nowMs)
-        return 0L
+        0L
     }
 
     /** Recorded starts still inside the platform window (diagnostics / tests). */
-    @Synchronized
-    fun startsInWindow(nowMs: Long): Int {
+    fun startsInWindow(nowMs: Long): Int = lock.withLock {
         prune(nowMs)
-        return starts.size
+        starts.size
     }
 
     /** Test seam — drops the recorded history. */
-    @Synchronized
-    fun reset() {
+    fun reset() = lock.withLock {
         starts.clear()
         blockedUntilMs = 0L
         lentOutUntilMs = 0L

@@ -5,6 +5,7 @@ import app.aaps.plugins.dexcomoneplus.OnePlusLog
 import app.aaps.plugins.dexcomoneplus.OnePlusLogMarkers
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.dexcomoneplus.gatt.OnePlusGattClient
+import app.aaps.plugins.dexcomoneplus.onePlusSleep
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrateRx
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrateTx
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrationMapper
@@ -16,6 +17,8 @@ import app.aaps.plugins.dexcomoneplus.parse.OnePlusSessionStartTx
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusSessionStopRx
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusTransmitterTimeRx
 import app.aaps.plugins.dexcomoneplus.warmup.OnePlusWarmupClock
+import kotlin.concurrent.Volatile
+import kotlin.time.Clock
 
 /**
  * Post-KEKS Control / EGV path aligned with Juggluco `getdatacmd` + xDrip Ob1 `doGetData` (G7).
@@ -101,28 +104,23 @@ class OnePlusEgvSession(
         // uses NOTIFY, but that is its native stack — libkeks/xDrip is our reference here.
         gatt.enableControlIndications()
         // Ob1 speakSlowly() — give CCCD write time before Control write.
-        try {
-            Thread.sleep(CCCD_SETTLE_MS)
-        } catch (_: InterruptedException) {
-            Thread.currentThread().interrupt()
-            return
-        }
+        if (!onePlusSleep(CCCD_SETTLE_MS)) return
 
         // Juggluco getdatacmd / Ob1 doGetData (G7): Control CCCD → 0x4E only.
         var lastWriteMs = 0L
         writeEgvRequest(preferShort = true)
-        lastWriteMs = System.currentTimeMillis()
+        lastWriteMs = Clock.System.now().toEpochMilliseconds()
 
         var preferShort = true
         var consecutiveTimeouts = 0
         var triedIndicateFallback = false
 
         while (shouldContinue() && gatt.isConnected()) {
-            val now = System.currentTimeMillis()
+            val now = Clock.System.now().toEpochMilliseconds()
             // Between two Control exchanges is the only safe moment: the loop owns the
             // characteristic, and nothing else is waiting for an indication right now.
             if (sendPendingCalibration(shouldContinue)) {
-                lastWriteMs = System.currentTimeMillis()
+                lastWriteMs = Clock.System.now().toEpochMilliseconds()
                 continue
             }
             if (now - lastWriteMs >= rewriteIntervalMs) {
@@ -147,7 +145,7 @@ class OnePlusEgvSession(
                             "${OnePlusLogMarkers.SESSION}: Control quiet after INDICATE — try NOTIFY",
                         )
                         gatt.enableControlNotifications()
-                        Thread.sleep(CCCD_SETTLE_MS)
+                        onePlusSleep(CCCD_SETTLE_MS)
                     } catch (t: Throwable) {
                         OnePlusLog.w(
                             "${OnePlusLogMarkers.SESSION}: Control INDICATE fallback failed: ${t.message}",
@@ -162,11 +160,11 @@ class OnePlusEgvSession(
                 ) {
                     performSessionStart(reason = "egv_timeout_new_start", shouldContinue = shouldContinue)
                     writeEgvRequest(preferShort = preferShort)
-                    lastWriteMs = System.currentTimeMillis()
+                    lastWriteMs = Clock.System.now().toEpochMilliseconds()
                     continue
                 }
                 writeEgvRequest(preferShort = preferShort)
-                lastWriteMs = System.currentTimeMillis()
+                lastWriteMs = Clock.System.now().toEpochMilliseconds()
                 continue
             }
             consecutiveTimeouts = 0
@@ -188,12 +186,7 @@ class OnePlusEgvSession(
         }
         // Control is INDICATE on ONE+/G7 (xDrip libkeks reference); NOTIFY made the peer drop.
         gatt.enableControlIndications()
-        try {
-            Thread.sleep(CCCD_SETTLE_MS)
-        } catch (_: InterruptedException) {
-            Thread.currentThread().interrupt()
-            return false
-        }
+        if (!onePlusSleep(CCCD_SETTLE_MS)) return false
         // Juggluco/xDrip GET_DATA: 0x4E first (same as [run]).
         writeEgvRequest(preferShort = true)
         var gotPacket = false
@@ -237,7 +230,7 @@ class OnePlusEgvSession(
     private fun sendPendingCalibration(shouldContinue: () -> Boolean): Boolean {
         val queue = calibrationQueue ?: return false
         if (queue.peek() == null) return false
-        val now = System.currentTimeMillis()
+        val now = Clock.System.now().toEpochMilliseconds()
         val dexTime = OnePlusCalibrationQueue.dexTimeForBlood(
             bloodAtMs = queue.peek()?.bloodAtMs ?: return false,
             nowMs = now,
@@ -307,7 +300,7 @@ class OnePlusEgvSession(
 
     private fun applyTransmitterTime(rx: OnePlusTransmitterTimeRx) {
         lastDexTimeSeconds = rx.currentTimeSeconds
-        lastDexTimeAtMs = System.currentTimeMillis()
+        lastDexTimeAtMs = Clock.System.now().toEpochMilliseconds()
         val age = rx.sessionAgeSeconds()
         OnePlusLog.i(
             "${OnePlusLogMarkers.SESSION}: TransmitterTimeRx current=${rx.currentTimeSeconds} " +
@@ -319,7 +312,7 @@ class OnePlusEgvSession(
             if (startMs != null) {
                 val warmup = OnePlusWarmupClock.warmingFromStart(
                     startEpochMs = startMs,
-                    nowMs = System.currentTimeMillis(),
+                    nowMs = Clock.System.now().toEpochMilliseconds(),
                     message = "tx_time_session",
                 )
                 onWarmup(warmup)
@@ -334,7 +327,7 @@ class OnePlusEgvSession(
 
         val payload = OnePlusSessionStartTx.build(
             dexTimeSeconds = lastDexTimeSeconds,
-            startTimeEpochMs = System.currentTimeMillis(),
+            startTimeEpochMs = Clock.System.now().toEpochMilliseconds(),
         )
         try {
             gatt.writeControl(payload)
@@ -369,7 +362,7 @@ class OnePlusEgvSession(
 
         if (rx.transmitterTime != 0 && rx.transmitterTime != OnePlusSessionStartRx.INVALID_TIME) {
             lastDexTimeSeconds = rx.transmitterTime
-            lastDexTimeAtMs = System.currentTimeMillis()
+            lastDexTimeAtMs = Clock.System.now().toEpochMilliseconds()
         }
 
         when {
@@ -442,7 +435,7 @@ class OnePlusEgvSession(
             )
             if (rx.transmitterTime != 0) {
                 lastDexTimeSeconds = rx.transmitterTime
-                lastDexTimeAtMs = System.currentTimeMillis()
+                lastDexTimeAtMs = Clock.System.now().toEpochMilliseconds()
             }
             return
         }
@@ -453,7 +446,7 @@ class OnePlusEgvSession(
             )
             if (rx.transmitterTime != 0 && rx.transmitterTime != OnePlusSessionStartRx.INVALID_TIME) {
                 lastDexTimeSeconds = rx.transmitterTime
-                lastDexTimeAtMs = System.currentTimeMillis()
+                lastDexTimeAtMs = Clock.System.now().toEpochMilliseconds()
             }
             return
         }
@@ -480,12 +473,12 @@ class OnePlusEgvSession(
 
         parsed.sessionAgeSeconds?.takeIf { it > 0 }?.let { age ->
             lastDexTimeSeconds = age
-            lastDexTimeAtMs = System.currentTimeMillis()
+            lastDexTimeAtMs = Clock.System.now().toEpochMilliseconds()
         }
 
         val warmup = OnePlusCalibrationMapper.toWarmupState(
             state = parsed.calibration,
-            nowMs = System.currentTimeMillis(),
+            nowMs = Clock.System.now().toEpochMilliseconds(),
             sessionAgeSeconds = parsed.sessionAgeSeconds,
         )
         onWarmup(warmup)

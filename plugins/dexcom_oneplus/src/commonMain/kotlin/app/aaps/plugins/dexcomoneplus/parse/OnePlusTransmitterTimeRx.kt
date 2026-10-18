@@ -1,7 +1,6 @@
 package app.aaps.plugins.dexcomoneplus.parse
 
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
+import kotlin.time.Clock
 
 /**
  * Control TransmitterTime response (opcode 0x25).
@@ -22,7 +21,7 @@ data class OnePlusTransmitterTimeRx(
     /**
      * Wall-clock estimate of when the sensor session started, or null if not in progress.
      */
-    fun realSessionStartEpochMs(nowMs: Long = System.currentTimeMillis()): Long? {
+    fun realSessionStartEpochMs(nowMs: Long = Clock.System.now().toEpochMilliseconds()): Long? {
         if (!sessionInProgress()) return null
         val ageSec = (currentTimeSeconds.toLong() - sessionStartTimeSeconds.toLong())
         return nowMs - ageSec * 1000L
@@ -45,9 +44,9 @@ data class OnePlusTransmitterTimeRx(
             if (!OnePlusFastCrc16.check(packet)) return null
             // Fields sit in the first 10 bytes; CRC is the final 2 (xDrip reads via absolute offsets).
             val status = packet[1].toInt() and 0xff
-            val data = ByteBuffer.wrap(packet).order(ByteOrder.LITTLE_ENDIAN)
-            val current = data.getInt(2)
-            val sessionStart = data.getInt(6)
+            val data = OnePlusByteReader(packet)
+            val current = data.intAt(2)
+            val sessionStart = data.intAt(6)
             return OnePlusTransmitterTimeRx(
                 statusByte = status,
                 currentTimeSeconds = current,

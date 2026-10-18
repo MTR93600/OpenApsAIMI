@@ -1,8 +1,5 @@
 package app.aaps.plugins.dexcomoneplus.parse
 
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-
 /**
  * What the sensor answered to a calibration.
  *
@@ -123,10 +120,10 @@ data class OnePlusCalibrateRx(
             if (packet.size != PACKET_LENGTH) return null
             if (packet[0] != OPCODE) return null
             if (!OnePlusFastCrc16.check(packet)) return null
-            val data = ByteBuffer.wrap(packet).order(ByteOrder.LITTLE_ENDIAN)
-            data.get() // opcode
-            val info = data.get().toInt() and 0xff
-            val result = data.get().toInt() and 0xff
+            val data = OnePlusByteReader(packet)
+            data.skip(1) // opcode
+            val info = data.u8()
+            val result = data.u8()
             return OnePlusCalibrateRx(
                 info = info,
                 result = result,
@@ -136,6 +133,6 @@ data class OnePlusCalibrateRx(
             )
         }
 
-        private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
+        private fun ByteArray.toHex(): String = onePlusToHex()
     }
 }

@@ -110,7 +110,7 @@ class Libre3NfcReader(private val session: Libre3NfcSession) {
         }
         try {
             nfcV.connect()
-            val result = session.scan { frame -> checkAnswer(nfcV.transceive(frame)) }
+            val result = session.scan { frame -> Libre3NfcCommands.checkAnswerFlag(nfcV.transceive(frame)) }
             scanFinished = true
             // The reader is turned off on the main thread before the screen is told, so a second
             // A8 cannot start while the first result is still being stored.
@@ -145,20 +145,5 @@ class Libre3NfcReader(private val session: Libre3NfcSession) {
         activity.runOnUiThread {
             if (!activity.isDestroyed) action()
         }
-    }
-
-    /**
-     * The first byte of an ISO 15693 answer is the answer flag. Bit 0 set means the sensor refused
-     * the command, and the byte after it says why.
-     */
-    private fun checkAnswer(answer: ByteArray): ByteArray {
-        if (answer.isEmpty()) {
-            throw Libre3NfcException("the sensor sent an empty answer", Libre3NfcFailure.LINK_LOST)
-        }
-        if (answer[0].toInt() and 0x01 != 0) {
-            val code = if (answer.size > 1) "0x%02X".format(answer[1]) else "unknown"
-            throw Libre3NfcException("the sensor refused the command, error $code", Libre3NfcFailure.SENSOR_REFUSED)
-        }
-        return answer
     }
 }

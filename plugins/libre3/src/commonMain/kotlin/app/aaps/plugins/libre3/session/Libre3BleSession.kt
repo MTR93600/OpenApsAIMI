@@ -9,13 +9,14 @@ import app.aaps.plugins.libre3.crypto.Libre3FirstPairEphemeral
 import app.aaps.plugins.libre3.crypto.Libre3FirstPairMaterial
 import app.aaps.plugins.libre3.crypto.Libre3FirstPairPhase5Source
 import app.aaps.plugins.libre3.crypto.Libre3PhoneCert
+import app.aaps.plugins.libre3.crypto.Libre3RandomSource
 import app.aaps.plugins.libre3.crypto.Libre3SensorCert
 import app.aaps.plugins.libre3.crypto.Libre3SessionMaterial
 import app.aaps.plugins.libre3.gatt.Libre3BluetoothUuids
 import app.aaps.plugins.libre3.gatt.Libre3GattClient
 import app.aaps.plugins.libre3.identity.Libre3SessionStore
 import app.aaps.plugins.libre3.parse.Libre3GlucoseFrameAssembler
-import java.security.SecureRandom
+import kotlin.concurrent.Volatile
 
 /**
  * Builds the block maker that the pairing messages use.
@@ -49,7 +50,7 @@ class Libre3BleSession(
     private val gatt: Libre3GattClient,
     private val store: Libre3SessionStore,
     private val pairingBlocks: Libre3PairingBlockFactory,
-    private val random: SecureRandom = SecureRandom(),
+    private val random: Libre3RandomSource = Libre3RandomSource.secure(),
     /**
      * The keys a sensor certificate must be signed by. The sensor maker's own, unless a test says
      * otherwise. LibreCRKit `PairingFlow` takes the same list for the same reason.
