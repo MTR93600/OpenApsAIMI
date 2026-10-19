@@ -13,12 +13,35 @@ Authorship per upstream comments: JamOrHam / jamorham. Upstream files carry no
 formal per-file "Copyright (C) <year> <name>" line; see the git history of the
 pin commit for authorship. No copyright holder is invented here.
 
-Each vendored .java file carries an "SPDX-License-Identifier: GPL-3.0-only"
-header naming this upstream and pin. Sources are not knowingly modified from the
-pin (verify with a diff against the pin commit before any wide distribution).
+Each vendored source file carries an "SPDX-License-Identifier: GPL-3.0-only"
+header naming this upstream and pin.
+
+MODIFICATION NOTICE
+-------------------
+These sources are a DERIVED WORK of the pin above, not a copy of it. In October
+2026 the 24 Java files were translated into Kotlin so that the handshake can run
+on Apple platforms as well as on Android. The translation keeps the protocol,
+the state machine, the message layouts and the upstream comments; a byte for
+byte diff against the pin is therefore no longer possible, and `src/commonTest`
+exists in its place. Those tests hold values recorded from the original Java and
+BouncyCastle code, including a whole four digit pairing replayed message by
+message, and they run on the JVM, on Android and on the iOS simulator.
+
+What the translation replaced, and why:
+  - BouncyCastle (secp256r1 point arithmetic, ECDSA, ASN.1 key readers) and
+    java.math.BigInteger have no multiplatform form. They are replaced by
+    jamorham.keks.crypto: KeksUInt, KeksP256 / KeksEcPoint, KeksEcdsa, KeksDer.
+  - Project Lombok (@Getter, @val, @RequiredArgsConstructor) is not needed in
+    Kotlin and is gone, with the annotation processor.
+  - javax.crypto, java.security.SecureRandom and android.util.Log are now three
+    `expect` declarations with an actual per platform.
+  - java.nio.ByteBuffer is replaced by jamorham.keks.util.KeksBuffer, which
+    copies the three behaviours the message classes depend on.
+
+SHA256.java carried its own MIT notice (Copyright (c) 2017 Fabian Meyer). That
+notice is kept in full at the top of the translated SHA256.kt.
 
 The combined OpenApsAIMI APK is distributed under AGPL-3.0-or-later; GPL-3.0
 obligations are honoured for these derived parts (GPLv3 §13 AGPL compatibility).
 
-Transitive dependency: org.bouncycastle bcpkix / bcprov (Bouncy Castle MIT-style
-licence) — pulled via Gradle, not vendored here.
+Bouncy Castle (bcpkix / bcprov) is no longer a dependency of this module.

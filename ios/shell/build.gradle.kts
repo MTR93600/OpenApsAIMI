@@ -43,6 +43,11 @@ val migratedModules = listOf(
     ":plugins:configuration",
     ":plugins:constraints",
     ":plugins:dexcom_oneplus",
+    // Vendored KEKS authentication. It builds for iOS now that it is Kotlin, so the guard above
+    // requires it here. Nothing on the iOS side calls it yet - wiring the ONE+ handshake to it is
+    // the next step - but a module that builds for iOS and is not listed is simply absent from the
+    // framework, which is the failure this list exists to stop.
+    ":plugins:libkeks",
     ":plugins:libre3",
     ":plugins:main",
     ":plugins:sensitivity",

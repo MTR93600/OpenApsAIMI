@@ -109,8 +109,10 @@ compatible app to close before connecting — that is not code derivation.
 3. Other third-party libraries
 -------------------------------------------------------------------------------
 
-org.bouncycastle bcpkix / bcprov (Bouncy Castle MIT-style licence) — pulled via
-Gradle by :plugins:libkeks (transitive), not vendored in this module.
+None. Bouncy Castle (bcpkix / bcprov) used to arrive here through :plugins:libkeks.
+That module was translated to Kotlin Multiplatform in October 2026 and carries
+its own secp256r1 and ECDSA code now, so nothing third-party reaches this module
+through it any more. See plugins/libkeks/NOTICE.
 Add SPDX name / version / licence URL here if new direct dependencies land.
 
 
