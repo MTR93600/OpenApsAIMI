@@ -2,13 +2,13 @@ package app.aaps.plugins.source.keys
 
 import app.aaps.core.keys.interfaces.BooleanPreferenceKey
 import app.aaps.core.keys.interfaces.TextRef
-import app.aaps.plugins.source.R
+import app.aaps.plugins.source.SourceStrings
 
 enum class DexcomOnePlusBooleanKey(
     override val key: String,
     override val defaultValue: Boolean,
-    private val titleResId: Int,
-    private val summaryResId: Int? = null,
+    override val title: TextRef,
+    override val summary: TextRef? = null,
     override val defaultedBySM: Boolean = false,
     override val calculatedDefaultValue: Boolean = false,
     override val engineeringModeOnly: Boolean = false,
@@ -22,14 +22,14 @@ enum class DexcomOnePlusBooleanKey(
 ) : BooleanPreferenceKey {
 
     /**
-     * Routes [app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers.default] to the Real skeleton
+     * Routes the production slot to the Real skeleton
      * (still fails closed at GATT/auth). For A3 spike only — not a production BLE claim.
      */
     UseRealSkeleton(
         key = "dexcom_oneplus_use_real_skeleton",
         defaultValue = true,
-        titleResId = R.string.dexcom_oneplus_use_real_skeleton,
-        summaryResId = R.string.dexcom_oneplus_use_real_skeleton_summary,
+        title = SourceStrings.dexcom_oneplus_use_real_skeleton,
+        summary = SourceStrings.dexcom_oneplus_use_real_skeleton_summary,
         engineeringModeOnly = true,
         exportable = false,
     ),
@@ -47,8 +47,8 @@ enum class DexcomOnePlusBooleanKey(
     SendCalibrationToSensor(
         key = "dexcom_oneplus_send_calibration_to_sensor",
         defaultValue = false,
-        titleResId = R.string.dexcom_oneplus_send_calibration_to_sensor,
-        summaryResId = R.string.dexcom_oneplus_send_calibration_to_sensor_summary,
+        title = SourceStrings.dexcom_oneplus_send_calibration_to_sensor,
+        summary = SourceStrings.dexcom_oneplus_send_calibration_to_sensor_summary,
         engineeringModeOnly = true,
         exportable = false,
     ),
@@ -63,8 +63,8 @@ enum class DexcomOnePlusBooleanKey(
     RepairMissingSensorChange(
         key = "dexcom_oneplus_repair_missing_sensor_change",
         defaultValue = true,
-        titleResId = R.string.dexcom_oneplus_repair_missing_sensor_change,
-        summaryResId = R.string.dexcom_oneplus_repair_missing_sensor_change_summary,
+        title = SourceStrings.dexcom_oneplus_repair_missing_sensor_change,
+        summary = SourceStrings.dexcom_oneplus_repair_missing_sensor_change_summary,
         engineeringModeOnly = true,
         exportable = false,
     ),
@@ -79,8 +79,8 @@ enum class DexcomOnePlusBooleanKey(
     CorrectSensorStart(
         key = "dexcom_oneplus_correct_sensor_start",
         defaultValue = true,
-        titleResId = R.string.dexcom_oneplus_correct_sensor_start,
-        summaryResId = R.string.dexcom_oneplus_correct_sensor_start_summary,
+        title = SourceStrings.dexcom_oneplus_correct_sensor_start,
+        summary = SourceStrings.dexcom_oneplus_correct_sensor_start_summary,
         engineeringModeOnly = true,
         exportable = false,
     ),
@@ -95,8 +95,8 @@ enum class DexcomOnePlusBooleanKey(
     AnchorSessionToManualSensorChange(
         key = "dexcom_oneplus_anchor_session_to_manual_sensor_change",
         defaultValue = false,
-        titleResId = R.string.dexcom_oneplus_anchor_session_to_manual_sensor_change,
-        summaryResId = R.string.dexcom_oneplus_anchor_session_to_manual_sensor_change_summary,
+        title = SourceStrings.dexcom_oneplus_anchor_session_to_manual_sensor_change,
+        summary = SourceStrings.dexcom_oneplus_anchor_session_to_manual_sensor_change_summary,
         engineeringModeOnly = true,
         exportable = false,
     ),
@@ -112,11 +112,7 @@ enum class DexcomOnePlusBooleanKey(
     AutoPromote(
         key = "dexcom_oneplus_staging_auto_promote",
         defaultValue = false,
-        titleResId = R.string.staging_auto_promote_title,
-        summaryResId = R.string.staging_auto_promote_summary,
+        title = SourceStrings.staging_auto_promote_title,
+        summary = SourceStrings.staging_auto_promote_summary,
     ),
-    ;
-
-    override val title: TextRef = TextRef.AndroidRes(titleResId)
-    override val summary: TextRef? = summaryResId?.let { TextRef.AndroidRes(it) }
 }

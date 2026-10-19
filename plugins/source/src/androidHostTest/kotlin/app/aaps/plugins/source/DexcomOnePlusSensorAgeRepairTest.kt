@@ -80,8 +80,8 @@ class DexcomOnePlusSensorAgeRepairTest : TestBase() {
         whenever(persistenceLayer.getTherapyEventDataIncludingInvalidFromTime(any(), any()))
             .thenReturn(emptyList())
         plugin = DexcomOnePlusPlugin(
-            rh, aapsLogger, preferences, config, notificationManager, context, persistenceLayer,
-            warmupBasalGuard, availabilityProvider, bleRadioPriority, activePlugin, rxBus,
+            rh, aapsLogger, preferences, config, notificationManager, DexcomOnePlusAndroidHost(context, availabilityProvider), persistenceLayer,
+            warmupBasalGuard, bleRadioPriority, activePlugin, rxBus,
         )
         DexcomOnePlusIngest.reset()
     }

@@ -70,8 +70,8 @@ class DexcomOnePlusInsertionDateTest : TestBase() {
         whenever(persistenceLayer.getTherapyEventDataFromToTime(any(), any())).thenReturn(emptyList())
         whenever(persistenceLayer.getTherapyEventDataIncludingInvalidFromTime(any(), any())).thenReturn(emptyList())
         plugin = DexcomOnePlusPlugin(
-            rh, aapsLogger, preferences, config, notificationManager, context, persistenceLayer,
-            warmupBasalGuard, availabilityProvider, bleRadioPriority, activePlugin, rxBus,
+            rh, aapsLogger, preferences, config, notificationManager, DexcomOnePlusAndroidHost(context, availabilityProvider), persistenceLayer,
+            warmupBasalGuard, bleRadioPriority, activePlugin, rxBus,
         )
     }
 

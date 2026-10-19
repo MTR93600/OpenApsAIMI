@@ -1,7 +1,8 @@
 package app.aaps.implementation.ble
 
 import app.aaps.core.interfaces.ble.BleRadioPriority
-import app.aaps.core.interfaces.di.ApplicationScope
+import app.aaps.core.interfaces.concurrent.AapsLock
+import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import dev.zacsweers.metro.AppScope
@@ -23,15 +24,25 @@ import kotlinx.coroutines.launch
  * generated in `:app`. A second copy would hand the same radio to two owners at once, which is the
  * whole thing this class exists to stop.
  *
- * ⚠️ ASYNC IMPACT: [acquire] and [release] are synchronized and do not block. The self release runs
- * on the application scope, so it still fires while the screen that took the lease is long gone.
+ * ⚠️ ASYNC IMPACT: [acquire] and [release] take one lock and do not block on anything else. The
+ * self release runs on the application scope, so it still fires while the screen that took the
+ * lease is long gone.
+ *
+ * Shared code, so an iPhone has the same single lease. `@Synchronized` is JVM only and was replaced
+ * by one [AapsLock] around the same three methods; it is reentrant and blocking, exactly what the
+ * monitor was.
  */
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
 class BleRadioPriorityImpl @Inject constructor(
     private val aapsLogger: AAPSLogger,
-    @ApplicationScope private val scope: CoroutineScope
+    // Plain CoroutineScope, not @ApplicationScope: that qualifier is javax and cannot appear in
+    // commonMain. AppCoroutineBindings.unqualifiedAppScope binds the very same scope without it.
+    private val scope: CoroutineScope
 ) : BleRadioPriority {
+
+    /** Guards the owner and its pending self release - the two must change together. */
+    private val lock = AapsLock()
 
     private val _owner = MutableStateFlow<String?>(null)
     override val owner: StateFlow<String?> = _owner.asStateFlow()
@@ -39,12 +50,11 @@ class BleRadioPriorityImpl @Inject constructor(
     /** The pending self release of the current lease, cancelled whenever the lease changes. */
     private var expiryJob: Job? = null
 
-    @Synchronized
-    override fun acquire(owner: String, maxHoldMs: Long): Boolean {
+    override fun acquire(owner: String, maxHoldMs: Long): Boolean = lock.withLock {
         val current = _owner.value
         if (current != null && current != owner) {
             aapsLogger.warn(LTag.PUMPBTCOMM, "BLE radio lease refused for $owner, held by $current")
-            return false
+            return@withLock false
         }
         val holdMs = maxHoldMs.coerceIn(BleRadioPriority.MIN_HOLD_MS, BleRadioPriority.MAX_HOLD_MS)
         expiryJob?.cancel()
@@ -55,12 +65,11 @@ class BleRadioPriorityImpl @Inject constructor(
         // Set last, so a collector that reacts at once already sees a lease with a live self release.
         _owner.value = owner
         if (current == null) aapsLogger.info(LTag.PUMPBTCOMM, "BLE radio lease taken by $owner for ${holdMs}ms")
-        return true
+        true
     }
 
-    @Synchronized
-    override fun release(owner: String) {
-        if (_owner.value != owner) return
+    override fun release(owner: String) = lock.withLock {
+        if (_owner.value != owner) return@withLock
         expiryJob?.cancel()
         expiryJob = null
         _owner.value = null
@@ -73,9 +82,8 @@ class BleRadioPriorityImpl @Inject constructor(
      * It checks the owner again because the lease may have been released and taken by somebody else
      * while this was waiting, and that newer lease must not be cut short.
      */
-    @Synchronized
-    private fun releaseExpired(owner: String, holdMs: Long) {
-        if (_owner.value != owner) return
+    private fun releaseExpired(owner: String, holdMs: Long) = lock.withLock {
+        if (_owner.value != owner) return@withLock
         expiryJob = null
         _owner.value = null
         aapsLogger.warn(LTag.PUMPBTCOMM, "BLE radio lease of $owner ran out after ${holdMs}ms, radio given back")

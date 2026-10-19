@@ -4,14 +4,14 @@ import app.aaps.core.keys.UnitType
 import app.aaps.core.keys.interfaces.BooleanPreferenceKey
 import app.aaps.core.keys.interfaces.IntPreferenceKey
 import app.aaps.core.keys.interfaces.TextRef
-import app.aaps.plugins.source.R
+import app.aaps.plugins.source.SourceStrings
 
 enum class DexcomOnePlusIntKey(
     override val key: String,
     override val defaultValue: Int,
     override val min: Int,
     override val max: Int,
-    private val titleResId: Int,
+    override val title: TextRef,
     override val dependency: BooleanPreferenceKey? = null,
     override val unitType: UnitType = UnitType.NONE,
     override val exportable: Boolean = true,
@@ -30,11 +30,8 @@ enum class DexcomOnePlusIntKey(
         defaultValue = 12,
         min = 6,
         max = 24,
-        titleResId = R.string.staging_auto_promote_hours_title,
+        title = SourceStrings.staging_auto_promote_hours_title,
         dependency = DexcomOnePlusBooleanKey.AutoPromote,
         unitType = UnitType.HOURS,
     ),
-    ;
-
-    override val title: TextRef = TextRef.AndroidRes(titleResId)
 }

@@ -46,6 +46,20 @@ interface OnePlusCgmDriver {
     fun isSessionUp(): Boolean
 
     /**
+     * Ask the driver to bring back the session it has stored, after the app was restarted.
+     *
+     * The driver keeps the sensor it last talked to - its address, its pairing code and its key -
+     * so it can connect again without the user doing anything. This asks it to do that now.
+     *
+     * Default is false, which is the honest answer for a driver that stores no session: it did not
+     * queue anything, and the caller must not show the sensor as coming back.
+     *
+     * @return true when a reconnect was queued. False when nothing was stored, when the stored
+     *   session is incomplete, or when a session is already running.
+     */
+    fun resumeStoredSession(): Boolean = false
+
+    /**
      * Ask the running session to hand a fingerstick to the sensor's own algorithm.
      *
      * The value does not reach the sensor here: it waits for the Control loop to reach a point

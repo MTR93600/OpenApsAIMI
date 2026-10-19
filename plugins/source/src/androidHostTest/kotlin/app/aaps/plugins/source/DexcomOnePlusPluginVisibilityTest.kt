@@ -57,8 +57,8 @@ class DexcomOnePlusPluginVisibilityTest : TestBase() {
         val availabilityProvider =
             DexcomOnePlusAvailabilityProvider(aapsLogger, { fileListProvider }, preferences, notificationManager, dateUtil)
         plugin = DexcomOnePlusPlugin(
-            rh, aapsLogger, preferences, config, notificationManager, context, persistenceLayer,
-            warmupBasalGuard, availabilityProvider, bleRadioPriority, activePlugin, rxBus
+            rh, aapsLogger, preferences, config, notificationManager, DexcomOnePlusAndroidHost(context, availabilityProvider), persistenceLayer,
+            warmupBasalGuard, bleRadioPriority, activePlugin, rxBus
         )
     }
 

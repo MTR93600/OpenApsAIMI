@@ -4,12 +4,12 @@ import app.aaps.core.keys.PreferenceType
 import app.aaps.core.keys.interfaces.BooleanPreferenceKey
 import app.aaps.core.keys.interfaces.IntentPreferenceKey
 import app.aaps.core.keys.interfaces.TextRef
-import app.aaps.plugins.source.R
+import app.aaps.plugins.source.SourceStrings
 
 enum class DexcomOnePlusIntentKey(
     override val key: String,
-    private val titleResId: Int,
-    private val summaryResId: Int? = null,
+    override val title: TextRef,
+    override val summary: TextRef? = null,
     override val preferenceType: PreferenceType = PreferenceType.CLICK,
     override val defaultedBySM: Boolean = false,
     override val showInApsMode: Boolean = true,
@@ -23,21 +23,17 @@ enum class DexcomOnePlusIntentKey(
 
     Status(
         key = "dexcom_oneplus_status",
-        titleResId = R.string.dexcom_oneplus_status_title,
-        summaryResId = R.string.dexcom_oneplus_status_summary
+        title = SourceStrings.dexcom_oneplus_status_title,
+        summary = SourceStrings.dexcom_oneplus_status_summary
     ),
     Start(
         key = "dexcom_oneplus_start",
-        titleResId = R.string.dexcom_oneplus_start_title,
-        summaryResId = R.string.dexcom_oneplus_start_summary
+        title = SourceStrings.dexcom_oneplus_start_title,
+        summary = SourceStrings.dexcom_oneplus_start_summary
     ),
     Warmup(
         key = "dexcom_oneplus_warmup",
-        titleResId = R.string.dexcom_oneplus_warmup_title,
-        summaryResId = R.string.dexcom_oneplus_warmup_summary
+        title = SourceStrings.dexcom_oneplus_warmup_title,
+        summary = SourceStrings.dexcom_oneplus_warmup_summary
     )
-    ;
-
-    override val title: TextRef = TextRef.AndroidRes(titleResId)
-    override val summary: TextRef? = summaryResId?.let { TextRef.AndroidRes(it) }
 }

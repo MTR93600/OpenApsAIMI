@@ -348,7 +348,7 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
      * ⚠️ ASYNC IMPACT: queues at most one resume on [bleExecutor]. The resumed session itself owns
      * persistent ADV waiting and all later reconnects.
      */
-    fun resumeStoredSession(): Boolean {
+    override fun resumeStoredSession(): Boolean {
         val stored = sensorStore?.load()
         if (!OnePlusCgmDriverResumePolicy.canResume(stored)) {
             OnePlusLog.i(

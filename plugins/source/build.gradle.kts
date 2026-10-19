@@ -72,7 +72,38 @@ kotlin {
     // plain jvm() target, so no special target name is needed.
     jvm()
 
+    // Explicit: the manual dependsOn below would otherwise switch the automatic hierarchy off and
+    // silently unwire iosMain.
+    applyDefaultHierarchyTemplate()
+
     sourceSets {
+        // Dexcom ONE+ lives here rather than in commonMain, and the reason is the desktop client.
+        //
+        // `:plugins:source` builds for the desktop shell too, but a desktop has no Bluetooth CGM
+        // and `:plugins:dexcom_oneplus` has no jvm target at all. A plugin in commonMain would be
+        // contributed to the desktop graph as well and would then need a third host that could
+        // only refuse. So the ONE+ plugin is shared between the two phones and simply absent on
+        // the desktop, which is the truthful answer for that build.
+        val androidAppleMain = create("androidAppleMain") {
+            dependsOn(commonMain.get())
+            dependencies {
+                implementation(project(":plugins:dexcom_oneplus"))
+            }
+        }
+        androidMain.get().dependsOn(androidAppleMain)
+        iosMain.get().dependsOn(androidAppleMain)
+
+        // The shared half of the ONE+ tests, so the same assertions run on the JVM host and on the
+        // iOS simulator. A test name here must not contain a comma: Kotlin/Native rejects it.
+        val androidAppleTest = create("androidAppleTest") {
+            dependsOn(commonTest.get())
+            dependencies {
+                implementation(kotlin("test"))
+            }
+        }
+        getByName("androidHostTest").dependsOn(androidAppleTest)
+        iosTest.get().dependsOn(androidAppleTest)
+
         commonMain {
             kotlin.srcDir(generateSourceStrings.flatMap { it.commonOutputDir })
             dependencies {
@@ -97,10 +128,8 @@ kotlin {
         androidMain {
             kotlin.srcDir(generateSourceStrings.flatMap { it.androidOutputDir })
             dependencies {
-                // Fork-only CGM source plugins. Both are multiplatform now, but the plugin
-                // wrappers that use them are still Android only, so they stay here until a shared
-                // caller exists.
-                implementation(project(":plugins:dexcom_oneplus"))
+                // Fork-only CGM source plugin whose wrapper is still Android only. Libre 3 stays
+                // here until it gets a shared caller, the way Dexcom ONE+ just did.
                 implementation(project(":plugins:libre3"))
 
                 implementation(project.dependencies.platform(libs.androidx.compose.bom))

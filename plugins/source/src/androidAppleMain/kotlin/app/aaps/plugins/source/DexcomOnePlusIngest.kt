@@ -3,8 +3,11 @@ package app.aaps.plugins.source
 import app.aaps.core.data.model.GV
 import app.aaps.core.data.model.SourceSensor
 import app.aaps.core.data.model.TrendArrow
+import app.aaps.core.interfaces.concurrent.AapsLock
+import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseSample
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
+import kotlin.concurrent.Volatile
 import kotlin.math.abs
 
 /**
@@ -25,7 +28,13 @@ internal object DexcomOnePlusIngest {
 
     private const val RECENT_CAP: Int = 64
 
-    private val lock = Any()
+    /**
+     * One lock for the whole dedup state.
+     *
+     * Was `synchronized(Any())`, which is JVM only. [AapsLock.withLock] is inline and reentrant, so
+     * the `return` statements inside the guarded blocks below still mean what they meant before.
+     */
+    private val lock = AapsLock()
     private val recentTimestampsMs = ArrayDeque<Long>()
     private val recentSequences = LinkedHashSet<Long>()
 
@@ -44,7 +53,7 @@ internal object DexcomOnePlusIngest {
      * are recent already-stored reading timestamps (from the DB) to re-seed the near-duplicate window.
      */
     fun seed(lastSequence: Long, recentTimestampsMs: List<Long>) {
-        synchronized(lock) {
+        lock.withLock {
             lastAcceptedSequence = lastSequence
             this.recentTimestampsMs.clear()
             recentTimestampsMs.takeLast(RECENT_CAP).forEach { this.recentTimestampsMs.addLast(it) }
@@ -62,7 +71,7 @@ internal object DexcomOnePlusIngest {
      * @return true if this sample should be inserted (not a near-duplicate of a recent one).
      */
     fun shouldAccept(sample: OnePlusGlucoseSample): Boolean {
-        synchronized(lock) {
+        lock.withLock {
             val seq = sample.sequence
             // Persistent floor: reject anything at or below the last accepted sequence — survives
             // restarts, so backfill/re-reads after an app update are not re-inserted.
@@ -133,7 +142,7 @@ internal object DexcomOnePlusIngest {
      * sequence counter restarts from a low value and must not be rejected against the old floor.
      */
     fun reset() {
-        synchronized(lock) {
+        lock.withLock {
             recentTimestampsMs.clear()
             recentSequences.clear()
             lastAcceptedSequence = -1L

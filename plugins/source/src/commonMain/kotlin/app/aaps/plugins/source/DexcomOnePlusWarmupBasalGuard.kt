@@ -12,6 +12,9 @@ import app.aaps.core.objects.extensions.convertedToAbsolute
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import dev.zacsweers.metro.Inject
+import kotlin.math.absoluteValue
+import kotlin.math.roundToLong
+import kotlin.time.Clock
 
 /**
  * ⚠️ SAFETY-CRITICAL — **DRAFT** pending project-maintainer + clinician review and on-device
@@ -58,7 +61,7 @@ class DexcomOnePlusWarmupBasalGuard @Inject constructor(
     suspend fun ensureProfileBasalDuringWarmup(
         owner: BgSource,
         scope: CoroutineScope,
-        nowMs: Long = System.currentTimeMillis(),
+        nowMs: Long = Clock.System.now().toEpochMilliseconds(),
     ) {
         if (shouldCancelResidualTemp(owner, nowMs)) {
             scope.launch { commandQueue.cancelTempBasal(enforceNew = false, autoForced = true) }
@@ -108,18 +111,31 @@ class DexcomOnePlusWarmupBasalGuard @Inject constructor(
         if (tempAbsolute <= profileBasal + RATE_EPSILON_U_PER_H) {
             aapsLogger.info(
                 LTag.APS,
-                "ONEPLUS_WARMUP_BASAL: keep temp %.3fU/h (<= profile %.3fU/h) — not raising delivery during warm-up"
-                    .format(tempAbsolute, profileBasal),
+                "ONEPLUS_WARMUP_BASAL: keep temp ${rate(tempAbsolute)}U/h (<= profile ${rate(profileBasal)}U/h) — " +
+                    "not raising delivery during warm-up",
             )
             return false
         }
 
         aapsLogger.info(
             LTag.APS,
-            "ONEPLUS_WARMUP_BASAL: cancel high temp %.3fU/h (> profile %.3fU/h) → revert to profile basal (warm-up, no glucose)"
-                .format(tempAbsolute, profileBasal),
+            "ONEPLUS_WARMUP_BASAL: cancel high temp ${rate(tempAbsolute)}U/h (> profile ${rate(profileBasal)}U/h) → " +
+                "revert to profile basal (warm-up, no glucose)",
         )
         return true
+    }
+
+    /**
+     * A basal rate for the log, with three decimals.
+     *
+     * `String.format` is JVM only, and this class is shared code now. The rate is only ever read by
+     * a person in a log line, so a plain round is enough and it needs no locale.
+     */
+    private fun rate(uPerHour: Double): String {
+        val milliUnits = (uPerHour * 1000.0).roundToLong()
+        val whole = milliUnits / 1000L
+        val fraction = (milliUnits % 1000L).absoluteValue
+        return "$whole.${fraction.toString().padStart(3, '0')}"
     }
 
     companion object {

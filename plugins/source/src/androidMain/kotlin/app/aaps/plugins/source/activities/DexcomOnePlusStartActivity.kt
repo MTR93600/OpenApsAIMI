@@ -153,7 +153,11 @@ class DexcomOnePlusStartActivity : MetroAppCompatActivity() {
                             )
                             finish()
                         },
-                        onStagingDriver = { dexcomOnePlusPlugin.stagingDriverForConnect() },
+                        // Straight from the Android registry, which is the same instance the
+                        // plugin uses. The plugin is shared code now and hands out the shared
+                        // OnePlusCgmDriver type, while this screen needs the real driver's
+                        // saveIdentity and its sighting-aware connect.
+                        onStagingDriver = { OnePlusCgmDrivers.staging() },
                         onSensorSessionStarted = { address, previousMac ->
                             dexcomOnePlusPlugin.onSensorSessionStarted(address, previousMac)
                         },

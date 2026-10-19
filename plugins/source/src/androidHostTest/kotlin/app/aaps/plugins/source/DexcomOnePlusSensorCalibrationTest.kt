@@ -8,6 +8,7 @@ import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.interfaces.source.SensorCalibrationResult
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriverReal
@@ -57,10 +58,10 @@ class DexcomOnePlusSensorCalibrationTest : TestBase() {
     @BeforeEach
     fun setup() {
         whenever(context.applicationContext).thenReturn(context)
-        whenever(rh.gs(any<Int>())).thenReturn("not sent")
+        whenever(rh.gs(any<TextRef>())).thenReturn("not sent")
         plugin = DexcomOnePlusPlugin(
-            rh, aapsLogger, preferences, config, notificationManager, context, persistenceLayer,
-            warmupBasalGuard, availabilityProvider, bleRadioPriority, activePlugin, rxBus,
+            rh, aapsLogger, preferences, config, notificationManager, DexcomOnePlusAndroidHost(context, availabilityProvider), persistenceLayer,
+            warmupBasalGuard, bleRadioPriority, activePlugin, rxBus,
         )
         OnePlusCgmDrivers.select(useReal = true)
     }
