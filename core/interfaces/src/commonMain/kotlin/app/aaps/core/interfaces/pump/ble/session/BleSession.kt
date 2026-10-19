@@ -101,6 +101,74 @@ sealed class BleCentralEvent {
     data class Written(val id: String, val characteristicUuid: String, val status: Int) : BleCentralEvent()
     data class Value(val id: String, val characteristicUuid: String, val data: ByteArray) : BleCentralEvent()
     data class DescriptorWritten(val id: String, val descriptorUuid: String, val status: Int) : BleCentralEvent()
+
+    /**
+     * iOS started the app again for a Bluetooth event and handed back the peripherals it had kept.
+     *
+     * Only the CoreBluetooth central emits this, and only when the system started the app itself.
+     * Tapping the icon never produces it, even though iOS did keep the state, so first-time setup
+     * must not live in this branch alone or it will never run on a manual start.
+     *
+     * [ids] are the peripheral identifiers. They are already back in the central's peripheral map
+     * with the delegate set again, so every [BleCentral] call that takes an id works on them at
+     * once: [BleCentral.cancel], [BleCentral.release], [BleCentral.connect] and
+     * [BleCentral.cachedName]. A driver that does not want the restored link can therefore hang up
+     * on it and start again, which is what a driver should normally do: a driver that counts
+     * packets per link, or runs a handshake per link, cannot carry on in the middle of one, and
+     * none of its own state survived the relaunch.
+     *
+     * iOS hands back what was connected **or still trying to connect**, so a restored id is not a
+     * promise of a live link. It restores the discovered services and characteristics "when
+     * possible", which means a driver cannot rely on them being there either.
+     *
+     * An empty list is normal and still means the relaunch happened.
+     */
+    data class Restored(val ids: List<String>) : BleCentralEvent()
+}
+
+/**
+ * The strings iOS keys kept Bluetooth state by.
+ *
+ * `CBCentralManagerOptionRestoreIdentifierKey` has to carry the same value at every launch. If it
+ * changes, iOS has nothing to match the kept state against and simply never restores anything, and
+ * nothing fails loudly when that happens: the loop just stops running overnight. So these are a
+ * stored format, not an internal name. `BleRestoreTest` repeats the exact values so an edit has to
+ * be deliberate.
+ *
+ * Every `CBCentralManager` in the process needs its own value. Two managers sharing one would be
+ * offered the same kept state.
+ */
+object BleRestoreIdentifier {
+
+    /** The shared [app.aaps.core.interfaces.pump.ble.BleTransport] central. */
+    const val PUMP_TRANSPORT = "app.aaps.ble.pump.transport"
+
+    /** The central the Medtrum driver owns. */
+    const val MEDTRUM = "app.aaps.ble.pump.medtrum"
+
+    /** The central the Dexcom ONE+ driver owns. */
+    const val DEXCOM_ONE_PLUS = "app.aaps.ble.cgm.dexcom.oneplus"
+}
+
+/**
+ * The events one `willRestoreState` turns into.
+ *
+ * [dropped] is how many entries iOS handed back that were not usable peripherals. They are
+ * reported, never skipped in silence: a peripheral lost here is a device that stays connected at
+ * the radio while the app believes it owns nothing, and that is invisible from the outside.
+ *
+ * The failure comes first, so a reader sees what was lost before it sees what was kept.
+ */
+fun bleRestoreEvents(ids: List<String>, dropped: Int = 0): List<BleCentralEvent> = buildList {
+    if (dropped > 0) {
+        add(
+            BleCentralEvent.OperationFailed(
+                operation = "restore",
+                message = "iOS handed back $dropped restored entries that are not peripherals; they are lost"
+            )
+        )
+    }
+    add(BleCentralEvent.Restored(ids))
 }
 
 /**
@@ -166,6 +234,19 @@ class BleSession(
     private var deadlineAt: Long? = null
     private var deadlineOp: String? = null
     private var lastNow: Long = 0L
+
+    /**
+     * Peripheral identifiers the last [BleCentralEvent.Restored] carried. Empty until iOS starts
+     * the app again for a Bluetooth event.
+     *
+     * The session does not act on a restore by itself. After a relaunch this object is brand new:
+     * it has no link, no listener yet and no profile state to re-attach to, and
+     * [app.aaps.core.interfaces.pump.ble.BleTransport] has no callback for a restore. So the owner
+     * reads this and decides whether to connect again. It is kept rather than dropped so the
+     * restore is visible to whoever looks.
+     */
+    var restoredIds: List<String> = emptyList()
+        private set
 
     fun setListener(listener: BleTransportListener?) {
         this.listener = listener
@@ -318,6 +399,8 @@ class BleSession(
             is BleCentralEvent.Written -> onWritten(event)
             is BleCentralEvent.Value -> listener?.onCharacteristicChanged(event.data.copyOf())
             is BleCentralEvent.DescriptorWritten -> onDescriptor(event)
+            // Kept, not acted on. See [restoredIds] for why the owner has to decide.
+            is BleCentralEvent.Restored -> restoredIds = event.ids
         }
     }
 

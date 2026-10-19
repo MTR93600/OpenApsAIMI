@@ -417,6 +417,29 @@ Neither is a blocker, but both look like the obvious idiom and both fail:
   KClass<*>, binding: binding<*> = ...)`. So a **qualified** map entry still needs a stated
   `@Provides` in a container; only unqualified ones can move onto the class.
 
+### Waiting for another gradle run: the guard that deadlocks on itself
+
+Two gradle builds at once corrupt each other's cache, so a second agent has to wait. The obvious
+guard is wrong:
+
+```
+until ! pgrep -f "GradleDaemon" ; do sleep 15 ; done      # DEADLOCKS
+```
+
+`pgrep -f` matches **full command lines**, and the waiting shell's own command line contains the
+pattern. So the loop finds itself, and two agents waiting at the same time find each other and both
+wait for ever. Measured on 2026-10-19: `pgrep -f GradleDaemon` returned two PIDs, and both were
+other agents' wait loops, not gradle.
+
+Match the daemon's real argv instead, which no shell wrapper reproduces:
+
+```
+until ! pgrep -f "gradle-daemon-main" > /dev/null ; do sleep 15 ; done
+```
+
+Checking `pgrep -fl` by eye once before a build is fine; it is the *loop* that bites. If a wait has
+run for several minutes with no build in flight, suspect this before suspecting a slow build.
+
 ### The five gates, and why the iOS test one is not optional any more
 
 Run all five, and measure the baseline **before** you touch anything, or an "after" number means

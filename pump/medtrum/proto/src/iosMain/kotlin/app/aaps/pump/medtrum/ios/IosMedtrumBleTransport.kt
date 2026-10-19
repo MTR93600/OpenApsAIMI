@@ -6,10 +6,12 @@ import app.aaps.core.interfaces.pump.ble.session.BleAdapterState
 import app.aaps.core.interfaces.pump.ble.session.BleCentral
 import app.aaps.core.interfaces.pump.ble.session.BleCentralEvent
 import app.aaps.pump.medtrum.comm.ManufacturerData
+import app.aaps.pump.medtrum.comm.MedtrumLogger
 import app.aaps.pump.medtrum.comm.ReadDataPacket
 import app.aaps.pump.medtrum.comm.WriteCommandPackets
 import app.aaps.pump.medtrum.session.MedtrumBleCallback
 import app.aaps.pump.medtrum.session.MedtrumBleTransport
+import app.aaps.pump.medtrum.util.MedtrumDeviceName
 
 /**
  * iOS implementation of [MedtrumBleTransport] on [BleCentral] (CoreBluetooth).
@@ -30,9 +32,19 @@ import app.aaps.pump.medtrum.session.MedtrumBleTransport
  *   (with response), continue on each `Written` event.
  * - Incoming: READ_UUID → [MedtrumBleCallback.onNotification];
  *   WRITE_UUID → reassemble via [ReadDataPacket] → [MedtrumBleCallback.onIndication].
+ *
+ * State restoration: iOS can start the app again and hand back the peripherals it kept. This
+ * transport never takes such a link over; see [onRestored] for why and for what it does instead.
+ *
+ * @param pumpSerial the serial of the pump this app is paired with, read when it is needed rather
+ *   than copied, because it is only known after the stored state has been loaded. Zero means no
+ *   pump has been chosen yet.
+ * @param logger where the restore lines go. Tests pass a recording logger.
  */
 class IosMedtrumBleTransport(
     private val central: BleCentral,
+    private val pumpSerial: () -> Long = { 0L },
+    private val logger: MedtrumLogger = MedtrumLogger.NO_OP,
 ) : MedtrumBleTransport {
 
     companion object {
@@ -42,6 +54,9 @@ class IosMedtrumBleTransport(
 
         /** Medtrum company ID in BLE manufacturer data (0x4781). */
         const val MANUFACTURER_ID = 18305
+
+        /** Log tag of this transport. The AAPS logger puts it in front of the line. */
+        private const val TAG = "PUMPBTCOMM"
     }
 
     /**
@@ -109,16 +124,84 @@ class IosMedtrumBleTransport(
      * tests call this directly.
      */
     fun onEvent(event: BleCentralEvent) {
+        // Every case is written out. There is no `else`, so a new event in the sealed class stops
+        // the compiler here instead of being dropped without a word.
         when (event) {
-            is BleCentralEvent.ScanResult      -> onScanResult(event)
-            is BleCentralEvent.Link            -> onLink(event)
-            is BleCentralEvent.Services        -> onServices(event)
-            is BleCentralEvent.Characteristics -> onCharacteristics(event)
-            is BleCentralEvent.Written          -> onWritten(event)
-            is BleCentralEvent.Value            -> onValue(event)
+            is BleCentralEvent.ScanResult        -> onScanResult(event)
+            is BleCentralEvent.Link              -> onLink(event)
+            is BleCentralEvent.Services          -> onServices(event)
+            is BleCentralEvent.Characteristics   -> onCharacteristics(event)
+            is BleCentralEvent.Written           -> onWritten(event)
+            is BleCentralEvent.Value             -> onValue(event)
             is BleCentralEvent.DescriptorWritten -> onDescriptorWritten(event)
-            else                               -> Unit
+            is BleCentralEvent.Restored          -> onRestored(event)
+            // The radio state is read in [connect], not followed here. It is logged so that a scan
+            // which never finds the pump can be read back against the radio going off.
+            is BleCentralEvent.AdapterState      -> logger.debug(TAG, "adapter state ${event.state}")
+            is BleCentralEvent.ScanFailed        -> logger.warn(TAG, "scan failed: ${event.message}")
+            is BleCentralEvent.OperationFailed   -> logger.warn(TAG, "${event.operation} failed: ${event.message}")
         }
+    }
+
+    /**
+     * iOS started the app again for a Bluetooth event and handed back the peripherals it kept.
+     *
+     * Medtrum never carries on with a restored link. Every peripheral iOS returned is hung up on
+     * and the link state here is cleared, so the next connect starts from a scan like any other.
+     *
+     * Why not take the link over. Nothing this transport counts per link survived the relaunch.
+     * [writeSequenceNumber] would start at 0 again on a link the pump never saw drop, which is not
+     * a case the protocol covers, and [readPacket] is empty, so the first indication of an answer
+     * that was already running would be read as the head of a new message: it would pass its own
+     * CRC and give a wrong length. The session above is worse off still. `MedtrumSession` does not
+     * check its phase in `onNotification`, so a restored link would write pump state, reservoir,
+     * bolus progress and temp basal history from packets that no handshake stands behind, and
+     * `bolusDone` reads back as true after a relaunch, so a bolus could be sent to a pump that is
+     * still delivering the one that was in flight when iOS ended the app.
+     *
+     * What was missed while the app was dead is recovered the way the driver is built to recover
+     * it: a fresh auth flow and then a record sync over the stored sequence numbers. The patch
+     * session token is stored as well, so authenticating again costs the person nothing.
+     *
+     * This only cleans up the radio. It does not set `MedtrumSession.phase`, it does not set
+     * `MedtrumSessionState.connectionState`, and it does not touch a therapy value. It also does
+     * not start a connect: the command queue owns when the driver talks to the pump, and a connect
+     * started from here would reach `MedtrumSession.onConnected` with no command behind it and
+     * leave the session READY on its own.
+     *
+     * A peripheral that cannot be named is released all the same. iOS hands back what was still
+     * only trying to connect, and such a peripheral has no name yet, so "unknown" must never mean
+     * "left alone": a device left connected at the radio while the app believes it owns nothing is
+     * invisible from the outside.
+     */
+    private fun onRestored(event: BleCentralEvent.Restored) {
+        val ourSerial = pumpSerial()
+        val liveLink = linkId
+        logger.warn(TAG, "iOS restored ${event.ids.size} peripherals; none of them is taken over")
+        for (id in event.ids) {
+            val name = central.cachedName(id)
+            val serial = MedtrumDeviceName.serialFromName(name)
+            val found = when {
+                name == null                           -> "no name yet, so iOS gave it back while it was still connecting"
+                serial == null                         -> "the name '$name' is not a Medtrum pump"
+                ourSerial == 0L                        -> "the pump '$name', but no serial is stored here to compare it with"
+                serial == ourSerial                    -> "our pump '$name'"
+                else                                   -> "another Medtrum pump '$name'"
+            }
+            logger.warn(TAG, "restored $id is $found; releasing it and starting again from a scan")
+            // cancel hangs up. release hangs up as well and forgets the peripheral and the
+            // characteristics cached for it, so nothing stale can be written to later.
+            central.cancel(id)
+            central.release(id)
+        }
+        // Only clear the link state that the restore actually took away. A live link that is not
+        // in the list keeps its sequence number and its half-read answer.
+        if (liveLink != null && liveLink !in event.ids) return
+        linkId = null
+        writePackets = null
+        writeSequenceNumber = 0
+        descriptorsArmed = 0
+        readLock.withLock { readPacket = null }
     }
 
     private fun onScanResult(event: BleCentralEvent.ScanResult) {

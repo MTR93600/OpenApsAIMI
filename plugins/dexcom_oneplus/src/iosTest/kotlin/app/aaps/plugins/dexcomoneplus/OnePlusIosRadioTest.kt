@@ -14,6 +14,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -35,7 +36,7 @@ class OnePlusIosRadioTest {
     @Test
     fun oneCentralFeedsBothTheScannerAndTheClient() {
         val central = FakeBleCentral()
-        val radio = OnePlusIosRadio()
+        val radio = OnePlusIosRadio(central)
         val scanner = OnePlusBleScannerIos(central = central, nowMs = { 0L }, sleep = { true })
         val gatt = OnePlusGattClientIos(central = central, nowMs = { 0L }, sleep = { true })
         radio.scanner = scanner
@@ -100,8 +101,42 @@ class OnePlusIosRadioTest {
 
     @Test
     fun anEventIsHarmlessBeforeEitherListenerIsSet() {
-        val radio = OnePlusIosRadio()
+        val radio = OnePlusIosRadio(FakeBleCentral())
 
         radio.onEvent(BleCentralEvent.ScanResult(name = "DX02aS", id = deviceId, advertisementBytes = null))
+    }
+
+    /**
+     * The decision the whole restore path rests on: ONE+ never takes a restored link over.
+     *
+     * The peripheral is given back to the system instead, so the next attempt goes through a scan
+     * and a real advertisement. A restored peripheral that were simply ignored would stay
+     * connected at the radio with nobody owning it.
+     */
+    @Test
+    fun aRestoredPeripheralIsReleasedAndNeverAdopted() {
+        val central = FakeBleCentral()
+        val radio = OnePlusIosRadio(central)
+        val scanner = OnePlusBleScannerIos(central = central, nowMs = { 0L }, sleep = { true })
+        val gatt = OnePlusGattClientIos(central = central, nowMs = { 0L }, sleep = { true })
+        radio.scanner = scanner
+        radio.gatt = gatt
+
+        radio.onEvent(BleCentralEvent.Restored(listOf(deviceId, "PERIPHERAL-2")))
+
+        assertEquals(listOf(deviceId, "PERIPHERAL-2"), central.cancels)
+        assertFalse(gatt.isConnected())
+        assertFalse(scanner.isScanning())
+    }
+
+    /** A relaunch that kept nothing is still a relaunch. It must not crash and must take no link. */
+    @Test
+    fun anEmptyRestoreReleasesNothing() {
+        val central = FakeBleCentral()
+        val radio = OnePlusIosRadio(central)
+
+        radio.onEvent(BleCentralEvent.Restored(emptyList()))
+
+        assertTrue(central.cancels.isEmpty())
     }
 }

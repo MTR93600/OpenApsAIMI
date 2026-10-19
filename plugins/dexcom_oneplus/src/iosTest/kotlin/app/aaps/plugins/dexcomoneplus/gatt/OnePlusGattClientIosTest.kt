@@ -315,4 +315,58 @@ class OnePlusGattClientIosTest {
         assertFalse(gatt.removeBond())
         assertFalse(gatt.awaitBondComplete(10L))
     }
+
+    // -- state restoration -------------------------------------------------------------------------
+
+    /**
+     * A restored peripheral is never adopted: no link id, no connected flag, and nothing put into
+     * any of the three queues. If it set the link id the client would look connected while the
+     * central holds no characteristics to write to; if it fed the queues, frames from before the
+     * app was ended would be read as a current glucose value.
+     */
+    @Test
+    fun aRestoredPeripheralDoesNotBecomeTheLink() {
+        val central = FakeBleCentral()
+        val gatt = client(central)
+
+        gatt.onEvent(BleCentralEvent.Restored(listOf(deviceId, "PERIPHERAL-2")))
+
+        assertFalse(gatt.isConnected())
+        // No link id: a write has nothing to write to and says so.
+        assertFailsWith<IllegalStateException> { gatt.writeControl(byteArrayOf(1)) }
+        assertNull(gatt.awaitKeksNotify(20L))
+        assertNull(gatt.awaitControlNotify(20L))
+        assertNull(gatt.awaitBackfillNotify(20L))
+        // Hanging up is the radio's job, so this client does not also cancel.
+        assertTrue(central.cancels.isEmpty())
+    }
+
+    /**
+     * A restore that names the link this client believes it holds is treated as a fault.
+     *
+     * The link is dropped and every wait is woken, rather than carried on with. Nothing this
+     * object knew about that link survived the relaunch that produced the restore.
+     */
+    @Test
+    fun aRestoreNamingTheCurrentLinkDropsIt() {
+        val (central, gatt) = connected()
+
+        gatt.onEvent(BleCentralEvent.Restored(listOf(deviceId)))
+
+        assertFalse(gatt.isConnected())
+        assertEquals(listOf(deviceId), central.cancels)
+        assertNull(gatt.awaitControlNotify(500L))
+        assertFailsWith<IllegalStateException> { gatt.writeControl(byteArrayOf(1)) }
+    }
+
+    /** An empty restore is normal and must change nothing about a healthy link. */
+    @Test
+    fun anEmptyRestoreLeavesAHealthyLinkAlone() {
+        val (central, gatt) = connected()
+
+        gatt.onEvent(BleCentralEvent.Restored(emptyList()))
+
+        assertTrue(gatt.isConnected())
+        assertTrue(central.cancels.isEmpty())
+    }
 }

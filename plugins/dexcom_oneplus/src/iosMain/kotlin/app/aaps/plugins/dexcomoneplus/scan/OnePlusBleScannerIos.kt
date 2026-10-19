@@ -144,15 +144,60 @@ class OnePlusBleScannerIos(
      * Feed central events here.
      *
      * The owner wires `central.events = scanner::onEvent`; tests call it directly. Only
-     * [BleCentralEvent.ScanResult] and a scan refusal mean anything to a scanner.
+     * [BleCentralEvent.ScanResult] and a scan refusal change what a scanner knows.
      */
     fun onEvent(event: BleCentralEvent) {
         when (event) {
-            is BleCentralEvent.ScanResult -> handle(event)
-            is BleCentralEvent.ScanFailed ->
+            is BleCentralEvent.ScanResult        -> handle(event)
+            is BleCentralEvent.ScanFailed        ->
                 OnePlusLog.e("${OnePlusLogMarkers.SCAN}: [$slot] scan refused: ${event.message}")
 
-            else                          -> Unit
+            is BleCentralEvent.Restored          -> onRestored(event)
+
+            // A link and its traffic belong to OnePlusGattClientIos, and the adapter state is read
+            // from [BleCentral.adapterState] where it decides something. Written out one by one
+            // instead of an `else`, so the next event added to the sealed class has to be looked
+            // at here rather than swallowed.
+            is BleCentralEvent.AdapterState,
+            is BleCentralEvent.OperationFailed,
+            is BleCentralEvent.Link,
+            is BleCentralEvent.Services,
+            is BleCentralEvent.Characteristics,
+            is BleCentralEvent.Written,
+            is BleCentralEvent.Value,
+            is BleCentralEvent.DescriptorWritten -> Unit
+        }
+    }
+
+    /**
+     * A restored identifier is **not** a sighting and is never recorded as one.
+     *
+     * iOS hands back the peripherals it kept when it ended the app, including ones it was only
+     * still trying to connect to. That says the app was started again. It says nothing about the
+     * sensor radiating now, and a ONE+ is asleep between its radio windows for most of every five
+     * minutes.
+     *
+     * `OnePlusBleSessionCyclePolicy.allowConnection` refuses a connect in restored-session mode
+     * until a fresh advertisement is in hand, exactly so that the driver does not connect into a
+     * sleeping sensor. Feeding a restored id into the pending wait would buy that connect with
+     * evidence that does not exist: the wait would end, the connect would be allowed, and the
+     * attempt would burn a radio window and a retry on a sensor that is not listening. So this
+     * records nothing and ends no wait.
+     *
+     * It is still logged, and the log names the waited-for id when it is in the list, because
+     * "iOS kept this sensor and we still have not heard it" is worth seeing in a field trace.
+     */
+    private fun onRestored(event: BleCentralEvent.Restored) {
+        OnePlusLog.i(
+            "${OnePlusLogMarkers.SCAN}: [$slot] iOS relaunch handed back ${event.ids.size} " +
+                "peripheral(s); a restored id is not an advertisement so none of them counts as a sighting",
+        )
+        val target = lock.withLock { pending }?.target ?: return
+        if (event.ids.any { it.uppercase() == target }) {
+            OnePlusLog.i(
+                "${OnePlusLogMarkers.SCAN}: [$slot] the restored list names ***${target.takeLast(5)}, " +
+                    "the id this wait is for; the wait goes on until the sensor really advertises",
+            )
         }
     }
 

@@ -216,4 +216,42 @@ class OnePlusBleScannerIosTest {
 
         assertEquals(1, OnePlusScanBudget.startsInWindow(clock))
     }
+
+    // -- state restoration -------------------------------------------------------------------
+
+    /**
+     * The pinned decision: a restored identifier is never turned into a sighting.
+     *
+     * iOS handing a peripheral back says the app was started again. It does not say the sensor is
+     * advertising, and `OnePlusBleSessionCyclePolicy.allowConnection` refuses an advertisement-less
+     * connect in restored-session mode for exactly that reason. Ending the wait here would buy
+     * that connect with evidence that never arrived.
+     */
+    @Test
+    fun awaitTargetIsNotEndedByARestoredIdentifier() {
+        val central = FakeBleCentral()
+        val scanner = scanner(central)
+        central.onStartScan = {
+            scanner.onEvent(BleCentralEvent.Restored(listOf("PERIPHERAL-6")))
+        }
+
+        val result = scanner.awaitTarget("PERIPHERAL-6", timeoutMs = 20L)
+
+        assertNull(result.target)
+        assertTrue(result.foreign.isEmpty())
+    }
+
+    /** The screen lists sensors it has heard. A restored identifier was not heard. */
+    @Test
+    fun theScreenIsNotToldAboutARestoredIdentifier() {
+        val central = FakeBleCentral()
+        val scanner = scanner(central)
+        val found = mutableListOf<OnePlusScanResult>()
+
+        scanner.startScan { found += it }
+        scanner.onEvent(BleCentralEvent.Restored(listOf("PERIPHERAL-6", "PERIPHERAL-7")))
+
+        assertTrue(found.isEmpty())
+        assertTrue(scanner.isScanning())
+    }
 }

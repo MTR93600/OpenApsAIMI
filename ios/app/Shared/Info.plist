@@ -85,9 +85,14 @@
 	  notification waking the app.
 
 	  It covers a SUSPENDED app, not a terminated one. After iOS reclaims the app, or after a
-	  reboot, only CoreBluetooth state restoration brings it back, and that needs a restore
-	  identifier on `CBCentralManager` plus somewhere to receive `willRestoreState`. See the KDoc
-	  on `CoreBluetoothCentral`: that part is not built yet.
+	  reboot, only CoreBluetooth state restoration brings it back. `CoreBluetoothCentral` now does
+	  that part: it passes a restore identifier to `CBCentralManager` and reads `willRestoreState`,
+	  so iOS starts the app again for a Bluetooth event. See the KDoc on `CoreBluetoothCentral` and
+	  `BleRestoreIdentifier`.
+
+	  Two limits stay. iOS does not restore after the person force-quits the app from the app
+	  switcher, and it does not restore while Bluetooth is off in Settings. In both cases the loop
+	  only runs again once somebody opens the app.
 	-->
 	<key>UIBackgroundModes</key>
 	<array>

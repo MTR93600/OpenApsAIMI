@@ -10,6 +10,8 @@ import platform.CoreBluetooth.CBAdvertisementDataManufacturerDataKey
 import platform.CoreBluetooth.CBAdvertisementDataServiceUUIDsKey
 import platform.CoreBluetooth.CBCentralManager
 import platform.CoreBluetooth.CBCentralManagerDelegateProtocol
+import platform.CoreBluetooth.CBCentralManagerOptionRestoreIdentifierKey
+import platform.CoreBluetooth.CBCentralManagerRestoredStatePeripheralsKey
 import platform.CoreBluetooth.CBCharacteristic
 import platform.CoreBluetooth.CBCharacteristicPropertyIndicate
 import platform.CoreBluetooth.CBCharacteristicPropertyNotify
@@ -42,6 +44,9 @@ import platform.darwin.dispatch_queue_set_specific
 import platform.darwin.dispatch_sync
 import platform.darwin.dispatch_time
 import platform.posix.memcpy
+import kotlin.concurrent.Volatile
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 /**
  * [BleCentral] on CoreBluetooth.
@@ -49,19 +54,35 @@ import platform.posix.memcpy
  * One serial queue owns the manager, the peripheral map and every callback. Callers from another
  * thread go through [sync] or [post]. Delegate methods already run on that queue.
  *
- * No restore identifier is passed to `CBCentralManager`. [BleTransport] has nowhere to put
- * `willRestoreState`, and setting the key without reading the result would drop the peripherals
- * iOS relaunches the app to deliver. The gap is written up in
- * `_docs/kmp/ios-ble-transport-ecarts.md`.
+ * **State restoration.** [restoreIdentifier] is passed as `CBCentralManagerOptionRestoreIdentifierKey`,
+ * and `willRestoreState` is read. This is what makes iOS start the app again for a Bluetooth event
+ * after the system has reclaimed it or the phone has rebooted. Without it the app only runs while
+ * somebody keeps it alive, so the loop works during the day and stops in the night. The peripherals
+ * iOS hands back are put into the peripheral map again with the delegate set, and reported through
+ * [BleCentralEvent.Restored]. What is not usable is reported too, never dropped in silence.
+ *
+ * The identifier has to be the same string at every launch and has to differ from every other
+ * central in the process. [BleRestoreIdentifier] holds the agreed values. Opening a second central
+ * on an identifier that is already open in this process does not get the key, and says so through
+ * [BleCentralEvent.OperationFailed].
+ *
+ * Restoration does not happen after the person force-quits the app, nor while Bluetooth is off in
+ * Settings, and it does not happen on a normal start from the home screen. The rest of the iOS
+ * notes are in `_docs/kmp/ios-ble-transport-ecarts.md`.
  */
 @OptIn(ExperimentalForeignApi::class)
-class CoreBluetoothCentral : BleCentral {
+class CoreBluetoothCentral(
+    private val restoreIdentifier: String = BleRestoreIdentifier.PUMP_TRANSPORT
+) : BleCentral {
 
     private val queue = dispatch_queue_create("app.aaps.ble", null)
     private val queueKey = StableQueueKey()
     private val peripherals = mutableMapOf<String, CBPeripheral>()
     private val characteristics = mutableMapOf<String, CBCharacteristic>()
-    private val delegate = RadioDelegate(::emit)
+    private val delegate = RadioDelegate(::emit, ::onRestore)
+
+    // Written on the caller thread by open() and on the radio queue by onRestore, read from both.
+    @Volatile
     private var manager: CBCentralManager? = null
 
     var events: ((BleCentralEvent) -> Unit)? = null
@@ -73,13 +94,31 @@ class CoreBluetoothCentral : BleCentral {
     }
 
     /**
-     * Creates the manager. Call after [events] is set: `centralManagerDidUpdateState` can run as
-     * soon as the manager exists, and it has to reach the session.
+     * Creates the manager. Call after [events] is set, always.
+     *
+     * `centralManagerDidUpdateState` can run as soon as the manager exists, and it has to reach the
+     * session. `willRestoreState` is stricter still: iOS delivers it during the manager's own set
+     * up, before the state update, so a central opened with no listener loses the one event that
+     * says which peripherals came back.
      */
+    @OptIn(ExperimentalAtomicApi::class)
     fun open() {
         if (manager != null) return
-        // options is null on purpose: see the class KDoc. Do not add a restore key here.
-        manager = CBCentralManager(delegate = delegate, queue = queue, options = null)
+        if (!ClaimedRestoreIdentifiers.claim(restoreIdentifier)) {
+            // Two managers on one identifier would be offered the same kept state. This one opens
+            // without the key, which costs it restoration and nothing else, and it is said out
+            // loud rather than discovered on a morning with no loop.
+            emit(
+                BleCentralEvent.OperationFailed(
+                    operation = "restore",
+                    message = "restore identifier $restoreIdentifier is already open in this process; this central runs without restoration"
+                )
+            )
+            manager = CBCentralManager(delegate = delegate, queue = queue, options = null)
+            return
+        }
+        val options = mapOf<Any?, Any?>(CBCentralManagerOptionRestoreIdentifierKey to restoreIdentifier)
+        manager = CBCentralManager(delegate = delegate, queue = queue, options = options)
     }
 
     fun postAfter(millis: Long, block: () -> Unit) {
@@ -170,10 +209,69 @@ class CoreBluetoothCentral : BleCentral {
         return true
     }
 
+    /**
+     * The name CoreBluetooth holds for a peripheral we know.
+     *
+     * Works for a restored id too: a restored peripheral is in the map, and it is connected, so its
+     * GAP name is there. This is how a driver that stores no peripheral identifier can tell whether
+     * a restored peripheral is its own device.
+     */
     override fun cachedName(id: String): String? = peripherals[id]?.name
 
     private fun emit(event: BleCentralEvent) {
         events?.invoke(event)
+    }
+
+    /**
+     * Takes back the peripherals iOS kept while the app was gone.
+     *
+     * Runs on the radio queue, from `centralManager:willRestoreState:`. iOS hands back every
+     * peripheral that was connected, or still trying to connect, when it ended the app. None of
+     * them carries a delegate: iOS keeps the peripheral, not our object graph. So the delegate is
+     * set again here. Without that line the peripheral's notifications reach nobody, and being
+     * started again would buy nothing.
+     *
+     * Each peripheral also goes into the peripheral map, which is what [connect], [cancel],
+     * [release] and [cachedName] all look up. An id that is not in that map is an id a driver can
+     * do nothing with, not even hang up on. So a driver that decides not to take a restored link
+     * over can still call [cancel] or [release] on it straight away, and that is what both iOS
+     * drivers do today.
+     *
+     * Entries that are not peripherals are counted and reported by [bleRestoreEvents]. Nothing is
+     * dropped without a word.
+     */
+    private fun onRestore(central: CBCentralManager, state: Map<Any?, *>) {
+        // The queue can deliver this before open() has stored the manager it is building. Taking
+        // the manager from the callback removes that race, so the central is usable from inside
+        // this event and from anything the event starts.
+        if (manager == null) manager = central
+        val raw = (state[CBCentralManagerRestoredStatePeripheralsKey] as? List<*>).orEmpty()
+        val restored = raw.filterIsInstance<CBPeripheral>()
+        val ids = restored.map { peripheral ->
+            val id = peripheral.identifier.UUIDString
+            peripherals[id] = peripheral
+            peripheral.delegate = delegate
+            indexRestoredCharacteristics(id, peripheral)
+            id
+        }
+        bleRestoreEvents(ids, dropped = raw.size - restored.size).forEach { emit(it) }
+    }
+
+    /**
+     * Puts back the characteristics CoreBluetooth already holds for a restored peripheral.
+     *
+     * `CBCentralManagerRestoredStatePeripheralsKey` says iOS restores the discovered services,
+     * characteristics and descriptors "when possible", so sometimes they are there and sometimes
+     * they are not. This fills the map when there is something to fill it with and leaves it empty
+     * otherwise. A driver still has to discover services again before it can count on finding
+     * anything here.
+     */
+    private fun indexRestoredCharacteristics(id: String, peripheral: CBPeripheral) {
+        peripheral.services.orEmpty().filterIsInstance<CBService>().forEach { service ->
+            service.characteristics.orEmpty().filterIsInstance<CBCharacteristic>().forEach { characteristic ->
+                characteristics[key(id, expandUuid(characteristic.UUID.UUIDString))] = characteristic
+            }
+        }
     }
 
     private fun onQueue(): Boolean = dispatch_get_specific(queueKey.pointer) != null
@@ -191,7 +289,8 @@ class CoreBluetoothCentral : BleCentral {
     }
 
     private class RadioDelegate(
-        private val emit: (BleCentralEvent) -> Unit
+        private val emit: (BleCentralEvent) -> Unit,
+        private val restore: (CBCentralManager, Map<Any?, *>) -> Unit
     ) : NSObject(), CBCentralManagerDelegateProtocol, CBPeripheralDelegateProtocol {
 
         var peripherals: MutableMap<String, CBPeripheral> = mutableMapOf()
@@ -199,6 +298,15 @@ class CoreBluetoothCentral : BleCentral {
 
         override fun centralManagerDidUpdateState(central: CBCentralManager) {
             emit(BleCentralEvent.AdapterState(central.state.toAdapterState()))
+        }
+
+        /**
+         * iOS started the app again for a Bluetooth event. This is the first delegate call of the
+         * launch, before `centralManagerDidUpdateState`, and it is the only place the kept
+         * peripherals are offered.
+         */
+        override fun centralManager(central: CBCentralManager, willRestoreState: Map<Any?, *>) {
+            restore(central, willRestoreState)
         }
 
         override fun centralManager(
@@ -341,6 +449,28 @@ class CoreBluetoothCentral : BleCentral {
                     status = statusOf(error)
                 )
             )
+        }
+    }
+}
+
+/**
+ * The restore identifiers already given to a `CBCentralManager` in this process.
+ *
+ * iOS keys the kept state by this string, so two managers sharing one would be offered each
+ * other's peripherals. The second central to ask for a name is refused and opens without the key,
+ * which is visible, instead of quietly fighting the first one over the same saved state.
+ */
+@OptIn(ExperimentalAtomicApi::class)
+private object ClaimedRestoreIdentifiers {
+
+    private val taken = AtomicReference<Set<String>>(emptySet())
+
+    /** True the first time [identifier] is claimed in this process, false afterwards. */
+    fun claim(identifier: String): Boolean {
+        while (true) {
+            val current = taken.load()
+            if (identifier in current) return false
+            if (taken.compareAndSet(current, current + identifier)) return true
         }
     }
 }

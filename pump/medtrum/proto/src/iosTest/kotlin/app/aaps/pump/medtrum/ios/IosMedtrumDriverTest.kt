@@ -7,6 +7,7 @@ import app.aaps.core.interfaces.pump.ble.session.BleGattCharacteristic
 import app.aaps.core.interfaces.pump.ble.session.BleGattService
 import app.aaps.core.interfaces.pump.ble.session.BleCharProperty
 import app.aaps.pump.medtrum.code.ConnectionState
+import app.aaps.pump.medtrum.comm.MedtrumLogger
 import app.aaps.pump.medtrum.session.MedtrumBleCallback
 import app.aaps.pump.medtrum.session.MedtrumClock
 import app.aaps.pump.medtrum.session.MedtrumSession
@@ -14,9 +15,11 @@ import app.aaps.pump.medtrum.session.MedtrumSessionState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.test.runTest
+import app.aaps.pump.medtrum.util.CrcUtils
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -37,12 +40,17 @@ class IosMedtrumDriverTest {
         var scanned = false
         var connectedId: String? = null
 
+        /** What CoreBluetooth would hand back as the GAP name. Missing means the name is unknown. */
+        val names = mutableMapOf<String, String>()
+        val cancelled = mutableListOf<String>()
+        val released = mutableListOf<String>()
+
         override fun adapterState(): BleAdapterState = adapterState
         override fun startScan() { scanned = true }
         override fun stopScan() { scanned = false }
         override fun connect(id: String): Boolean { connectedId = id; return true }
-        override fun cancel(id: String) { if (connectedId == id) connectedId = null }
-        override fun release(id: String) { if (connectedId == id) connectedId = null }
+        override fun cancel(id: String) { cancelled.add(id); if (connectedId == id) connectedId = null }
+        override fun release(id: String) { released.add(id); if (connectedId == id) connectedId = null }
         override fun discoverServices(id: String) = Unit
         override fun discoverCharacteristics(id: String, serviceUuid: String) = Unit
         override fun write(id: String, characteristicUuid: String, data: ByteArray, withResponse: Boolean): Boolean {
@@ -53,7 +61,15 @@ class IosMedtrumDriverTest {
             enabledNotifies.add(Triple(id, characteristicUuid, indicate))
             return true
         }
-        override fun cachedName(id: String): String? = null
+        override fun cachedName(id: String): String? = names[id]
+    }
+
+    /** Keeps the log lines so a test can show that nothing was released without a word. */
+    private class RecordingLogger : MedtrumLogger {
+        val lines = mutableListOf<String>()
+        override fun debug(tag: String, message: String) { lines.add(message) }
+        override fun error(tag: String, message: String) { lines.add(message) }
+        override fun warn(tag: String, message: String) { lines.add(message) }
     }
 
     private class RecordingCallback : MedtrumBleCallback {
@@ -83,9 +99,12 @@ class IosMedtrumDriverTest {
         return out
     }
 
-    private fun setup(): Triple<FakeBleCentral, IosMedtrumBleTransport, RecordingCallback> {
+    private fun setup(
+        pumpSerial: Long = 0L,
+        logger: MedtrumLogger = MedtrumLogger.NO_OP,
+    ): Triple<FakeBleCentral, IosMedtrumBleTransport, RecordingCallback> {
         val central = FakeBleCentral()
-        val transport = IosMedtrumBleTransport(central)
+        val transport = IosMedtrumBleTransport(central, pumpSerial = { pumpSerial }, logger = logger)
         val callback = RecordingCallback()
         transport.setCallback(callback)
         return Triple(central, transport, callback)
@@ -271,5 +290,152 @@ class IosMedtrumDriverTest {
         pump.cancelTempBasal(false)
         // No connection was ever established → no writes possible
         assertTrue(central.writes.isEmpty())
+    }
+
+    // -- State restoration ---------------------------------------------------------
+
+    /** 12345 is 0x3039, so the pump is shown and stored as MT-3039. */
+    private val ourPumpName = "MT-3039"
+
+    /**
+     * One indication frame the pump could really send: `[size, cmd, seq, pkgIndex, payload, crc]`.
+     *
+     * [size] is what `ReadDataPacket` compares the bytes it holds against, so a small size makes
+     * one chunk a whole answer and a large one leaves the answer half read.
+     */
+    private fun indicationFrame(size: Int, payload: Byte): ByteArray {
+        val body = byteArrayOf(size.toByte(), 0x12, 0x00, 0x00, payload)
+        return body + CrcUtils.calcCrc8(body, body.size)
+    }
+
+    @Test
+    fun restoredOurPumpIsReleasedAndTheLinkIsDropped() {
+        val logger = RecordingLogger()
+        val (central, transport, callback) = setup(pumpSerial = 12345L, logger = logger)
+        central.names["dev-1"] = ourPumpName
+        connectFlow(central, transport, sn = 12345L)
+
+        transport.onEvent(BleCentralEvent.Restored(listOf("dev-1")))
+
+        assertTrue(central.cancelled.contains("dev-1"))
+        assertTrue(central.released.contains("dev-1"))
+        assertNull(central.connectedId)
+        assertTrue(logger.lines.any { it.contains("dev-1") && it.contains("our pump") })
+        // The link state is gone: a send has nothing to write on any more.
+        central.writes.clear()
+        transport.sendMessage(byteArrayOf(1, 2, 3))
+        assertTrue(central.writes.isEmpty())
+        assertEquals(listOf("not connected"), callback.errors)
+    }
+
+    @Test
+    fun restoredPeripheralThatIsNotOurPumpIsReleasedAsWell() {
+        val logger = RecordingLogger()
+        val (central, transport, _) = setup(pumpSerial = 12345L, logger = logger)
+        central.names["other-1"] = "MT-ABCDEF"
+        central.names["other-2"] = "Dexcom ONE+"
+
+        transport.onEvent(BleCentralEvent.Restored(listOf("other-1", "other-2")))
+
+        assertEquals(listOf("other-1", "other-2"), central.released)
+        assertEquals(listOf("other-1", "other-2"), central.cancelled)
+        assertTrue(logger.lines.any { it.contains("other-1") && it.contains("another Medtrum pump") })
+        assertTrue(logger.lines.any { it.contains("other-2") && it.contains("is not a Medtrum pump") })
+    }
+
+    @Test
+    fun restoredPeripheralWithNoNameIsReleasedAndSaidOutLoud() {
+        val logger = RecordingLogger()
+        val (central, transport, _) = setup(pumpSerial = 12345L, logger = logger)
+        // iOS hands back what was still only trying to connect. Such a peripheral has no name yet.
+
+        transport.onEvent(BleCentralEvent.Restored(listOf("nameless")))
+
+        assertEquals(listOf("nameless"), central.released)
+        assertEquals(listOf("nameless"), central.cancelled)
+        assertTrue(logger.lines.any { it.contains("nameless") && it.contains("no name yet") })
+    }
+
+    @Test
+    fun restoreDoesNotTouchTheSessionPhaseOrTheConnectionState() {
+        val (central, transport, _) = setup(pumpSerial = 12345L)
+        val state = MedtrumSessionState(clock = MedtrumClock.fixed(0L))
+        state.pumpSN = 12345L
+        val session = MedtrumSession(transport = transport, state = state, clock = MedtrumClock.fixed(0L))
+        transport.setCallback(session)
+        central.names["dev-1"] = ourPumpName
+
+        transport.onEvent(BleCentralEvent.Restored(listOf("dev-1")))
+
+        // The pump was never asked anything, so nothing may be claimed about it.
+        assertEquals(MedtrumSession.Phase.IDLE, session.phase)
+        assertEquals(ConnectionState.DISCONNECTED, state.connectionState)
+        assertTrue(state.bolusDone)
+    }
+
+    @Test
+    fun restoreDoesNotTellTheCallbackAnythingAboutTheLink() {
+        val (central, transport, callback) = setup(pumpSerial = 12345L)
+        central.names["dev-1"] = ourPumpName
+
+        transport.onEvent(BleCentralEvent.Restored(listOf("dev-1")))
+
+        assertFalse(callback.connected)
+        assertFalse(callback.disconnected)
+        assertTrue(callback.errors.isEmpty())
+    }
+
+    @Test
+    fun restoreOfAnotherPeripheralLeavesTheLiveLinkAlone() {
+        val (central, transport, callback) = setup(pumpSerial = 12345L)
+        central.names["dev-1"] = ourPumpName
+        connectFlow(central, transport, sn = 12345L)
+        central.writes.clear()
+
+        transport.onEvent(BleCentralEvent.Restored(listOf("ghost")))
+
+        assertEquals(listOf("ghost"), central.released)
+        assertEquals("dev-1", central.connectedId)
+        // The live link still carries a message.
+        transport.sendMessage(byteArrayOf(1, 2, 3))
+        assertTrue(central.writes.isNotEmpty())
+        assertTrue(callback.errors.isEmpty())
+    }
+
+    @Test
+    fun restoreClearsTheHalfReadAnswerAndTheUnsentPackets() {
+        val (central, transport, callback) = setup(pumpSerial = 12345L)
+        central.names["dev-1"] = ourPumpName
+        connectFlow(central, transport, sn = 12345L)
+        // An answer that is still being read, and a message whose chunks are not all sent.
+        transport.onEvent(
+            BleCentralEvent.Value(
+                id = "dev-1",
+                characteristicUuid = IosMedtrumBleTransport.WRITE_UUID,
+                data = indicationFrame(size = 60, payload = 0x01),
+            )
+        )
+        transport.sendMessage(ByteArray(40) { it.toByte() })
+        assertTrue(callback.indications.isEmpty())
+
+        transport.onEvent(BleCentralEvent.Restored(listOf("dev-1")))
+        connectFlow(central, transport, sn = 12345L)
+        callback.errors.clear()
+        central.writes.clear()
+
+        // A whole answer arrives as one chunk. It is read on its own, not added to the old one.
+        transport.onEvent(
+            BleCentralEvent.Value(
+                id = "dev-1",
+                characteristicUuid = IosMedtrumBleTransport.WRITE_UUID,
+                data = indicationFrame(size = 5, payload = 0x77),
+            )
+        )
+        assertEquals(1, callback.indications.size)
+        assertEquals(0x77.toByte(), callback.indications[0].last())
+        // The chunks left over from before are gone, so a new message is accepted.
+        transport.sendMessage(byteArrayOf(1, 2, 3))
+        assertTrue(central.writes.isNotEmpty())
+        assertTrue(callback.errors.isEmpty())
     }
 }

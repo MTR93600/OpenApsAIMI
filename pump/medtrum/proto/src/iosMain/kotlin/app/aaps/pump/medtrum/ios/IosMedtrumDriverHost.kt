@@ -5,6 +5,7 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.pump.DetailedBolusInfoStorage
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.interfaces.pump.TemporaryBasalStorage
+import app.aaps.core.interfaces.pump.ble.session.BleRestoreIdentifier
 import app.aaps.core.interfaces.pump.ble.session.CoreBluetoothCentral
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.pump.medtrum.comm.MedtrumLogger
@@ -45,11 +46,25 @@ class IosMedtrumDriverHost(
 
     private val logger: MedtrumLogger = AapsMedtrumLogger(aapsLogger)
     private val clock = systemMedtrumClock()
-    private val central = CoreBluetoothCentral()
-    private val transport = IosMedtrumBleTransport(central)
 
     /** Long lived patch state, read back from NSUserDefaults by the driver when it is built. */
     val state = MedtrumSessionState(logger = logger, clock = clock)
+
+    /**
+     * The radio. It asks iOS to keep its Bluetooth state under the Medtrum name, which is what
+     * lets iOS start the app again for a pump event after the system has reclaimed it.
+     *
+     * The name has to be this driver's own. Every `CBCentralManager` in the process needs a
+     * different one, or two of them are offered the same kept peripherals and only one gets them.
+     */
+    private val central = CoreBluetoothCentral(BleRestoreIdentifier.MEDTRUM)
+
+    private val transport = IosMedtrumBleTransport(
+        central = central,
+        // Read late: the serial is only in [state] after the driver has loaded the stored state.
+        pumpSerial = { state.pumpSN },
+        logger = logger
+    )
 
     /** The store the driver loads from and saves to. Also the only place the serial number lives today. */
     val store = IosMedtrumStateStore()

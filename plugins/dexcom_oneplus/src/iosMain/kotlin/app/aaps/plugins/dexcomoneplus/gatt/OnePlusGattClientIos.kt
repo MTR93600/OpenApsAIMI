@@ -312,8 +312,54 @@ class OnePlusGattClientIos(
             is BleCentralEvent.OperationFailed   ->
                 OnePlusLog.e("${OnePlusLogMarkers.ERROR}: central ${event.operation} failed: ${event.message}")
 
-            else                                 -> Unit
+            is BleCentralEvent.Restored          -> onRestored(event)
+
+            // A scan belongs to OnePlusBleScannerIos, and the adapter state is read from
+            // [BleCentral.adapterState] at the point where it decides something. Written out one
+            // by one instead of an `else`, so the next event added to the sealed class has to be
+            // looked at here rather than swallowed.
+            is BleCentralEvent.AdapterState,
+            is BleCentralEvent.ScanResult,
+            is BleCentralEvent.ScanFailed        -> Unit
         }
+    }
+
+    /**
+     * iOS started the app again and handed back peripherals. None of them is taken over.
+     *
+     * Nothing is adopted and nothing is marked connected. There is no Apple build of the pairing
+     * handshake, the handshake is per link and cannot be resumed, and after a relaunch the
+     * central holds no characteristics to write to. The peripheral itself is released by
+     * `OnePlusIosRadio`, which owns the central and is there even when no client is.
+     *
+     * The dangerous part is the queues. A restored link can still deliver Control indications
+     * that belong to the exchange before the app was ended, and `OnePlusEgvSession` would read
+     * them as a current glucose value and a current transmitter time. That is a stale reading
+     * stamped with the wrong moment, which the loop would act on.
+     *
+     * When a restored id **is** this client's link, that is treated as a fault and the link is
+     * dropped: the restore says this process started again, so nothing this object believed about
+     * that link survived. The tear-down also poisons the queues, which wakes every blocked `await`
+     * with the disconnect sentinel instead of letting it return a leftover frame. In today's
+     * wiring it cannot happen - iOS delivers `willRestoreState` while the manager is being built,
+     * which is before anything can connect - so the error line is what would make a future wiring
+     * that broke that order visible.
+     */
+    private fun onRestored(event: BleCentralEvent.Restored) {
+        val id = linkId
+        if (id == null || id !in event.ids) {
+            OnePlusLog.i(
+                "${OnePlusLogMarkers.SESSION}: iOS relaunch handed back ${event.ids.size} " +
+                    "peripheral(s); none is this client's link and none is taken over",
+            )
+            return
+        }
+        OnePlusLog.e(
+            "${OnePlusLogMarkers.ERROR}: iOS handed back this client's link ***${id.takeLast(5)} - " +
+                "dropping it instead of carrying on, because a restored link can still deliver " +
+                "frames from before the app was ended and they would be read as current glucose",
+        )
+        disconnectInternal(poisonQueues = true)
     }
 
     private fun onLink(event: BleCentralEvent.Link) {

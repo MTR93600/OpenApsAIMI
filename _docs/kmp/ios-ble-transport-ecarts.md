@@ -23,9 +23,15 @@ Ce lot aligne ce qui peut l'être sur la sémantique Android **de Dana** (`pump/
 
 ## Écarts, non tranchés dans le contrat
 
-### Pas de clé de restauration
+### Restauration d'état — posée dans le central, absente du contrat
 
-`BleTransport` n'a pas d'identifiant de restauration ni de `willRestoreState`. `CBCentralManager` est créé avec `options = null`. Poser `CBCentralManagerOptionRestoreIdentifierKey` sans lire l'état restauré ferait jeter par iOS les périphériques pour lesquels l'application est relancée. La clé n'est donc pas posée.
+**Mis à jour.** `CoreBluetoothCentral` pose maintenant `CBCentralManagerOptionRestoreIdentifierKey` et lit `centralManager:willRestoreState:`. C'est ce qui permet à iOS de relancer l'application pour un évènement Bluetooth après qu'il l'a tuée ou après un redémarrage du téléphone. Les périphériques rendus par iOS sont remis dans la carte `peripherals` avec le delegate repositionné, donc `connect`, `cancel`, `release` et `cachedName` fonctionnent tout de suite sur un identifiant restauré. Ce qui n'est pas un périphérique utilisable est compté et signalé (`BleCentralEvent.OperationFailed("restore", …)`), jamais jeté en silence.
+
+L'identifiant vient de `BleRestoreIdentifier` (commonMain). Il doit être identique à chaque lancement, sinon iOS n'a rien à rapprocher et ne restaure jamais, sans erreur. Il doit aussi être différent pour chaque `CBCentralManager` du processus : un deuxième central sur un identifiant déjà ouvert n'obtient pas la clé et le dit par `OperationFailed`.
+
+Ce que la restauration ne couvre pas : un arrêt forcé par l'utilisateur, le Bluetooth coupé dans Réglages, et un lancement normal depuis l'icône (`willRestoreState` n'est alors pas appelé, même si l'état a bien été conservé — une initialisation placée uniquement là ne tournerait jamais).
+
+**L'écart restant est dans le contrat, pas dans le central.** `BleTransport` n'a pas de rappel de restauration. `BleSession` garde la liste dans `restoredIds` et n'agit pas : après une relance l'objet est neuf, sans lien ni état de profil à ré-attacher. C'est au propriétaire du central de décider. Les deux pilotes iOS actuels ont décidé de ne pas reprendre un lien restauré (numéro de séquence Medtrum remis à zéro, poignée de main KEKS par lien côté ONE+) : ils le relâchent et se reconnectent.
 
 ### Appairage
 
