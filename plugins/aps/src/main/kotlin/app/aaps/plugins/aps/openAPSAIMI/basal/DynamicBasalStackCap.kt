@@ -22,6 +22,11 @@ import kotlin.math.max
  * In that case the multiplier is held at ×1.0: the basal is not raised, it is not cut either. A
  * multiplier at or below 1.0 is never changed, so every brake of the controller stays as it is.
  *
+ * Holding the multiplier does NOT bound a rate that was already high when it reached `setTempBasal`
+ * (meal-absorption overlay, engine branches, forced early-meal TBR): `applied = true` can go with 4–6 U/h
+ * at the pump. [BasalStackTerminalCap] applies the same rule to that final rate; it is a shadow by
+ * default.
+ *
  * It never acts while a meal is declared (an active meal mode, or a meal note within the last 3 h, 4 h
  * for high-carb). Measured on the same data: inside FCL meals it would have touched 13 ticks, with no low
  * after any of them, so there it would only remove insulin from a meal. The FCL basal floor is applied

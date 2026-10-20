@@ -44,7 +44,10 @@ import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalChannelSafetyGuards
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalDecisionEngine
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalHistoryUtils
+import app.aaps.plugins.aps.openAPSAIMI.basal.BasalStackTerminalCap
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalTerminalInvariants
+import app.aaps.plugins.aps.openAPSAIMI.basal.EngineHyperRateBound
+import app.aaps.plugins.aps.openAPSAIMI.basal.TerminalRateGuards
 import app.aaps.plugins.aps.openAPSAIMI.basal.AnticipationBasalFloor
 import app.aaps.plugins.aps.openAPSAIMI.basal.FclMealBasal
 import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController
@@ -168,6 +171,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.EndogenousBasalBridgePolicy
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionMemory
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
+import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionRuntime
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhaseClassifier
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioContextMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
@@ -782,6 +786,10 @@ internal data class AimiDecisionContext(
         var meal_blocks_origin: org.json.JSONObject? = null,
         /** DynamicBasalStackCap on the engine PI fallback and on setTempBasal. */
         var dynamic_basal_stack_cap: org.json.JSONObject? = null,
+        /** EngineHyperRateBound on the engine "Slow rise" / "Eventual BG>110" branches (shadow when off). */
+        var engine_hyper_bound: org.json.JSONObject? = null,
+        /** MealAbsorptionRuntime of the meal-absorption overlay: old runtime vs real episode age. */
+        var meal_absorption_runtime: org.json.JSONObject? = null,
         /** PKPD vs scenario eventual-BG divergence audit (PredictionDivergenceAuditor) */
         var pred_divergence: org.json.JSONObject? = null,
         /** Recursive Belief Tree — full JSON object for AIMI_Decisions.jsonl */
@@ -1287,6 +1295,8 @@ internal data class AimiDecisionContext(
             adjustments.declared_meal?.let { adj.put("declared_meal", it) }
             adjustments.meal_blocks_origin?.let { adj.put("meal_blocks_origin", it) }
             adjustments.dynamic_basal_stack_cap?.let { adj.put("dynamic_basal_stack_cap", it) }
+            adjustments.engine_hyper_bound?.let { adj.put("engine_hyper_bound", it) }
+            adjustments.meal_absorption_runtime?.let { adj.put("meal_absorption_runtime", it) }
             adjustments.pred_divergence?.let { pd ->
                 adj.put("pred_divergence", pd)
             }
@@ -2473,6 +2483,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastPostHypoAuthorityInputs = null
         lastDynamicStackCapEngine = null
         lastDynamicStackCapSetTemp = null
+        lastStackTerminalVerdict = null
+        lastEngineHyperBound = null
+        lastMealAbsorptionRuntime = null
         lastPostHypoSmbBeforeCapU = null
         lastPostHypoSmbAfterCapU = null
         // Cross-tick hysteresis (InsulinSlope / Endogenous) must NOT reset here — that zeroed
@@ -3887,6 +3900,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         put("multiplier_in", v.multiplierIn)
         put("multiplier_out", v.multiplierOut)
         v.stackDropMgdl?.let { put("stack_drop_mgdl", it) }
+        put("declared_meal_exempt", v.declaredMealExempt)
+    }
+
+    private fun stackTerminalJson(v: BasalStackTerminalCap.Verdict): org.json.JSONObject = org.json.JSONObject().apply {
+        put("would_cap", v.wouldCap)
+        put("applied", v.applied)
+        put("rate_in_uph", v.rateInUph)
+        put("rate_out_uph", v.rateOutUph)
+        v.capUph?.let { put("cap_uph", it) }
+        v.stackDropMgdl?.let { put("stack_drop_mgdl", it) }
+        v.bgMinusFloorMgdl?.let { put("bg_minus_floor_mgdl", it) }
         put("declared_meal_exempt", v.declaredMealExempt)
     }
 
@@ -7857,10 +7881,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         lastMealAbsorptionOutput?.phase == MealAbsorptionPhase.INTER_WAVE ||
                         lastMealAbsorptionOutput?.phase == MealAbsorptionPhase.PEAK_CORRECTION
                     ) -> {
-                val runTime: Int = MealAbsorptionMemory.lastActiveAtMs.takeIf { it > 0L }?.let {
-                    ((dateUtil.now() - it) / 60_000L).toInt().coerceAtLeast(0)
-                } ?: listOf(mealruntime, lunchruntime, dinnerruntime, highCarbrunTime, bfastruntime, snackrunTime)
-                    .maxOrNull()?.toInt() ?: 0
+                val runtime = MealAbsorptionRuntime.resolve(
+                    nowMs = dateUtil.now(),
+                    onsetAtMs = MealAbsorptionMemory.onsetAtMs,
+                    lastActiveAtMs = MealAbsorptionMemory.lastActiveAtMs,
+                    modeRuntimesMin = listOf(mealruntime, lunchruntime, dinnerruntime, highCarbrunTime, bfastruntime, snackrunTime),
+                    useOnset = preferences.get(BooleanKey.OApsAIMIMealAbsorptionOnsetRuntime),
+                )
+                lastMealAbsorptionRuntime = runtime
+                val runTime: Int = runtime.runtimeMin
                 val target = targetBg
                 val rocketStart = delta > 5.0f || bg > targetBg + 40
                 val safeMax = if (rocketStart) profile.max_basal else if (mealModesMaxBasal > 0) mealModesMaxBasal else profileCurrentBasal * 2.0
@@ -7879,7 +7908,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         basal,
                         profileCurrentBasal,
                         boostedRate / profileCurrentBasal,
-                        "Meal absorption ${lastMealAbsorptionOutput?.phase?.name} ($runTime m)",
+                        "Meal absorption ${lastMealAbsorptionOutput?.phase?.name} (${runtime.onsetMin ?: runTime} m)",
                         ctx.currentTemp,
                         rT,
                     )
@@ -8814,6 +8843,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             dynamicStackCapArmed = preferences.get(BooleanKey.OApsAIMIDynamicBasalStackCap),
             declaredMealActive = declaredMealWindowActive(),
             stackCapIsf = stackCapIsf(),
+            engineHyperBoundArmed = preferences.get(BooleanKey.OApsAIMIEngineHyperRateBound),
         )
         val helpers = BasalDecisionEngine.Helpers(
             calculateRate = { basalValue, currentBasalValue, multiplier, label ->
@@ -8829,6 +8859,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
         return basalDecisionEngine.decide(basalInput, bundle.rT, helpers).also { decision ->
             decision.piStackCap?.let { lastDynamicStackCapEngine = it }
+            decision.hyperBound?.let { lastEngineHyperBound = it }
         }
     }
 
@@ -9909,7 +9940,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                             }
                             applySmbUnits(finalResult, result.bolusU ?: 0.0, "AiAuditor")
                             if (result.tbrUph != null) {
-                                finalResult.rate = result.tbrUph
+                                // The auditor writes after setTempBasal, so no basal bound saw its rate:
+                                // it may lower the loop rate, never raise it. See TerminalRateGuards.
+                                val loopRate = finalResult.rate
+                                TerminalRateGuards.auditorTbr(loopRate, result.tbrUph)?.let { rate ->
+                                    if (loopRate != null && rate < loopRate) {
+                                        consoleLog.add(sanitizeForJson("🧠 AI Auditor TBR ${"%.2f".format(loopRate)}→${"%.2f".format(rate)} U/h"))
+                                    } else if (loopRate != null && result.tbrUph > loopRate) {
+                                        consoleLog.add(sanitizeForJson("🧠 AI Auditor TBR ${"%.2f".format(result.tbrUph)} refused (above loop ${"%.2f".format(loopRate)} U/h)"))
+                                    }
+                                    finalResult.rate = rate
+                                }
                             }
                             if (result.tbrMin != null) {
                                 finalResult.duration = result.tbrMin
@@ -10195,6 +10236,33 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             put("armed", preferences.get(BooleanKey.OApsAIMIDynamicBasalStackCap))
             lastDynamicStackCapEngine?.let { put("engine_pi", stackCapJson(it)) }
             lastDynamicStackCapSetTemp?.let { put("set_temp", stackCapJson(it)) }
+            put("terminal_armed", preferences.get(BooleanKey.OApsAIMIBasalStackTerminalCap))
+            lastStackTerminalVerdict?.let { put("terminal", stackTerminalJson(it)) }
+            // Rate after every writer of this tick, the synchronous Sentinel auditor included. An
+            // external auditor answers later, on its own thread, so its rate is not in this value.
+            put("commanded_rate_uph", finalResult.rate ?: org.json.JSONObject.NULL)
+        }
+        decisionCtx.adjustments.engine_hyper_bound = lastEngineHyperBound?.let { v ->
+            org.json.JSONObject().apply {
+                put("armed", preferences.get(BooleanKey.OApsAIMIEngineHyperRateBound))
+                put("branch", v.branch.name)
+                put("raw_uph", v.rawUph)
+                put("bound_uph", v.boundUph)
+                put("would_bind", v.wouldBind)
+                put("applied", v.applied)
+                put("rate_out_uph", v.rateOutUph)
+            }
+        }
+        decisionCtx.adjustments.meal_absorption_runtime = lastMealAbsorptionRuntime?.let { r ->
+            org.json.JSONObject().apply {
+                put("armed", preferences.get(BooleanKey.OApsAIMIMealAbsorptionOnsetRuntime))
+                put("runtime_used_min", r.runtimeMin)
+                put("runtime_legacy_min", r.legacyMin)
+                put("runtime_onset_min", r.onsetMin ?: org.json.JSONObject.NULL)
+                put("used_onset", r.usedOnset)
+                // The overlay window is 0..120 min: with the real age it would already be closed.
+                put("overlay_would_close", (r.onsetMin ?: 0) > 120)
+            }
         }
         decisionCtx.adjustments.pred_divergence = lastPredDivergenceExport
         val rbtPrefs = RecursiveBeliefPreferences.from(preferences)
@@ -12206,6 +12274,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     // DynamicBasalStackCap verdicts of this tick (engine PI fallback, setTempBasal). Export only.
     private var lastDynamicStackCapEngine: DynamicBasalStackCap.Verdict? = null
     private var lastDynamicStackCapSetTemp: DynamicBasalStackCap.Verdict? = null
+    // BasalStackTerminalCap (end of setTempBasal), EngineHyperRateBound and MealAbsorptionRuntime of this tick. Export only.
+    private var lastStackTerminalVerdict: BasalStackTerminalCap.Verdict? = null
+    private var lastEngineHyperBound: EngineHyperRateBound.Verdict? = null
+    private var lastMealAbsorptionRuntime: MealAbsorptionRuntime.Result? = null
 
     /** A meal is declared now: a meal mode is active, or a meal note is younger than 3 h (4 h high-carb). */
     private fun declaredMealWindowActive(): Boolean = DynamicBasalStackCap.declaredMealActive(
@@ -14016,7 +14088,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     return rT
                 }
                 isMealMode && bg > hypoGuard -> {
-                    val rate = requestedRate.coerceAtLeast(0.0)
+                    val rate = TerminalRateGuards.forceExactCeiling(
+                        requestedRate, profile.max_basal, preferences.get(DoubleKey.meal_modes_MaxBasal),
+                    )
                     rT.reason.append(
                         context.getString(
                             R.string.manual_basal_override,
@@ -14087,7 +14161,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // 1) Mode manuel : on pose exactement la valeur demandée (toujours bornée ≥ 0)
         if (forceExact) {
-            val rate = requestedRate.coerceAtLeast(0.0)
+            val rate = TerminalRateGuards.forceExactCeiling(
+                requestedRate, profile.max_basal, preferences.get(DoubleKey.meal_modes_MaxBasal),
+            )
             rT.reason.append(
                 context.getString(
                     R.string.manual_basal_override,
@@ -14343,6 +14419,28 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT.reason.append(" [BASAL_TERMINAL:${terminal.boundBy} ${"%.2f".format(rate)}→${"%.2f".format(terminal.rateUph)}U/h]")
         }
         rate = terminal.rateUph
+
+        // Same stack rule as the multiplier cap above, on the rate itself. Shadow unless armed: the
+        // verdict is exported on every tick, see BasalStackTerminalCap for why it is off by default.
+        // Same IOB and ISF as setTempStackCap, so both verdicts agree.
+        val stackTerminal = BasalStackTerminalCap.evaluate(
+            rateUph = rate,
+            profileBasalUph = profile.current_basal,
+            bgMgdl = bgNow,
+            iobU = iob.toDouble(),
+            isfMgdlPerU = stackCapIsf(),
+            declaredMealActive = declaredMealWindowActive(),
+            armed = preferences.get(BooleanKey.OApsAIMIBasalStackTerminalCap),
+        )
+        lastStackTerminalVerdict = stackTerminal
+        if (stackTerminal.applied) {
+            consoleLog.add(
+                "🔒 STACK_CAP_TERMINAL ${"%.2f".format(stackTerminal.rateInUph)}→${"%.2f".format(stackTerminal.rateOutUph)}U/h " +
+                    "IOB×ISF=${"%.0f".format(stackTerminal.stackDropMgdl ?: 0.0)} ≥ BG−70",
+            )
+            rT.reason.append(" [STACK_CAP_TERMINAL ${"%.2f".format(stackTerminal.rateInUph)}→${"%.2f".format(stackTerminal.rateOutUph)}U/h]")
+            rate = stackTerminal.rateOutUph
+        }
 
         rT.reason.append(context.getString(R.string.temp_basal_pose, "%.2f".format(rate), duration))
         rT.duration = duration
