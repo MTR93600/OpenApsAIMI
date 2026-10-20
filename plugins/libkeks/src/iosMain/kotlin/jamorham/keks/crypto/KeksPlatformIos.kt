@@ -93,10 +93,10 @@ internal actual class KeksLock actual constructor() {
     actual fun unlock() = delegate.unlock()
 }
 
-internal actual class KeksSecurityException actual constructor(message: String) : RuntimeException(message)
+actual class KeksSecurityException actual constructor(message: String) : RuntimeException(message)
 
-internal actual class KeksInvalidParameterException actual constructor(message: String) :
+actual class KeksInvalidParameterException actual constructor(message: String) :
     IllegalArgumentException(message)
 
-internal actual class KeksArrayIndexOutOfBoundsException actual constructor(message: String) :
+actual class KeksArrayIndexOutOfBoundsException actual constructor(message: String) :
     IndexOutOfBoundsException(message)

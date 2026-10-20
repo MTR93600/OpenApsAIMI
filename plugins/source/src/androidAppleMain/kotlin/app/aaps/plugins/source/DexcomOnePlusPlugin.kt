@@ -89,9 +89,12 @@ import kotlin.time.Clock
  *
  * **On iPhone this plugin is locked off and says why.** `DexcomOnePlusIosHost` returns a reason
  * from [DexcomOnePlusHost.notUsableReason], which becomes both the description and the text on the
- * locked switch. Two things are missing there and neither is hidden: the sensor's pairing
- * handshake has no Apple build, and CoreBluetooth state restoration is not implemented, so an app
- * iOS has terminated is not woken by the sensor until someone opens it again.
+ * locked switch. The handshake and the driver around it are shared code and do run on iPhone now,
+ * but four things still stand in the way and the text hides none of them: nothing has met a real
+ * sensor, an unbonded pairing needs an OS pairing prompt CoreBluetooth cannot ask for, there is no
+ * screen on iPhone for entering a pairing code, and CoreBluetooth state restoration is not
+ * implemented, so an app iOS has terminated is not woken by the sensor until someone opens it
+ * again.
  */
 @ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
 @IntKey(446)

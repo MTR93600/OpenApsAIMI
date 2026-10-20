@@ -48,8 +48,8 @@ internal actual class KeksLock actual constructor() {
     actual fun unlock() = delegate.unlock()
 }
 
-internal actual typealias KeksSecurityException = SecurityException
+actual typealias KeksSecurityException = SecurityException
 
-internal actual typealias KeksInvalidParameterException = InvalidParameterException
+actual typealias KeksInvalidParameterException = InvalidParameterException
 
-internal actual typealias KeksArrayIndexOutOfBoundsException = ArrayIndexOutOfBoundsException
+actual typealias KeksArrayIndexOutOfBoundsException = ArrayIndexOutOfBoundsException

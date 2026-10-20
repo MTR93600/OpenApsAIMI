@@ -5,6 +5,7 @@ import app.aaps.core.interfaces.pump.ble.session.BleCentralEvent
 import app.aaps.core.interfaces.pump.ble.session.BleRestoreIdentifier
 import app.aaps.plugins.dexcomoneplus.gatt.OnePlusGattClientIos
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScannerIos
+import kotlin.concurrent.Volatile
 
 /**
  * Sends one central's events to the scanner and to the GATT client.
@@ -31,8 +32,9 @@ import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScannerIos
  * ONE+ driver releases every one of them and starts again from a scan. Four reasons, each on its
  * own enough:
  *
- * - The pairing handshake has no Apple build at all, so a restored and connected peripheral
- *   cannot lead to a usable session here.
+ * - A restored peripheral belongs to no session. `OnePlusCgmDriverReal` is shared code now and
+ *   does drive a session here, but it opens one from a connect of its own; it has no way to be
+ *   handed a link that already exists and no state left over from before the relaunch.
  * - The handshake is per link. The stored shared key only lets the library skip rounds, it still
  *   runs over the live link, and there is no session object to resume.
  * - After a relaunch the central's characteristic map is empty unless iOS happened to restore it,
@@ -55,8 +57,16 @@ import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScannerIos
  */
 class OnePlusIosRadio(private val central: BleCentral) {
 
+    /**
+     * Volatile because it is written by whoever builds the driver's scanner and read on the
+     * central's own queue. A new GATT client is built for every connection attempt and has to be
+     * seen by the very next event, so a stale read would send that event to the client of the
+     * attempt before.
+     */
+    @Volatile
     var scanner: OnePlusBleScannerIos? = null
 
+    @Volatile
     var gatt: OnePlusGattClientIos? = null
 
     fun onEvent(event: BleCentralEvent) {

@@ -1,9 +1,10 @@
 package app.aaps.plugins.dexcomoneplus.session
 
-import android.util.Base64
 import app.aaps.plugins.dexcomoneplus.OnePlusLog
 import app.aaps.plugins.dexcomoneplus.OnePlusLogMarkers
 import jamorham.keks.Plugin
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
  * KEKS certificate package from the public xDrip G7/One+/Stelo Auto Configure QR
@@ -35,7 +36,21 @@ object OnePlusKeksGuideCerts {
         )
     }
 
-    private fun decode(b64: String): ByteArray = Base64.decode(b64, Base64.DEFAULT)
+    /**
+     * The same bytes `android.util.Base64.decode(b64, Base64.DEFAULT)` gave.
+     *
+     * The three values below are split across source lines for reading, but they are joined at
+     * compile time and hold no line separator at all, so the one way the two decoders differ -
+     * Android's DEFAULT skips line breaks, the Kotlin one refuses them - cannot be reached by
+     * anything here. Padding is not a difference either: part A ends in
+     * a single `=` and the other two are a whole number of three byte groups, so both decoders
+     * read all three the same way. A certificate that decoded to the wrong length would still
+     * look like a certificate, and the sensor would be the only thing to say otherwise, after a
+     * failed pairing - so `OnePlusKeksGuideCertsTest` holds [install] against the three sizes
+     * 494, 465 and 138 instead.
+     */
+    @OptIn(ExperimentalEncodingApi::class)
+    private fun decode(b64: String): ByteArray = Base64.Default.decode(b64)
 
     private val PART_A_B64: String =
         "MIIB6jCCAY+gAwIBAgIULzxStusIcBBG1F14zoF4TJ3+UkAwCgYIKoZIzj0EAwIwEzERMA8GA1UE" +

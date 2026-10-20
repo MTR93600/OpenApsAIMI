@@ -3,8 +3,11 @@ package app.aaps.plugins.dexcomoneplus.session
 /**
  * Session authentication / J-PAKE key exchange (A6.4).
  *
- * Production path: `OnePlusSessionAuthKeks` via `:plugins:libkeks` (GPL-3 xDrip pin), which is
- * Android only because that library is plain Java.
+ * Production path: [OnePlusSessionAuthKeks] via `:plugins:libkeks` (GPL-3 xDrip pin). Both are
+ * shared code: the library was ported to Kotlin Multiplatform, so the handshake compiles and runs
+ * on Apple too, and `OnePlusCgmDriverReal` around it is shared as well. What is still Android only
+ * is OS bonding, which CoreBluetooth does not offer at all, so the unbonded four digit pairing
+ * cannot complete on an iPhone.
  * **No proprietary Dexcom secrets or hard-coded session keys belong in this module.**
  */
 interface OnePlusSessionAuth {

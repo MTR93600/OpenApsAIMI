@@ -10,3 +10,5 @@ import platform.Foundation.NSProcessInfo
  * really took minutes look like milliseconds.
  */
 internal fun onePlusIosElapsedMs(): Long = (NSProcessInfo.processInfo.systemUptime * 1_000.0).toLong()
+
+internal actual fun onePlusElapsedMs(): Long = onePlusIosElapsedMs()

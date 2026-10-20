@@ -10,9 +10,10 @@ import kotlin.concurrent.Volatile
  * Emits FAILED on connect so UI can show "protocol not yet wired".
  * Remains the **default** via [instance] / `OnePlusCgmDrivers.default`.
  *
- * It is shared code, not Android code: the Apple build has no real driver yet, and this is what it
- * gets. It never reports a reading and never claims a session, so nothing downstream can mistake
- * it for a working sensor.
+ * It is shared code, not Android code, and both platforms get it until the engineering switch is
+ * turned on. It never reports a reading and never claims a session, so nothing downstream can
+ * mistake it for a working sensor. On iPhone it is also what the pre-soak slot always gets, since
+ * a second slot cannot have a scan of its own there.
  */
 class OnePlusCgmDriverStub : OnePlusCgmDriver {
 

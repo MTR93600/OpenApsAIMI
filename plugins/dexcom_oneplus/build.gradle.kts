@@ -38,14 +38,15 @@ kotlin {
         commonMain {
             dependencies {
                 implementation(project(":core:interfaces"))
+                // The vendored xDrip KEKS authentication library. It is Kotlin Multiplatform
+                // since the port, so OnePlusSessionAuthKeks and OnePlusKeksGuideCerts live in
+                // commonMain and the handshake compiles for Apple as well as for Android.
+                implementation(project(":plugins:libkeks"))
             }
         }
 
         androidMain {
             dependencies {
-                // The vendored xDrip KEKS authentication library. Plain Java, so the two files
-                // that use it can only live here.
-                implementation(project(":plugins:libkeks"))
                 // Kept as `api` exactly as the old android library exported it, so nothing that
                 // resolved androidx.core through this module loses it.
                 api(libs.androidx.core)

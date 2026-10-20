@@ -257,6 +257,16 @@ class OnePlusGattClientIos(
         return false
     }
 
+    /**
+     * Always false, and that does NOT mean a bond cannot happen on iOS.
+     *
+     * iOS bonds by itself, the moment the sensor asks for an encrypted link, and shows the person
+     * its own pairing dialog. What no app can do is start that or watch it finish, which is what
+     * the Android flow does here. So a false answer means "this step does not exist on this
+     * platform", not "pairing is impossible": Trio pairs G7 sensors on iPhone without such a call.
+     * Whether letting iOS bond on its own is enough for this handshake is untested — see the
+     * reason text on the plugin, which says the same thing to the person.
+     */
     override fun createBond(): Boolean {
         OnePlusLog.e(
             "${OnePlusLogMarkers.ERROR}: createBond is not possible on iOS - CoreBluetooth pairs by " +
@@ -327,9 +337,9 @@ class OnePlusGattClientIos(
     /**
      * iOS started the app again and handed back peripherals. None of them is taken over.
      *
-     * Nothing is adopted and nothing is marked connected. There is no Apple build of the pairing
-     * handshake, the handshake is per link and cannot be resumed, and after a relaunch the
-     * central holds no characteristics to write to. The peripheral itself is released by
+     * Nothing is adopted and nothing is marked connected. The handshake is per link and cannot be
+     * resumed - running it again is the only way back, and after a relaunch the central holds no
+     * characteristics to write to anyway. The peripheral itself is released by
      * `OnePlusIosRadio`, which owns the central and is there even when no client is.
      *
      * The dangerous part is the queues. A restored link can still deliver Control indications

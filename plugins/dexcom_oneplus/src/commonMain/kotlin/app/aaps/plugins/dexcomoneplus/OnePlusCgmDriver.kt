@@ -5,9 +5,10 @@ import app.aaps.plugins.dexcomoneplus.scan.OnePlusScanListener
 /**
  * Native Dexcom ONE+ BLE driver façade.
  *
- * Default impl: [OnePlusCgmDriverStub]. Real stack: `OnePlusCgmDriverReal`, which is Android only:
- * the KEKS handshake it needs is a Java library (`:plugins:libkeks`) with no Apple build.
- * See docs/spikes/ONEPLUS_BLE_PORT_MAP.md.
+ * Default impl: [OnePlusCgmDriverStub]. Real stack: [OnePlusCgmDriverReal], which is shared code:
+ * it builds and drives the session on both phones, and everything the phone itself owns is behind
+ * [OnePlusPlatform]. The KEKS handshake (`:plugins:libkeks`) and `OnePlusSessionAuthKeks` are
+ * shared too. See docs/spikes/ONEPLUS_BLE_PORT_MAP.md.
  *
  * ⚠️ ASYNC IMPACT: Real driver may invoke [OnePlusGlucoseWatcher] / scan listeners off the main
  * thread (bleExecutor / binder). Callers must not assume main; do not run AIMI dose logic there.

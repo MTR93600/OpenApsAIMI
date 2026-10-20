@@ -732,6 +732,48 @@ It is the same shape as the ONE+ driver and hit four blockers that one did not.
   `editAndWait(block): Boolean` **as well as** `edit(block)`. `OnePlusSensorPrefs` has only `edit`,
   which is why the two modules do not share one interface.
 
+#### Finishing a driver: the executor, and the three things that bit on the way
+
+`OnePlusCgmDriverReal` (697 lines) moved whole, with nothing left on Android. Its one real
+`android.` import was `SystemClock`; the other eighteen blockers were JVM types, not Android ones.
+Four substitutions and one new port covered all of it.
+
+- **`Executors.newSingleThreadExecutor` is a port, not a substitution.** A blocking driver loop
+  needs one thread it can hold for minutes, and there is no shared class for that. An
+  `internal interface` with `execute(block)` / `shutdownNow()` plus an `expect fun` factory is
+  enough: the Android actual wraps the same `ExecutorService` it always did, and the iOS actual is
+  a serial `dispatch_queue_create` + `dispatch_async`. Blocking a GCD thread costs exactly one
+  thread as long as the queue is serial and one executor is built per driver instance.
+  **What does not port is the interrupt.** `shutdownNow()` on the JVM interrupts the running
+  thread, which is what cuts `Thread.sleep` short; iOS cannot interrupt a thread at all, and
+  `onePlusSleep` there already never returns false. So the iOS actual can only drop what is still
+  queued. Say that in the interface's KDoc and check that the real stop signal is something else -
+  here the session's own `stop()`, called before `shutdownNow()` on both paths.
+- **`AapsLock.withLock` had no `callsInPlace` contract, and `synchronized` does.** A block that
+  assigns `val`s declared just above it - the standard shape for "take these three fields under the
+  lock and use them after" - compiles under `synchronized` and fails under `withLock` with
+  `Variable 'x' must be initialized` and `'val' cannot be reassigned`. That is not a reason to
+  restructure the caller: add `contract { callsInPlace(action, InvocationKind.EXACTLY_ONCE) }` to
+  `withLock` (and `AT_MOST_ONCE` to `tryWithLock`, which really may not run). Both need
+  `@OptIn(ExperimentalContracts::class)`. It is a compile-time statement only; nothing about the
+  lock changes. Done on 2026-10-19, so it is there now.
+- **`CopyOnWriteArrayList` is a lock plus a copy on read.** Guard the list with its **own**
+  `AapsLock`, never the lifecycle one, and give callers a `snapshot(): List<T>` that copies under
+  it. Walking the copy is exactly what iterating a copy-on-write list did, and the add becomes
+  atomic into the bargain. Check the lock order while you are there: if the lifecycle lock is taken
+  and then the watcher lock, nothing may ever take them the other way round.
+- **`Build.MANUFACTURER` is null on the unit-test classpath** and the actual declares `String`, so
+  the Kotlin null check throws `MANUFACTURER must not be null`. Nothing sees this until the class
+  that reads it reaches `commonTest` and the new tests run on the JVM too. `?: ""` is the fix, and
+  it is the right production answer as well - an empty manufacturer reads as "an OEM I do not know".
+
+And one judgement call worth copying rather than re-deriving. iOS has no wake lock, so
+`OnePlusIosCpuLease.hold()` returns **null**, which is the word `OnePlusCpuLease` already has for
+"this platform could not take one"; the caller holds it in a nullable and goes ahead less
+protected. A `Hold` that did nothing would have been the dishonest shape. `beginBackgroundTask`
+was considered and refused on a number: it buys about 30 seconds and the session asks for 600 000
+milliseconds, so it would answer a ten minute question with a thirty second one.
+
 #### Blockers this campaign has now seen that an import scan still cannot
 
 Add these to the list that `java.lang` and same-package neighbours are already on:

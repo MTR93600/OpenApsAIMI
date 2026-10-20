@@ -1,6 +1,9 @@
 package app.aaps.plugins.dexcomoneplus
 
+import app.aaps.core.interfaces.concurrent.AapsLock
+import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.core.interfaces.source.SensorSlot
+import kotlin.concurrent.Volatile
 
 /**
  * Driver selection. **Stub remains default** until A3 device GO and Real protocol is filled.
@@ -21,10 +24,10 @@ object OnePlusCgmDrivers {
     var useRealSkeleton: Boolean = false
         private set
 
-    /** SharedPreferences namespace for the staging slot's sensor store. */
+    /** Key-value namespace for the staging slot's sensor store. */
     const val STAGING_NAMESPACE = "staging"
 
-    private val lock = Any()
+    private val lock = AapsLock()
 
     @Volatile
     private var productionReal: OnePlusCgmDriverReal? = null
@@ -34,6 +37,10 @@ object OnePlusCgmDrivers {
      * executor, scanner and namespaced sensor store, so it can run concurrently with production
      * without sharing identity / key / ingest markers. Always Real (staging is a real second sensor);
      * the Stub path only applies to the production default.
+     *
+     * ⚠️ Android only in practice. An iPhone gets one Bluetooth scan for the whole app, so a second
+     * slot would take the radio from the first; `DexcomOnePlusIosHost` keeps the pre-soak slot on
+     * the stub driver and says so.
      * See docs/DEXCOM_ONEPLUS_DUAL_SENSOR_STAGING_PLAN.md.
      */
     @Volatile
@@ -53,12 +60,12 @@ object OnePlusCgmDrivers {
     }
 
     /** The real production instance. Built on first use. */
-    fun realProduction(): OnePlusCgmDriverReal = synchronized(lock) {
+    fun realProduction(): OnePlusCgmDriverReal = lock.withLock {
         productionReal ?: OnePlusCgmDriverReal().also { productionReal = it }
     }
 
     /** The dedicated STAGING driver instance (pre-soak second sensor). Built on first use. */
-    fun staging(): OnePlusCgmDriverReal = synchronized(lock) {
+    fun staging(): OnePlusCgmDriverReal = lock.withLock {
         stagingReal ?: OnePlusCgmDriverReal(storeNamespace = STAGING_NAMESPACE).also { stagingReal = it }
     }
 
@@ -85,16 +92,15 @@ object OnePlusCgmDrivers {
      * @return the instance that has just been retired, for the caller to shut down **outside** the
      *   lock, or null when there was no staging instance to promote.
      */
-    fun promoteStagingInstance(): OnePlusCgmDriverReal? {
-        synchronized(lock) {
-            val promoted = stagingReal ?: return null
+    fun promoteStagingInstance(): OnePlusCgmDriverReal? =
+        lock.withLock {
+            val promoted = stagingReal ?: return@withLock null
             val retired = productionReal
             promoted.rebindStore(null)
             productionReal = promoted
             stagingReal = null
-            return retired
+            retired
         }
-    }
 
     /**
      * Atomically switch Stub ↔ Real, migrating an optional [watcher] and shutting down the
@@ -106,14 +112,14 @@ object OnePlusCgmDrivers {
      *
      * ⚠️ ASYNC IMPACT: may call [OnePlusCgmDriver.shutdown] which disconnects GATT.
      */
-    fun select(useReal: Boolean, watcher: OnePlusGlucoseWatcher? = null): OnePlusCgmDriver {
-        synchronized(lock) {
+    fun select(useReal: Boolean, watcher: OnePlusGlucoseWatcher? = null): OnePlusCgmDriver =
+        lock.withLock {
             if (useRealSkeleton == useReal) {
                 val current = default()
                 if (watcher != null) {
                     current.addWatcher(watcher)
                 }
-                return current
+                return@withLock current
             }
             val previous = default()
             if (watcher != null) {
@@ -134,7 +140,6 @@ object OnePlusCgmDrivers {
             if (watcher != null) {
                 next.addWatcher(watcher)
             }
-            return next
+            next
         }
-    }
 }

@@ -1,5 +1,9 @@
 package app.aaps.core.interfaces.concurrent
 
+import kotlin.contracts.ExperimentalContracts
+import kotlin.contracts.InvocationKind
+import kotlin.contracts.contract
+
 /**
  * A mutual exclusion lock that works on every target.
  *
@@ -68,8 +72,15 @@ expect class AapsLock() {
  * Inline, so `return` from inside the block behaves exactly as it did under `synchronized` - several
  * call sites return their result from within the guarded region, and a non-inline version would not
  * compile there. Same shape as `kotlin.concurrent.withLock` for `java.util.concurrent.locks.Lock`.
+ *
+ * [action] runs exactly once, and the contract says so, exactly as `synchronized` does. Without it
+ * the compiler cannot see that a `val` declared before the block and assigned inside it is really
+ * assigned, so a call site written the way the `synchronized` one was fails with "Variable must be
+ * initialized". That is a compile-time statement only; nothing about the lock changes.
  */
+@OptIn(ExperimentalContracts::class)
 inline fun <T> AapsLock.withLock(action: () -> T): T {
+    contract { callsInPlace(action, InvocationKind.EXACTLY_ONCE) }
     lock()
     try {
         return action()
@@ -87,9 +98,12 @@ inline fun <T> AapsLock.withLock(action: () -> T): T {
  *
  * [T] is bound to a non-null type so `null` can only ever mean "the lock was busy".
  *
- * Inline, for the same reason as [withLock].
+ * Inline, for the same reason as [withLock]. Its contract is `AT_MOST_ONCE` and not `EXACTLY_ONCE`,
+ * because the block really does not run when the lock is busy.
  */
+@OptIn(ExperimentalContracts::class)
 inline fun <T : Any> AapsLock.tryWithLock(action: () -> T): T? {
+    contract { callsInPlace(action, InvocationKind.AT_MOST_ONCE) }
     if (!tryLock()) return null
     try {
         return action()

@@ -5,7 +5,9 @@ import app.aaps.plugins.dexcomoneplus.OnePlusLogMarkers
 import app.aaps.plugins.dexcomoneplus.gatt.OnePlusGattClient
 import app.aaps.plugins.dexcomoneplus.gatt.OnePlusKeksNotifySource
 import jamorham.keks.Plugin
-import java.security.InvalidParameterException
+import jamorham.keks.crypto.KeksArrayIndexOutOfBoundsException
+import jamorham.keks.crypto.KeksInvalidParameterException
+import jamorham.keks.crypto.KeksSecurityException
 
 /**
  * KEKS (libkeks) handshake driver over [OnePlusGattClient].
@@ -18,10 +20,25 @@ import java.security.InvalidParameterException
  * - Success only when Ob1 would enter GET_DATA (`aNext` length==1)
  *
  * Juggluco recovery (ChallengeReply): if AuthStatus `authenticated != 1`, wipe persisted key
- * ([AuthResult.invalidateSharedKey]) and clear in-memory [Context.savedKey] / singleton so the
- * next attempt runs full J-PAKE. Soft recovery: do **not** [OnePlusGattClient.removeBond] on the
+ * ([AuthResult.invalidateSharedKey]) and clear the in-memory [jamorham.keks.Context.savedKey] and
+ * the singleton, so the next attempt runs full J-PAKE. Soft recovery: do **not** [OnePlusGattClient.removeBond] on the
  * first short-auth reject (preload path) — forced unbond correlated with ADV blackout on Samsung.
  * Unbond only after a full J-PAKE AuthStatus reject while still OS-bonded, or on bond=3.
+ *
+ * ## Shared code, and what that means on iPhone
+ *
+ * This class is in commonMain since `:plugins:libkeks` was ported to Kotlin Multiplatform, so the
+ * handshake itself runs on Apple as well. The three exception types it catches come from
+ * `jamorham.keks.crypto` for that reason: on Android they are still `java.lang.SecurityException`,
+ * `java.security.InvalidParameterException` and `java.lang.ArrayIndexOutOfBoundsException`, so
+ * nothing changed there.
+ *
+ * One branch cannot work on iPhone and the failure is quiet, so read this before wiring it up:
+ * `requestAndroidBond` needs [OnePlusGattClient.createBond] and
+ * [OnePlusGattClient.awaitBondComplete], and `OnePlusGattClientIos` answers false to both because
+ * CoreBluetooth has no pairing API. The sensor asks for a bond in the middle of an **unbonded**
+ * four-digit pairing, so that path ends here with "Android bond required / timed out". A
+ * reconnect with a saved shared key does not pass through `requestAndroidBond` at all.
  *
  * ⚠️ ASYNC IMPACT: blocks caller (bleExecutor) on [OnePlusGattClient.awaitKeksNotify] and
  * [OnePlusGattClient.awaitBondComplete]. Do not call from main.
@@ -115,12 +132,12 @@ class OnePlusSessionAuthKeks(
                     OnePlusKeksNotifySource.AUTHENTICATION -> plugin.receivedResponse(notify.payload)
                     OnePlusKeksNotifySource.EXTRA_DATA -> plugin.receivedData(notify.payload)
                 }
-            } catch (se: SecurityException) {
+            } catch (se: KeksSecurityException) {
                 return finalizeAuthResult(
                     AuthResult(ok = false, message = "ONEPLUS_AUTH: ${se.message}"),
                     plugin,
                 )
-            } catch (ipe: InvalidParameterException) {
+            } catch (ipe: KeksInvalidParameterException) {
                 return finalizeAuthResult(
                     AuthResult(
                         ok = false,
@@ -129,7 +146,7 @@ class OnePlusSessionAuthKeks(
                     ),
                     plugin,
                 )
-            } catch (aioobe: ArrayIndexOutOfBoundsException) {
+            } catch (aioobe: KeksArrayIndexOutOfBoundsException) {
                 // libkeks `Calc.challenger` copies 16 bytes from offset 2 with no length check, so a
                 // short packet where a challenge was expected throws instead of failing auth. The
                 // field log of 2026-08-25 hit this with a 3-byte AuthStatus arriving mid-handshake.
@@ -143,9 +160,10 @@ class OnePlusSessionAuthKeks(
                     plugin,
                 )
             } catch (ise: IllegalStateException) {
-                // BouncyCastle "Invalid result" from validateZeroKnowledgeProof: the round-1 packet
-                // did not decode to a point on the curve. Same root cause as above — bytes from
-                // another handshake — and same treatment.
+                // "Invalid result" from validateZeroKnowledgeProof: the round-1 packet did not
+                // decode to a point on the curve. BouncyCastle raised this on Android and the
+                // shared `KeksP256.multiply` keeps the same check and the same message. Same root
+                // cause as above — bytes from another handshake — and same treatment.
                 return finalizeAuthResult(
                     AuthResult(
                         ok = false,

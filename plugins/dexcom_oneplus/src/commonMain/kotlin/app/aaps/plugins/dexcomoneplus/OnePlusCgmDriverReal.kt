@@ -1,7 +1,8 @@
 package app.aaps.plugins.dexcomoneplus
 
-import android.os.SystemClock
 import app.aaps.core.interfaces.ble.BleRadioPriority
+import app.aaps.core.interfaces.concurrent.AapsLock
+import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.plugins.dexcomoneplus.gatt.OnePlusGattClient
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorIdentity
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
@@ -21,10 +22,11 @@ import app.aaps.plugins.dexcomoneplus.session.OnePlusCalibrationQueue
 import app.aaps.plugins.dexcomoneplus.session.OnePlusConnectPrep
 import app.aaps.plugins.dexcomoneplus.session.OnePlusSessionAuthKeks
 import app.aaps.plugins.dexcomoneplus.session.OnePlusSessionStart
-import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicInteger
+import kotlin.concurrent.Volatile
+import kotlin.concurrent.atomics.AtomicInt
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.concurrent.atomics.incrementAndFetch
+import kotlin.time.Clock
 
 internal object OnePlusCgmDriverResumePolicy {
     fun canResume(storedSession: OnePlusStoredSession?): Boolean =
@@ -43,12 +45,21 @@ internal object OnePlusCgmDriverResumePolicy {
  * ⚠️ ASYNC IMPACT: scan on binder; connect/auth/EGV on [bleExecutor] (blocks that thread).
  * [disconnect] / [shutdown] call [OnePlusBleSession.stop] directly so GATT disconnect can
  * unblock [OnePlusGattClient.awaitControlNotify]. Watchers may be off main.
+ *
+ * ## One driver, two platforms
+ *
+ * This is shared code. It was Android only for as long as it used an Android clock and the JVM's
+ * threads and collections, none of which it needed for what it decides: everything the phone
+ * really owns is behind [OnePlusPlatform] and its four members. Keep it that way - a rule that
+ * lands here rather than behind the port is a rule only one of the two phones follows.
+ *
+ * @param storeNamespace per-slot key-value namespace for the sensor store (null = the original
+ *   single-sensor file; "staging" = the pre-soak second sensor). Lets two driver instances run
+ *   concurrently without sharing identity / MAC / KEKS key / ingest markers. **A second instance
+ *   is Android only today**: an iPhone gets one Bluetooth scan for the whole app, so two slots
+ *   would take the radio from each other. See `OnePlusIosPlatform`.
  */
-/**
- * @param storeNamespace per-slot SharedPreferences namespace for the sensor store (null = the
- *   original single-sensor file; "staging" = the pre-soak second sensor). Lets two driver instances
- *   run concurrently without sharing identity / MAC / KEKS key / ingest markers.
- */
+@OptIn(ExperimentalAtomicApi::class)
 class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
 
     /**
@@ -76,10 +87,20 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
      * pre-soak's claim silently release the promoted instance's claim on the sensor still feeding
      * the loop — see [OnePlusMacArbiter]'s warning.
      */
-    private val arbiterOwner: String = "$slot#${nextInstance.incrementAndGet()}"
+    private val arbiterOwner: String = "$slot#${nextInstance.incrementAndFetch()}"
 
-    private val watchers = CopyOnWriteArrayList<OnePlusGlucoseWatcher>()
-    private val lifecycleLock = Any()
+    /**
+     * Guards [watchers] only, never anything else.
+     *
+     * This used to be a `CopyOnWriteArrayList`, which has no multiplatform form. The list is read
+     * far more often than it is written and it is read while a session thread is running, so
+     * [watchersSnapshot] copies it under this lock and the callers walk the copy - which is exactly
+     * what iterating a copy-on-write list did. [lifecycleLock] is never taken from inside this one,
+     * so the two cannot deadlock against each other.
+     */
+    private val watchersLock = AapsLock()
+    private val watchers = mutableListOf<OnePlusGlucoseWatcher>()
+    private val lifecycleLock = AapsLock()
 
     /** The host this driver is attached to. Null until [attach]. */
     @Volatile
@@ -88,7 +109,7 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
     private var resumeQueued = false
 
     @Volatile
-    private var bleExecutor: ExecutorService = newBleExecutor()
+    private var bleExecutor: OnePlusBleExecutor = onePlusBleExecutor()
 
     @Volatile
     private var scanner: OnePlusBleScanner = OnePlusBleScannerStub()
@@ -107,8 +128,9 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
     private var pendingDeviceName: String? = null
 
     /**
-     * `SystemClock.elapsedRealtime()` of the ADV sighting handed off from the UI for the [connect]
-     * target (0 = none). Lets [prepareConnect] skip the blind re-scan when the sensor was just seen.
+     * When the ADV sighting handed off from the UI for the [connect] target was seen, on the
+     * monotonic clock of [onePlusElapsedMs] (0 = none). Lets [prepareConnect] skip the blind
+     * re-scan when the sensor was just seen.
      */
     @Volatile
     private var pendingAdvSightingElapsedMs: Long = 0L
@@ -159,7 +181,7 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
             OnePlusLog.w("${OnePlusLogMarkers.SESSION}: [$slot] calibration refused — no session")
             return false
         }
-        val accepted = calibrationQueue.offer(glucoseMgdl, bloodAtMs, System.currentTimeMillis())
+        val accepted = calibrationQueue.offer(glucoseMgdl, bloodAtMs, Clock.System.now().toEpochMilliseconds())
         OnePlusLog.i(
             "${OnePlusLogMarkers.SESSION}: [$slot] calibration queued=$accepted glucose=$glucoseMgdl",
         )
@@ -247,12 +269,23 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
     }
 
     override fun addWatcher(watcher: OnePlusGlucoseWatcher) {
-        if (!watchers.contains(watcher)) watchers.add(watcher)
+        watchersLock.withLock {
+            if (!watchers.contains(watcher)) watchers.add(watcher)
+        }
     }
 
     override fun removeWatcher(watcher: OnePlusGlucoseWatcher) {
-        watchers.remove(watcher)
+        watchersLock.withLock { watchers.remove(watcher) }
     }
+
+    /**
+     * The watchers as they are right now, for a caller that is about to walk them.
+     *
+     * A copy, so a watcher that adds or removes one while it is being told something cannot change
+     * the list under the walk. That is what iterating a copy-on-write list gave before.
+     */
+    private fun watchersSnapshot(): List<OnePlusGlucoseWatcher> =
+        watchersLock.withLock { watchers.toList() }
 
     override fun startScan(listener: OnePlusScanListener) {
         OnePlusLog.i("${OnePlusLogMarkers.SCAN}: [$slot] start")
@@ -272,7 +305,7 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
         // this sensor, and opening a second session would corrupt both KEKS handshakes. Nothing is
         // written to the store on a refusal: the slot must stay exactly as it was.
         if (!OnePlusMacArbiter.claim(deviceAddress, arbiterOwner)) {
-            watchers.forEach {
+            watchersSnapshot().forEach {
                 it.onError("ONEPLUS_SESSION: sensor already in use by the other slot", false)
             }
             return
@@ -281,8 +314,8 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
         // Stop any in-flight reconnect loop (may still be targeting a previous MAC).
         val previousSession: OnePlusBleSession?
         val generation: Long
-        val executor: ExecutorService
-        synchronized(lifecycleLock) {
+        val executor: OnePlusBleExecutor
+        lifecycleLock.withLock {
             operationGeneration++
             generation = operationGeneration
             previousSession = session
@@ -307,10 +340,10 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
         sensorStore?.clearSharedKey()
         scanner.updateSessionHint(sensorStore?.load())
         try {
-            synchronized(lifecycleLock) {
+            lifecycleLock.withLock {
                 if (generation != operationGeneration || executor !== bleExecutor) return
                 executor.execute {
-                    val created = synchronized(lifecycleLock) {
+                    val created = lifecycleLock.withLock {
                         if (generation != operationGeneration) return@execute
                         createSession(
                             requestNewSensorStart = true,
@@ -321,7 +354,7 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
                         created.startWithPairingCode(deviceAddress, pairingCode)
                     } catch (t: Throwable) {
                         OnePlusLog.e("${OnePlusLogMarkers.ERROR}: [$slot] ${t.message}", t)
-                        watchers.forEach {
+                        watchersSnapshot().forEach {
                             it.onError(t.message ?: "ONEPLUS_CONNECT_FAILED", fatal = false)
                             it.onWarmup(
                                 OnePlusWarmupState(
@@ -367,8 +400,8 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
         }
         val pairingCode = stored.identity.pin
         val generation: Long
-        val executor: ExecutorService
-        synchronized(lifecycleLock) {
+        val executor: OnePlusBleExecutor
+        lifecycleLock.withLock {
             if (resumeQueued || session != null) {
                 OnePlusLog.i(
                     "${OnePlusLogMarkers.SESSION}: [$slot] auto-resume already active",
@@ -389,10 +422,10 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
                 "savedKey=true newStart=false",
         )
         try {
-            synchronized(lifecycleLock) {
+            lifecycleLock.withLock {
                 if (generation != operationGeneration || executor !== bleExecutor) return false
                 executor.execute {
-                    val created = synchronized(lifecycleLock) {
+                    val created = lifecycleLock.withLock {
                         if (generation != operationGeneration) return@execute
                         createSession(
                             requestNewSensorStart = false,
@@ -402,7 +435,7 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
                     try {
                         created.startWithPairingCode(deviceAddress, pairingCode)
                     } catch (t: Throwable) {
-                        synchronized(lifecycleLock) {
+                        lifecycleLock.withLock {
                             if (generation == operationGeneration && session === created) {
                                 resumeQueued = false
                                 session = null
@@ -412,14 +445,14 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
                             "${OnePlusLogMarkers.ERROR}: [$slot] auto-resume ${t.message}",
                             t,
                         )
-                        watchers.forEach {
+                        watchersSnapshot().forEach {
                             it.onError(t.message ?: "ONEPLUS_AUTO_RESUME_FAILED", fatal = false)
                         }
                     }
                 }
             }
         } catch (t: Throwable) {
-            synchronized(lifecycleLock) {
+            lifecycleLock.withLock {
                 if (generation == operationGeneration) {
                     resumeQueued = false
                 }
@@ -453,7 +486,7 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
 
     override fun disconnect() {
         // Must not queue behind a blocking Control/EGV loop on bleExecutor.
-        val previousSession = synchronized(lifecycleLock) {
+        val previousSession = lifecycleLock.withLock {
             operationGeneration++
             resumeQueued = false
             session.also { session = null }
@@ -468,20 +501,20 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
         } catch (_: Throwable) {
         }
         val previousSession: OnePlusBleSession?
-        val previousExecutor: ExecutorService
-        synchronized(lifecycleLock) {
+        val previousExecutor: OnePlusBleExecutor
+        lifecycleLock.withLock {
             operationGeneration++
             resumeQueued = false
             previousSession = session
             session = null
             previousExecutor = bleExecutor
-            bleExecutor = newBleExecutor()
+            bleExecutor = onePlusBleExecutor()
         }
         try {
             previousSession?.stop("shutdown")
         } catch (_: Throwable) {
         }
-        watchers.clear()
+        watchersLock.withLock { watchers.clear() }
         previousExecutor.shutdownNow()
         OnePlusMacArbiter.release(arbiterOwner)
         OnePlusLog.i("${OnePlusLogMarkers.SESSION}: [$slot] shutdown")
@@ -501,7 +534,7 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
         // how to hold every start back; the hold is sized to the longest a lease can live and it is
         // lifted as soon as the lease really ends.
         if (backOff) {
-            OnePlusScanBudget.lendRadioOut(SystemClock.elapsedRealtime(), BleRadioPriority.MAX_HOLD_MS)
+            OnePlusScanBudget.lendRadioOut(onePlusElapsedMs(), BleRadioPriority.MAX_HOLD_MS)
         } else {
             OnePlusScanBudget.takeRadioBack()
         }
@@ -528,22 +561,22 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
             profile = profile,
             onWarmup = { state ->
                 ifCurrentOperation(generation) {
-                    watchers.forEach { it.onWarmup(state) }
+                    watchersSnapshot().forEach { it.onWarmup(state) }
                 }
             },
             onSession = { up, reason ->
                 ifCurrentOperation(generation) {
-                    watchers.forEach { it.onSession(up, reason) }
+                    watchersSnapshot().forEach { it.onSession(up, reason) }
                 }
             },
             onError = { message, fatal ->
                 ifCurrentOperation(generation) {
-                    watchers.forEach { it.onError(message, fatal) }
+                    watchersSnapshot().forEach { it.onError(message, fatal) }
                 }
             },
             onGlucose = { sample ->
                 ifCurrentOperation(generation) {
-                    watchers.forEach { it.onGlucose(sample) }
+                    watchersSnapshot().forEach { it.onGlucose(sample) }
                 }
             },
             // Auto-resume always passes false; only an explicit new-sensor connect may start.
@@ -577,7 +610,7 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
     }
 
     private fun ifCurrentOperation(generation: Long, action: () -> Unit) {
-        synchronized(lifecycleLock) {
+        lifecycleLock.withLock {
             if (generation == operationGeneration) {
                 action()
             }
@@ -606,7 +639,7 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
         val target = deviceAddress.uppercase()
         val sightingAgeMs =
             if (pendingAdvSightingElapsedMs > 0L) {
-                SystemClock.elapsedRealtime() - pendingAdvSightingElapsedMs
+                onePlusElapsedMs() - pendingAdvSightingElapsedMs
             } else {
                 Long.MAX_VALUE
             }
@@ -678,11 +711,6 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
         }
     }
 
-    private fun newBleExecutor(): ExecutorService =
-        Executors.newSingleThreadExecutor { r ->
-            Thread(r, "OnePlusBleExecutor").apply { isDaemon = true }
-        }
-
     private companion object {
         /**
          * Max age of a handed-off ADV sighting still treated as "fresh" (skip rescan, direct
@@ -692,6 +720,6 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
         const val ADV_HANDOFF_FRESH_MS = 6_000L
 
         /** Process-wide counter so every instance's [arbiterOwner] is unique — see its doc comment. */
-        val nextInstance = AtomicInteger(0)
+        val nextInstance = AtomicInt(0)
     }
 }

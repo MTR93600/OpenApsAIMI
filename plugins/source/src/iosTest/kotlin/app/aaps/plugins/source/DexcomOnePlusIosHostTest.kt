@@ -14,8 +14,12 @@ import kotlin.test.assertTrue
  * The iPhone host must refuse out loud, never quietly.
  *
  * This is the contract that keeps a person from believing their iPhone is reading a sensor: the
- * plugin is listed, it carries a reason, and the thing it hands out instead of a driver is the
- * stub, which reports FAILED and never claims a session.
+ * plugin is listed, it carries a reason, and what it hands out by itself is the stub, which reports
+ * FAILED and never claims a session.
+ *
+ * The real driver is shared code now and the host can reach it, so the tests below say which of
+ * the two comes back and when. Nothing here builds `OnePlusIosPlatform`: that opens a
+ * `CBCentralManager`, which a unit test on the simulator has no business doing.
  */
 class DexcomOnePlusIosHostTest {
 
@@ -32,16 +36,19 @@ class DexcomOnePlusIosHostTest {
     }
 
     @Test
-    fun `both slots hand out the stub driver and never a real one`() {
+    fun `the production slot hands out the stub until the engineering switch is turned on`() {
         assertSame(OnePlusCgmDriverStub.instance, host.productionDriver())
+        assertTrue(!host.useRealSkeleton())
+    }
+
+    @Test
+    fun `the pre-soak slot is the stub because a second slot cannot have its own scan here`() {
         assertSame(OnePlusCgmDriverStub.instance, host.stagingDriver())
-        assertSame(OnePlusCgmDriverStub.instance, host.selectProductionDriver(useReal = true, watcher = null))
     }
 
     @Test
     fun `the stub never claims a session`() {
         assertTrue(!host.productionDriver().isSessionUp())
-        assertTrue(!host.useRealSkeleton())
     }
 
     @Test
