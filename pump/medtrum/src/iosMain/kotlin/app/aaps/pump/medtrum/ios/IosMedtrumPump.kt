@@ -18,6 +18,7 @@ import app.aaps.core.interfaces.pump.actions.CustomAction
 import app.aaps.core.interfaces.pump.actions.CustomActionType
 import app.aaps.core.interfaces.queue.CustomCommand
 import app.aaps.pump.medtrum.code.ConnectionState
+import app.aaps.pump.medtrum.comm.MedtrumPumpSyncHistory
 import app.aaps.pump.medtrum.comm.MedtrumLogger
 import app.aaps.pump.medtrum.comm.enums.BasalType
 import app.aaps.pump.medtrum.comm.enums.MedtrumPumpState

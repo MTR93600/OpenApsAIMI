@@ -47,7 +47,6 @@ class DexcomOnePlusInsertionDateTest : TestBase() {
     @Mock lateinit var notificationManager: NotificationManager
     @Mock lateinit var warmupBasalGuard: DexcomOnePlusWarmupBasalGuard
 
-    private val availabilityProvider: DexcomOnePlusAvailabilityProvider = mock()
     private val bleRadioPriority: BleRadioPriority = mock()
     private val activePlugin: ActivePlugin = mock()
     private val prefs: SharedPreferences = SharedPreferencesMock()
@@ -70,7 +69,7 @@ class DexcomOnePlusInsertionDateTest : TestBase() {
         whenever(persistenceLayer.getTherapyEventDataFromToTime(any(), any())).thenReturn(emptyList())
         whenever(persistenceLayer.getTherapyEventDataIncludingInvalidFromTime(any(), any())).thenReturn(emptyList())
         plugin = DexcomOnePlusPlugin(
-            rh, aapsLogger, preferences, config, notificationManager, DexcomOnePlusAndroidHost(context, availabilityProvider), persistenceLayer,
+            rh, aapsLogger, preferences, config, notificationManager, DexcomOnePlusAndroidHost(context), persistenceLayer,
             warmupBasalGuard, bleRadioPriority, activePlugin, rxBus,
         )
     }

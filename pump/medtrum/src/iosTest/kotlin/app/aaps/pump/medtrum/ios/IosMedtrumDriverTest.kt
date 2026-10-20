@@ -7,6 +7,9 @@ import app.aaps.core.interfaces.pump.ble.session.BleGattCharacteristic
 import app.aaps.core.interfaces.pump.ble.session.BleGattService
 import app.aaps.core.interfaces.pump.ble.session.BleCharProperty
 import app.aaps.pump.medtrum.code.ConnectionState
+import app.aaps.pump.medtrum.comm.RecordingPumpSync
+import app.aaps.pump.medtrum.comm.FakeDetailedBolusInfoStorage
+import app.aaps.pump.medtrum.comm.FakeTemporaryBasalStorage
 import app.aaps.pump.medtrum.comm.MedtrumLogger
 import app.aaps.pump.medtrum.session.MedtrumBleCallback
 import app.aaps.pump.medtrum.session.MedtrumClock

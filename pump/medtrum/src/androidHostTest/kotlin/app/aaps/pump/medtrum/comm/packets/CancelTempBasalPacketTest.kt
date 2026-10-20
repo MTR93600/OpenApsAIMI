@@ -1,6 +1,5 @@
 package app.aaps.pump.medtrum.comm.packets
 
-import app.aaps.core.interfaces.di.MetroMemberInjector
 import app.aaps.pump.medtrum.MedtrumTestBase
 import app.aaps.pump.medtrum.comm.enums.BasalType
 import app.aaps.pump.medtrum.util.MedtrumTimeUtil
@@ -9,26 +8,17 @@ import org.junit.jupiter.api.Test
 
 class CancelTempBasalPacketTest : MedtrumTestBase() {
 
-    val medtrumTimeUtil = MedtrumTimeUtil()
+    val medtrumTimeUtil = MedtrumTimeUtil { dateUtil.now() }
 
     /** Test packet specific behavior */
 
-    private val packetInjector = MetroMemberInjector {
-        if (it is CancelTempBasalPacket) {
-                it.aapsLogger = aapsLogger
-                it.medtrumPump = medtrumPump
-                it.dateUtil = dateUtil
-                it.medtrumTimeUtil = medtrumTimeUtil
-        }
-        true
-    }
 
     @Test fun getRequestGivenPacketWhenCalledThenReturnOpCode() {
         // Inputs
         val opCode = 25
 
         // Call
-        val packet = CancelTempBasalPacket(packetInjector)
+        val packet = CancelTempBasalPacket(medtrumPump)
         val result = packet.getRequest()
 
         // Expected values
@@ -40,7 +30,7 @@ class CancelTempBasalPacketTest : MedtrumTestBase() {
         val response = byteArrayOf(18, 25, 16, 0, 0, 0, 1, 22, 0, 3, 0, -110, 0, -32, -18, 88, 17)
 
         // Call
-        val packet = CancelTempBasalPacket(packetInjector)
+        val packet = CancelTempBasalPacket(medtrumPump)
         val result = packet.handleResponse(response)
 
         // Expected values
@@ -63,7 +53,7 @@ class CancelTempBasalPacketTest : MedtrumTestBase() {
         val response = byteArrayOf(18, 25, 16, 0, 0, 0, 1, 22, 0, 3, 0, -110, 0, -32, -18, 88)
 
         // Call
-        val packet = CancelTempBasalPacket(packetInjector)
+        val packet = CancelTempBasalPacket(medtrumPump)
         val result = packet.handleResponse(response)
 
         // Expected values

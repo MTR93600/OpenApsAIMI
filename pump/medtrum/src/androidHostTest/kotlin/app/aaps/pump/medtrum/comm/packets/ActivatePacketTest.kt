@@ -1,6 +1,5 @@
 package app.aaps.pump.medtrum.comm.packets
 
-import app.aaps.core.interfaces.di.MetroMemberInjector
 import app.aaps.pump.medtrum.MedtrumTestBase
 import app.aaps.pump.medtrum.comm.enums.AlarmSetting
 import app.aaps.pump.medtrum.comm.enums.BasalType
@@ -10,20 +9,10 @@ import org.junit.jupiter.api.Test
 
 class ActivatePacketTest : MedtrumTestBase() {
 
-    val medtrumTimeUtil = MedtrumTimeUtil()
+    val medtrumTimeUtil = MedtrumTimeUtil { dateUtil.now() }
 
     /** Test packet specific behavior */
 
-    private val packetInjector = MetroMemberInjector {
-        if (it is ActivatePacket) {
-                it.aapsLogger = aapsLogger
-                it.medtrumPump = medtrumPump
-                it.tddCalculator = tddCalculator
-                it.pumpSync = pumpSync
-                it.medtrumTimeUtil = medtrumTimeUtil
-        }
-        true
-    }
 
     @Test fun getRequestGivenPacketWhenValuesSetThenReturnCorrectByteArray() {
         // Inputs
@@ -35,7 +24,7 @@ class ActivatePacketTest : MedtrumTestBase() {
         val basalProfile = byteArrayOf(3, 16, 14, 0, 0, 1, 2, 12, 12, 12)
 
         // Call
-        val packet = ActivatePacket(packetInjector, basalProfile)
+        val packet = ActivatePacket(medtrumPump, nowMs = dateUtil::now, basalProfile = basalProfile)
         val result = packet.getRequest()
 
         // Expected values
@@ -54,7 +43,7 @@ class ActivatePacketTest : MedtrumTestBase() {
         val response = byteArrayOf(26, 18, 19, 1, 0, 0, 41, 0, 0, 0, -104, 91, 28, 17, 1, 30, 0, 1, 0, 41, 0, -104, 91, 28, 17)
 
         // Call
-        val packet = ActivatePacket(packetInjector, basalProfile)
+        val packet = ActivatePacket(medtrumPump, nowMs = dateUtil::now, basalProfile = basalProfile)
         val result = packet.handleResponse(response)
 
         // Expected values
@@ -82,7 +71,7 @@ class ActivatePacketTest : MedtrumTestBase() {
         val response = byteArrayOf(26, 18, 19, 1, 0, 0, 41, 0, 0, 0, -104, 91, 28, 17, 1, 30, 0, 1, 0, 41, 0, -104, 91, 28)
 
         // Call
-        val packet = ActivatePacket(packetInjector, byteArrayOf())
+        val packet = ActivatePacket(medtrumPump, nowMs = dateUtil::now, basalProfile = byteArrayOf())
         val result = packet.handleResponse(response)
 
         // Expected values

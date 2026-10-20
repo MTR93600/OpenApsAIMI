@@ -1,5 +1,7 @@
 package app.aaps.plugins.source
 
+import app.aaps.core.data.plugin.PluginType
+import app.aaps.core.interfaces.configuration.ConfigBuilder
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.keys.interfaces.PreferenceItem
@@ -27,13 +29,12 @@ import dev.zacsweers.metro.binding
 /**
  * [DexcomOnePlusHost] on iPhone.
  *
- * ## The plugin is listed, locked off, and says why
+ * ## The plugin can be switched on, and says what is different here
  *
- * [notUsableReason] is not null, so [DexcomOnePlusPlugin] carries `EnforcedState.Disabled`: the
- * user can see that Dexcom ONE+ exists, can read in the same place why it does not work here, and
- * cannot switch it on. That is deliberate. A BG source the user can select but that never produces
- * a reading is the worst shape this could take - the loop would simply see "no glucose" and the
- * person would not know why.
+ * [notUsableReason] is null, so nothing locks the switch: the owner asked for the iPhone to be
+ * testable on a real sensor, and that call is theirs to make. What stays is [platformNote], which
+ * replaces the plugin description with the limits below. The person reads them in the place they
+ * switch the plugin on, and then decides.
  *
  * ## What is there now and what is not
  *
@@ -64,19 +65,17 @@ import dev.zacsweers.metro.binding
  *   code. There is still no Status and no Warm-up screen, and the pre-soak slot is left out
  *   because one app gets one scan - see [screenItems].
  *
- * ## Why it stays locked off even so
+ * ## The one that is not a missing feature
  *
  * A Dexcom ONE+ or G7 admits **one display at a time**. `OnePlusMacArbiter` records that two
  * sessions on one transmitter is not a race that sometimes bites but a certainty. So an attempt
- * from an iPhone is not a harmless experiment: it can take a running sensor away from the Dexcom
- * app or from the person's Android phone. Switching this on is the owner's call after a device
- * test, not something a green test run earns.
+ * from an iPhone can take a running sensor away from the Dexcom app or from the person's Android
+ * phone. That is why [platformNote] says it first: no amount of code here removes it, the person
+ * has to know not to run both.
  *
  * ## What the members below do
  *
- * Only [isAvailable], [notUsableReason] and [screenItems] are reached while the plugin is locked
- * off; the plugin's `onStart` never runs. The rest answer honestly anyway, so nothing here lies
- * if the enforcement is ever lifted:
+ * Every member below is now reachable, because the plugin can start:
  *
  * - [productionDriver] is `OnePlusCgmDrivers.default()`, the same registry Android uses: the stub
  *   until the engineering switch is turned on, the shared real driver after that. The stub reports
@@ -95,6 +94,9 @@ import dev.zacsweers.metro.binding
 @Inject
 class DexcomOnePlusIosHost(
     private val aapsLogger: AAPSLogger,
+    // A function, not the type: ConfigBuilder reaches every plugin through ActivePlugin, and this
+    // host is built as part of one of them. Asking for it late keeps that out of the graph build.
+    private val configBuilder: () -> ConfigBuilder,
 ) : DexcomOnePlusHost {
 
     /**
@@ -108,20 +110,10 @@ class DexcomOnePlusIosHost(
 
     override val stagingNamespace: String = OnePlusCgmDrivers.STAGING_NAMESPACE
 
-    override val notUsableReason: TextRef = SourceStrings.dexcom_oneplus_ios_not_ready
+    /** Nothing stops the plugin here any more - the limits are in [platformNote]. */
+    override val notUsableReason: TextRef? = null
 
-    /**
-     * Listed on purpose, which is the one place this host does not copy Android.
-     *
-     * On Android the plugin is offered only when the engineering marker file
-     * `AAPS/extra/engineering_oneplus` exists, because the driver there is an engineering build
-     * that a user should not stumble into. Here the entry is locked off and carries
-     * [notUsableReason]. Listing it is therefore how the person gets told, in the place they would
-     * go looking, instead of finding nothing and wondering.
-     *
-     * One line to change if the owner would rather hide it: return `config.isEngineeringMode()`.
-     */
-    override fun isAvailable(): Boolean = true
+    override val platformNote: TextRef = SourceStrings.dexcom_oneplus_ios_caution
 
     override fun useRealSkeleton(): Boolean = OnePlusCgmDrivers.useRealSkeleton
 
@@ -188,10 +180,10 @@ class DexcomOnePlusIosHost(
      *   with a chooser the user could pick a slot that would quietly take the radio from the other.
      *   Promotion follows from that: it is reached only from the slot conflict dialog, which cannot
      *   appear when there is no pre-soak sensor to conflict with.
-     * - **The plugin is not switched on.** It carries `EnforcedState.Disabled` while
-     *   [notUsableReason] is set, and a screen must not undo that. So Connect adopts the sensor and
-     *   starts the session, and the plugin stays locked off until the owner lifts the enforcement.
      * - **There is no warm-up screen to hand over to**, so a started sensor closes the screen.
+     *
+     * Switching the plugin on after a sensor is adopted goes through [ConfigBuilder], exactly as
+     * the Android Activity does, so the BG source is selected the same way on both phones.
      */
     override fun screenItems(plugin: DexcomOnePlusPlugin): List<PreferenceItem> = listOf(
         DexcomOnePlusIntentKey.Start.withCompose(
@@ -207,9 +199,10 @@ class DexcomOnePlusIosHost(
                         OnePlusCgmDrivers.default()
                     },
                     onActivatePlugin = {
-                        aapsLogger.warn(
-                            LTag.BGSOURCE,
-                            "DEXCOM_ONEPLUS: sensor adopted, plugin left off - it is locked while notUsableReason is set",
+                        configBuilder().performPluginSwitch(
+                            changedPlugin = plugin,
+                            enabled = true,
+                            type = PluginType.BGSOURCE,
                         )
                     },
                     onStarted = { onBack() },

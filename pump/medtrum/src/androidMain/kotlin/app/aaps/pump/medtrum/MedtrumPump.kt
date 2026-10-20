@@ -37,8 +37,8 @@ import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import app.aaps.pump.medtrum.comm.MedtrumProtocolState
 import kotlinx.coroutines.runBlocking
-import java.util.EnumSet
 import java.util.GregorianCalendar
 import kotlin.math.round
 
@@ -52,7 +52,7 @@ class MedtrumPump(
     private val pumpSync: PumpSync,
     private val temporaryBasalStorage: TemporaryBasalStorage,
     private val bolusProgressData: BolusProgressData
-) {
+) : MedtrumProtocolState {
 
     companion object {
 
@@ -71,7 +71,7 @@ class MedtrumPump(
     // Pump state flow
     private val _pumpState = MutableStateFlow(MedtrumPumpState.NONE)
     val pumpStateFlow: StateFlow<MedtrumPumpState> = _pumpState
-    var pumpState: MedtrumPumpState
+    override var pumpState: MedtrumPumpState
         get() = _pumpState.value
         set(value) {
             // Maintain patchPrimed flag: set once we reach PRIMING, clear only on STOPPED
@@ -85,8 +85,8 @@ class MedtrumPump(
         }
 
     // Active alarms
-    private var _activeAlarms: EnumSet<AlarmState> = EnumSet.noneOf(AlarmState::class.java)
-    var activeAlarms: EnumSet<AlarmState>
+    private var _activeAlarms: MutableSet<AlarmState> = mutableSetOf()
+    override var activeAlarms: MutableSet<AlarmState>
         get() = _activeAlarms
         set(value) {
             _activeAlarms = value
@@ -95,7 +95,7 @@ class MedtrumPump(
     // New pump warnings
     private val _pumpWarning = MutableStateFlow(AlarmState.NONE)
     val pumpWarningFlow: StateFlow<AlarmState> = _pumpWarning
-    var pumpWarning: AlarmState
+    override var pumpWarning: AlarmState
         get() = _pumpWarning.value
         set(value) {
             _pumpWarning.value = value
@@ -104,7 +104,7 @@ class MedtrumPump(
     // Prime progress as state flow
     private val _primeProgress = MutableStateFlow(0)
     val primeProgressFlow: StateFlow<Int> = _primeProgress
-    var primeProgress: Int
+    override var primeProgress: Int
         get() = _primeProgress.value
         set(value) {
             _primeProgress.value = value
@@ -128,22 +128,25 @@ class MedtrumPump(
 
     private val _lastBasalRate = MutableStateFlow(0.0)
     val lastBasalRateFlow: StateFlow<Double> = _lastBasalRate
-    val lastBasalRate: Double
+    override var lastBasalRate: Double
         get() = _lastBasalRate.value
+        set(value) {
+            _lastBasalRate.value = value
+        }
 
     private val _reservoirFlow = MutableStateFlow(0.0)
     val reservoirFlow: StateFlow<Double> = _reservoirFlow.asStateFlow()
-    var reservoir: Double
+    override var reservoir: Double
         get() = reservoirFlow.value
         set(value) {
             _reservoirFlow.value = value
         }
 
-    var batteryVoltage_A = 0.0 // Not used in UI
+    override var batteryVoltage_A = 0.0 // Not used in UI
     private val _batteryVoltage_BFlow = MutableStateFlow(0.0)
     val batteryVoltage_BFlow: StateFlow<Double> = _batteryVoltage_BFlow.asStateFlow()
     val batteryFlow: StateFlow<Int?> = MutableStateFlow(null) // Medtrum reports voltage, not percentage
-    var batteryVoltage_B: Double
+    override var batteryVoltage_B: Double
         get() = batteryVoltage_BFlow.value
         set(value) {
             _batteryVoltage_BFlow.value = value
@@ -151,7 +154,7 @@ class MedtrumPump(
 
     /** Stuff stored in preferences */
     private var _patchSessionToken = 0L
-    var patchSessionToken: Long
+    override var patchSessionToken: Long
         get() = _patchSessionToken
         set(value) {
             _patchSessionToken = value
@@ -161,7 +164,7 @@ class MedtrumPump(
     // Note: This is not always incremented by the pump, so it is not a reliable indicator for activation unless we reset it on deactivation
     // see resetPatchParameters()
     private var _patchId = 0L
-    var patchId: Long
+    override var patchId: Long
         get() = _patchId
         set(value) {
             _patchId = value
@@ -169,7 +172,7 @@ class MedtrumPump(
         }
 
     private var _currentSequenceNumber = 0
-    var currentSequenceNumber: Int
+    override var currentSequenceNumber: Int
         get() = _currentSequenceNumber
         set(value) {
             _currentSequenceNumber = value
@@ -177,7 +180,7 @@ class MedtrumPump(
         }
 
     private var _syncedSequenceNumber = 0
-    var syncedSequenceNumber: Int
+    override var syncedSequenceNumber: Int
         get() = _syncedSequenceNumber
         set(value) {
             _syncedSequenceNumber = value
@@ -185,7 +188,7 @@ class MedtrumPump(
         }
 
     private var _actualBasalProfile = byteArrayOf(0)
-    var actualBasalProfile: ByteArray
+    override var actualBasalProfile: ByteArray
         get() = _actualBasalProfile
         set(value) {
             _actualBasalProfile = value
@@ -195,7 +198,7 @@ class MedtrumPump(
 
     private val _lastBolusTimeFlow = MutableStateFlow<Long?>(null) // Time in ms!
     val lastBolusTimeFlow: StateFlow<Long?> = _lastBolusTimeFlow.asStateFlow()
-    var lastBolusTime: Long?
+    override var lastBolusTime: Long?
         get() = lastBolusTimeFlow.value
         set(value) {
             _lastBolusTimeFlow.value = value
@@ -204,7 +207,7 @@ class MedtrumPump(
 
     private val _lastBolusAmountFlow = MutableStateFlow<Double?>(null)
     val lastBolusAmountFlow: StateFlow<Double?> = _lastBolusAmountFlow.asStateFlow()
-    var lastBolusAmount: Double?
+    override var lastBolusAmount: Double?
         get() = lastBolusAmountFlow.value
         set(value) {
             _lastBolusAmountFlow.value = value
@@ -221,7 +224,7 @@ class MedtrumPump(
         }
 
     private var _deviceType: Int = 0 // As reported by pump
-    var deviceType: Int
+    override var deviceType: Int
         get() = _deviceType
         set(value) {
             _deviceType = value
@@ -229,7 +232,7 @@ class MedtrumPump(
         }
 
     private var _swVersion: String = "" // As reported by pump
-    var swVersion: String
+    override var swVersion: String
         get() = _swVersion
         set(value) {
             _swVersion = value
@@ -237,7 +240,7 @@ class MedtrumPump(
         }
 
     private var _patchStartTime = 0L // Time in ms!
-    var patchStartTime: Long
+    override var patchStartTime: Long
         get() = _patchStartTime
         set(value) {
             _patchStartTime = value
@@ -245,7 +248,7 @@ class MedtrumPump(
         }
 
     private var _pumpTimeZoneOffset = 0 // As reported by pump
-    var pumpTimeZoneOffset: Int
+    override var pumpTimeZoneOffset: Int
         get() = _pumpTimeZoneOffset
         set(value) {
             _pumpTimeZoneOffset = value
@@ -253,8 +256,11 @@ class MedtrumPump(
         }
 
     private var _pumpSN = 0L
-    val pumpSN: Long
+    override var pumpSN: Long
         get() = _pumpSN
+        set(value) {
+            _pumpSN = value
+        }
 
     val pumpSNFromSP: Long
         get() =
@@ -266,9 +272,9 @@ class MedtrumPump(
             }
 
     var needCheckTimeUpdate = false
-    var lastTimeReceivedFromPump = 0L // Time in ms!
-    var suspendTime = 0L // Time in ms!
-    var patchAge = 0L // Time in seconds?! // As reported by pump, not used (yet)
+    override var lastTimeReceivedFromPump = 0L // Time in ms!
+    override var suspendTime = 0L // Time in ms!
+    override var patchAge = 0L // Time in seconds?! // As reported by pump, not used (yet)
 
     // bolus status
     private var _bolusStartTime = 0L // Time in ms!
@@ -313,8 +319,11 @@ class MedtrumPump(
         get() = _lastBasalPatchId
 
     private var _lastBasalStartTime = 0L
-    val lastBasalStartTime: Long
+    override var lastBasalStartTime: Long
         get() = _lastBasalStartTime
+        set(value) {
+            _lastBasalStartTime = value
+        }
 
     private var _lastBasalDuration = 0
     val lastBasalDuration: Int
@@ -334,10 +343,10 @@ class MedtrumPump(
     var lastStopPatchId = 0L
 
     // User settings (desired values, to be set on pump)
-    var desiredPatchExpiration = false
-    var desiredAlarmSetting = AlarmSetting.LIGHT_VIBRATE_AND_BEEP
-    var desiredHourlyMaxInsulin: Int = 40
-    var desiredDailyMaxInsulin: Int = 180
+    override var desiredPatchExpiration = false
+    override var desiredAlarmSetting = AlarmSetting.LIGHT_VIBRATE_AND_BEEP
+    override var desiredHourlyMaxInsulin: Int = 40
+    override var desiredDailyMaxInsulin: Int = 180
     var desiredPumpWarning = true
     var desiredPumpWarningExpiryThresholdHours = 72
 
@@ -443,7 +452,7 @@ class MedtrumPump(
         return basal
     }
 
-    fun handleBolusStatusUpdate(bolusType: Int, bolusCompleted: Boolean, amountDelivered: Double) {
+    override fun handleBolusStatusUpdate(bolusType: Int, bolusCompleted: Boolean, amountDelivered: Double) {
         aapsLogger.debug(LTag.PUMP, "handleBolusStatusUpdate: bolusType: $bolusType bolusCompleted: $bolusCompleted amountDelivered: $amountDelivered")
         bolusProgressLastTimeStamp = dateUtil.now()
         _bolusAmountDelivered.value = amountDelivered
@@ -451,11 +460,11 @@ class MedtrumPump(
         bolusDone = bolusCompleted
     }
 
-    fun handleBasalStatusUpdate(basalType: BasalType, basalValue: Double, basalSequence: Int, basalPatchId: Long, basalStartTime: Long) {
+    override fun handleBasalStatusUpdate(basalType: BasalType, basalValue: Double, basalSequence: Int, basalPatchId: Long, basalStartTime: Long) {
         handleBasalStatusUpdate(basalType, basalValue, basalSequence, basalPatchId, basalStartTime, dateUtil.now())
     }
 
-    fun handleBasalStatusUpdate(basalType: BasalType, basalRate: Double, basalSequence: Int, basalPatchId: Long, basalStartTime: Long, receivedTime: Long) {
+    override fun handleBasalStatusUpdate(basalType: BasalType, basalRate: Double, basalSequence: Int, basalPatchId: Long, basalStartTime: Long, receivedTime: Long) {
         aapsLogger.debug(
             LTag.PUMP,
             "handleBasalStatusUpdate: basalType: $basalType basalValue: $basalRate basalSequence: $basalSequence basalPatchId: $basalPatchId basalStartTime: $basalStartTime receivedTime: $receivedTime"
@@ -554,7 +563,7 @@ class MedtrumPump(
         _lastBasalDuration = durationInMin
     }
 
-    fun handleStopStatusUpdate(stopSequence: Int, stopPatchId: Long) {
+    override fun handleStopStatusUpdate(stopSequence: Int, stopPatchId: Long) {
         aapsLogger.debug(LTag.PUMP, "handleStopStatusUpdate: stopSequence: $stopSequence stopPatchId: $stopPatchId")
         lastStopSequence = stopSequence
         if (stopSequence > currentSequenceNumber) {
@@ -595,17 +604,17 @@ class MedtrumPump(
         )
     }
 
-    fun addAlarm(alarm: AlarmState) {
+    override fun addAlarm(alarm: AlarmState) {
         activeAlarms.add(alarm)
         saveActiveAlarms()
     }
 
-    fun removeAlarm(alarm: AlarmState) {
+    override fun removeAlarm(alarm: AlarmState) {
         activeAlarms.remove(alarm)
         saveActiveAlarms()
     }
 
-    fun clearAlarmState() {
+    override fun clearAlarmState() {
         activeAlarms.clear()
         saveActiveAlarms()
     }
@@ -644,7 +653,7 @@ class MedtrumPump(
         patchStartTime = 0L
     }
 
-    fun handleNewPatch(newPatchId: Long, sequenceNumber: Int, newStartTime: Long) {
+    override fun handleNewPatch(newPatchId: Long, sequenceNumber: Int, newStartTime: Long) {
         patchId = newPatchId
         patchStartTime = newStartTime
         currentSequenceNumber = sequenceNumber // We are activated, set the new seq nr
@@ -674,11 +683,11 @@ class MedtrumPump(
     private fun loadActiveAlarms() {
         val alarmsStr = preferences.get(MedtrumStringNonKey.ActiveAlarms)
         activeAlarms = if (alarmsStr.isEmpty()) {
-            EnumSet.noneOf(AlarmState::class.java)
+            mutableSetOf()
         } else {
             alarmsStr.split(",")
                 .mapNotNull { AlarmState.entries.find { alarm -> alarm.name == it } }
-                .let { EnumSet.copyOf(it) }
+                .toMutableSet()
         }
     }
 

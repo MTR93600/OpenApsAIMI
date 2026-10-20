@@ -8,6 +8,8 @@ import app.aaps.shared.clientbindings.ClientGraphBindings
 import dev.zacsweers.metro.createGraphFactory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertFalse
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -19,9 +21,11 @@ import kotlin.test.assertTrue
  * plugin over: a `@ContributesIntoMap` whose dependencies cannot be satisfied is a compile error,
  * but a plugin that throws while being built is only found by building it.
  *
- * The second half is the safety rule. An iPhone cannot enter a Medtrum serial number and cannot
- * start a patch, so the plugin must never become the active pump. If someone lifts the enforcement
- * without building the pairing flow, this test is what says so.
+ * The second half is the safety rule, and it moved. An iPhone can now be told which pump is
+ * yours - the plugin offers a Bluetooth chooser that reads the serial out of the advertisement -
+ * so nothing forces the plugin off any more. What it still cannot do is START a patch, and the
+ * thing that must stay true is that a plugin with no pump chosen reports itself unconfigured, so
+ * the loop never believes it has a pump it cannot reach.
  */
 class IosMedtrumPluginGraphTest {
 
@@ -43,12 +47,19 @@ class IosMedtrumPluginGraphTest {
     }
 
     @Test
-    fun `the user cannot switch the Medtrum pump on`() {
+    fun `the user may switch the Medtrum pump on`() {
         val plugin = graph().medtrumPump
 
-        assertEquals(EnforcedState.Disabled, plugin.enforcedState())
-        assertFalse(plugin.isEnabled(PluginType.PUMP))
-        assertFalse(plugin.isEnabled())
+        assertNotEquals(EnforcedState.Disabled, plugin.enforcedState())
+    }
+
+    @Test
+    fun `the plugin offers the pump chooser so a serial can be learned`() {
+        // Without this screen there is no way to tell the driver which pump is yours, and the
+        // plugin would be switchable but unable to reach anything.
+        val content = graph().medtrumPump.getPreferenceScreenContent()
+
+        assertNotNull(content, "the plugin must offer a settings screen")
     }
 
     @Test
@@ -57,6 +68,6 @@ class IosMedtrumPluginGraphTest {
 
         assertEquals(PumpType.MEDTRUM_NANO, plugin.model())
         assertFalse(plugin.canHandleDST())
-        assertFalse(plugin.isConfigured(), "no serial number can be entered on iOS yet")
+        assertFalse(plugin.isConfigured(), "no pump has been chosen in this test, so it is not configured")
     }
 }

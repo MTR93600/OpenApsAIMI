@@ -241,12 +241,6 @@ enum class NotificationId(
     // Kept after the upstream block on purpose: upstream keeps appending at its end, so a future
     // merge renumbers only these, which this fork controls, rather than any upstream id.
 
-    /** The AAPS folder grant used to look up the ONE+ engineering marker is gone. */
-    DEXCOM_ONEPLUS_DIR_ACCESS_LOST(NORMAL, SYSTEM),
-
-    /** The AAPS folder grant used to look up the Libre 3 engineering marker is gone. */
-    LIBRE3_DIR_ACCESS_LOST(NORMAL, SYSTEM),
-
     /** AIMI predicted hypo risk. Urgent loop alarm. Multiple can be posted. */
     HYPO_RISK_ALARM(URGENT, LOOP, allowMultiple = true),
 

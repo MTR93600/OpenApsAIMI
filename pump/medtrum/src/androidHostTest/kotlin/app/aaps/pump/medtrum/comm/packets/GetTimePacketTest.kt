@@ -1,6 +1,5 @@
 package app.aaps.pump.medtrum.comm.packets
 
-import app.aaps.core.interfaces.di.MetroMemberInjector
 import app.aaps.pump.medtrum.MedtrumTestBase
 import app.aaps.pump.medtrum.extension.toByteArray
 import app.aaps.pump.medtrum.util.MedtrumTimeUtil
@@ -9,25 +8,17 @@ import org.junit.jupiter.api.Test
 
 class GetTimePacketTest : MedtrumTestBase() {
 
-    val medtrumTimeUtil = MedtrumTimeUtil()
+    val medtrumTimeUtil = MedtrumTimeUtil { dateUtil.now() }
 
     /** Test packet specific behavior */
 
-    private val packetInjector = MetroMemberInjector {
-        if (it is GetTimePacket) {
-                it.aapsLogger = aapsLogger
-                it.medtrumPump = medtrumPump
-                it.medtrumTimeUtil = medtrumTimeUtil
-        }
-        true
-    }
 
     @Test fun getRequestGivenPacketWhenCalledThenReturnOpCode() {
         // Inputs
         val opCode = 11
 
         // Call
-        val packet = GetTimePacket(packetInjector)
+        val packet = GetTimePacket(medtrumPump)
         val result = packet.getRequest()
 
         // Expected values
@@ -42,7 +33,7 @@ class GetTimePacketTest : MedtrumTestBase() {
         val response = byteArrayOf(0) + opCode.toByte() + 0.toByteArray(2) + responseCode.toByteArray(2) + time.toByteArray(4)
 
         // Call       
-        val packet = GetTimePacket(packetInjector)
+        val packet = GetTimePacket(medtrumPump)
         val result = packet.handleResponse(response)
 
         // Expected values
@@ -59,7 +50,7 @@ class GetTimePacketTest : MedtrumTestBase() {
         val response = byteArrayOf(0) + opCode.toByte() + 0.toByteArray(2) + responseCode.toByteArray(2) + time.toByteArray(4)
 
         // Call        
-        val packet = GetTimePacket(packetInjector)
+        val packet = GetTimePacket(medtrumPump)
         val result = packet.handleResponse(response.sliceArray(0..response.size - 2))
 
         // Expected values

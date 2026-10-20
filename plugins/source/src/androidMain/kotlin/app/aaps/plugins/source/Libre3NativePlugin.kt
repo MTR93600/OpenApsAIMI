@@ -100,21 +100,15 @@ class Libre3NativePlugin @Inject constructor(
     notificationManager: NotificationManager,
     private val context: Context,
     private val persistenceLayer: PersistenceLayer,
-    private val availabilityProvider: Libre3AvailabilityProvider,
     private val bleRadioPriority: BleRadioPriority,
     private val activePlugin: ActivePlugin,
 ) : AbstractBgSourcePlugin(
     pluginDescription = PluginDescription()
         .mainType(PluginType.BGSOURCE)
-        // Libre 3 native is only offered when the engineering marker file is present in the AAPS
-        // `extra` directory. See Libre3AvailabilityProvider, the only place that decides this.
-        // This was `specialShowInListCondition()` until upstream removed it; same test, same
-        // effect. ActivePlugin.getSpecificPluginsVisibleInList filters on this, so hiding here
-        // removes the plugin from Config Builder, the Setup Wizard, search and Quick Launch at the
-        // same time.
-        // On purpose this is NOT wired into `specialEnableCondition`: a plugin that is already
-        // selected must keep feeding glucose exactly as before.
-        .showInList({ availabilityProvider.isAvailable() })
+        // No `showInList` call on purpose: Libre 3 native is offered in every build. It used to
+        // be hidden unless the marker file `AAPS/extra/engineering_libre3` was there.
+        // PluginDescription.showInList already defaults to `{ true }`, so the missing call is the
+        // gate being gone, not an oversight.
         .composeContent { plugin ->
             BgSourceComposeContent(
                 title = rh.gs(R.string.libre3_native),

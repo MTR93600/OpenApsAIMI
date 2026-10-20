@@ -1,6 +1,5 @@
 package app.aaps.pump.medtrum.comm.packets
 
-import app.aaps.core.interfaces.di.MetroMemberInjector
 import app.aaps.pump.medtrum.MedtrumTestBase
 import app.aaps.pump.medtrum.extension.toByteArray
 import com.google.common.truth.Truth.assertThat
@@ -10,19 +9,13 @@ class GetDeviceTypePacketTest : MedtrumTestBase() {
 
     /** Test packet specific behavior */
 
-    private val packetInjector = MetroMemberInjector {
-        if (it is MedtrumPacket) {
-                it.aapsLogger = aapsLogger
-        }
-        true
-    }
 
     @Test fun getRequestGivenPacketWhenCalledThenReturnOpCode() {
         // Inputs
         val opCode = 6
 
         // Call
-        val packet = GetDeviceTypePacket(packetInjector)
+        val packet = GetDeviceTypePacket()
         val result = packet.getRequest()
 
         // Expected values
@@ -38,7 +31,7 @@ class GetDeviceTypePacketTest : MedtrumTestBase() {
         val response = byteArrayOf(0) + opCode.toByte() + 0.toByteArray(2) + responseCode.toByteArray(2) + deviceType.toByte() + deviceSN.toByteArray(4)
 
         // Call       
-        val packet = GetDeviceTypePacket(packetInjector)
+        val packet = GetDeviceTypePacket()
         val result = packet.handleResponse(response)
 
         // Expected values
@@ -58,7 +51,7 @@ class GetDeviceTypePacketTest : MedtrumTestBase() {
         val response = byteArrayOf(0) + opCode.toByte() + 0.toByteArray(2) + responseCode.toByteArray(2) + deviceType.toByte() + deviceSN.toByteArray(4)
 
         // Call
-        val packet = GetDeviceTypePacket(packetInjector)
+        val packet = GetDeviceTypePacket()
         val result = packet.handleResponse(response.sliceArray(0..response.size - 2))
 
         // Expected values

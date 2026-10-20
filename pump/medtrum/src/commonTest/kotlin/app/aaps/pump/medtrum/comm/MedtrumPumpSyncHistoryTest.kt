@@ -1,9 +1,8 @@
-package app.aaps.pump.medtrum.ios
+package app.aaps.pump.medtrum.comm
 
 import app.aaps.core.data.model.BS
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.PumpSync
-import app.aaps.pump.medtrum.comm.MedtrumBasalRecord
 import app.aaps.pump.medtrum.comm.enums.AlarmState
 import app.aaps.pump.medtrum.comm.enums.BasalEndReason
 import app.aaps.pump.medtrum.comm.enums.BasalType

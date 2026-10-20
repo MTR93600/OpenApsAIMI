@@ -5,10 +5,13 @@ import app.aaps.core.data.pump.defs.ManufacturerType
 import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.plugin.EnforcedState
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.pump.medtrum.MedtrumStrings
+import app.aaps.pump.medtrum.comm.RecordingPumpSync
+import app.aaps.pump.medtrum.comm.FakeDetailedBolusInfoStorage
+import app.aaps.pump.medtrum.comm.FakeTemporaryBasalStorage
 import app.aaps.pump.medtrum.comm.enums.MedtrumPumpState
 import kotlinx.coroutines.test.runTest
 import kotlin.test.BeforeTest
@@ -86,23 +89,24 @@ class IosMedtrumPluginWiringTest {
     }
 
     @Test
-    fun `the plugin is forced off because it cannot pair`() {
+    fun `nothing forces the plugin off any more`() {
+        // It used to carry EnforcedState.Disabled because nothing could tell it which pump was
+        // yours. The pump chooser does that now, so the switch is the person's.
         val applying = medtrumIosPluginDescription().enforcements.filter { it.applies() }
-        assertEquals(1, applying.size, "exactly one enforcement should apply")
-        assertEquals(EnforcedState.Disabled, applying.first().state)
+        assertEquals(0, applying.size, "no enforcement should apply")
     }
 
     @Test
-    fun `the plugin says why it is off in words a user can read`() {
-        val description = medtrumIosPluginDescription().description
-        assertEquals(TextRef.Literal(MEDTRUM_IOS_NOT_READY_REASON), description)
-        assertTrue(MEDTRUM_IOS_NOT_READY_REASON.contains("Not usable on iPhone yet"))
+    fun `the plugin description is a translated resource and not a literal`() {
+        // It was a hand written literal while the module had no string table. It has one now, so
+        // the text a person reads is translated like every other.
+        assertEquals(MedtrumStrings.medtrum_ios_caution, medtrumIosPluginDescription().description)
     }
 
     @Test
-    fun `the reason given to the user and the reason given to the config builder are the same text`() {
-        val enforcement = medtrumIosPluginDescription().enforcements.single()
-        assertEquals(medtrumIosPluginDescription().description, enforcement.reason)
+    fun `the plugin offers the pump chooser and nothing else`() {
+        // One screen, and it is the one that stands between this phone and a running patch.
+        assertEquals(listOf(MedtrumIosIntentKey.PickPump), MedtrumIosIntentKey.entries)
     }
 
     // -- The driver behind it --------------------------------------------------------------------

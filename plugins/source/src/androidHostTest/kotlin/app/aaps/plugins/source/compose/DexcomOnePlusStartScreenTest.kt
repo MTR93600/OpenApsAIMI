@@ -116,7 +116,7 @@ class DexcomOnePlusStartScreenTest {
         override fun slotStore(namespace: String?): OnePlusSensorStore = OnePlusSensorStore(MemoryPrefs())
         override val stagingNamespace: String = "staging"
         override val notUsableReason: TextRef? = null
-        override fun isAvailable(): Boolean = true
+        override val platformNote: TextRef? = null
         override fun useRealSkeleton(): Boolean = false
         override fun productionDriver(): OnePlusCgmDriver = OnePlusCgmDriverStub.instance
         override fun stagingDriver(): OnePlusCgmDriver = OnePlusCgmDriverStub.instance

@@ -23,6 +23,10 @@ import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScanner
  * these says so through [notUsableReason], and the plugin is then locked off and tells the user
  * why. A CGM plugin that is switched on and quietly never produces a reading is read by the dosing
  * engine as "no glucose", which is not the same thing as a reading.
+ *
+ * [platformNote] is the softer half of that: a host that CAN run the driver but has limits worth
+ * reading says so there. It replaces the plugin description and locks nothing, so the person
+ * reads it in the place they switch the plugin on and still decides for themselves.
  */
 interface DexcomOnePlusHost {
 
@@ -55,8 +59,14 @@ interface DexcomOnePlusHost {
      */
     val notUsableReason: TextRef?
 
-    /** Whether the plugin may be offered at all on this phone. */
-    fun isAvailable(): Boolean
+    /**
+     * What this phone does differently, or null when there is nothing to say.
+     *
+     * Shown as the plugin description instead of the generic one. Unlike [notUsableReason] it
+     * never locks the switch - it is for limits the person should know about before they rely on
+     * the plugin, not for a plugin that cannot work.
+     */
+    val platformNote: TextRef?
 
     /** True while the production slot is routed to the real driver rather than the stub. */
     fun useRealSkeleton(): Boolean

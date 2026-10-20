@@ -2,6 +2,9 @@ package app.aaps.pump.medtrum.ios
 
 import app.aaps.core.data.model.BS
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
+import app.aaps.pump.medtrum.comm.RecordingPumpSync
+import app.aaps.pump.medtrum.comm.FakeDetailedBolusInfoStorage
+import app.aaps.pump.medtrum.comm.FakeTemporaryBasalStorage
 import app.aaps.pump.medtrum.comm.MedtrumLogger
 import app.aaps.pump.medtrum.comm.enums.CommandType
 import app.aaps.pump.medtrum.comm.enums.MedtrumPumpState

@@ -1,9 +1,11 @@
 package app.aaps.pump.medtrum
 
 import app.aaps.core.interfaces.pump.BolusProgressData
+import app.aaps.core.interfaces.pump.DetailedBolusInfoStorage
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.interfaces.pump.TemporaryBasalStorage
 import app.aaps.core.interfaces.stats.TddCalculator
+import app.aaps.pump.medtrum.comm.MedtrumPumpSyncHistory
 import app.aaps.pump.medtrum.keys.MedtrumStringNonKey
 import app.aaps.shared.tests.TestBaseWithProfile
 import kotlinx.coroutines.CoroutineScope
@@ -20,8 +22,28 @@ open class MedtrumTestBase : TestBaseWithProfile() {
     @Mock lateinit var tddCalculator: TddCalculator
     @Mock lateinit var pumpSync: PumpSync
     @Mock lateinit var temporaryBasalStorage: TemporaryBasalStorage
+    @Mock lateinit var detailedBolusInfoStorage: DetailedBolusInfoStorage
 
     val bolusProgressData by lazy { BolusProgressData(ch, CoroutineScope(Dispatchers.Unconfined)) }
+
+    /**
+     * Where the shared `GetRecordPacket` writes what it parsed.
+     *
+     * The Android packet used to call [PumpSync] from its own injected fields; the shared one hands
+     * the record to this. It is the real implementation over the same mock, so a test that verifies
+     * a `pumpSync` call still verifies the same call - which is what shows the shared writer and
+     * the old Android packet do the same thing.
+     */
+    val recordSync by lazy {
+        MedtrumPumpSyncHistory(
+            pumpSync = pumpSync,
+            detailedBolusInfoStorage = detailedBolusInfoStorage,
+            temporaryBasalStorage = temporaryBasalStorage,
+            deviceType = { medtrumPump.deviceType },
+            serialProvider = { medtrumPump.pumpSN.toString(radix = 16) },
+            nowMillis = dateUtil::now
+        )
+    }
     lateinit var medtrumPump: MedtrumPump
 
     @BeforeEach

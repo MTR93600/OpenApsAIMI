@@ -64,7 +64,6 @@ class DexcomOnePlusPromotionOrderTest : TestBase() {
     @Mock lateinit var persistenceLayer: PersistenceLayer
     @Mock lateinit var warmupBasalGuard: DexcomOnePlusWarmupBasalGuard
 
-    private val availabilityProvider: DexcomOnePlusAvailabilityProvider = mock()
 
     private val notificationManager: NotificationManager = mock()
     private val bleRadioPriority: BleRadioPriority = mock()
@@ -88,7 +87,7 @@ class DexcomOnePlusPromotionOrderTest : TestBase() {
         whenever(persistenceLayer.insertCgmSourceData(any(), any(), any(), anyOrNull()))
             .thenReturn(PersistenceLayer.TransactionResult())
         plugin = DexcomOnePlusPlugin(
-            rh, logger, preferences, config, notificationManager, DexcomOnePlusAndroidHost(context, availabilityProvider), persistenceLayer,
+            rh, logger, preferences, config, notificationManager, DexcomOnePlusAndroidHost(context), persistenceLayer,
             warmupBasalGuard, bleRadioPriority, activePlugin, rxBus,
         )
         plugin.promotionAlerter = { alerts += it }

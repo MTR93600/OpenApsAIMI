@@ -1,4 +1,4 @@
-package app.aaps.pump.medtrum.ios
+package app.aaps.pump.medtrum.comm
 
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.TE

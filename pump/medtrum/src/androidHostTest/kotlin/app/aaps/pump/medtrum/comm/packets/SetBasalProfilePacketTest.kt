@@ -1,6 +1,5 @@
 package app.aaps.pump.medtrum.comm.packets
 
-import app.aaps.core.interfaces.di.MetroMemberInjector
 import app.aaps.pump.medtrum.MedtrumTestBase
 import app.aaps.pump.medtrum.comm.enums.BasalType
 import app.aaps.pump.medtrum.util.MedtrumTimeUtil
@@ -9,18 +8,10 @@ import org.junit.jupiter.api.Test
 
 class SetBasalProfilePacketTest : MedtrumTestBase() {
 
-    val medtrumTimeUtil = MedtrumTimeUtil()
+    val medtrumTimeUtil = MedtrumTimeUtil { dateUtil.now() }
 
     /** Test packet specific behavior */
 
-    private val packetInjector = MetroMemberInjector {
-        if (it is SetBasalProfilePacket) {
-                it.aapsLogger = aapsLogger
-                it.medtrumPump = medtrumPump
-                it.medtrumTimeUtil = medtrumTimeUtil
-        }
-        true
-    }
 
     @Test fun getRequestGivenPacketWhenCalledThenReturnOpCode() {
         // Inputs
@@ -28,7 +19,7 @@ class SetBasalProfilePacketTest : MedtrumTestBase() {
         val basalProfile = byteArrayOf(8, 2, 3, 4, -1, 0, 0, 0, 0)
 
         // Call
-        val packet = SetBasalProfilePacket(packetInjector, basalProfile)
+        val packet = SetBasalProfilePacket(medtrumPump, basalProfile = basalProfile)
         val result = packet.getRequest()
 
         // Expected values
@@ -42,7 +33,7 @@ class SetBasalProfilePacketTest : MedtrumTestBase() {
         val basalProfile = byteArrayOf(8, 2, 3, 4, -1, 0, 0, 0, 0)
 
         // Call
-        val packet = SetBasalProfilePacket(packetInjector, basalProfile)
+        val packet = SetBasalProfilePacket(medtrumPump, basalProfile = basalProfile)
         val result = packet.handleResponse(response)
 
         // Expected values
@@ -67,7 +58,7 @@ class SetBasalProfilePacketTest : MedtrumTestBase() {
         val basalProfile = byteArrayOf(8, 2, 3, 4, -1, 0, 0, 0, 0)
 
         // Call
-        val packet = SetBasalProfilePacket(packetInjector, basalProfile)
+        val packet = SetBasalProfilePacket(medtrumPump, basalProfile = basalProfile)
         val result = packet.handleResponse(response)
 
         // Expected values

@@ -53,7 +53,6 @@ class DexcomOnePlusSensorAgeRepairTest : TestBase() {
     @Mock lateinit var persistenceLayer: PersistenceLayer
     @Mock lateinit var warmupBasalGuard: DexcomOnePlusWarmupBasalGuard
 
-    private val availabilityProvider: DexcomOnePlusAvailabilityProvider = mock()
 
     private val notificationManager: NotificationManager = mock()
     private val bleRadioPriority: BleRadioPriority = mock()
@@ -80,7 +79,7 @@ class DexcomOnePlusSensorAgeRepairTest : TestBase() {
         whenever(persistenceLayer.getTherapyEventDataIncludingInvalidFromTime(any(), any()))
             .thenReturn(emptyList())
         plugin = DexcomOnePlusPlugin(
-            rh, aapsLogger, preferences, config, notificationManager, DexcomOnePlusAndroidHost(context, availabilityProvider), persistenceLayer,
+            rh, aapsLogger, preferences, config, notificationManager, DexcomOnePlusAndroidHost(context), persistenceLayer,
             warmupBasalGuard, bleRadioPriority, activePlugin, rxBus,
         )
         DexcomOnePlusIngest.reset()

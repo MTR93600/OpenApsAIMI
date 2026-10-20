@@ -1,6 +1,5 @@
 package app.aaps.pump.medtrum.comm.packets
 
-import app.aaps.core.interfaces.di.MetroMemberInjector
 import app.aaps.pump.medtrum.MedtrumTestBase
 import app.aaps.pump.medtrum.extension.toByteArray
 import app.aaps.pump.medtrum.util.MedtrumTimeUtil
@@ -16,15 +15,6 @@ class SetTimePacketTest : MedtrumTestBase() {
 
     /** Test packet specific behavior */
 
-    private val packetInjector = MetroMemberInjector {
-        if (it is MedtrumPacket) {
-                it.aapsLogger = aapsLogger
-            }
-            if (it is SetTimePacket) {
-                it.medtrumTimeUtil = medtrumTimeUtil
-        }
-        true
-    }
 
     @BeforeEach
     fun mock() {
@@ -37,7 +27,7 @@ class SetTimePacketTest : MedtrumTestBase() {
         val time = medtrumTimeUtil.getCurrentTimePumpSeconds()
 
         // Call
-        val packet = SetTimePacket(packetInjector)
+        val packet = SetTimePacket(medtrumPump, medtrumTimeUtil)
         val result = packet.getRequest()
 
         // Expected values

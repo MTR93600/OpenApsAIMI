@@ -16,6 +16,7 @@ import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.StatusLevel
 import app.aaps.pump.medtrum.MedtrumPlugin
 import app.aaps.pump.medtrum.MedtrumPump
+import app.aaps.pump.medtrum.MedtrumStrings
 import app.aaps.pump.medtrum.R
 import app.aaps.pump.medtrum.code.ConnectionState
 import app.aaps.pump.medtrum.comm.enums.AlarmState
@@ -107,9 +108,13 @@ internal class MedtrumOverviewViewModelTest {
         whenever(rh.gs(R.string.pump_type_label)).thenReturn("Pump type")
         whenever(rh.gs(R.string.patch_no_label)).thenReturn("Patch no")
         whenever(rh.gs(R.string.expiry_not_enabled)).thenReturn("")   // empty -> expiry row skipped
-        // pumpState.label values used across the two tests
+        // pumpState.label values used across the two tests. The label is a TextRef now, because the
+        // enum lives in shared code and cannot hold an Android resource id, so both spellings are
+        // stubbed the way the core:ui rows above already do it.
         whenever(rh.gs(R.string.alarm_none)).thenReturn("None")
+        whenever(rh.gs(MedtrumStrings.alarm_none)).thenReturn("None")
         whenever(rh.gs(R.string.status_active)).thenReturn("Active")
+        whenever(rh.gs(MedtrumStrings.status_active)).thenReturn("Active")
         // Banner
         whenever(rh.gs(R.string.patch_not_active)).thenReturn("Patch not activated")
         // Actions

@@ -45,7 +45,6 @@ class DexcomOnePlusSensorCalibrationTest : TestBase() {
     @Mock lateinit var persistenceLayer: PersistenceLayer
     @Mock lateinit var warmupBasalGuard: DexcomOnePlusWarmupBasalGuard
 
-    private val availabilityProvider: DexcomOnePlusAvailabilityProvider = mock()
 
     private val notificationManager: NotificationManager = mock()
     private val bleRadioPriority: BleRadioPriority = mock()
@@ -60,7 +59,7 @@ class DexcomOnePlusSensorCalibrationTest : TestBase() {
         whenever(context.applicationContext).thenReturn(context)
         whenever(rh.gs(any<TextRef>())).thenReturn("not sent")
         plugin = DexcomOnePlusPlugin(
-            rh, aapsLogger, preferences, config, notificationManager, DexcomOnePlusAndroidHost(context, availabilityProvider), persistenceLayer,
+            rh, aapsLogger, preferences, config, notificationManager, DexcomOnePlusAndroidHost(context), persistenceLayer,
             warmupBasalGuard, bleRadioPriority, activePlugin, rxBus,
         )
         OnePlusCgmDrivers.select(useReal = true)

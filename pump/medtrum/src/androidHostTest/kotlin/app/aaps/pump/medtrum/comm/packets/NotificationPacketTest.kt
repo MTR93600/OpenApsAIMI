@@ -1,6 +1,5 @@
 package app.aaps.pump.medtrum.comm.packets
 
-import app.aaps.core.interfaces.di.MetroMemberInjector
 import app.aaps.pump.medtrum.MedtrumTestBase
 import app.aaps.pump.medtrum.comm.enums.BasalType
 import app.aaps.pump.medtrum.comm.enums.MedtrumPumpState
@@ -10,25 +9,17 @@ import org.junit.jupiter.api.Test
 
 class NotificationPacketTest : MedtrumTestBase() {
 
-    val medtrumTimeUtil = MedtrumTimeUtil()
+    val medtrumTimeUtil = MedtrumTimeUtil { dateUtil.now() }
 
     /** Test base behavior of the Notification packet  */
 
-    private val packetInjector = MetroMemberInjector {
-        if (it is NotificationPacket) {
-                it.aapsLogger = aapsLogger
-                it.medtrumPump = medtrumPump
-                it.medtrumTimeUtil = medtrumTimeUtil
-        }
-        true
-    }
 
     @Test fun handleNotificationGivenStatusAndDataThenStateSaved() {
         // Inputs
         val state: Byte = 1
 
         // Call
-        NotificationPacket(packetInjector).handleNotification(byteArrayOf(state))
+        NotificationPacket(medtrumPump).handleNotification(byteArrayOf(state))
 
         // Expected values
         assertThat(MedtrumPumpState.fromByte(state)).isEqualTo(medtrumPump.pumpState)
@@ -39,7 +30,7 @@ class NotificationPacketTest : MedtrumTestBase() {
         val data = byteArrayOf(32, 40, 64, 6, 25, 0, 14, 0, 84, -93, -83, 17, 17, 64, 0, -104, 14, 0, 16)
 
         // Call
-        NotificationPacket(packetInjector).handleNotification(data)
+        NotificationPacket(medtrumPump).handleNotification(data)
 
         // Expected values
         assertThat(medtrumPump.lastBasalType).isEqualTo(BasalType.ABSOLUTE_TEMP)
@@ -55,7 +46,7 @@ class NotificationPacketTest : MedtrumTestBase() {
         val data = byteArrayOf(32, 0, 17, -89, 0, 14, 0, 0, 0, 0, 0, 0)
 
         // Call
-        NotificationPacket(packetInjector).handleNotification(data)
+        NotificationPacket(medtrumPump).handleNotification(data)
 
         // Expected values
         assertThat(medtrumPump.currentSequenceNumber).isEqualTo(167)
@@ -67,7 +58,7 @@ class NotificationPacketTest : MedtrumTestBase() {
         bolusProgressData.start(insulin = 1.0, isSMB = false)
 
         // Call
-        NotificationPacket(packetInjector).handleNotification(data)
+        NotificationPacket(medtrumPump).handleNotification(data)
 
         // Expected values
         assertThat(medtrumPump.bolusDone).isFalse()
@@ -81,7 +72,7 @@ class NotificationPacketTest : MedtrumTestBase() {
         bolusProgressData.start(insulin = 1.0, isSMB = false)
 
         // Call
-        NotificationPacket(packetInjector).handleNotification(data)
+        NotificationPacket(medtrumPump).handleNotification(data)
 
         // Expected values
         assertThat(medtrumPump.bolusDone).isTrue()
@@ -94,7 +85,7 @@ class NotificationPacketTest : MedtrumTestBase() {
         val data = byteArrayOf(67, 41, 67, -1, 122, 95, 18, 0, 73, 1, 19, 0, 1, 0, 20, 0, 0, 0, 0, 16)
 
         // Call
-        NotificationPacket(packetInjector).handleNotification(data)
+        NotificationPacket(medtrumPump).handleNotification(data)
 
         // Expected values
         assertThat(medtrumPump.suspendTime).isEqualTo(0)
@@ -108,7 +99,7 @@ class NotificationPacketTest : MedtrumTestBase() {
         val data = byteArrayOf(32, 34, 17, -128, 4, -2, 20, -1, -89, 5, 6, 0, 18, 64, 35, 0, -54)
 
         // Call
-        NotificationPacket(packetInjector).handleNotification(data)
+        NotificationPacket(medtrumPump).handleNotification(data)
 
         // Expected values
         assertThat(medtrumPump.suspendTime).isEqualTo(0)
@@ -124,7 +115,7 @@ class NotificationPacketTest : MedtrumTestBase() {
         medtrumPump.patchId = 14
 
         // Call
-        NotificationPacket(packetInjector).handleNotification(data)
+        NotificationPacket(medtrumPump).handleNotification(data)
 
         // Expected values
         assertThat(medtrumPump.bolusDone).isTrue()
@@ -139,7 +130,7 @@ class NotificationPacketTest : MedtrumTestBase() {
         medtrumPump.patchId = 15
 
         // Call
-        NotificationPacket(packetInjector).handleNotification(data)
+        NotificationPacket(medtrumPump).handleNotification(data)
 
         // Expected values
         assertThat(medtrumPump.lastBasalType).isEqualTo(BasalType.NONE)
@@ -157,7 +148,7 @@ class NotificationPacketTest : MedtrumTestBase() {
         medtrumPump.patchId = 14
 
         // Call
-        NotificationPacket(packetInjector).handleNotification(data)
+        NotificationPacket(medtrumPump).handleNotification(data)
 
         // Expected values
         assertThat(medtrumPump.lastBasalType).isEqualTo(BasalType.NONE)
@@ -174,7 +165,7 @@ class NotificationPacketTest : MedtrumTestBase() {
         bolusProgressData.start(insulin = 1.0, isSMB = false)
 
         // Call
-        NotificationPacket(packetInjector).handleNotification(data)
+        NotificationPacket(medtrumPump).handleNotification(data)
 
         // Expected values
         assertThat(medtrumPump.bolusDone).isTrue()
@@ -190,7 +181,7 @@ class NotificationPacketTest : MedtrumTestBase() {
         medtrumPump.patchId = 14
 
         // Call
-        NotificationPacket(packetInjector).handleNotification(data)
+        NotificationPacket(medtrumPump).handleNotification(data)
 
         // Expected values
         assertThat(medtrumPump.bolusDone).isTrue()

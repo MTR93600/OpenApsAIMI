@@ -1,6 +1,5 @@
 package app.aaps.pump.medtrum.comm.packets
 
-import app.aaps.core.interfaces.di.MetroMemberInjector
 import app.aaps.pump.medtrum.MedtrumTestBase
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
@@ -9,19 +8,13 @@ class PrimePacketTest : MedtrumTestBase() {
 
     /** Test packet specific behavior */
 
-    private val packetInjector = MetroMemberInjector {
-        if (it is MedtrumPacket) {
-                it.aapsLogger = aapsLogger
-        }
-        true
-    }
 
     @Test fun getRequestGivenPacketWhenCalledThenReturnOpCode() {
         // Inputs
         val opCode = 16
 
         // Call
-        val packet = PrimePacket(packetInjector)
+        val packet = PrimePacket()
         val result = packet.getRequest()
 
         // Expected values

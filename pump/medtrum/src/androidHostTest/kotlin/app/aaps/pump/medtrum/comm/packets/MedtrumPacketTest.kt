@@ -1,6 +1,5 @@
 package app.aaps.pump.medtrum.comm.packets
 
-import app.aaps.core.interfaces.di.MetroMemberInjector
 import app.aaps.pump.medtrum.MedtrumTestBase
 import app.aaps.pump.medtrum.extension.toByteArray
 import com.google.common.truth.Truth.assertThat
@@ -10,19 +9,13 @@ class MedtrumPacketTest : MedtrumTestBase() {
 
     /** Test base behavior of the medtrum packet  */
 
-    private val packetInjector = MetroMemberInjector {
-        if (it is MedtrumPacket) {
-                it.aapsLogger = aapsLogger
-        }
-        true
-    }
 
     @Test fun getRequestGivenPacketWhenCalledThenReturnOpCode() {
         // Inputs
         val opCode = 1
 
         // Call
-        val packet = MedtrumPacket(packetInjector)
+        val packet = MedtrumPacket()
         packet.opCode = opCode.toByte()
         val result = packet.getRequest()
 
@@ -37,7 +30,7 @@ class MedtrumPacketTest : MedtrumTestBase() {
         val response = byteArrayOf(0) + opCode.toByte() + 0x0 + 0x0 + responseCode.toByteArray(2)
 
         // Call        
-        val packet = MedtrumPacket(packetInjector)
+        val packet = MedtrumPacket()
         packet.opCode = opCode.toByte()
         val result = packet.handleResponse(response)
 
@@ -53,7 +46,7 @@ class MedtrumPacketTest : MedtrumTestBase() {
         val response = byteArrayOf(0) + (opCode + 1).toByte() + 0x0 + 0x0 + responseCode.toByteArray(2)
 
         // Call
-        val packet = MedtrumPacket(packetInjector)
+        val packet = MedtrumPacket()
         packet.opCode = opCode.toByte()
         val result = packet.handleResponse(response)
 
@@ -69,7 +62,7 @@ class MedtrumPacketTest : MedtrumTestBase() {
         val response = byteArrayOf(0) + opCode.toByte() + 0x0 + 0x0 + responseCode.toByteArray(2)
 
         // Call
-        val packet = MedtrumPacket(packetInjector)
+        val packet = MedtrumPacket()
         packet.opCode = opCode.toByte()
         val result = packet.handleResponse(response)
 
@@ -85,7 +78,7 @@ class MedtrumPacketTest : MedtrumTestBase() {
         val response = byteArrayOf(0) + opCode.toByte() + 0.toByteArray(2) + responseCode.toByteArray(2)
 
         // Call
-        val packet = MedtrumPacket(packetInjector)
+        val packet = MedtrumPacket()
         packet.opCode = opCode.toByte()
         val result = packet.handleResponse(response)
 
@@ -100,7 +93,7 @@ class MedtrumPacketTest : MedtrumTestBase() {
         val response = byteArrayOf(0) + opCode.toByte() + 0x0 + 0x0
 
         // Call
-        val packet = MedtrumPacket(packetInjector)
+        val packet = MedtrumPacket()
         packet.opCode = opCode.toByte()
         val result = packet.handleResponse(response)
 

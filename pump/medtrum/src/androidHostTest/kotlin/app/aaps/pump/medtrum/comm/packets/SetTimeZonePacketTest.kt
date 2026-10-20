@@ -1,6 +1,5 @@
 package app.aaps.pump.medtrum.comm.packets
 
-import app.aaps.core.interfaces.di.MetroMemberInjector
 import app.aaps.pump.medtrum.MedtrumTestBase
 import app.aaps.pump.medtrum.extension.toByteArray
 import app.aaps.pump.medtrum.util.MedtrumTimeUtil
@@ -21,17 +20,6 @@ class SetTimeZonePacketTest : MedtrumTestBase() {
         whenever(medtrumTimeUtil.getCurrentTimePumpSeconds()).thenReturn(1234567890)
     }
 
-    private val packetInjector = MetroMemberInjector {
-        if (it is MedtrumPacket) {
-                it.aapsLogger = aapsLogger
-            }
-            if (it is SetTimeZonePacket) {
-                it.dateUtil = dateUtil
-                it.medtrumPump = medtrumPump
-                it.medtrumTimeUtil = medtrumTimeUtil
-        }
-        true
-    }
 
     @Test fun getRequestGivenPacketWhenCalledThenReturnOpCode() {
         // Inputs
@@ -40,7 +28,7 @@ class SetTimeZonePacketTest : MedtrumTestBase() {
         val offsetMinutes = dateUtil.getTimeZoneOffsetMinutes(dateUtil.now())
 
         // Call
-        val packet = SetTimeZonePacket(packetInjector)
+        val packet = SetTimeZonePacket(medtrumPump, dateUtil.getTimeZoneOffsetMinutes(dateUtil.now()), medtrumTimeUtil)
         val result = packet.getRequest()
 
         // Expected values
@@ -54,7 +42,7 @@ class SetTimeZonePacketTest : MedtrumTestBase() {
         val offsetMinutes = dateUtil.getTimeZoneOffsetMinutes(dateUtil.now())
 
         // Call
-        val packet = SetTimeZonePacket(packetInjector)
+        val packet = SetTimeZonePacket(medtrumPump, dateUtil.getTimeZoneOffsetMinutes(dateUtil.now()), medtrumTimeUtil)
         val result = packet.handleResponse(response)
 
         // Expected values

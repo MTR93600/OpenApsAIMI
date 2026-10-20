@@ -1,4 +1,4 @@
-package app.aaps.pump.medtrum.ios
+package app.aaps.pump.medtrum.comm
 
 import app.aaps.core.data.model.TE
 import app.aaps.core.data.pump.defs.PumpType
@@ -8,11 +8,6 @@ import app.aaps.core.interfaces.pump.PumpInsulin
 import app.aaps.core.interfaces.pump.PumpRate
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.interfaces.pump.TemporaryBasalStorage
-import app.aaps.pump.medtrum.comm.MedtrumBasalRecord
-import app.aaps.pump.medtrum.comm.MedtrumBolusRecord
-import app.aaps.pump.medtrum.comm.MedtrumLogger
-import app.aaps.pump.medtrum.comm.MedtrumRecordSync
-import app.aaps.pump.medtrum.comm.MedtrumTddRecord
 import app.aaps.pump.medtrum.comm.enums.AlarmState
 import app.aaps.pump.medtrum.comm.enums.BasalType
 import app.aaps.pump.medtrum.comm.enums.BolusType

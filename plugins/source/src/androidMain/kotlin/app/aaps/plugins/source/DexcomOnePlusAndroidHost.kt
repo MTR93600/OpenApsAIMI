@@ -36,7 +36,6 @@ import dev.zacsweers.metro.binding
 @Inject
 class DexcomOnePlusAndroidHost(
     private val context: Context,
-    private val availabilityProvider: DexcomOnePlusAvailabilityProvider,
 ) : DexcomOnePlusHost {
 
     /**
@@ -60,9 +59,10 @@ class DexcomOnePlusAndroidHost(
     /** Android can run the driver, so there is nothing to say and nothing to lock off. */
     override val notUsableReason: TextRef? = null
 
-    private val warmupNotification by lazy { DexcomOnePlusWarmupNotification(appContext) }
+    /** Nor anything that works differently enough here to be worth a line in the description. */
+    override val platformNote: TextRef? = null
 
-    override fun isAvailable(): Boolean = availabilityProvider.isAvailable()
+    private val warmupNotification by lazy { DexcomOnePlusWarmupNotification(appContext) }
 
     override fun useRealSkeleton(): Boolean = OnePlusCgmDrivers.useRealSkeleton
 

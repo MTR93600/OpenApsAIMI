@@ -60,6 +60,7 @@ object StringOwnerModules {
         StringOwnerModule("configuration", "app.aaps.plugins.configuration", "ConfigurationStrings", "ConfigurationStringIds"),
         StringOwnerModule("constraints", "app.aaps.plugins.constraints", "ConstraintsStrings", "ConstraintsStringIds"),
         StringOwnerModule("main", "app.aaps.plugins.main", "MainStrings", "MainStringIds"),
+        StringOwnerModule("medtrum", "app.aaps.pump.medtrum", "MedtrumStrings", "MedtrumStringIds"),
         StringOwnerModule("sensitivity", "app.aaps.plugins.sensitivity", "SensitivityStrings", "SensitivityStringIds"),
         StringOwnerModule("smoothing", "app.aaps.plugins.smoothing", "SmoothingStrings", "SmoothingStringIds"),
         StringOwnerModule("source", "app.aaps.plugins.source", "SourceStrings", "SourceStringIds"),

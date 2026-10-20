@@ -253,20 +253,13 @@ dependencies {
     // verified by building an APK with comboctl un-excluded. Keeping
     // them out of this list would only be tidiness, and it is tidiness that has to be maintained by
     // hand every time a module is added.
-    // :pump:medtrum:proto is the second exception, and for the opposite reason to the paragraph
-    // above. It is a Kotlin Multiplatform module holding the Medtrum protocol for the iOS driver,
-    // and :pump:medtrum does NOT depend on it, so it does not arrive transitively - it is added
-    // here as a separate node carrying its own copy of 45 classes that :pump:medtrum also has, in
-    // the same packages. Both land in the APK and dex merge fails with "Type
-    // app.aaps.pump.medtrum.extension.BoolExtensionKt... is defined multiple times".
-    //
-    // This stayed hidden because the project's CI command runs unit tests and never builds an APK,
-    // so the first `assembleFullDebug` after the Medtrum KMP work was the one that found it.
-    //
-    // Remove this exclusion when the two converge: :pump:medtrum should depend on :pump:medtrum:proto
-    // and delete its own copies, the way the Dash driver is meant to move onto dashctl. Until then
-    // the proto module is an iOS artefact and has no business in the Android APK.
-    val pumpExclusions = setOf(":pump:virtual", ":pump:medtrum:proto")
+    // :pump:medtrum:proto used to be a second exception: a Kotlin Multiplatform module holding a
+    // SECOND copy of 45 Medtrum protocol classes, in the same packages as :pump:medtrum, so both
+    // landed in the APK and dex merge failed with "Type
+    // app.aaps.pump.medtrum.extension.BoolExtensionKt... is defined multiple times". It is gone -
+    // :pump:medtrum is multiplatform itself now and holds the one copy in commonMain, which is
+    // also what the iOS driver links. Nothing to exclude any more.
+    val pumpExclusions = setOf(":pump:virtual")
     rootProject.subprojects
         .filter { it.path.startsWith(":pump:") && it.path !in pumpExclusions && it.buildFile.exists() }
         .forEach {

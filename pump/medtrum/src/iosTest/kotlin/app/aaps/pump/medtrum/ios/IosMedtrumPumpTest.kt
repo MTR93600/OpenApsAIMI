@@ -7,6 +7,9 @@ import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.pump.medtrum.code.ConnectionState
+import app.aaps.pump.medtrum.comm.RecordingPumpSync
+import app.aaps.pump.medtrum.comm.FakeDetailedBolusInfoStorage
+import app.aaps.pump.medtrum.comm.FakeTemporaryBasalStorage
 import app.aaps.pump.medtrum.comm.MedtrumLogger
 import app.aaps.pump.medtrum.comm.enums.AlarmState
 import app.aaps.pump.medtrum.comm.enums.CommandType

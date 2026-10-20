@@ -67,7 +67,6 @@ class Libre3PromotionHandoverTest : TestBase() {
     /** Promotion tells the active calibration plugin to drop the retired sensor's fingersticks. */
     private val activeCalibration: Calibration = mock()
     private val activePlugin: ActivePlugin = mock<ActivePlugin>().also { whenever(it.activeCalibration).thenReturn(activeCalibration) }
-    private val availabilityProvider: Libre3AvailabilityProvider = mock()
 
     private val productionPrefs: SharedPreferences = SharedPreferencesMock()
     private val stagingPrefs: SharedPreferences = SharedPreferencesMock()
@@ -91,7 +90,7 @@ class Libre3PromotionHandoverTest : TestBase() {
         Libre3MacArbiter.reset()
         Libre3CgmDrivers.releaseStagingInstance()?.let { runCatching { it.shutdown() } }
         plugin = Libre3NativePlugin(
-            rh, aapsLogger, preferences, config, notificationManager, context, persistenceLayer, availabilityProvider, bleRadioPriority, activePlugin,
+            rh, aapsLogger, preferences, config, notificationManager, context, persistenceLayer, bleRadioPriority, activePlugin,
         )
     }
 

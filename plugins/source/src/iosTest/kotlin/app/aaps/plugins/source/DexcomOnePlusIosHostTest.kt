@@ -10,28 +10,29 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
- * The iPhone host must refuse out loud, never quietly.
+ * The iPhone host may be switched on now, and must still say what is different here.
  *
- * This is the contract that keeps a person from believing their iPhone is reading a sensor: the
- * plugin is listed, it carries a reason, and what it hands out by itself is the stub, which reports
- * FAILED and never claims a session.
+ * Nothing locks the plugin any more, so the contract moved: the switch is free, the limits are in
+ * the note that replaces the description, and what the host hands out by itself is still the stub
+ * until the engineering switch is turned on.
  *
- * The real driver is shared code now and the host can reach it, so the tests below say which of
- * the two comes back and when. Nothing here builds `OnePlusIosPlatform`: that opens a
- * `CBCentralManager`, which a unit test on the simulator has no business doing.
+ * The real driver is shared code and the host can reach it, so the tests below say which of the
+ * two comes back and when. Nothing here builds `OnePlusIosPlatform`: that opens a
+ * `CBCentralManager`, which a unit test on the simulator has no business doing. The config
+ * builder is never reached either - only the start screen asks for it.
  */
 class DexcomOnePlusIosHostTest {
 
-    private val host = DexcomOnePlusIosHost(SilentLogger)
+    private val host = DexcomOnePlusIosHost(SilentLogger, { error("the config builder is not used here") })
 
     @Test
-    fun `the host says why the plugin cannot work here`() {
-        assertNotNull(host.notUsableReason)
+    fun `nothing locks the plugin on iPhone any more`() {
+        assertNull(host.notUsableReason)
     }
 
     @Test
-    fun `the plugin is listed so the reason can be read`() {
-        assertTrue(host.isAvailable())
+    fun `the host still says what is different on iPhone`() {
+        assertNotNull(host.platformNote)
     }
 
     @Test

@@ -4,7 +4,7 @@ import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.NotificationManager
-import app.aaps.core.interfaces.plugin.EnforcedState
+import app.aaps.core.interfaces.pump.ble.ScannedDevice
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.pump.Pump
@@ -12,7 +12,16 @@ import app.aaps.core.interfaces.pump.PumpPluginBase
 import app.aaps.core.interfaces.queue.CommandQueue
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.keys.interfaces.PreferenceItem
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.core.keys.interfaces.withCompose
+import app.aaps.core.ui.compose.ComposeScreenContent
+import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
+import app.aaps.pump.medtrum.MedtrumStrings
+import app.aaps.pump.medtrum.compose.MedtrumPumpPickerScreen
+import app.aaps.pump.medtrum.util.MedtrumDeviceName
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
@@ -28,24 +37,18 @@ import dev.zacsweers.metro.IntKey as MetroIntKey
  * pump. This class is that registration. All of [Pump] is delegated to the driver through
  * [IosMedtrumDriverHost], so this file holds plugin lifecycle and nothing about therapy.
  *
- * ## It is switched off on purpose, and cannot be switched on
+ ## It can be switched on, and says what is different here
  *
- * The plugin declares [EnforcedState.Disabled], so the user cannot select it and the loop can never
- * reach it. That is not a placeholder, it is the honest answer to a missing piece: **an iPhone
- * cannot start a Medtrum patch.** On Android the user picks the pump in a Bluetooth scan step and
- * then runs a wizard that fills, primes and activates the patch. Only the first half exists here:
+ * The plugin used to declare [EnforcedState.Disabled] because nothing could tell it which pump was
+ * yours. That is no longer true: [MedtrumIosIntentKey.PickPump] opens a Bluetooth scan that reads
+ * the serial out of the advertisement and keeps it, so `MedtrumSessionState.pumpSN` holds a real
+ * value and the transport can match that pump. With a serial the driver connects to a patch that
+ * is already running and the loop can drive it.
  *
- * - the serial number can be learned over Bluetooth: [IosMedtrumDiscoverySession] lists the pumps
- *   nearby and saves the serial of the one that is chosen, so `MedtrumSessionState.pumpSN` can
- *   hold a real value and the transport can match that pump in an advertisement. What is missing
- *   is a screen on top of it, so today only a test drives that session;
- * - nothing calls `MedtrumSession.prime` or `MedtrumSession.activate`, so a fresh patch stays dead;
- * - nothing calls `MedtrumSession.deactivatePatch`, so a patch could not be ended from here either.
- *
- * A pump the user can pick but that can never pair is the worst shape this could take: the loop
- * would look closed and no insulin would be delivered. So the plugin is listed, visibly locked, and
- * says why in its own description. Lifting the enforcement is one line, and the work it waits for
- * is a pump picking screen and a patch activation flow.
+ * What is still missing is **starting a patch**: nothing here calls `MedtrumSession.prime`,
+ * `activate` or `deactivatePatch`, so a fresh patch has to be filled, primed and activated with
+ * the Medtrum app or an Android phone first. The plugin description says exactly that, in the
+ * place a person switches it on, rather than letting them find out with a dead patch.
  *
  * ## Keys and buckets
  *
@@ -70,12 +73,53 @@ class IosMedtrumPlugin(
     private val host: IosMedtrumDriverHost
 ) : PumpPluginBase(
     pluginDescription = medtrumIosPluginDescription(),
+    ownPreferences = MedtrumIosIntentKey.entries,
     aapsLogger = aapsLogger,
     rh = rh,
     preferences = preferences,
     commandQueue = commandQueue,
     notificationManager = notificationManager
 ), Pump by host.driver {
+
+    /**
+     * The settings screen of this plugin: one entry, the pump chooser.
+     *
+     * It opens through [withCompose] rather than an Activity, which is how every shared screen
+     * reaches iOS. The screen is shared code - Android could show the very same one - and the only
+     * iPhone part is the discovery session behind it.
+     */
+    override fun getPreferenceScreenContent(): PreferenceItem = PreferenceSubScreenDef(
+        key = "medtrum_ios_settings",
+        title = TextRef.Literal(MEDTRUM_IOS_PLUGIN_NAME),
+        summary = MedtrumStrings.medtrum_pick_pump_summary,
+        items = listOf(
+            MedtrumIosIntentKey.PickPump.withCompose(
+                ComposeScreenContent { onBack ->
+                    val pumps by host.discovery.pumps.collectAsState()
+                    MedtrumPumpPickerScreen(
+                        devices = pumps.map { ScannedDevice(name = it.name, address = it.id) },
+                        chosenSerialHex = host.store.loadPumpSerial()?.let { MedtrumDeviceName.serialHex(it) },
+                        bluetoothOff = !host.discovery.scanning && pumps.isEmpty(),
+                        onStartScan = {
+                            // The scan needs the radio, and opening it is what makes iOS ask for
+                            // the Bluetooth permission. It happens here rather than in the body of
+                            // the screen because the body runs again on every recomposition, while
+                            // this runs once when the screen appears. Calling it again is safe
+                            // anyway: the central keeps the one manager it already made.
+                            host.openRadio()
+                            host.discovery.start()
+                        },
+                        onStopScan = { host.discovery.stop() },
+                        onSelect = { device ->
+                            pumps.firstOrNull { it.id == device.address }?.let { host.discovery.select(it) }
+                        },
+                        onBack = onBack
+                    )
+                }
+            )
+        ),
+        icon = pluginDescription.icon
+    )
 
     /**
      * Opens the radio once the plugin is really running.
@@ -100,25 +144,16 @@ class IosMedtrumPlugin(
 const val MEDTRUM_IOS_PLUGIN_NAME: String = "Medtrum"
 
 /**
- * Shown under the plugin name in the config builder, next to the locked switch.
- *
- * A literal rather than a translated resource: this module has no string table of its own yet, and
- * adding one would be a bigger change than the text is worth while the plugin cannot be switched
- * on. It has to become a real resource before the enforcement is lifted.
- */
-const val MEDTRUM_IOS_NOT_READY_REASON: String =
-    "Medtrum patch pump. Not usable on iPhone yet: this app cannot enter the pump serial number " +
-        "and cannot start a patch, so it can never connect to your pump. The switch stays off " +
-        "until that is built."
-
-/**
  * What the plugin tells the rest of the app about itself.
  *
+ * No `enforce` any more: the switch is the person's. The description is a real translated resource
+ * now - the module owns a string table since it became multiplatform - and it carries the one
+ * limit that matters, that a patch has to be started elsewhere.
+ *
  * A function rather than an expression inside the constructor call so that a test can read the
- * enforcement without building the plugin and the radio behind it.
+ * description without building the plugin and the radio behind it.
  */
 fun medtrumIosPluginDescription(): PluginDescription = PluginDescription()
     .mainType(PluginType.PUMP)
     .pluginName(TextRef.Literal(MEDTRUM_IOS_PLUGIN_NAME))
-    .description(TextRef.Literal(MEDTRUM_IOS_NOT_READY_REASON))
-    .enforce(EnforcedState.Disabled, TextRef.Literal(MEDTRUM_IOS_NOT_READY_REASON))
+    .description(MedtrumStrings.medtrum_ios_caution)

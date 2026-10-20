@@ -65,7 +65,6 @@ class Libre3PresoakPluginTest : TestBase() {
 
     private val notificationManager: NotificationManager = mock()
     private val activePlugin: ActivePlugin = mock()
-    private val availabilityProvider: Libre3AvailabilityProvider = mock()
 
     private val productionPrefs: SharedPreferences = SharedPreferencesMock()
     private val stagingPrefs: SharedPreferences = SharedPreferencesMock()
@@ -112,7 +111,7 @@ class Libre3PresoakPluginTest : TestBase() {
     }
 
     private fun newPlugin() = Libre3NativePlugin(
-        rh, aapsLogger, preferences, config, notificationManager, context, persistenceLayer, availabilityProvider, bleRadioPriority, activePlugin,
+        rh, aapsLogger, preferences, config, notificationManager, context, persistenceLayer, bleRadioPriority, activePlugin,
     )
 
     private fun storeStagedSensor() {
@@ -366,7 +365,7 @@ class Libre3PresoakPluginTest : TestBase() {
     }
 
     private fun newPlugin(logger: AAPSLogger) = Libre3NativePlugin(
-        rh, logger, preferences, config, notificationManager, context, persistenceLayer, availabilityProvider, bleRadioPriority, activePlugin,
+        rh, logger, preferences, config, notificationManager, context, persistenceLayer, bleRadioPriority, activePlugin,
     )
 
     private class RecordingLogger : AAPSLogger by AAPSLoggerTest() {

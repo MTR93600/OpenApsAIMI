@@ -1,6 +1,5 @@
 package app.aaps.pump.medtrum.comm.packets
 
-import app.aaps.core.interfaces.di.MetroMemberInjector
 import app.aaps.pump.medtrum.MedtrumPump
 import app.aaps.pump.medtrum.MedtrumTestBase
 import app.aaps.pump.medtrum.extension.toByteArray
@@ -11,13 +10,6 @@ class AuthorizePacketTest : MedtrumTestBase() {
 
     /** Test packet specific behavior */
 
-    private val packetInjector = MetroMemberInjector {
-        if (it is AuthorizePacket) {
-                it.aapsLogger = aapsLogger
-                it.medtrumPump = medtrumPump
-        }
-        true
-    }
 
     @Test fun getRequestGivenPacketAndSNWhenCalledThenReturnAuthorizePacket() {
         // Inputs
@@ -28,7 +20,7 @@ class AuthorizePacketTest : MedtrumTestBase() {
         medtrumPump.patchSessionToken = 667
 
         // Call
-        val packet = AuthorizePacket(packetInjector)
+        val packet = AuthorizePacket(medtrumPump)
         val result = packet.getRequest()
 
         // Expected values
@@ -49,7 +41,7 @@ class AuthorizePacketTest : MedtrumTestBase() {
 
         // Call
         val response = byteArrayOf(0) + opCode.toByte() + 0.toByteArray(2) + responseCode.toByteArray(2) + 0.toByte() + deviceType.toByte() + swVerX.toByte() + swVerY.toByte() + swVerZ.toByte()
-        val packet = AuthorizePacket(packetInjector)
+        val packet = AuthorizePacket(medtrumPump)
         val result = packet.handleResponse(response)
 
         // Expected values
@@ -67,7 +59,7 @@ class AuthorizePacketTest : MedtrumTestBase() {
 
         // Call
         val response = byteArrayOf(0) + opCode.toByte() + 0.toByteArray(2) + responseCode.toByteArray(2)
-        val packet = AuthorizePacket(packetInjector)
+        val packet = AuthorizePacket(medtrumPump)
         packet.opCode = opCode.toByte()
         val result = packet.handleResponse(response)
 

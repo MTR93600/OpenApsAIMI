@@ -2,7 +2,6 @@ package app.aaps.pump.medtrum.comm.packets
 
 import app.aaps.core.data.model.BS
 import app.aaps.core.data.time.T
-import app.aaps.core.interfaces.di.MetroMemberInjector
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.DetailedBolusInfoStorage
 import app.aaps.core.interfaces.pump.PumpInsulin
@@ -21,23 +20,11 @@ import org.mockito.kotlin.whenever
 
 class GetRecordPacketTest : MedtrumTestBase() {
 
-    val medtrumTimeUtil = MedtrumTimeUtil()
+    val medtrumTimeUtil = MedtrumTimeUtil { dateUtil.now() }
 
     /** Test packet specific behavior */
 
-    @Mock private lateinit var detailedBolusInfoStorage: DetailedBolusInfoStorage
 
-    private val packetInjector = MetroMemberInjector {
-        if (it is GetRecordPacket) {
-                it.aapsLogger = aapsLogger
-                it.medtrumPump = medtrumPump
-                it.pumpSync = pumpSync
-                it.detailedBolusInfoStorage = detailedBolusInfoStorage
-                it.dateUtil = dateUtil
-                it.medtrumTimeUtil = medtrumTimeUtil
-        }
-        true
-    }
 
     @Test fun getRequestGivenPacketWhenCalledThenReturnOpCode() {
         // Inputs
@@ -45,7 +32,7 @@ class GetRecordPacketTest : MedtrumTestBase() {
         medtrumPump.patchId = 146
 
         // Call
-        val packet = GetRecordPacket(packetInjector, recordIndex)
+        val packet = GetRecordPacket(medtrumPump, recordSync = recordSync, recordIndex = recordIndex)
         val result = packet.getRequest()
 
         // Expected values
@@ -58,7 +45,7 @@ class GetRecordPacketTest : MedtrumTestBase() {
         val data = byteArrayOf(35, 99, 9, 1, 0, 0, -86, 28, 2, -1, -5, -40, -27, -18, 14, 0, -64, 1, -91, -20, -82, 17, -91, -20, -82, 17, 1, 0, 26, 0, 0, 0, -102, 0, -48)
 
         // Call
-        val packet = GetRecordPacket(packetInjector, 0)
+        val packet = GetRecordPacket(medtrumPump, recordSync = recordSync, recordIndex = 0)
         val result = packet.handleResponse(data)
 
         // Expected values
@@ -71,7 +58,7 @@ class GetRecordPacketTest : MedtrumTestBase() {
         val data = byteArrayOf(35, 99, 9, 1, 0, 0, -86, 28, 2, -1, -5, -40, -27, -18, 14, 0, -64)
 
         // Call
-        val packet = GetRecordPacket(packetInjector, 0)
+        val packet = GetRecordPacket(medtrumPump, recordSync = recordSync, recordIndex = 0)
         val result = packet.handleResponse(data)
 
         // Expected values
@@ -98,7 +85,7 @@ class GetRecordPacketTest : MedtrumTestBase() {
         whenever(detailedBolusInfoStorage.findDetailedBolusInfo(timestamp, amount)).thenReturn(detailedBolusInfo)
 
         // Call
-        val packet = GetRecordPacket(packetInjector, 0)
+        val packet = GetRecordPacket(medtrumPump, recordSync = recordSync, recordIndex = 0)
         val result = packet.handleResponse(data)
 
         // Expected values
@@ -130,7 +117,7 @@ class GetRecordPacketTest : MedtrumTestBase() {
         whenever(detailedBolusInfoStorage.findDetailedBolusInfo(timestamp, amount)).thenReturn(null)
 
         // Call
-        val packet = GetRecordPacket(packetInjector, 0)
+        val packet = GetRecordPacket(medtrumPump, recordSync = recordSync, recordIndex = 0)
         val result = packet.handleResponse(data)
 
         // Expected values
@@ -159,7 +146,7 @@ class GetRecordPacketTest : MedtrumTestBase() {
         val duration = T.mins(30).msecs()
 
         // Call
-        val packet = GetRecordPacket(packetInjector, 0)
+        val packet = GetRecordPacket(medtrumPump, recordSync = recordSync, recordIndex = 0)
         val result = packet.handleResponse(data)
 
         // Expected values
@@ -191,7 +178,7 @@ class GetRecordPacketTest : MedtrumTestBase() {
         whenever(detailedBolusInfoStorage.findDetailedBolusInfo(timestamp, amountDirect)).thenReturn(null)
 
         // Call
-        val packet = GetRecordPacket(packetInjector, 0)
+        val packet = GetRecordPacket(medtrumPump, recordSync = recordSync, recordIndex = 0)
         val result = packet.handleResponse(data)
 
         // Expected values
@@ -228,7 +215,7 @@ class GetRecordPacketTest : MedtrumTestBase() {
         val duration = endTime - startTime
 
         // Call
-        val packet = GetRecordPacket(packetInjector, 0)
+        val packet = GetRecordPacket(medtrumPump, recordSync = recordSync, recordIndex = 0)
         val result = packet.handleResponse(data)
 
         // Expected values
@@ -258,7 +245,7 @@ class GetRecordPacketTest : MedtrumTestBase() {
         val duration = endTime - startTime
 
         // Call
-        val packet = GetRecordPacket(packetInjector, 0)
+        val packet = GetRecordPacket(medtrumPump, recordSync = recordSync, recordIndex = 0)
         val result = packet.handleResponse(data)
 
         // Expected values
@@ -288,7 +275,7 @@ class GetRecordPacketTest : MedtrumTestBase() {
         val duration = endTime - startTime
 
         // Call
-        val packet = GetRecordPacket(packetInjector, 0)
+        val packet = GetRecordPacket(medtrumPump, recordSync = recordSync, recordIndex = 0)
         val result = packet.handleResponse(data)
 
         // Expected values
@@ -327,7 +314,7 @@ class GetRecordPacketTest : MedtrumTestBase() {
         }
 
         // Call
-        val packet = GetRecordPacket(packetInjector, 0)
+        val packet = GetRecordPacket(medtrumPump, recordSync = recordSync, recordIndex = 0)
         val result = packet.handleResponse(data)
 
         // Just check the pumpSync here, rest of the behaviour of medtrumPump is tested in MedtrumPumpTest
@@ -367,7 +354,7 @@ class GetRecordPacketTest : MedtrumTestBase() {
         }
 
         // Call
-        val packet = GetRecordPacket(packetInjector, 0)
+        val packet = GetRecordPacket(medtrumPump, recordSync = recordSync, recordIndex = 0)
         val result = packet.handleResponse(data)
 
         // Just check the pumpSync here, rest of the behaviour of medtrumPump is tested in MedtrumPumpTest
@@ -411,7 +398,7 @@ class GetRecordPacketTest : MedtrumTestBase() {
         }
 
         // Call
-        val packet = GetRecordPacket(packetInjector, 0)
+        val packet = GetRecordPacket(medtrumPump, recordSync = recordSync, recordIndex = 0)
         val result = packet.handleResponse(data)
 
         // Just check the pumpSync here, rest of the behaviour of medtrumPump is tested in MedtrumPumpTest
@@ -445,7 +432,7 @@ class GetRecordPacketTest : MedtrumTestBase() {
         val bolusTdd = tdd - basalTdd
 
         // Call
-        val packet = GetRecordPacket(packetInjector, 0)
+        val packet = GetRecordPacket(medtrumPump, recordSync = recordSync, recordIndex = 0)
         val result = packet.handleResponse(data)
 
         // Expected values

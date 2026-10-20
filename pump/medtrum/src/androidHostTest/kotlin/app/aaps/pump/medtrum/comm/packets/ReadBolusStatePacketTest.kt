@@ -1,6 +1,5 @@
 package app.aaps.pump.medtrum.comm.packets
 
-import app.aaps.core.interfaces.di.MetroMemberInjector
 import app.aaps.pump.medtrum.MedtrumTestBase
 import app.aaps.pump.medtrum.extension.toByteArray
 import com.google.common.truth.Truth.assertThat
@@ -10,12 +9,6 @@ class ReadBolusStatePacketTest : MedtrumTestBase() {
 
     /** Test packet specific behavior */
 
-    private val packetInjector = MetroMemberInjector {
-        if (it is MedtrumPacket) {
-                it.aapsLogger = aapsLogger
-        }
-        true
-    }
 
     @Test fun handleResponseGivenPacketWhenValuesSetThenReturnCorrectValues() {
         // Inputs
@@ -25,7 +18,7 @@ class ReadBolusStatePacketTest : MedtrumTestBase() {
         val response = byteArrayOf(0) + opCode.toByte() + 0.toByteArray(2) + responseCode.toByteArray(2) + bolusData
 
         // Call
-        val packet = ReadBolusStatePacket(packetInjector)
+        val packet = ReadBolusStatePacket()
         val result = packet.handleResponse(response)
 
         // Expected values
@@ -41,7 +34,7 @@ class ReadBolusStatePacketTest : MedtrumTestBase() {
         val response = byteArrayOf(0) + opCode.toByte() + 0.toByteArray(2) + responseCode.toByteArray(2)
 
         // Call
-        val packet = ReadBolusStatePacket(packetInjector)
+        val packet = ReadBolusStatePacket()
         val result = packet.handleResponse(response)
 
         // Expected values

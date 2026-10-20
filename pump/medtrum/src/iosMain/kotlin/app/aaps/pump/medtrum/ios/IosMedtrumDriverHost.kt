@@ -8,6 +8,7 @@ import app.aaps.core.interfaces.pump.TemporaryBasalStorage
 import app.aaps.core.interfaces.pump.ble.session.BleRestoreIdentifier
 import app.aaps.core.interfaces.pump.ble.session.CoreBluetoothCentral
 import app.aaps.core.interfaces.resources.TextResolver
+import app.aaps.pump.medtrum.comm.AapsMedtrumLogger
 import app.aaps.pump.medtrum.comm.MedtrumLogger
 import app.aaps.pump.medtrum.session.MedtrumPatchSession
 import app.aaps.pump.medtrum.session.MedtrumSessionState
@@ -137,12 +138,4 @@ class IosMedtrumDriverHost(
         driver.close()
         scope.cancel()
     }
-}
-
-/** Sends the Medtrum protocol log lines to the AAPS log, under [LTag.PUMPBTCOMM]. */
-private class AapsMedtrumLogger(private val aapsLogger: AAPSLogger) : MedtrumLogger {
-
-    override fun debug(tag: String, message: String) = aapsLogger.debug(LTag.PUMPBTCOMM, "$tag $message")
-    override fun warn(tag: String, message: String) = aapsLogger.warn(LTag.PUMPBTCOMM, "$tag $message")
-    override fun error(tag: String, message: String) = aapsLogger.error(LTag.PUMPBTCOMM, "$tag $message")
 }

@@ -1,6 +1,5 @@
 package app.aaps.pump.medtrum.comm.packets
 
-import app.aaps.core.interfaces.di.MetroMemberInjector
 import app.aaps.pump.medtrum.MedtrumTestBase
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
@@ -9,20 +8,13 @@ class StopPatchPacketTest : MedtrumTestBase() {
 
     /** Test packet specific behavior */
 
-    private val packetInjector = MetroMemberInjector {
-        if (it is StopPatchPacket) {
-                it.aapsLogger = aapsLogger
-                it.medtrumPump = medtrumPump
-        }
-        true
-    }
 
     @Test fun getRequestGivenPacketWhenCalledThenReturnOpCode() {
         // Inputs
         val opCode = 31
 
         // Call
-        val packet = StopPatchPacket(packetInjector)
+        val packet = StopPatchPacket(medtrumPump)
         val result = packet.getRequest()
 
         // Expected values
@@ -34,7 +26,7 @@ class StopPatchPacketTest : MedtrumTestBase() {
         val response = byteArrayOf(11, 31, 10, 0, 0, 0, 23, 0, -110, 0, -5, 0)
 
         // Call
-        val packet = StopPatchPacket(packetInjector)
+        val packet = StopPatchPacket(medtrumPump)
         val result = packet.handleResponse(response)
 
         // Expected values
@@ -50,7 +42,7 @@ class StopPatchPacketTest : MedtrumTestBase() {
         val response = byteArrayOf(11, 31, 10, 0, 0, 0, 23, 0, -110)
 
         // Call
-        val packet = StopPatchPacket(packetInjector)
+        val packet = StopPatchPacket(medtrumPump)
         val result = packet.handleResponse(response)
 
         // Expected values

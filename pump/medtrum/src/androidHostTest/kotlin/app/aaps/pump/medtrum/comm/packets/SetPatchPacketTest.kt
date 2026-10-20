@@ -1,6 +1,5 @@
 package app.aaps.pump.medtrum.comm.packets
 
-import app.aaps.core.interfaces.di.MetroMemberInjector
 import app.aaps.pump.medtrum.MedtrumTestBase
 import app.aaps.pump.medtrum.comm.enums.AlarmSetting
 import com.google.common.truth.Truth.assertThat
@@ -10,13 +9,6 @@ class SetPatchPacketTest : MedtrumTestBase() {
 
     /** Test packet specific behavior */
 
-    private val packetInjector = MetroMemberInjector {
-        if (it is SetPatchPacket) {
-                it.aapsLogger = aapsLogger
-                it.medtrumPump = medtrumPump
-        }
-        true
-    }
 
     @Test fun getRequestGivenValuesWhenCalledThenReturnValidArray() {
         // Inputs
@@ -26,7 +18,7 @@ class SetPatchPacketTest : MedtrumTestBase() {
         medtrumPump.desiredDailyMaxInsulin = 180
 
         // Call
-        val packet = SetPatchPacket(packetInjector)
+        val packet = SetPatchPacket(medtrumPump)
         val result = packet.getRequest()
 
         // Expected values

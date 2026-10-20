@@ -67,7 +67,6 @@ class Libre3PromotionTest : TestBase() {
 
     private val notificationManager: NotificationManager = mock()
     private val activeCalibration: Calibration = mock()
-    private val availabilityProvider: Libre3AvailabilityProvider = mock()
 
     private val productionPrefs: SharedPreferences = SharedPreferencesMock()
     private val stagingGate = GatedPreferences(SharedPreferencesMock())
@@ -135,7 +134,7 @@ class Libre3PromotionTest : TestBase() {
         val plugins = mock<ActivePlugin>()
         whenever(plugins.activeCalibration).thenReturn(calibration)
         return Libre3NativePlugin(
-            rh, logger, preferences, config, notificationManager, context, persistenceLayer, availabilityProvider, bleRadioPriority, plugins,
+            rh, logger, preferences, config, notificationManager, context, persistenceLayer, bleRadioPriority, plugins,
         )
     }
 

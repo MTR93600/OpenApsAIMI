@@ -7,7 +7,6 @@ import android.os.IBinder
 import android.os.SystemClock
 import app.aaps.core.data.model.BS
 import app.aaps.core.data.time.T
-import app.aaps.core.interfaces.di.MetroMemberInjector
 import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
@@ -22,9 +21,11 @@ import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.DetailedBolusInfoStorage
 import app.aaps.core.interfaces.pump.PumpInsulin
 import app.aaps.core.interfaces.pump.PumpSync
+import app.aaps.core.interfaces.pump.TemporaryBasalStorage
 import app.aaps.core.interfaces.queue.CommandQueue
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.bus.RxBus
+import app.aaps.core.interfaces.stats.TddCalculator
 import app.aaps.core.interfaces.rx.collectResilient
 import app.aaps.core.interfaces.rx.events.EventAppExit
 import app.aaps.core.interfaces.rx.events.EventPumpStatusChanged
@@ -66,7 +67,10 @@ import app.aaps.pump.medtrum.keys.MedtrumBooleanKey
 import app.aaps.pump.medtrum.keys.MedtrumIntKey
 import app.aaps.pump.medtrum.keys.MedtrumStringKey
 import app.aaps.pump.medtrum.keys.MedtrumStringNonKey
+import app.aaps.pump.medtrum.comm.AapsMedtrumLogger
+import app.aaps.pump.medtrum.comm.MedtrumPumpSyncHistory
 import app.aaps.pump.medtrum.util.MedtrumSnUtil
+import app.aaps.pump.medtrum.util.MedtrumTimeUtil
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -81,7 +85,6 @@ import kotlin.math.abs
 
 class MedtrumService : MetroService(), MedtrumBleCallback {
 
-    @Inject lateinit var injector: MetroMemberInjector
     @Inject lateinit var aapsLogger: AAPSLogger
     @Inject lateinit var rxBus: RxBus
     @Inject lateinit var preferences: Preferences
@@ -96,9 +99,46 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
     @Inject lateinit var bleTransport: MedtrumBleTransport
     @Inject lateinit var pumpSync: PumpSync
     @Inject lateinit var detailedBolusInfoStorage: DetailedBolusInfoStorage
+    @Inject lateinit var temporaryBasalStorage: TemporaryBasalStorage
+    // Used to be injected into ActivatePacket itself. The shared packet takes the number instead,
+    // so the service reads it and passes it.
+    @Inject lateinit var tddCalculator: TddCalculator
     @Inject lateinit var dateUtil: DateUtil
     @Inject lateinit var ch: ConcentrationHelper
     @Inject lateinit var bolusProgressData: BolusProgressData
+
+    /**
+     * What the shared packets log through.
+     *
+     * The packets used to inject an [app.aaps.core.interfaces.logging.AAPSLogger] field each. They
+     * are shared code now and take a `MedtrumLogger`, whose default writes nothing, so the service
+     * hands them a real one. Without this the pump comms log would go quiet and nobody would see
+     * it until a problem needed the log.
+     */
+    private val packetLogger by lazy { AapsMedtrumLogger(aapsLogger) }
+
+    /** The shared packets take their clock. Without one they refuse, which is the point. */
+    private val medtrumTimeUtil by lazy { MedtrumTimeUtil(dateUtil::now) }
+
+    /**
+     * Where pump history records are written.
+     *
+     * `GetRecordPacket` used to call [PumpSync] itself from injected fields. The shared packet
+     * hands the parsed record to this seam instead, and this implementation makes the same calls
+     * the Android packet made - it is the one both phones use, so a bolus read off the pump lands
+     * in the database the same way on either.
+     */
+    private val recordSync by lazy {
+        MedtrumPumpSyncHistory(
+            pumpSync = pumpSync,
+            detailedBolusInfoStorage = detailedBolusInfoStorage,
+            temporaryBasalStorage = temporaryBasalStorage,
+            deviceType = { medtrumPump.deviceType },
+            serialProvider = { medtrumPump.pumpSN.toString(radix = 16) },
+            nowMillis = dateUtil::now,
+            logger = packetLogger
+        )
+    }
 
     companion object {
 
@@ -243,7 +283,7 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
     }
 
     fun startPrime(): Boolean {
-        return sendPacketAndGetResponse(PrimePacket(injector))
+        return sendPacketAndGetResponse(PrimePacket())
     }
 
     fun startActivate(): Boolean {
@@ -255,17 +295,24 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
             aapsLogger.error(LTag.PUMP, "startActivate: failed to build basal byte array")
             return false
         }
-        return sendPacketAndGetResponse(ActivatePacket(injector, bytes))
+        return sendPacketAndGetResponse(ActivatePacket(
+                state = medtrumPump,
+                basalProfile = bytes,
+                tddToday = runBlocking { tddCalculator.calculateToday() }?.totalAmount ?: 0.0,
+                timeUtil = medtrumTimeUtil,
+                nowMs = dateUtil::now,
+                logger = packetLogger
+            ))
     }
 
     fun deactivatePatch(): Boolean {
         var result = true
         if (medtrumPump.tempBasalInProgress) {
-            result = sendPacketAndGetResponse(CancelTempBasalPacket(injector))
+            result = sendPacketAndGetResponse(CancelTempBasalPacket(medtrumPump, medtrumTimeUtil, packetLogger))
         }
         // Make sure we have all events of this patch if possible
         loadEvents()
-        if (result) result = sendPacketAndGetResponse(StopPatchPacket(injector))
+        if (result) result = sendPacketAndGetResponse(StopPatchPacket(medtrumPump, packetLogger))
         return result
     }
 
@@ -319,8 +366,8 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
         // But we don't check timeZone each time, therefore we do it here (if needed)
         var result = true
         if (medtrumPump.pumpTimeZoneOffset != dateUtil.getTimeZoneOffsetMinutes(dateUtil.now())) {
-            result = sendPacketAndGetResponse(SetTimePacket(injector))
-            if (result) result = sendPacketAndGetResponse(SetTimeZonePacket(injector))
+            result = sendPacketAndGetResponse(SetTimePacket(medtrumPump, medtrumTimeUtil, packetLogger))
+            if (result) result = sendPacketAndGetResponse(SetTimeZonePacket(medtrumPump, dateUtil.getTimeZoneOffsetMinutes(dateUtil.now()), medtrumTimeUtil, packetLogger))
             timeUpdateNotification(result)
         }
         // Do this here, because TBR can be cancelled due to time change by connect flow
@@ -351,11 +398,11 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
         if (result && medtrumPump.pumpState.isSuspendedByPump()) {
             when (medtrumPump.pumpState) {
                 MedtrumPumpState.HOURLY_MAX_SUSPENDED -> {
-                    result = sendPacketAndGetResponse(ClearPumpAlarmPacket(injector, ALARM_HOURLY_MAX_CLEAR_CODE))
+                    result = sendPacketAndGetResponse(ClearPumpAlarmPacket(ALARM_HOURLY_MAX_CLEAR_CODE))
                 }
 
                 MedtrumPumpState.DAILY_MAX_SUSPENDED  -> {
-                    result = sendPacketAndGetResponse(ClearPumpAlarmPacket(injector, ALARM_DAILY_MAX_CLEAR_CODE))
+                    result = sendPacketAndGetResponse(ClearPumpAlarmPacket(ALARM_DAILY_MAX_CLEAR_CODE))
                 }
 
                 else                                  -> {
@@ -363,7 +410,7 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
                 }
             }
             // Resume suspended pump
-            if (result) result = sendPacketAndGetResponse(ResumePumpPacket(injector))
+            if (result) result = sendPacketAndGetResponse(ResumePumpPacket())
             if (result) medtrumPump.clearAlarmState()
         }
         return result
@@ -371,7 +418,7 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
 
     fun setUserSettings(): Boolean {
         rxBus.send(EventPumpStatusChanged(rh.gs(R.string.setting_pump_settings)))
-        return sendPacketAndGetResponse(SetPatchPacket(injector))
+        return sendPacketAndGetResponse(SetPatchPacket(medtrumPump, packetLogger))
     }
 
     suspend fun setBolus(detailedBolusInfo: DetailedBolusInfo): Boolean {
@@ -467,7 +514,7 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
 
     private fun sendBolusCommand(insulin: Double): Boolean {
         return if (insulin > 0) {
-            sendPacketAndGetResponse(SetBolusPacket(injector, insulin))
+            sendPacketAndGetResponse(SetBolusPacket(insulin))
         } else {
             aapsLogger.debug(LTag.PUMPCOMM, "Bolus not set, insulin: $insulin")
             false
@@ -531,10 +578,10 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
         aapsLogger.debug(LTag.PUMPCOMM, "bolusStop >>>>> @ ${bolusProgressData.state.value?.delivered?.cU ?: 0.0}")
         medtrumPump.bolusErrorReason = rh.gs(R.string.bolus_error_reason_user)
         if (isConnected) {
-            var success = sendPacketAndGetResponse(CancelBolusPacket(injector))
+            var success = sendPacketAndGetResponse(CancelBolusPacket())
             val timeout = System.currentTimeMillis() + T.secs(30).msecs()
             while (!success && System.currentTimeMillis() < timeout) {
-                success = sendPacketAndGetResponse(CancelBolusPacket(injector))
+                success = sendPacketAndGetResponse(CancelBolusPacket())
                 SystemClock.sleep(200)
             }
             aapsLogger.debug(LTag.PUMPCOMM, "bolusStop success: $success")
@@ -547,9 +594,9 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
     fun setTempBasal(absoluteRate: Double, durationInMinutes: Int): Boolean {
         var result = true
         if (medtrumPump.tempBasalInProgress) {
-            result = sendPacketAndGetResponse(CancelTempBasalPacket(injector))
+            result = sendPacketAndGetResponse(CancelTempBasalPacket(medtrumPump, medtrumTimeUtil, packetLogger))
         }
-        if (result) result = sendPacketAndGetResponse(SetTempBasalPacket(injector, absoluteRate, durationInMinutes))
+        if (result) result = sendPacketAndGetResponse(SetTempBasalPacket(medtrumPump, packetLogger, medtrumTimeUtil, absoluteRate, durationInMinutes))
 
         // Get history records, this will update the previous basals
         // Do not call update status directly, reconnection may be needed
@@ -562,7 +609,7 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
     }
 
     fun cancelTempBasal(): Boolean {
-        val result = sendPacketAndGetResponse(CancelTempBasalPacket(injector))
+        val result = sendPacketAndGetResponse(CancelTempBasalPacket(medtrumPump, medtrumTimeUtil, packetLogger))
 
         // Get history records, this will update the previous basals
         // Do not call update status directly, reconnection may be needed
@@ -579,9 +626,9 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
         // Update basal affects the TBR records (the pump will cancel the TBR, set our basal profile, and resume the TBR in a new record)
         // Cancel any TBR in progress
         if (medtrumPump.tempBasalInProgress) {
-            result = sendPacketAndGetResponse(CancelTempBasalPacket(injector))
+            result = sendPacketAndGetResponse(CancelTempBasalPacket(medtrumPump, medtrumTimeUtil, packetLogger))
         }
-        val packet = medtrumPump.buildMedtrumProfileArray(profile)?.let { SetBasalProfilePacket(injector, it) }
+        val packet = medtrumPump.buildMedtrumProfileArray(profile)?.let { SetBasalProfilePacket(medtrumPump, packetLogger, medtrumTimeUtil, basalProfile = it) }
         if (result) result = packet?.let { sendPacketAndGetResponse(it) } == true
 
         // Get history records, this will update the pump state and add changes in TBR to AAPS history
@@ -598,7 +645,7 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
         if (medtrumPump.syncedSequenceNumber < medtrumPump.currentSequenceNumber) {
             for (sequence in (medtrumPump.syncedSequenceNumber + 1)..medtrumPump.currentSequenceNumber) {
                 rxBus.send(EventPumpStatusChanged(rh.gs(R.string.syncing_records, (medtrumPump.currentSequenceNumber - sequence + 1))))
-                val packet = GetRecordPacket(injector, sequence)
+                val packet = GetRecordPacket(medtrumPump, sequence, recordSync, medtrumTimeUtil, packetLogger)
                 result = sendPacketAndGetResponse(packet, COMMAND_SYNC_TIMEOUT_SEC)
                 if (!result && packet.failed) {
                     // Record may be broken for unkown reasons, try the next packet if that fails abort
@@ -841,7 +888,7 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
 
     override fun onNotification(data: ByteArray) {
         aapsLogger.debug(LTag.PUMPCOMM, "<<<<< onNotification ${data.contentToString()}")
-        NotificationPacket(injector).handleNotification(data)
+        NotificationPacket(medtrumPump, medtrumTimeUtil, packetLogger).handleNotification(data)
     }
 
     override fun onIndication(data: ByteArray) {
@@ -968,7 +1015,7 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
 
         override fun onEnter() {
             aapsLogger.debug(LTag.PUMPCOMM, "Medtrum Service reached AuthState")
-            mPacket = AuthorizePacket(injector)
+            mPacket = AuthorizePacket(medtrumPump, packetLogger)
             mPacket?.getRequest()?.let { bleTransport.sendMessage(it) }
             scope.launch {
                 waitForResponse(COMMAND_CONNECTING_TIMEOUT_SEC)
@@ -996,7 +1043,7 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
 
         override fun onEnter() {
             aapsLogger.debug(LTag.PUMPCOMM, "Medtrum Service reached GetDeviceTypeState")
-            mPacket = GetDeviceTypePacket(injector)
+            mPacket = GetDeviceTypePacket()
             mPacket?.getRequest()?.let { bleTransport.sendMessage(it) }
             scope.launch {
                 waitForResponse(COMMAND_CONNECTING_TIMEOUT_SEC)
@@ -1028,7 +1075,7 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
 
         override fun onEnter() {
             aapsLogger.debug(LTag.PUMPCOMM, "Medtrum Service reached GetTimeState")
-            mPacket = GetTimePacket(injector)
+            mPacket = GetTimePacket(medtrumPump, medtrumTimeUtil, packetLogger)
             mPacket?.getRequest()?.let { bleTransport.sendMessage(it) }
             scope.launch {
                 waitForResponse(COMMAND_CONNECTING_TIMEOUT_SEC)
@@ -1063,7 +1110,7 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
 
         override fun onEnter() {
             aapsLogger.debug(LTag.PUMPCOMM, "Medtrum Service reached SetTimeState")
-            mPacket = SetTimePacket(injector)
+            mPacket = SetTimePacket(medtrumPump, medtrumTimeUtil, packetLogger)
             mPacket?.getRequest()?.let { bleTransport.sendMessage(it) }
             scope.launch {
                 waitForResponse(COMMAND_CONNECTING_TIMEOUT_SEC)
@@ -1091,7 +1138,7 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
 
         override fun onEnter() {
             aapsLogger.debug(LTag.PUMPCOMM, "Medtrum Service reached SetTimeZoneState")
-            mPacket = SetTimeZonePacket(injector)
+            mPacket = SetTimeZonePacket(medtrumPump, dateUtil.getTimeZoneOffsetMinutes(dateUtil.now()), medtrumTimeUtil, packetLogger)
             mPacket?.getRequest()?.let { bleTransport.sendMessage(it) }
             scope.launch {
                 waitForResponse(COMMAND_CONNECTING_TIMEOUT_SEC)
@@ -1121,7 +1168,7 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
 
         override fun onEnter() {
             aapsLogger.debug(LTag.PUMPCOMM, "Medtrum Service reached SynchronizeState")
-            mPacket = SynchronizePacket(injector)
+            mPacket = SynchronizePacket(medtrumPump, medtrumTimeUtil, packetLogger)
             mPacket?.getRequest()?.let { bleTransport.sendMessage(it) }
             scope.launch {
                 waitForResponse(COMMAND_CONNECTING_TIMEOUT_SEC)
@@ -1149,7 +1196,7 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
 
         override fun onEnter() {
             aapsLogger.debug(LTag.PUMPCOMM, "Medtrum Service reached SubscribeState")
-            mPacket = SubscribePacket(injector)
+            mPacket = SubscribePacket()
             mPacket?.getRequest()?.let { bleTransport.sendMessage(it) }
             scope.launch {
                 waitForResponse(COMMAND_CONNECTING_TIMEOUT_SEC)

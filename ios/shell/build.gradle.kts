@@ -58,7 +58,7 @@ val migratedModules = listOf(
     // `.claude` walk above drowned them among ~47 phantom modules, so the real message was never
     // read. Not listing a module that builds for iOS means its code is simply absent from the
     // framework Swift sees - which for `:pump:medtrum:proto` is the whole iOS Medtrum driver.
-    ":pump:medtrum:proto",
+    ":pump:medtrum",
     ":pump:omnipod:dashctl",
     ":pump:ui",
     ":pump:virtual",

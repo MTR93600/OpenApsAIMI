@@ -1,6 +1,5 @@
 package app.aaps.pump.medtrum.comm.packets
 
-import app.aaps.core.interfaces.di.MetroMemberInjector
 import app.aaps.pump.medtrum.MedtrumTestBase
 import app.aaps.pump.medtrum.comm.enums.BasalType
 import app.aaps.pump.medtrum.util.MedtrumTimeUtil
@@ -9,18 +8,10 @@ import org.junit.jupiter.api.Test
 
 class SetTempBasalPacketTest : MedtrumTestBase() {
 
-    val medtrumTimeUtil = MedtrumTimeUtil()
+    val medtrumTimeUtil = MedtrumTimeUtil { dateUtil.now() }
 
     /** Test packet specific behavior */
 
-    private val packetInjector = MetroMemberInjector {
-        if (it is SetTempBasalPacket) {
-                it.aapsLogger = aapsLogger
-                it.medtrumPump = medtrumPump
-                it.medtrumTimeUtil = medtrumTimeUtil
-        }
-        true
-    }
 
     @Test fun getRequestGivenPacketWhenCalledThenReturnOpCode() {
         // Inputs
@@ -28,7 +19,7 @@ class SetTempBasalPacketTest : MedtrumTestBase() {
         val duration = 60
 
         // Call
-        val packet = SetTempBasalPacket(packetInjector, absoluteRate, duration)
+        val packet = SetTempBasalPacket(medtrumPump, absoluteRate = absoluteRate, durationInMinutes = duration)
         val result = packet.getRequest()
 
         // Expected values
@@ -44,7 +35,7 @@ class SetTempBasalPacketTest : MedtrumTestBase() {
         val response = byteArrayOf(18, 24, 12, 0, 0, 0, 6, 25, 0, 2, 0, -110, 0, -56, -19, 88, 17, -89, 0)
 
         // Call
-        val packet = SetTempBasalPacket(packetInjector, absoluteRate, duration)
+        val packet = SetTempBasalPacket(medtrumPump, absoluteRate = absoluteRate, durationInMinutes = duration)
         val result = packet.handleResponse(response)
 
         // Expected values
@@ -70,7 +61,7 @@ class SetTempBasalPacketTest : MedtrumTestBase() {
         val response = byteArrayOf(18, 24, 12, 0, 0, 0, 6, 25, 0, 2, 0, -110, 0, -56, -19, 88)
 
         // Call
-        val packet = SetTempBasalPacket(packetInjector, absoluteRate, duration)
+        val packet = SetTempBasalPacket(medtrumPump, absoluteRate = absoluteRate, durationInMinutes = duration)
         val result = packet.handleResponse(response)
 
         // Expected values

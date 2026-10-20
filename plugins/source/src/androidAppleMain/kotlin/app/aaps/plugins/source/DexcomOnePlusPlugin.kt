@@ -116,16 +116,11 @@ class DexcomOnePlusPlugin @Inject constructor(
 ) : AbstractBgSourcePlugin(
     pluginDescription = PluginDescription()
         .mainType(PluginType.BGSOURCE)
-        // ONE+ is only offered when the engineering marker file is present in the AAPS `extra`
-        // directory - see DexcomOnePlusAvailabilityProvider, the single place that decides this.
-        // This was `specialShowInListCondition()` until upstream removed it; same test, same
-        // effect. ActivePlugin.getSpecificPluginsVisibleInList filters on this, so hiding here
-        // removes ONE+ from Config Builder, the Setup Wizard, search and Quick Launch alike - it
-        // cannot be newly selected anywhere.
-        // Deliberately NOT wired into `specialEnableCondition`: an already-selected ONE+ must keep
-        // feeding glucose exactly as before. BGSOURCE has no `fallbackIfNotVisible` (only
-        // SENSITIVITY does), which is the existing framework behaviour and is left untouched.
-        .showInList({ host.isAvailable() })
+        // No `showInList` call on purpose: ONE+ is offered in every build, on both platforms.
+        // It used to be hidden unless the marker file `AAPS/extra/engineering_oneplus` was there,
+        // which iOS never honoured, so the same plugin was listed on one phone and not the other.
+        // PluginDescription.showInList already defaults to `{ true }`, so the missing call is the
+        // gate being gone, not an oversight.
         .composeContent { plugin ->
             BgSourceComposeContent(
                 title = rh.gs(SourceStrings.dexcom_oneplus_native),
@@ -134,11 +129,10 @@ class DexcomOnePlusPlugin @Inject constructor(
         .icon(IcPluginByoda)
         .pluginName(SourceStrings.dexcom_oneplus_native)
         .preferencesVisibleInSimpleMode(false)
-        // One description, two answers. On a phone that can run the driver it is the usual one. On
-        // a phone that cannot, the host says why, and that same text is both the description and
-        // the reason on the locked switch - so the limitation is read exactly where someone would
-        // try to switch the plugin on.
-        .description(host.notUsableReason ?: SourceStrings.description_source_dexcom_oneplus_native)
+        // One description, three answers. The usual one on a phone with nothing to add; the host
+        // note on a phone that works with limits; the refusal on a phone that cannot run the
+        // driver at all. Either way the text is read exactly where someone switches the plugin on.
+        .description(host.notUsableReason ?: host.platformNote ?: SourceStrings.description_source_dexcom_oneplus_native)
         .enforce(EnforcedState.Disabled, host.notUsableReason) { host.notUsableReason != null },
     ownPreferences = DexcomOnePlusIntentKey.entries + DexcomOnePlusBooleanKey.entries + DexcomOnePlusIntKey.entries,
     aapsLogger,
