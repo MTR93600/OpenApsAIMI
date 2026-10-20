@@ -32,10 +32,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import app.aaps.core.ui.compose.AapsSpacing
-import app.aaps.plugins.source.R
+import app.aaps.core.ui.compose.stringResource
+import app.aaps.plugins.source.SourceStrings
 
 /**
  * A block of related information, with its own surface.
@@ -165,7 +165,7 @@ fun CgmHelpCard(
             Icon(
                 imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
                 contentDescription = stringResource(
-                    if (expanded) R.string.cgm_help_collapse else R.string.cgm_help_expand,
+                    if (expanded) SourceStrings.cgm_help_collapse else SourceStrings.cgm_help_expand,
                 ),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -285,7 +285,7 @@ fun CgmStepper(
             ) {
                 Text(
                     text = stringResource(
-                        R.string.cgm_step_counter,
+                        SourceStrings.cgm_step_counter,
                         (currentStep + 1).coerceAtMost(labels.size),
                         labels.size,
                     ),

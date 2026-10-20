@@ -315,7 +315,7 @@ class DexcomOnePlusPlugin @Inject constructor(
         // The three screen buttons come from the host, because the screens themselves are a host
         // thing. A host that has none contributes none, so the settings screen does not offer a
         // button that would do nothing.
-        items = host.screenItems() + listOf(
+        items = host.screenItems(this) + listOf(
             DexcomOnePlusBooleanKey.UseRealSkeleton,
             DexcomOnePlusBooleanKey.SendCalibrationToSensor,
             DexcomOnePlusBooleanKey.AutoPromote,

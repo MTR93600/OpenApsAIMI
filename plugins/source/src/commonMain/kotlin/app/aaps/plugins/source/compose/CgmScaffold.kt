@@ -22,10 +22,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTopAppBar
-import app.aaps.plugins.source.R
+import app.aaps.core.ui.compose.stringResource
+import app.aaps.plugins.source.SourceStrings
 
 /**
  * Which job the navigation icon of a ONE+ screen does — see the convention documented on
@@ -75,12 +75,12 @@ fun CgmScaffold(
                         when (navIcon) {
                             CgmNavIcon.Back  -> Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = stringResource(R.string.dexcom_oneplus_nav_back),
+                                contentDescription = stringResource(SourceStrings.dexcom_oneplus_nav_back),
                             )
 
                             CgmNavIcon.Close -> Icon(
                                 imageVector = Icons.Filled.Close,
-                                contentDescription = stringResource(R.string.cgm_nav_close),
+                                contentDescription = stringResource(SourceStrings.cgm_nav_close),
                             )
                         }
                     }

@@ -4,7 +4,6 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriverStub
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
@@ -56,10 +55,11 @@ class DexcomOnePlusIosHostTest {
         assertNull(host.promoteStagingInstance())
     }
 
-    @Test
-    fun `no screen button is offered because there are no screens`() {
-        assertEquals(emptyList(), host.screenItems())
-    }
+    // The screen entry itself is not asserted here. `screenItems` wires the shared start screen to
+    // the plugin, and a unit test on the simulator cannot build a plugin. What that screen does is
+    // covered where it can be run: `DexcomOnePlusStartRulesTest` and `DexcomOnePlusStartStringsTest`
+    // run its rules and its strings on this simulator, and `DexcomOnePlusStartScreenTest` renders it
+    // under Robolectric with a one slot host, which is the iPhone shape.
 
     @Test
     fun `each slot gets its own store`() {

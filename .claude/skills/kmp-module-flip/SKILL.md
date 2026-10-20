@@ -679,6 +679,56 @@ alphabet, padded, no line breaks. And writing a **null** string through `SharedP
 removes the key; say so in the interface's KDoc and keep it, because a store that writes `"null"`
 instead would resurrect a sensor identity that was meant to be cleared.
 
+#### Sharing a screen that lives in an Activity
+
+`DexcomOnePlusStartActivity` was 997 lines and already Compose: a wrapper calling `setContent`, and
+below it the whole screen as private composables. 880 of those lines moved out, leaving a 117 line
+Activity. Five things come up every time, and only the first is in the strings section above.
+
+- **`androidx.compose.ui.res.stringResource` is the Android one.** Swap the import for
+  `app.aaps.core.ui.compose.stringResource` at the same time as `R.string.x` →
+  `XxxStrings.x`; both are called `stringResource` and Kotlin picks by parameter type. A
+  `stringResource(if (a) R.string.x else R.string.y)` converts as-is, because the branches become
+  `TextRef`s.
+- **A runtime permission cannot come from an app-scoped host.** `ActivityCompat.requestPermissions`
+  needs the Activity on top, and a `@SingleIn(AppScope::class)` host only has the application
+  context. Make it a **parameter of the composable** - a two method interface (`granted()`,
+  `request()`) - and let the Android entry point pass one bound to its Activity. A platform with no
+  such step answers `granted() = true`, which makes `request()` unreachable rather than a silent
+  no-op; say that in its KDoc.
+- **`HandlerCompat.post(mainLooper)` becomes `rememberCoroutineScope().launch`.** A scanner callback
+  arrives on a binder thread (Android) or the central's queue (iOS) and has to reach the UI thread.
+  The composition's scope does that on both, and it also drops a hit that arrives after the screen
+  is gone instead of writing into a composition that no longer exists. Where the old code read a
+  live field back from the scanner inside the callback, use `rememberUpdatedState`.
+- **A host method that needs the plugin takes it as a parameter.** The plugin injects the host, so
+  a host that injected the plugin is a Metro cycle. `screenItems(plugin)` costs one call site.
+- **A smart cast dies when a condition moves into a function.** `storedMac != null && ...` let the
+  compiler treat `storedSession` as non-null two lines later; `Rules.adoptsAnotherSensor(storedMac,
+  address)` does not. A safe call at the use site is the same behaviour and compiles.
+
+Where the screen goes is decided by what it imports, not by where its siblings live. This one needs
+`:plugins:dexcom_oneplus`, which has no jvm target, so it went to `androidAppleMain`; the generic
+card and scaffold kit it draws with had no such dependency and went to `commonMain`.
+
+#### The iOS entry point of a shared screen is a preference item, not an Activity
+
+`IntentPreferenceKey.withCompose(ComposeScreenContent { onBack -> Screen(...) })` is how a shared
+screen reaches iOS - the settings tree renders it in place. `IosAimiPlatformPreferenceItems` in
+`:plugins:aps` is the precedent. The Android side keeps `withClick { startActivity(...) }`, so one
+host interface serves both without either pretending.
+
+#### Robolectric Compose tests of a long screen: two traps, one build round each
+
+Both cost a full gate run to find, and neither error message says what to do.
+
+- **A node below the fold of a `LazyColumn` is not composed**, so `assertIsDisplayed` *and*
+  `assertExists` both fail on it. Give each item a `key` and scroll first:
+  `compose.onNode(hasScrollToKeyAction()).performScrollToKey("scanHeader")`.
+- **Text inside a component that merges its semantics** (a chip, a card header with a trailing
+  slot) is not in the merged tree. The failure says so in one line - *"However, the unmerged tree
+  contains 1 node that matches"* - and the fix is `onNodeWithText(text, useUnmergedTree = true)`.
+
 #### Lift one platform call, keep a thousand lines
 
 The 1 059 line session class imported exactly two Android types, both for a wake lock. Replacing them

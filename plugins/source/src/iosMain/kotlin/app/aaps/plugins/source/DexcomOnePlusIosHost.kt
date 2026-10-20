@@ -4,13 +4,20 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.keys.interfaces.PreferenceItem
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.core.keys.interfaces.withCompose
+import app.aaps.core.ui.compose.ComposeScreenContent
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriver
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriverStub
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers
 import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseWatcher
 import app.aaps.plugins.dexcomoneplus.OnePlusIosPlatform
+import app.aaps.plugins.dexcomoneplus.OnePlusLogMarkers
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
+import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScanner
+import app.aaps.plugins.source.compose.DexcomOnePlusStartScreen
+import app.aaps.plugins.source.compose.OnePlusBlePermissionGate
+import app.aaps.plugins.source.keys.DexcomOnePlusIntentKey
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
@@ -52,8 +59,10 @@ import dev.zacsweers.metro.binding
  *   `OnePlusIosCpuLease` answers "no lease" because iOS has nothing with that meaning. The session
  *   already treats that as "the work goes ahead, less protected", and the background mode above is
  *   what stands in its place. It has not been measured on a phone.
- * - **No screens.** There is no Status, Start or Warm-up screen here, so a person has no place to
- *   type a pairing code in. [screenItems] is empty on purpose rather than offering a dead button.
+ * - **One screen, not three.** The sensor start screen is shared code now and opens from this
+ *   plugin's settings, so a person can scan, pick their sensor and type the four digit pairing
+ *   code. There is still no Status and no Warm-up screen, and the pre-soak slot is left out
+ *   because one app gets one scan - see [screenItems].
  *
  * ## Why it stays locked off even so
  *
@@ -152,6 +161,70 @@ class DexcomOnePlusIosHost(
         aapsLogger.warn(LTag.BGSOURCE, "DEXCOM_ONEPLUS: not shown to the user on iPhone: $message")
     }
 
-    /** No Status, Start or Warmup screen here, so the settings screen offers no button for them. */
-    override fun screenItems(): List<PreferenceItem> = emptyList()
+    /**
+     * One scan on this phone, so this is the scan: asking for it takes the radio from whatever the
+     * driver was doing. That is the right trade on the screen whose whole job is to find a sensor.
+     */
+    override fun screenScanner(): OnePlusBleScanner =
+        platform.scanner(hint = null, slot = OnePlusLogMarkers.SLOT_PRODUCTION)
+
+    /**
+     * The sensor start screen, and only that one.
+     *
+     * It is the screen that stands between an iPhone and a first reading: scan, pick the sensor,
+     * type the four digit code from the applicator, connect. The screen itself is shared code, so
+     * what a person reads and the order they do things in are the same as on Android.
+     *
+     * It opens inside the settings tree through [withCompose] rather than through an Activity,
+     * which is how every other shared screen reaches iOS.
+     *
+     * Status and Warm-up are still Android Activities and have no entry here, so the settings
+     * screen offers no button for them rather than a button that does nothing.
+     *
+     * Three callbacks have no iPhone answer and say so instead of pretending:
+     *
+     * - **The pre-soak slot is absent.** `onStagingDriver` is null, so the screen does not draw the
+     *   slot chooser at all. A second slot needs a second scan and CoreBluetooth gives an app one;
+     *   with a chooser the user could pick a slot that would quietly take the radio from the other.
+     *   Promotion follows from that: it is reached only from the slot conflict dialog, which cannot
+     *   appear when there is no pre-soak sensor to conflict with.
+     * - **The plugin is not switched on.** It carries `EnforcedState.Disabled` while
+     *   [notUsableReason] is set, and a screen must not undo that. So Connect adopts the sensor and
+     *   starts the session, and the plugin stays locked off until the owner lifts the enforcement.
+     * - **There is no warm-up screen to hand over to**, so a started sensor closes the screen.
+     */
+    override fun screenItems(plugin: DexcomOnePlusPlugin): List<PreferenceItem> = listOf(
+        DexcomOnePlusIntentKey.Start.withCompose(
+            ComposeScreenContent { onBack ->
+                DexcomOnePlusStartScreen(
+                    host = this@DexcomOnePlusIosHost,
+                    // iOS has no permission to check before a scan: CoreBluetooth prompts on the
+                    // first one.
+                    permissions = OnePlusBlePermissionGate.NoSeparateStep,
+                    onBack = onBack,
+                    onEnsureDriver = {
+                        plugin.syncDriverFromPrefs()
+                        OnePlusCgmDrivers.default()
+                    },
+                    onActivatePlugin = {
+                        aapsLogger.warn(
+                            LTag.BGSOURCE,
+                            "DEXCOM_ONEPLUS: sensor adopted, plugin left off - it is locked while notUsableReason is set",
+                        )
+                    },
+                    onStarted = { onBack() },
+                    onBeginStaging = { plugin.beginStaging(it) },
+                    onIsStagingSensor = { plugin.isStagingSensor(it) },
+                    onCancelStaging = { plugin.cancelStaging() },
+                    onOpenPromote = {
+                        aapsLogger.warn(LTag.BGSOURCE, "DEXCOM_ONEPLUS: no promote screen on iPhone")
+                    },
+                    onStagingDriver = null,
+                    onSensorSessionStarted = { address, previousMac ->
+                        plugin.onSensorSessionStarted(address, previousMac)
+                    },
+                )
+            },
+        ),
+    )
 }

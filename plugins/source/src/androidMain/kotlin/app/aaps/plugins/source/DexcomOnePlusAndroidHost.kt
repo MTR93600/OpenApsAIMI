@@ -11,6 +11,8 @@ import app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers
 import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseWatcher
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
+import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScanner
+import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScannerAndroid
 import app.aaps.plugins.source.activities.DexcomOnePlusStartActivity
 import app.aaps.plugins.source.activities.DexcomOnePlusStatusActivity
 import app.aaps.plugins.source.activities.DexcomOnePlusWarmupActivity
@@ -84,7 +86,14 @@ class DexcomOnePlusAndroidHost(
 
     override fun alert(message: String) = warmupNotification.alert(message)
 
-    override fun screenItems(): List<PreferenceItem> = listOf(
+    /**
+     * The same scanner the start screen built for itself before it became shared code: its own
+     * instance, with no hint until the screen sets one.
+     */
+    override fun screenScanner(): OnePlusBleScanner =
+        OnePlusBleScannerAndroid(appContext, sessionHint = null)
+
+    override fun screenItems(plugin: DexcomOnePlusPlugin): List<PreferenceItem> = listOf(
         DexcomOnePlusIntentKey.Status.withClick { open(DexcomOnePlusStatusActivity::class.java) },
         DexcomOnePlusIntentKey.Start.withClick { open(DexcomOnePlusStartActivity::class.java) },
         DexcomOnePlusIntentKey.Warmup.withClick { open(DexcomOnePlusWarmupActivity::class.java) },

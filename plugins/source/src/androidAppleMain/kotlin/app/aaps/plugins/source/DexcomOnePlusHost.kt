@@ -6,6 +6,7 @@ import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriver
 import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseWatcher
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
+import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScanner
 
 /**
  * Everything [DexcomOnePlusPlugin] needs from the phone it runs on.
@@ -95,10 +96,26 @@ interface DexcomOnePlusHost {
     fun alert(message: String)
 
     /**
+     * A scanner for the setup screens to drive themselves, separate from the driver's own.
+     *
+     * The start screen lists what is in range so the user can pick their sensor, which is a
+     * different job from the driver's pre-connect wait for one known MAC.
+     *
+     * ⚠️ One radio. On Android this is a second scan next to the driver's, which is what it has
+     * always been. On iPhone an app gets a single scan from CoreBluetooth, so asking for this takes
+     * the radio from whatever the driver was doing. That is the right trade on a screen whose whole
+     * purpose is to find a sensor, and it is the same limitation that leaves the pre-soak slot out.
+     */
+    fun screenScanner(): OnePlusBleScanner
+
+    /**
      * The entries that open this plugin's own screens, for the settings screen.
      *
      * Empty on a host that has no such screens, so the settings screen simply does not offer them
      * rather than offering a button that does nothing.
+     *
+     * @param plugin the plugin these screens act on. It is passed in rather than injected because
+     *   the plugin builds the host, so a host that asked for the plugin would be a loop.
      */
-    fun screenItems(): List<PreferenceItem>
+    fun screenItems(plugin: DexcomOnePlusPlugin): List<PreferenceItem>
 }
