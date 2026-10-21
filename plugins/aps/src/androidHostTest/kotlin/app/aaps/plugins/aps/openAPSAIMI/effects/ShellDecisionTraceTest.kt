@@ -6345,7 +6345,7 @@ Failed to save AIMI Decision JSON: lateinit property appendCap has not been init
 
         private val MEAL_ABSORPTION_FIRST_WAVE_TRACE = """
             READ key=DoubleKey.OApsAIMIHighBg value=0.00
-            LOG 🍽️ MEAL_ABSORPTION: FIRST_WAVE B=1.00 pri=true waves=1 (FIRST_WAVE B=1.00 π=0.85 K=1.00 T=0.00 P=0.35)
+            LOG 🍽️ MEAL_ABSORPTION: FIRST_WAVE B=1.00 pri=true waves=1 (FIRST_WAVE B=1.00 π=0.85 K=1.00 T=0.00 P=0.00)
         """.trimIndent()
 
         private val VIRTUAL_COB_DECLARED_TRACE = """
@@ -7292,7 +7292,7 @@ READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
 READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
 READ key=AimiLongKey.LastPrebolusTime value=0
 READ key=DoubleKey.OApsAIMIHighBg value=0.00
-LOG 🍽️ MEAL_ABSORPTION: FIRST_WAVE B=0.72 pri=true waves=1 (FIRST_WAVE B=0.72 π=0.85 K=0.50 T=0.00 P=0.35)
+LOG 🍽️ MEAL_ABSORPTION: FIRST_WAVE B=0.68 pri=true waves=1 (FIRST_WAVE B=0.68 π=0.85 K=0.50 T=0.00 P=0.00)
 READ key=BooleanKey.OApsAIMISensorConfidenceCgmFirst value=false
 READ key=BooleanKey.OApsAIMIEffortActivityProtection value=false
 READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
@@ -7311,7 +7311,7 @@ READ key=DoubleKey.OApsAIMIHyperDeepDevMgdl value=0.00
 READ key=DoubleKey.OApsAIMIHighBg value=0.00
 READ key=DoubleKey.OApsAIMIweight value=70.00
 LOG 🧠 ATTN_MASK: auto=0.17 inflam=0.00 hormonal=0.00
-LOG 🧠 LATENT: meal=0.92 endo=0.00 siCirc=1.00 resist=0.12 sleep=0.00 sensor=0.11
+LOG 🧠 LATENT: meal=0.90 endo=0.00 siCirc=1.00 resist=0.12 sleep=0.00 sensor=0.11
 EFFECT SetTbr rate=2.40 dur=30 override=true forceExact=false adaptive=1.00
 READ key=BooleanKey.OApsAIMIautodriveAggressiveSmbFloor value=false
 READ key=DoubleKey.OApsAIMIautodrivesmallPrebolus value=0.50
@@ -7353,7 +7353,7 @@ READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
 READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
 READ key=AimiLongKey.LastPrebolusTime value=0
 READ key=DoubleKey.OApsAIMIHighBg value=0.00
-LOG 🍽️ MEAL_ABSORPTION: FIRST_WAVE B=0.72 pri=true waves=1 (FIRST_WAVE B=0.72 π=0.85 K=0.50 T=0.00 P=0.35)
+LOG 🍽️ MEAL_ABSORPTION: FIRST_WAVE B=0.68 pri=true waves=1 (FIRST_WAVE B=0.68 π=0.85 K=0.50 T=0.00 P=0.00)
 READ key=BooleanKey.OApsAIMISensorConfidenceCgmFirst value=false
 READ key=BooleanKey.OApsAIMIEffortActivityProtection value=false
 READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
@@ -7372,7 +7372,7 @@ READ key=DoubleKey.OApsAIMIHyperDeepDevMgdl value=0.00
 READ key=DoubleKey.OApsAIMIHighBg value=0.00
 READ key=DoubleKey.OApsAIMIweight value=70.00
 LOG 🧠 ATTN_MASK: auto=0.17 inflam=0.00 hormonal=0.00
-LOG 🧠 LATENT: meal=0.92 endo=0.00 siCirc=1.00 resist=0.12 sleep=0.00 sensor=0.11
+LOG 🧠 LATENT: meal=0.90 endo=0.00 siCirc=1.00 resist=0.12 sleep=0.00 sensor=0.11
 READ key=DoubleKey.OApsAIMIActivityBasalCapFactor value=1.30
 LOG 🏃 ACTIVITY_BASAL_CAP[AUTODRIVE_V3_DIRECT]: 2.40→1.30 U/h (≤ 1.30× profile 1.00)
 EFFECT SetTbr rate=1.30 dur=30 override=true forceExact=false adaptive=1.00

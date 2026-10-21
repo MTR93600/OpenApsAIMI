@@ -59,6 +59,20 @@ object MealAbsorptionPhaseEngine {
         val evidence: MealAbsorptionMemory.Evidence = MealAbsorptionMemory.Evidence.NONE,
         /** The raw NONE must not be turned back into the previous phase by the hysteresis. */
         val suppressHold: Boolean = false,
+        /** Belief terms before and after bonus clamping, for export only. */
+        val beliefParts: BeliefParts? = null,
+        /** Phase before hysteresis; a held tick can report NONE here. */
+        val rawPhase: String? = null,
+    )
+
+    data class BeliefParts(
+        val base: Double,
+        val intent: Double,
+        val cob: Double,
+        val physioMeal: Double,
+        val ra: Double,
+        val fastRise: Boolean,
+        val moderateRise: Boolean,
     )
 
     private const val FAST_RISE_DELTA = 2.5
@@ -84,6 +98,7 @@ object MealAbsorptionPhaseEngine {
             stabilized = classified
         }
         return stabilized.copy(
+            rawPhase = classified.phase.name,
             memoryActive = MealAbsorptionMemory.isActive(raw.nowMs),
             waveCount = MealAbsorptionMemory.waveCount,
         )
@@ -107,12 +122,19 @@ object MealAbsorptionPhaseEngine {
         val trajectory = trajectoryScore(input, highBand, gap, gapPrev, projectionLead)
         val physio = physioScore(input)
 
-        var belief = (0.30 * chrono + 0.35 * kinetic + 0.25 * trajectory + 0.10 * physio)
+        val beliefBase = (0.30 * chrono + 0.35 * kinetic + 0.25 * trajectory + 0.10 * physio)
             .coerceIn(0.0, 1.0)
-        if (input.mealIntent) belief = min(1.0, belief + 0.25)
-        if (input.mealCobG >= 5.0) belief = min(1.0, belief + 0.30)
-        if (input.physiologicalPhase.isMealRisk) belief = min(1.0, belief + 0.20)
-        input.estimatedRa?.takeIf { it >= 2.0 }?.let { belief = min(1.0, belief + 0.15) }
+        var belief = beliefBase
+        fun addBonus(on: Boolean, amount: Double): Double {
+            if (!on) return 0.0
+            val before = belief
+            belief = min(1.0, belief + amount)
+            return belief - before
+        }
+        val bonusIntent = addBonus(input.mealIntent, 0.25)
+        val bonusCob = addBonus(input.mealCobG >= 5.0, 0.30)
+        val bonusPhysioMeal = addBonus(input.physiologicalPhase.isMealRisk, 0.20)
+        val bonusRa = addBonus(input.estimatedRa?.let { it >= 2.0 } == true, 0.15)
 
         val fastRise = isFastRise(input)
         val moderateRise = input.deltaMgdlPer5 >= 1.5 ||
@@ -177,6 +199,7 @@ object MealAbsorptionPhaseEngine {
             physioScore = physio,
             evidence = evidence,
             suppressHold = interWaveFloorBlocked,
+            beliefParts = BeliefParts(beliefBase, bonusIntent, bonusCob, bonusPhysioMeal, bonusRa, fastRise, moderateRise),
         )
     }
 
@@ -208,11 +231,9 @@ object MealAbsorptionPhaseEngine {
     }
 
     internal fun physioScore(input: Input): Double {
-        val hrDelta = input.heartRateBpm - input.restingHeartRateBpm
+        // Heart rate can reflect stress, so it is not meal evidence.
         var score = 0.0
-        if (hrDelta in 5..18 && input.deltaMgdlPer5 >= 1.5) score += 0.35
         if (input.stepsLast15m >= 80 && input.deltaMgdlPer5 >= 2.0) score += 0.10
-        if (hrDelta > 18 && input.deltaMgdlPer5 >= 4.0) score -= 0.20
         return score.coerceIn(0.0, 1.0)
     }
 

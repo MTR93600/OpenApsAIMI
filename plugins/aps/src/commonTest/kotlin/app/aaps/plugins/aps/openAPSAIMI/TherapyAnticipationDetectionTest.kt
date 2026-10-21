@@ -4,6 +4,7 @@ import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.TE
 import kotlin.test.Test
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -72,5 +73,19 @@ class TherapyAnticipationDetectionTest {
         val therapy = therapyWith("meal")
         assertTrue(therapy.mealTime)
         assertFalse(therapy.anticipTime)
+    }
+
+    @Test
+    fun anAimiContextNoteDoesNotArmTherapyModes() {
+        val therapy = therapyWith("""AIMI_CONTEXT:ctx-1:{"intent":"SlowCarbMeal","mode":"SPORT","note":"meal delete stop cafe lunch"}""")
+
+        assertFalse(therapy.mealTime)
+        assertFalse(therapy.sportTime)
+        assertFalse(therapy.stopTime)
+        assertFalse(therapy.deleteTime)
+        assertFalse(therapy.lunchTime)
+        assertTrue(therapy.getTimeElapsedSinceLastEvent("meal") < 0L)
+        assertNull(therapy.lastDeclaredMeal(aimiWallClockMs()))
+        assertNull(therapy.activeCoffee(aimiWallClockMs()))
     }
 }

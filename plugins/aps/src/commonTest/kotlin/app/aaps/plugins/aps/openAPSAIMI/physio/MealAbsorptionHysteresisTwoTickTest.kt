@@ -29,7 +29,7 @@ class MealAbsorptionHysteresisTwoTickTest {
         assertFalse(first.reason.contains("hysteresis hold"))
         assertEquals(
             "🍽️ MEAL_ABSORPTION: FIRST_WAVE B=1.00 pri=true waves=1 " +
-                "(FIRST_WAVE B=1.00 π=0.85 K=1.00 T=0.00 P=0.35)",
+                "(FIRST_WAVE B=1.00 π=0.85 K=1.00 T=0.00 P=0.00)",
             shellLine(first),
         )
 

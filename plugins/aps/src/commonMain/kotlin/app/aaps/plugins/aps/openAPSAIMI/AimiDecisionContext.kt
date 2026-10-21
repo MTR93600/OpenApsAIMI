@@ -385,6 +385,8 @@ internal data class AimiDecisionContext(
         var physiological_patterns: JsonObject? = null,
         /** Unified meal absorption belief + phase (IOB / HTR / SMB priority) */
         var meal_absorption_phase: MealAbsorptionPhaseExport? = null,
+        /** Meal-confirmed early release gate terms, for diagnosis only. */
+        var mcer: JsonObject? = null,
         /** Meals the person declared with a mode note (FCL, lunch, …): active modes and last declaration. */
         var declared_meal: JsonObject? = null,
         /** Which tick the meal blocks come from: this one, or the previous one on an early exit. */
@@ -501,6 +503,15 @@ internal data class AimiDecisionContext(
         val kinetic_score: Double,
         val trajectory_score: Double,
         val physio_score: Double,
+        val raw_phase: String? = null,
+        val meal_intent_source: String? = null,
+        val belief_base: Double? = null,
+        val bonus_intent: Double? = null,
+        val bonus_cob: Double? = null,
+        val bonus_physio_meal: Double? = null,
+        val bonus_ra: Double? = null,
+        val fast_rise: Boolean? = null,
+        val moderate_rise: Boolean? = null,
     )
 
     data class PhysiologicalPhaseExport(
@@ -853,8 +864,18 @@ internal data class AimiDecisionContext(
                 mJson.put("kinetic_score", m.kinetic_score)
                 mJson.put("trajectory_score", m.trajectory_score)
                 mJson.put("physio_score", m.physio_score)
+                m.raw_phase?.let { mJson.put("raw_phase", it) }
+                m.meal_intent_source?.let { mJson.put("meal_intent_source", it) }
+                m.belief_base?.let { mJson.put("belief_base", it) }
+                m.bonus_intent?.let { mJson.put("bonus_intent", it) }
+                m.bonus_cob?.let { mJson.put("bonus_cob", it) }
+                m.bonus_physio_meal?.let { mJson.put("bonus_physio_meal", it) }
+                m.bonus_ra?.let { mJson.put("bonus_ra", it) }
+                m.fast_rise?.let { mJson.put("fast_rise", it) }
+                m.moderate_rise?.let { mJson.put("moderate_rise", it) }
                 adj.put("meal_absorption_phase", mJson)
             }
+            adjustments.mcer?.let { adj.put("mcer", it) }
             adjustments.declared_meal?.let { adj.put("declared_meal", it) }
             adjustments.meal_blocks_origin?.let { adj.put("meal_blocks_origin", it) }
             adjustments.dynamic_basal_stack_cap?.let { adj.put("dynamic_basal_stack_cap", it) }

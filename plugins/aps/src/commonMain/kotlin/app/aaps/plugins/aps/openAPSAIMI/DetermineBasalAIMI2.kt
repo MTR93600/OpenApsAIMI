@@ -2594,11 +2594,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             override fun hourOfDay() = work.hourOfDay
             override fun maxIob() = work.maxIob
             override fun gapPrev() = MealAbsorptionMemory.lastGapMgdl
-            override fun declaredMealNote() = fclTime || anticipTime
+            override fun fclTime() = fclTime
+            override fun anticipTime() = anticipTime
             override fun physiologicalPhase() =
                 work.lastPhysiologicalPhaseOutput?.phase ?: PhysiologicalPhase.OFF
             override fun estimatedRa() =
                 continuousStateEstimator.getLastRa().takeIf { it.isFinite() && it > 0.0 }
+            override fun writeMealIntentSource(source: String) {
+                work.lastMealIntentSource = source
+            }
             override fun writeOutput(output: MealAbsorptionPhaseEngine.Output) {
                 work.lastMealAbsorptionOutput = output
             }
@@ -2716,6 +2720,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             kinetic_score = out.kineticScore,
             trajectory_score = out.trajectoryScore,
             physio_score = out.physioScore,
+            raw_phase = out.rawPhase,
+            meal_intent_source = work.lastMealIntentSource,
+            belief_base = out.beliefParts?.base,
+            bonus_intent = out.beliefParts?.intent,
+            bonus_cob = out.beliefParts?.cob,
+            bonus_physio_meal = out.beliefParts?.physioMeal,
+            bonus_ra = out.beliefParts?.ra,
+            fast_rise = out.beliefParts?.fastRise,
+            moderate_rise = out.beliefParts?.moderateRise,
         )
     }
 
@@ -7192,6 +7205,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         decisionCtx.adjustments.meal_absorption_phase = mealAbsorptionPhaseExport(
             work.lastMealAbsorptionOutput ?: prevTickMealAbsorptionOutput.takeIf { usePreviousMealBlocks },
         )
+        decisionCtx.adjustments.mcer = work.lastDecisionPredictionAuthority?.mcerDiagnostics?.let { d ->
+            JsonObj().apply {
+                put("armed", d.armed)
+                put("rising", d.rising)
+                put("combined_delta_mgdl_5m", d.combinedDeltaMgdl5m)
+                put("above_target", d.aboveTarget)
+                put("strong_meal_confirmed", d.strongMealConfirmed)
+                put("tree_meal_evidence", d.treeMealEvidence)
+                put("meal_delivery_priority", d.mealDeliveryPriority)
+                put("meal_prob_confirmed", d.mealProbConfirmed)
+                put("tail_by_phase", d.tailByPhase)
+                put("tail_by_iob", d.tailByIob)
+                put("tail_by_fall", d.tailByFall)
+                put("tail_latched", d.tailLatched)
+                put("sovereign_hypo_block", d.sovereignHypoBlock)
+            }.build()
+        }
         decisionCtx.adjustments.meal_blocks_origin = JsonObj().apply {
             put("source", if (mealBlocksFromThisTick) "this_tick" else if (usePreviousMealBlocks) "previous_tick" else "none")
             if (usePreviousMealBlocks) put("age_min", (ctx.currentTime - prevTickMealBlocksAtMs) / 60_000L)

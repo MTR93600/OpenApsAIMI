@@ -23,6 +23,9 @@ data class TE(
     var arrow: Arrow? = null
 ) : HasIDs, TimeStamped {
 
+    /** True for an AIMI context record, not a therapy mode entered by the person. */
+    fun isAimiContextNote(): Boolean = type == Type.NOTE && note?.startsWith(AIMI_CONTEXT_NOTE_PREFIX) == true
+
     fun contentEqualsTo(other: TE): Boolean =
         isValid == other.isValid &&
             timestamp == other.timestamp &&
@@ -176,5 +179,8 @@ data class TE(
         }
     }
 
-    companion object
+    companion object {
+
+        const val AIMI_CONTEXT_NOTE_PREFIX = "AIMI_CONTEXT:"
+    }
 }

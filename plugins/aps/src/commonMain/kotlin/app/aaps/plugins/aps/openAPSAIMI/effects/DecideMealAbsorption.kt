@@ -50,10 +50,11 @@ internal interface AimiMealAbsorptionCalls {
     fun hourOfDay(): Int
     fun maxIob(): Double
     fun gapPrev(): Double?
-    /** An FCL or "anticip" note is active this tick: a meal the person declared. */
-    fun declaredMealNote(): Boolean
+    fun fclTime(): Boolean
+    fun anticipTime(): Boolean
     fun physiologicalPhase(): PhysiologicalPhase
     fun estimatedRa(): Double?
+    fun writeMealIntentSource(source: String)
     fun writeOutput(output: MealAbsorptionPhaseEngine.Output)
 }
 
@@ -90,6 +91,12 @@ internal fun decideRefreshMealAbsorptionPhase(
         nowMs = nowMs,
     )
     val hoursSinceBolus = lastBolusTimeMs?.let { (nowMs - it) / 3_600_000.0 }
+    val mealIntentSource = when {
+        mealContext.declaredMealIntent -> "DECLARED"
+        calls.fclTime() -> "FCL"
+        calls.anticipTime() -> "ANTICIP"
+        else -> "NONE"
+    }
     val output = MealAbsorptionPhaseEngine.evaluate(
         MealAbsorptionPhaseEngine.Input(
             bgMgdl = calls.bg(),
@@ -111,7 +118,7 @@ internal fun decideRefreshMealAbsorptionPhase(
             stepsLast15m = stepsLast15m,
             // Declared meals only: `hasMealIntent` also counts the loop's own SMBs and this engine's
             // previous phase, so the belief fed on itself (F10, 2026-10-21).
-            mealIntent = mealContext.declaredMealIntent || calls.declaredMealNote(),
+            mealIntent = mealIntentSource != "NONE",
             physiologicalPhase = calls.physiologicalPhase(),
             estimatedRa = calls.estimatedRa(),
             hoursSinceBolus = hoursSinceBolus,
@@ -119,6 +126,7 @@ internal fun decideRefreshMealAbsorptionPhase(
             nowMs = nowMs,
         ),
     )
+    calls.writeMealIntentSource(mealIntentSource)
     calls.writeOutput(output)
     if (output.phase.isActive) {
         consoleLog.add(

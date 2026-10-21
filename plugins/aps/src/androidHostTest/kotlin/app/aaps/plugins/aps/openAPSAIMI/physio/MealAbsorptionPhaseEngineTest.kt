@@ -54,7 +54,26 @@ class MealAbsorptionPhaseEngineTest {
             baseInput(bg = 105.0, delta = 9.0, shortAvg = 7.5, bestT = 218.0),
         )
         assertEquals(MealAbsorptionPhase.FIRST_WAVE, out.phase)
+        assertEquals(MealAbsorptionPhase.FIRST_WAVE.name, out.rawPhase)
         assertTrue(out.mealDeliveryPriority)
+        val parts = requireNotNull(out.beliefParts)
+        assertEquals(out.belief, parts.base + parts.intent + parts.cob + parts.physioMeal + parts.ra, 1e-9)
+    }
+
+    @Test
+    fun heartRateDoesNotCountAsMealEvidence() {
+        val highHeartRate = baseInput().copy(
+            heartRateBpm = 120,
+            restingHeartRateBpm = 60,
+            stepsLast15m = 0,
+        )
+        val ordinaryHeartRate = highHeartRate.copy(heartRateBpm = 60)
+
+        assertEquals(0.0, MealAbsorptionPhaseEngine.physioScore(highHeartRate))
+        assertEquals(
+            MealAbsorptionPhaseEngine.physioScore(ordinaryHeartRate),
+            MealAbsorptionPhaseEngine.physioScore(highHeartRate),
+        )
     }
 
     @Test

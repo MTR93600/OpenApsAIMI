@@ -31,7 +31,7 @@ internal object GarminTherapyMode {
      * `breakfast` is not accepted: the watch keyword is `bfast`.
      */
     val allowedModes: Set<String> = setOf(
-        "bfast", "lunch", "dinner", "highcarb", "fcl", "sport", "stop", "meal", "snack",
+        "bfast", "lunch", "dinner", "highcarb", "coffee", "cafe", "fcl", "sport", "stop", "meal", "snack",
     )
 
     private val defaultDurationMin: Map<String, Int> = mapOf(
@@ -39,6 +39,8 @@ internal object GarminTherapyMode {
         "lunch" to 60,
         "dinner" to 60,
         "highcarb" to 90,
+        "coffee" to 90,
+        "cafe" to 90,
         "fcl" to 30,
         "sport" to 120,
         "meal" to 60,

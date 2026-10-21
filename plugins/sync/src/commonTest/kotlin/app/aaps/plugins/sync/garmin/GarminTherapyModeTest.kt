@@ -77,6 +77,13 @@ class GarminTherapyModeTest {
     }
 
     @Test
+    fun coffeeModesDefaultToNinetyMinutes() {
+        assertEquals(90, accepted("coffee").reportedDurationMin)
+        assertEquals(90, accepted("cafe").reportedDurationMin)
+        assertEquals("coffee", accepted(" COFFEE ").note)
+    }
+
+    @Test
     fun sportWithSurroundingSpacesIsTheKeywordOnly() {
         val decision = accepted(" sport ", "90")
         assertEquals("sport", decision.note)
@@ -153,6 +160,8 @@ class GarminTherapyModeTest {
         assertEquals(60, accepted("lunch").reportedDurationMin)
         assertEquals(60, accepted("dinner").reportedDurationMin)
         assertEquals(90, accepted("highcarb").reportedDurationMin)
+        assertEquals(90, accepted("coffee").reportedDurationMin)
+        assertEquals(90, accepted("cafe").reportedDurationMin)
         assertEquals(30, accepted("fcl").reportedDurationMin)
         assertEquals(120, accepted("sport").reportedDurationMin)
         assertEquals(60, accepted("meal").reportedDurationMin)

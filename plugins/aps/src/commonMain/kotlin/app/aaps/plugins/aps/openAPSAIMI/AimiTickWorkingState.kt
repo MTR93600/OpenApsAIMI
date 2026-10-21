@@ -93,6 +93,7 @@ internal class AimiTickWorkingState {
     var lastPhysiologicalPhaseOutput: PhysiologicalPhaseClassifier.Output? = null
     var lastPhysiologicalPatternSnapshot: PhysiologicalPatternSnapshot? = null
     var lastMealAbsorptionOutput: MealAbsorptionPhaseEngine.Output? = null
+    var lastMealIntentSource: String? = null
     var lastInsulinStackingEvaluation: InsulinStackingStance.Evaluation? = null
     var lastBasePhysioMultipliers: PhysioMultipliersMTR = PhysioMultipliersMTR.NEUTRAL
     var lastFusedPhysioMultipliers: PhysioMultipliersMTR? = null

@@ -50,6 +50,23 @@ data class DecisionPredictionAuthority(
      * actually armed — a fall with no earlier arm is not a post-peak tail, there was no peak.
      */
     val mcerArmed: Boolean = false,
+    val mcerDiagnostics: McerDiagnostics? = null,
+)
+
+data class McerDiagnostics(
+    val armed: Boolean,
+    val rising: Boolean,
+    val combinedDeltaMgdl5m: Double,
+    val aboveTarget: Boolean,
+    val strongMealConfirmed: Boolean,
+    val treeMealEvidence: Boolean,
+    val mealDeliveryPriority: Boolean,
+    val mealProbConfirmed: Boolean,
+    val tailByPhase: Boolean,
+    val tailByIob: Boolean,
+    val tailByFall: Boolean,
+    val tailLatched: Boolean,
+    val sovereignHypoBlock: Boolean,
 )
 
 object DecisionPredictionAuthorityResolver {
@@ -193,6 +210,7 @@ object DecisionPredictionAuthorityResolver {
         var mcerSuffix = ""
         var tailTripped = false
         var mcerArmedThisTick = false
+        var mcerDiagnostics: McerDiagnostics? = null
         if (mealConfirmedEarlyReleaseEnabled) {
             // The GATE path-min, never the display one. `pathMinMgdl` is the series after the
             // meal-absorption lift, and that lift ramps every point up from the current glucose, so
@@ -222,6 +240,22 @@ object DecisionPredictionAuthorityResolver {
             val sovereignHypoBlock = falseMealSuppression || postHypoDelivery.active
             val armed = rising && aboveTarget && strongMealConfirmed && !tailBreaker && !sovereignHypoBlock
             mcerArmedThisTick = armed
+            mcerDiagnostics = McerDiagnostics(
+                armed = armed,
+                rising = rising,
+                combinedDeltaMgdl5m = combinedDeltaMgdl5m,
+                aboveTarget = aboveTarget,
+                strongMealConfirmed = strongMealConfirmed,
+                treeMealEvidence = treeMealEvidence,
+                mealDeliveryPriority = mealDeliveryPriority,
+                mealProbConfirmed = mealCompatibleProb >= MCER_STRONG_MEAL_PROB ||
+                    causalMealConfidence >= MCER_STRONG_MEAL_PROB,
+                tailByPhase = tailByPhase,
+                tailByIob = tailByIob,
+                tailByFall = tailByFall,
+                tailLatched = mcerTailLatched,
+                sovereignHypoBlock = sovereignHypoBlock,
+            )
             if (armed && scenarioBestPathMin.isFinite() && scenarioBestPathMin > predTerminal) {
                 predTerminal = scenarioBestPathMin
                 mcerSuffix = " | MCER=ARMED release->${scenarioBestPathMin.toInt()}"
@@ -252,6 +286,7 @@ object DecisionPredictionAuthorityResolver {
                 reason = "scenario_consensus lead=${aimiFmt1(scenarioLead)}" + mcerSuffix,
                 mcerTailTripped = tailTripped,
                 mcerArmed = mcerArmedThisTick,
+                mcerDiagnostics = mcerDiagnostics,
             )
         }
 
@@ -268,6 +303,7 @@ object DecisionPredictionAuthorityResolver {
                 reason = "non_meal_guard prob=${aimiFmt2(competingNonMealProb)} cause=${causalDominant.name}" + mcerSuffix,
                 mcerTailTripped = tailTripped,
                 mcerArmed = mcerArmedThisTick,
+                mcerDiagnostics = mcerDiagnostics,
             )
         }
 
@@ -288,6 +324,7 @@ object DecisionPredictionAuthorityResolver {
                     "lead=${aimiFmt1(scenarioLead)} cause=${causalDominant.name}" + mcerSuffix,
                     mcerTailTripped = tailTripped,
                     mcerArmed = mcerArmedThisTick,
+                mcerDiagnostics = mcerDiagnostics,
             )
         }
 
@@ -305,6 +342,7 @@ object DecisionPredictionAuthorityResolver {
                 reason = "trajectory=${trajectoryType.name} lead=${aimiFmt1(scenarioLead)}" + mcerSuffix,
                 mcerTailTripped = tailTripped,
                 mcerArmed = mcerArmedThisTick,
+                mcerDiagnostics = mcerDiagnostics,
             )
         }
 
@@ -322,6 +360,7 @@ object DecisionPredictionAuthorityResolver {
                 reason = "guarded_uplift lead=${aimiFmt1(scenarioLead)} meal=${mealEvidence} traj=${trajectoryType?.name ?: "NONE"}" + mcerSuffix,
                 mcerTailTripped = tailTripped,
                 mcerArmed = mcerArmedThisTick,
+                mcerDiagnostics = mcerDiagnostics,
             )
         }
 
@@ -337,6 +376,7 @@ object DecisionPredictionAuthorityResolver {
             reason = "pkpd_retained lead=${aimiFmt1(scenarioLead)}" + mcerSuffix,
             mcerTailTripped = tailTripped,
             mcerArmed = mcerArmedThisTick,
+            mcerDiagnostics = mcerDiagnostics,
         )
     }
 

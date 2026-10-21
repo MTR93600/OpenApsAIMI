@@ -90,6 +90,7 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
         val now = aimiWallClockMs()
         val fromTime = now - T.days(1).msecs()
         val events = persistenceLayer.getTherapyEventDataFromTime(fromTime, ascending = true)
+            .filterNot { it.isAimiContextNote() }
         val noteEvents = events.filter { it.type == TE.Type.NOTE }
         val stop = findActivestopEvents(events, now)
         if (!stop) {
