@@ -16,6 +16,7 @@ import app.aaps.core.interfaces.calibration.CalibrationContext
 import app.aaps.core.interfaces.calibration.CalibrationStatus
 import app.aaps.core.interfaces.concurrent.AapsLock
 import app.aaps.core.interfaces.concurrent.withLock
+import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.db.observeChanges
 import app.aaps.core.interfaces.iob.GlucoseStatusProvider
@@ -24,9 +25,9 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.NotificationAction
 import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.interfaces.notifications.NotificationManager
+import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
-import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventCalibrationChanged
@@ -66,14 +67,15 @@ class LinearCalibrationPlugin(
     private val glucoseStatusProvider: GlucoseStatusProvider,
     private val rxBus: RxBus,
     private val profileUtil: ProfileUtil,
-    private val preferences: Preferences
+    private val preferences: Preferences,
+    private val config: Config
 ) : PluginBase(
     PluginDescription()
         .mainType(PluginType.CALIBRATION)
         .icon(IcCalibration)
         .pluginName(CalibrationStrings.linear_calibration_name)
         .description(CalibrationStrings.description_linear_calibration)
-        .composeContent { CalibrationComposeContent(persistenceLayer, profileUtil, aapsLogger, dateUtil) },
+        .composeContent { CalibrationComposeContent() },
     aapsLogger, rh, notificationManager
 ), Calibration {
 
@@ -155,8 +157,10 @@ class LinearCalibrationPlugin(
             return data
         }
 
-        detectAndNotifyGap(sessionStart, now)
-        checkCalibrationHealthAndNotify(sessionStart, now)
+        if (!config.AAPSCLIENT) {
+            detectAndNotifyGap(sessionStart, now)
+            checkCalibrationHealthAndNotify(sessionStart, now)
+        }
 
         // Without a recorded SENSOR_CHANGE, entries can span multiple sensors with
         // different bias — fitting across them is unsafe. Gap detection above will

@@ -31,7 +31,7 @@ import app.aaps.core.interfaces.automation.Automation
 import app.aaps.core.interfaces.automation.AutomationEvent
 import app.aaps.core.interfaces.bolus.BatchAction
 import app.aaps.core.interfaces.bolus.BatchExecutor
-import app.aaps.core.interfaces.bolus.WizardBolusExecutor
+import app.aaps.core.interfaces.bolus.MasterActionExecutor
 import app.aaps.core.interfaces.bolus.WizardExecutor
 import app.aaps.core.interfaces.clientcontrol.ActionProgress
 import app.aaps.core.interfaces.configuration.Config
@@ -164,11 +164,11 @@ class DataHandlerMobile(
     private val pumpStatusProvider: PumpStatusProvider,
     private val ch: ConcentrationHelper,
     private val runningModeGuard: RunningModeGuard,
-    private val wizardBolusExecutor: WizardBolusExecutor,
-    // Role-transparent relays: on a MASTER they run locally (via wizardBolusExecutor); on a CLIENT they route the
+    private val masterActionExecutor: MasterActionExecutor,
+    // Role-transparent relays: on a MASTER they run locally (via masterActionExecutor); on a CLIENT they route the
     // action to the master over the signed round-trip (gated on masterReachable). EVERY wear therapy action goes
     // through these — bolus/eCarbs/TT/PS/RM via batchExecutor, quick-wizard/wizard via wizardExecutor. The local
-    // wizardBolusExecutor stays on the wear path for Fill ONLY (no relay command for Fill).
+    // masterActionExecutor stays on the wear path for Fill ONLY (no relay command for Fill).
     private val batchExecutor: BatchExecutor,
     private val wizardExecutor: WizardExecutor,
 ) {
@@ -340,7 +340,7 @@ class DataHandlerMobile(
                 // The executor already wrote the right sentence for both cases (a failure and a cancel), so the
                 // watch shows its comment as-is. The watch has no neutral terminal screen — a cancel still lands
                 // under the red "Error" heading — but the words are correct.
-                wizardBolusExecutor.deliverFillBolus(it.insulin, null, Sources.Wear, onError = { failure -> sendError(failure.comment) })
+                masterActionExecutor.deliverFillBolus(it.insulin, null, Sources.Wear, onError = { failure -> sendError(failure.comment) })
         }
         // These two are the ones that actually recompute a dose. The executor they delegate to already
         // refuses before init, so this is defence in depth - but it keeps the refusal in one place with the
@@ -696,7 +696,7 @@ class DataHandlerMobile(
             sendError(rh.gs(CoreUiStrings.wizard_no_actual_bg))
             return
         }
-        val inputs = WizardBolusExecutor.WizardInputs(
+        val inputs = MasterActionExecutor.WizardInputs(
             bg = bgReading.valueToUnits(profileFunction.getUnits()),
             carbs = command.carbs,
             percentage = command.percentage,
@@ -919,7 +919,7 @@ class DataHandlerMobile(
      * Shared wear eCarbs precheck: cap + park + author the confirmation on the MASTER via the role-transparent
      * [BatchExecutor] (MASTER → local prepareBatch; CLIENT → signed BatchPrepare so the master records them), then push
      * the master-authored [lines][EventData.ConfirmAction.lines] to the watch with the parked bolusId. The wear ✓
-     * commits by id (consume-once). (Was a local-only `wizardBolusExecutor.prepareBatch`; now everything runs on the master.)
+     * commits by id (consume-once). (Was a local-only `masterActionExecutor.prepareBatch`; now everything runs on the master.)
      */
     private suspend fun sendBatchPreCheck(
         bolus: BatchAction.Bolus,
@@ -1556,8 +1556,8 @@ class DataHandlerMobile(
         val openApsStatus =
             if (config.APS) loop.lastRun?.let { if (it.lastTBREnact != 0L) it.lastTBREnact else -1 } ?: -1
             else processedDeviceStatusData.openApsTimestamp
-        // Patient name for followers
-        val patientName = preferences.get(StringKey.GeneralPatientName)
+        // Instance name for followers
+        val instanceName = preferences.get(StringKey.GeneralInstanceName)
         //temptarget
         val units = profileFunction.getUnits()
         var tempTargetLevel = 0
@@ -1615,7 +1615,7 @@ class DataHandlerMobile(
                 openApsStatus = openApsStatus,
                 bgi = bgiString,
                 batteryLevel = if (phoneBattery >= 30) 1 else 0,
-                patientName = patientName,
+                patientName = instanceName, // wire field name is fixed by the watch contract
                 tempTarget = tempTarget,
                 tempTargetLevel = tempTargetLevel,
                 tempTargetDuration = tempTargetDuration,
@@ -1694,7 +1694,9 @@ class DataHandlerMobile(
         persistenceLayer.getTemporaryTargetActiveAt(dateUtil.now())?.let { tt ->
             // Show the full low–high range (was passing lowTarget twice — a range TT only showed its low bound).
             out += ConfirmationLine(ConfirmationRole.NORMAL, rh.gs(InterfacesStrings.confirmation_line, rh.gs(SyncStrings.temp_target), profileUtil.toTargetRangeString(tt.lowTarget, tt.highTarget, GlucoseUnit.MGDL)))
-            out += ConfirmationLine(ConfirmationRole.INFO, rh.gs(InterfacesStrings.confirmation_line, rh.gs(SyncStrings.until), dateUtil.timeString(tt.end)))
+            // A target without an end (a scene without a duration) has no "until" line.
+            if (tt.hasEnd)
+                out += ConfirmationLine(ConfirmationRole.INFO, rh.gs(InterfacesStrings.confirmation_line, rh.gs(SyncStrings.until), dateUtil.timeString(tt.end)))
         }
         out += ConfirmationLine(ConfirmationRole.NORMAL, rh.gs(InterfacesStrings.confirmation_line, rh.gs(SyncStrings.default_range), profileUtil.toTargetRangeString(profile.getTargetLowMgdl(), profile.getTargetHighMgdl(), GlucoseUnit.MGDL)))
         out += ConfirmationLine(ConfirmationRole.NORMAL, rh.gs(InterfacesStrings.confirmation_line, rh.gs(SyncStrings.target), profileUtil.fromMgdlToStringInUnits(profile.getTargetMgdl())))

@@ -237,6 +237,14 @@ enum class NotificationId(
     // Appended at the END for the same reason as above.
     COMBO_PUMP_ERROR_LOCKOUT(NORMAL, PUMP),
 
+    // ---- New upstream entries ----
+    // Kept before the fork entries so the fork IDs stay at the end of the list.
+    // A scene can leave its temporary profile active after it ends; the user has to choose a profile to restore normal delivery.
+    // Appended at the END for the same reason as above.
+    SCENE_PROFILE_NOT_RESTORED(IMPORTANT, AUTOMATION),
+    // Appended at the END for the same reason as above.
+    GARMIN_NOT_ON_CLIENT(NORMAL, SYNC),
+
     // ---- Fork entries (ONE+/Libre 3 native, AIMI, calibration) ----
     // Kept after the upstream block on purpose: upstream keeps appending at its end, so a future
     // merge renumbers only these, which this fork controls, rather than any upstream id.

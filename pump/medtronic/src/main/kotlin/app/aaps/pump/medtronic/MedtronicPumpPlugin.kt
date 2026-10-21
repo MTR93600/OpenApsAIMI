@@ -190,6 +190,9 @@ class MedtronicPumpPlugin(
     private val busyTimestamps: MutableList<Long> = ArrayList()
     private var isBusy = false
 
+    /** When [connect] last started a tune-up. The task runs on its own thread, so the state can still be the old one. */
+    private var lastRetuneStart = 0L
+
     override suspend fun onStart() {
         aapsLogger.debug(LTag.PUMP, deviceID() + " started. (V2.0007)")
         serviceConnection = object : ServiceConnection {
@@ -363,7 +366,27 @@ class MedtronicPumpPlugin(
 
     override fun isConnecting(): Boolean {
         if (displayConnectionMessages) aapsLogger.debug(LTag.PUMP, "MedtronicPumpPlugin::isConnecting")
+        // After a failed tune-up nothing is in progress. Reported as connecting, the queue waited for it on every
+        // command until it timed out, and it never called connect(), so nothing tuned again (#3253).
+        if (isServiceSet && rileyLinkServiceData.rileyLinkServiceState == RileyLinkServiceState.PumpConnectorError) return false
         return !isServiceSet || rileyLinkMedtronicService?.isInitialized != true
+    }
+
+    /**
+     * Tunes again after a tune-up failed, for example while the pump was out of range. Before, only the "Wake and
+     * Tune Up" button or a new RileyLink connection brought the pump back (#3253).
+     *
+     * The queue calls this about once a second while it waits, so a tune-up starts only when the failure and the
+     * last tune-up started here are both older than [RETUNE_INTERVAL_MS]. A pump that is really away costs one scan
+     * per [RETUNE_INTERVAL_MS].
+     */
+    override fun connect(reason: String) {
+        if (!isServiceSet || rileyLinkServiceData.rileyLinkServiceState != RileyLinkServiceState.PumpConnectorError) return
+        val now = System.currentTimeMillis()
+        if (now - rileyLinkServiceData.lastServiceStateChange < RETUNE_INTERVAL_MS || now - lastRetuneStart < RETUNE_INTERVAL_MS) return
+        aapsLogger.info(LTag.PUMP, "Tune-up failed (${rileyLinkServiceData.rileyLinkError}), tuning again. Reason: $reason")
+        lastRetuneStart = now
+        serviceTaskExecutor.startTask(wakeAndTuneTaskProvider())
     }
 
     override suspend fun getPumpStatus(reason: String) {
@@ -581,6 +604,17 @@ class MedtronicPumpPlugin(
         }
         return !invalid
     }
+
+    /**
+     * The 24 hourly rates the pump runs, rounded to its step: 0.05 U/h, or 0.025 U/h below 1 U/h on a 523 and
+     * later (#2454). Read from the pump at start, and the profile as it was sent after each set. null while they
+     * are not known: the profile counts as it was sent.
+     */
+    override fun deliveredBasal(): List<Profile.ProfileValue>? =
+        if (!isDriverInitialized) null
+        else medtronicPumpStatus.basalsByHour
+            ?.takeIf { !BasalProfile.isBasalProfileByHourUndefined(it) }
+            ?.mapIndexed { hour, rate -> Profile.ProfileValue(hour * SECONDS_PER_HOUR, rate) }
 
     override val baseBasalRate: PumpRate
         get() = PumpRate(medtronicPumpStatus.basalProfileForHour)
@@ -905,7 +939,13 @@ class MedtronicPumpPlugin(
         if (debugHistory) aapsLogger.debug(LTag.PUMP, "HST: After task")
         val historyResult = responseTask2?.result as PumpHistoryResult?
         if (debugHistory) aapsLogger.debug(LTag.PUMP, "HST: History Result: $historyResult")
-        val latestEntry = historyResult!!.latestEntry
+        if (historyResult!!.readFailed) {
+            // Entries between the pages that were read and the target date can be missing. The last entry stays as
+            // it is, so the next read asks for the same time again and gets the missing entries too (#3378).
+            aapsLogger.warn(LTag.PUMP, "History read failed, nothing is processed. It is read again next time.")
+            return
+        }
+        val latestEntry = historyResult.latestEntry
         if (debugHistory) aapsLogger.debug(LTag.PUMP, "Last entry: " + latestEntry)
         if (latestEntry == null) // no new history to read
             return
@@ -1125,6 +1165,10 @@ class MedtronicPumpPlugin(
 
     companion object {
 
+        private const val SECONDS_PER_HOUR = 60 * 60
+
+        /** The time between two tune-ups that [connect] starts after a failed one. */
+        private const val RETUNE_INTERVAL_MS = 10 * 60 * 1000L
         val pumpFreqValues = arrayOf<CharSequence>(RileyLinkTargetFrequency.MedtronicUS.key!!, RileyLinkTargetFrequency.MedtronicWorldWide.key!!)
         val encodingValues = arrayOf<CharSequence>(RileyLinkEncodingType.FourByteSixByteLocal.key!!, RileyLinkEncodingType.FourByteSixByteRileyLink.key!!)
         val batteryValues = mutableListOf<CharSequence>().also { list -> BatteryType.entries.forEach { list.add(it.key) } }.toTypedArray()

@@ -12,6 +12,7 @@ import app.aaps.core.interfaces.aps.GlucoseStatusSMB
 import app.aaps.core.interfaces.calibration.AddEntryResult
 import app.aaps.core.interfaces.calibration.CalibrationContext
 import app.aaps.core.interfaces.calibration.CalibrationStatus
+import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.iob.GlucoseStatusProvider
 import app.aaps.core.interfaces.notifications.NotificationAction
@@ -48,6 +49,7 @@ class LinearCalibrationPluginTest : TestBase() {
     @Mock lateinit var glucoseStatusProvider: GlucoseStatusProvider
     @Mock lateinit var profileUtil: ProfileUtil
     @Mock lateinit var preferences: Preferences
+    @Mock lateinit var config: Config
 
     private lateinit var plugin: LinearCalibrationPlugin
 
@@ -64,10 +66,12 @@ class LinearCalibrationPluginTest : TestBase() {
         whenever(persistenceLayer.getTherapyEventDataFromToTime(any(), any())).thenReturn(emptyList())
         whenever(persistenceLayer.getValidCalibrationEntriesSince(any())).thenReturn(emptyList())
         whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), any())).thenReturn(emptyList())
+        whenever(config.AAPSCLIENT).thenReturn(false)
         whenever(preferences.get(CalibrationLongKey.EntriesValidFrom)).thenReturn(0L)
         whenever(preferences.get(CalibrationLongKey.IgnoredSensorGapAt)).thenReturn(0L)
         plugin = LinearCalibrationPlugin(
-            aapsLogger, rh, dateUtil, persistenceLayer, notificationManager, glucoseStatusProvider, rxBus, profileUtil, preferences
+            aapsLogger, rh, dateUtil, persistenceLayer, notificationManager, glucoseStatusProvider, rxBus,
+            profileUtil, preferences, config
         )
     }
 
@@ -305,6 +309,27 @@ class LinearCalibrationPluginTest : TestBase() {
         plugin.calibrate(data, CalibrationContext.NONE)
         verify(notificationManager).post(
             eq(NotificationId.SENSOR_CHANGE_DETECTED),
+            any<String>(),
+            any<NotificationLevel>(),
+            any<Int>(),
+            anyOrNull(),
+            any<List<NotificationAction>>(),
+            anyOrNull()
+        )
+    }
+
+    // The notice's button writes a sensor change. On a client it would stay there, so only the master asks.
+    @Test
+    fun calibrate_gapOnClient_postsNoNotification() = runTest {
+        whenever(config.AAPSCLIENT).thenReturn(true)
+        val data = mutableListOf(
+            value(now, 150.0),
+            value(now - T.mins(60).msecs(), 150.0),
+            value(now - T.mins(65).msecs(), 150.0)
+        )
+        plugin.calibrate(data, CalibrationContext.NONE)
+        verify(notificationManager, never()).post(
+            any<NotificationId>(),
             any<String>(),
             any<NotificationLevel>(),
             any<Int>(),

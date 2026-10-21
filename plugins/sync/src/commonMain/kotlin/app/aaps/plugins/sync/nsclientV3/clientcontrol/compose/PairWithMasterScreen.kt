@@ -3,6 +3,7 @@ package app.aaps.plugins.sync.nsclientV3.clientcontrol.compose
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -36,7 +37,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
+import app.aaps.core.keys.interfaces.ClientRole
 import app.aaps.core.ui.CoreUiStrings
+import app.aaps.core.ui.clientcontrol.label
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.clearFocusOnTap
@@ -53,6 +56,8 @@ fun PairWithMasterScreen(
     viewModel: PairWithMasterViewModel = metroViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val hardenedMode by viewModel.hardenedMode.collectAsStateWithLifecycle()
+    val clientRole by viewModel.clientRole.collectAsStateWithLifecycle()
 
     // While the hello upload is in flight, swallow Back to keep the ViewModel (and therefore
     // viewModelScope) alive until publishHello() completes — otherwise the master never sees
@@ -96,6 +101,8 @@ fun PairWithMasterScreen(
             when (val s = state) {
                 is PairWithMasterViewModel.UiState.AlreadyPaired -> AlreadyPairedContent(
                     masterInstallId = s.pairing.masterInstallId,
+                    hardenedMode = hardenedMode,
+                    clientRole = clientRole,
                     onUnpair = viewModel::unpair,
                     onCancel = onNavigateBack
                 )
@@ -150,7 +157,7 @@ private fun PinEntryContent(onSubmit: (String) -> Unit) {
         OutlinedTextField(
             value = pin,
             // Filter to digits + cap at PIN_LENGTH up-front so the IME shows a clean count and the
-            // submit gate stays simple — paste of "1234-5678" still produces 8 digits.
+            // submit gate stays simple — paste of "1234 5678" as shown on the master still produces 8 digits.
             onValueChange = { raw -> pin = raw.filter(Char::isDigit).take(PIN_LENGTH) },
             label = { Text(stringResource(SyncStrings.pair_with_master_pin_entry_label)) },
             singleLine = true,
@@ -297,6 +304,8 @@ private fun ErrorContent(
 @Composable
 private fun AlreadyPairedContent(
     masterInstallId: String,
+    hardenedMode: Boolean,
+    clientRole: ClientRole,
     onUnpair: () -> Unit,
     onCancel: () -> Unit
 ) {
@@ -317,6 +326,15 @@ private fun AlreadyPairedContent(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = AapsSpacing.medium)
         )
+        // This phone's role on the master, with the (i) that explains the four roles.
+        Row(modifier = Modifier.padding(top = AapsSpacing.medium), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = stringResource(CoreUiStrings.client_role_line, stringResource(clientRole.label())),
+                style = MaterialTheme.typography.titleSmall
+            )
+            ClientRolesInfoButton()
+        }
+        if (hardenedMode) HardenedModeInfoRow(modifier = Modifier.padding(top = AapsSpacing.medium))
         Button(
             onClick = onUnpair,
             modifier = Modifier

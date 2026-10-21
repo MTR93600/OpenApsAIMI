@@ -180,11 +180,17 @@ fun MainScreen(
         drawerState = drawerState,
         drawerContent = {
             MainDrawer(
+                drawerState = drawerState,
                 versionName = mainViewModel.versionName,
                 onNavigate = { request ->
-                    scope.launch { drawerState.close() }
-                    onDrawerClosed()
-                    onNavigate(request)
+                    // Close the drawer first, then open the screen. Opened while the drawer was still
+                    // sliding in (a fast tap, as the e2e test makes), one Back from that screen left
+                    // the app instead of coming back to the overview.
+                    scope.launch {
+                        drawerState.close()
+                        onDrawerClosed()
+                        onNavigate(request)
+                    }
                 },
                 isTreatmentsEnabled = uiState.isProfileLoaded,
                 showExit = mainViewModel.showExit
@@ -292,6 +298,10 @@ fun MainScreen(
                         formatDuration = mainViewModel::formatDuration,
                         paddingValues = contentPadding,
                         fabBottomOffset = if (hasToolbar && showChrome) 56.dp else 0.dp,
+                        // In preview mode the bottom bar lies over the content instead of above it, so the end of each
+                        // column needs its height too. The height is kept once measured, so the columns do not move each
+                        // time the bars show and hide.
+                        overlaidBarsHeight = if (previewMode) with(density) { bottomBarHeightPx.toDp() } else 0.dp,
                         bolusState = bolusState,
                         pumpStatusText = pumpStatusText,
                         queueStatusText = queueStatusText,
@@ -506,7 +516,8 @@ fun MainScreen(
             automationItems = automationState.items,
             onItemClick = { item -> mainViewModel.requestAutomationConfirmation(item.eventId) },
             sceneItems = automationState.sceneItems,
-            onSceneClick = { sceneId -> mainViewModel.requestSceneConfirmation(sceneId) }
+            onSceneClick = { sceneId -> mainViewModel.requestSceneConfirmation(sceneId) },
+            onEditScenesClick = { onNavigate(NavigationRequest.Element(ElementType.SCENE_MANAGEMENT)) }
         )
     }
 
