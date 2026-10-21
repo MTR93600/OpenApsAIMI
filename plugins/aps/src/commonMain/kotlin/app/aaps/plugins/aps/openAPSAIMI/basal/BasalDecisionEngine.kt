@@ -119,6 +119,8 @@ class BasalDecisionEngine @Inject constructor(
         val declaredMealActive: Boolean = false,
         /** ISF used by the stack cap; `null` disables it. */
         val stackCapIsf: Double? = null,
+        /** Bound "Slow rise" and "Eventual BG>110" by [EngineHyperRateBound]. Off = shadow only. */
+        val engineHyperBoundArmed: Boolean = false,
     )
 
     data class Helpers(
@@ -134,6 +136,8 @@ class BasalDecisionEngine @Inject constructor(
         val overrideSafety: Boolean,
         /** Stack cap verdict on the PI fallback, `null` when that path did not run. Export only. */
         val piStackCap: DynamicBasalStackCap.Verdict? = null,
+        /** [EngineHyperRateBound] verdict, `null` when neither hyper branch ran. Export only. */
+        val hyperBound: EngineHyperRateBound.Verdict? = null,
     )
 
     companion object {
@@ -226,6 +230,7 @@ class BasalDecisionEngine @Inject constructor(
 
         var overrideSafety = false
         var chosenRate: Double? = null
+        var hyperBound: EngineHyperRateBound.Verdict? = null
 
         val lastTempIsZero = input.currentTemp.rate == 0.0
         val zeroSinceMin = input.zeroSinceMin
@@ -422,14 +427,18 @@ class BasalDecisionEngine @Inject constructor(
                 input.combinedDelta > 1 && !input.sportTime &&
                 input.bgAcceleration > 1.0
             ) {
-                chosenRate = helpers.calculateBasalRate(finalBasalRate, input.profileCurrentBasal, input.combinedDelta)
+                val raw = helpers.calculateBasalRate(finalBasalRate, input.profileCurrentBasal, input.combinedDelta)
                 rT.reason.append(rh.gs(ApsStrings.slow_rise_proportional_adjustment))
+                hyperBound = boundHyperBranch(EngineHyperRateBound.Branch.SLOW_RISE, raw, input, basalAdjustmentFactor, rT)
+                chosenRate = hyperBound.rateOutUph
             } else if (input.eventualBg > 110 && !input.sportTime && input.bg > 150 &&
                 input.combinedDelta in -2.0..15.0 &&
                 input.bgAcceleration > 0.0
             ) {
-                chosenRate = helpers.calculateBasalRate(finalBasalRate, input.profileCurrentBasal, basalAdjustmentFactor)
+                val raw = helpers.calculateBasalRate(finalBasalRate, input.profileCurrentBasal, basalAdjustmentFactor)
                 rT.reason.append(rh.gs(ApsStrings.eventual_bg_over_110_hyper_factor))
+                hyperBound = boundHyperBranch(EngineHyperRateBound.Branch.EVENTUAL_BG_110, raw, input, basalAdjustmentFactor, rT)
+                chosenRate = hyperBound.rateOutUph
             }
         }
 
@@ -652,7 +661,21 @@ class BasalDecisionEngine @Inject constructor(
         }
 
         val finalRate = chosenRate ?: input.profileCurrentBasal
-        return Decision(finalRate, rT.duration ?: 30, overrideSafety, piStackCap)
+        return Decision(finalRate, rT.duration ?: 30, overrideSafety, piStackCap, hyperBound)
+    }
+
+    private fun boundHyperBranch(
+        branch: EngineHyperRateBound.Branch,
+        raw: Double,
+        input: Input,
+        glucoseFactor: Double,
+        rT: RT,
+    ): EngineHyperRateBound.Verdict {
+        val v = EngineHyperRateBound.evaluate(branch, raw, input.profileCurrentBasal, glucoseFactor, input.engineHyperBoundArmed)
+        if (v.applied) {
+            rT.reason.append(" | ENGINE_BOUND ${aimiFmt2(v.rawUph)}→${aimiFmt2(v.rateOutUph)} U/h")
+        }
+        return v
     }
 
     // ===== utilitaires existants inchangés =====

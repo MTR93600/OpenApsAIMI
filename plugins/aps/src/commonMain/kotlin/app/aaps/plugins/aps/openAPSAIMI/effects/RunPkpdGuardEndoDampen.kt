@@ -58,6 +58,9 @@ internal interface AimiPkpdGuardState {
     fun criticalSafetyZeroed(): Boolean
     fun endogenousCounterRegulatory(): Boolean
     fun mealAbsorptionPhase(): MealAbsorptionPhase
+
+    /** A meal is declared now (meal mode, or a meal note in the last 3–4 h): no restore ceiling. */
+    fun declaredMealWindowActive(): Boolean
 }
 
 internal data class AimiPkpdGuardEndoRedCarpetSmbStage(
@@ -240,6 +243,8 @@ internal fun decidePkpdGuardEndoDampenRedCarpetAndCapSmb(
         effectiveMaxIob = effectiveMaxIobForDebridage,
         iobForCap = iob.toDouble(),
         memberIob = state.memberIob(),
+        modelOutputU = state.bindingDraft().modelOutputU,
+        restoreCeilingExempt = isExplicitAction || anyMealModeForGuard || state.declaredMealWindowActive(),
     )
     smbToGiveLocal = carpet.units
     carpet.logs.forEach { consoleLog.add(it) }

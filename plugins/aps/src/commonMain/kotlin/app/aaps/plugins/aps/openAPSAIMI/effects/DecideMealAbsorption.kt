@@ -50,7 +50,8 @@ internal interface AimiMealAbsorptionCalls {
     fun hourOfDay(): Int
     fun maxIob(): Double
     fun gapPrev(): Double?
-    fun uamConfidence(): Double
+    /** An FCL or "anticip" note is active this tick: a meal the person declared. */
+    fun declaredMealNote(): Boolean
     fun physiologicalPhase(): PhysiologicalPhase
     fun estimatedRa(): Double?
     fun writeOutput(output: MealAbsorptionPhaseEngine.Output)
@@ -108,8 +109,9 @@ internal fun decideRefreshMealAbsorptionPhase(
             heartRateBpm = heartRateBpm,
             restingHeartRateBpm = restingHeartRateBpm,
             stepsLast15m = stepsLast15m,
-            uamConfidence = calls.uamConfidence(),
-            mealIntent = mealContext.hasMealIntent,
+            // Declared meals only: `hasMealIntent` also counts the loop's own SMBs and this engine's
+            // previous phase, so the belief fed on itself (F10, 2026-10-21).
+            mealIntent = mealContext.declaredMealIntent || calls.declaredMealNote(),
             physiologicalPhase = calls.physiologicalPhase(),
             estimatedRa = calls.estimatedRa(),
             hoursSinceBolus = hoursSinceBolus,

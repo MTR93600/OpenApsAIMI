@@ -151,6 +151,15 @@ internal fun interface AimiFinalizeBindingDraft {
     fun current(): SmbBindingTrace.Draft
 }
 
+/** Inputs of the restore ceiling and of the "coffee" SMB cap, read at the line the reference reads them. */
+internal interface AimiFinalizeRestoreGuards {
+    /** A meal is declared now (meal mode, or a meal note in the last 3–4 h): no restore ceiling. */
+    fun declaredMealWindowActive(): Boolean
+
+    /** Most SMB the "coffee" note allows (`CoffeeRiseMode.smbCeilingU`), `null` when it does not apply. */
+    fun coffeeSmbCeilingU(modelOutputU: Double?): Double?
+}
+
 /**
  * Output type of [MealCorrectionContextResolver] without pulling the resolver's name into every port.
  * The shell's `resolveMealCorrectionContext` already returns that output; this alias keeps the port thin.
@@ -176,6 +185,8 @@ internal data class FinalizeSmbSideEffects(
     val smbCapped: Double,
     val smbFinal: Double,
     val iobSurveillance: IobSurveillanceExport,
+    /** Dose before the "coffee" SMB cap, `null` when it did not cut. Export only. */
+    val coffeeSmbCutFromU: Double? = null,
 )
 
 private data class SmbGateAudit(
@@ -257,6 +268,7 @@ internal fun decideFinalizeAndCapSmb(
     seal: AimiFinalizeSeal,
     riseExport: AimiFinalizeRiseExport,
     bindingDraft: AimiFinalizeBindingDraft,
+    restoreGuards: AimiFinalizeRestoreGuards,
     smbAction: AimiSmbActionType,
     format2f: (Float) -> String,
 ): FinalizeSmbSideEffects? {
@@ -385,6 +397,8 @@ internal fun decideFinalizeAndCapSmb(
     }
     val slowCarbEarlyStart = slowCarb.earlyStartMs()
     val rawEffortFactor = effort?.smbFactor ?: 1.0
+    val mealModeCondition = mealFlags.mealModeCondition()
+    val modelOutputU = bindingDraft.current().modelOutputU
     val seed = AimiSmbFinalizeMath.Input(
         proposedUnits = proposedUnits,
         waitBias = rbtHints?.waitBiasMultiplier ?: 1.0,
@@ -420,7 +434,7 @@ internal fun decideFinalizeAndCapSmb(
         tdd24h = tdd.resolve(30.0),
         iobActivityNow = iobActivityNow,
         throttle = throttle,
-        mealModeCondition = mealFlags.mealModeCondition(),
+        mealModeCondition = mealModeCondition,
         criticalSafetyZeroed = criticalFlag.zeroedThisTick(),
         contextSuppressSmb = contextSmb.suppress(),
         contextCeilingU = contextSmb.ceilingU(),
@@ -438,6 +452,8 @@ internal fun decideFinalizeAndCapSmb(
         ceilingRepeatCount = ceilingRepeatCount,
         ceilingRepeatLastMs = ceilingRepeatLastMs,
         nowMs = clock.nowMs(),
+        modelOutputU = modelOutputU,
+        restoreCeilingExempt = isExplicitUserAction || mealModeCondition || restoreGuards.declaredMealWindowActive(),
         format2f = format2f,
     )
     val eventualForStacking = decisionEventualBgForSmb.takeIf { it.isFinite() && it > 1.0 }
@@ -466,7 +482,9 @@ internal fun decideFinalizeAndCapSmb(
         mealAbsorptionPhase = mealAbsorption?.phase ?: MealAbsorptionPhase.NONE,
         mealModeActive = mealFlags.anyManualMeal(),
     )
-    val out = AimiSmbFinalizeMath.decide(seed.copy(stacking = stackingEval))
+    // Read after the IOB surveillance stance, as the reference reads it after Red Carpet.
+    val coffeeSmbCeilingU = restoreGuards.coffeeSmbCeilingU(modelOutputU)
+    val out = AimiSmbFinalizeMath.decide(seed.copy(stacking = stackingEval, coffeeSmbCeilingU = coffeeSmbCeilingU))
     out.logs.forEach { consoleLog.add(it) }
     out.reasonBits.forEach { rT.reason.append(it) }
     riseExport.note(
@@ -505,7 +523,43 @@ internal fun decideFinalizeAndCapSmb(
             phase = "FINALIZE",
             kind = if (out.afterRedCarpet > safeCap + SmbBindingTrace.REDUCTION_TOLERANCE_U) "RESTORE" else "PASS",
         )
-        .appendStage("TERMINAL_PROTECTIONS", out.afterRedCarpet, finalUnits, phase = "FINALIZE", kind = "GUARD")
+        .let { draft ->
+            if (out.afterFinalizeFloor > out.afterRedCarpet + SmbBindingTrace.REDUCTION_TOLERANCE_U) {
+                draft.appendStage(
+                    "RBT_FINALIZE_FLOOR",
+                    out.afterRedCarpet,
+                    out.afterFinalizeFloor,
+                    hyperReleaseFloorU,
+                    phase = "FINALIZE",
+                    kind = "RESTORE",
+                )
+            } else {
+                draft
+            }
+        }
+        .let { draft ->
+            if (out.afterRestoreCeiling < out.afterFinalizeFloor - SmbBindingTrace.REDUCTION_TOLERANCE_U) {
+                draft.appendStage(
+                    "RESTORE_CEILING",
+                    out.afterFinalizeFloor,
+                    out.afterRestoreCeiling,
+                    safeCap.toDouble(),
+                    phase = "FINALIZE",
+                    kind = "CAP",
+                )
+            } else {
+                draft
+            }
+        }
+        .let { draft ->
+            val cutFrom = out.coffeeSmbCutFromU
+            if (cutFrom != null) {
+                draft.appendStage("COFFEE_SMB_CAP", cutFrom, out.afterRestoreGuards, phase = "FINALIZE", kind = "CAP")
+            } else {
+                draft
+            }
+        }
+        .appendStage("TERMINAL_PROTECTIONS", out.afterRestoreGuards, finalUnits, phase = "FINALIZE", kind = "GUARD")
 
     if (finalUnits > 0) {
         latch.markDelivered(clock.nowMs())
@@ -597,6 +651,7 @@ internal fun decideFinalizeAndCapSmb(
         smbCapped = finalUnits,
         smbFinal = finalUnits,
         iobSurveillance = surveillance,
+        coffeeSmbCutFromU = out.coffeeSmbCutFromU,
     )
 }
 

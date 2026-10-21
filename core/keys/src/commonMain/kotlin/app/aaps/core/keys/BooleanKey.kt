@@ -721,6 +721,21 @@ enum class BooleanKey(
         title = KeysStrings.pref_title_aimi_forced_tbr_real_pred_delta,
         summary = KeysStrings.pref_summary_aimi_forced_tbr_real_pred_delta,
     ),
+    /** 🩸 Same stack rule as [OApsAIMIDynamicBasalStackCap], on the final rate at the end of setTempBasal:
+     *  back to the profile basal when IOB × ISF ≥ BG − 70, outside a declared meal. OFF by default (shadow):
+     *  on 2026-09-02..10-20 it marks risk (lows 28 % vs 13 %) but does not discriminate (1.34). See `BasalStackTerminalCap`. */
+    OApsAIMIBasalStackTerminalCap(
+        "key_aimi_basal_stack_terminal_cap", false,
+        title = KeysStrings.pref_title_aimi_basal_stack_terminal_cap,
+        summary = KeysStrings.pref_summary_aimi_basal_stack_terminal_cap,
+    ),
+    /** 🩸 Engine "Slow rise" / "Eventual BG>110": bound to profile × one glucose factor (0.5–5). OFF by default (shadow).
+     *  See `EngineHyperRateBound`. */
+    OApsAIMIEngineHyperRateBound(
+        "key_aimi_engine_hyper_rate_bound", false,
+        title = KeysStrings.pref_title_aimi_engine_hyper_rate_bound,
+        summary = KeysStrings.pref_summary_aimi_engine_hyper_rate_bound,
+    ),
     OApsAIMIBasalTerminalInvariants(
         "key_aimi_basal_terminal_invariants", true,
         title = KeysStrings.pref_title_aimi_basal_terminal_invariants,

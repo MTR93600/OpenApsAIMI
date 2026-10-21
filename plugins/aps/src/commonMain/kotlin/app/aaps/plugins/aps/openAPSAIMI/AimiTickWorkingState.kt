@@ -1,7 +1,10 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
 import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
+import app.aaps.plugins.aps.openAPSAIMI.basal.BasalStackTerminalCap
+import app.aaps.plugins.aps.openAPSAIMI.basal.CoffeeRiseMode
 import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalStackCap
+import app.aaps.plugins.aps.openAPSAIMI.basal.EngineHyperRateBound
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.effects.RbtLiveCommitResult
 import app.aaps.plugins.aps.openAPSAIMI.inflammatory.InflammationAdjuster
@@ -14,6 +17,7 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.PatientModeOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalTreeSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
+import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionRuntime
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioMultipliersMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhaseClassifier
 import app.aaps.plugins.aps.openAPSAIMI.physio.pattern.PhysiologicalPatternSnapshot
@@ -169,6 +173,19 @@ internal class AimiTickWorkingState {
     // DynamicBasalStackCap verdicts of this tick (engine PI fallback, setTempBasal). Export only.
     var lastDynamicStackCapEngine: DynamicBasalStackCap.Verdict? = null
     var lastDynamicStackCapSetTemp: DynamicBasalStackCap.Verdict? = null
+
+    // BasalStackTerminalCap (end of setTempBasal), EngineHyperRateBound and MealAbsorptionRuntime of this tick. Export only.
+    var lastStackTerminalVerdict: BasalStackTerminalCap.Verdict? = null
+    var lastEngineHyperBound: EngineHyperRateBound.Verdict? = null
+    var lastMealAbsorptionRuntime: MealAbsorptionRuntime.Result? = null
+
+    // "coffee" note of this tick (see CoffeeRiseMode) and the profile values its basal band needs.
+    var coffeeNote: Therapy.CoffeeNote? = null
+    var coffeeProfileBasalUph: Double = 0.0
+    var coffeeMaxBasalUph: Double = 0.0
+    var lastCoffeeVerdict: CoffeeRiseMode.Verdict? = null
+    var lastCoffeeSmbCutFromU: Double? = null
+    var lastCoffeeBasalChange: String? = null
     var raEstimatorRunCountAtTickStart: Long = -1L
     var mealAbsorptionDeltaPrevForTick: Double? = null
     var mealAbsorptionDeltaPrevLatched: Boolean = false

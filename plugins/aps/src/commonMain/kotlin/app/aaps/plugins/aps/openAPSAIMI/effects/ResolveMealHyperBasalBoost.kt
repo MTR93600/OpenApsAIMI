@@ -12,6 +12,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.EndogenousBasalBridgePolicy
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionMemory
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
+import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionRuntime
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
 
@@ -40,6 +41,9 @@ internal interface AimiMealHyperFields {
     fun basalFirstActive(): Boolean
     fun fragileBg(): Boolean
     fun fastingTime(): Boolean
+
+    /** Runtime of the meal-absorption overlay of this tick, for the export. Nothing to do by default. */
+    fun recordMealAbsorptionRuntime(result: MealAbsorptionRuntime.Result) {}
 }
 
 /** `setTempBasal`. Le corps reste dans la coquille Android. */
@@ -172,16 +176,21 @@ internal fun decideMealHyperBasalBoost(
                     fields.mealAbsorption()?.phase == MealAbsorptionPhase.INTER_WAVE ||
                     fields.mealAbsorption()?.phase == MealAbsorptionPhase.PEAK_CORRECTION
                 ) -> {
-            val runTime: Int = MealAbsorptionMemory.lastActiveAtMs.takeIf { it > 0L }?.let {
-                ((clock.nowMs() - it) / 60_000L).toInt().coerceAtLeast(0)
-            } ?: listOf(
-                fields.mealRuntime(),
-                fields.lunchRuntime(),
-                fields.dinnerRuntime(),
-                fields.highCarbRunTime(),
-                fields.bfastRuntime(),
-                fields.snackRunTime(),
-            ).maxOrNull()?.toInt() ?: 0
+            val runtime = MealAbsorptionRuntime.resolve(
+                nowMs = clock.nowMs(),
+                onsetAtMs = MealAbsorptionMemory.onsetAtMs,
+                lastActiveAtMs = MealAbsorptionMemory.lastActiveAtMs,
+                modeRuntimesMin = listOf(
+                    fields.mealRuntime(),
+                    fields.lunchRuntime(),
+                    fields.dinnerRuntime(),
+                    fields.highCarbRunTime(),
+                    fields.bfastRuntime(),
+                    fields.snackRunTime(),
+                ),
+            )
+            fields.recordMealAbsorptionRuntime(runtime)
+            val runTime: Int = runtime.runtimeMin
             val target = targetBg
             val rocketStart = fields.delta() > 5.0f || fields.bg() > targetBg + 40
             val safeMax = if (rocketStart) profile.max_basal else if (mealModesMaxBasal > 0) mealModesMaxBasal else profileCurrentBasal * 2.0
@@ -200,7 +209,7 @@ internal fun decideMealHyperBasalBoost(
                     basal,
                     profileCurrentBasal,
                     boostedRate / profileCurrentBasal,
-                    "Meal absorption ${fields.mealAbsorption()?.phase?.name} ($runTime m)",
+                    "Meal absorption ${fields.mealAbsorption()?.phase?.name} (${runtime.onsetMin ?: runTime} m)",
                     currentTemp,
                     rT,
                 )

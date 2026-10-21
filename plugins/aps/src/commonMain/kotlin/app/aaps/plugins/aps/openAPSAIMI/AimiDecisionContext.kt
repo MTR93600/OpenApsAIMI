@@ -391,6 +391,14 @@ internal data class AimiDecisionContext(
         var meal_blocks_origin: JsonObject? = null,
         /** DynamicBasalStackCap on the engine PI fallback and on setTempBasal. */
         var dynamic_basal_stack_cap: JsonObject? = null,
+        /** EngineHyperRateBound on the engine "Slow rise" / "Eventual BG>110" branches (shadow when off). */
+        var engine_hyper_bound: JsonObject? = null,
+        /** MealAbsorptionRuntime of the meal-absorption overlay: old runtime vs real episode age. */
+        var meal_absorption_runtime: JsonObject? = null,
+        /** MealAbsorptionMemory episode: onset, last evidence, why the last one closed (F10). */
+        var meal_absorption_episode: JsonObject? = null,
+        /** CoffeeRiseMode verdict of this tick ("coffee" note). */
+        var coffee_mode: JsonObject? = null,
         /** PKPD vs scenario eventual-BG divergence audit (PredictionDivergenceAuditor) */
         var pred_divergence: JsonObject? = null,
         /** Recursive Belief Tree — full JSON object for AIMI_Decisions.jsonl */
@@ -850,6 +858,10 @@ internal data class AimiDecisionContext(
             adjustments.declared_meal?.let { adj.put("declared_meal", it) }
             adjustments.meal_blocks_origin?.let { adj.put("meal_blocks_origin", it) }
             adjustments.dynamic_basal_stack_cap?.let { adj.put("dynamic_basal_stack_cap", it) }
+            adjustments.engine_hyper_bound?.let { adj.put("engine_hyper_bound", it) }
+            adjustments.meal_absorption_runtime?.let { adj.put("meal_absorption_runtime", it) }
+            adjustments.meal_absorption_episode?.let { adj.put("meal_absorption_episode", it) }
+            adjustments.coffee_mode?.let { adj.put("coffee_mode", it) }
             adjustments.pred_divergence?.let { pd ->
                 adj.put("pred_divergence", pd)
             }

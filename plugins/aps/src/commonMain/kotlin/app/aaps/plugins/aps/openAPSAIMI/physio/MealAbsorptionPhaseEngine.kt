@@ -29,7 +29,10 @@ object MealAbsorptionPhaseEngine {
         val heartRateBpm: Int,
         val restingHeartRateBpm: Int,
         val stepsLast15m: Int,
-        val uamConfidence: Double,
+        /**
+         * A meal the person declared (meal mode, advisor carbs, explicit trigger, FCL/anticip note).
+         * Not the loop's own SMBs, not the previous phase: see `MealSafetyContext.declaredMealIntent`.
+         */
         val mealIntent: Boolean,
         val physiologicalPhase: PhysiologicalPhase,
         val estimatedRa: Double? = null,
@@ -52,6 +55,10 @@ object MealAbsorptionPhaseEngine {
         val kineticScore: Double,
         val trajectoryScore: Double,
         val physioScore: Double,
+        /** Meal evidence of the raw classification, whatever branch was chosen. Feeds [MealAbsorptionMemory]. */
+        val evidence: MealAbsorptionMemory.Evidence = MealAbsorptionMemory.Evidence.NONE,
+        /** The raw NONE must not be turned back into the previous phase by the hysteresis. */
+        val suppressHold: Boolean = false,
     )
 
     private const val FAST_RISE_DELTA = 2.5
@@ -60,9 +67,22 @@ object MealAbsorptionPhaseEngine {
     private const val SECOND_WAVE_DELTA = 1.2
     private const val INTER_WAVE_DELTA_MAX = 2.25
 
+    /** Under this glucose a moderate rise in an open episode is not "inter-wave". */
+    internal const val INTER_WAVE_MIN_BG_MGDL = 100.0
+
+    /** Entered carbs that count as meal evidence for [MealAbsorptionMemory]. */
+    private const val COB_EVIDENCE_G = 5.0
+
     fun evaluate(raw: Input): Output {
-        val stabilized = MealAbsorptionPhaseHysteresis.stabilize(classifyRaw(raw))
-        MealAbsorptionMemory.update(stabilized, raw.nowMs)
+        val classified = classifyRaw(raw)
+        var stabilized = MealAbsorptionPhaseHysteresis.stabilize(classified)
+        // Evidence comes from the raw classification: a held copy is a NONE tick, never evidence.
+        MealAbsorptionMemory.update(stabilized, raw.nowMs, classified.evidence)
+        if (stabilized !== classified && !MealAbsorptionMemory.isActive(raw.nowMs)) {
+            // The episode closed: nothing left to hold.
+            MealAbsorptionPhaseHysteresis.reset()
+            stabilized = classified
+        }
         return stabilized.copy(
             memoryActive = MealAbsorptionMemory.isActive(raw.nowMs),
             waveCount = MealAbsorptionMemory.waveCount,
@@ -93,7 +113,6 @@ object MealAbsorptionPhaseEngine {
         if (input.mealCobG >= 5.0) belief = min(1.0, belief + 0.30)
         if (input.physiologicalPhase.isMealRisk) belief = min(1.0, belief + 0.20)
         input.estimatedRa?.takeIf { it >= 2.0 }?.let { belief = min(1.0, belief + 0.15) }
-        if (input.uamConfidence >= 0.45) belief = min(1.0, belief + 0.10)
 
         val fastRise = isFastRise(input)
         val moderateRise = input.deltaMgdlPer5 >= 1.5 ||
@@ -117,10 +136,22 @@ object MealAbsorptionPhaseEngine {
                 input.bgMgdl >= 140.0 &&
                 dev >= highBand * 0.5 -> MealAbsorptionPhase.INTER_WAVE
             fastRise && belief >= 0.55 -> MealAbsorptionPhase.FIRST_WAVE
-            memoryActive && moderateRise && belief >= 0.40 -> MealAbsorptionPhase.INTER_WAVE
+            // Without a glucose floor this rule called a rise at 54 mg/dL "inter-wave". It must give
+            // NONE here, not fall through to the chrono FIRST_WAVE rule below.
+            memoryActive && moderateRise && belief >= 0.40 ->
+                if (input.bgMgdl < INTER_WAVE_MIN_BG_MGDL) MealAbsorptionPhase.NONE else MealAbsorptionPhase.INTER_WAVE
             belief >= 0.55 && moderateRise && chrono >= 0.55 -> MealAbsorptionPhase.FIRST_WAVE
             else -> MealAbsorptionPhase.NONE
         }
+
+        val interWaveFloorBlocked = phase == MealAbsorptionPhase.NONE && memoryActive && moderateRise &&
+            belief >= 0.40 && input.bgMgdl < INTER_WAVE_MIN_BG_MGDL
+        val evidence = MealAbsorptionMemory.Evidence(
+            firstWave = belief >= 0.55 && (fastRise || (moderateRise && chrono >= 0.55)),
+            lateFat = input.lateFatProteinRise && input.mealCobG < 1.0,
+            declaredMeal = input.mealIntent,
+            cob = input.mealCobG >= COB_EVIDENCE_G,
+        )
 
         val deliveryPriority = mealDeliveryPriority(
             phase = phase,
@@ -144,6 +175,8 @@ object MealAbsorptionPhaseEngine {
             kineticScore = kinetic,
             trajectoryScore = trajectory,
             physioScore = physio,
+            evidence = evidence,
+            suppressHold = interWaveFloorBlocked,
         )
     }
 
@@ -213,7 +246,7 @@ object MealAbsorptionPhaseEngine {
         if (phase.bypassesIobSurveillance) return true
         if (phase == MealAbsorptionPhase.INTER_WAVE && belief >= 0.40) return true
         if (phase == MealAbsorptionPhase.LATE_FAT) return false
-        return (input.mealIntent || input.mealCobG >= 6.0 || input.uamConfidence >= 0.45 || belief >= 0.45) &&
+        return (input.mealIntent || input.mealCobG >= 6.0 || belief >= 0.45) &&
             input.bgMgdl >= 130.0 &&
             (fastRise || moderateRise || phase.isActive)
     }

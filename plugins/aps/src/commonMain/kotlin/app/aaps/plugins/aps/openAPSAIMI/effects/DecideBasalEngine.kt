@@ -194,6 +194,7 @@ internal fun decideBasalDecisionEngine(
         dynamicStackCapArmed = preferences.get(BooleanKey.OApsAIMIDynamicBasalStackCap),
         declaredMealActive = calls.declaredMealWindowActive(),
         stackCapIsf = calls.stackCapIsf(),
+        engineHyperBoundArmed = preferences.get(BooleanKey.OApsAIMIEngineHyperRateBound),
     )
     val helpers = BasalDecisionEngine.Helpers(
         calculateRate = { basalValue, currentBasalValue, multiplier, label ->

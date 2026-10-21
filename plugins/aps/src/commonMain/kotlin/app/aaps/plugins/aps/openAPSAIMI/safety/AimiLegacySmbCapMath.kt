@@ -131,6 +131,10 @@ internal object AimiLegacySmbCapMath {
         effectiveMaxIob: Double,
         iobForCap: Double,
         memberIob: Double,
+        /** What the model asked for this tick, `null` when unknown. See [SmbRestoreCeiling]. */
+        modelOutputU: Double? = null,
+        /** Manual action, meal mode or declared meal: the restore ceiling does not apply. */
+        restoreCeilingExempt: Boolean = false,
     ): RedCarpet {
         val logs = mutableListOf<String>()
         val isMealChaos = mealCob > 10.0 && delta > 5.0
@@ -164,7 +168,13 @@ internal object AimiLegacySmbCapMath {
                 }
                 else -> {
                     logs += "✨ RED CARPET: Restoring meal bolus blocked by minor safety (Proposed=${aimiFmt2(proposedUnits)} vs Gated=${aimiFmt2(smbAfterGuards)})"
-                    proposedUnits
+                    // Same ceiling as the finalize restore, see SmbRestoreCeiling.
+                    SmbRestoreCeiling.apply(
+                        finalU = proposedUnits.toDouble(),
+                        modelOutputU = modelOutputU,
+                        afterGuardsU = smbAfterGuards.toDouble(),
+                        exempt = restoreCeilingExempt,
+                    ).toFloat()
                 }
             }
         } else {

@@ -18,6 +18,16 @@ data class MealSafetyContext(
             inferredMealSignal ||
             (manualBolusAgeMin != null && manualBolusAgeMin <= MANUAL_BOLUS_SUPPRESS_WINDOW_MIN)
 
+    /**
+     * A meal the person declared: a meal mode, fresh advisor carbs, or an explicit trigger.
+     *
+     * Unlike [hasMealIntent] it leaves out [manualBolusAgeMin] (which counts the loop's own SMBs) and
+     * [inferredMealSignal] (which reads the meal-absorption phase of the previous tick). The
+     * meal-absorption belief reads this one: with [hasMealIntent] it fed on its own output.
+     */
+    val declaredMealIntent: Boolean
+        get() = mealModeActive || mealAdvisorCarbsFresh || explicitMealTrigger
+
     companion object {
         const val MANUAL_BOLUS_SUPPRESS_WINDOW_MIN = 45.0
     }

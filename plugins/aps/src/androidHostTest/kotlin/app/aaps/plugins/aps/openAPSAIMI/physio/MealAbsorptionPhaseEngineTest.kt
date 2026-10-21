@@ -43,7 +43,6 @@ class MealAbsorptionPhaseEngineTest {
         heartRateBpm = 78,
         restingHeartRateBpm = 62,
         stepsLast15m = 50,
-        uamConfidence = 0.5,
         mealIntent = false,
         physiologicalPhase = PhysiologicalPhase.MEAL_UNDECLARED,
         nowMs = nowMs,
@@ -104,6 +103,8 @@ class MealAbsorptionPhaseEngineTest {
                 physioScore = 0.0,
             ),
             nowMs = 900_000L,
+            // An INTER_WAVE alone opens no episode since F10: the seed stands for a meal already under way.
+            evidence = MealAbsorptionMemory.Evidence(firstWave = true),
         )
         val out = MealAbsorptionPhaseEngine.evaluate(
             baseInput(
@@ -222,5 +223,50 @@ class MealAbsorptionPhaseEngineTest {
         )
         assertFalse(stress.phase == PhysiologicalPhase.STRESS_CORTISOL)
     }
-}
 
+    // ---- F10 / belief fixes (2026-10-21) ------------------------------------------------------
+
+    private fun seed(phase: MealAbsorptionPhase, nowMs: Long, delta: Double = 3.0, gap: Double = 150.0) =
+        MealAbsorptionMemory.update(
+            MealAbsorptionPhaseEngine.Output(
+                phase = phase, belief = 0.8, reason = "seed", deltaMgdlPer5 = delta, gapMgdl = gap,
+                bestTerminalMgdl = 220.0, memoryActive = true, waveCount = 1, mealDeliveryPriority = true,
+                chronoPrior = 0.85, kineticScore = 0.9, trajectoryScore = 0.5, physioScore = 0.0,
+            ),
+            nowMs = nowMs,
+        )
+
+    /**
+     * Memory active, a rise at BG 90 used to be INTER_WAVE (rule with no glucose floor). Blocking it
+     * must give NONE, not fall through to the chrono FIRST_WAVE rule, and must not be held either.
+     */
+    @Test
+    fun interWaveUnderTheGlucoseFloorIsNoneAndNotHeld() {
+        val t = 1_000_000_000L
+        val first = MealAbsorptionPhaseEngine.evaluate(baseInput(bg = 105.0, delta = 9.0, shortAvg = 7.5, bestT = 218.0, nowMs = t))
+        assertEquals(MealAbsorptionPhase.FIRST_WAVE, first.phase)
+        val low = MealAbsorptionPhaseEngine.evaluate(baseInput(bg = 90.0, delta = 1.6, shortAvg = 0.5, nowMs = t + 300_000L))
+        assertEquals(MealAbsorptionPhase.NONE, low.phase)
+    }
+
+    /** A real fast rise while the memory is active is labelled INTER_WAVE, but it is still meal evidence. */
+    @Test
+    fun evidenceComesFromTheFirstWavePredicateNotFromTheBranch() {
+        val t = 2_000_000_000L
+        seed(MealAbsorptionPhase.FIRST_WAVE, t - 300_000L)
+        val out = MealAbsorptionPhaseEngine.evaluate(baseInput(bg = 175.0, delta = 2.0, shortAvg = 2.5, nowMs = t))
+        assertEquals(MealAbsorptionPhase.INTER_WAVE, out.phase)
+        assertTrue(out.evidence.firstWave)
+    }
+
+    /** The UAM confidence was a constant 0.5 (its writer has no caller): it must not open delivery priority. */
+    @Test
+    fun deliveryPriorityNoLongerOpenedByTheUamConstant() {
+        val out = MealAbsorptionPhaseEngine.evaluate(
+            baseInput(bg = 135.0, delta = 1.6, shortAvg = 0.5, bestT = 135.0, floorT = 130.0, hour = 3)
+                .copy(physiologicalPhase = PhysiologicalPhase.OFF),
+        )
+        assertEquals(MealAbsorptionPhase.NONE, out.phase)
+        assertFalse(out.mealDeliveryPriority)
+    }
+}

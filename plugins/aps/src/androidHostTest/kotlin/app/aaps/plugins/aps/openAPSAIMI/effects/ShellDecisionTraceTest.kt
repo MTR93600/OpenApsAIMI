@@ -5085,6 +5085,7 @@ class ShellDecisionTraceTest {
             READ key=IntKey.OApsAIMIHighBGinterval value=0
             READ key=BooleanKey.OApsAIMIRiseCeilingGuard value=false
             READ key=BooleanKey.OApsAIMIIobSurveillanceGuard value=false
+            READ key=DoubleKey.OApsAIMIHighBg value=0.00
             WRITE key=AimiLongKey.LastPrebolusTime value=1700000000000
             READ key=BooleanKey.OApsAIMIIobSurveillanceGuard value=false
             READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
@@ -5419,6 +5420,7 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMIBasalProjectedError value=false
             READ key=BooleanKey.OApsAIMIForcedTbrRealPredDelta value=false
             READ key=BooleanKey.OApsAIMIDynamicBasalStackCap value=false
+            READ key=BooleanKey.OApsAIMIEngineHyperRateBound value=false
             READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
             READ key=BooleanKey.OApsAIMIBasalSlewLimitEnabled value=false
             READ key=BooleanKey.OApsAIMIAnticipBasalFloor value=false
@@ -5436,6 +5438,8 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
             READ key=BooleanKey.OApsAIMIBasalChannelSafetyGuards value=false
             READ key=BooleanKey.OApsAIMIDynamicBasalStackCap value=false
+            READ key=BooleanKey.OApsAIMIBasalStackTerminalCap value=false
+            READ key=DoubleKey.OApsAIMIHighBg value=0.00
             READ key=BooleanKey.OApsAIMIRecursiveBeliefShadow value=false
             READ key=BooleanKey.OApsAIMIRecursiveBeliefAuthority value=false
             READ key=BooleanKey.OApsAIMIRecursiveBeliefWavelet value=false
@@ -6212,6 +6216,8 @@ READ key=BooleanKey.OApsAIMIPeakGovernorEnabled value=false
 READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
 READ key=BooleanKey.OApsAIMIBasalChannelSafetyGuards value=false
 READ key=BooleanKey.OApsAIMIDynamicBasalStackCap value=false
+READ key=BooleanKey.OApsAIMIBasalStackTerminalCap value=false
+READ key=DoubleKey.OApsAIMIHighBg value=0.00
 READ key=BooleanKey.OApsAIMIRecursiveBeliefShadow value=false
 READ key=BooleanKey.OApsAIMIRecursiveBeliefAuthority value=false
 READ key=BooleanKey.OApsAIMIRecursiveBeliefWavelet value=false
@@ -6309,6 +6315,7 @@ Failed to save AIMI Decision JSON: lateinit property appendCap has not been init
             READ key=BooleanKey.OApsAIMIRiseCeilingGuard value=false
             READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
             READ key=BooleanKey.OApsAIMIIobSurveillanceGuard value=false
+            READ key=DoubleKey.OApsAIMIHighBg value=0.00
             LOG PKPD_THROTTLE smbFactor=0.60 intervalAdd=3 preferTbr=true reason=Onset unconfirmed, rising BG → TBR priority
             WRITE key=AimiLongKey.LastPrebolusTime value=1700000000000
             LOG GATE_REFRACTORY sinceLastBolus=999.0m window=5.0
@@ -6461,6 +6468,7 @@ Failed to save AIMI Decision JSON: lateinit property appendCap has not been init
             READ key=BooleanKey.OApsAIMIBasalProjectedError value=false
             READ key=BooleanKey.OApsAIMIForcedTbrRealPredDelta value=false
             READ key=BooleanKey.OApsAIMIDynamicBasalStackCap value=false
+            READ key=BooleanKey.OApsAIMIEngineHyperRateBound value=false
         """.trimIndent()
 
         private val DOSE_TERMINAL_MEAL_UPLIFT_TRACE = """
@@ -7134,6 +7142,7 @@ LOG 📦 CACHE TDD24H=MISSING reason=tdd24h_missing
 READ key=BooleanKey.OApsAIMIRiseCeilingGuard value=false
 READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
 READ key=BooleanKey.OApsAIMIIobSurveillanceGuard value=false
+READ key=DoubleKey.OApsAIMIHighBg value=0.00
 LOG PKPD_THROTTLE smbFactor=0.60 intervalAdd=3 preferTbr=true reason=Onset unconfirmed, rising BG → TBR priority
 WRITE key=AimiLongKey.LastPrebolusTime value=1700000000000
 LOG GATE_REFRACTORY sinceLastBolus=999.0m window=5.0

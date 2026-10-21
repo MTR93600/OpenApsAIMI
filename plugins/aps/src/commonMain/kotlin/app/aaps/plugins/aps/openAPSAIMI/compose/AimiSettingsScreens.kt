@@ -814,6 +814,8 @@ internal object AimiSettingsScreens {
                 BooleanKey.OApsAIMIBasalProjectedError,
                 BooleanKey.OApsAIMIDynamicBasalStackCap,
                 BooleanKey.OApsAIMIForcedTbrRealPredDelta,
+                BooleanKey.OApsAIMIBasalStackTerminalCap,
+                BooleanKey.OApsAIMIEngineHyperRateBound,
                 DoubleKey.OApsAIMIAdaptiveBasalMaxScaling,
                 DoubleKey.OApsAIMIGovernanceHypoRateEnter,
                 DoubleKey.OApsAIMIGovernanceHypoRateExit,

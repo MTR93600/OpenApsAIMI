@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.safety
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt0
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
+import app.aaps.plugins.aps.openAPSAIMI.quality.SmbBindingTrace
 import app.aaps.plugins.aps.openAPSAIMI.smb.RiseCeilingGuard
 import kotlin.math.max
 import kotlin.math.min
@@ -83,6 +84,12 @@ internal object AimiSmbFinalizeMath {
         val ceilingRepeatCount: Int = 0,
         val ceilingRepeatLastMs: Long = 0L,
         val nowMs: Long = 0L,
+        /** What the model asked for this tick (binding trace), `null` when unknown. See [SmbRestoreCeiling]. */
+        val modelOutputU: Double? = null,
+        /** Manual action, meal mode or declared meal: the restore ceiling does not apply. */
+        val restoreCeilingExempt: Boolean = false,
+        /** Most SMB the "coffee" note allows (`CoffeeRiseMode.smbCeilingU`), `null` when it does not apply. */
+        val coffeeSmbCeilingU: Double? = null,
         val format2f: (Float) -> String = { it.toString() },
     )
 
@@ -107,6 +114,14 @@ internal object AimiSmbFinalizeMath {
         val beforeThrottle: Float,
         val chainAfterThrottle: Float,
         val afterRedCarpet: Double,
+        /** After the RBT/HTR finalize floor (same as [afterRedCarpet] when it did not raise). */
+        val afterFinalizeFloor: Double,
+        /** After [SmbRestoreCeiling]. */
+        val afterRestoreCeiling: Double,
+        /** After the restore ceiling and the "coffee" SMB cap: where TERMINAL_PROTECTIONS starts. */
+        val afterRestoreGuards: Double,
+        /** Dose before the "coffee" SMB cap, `null` when the cap did not cut. */
+        val coffeeSmbCutFromU: Double?,
         val chainThrottleFactor: Double,
         val chainIntervalAdd: Int,
         val chainFinal: Double,
@@ -368,7 +383,13 @@ internal object AimiSmbFinalizeMath {
             finalUnits = safeCap.toDouble()
         }
         val afterRedCarpet = finalUnits
-        if (input.hyperReleaseFloorU > 0.0 && !isRedCarpetSituation) {
+        // The RBT/HTR finalize floor is a restore like Red Carpet, so it obeys the same vetoes: a zero
+        // set by a vital safety and an active IOB surveillance cannot be undone. On 2026-10-21 07:35 it
+        // put back 0.48 U over "BG below target stable without COB", and the trace showed it as the
+        // TERMINAL_PROTECTIONS guard because it wrote no stage of its own.
+        if (input.hyperReleaseFloorU > 0.0 && !isRedCarpetSituation &&
+            !input.criticalSafetyZeroed && !input.stacking.suppressRedCarpetRestore
+        ) {
             val iobSpace = (input.maxIob - input.iob).coerceAtLeast(0.0)
             val floorCap = minOf(input.hyperReleaseFloorU, iobSpace, input.baseLimit)
             if (finalUnits + 0.02 < floorCap) {
@@ -377,6 +398,33 @@ internal object AimiSmbFinalizeMath {
                 finalUnits = floorCap
             }
         }
+        val afterFinalizeFloor = finalUnits
+
+        // One ceiling for every restore (Red Carpet, finalize floor): no more than the model asked for
+        // or the guards let through. Not on a declared meal or a manual action. See SmbRestoreCeiling.
+        val beforeRestoreCeiling = finalUnits
+        finalUnits = SmbRestoreCeiling.apply(
+            finalU = finalUnits,
+            modelOutputU = input.modelOutputU,
+            afterGuardsU = safeCap.toDouble(),
+            exempt = input.restoreCeilingExempt,
+        )
+        if (finalUnits < beforeRestoreCeiling - SmbBindingTrace.REDUCTION_TOLERANCE_U) {
+            logs += "🧯 SMB_RESTORE_CEILING ${aimiFmt2(beforeRestoreCeiling)}→${aimiFmt2(finalUnits)}U " +
+                "(model=${aimiFmt2(input.modelOutputU ?: 0.0)} guards=${aimiFmt2(safeCap)})"
+        }
+        val afterRestoreCeiling = finalUnits
+
+        // "coffee" note: no SMB under the high BG, and above it only what the model asked for.
+        var coffeeSmbCutFromU: Double? = null
+        input.coffeeSmbCeilingU?.let { cap ->
+            if (finalUnits > cap + SmbBindingTrace.REDUCTION_TOLERANCE_U) {
+                logs += "☕ COFFEE_SMB_CAP ${aimiFmt2(finalUnits)}→${aimiFmt2(cap)}U"
+                coffeeSmbCutFromU = finalUnits
+                finalUnits = cap
+            }
+        }
+        val afterRestoreGuards = finalUnits
 
         var slowCarbWindow = input.slowCarbWindowMs
         var slowCarbDelivered = input.slowCarbDeliveredU
@@ -497,6 +545,10 @@ internal object AimiSmbFinalizeMath {
             beforeThrottle = beforeThrottle,
             chainAfterThrottle = chainAfterThrottle,
             afterRedCarpet = afterRedCarpet,
+            afterFinalizeFloor = afterFinalizeFloor,
+            afterRestoreCeiling = afterRestoreCeiling,
+            afterRestoreGuards = afterRestoreGuards,
+            coffeeSmbCutFromU = coffeeSmbCutFromU,
             chainThrottleFactor = chainThrottleFactor,
             chainIntervalAdd = chainIntervalAdd,
             chainFinal = finalUnits,

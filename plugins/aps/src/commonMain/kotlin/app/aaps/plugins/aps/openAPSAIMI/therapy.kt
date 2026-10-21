@@ -7,6 +7,7 @@ import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
+import app.aaps.plugins.aps.openAPSAIMI.basal.CoffeeRiseMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
@@ -152,6 +153,7 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
         persistenceLayer.deleteLastEventMatchingKeyword("dinner")
         persistenceLayer.deleteLastEventMatchingKeyword("fasting")
         persistenceLayer.deleteLastEventMatchingKeyword("delete")
+        for (keyword in CoffeeRiseMode.KEYWORDS) persistenceLayer.deleteLastEventMatchingKeyword(keyword)
     }
 
     private fun applySnapshot(snapshot: TherapySnapshot) {
@@ -325,6 +327,26 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
             .filter { it.timestamp >= fromTime && it.note?.contains(keyword, ignoreCase = true) == true }
             .maxByOrNull { it.timestamp }
         return lastEvent?.let { (now - it.timestamp) / 60000 } ?: -1L
+    }
+
+    /** A live "coffee" note: its age and its window, both in minutes. See [CoffeeRiseMode]. */
+    data class CoffeeNote(val ageMin: Long, val windowMin: Long)
+
+    /**
+     * The most recent coffee note whose window is still open, or `null`. The window is the note's own
+     * duration, 90 min without one, never more than 150 min ([CoffeeRiseMode.windowMin]). A stop note
+     * clears it like the other modes.
+     */
+    fun activeCoffee(nowMs: Long): CoffeeNote? {
+        if (stopTime) return null
+        val event = latestNoteEvents
+            .asSequence()
+            .filter { it.timestamp <= nowMs && CoffeeRiseMode.isCoffeeNote(it.note) }
+            .maxByOrNull { it.timestamp }
+            ?: return null
+        val windowMin = CoffeeRiseMode.windowMin(event.duration / 60_000L)
+        val ageMin = (nowMs - event.timestamp) / 60_000L
+        return if (ageMin < windowMin) CoffeeNote(ageMin, windowMin) else null
     }
 
     /**

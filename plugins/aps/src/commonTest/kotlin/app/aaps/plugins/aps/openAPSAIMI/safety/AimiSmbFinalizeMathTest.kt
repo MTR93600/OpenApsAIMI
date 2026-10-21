@@ -204,4 +204,70 @@ class AimiSmbFinalizeMathTest {
         assertEquals(3, out.ceilingRepeatCount)
         assertTrue(out.logs.any { it.startsWith("🧱 RISE_CEILING_GUARD") })
     }
+
+    // ---- Restore guards (dev_OAPSAIMI working tree 2026-10-21) -----------------------------------
+
+    private fun floorInput(criticalSafetyZeroed: Boolean) = AimiSmbFinalizeMath.Input(
+        proposedUnits = 0.5,
+        safetyUnits = 0.5f,
+        hyperReleaseFloorU = 1.0,
+        criticalSafetyZeroed = criticalSafetyZeroed,
+        baseLimit = 5.0,
+        maxIob = 10.0,
+        iob = 1.0,
+    )
+
+    @Test
+    fun theFinalizeFloorRaisesTheDoseWhenNoVitalSafetyZeroedIt() {
+        val out = AimiSmbFinalizeMath.decide(floorInput(criticalSafetyZeroed = false))
+        assertNear(1.0, out.afterFinalizeFloor)
+        assertTrue(out.afterFinalizeFloor > out.afterRedCarpet)
+        assertTrue(out.logs.any { it.startsWith("🚀 HTR finalize floor") })
+    }
+
+    /** Same veto as Red Carpet: a zero set by a vital safety this tick is never undone by the floor. */
+    @Test
+    fun theFinalizeFloorObeysTheVitalSafetyVeto() {
+        val out = AimiSmbFinalizeMath.decide(floorInput(criticalSafetyZeroed = true))
+        assertNear(out.afterRedCarpet, out.afterFinalizeFloor)
+        assertFalse(out.logs.any { it.startsWith("🚀 HTR finalize floor") })
+    }
+
+    private fun mealRestoreInput(exempt: Boolean) = AimiSmbFinalizeMath.Input(
+        proposedUnits = 4.0,
+        safetyUnits = 1f,
+        isMealActive = true,
+        baseLimit = 8.0,
+        maxSmbHb = 8.0,
+        maxIob = 20.0,
+        iob = 1.0,
+        modelOutputU = 0.0,
+        restoreCeilingExempt = exempt,
+    )
+
+    /** The model asked 0 U: the Red Carpet restore may not go above what the guards let through. */
+    @Test
+    fun theRestoreCeilingBoundsARedCarpetRestore() {
+        val out = AimiSmbFinalizeMath.decide(mealRestoreInput(exempt = false))
+        assertNear(4.0, out.afterRedCarpet)
+        assertNear(out.safeCap.toDouble(), out.afterRestoreCeiling)
+        assertNear(out.afterRestoreCeiling, out.finalUnits)
+        assertTrue(out.logs.any { it.startsWith("🧯 SMB_RESTORE_CEILING") })
+    }
+
+    @Test
+    fun aDeclaredMealKeepsItsRestore() {
+        val out = AimiSmbFinalizeMath.decide(mealRestoreInput(exempt = true))
+        assertNear(4.0, out.afterRestoreCeiling)
+    }
+
+    @Test
+    fun theCoffeeCapCutsTheDoseAndRecordsWhatItCut() {
+        val out = AimiSmbFinalizeMath.decide(
+            AimiSmbFinalizeMath.Input(proposedUnits = 2.0, safetyUnits = 2f, coffeeSmbCeilingU = 0.0),
+        )
+        assertNear(2.0, out.coffeeSmbCutFromU!!)
+        assertNear(0.0, out.afterRestoreGuards)
+        assertNear(0.0, out.finalUnits)
+    }
 }
