@@ -67,7 +67,7 @@ class IosMedtrumPluginGraphTest {
         val plugin = graph().medtrumPump
 
         assertEquals(PumpType.MEDTRUM_NANO, plugin.model())
-        assertFalse(plugin.canHandleDST())
+        assertTrue(plugin.canHandleDST())
         assertFalse(plugin.isConfigured(), "no pump has been chosen in this test, so it is not configured")
     }
 }

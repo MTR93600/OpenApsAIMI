@@ -25,8 +25,8 @@ import app.aaps.pump.medtrum.util.MedtrumDeviceName
  * [FakeBleCentral].
  *
  * Flow (mirrors Android `MedtrumBleTransportImpl`):
- * - [connect]: scan → match pump SN in manufacturer data (company 0x4781) →
- *   connect → discover services → discover characteristics → enable notify on
+ * - [connect]: direct connect to the known peripheral and scan → match pump SN in manufacturer
+ *   data (company 0x4781) → connect → discover services → discover characteristics → enable notify on
  *   READ_UUID + indicate on WRITE_UUID → [MedtrumBleCallback.onConnected].
  * - [sendMessage]: chunk via [WriteCommandPackets], write on WRITE_UUID
  *   (with response), continue on each `Written` event.
@@ -45,6 +45,10 @@ class IosMedtrumBleTransport(
     private val central: BleCentral,
     private val pumpSerial: () -> Long = { 0L },
     private val logger: MedtrumLogger = MedtrumLogger.NO_OP,
+    /** The iOS identifier of the peripheral last connected for this serial, or null. */
+    private val knownPeripheralId: (serial: Long) -> String? = { null },
+    /** Called once a link to the pump is fully set up, so the next connect can skip the scan. */
+    private val rememberPeripheralId: (serial: Long, id: String) -> Unit = { _, _ -> },
 ) : MedtrumBleTransport {
 
     companion object {
@@ -82,12 +86,28 @@ class IosMedtrumBleTransport(
         this.callback = callback
     }
 
+    /**
+     * Starts a link to the pump with serial [deviceSN], in two ways at once:
+     * - a direct connect to the peripheral this pump used last time. iOS keeps such a request
+     *   pending, with no time limit, also while the phone is locked - which is when the loop
+     *   needs the pump. A scan with no service filter, the only way to find a pump by its serial,
+     *   returns nothing at all while the app is in the background;
+     * - the scan, which finds the pump the first time, and finds it again when the base was
+     *   changed and the stored identifier belongs to another device.
+     * Whichever comes first wins; the other is stopped. The session's own timeout ends both.
+     */
     override fun connect(from: String, deviceSN: Long): Boolean {
         if (central.adapterState() != BleAdapterState.PoweredOn) return false
         targetSN = deviceSN
         descriptorsArmed = 0
         scanning = true
         central.startScan()
+        val known = knownPeripheralId(deviceSN)
+        if (known != null && central.connect(known)) {
+            logger.debug(TAG, "connect: pending direct connect to known peripheral $known")
+            linkId = known
+            writeSequenceNumber = 0
+        }
         return true
     }
 
@@ -212,6 +232,9 @@ class IosMedtrumBleTransport(
         if (sn == targetSN) {
             scanning = false
             central.stopScan()
+            if (linkId == event.id) return // the direct connect is already on its way to this pump
+            // The stored identifier was another device: drop that pending connect.
+            linkId?.let { central.cancel(it) }
             linkId = event.id
             writeSequenceNumber = 0
             central.connect(event.id)
@@ -221,6 +244,11 @@ class IosMedtrumBleTransport(
     private fun onLink(event: BleCentralEvent.Link) {
         if (event.id != linkId) return
         if (event.connected) {
+            // Reached through the direct connect: the scan is not needed any more.
+            if (scanning) {
+                scanning = false
+                central.stopScan()
+            }
             central.discoverServices(event.id)
         } else {
             linkId = null
@@ -250,6 +278,7 @@ class IosMedtrumBleTransport(
         // Both READ (notify) and WRITE (indicate) descriptors must be armed.
         if (descriptorsArmed >= 2) {
             descriptorsArmed = 0
+            rememberPeripheralId(targetSN, event.id)
             callback?.onConnected()
         }
     }

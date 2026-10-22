@@ -1,6 +1,8 @@
 package app.aaps.pump.medtrum.compose.patch
 
+import app.aaps.core.data.model.ICfg
 import app.aaps.core.data.model.TE
+import app.aaps.core.data.model.labelOfInsulin
 import app.aaps.core.data.time.T
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.interfaces.db.PersistenceLayer
@@ -18,6 +20,7 @@ import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.pump.ProfileGateStepHost
 import app.aaps.core.ui.compose.pump.activateProfileFromGate
+import app.aaps.core.ui.compose.pump.switchToWizardInsulin
 import app.aaps.core.ui.compose.siteRotation.BodyType
 import app.aaps.core.ui.compose.siteRotation.SiteLocationStepHost
 import app.aaps.pump.medtrum.code.PatchStep
@@ -52,8 +55,8 @@ import kotlinx.coroutines.sync.withLock
  * - the site location, through the shared [SiteLocationStepHost], shown when site rotation for the
  *   pump is turned on. It is saved on the cannula change of the new patch, as Android does.
  *
- * The insulin picker of the Android wizard is not here. The patch runs the active insulin, which is
- * chosen in the insulin settings.
+ * - the insulin of the new reservoir, when there is more than one to choose from. The profile is
+ *   switched to it once the patch runs, as Android does.
  */
 class MedtrumPatchWizardModel(
     private val patch: MedtrumPatchSession,
@@ -75,24 +78,43 @@ class MedtrumPatchWizardModel(
     data class PumpReadout(val primeProgress: Int, val reservoir: Double, val pumpState: String)
 
     /** The wizard pages, for the progress indicator. */
-    private enum class Page { PROFILE_GATE, BLE_SCAN, PREPARE, PRIME, SITE_LOCATION, ATTACH, ACTIVATE, COMPLETE, CONFIRM_DEACTIVATE, DEACTIVATING, DEACTIVATE_COMPLETE, RETRY }
+    private enum class Page { PROFILE_GATE, BLE_SCAN, PREPARE, SELECT_INSULIN, PRIME, SITE_LOCATION, ATTACH, ACTIVATE, COMPLETE, CONFIRM_DEACTIVATE, DEACTIVATING, DEACTIVATE_COMPLETE, RETRY }
 
     private val showingSiteLocation = MutableStateFlow(false)
 
     /** The retry prompt, shown before anything is asked of the pump - as on Android. */
     private val showingRetryPrompt = MutableStateFlow(false)
 
+    // Insulin selection, the Android SELECT_INSULIN page: which insulin is in the new reservoir.
+    private val _availableInsulins = MutableStateFlow<List<ICfg>>(emptyList())
+    val availableInsulins: StateFlow<List<ICfg>> = _availableInsulins.asStateFlow()
+    private val _selectedInsulin = MutableStateFlow<ICfg?>(null)
+    val selectedInsulin: StateFlow<ICfg?> = _selectedInsulin.asStateFlow()
+    private val _activeInsulinLabel = MutableStateFlow<String?>(null)
+    val activeInsulinLabel: StateFlow<String?> = _activeInsulinLabel.asStateFlow()
+
+    /** False until the person went past the insulin page of this activation. */
+    private val insulinChosen = MutableStateFlow(false)
+
+    /** Shown only when there is a choice to make, as on Android. */
+    val showInsulinStep: Boolean get() = _availableInsulins.value.size > 1
+    val concentrationEnabled: Boolean get() = preferences.get(BooleanKey.GeneralInsulinConcentration)
+
     /**
-     * The step to show: the session's, SITE_LOCATION while the person picks a site, or
-     * RETRY_ACTIVATION while the retry prompt waits for the person.
+     * The step to show: the session's, SITE_LOCATION while the person picks a site,
+     * RETRY_ACTIVATION while the retry prompt waits for the person, or SELECT_INSULIN between
+     * filling and priming. The session moves to PRIME by itself once the patch is filled; Android
+     * shows the insulin page right there.
      */
-    val step: StateFlow<PatchStep?> = combine(patch.step, showingSiteLocation, showingRetryPrompt) { sessionStep, site, retry ->
-        when {
-            retry -> PatchStep.RETRY_ACTIVATION
-            site  -> PatchStep.SITE_LOCATION
-            else  -> sessionStep
-        }
-    }.stateIn(scope, SharingStarted.Eagerly, null)
+    val step: StateFlow<PatchStep?> =
+        combine(patch.step, showingSiteLocation, showingRetryPrompt, insulinChosen, _availableInsulins) { sessionStep, site, retry, chosen, insulins ->
+            when {
+                retry                                                       -> PatchStep.RETRY_ACTIVATION
+                site                                                        -> PatchStep.SITE_LOCATION
+                sessionStep == PatchStep.PRIME && !chosen && insulins.size > 1 -> PatchStep.SELECT_INSULIN
+                else                                                        -> sessionStep
+            }
+        }.stateIn(scope, SharingStarted.Eagerly, null)
 
     /** Why the sequence stopped, from the session. Every further step is refused while it is set. */
     val failure: StateFlow<String?> = patch.failure
@@ -144,10 +166,41 @@ class MedtrumPatchWizardModel(
 
     /** Opens a new activation: the profile gate, the pump search, or the patch preparation. */
     fun startActivation() = action {
+        insulinChosen.value = false
+        loadInsulins()
         pages = activationPages()
         loadSiteRotationEntries()
         loadAvailableProfiles()
         report(patch.start())
+    }
+
+    fun selectInsulin(iCfg: ICfg) {
+        _selectedInsulin.value = iCfg
+    }
+
+    /** The insulin page is done; the priming page follows. */
+    fun insulinChosen() {
+        insulinChosen.value = true
+    }
+
+    private suspend fun loadInsulins() {
+        val insulins = insulinManager.insulins.map { it.deepClone() }
+        val activeLabel = insulins.labelOfInsulin(profileFunction.getProfile()?.iCfg)
+        _availableInsulins.value = insulins
+        _selectedInsulin.value = insulins.find { it.insulinLabel == activeLabel } ?: insulins.firstOrNull()
+        _activeInsulinLabel.value = activeLabel
+    }
+
+    /**
+     * Android `executeInsulinProfileSwitch`: after the patch runs, switch the profile to the
+     * insulin the person chose, when it is not the active one. A refused switch says why and does
+     * not stop the wizard: the patch is already running.
+     */
+    private suspend fun switchToChosenInsulin() {
+        val selected = _selectedInsulin.value ?: return
+        val activeLabel = insulinManager.insulins.labelOfInsulin(profileFunction.getProfile()?.iCfg)
+        if (selected.insulinLabel == activeLabel) return
+        switchToWizardInsulin(profileFunction, rh, rxBus, selected, Sources.Medtrum)
     }
 
     /** Opens the deactivation of the running patch. Nothing is sent until the person confirms. */
@@ -197,6 +250,7 @@ class MedtrumPatchWizardModel(
     fun activate() = waitingAction {
         if (report(patch.activate()) != PatchResult.Ok) return@waitingAction
         waitWhileNotYet(PatchStep.ACTIVATE) { patch.awaitActivated() }
+        if (patch.step.value == PatchStep.ACTIVATE_COMPLETE) switchToChosenInsulin()
     }
 
     /** Ends a successful activation and saves the site location on the new cannula change. */
@@ -409,6 +463,7 @@ class MedtrumPatchWizardModel(
         if (noProfile) add(Page.PROFILE_GATE)
         if (state.pumpSN == 0L) add(Page.BLE_SCAN)
         add(Page.PREPARE)
+        if (showInsulinStep) add(Page.SELECT_INSULIN)
         add(Page.PRIME)
         if (showSiteLocationStep) add(Page.SITE_LOCATION)
         add(Page.ATTACH)
@@ -430,7 +485,8 @@ class MedtrumPatchWizardModel(
             PatchStep.DEACTIVATE, PatchStep.FORCE_DEACTIVATION             -> Page.DEACTIVATING
             PatchStep.DEACTIVATION_COMPLETE                                -> Page.DEACTIVATE_COMPLETE
             PatchStep.RETRY_ACTIVATION, PatchStep.RETRY_ACTIVATION_CONNECT -> Page.RETRY
-            PatchStep.SELECT_INSULIN, PatchStep.CANCEL, null               -> return
+            PatchStep.SELECT_INSULIN                                       -> Page.SELECT_INSULIN
+            PatchStep.CANCEL, null                                         -> return
         }
         _progress.value = pages.indexOf(page).coerceAtLeast(0) to pages.size
     }

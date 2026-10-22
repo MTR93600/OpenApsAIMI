@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.utils
 
+import app.aaps.core.interfaces.concurrent.AapsLock
+import app.aaps.core.interfaces.concurrent.withLock
 import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.get
@@ -16,11 +18,15 @@ import platform.Foundation.NSUTF8StringEncoding
 import platform.Foundation.NSUserDomainMask
 import platform.Foundation.closeFile
 import platform.Foundation.create
+import platform.Foundation.dataUsingEncoding
 import platform.Foundation.fileHandleForReadingAtPath
+import platform.Foundation.fileHandleForWritingAtPath
 import platform.Foundation.readDataOfLength
+import platform.Foundation.seekToEndOfFile
 import platform.Foundation.seekToFileOffset
 import platform.Foundation.stringWithContentsOfFile
 import platform.Foundation.timeIntervalSince1970
+import platform.Foundation.writeData
 import platform.Foundation.writeToFile
 
 internal actual fun aimiLocalFiles(): AimiLocalFiles = IosAimiLocalFiles
@@ -52,9 +58,30 @@ private object IosAimiLocalFiles : AimiLocalFiles {
     override fun writeText(path: String, text: String): Boolean =
         NSString.create(string = text).writeToFile(path, atomically = true, encoding = NSUTF8StringEncoding, error = null)
 
-    override fun appendText(path: String, text: String): Boolean {
-        val current = readText(path).orEmpty()
-        return writeText(path, current + text)
+    /** One append at a time: two writers seeking to the same end would overwrite each other. */
+    private val appendLock = AapsLock()
+
+    /**
+     * Adds [text] at the end of the file, without reading it.
+     *
+     * This used to read the whole file and write it back with the new text, on every call. The
+     * decision log gets a line of hundreds of KB on every loop tick, so after a day each tick read
+     * and rewrote tens of MB - slow ticks and memory peaks, on the path that doses. Same way as
+     * `AAPSLoggerIos.appendToFile`: seek to the end and write.
+     */
+    override fun appendText(path: String, text: String): Boolean = appendLock.withLock {
+        if (!manager.fileExistsAtPath(path)) return@withLock writeText(path, text)
+        val data = NSString.create(string = text).dataUsingEncoding(NSUTF8StringEncoding) ?: return@withLock false
+        val handle = NSFileHandle.fileHandleForWritingAtPath(path) ?: return@withLock false
+        try {
+            handle.seekToEndOfFile()
+            handle.writeData(data)
+            true
+        } catch (e: Exception) {
+            false
+        } finally {
+            handle.closeFile()
+        }
     }
 
     override fun delete(path: String): Boolean {

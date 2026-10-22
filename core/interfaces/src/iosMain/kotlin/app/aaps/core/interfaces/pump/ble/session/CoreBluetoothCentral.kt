@@ -155,6 +155,12 @@ class CoreBluetoothCentral(
             ?: error("CoreBluetooth central is not open")
     }
 
+    override fun startScan(serviceUuids: List<String>) {
+        if (serviceUuids.isEmpty()) return startScan()
+        manager?.scanForPeripheralsWithServices(serviceUUIDs = serviceUuids.map { CBUUID.UUIDWithString(it) }, options = null)
+            ?: error("CoreBluetooth central is not open")
+    }
+
     override fun stopScan() {
         manager?.stopScan()
     }

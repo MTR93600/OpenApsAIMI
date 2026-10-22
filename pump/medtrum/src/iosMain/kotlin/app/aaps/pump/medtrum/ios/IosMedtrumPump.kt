@@ -3,29 +3,33 @@ package app.aaps.pump.medtrum.ios
 import app.aaps.core.data.pump.defs.ManufacturerType
 import app.aaps.core.data.pump.defs.PumpDescription
 import app.aaps.core.data.pump.defs.PumpType
-import app.aaps.core.interfaces.pump.defs.fillFor
-import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.DetailedBolusInfoStorage
 import app.aaps.core.interfaces.pump.Pump
 import app.aaps.core.interfaces.pump.PumpEnactResult
+import app.aaps.core.interfaces.pump.PumpInsulin
 import app.aaps.core.interfaces.pump.PumpProfile
 import app.aaps.core.interfaces.pump.PumpRate
-import app.aaps.core.interfaces.pump.PumpInsulin
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.interfaces.pump.TemporaryBasalStorage
 import app.aaps.core.interfaces.pump.actions.CustomAction
 import app.aaps.core.interfaces.pump.actions.CustomActionType
+import app.aaps.core.interfaces.pump.defs.fillFor
 import app.aaps.core.interfaces.queue.CustomCommand
+import app.aaps.core.interfaces.resources.TextResolver
+import app.aaps.pump.medtrum.MedtrumStrings
 import app.aaps.pump.medtrum.code.ConnectionState
-import app.aaps.pump.medtrum.comm.MedtrumPumpSyncHistory
+import app.aaps.pump.medtrum.comm.MedtrumAlarmNotifier
 import app.aaps.pump.medtrum.comm.MedtrumLogger
+import app.aaps.pump.medtrum.comm.MedtrumPumpSyncHistory
+import app.aaps.pump.medtrum.comm.enums.AlarmState
 import app.aaps.pump.medtrum.comm.enums.BasalType
 import app.aaps.pump.medtrum.comm.enums.MedtrumPumpState
 import app.aaps.pump.medtrum.session.MedtrumBleTransport
 import app.aaps.pump.medtrum.session.MedtrumClock
 import app.aaps.pump.medtrum.session.MedtrumSession
 import app.aaps.pump.medtrum.session.MedtrumSessionState
+import kotlin.math.abs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,7 +37,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlin.math.abs
 
 /**
  * Omnipod Medtrum [Pump] for iOS, driving the M2 [MedtrumSession].
@@ -65,6 +68,10 @@ class IosMedtrumPump(
     private val scope: CoroutineScope,
     private val store: IosMedtrumStateStore? = null,
     private val logger: MedtrumLogger = MedtrumLogger.NO_OP,
+    /** Tells the person about alarms and warnings. Null in tests that do not look at notifications. */
+    private val alarmNotifier: MedtrumAlarmNotifier? = null,
+    /** The Android `MedtrumWarningNotification` setting: pump warnings are shown. On by default, as there. */
+    private val pumpWarningsOn: () -> Boolean = { true },
 ) : Pump {
 
     private val history = MedtrumPumpSyncHistory(
@@ -93,9 +100,18 @@ class IosMedtrumPump(
     ).also {
         transport.setCallback(it)
         it.onStateChanged = ::onSessionData
+        it.onRecordSyncFailed = { alarmNotifier?.onRecordSyncFailed() }
+    }
+
+    private companion object {
+
+        /** The clear codes of the Android `MedtrumService`. */
+        const val ALARM_HOURLY_MAX_CLEAR_CODE = 4
+        const val ALARM_DAILY_MAX_CLEAR_CODE = 5
     }
 
     private val commandMutex = Mutex()
+    private var publishedPumpWarning: AlarmState = AlarmState.NONE
     private var busy = false
 
     init {
@@ -185,6 +201,10 @@ class IosMedtrumPump(
             onPumpStateChanged(state.pumpState)
             store?.save(state)
         }
+        if (state.pumpWarning != publishedPumpWarning) {
+            publishedPumpWarning = state.pumpWarning
+            onPumpWarning(state.pumpWarning)
+        }
     }
 
     /**
@@ -195,6 +215,13 @@ class IosMedtrumPump(
     private fun onPumpStateChanged(newState: MedtrumPumpState) {
         val alarm = history.announcePumpState(newState)
         if (alarm != null) state.addAlarm(alarm)
+        // Before the reset below: a drop to IDLE or FILLED is an error only for a primed patch.
+        val primed = state.patchPrimed
+        alarmNotifier?.onPumpState(newState, primed, MedtrumPumpSyncHistory::alarmText)
+        if (primed && (newState == MedtrumPumpState.IDLE || newState == MedtrumPumpState.FILLED)) {
+            logger.error("PUMP", "Unexpected patch state drop while primed! state: $newState")
+            history.announce(textResolver.gs(MedtrumStrings.patch_reset_after_primed_error))
+        }
         val needsFakeTbr = when (newState) {
             MedtrumPumpState.NONE, MedtrumPumpState.STOPPED,
             MedtrumPumpState.IDLE, MedtrumPumpState.FILLED,
@@ -219,6 +246,13 @@ class IosMedtrumPump(
         }
     }
 
+    /** Android `MedtrumService.notifyPumpWarning`: the notification and the history announcement. */
+    private fun onPumpWarning(warning: AlarmState) {
+        if (warning == AlarmState.NONE || !pumpWarningsOn()) return
+        alarmNotifier?.onPumpWarning(warning, warningsOn = true, MedtrumPumpSyncHistory::alarmText)
+        history.announce(MedtrumPumpSyncHistory.alarmText(warning))
+    }
+
     override fun connect(reason: String) {
         // The session suspends inside, so run it on the owner scope. Callers use isReady().
         scope.launch {
@@ -231,9 +265,75 @@ class IosMedtrumPump(
                 false
             }
             if (!connected) logger.warn("PUMPCOMM", "connect failed ($reason)")
+            // The time zone after every connect: iOS has no time zone receiver like the Android
+            // one, and a pump that keeps the old offset runs its basal schedule an hour off after
+            // a daylight saving change. Nothing is sent while the offset is the same.
+            if (connected) commandMutex.withLock { syncTimeZoneIfReady() }
             publishState()
             store?.save(state)
         }
+    }
+
+    /**
+     * Android `MedtrumService.updateTimeIfNeeded`, the time zone part: sends SetTime and
+     * SetTimeZone when the phone offset differs from the one the pump has. Call with
+     * [commandMutex] held.
+     */
+    private suspend fun syncTimeZoneIfReady(): Boolean {
+        if (!isReady()) return false
+        val ok = session.updateTimeIfNeeded(clock.utcOffsetMinutes(clock.nowMillis()))
+        if (!ok) logger.error("PUMPCOMM", "Failed to update the pump time zone")
+        return ok
+    }
+
+    // -- The Medtrum queue commands (`app.aaps.core.interfaces.pump.Medtrum`) --------------------
+
+    /**
+     * Android `MedtrumService.clearAlarms`: read the records first, then clear an hourly or daily
+     * maximum stop and resume the pump. Without this a pump stopped by its own maximum could not
+     * be started again from the iPhone.
+     */
+    suspend fun clearAlarms(): PumpEnactResult = commandMutex.withLock {
+        if (!isReady()) return failClosed("Pump not ready — clear alarms refused")
+        busy = true
+        try {
+            var result = session.syncRecords()
+            if (result && state.pumpState.isSuspendedByPump()) {
+                when (state.pumpState) {
+                    MedtrumPumpState.HOURLY_MAX_SUSPENDED -> result = session.clearAlarm(ALARM_HOURLY_MAX_CLEAR_CODE)
+                    MedtrumPumpState.DAILY_MAX_SUSPENDED  -> result = session.clearAlarm(ALARM_DAILY_MAX_CLEAR_CODE)
+                    else                                  -> Unit // Nothing to reset
+                }
+                // Resume suspended pump
+                if (result) result = session.resumePump()
+                if (result) state.clearAlarmState()
+            }
+            enactResult(success = result, enacted = result)
+        } finally {
+            busy = false
+            publishState()
+            store?.save(state)
+        }
+    }
+
+    /** Android `MedtrumService.updateTimeIfNeeded`, for the queue's update time command. */
+    suspend fun updateTime(): PumpEnactResult = commandMutex.withLock {
+        val ok = syncTimeZoneIfReady()
+        enactResult(success = ok, enacted = ok)
+    }
+
+    /** Android `loadEvents` for the queue's load events command. */
+    suspend fun loadEventsCommand(): PumpEnactResult = commandMutex.withLock {
+        if (!isReady()) return failClosed("Pump not ready — load events refused")
+        loadEvents()
+        enactResult(success = true, enacted = false)
+    }
+
+    /** Android `MedtrumService.setUserSettings`: sends the patch settings (alarm, maximums, expiry). */
+    suspend fun setUserOptions(): PumpEnactResult = commandMutex.withLock {
+        if (!isReady()) return failClosed("Pump not ready — user settings refused")
+        val ok = session.setUserSettings()
+        enactResult(success = ok, enacted = ok)
     }
 
     override fun disconnect(reason: String) {
@@ -251,6 +351,8 @@ class IosMedtrumPump(
         // The mutex makes it wait for a running bolus, like the Android command queue does.
         commandMutex.withLock {
             if (!isReady()) return
+            // Android `readPumpStatus` checks the time zone here too.
+            syncTimeZoneIfReady()
             loadEvents()
         }
     }
@@ -416,6 +518,9 @@ class IosMedtrumPump(
 
     // -- Plumbing ---------------------------------------------------------------
 
+    /** A refusal the plugin gives for a command it does not run (see `IosMedtrumPlugin.deactivate`). */
+    internal fun refuse(comment: String): PumpEnactResult = failClosed(comment)
+
     private fun failClosed(comment: String): PumpEnactResult =
         enactResult(success = false, enacted = false, comment = comment)
 
@@ -436,7 +541,8 @@ class IosMedtrumPump(
     override suspend fun loadTDDs(): PumpEnactResult =
         enactResult(success = false, enacted = false, comment = "TDD not yet wired")
 
-    override fun canHandleDST(): Boolean = false
+    // Same as Android: the driver follows a time zone change itself (see [syncTimeZoneIfReady]).
+    override fun canHandleDST(): Boolean = true
 
     override fun getCustomActions(): List<CustomAction>? = null
     override fun executeCustomAction(customActionType: CustomActionType) = Unit

@@ -164,6 +164,17 @@ class OnePlusBleScannerIosTest {
         assertFalse(central.scanning)
     }
 
+    /** With the phone locked iOS reports nothing to a scan without a filter, so this one has one. */
+    @Test
+    fun awaitTargetScansForTheDexcomServiceOnly() {
+        val central = FakeBleCentral()
+        val scanner = scanner(central)
+
+        scanner.awaitTarget("PERIPHERAL-8", timeoutMs = 20L)
+
+        assertEquals(listOf(OnePlusBluetoothUuids.Advertisement), central.lastScanFilter)
+    }
+
     @Test
     fun awaitTargetReportsAnotherSensorWhenTheStoredOneStaysSilent() {
         val central = FakeBleCentral()

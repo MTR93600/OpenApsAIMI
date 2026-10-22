@@ -20,6 +20,10 @@ struct ClientApp: App {
         // finishes launching, and `makeUIViewController` below runs later. This call needs no
         // graph; the Kotlin side queues the tasks once its graph is built.
         AapsAppHostKt.registerAimiBackgroundTasks()
+        // Before any window: iOS can start the app in the background for a Bluetooth event, and
+        // then SwiftUI may build no window at all. The sensor, the pump and the loop must run then
+        // too. The view calls this again, which does nothing the second time.
+        AapsAppHostKt.startAapsApp(nsSocketFactory: SwiftNsSocketFactory())
     }
 
     var body: some SwiftUI.Scene {

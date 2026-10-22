@@ -69,6 +69,8 @@ class IosMedtrumBolusHistoryTest {
             patchId = 7
             patchSessionToken = 0xABCDEF01L
             pumpState = MedtrumPumpState.ACTIVE
+            // The pump already runs on the phone's time zone, so a connect sends no time zone update.
+            pumpTimeZoneOffset = 120
         }
         val sync = RecordingPumpSync()
         val infos = FakeDetailedBolusInfoStorage()

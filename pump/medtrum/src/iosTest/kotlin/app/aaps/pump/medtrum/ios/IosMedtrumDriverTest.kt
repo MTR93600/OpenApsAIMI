@@ -241,6 +241,62 @@ class IosMedtrumDriverTest {
         assertTrue(callback.disconnected)
     }
 
+    // -- Transport: reconnect without a scan ----------------------------------------
+
+    /** The case that matters with the phone locked: no scan result arrives, the direct connect does. */
+    @Test
+    fun aKnownPumpIsReachedByADirectConnect() {
+        val central = FakeBleCentral()
+        val remembered = mutableListOf<Pair<Long, String>>()
+        val transport = IosMedtrumBleTransport(
+            central,
+            knownPeripheralId = { serial -> if (serial == 999L) "dev-known" else null },
+            rememberPeripheralId = { serial, id -> remembered.add(serial to id) },
+        )
+        val callback = RecordingCallback()
+        transport.setCallback(callback)
+
+        assertTrue(transport.connect("test", 999L))
+        assertEquals("dev-known", central.connectedId)
+
+        transport.onEvent(BleCentralEvent.Link(id = "dev-known", connected = true, status = 0))
+        // Linked, so the scan that was started beside the direct connect is stopped.
+        assertFalse(central.scanned)
+        transport.onEvent(
+            BleCentralEvent.Services("dev-known", listOf(BleGattService(IosMedtrumBleTransport.SERVICE_UUID, emptyList())), status = 0)
+        )
+        transport.onEvent(BleCentralEvent.Characteristics("dev-known", IosMedtrumBleTransport.SERVICE_UUID, emptyList(), status = 0))
+        transport.onEvent(BleCentralEvent.DescriptorWritten(id = "dev-known", descriptorUuid = "d1", status = 0))
+        transport.onEvent(BleCentralEvent.DescriptorWritten(id = "dev-known", descriptorUuid = "d2", status = 0))
+
+        assertTrue(callback.connected)
+        assertEquals(listOf(999L to "dev-known"), remembered)
+    }
+
+    /** The base was changed: the scan finds the pump under another id, and the old request is dropped. */
+    @Test
+    fun aStaleKnownIdIsReplacedByTheScan() {
+        val central = FakeBleCentral()
+        val transport = IosMedtrumBleTransport(central, knownPeripheralId = { "dev-old" })
+        transport.setCallback(RecordingCallback())
+
+        assertTrue(transport.connect("test", 999L))
+        transport.onEvent(BleCentralEvent.ScanResult(name = "MT", id = "dev-new", advertisementBytes = medtrumManufacturerPayload(999L)))
+
+        assertTrue(central.cancelled.contains("dev-old"))
+        assertEquals("dev-new", central.connectedId)
+    }
+
+    @Test
+    fun aFirstConnectStillStartsFromTheScan() {
+        val (central, transport, _) = setup()
+
+        assertTrue(transport.connect("test", 999L))
+
+        assertTrue(central.scanned)
+        assertNull(central.connectedId)
+    }
+
     // -- Safety guard -------------------------------------------------------------
 
     private fun pumpNotReady(): IosMedtrumPump {

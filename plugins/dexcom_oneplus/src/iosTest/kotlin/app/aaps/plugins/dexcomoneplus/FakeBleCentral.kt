@@ -60,9 +60,18 @@ class FakeBleCentral : BleCentral {
     override fun adapterState(): BleAdapterState = adapter
 
     override fun startScan() {
+        lastScanFilter = emptyList()
         scanning = true
         scanStarts++
         onStartScan?.invoke()
+    }
+
+    /** The service filter of the last scan; empty for a scan with no filter. */
+    var lastScanFilter: List<String> = emptyList()
+
+    override fun startScan(serviceUuids: List<String>) {
+        startScan()
+        lastScanFilter = serviceUuids
     }
 
     override fun stopScan() {

@@ -20,6 +20,7 @@ import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
 import app.aaps.pump.medtrum.MedtrumStrings
 import app.aaps.pump.medtrum.compose.MedtrumPumpPickerScreen
 import app.aaps.pump.medtrum.util.MedtrumDeviceName
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import app.aaps.core.interfaces.db.PersistenceLayer
@@ -34,6 +35,9 @@ import app.aaps.pump.medtrum.compose.patch.MedtrumPatchWizardScreen
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.CoroutineScope
+import app.aaps.core.interfaces.pump.Medtrum
+import app.aaps.core.interfaces.pump.PumpEnactResult
+import kotlinx.coroutines.runBlocking
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
@@ -89,14 +93,26 @@ class IosMedtrumPlugin(
     private val rxBus: () -> RxBus,
     private val dateUtil: () -> DateUtil
 ) : PumpPluginBase(
-    pluginDescription = medtrumIosPluginDescription(),
+    // The pump screen of the overview. Built when it is opened, so building the plugin builds no UI.
+    pluginDescription = medtrumIosPluginDescription().composeContent { plugin -> (plugin as IosMedtrumPlugin).overviewContent() },
     ownPreferences = MedtrumIosIntentKey.entries,
     aapsLogger = aapsLogger,
     rh = rh,
     preferences = preferences,
     commandQueue = commandQueue,
     notificationManager = notificationManager
-), Pump by host.driver {
+), Pump by host.driver, Medtrum {
+
+    // The queue's Medtrum commands (clear alarms, update time, load events, user settings). They are
+    // blocking calls in the shared interface and run on the queue's own thread, never on the main one.
+    override fun loadEvents(): PumpEnactResult = runBlocking { host.driver.loadEventsCommand() }
+    override fun setUserOptions(): PumpEnactResult = runBlocking { host.driver.setUserOptions() }
+    override fun clearAlarms(): PumpEnactResult = runBlocking { host.driver.clearAlarms() }
+    override fun updateTime(): PumpEnactResult = runBlocking { host.driver.updateTime() }
+
+    /** The patch is taken off with the patch wizard, which asks the person to confirm. */
+    override fun deactivate(): PumpEnactResult = host.driver.refuse("Deactivate the patch with Change Patch")
+
 
     /**
      * The settings screen of this plugin: one entry, the pump chooser.
@@ -135,36 +151,49 @@ class IosMedtrumPlugin(
                 }
             ),
             MedtrumIosIntentKey.ChangePatch.withCompose(
-                ComposeScreenContent { onBack ->
-                    val scope = rememberCoroutineScope()
-                    val model = remember { patchWizardModel(scope).also { it.open() } }
-                    MedtrumPatchWizardScreen(
-                        model = model,
-                        scanContent = { onCancel ->
-                            val pumps by host.discovery.pumps.collectAsState()
-                            MedtrumPumpPickerScreen(
-                                devices = pumps.map { ScannedDevice(name = it.name, address = it.id) },
-                                chosenSerialHex = host.store.loadPumpSerial()?.let { MedtrumDeviceName.serialHex(it) },
-                                bluetoothOff = !host.discovery.scanning && pumps.isEmpty(),
-                                onStartScan = {
-                                    host.openRadio()
-                                    host.discovery.start()
-                                },
-                                onStopScan = { host.discovery.stop() },
-                                onSelect = { device ->
-                                    val chosen = pumps.firstOrNull { it.id == device.address }
-                                    if (chosen != null && host.discovery.select(chosen)) model.pumpChosen()
-                                },
-                                onBack = onCancel
-                            )
-                        },
-                        onClose = onBack
-                    )
-                }
+                ComposeScreenContent { onBack -> PatchWizard(onClose = onBack) }
             )
         ),
         icon = pluginDescription.icon
     )
+
+    /** The pump screen: state, refresh, clear alarms, change patch. */
+    private fun overviewContent() = MedtrumIosOverviewContent(
+        host = host,
+        commandQueue = commandQueue,
+        rh = rh,
+        dateUtil = dateUtil(),
+        patchWizard = { onClose -> PatchWizard(onClose) }
+    )
+
+    /** The "Change Patch" wizard, opened from the settings entry and from the pump screen. */
+    @Composable
+    private fun PatchWizard(onClose: () -> Unit) {
+        val scope = rememberCoroutineScope()
+        val model = remember { patchWizardModel(scope).also { it.open() } }
+        MedtrumPatchWizardScreen(
+            model = model,
+            scanContent = { onCancel ->
+                val pumps by host.discovery.pumps.collectAsState()
+                MedtrumPumpPickerScreen(
+                    devices = pumps.map { ScannedDevice(name = it.name, address = it.id) },
+                    chosenSerialHex = host.store.loadPumpSerial()?.let { MedtrumDeviceName.serialHex(it) },
+                    bluetoothOff = !host.discovery.scanning && pumps.isEmpty(),
+                    onStartScan = {
+                        host.openRadio()
+                        host.discovery.start()
+                    },
+                    onStopScan = { host.discovery.stop() },
+                    onSelect = { device ->
+                        val chosen = pumps.firstOrNull { it.id == device.address }
+                        if (chosen != null && host.discovery.select(chosen)) model.pumpChosen()
+                    },
+                    onBack = onCancel
+                )
+            },
+            onClose = onClose
+        )
+    }
 
     /** One wizard per opened screen, living as long as that screen does. */
     private fun patchWizardModel(scope: CoroutineScope) = MedtrumPatchWizardModel(

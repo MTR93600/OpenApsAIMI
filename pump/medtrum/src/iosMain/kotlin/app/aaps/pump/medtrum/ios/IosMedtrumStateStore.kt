@@ -39,6 +39,8 @@ class IosMedtrumStateStore(
         defaults.setInteger(state.desiredDailyMaxInsulin.toLong(), forKey = key("desiredDailyMaxInsulin"))
         defaults.setObject(state.actualBasalProfile.toHex(), forKey = key("actualBasalProfile"))
         defaults.setDouble(state.reservoir, forKey = key("reservoir"))
+        // The offset the pump was last given, so a restart does not hide a time zone change.
+        defaults.setInteger(state.pumpTimeZoneOffset.toLong(), forKey = key("pumpTimeZoneOffset"))
         state.lastBolusTime?.let { defaults.setInteger(it, forKey = key("lastBolusTime")) }
             ?: defaults.removeObjectForKey(key("lastBolusTime"))
         state.lastBolusAmount?.let { defaults.setDouble(it, forKey = key("lastBolusAmount")) }
@@ -60,6 +62,23 @@ class IosMedtrumStateStore(
 
     /** The saved serial, or null when none was saved or the saved text is not a usable serial. */
     fun loadPumpSerial(): Long? = MedtrumDeviceName.serialFromHex(defaults.stringForKey(key("snInput")))
+
+    /**
+     * Remembers the CoreBluetooth identifier of the pump with [serial]. iOS gives each device its
+     * own identifier on this phone, so a direct connect can reach the pump without a scan.
+     */
+    fun savePeripheralId(serial: Long, id: String) {
+        defaults.setObject(id, forKey = key("peripheralId"))
+        defaults.setObject(MedtrumDeviceName.serialHex(serial), forKey = key("peripheralSerial"))
+        defaults.synchronize()
+    }
+
+    /** The identifier saved for [serial], or null: an identifier of another pump is never returned. */
+    fun loadPeripheralId(serial: Long): String? {
+        if (serial == 0L) return null
+        val savedFor = MedtrumDeviceName.serialFromHex(defaults.stringForKey(key("peripheralSerial")))
+        return defaults.stringForKey(key("peripheralId"))?.takeIf { savedFor == serial }
+    }
 
     fun load(state: MedtrumSessionState) {
         // The serial can be there on its own: a pump was picked in the scan step but no patch has
@@ -90,6 +109,7 @@ class IosMedtrumStateStore(
             state.actualBasalProfile = it
         }
         state.reservoir = defaults.doubleForKey(key("reservoir"))
+        state.pumpTimeZoneOffset = defaults.integerForKey(key("pumpTimeZoneOffset")).toInt()
         state.lastBolusTime = defaults.objectForKey(key("lastBolusTime"))?.let {
             defaults.integerForKey(key("lastBolusTime"))
         }
@@ -101,9 +121,9 @@ class IosMedtrumStateStore(
 
     fun clear() {
         listOf(
-            "snInput", "pumpSN", "patchId", "patchSessionToken", "patchStartTime",
+            "snInput", "peripheralId", "peripheralSerial", "pumpSN", "patchId", "patchSessionToken", "patchStartTime",
             "currentSequenceNumber", "syncedSequenceNumber", "pumpState", "desiredAlarmSetting",
-            "desiredHourlyMaxInsulin", "desiredDailyMaxInsulin", "actualBasalProfile",
+            "desiredHourlyMaxInsulin", "desiredDailyMaxInsulin", "actualBasalProfile", "pumpTimeZoneOffset",
             "reservoir", "lastBolusTime", "lastBolusAmount",
         ).forEach { defaults.removeObjectForKey(key(it)) }
         defaults.synchronize()

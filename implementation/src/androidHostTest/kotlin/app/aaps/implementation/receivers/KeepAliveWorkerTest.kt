@@ -27,6 +27,7 @@ import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventProfileChangeRequested
 import app.aaps.core.keys.LongNonKey
 import app.aaps.core.objects.profile.ProfileSealed
+import app.aaps.implementation.maintenance.KeepAliveChecks
 import app.aaps.implementation.maintenance.PeriodicMaintenance
 import app.aaps.shared.tests.TestBaseWithProfile
 import com.google.common.truth.Truth.assertThat
@@ -110,16 +111,7 @@ class KeepAliveWorkerTest : TestBaseWithProfile() {
         )
 
     private fun resetWorkerStaticState() {
-        listOf("lastRun", "lastReadStatus", "lastIobUpload").forEach { name ->
-            val field = try {
-                KeepAliveWorker::class.java.getDeclaredField(name)
-            } catch (_: NoSuchFieldException) {
-                KeepAliveWorker.Companion::class.java.getDeclaredField(name)
-            }
-            field.isAccessible = true
-            val target = if (Modifier.isStatic(field.modifiers)) null else KeepAliveWorker.Companion
-            field.setLong(target, 0L)
-        }
+        listOf("lastRun", "lastReadStatus", "lastIobUpload").forEach { name -> setStaticLong(name, 0L) }
     }
 
     // ---- doWorkAndLog: scheduling / gating / orchestration ----------------------------------------
@@ -498,14 +490,19 @@ class KeepAliveWorkerTest : TestBaseWithProfile() {
         assertThat(result).isEqualTo(ListenableWorker.Result.success())
     }
 
+    /**
+     * The counters are static: `lastRun` on the worker, `lastReadStatus` and `lastIobUpload` on the
+     * shared [KeepAliveChecks]. Looked up on both classes and their companions.
+     */
     private fun setStaticLong(name: String, value: Long) {
-        val field = try {
-            KeepAliveWorker::class.java.getDeclaredField(name)
-        } catch (_: NoSuchFieldException) {
-            KeepAliveWorker.Companion::class.java.getDeclaredField(name)
-        }
+        val owners = listOf(KeepAliveWorker::class.java, KeepAliveWorker.Companion::class.java, KeepAliveChecks::class.java, KeepAliveChecks.Companion::class.java)
+        val (owner, field) = owners.firstNotNullOf { cls -> runCatching { cls to cls.getDeclaredField(name) }.getOrNull() }
         field.isAccessible = true
-        val target = if (Modifier.isStatic(field.modifiers)) null else KeepAliveWorker.Companion
+        val target = when {
+            Modifier.isStatic(field.modifiers)           -> null
+            owner == KeepAliveChecks.Companion::class.java -> KeepAliveChecks.Companion
+            else                                         -> KeepAliveWorker.Companion
+        }
         field.setLong(target, value)
     }
 }

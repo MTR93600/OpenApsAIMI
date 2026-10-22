@@ -72,6 +72,8 @@ class IosMedtrumPumpTest {
             deviceType = 80 // MD0201, a Nano
             patchSessionToken = 0xABCDEF01L
             pumpState = MedtrumPumpState.ACTIVE
+            // The pump already runs on the phone's time zone, so a connect sends no time zone update.
+            pumpTimeZoneOffset = 120
         }
         val logs = mutableListOf<String>()
         val logger = object : MedtrumLogger {
@@ -441,6 +443,26 @@ class IosMedtrumPumpTest {
             rig.sync.calls[1]
         )
         assertTrue(rig.infos.infos.isEmpty())
+    }
+
+    /** iOS has no time zone receiver, so a connect is where a daylight saving change reaches the pump. */
+    @Test
+    fun aConnectSendsTheNewTimeZoneWhenThePhoneOffsetChanged() = runBlocking {
+        val rig = newRig()
+        rig.state.pumpTimeZoneOffset = 60 // the pump still runs on winter time
+        scriptAuthSuccess(rig.fake)
+        val pumpSeconds = ((nowMs - MedtrumTimeUtil.PUMP_EPOCH_MILLIS) / 1000).toInt()
+        val pumpTimeBytes = byteArrayOf(
+            pumpSeconds.toByte(), (pumpSeconds shr 8).toByte(),
+            (pumpSeconds shr 16).toByte(), (pumpSeconds shr 24).toByte()
+        )
+        rig.fake.responses[CommandType.SET_TIME.code] = successResponse(CommandType.SET_TIME.code) + pumpTimeBytes
+        rig.fake.responses[CommandType.SET_TIME_ZONE.code] = successResponse(CommandType.SET_TIME_ZONE.code) + pumpTimeBytes
+
+        rig.pump.connect("test")
+
+        assertTrue(waitUntil { rig.state.pumpTimeZoneOffset == 120 }, "the pump should get the phone's offset")
+        assertTrue(rig.fake.sentMessages.any { it.getOrNull(0) == CommandType.SET_TIME_ZONE.code })
     }
 
     @Test

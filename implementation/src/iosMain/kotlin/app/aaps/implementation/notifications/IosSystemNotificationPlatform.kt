@@ -19,6 +19,7 @@ import platform.UserNotifications.UNNotificationDismissActionIdentifier
 import platform.UserNotifications.UNNotificationInterruptionLevel.UNNotificationInterruptionLevelActive
 import platform.UserNotifications.UNNotificationInterruptionLevel.UNNotificationInterruptionLevelTimeSensitive
 import platform.UserNotifications.UNNotificationRequest
+import platform.UserNotifications.UNNotificationSound
 import platform.UserNotifications.UNUserNotificationCenter
 
 /**
@@ -97,6 +98,10 @@ class IosSystemNotificationPlatform(
             // same split the Android side uses so a replaced alarm does not restart the sound.
             // Without the category the dismiss callback never fires - see onDismissed.
             setCategoryIdentifier(CATEGORY)
+            // An urgent alarm also carries the system sound. While iOS suspends the app, the alarm
+            // player cannot start any audio, so with the phone locked this sound - played by iOS
+            // itself - is the only sound the person hears.
+            if (notification.level == NotificationLevel.URGENT) setSound(UNNotificationSound.defaultSound)
             setInterruptionLevel(
                 if (breakThroughFocus) UNNotificationInterruptionLevelTimeSensitive
                 else UNNotificationInterruptionLevelActive
@@ -275,11 +280,7 @@ class IosSystemNotificationPlatform(
     private fun ensureAuthorization() {
         if (authorizationAsked) return
         authorizationAsked = true
-        val options = UNAuthorizationOptionAlert or UNAuthorizationOptionSound or UNAuthorizationOptionBadge
-        center.requestAuthorizationWithOptions(options) { granted, error ->
-            if (error != null) aapsLogger.error(LTag.NOTIFICATION, "Notification permission failed: $error")
-            else aapsLogger.debug(LTag.NOTIFICATION, "Notification permission granted=$granted")
-        }
+        requestIosNotificationPermission(aapsLogger)
     }
 
     companion object {
@@ -288,5 +289,19 @@ class IosSystemNotificationPlatform(
 
         /** Named once: it has to match between the posted content and the registered category. */
         private const val CATEGORY = "aaps-notification"
+    }
+}
+
+/**
+ * Asks the person to allow notifications. Called at start-up as well as before the first
+ * notification: when the first notification is an alarm that fires while the app is in the
+ * background, a question asked only then is never seen, and the alarm stays silent.
+ * Asking again after an answer shows nothing; iOS keeps the first answer.
+ */
+fun requestIosNotificationPermission(aapsLogger: AAPSLogger) {
+    val options = UNAuthorizationOptionAlert or UNAuthorizationOptionSound or UNAuthorizationOptionBadge
+    UNUserNotificationCenter.currentNotificationCenter().requestAuthorizationWithOptions(options) { granted, error ->
+        if (error != null) aapsLogger.error(LTag.NOTIFICATION, "Notification permission failed: $error")
+        else aapsLogger.debug(LTag.NOTIFICATION, "Notification permission granted=$granted")
     }
 }

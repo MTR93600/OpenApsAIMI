@@ -35,6 +35,8 @@ import app.aaps.core.interfaces.notifications.IosNotificationDelegate
 import app.aaps.core.interfaces.protection.ProtectionCheck
 import app.aaps.core.interfaces.protection.ProtectionResult
 import app.aaps.core.interfaces.resources.TextRefValueRegistry
+import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.core.interfaces.utils.delayUntilWallClock
 import app.aaps.core.keys.BooleanNonKey
 import app.aaps.core.keys.StringKey
 import app.aaps.core.objects.di.CoreObjectsGraph
@@ -46,6 +48,8 @@ import app.aaps.core.ui.compose.metroViewModel
 import app.aaps.core.ui.compose.navigation.NavigationRequest
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.implementation.lifecycle.IosProtectionLifecycle
+import app.aaps.implementation.maintenance.KeepAliveChecks
+import app.aaps.implementation.notifications.requestIosNotificationPermission
 import app.aaps.ios.shell.IosAppStartup
 import app.aaps.ios.shell.PluginStoreRegistry
 import app.aaps.ios.shell.di.IosAppGraph
@@ -83,34 +87,34 @@ import app.aaps.ui.compose.treatments.viewmodels.TreatmentsViewModel
 import app.aaps.ui.compose.treatmentsSheet.TreatmentViewModel
 import app.aaps.ui.search.SearchViewModel
 import dev.zacsweers.metro.createGraphFactory
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import platform.Foundation.NSNotificationCenter
 import platform.Foundation.NSOperationQueue
 import platform.UIKit.UIApplicationDidBecomeActiveNotification
 import platform.UIKit.UIViewController
 
+/** What the app builds once per process: the graph, and everything started from it. */
+private class StartedApp(val graph: IosAppGraph, val viewModelFactory: ClientViewModelFactory)
+
+private var startedApp: StartedApp? = null
+
 /**
- * The real AAPS app, running on iOS - the counterpart of `ComposeMainActivity` in `:app`.
+ * Builds the graph and starts the app - plugins, loop, drivers - once per process.
  *
- * [AapsAppRoot] is shared code and owns everything above a screen: the theme, the composition
- * locals, the splash gate and the four hosts (snackbar, dialog, password prompt, client-control
- * modal). This file supplies the two things it cannot: the platform's own graph, and the navigation
- * that fills the space it leaves for `content`.
- *
- * ## What this is not, yet
- *
- * The overview - the home screen with the graph and the treatment buttons - is still assembled
- * inline inside `ComposeMainActivity` rather than in the shared navigation graph, so there is
- * nothing here to call for it. The app therefore opens on the preference screen, which **is** in
- * `appNavGraph` and is a fair test of the layers underneath: it reads and writes real preferences
- * through `NSUserDefaults`.
- *
- * The callbacks below are placeholders and say so in the log when used. They are the wiring a
- * platform is supposed to supply - opening a document picker, asking for a permission - and each
- * needs an iOS answer of its own rather than a shared one.
+ * Called from the Swift `App.init`, not only from the view. iOS can start the app in the
+ * background for a Bluetooth event, and SwiftUI may build no window for such a launch. When the
+ * graph was built only with the first screen, nothing was running then: no sensor, no pump, no
+ * loop, until the person opened the app. Calling it again, as the view does, is a no-op.
  */
-fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
+fun startAapsApp(nsSocketFactory: NsSocketFactory) {
+    startedOnce(nsSocketFactory)
+}
+
+private fun startedOnce(nsSocketFactory: NsSocketFactory): StartedApp {
+    startedApp?.let { return it }
     // Built once, outside the composition: a graph rebuilt on each recomposition would hand out new
     // singletons every frame - a new database wrapper, a new preference store.
     val graph = createGraphFactory<IosAppGraph.Factory>().create(CoreObjectsGraph, ClientGraphBindings, nsSocketFactory)
@@ -131,6 +135,7 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
             graph.runningModeExpiryScheduler.start()
             graph.profileSwitchScheduler.start()
             graph.automationRuntime.start()
+            startKeepAliveChecks(graph.keepAliveChecks, graph.dateUtil, graph.appScope, logger)
         }
     ).run()
 
@@ -191,6 +196,10 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
 
     IosNotificationDelegate.install()
 
+    // At start-up, not at the first notification: an alarm that fires in the background before the
+    // person was ever asked would stay silent.
+    requestIosNotificationPermission(logger)
+
     // A snackbar sent while no screen is up becomes a notification instead of being lost. Shared
     // with Android and desktop; started after the delegate above, because it posts through it.
     graph.snackbarNotificationFallback.start()
@@ -202,6 +211,35 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
     // Clears a granted PIN or biometric session when the app is backgrounded, which is what Android
     // gets from `ProcessLifecycleListener.onPause`. Same placement and the same UIKit reason.
     IosProtectionLifecycle(logger, graph.protectionCheck).start()
+
+    return StartedApp(graph, viewModelFactory).also { startedApp = it }
+}
+
+/**
+ * The real AAPS app, running on iOS - the counterpart of `ComposeMainActivity` in `:app`.
+ *
+ * [AapsAppRoot] is shared code and owns everything above a screen: the theme, the composition
+ * locals, the splash gate and the four hosts (snackbar, dialog, password prompt, client-control
+ * modal). This file supplies the two things it cannot: the platform's own graph, and the navigation
+ * that fills the space it leaves for `content`.
+ *
+ * ## What this is not, yet
+ *
+ * The overview - the home screen with the graph and the treatment buttons - is still assembled
+ * inline inside `ComposeMainActivity` rather than in the shared navigation graph, so there is
+ * nothing here to call for it. The app therefore opens on the preference screen, which **is** in
+ * `appNavGraph` and is a fair test of the layers underneath: it reads and writes real preferences
+ * through `NSUserDefaults`.
+ *
+ * The callbacks below are placeholders and say so in the log when used. They are the wiring a
+ * platform is supposed to supply - opening a document picker, asking for a permission - and each
+ * needs an iOS answer of its own rather than a shared one.
+ */
+fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
+    val started = startedOnce(nsSocketFactory)
+    val graph = started.graph
+    val viewModelFactory = started.viewModelFactory
+    val logger = graph.logger
 
     // Built out here, once, for two reasons: the request it carries has to survive a recomposition,
     // and `AapsAppRoot` collects pending requests in an effect keyed on the lambda, so handing it a
@@ -556,12 +594,34 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
  * `BGTaskScheduler` handlers to be registered before the app finishes launching, and the view
  * controller is made later than that: registering there can crash the app. For the same reason this
  * needs no graph - none exists yet. The part that needs the graph is
- * `IosAimiBackgroundTasks.install`, which `aapsAppViewController` calls once the graph is built.
+ * `IosAimiBackgroundTasks.install`, which `startAapsApp` calls once the graph is built.
  * Keep the two apart.
  */
 fun registerAimiBackgroundTasks() {
     IosAimiBackgroundTasks.register()
 }
+
+/**
+ * Runs the master pump and APS checks every five minutes, as the Android `KeepAliveWorker` does.
+ *
+ * Waits on the wall clock: while iOS suspends the app a plain delay stops counting, so a check that
+ * was due during the suspension runs at the first wake-up - a sensor reading, a pump event -
+ * instead of five minutes after it. The first pass waits too, as Android's first worker run does.
+ */
+private fun startKeepAliveChecks(checks: KeepAliveChecks, dateUtil: DateUtil, scope: CoroutineScope, logger: AAPSLogger) {
+    scope.launch {
+        while (isActive) {
+            delayUntilWallClock(dateUtil.now() + KEEP_ALIVE_INTERVAL_MS, dateUtil::now)
+            try {
+                checks.run()
+            } catch (e: Exception) {
+                logger.error(LTag.CORE, "Keep-alive checks failed", e)
+            }
+        }
+    }
+}
+
+private const val KEEP_ALIVE_INTERVAL_MS = 5L * 60L * 1000L
 
 /** One line, one shape, so a run makes it obvious which platform callbacks are still placeholders. */
 private fun AAPSLogger.notWiredYet(what: String) = error(LTag.CORE, "Not wired up on iOS yet: $what")

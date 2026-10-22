@@ -36,9 +36,9 @@ import kotlin.time.Duration.Companion.minutes
  *
  * ## What is here and what is not
  *
- * Only the platform-neutral work. `KeepAliveWorker` keeps the rest, and it belongs there: the
- * WorkManager self-rescheduling, the worker-database telemetry, and the pump and APS checks, which
- * are gated on `config.APS` and so are no-ops on the two shells that hardcode it false.
+ * Only the platform-neutral housekeeping. The pump and APS checks of a master phone are in
+ * [KeepAliveChecks], which `KeepAliveWorker` and the iOS shell both run. The worker keeps only what
+ * is WorkManager itself: its self-rescheduling and the worker-database telemetry.
  *
  * ## Who drives it
  *

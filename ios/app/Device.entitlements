@@ -28,5 +28,12 @@
 	<true/>
 	<key>com.apple.developer.healthkit.access</key>
 	<array/>
+	<!-- Time Sensitive Notifications. The code already posts urgent alarms with the time-sensitive
+	     interruption level (IosSystemNotificationPlatform, IosLoopNotifier); without this
+	     entitlement iOS treats them as ordinary notifications, and a Focus mode hides them.
+	     Automatic signing adds the capability to the App ID. Critical alerts are a separate
+	     entitlement that Apple grants on request only. -->
+	<key>com.apple.developer.usernotifications.time-sensitive</key>
+	<true/>
 </dict>
 </plist>

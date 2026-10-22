@@ -399,6 +399,12 @@ class MedtrumPumpSyncHistory(
 
     // -- Alarms (Android: MedtrumService.handlePumpStateUpdate) --------------------------------
 
+    /** Writes [text] to the history as a pump announcement, as Android does for warnings and patch errors. */
+    fun announce(text: String) = runBlocking {
+        pumpSync.insertAnnouncement(error = text, pumpId = null, pumpType = pumpType(), pumpSerial = serial())
+        Unit
+    }
+
     /** Writes the announcement for an alarm state. Returns the alarm, or null when the state is no alarm. */
     fun announcePumpState(state: MedtrumPumpState): AlarmState? {
         val alarm = alarmFor(state) ?: return null

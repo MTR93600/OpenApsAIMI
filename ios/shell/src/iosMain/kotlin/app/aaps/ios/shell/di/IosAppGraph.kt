@@ -58,6 +58,7 @@ import app.aaps.ui.compose.overview.chips.ChipsViewModel
 import app.aaps.ui.compose.overview.graphs.GraphViewModel
 import app.aaps.ui.search.BuiltInSearchables
 import app.aaps.core.interfaces.di.APS
+import app.aaps.implementation.maintenance.KeepAliveChecks
 import app.aaps.implementation.profile.ProfileSwitchScheduler
 import app.aaps.plugins.aps.loop.runningMode.IosRunningModeExpiryScheduler
 import app.aaps.plugins.aps.loop.runningMode.RunningModeReconciler
@@ -204,6 +205,7 @@ interface IosAppGraph : MetroViewModelMultibindings {
     val runningModeReconciler: RunningModeReconciler
     val runningModeExpiryScheduler: IosRunningModeExpiryScheduler
     val profileSwitchScheduler: ProfileSwitchScheduler
+    val keepAliveChecks: KeepAliveChecks
     val automationRuntime: AutomationRuntime
     // The periodic housekeeping shared with Android, and the scope the shell drives it on.
     val periodicMaintenance: PeriodicMaintenance

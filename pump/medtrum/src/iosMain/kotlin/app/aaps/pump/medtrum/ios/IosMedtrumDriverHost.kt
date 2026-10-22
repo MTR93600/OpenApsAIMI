@@ -2,6 +2,7 @@ package app.aaps.pump.medtrum.ios
 
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.pump.DetailedBolusInfoStorage
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.interfaces.pump.TemporaryBasalStorage
@@ -9,6 +10,7 @@ import app.aaps.core.interfaces.pump.ble.session.BleRestoreIdentifier
 import app.aaps.core.interfaces.pump.ble.session.CoreBluetoothCentral
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.pump.medtrum.comm.AapsMedtrumLogger
+import app.aaps.pump.medtrum.comm.MedtrumAlarmNotifier
 import app.aaps.pump.medtrum.comm.MedtrumLogger
 import app.aaps.pump.medtrum.session.MedtrumPatchSession
 import app.aaps.pump.medtrum.session.MedtrumSessionState
@@ -42,7 +44,8 @@ class IosMedtrumDriverHost(
     textResolver: TextResolver,
     private val pumpSync: PumpSync,
     detailedBolusInfoStorage: DetailedBolusInfoStorage,
-    temporaryBasalStorage: TemporaryBasalStorage
+    temporaryBasalStorage: TemporaryBasalStorage,
+    notificationManager: NotificationManager
 ) {
 
     private val logger: MedtrumLogger = AapsMedtrumLogger(aapsLogger)
@@ -60,15 +63,17 @@ class IosMedtrumDriverHost(
      */
     private val central = CoreBluetoothCentral(BleRestoreIdentifier.MEDTRUM)
 
+    /** The store the driver loads from and saves to. Also the only place the serial number lives today. */
+    val store = IosMedtrumStateStore()
+
     private val transport = IosMedtrumBleTransport(
         central = central,
         // Read late: the serial is only in [state] after the driver has loaded the stored state.
         pumpSerial = { state.pumpSN },
-        logger = logger
+        logger = logger,
+        knownPeripheralId = store::loadPeripheralId,
+        rememberPeripheralId = store::savePeripheralId
     )
-
-    /** The store the driver loads from and saves to. Also the only place the serial number lives today. */
-    val store = IosMedtrumStateStore()
 
     /**
      * Work the driver starts by itself: a connect attempt and a bolus stop. Its own scope, not the
@@ -86,7 +91,8 @@ class IosMedtrumDriverHost(
         temporaryBasalStorage = temporaryBasalStorage,
         scope = scope,
         store = store,
-        logger = logger
+        logger = logger,
+        alarmNotifier = MedtrumAlarmNotifier(notificationManager)
     )
 
     /**

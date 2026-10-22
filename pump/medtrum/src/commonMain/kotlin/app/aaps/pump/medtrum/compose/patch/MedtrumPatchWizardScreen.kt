@@ -1,19 +1,28 @@
 package app.aaps.pump.medtrum.compose.patch
 
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.ToolbarConfig
 import app.aaps.core.ui.compose.dialogs.OkCancelDialog
 import app.aaps.core.ui.compose.dialogs.OkDialog
+import app.aaps.core.ui.compose.insulin.SelectInsulin
 import app.aaps.core.ui.compose.pump.ProfileGateWizardStep
+import app.aaps.core.ui.compose.pump.WizardButton
 import app.aaps.core.ui.compose.pump.WizardScreen
+import app.aaps.core.ui.compose.pump.WizardStepLayout
 import app.aaps.core.ui.compose.siteRotation.SiteLocationWizardStep
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.pump.medtrum.MedtrumStrings
@@ -117,8 +126,9 @@ fun MedtrumPatchWizardScreen(
                     onCancel = onCancel
                 )
 
-                // Not part of this wizard: the patch runs the active insulin. COMPLETE and CANCEL close it.
-                PatchStep.SELECT_INSULIN,
+                PatchStep.SELECT_INSULIN           -> SelectInsulinPage(model, onCancel)
+
+                // COMPLETE and CANCEL close the wizard.
                 PatchStep.COMPLETE,
                 PatchStep.CANCEL                   -> Unit
             }
@@ -162,6 +172,7 @@ private val stepsThatMayBeLeft = setOf(
     PatchStep.BLE_SCAN,
     PatchStep.PROFILE_GATE,
     PatchStep.PREPARE_PATCH,
+    PatchStep.SELECT_INSULIN,
     PatchStep.SITE_LOCATION,
     PatchStep.START_DEACTIVATION,
     PatchStep.RETRY_ACTIVATION,
@@ -191,4 +202,26 @@ private fun titleOf(step: PatchStep): TextRef = when (step) {
     PatchStep.RETRY_ACTIVATION_CONNECT -> MedtrumStrings.step_retry_activation
     PatchStep.COMPLETE,
     PatchStep.CANCEL                   -> MedtrumStrings.change_patch_label
+}
+
+/** The Android SELECT_INSULIN page: which insulin is in the new reservoir. */
+@Composable
+private fun SelectInsulinPage(model: MedtrumPatchWizardModel, onCancel: () -> Unit) {
+    val insulins by model.availableInsulins.collectAsStateWithLifecycle()
+    val selected by model.selectedInsulin.collectAsStateWithLifecycle()
+    val activeLabel by model.activeInsulinLabel.collectAsStateWithLifecycle()
+    WizardStepLayout(
+        primaryButton = WizardButton(text = stringResource(CoreUiStrings.next), onClick = model::insulinChosen),
+        secondaryButton = WizardButton(text = stringResource(CoreUiStrings.cancel), onClick = onCancel)
+    ) {
+        Text(text = stringResource(CoreUiStrings.select_insulin_description), style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(16.dp))
+        SelectInsulin(
+            availableInsulins = insulins,
+            selectedInsulin = selected,
+            activeInsulinLabel = activeLabel,
+            onInsulinSelect = model::selectInsulin,
+            concentrationDropDownEnabled = model.concentrationEnabled
+        )
+    }
 }

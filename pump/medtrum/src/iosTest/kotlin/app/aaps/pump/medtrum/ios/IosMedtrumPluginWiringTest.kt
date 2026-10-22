@@ -1,5 +1,6 @@
 package app.aaps.pump.medtrum.ios
 
+import app.aaps.pump.medtrum.comm.RecordingNotificationManager
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.pump.defs.ManufacturerType
 import app.aaps.core.data.pump.defs.PumpType
@@ -78,7 +79,8 @@ class IosMedtrumPluginWiringTest {
         textResolver = TestTextResolver,
         pumpSync = pumpSync,
         detailedBolusInfoStorage = FakeDetailedBolusInfoStorage(),
-        temporaryBasalStorage = FakeTemporaryBasalStorage()
+        temporaryBasalStorage = FakeTemporaryBasalStorage(),
+        notificationManager = RecordingNotificationManager()
     )
 
     // -- The plugin's own declaration -----------------------------------------------------------
@@ -128,11 +130,11 @@ class IosMedtrumPluginWiringTest {
     }
 
     @Test
-    fun `the pump is the Nano and does not handle daylight saving`() {
+    fun `the pump is the Nano and follows daylight saving like on Android`() {
         val host = newHost()
         assertEquals(PumpType.MEDTRUM_NANO, host.driver.model())
         assertEquals(ManufacturerType.Medtrum, host.driver.manufacturer())
-        assertFalse(host.driver.canHandleDST())
+        assertTrue(host.driver.canHandleDST())
     }
 
     @Test

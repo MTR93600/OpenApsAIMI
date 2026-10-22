@@ -267,9 +267,9 @@ class OnePlusGattClientIos(
 
     /**
      * Yes: on iOS the pairing happens by itself, the moment the sensor asks for an encrypted link,
-     * and the person sees the system pairing dialog. No app can start it - and none needs to. Trio
-     * pairs G7 sensors on iPhone the same way. Answering false here stopped every new four digit
-     * pairing before iOS had the chance to pair.
+     * and the person sees the system pairing dialog. No app can start it - and none needs to.
+     * Answering false here stopped every new four digit pairing before iOS had the chance to pair.
+     * Not yet tried with a real sensor.
      */
     override fun createBond(): Boolean {
         OnePlusLog.i(
@@ -288,9 +288,11 @@ class OnePlusGattClientIos(
     }
 
     /**
-     * There is no bond state to watch on iOS. The pairing happens during the next write with
-     * response, which waits while the system dialog is up, so that write gets this whole
-     * [timeoutMs] instead of the usual operation timeout. See [writeWithResponse].
+     * There is no bond state to watch on iOS. The pairing happens during the next operation
+     * that needs an encrypted link - after the bond request that is the Control subscription of
+     * the glucose loop - and that operation waits while the system dialog is up. So the next
+     * write or subscription gets this whole [timeoutMs] instead of the usual operation timeout.
+     * See [writeWithResponse] and [subscribeBlocking].
      */
     override fun awaitBondComplete(timeoutMs: Long): Boolean {
         stateLock.withLock { pairingWindowEnd = TimeSource.Monotonic.markNow() + timeoutMs.milliseconds }
@@ -513,7 +515,7 @@ class OnePlusGattClientIos(
 
     // -- helpers ---------------------------------------------------------------------------------
 
-    /** The usual operation timeout, or what is left of the pairing window when that is longer. */
+    /** The usual operation timeout, or what is left of the pairing window when that is longer. Used by writes and subscriptions. */
     private fun writeTimeoutMs(): Long {
         val left = stateLock.withLock { pairingWindowEnd }?.let { -it.elapsedNow().inWholeMilliseconds } ?: 0L
         return maxOf(GATT_OP_TIMEOUT_MS, left)
@@ -547,10 +549,12 @@ class OnePlusGattClientIos(
                 pendingOp = null
                 error("ONEPLUS_GATT: $label subscription refused by the central")
             }
-            val status = runBlocking { withTimeoutOrNull(GATT_OP_TIMEOUT_MS) { op.await() } }
+            val status = runBlocking { withTimeoutOrNull(writeTimeoutMs()) { op.await() } }
             pendingOp = null
             if (status == null) error("ONEPLUS_GATT: $label subscription timeout")
             if (status != 0) error("ONEPLUS_GATT: $label subscription status=$status")
+            // The subscription went through, so a pairing it waited for is done.
+            stateLock.withLock { pairingWindowEnd = null }
         }
     }
 

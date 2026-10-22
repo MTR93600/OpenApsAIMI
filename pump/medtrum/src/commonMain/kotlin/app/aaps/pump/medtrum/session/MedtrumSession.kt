@@ -92,6 +92,9 @@ class MedtrumSession(
      */
     var onStateChanged: (() -> Unit)? = null
 
+    /** Called on the first history record that could not be read in a sync, as Android notifies there. */
+    var onRecordSyncFailed: (() -> Unit)? = null
+
     private val scope = CoroutineScope(SupervisorJob())
 
     private data class PendingPacket(
@@ -573,7 +576,8 @@ class MedtrumSession(
                     failureCount++
                     logger.error("PUMPCOMM", "Failed to sync record $sequence, failureCount: $failureCount")
                     if (failureCount >= 2) break
-                    // else: broken record, try the next one (Android shows a notification here — M3)
+                    // Broken record: tell the person once, as Android does, and try the next one.
+                    onRecordSyncFailed?.invoke()
                 } else if (!result) {
                     break // timeout (already disconnected by sendCommand)
                 }

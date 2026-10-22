@@ -1,24 +1,35 @@
 package app.aaps.ios.shell.di
 
+import app.aaps.core.interfaces.alerts.LocalAlertUtils
+import app.aaps.core.interfaces.aps.Loop
+import app.aaps.core.interfaces.bgQualityCheck.BgQualityCheck
 import app.aaps.core.interfaces.configuration.Config
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
+import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.L
 import app.aaps.core.interfaces.notifications.AlarmSoundPlayer
 import app.aaps.core.interfaces.notifications.SystemNotificationPlatform
+import app.aaps.core.interfaces.plugin.ActivePlugin
+import app.aaps.core.interfaces.profile.ProfileFunction
+import app.aaps.core.interfaces.queue.CommandQueue
+import app.aaps.core.interfaces.resources.TextResolver
+import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.ui.CoreUiStrings
 import app.aaps.implementation.logging.AAPSLoggerIos
+import app.aaps.implementation.maintenance.KeepAliveChecks
 import app.aaps.implementation.notifications.IosSystemNotificationPlatform
 import app.aaps.ios.shell.config.IosConfig
-import app.aaps.plugins.constraints.bgQualityCheck.BgQualityCheckPlugin
 import app.aaps.ios.shell.platform.IosHistoryScope
 import app.aaps.ios.shell.prefs.IosSp
+import app.aaps.plugins.constraints.bgQualityCheck.BgQualityCheckPlugin
 import app.aaps.shared.impl.utils.DateUtilImpl
 import app.aaps.shared.impl.utils.IosDateFormatPlatform
 import app.aaps.ui.compose.history.HistoryScope
-import app.aaps.core.interfaces.bgQualityCheck.BgQualityCheck
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.BindingContainer
 import dev.zacsweers.metro.ContributesTo
@@ -73,6 +84,31 @@ object IosPlatformBindings {
      */
     @Provides
     fun bgQualityCheck(plugin: BgQualityCheckPlugin): BgQualityCheck = plugin
+
+    /**
+     * The pump and APS checks of a master phone, the same code the Android `KeepAliveWorker` runs.
+     * The reasons given to the status read are the same strings as on Android.
+     */
+    @Provides
+    @SingleIn(AppScope::class)
+    fun keepAliveChecks(
+        aapsLogger: AAPSLogger,
+        localAlertUtils: LocalAlertUtils,
+        config: Config,
+        iobCobCalculator: IobCobCalculator,
+        loop: Loop,
+        dateUtil: DateUtil,
+        activePlugin: ActivePlugin,
+        profileFunction: ProfileFunction,
+        rxBus: RxBus,
+        commandQueue: CommandQueue,
+        ch: ConcentrationHelper,
+        rh: TextResolver
+    ): KeepAliveChecks = KeepAliveChecks(
+        aapsLogger, localAlertUtils, config, iobCobCalculator, loop, dateUtil, activePlugin, profileFunction, rxBus, commandQueue, ch,
+        statusOutdatedLabel = { rh.gs(CoreUiStrings.keepalive_status_outdated) },
+        basalOutdatedLabel = { rh.gs(CoreUiStrings.keepalive_basal_outdated) }
+    )
 
     /** Notifications through UNUserNotificationCenter, with the shared registry above it. */
     @Provides

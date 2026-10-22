@@ -179,6 +179,13 @@ fun bleRestoreEvents(ids: List<String>, dropped: Int = 0): List<BleCentralEvent>
 interface BleCentral {
     fun adapterState(): BleAdapterState
     fun startScan()
+
+    /**
+     * A scan that reports only peripherals advertising one of [serviceUuids]. On iOS this is the
+     * only scan that still delivers results while the app is in the background; a scan with no
+     * filter reports nothing then. A central with no such filter scans for everything.
+     */
+    fun startScan(serviceUuids: List<String>) = startScan()
     fun stopScan()
     fun connect(id: String): Boolean
     fun cancel(id: String)

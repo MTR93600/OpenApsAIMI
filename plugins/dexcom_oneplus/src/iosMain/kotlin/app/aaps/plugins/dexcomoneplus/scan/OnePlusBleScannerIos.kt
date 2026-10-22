@@ -118,7 +118,10 @@ class OnePlusBleScannerIos(
             lock.withLock { radioOn = true }
             // Started again on purpose: CoreBluetooth reports each peripheral once per scan, so a
             // sensor already heard in the screen's scan would never be reported into this window.
-            central.startScan()
+            // Filtered by the Dexcom advertisement service: with the phone locked, iOS reports
+            // nothing to a scan without a service filter, and this wait is what every reading
+            // after the first one goes through.
+            central.startScan(listOf(OnePlusBluetoothUuids.Advertisement))
             OnePlusLog.i(
                 "${OnePlusLogMarkers.SCAN}: [$slot] awaitTarget started " +
                     "id=***${wait.target.takeLast(5)} timeoutMs=$timeoutMs",
@@ -135,6 +138,9 @@ class OnePlusBleScannerIos(
             if (!keepRadio) {
                 lock.withLock { radioOn = false }
                 central.stopScan()
+            } else {
+                // The screen is still scanning: give it back its scan without a filter.
+                central.startScan()
             }
             OnePlusLog.i("${OnePlusLogMarkers.SCAN}: [$slot] awaitTarget stopped")
         }
