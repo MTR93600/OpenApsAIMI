@@ -157,6 +157,12 @@ class AimiGlassDashboardSnapshotTest {
                     isfMgdlPerUnit = 45.0,
                     stableBgMinutes = 36.0,
                 ),
+                safety = AimiGlassDashboardData.Safety(
+                    tdd7DaysPerHour = 0.75,
+                    lowTirLastHourPercent = 1.0,
+                    lowTirTodayPercent = 2.0,
+                    stepsLast5Minutes = 42,
+                ),
             )
 
         assertEquals(245, shared.training?.basal?.sampleCount)
@@ -175,6 +181,10 @@ class AimiGlassDashboardSnapshotTest {
         assertEquals(1.2, shared.keyFactors?.maxSmbUnits)
         assertEquals(45.0, shared.keyFactors?.isfMgdlPerUnit)
         assertEquals(36.0, shared.keyFactors?.stableBgMinutes)
+        assertEquals(0.75, shared.safety?.tdd7DaysPerHour)
+        assertEquals(1.0, shared.safety?.lowTirLastHourPercent)
+        assertEquals(2.0, shared.safety?.lowTirTodayPercent)
+        assertEquals(42, shared.safety?.stepsLast5Minutes)
     }
 
     @Test

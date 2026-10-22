@@ -44,7 +44,7 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
  * AIMI ADVISOR SERVICE
  * =============================================================================
  * 
- * Analyzes metrics and provides scored recommendations.
+ * Analyzes metrics and provides scored recommendations on each supported platform.
  * Localized through [AimiAdvisorStrings] (KMP-safe); falls back to English literals.
  * =============================================================================
  */

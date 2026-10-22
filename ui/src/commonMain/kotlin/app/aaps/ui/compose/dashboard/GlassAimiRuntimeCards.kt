@@ -11,7 +11,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -25,6 +27,7 @@ data class GlassAimiRuntimeCardStrings(
     val trajectoryUamLabel: String,
     val trajectoryUnavailable: String,
     val keyFactorsTitle: String,
+    val keyFactorsContextBadge: String,
     val keyFactorsTargetLabel: String,
     val keyFactorsMaxIobLabel: String,
     val keyFactorsMaxSmbLabel: String,
@@ -33,6 +36,15 @@ data class GlassAimiRuntimeCardStrings(
     val formatInsulin: @Composable (Double) -> String,
     val formatIsf: @Composable (Double) -> String,
     val formatStableMinutes: @Composable (Double) -> String,
+    val safetyTitle: String,
+    val safetyTddLabel: String,
+    val safetyTirLabel: String,
+    val safetyStepsLabel: String,
+    val safetyTirValue: @Composable (String, String) -> String,
+    val formatPercent: @Composable (Double) -> String,
+    val formatInsulinPerHour: @Composable (Double) -> String,
+    val formatSteps: @Composable (Int) -> String,
+    val openAimiContextLabel: String,
     val physioTitle: String,
     val physioModeLabel: String,
     val physioIntentLabel: String,
@@ -78,6 +90,7 @@ internal fun GlassAimiRuntimeCards(
     strings: GlassAimiRuntimeCardStrings,
     formatGlucose: (Double) -> String,
     formatDateTime: (Long) -> String,
+    onOpenAimiContext: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -124,7 +137,10 @@ internal fun GlassAimiRuntimeCards(
             }
         }
 
-        GlassRuntimeSection(title = strings.keyFactorsTitle) {
+        GlassRuntimeSection(
+            title = strings.keyFactorsTitle,
+            badge = strings.keyFactorsContextBadge,
+        ) {
             val keyFactors = data.keyFactors
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -175,6 +191,42 @@ internal fun GlassAimiRuntimeCards(
             }
         }
 
+        GlassRuntimeSection(title = strings.safetyTitle) {
+            val safety = data.safety
+            GlassRuntimeMetric(
+                label = strings.safetyTddLabel,
+                value = formatOptionalMetric(
+                    safety?.tdd7DaysPerHour,
+                    strings.formatInsulinPerHour,
+                    strings.valueUnavailable,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            GlassRuntimeMetric(
+                label = strings.safetyTirLabel,
+                value = strings.safetyTirValue(
+                    formatOptionalMetric(
+                        safety?.lowTirLastHourPercent,
+                        strings.formatPercent,
+                        strings.valueUnavailable,
+                    ),
+                    formatOptionalMetric(
+                        safety?.lowTirTodayPercent,
+                        strings.formatPercent,
+                        strings.valueUnavailable,
+                    ),
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            GlassRuntimeMetric(
+                label = strings.safetyStepsLabel,
+                value = safety?.stepsLast5Minutes
+                    ?.let { steps -> strings.formatSteps(steps) }
+                    ?: strings.valueUnavailable,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+
         GlassRuntimeSection(title = strings.physioTitle) {
             val presentation = data.physio?.presentation
             if (presentation == null) {
@@ -208,6 +260,11 @@ internal fun GlassAimiRuntimeCards(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                    }
+                    if (data.contextScreenAvailable) {
+                        TextButton(onClick = onOpenAimiContext) {
+                            Text(strings.openAimiContextLabel)
+                        }
                     }
                 }
             }
@@ -363,6 +420,7 @@ private fun modelFileValue(
 @Composable
 private fun GlassRuntimeSection(
     title: String,
+    badge: String? = null,
     content: @Composable () -> Unit,
 ) {
     Surface(
@@ -380,12 +438,29 @@ private fun GlassRuntimeSection(
             modifier = Modifier.padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.SemiBold,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                if (badge != null) {
+                    Text(
+                        text = badge,
+                        modifier = Modifier
+                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(999.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
             content()
         }
     }

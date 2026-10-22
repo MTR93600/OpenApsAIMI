@@ -8,21 +8,36 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import app.aaps.core.interfaces.dashboard.AimiGlassDashboardData
 import app.aaps.core.data.model.GlucoseUnit
+import app.aaps.core.interfaces.InterfacesStrings
+import app.aaps.core.interfaces.dashboard.AimiGlassDashboardData
 import app.aaps.core.interfaces.navigation.ElementType
+import app.aaps.core.interfaces.protection.ProtectionCheck
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.ui.CoreUiStrings
-import app.aaps.core.interfaces.InterfacesStrings
 import app.aaps.core.ui.compose.LocalProfileUtil
 import app.aaps.core.ui.compose.navigation.NavigationRequest
-import app.aaps.core.ui.compose.stringResource
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
+import app.aaps.core.ui.compose.stringResource
+import app.aaps.ui.UiStrings
 import app.aaps.ui.compose.overview.chips.ChipsViewModel
 import app.aaps.ui.compose.overview.graphs.GraphViewModel
 import app.aaps.ui.compose.overview.statusLights.StatusViewModel
-import app.aaps.ui.UiStrings
 import kotlinx.coroutines.flow.Flow
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Instant
+
+private const val AIMI_PLUGIN_CLASS_NAME = "OpenAPSAIMIPlugin"
+private const val AIMI_CONTEXT_COMPOSE_SCREEN_KEY = "aimi_context_compose"
+
+internal fun aimiContextNavigationRequest(): NavigationRequest.PluginPreferences =
+    NavigationRequest.PluginPreferences(
+        pluginKey = AIMI_PLUGIN_CLASS_NAME,
+        composeScreenKey = AIMI_CONTEXT_COMPOSE_SCREEN_KEY,
+        requiredProtection = ProtectionCheck.Protection.BOLUS,
+    )
 
 /**
  * GLASS home data adapter for existing Overview flows and existing app routes.
@@ -51,6 +66,22 @@ fun GlassDashboardHome(
     val sensitivityState by chipsViewModel.sensitivityUiState.collectAsStateWithLifecycle()
     val aimiData by aimiDashboardData.collectAsStateWithLifecycle(
         initialValue = AimiGlassDashboardData(),
+    )
+    val now = dateUtil.now()
+    val localDayOfWeek = Instant.fromEpochMilliseconds(now)
+        .toLocalDateTime(TimeZone.currentSystemDefault())
+        .dayOfWeek
+    val contextDayLabel = stringResource(
+        if (localDayOfWeek == DayOfWeek.SATURDAY || localDayOfWeek == DayOfWeek.SUNDAY) {
+            UiStrings.dashboard_glass_loop_weekend
+        } else {
+            UiStrings.dashboard_glass_loop_weekday
+        },
+    )
+    val contextBadge = stringResource(
+        UiStrings.dashboard_glass_loop_hour_badge,
+        dateUtil.hourString(now),
+        contextDayLabel,
     )
     val profileUtil = LocalProfileUtil.current
 
@@ -93,6 +124,7 @@ fun GlassDashboardHome(
                         trajectoryUamLabel = stringResource(UiStrings.dashboard_glass_loop_trajectory_uam_label),
                         trajectoryUnavailable = stringResource(UiStrings.dashboard_glass_loop_trajectory_stale),
                         keyFactorsTitle = stringResource(UiStrings.dashboard_glass_loop_key_factors_title),
+                        keyFactorsContextBadge = contextBadge,
                         keyFactorsTargetLabel = stringResource(UiStrings.dashboard_glass_loop_target_label),
                         keyFactorsMaxIobLabel = stringResource(UiStrings.dashboard_glass_loop_max_iob_label),
                         keyFactorsMaxSmbLabel = stringResource(UiStrings.dashboard_glass_loop_max_smb_label),
@@ -116,6 +148,23 @@ fun GlassDashboardHome(
                         formatStableMinutes = { minutes ->
                             stringResource(UiStrings.dashboard_glass_loop_stable_bg_minutes, minutes)
                         },
+                        safetyTitle = stringResource(UiStrings.dashboard_glass_loop_safety_title),
+                        safetyTddLabel = stringResource(UiStrings.dashboard_glass_loop_safety_tdd_label),
+                        safetyTirLabel = stringResource(UiStrings.dashboard_glass_loop_safety_tir_label),
+                        safetyStepsLabel = stringResource(UiStrings.dashboard_glass_loop_safety_steps_label),
+                        safetyTirValue = { hour, today ->
+                            stringResource(UiStrings.dashboard_glass_loop_safety_tir_value, hour, today)
+                        },
+                        formatPercent = { percent ->
+                            stringResource(UiStrings.dashboard_glass_loop_percent, percent)
+                        },
+                        formatInsulinPerHour = { insulin ->
+                            stringResource(UiStrings.dashboard_glass_loop_insulin_per_hour, insulin)
+                        },
+                        formatSteps = { steps ->
+                            stringResource(UiStrings.dashboard_glass_loop_steps_count, steps)
+                        },
+                        openAimiContextLabel = stringResource(UiStrings.dashboard_glass_loop_open_context),
                         physioTitle = stringResource(UiStrings.dashboard_glass_loop_physio_title),
                         physioModeLabel = stringResource(UiStrings.dashboard_glass_loop_physio_mode_label),
                         physioIntentLabel = stringResource(UiStrings.dashboard_glass_loop_physio_intent_label),
@@ -155,6 +204,7 @@ fun GlassDashboardHome(
                     ),
                     formatGlucose = profileUtil::fromMgdlToStringInUnits,
                     formatDateTime = dateUtil::dateAndTimeString,
+                    onOpenAimiContext = { onNavigate(aimiContextNavigationRequest()) },
                 )
             }
         },
@@ -164,10 +214,12 @@ fun GlassDashboardHome(
                 chipsViewModel = chipsViewModel,
                 statusViewModel = statusViewModel,
                 statusLightsDef = statusLightsDef,
+                aimiDashboardData = aimiDashboardData,
                 commandsAllowed = commandsAllowed,
                 onIobClick = chipsViewModel::showIobInfo,
                 onNavigate = onNavigate,
                 showOverviewSummary = false,
+                showContextAction = false,
             )
         },
     )

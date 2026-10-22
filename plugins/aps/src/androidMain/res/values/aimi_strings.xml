@@ -1089,6 +1089,8 @@
 
 <string name="aimi_adv_error_prefix">Error: </string>
 
+<string name="aimi_adv_error_message" comment="%1$s=error details, e.g. The report could not be loaded">Error: %1$s</string>
+
 <string name="aimi_adv_error_oom">Not enough memory to finish. Close other apps and try again.</string>
 
 <string name="aimi_adv_card_render_error" comment="%1$s=card name, %2$s=exception type. Shown in place of a single advisor card that failed to render.">⚠️ %1$s unavailable (%2$s)</string>

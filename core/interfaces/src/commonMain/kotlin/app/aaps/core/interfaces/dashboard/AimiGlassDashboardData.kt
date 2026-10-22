@@ -11,6 +11,8 @@ data class AimiGlassDashboardData(
     val physio: Physio? = null,
     val training: Training? = null,
     val keyFactors: KeyFactors? = null,
+    val safety: Safety? = null,
+    val contextScreenAvailable: Boolean = false,
 ) {
 
     data class KeyFactors(
@@ -19,6 +21,13 @@ data class AimiGlassDashboardData(
         val maxSmbUnits: Double?,
         val isfMgdlPerUnit: Double?,
         val stableBgMinutes: Double?,
+    )
+
+    data class Safety(
+        val tdd7DaysPerHour: Double?,
+        val lowTirLastHourPercent: Double?,
+        val lowTirTodayPercent: Double?,
+        val stepsLast5Minutes: Int?,
     )
 
     data class Trajectory(

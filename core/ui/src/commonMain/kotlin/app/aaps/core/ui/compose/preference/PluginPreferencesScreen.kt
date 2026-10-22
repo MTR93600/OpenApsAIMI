@@ -26,6 +26,8 @@ import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import app.aaps.core.interfaces.plugin.PluginBase
+import app.aaps.core.keys.interfaces.IntentPreferenceKey
+import app.aaps.core.keys.interfaces.PreferenceItem
 import app.aaps.core.keys.interfaces.VisibilityContext
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.AapsTopAppBar
@@ -48,13 +50,20 @@ import kotlinx.coroutines.launch
 fun PluginPreferencesScreen(
     plugin: PluginBase,
     visibilityContext: VisibilityContext? = null,
+    initialComposeScreenKey: String? = null,
     onBackClick: () -> Unit
 ) {
     val preferenceScreenContent = plugin.getPreferenceScreenContent()
     val title = plugin.name
 
     // State for inline Compose screen navigation
-    var composeScreen: ComposeScreenContent? by remember { mutableStateOf(null) }
+    var composeScreen: ComposeScreenContent? by remember(plugin, initialComposeScreenKey) {
+        mutableStateOf(
+            initialComposeScreenKey?.let { key ->
+                plugin.getPreferenceScreenContent()?.findComposeScreen(key)
+            },
+        )
+    }
 
     // Back closes the inline sub-screen instead of leaving the preferences screen.
     // The sub-screen is a single level, so the handler carries no navigation info.
@@ -119,6 +128,12 @@ fun PluginPreferencesScreen(
             }
         }
     }
+}
+
+private fun PreferenceItem.findComposeScreen(key: String): ComposeScreenContent? = when (this) {
+    is PreferenceSubScreenDef -> items.firstNotNullOfOrNull { it.findComposeScreen(key) }
+    is IntentPreferenceKey -> if (this.key == key) composeScreen as? ComposeScreenContent else null
+    else -> null
 }
 
 /**

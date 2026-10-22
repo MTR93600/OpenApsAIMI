@@ -46,9 +46,14 @@ sealed class AppRoute(val route: String) {
     data object ProfileHelper : AppRoute("profile_helper")
     data object HistoryBrowser : AppRoute("history_browser")
     data object Preferences : AppRoute("preferences")
-    data object PluginPreferences : AppRoute("plugin_preferences/{pluginKey}") {
+    data object PluginPreferences : AppRoute("plugin_preferences/{pluginKey}?composeScreenKey={composeScreenKey}") {
 
-        fun createRoute(pluginKey: String) = "plugin_preferences/$pluginKey"
+        fun createRoute(pluginKey: String, composeScreenKey: String? = null) =
+            if (composeScreenKey == null) {
+                "plugin_preferences/$pluginKey"
+            } else {
+                "plugin_preferences/$pluginKey?composeScreenKey=$composeScreenKey"
+            }
     }
 
     data object PreferenceScreen : AppRoute("preference_screen/{screenKey}?highlight={highlightKey}") {

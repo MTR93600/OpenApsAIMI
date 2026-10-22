@@ -30,6 +30,8 @@ class OrefLocalPipeline(
         filesDir: AimiPath? = null,
         personalMlEnabled: Boolean = false,
     ): OrefAnalysisReport = withContext(Dispatchers.Default) {
+        val scorerFactory = orefRiskScorerFactory()
+        val noModelStatus = if (scorerFactory.runtimeAvailable) OrefMlStatus.NOT_BUNDLED else OrefMlStatus.UNAVAILABLE_DEVICE
         // APS rows carry large JSON per loop; loading 30d on a 256MB heap can OOM (see APSResultDao cursor).
         val effectiveWindowDays = min(windowDays, MAX_HISTORY_DAYS_FOR_MEMORY)
         val end = aimiWallClockMs()
@@ -49,7 +51,7 @@ class OrefLocalPipeline(
                 actualHypo4hPct = null,
                 actualHyper4hPct = null,
                 priority = OrefGlycemicPriority.BALANCED,
-                mlStatus = OrefMlStatus.NOT_BUNDLED,
+                mlStatus = noModelStatus,
                 featureMissingPct = emptyMap(),
                 hints = listOf("Insufficient local data (need more CGM and APS history)."),
                 dataSufficiency = OrefDataSufficiency.INSUFFICIENT,
@@ -74,7 +76,7 @@ class OrefLocalPipeline(
                 actualHypo4hPct = null,
                 actualHyper4hPct = null,
                 priority = OrefGlycemicPriority.BALANCED,
-                mlStatus = OrefMlStatus.NOT_BUNDLED,
+                mlStatus = noModelStatus,
                 featureMissingPct = emptyMap(),
                 hints = listOf("Insufficient local data (need more CGM and APS history)."),
                 dataSufficiency = OrefDataSufficiency.INSUFFICIENT,
@@ -93,7 +95,7 @@ class OrefLocalPipeline(
                 actualHypo4hPct = null,
                 actualHyper4hPct = null,
                 priority = classifyPriorityFromTir(pctBelow(sortedGv, 70.0), pctAbove(sortedGv, 180.0), tir(sortedGv)),
-                mlStatus = OrefMlStatus.NOT_BUNDLED,
+                mlStatus = noModelStatus,
                 featureMissingPct = emptyMap(),
                 hints = listOf("Few APS-aligned CGM rows (${slices.size}). Sync/history retention may be limited."),
                 dataSufficiency = OrefDataSufficiency.INSUFFICIENT,
@@ -140,7 +142,7 @@ class OrefLocalPipeline(
 
         val hints = buildHints(slices, profileSnapshot)
 
-        val onnx = computeOnnxSummaries(assetReader, slices, outcomePerSlice)
+        val onnx = computeOnnxSummaries(scorerFactory, assetReader, slices, outcomePerSlice)
 
         val sufficiency = computeDataSufficiency(slices.size, labelled)
         var personalStatus = OrefPersonalMlStatus.OFF
@@ -246,17 +248,21 @@ class OrefLocalPipeline(
     )
 
     private fun computeOnnxSummaries(
+        scorerFactory: OrefRiskScorerFactory,
         assetReader: AimiAssetReader?,
         slices: List<Triple<Int, DoubleArray, Long>>,
         outcomePerSlice: List<OrefOutcomeComputer.Outcome>,
     ): OnnxSummaries {
+        if (!scorerFactory.runtimeAvailable) {
+            return OnnxSummaries(OrefMlStatus.UNAVAILABLE_DEVICE)
+        }
         if (assetReader == null) {
             return OnnxSummaries(OrefMlStatus.NOT_BUNDLED)
         }
-        if (!OrefOnnxScorer.assetModelsPresent(assetReader)) {
+        if (!scorerFactory.assetModelsPresent(assetReader)) {
             return OnnxSummaries(OrefMlStatus.NOT_BUNDLED)
         }
-        val scorer = OrefOnnxScorer.tryCreate(assetReader)
+        val scorer = scorerFactory.tryCreate(assetReader)
             ?: return OnnxSummaries(
                 OrefMlStatus.LOAD_FAILED,
                 mlErrorDetail = "Could not create ONNX sessions (check model format).",

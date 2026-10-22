@@ -282,6 +282,7 @@ danars_password|DanaStringNonKey|true
 danars_v3_pairing_key_%s|DanaStringComposedKey|true
 danars_v3_randompairing_key_%s|DanaStringComposedKey|true
 danars_v3_randomsync_key_%s|DanaStringComposedKey|true
+dashboard_home_skin|StringKey|true
 device_type|MedtrumIntNonKey|true
 dexcom_lognssensorchange|BooleanKey|true
 dexcom_oneplus_anchor_session_to_manual_sensor_change|DexcomOnePlusBooleanKey|false
@@ -384,6 +385,7 @@ key_aimi_autodrive_v3_authoritative|BooleanKey|true
 key_aimi_basal_channel_safety_guards|BooleanKey|true
 key_aimi_basal_projected_error|BooleanKey|true
 key_aimi_basal_slew_limit|BooleanKey|true
+key_aimi_basal_stack_terminal_cap|BooleanKey|true
 key_aimi_basal_terminal_invariants|BooleanKey|true
 key_aimi_context_enabled|BooleanKey|true
 key_aimi_context_llm_enabled|BooleanKey|true
@@ -391,6 +393,7 @@ key_aimi_dia_governor_enabled|BooleanKey|true
 key_aimi_dynamic_basal_stack_cap|BooleanKey|true
 key_aimi_effective_iob_release_enabled|BooleanKey|true
 key_aimi_effort_activity_protection|BooleanKey|true
+key_aimi_engine_hyper_rate_bound|BooleanKey|true
 key_aimi_forced_tbr_real_pred_delta|BooleanKey|true
 key_aimi_gov_anticipation_decay_blend_max|DoubleKey|true
 key_aimi_gov_anticipation_hypo_damp|DoubleKey|true

@@ -17,14 +17,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTheme
-import app.aaps.plugins.aps.R
+import app.aaps.core.ui.compose.stringResource
+import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.advisor.oref.OrefAnalysisReport
 import app.aaps.plugins.aps.openAPSAIMI.advisor.oref.OrefUserInsightFormatter
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
@@ -68,20 +68,20 @@ private const val BRAIN_EMOJI = "🧠" // 🧠
 internal fun CognitiveBrainCard(reactivityFactor: Double) {
     val (stateRes, descRes, stateColor) = when {
         reactivityFactor < 0.95 -> Triple(
-            R.string.aimi_adv_brain_protect,
-            R.string.aimi_adv_brain_protect_desc,
+            ApsStrings.aimi_adv_brain_protect,
+            ApsStrings.aimi_adv_brain_protect_desc,
             AapsTheme.generalColors.bgLow,
         )
 
         reactivityFactor > 1.05 -> Triple(
-            R.string.aimi_adv_brain_offense,
-            R.string.aimi_adv_brain_offense_desc,
+            ApsStrings.aimi_adv_brain_offense,
+            ApsStrings.aimi_adv_brain_offense_desc,
             AapsTheme.generalColors.bgHigh,
         )
 
         else                    -> Triple(
-            R.string.aimi_adv_brain_neutral,
-            R.string.aimi_adv_brain_neutral_desc,
+            ApsStrings.aimi_adv_brain_neutral,
+            ApsStrings.aimi_adv_brain_neutral_desc,
             AapsTheme.generalColors.bgInRange,
         )
     }
@@ -111,11 +111,11 @@ internal fun CognitiveBrainCard(reactivityFactor: Double) {
  * On-device OREF-aligned analysis: a plain-language paragraph, the raw prompt-section block, and an
  * optional CGM time-in-ranges chart (collapsed by default, per the staged behaviour).
  *
- * [rh] is passed in only to resolve [OrefUserInsightFormatter.buildParagraph], which is not a
+ * [textResolver] is passed in only to resolve [OrefUserInsightFormatter.buildParagraph], which is not a
  * composable - every other string here goes through [stringResource].
  */
 @Composable
-internal fun OrefAnalysisCard(oref: OrefAnalysisReport, rh: ResourceHelper) {
+internal fun OrefAnalysisCard(oref: OrefAnalysisReport, textResolver: TextResolver) {
     var showChart by remember { mutableStateOf(false) }
     val canShowChart = oref.timeBelow70Pct != null || oref.timeInRange70180Pct != null || oref.timeAbove180Pct != null
 
@@ -125,11 +125,11 @@ internal fun OrefAnalysisCard(oref: OrefAnalysisReport, rh: ResourceHelper) {
             verticalArrangement = Arrangement.spacedBy(AapsSpacing.medium),
         ) {
             Text(
-                text = stringResource(R.string.aimi_adv_oref_user_insight_title),
+                text = stringResource(ApsStrings.aimi_adv_oref_user_insight_title),
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
-                text = OrefUserInsightFormatter.buildParagraph(rh, oref),
+                text = OrefUserInsightFormatter.buildParagraph(textResolver, oref),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -142,7 +142,7 @@ internal fun OrefAnalysisCard(oref: OrefAnalysisReport, rh: ResourceHelper) {
                 OutlinedButton(onClick = { showChart = !showChart }) {
                     Text(
                         stringResource(
-                            if (showChart) R.string.aimi_adv_oref_hide_chart else R.string.aimi_adv_oref_show_chart,
+                            if (showChart) ApsStrings.aimi_adv_oref_hide_chart else ApsStrings.aimi_adv_oref_show_chart,
                         ),
                     )
                 }
@@ -158,9 +158,8 @@ internal fun OrefAnalysisCard(oref: OrefAnalysisReport, rh: ResourceHelper) {
  * Bar chart of the OREF-window CGM distribution (the same three percentages as the monospace
  * summary above it): time below 70, time in range 70-180, and time above 180.
  *
- * The only chart in this port. Built with Vico - the repo's KMP-compatible charting library, already
- * on this module's classpath via `:core:graph` (see `core/graph/build.gradle.kts` and
- * `plugins/aps/build.gradle.kts`) - copying the axis/host/zoom-state setup from
+ * The only chart in this port. Built with Vico, the repo's KMP-compatible charting library, also
+ * used by `:core:graph` - copying the axis/host/zoom-state setup from
  * `core/graph/IsfProfileGraphCompose.kt`. That file draws a line chart; this one needs Vico's column
  * layer instead, which nothing in the repo used yet, so its API came from the library's own sources
  * (`ColumnCartesianLayer.kt`, `ColumnCartesianLayerModel.kt`) rather than from an existing example.
@@ -177,7 +176,7 @@ private fun OrefCgmRangeChart(oref: OrefAnalysisReport) {
     val inRangePct = oref.timeInRange70180Pct
     val abovePct = oref.timeAbove180Pct
     if (belowPct == null || inRangePct == null || abovePct == null) {
-        Text(stringResource(R.string.aimi_adv_not_enough_data))
+        Text(stringResource(ApsStrings.aimi_adv_not_enough_data))
         return
     }
 
@@ -190,9 +189,9 @@ private fun OrefCgmRangeChart(oref: OrefAnalysisReport) {
         }
     }
 
-    val lowLabel = stringResource(R.string.aimi_adv_oref_bar_low)
-    val inRangeLabel = stringResource(R.string.aimi_adv_oref_bar_in_range)
-    val highLabel = stringResource(R.string.aimi_adv_oref_bar_high)
+    val lowLabel = stringResource(ApsStrings.aimi_adv_oref_bar_low)
+    val inRangeLabel = stringResource(ApsStrings.aimi_adv_oref_bar_in_range)
+    val highLabel = stringResource(ApsStrings.aimi_adv_oref_bar_high)
     val lowColor = AapsTheme.generalColors.bgLow
     val inRangeColor = AapsTheme.generalColors.bgInRange
     val highColor = AapsTheme.generalColors.bgHigh
@@ -237,7 +236,7 @@ private fun OrefCgmRangeChart(oref: OrefAnalysisReport) {
         verticalArrangement = Arrangement.spacedBy(AapsSpacing.small),
     ) {
         Text(
-            text = stringResource(R.string.aimi_adv_oref_chart_title),
+            text = stringResource(ApsStrings.aimi_adv_oref_chart_title),
             style = MaterialTheme.typography.titleSmall,
         )
         CartesianChartHost(
@@ -275,14 +274,14 @@ internal fun AiCoachCard(loading: Boolean, advice: String?, error: String?) {
             verticalArrangement = Arrangement.spacedBy(AapsSpacing.medium),
         ) {
             Text(
-                text = stringResource(R.string.aimi_coach_header_title, stringResource(R.string.aimi_coach_title)),
+                text = stringResource(ApsStrings.aimi_coach_header_title, stringResource(ApsStrings.aimi_coach_title)),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.tertiary,
             )
             val bodyText = when {
                 error != null            -> error
                 advice != null && !loading -> advice
-                else                      -> stringResource(R.string.aimi_coach_loading)
+                else                      -> stringResource(ApsStrings.aimi_coach_loading)
             }
             Text(
                 text = bodyText,

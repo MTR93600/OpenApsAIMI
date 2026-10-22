@@ -115,6 +115,8 @@ kotlin {
                 implementation(project(":plugins:aimi-contracts"))
 
                 implementation(libs.androidx.collection)
+                implementation(libs.jetbrains.lifecycle.runtime.compose)
+                implementation(libs.com.patrykandpatrick.vico.compose)
                 implementation(libs.kotlinx.coroutines.core)
                 implementation(libs.kotlinx.datetime)
                 implementation(libs.jetbrains.compose.runtime)

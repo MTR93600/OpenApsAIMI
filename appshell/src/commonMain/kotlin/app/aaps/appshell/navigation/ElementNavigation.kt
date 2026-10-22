@@ -65,8 +65,13 @@ class ElementNavigator(
                 openPlugin(plugin, navController, activePlugin)
             }
 
-            is NavigationRequest.PluginPreferences -> guarded(ElementType.SETTINGS.protection) {
-                navController.navigate(AppRoute.PluginPreferences.createRoute(request.pluginKey))
+            is NavigationRequest.PluginPreferences -> guarded(request.requiredProtection) {
+                navController.navigate(
+                    AppRoute.PluginPreferences.createRoute(
+                        request.pluginKey,
+                        request.composeScreenKey,
+                    ),
+                )
             }
         }
     }

@@ -674,6 +674,7 @@ fun NavGraphBuilder.appNavGraph(
             PluginPreferencesScreen(
                 plugin = plugin,
                 visibilityContext = visibilityContext,
+                initialComposeScreenKey = backStackEntry.stringArg("composeScreenKey"),
                 onBackClick = { navController.safePopBackStack() }
             )
         } else {

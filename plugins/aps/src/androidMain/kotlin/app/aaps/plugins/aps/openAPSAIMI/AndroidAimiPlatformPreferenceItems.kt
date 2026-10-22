@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
 import android.content.Context
+import androidx.compose.runtime.remember
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.maintenance.ImportExportPrefs
@@ -21,12 +22,16 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiAdvisorService
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiAdvisorStringsAndroid
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiSharing
 import app.aaps.plugins.aps.openAPSAIMI.advisor.compose.AimiProfileAdvisorScreen
+import app.aaps.plugins.aps.openAPSAIMI.advisor.oref.AndroidAssetReader
 import app.aaps.plugins.aps.openAPSAIMI.advisor.compose.AimiSupportPackageScreen
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
 import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiDiagnosticsManager
 import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiSupportPackageExporter
 import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AndroidAimiDiagPlatform
+import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.FoodRecognitionService
+import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.toAimiImage
 import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.ui.AimiMealAdvisorScreen
+import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.ui.MealAdvisorCameraCapture
 import app.aaps.plugins.aps.openAPSAIMI.advisor.modesettings.ui.AimiModeSettingsScreen
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiPkpdSettingsScreen
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextManager
@@ -44,6 +49,7 @@ import app.aaps.plugins.aps.openAPSAIMI.sos.AimiSosPermissionScreen
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiBackupManager
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttp
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiKeyValueCache
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
@@ -53,8 +59,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Android half of [AimiPlatformPreferenceItems]: the AIMI settings entries whose screens are still
- * built on Android classes. The code of each entry was moved here unchanged from the plugin.
+ * Android half of [AimiPlatformPreferenceItems]: the AIMI settings entries that need Android
+ * services, such as camera capture and support-package export.
  */
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
@@ -148,13 +154,23 @@ class AndroidAimiPlatformPreferenceItems @Inject constructor(
     private fun mealAdvisor(): PreferenceItem =
         ApsIntentKey.AimiMealAdvisor.withCompose(
             ComposeScreenContent { onBack ->
+                val recognitionService = remember {
+                    FoodRecognitionService(geminiModelResolver, preferences, aapsLogger, aimiHttp)
+                }
                 AimiMealAdvisorScreen(
                     preferences = preferences,
                     persistenceLayer = persistenceLayer,
                     profileFunction = profileFunction,
                     aapsLogger = aapsLogger,
-                    geminiModelResolver = geminiModelResolver,
-                    aimiHttp = aimiHttp,
+                    cameraCapture = { onCaptured, onError, onCancel ->
+                        MealAdvisorCameraCapture(
+                            aapsLogger = aapsLogger,
+                            onCaptured = { bitmap -> onCaptured(bitmap.toAimiImage()) },
+                            onError = onError,
+                            onCancel = onCancel,
+                        )
+                    },
+                    analyzeImage = recognitionService::estimateCarbsFromImage,
                     onBack = onBack,
                 )
             },
@@ -183,9 +199,11 @@ class AndroidAimiPlatformPreferenceItems @Inject constructor(
                     importExportPrefs = importExportPrefs,
                     exportPasswordDataStore = exportPasswordDataStore,
                     aiCoachingService = aiCoachingService,
-                    rh = rh,
+                    textResolver = rh,
                     storage = storage,
                     sharing = sharing,
+                    assetReader = AndroidAssetReader(context),
+                    filesDir = AimiPath(context.filesDir.absolutePath),
                     onBack = onBack,
                 )
             },

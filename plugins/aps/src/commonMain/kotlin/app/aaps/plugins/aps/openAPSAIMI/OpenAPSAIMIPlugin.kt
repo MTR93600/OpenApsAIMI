@@ -305,6 +305,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
     override suspend fun onStart() {
         super.onStart()
+        AimiGlassDashboardSnapshotFeed.configureContextScreenAvailable(
+            platformItems.item(AimiPlatformPreferenceSlot.CONTEXT) != null,
+        )
         AimiGlassDashboardSnapshotFeed.configureKeyFactorsProvider {
             val result = activePlugin.activeAPS?.lastAPSResult
             val profile = result?.oapsProfileAimi
@@ -317,6 +320,32 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     .getAimiFeatures(allowOldData = true)
                     ?.stable5pctMinutes
                     ?.takeIf { it.isFinite() },
+            )
+        }
+        AimiGlassDashboardSnapshotFeed.configureSafetyMetricsProvider {
+            val tdd = tddCalculator.averageTDD(tddCalculator.calculate(7L, allowMissingDays = true))
+                ?.data
+                ?.totalAmount
+                ?.takeIf { it.isFinite() }
+                ?.div(24.0)
+            val lowTirHour = tirCalculator.averageTIR(tirCalculator.calculateHour(70.0, 180.0))
+                .takeIf { it.count > 0 }
+                ?.belowPct()
+                ?.takeIf { it.isFinite() }
+            val lowTirToday = tirCalculator.averageTIR(tirCalculator.calculateDaily(70.0, 180.0))
+                .takeIf { it.count > 0 }
+                ?.belowPct()
+                ?.takeIf { it.isFinite() }
+            val now = dateUtil.now()
+            val stepsLast5Minutes = persistenceLayer.getLastStepsCountFromTimeToTime(
+                now - 24L * 60L * 60L * 1000L,
+                now,
+            )?.steps5min
+            AimiGlassDashboardData.Safety(
+                tdd7DaysPerHour = tdd,
+                lowTirLastHourPercent = lowTirHour,
+                lowTirTodayPercent = lowTirToday,
+                stepsLast5Minutes = stepsLast5Minutes,
             )
         }
         // Fresh cross-tick hysteresis for a new plugin lifetime (not per APS tick).

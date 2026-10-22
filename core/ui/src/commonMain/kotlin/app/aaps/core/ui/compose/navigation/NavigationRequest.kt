@@ -2,12 +2,17 @@ package app.aaps.core.ui.compose.navigation
 
 import androidx.compose.runtime.compositionLocalOf
 import app.aaps.core.interfaces.navigation.ElementType
+import app.aaps.core.interfaces.protection.ProtectionCheck
 
 sealed class NavigationRequest {
     data class Element(val type: ElementType) : NavigationRequest()
     data class QuickWizard(val guid: String) : NavigationRequest()
     data class Plugin(val className: String) : NavigationRequest()
-    data class PluginPreferences(val pluginKey: String) : NavigationRequest()
+    data class PluginPreferences(
+        val pluginKey: String,
+        val composeScreenKey: String? = null,
+        val requiredProtection: ProtectionCheck.Protection = ProtectionCheck.Protection.PREFERENCES,
+    ) : NavigationRequest()
 }
 
 /**

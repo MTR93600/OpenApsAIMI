@@ -2338,16 +2338,30 @@ Other things nobody had counted: Hilt does not exist on this branch (5 glass fil
 The 2026-09-28 survey above is historical. The current KMP source has a shared home-skin preference
 for Overview, Dashboard V2, and GLASS; Overview remains the default. V2 uses shared Compose UI and
 the Overview state, with a pannable and zoomable graph. GLASS uses shared Compose UI and currently
-shows Overview metrics, fresh AIMI trajectories (including UAM), profile/runtime key factors, the
-physio presentation, basal and SMB training state, and model-file timestamps and sizes. These are
-read-only displays; no dosing decision was moved into the UI.
+shows Overview metrics, fresh AIMI trajectories (including UAM), profile/runtime key factors,
+read-only TDD/TIR/step summaries, the physio presentation, basal and SMB training state, and
+model-file timestamps and sizes. These are read-only displays; no dosing decision was moved into
+the UI.
 
-This is not yet feature parity with the reference. Still absent are the remaining Key Factors and
-Safety & Alarms values (TDD per hour, low-TIR summaries, and recent-step summary), a working AIMI
-Context destination, and the remaining V2 hero actions. Do not infer any of those values in the UI:
-wire each one from its exact shared source, keep unavailable values explicit, and test the source
-mapping before adding the display. The shared iOS build does not by itself confirm rendered behavior
-on an iOS device.
+This is not yet feature parity with the reference. The GLASS Context action and Dashboard V2 context
+shortcut open the shared AIMI Context screen on Android and iOS, with bolus protection. Dashboard V2
+still does not expose Advisor, Adjust, or Meal Advisor actions. The Meal Advisor settings screen is
+shared and registered on iOS; Profile Advisor and Mode Settings remain unregistered there. The
+shared iOS build does not by itself confirm rendered behavior on an iOS device.
+
+The Meal Advisor UI is now in `commonMain`; Android keeps its existing Camera2 preview in
+`androidMain`, and the iOS preference slot uses the shared screen and real `FoodRecognitionService`.
+Android host characterization covers initial inputs, provider selection/persistence, and the
+capture → estimate → editable carbohydrate estimate → confirmation path. The confirmation test pins
+the persisted carbohydrate treatment and all three one-shot trigger preferences. The
+post-confirmation delayed return to the previous screen is not asserted by this host test.
+
+The iOS camera boundary is an `iosMain` factory/controller contract implemented by a Swift
+AVFoundation preview controller, registered from `ClientApp` before graph creation. The approved
+`NSCameraUsageDescription` is present. The Kotlin/Native bridge compiles, the iOS simulator tests and
+Android host tests pass, and the AAPSClient Xcode scheme builds for an arm64 simulator. The camera
+has not been exercised on a device, so permission denial, capture, cancel, and JPEG delivery still
+need runtime validation.
 
 ### The app-init deferral: do NOT port it
 
@@ -4992,3 +5006,28 @@ Four times today a test task reported a pass from **stale result XML** while its
 failed - once by 16 hours, once by 75 minutes. Each number in this section was read with the result
 files' mtime checked against the clock, and the suites re-run with `--rerun-tasks`. A green number
 from a task that did not run is worse than a red one.
+
+## 6by. 2026-10-22: Profile Advisor shared screen and iOS ONNX build
+
+`AimiAdvisorService`, `OrefLocalPipeline`, the Profile Advisor screen, and the OREF/coach cards now
+live in `commonMain`. Android keeps its ONNX Runtime scorer and its existing strings. iOS registers
+the Profile Advisor and supplies shared text, storage, sharing, and bundle-asset adapters. The Apply
+flow keeps its existing order: update preferences, then export when at least one setting changed.
+
+The scorer now has a shared interface. Android uses its existing ONNX implementation; iOS and JVM
+explicitly report that scores are unavailable. The approved iOS message is
+“ONNX risk scores are not available on this device.” No `.onnx` files are present in the repository,
+so placeholder models are not used. The iOS scorer is still not wired to the generated runtime and
+does not produce risk scores.
+
+The pinned ONNX Runtime 1.20.0 source build produced and verified an XCFramework with iOS-device
+arm64 and iOS-simulator arm64 slices and the C API headers. The build script uses the pinned Eigen
+Git commit because the upstream archive checksum no longer matches the generated GitLab archive. It
+omits the optional XNNPACK provider because its KleidiAI archive has the same checksum problem; the
+ONNX CPU provider remains available in the built framework. The XCFramework is a local build artifact.
+Gradle cinterop/linking and a real iOS scorer remain future work, and require valid models before
+scores can be checked.
+
+**Verification for this port:** the focused Android host tests passed (8 tests); the OREF status test
+passed on the iOS simulator; `:plugins:aps:iosSimulatorArm64Test`, both iOS Kotlin compile targets,
+and `:app:assembleFullDebug` passed. The iOS app UI and real-device behavior have not been tested.

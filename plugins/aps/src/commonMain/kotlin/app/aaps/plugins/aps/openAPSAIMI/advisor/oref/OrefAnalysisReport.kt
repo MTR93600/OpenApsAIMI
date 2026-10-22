@@ -146,6 +146,7 @@ enum class OrefGlycemicPriority {
 
 enum class OrefMlStatus(val userMessage: String) {
     NOT_BUNDLED("Risk scores: ONNX models not in assets (optional)."),
+    UNAVAILABLE_DEVICE("ONNX risk scores are not available on this device."),
     LOAD_FAILED("Risk scores: ONNX load/inference failed."),
     OK("Risk scores: on-device ONNX OK."),
 }

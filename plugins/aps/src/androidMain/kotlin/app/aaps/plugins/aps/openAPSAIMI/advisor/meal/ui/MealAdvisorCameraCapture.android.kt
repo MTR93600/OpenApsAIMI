@@ -88,11 +88,9 @@ import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.preference.ProvidePreferenceTheme
 import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.EstimationResult
-import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.FoodRecognitionService
+import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.AimiImage
 import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.toAimiImage
-import app.aaps.plugins.aps.openAPSAIMI.utils.AimiHttp
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
-import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.compose.ProviderDropdown
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -100,374 +98,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
 
-/**
- * Compose port of the parked `MealAdvisorActivity` + `MealAdvisorCameraActivity` ("Snap & Go").
- *
- * One screen, not two: this project's Compose preference mechanism is `ComposeScreenContent { onBack -> ... }`,
- * one screen per entry with no "startActivityForResult"-style contract to hand a photo between two screens.
- * `showCamera` toggles between the input/result layout and a full-screen Camera2 capture layout instead.
- *
- * Camera2 (not CameraX): this repo has no CameraX dependency anywhere, and the parked Activity already
- * used Camera2 directly to force back-camera selection, so the capture logic below is a straight port of
- * that, not a new design.
- *
- * The confirm-flow preference keys ([BooleanKey.OApsAIMIMealAdvisorTrigger], [DoubleKey.OApsAIMILastEstimatedCarbs],
- * [DoubleKey.OApsAIMILastEstimatedCarbTime]) and the `MEAL_ADVISOR_TRACE` debug log prefix must not change:
- * the dosing loop reads them for a one-shot SMB bypass right after a logged meal.
- */
 @Composable
-fun AimiMealAdvisorScreen(
-    preferences: Preferences,
-    persistenceLayer: PersistenceLayer,
-    profileFunction: ProfileFunction,
-    aapsLogger: AAPSLogger,
-    geminiModelResolver: GeminiModelResolver,
-    aimiHttp: AimiHttp,
-    onBack: () -> Unit,
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val snackbarHostState = remember { SnackbarHostState() }
-    val recognitionService = remember { FoodRecognitionService(geminiModelResolver, preferences, aapsLogger, aimiHttp) }
-
-    var showCamera by remember { mutableStateOf(false) }
-    var provider by remember { mutableStateOf(preferences.get(StringKey.AimiAdvisorProvider).uppercase(Locale.ROOT)) }
-    var descriptionText by remember { mutableStateOf("") }
-    var capturedBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    var analyzing by remember { mutableStateOf(false) }
-    var result by remember { mutableStateOf<EstimationResult?>(null) }
-    var carbsText by remember { mutableStateOf("") }
-    var proposedDoseUnits by remember { mutableStateOf(0.0) }
-    var confirming by remember { mutableStateOf(false) }
-
-    val cameraPermissionDeniedMessage = stringResource(R.string.aimi_meal_advisor_camera_permission_denied_message)
-    val analyzeErrorPrefix = stringResource(R.string.aimi_meal_advisor_analyze_error_prefix)
-    val confirmErrorPrefix = stringResource(R.string.aimi_meal_advisor_confirm_error_prefix)
-    val confirmedMessage = stringResource(R.string.aimi_meal_advisor_confirmed_message)
-    val confirmButtonTemplate = stringResource(R.string.aimi_meal_advisor_confirm_button)
-
-    val cameraPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { granted ->
-        if (granted) {
-            showCamera = true
-        } else {
-            scope.launch { snackbarHostState.showSnackbar(cameraPermissionDeniedMessage) }
-        }
-    }
-
-    fun analyze(bitmap: Bitmap) {
-        analyzing = true
-        scope.launch {
-            try {
-                val estimate = recognitionService.estimateCarbsFromImage(bitmap.toAimiImage(), descriptionText)
-                result = estimate
-                carbsText = estimate.recommendedCarbsForDose.toInt().toString()
-            } catch (e: Exception) {
-                aapsLogger.error(LTag.APS, "MEAL_ADVISOR_TRACE analyze failed", e)
-                snackbarHostState.showSnackbar(String.format(Locale.getDefault(), analyzeErrorPrefix, e.message ?: ""))
-            } finally {
-                analyzing = false
-            }
-        }
-    }
-
-    LaunchedEffect(carbsText) {
-        val carbs = carbsText.toDoubleOrNull() ?: 0.0
-        val profile = withContext(Dispatchers.IO) { profileFunction.getProfile() }
-        val ic = if (profile != null && profile.getIc() > 0.1) profile.getIc() else 10.0
-        proposedDoseUnits = carbs / ic
-    }
-
-    fun onAnalyzeClick() {
-        val hasPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
-        if (hasPermission) {
-            showCamera = true
-        } else {
-            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-        }
-    }
-
-    fun onCaptured(bitmap: Bitmap) {
-        showCamera = false
-        capturedBitmap = bitmap
-        analyze(bitmap)
-    }
-
-    fun onCameraError(message: String) {
-        showCamera = false
-        scope.launch { snackbarHostState.showSnackbar(message) }
-    }
-
-    fun confirmInjection() {
-        val carbs = carbsText.toDoubleOrNull() ?: return
-        if (carbs <= 0.0 || confirming) return
-        confirming = true
-        scope.launch(Dispatchers.IO) {
-            try {
-                val ca = CA(
-                    timestamp = aimiWallClockMs(),
-                    isValid = true,
-                    duration = 0,
-                    amount = carbs,
-                    notes = "AIMI Meal Advisor: ${result?.description ?: ""}",
-                    ids = IDs(),
-                )
-                persistenceLayer.insertOrUpdateCarbs(ca, Action.TREATMENT, Sources.CarbDialog, ca.notes)
-
-                preferences.put(BooleanKey.OApsAIMIMealAdvisorTrigger, true)
-                preferences.put(DoubleKey.OApsAIMILastEstimatedCarbs, carbs)
-                val nowMs = aimiWallClockMs()
-                preferences.put(DoubleKey.OApsAIMILastEstimatedCarbTime, nowMs.toDouble())
-                aapsLogger.debug(
-                    LTag.APS,
-                    "MEAL_ADVISOR_TRACE confirmInjection carbs=${"%.1f".format(Locale.ROOT, carbs)}g trigger=true estimateTimeMs=$nowMs",
-                )
-
-                withContext(Dispatchers.Main) {
-                    snackbarHostState.showSnackbar(confirmedMessage)
-                    delay(900)
-                    onBack()
-                }
-            } catch (e: Exception) {
-                aapsLogger.error(LTag.APS, "MEAL_ADVISOR_TRACE confirmInjection failed", e)
-                withContext(Dispatchers.Main) {
-                    confirming = false
-                    snackbarHostState.showSnackbar(String.format(Locale.getDefault(), confirmErrorPrefix, e.message ?: ""))
-                }
-            }
-        }
-    }
-
-    if (showCamera) {
-        MealAdvisorCameraCapture(
-            aapsLogger = aapsLogger,
-            onCaptured = ::onCaptured,
-            onError = ::onCameraError,
-            onCancel = { showCamera = false },
-        )
-        return
-    }
-
-    ProvidePreferenceTheme {
-        Scaffold(
-            topBar = {
-                AapsTopAppBar(
-                    title = { Text(stringResource(R.string.aimi_meal_advisor_title)) },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = stringResource(app.aaps.core.ui.R.string.back),
-                            )
-                        }
-                    },
-                )
-            },
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-        ) { padding ->
-            Column(
-                modifier = Modifier
-                    .padding(padding)
-                    .padding(horizontal = AapsSpacing.large)
-                    .padding(bottom = AapsSpacing.xxLarge)
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(AapsSpacing.medium),
-            ) {
-                Text(
-                    text = stringResource(R.string.aimi_meal_advisor_intro),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-
-                ProviderDropdown(
-                    selected = provider,
-                    onSelect = {
-                        provider = it
-                        preferences.put(StringKey.AimiAdvisorProvider, it)
-                    },
-                )
-
-                PhotoPreview(bitmap = capturedBitmap)
-
-                OutlinedTextField(
-                    value = descriptionText,
-                    onValueChange = { descriptionText = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.aimi_meal_advisor_description_hint)) },
-                    minLines = 1,
-                    maxLines = 3,
-                )
-
-                Button(
-                    onClick = { onAnalyzeClick() },
-                    enabled = !analyzing,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        stringResource(
-                            if (analyzing) R.string.aimi_meal_advisor_analyzing_button
-                            else R.string.aimi_meal_advisor_analyze_button
-                        )
-                    )
-                }
-                if (analyzing) {
-                    CircularProgressIndicator(modifier = Modifier.padding(AapsSpacing.small))
-                }
-
-                val currentResult = result
-                if (currentResult != null) {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = AapsSpacing.medium))
-                    MealAdvisorResultSection(
-                        result = currentResult,
-                        carbsText = carbsText,
-                        onCarbsChange = { carbsText = it },
-                    )
-                    Button(
-                        onClick = { confirmInjection() },
-                        enabled = !confirming && (carbsText.toDoubleOrNull() ?: 0.0) > 0.0,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            String.format(
-                                Locale.getDefault(),
-                                confirmButtonTemplate,
-                                carbsText.toDoubleOrNull()?.toInt() ?: 0,
-                                proposedDoseUnits,
-                            )
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PhotoPreview(bitmap: Bitmap?) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(220.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = stringResource(R.string.aimi_meal_advisor_photo_content_description),
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
-                Text(
-                    text = stringResource(R.string.aimi_meal_advisor_photo_placeholder),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun MealAdvisorResultSection(
-    result: EstimationResult,
-    carbsText: String,
-    onCarbsChange: (String) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(AapsSpacing.medium)) {
-        ConfidenceBadge(confidence = result.confidence)
-
-        Text(text = result.description, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
-
-        Text(
-            text = String.format(
-                Locale.getDefault(),
-                stringResource(R.string.aimi_meal_advisor_macro_summary),
-                result.protein.estimate,
-                result.fat.estimate,
-                result.fpuEquivalent,
-            ),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        if (result.hiddenCarbRisk == "HIGH" || result.needsManualConfirmation) {
-            RiskBanner(result = result)
-        }
-
-        Text(
-            text = stringResource(R.string.aimi_meal_advisor_identified_items_title),
-            style = MaterialTheme.typography.titleSmall,
-        )
-        result.visibleItems.forEach { item ->
-            Text(
-                text = String.format(Locale.getDefault(), stringResource(R.string.aimi_meal_advisor_item_row), item.name, item.amountInfo),
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-
-        Text(
-            text = String.format(Locale.getDefault(), stringResource(R.string.aimi_meal_advisor_reasoning_prefix), result.reasoning),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        OutlinedTextField(
-            value = carbsText,
-            onValueChange = onCarbsChange,
-            label = { Text(stringResource(R.string.aimi_meal_advisor_carbs_field_label)) },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Text(
-            text = result.recommendedCarbsReason,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-@Composable
-private fun ConfidenceBadge(confidence: String) {
-    val (labelRes, containerColor) = when (confidence.uppercase(Locale.ROOT)) {
-        "HIGH"   -> R.string.aimi_meal_advisor_confidence_high to MaterialTheme.colorScheme.primaryContainer
-        "MEDIUM" -> R.string.aimi_meal_advisor_confidence_medium to MaterialTheme.colorScheme.secondaryContainer
-        else     -> R.string.aimi_meal_advisor_confidence_low to MaterialTheme.colorScheme.errorContainer
-    }
-    Card(colors = CardDefaults.cardColors(containerColor = containerColor)) {
-        Text(
-            text = stringResource(labelRes),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(horizontal = AapsSpacing.medium, vertical = AapsSpacing.small),
-        )
-    }
-}
-
-@Composable
-private fun RiskBanner(result: EstimationResult) {
-    val prefixRes = when {
-        result.hiddenCarbRisk == "HIGH" && result.needsManualConfirmation -> R.string.aimi_meal_advisor_risk_high_and_manual
-        result.hiddenCarbRisk == "HIGH"                                   -> R.string.aimi_meal_advisor_risk_high
-        else                                                              -> R.string.aimi_meal_advisor_risk_manual
-    }
-    val notes = result.insulinRelevantNotes.joinToString(", ").ifBlank {
-        stringResource(R.string.aimi_meal_advisor_risk_notes_default)
-    }
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-        Text(
-            text = String.format(Locale.getDefault(), stringResource(R.string.aimi_meal_advisor_risk_banner), stringResource(prefixRes), notes),
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onErrorContainer,
-            modifier = Modifier.padding(AapsSpacing.medium),
-        )
-    }
-}
-
-@Composable
-private fun MealAdvisorCameraCapture(
+internal fun MealAdvisorCameraCapture(
     aapsLogger: AAPSLogger,
     onCaptured: (Bitmap) -> Unit,
     onError: (String) -> Unit,
@@ -476,8 +108,25 @@ private fun MealAdvisorCameraCapture(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val controller = remember { MealAdvisorCameraController(context, aapsLogger) }
+    val cameraPermissionDeniedMessage = stringResource(R.string.aimi_meal_advisor_camera_permission_denied_message)
+    var hasCameraPermission by remember {
+        mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
+    }
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            hasCameraPermission = true
+        } else {
+            onError(cameraPermissionDeniedMessage)
+        }
+    }
     var textureView by remember { mutableStateOf<TextureView?>(null) }
     var wasStoppedForPause by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        if (!hasCameraPermission) cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+    }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -501,6 +150,11 @@ private fun MealAdvisorCameraCapture(
             lifecycleOwner.lifecycle.removeObserver(observer)
             controller.stop()
         }
+    }
+
+    if (!hasCameraPermission) {
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black))
+        return
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {

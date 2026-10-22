@@ -80,6 +80,8 @@ data class AimiGlassDashboardSnapshot(
         basalTraining: BasalMlDashboardSnapshot? = null,
         smbTraining: AimiSmbDashboardSnapshot? = null,
         keyFactors: AimiGlassDashboardData.KeyFactors? = null,
+        safety: AimiGlassDashboardData.Safety? = null,
+        contextScreenAvailable: Boolean = false,
     ): AimiGlassDashboardData =
         AimiGlassDashboardData(
             trajectory = if (
@@ -175,6 +177,8 @@ data class AimiGlassDashboardSnapshot(
                 )
             },
             keyFactors = keyFactors,
+            safety = safety,
+            contextScreenAvailable = contextScreenAvailable,
         )
 
     private fun TrainingOutcome.toSharedOutcome(): AimiGlassDashboardData.SmbOutcome = when (this) {
@@ -203,6 +207,10 @@ object AimiGlassDashboardSnapshotFeed {
     private val trainingStorage = MutableStateFlow<TrainingStorage?>(null)
     private val keyFactorsProvider =
         MutableStateFlow<(() -> AimiGlassDashboardData.KeyFactors)?>(null)
+    private val safetyMetricsProvider =
+        MutableStateFlow<(suspend () -> AimiGlassDashboardData.Safety)?>(null)
+    private val safetyMetrics = MutableStateFlow<AimiGlassDashboardData.Safety?>(null)
+    private val contextScreenAvailable = MutableStateFlow(false)
 
     /** Called by the AIMI plugin at startup with the exact storage location used by its SMB trainer. */
     fun configureTrainingStorage(storage: AimiStorage, directory: AimiPath) {
@@ -212,6 +220,15 @@ object AimiGlassDashboardSnapshotFeed {
     /** Supplies read-only key factors from the active AIMI runtime and profile. */
     fun configureKeyFactorsProvider(provider: () -> AimiGlassDashboardData.KeyFactors) {
         keyFactorsProvider.value = provider
+    }
+
+    /** Supplies the GLASS-only statistical summary from the existing calculators and database. */
+    fun configureSafetyMetricsProvider(provider: suspend () -> AimiGlassDashboardData.Safety) {
+        safetyMetricsProvider.value = provider
+    }
+
+    fun configureContextScreenAvailable(available: Boolean) {
+        contextScreenAvailable.value = available
     }
 
     fun observe(): Flow<AimiGlassDashboardData> = channelFlow {
@@ -233,6 +250,13 @@ object AimiGlassDashboardSnapshotFeed {
                 send(currentSnapshot())
             }
         }
+        val safetyMetricsJob = launch(start = CoroutineStart.UNDISPATCHED) {
+            while (true) {
+                safetyMetrics.value = safetyMetricsProvider.value?.invoke()
+                send(currentSnapshot())
+                kotlinx.coroutines.delay(60_000L)
+            }
+        }
         val basalCoordinator = BasalMlTrainingCoordinator.instance
         val basalTrainingJob = basalCoordinator?.let { coordinator ->
             launch(start = CoroutineStart.UNDISPATCHED) {
@@ -248,6 +272,7 @@ object AimiGlassDashboardSnapshotFeed {
             smbTrainingJob.cancel()
             basalTrainingJob?.cancel()
             freshnessJob.cancel()
+            safetyMetricsJob.cancel()
         }
     }
 
@@ -280,6 +305,8 @@ object AimiGlassDashboardSnapshotFeed {
                 AimiSmbTrainer.dashboardSnapshot(configured.storage, configured.directory)
             },
             keyFactors = keyFactorsProvider.value?.invoke(),
+            safety = safetyMetrics.value,
+            contextScreenAvailable = contextScreenAvailable.value,
         )
     }
 }

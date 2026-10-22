@@ -19,15 +19,15 @@ class OrefOnnxScorer private constructor(
     private val hypoInput: String,
     private val hyperInput: String,
     private val bgInput: String,
-) : AutoCloseable {
+) : OrefRiskScorer {
 
-    fun predictHypoProba(featuresRowMajor: Array<FloatArray>): FloatArray =
+    override fun predictHypoProba(featuresRowMajor: Array<FloatArray>): FloatArray =
         runBinaryProbaSecondClass(hypoSession, hypoInput, featuresRowMajor)
 
-    fun predictHyperProba(featuresRowMajor: Array<FloatArray>): FloatArray =
+    override fun predictHyperProba(featuresRowMajor: Array<FloatArray>): FloatArray =
         runBinaryProbaSecondClass(hyperSession, hyperInput, featuresRowMajor)
 
-    fun predictBgChange(featuresRowMajor: Array<FloatArray>): FloatArray =
+    override fun predictBgChange(featuresRowMajor: Array<FloatArray>): FloatArray =
         runRegression(bgChangeSession, bgInput, featuresRowMajor)
 
     private fun runBinaryProbaSecondClass(session: OrtSession, inputName: String, rows: Array<FloatArray>): FloatArray {
@@ -165,6 +165,19 @@ class OrefOnnxScorer private constructor(
             }
         }
     }
+}
+
+internal actual fun orefRiskScorerFactory(): OrefRiskScorerFactory = AndroidOrefRiskScorerFactory
+
+private object AndroidOrefRiskScorerFactory : OrefRiskScorerFactory {
+
+    override val runtimeAvailable: Boolean = true
+
+    override fun assetModelsPresent(assets: AimiAssetReader): Boolean =
+        OrefOnnxScorer.assetModelsPresent(assets)
+
+    override fun tryCreate(assets: AimiAssetReader): OrefRiskScorer? =
+        OrefOnnxScorer.tryCreate(assets)
 }
 
 private inline fun <T : OnnxValue, R> T.use(block: (T) -> R): R {

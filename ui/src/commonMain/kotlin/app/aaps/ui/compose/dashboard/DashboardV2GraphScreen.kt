@@ -16,6 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.aaps.core.interfaces.dashboard.AimiGlassDashboardData
 import app.aaps.core.interfaces.navigation.ElementType
 import app.aaps.core.interfaces.overview.graph.SeriesType
 import app.aaps.core.ui.CoreUiStrings
@@ -34,8 +35,10 @@ import app.aaps.core.ui.compose.dashboard.DashboardGraphViewportPresentation
 import app.aaps.core.ui.compose.dashboard.GraphFreshnessLevel
 import app.aaps.ui.UiStrings
 import app.aaps.ui.compose.overview.chips.ChipsViewModel
+import app.aaps.ui.compose.overview.chips.PluginStatusChip
 import app.aaps.ui.compose.overview.graphs.GraphViewModel
 import app.aaps.ui.compose.overview.statusLights.StatusViewModel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlin.math.max
 
@@ -51,10 +54,12 @@ fun DashboardV2GraphScreen(
     chipsViewModel: ChipsViewModel,
     statusViewModel: StatusViewModel,
     statusLightsDef: PreferenceSubScreenDef,
+    aimiDashboardData: Flow<AimiGlassDashboardData>,
     commandsAllowed: Boolean,
     onIobClick: () -> Unit,
     onNavigate: (NavigationRequest) -> Unit,
     showOverviewSummary: Boolean = true,
+    showContextAction: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val readings by graphViewModel.bgReadingsFlow.collectAsStateWithLifecycle()
@@ -65,6 +70,12 @@ fun DashboardV2GraphScreen(
     val chartConfig by graphViewModel.chartConfigFlow.collectAsStateWithLifecycle()
     val derivedRange by graphViewModel.derivedTimeRange.collectAsStateWithLifecycle()
     val now by graphViewModel.nowTimestamp.collectAsStateWithLifecycle()
+    val aimiDataState = if (showContextAction) {
+        aimiDashboardData.collectAsStateWithLifecycle(initialValue = AimiGlassDashboardData())
+    } else {
+        remember { mutableStateOf(AimiGlassDashboardData()) }
+    }
+    val aimiData by aimiDataState
     val iobState by chipsViewModel.iobUiState.collectAsStateWithLifecycle()
     val cobState by chipsViewModel.cobUiState.collectAsStateWithLifecycle()
     val sensitivityState by chipsViewModel.sensitivityUiState.collectAsStateWithLifecycle()
@@ -153,6 +164,16 @@ fun DashboardV2GraphScreen(
                     cob = cobState,
                     sensitivity = sensitivityState,
                     onIobClick = onIobClick,
+                    contextActionLabel = if (showContextAction && aimiData.contextScreenAvailable) {
+                        stringResource(UiStrings.dashboard_glass_loop_open_context)
+                    } else {
+                        null
+                    },
+                    onOpenContext = if (showContextAction && aimiData.contextScreenAvailable) {
+                        { onNavigate(aimiContextNavigationRequest()) }
+                    } else {
+                        null
+                    },
                 )
             }
             DashboardOverviewStatus(
@@ -162,7 +183,7 @@ fun DashboardV2GraphScreen(
                 commandsAllowed = commandsAllowed,
             )
             pluginBadge?.let { badge ->
-                app.aaps.ui.compose.overview.chips.PluginStatusChip(
+                PluginStatusChip(
                     badge = badge,
                     onClick = chipsViewModel::onPluginBadgeClick,
                     modifier = Modifier.padding(horizontal = 12.dp),

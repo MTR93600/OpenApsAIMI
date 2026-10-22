@@ -29,6 +29,7 @@ class DashboardV2OverviewSummaryTest {
     @Test
     fun presentsOverviewGlucoseAndInsulinValuesAndKeepsIobAction() {
         var iobClicked = false
+        var contextClicked = false
         compose.setContent {
             MaterialTheme {
                 DashboardV2OverviewSummary(
@@ -52,6 +53,8 @@ class DashboardV2OverviewSummaryTest {
                     cob = CobUiState(text = "43 g", cobValue = 43.0),
                     sensitivity = SensitivityUiState(),
                     onIobClick = { iobClicked = true },
+                    contextActionLabel = "Open AIMI Context",
+                    onOpenContext = { contextClicked = true },
                 )
             }
         }
@@ -61,6 +64,28 @@ class DashboardV2OverviewSummaryTest {
         compose.onNodeWithText("2 min ago").assertIsDisplayed()
         compose.onNodeWithText("2.66 U").assertIsDisplayed().performClick()
         compose.onNodeWithText("43 g").assertIsDisplayed()
-        compose.runOnIdle { assert(iobClicked) }
+        compose.onNodeWithText("Open AIMI Context").assertIsDisplayed().performClick()
+        compose.runOnIdle {
+            assert(iobClicked)
+            assert(contextClicked)
+        }
+    }
+
+    @Test
+    fun hidesContextActionWhenThereIsNoPlatformDestination() {
+        compose.setContent {
+            MaterialTheme {
+                DashboardV2OverviewSummary(
+                    bgInfo = null,
+                    timeAgoText = "",
+                    iob = IobUiState(),
+                    cob = CobUiState(),
+                    sensitivity = SensitivityUiState(),
+                    onIobClick = {},
+                )
+            }
+        }
+
+        compose.onNodeWithText("Open AIMI Context").assertDoesNotExist()
     }
 }

@@ -11,6 +11,11 @@ import AapsShared
 struct ClientApp: App {
 
     init() {
+        // Install the Swift AVFoundation implementation before the Kotlin graph can construct an
+        // iOS Meal Advisor screen.
+        IosMealAdvisorCameraBridgeKt.installIosMealAdvisorCameraFactory(
+            factory: SwiftMealAdvisorCameraFactory()
+        )
         // Must happen here. iOS only lets background task handlers be registered before the app
         // finishes launching, and `makeUIViewController` below runs later. This call needs no
         // graph; the Kotlin side queues the tasks once its graph is built.
@@ -32,7 +37,7 @@ struct ClientApp: App {
 /// runs - built by the Kotlin graph on the other side of this call.
 struct AapsAppView: UIViewControllerRepresentable {
 
-    func makeUIViewController(context: Context) -> UIViewController {
+    func makeUIViewController(context: UIViewControllerRepresentableContext<AapsAppView>) -> UIViewController {
         // The Nightscout socket is handed to the Kotlin graph from here, because it is written in
         // Swift and cannot carry a Kotlin annotation. Android and desktop contribute their own
         // socket.io client automatically; this is the same project's Swift client, so both platforms
@@ -40,7 +45,10 @@ struct AapsAppView: UIViewControllerRepresentable {
         AapsAppHostKt.aapsAppViewController(nsSocketFactory: SwiftNsSocketFactory())
     }
 
-    func updateUIViewController(_ controller: UIViewController, context: Context) {}
+    func updateUIViewController(
+        _ controller: UIViewController,
+        context: UIViewControllerRepresentableContext<AapsAppView>,
+    ) {}
 }
 
 /// The whole screen is AAPS.

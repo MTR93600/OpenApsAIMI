@@ -73,6 +73,11 @@ class ElementNavigatorTest {
             .filter { it.method.name == "navigate" }
             .mapNotNull { it.arguments.firstOrNull() as? String }
 
+    private fun requestedProtectionLevels(): List<ProtectionCheck.Protection> =
+        mockingDetails(protectionCheck).invocations
+            .filter { it.method.name == "requestProtection" }
+            .mapNotNull { it.arguments.firstOrNull() as? ProtectionCheck.Protection }
+
     private fun viewModelCalls(): List<String> =
         mockingDetails(mainViewModel).invocations.map { it.method.name }
 
@@ -210,6 +215,22 @@ class ElementNavigatorTest {
         sut.handleNavigationRequest(NavigationRequest.PluginPreferences("SomeKey"))
 
         assertThat(navigatedRoutes()).containsExactly(AppRoute.PluginPreferences.createRoute("SomeKey"))
+        assertThat(requestedProtectionLevels()).contains(ProtectionCheck.Protection.PREFERENCES)
+    }
+
+    @Test
+    fun `a plugin sub-screen request uses its requested protection level`() {
+        resolveProtection(ProtectionResult.GRANTED)
+
+        sut.handleNavigationRequest(
+            NavigationRequest.PluginPreferences(
+                pluginKey = "OpenAPSAIMIPlugin",
+                composeScreenKey = "aimi_context_compose",
+                requiredProtection = ProtectionCheck.Protection.BOLUS,
+            ),
+        )
+
+        assertThat(requestedProtectionLevels()).contains(ProtectionCheck.Protection.BOLUS)
     }
 
     // endregion

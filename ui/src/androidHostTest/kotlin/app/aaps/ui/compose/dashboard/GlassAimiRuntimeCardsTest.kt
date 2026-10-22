@@ -5,12 +5,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.Modifier
 import app.aaps.core.interfaces.dashboard.AimiGlassDashboardData
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -72,6 +74,7 @@ class GlassAimiRuntimeCardsTest {
                     strings = runtimeCardStrings,
                     formatGlucose = { "$it mg/dL" },
                     formatDateTime = { "date-$it" },
+                    onOpenAimiContext = {},
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                 )
             }
@@ -104,13 +107,15 @@ class GlassAimiRuntimeCardsTest {
                     strings = runtimeCardStrings,
                     formatGlucose = { "$it mg/dL" },
                     formatDateTime = { "date-$it" },
+                    onOpenAimiContext = {},
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                 )
             }
         }
 
-        compose.onNodeWithText("No recent prediction available.").assertIsDisplayed()
-        compose.onNodeWithText("No recent physio snapshot available.").assertIsDisplayed()
+        compose.onNodeWithText("No recent prediction available.").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("No recent physio snapshot available.").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Open AIMI Context").assertDoesNotExist()
     }
 
     @Test
@@ -131,13 +136,14 @@ class GlassAimiRuntimeCardsTest {
                     strings = runtimeCardStrings,
                     formatGlucose = { "$it mg/dL" },
                     formatDateTime = { "date-$it" },
+                    onOpenAimiContext = {},
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                 )
             }
         }
 
-        compose.onNodeWithText("126.0 mg/dL").assertIsDisplayed()
-        compose.onAllNodesWithText("n/a").assertCountEquals(8)
+        compose.onNodeWithText("126.0 mg/dL").performScrollTo().assertIsDisplayed()
+        compose.onAllNodesWithText("n/a").assertCountEquals(10)
     }
 
     @Test
@@ -158,6 +164,7 @@ class GlassAimiRuntimeCardsTest {
                     strings = runtimeCardStrings,
                     formatGlucose = { "$it mg/dL" },
                     formatDateTime = { "date-$it" },
+                    onOpenAimiContext = {},
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                 )
             }
@@ -181,10 +188,17 @@ class GlassAimiRuntimeCardsTest {
                             isfMgdlPerUnit = 45.0,
                             stableBgMinutes = 36.0,
                         ),
+                        safety = AimiGlassDashboardData.Safety(
+                            tdd7DaysPerHour = 0.75,
+                            lowTirLastHourPercent = 1.0,
+                            lowTirTodayPercent = 2.0,
+                            stepsLast5Minutes = 42,
+                        ),
                     ),
                     strings = runtimeCardStrings,
                     formatGlucose = { "$it mg/dL" },
                     formatDateTime = { "date-$it" },
+                    onOpenAimiContext = {},
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                 )
             }
@@ -192,6 +206,7 @@ class GlassAimiRuntimeCardsTest {
 
         listOf(
             "Key Factors",
+            "14 · weekday",
             "Target BG",
             "110.0 mg/dL",
             "Max IOB",
@@ -202,7 +217,63 @@ class GlassAimiRuntimeCardsTest {
             "45.0 mg/dL/U",
             "Stable BG duration",
             "36.0 min",
+            "Safety & Alarms",
+            "7-day average insulin per hour",
+            "0.75 U/h",
+            "Low glucose time (1h / today)",
+            "1h 1.0% / today 2.0%",
+            "Recent steps (5 min)",
+            "42 steps",
         ).forEach { compose.onNodeWithText(it).performScrollTo().assertIsDisplayed() }
+    }
+
+    @Test
+    fun contextActionIsShownOnlyWhenPlatformProvidesARealDestination() {
+        var opened = false
+        compose.setContent {
+            MaterialTheme {
+                GlassAimiRuntimeCards(
+                    data = AimiGlassDashboardData(
+                        contextScreenAvailable = true,
+                        physio = AimiGlassDashboardData.Physio(
+                            stepsLast15m = 0,
+                            stepsLast60m = 0,
+                            hrNowBpm = 0,
+                            hrAvg15mBpm = 0,
+                            rhrRestingBpm = 0,
+                            hrvRmssd = 0.0,
+                            activityState = "IDLE",
+                            sleepDebtMinutes = 0,
+                            asleepLiveConfidence = 0.0,
+                            asleepLiveSource = "NONE",
+                            snapshotAgeMs = 0L,
+                            hrSampleAgeMs = null,
+                            source = "Unknown",
+                            confidence = 0.0,
+                            thermalHypothesis = "DATA_PENDING",
+                            thermalDeltaVsBaselineC = 0.0,
+                            thermalInflammationIndex = 0.0,
+                            thermalNarrative = "",
+                            presentation = AimiGlassDashboardData.Physio.Presentation(
+                                modeHeadline = "Mode",
+                                intentSummary = "Intent",
+                                thermalSummary = "Thermal",
+                                updatedSummary = "",
+                            ),
+                        ),
+                    ),
+                    strings = runtimeCardStrings,
+                    formatGlucose = { "$it mg/dL" },
+                    formatDateTime = { "date-$it" },
+                    onOpenAimiContext = { opened = true },
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                )
+            }
+        }
+
+        compose.onNodeWithText("Open AIMI Context").performScrollTo().performClick()
+
+        assertTrue(opened)
     }
 
     @Test
@@ -238,6 +309,7 @@ class GlassAimiRuntimeCardsTest {
                     strings = runtimeCardStrings,
                     formatGlucose = { "$it mg/dL" },
                     formatDateTime = { "localized-date-$it" },
+                    onOpenAimiContext = {},
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                 )
             }
@@ -272,6 +344,7 @@ class GlassAimiRuntimeCardsTest {
         trajectoryUamLabel = "Unannounced meal BG",
         trajectoryUnavailable = "No recent prediction available.",
         keyFactorsTitle = "Key Factors",
+        keyFactorsContextBadge = "14 · weekday",
         keyFactorsTargetLabel = "Target BG",
         keyFactorsMaxIobLabel = "Max IOB",
         keyFactorsMaxSmbLabel = "Max SMB",
@@ -280,6 +353,15 @@ class GlassAimiRuntimeCardsTest {
         formatInsulin = { "$it U" },
         formatIsf = { "$it mg/dL/U" },
         formatStableMinutes = { "$it min" },
+        safetyTitle = "Safety & Alarms",
+        safetyTddLabel = "7-day average insulin per hour",
+        safetyTirLabel = "Low glucose time (1h / today)",
+        safetyStepsLabel = "Recent steps (5 min)",
+        safetyTirValue = { hour, today -> "1h $hour / today $today" },
+        formatPercent = { "$it%" },
+        formatInsulinPerHour = { "$it U/h" },
+        formatSteps = { "$it steps" },
+        openAimiContextLabel = "Open AIMI Context",
         physioTitle = "Physio",
         physioModeLabel = "Mode",
         physioIntentLabel = "Intent",

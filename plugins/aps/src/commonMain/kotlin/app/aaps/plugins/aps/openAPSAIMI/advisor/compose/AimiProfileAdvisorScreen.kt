@@ -40,28 +40,28 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import app.aaps.core.interfaces.maintenance.ImportExportPrefs
 import app.aaps.core.interfaces.protection.ExportPasswordDataStore
-import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.core.ui.R as CoreUiR
+import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.preference.ProvidePreferenceTheme
+import app.aaps.core.ui.compose.stringResource
 import app.aaps.plugins.aps.ApsStrings
-import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AdvisorMetrics
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AdvisorReport
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AdvisorSeverity
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AiCoachingService
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiAdvisorService
-import app.aaps.plugins.aps.openAPSAIMI.advisor.oref.AndroidAssetReader
+import app.aaps.plugins.aps.openAPSAIMI.advisor.isAimiOutOfMemoryError
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiAssetReader
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiRecommendation
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiSharing
@@ -89,7 +89,6 @@ import app.aaps.plugins.aps.openAPSAIMI.model.AimiAction
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
@@ -126,12 +125,13 @@ fun AimiProfileAdvisorScreen(
     importExportPrefs: ImportExportPrefs,
     exportPasswordDataStore: ExportPasswordDataStore,
     aiCoachingService: AiCoachingService,
-    rh: ResourceHelper,
+    textResolver: TextResolver,
     storage: AimiStorage,
     sharing: AimiSharing,
+    assetReader: AimiAssetReader,
+    filesDir: AimiPath,
     onBack: () -> Unit,
 ) {
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     var report by remember { mutableStateOf<AdvisorReport?>(null) }
@@ -177,42 +177,42 @@ fun AimiProfileAdvisorScreen(
     var basalProposalLoading by remember { mutableStateOf(false) }
     var basalProposal by remember { mutableStateOf<AimiAdvisorService.BasalProfileProposal?>(null) }
 
-    val noChangesMessage = stringResource(R.string.aimi_tuning_no_changes)
-    val errorPrefix = stringResource(R.string.aimi_adv_error_prefix)
-    val errorOom = stringResource(R.string.aimi_adv_error_oom)
+    val noChangesMessage = stringResource(ApsStrings.aimi_tuning_no_changes)
+    val errorOom = stringResource(ApsStrings.aimi_adv_error_oom)
     // The confirm dialog applies exactly one preference key, so the count is one. Derive it from
     // the apply result instead if this dialog ever applies a batch.
-    val recommendationAppliedMessage = stringResource(R.string.aimi_adv_success_msg, 1)
-    val recommendationNoChangeMessage = stringResource(R.string.aimi_adv_no_change_msg)
-    val basalGeneratingMessage = stringResource(R.string.aimi_adv_basal_generating_msg)
-    val basalFailedMessage = stringResource(R.string.aimi_adv_basal_failed_msg)
-    val basalShareSubject = stringResource(R.string.aimi_adv_basal_share_subject)
-    val basalShareChooserTitle = stringResource(R.string.aimi_adv_basal_share_chooser_title)
+    val recommendationAppliedMessage = stringResource(ApsStrings.aimi_adv_success_msg, 1)
+    val recommendationNoChangeMessage = stringResource(ApsStrings.aimi_adv_no_change_msg)
+    val basalGeneratingMessage = stringResource(ApsStrings.aimi_adv_basal_generating_msg)
+    val basalFailedMessage = stringResource(ApsStrings.aimi_adv_basal_failed_msg)
+    val basalShareSubject = stringResource(ApsStrings.aimi_adv_basal_share_subject)
+    val basalShareChooserTitle = stringResource(ApsStrings.aimi_adv_basal_share_chooser_title)
 
     LaunchedEffect(Unit) {
         try {
             // history feeds the 48h-cooldown filter on recommendations a later sub-lot renders from
             // this same report; assetReader lets the OREF pipeline load its bundled ML asset. Both
             // silently degrade the report (not a crash) if omitted, so pass them like the original did.
-            val loaded = withContext(Dispatchers.IO) {
+            val loaded = withContext(aapsIoDispatcher) {
                 advisorService.generateReport(
                     history = historyRepo.getRecentActions(10),
-                    assetReader = AndroidAssetReader(context),
-                    filesDir = AimiPath(context.filesDir.absolutePath),
+                    assetReader = assetReader,
+                    filesDir = filesDir,
                 )
             }
             report = loaded
             recommendations = loaded.recommendations
         } catch (t: Throwable) {
-            loadError = when (t) {
-                is OutOfMemoryError -> errorOom
-                else                -> "$errorPrefix${t.localizedMessage ?: t.javaClass.simpleName}"
+            loadError = if (isAimiOutOfMemoryError(t)) {
+                errorOom
+            } else {
+                textResolver.gs(ApsStrings.aimi_adv_error_message, t.message ?: t::class.simpleName.orEmpty())
             }
         }
     }
 
     LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
+        withContext(aapsIoDispatcher) {
             // One load at a time, each on its own: a broken line in one section must not hide the
             // other two cards.
             rbtExport = loadOrNull { RecursiveBeliefExportReader.loadLastExport(storage) }
@@ -249,8 +249,8 @@ fun AimiProfileAdvisorScreen(
                 // No key configured: this is what most users see. Same deterministic summary as the
                 // report's own text, plus a note asking for a key - never a network call.
                 val basicAnalysis = advisorService.generatePlainTextAnalysis(advisorCtx, currentReport, includeUserInsight = true)
-                val note = rh.gs(R.string.aimi_coach_placeholder, provider.name)
-                rh.gs(R.string.aimi_coach_basic_with_note, basicAnalysis, note)
+                val note = textResolver.gs(ApsStrings.aimi_coach_placeholder, provider.name)
+                textResolver.gs(ApsStrings.aimi_coach_basic_with_note, basicAnalysis, note)
             } else {
                 // familyBridgeSuggestions/causalInsights are prompt input only - never rendered as a
                 // card - and stay inside runCatching like the staged code, since either can throw on
@@ -259,7 +259,7 @@ fun AimiProfileAdvisorScreen(
                     val familyBridgeSuggestions = buildAimiFamilyBridgeSuggestions(preferences, currentReport.metrics)
                     buildAimiBehaviorCausalInsights(preferences, currentReport.metrics, familyBridgeSuggestions)
                 }.getOrDefault(emptyList())
-                val history = withContext(Dispatchers.IO) { historyRepo.getRecentActions(7) }
+                val history = withContext(aapsIoDispatcher) { historyRepo.getRecentActions(7) }
                 val richOref = preferences.get(BooleanKey.OApsAIMIAdvisorLlmRichOref)
                 aiCoachingService.fetchAdvice(
                     context = advisorCtx,
@@ -273,8 +273,12 @@ fun AimiProfileAdvisorScreen(
             }
         } catch (t: Throwable) {
             if (t is CancellationException) throw t
-            val detail = if (t is OutOfMemoryError) errorOom else (t.localizedMessage ?: t.javaClass.simpleName)
-            coachError = rh.gs(R.string.aimi_coach_error_detail, rh.gs(R.string.aimi_coach_error), detail)
+            val detail = if (isAimiOutOfMemoryError(t)) errorOom else (t.message ?: t::class.simpleName.orEmpty())
+            coachError = textResolver.gs(
+                ApsStrings.aimi_coach_error_detail,
+                textResolver.gs(ApsStrings.aimi_coach_error),
+                detail,
+            )
         } finally {
             coachLoading = false
         }
@@ -298,7 +302,7 @@ fun AimiProfileAdvisorScreen(
         basalProposalLoading = true
         scope.launch { snackbarHostState.showSnackbar(basalGeneratingMessage) }
         scope.launch {
-            val proposal = withContext(Dispatchers.IO) {
+            val proposal = withContext(aapsIoDispatcher) {
                 loadOrNull { advisorService.generateBasalProfileProposal(periodDays = 7) }
             }
             basalProposalLoading = false
@@ -314,12 +318,12 @@ fun AimiProfileAdvisorScreen(
         Scaffold(
             topBar = {
                 AapsTopAppBar(
-                    title = { Text(stringResource(R.string.aimi_advisor_title)) },
+                    title = { Text(stringResource(ApsStrings.aimi_advisor_title)) },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = stringResource(CoreUiR.string.back),
+                                contentDescription = stringResource(CoreUiStrings.back),
                             )
                         }
                     },
@@ -327,13 +331,13 @@ fun AimiProfileAdvisorScreen(
                         IconButton(onClick = { showModelSelector = true }) {
                             Icon(
                                 imageVector = Icons.Filled.Settings,
-                                contentDescription = stringResource(R.string.aimi_advisor_model_title),
+                                contentDescription = stringResource(ApsStrings.aimi_advisor_model_title),
                             )
                         }
                         IconButton(onClick = { requestBasalProposal() }, enabled = !basalProposalLoading) {
                             Icon(
                                 imageVector = Icons.Filled.Science,
-                                contentDescription = stringResource(R.string.aimi_adv_basal_dialog_title),
+                                contentDescription = stringResource(ApsStrings.aimi_adv_basal_dialog_title),
                             )
                         }
                     },
@@ -394,7 +398,7 @@ fun AimiProfileAdvisorScreen(
                         HarmoniaRuntimeHistoryCard(harmoniaHistory)
                     } else {
                         Text(
-                            text = stringResource(R.string.aimi_adv_loading_details),
+                            text = stringResource(ApsStrings.aimi_adv_loading_details),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
@@ -410,7 +414,7 @@ fun AimiProfileAdvisorScreen(
                     val pkpdRecs = recommendations.filter { it.domain == AimiDomain.Pkpd }
 
                     if (observationRecs.isNotEmpty()) {
-                        SectionHeader(stringResource(R.string.aimi_adv_section_obs))
+                        SectionHeader(stringResource(ApsStrings.aimi_adv_section_obs))
                         observationRecs.forEach { rec ->
                             AimiRecommendationCard(
                                 recommendation = rec,
@@ -422,7 +426,7 @@ fun AimiProfileAdvisorScreen(
                     }
 
                     if (pkpdRecs.isNotEmpty()) {
-                        SectionHeader(stringResource(R.string.aimi_adv_section_pkpd))
+                        SectionHeader(stringResource(ApsStrings.aimi_adv_section_pkpd))
                         pkpdRecs.forEach { rec ->
                             AimiRecommendationCard(
                                 recommendation = rec,
@@ -433,15 +437,15 @@ fun AimiProfileAdvisorScreen(
                         }
                     }
 
-                    SectionHeader(stringResource(R.string.aimi_adv_section_brain))
+                    SectionHeader(stringResource(ApsStrings.aimi_adv_section_brain))
                     CognitiveBrainCard(currentReport.advisorContext.prefs.unifiedReactivityFactor)
 
                     currentReport.orefAnalysis?.let { oref ->
-                        SectionHeader(stringResource(R.string.aimi_adv_section_oref))
-                        OrefAnalysisCard(oref = oref, rh = rh)
+                        SectionHeader(stringResource(ApsStrings.aimi_adv_section_oref))
+                        OrefAnalysisCard(oref = oref, textResolver = textResolver)
                     }
 
-                    SectionHeader(stringResource(R.string.aimi_adv_section_coach))
+                    SectionHeader(stringResource(ApsStrings.aimi_adv_section_coach))
                     AiCoachCard(loading = coachLoading, advice = coachAdvice, error = coachError)
 
                     DashboardFooter(advisorService.formatTime(currentReport.generatedAt))
@@ -453,11 +457,11 @@ fun AimiProfileAdvisorScreen(
     previewPlan?.let { plan ->
         AlertDialog(
             onDismissRequest = { previewPlan = null },
-            title = { Text(stringResource(R.string.aimi_tuning_dialog_preview_title)) },
+            title = { Text(stringResource(ApsStrings.aimi_tuning_dialog_preview_title)) },
             text = { Text(formatTuningDialogBody(plan)) },
             confirmButton = {
                 TextButton(onClick = { previewPlan = null }) {
-                    Text(stringResource(android.R.string.ok))
+                    Text(stringResource(CoreUiStrings.ok))
                 }
             },
         )
@@ -466,7 +470,7 @@ fun AimiProfileAdvisorScreen(
     applyPlan?.let { plan ->
         AlertDialog(
             onDismissRequest = { if (!applying) applyPlan = null },
-            title = { Text(stringResource(R.string.aimi_tuning_dialog_apply_title)) },
+            title = { Text(stringResource(ApsStrings.aimi_tuning_dialog_apply_title)) },
             text = { Text(formatTuningDialogBody(plan)) },
             confirmButton = {
                 TextButton(
@@ -474,7 +478,7 @@ fun AimiProfileAdvisorScreen(
                     onClick = {
                         applying = true
                         scope.launch {
-                            val result = withContext(Dispatchers.IO) {
+                            val result = withContext(aapsIoDispatcher) {
                                 val applied = TuningContextApplySupport.applyTuningPlan(plan, preferences, historyRepo)
                                 val exportStatus = if (applied.appliedCount > 0) {
                                     TuningContextApplySupport.tryExportSettings(importExportPrefs, exportPasswordDataStore)
@@ -489,12 +493,12 @@ fun AimiProfileAdvisorScreen(
                         }
                     },
                 ) {
-                    Text(stringResource(R.string.aimi_tuning_apply_btn))
+                    Text(stringResource(ApsStrings.aimi_tuning_apply_btn))
                 }
             },
             dismissButton = {
                 TextButton(enabled = !applying, onClick = { applyPlan = null }) {
-                    Text(stringResource(android.R.string.cancel))
+                    Text(stringResource(CoreUiStrings.cancel))
                 }
             },
         )
@@ -503,13 +507,13 @@ fun AimiProfileAdvisorScreen(
     pendingRecommendation?.let { action ->
         AlertDialog(
             onDismissRequest = { if (!applyingRecommendation) pendingRecommendation = null },
-            title = { Text(stringResource(R.string.aimi_adv_apply_dialog_title)) },
+            title = { Text(stringResource(ApsStrings.aimi_adv_apply_dialog_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(AapsSpacing.medium)) {
-                    Text(stringResource(R.string.aimi_adv_apply_dialog_prefix))
+                    Text(stringResource(ApsStrings.aimi_adv_apply_dialog_prefix))
                     Text(
                         stringResource(
-                            R.string.aimi_adv_apply_dialog_change,
+                            ApsStrings.aimi_adv_apply_dialog_change,
                             TuningPreferenceLabels.shortLabel(action.key),
                             TuningPreferenceLabels.formatValue(action.newValue),
                         ),
@@ -525,7 +529,7 @@ fun AimiProfileAdvisorScreen(
                         applyingRecommendation = true
                         scope.launch {
                             // SharedPreferences + Gson, so never on the main thread.
-                            val applied = withContext(Dispatchers.IO) {
+                            val applied = withContext(aapsIoDispatcher) {
                                 // Read the value the setting really holds before overwriting it. The
                                 // history is fed to the AI Coach, so a placeholder would mislead it.
                                 val oldValue = readPreferenceValueAsString(preferences, action.key)
@@ -542,7 +546,7 @@ fun AimiProfileAdvisorScreen(
                                 ok
                             }
                             if (applied) {
-                                val stillVisible = withContext(Dispatchers.IO) {
+                                val stillVisible = withContext(aapsIoDispatcher) {
                                     val history = historyRepo.getRecentActions(10)
                                     recommendations.filter { advisorService.isRecommendationVisible(it, history) }
                                 }
@@ -556,12 +560,12 @@ fun AimiProfileAdvisorScreen(
                         }
                     },
                 ) {
-                    Text(stringResource(R.string.aimi_adv_apply_btn))
+                    Text(stringResource(ApsStrings.aimi_adv_apply_btn))
                 }
             },
             dismissButton = {
                 TextButton(enabled = !applyingRecommendation, onClick = { pendingRecommendation = null }) {
-                    Text(stringResource(android.R.string.cancel))
+                    Text(stringResource(CoreUiStrings.cancel))
                 }
             },
         )
@@ -570,11 +574,11 @@ fun AimiProfileAdvisorScreen(
     applyResult?.let { result ->
         AlertDialog(
             onDismissRequest = { applyResult = null },
-            title = { Text(stringResource(R.string.aimi_tuning_result_title)) },
+            title = { Text(stringResource(ApsStrings.aimi_tuning_result_title)) },
             text = { Text(buildTuningResultMessage(result)) },
             confirmButton = {
                 TextButton(onClick = { applyResult = null }) {
-                    Text(stringResource(android.R.string.ok))
+                    Text(stringResource(CoreUiStrings.ok))
                 }
             },
         )
@@ -583,7 +587,7 @@ fun AimiProfileAdvisorScreen(
     if (showModelSelector) {
         AlertDialog(
             onDismissRequest = { showModelSelector = false },
-            title = { Text(stringResource(R.string.aimi_advisor_model_title)) },
+            title = { Text(stringResource(ApsStrings.aimi_advisor_model_title)) },
             text = {
                 ProviderDropdown(
                     selected = selectedProvider.uppercase(),
@@ -596,7 +600,7 @@ fun AimiProfileAdvisorScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showModelSelector = false }) {
-                    Text(stringResource(android.R.string.ok))
+                    Text(stringResource(CoreUiStrings.ok))
                 }
             },
         )
@@ -605,7 +609,7 @@ fun AimiProfileAdvisorScreen(
     basalProposal?.let { proposal ->
         AlertDialog(
             onDismissRequest = { basalProposal = null },
-            title = { Text(stringResource(R.string.aimi_adv_basal_dialog_title)) },
+            title = { Text(stringResource(ApsStrings.aimi_adv_basal_dialog_title)) },
             text = { Text(formatBasalProposalPreview(proposal)) },
             confirmButton = {
                 TextButton(onClick = {
@@ -616,12 +620,12 @@ fun AimiProfileAdvisorScreen(
                     )
                     basalProposal = null
                 }) {
-                    Text(stringResource(R.string.aimi_adv_basal_export_btn))
+                    Text(stringResource(ApsStrings.aimi_adv_basal_export_btn))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { basalProposal = null }) {
-                    Text(stringResource(android.R.string.cancel))
+                    Text(stringResource(CoreUiStrings.cancel))
                 }
             },
         )
@@ -629,10 +633,10 @@ fun AimiProfileAdvisorScreen(
 }
 
 private val TUNING_CONTEXT_CHIPS = listOf(
-    AimiTuningContext.MEAL_RISE to R.string.aimi_tuning_context_meal_rise,
-    AimiTuningContext.HYPO_GUARD to R.string.aimi_tuning_context_hypo_guard,
-    AimiTuningContext.HYPER_STABLE to R.string.aimi_tuning_context_hyper_stable,
-    AimiTuningContext.AUTO_BALANCE to R.string.aimi_tuning_context_auto,
+    AimiTuningContext.MEAL_RISE to ApsStrings.aimi_tuning_context_meal_rise,
+    AimiTuningContext.HYPO_GUARD to ApsStrings.aimi_tuning_context_hypo_guard,
+    AimiTuningContext.HYPER_STABLE to ApsStrings.aimi_tuning_context_hyper_stable,
+    AimiTuningContext.AUTO_BALANCE to ApsStrings.aimi_tuning_context_auto,
 )
 
 @Composable
@@ -648,11 +652,11 @@ private fun TuningContextCard(
             verticalArrangement = Arrangement.spacedBy(AapsSpacing.medium),
         ) {
             Text(
-                text = stringResource(R.string.aimi_tuning_section_title),
+                text = stringResource(ApsStrings.aimi_tuning_section_title),
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
-                text = stringResource(R.string.aimi_tuning_section_desc),
+                text = stringResource(ApsStrings.aimi_tuning_section_desc),
                 style = MaterialTheme.typography.bodyMedium,
             )
             Row(
@@ -672,10 +676,10 @@ private fun TuningContextCard(
                 horizontalArrangement = Arrangement.spacedBy(AapsSpacing.small, Alignment.End),
             ) {
                 OutlinedButton(onClick = onPreview) {
-                    Text(stringResource(R.string.aimi_tuning_preview_btn))
+                    Text(stringResource(ApsStrings.aimi_tuning_preview_btn))
                 }
                 Button(onClick = onApply) {
-                    Text(stringResource(R.string.aimi_tuning_apply_btn))
+                    Text(stringResource(ApsStrings.aimi_tuning_apply_btn))
                 }
             }
         }
@@ -698,9 +702,9 @@ private fun SectionHeader(title: String) {
  */
 @Composable
 private fun MetricsCard(metrics: AdvisorMetrics) {
-    val percent = CoreUiR.string.format_percent
+    val percent = CoreUiStrings.format_percent
     // A metric that was not measured shows this text. It is never shown as a number.
-    val missing = stringResource(R.string.aimi_adv_metric_value_missing)
+    val missing = stringResource(ApsStrings.aimi_adv_metric_value_missing)
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(AapsSpacing.extraLarge),
@@ -712,14 +716,14 @@ private fun MetricsCard(metrics: AdvisorMetrics) {
             ) {
                 MetricCell(
                     modifier = Modifier.weight(1f),
-                    label = stringResource(R.string.aimi_adv_metric_tir),
+                    label = stringResource(ApsStrings.aimi_adv_metric_tir),
                     value = metrics.tir70_180?.let { stringResource(percent, (it * 100).roundToInt()) } ?: missing,
                     valueColor = AapsTheme.generalColors.bgInRange,
                 )
                 MetricCell(
                     modifier = Modifier.weight(1f),
-                    label = stringResource(R.string.aimi_adv_metric_tdd),
-                    value = metrics.tdd?.let { stringResource(CoreUiR.string.units_format_insulin_int, it.roundToInt()) } ?: missing,
+                    label = stringResource(ApsStrings.aimi_adv_metric_tdd),
+                    value = metrics.tdd?.let { stringResource(CoreUiStrings.units_format_insulin_int, it.roundToInt()) } ?: missing,
                     valueColor = AapsTheme.generalColors.activeInsulinText,
                 )
             }
@@ -729,13 +733,13 @@ private fun MetricsCard(metrics: AdvisorMetrics) {
             ) {
                 MetricCell(
                     modifier = Modifier.weight(1f),
-                    label = stringResource(R.string.aimi_adv_metric_gmi),
-                    value = metrics.gmi?.let { stringResource(R.string.aimi_adv_metric_value_gmi, it) } ?: missing,
+                    label = stringResource(ApsStrings.aimi_adv_metric_gmi),
+                    value = metrics.gmi?.let { stringResource(ApsStrings.aimi_adv_metric_value_gmi, it) } ?: missing,
                     valueColor = AapsTheme.generalColors.bgHigh,
                 )
                 MetricCell(
                     modifier = Modifier.weight(1f),
-                    label = stringResource(R.string.aimi_adv_metric_hypo54),
+                    label = stringResource(ApsStrings.aimi_adv_metric_hypo54),
                     value = metrics.timeBelow54?.let { stringResource(percent, (it * 100).roundToInt()) } ?: missing,
                     valueColor = AapsTheme.generalColors.bgLow,
                 )
@@ -749,14 +753,14 @@ private fun MetricsCard(metrics: AdvisorMetrics) {
                 ) {
                     MetricCell(
                         modifier = Modifier.weight(1f),
-                        label = stringResource(R.string.aimi_adv_metric_today_tir),
+                        label = stringResource(ApsStrings.aimi_adv_metric_today_tir),
                         value = todayTir?.let { stringResource(percent, (it * 100).roundToInt()) } ?: missing,
                         valueColor = AapsTheme.generalColors.bgInRange,
                     )
                     MetricCell(
                         modifier = Modifier.weight(1f),
-                        label = stringResource(R.string.aimi_adv_metric_today_tdd),
-                        value = todayTdd?.let { stringResource(CoreUiR.string.format_insulin_units1, it) } ?: missing,
+                        label = stringResource(ApsStrings.aimi_adv_metric_today_tdd),
+                        value = todayTdd?.let { stringResource(CoreUiStrings.format_insulin_units1, it) } ?: missing,
                         valueColor = AapsTheme.generalColors.activeInsulinText,
                     )
                 }
@@ -788,18 +792,18 @@ private fun MetricCell(
 
 @Composable
 private fun tierLabel(tier: TuningStepTier): String = when (tier) {
-    TuningStepTier.MICRO    -> stringResource(R.string.aimi_tuning_tier_micro)
-    TuningStepTier.MODERATE -> stringResource(R.string.aimi_tuning_tier_moderate)
-    TuningStepTier.STRONG   -> stringResource(R.string.aimi_tuning_tier_strong)
+    TuningStepTier.MICRO    -> stringResource(ApsStrings.aimi_tuning_tier_micro)
+    TuningStepTier.MODERATE -> stringResource(ApsStrings.aimi_tuning_tier_moderate)
+    TuningStepTier.STRONG   -> stringResource(ApsStrings.aimi_tuning_tier_strong)
 }
 
 @Composable
 private fun formatTuningDialogBody(plan: TuningPlan): String {
-    val tierLine = stringResource(R.string.aimi_tuning_dialog_tier, tierLabel(plan.dominantTier))
+    val tierLine = stringResource(ApsStrings.aimi_tuning_dialog_tier, tierLabel(plan.dominantTier))
     val blocked = plan.blockedReason
     return when {
-        blocked != null        -> "$tierLine\n\n" + stringResource(R.string.aimi_tuning_blocked, blocked)
-        plan.changes.isEmpty() -> "$tierLine\n\n" + stringResource(R.string.aimi_tuning_no_changes)
+        blocked != null        -> "$tierLine\n\n" + stringResource(ApsStrings.aimi_tuning_blocked, blocked)
+        plan.changes.isEmpty() -> "$tierLine\n\n" + stringResource(ApsStrings.aimi_tuning_no_changes)
         else                   -> "$tierLine\n\n" + TuningContextApplySupport.formatPlanPreview(plan)
     }
 }
@@ -807,12 +811,12 @@ private fun formatTuningDialogBody(plan: TuningPlan): String {
 @Composable
 private fun buildTuningResultMessage(result: TuningApplyResult): String {
     if (result.appliedCount == 0) {
-        return result.plan.blockedReason ?: stringResource(R.string.aimi_tuning_no_changes)
+        return result.plan.blockedReason ?: stringResource(ApsStrings.aimi_tuning_no_changes)
     }
     val sb = StringBuilder()
     sb.append(
         stringResource(
-            R.string.aimi_tuning_result_summary,
+            ApsStrings.aimi_tuning_result_summary,
             result.appliedCount,
             tierLabel(result.plan.dominantTier),
         ),
@@ -821,11 +825,11 @@ private fun buildTuningResultMessage(result: TuningApplyResult): String {
     sb.append('\n')
     sb.append(
         when (result.exportStatus) {
-            TuningExportStatus.SUCCESS                -> stringResource(R.string.aimi_tuning_result_export_ok)
-            TuningExportStatus.SKIPPED_DISABLED        -> stringResource(R.string.aimi_tuning_result_export_skipped)
-            TuningExportStatus.SKIPPED_NO_PASSWORD     -> stringResource(R.string.aimi_tuning_result_export_skipped)
-            TuningExportStatus.SKIPPED_PASSWORD_EXPIRED -> stringResource(R.string.aimi_tuning_result_export_expired)
-            TuningExportStatus.FAILED                  -> stringResource(R.string.aimi_tuning_result_export_failed)
+            TuningExportStatus.SUCCESS                -> stringResource(ApsStrings.aimi_tuning_result_export_ok)
+            TuningExportStatus.SKIPPED_DISABLED        -> stringResource(ApsStrings.aimi_tuning_result_export_skipped)
+            TuningExportStatus.SKIPPED_NO_PASSWORD     -> stringResource(ApsStrings.aimi_tuning_result_export_skipped)
+            TuningExportStatus.SKIPPED_PASSWORD_EXPIRED -> stringResource(ApsStrings.aimi_tuning_result_export_expired)
+            TuningExportStatus.FAILED                  -> stringResource(ApsStrings.aimi_tuning_result_export_failed)
         },
     )
     return sb.toString().trimEnd()
@@ -858,7 +862,7 @@ private fun DashboardHeader(
         horizontalArrangement = Arrangement.spacedBy(AapsSpacing.medium),
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = stringResource(R.string.aimi_adv_report_weekly), style = MaterialTheme.typography.titleLarge)
+            Text(text = stringResource(ApsStrings.aimi_adv_report_weekly), style = MaterialTheme.typography.titleLarge)
             Text(
                 text = periodLabel,
                 style = MaterialTheme.typography.bodyMedium,
@@ -870,8 +874,8 @@ private fun DashboardHeader(
             color = severityColor.copy(alpha = 0.15f),
         ) {
             Text(
-                text = overallScore?.let { stringResource(R.string.aimi_adv_score_label, it) }
-                    ?: stringResource(R.string.aimi_adv_not_enough_data),
+                text = overallScore?.let { stringResource(ApsStrings.aimi_adv_score_label, it) }
+                    ?: stringResource(ApsStrings.aimi_adv_not_enough_data),
                 style = MaterialTheme.typography.labelLarge,
                 color = severityColor,
                 modifier = Modifier.padding(horizontal = AapsSpacing.medium, vertical = AapsSpacing.small),
@@ -884,7 +888,7 @@ private fun DashboardHeader(
 @Composable
 private fun DashboardFooter(generatedAtText: String) {
     Text(
-        text = stringResource(R.string.aimi_adv_generated_footer, generatedAtText),
+        text = stringResource(ApsStrings.aimi_adv_generated_footer, generatedAtText),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center,
@@ -901,15 +905,15 @@ private fun DashboardFooter(generatedAtText: String) {
  */
 @Composable
 private fun formatBasalProposalPreview(proposal: AimiAdvisorService.BasalProfileProposal): String {
-    if (proposal.rows.isEmpty()) return stringResource(R.string.aimi_adv_basal_no_profile_msg)
-    val disclaimer = stringResource(R.string.aimi_adv_basal_disclaimer)
-    val strategyLine = stringResource(R.string.aimi_adv_basal_strategy_line, proposal.strategy)
-    val factorLine = stringResource(R.string.aimi_adv_basal_factor_line, proposal.scalingFactor)
-    val rationaleLine = stringResource(R.string.aimi_adv_basal_rationale_line, proposal.rationale)
-    val previewHeading = stringResource(R.string.aimi_adv_basal_preview_heading)
+    if (proposal.rows.isEmpty()) return stringResource(ApsStrings.aimi_adv_basal_no_profile_msg)
+    val disclaimer = stringResource(ApsStrings.aimi_adv_basal_disclaimer)
+    val strategyLine = stringResource(ApsStrings.aimi_adv_basal_strategy_line, proposal.strategy)
+    val factorLine = stringResource(ApsStrings.aimi_adv_basal_factor_line, proposal.scalingFactor)
+    val rationaleLine = stringResource(ApsStrings.aimi_adv_basal_rationale_line, proposal.rationale)
+    val previewHeading = stringResource(ApsStrings.aimi_adv_basal_preview_heading)
     val rowLines = proposal.rows.take(6).map { row ->
         val deltaPct = if (row.current > 0.0) ((row.proposed / row.current) - 1.0) * 100.0 else 0.0
-        stringResource(R.string.aimi_adv_basal_row_line, row.hour, row.current, row.proposed, deltaPct)
+        stringResource(ApsStrings.aimi_adv_basal_row_line, row.hour, row.current, row.proposed, deltaPct)
     }
     return "$disclaimer\n$strategyLine\n$factorLine\n$rationaleLine\n\n$previewHeading\n${rowLines.joinToString("\n")}"
 }

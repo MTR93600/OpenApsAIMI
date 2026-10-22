@@ -72,7 +72,7 @@ import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.minutes
 
 /**
- * Compose port of the parked `ContextActivity` (+ its `ContextViewModel`, `ContextIntentAdapter`,
+ * Shared Compose port of the parked `ContextActivity` (+ its `ContextViewModel`, `ContextIntentAdapter`,
  * `PatientSignalGaugeBinder`).
  *
  * `ContextViewModel` was never actually wired to `ContextActivity` - the Activity's own doc comment

@@ -15,6 +15,18 @@
     <string name="dashboard_glass_loop_stable_bg_label">Stable BG duration</string>
     <string name="dashboard_glass_loop_isf_value" comment="%1$.1f=insulin sensitivity factor, %2$s=glucose unit per insulin unit. Example: 45.0 mg/dL/U">%1$.1f %2$s</string>
     <string name="dashboard_glass_loop_stable_bg_minutes" comment="%1$.0f=stable glucose duration in minutes. Example: 35 min">%1$.0f min</string>
+    <string name="dashboard_glass_loop_safety_title">Safety &amp; Alarms</string>
+    <string name="dashboard_glass_loop_safety_tdd_label">7-day average insulin per hour</string>
+    <string name="dashboard_glass_loop_safety_tir_label">Low glucose time (1h / today)</string>
+    <string name="dashboard_glass_loop_safety_steps_label">Recent steps (5 min)</string>
+    <string name="dashboard_glass_loop_open_context">Open AIMI Context</string>
+    <string name="dashboard_glass_loop_weekday">Weekday</string>
+    <string name="dashboard_glass_loop_weekend">Weekend</string>
+    <string name="dashboard_glass_loop_hour_badge" comment="%1$s=local hour, %2$s=weekday or weekend. Example: 14 · weekday">%1$s · %2$s</string>
+    <string name="dashboard_glass_loop_safety_tir_value" comment="%1$s=low glucose time during the last hour, %2$s=low glucose time today. Example: 1h 0% / today 2%">1h %1$s / today %2$s</string>
+    <string name="dashboard_glass_loop_percent" comment="%1$.0f=percentage. Example: 12%">%1$.0f%%</string>
+    <string name="dashboard_glass_loop_insulin_per_hour" comment="%1$.2f=average insulin amount per hour. Example: 0.80 U/h">%1$.2f U/h</string>
+    <string name="dashboard_glass_loop_steps_count" comment="%1$d=step count. Example: 42 steps">%1$d steps</string>
     <string name="dashboard_glass_loop_physio_title">Physio</string>
     <string name="dashboard_glass_loop_physio_mode_label">Mode</string>
     <string name="dashboard_glass_loop_physio_intent_label">Intent</string>

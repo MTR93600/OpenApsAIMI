@@ -12,11 +12,13 @@
 		AA2005000000000000000 /* libre3 in Resources */ = {isa = PBXBuildFile; fileRef = AA1005000000000000000 /* libre3 */; };
 		AA2000500000000000000 /* AapsShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA1000200000000000000 /* AapsShared.framework */; };
 		AA2009900000000000000 /* NsSocketBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1009900000000000000 /* NsSocketBridge.swift */; };
+		AA2010000000000000000 /* MealAdvisorCameraBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1010000000000000000000 /* MealAdvisorCameraBridge.swift */; };
 		AA3000300000000000000 /* ClientApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000100000000000000 /* ClientApp.swift */; };
 		AA3000400000000000000 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA3000200000000000000 /* Assets.xcassets */; };
 		AA3005000000000000000 /* libre3 in Resources */ = {isa = PBXBuildFile; fileRef = AA1005000000000000000 /* libre3 */; };
 		AA3000500000000000000 /* AapsShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA1000200000000000000 /* AapsShared.framework */; };
 		AA3009900000000000000 /* NsSocketBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1009900000000000000 /* NsSocketBridge.swift */; };
+		AA3010000000000000000 /* MealAdvisorCameraBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1010000000000000000000 /* MealAdvisorCameraBridge.swift */; };
 		D32B0F773048851500FAFE85 /* SocketIO in Frameworks */ = {isa = PBXBuildFile; productRef = AA00SP02000000000000001 /* SocketIO */; };
 		D32B0F783048851500FAFE85 /* SocketIO in Frameworks */ = {isa = PBXBuildFile; productRef = AA00SP02000000000000002 /* SocketIO */; };
 /* End PBXBuildFile section */
@@ -26,6 +28,7 @@
 		AA1000200000000000000 /* AapsShared.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AapsShared.framework; path = ../shell/build/bin/iosSimulatorArm64/debugFramework/AapsShared.framework; sourceTree = "<group>"; };
 		AA1000300000000000000 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 		AA1009900000000000000 /* NsSocketBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NsSocketBridge.swift; path = Shared/NsSocketBridge.swift; sourceTree = "<group>"; };
+		AA1010000000000000000000 /* MealAdvisorCameraBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MealAdvisorCameraBridge.swift; path = Shared/MealAdvisorCameraBridge.swift; sourceTree = "<group>"; };
 		AA2000100000000000000 /* AAPSClient.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AAPSClient.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA2000200000000000000 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = AAPSClient/Assets.xcassets; sourceTree = "<group>"; };
 		AA3000100000000000000 /* AAPSClient2.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AAPSClient2.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -60,6 +63,7 @@
 			children = (
 				AA1000100000000000000 /* ClientApp.swift */,
 				AA1009900000000000000 /* NsSocketBridge.swift */,
+				AA1010000000000000000000 /* MealAdvisorCameraBridge.swift */,
 				AA2001200000000000000 /* AAPSClient */,
 				AA3001200000000000000 /* AAPSClient2 */,
 				AA1000300000000000000 /* Signing.xcconfig */,
@@ -230,6 +234,7 @@
 			files = (
 				AA2000300000000000000 /* ClientApp.swift in Sources */,
 				AA2009900000000000000 /* NsSocketBridge.swift in Sources */,
+				AA2010000000000000000 /* MealAdvisorCameraBridge.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -239,6 +244,7 @@
 			files = (
 				AA3000300000000000000 /* ClientApp.swift in Sources */,
 				AA3009900000000000000 /* NsSocketBridge.swift in Sources */,
+				AA3010000000000000000 /* MealAdvisorCameraBridge.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

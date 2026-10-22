@@ -282,6 +282,7 @@ fun OverviewScreen(
                     chipsViewModel = chipsViewModel,
                     statusViewModel = statusViewModel,
                     statusLightsDef = builtInSearchables.statusLights,
+                    aimiDashboardData = aimiGlassDashboardData,
                     commandsAllowed = commandsAllowed,
                     onIobClick = chipsViewModel::showIobInfo,
                     onNavigate = onNavigate,
