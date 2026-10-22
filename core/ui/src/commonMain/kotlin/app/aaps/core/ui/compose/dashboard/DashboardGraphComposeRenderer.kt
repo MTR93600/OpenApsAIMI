@@ -27,10 +27,6 @@ internal fun DashboardGraphComposeRenderer(
     val scheme = MaterialTheme.colorScheme
     val lineColor = scheme.primary
     val lineGlow = scheme.primary.copy(alpha = 0.38f)
-    // Prediction (PRED): keep tertiary family but stronger contrast + heavier strokes so the dashed
-    // future curve reads clearly on busy gradients (user feedback: line felt too light).
-    val predictionColor = scheme.tertiary.copy(alpha = 0.98f)
-    val predictionGlow = scheme.tertiary.copy(alpha = 0.38f)
     val targetBandEdge = scheme.primary.copy(alpha = 0.02f)
     val targetBandCore = scheme.primary.copy(alpha = 0.24f)
     val targetBandLine = scheme.primary.copy(alpha = 0.74f)
@@ -50,10 +46,9 @@ internal fun DashboardGraphComposeRenderer(
         val width = size.width
         val height = size.height
         if (width <= 0f || height <= 0f) return@Canvas
-        val reservedFabInset = min(72f, width * 0.16f)
         val plotLeft = 0f
         val plotTop = 0f
-        val plotRight = width - reservedFabInset
+        val plotRight = dashboardGraphPlotWidthPx(width)
         val plotBottom = height - 6f
         val plotWidth = (plotRight - plotLeft).coerceAtLeast(1f)
         val plotHeight = (plotBottom - plotTop).coerceAtLeast(1f)
@@ -127,7 +122,8 @@ internal fun DashboardGraphComposeRenderer(
 
         val predictionPoints = renderInput.predictionPoints
         val points = renderInput.points
-        if (points.isEmpty() && predictionPoints.size < 2) return@Canvas
+        val predictionSeries = dashboardPredictionSeries(predictionPoints)
+        if (points.isEmpty() && predictionSeries.none { it.points.size >= 2 }) return@Canvas
         val basePoints = if (points.isNotEmpty()) points else predictionPoints
         val minX = renderInput.fromTimeEpochMs.takeIf { it > 0L } ?: basePoints.minOf { it.timestampEpochMs }
         val maxX = renderInput.toTimeEpochMs.takeIf { it > minX } ?: basePoints.maxOf { it.timestampEpochMs }
@@ -256,7 +252,7 @@ internal fun DashboardGraphComposeRenderer(
             )
         }
 
-        val sorted = basePoints.sortedBy { it.timestampEpochMs }
+        val sorted = points.sortedBy { it.timestampEpochMs }
         fun interpolateBgY(epochMs: Long): Float {
             if (sorted.isEmpty()) return plotBottom - plotHeight * 0.08f
             if (sorted.size == 1) return toCanvasY(sorted[0].value)
@@ -322,19 +318,25 @@ internal fun DashboardGraphComposeRenderer(
                     color = lineColor,
                     style = Stroke(width = 3f, cap = StrokeCap.Round),
                 )
-                if (predictionPoints.size >= 2) {
+            }
+        }
+
+        clipRect(left = plotLeft, top = plotTop, right = plotRight, bottom = plotBottom) {
+            predictionSeries.forEach { series ->
+                if (series.points.size >= 2) {
                     val predictionPath = Path()
-                    predictionPoints
+                    series.points
                         .sortedBy { it.timestampEpochMs }
                         .forEachIndexed { index, point ->
                             val x = toCanvasX(point.timestampEpochMs)
                             val y = toCanvasY(point.value)
                             if (index == 0) predictionPath.moveTo(x, y) else predictionPath.lineTo(x, y)
                         }
+                    val predictionColor = dashboardPredictionSeriesColor(series.type, scheme)
                     val dashPred = PathEffect.dashPathEffect(floatArrayOf(20f, 12f), 0f)
                     drawPath(
                         path = predictionPath,
-                        color = predictionGlow,
+                        color = predictionColor.copy(alpha = 0.38f),
                         style = Stroke(
                             width = 9f,
                             cap = StrokeCap.Round,
@@ -343,7 +345,7 @@ internal fun DashboardGraphComposeRenderer(
                     )
                     drawPath(
                         path = predictionPath,
-                        color = predictionColor.copy(alpha = 0.62f),
+                        color = predictionColor.copy(alpha = 0.72f),
                         style = Stroke(
                             width = 5.8f,
                             cap = StrokeCap.Round,
@@ -352,7 +354,7 @@ internal fun DashboardGraphComposeRenderer(
                     )
                     drawPath(
                         path = predictionPath,
-                        color = predictionColor,
+                        color = predictionColor.copy(alpha = 0.98f),
                         style = Stroke(
                             width = 3.6f,
                             cap = StrokeCap.Round,

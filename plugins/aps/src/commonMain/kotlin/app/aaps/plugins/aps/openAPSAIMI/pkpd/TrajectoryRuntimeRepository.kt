@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.pkpd
 
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -18,7 +19,12 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 @OptIn(ExperimentalAtomicApi::class)
 object TrajectoryRuntimeRepository {
 
-    private val latestRef = AtomicReference<AdvancedPredictionCurves?>(null)
+    data class PublishedTrajectory(
+        val curves: AdvancedPredictionCurves,
+        val publishedAtMs: Long,
+    )
+
+    private val latestRef = AtomicReference<PublishedTrajectory?>(null)
     private val updatesFlow = MutableSharedFlow<Unit>(
         extraBufferCapacity = 1,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
@@ -27,9 +33,11 @@ object TrajectoryRuntimeRepository {
     val updates: SharedFlow<Unit> = updatesFlow.asSharedFlow()
 
     fun publish(curves: AdvancedPredictionCurves) {
-        latestRef.store(curves)
+        latestRef.store(PublishedTrajectory(curves, aimiWallClockMs()))
         updatesFlow.tryEmit(Unit)
     }
 
-    fun getLatest(): AdvancedPredictionCurves? = latestRef.load()
+    fun getLatestSnapshot(): PublishedTrajectory? = latestRef.load()
+
+    fun getLatest(): AdvancedPredictionCurves? = getLatestSnapshot()?.curves
 }

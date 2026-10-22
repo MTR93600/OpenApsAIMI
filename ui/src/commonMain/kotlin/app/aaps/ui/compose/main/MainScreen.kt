@@ -150,6 +150,8 @@ fun MainScreen(
     queueStatusText: AnnotatedString? = null,
     isPumpCommunicating: Boolean = false,
     onStopBolus: () -> Unit = {},
+    /** Replaces only the home content; drawer, toolbar, notifications and shell chrome remain. */
+    dashboardV2Content: (@Composable (commandsAllowed: Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     LocalDateUtil.current
@@ -256,6 +258,11 @@ fun MainScreen(
                 // masterReachable for its own gating.)
                 Box(modifier = Modifier.fillMaxSize()) {
                     // Main content
+                    if (dashboardV2Content != null) {
+                        DashboardHomeContent(contentPadding = contentPadding) {
+                            dashboardV2Content(masterOrPairedClient)
+                        }
+                    } else {
                     OverviewScreen(
                         profileName = uiState.profileName,
                         profilePsId = uiState.profilePsId,
@@ -308,6 +315,7 @@ fun MainScreen(
                         isPumpCommunicating = isPumpCommunicating,
                         onStopBolus = onStopBolus
                     )
+                    }
 
                     // Search results overlay
                     if (searchUiState.isSearchActive) {

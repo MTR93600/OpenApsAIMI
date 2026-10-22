@@ -19,6 +19,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
@@ -152,6 +156,8 @@ class BasalMlTrainingCoordinator @Inject constructor(
     private val lastTrainMs = AtomicLong(0L)
     private val rowsAtLastTrain = AtomicLong(0L)
     private val circuitBreaker = TrainingCircuitBreaker()
+    private val dashboardRevisionState = MutableStateFlow(0L)
+    val dashboardUpdates: StateFlow<Long> = dashboardRevisionState.asStateFlow()
 
     init {
         instance = this
@@ -374,6 +380,20 @@ class BasalMlTrainingCoordinator @Inject constructor(
     /** True while the training circuit breaker is currently open (recent failures cooling down). */
     fun isCircuitOpenNow(): Boolean = circuitBreaker.isOpen()
 
+    /** Read-only basal learner counters and weights-file metadata; no model load or training is triggered. */
+    fun dashboardSnapshot(): BasalMlDashboardSnapshot {
+        val weights = basalWeightsFile()
+        val exists = storage.exists(weights)
+        return BasalMlDashboardSnapshot(
+            lastTrainedAtMs = lastTrainedAtMs(),
+            sampleCount = basalNeuralLearner.getGovernanceSnapshot().sampleCount,
+            circuitOpen = isCircuitOpenNow(),
+            modelFileExists = exists,
+            modelFileModifiedAtMs = if (exists) storage.lastModifiedMs(weights) else null,
+            modelFileSizeBytes = if (exists) storage.sizeBytes(weights) else null,
+        )
+    }
+
     /**
      * Where the basal adaptive weights live, for read-only metadata (dashboard use only).
      *
@@ -393,6 +413,7 @@ class BasalMlTrainingCoordinator @Inject constructor(
         if (circuitBreaker.recordFailure()) {
             log.warn(LTag.AIMI, "$TAG: circuit breaker OPEN for 6h after ${TrainingCircuitBreaker.DEFAULT_MAX_FAILURES} failures")
         }
+        publishDashboardUpdate()
     }
 
     private fun loadPersistedState() {
@@ -419,6 +440,11 @@ class BasalMlTrainingCoordinator @Inject constructor(
         lastTrainMs.store(nowMs)
         rowsAtLastTrain.store(totalRows)
         persistState()
+        publishDashboardUpdate()
+    }
+
+    private fun publishDashboardUpdate() {
+        dashboardRevisionState.update { it + 1L }
     }
 
     private fun persistState() {

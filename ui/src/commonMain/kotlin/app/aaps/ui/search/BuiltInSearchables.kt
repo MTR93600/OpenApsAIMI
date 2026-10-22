@@ -104,7 +104,8 @@ class BuiltInSearchables(
             ),
 
             BooleanKey.OverviewShowNotesInDialogs,
-            StringKey.GeneralDarkMode
+            StringKey.GeneralDarkMode,
+            StringKey.GeneralDashboardSkin
         ),
         icon = Icons.Outlined.Palette
     )
@@ -367,4 +368,3 @@ class BuiltInSearchables(
         add(SearchableItem.Category(siteRotation))
     }
 }
-

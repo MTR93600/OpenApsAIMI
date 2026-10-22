@@ -31,6 +31,8 @@ data class DashboardAdjustmentCardUiState(
 data class DashboardGraphControlsUiState(
     val selectedRangeHours: Int,
     val onSelectRange: ((Int) -> Unit)? = null,
+    val onOpenStats: (() -> Unit)? = null,
+    val onOpenTreatments: (() -> Unit)? = null,
 )
 
 /** A single notification row for [DashboardNotificationsComposeList]. */

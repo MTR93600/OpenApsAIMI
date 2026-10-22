@@ -104,6 +104,17 @@ enum class StringKey(
         ),
         defaultedBySM = true
     ),
+    GeneralDashboardSkin(
+        key = "dashboard_home_skin",
+        defaultValue = "overview",
+        title = KeysStrings.pref_title_dashboard_home_skin,
+        preferenceType = PreferenceType.LIST,
+        entriesRefs = mapOf(
+            "overview" to KeysStrings.pref_dashboard_home_overview,
+            "dashboard_v2" to KeysStrings.pref_dashboard_home_v2,
+            "glass" to KeysStrings.pref_dashboard_home_glass,
+        ),
+    ),
 
     AapsDirectoryUri(key = "aaps_directory", defaultValue = "", title = KeysStrings.pref_title_aaps_directory),
 

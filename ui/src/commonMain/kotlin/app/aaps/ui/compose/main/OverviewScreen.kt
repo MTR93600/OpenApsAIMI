@@ -12,15 +12,20 @@ import app.aaps.core.interfaces.bgQualityCheck.BgQualityCheck
 import app.aaps.core.interfaces.clientcontrol.ClientControlActionDispatcher
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.constraints.Objectives
+import app.aaps.core.interfaces.dashboard.AimiGlassDashboardData
+import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.notifications.AapsNotification
 import app.aaps.core.interfaces.notifications.AlarmSound
 import app.aaps.core.interfaces.notifications.NotificationHandle
 import app.aaps.core.interfaces.notifications.NotificationManager
+import app.aaps.core.interfaces.navigation.ElementType
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.queue.CommandQueue
 import app.aaps.core.interfaces.ui.UiInteraction
+import app.aaps.core.keys.StringKey
+import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.dialogs.OkDialog
 import app.aaps.core.ui.compose.navigation.NavigationRequest
@@ -28,6 +33,10 @@ import app.aaps.core.ui.compose.pump.PumpCommunicationStatus
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.ui.UiStrings
 import app.aaps.ui.compose.loopSheet.LoopActionViewModel
+import app.aaps.ui.compose.dashboard.DashboardHomeSelection
+import app.aaps.ui.compose.dashboard.GlassDashboardScreen
+import app.aaps.ui.compose.dashboard.DashboardV2GraphScreen
+import app.aaps.ui.compose.dashboard.GlassDashboardHome
 import app.aaps.ui.compose.maintenance.ImportSource
 import app.aaps.ui.compose.maintenance.MaintenanceViewModel
 import app.aaps.ui.compose.manageSheet.ManageSheetHost
@@ -42,6 +51,7 @@ import app.aaps.ui.compose.treatmentsSheet.TreatmentViewModel
 import app.aaps.ui.search.BuiltInSearchables
 import app.aaps.ui.search.SearchIndexEntry
 import app.aaps.ui.search.SearchViewModel
+import kotlinx.coroutines.flow.Flow
 
 /**
  * The overview - the app's home screen - assembled once for every platform.
@@ -81,6 +91,8 @@ fun OverviewScreen(
     permissionsViewModel: PermissionsViewModel,
     graphViewModel: GraphViewModel,
     chipsViewModel: ChipsViewModel,
+    aimiGlassDashboardData: Flow<AimiGlassDashboardData>,
+    dateUtil: DateUtil,
     // Dependencies
     activePlugin: ActivePlugin,
     config: Config,
@@ -110,8 +122,12 @@ fun OverviewScreen(
     onAuthorizationFailed: () -> Unit,
     // Notification sheet, opened from outside when something important arrives
     autoShowNotificationSheet: Boolean,
-    onAutoShowConsumed: () -> Unit
+    onAutoShowConsumed: () -> Unit,
 ) {
+    val storedHomeSelection by mainViewModel.preferences
+        .observe(StringKey.GeneralDashboardSkin)
+        .collectAsStateWithLifecycle(initialValue = StringKey.GeneralDashboardSkin.defaultValue)
+    val homeSelection = DashboardHomeSelection.resolve(storedHomeSelection)
     val state by mainViewModel.uiState.collectAsStateWithLifecycle()
     val searchState by searchViewModel.uiState.collectAsStateWithLifecycle()
     val calcProgress by mainViewModel.calcProgressFlow.collectAsStateWithLifecycle()
@@ -258,6 +274,37 @@ fun OverviewScreen(
             } else {
                 commandQueue.cancelAllBoluses(null)
             }
-        }
+        },
+        dashboardV2Content = when (homeSelection) {
+            DashboardHomeSelection.DASHBOARD_V2 -> { commandsAllowed ->
+                DashboardV2GraphScreen(
+                    graphViewModel = graphViewModel,
+                    chipsViewModel = chipsViewModel,
+                    statusViewModel = statusViewModel,
+                    statusLightsDef = builtInSearchables.statusLights,
+                    commandsAllowed = commandsAllowed,
+                    onIobClick = chipsViewModel::showIobInfo,
+                    onNavigate = onNavigate,
+                )
+            }
+            DashboardHomeSelection.GLASS -> { commandsAllowed ->
+                GlassDashboardHome(
+                    graphViewModel = graphViewModel,
+                    aimiDashboardData = aimiGlassDashboardData,
+                    dateUtil = dateUtil,
+                    chipsViewModel = chipsViewModel,
+                    statusViewModel = statusViewModel,
+                    statusLightsDef = builtInSearchables.statusLights,
+                    commandsAllowed = commandsAllowed,
+                    onNavigate = onNavigate,
+                    onOpenSettings = {
+                        onNavigate(NavigationRequest.Element(ElementType.SETTINGS))
+                    },
+                    title = stringResource(UiStrings.dashboard_glass_home_title),
+                    settingsLabel = stringResource(CoreUiStrings.settings),
+                )
+            }
+            DashboardHomeSelection.OVERVIEW -> null
+        },
     )
 }

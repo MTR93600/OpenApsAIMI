@@ -97,6 +97,7 @@ import app.aaps.core.utils.isRunningRealPumpTest
 import app.aaps.implementation.plugin.PluginPermissionsImpl
 import app.aaps.implementation.protection.BiometricCheck
 import app.aaps.plugins.automation.AutomationRuntime
+import app.aaps.plugins.aps.openAPSAIMI.dashboard.AimiGlassDashboardSnapshotFeed
 import app.aaps.plugins.configuration.setupwizard.SWDefinition
 import app.aaps.plugins.source.DexcomPlugin
 import app.aaps.plugins.source.activities.RequestDexcomPermissionActivity
@@ -541,6 +542,8 @@ class ComposeMainActivity : MetroAppCompatActivity() {
                         permissionsViewModel = permissionsViewModel,
                         graphViewModel = graphViewModel,
                         chipsViewModel = chipsViewModel,
+                        aimiGlassDashboardData = remember { AimiGlassDashboardSnapshotFeed.observe() },
+                        dateUtil = dateUtil,
                         activePlugin = activePlugin,
                         config = config,
                         objectives = objectives,

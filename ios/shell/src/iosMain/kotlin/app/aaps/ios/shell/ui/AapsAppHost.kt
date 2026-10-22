@@ -51,6 +51,7 @@ import app.aaps.ios.shell.di.IosAppGraph
 import app.aaps.ios.shell.platform.IosLanguage
 import app.aaps.ios.shell.platform.notOnThisPlatform
 import app.aaps.plugins.aps.openAPSAIMI.background.IosAimiBackgroundTasks
+import app.aaps.plugins.aps.openAPSAIMI.dashboard.AimiGlassDashboardSnapshotFeed
 import app.aaps.plugins.aps.openAPSAIMI.di.IosAimiEngineGraph
 import app.aaps.plugins.aps.openAPSAIMI.di.IosAimiEngineHolder
 import app.aaps.plugins.sync.nsclientV3.ws.NsSocketFactory
@@ -476,6 +477,8 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
                                 permissionsViewModel = metroViewModel<PermissionsViewModel>(),
                                 graphViewModel = graphs,
                                 chipsViewModel = chips,
+                                aimiGlassDashboardData = remember { AimiGlassDashboardSnapshotFeed.observe() },
+                                dateUtil = graph.dateUtil,
                                 activePlugin = graph.activePlugin,
                                 config = graph.config,
                                 objectives = graph.objectives,

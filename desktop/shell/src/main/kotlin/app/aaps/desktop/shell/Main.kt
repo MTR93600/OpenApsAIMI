@@ -430,6 +430,8 @@ private fun AapsDesktopApp(graph: DesktopAppGraph, appIcon: Painter, appName: St
                             permissionsViewModel = metroViewModel<PermissionsViewModel>(),
                             graphViewModel = graphs,
                             chipsViewModel = chips,
+                            aimiGlassDashboardData = app.aaps.plugins.aps.openAPSAIMI.dashboard.AimiGlassDashboardSnapshotFeed.observe(),
+                            dateUtil = graph.dateUtil,
                             activePlugin = graph.activePlugin,
                             config = graph.config,
                             objectives = graph.objectives,

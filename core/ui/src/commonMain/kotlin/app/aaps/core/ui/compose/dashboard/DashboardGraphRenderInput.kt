@@ -1,5 +1,7 @@
 package app.aaps.core.ui.compose.dashboard
 
+import app.aaps.core.interfaces.overview.graph.BgType
+
 /**
  * Plain input for [DashboardGraphComposeRenderer].
  *
@@ -23,7 +25,20 @@ data class DashboardGraphRenderInput(
 data class DashboardGraphPoint(
     val timestampEpochMs: Long,
     val value: Double,
+    val type: BgType? = null,
 )
+
+/** Prediction points with different source semantics must never be connected into one curve. */
+internal data class DashboardPredictionSeries(
+    val type: BgType?,
+    val points: List<DashboardGraphPoint>,
+)
+
+internal fun dashboardPredictionSeries(
+    points: List<DashboardGraphPoint>,
+): List<DashboardPredictionSeries> =
+    points.groupBy { it.type }
+        .map { (type, seriesPoints) -> DashboardPredictionSeries(type, seriesPoints) }
 
 data class DashboardSmbMarker(
     val timestampEpochMs: Long,

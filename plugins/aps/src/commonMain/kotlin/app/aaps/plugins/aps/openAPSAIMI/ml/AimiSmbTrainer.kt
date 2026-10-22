@@ -9,6 +9,10 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -79,6 +83,8 @@ object AimiSmbTrainer {
     private val modelRef   = AtomicReference<AimiNeuralNetwork?>(null)
     private val trainMutex = Mutex()
     private val scope      = CoroutineScope(aapsIoDispatcher + SupervisorJob())
+    private val dashboardRevisionState = MutableStateFlow(0L)
+    val dashboardUpdates: StateFlow<Long> = dashboardRevisionState.asStateFlow()
 
     // Circuit breaker (shared component)
     private val circuitBreaker = TrainingCircuitBreaker()
@@ -138,6 +144,7 @@ object AimiSmbTrainer {
             trainMutex.withLock { ensureStateLoadedLocked(storage, dir) }
             val net = AimiSmbModelStore.load(storage, dir, INPUT_SIZE)
             modelRef.store(net)
+            publishDashboardUpdate()
             if (net != null) {
                 println("$TAG: Model loaded from disk (${INPUT_SIZE} inputs)")
             } else {
@@ -167,6 +174,7 @@ object AimiSmbTrainer {
         // attempt left behind and never turns into a disk write on every loop tick.
         if (isCircuitOpen(now)) {
             currentWaitingStatusRef.store(TrainingResult(atMs = now, outcome = TrainingOutcome.CIRCUIT_OPEN))
+            publishDashboardUpdate()
             return
         }
 
@@ -216,6 +224,29 @@ object AimiSmbTrainer {
 
     /** True while the training circuit breaker is currently open (recent failures cooling down). */
     fun isCircuitOpenNow(): Boolean = circuitBreaker.isOpen()
+
+    /**
+     * Read-only dashboard view of the current trainer state and SMB model file.
+     *
+     * This does not load a model, start training, or mutate training state. The caller supplies the
+     * same storage and directory used by the trainer so the file metadata comes from the actual
+     * persisted model location.
+     */
+    fun dashboardSnapshot(storage: AimiStorage, dir: AimiPath): AimiSmbDashboardSnapshot {
+        val modelFile = AimiSmbModelStore.modelFile(storage, dir)
+        val exists = storage.exists(modelFile)
+        return AimiSmbDashboardSnapshot(
+            lastAttempt = lastResult(),
+            waiting = currentWaitingStatus(),
+            lastAttemptAtMs = lastAttemptAtMs(),
+            lastTrainedAtMs = lastTrainedAtMs(),
+            circuitOpen = isCircuitOpenNow(),
+            modelLoaded = modelRef.load() != null,
+            modelFileExists = exists,
+            modelFileModifiedAtMs = if (exists) storage.lastModifiedMs(modelFile) else null,
+            modelFileSizeBytes = if (exists) storage.sizeBytes(modelFile) else null,
+        )
+    }
 
     /**
      * Refine [predictedSmb] using the in-memory model.
@@ -340,6 +371,7 @@ object AimiSmbTrainer {
                     gateDetail = decision.reason,
                 ),
             )
+            publishDashboardUpdate()
             return
         }
 
@@ -348,6 +380,7 @@ object AimiSmbTrainer {
         // it would otherwise show a stale "waiting" reason while this real attempt runs.
         lastAttemptMs.store(now)
         currentWaitingStatusRef.store(null)
+        publishDashboardUpdate()
         persistState(storage, dir)
 
         val headers = headerLine.split(",").map { it.trim() }
@@ -608,6 +641,7 @@ object AimiSmbTrainer {
     private fun recordResult(storage: AimiStorage, dir: AimiPath, result: TrainingResult) {
         val previous = lastAttemptResultRef.load()
         lastAttemptResultRef.store(result)
+        publishDashboardUpdate()
         val unchanged = previous != null &&
             previous.outcome == result.outcome &&
             previous.totalRows == result.totalRows &&
@@ -616,6 +650,10 @@ object AimiSmbTrainer {
             previous.gateDetail == result.gateDetail
         if (unchanged) return
         persistState(storage, dir)
+    }
+
+    private fun publishDashboardUpdate() {
+        dashboardRevisionState.update { it + 1L }
     }
 
     // ---- Test-only access ----------------------------------------------------

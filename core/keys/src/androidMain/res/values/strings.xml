@@ -2,6 +2,10 @@
 <resources>
     <!-- General preferences -->
     <string name="pref_title_simple_mode">Simple mode</string>
+    <string name="pref_title_dashboard_home_skin">Home screen</string>
+    <string name="pref_dashboard_home_overview">Overview</string>
+    <string name="pref_dashboard_home_v2">Dashboard V2</string>
+    <string name="pref_dashboard_home_glass">GLASS</string>
     <string name="pref_title_insulin_concentration">Insulin concentration support</string>
     <string name="pref_summary_insulin_concentration">Enable support for different insulin concentrations (U50, U200, etc.)</string>
 

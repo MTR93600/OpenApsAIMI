@@ -1,5 +1,50 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="dashboard_glass_home_title">GLASS</string>
+    <string name="dashboard_glass_loop_trajectory_title">Trajectory</string>
+    <string name="dashboard_glass_loop_trajectory_hybrid_label">Predicted (4h)</string>
+    <string name="dashboard_glass_loop_trajectory_iob_label" comment="Predicted BG from the insulin-only projection curve, not an insulin amount">Insulin-only BG</string>
+    <string name="dashboard_glass_loop_trajectory_cob_label" comment="Predicted BG from the carbs-only projection curve, not a carb amount">Carbs-only BG</string>
+    <string name="dashboard_glass_loop_trajectory_uam_label" comment="Predicted BG from the unannounced-meal projection curve">Unannounced meal BG</string>
+    <string name="dashboard_glass_loop_trajectory_stale">No recent prediction available.</string>
+    <string name="dashboard_glass_loop_key_factors_title">Key Factors</string>
+    <string name="dashboard_glass_loop_target_label">Target BG</string>
+    <string name="dashboard_glass_loop_max_iob_label">Max IOB</string>
+    <string name="dashboard_glass_loop_max_smb_label">Max SMB</string>
+    <string name="dashboard_glass_loop_isf_label">ISF</string>
+    <string name="dashboard_glass_loop_stable_bg_label">Stable BG duration</string>
+    <string name="dashboard_glass_loop_isf_value" comment="%1$.1f=insulin sensitivity factor, %2$s=glucose unit per insulin unit. Example: 45.0 mg/dL/U">%1$.1f %2$s</string>
+    <string name="dashboard_glass_loop_stable_bg_minutes" comment="%1$.0f=stable glucose duration in minutes. Example: 35 min">%1$.0f min</string>
+    <string name="dashboard_glass_loop_physio_title">Physio</string>
+    <string name="dashboard_glass_loop_physio_mode_label">Mode</string>
+    <string name="dashboard_glass_loop_physio_intent_label">Intent</string>
+    <string name="dashboard_glass_loop_physio_thermal_label">Thermal</string>
+    <string name="dashboard_glass_loop_physio_stale">No recent physio snapshot available.</string>
+    <string name="dashboard_glass_loop_ml_training_title">ML Training</string>
+    <string name="dashboard_glass_loop_ml_last_trained_label">Last trained</string>
+    <string name="dashboard_glass_loop_ml_samples_label">Samples</string>
+    <string name="dashboard_glass_loop_ml_circuit_open">Training paused (cooling down after recent failures)</string>
+    <string name="dashboard_glass_loop_ml_never_trained">Never trained yet</string>
+    <string name="dashboard_glass_loop_ml_training_stale">Training subsystem not started yet</string>
+    <string name="dashboard_glass_loop_ml_smb_label">SMB training</string>
+    <string name="dashboard_glass_loop_ml_smb_never_attempted">Never attempted yet</string>
+    <string name="dashboard_glass_loop_ml_smb_outcome_trained">Trained</string>
+    <string name="dashboard_glass_loop_ml_smb_outcome_no_csv">No data file yet</string>
+    <string name="dashboard_glass_loop_ml_smb_outcome_refused_header">Data file refused: wrong columns</string>
+    <string name="dashboard_glass_loop_ml_smb_outcome_too_few_samples">Not enough usable rows</string>
+    <string name="dashboard_glass_loop_ml_smb_outcome_rejected">Model rejected by a quality check</string>
+    <string name="dashboard_glass_loop_ml_smb_outcome_error">Training failed with an error</string>
+    <string name="dashboard_glass_loop_ml_smb_detail_label">SMB training detail</string>
+    <string name="dashboard_glass_loop_ml_smb_rows">%1$d rows kept, %2$d dropped</string>
+    <string name="dashboard_glass_loop_ml_smb_waiting_not_due">Waiting: next attempt not due yet</string>
+    <string name="dashboard_glass_loop_ml_smb_waiting_circuit_open">Waiting: training paused after repeated failures</string>
+    <string name="dashboard_glass_loop_ml_files_title">Model Files</string>
+    <string name="dashboard_glass_loop_ml_file_basal_label">Basal model</string>
+    <string name="dashboard_glass_loop_ml_file_smb_label">SMB model</string>
+    <string name="dashboard_glass_loop_ml_file_basal_size_label">Basal model size</string>
+    <string name="dashboard_glass_loop_ml_file_smb_size_label">SMB model size</string>
+    <string name="dashboard_glass_loop_ml_file_size_bytes" comment="%1$d=file size in bytes. Example: 2048 bytes">%1$d bytes</string>
+    <string name="dashboard_glass_loop_ml_file_missing">Not created yet</string>
     <string name="cancel_action_with_details" comment="%1$s=the word Cancel, %2$s=the active item being cancelled (e.g. a running temp basal or extended bolus description). Example: 'Cancel 150% 30min'">%1$s %2$s</string>
     <string name="no_temp_basal_running">No temp basal running</string>
     <string name="start_activity_tt">Start Activity TT</string>
@@ -354,6 +399,27 @@
     <string name="cal_precheck_delta_too_high">Glucose is changing too fast (Δ %1$s %3$s per 5 min, limit %2$s). Wait for stability.</string>
     <string name="cal_precheck_mark_sensor_change">Mark sensor change</string>
     <string name="graph_therapy_event_bg_with_note" comment="Shown when the user taps a BG check in the overview graph. %1$s = glucose with its unit, %2$s = the note the user wrote. Example: 6.1 mmol/L, before lunch">%1$s, %2$s</string>
+    <!-- Shared dashboard graph labels copied from the existing :plugins:main strings. -->
+    <string name="dashboard_graph_header">Graph</string>
+    <string name="dashboard_graph_blood_glucose">blood glucose</string>
+    <string name="dashboard_graph_scenario_floor">Floor</string>
+    <string name="dashboard_graph_scenario_best">Scenario</string>
+    <string name="dashboard_graph_prediction_short">PRED</string>
+    <string name="dashboard_graph_smb_legend">SMB</string>
+    <string name="dashboard_graph_tbr_legend">TBR</string>
+    <string name="dashboard_graph_scenario_near_bg_hint">Scenario near current BG (equilibrium / weak signal)</string>
+    <string name="dashboard_graph_smb_toast">SMB · %1$s</string>
+    <string name="dashboard_graph_scale_6h">6h</string>
+    <string name="dashboard_graph_scale_12h">12h</string>
+    <string name="dashboard_graph_scale_18h">18h</string>
+    <string name="dashboard_graph_scale_24h">24h</string>
+    <string name="dashboard_graph_live">Live</string>
+    <string name="dashboard_graph_following">Following</string>
+    <string name="dashboard_graph_fixed">Fixed</string>
+    <string name="dashboard_graph_no_data">No data</string>
+    <string name="dashboard_graph_refresh_unknown">Refresh status unavailable</string>
+    <string name="dashboard_graph_refresh_now">Updated just now</string>
+    <string name="dashboard_graph_refresh_minutes_ago">Updated %1$d min ago</string>
 
     <!-- Shown after a fingerstick was saved but did not yet change the sensor value.
          Ref ui/src/main/res/values/strings.xml L339–340 @ 6598201d. -->

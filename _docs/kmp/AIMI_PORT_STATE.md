@@ -2333,6 +2333,22 @@ Other things nobody had counted: Hilt does not exist on this branch (5 glass fil
 `core/ui/.../compose/glass/` (4 files) is absent, ~98 strings, 5 drawables to convert to `ImageVector`,
 3 preference keys, and four glass files sit on LiveData that has to become a `StateFlow`.
 
+### KMP implementation status
+
+The 2026-09-28 survey above is historical. The current KMP source has a shared home-skin preference
+for Overview, Dashboard V2, and GLASS; Overview remains the default. V2 uses shared Compose UI and
+the Overview state, with a pannable and zoomable graph. GLASS uses shared Compose UI and currently
+shows Overview metrics, fresh AIMI trajectories (including UAM), profile/runtime key factors, the
+physio presentation, basal and SMB training state, and model-file timestamps and sizes. These are
+read-only displays; no dosing decision was moved into the UI.
+
+This is not yet feature parity with the reference. Still absent are the remaining Key Factors and
+Safety & Alarms values (TDD per hour, low-TIR summaries, and recent-step summary), a working AIMI
+Context destination, and the remaining V2 hero actions. Do not infer any of those values in the UI:
+wire each one from its exact shared source, keep unavailable values explicit, and test the source
+mapping before adding the display. The shared iOS build does not by itself confirm rendered behavior
+on an iOS device.
+
 ### The app-init deferral: do NOT port it
 
 `AppInitCalculationPolicy` on the reference is two things, and only one is cosmetic. `DEFER_MS = 5_000`

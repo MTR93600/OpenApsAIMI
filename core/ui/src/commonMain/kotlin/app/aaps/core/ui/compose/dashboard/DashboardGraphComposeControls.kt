@@ -2,6 +2,8 @@ package app.aaps.core.ui.compose.dashboard
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -14,22 +16,28 @@ import androidx.compose.ui.unit.dp
 @Composable
 internal fun DashboardGraphComposeControls(
     state: DashboardGraphControlsUiState,
-    strings: DashboardCardStrings,
+    strings: DashboardGraphCardStrings,
     modifier: Modifier = Modifier,
 ) {
     val selected = state.selectedRangeHours
     val onSelect = state.onSelectRange ?: return
     val ranges = listOf(6, 12, 18, 24)
-    val commands = LocalDashboardHeroCommands.current
     Row(
         modifier = modifier,
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        AssistChip(
-            onClick = commands::openStatsScreen,
-            label = { Text(text = strings.statsButton) },
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        state.onOpenStats?.let { onOpenStats ->
+            AssistChip(
+                onClick = onOpenStats,
+                label = { Text(text = strings.statsButton) },
+            )
+        }
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
             ranges.forEach { hours ->
                 val label = when (hours) {
                     6 -> strings.range6h
@@ -46,9 +54,11 @@ internal fun DashboardGraphComposeControls(
                 )
             }
         }
-        AssistChip(
-            onClick = commands::openTreatmentsScreen,
-            label = { Text(text = strings.treatmentsLabel) },
-        )
+        state.onOpenTreatments?.let { onOpenTreatments ->
+            AssistChip(
+                onClick = onOpenTreatments,
+                label = { Text(text = strings.treatmentsLabel) },
+            )
+        }
     }
 }

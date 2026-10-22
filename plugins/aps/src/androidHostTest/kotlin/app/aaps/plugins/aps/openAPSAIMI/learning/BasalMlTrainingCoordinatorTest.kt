@@ -115,6 +115,24 @@ class BasalMlTrainingCoordinatorTest : TestBase() {
         assertThat(log.debugMessages.any { it.contains("new rows (need") }).isFalse()
     }
 
+    @Test
+    fun dashboardSnapshotReadsOnlyBasalTrainingStateAndWeightsMetadata() {
+        val weights = File(tempDir, "basal_adaptive_weights.json")
+        weights.writeText("{}")
+        File(tempDir, "basal_ml_training_state.json").writeText(
+            """{"lastTrainMs":1700000000000,"rowsAtLastTrain":31}""",
+        )
+        val freshCoordinator = BasalMlTrainingCoordinator(storage, learner, CapturingLogger())
+
+        val snapshot = freshCoordinator.dashboardSnapshot()
+
+        assertThat(snapshot.lastTrainedAtMs).isEqualTo(1_700_000_000_000L)
+        assertThat(snapshot.sampleCount).isEqualTo(0)
+        assertThat(snapshot.circuitOpen).isFalse()
+        assertThat(snapshot.modelFileExists).isTrue()
+        assertThat(snapshot.modelFileModifiedAtMs).isNotNull()
+    }
+
     /** Study `AAPSLoggerTest` is final; capture debug lines the way the tip mockk verify did. */
     private class CapturingLogger : AAPSLogger {
         val debugMessages = mutableListOf<String>()

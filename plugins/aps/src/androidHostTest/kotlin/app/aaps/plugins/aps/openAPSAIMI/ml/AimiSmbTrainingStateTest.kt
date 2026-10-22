@@ -142,6 +142,26 @@ class AimiSmbTrainingStateTest {
         assertThat(AimiSmbTrainer.currentWaitingStatus()).isNull()
     }
 
+    @Test
+    fun dashboard_snapshot_reports_the_real_attempt_and_read_only_model_file_metadata(@TempDir dir: File) {
+        val csvFile = File(dir, "oapsaimiML2_records.csv")
+        val weightsPath = AimiSmbModelStore.modelFile(storage, pathOf(dir))
+        assertThat(storage.createFile(weightsPath)).isTrue()
+
+        runBlocking { AimiSmbTrainer.trainNow(storage, pathOf(dir), pathOf(csvFile)) }
+
+        val snapshot = AimiSmbTrainer.dashboardSnapshot(storage, pathOf(dir))
+
+        assertThat(snapshot.lastAttempt?.outcome).isEqualTo(TrainingOutcome.SKIPPED_NO_CSV)
+        assertThat(snapshot.lastAttempt?.atMs).isGreaterThan(0L)
+        assertThat(snapshot.waiting).isNull()
+        assertThat(snapshot.lastTrainedAtMs).isEqualTo(0L)
+        assertThat(snapshot.circuitOpen).isFalse()
+        assertThat(snapshot.modelFileExists).isTrue()
+        assertThat(snapshot.modelFileModifiedAtMs).isNotNull()
+        assertThat(snapshot.modelLoaded).isFalse()
+    }
+
     // ---- Gate-rejection result --------------------------------------------------
 
     @Test

@@ -61,11 +61,13 @@ import app.aaps.core.interfaces.profile.EffectiveProfile
 import app.aaps.core.interfaces.profile.Profile
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
+import app.aaps.core.interfaces.dashboard.AimiGlassDashboardData
 import app.aaps.core.interfaces.profiling.Profiler
 import app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner
 import app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextManager
+import app.aaps.plugins.aps.openAPSAIMI.dashboard.AimiGlassDashboardSnapshotFeed
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiAuditorNotifier
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiPhysioLifecycle
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiStepsLifecycle
@@ -303,6 +305,20 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
     override suspend fun onStart() {
         super.onStart()
+        AimiGlassDashboardSnapshotFeed.configureKeyFactorsProvider {
+            val result = activePlugin.activeAPS?.lastAPSResult
+            val profile = result?.oapsProfileAimi
+            AimiGlassDashboardData.KeyFactors(
+                targetBgMgdl = result?.targetBG?.takeIf { it.isFinite() },
+                maxIobUnits = profile?.max_iob?.takeIf { it.isFinite() },
+                maxSmbUnits = preferences.get(DoubleKey.OApsAIMIMaxSMB).takeIf { it.isFinite() },
+                isfMgdlPerUnit = result?.variableSens?.takeIf { it.isFinite() },
+                stableBgMinutes = glucoseStatusCalculatorAimi
+                    .getAimiFeatures(allowOldData = true)
+                    ?.stable5pctMinutes
+                    ?.takeIf { it.isFinite() },
+            )
+        }
         // Fresh cross-tick hysteresis for a new plugin lifetime (not per APS tick).
         EndogenousPhaseHysteresis.reset()
         InsulinSlopePreserveHysteresis.reset()
@@ -415,7 +431,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         try {
             val (status, path, error) = storageHelper.getStorageStatus()
             PkPdCsvLogger.configureStorage(storage, aapsLogger)
-            AimiSmbTrainer.loadModel(storage, storage.directory())
+            val aimiDirectory = storage.directory()
+            AimiGlassDashboardSnapshotFeed.configureTrainingStorage(storage, aimiDirectory)
+            AimiSmbTrainer.loadModel(storage, aimiDirectory)
             aapsLogger.info(LTag.APS, "AIMI storage status=$status path=${path ?: "n/a"} error=${error ?: "none"}")
             aapsLogger.info(LTag.APS, "? AimiSmbTrainer: model load requested (async)")
         } catch (e: Exception) {
