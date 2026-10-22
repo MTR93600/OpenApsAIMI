@@ -120,7 +120,7 @@ class DesktopClientConfigOptionsTest {
      * These three replace the whole [app.aaps.core.interfaces.configuration.InitProgress] rather than
      * copying it, so the depth has to be carried across by hand. Getting it wrong reopens the app to
      * readers while a settings import still believes plugin state is being rebuilt - and this shape is
-     * shared with `IosClientConfig`, where it is worse: iOS starts at `done = true` and has no start-up
+     * shared with `IosConfig`, where it is worse: iOS starts at `done = true` and has no start-up
      * sequence that would put the state right afterwards.
      */
     @Test

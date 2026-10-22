@@ -11,12 +11,14 @@ import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.implementation.logging.AAPSLoggerIos
 import app.aaps.implementation.notifications.IosSystemNotificationPlatform
-import app.aaps.ios.shell.config.IosClientConfig
+import app.aaps.ios.shell.config.IosConfig
+import app.aaps.plugins.constraints.bgQualityCheck.BgQualityCheckPlugin
 import app.aaps.ios.shell.platform.IosHistoryScope
 import app.aaps.ios.shell.prefs.IosSp
 import app.aaps.shared.impl.utils.DateUtilImpl
 import app.aaps.shared.impl.utils.IosDateFormatPlatform
 import app.aaps.ui.compose.history.HistoryScope
+import app.aaps.core.interfaces.bgQualityCheck.BgQualityCheck
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.BindingContainer
 import dev.zacsweers.metro.ContributesTo
@@ -59,11 +61,18 @@ object IosPlatformBindings {
     @SingleIn(AppScope::class)
     fun dateUtil(): DateUtil = DateUtilImpl(IosDateFormatPlatform())
 
-    /** What kind of build this is. An iOS build is a follower client, not a loop. */
+    /** What kind of build this is. An iOS build is a master phone, like the Android `full` flavour. */
     @Provides
     @SingleIn(AppScope::class)
-    fun config(): Config = IosClientConfig()
+    fun config(): Config = IosConfig()
 
+
+    /**
+     * The shared plugin is the check, as on Android (`AppRootGraph.bgQualityCheck`). It flags flat,
+     * doubled and recalculated sensor data, and the APS plugins read it before they allow an SMB.
+     */
+    @Provides
+    fun bgQualityCheck(plugin: BgQualityCheckPlugin): BgQualityCheck = plugin
 
     /** Notifications through UNUserNotificationCenter, with the shared registry above it. */
     @Provides

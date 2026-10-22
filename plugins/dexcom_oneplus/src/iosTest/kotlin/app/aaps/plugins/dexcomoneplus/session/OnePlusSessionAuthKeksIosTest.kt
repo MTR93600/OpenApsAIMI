@@ -29,9 +29,9 @@ import kotlin.test.assertTrue
  * because the reply would have to be a genuine J-PAKE message from a second party.
  *
  * What none of this shows is a pairing with a sensor. Two branches of the real handshake have no
- * recorded exchange at all, and one of them cannot work on iPhone - it is pinned below: a ONE+
- * asks for an OS bond in the middle of an unbonded four digit pairing, and CoreBluetooth has no
- * pairing API, so [OnePlusGattClientIos.createBond] answers false.
+ * recorded exchange at all. One of them is pinned below: a ONE+ asks for an OS bond in the middle
+ * of an unbonded four digit pairing. CoreBluetooth has no pairing API and needs none - it pairs on
+ * the next encrypted operation - so the handshake must go on rather than stop there.
  *
  * No test name here may contain a comma: these really run on Kotlin/Native.
  */
@@ -153,7 +153,7 @@ class OnePlusSessionAuthKeksIosTest {
     }
 
     @Test
-    fun anUnbondedPairingStopsOnIosBecauseThereIsNoPairingApi() {
+    fun anUnbondedPairingGoesOnAndLeavesThePairingToIos() {
         val (central, gatt) = connected()
         // TIME_EXTENDED is the frame a ONE+ sends to ask for an OS bond. It is queued before the
         // handshake starts waiting, which is how a scripted central delivers it to a blocking
@@ -162,12 +162,12 @@ class OnePlusSessionAuthKeksIosTest {
             BleCentralEvent.Value(deviceId, OnePlusBluetoothUuids.Authentication, byteArrayOf(0x06, 0x19)),
         )
 
-        val result = auth(gatt).authenticate(pairingCode)
+        val result = OnePlusSessionAuthKeks(gatt, stepTimeoutMs = 20L, bondWaitMs = 20L).authenticate(pairingCode)
 
+        // A scripted central cannot finish a real J-PAKE round, so the handshake still ends - but no
+        // longer at the bond request: iOS is left to pair on the next encrypted operation.
         assertFalse(result.ok)
-        assertContains(result.message ?: "", "Android bond required")
-        // Nothing was left half done: the client reported it could not bond rather than claiming
-        // one, and never asked the central for something CoreBluetooth does not offer.
+        assertFalse((result.message ?: "").contains("bond required"), result.message)
         assertFalse(gatt.isBonded())
         assertTrue(central.cancels.isEmpty())
     }

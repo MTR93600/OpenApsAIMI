@@ -152,5 +152,5 @@
     <string name="medtrum_chosen_pump" comment="%1$s=serial number of the pump that was chosen, in hex, for example 2F4A1B. Example: Chosen pump: 2F4A1B">Chosen pump: %1$s</string>
     <string name="medtrum_no_pump_chosen">No pump chosen yet.</string>
     <string name="medtrum_bluetooth_off">Bluetooth is off, so no pump can be found. Turn it on and open this screen again.</string>
-    <string name="medtrum_ios_caution">Medtrum patch pump. This runs on iPhone, but it is new and has one limit you must know: a patch cannot be started from here. Fill, prime and activate the patch with the Medtrum app or your Android phone first, then choose the pump on this screen so this app can connect to the patch that is already running. This is software behaviour, not medical advice \u2014 talk to your care team before you change how your pump is driven.</string>
+    <string name="medtrum_ios_caution">Medtrum patch pump on iPhone. It is new: test it with water before you trust it with insulin. Choose your pump first, then use Change Patch to fill, prime and activate a patch. This is software behaviour, not medical advice \u2014 talk to your care team before you change how your pump is driven.</string>
 </resources>

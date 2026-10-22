@@ -147,4 +147,32 @@ class IosAppStartupTest {
         assertEquals(listOf("register", "initialize"), registry.calls)
         assertTrue(registry.registered.isEmpty())
     }
+
+    /** The `@APS` bucket (Objectives among it) belongs in the list only when the loop runs here. */
+    @Test
+    fun `aps plugins are merged only when asked`() {
+        val plugins = mapOf(10 to NamedPlugin("iob"))
+        val aps = mapOf(840 to NamedPlugin("objectives"))
+
+        val notMerged = RecordingRegistry()
+        IosAppStartup(SilentLogger, notMerged, plugins, apsPlugins = aps, mergeApsPlugins = false, startPeriodicWork = {}).run()
+        val merged = RecordingRegistry()
+        IosAppStartup(SilentLogger, merged, plugins, apsPlugins = aps, mergeApsPlugins = true, startPeriodicWork = {}).run()
+
+        assertEquals(listOf("iob"), notMerged.registered.map { (it as NamedPlugin).id })
+        assertEquals(listOf("iob", "objectives"), merged.registered.map { (it as NamedPlugin).id })
+    }
+
+    /** The master services read plugin state, so they start after the plugins, as in `MainApp`. */
+    @Test
+    fun `master services start after the plugins`() {
+        val registry = RecordingRegistry()
+        IosAppStartup(
+            SilentLogger, registry, mapOf(1 to NamedPlugin("a")),
+            startPeriodicWork = { registry.calls.add("periodic") },
+            startMasterServices = { registry.calls.add("master") }
+        ).run()
+
+        assertEquals(listOf("register", "initialize", "periodic", "master"), registry.calls)
+    }
 }

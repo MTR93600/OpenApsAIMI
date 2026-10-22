@@ -377,6 +377,13 @@ class IosMedtrumPump(
 
     override suspend fun setNewBasalProfile(profile: PumpProfile): PumpEnactResult =
         commandMutex.withLock {
+            // Same as Android: with no patch running, the profile is written at activation. That is
+            // a deferred write, so success without enacted - a failure here would raise the
+            // profile alarm and leave the loop without a running profile, and then activation
+            // itself would be refused for want of one.
+            if (!isInitialized()) return enactResult(success = true, enacted = false, comment = "Basal profile will be set at activation")
+            // Same as Android: the pump stores only the basal bytes, so an unchanged basal needs no packet.
+            if (isThisProfileSet(profile)) return enactResult(success = true, enacted = false)
             if (!isReady()) return failClosed("Pump not ready — basal profile refused")
             val pairs = profile.getBasalValues().map { it.value to it.timeAsSeconds }
             busy = true
@@ -393,7 +400,9 @@ class IosMedtrumPump(
         }
 
     override fun isThisProfileSet(profile: PumpProfile): Boolean {
-        if (!isReady()) return true
+        // Same as Android: compared whenever a patch is running, also while the link is down. The
+        // stored bytes are the pump's, so a dropped link must not make a new profile look applied.
+        if (!isInitialized()) return true
         val expected = state.buildMedtrumProfileArray(profile.getBasalValues().map { it.value to it.timeAsSeconds })
             ?: return false
         return expected.contentEquals(state.actualBasalProfile)

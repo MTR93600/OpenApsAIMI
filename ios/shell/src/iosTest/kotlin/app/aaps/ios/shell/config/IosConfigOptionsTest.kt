@@ -19,12 +19,12 @@ import kotlin.test.assertTrue
  * on. Real files in a real directory, because the thing being tested *is* the file lookup.
  */
 @OptIn(ExperimentalForeignApi::class)
-class IosClientOptionsTest {
+class IosConfigOptionsTest {
 
     private val manager = NSFileManager.defaultManager
     private val extra = NSTemporaryDirectory() + "aaps-extra-" + NSUUID().UUIDString()
 
-    private val sut = IosClientConfig(extraDir = extra)
+    private val sut = IosConfig(extraDir = extra)
 
     init {
         manager.createDirectoryAtPath(extra, withIntermediateDirectories = true, attributes = null, error = null)
@@ -106,7 +106,7 @@ class IosClientOptionsTest {
     /** A build with no Documents directory answers off rather than failing. */
     @Test
     fun `no extra directory means every option is off`() {
-        val none = IosClientConfig(extraDir = null)
+        val none = IosConfig(extraDir = null)
 
         assertFalse(none.isEnabled(ExternalOptions.ENGINEERING_MODE))
         assertFalse(none.isEngineeringMode())

@@ -22,6 +22,18 @@ import app.aaps.pump.medtrum.compose.MedtrumPumpPickerScreen
 import app.aaps.pump.medtrum.util.MedtrumDeviceName
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.insulin.InsulinManager
+import app.aaps.core.interfaces.profile.ProfileFunction
+import app.aaps.core.interfaces.profile.ProfileRepository
+import app.aaps.core.interfaces.pump.PumpSync
+import app.aaps.core.interfaces.rx.bus.RxBus
+import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.pump.medtrum.compose.patch.MedtrumPatchWizardModel
+import app.aaps.pump.medtrum.compose.patch.MedtrumPatchWizardScreen
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.CoroutineScope
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
@@ -45,10 +57,8 @@ import dev.zacsweers.metro.IntKey as MetroIntKey
  * value and the transport can match that pump. With a serial the driver connects to a patch that
  * is already running and the loop can drive it.
  *
- * What is still missing is **starting a patch**: nothing here calls `MedtrumSession.prime`,
- * `activate` or `deactivatePatch`, so a fresh patch has to be filled, primed and activated with
- * the Medtrum app or an Android phone first. The plugin description says exactly that, in the
- * place a person switches it on, rather than letting them find out with a dead patch.
+ * Changing the patch - fill, prime, activate, and taking it off - is [MedtrumIosIntentKey.ChangePatch]:
+ * the shared `MedtrumPatchWizardScreen` over the headless `MedtrumPatchSession` of the host.
  *
  * ## Keys and buckets
  *
@@ -56,9 +66,8 @@ import dev.zacsweers.metro.IntKey as MetroIntKey
  * order Medtrum in the same place. They never meet: this file is in `iosMain` and the Android one
  * is in `pump/medtrum/src/main`.
  *
- * No `@PumpDriver` qualifier, unlike Android. `IosAppGraph` merges only the unqualified
- * `Map<Int, PluginBase>` bucket - an iOS build is a follower client - so a qualified entry would
- * compile and then simply not be in the list.
+ * No `@PumpDriver` qualifier, unlike Android: that qualifier is an Android-only annotation, and
+ * `IosAppGraph` puts the iOS pump drivers in the unqualified `Map<Int, PluginBase>` bucket.
  */
 @ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
 @MetroIntKey(1120)
@@ -70,7 +79,15 @@ class IosMedtrumPlugin(
     preferences: Preferences,
     commandQueue: CommandQueue,
     notificationManager: NotificationManager,
-    private val host: IosMedtrumDriverHost
+    private val host: IosMedtrumDriverHost,
+    // Providers: only the patch wizard needs these, and only when it is opened.
+    private val profileFunction: () -> ProfileFunction,
+    private val profileRepository: () -> ProfileRepository,
+    private val insulinManager: () -> InsulinManager,
+    private val pumpSync: () -> PumpSync,
+    private val persistenceLayer: () -> PersistenceLayer,
+    private val rxBus: () -> RxBus,
+    private val dateUtil: () -> DateUtil
 ) : PumpPluginBase(
     pluginDescription = medtrumIosPluginDescription(),
     ownPreferences = MedtrumIosIntentKey.entries,
@@ -116,9 +133,54 @@ class IosMedtrumPlugin(
                         onBack = onBack
                     )
                 }
+            ),
+            MedtrumIosIntentKey.ChangePatch.withCompose(
+                ComposeScreenContent { onBack ->
+                    val scope = rememberCoroutineScope()
+                    val model = remember { patchWizardModel(scope).also { it.open() } }
+                    MedtrumPatchWizardScreen(
+                        model = model,
+                        scanContent = { onCancel ->
+                            val pumps by host.discovery.pumps.collectAsState()
+                            MedtrumPumpPickerScreen(
+                                devices = pumps.map { ScannedDevice(name = it.name, address = it.id) },
+                                chosenSerialHex = host.store.loadPumpSerial()?.let { MedtrumDeviceName.serialHex(it) },
+                                bluetoothOff = !host.discovery.scanning && pumps.isEmpty(),
+                                onStartScan = {
+                                    host.openRadio()
+                                    host.discovery.start()
+                                },
+                                onStopScan = { host.discovery.stop() },
+                                onSelect = { device ->
+                                    val chosen = pumps.firstOrNull { it.id == device.address }
+                                    if (chosen != null && host.discovery.select(chosen)) model.pumpChosen()
+                                },
+                                onBack = onCancel
+                            )
+                        },
+                        onClose = onBack
+                    )
+                }
             )
         ),
         icon = pluginDescription.icon
+    )
+
+    /** One wizard per opened screen, living as long as that screen does. */
+    private fun patchWizardModel(scope: CoroutineScope) = MedtrumPatchWizardModel(
+        patch = host.patch,
+        state = host.state,
+        profileFunction = profileFunction(),
+        profileRepository = profileRepository(),
+        insulinManager = insulinManager(),
+        pumpSync = pumpSync(),
+        persistenceLayer = persistenceLayer(),
+        preferences = preferences,
+        rh = rh,
+        rxBus = rxBus(),
+        dateUtil = dateUtil(),
+        aapsLogger = aapsLogger,
+        scope = scope
     )
 
     /**

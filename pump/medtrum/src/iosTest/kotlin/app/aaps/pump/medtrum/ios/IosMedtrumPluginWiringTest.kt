@@ -104,9 +104,9 @@ class IosMedtrumPluginWiringTest {
     }
 
     @Test
-    fun `the plugin offers the pump chooser and nothing else`() {
-        // One screen, and it is the one that stands between this phone and a running patch.
-        assertEquals(listOf(MedtrumIosIntentKey.PickPump), MedtrumIosIntentKey.entries)
+    fun `the plugin offers the pump chooser and the patch change`() {
+        // Choosing the pump, then the same "Change Patch" entry as the Android overview.
+        assertEquals(listOf(MedtrumIosIntentKey.PickPump, MedtrumIosIntentKey.ChangePatch), MedtrumIosIntentKey.entries)
     }
 
     // -- The driver behind it --------------------------------------------------------------------

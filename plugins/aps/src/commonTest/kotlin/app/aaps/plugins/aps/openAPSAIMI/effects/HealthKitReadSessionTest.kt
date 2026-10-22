@@ -17,7 +17,7 @@ import kotlin.test.assertTrue
  * `autosensHalfDoublesScheduledBasalAndRestingHeartRateStrengthensIsf` (80, 80, 80, then 110 bpm)
  * strengthen ISF 50 to 45 and lock `HR_TREND_ISF x0.90 (hr10 110 / hr60 88, steps10 0)`.
  *
- * Authorization is requested only when `IosClientConfig.APS` and the engine switch are both on.
+ * Authorization is requested only when `IosConfig.APS` and the engine switch are both on.
  */
 class HealthKitReadSessionTest {
 

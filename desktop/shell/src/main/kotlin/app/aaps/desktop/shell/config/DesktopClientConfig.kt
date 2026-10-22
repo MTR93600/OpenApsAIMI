@@ -105,7 +105,7 @@ class DesktopClientConfig(
     private val _initSnackbarFlow = MutableSharedFlow<String>(extraBufferCapacity = 8)
     override val initSnackbarFlow: SharedFlow<String> = _initSnackbarFlow.asSharedFlow()
 
-    // See IosClientConfig: these replace the whole value, and the reconfigure depth must survive it -
+    // See IosConfig: these replace the whole value, and the reconfigure depth must survive it -
     // it belongs to whoever opened the window, not to init progress. Clobbering it would reopen the
     // app to readers while an import still believes the window is held.
     override fun updateInitProgress(step: String, current: Int, total: Int) {

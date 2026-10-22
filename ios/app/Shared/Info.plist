@@ -11,7 +11,7 @@
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<!--
-	  Shows the app's Documents folder in the Files app, as "On My iPhone > AAPSClient". That is how
+	  Shows the app's Documents folder in the Files app, as "On My iPhone > AAPS". That is how
 	  a person reaches an export to copy it off the phone, drops one in to import, and creates
 	  `extra/engineering_mode` by hand - the whole user-facing file story rests on this one key.
 
@@ -21,6 +21,12 @@
 	  a missing plist key and a user who has not looked yet are indistinguishable.
 	-->
 	<key>UIFileSharingEnabled</key>
+	<true/>
+	<!--
+	  The second half of the same story: UIFileSharingEnabled alone shows the folder only in the
+	  Finder of a connected Mac. The Files app on the phone lists it only with this key as well.
+	-->
+	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
 	<!--
 	  Required before Core Location may be asked for anything. iOS terminates an app that requests

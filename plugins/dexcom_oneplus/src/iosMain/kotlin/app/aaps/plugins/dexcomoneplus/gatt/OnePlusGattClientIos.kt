@@ -17,6 +17,9 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.concurrent.Volatile
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 
 /**
  * [OnePlusGattClient] on CoreBluetooth, through [BleCentral].
@@ -33,10 +36,12 @@ import kotlin.concurrent.Volatile
  * logs which one the sensor offered so a field trace says it out loud.
  *
  * What CoreBluetooth cannot do, and what this does instead of pretending:
- * - **Bonding.** There is no API to start, watch or drop a pairing. [createBond],
- *   [awaitBondComplete] and [removeBond] return false and log an error; [isBonded] returns false
- *   because the honest answer is "we cannot know", and the KEKS path already treats false as "not
- *   bonded yet". None of them returns success.
+ * - **Bonding.** There is no API to start, watch or drop a pairing: iOS pairs by itself on the
+ *   first operation that needs an encrypted link, and shows the person its own pairing dialog.
+ *   [createBond] therefore says yes - the pairing will happen - and [awaitBondComplete] gives the
+ *   next write the whole pairing window, so the person has time to accept the dialog. [isBonded]
+ *   stays false because the honest answer is "we cannot know", and [removeBond] stays false
+ *   because only the person can forget the device in Settings.
  * - **Connection interval.** There is no equivalent of `requestConnectionPriority`, so
  *   [setLowPower] records that the request was dropped rather than reporting a change nobody made.
  * - **Write-without-response completion.** iOS does not call back for one, so the ExtraData chunk
@@ -65,6 +70,9 @@ class OnePlusGattClientIos(
     /** Serializes one outstanding write or subscription, exactly as the Android client does. */
     private val opLock = AapsLock()
     private val stateLock = AapsLock()
+
+    /** Set by [awaitBondComplete]: until then a write may wait for the person to accept pairing. */
+    private var pairingWindowEnd: TimeMark? = null
 
     @Volatile
     private var linkId: String? = null
@@ -258,21 +266,17 @@ class OnePlusGattClientIos(
     }
 
     /**
-     * Always false, and that does NOT mean a bond cannot happen on iOS.
-     *
-     * iOS bonds by itself, the moment the sensor asks for an encrypted link, and shows the person
-     * its own pairing dialog. What no app can do is start that or watch it finish, which is what
-     * the Android flow does here. So a false answer means "this step does not exist on this
-     * platform", not "pairing is impossible": Trio pairs G7 sensors on iPhone without such a call.
-     * Whether letting iOS bond on its own is enough for this handshake is untested — see the
-     * reason text on the plugin, which says the same thing to the person.
+     * Yes: on iOS the pairing happens by itself, the moment the sensor asks for an encrypted link,
+     * and the person sees the system pairing dialog. No app can start it - and none needs to. Trio
+     * pairs G7 sensors on iPhone the same way. Answering false here stopped every new four digit
+     * pairing before iOS had the chance to pair.
      */
     override fun createBond(): Boolean {
-        OnePlusLog.e(
-            "${OnePlusLogMarkers.ERROR}: createBond is not possible on iOS - CoreBluetooth pairs by " +
-                "itself when the sensor asks for an encrypted link, and no app can start it",
+        OnePlusLog.i(
+            "${OnePlusLogMarkers.SESSION}: createBond on iOS - CoreBluetooth pairs by itself on the next " +
+                "encrypted operation, the person accepts the system pairing dialog",
         )
-        return false
+        return true
     }
 
     override fun removeBond(): Boolean {
@@ -283,12 +287,15 @@ class OnePlusGattClientIos(
         return false
     }
 
+    /**
+     * There is no bond state to watch on iOS. The pairing happens during the next write with
+     * response, which waits while the system dialog is up, so that write gets this whole
+     * [timeoutMs] instead of the usual operation timeout. See [writeWithResponse].
+     */
     override fun awaitBondComplete(timeoutMs: Long): Boolean {
-        OnePlusLog.e(
-            "${OnePlusLogMarkers.ERROR}: awaitBondComplete cannot be answered on iOS - there is no " +
-                "bond state to watch, so the ${timeoutMs}ms wait is refused instead of slept through",
-        )
-        return false
+        stateLock.withLock { pairingWindowEnd = TimeSource.Monotonic.markNow() + timeoutMs.milliseconds }
+        OnePlusLog.i("${OnePlusLogMarkers.SESSION}: iOS pairing window ${timeoutMs}ms for the next write")
+        return true
     }
 
     // -- incoming frames ---------------------------------------------------------------------------
@@ -506,6 +513,12 @@ class OnePlusGattClientIos(
 
     // -- helpers ---------------------------------------------------------------------------------
 
+    /** The usual operation timeout, or what is left of the pairing window when that is longer. */
+    private fun writeTimeoutMs(): Long {
+        val left = stateLock.withLock { pairingWindowEnd }?.let { -it.elapsedNow().inWholeMilliseconds } ?: 0L
+        return maxOf(GATT_OP_TIMEOUT_MS, left)
+    }
+
     private fun writeWithResponse(characteristicUuid: String, payload: ByteArray?, label: String) {
         if (payload == null || payload.isEmpty()) return
         val id = linkId ?: error("ONEPLUS_GATT: not connected ($label)")
@@ -516,10 +529,12 @@ class OnePlusGattClientIos(
                 pendingOp = null
                 error("ONEPLUS_GATT: write $label refused by the central")
             }
-            val status = runBlocking { withTimeoutOrNull(GATT_OP_TIMEOUT_MS) { op.await() } }
+            val status = runBlocking { withTimeoutOrNull(writeTimeoutMs()) { op.await() } }
             pendingOp = null
             if (status == null) error("ONEPLUS_GATT: write $label timeout")
             if (status != 0) error("ONEPLUS_GATT: write $label status=$status")
+            // The write went through, so a pairing it waited for is done.
+            stateLock.withLock { pairingWindowEnd = null }
             OnePlusLog.d("${OnePlusLogMarkers.SESSION}: wrote $label ${payload.size}b")
         }
     }

@@ -7,11 +7,8 @@ import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.pump.medtrum.MedtrumStrings
 
 /**
- * The screens this plugin offers in its settings on an iPhone.
- *
- * One for now. Android reaches the same scan through its patch wizard, which this app does not
- * have here yet, so the one step a person needs on an iPhone - telling the app which pump is
- * theirs - gets a screen of its own.
+ * The screens this plugin offers in its settings on an iPhone: choosing the pump, and changing the
+ * patch with the shared patch wizard.
  *
  * `iosMain`, so none of this is in the Android preference schema.
  */
@@ -34,5 +31,11 @@ enum class MedtrumIosIntentKey(
         key = "medtrum_ios_pick_pump",
         title = MedtrumStrings.medtrum_pick_pump_title,
         summary = MedtrumStrings.medtrum_pick_pump_summary
+    ),
+
+    /** The same entry as on the Android overview: it opens the page that fits the pump state. */
+    ChangePatch(
+        key = "medtrum_ios_change_patch",
+        title = MedtrumStrings.change_patch_label
     )
 }

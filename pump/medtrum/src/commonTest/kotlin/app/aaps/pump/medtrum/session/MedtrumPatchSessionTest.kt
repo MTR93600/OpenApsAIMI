@@ -354,6 +354,25 @@ class MedtrumPatchSessionTest {
         assertTrue(stateSavedCount > 0)
     }
 
+    /** The Android "discard" after a failed stop: the patch is written off, nothing more is sent. */
+    @Test
+    fun aPatchWhoseStopFailedCanBeDiscarded() = runBlocking {
+        scriptAuth(MedtrumPumpState.ACTIVE)
+        scriptPatchCommands()
+        fake.responses[CommandType.STOP_PATCH.code] = errorResponse(CommandType.STOP_PATCH.code)
+        assertTrue(session.connect("test"))
+
+        assertOk(patch.startDeactivation())
+        assertFailed(patch.deactivate())
+        assertEquals(PatchStep.DEACTIVATE, patch.step.value)
+        val stopsSent = sentOpcodes().count { it == CommandType.STOP_PATCH.code }
+
+        assertOk(patch.forceDeactivate())
+        assertEquals(PatchStep.DEACTIVATION_COMPLETE, patch.step.value)
+        assertEquals(MedtrumPumpState.STOPPED, state.pumpState)
+        assertEquals(stopsSent, sentOpcodes().count { it == CommandType.STOP_PATCH.code })
+    }
+
     // -- coming back after a failure ----------------------------------------
 
     @Test

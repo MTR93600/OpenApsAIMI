@@ -60,28 +60,9 @@ class RunningModeExpiryScheduler(
     internal suspend fun rescheduleFromCurrentMode() {
         val now = dateUtil.now()
         val active = persistenceLayer.getRunningModeActiveAt(now)
-        if (!active.mode.mustBeTemporary() || active.duration <= 0L) {
-            cancelScheduled()
-            return
-        }
-        // Long.MAX_VALUE duration is the "open-ended" sentinel (e.g. SUSPENDED_BY_PUMP from
-        // precheck, constraint-forced modes). No expiry to schedule.
-        if (active.duration == Long.MAX_VALUE) {
-            cancelScheduled()
-            return
-        }
-        // Overflow guard: timestamp + duration can wrap when duration is near Long.MAX_VALUE.
-        val endTime = active.timestamp + active.duration
-        if (endTime < active.timestamp) {
-            cancelScheduled()
-            return
-        }
-        val delayMs = endTime - now
-        if (delayMs <= 0) {
-            aapsLogger.debug(
-                LTag.APS,
-                "RunningModeExpiryScheduler: active RM (${active.mode}) already expired, canceling any pending work"
-            )
+        val delayMs = RunningModeExpiryDecision.delayUntilExpiry(active, now)
+        if (delayMs == null) {
+            aapsLogger.debug(LTag.APS, "RunningModeExpiryScheduler: nothing to schedule for ${active.mode}, canceling any pending work")
             cancelScheduled()
             return
         }

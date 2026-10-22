@@ -1,25 +1,14 @@
 package app.aaps.pump.medtrum.compose.steps
 
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.aaps.core.ui.compose.dialogs.OkDialog
-import app.aaps.core.ui.compose.pump.WizardButton
-import app.aaps.core.ui.compose.pump.WizardStepLayout
 import app.aaps.pump.medtrum.R
 import app.aaps.pump.medtrum.code.PatchStep
 import app.aaps.pump.medtrum.compose.MedtrumPatchViewModel
@@ -84,63 +73,5 @@ fun ActivateStep(
                 viewModel.moveStep(PatchStep.CANCEL)
             }
         )
-    }
-}
-
-internal enum class ActivateState { ACTIVATING, COMPLETE }
-
-/**
- * @see PreviewActivating
- * @see ActivateStepPreviewComplete
- */
-@Composable
-internal fun ActivateStepContent(
-    state: ActivateState,
-    reservoirLevel: Double = 0.0,
-    onComplete: () -> Unit,
-    onCancel: () -> Unit
-) {
-    WizardStepLayout(
-        primaryButton = when (state) {
-            ActivateState.ACTIVATING -> null
-            ActivateState.COMPLETE   -> WizardButton(text = stringResource(app.aaps.core.ui.R.string.ok), onClick = onComplete)
-        },
-        secondaryButton = if (state != ActivateState.COMPLETE) WizardButton(
-            text = stringResource(app.aaps.core.ui.R.string.cancel),
-            onClick = onCancel
-        ) else null
-    ) {
-        when (state) {
-            ActivateState.ACTIVATING -> {
-                Text(
-                    text = stringResource(R.string.activating_pump),
-                    style = MaterialTheme.typography.bodyLarge
-                )
-                Spacer(Modifier.height(48.dp))
-                CircularProgressIndicator(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .align(Alignment.CenterHorizontally)
-                )
-            }
-
-            ActivateState.COMPLETE   -> {
-                Text(
-                    text = stringResource(R.string.activating_complete, reservoirLevel),
-                    style = MaterialTheme.typography.bodyLarge
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = stringResource(R.string.can_export_settings),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = stringResource(R.string.press_OK_to_return).stripHtml(),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-        }
     }
 }

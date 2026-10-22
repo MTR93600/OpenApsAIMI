@@ -33,12 +33,12 @@ import jamorham.keks.crypto.KeksSecurityException
  * `java.security.InvalidParameterException` and `java.lang.ArrayIndexOutOfBoundsException`, so
  * nothing changed there.
  *
- * One branch cannot work on iPhone and the failure is quiet, so read this before wiring it up:
- * `requestAndroidBond` needs [OnePlusGattClient.createBond] and
- * [OnePlusGattClient.awaitBondComplete], and `OnePlusGattClientIos` answers false to both because
- * CoreBluetooth has no pairing API. The sensor asks for a bond in the middle of an **unbonded**
- * four-digit pairing, so that path ends here with "Android bond required / timed out". A
- * reconnect with a saved shared key does not pass through `requestAndroidBond` at all.
+ * The sensor asks for a bond in the middle of an **unbonded** four-digit pairing, and
+ * `requestAndroidBond` answers it through [OnePlusGattClient.createBond] and
+ * [OnePlusGattClient.awaitBondComplete]. CoreBluetooth has no pairing API: iOS pairs by itself on
+ * the next encrypted operation, so `OnePlusGattClientIos` answers yes and gives that operation the
+ * pairing window. This path has not met a real sensor on iPhone yet. A reconnect with a saved
+ * shared key does not pass through `requestAndroidBond` at all.
  *
  * ⚠️ ASYNC IMPACT: blocks caller (bleExecutor) on [OnePlusGattClient.awaitKeksNotify] and
  * [OnePlusGattClient.awaitBondComplete]. Do not call from main.

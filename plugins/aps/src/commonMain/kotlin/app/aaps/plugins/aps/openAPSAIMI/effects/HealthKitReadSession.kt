@@ -33,7 +33,7 @@ internal data class HealthKitSessionResult(
 )
 
 /**
- * `IosClientConfig.APS` and `AimiCommonEngineSwitch` both have to be on.
+ * `IosConfig.APS` and `AimiCommonEngineSwitch` both have to be on.
  * Either one off and the session does not ask for a grant.
  */
 internal fun healthKitReadAuthorizationAllowed(apsEnabled: Boolean, engineEnabled: Boolean): Boolean =

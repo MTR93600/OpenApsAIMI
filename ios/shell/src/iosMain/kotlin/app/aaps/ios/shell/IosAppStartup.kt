@@ -17,20 +17,29 @@ import app.aaps.ios.shell.di.GeneratedStringOwners
  * there is nothing to gain from doing it in the background, and everything to lose: a view model
  * built while the list was still empty would fail exactly as before.
  *
- * ## What Android also does here, and this does not yet
+ * ## The master services
  *
- * `MainApp` migrates preferences, re-reads the profile repository, vacuums the database, starts the
- * running-mode reconciler and expiry schedulers, starts the automation runtime and runs data
- * migrations - all in the background, behind the splash screen that `AapsAppRoot` shows until
- * `config.initCompleted()`. None of that is wired up here yet. `IosClientConfig` reports
+ * After the plugins, [startMasterServices] starts what `MainApp` starts on an Android master: the
+ * running-mode reconciler and its expiry scheduler, the profile switch scheduler and the automation
+ * runtime. Each of them checks `config.APS` or `config.AAPSCLIENT` itself, as on Android.
+ *
+ * ## What Android also does here, and this does not
+ *
+ * `MainApp` also migrates preferences, vacuums the database and runs data migrations. Those move
+ * data written by older Android versions; an iOS install has none. `IosConfig` reports
  * initialization done from the start, so the splash does not appear at all.
  */
 internal class IosAppStartup(
     private val aapsLogger: AAPSLogger,
     private val registry: PluginRegistry,
     private val contributedPlugins: Map<Int, PluginBase>,
+    /** The `@APS` bucket. Merged only when [mergeApsPlugins], like `MetroGraphs.allPlugins`. */
+    private val apsPlugins: Map<Int, PluginBase> = emptyMap(),
+    private val mergeApsPlugins: Boolean = false,
     /** Starts the shared periodic housekeeping. A lambda so a test can run this without building it. */
-    private val startPeriodicWork: () -> Unit
+    private val startPeriodicWork: () -> Unit,
+    /** Starts the services a master phone runs. A lambda for the same reason. */
+    private val startMasterServices: () -> Unit = {}
 ) {
 
     fun run() {
@@ -40,7 +49,7 @@ internal class IosAppStartup(
 
         // Sorted by the order key each plugin registers itself with, which is the order the plugin
         // list is shown in and the order defaults are picked in.
-        val plugins = contributedPlugins.entries.sortedBy { it.key }.map { it.value }
+        val plugins = mergedPlugins().entries.sortedBy { it.key }.map { it.value }
         registry.register(plugins)
         aapsLogger.debug(LTag.CORE, "Registered ${plugins.size} plugins on iOS")
 
@@ -66,6 +75,24 @@ internal class IosAppStartup(
         // preference was drawn on this platform and did nothing, and the database never shrank.
         startPeriodicWork()
 
+        startMasterServices()
+
         aapsLogger.debug(LTag.CORE, "Plugins started and selection verified, starting the UI")
+    }
+
+    /**
+     * The same rule as Android's `mergePlugins`: a later bucket wins an order key, and a clash is
+     * logged rather than thrown, because a wrong plugin list must not stop the app from starting.
+     */
+    private fun mergedPlugins(): Map<Int, PluginBase> {
+        if (!mergeApsPlugins) return contributedPlugins
+        val merged = LinkedHashMap(contributedPlugins)
+        for ((key, plugin) in apsPlugins) {
+            merged[key]?.let { previous ->
+                aapsLogger.error(LTag.CORE, "PLUGIN LIST: order key $key used by both ${previous::class.simpleName} and @APS ${plugin::class.simpleName} - one of them is dropped")
+            }
+            merged[key] = plugin
+        }
+        return merged
     }
 }

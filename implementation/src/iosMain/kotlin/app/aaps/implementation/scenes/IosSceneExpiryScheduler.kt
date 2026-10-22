@@ -2,65 +2,48 @@ package app.aaps.implementation.scenes
 
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.core.interfaces.utils.WallClockTimer
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import kotlinx.coroutines.CoroutineScope
 
 /**
- * Scene expiry is **not scheduled on iOS**, and on a client build it never needs to be. This exists
- * so the rest of scenes compiles and the editor works; it is not an implementation of the contract.
+ * Ends a timed scene when its time is up, by running the shared [SceneExpiryRunner].
  *
- * ## Why nothing calls this
+ * iOS is a master phone, so this is reachable: `SceneExecutor.activate` runs here and asks for the
+ * expiry. Without it the SMB toggle and the profile switch of a timed scene would stay applied.
  *
- * The only caller of [SceneExpiryScheduler.schedule] is `SceneExecutor.activate`, which runs on the
- * **master**. `config.AAPSCLIENT` is hardcoded `true` in `IosClientConfig`, and on a client
- * `RoleBranch.prepare`/`commit` send the command to the master rather than calling the local lambda,
- * while `SceneActions.stop` goes through `ClientControlActionDispatcher`. A client runs only
- * `validateActivation`, which is a pure query. So the master activates the scene and schedules its
- * expiry with its own working scheduler, and the client is told the result.
+ * Two things end a scene on time, and either is enough:
+ * - this timer, while the app is alive. It waits on the wall clock ([WallClockTimer]), so a
+ *   wake-up after iOS suspended the app is noticed within one step;
+ * - the loop check (`SceneExpiryRunner.endIfOverdue`, called by `PostCalculationRunner` on each new
+ *   glucose value), which ends an overdue scene even after the app was killed and started again.
  *
- * It still logs at error rather than doing nothing quietly, because the day iOS ships as something
- * other than a client this becomes reachable, and then it matters - see below.
- *
- * ## What it would cost if iOS were ever a master
- *
- * [SceneExpiryRunner] does more than refresh a screen. At expiry it reverts the two actions whose
- * effect does not end on its own - the SMB toggle, which is a preference with no duration, and the
- * profile switch, whose `EffectiveProfileSwitch` outlives the timed record it came from. Without
- * this callback both would stay applied **indefinitely**, and a chained follow-up scene would never
- * start.
- *
- * Temp target, loop mode and care portal entries are safe either way: those self-expire from their
- * own timestamps.
- *
- * ## Why not a timer
- *
- * iOS has no exact-time background execution. A `UNTimeIntervalNotificationTrigger` fires reliably
- * but only shows a notification; a `BGProcessingTask` runs when iOS decides, which may be hours
- * late or never; an in-process timer works only while the app is alive, which for a follower it
- * usually is not. A real implementation is a combination - timer when alive, notification at the
- * deadline, and an overdue sweep on foreground so the runner executes late rather than never - and
- * that is a product decision about scenes on iOS, not a port. See `_docs/ios_todo.md`.
- *
- * This was twice written up as "a timed scene never ends on iOS". It is not, for the reason above.
+ * Android uses WorkManager instead, which also survives process death. The loop check is what
+ * covers that case here.
  */
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
 @Inject
 class IosSceneExpiryScheduler(
-    private val aapsLogger: AAPSLogger
+    private val aapsLogger: AAPSLogger,
+    private val dateUtil: DateUtil,
+    private val expiryRunner: () -> SceneExpiryRunner,
+    scope: CoroutineScope
 ) : SceneExpiryScheduler {
 
+    private val timer = WallClockTimer(scope, dateUtil::now)
+
     override fun schedule(sceneName: String, delayMs: Long) {
-        aapsLogger.error(
-            LTag.UI,
-            "Scene expiry cannot be scheduled on iOS: '$sceneName' will NOT end by itself in ${delayMs}ms. " +
-                "Its SMB toggle and profile switch would stay applied. Timed scenes must be gated in the UI."
-        )
+        aapsLogger.debug(LTag.UI, "Scene '$sceneName' expires in ${delayMs}ms")
+        timer.schedule(dateUtil.now() + delayMs) {
+            val outcome = expiryRunner().run(sceneName)
+            aapsLogger.debug(LTag.UI, "Scene '$sceneName' expiry finished: $outcome")
+        }
     }
 
-    override fun cancel() {
-        // Nothing was ever scheduled, so there is nothing to cancel. Not an error.
-    }
+    override fun cancel() = timer.cancel()
 }

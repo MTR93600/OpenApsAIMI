@@ -48,9 +48,10 @@ import dev.zacsweers.metro.binding
  * - **Nothing has met a sensor.** The handshake matches the Java byte for byte on recorded
  *   exchanges, and two branches have no recorded exchange at all - the unbonded four digit
  *   pairing, and the short reconnect with a saved key. Nothing in this lot changes that.
- * - **A new sensor still cannot be set up.** An unbonded pairing reaches a point where the sensor
- *   asks for an OS pairing. CoreBluetooth has no API for that, so `createBond` answers false and
- *   the handshake stops there. This is not a gap in the port; iOS does not offer it.
+ * - **A new sensor pairs through the iPhone dialog.** An unbonded pairing reaches a point where
+ *   the sensor asks for an OS pairing. CoreBluetooth has no API for that and pairs by itself on
+ *   the next encrypted operation, showing its own dialog; `OnePlusGattClientIos` lets the
+ *   handshake go on and waits for the person to accept. Not yet tried with a real sensor.
  * - **A terminated app is not woken.** `bluetooth-central` in the Info.plist lets a *suspended*
  *   app be woken by a connected peripheral, which is the five minute heartbeat every iOS loop app
  *   relies on. CoreBluetooth **state restoration is not implemented** for this driver - every

@@ -39,6 +39,7 @@ import app.aaps.pump.medtrum.MedtrumPump
 import app.aaps.pump.medtrum.R
 import app.aaps.pump.medtrum.code.ConnectionState
 import app.aaps.pump.medtrum.code.PatchStep
+import app.aaps.pump.medtrum.compose.patch.patchWorkflowStart
 import app.aaps.pump.medtrum.comm.enums.BasalType
 import app.aaps.pump.medtrum.comm.enums.MedtrumPumpState
 import app.aaps.pump.medtrum.comm.enums.ModelType
@@ -144,16 +145,7 @@ class MedtrumOverviewViewModel(
     fun onClickChangePatch() {
         aapsLogger.debug(LTag.PUMP, "ChangePatch clicked!")
         viewModelScope.launch {
-            val nextStep = when {
-                medtrumPump.pumpState in listOf(MedtrumPumpState.STOPPED, MedtrumPumpState.NONE)                                                    ->
-                    PatchStep.PREPARE_PATCH
-
-                medtrumPump.pumpState <= MedtrumPumpState.EJECTED && !(medtrumPump.pumpState < MedtrumPumpState.PRIMING && medtrumPump.patchPrimed) ->
-                    PatchStep.RETRY_ACTIVATION
-
-                else                                                                                                                                ->
-                    PatchStep.START_DEACTIVATION
-            }
+            val nextStep = patchWorkflowStart(medtrumPump.pumpState, medtrumPump.patchPrimed)
             _events.tryEmit(MedtrumOverviewEvent.StartPatchWorkflow(nextStep))
         }
     }

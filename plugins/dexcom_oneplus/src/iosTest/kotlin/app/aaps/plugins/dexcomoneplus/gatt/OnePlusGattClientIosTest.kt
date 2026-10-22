@@ -306,14 +306,21 @@ class OnePlusGattClientIosTest {
 
     // -- what iOS cannot do ------------------------------------------------------------------------
 
+    /**
+     * iOS pairs by itself on the next encrypted operation, so a bond request is answered yes and
+     * the wait opens a pairing window. The bond state itself is still not claimed, and a bond cannot
+     * be removed by an app.
+     */
     @Test
-    fun bondingIsRefusedRatherThanFaked() {
-        val (_, gatt) = connected()
+    fun bondingIsLeftToIosWithoutClaimingAState() {
+        val (central, gatt) = connected()
 
+        assertTrue(gatt.createBond())
+        assertTrue(gatt.awaitBondComplete(10L))
         assertFalse(gatt.isBonded())
-        assertFalse(gatt.createBond())
         assertFalse(gatt.removeBond())
-        assertFalse(gatt.awaitBondComplete(10L))
+        // Nothing was asked of the central: there is no pairing call to make on iOS.
+        assertTrue(central.cancels.isEmpty())
     }
 
     // -- state restoration -------------------------------------------------------------------------

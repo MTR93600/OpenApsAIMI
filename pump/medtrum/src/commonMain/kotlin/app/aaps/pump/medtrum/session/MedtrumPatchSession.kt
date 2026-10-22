@@ -420,11 +420,16 @@ class MedtrumPatchSession(
      * Writes the patch off without asking the pump. This is the Android "discard" button: the
      * patch is in a fault state, or was never started, so no stop command can work and the person
      * throws it away.
+     *
+     * Also allowed after a stop command failed: Android offers "discard" on the deactivating page
+     * when the deactivation ends in an error. Not while a stop command is still running - only
+     * once [failure] says it ended.
      */
     suspend fun forceDeactivate(): PatchResult {
         val from = _step.value
-        if (from != PatchStep.START_DEACTIVATION && from != PatchStep.RETRY_ACTIVATION && from != PatchStep.RETRY_ACTIVATION_CONNECT)
-            return refuse("forceDeactivate is only allowed from the deactivation or retry step")
+        val failedStop = from == PatchStep.DEACTIVATE && _failure.value != null
+        if (from != PatchStep.START_DEACTIVATION && from != PatchStep.RETRY_ACTIVATION && from != PatchStep.RETRY_ACTIVATION_CONNECT && !failedStop)
+            return refuse("forceDeactivate is only allowed from the deactivation or retry step, or after a failed stop")
         return forceDeactivateFrom(from)
     }
 

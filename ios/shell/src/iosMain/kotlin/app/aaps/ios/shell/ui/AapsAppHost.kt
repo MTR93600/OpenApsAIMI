@@ -30,6 +30,7 @@ import app.aaps.appshell.navigation.handleQuickLaunchAction
 import app.aaps.appshell.navigation.handleSearchResultClick
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.notifications.AlarmSound
 import app.aaps.core.interfaces.notifications.IosNotificationDelegate
 import app.aaps.core.interfaces.protection.ProtectionCheck
 import app.aaps.core.interfaces.protection.ProtectionResult
@@ -118,7 +119,20 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
 
     // Before the composition, not beside it: the first view model built reads the active pump, and
     // an empty plugin list there throws from a coroutine and takes the process with it.
-    IosAppStartup(logger, PluginStoreRegistry(graph.pluginStore, graph.configBuilder), graph.contributedPlugins) { graph.periodicMaintenance.start(graph.appScope) }.run()
+    IosAppStartup(
+        aapsLogger = logger,
+        registry = PluginStoreRegistry(graph.pluginStore, graph.configBuilder),
+        contributedPlugins = graph.contributedPlugins,
+        apsPlugins = graph.contributedApsPlugins,
+        mergeApsPlugins = graph.config.APS,
+        startPeriodicWork = { graph.periodicMaintenance.start(graph.appScope) },
+        startMasterServices = {
+            graph.runningModeReconciler.start()
+            graph.runningModeExpiryScheduler.start()
+            graph.profileSwitchScheduler.start()
+            graph.automationRuntime.start()
+        }
+    ).run()
 
     // The real AIMI engine, built from the shell's own bindings and installed where iOS scene
     // code can reach it (`IosAimiEngineHolder.engine`). Built after startup on purpose: the
@@ -431,11 +445,8 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
                         rxBus = graph.rxBus,
                         activePlugin = graph.activePlugin,
                         pluginPermissions = graph.pluginPermissions,
-                        // Passed so the rules can be read and edited here. The runtime is deliberately
-                        // NOT started on a client: `MainApp` calls `automationRuntime.start()`, this shell
-                        // does not, and that is the design - a follower edits definitions and the master
-                        // runs them. Do not "fix" the missing start() call; it would give a second machine
-                        // the power to fire the same rules.
+                        // Passed so the rules can be read and edited here. `IosAppStartup` starts the
+                        // runtime, as `MainApp` does on an Android master.
                         automationRuntime = graph.automationRuntime,
                         preferences = graph.preferences,
                         rh = graph.textResolver,
@@ -445,8 +456,10 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
                         persistenceLayer = graph.persistenceLayer,
                         visibilityContext = graph.visibilityContext,
                         onNavigationRequest = { request, _ -> navigator.handleNavigationRequest(request) },
+                        // The same alarm as `ComposeMainActivity`: a dose that did not reach the pump
+                        // has to be heard, not only written to the log.
                         onShowDeliveryError = { comment, title ->
-                            logger.error(LTag.CORE, "Delivery error: ${graph.textResolver.gs(title)} - $comment")
+                            graph.uiInteraction.runAlarm(comment, graph.textResolver.gs(title), AlarmSound.BOLUS_ERROR)
                         },
                         withProtection = guardedBy(graph.protectionCheck),
                         // The same check `ComposeMainActivity` makes. It used to grant unconditionally

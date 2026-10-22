@@ -155,7 +155,7 @@ private class QuerySlot {
 
 /**
  * Gates the HealthKit permission prompt, and is false because **nothing ever assigns it** - in any
- * commit, in production or in a test. It was meant to follow `IosClientConfig.APS`, which this
+ * commit, in production or in a test. It was meant to follow `IosConfig.APS`, which this
  * module cannot see (`:ios:shell` depends on `:plugins:aps`, not the other way round), and that
  * wire was never made. So it is a constant wearing a `var`.
  *

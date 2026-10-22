@@ -24,20 +24,23 @@ import platform.UIKit.UIDevice
  * What kind of build this is, answered for iOS.
  *
  * On Android these values come from the Gradle flavour: `full`, `pumpcontrol`, `aapsclient`. iOS
- * builds only the client today, so the answers are fixed rather than generated - the app has no
- * pump drivers and does not run the loop, which is exactly what `AAPSCLIENT` means.
+ * builds one kind only: the **master** phone, the same role as the Android `full` flavour. It runs
+ * the loop, talks to the pump and the sensor, and writes and uploads the therapy records.
+ *
+ * The Xcode targets are still called AAPSClient and AAPSClient2. That name comes from the first
+ * iOS port, which was a follower. It does not decide the role any more; this class does.
  *
  * This is a real implementation, not a stand-in. Getting [APS] or [PUMPDRIVERS] wrong here would
  * make shared code offer features the app cannot perform.
  */
-class IosClientConfig(
+class IosConfig(
     override val VERSION_NAME: String = GeneratedBuildInfo.VERSION,
     override val APPLICATION_ID: String = NSBundle.mainBundle.bundleIdentifier ?: DEFAULT_BUNDLE_ID,
     /**
      * Where the option marker files are looked for. A test points it elsewhere.
      *
      * `extra` inside the app's Documents directory, which the Files app shows as
-     * **On My iPhone → AAPSClient**. That is the whole reason this can work at all: the folder is
+     * **On My iPhone → AAPS**. That is the whole reason this can work at all: the folder is
      * reachable by the person using the phone, so `extra/engineering_mode` can be created by hand
      * there exactly as it is created in `AAPS/extra` on Android.
      */
@@ -47,41 +50,24 @@ class IosClientConfig(
     override val SUPPORTED_NS_VERSION: Int = 150000
 
     /*
-     * APS is on at the owner's explicit decision, taken on 2026-10-18 after being shown what
-     * follows. It says shared code may offer the loop, and AIMI is now a real plugin here.
+     * The values of the Android `full` flavour: the loop runs here (APS), pump drivers are offered
+     * (PUMPDRIVERS), and this phone is not a follower (AAPSCLIENT false). The owner chose this on
+     * 2026-10-22: the iPhone is a master phone, exactly like AAPS on Android.
      *
-     * What is NOT yet true, and must be read before trusting this flag: no pump driver is
-     * registered with Metro on iOS. The Medtrum and Dash iOS drivers exist but are built by hand,
-     * so the only pump plugin this graph can contribute is `VirtualPumpPlugin`, and the only
-     * glucose source is `NSClientSourcePlugin` following Nightscout. So the engine decides, and
-     * for now there is nothing underneath to carry the decision out.
-     *
-     * PUMPCONTROL stays false: that flavour means "pump remote control without a loop", which is
-     * the opposite of what this build now is.
+     * PUMPCONTROL stays false: that flavour means "pump remote control without a loop".
      */
     override val APS: Boolean = true
     override val PUMPCONTROL: Boolean = false
     override val PUMPDRIVERS: Boolean = true
 
-    override val AAPSCLIENT: Boolean = true
+    override val AAPSCLIENT: Boolean = false
 
-    /**
-     * Which client this build is, worked out from the bundle it was built into.
-     *
-     * Read rather than written down, for the same reason as [appName] and the app icon: one Kotlin
-     * framework is linked into **both** AAPSClient and AAPSClient2, so a fixed answer here is wrong
-     * in one of the two targets no matter which value is chosen. It used to say client 1 always, and
-     * the overview tints itself by these flags - so both clients drew the same colour, which is the
-     * one thing the tint exists to prevent.
-     *
-     * Derived through [FLAVOR] so the shape matches Android, where `ConfigImpl` compares
-     * `BuildConfig.FLAVOR` against the same three names.
-     */
-    override val FLAVOR: String = clientFlavorFor(APPLICATION_ID)
+    /** The name of the Android flavour with the same role, so shared code that compares it agrees. */
+    override val FLAVOR: String = "full"
 
-    override val AAPSCLIENT1: Boolean = FLAVOR == "aapsclient"
-    override val AAPSCLIENT2: Boolean = FLAVOR == "aapsclient2"
-    override val AAPSCLIENT3: Boolean = FLAVOR == "aapsclient3"
+    override val AAPSCLIENT1: Boolean = false
+    override val AAPSCLIENT2: Boolean = false
+    override val AAPSCLIENT3: Boolean = false
     /**
      * Which configuration built this, from the bundle - the same trick as [appName] and the client
      * number, and for the same reason: one Kotlin framework serves every configuration, so it cannot
@@ -114,21 +100,16 @@ class IosClientConfig(
     /**
      * What the app calls itself, taken from the bundle it was built into.
      *
-     * Android sets `app_name` per flavour, and this build is a client, so the name is "AAPSClient" -
-     * not "AAPS", which is the name of the master. A follower claiming to be the master is exactly
-     * the confusion the flavour names exist to prevent.
-     *
-     * Read rather than written down, for the same reason as the app icon: one Kotlin framework is
-     * linked into both AAPSClient and AAPSClient2, and each target already sets its own
-     * `CFBundleDisplayName`. Asking the bundle therefore names the app that is really running, and
-     * cannot disagree with the name under its icon on the home screen.
+     * Read rather than written down: one Kotlin framework is linked into both Xcode targets, and
+     * each target sets its own `CFBundleDisplayName`. Asking the bundle therefore names the app that
+     * is really running, and cannot disagree with the name under its icon on the home screen.
      *
      * The fallback matters only in a test binary, which has no app bundle to ask.
      */
     override val appName: TextRef = TextRef.Literal(
         NSBundle.mainBundle.objectForInfoDictionaryKey("CFBundleDisplayName") as? String
             ?: NSBundle.mainBundle.objectForInfoDictionaryKey("CFBundleName") as? String
-            ?: "AAPSClient"
+            ?: "AAPS"
     )
 
     private val _initProgressFlow = MutableStateFlow(InitProgress(done = true))
@@ -173,13 +154,11 @@ class IosClientConfig(
     override fun isEngineeringMode(): Boolean = isEnabled(ExternalOptions.ENGINEERING_MODE)
 
     /**
-     * Always true, and correct rather than a shortcut.
-     *
-     * Android computes `if (!APS) true else isEngineeringMode() || !isDev()`. [APS] is false here
-     * because this is a follower, so that expression is true whatever the rest says. Written out
-     * rather than copied so it does not read as a stub.
+     * The same rule as Android's `ConfigImpl`. A build that is not a release one may run the closed
+     * loop only with the `engineering_mode` file in `extra`; `SafetyPlugin` reads this.
      */
-    override fun isEngineeringModeOrRelease(): Boolean = true
+    override fun isEngineeringModeOrRelease(): Boolean =
+        if (!APS) true else isEngineeringMode() || !isDev()
 
     /**
      * Read the same way Android does - by the presence of a file in the `extra` folder.
@@ -187,7 +166,7 @@ class IosClientConfig(
      * This answered a flat `false` before, on the grounds that iOS had nowhere for a user to put such
      * a file. That was true when it was written and stopped being true when the app's Documents
      * directory was exposed to the Files app: a person can now create
-     * **On My iPhone → AAPSClient → extra → engineering_mode** with no computer and no cable, which
+     * **On My iPhone → AAPS → extra → engineering_mode** with no computer and no cable, which
      * is the same gesture as `touch AAPS/extra/engineering_mode` on the other two platforms.
      *
      * Checked on each call rather than cached, because the file appears while the app is running -
@@ -202,25 +181,8 @@ class IosClientConfig(
     companion object {
 
         /** Used only where there is no app bundle to ask, which in practice means a test binary. */
-        internal const val DEFAULT_BUNDLE_ID = "info.nightscout.aapsclient"
+        internal const val DEFAULT_BUNDLE_ID = "app.aaps.client"
     }
-}
-
-/**
- * The Android flavour name this bundle identifier corresponds to.
- *
- * Separate and pure so it can be tested: the bundle identifier of a test binary is the test
- * binary's, so the real [IosClientConfig] can never observe anything but client 1 under test.
- *
- * Matched on the trailing `client<n>` rather than on a whole identifier, so it holds for both the
- * `app.aaps.client2` the targets use now and the older `info.nightscout.aapsclient2`. Client 1's
- * identifier is a prefix of the others, so the numbered ones are checked first. Anything
- * unrecognised is client 1, which keeps exactly one of the three flags true.
- */
-internal fun clientFlavorFor(bundleId: String): String = when {
-    bundleId.endsWith("client2") -> "aapsclient2"
-    bundleId.endsWith("client3") -> "aapsclient3"
-    else                         -> "aapsclient"
 }
 
 /**

@@ -57,6 +57,10 @@ import app.aaps.shared.clientbindings.ClientGraphBindings
 import app.aaps.ui.compose.overview.chips.ChipsViewModel
 import app.aaps.ui.compose.overview.graphs.GraphViewModel
 import app.aaps.ui.search.BuiltInSearchables
+import app.aaps.core.interfaces.di.APS
+import app.aaps.implementation.profile.ProfileSwitchScheduler
+import app.aaps.plugins.aps.loop.runningMode.IosRunningModeExpiryScheduler
+import app.aaps.plugins.aps.loop.runningMode.RunningModeReconciler
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.DependencyGraph
 import dev.zacsweers.metro.Includes
@@ -90,15 +94,9 @@ import kotlinx.coroutines.CoroutineScope
  * `AimiPlatformPreferenceItems` and `AimiTickCaptureHook`. `AimiStorage` and
  * `HormonitorStudyExporterProvider` are in `IosAimiPlatformBindings`.
  *
- * What is still missing is not a binding, and matters more than one:
- * - No pump driver is registered with Metro on iOS. The Medtrum and Dash iOS drivers exist but
- *   are built by hand, so the only pump plugin this graph contributes is `VirtualPumpPlugin`.
- * - There is no native CGM. The only glucose source is `NSClientSourcePlugin`, following
- *   Nightscout.
- *
- * So AIMI decides here, and for now nothing underneath carries the decision out. `IosClientConfig`
- * says the same thing next to `APS`, which the owner turned on knowing this. Read both before
- * concluding that an iPhone loops.
+ * The phone is a master (`IosConfig`), so these plugins really reach a pump and a sensor: the iOS
+ * Medtrum driver (`IosMedtrumPlugin`) and the Dexcom ONE+ / G7 driver (`DexcomOnePlusPlugin`) are
+ * contributed to the plugin map below, beside `VirtualPumpPlugin` and `NSClientSourcePlugin`.
  */
 @DependencyGraph(AppScope::class)
 interface IosAppGraph : MetroViewModelMultibindings {
@@ -191,13 +189,21 @@ interface IosAppGraph : MetroViewModelMultibindings {
     /**
      * Plugins that register themselves with `@ContributesIntoMap`, keyed by their order.
      *
-     * Only this one bucket, unlike Android, which also merges `@APS`, `@PumpDriver` and
-     * `@NotNSClient` sets. An iOS build is a follower client: `config.APS`, `config.PUMPDRIVERS`
-     * are false and `config.AAPSCLIENT` is true, so all three of those buckets are excluded by the
-     * same rules `:app` applies. One bucket also means no key can collide, which is what
-     * `mergePlugins` exists to detect on Android.
+     * `IosAppStartup` merges [contributedApsPlugins] into this list when `config.APS`, the same rule
+     * as `MetroGraphs.allPlugins` on Android. The `@PumpDriver` and `@NotNSClient` qualifiers are
+     * Android-only annotations, so no plugin compiled for iOS can carry them; the iOS pump drivers
+     * register in this unqualified bucket instead.
      */
     val contributedPlugins: Map<Int, PluginBase>
+
+    /** Plugins that belong only in a build that runs the loop - `ObjectivesPlugin` among them. */
+    @APS
+    val contributedApsPlugins: Map<Int, PluginBase>
+
+    /** Started by `IosAppStartup`, as `MainApp` starts them on Android. */
+    val runningModeReconciler: RunningModeReconciler
+    val runningModeExpiryScheduler: IosRunningModeExpiryScheduler
+    val profileSwitchScheduler: ProfileSwitchScheduler
     val automationRuntime: AutomationRuntime
     // The periodic housekeeping shared with Android, and the scope the shell drives it on.
     val periodicMaintenance: PeriodicMaintenance

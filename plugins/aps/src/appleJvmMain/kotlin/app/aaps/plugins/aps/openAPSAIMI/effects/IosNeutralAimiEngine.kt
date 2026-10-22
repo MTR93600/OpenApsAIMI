@@ -33,7 +33,7 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.iosTickAimiRoot
 /**
  * Scenes the user approved on 2026-10-05 (MEAL, SPORT, NIGHT, LOW_PREDICTION) and
  * 2026-10-08 (FASTING, first of the five iOS scenes). The iOS loop does not construct this while
- * `IosClientConfig.APS` is false. [AimiCommonEngineSwitch][app.aaps.plugins.aimiengine.AimiCommonEngineSwitch]
+ * `IosConfig.APS` is false. [AimiCommonEngineSwitch][app.aaps.plugins.aimiengine.AimiCommonEngineSwitch]
  * is a second switch, also off by default.
  */
 enum class IosNeutralScene {
