@@ -29,7 +29,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import app.aaps.core.data.model.GV
-import app.aaps.core.data.model.SourceSensor
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -65,6 +64,7 @@ import app.aaps.plugins.source.compose.CgmScaffold
 import app.aaps.plugins.source.compose.CgmStateChip
 import app.aaps.plugins.source.compose.CgmStepTimeline
 import app.aaps.plugins.source.compose.CgmUiState
+import app.aaps.plugins.source.compose.DexcomOnePlusProductionCard
 import app.aaps.plugins.source.compose.DexcomOnePlusUiLabels
 import app.aaps.plugins.source.compose.toUiState
 import app.aaps.plugins.source.logs.DriverLogFilter
@@ -393,7 +393,10 @@ private fun DexcomOnePlusStatusScreen(
     }
 }
 
-/** The sensor that feeds the loop. Accented so it is never confused with the pre-soak card. */
+/**
+ * The sensor that feeds the loop: the shared card, with the Android only "correct insertion date"
+ * action under it.
+ */
 @Composable
 private fun ProductionCard(
     phaseLabel: String,
@@ -408,47 +411,17 @@ private fun ProductionCard(
     correctSensorStartEnabled: Boolean,
     onCorrectSensorStart: suspend (Long) -> DexcomOnePlusSensorStartCorrection.Verdict,
 ) {
-    CgmCard(accent = true) {
-        CgmCardHeader(stringResource(R.string.dexcom_oneplus_production_heading)) {
-            CgmStateChip(state = phaseState, label = phaseLabel)
-        }
-        // Only this driver's own readings are shown here: the newest value in the database can come
-        // from another source, and labelling someone else's reading as this sensor's would be a lie.
-        val ownReading = newestGlucose?.takeIf { it.sourceSensor == SourceSensor.DEXCOM_ONEPLUS_NATIVE }
-        if (ownReading != null) {
-            Text(
-                text = stringResource(
-                    R.string.dexcom_oneplus_staging_last_reading,
-                    formatGlucose(ownReading.value),
-                    formatTime(ownReading.timestamp),
-                ),
-                style = MaterialTheme.typography.titleMedium,
-            )
-        } else {
-            Text(
-                text = stringResource(R.string.dexcom_oneplus_production_no_reading),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        CgmKeyValueRow(
-            label = stringResource(R.string.cgm_session_label),
-            value = stringResource(
-                if (sessionUp) R.string.dexcom_oneplus_session_up else R.string.dexcom_oneplus_session_down,
-            ),
-        )
-        lifecycle?.ageMs?.let { age ->
-            Text(
-                text = stringResource(R.string.dexcom_oneplus_sensor_age, formatAge(age)),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Text(
-            text = message,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    DexcomOnePlusProductionCard(
+        phaseLabel = phaseLabel,
+        phaseState = phaseState,
+        sessionUp = sessionUp,
+        message = message,
+        lifecycle = lifecycle,
+        newestGlucose = newestGlucose,
+        formatGlucose = formatGlucose,
+        formatTime = formatTime,
+        formatAge = formatAge,
+    ) {
         // Hidden while the engineering switch is off. The function also refuses before any write.
         if (correctSensorStartEnabled) {
             lifecycle?.startedAtEpochMs?.let { startedAt ->

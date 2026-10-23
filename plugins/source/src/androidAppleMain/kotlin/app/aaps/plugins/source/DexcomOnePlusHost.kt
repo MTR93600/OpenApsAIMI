@@ -13,8 +13,9 @@ import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScanner
  *
  * The plugin itself is shared code: the sensor slots, the pre-soak rules, the promotion gates and
  * the ingest path read the same on both platforms. What is not shared is the host around it - the
- * driver registry, the three setup screens, the foreground service and the status-bar notification
- * are Android things, and an iPhone has no equivalent of some of them.
+ * driver registry, how the three setup screens are opened (the screens themselves are shared), the
+ * foreground service and the status-bar notification - and an iPhone has no equivalent of some of
+ * them.
  *
  * Each of those favours is named here one by one, the same way `OnePlusPlatform` names what the
  * driver needs, so the plugin never has to know what an Android `Context` is.
@@ -104,6 +105,21 @@ interface DexcomOnePlusHost {
 
     /** Tell the user about a problem that happened while they were not looking. */
     fun alert(message: String)
+
+    /**
+     * A reading from the production sensor was stored, at [timestampMs].
+     *
+     * For a phone that suspends the app: the missed BG readings alarm
+     * (`LocalAlertUtils.checkStaleBGAlert`) runs inside the app, so a suspended app that is no
+     * longer woken by the sensor would never ring it. iPhone arms a system notification here.
+     *
+     * Nothing to do by default: on Android the app keeps running, and the periodic maintenance
+     * rings the missed-reading alarm as before.
+     */
+    fun onReadingStored(timestampMs: Long) = Unit
+
+    /** Take down what [onReadingStored] armed, because the plugin stops. Nothing by default. */
+    fun cancelMissedReadingAlarm() = Unit
 
     /**
      * A scanner for the setup screens to drive themselves, separate from the driver's own.

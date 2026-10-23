@@ -268,7 +268,16 @@ enum class NotificationId(
      * A pre-soak sensor (ONE+ / G7 or Libre 3) was switched to production by itself, without the
      * user pressing the promote button. Appended last on purpose, see the comment above.
      */
-    CGM_STAGING_AUTO_PROMOTED(NORMAL, CGM);
+    CGM_STAGING_AUTO_PROMOTED(NORMAL, CGM),
+
+    /**
+     * The ONE+ / G7 sensor on iPhone: pairing, warm-up and the time left. Android shows the same
+     * through its own warm-up notification. Appended last on purpose, see the comment above.
+     */
+    DEXCOM_ONEPLUS_WARMUP(NORMAL, CGM),
+
+    /** A ONE+ / G7 problem the person must see on iPhone: silent sensor, wrong sensor, failure. Appended last on purpose. */
+    DEXCOM_ONEPLUS_ALERT(IMPORTANT, CGM);
 
     companion object {
 

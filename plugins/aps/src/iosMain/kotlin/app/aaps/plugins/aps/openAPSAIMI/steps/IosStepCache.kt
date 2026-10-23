@@ -16,6 +16,14 @@ enum class IosStepDataStatus {
     /** The last good refresh is too old to trust. Getters answer `null` (unknown). */
     STALE,
 
+    /**
+     * HealthKit answered, but it has held no step sample at all for a long time (see
+     * `refreshStepCache`). That is what a refused read looks like, and also an iPhone with motion
+     * tracking switched off. Android answers `null` when it has no working step sensor, so the
+     * getters answer `null` (unknown) here too, never a 0 that would read as "the person sat still".
+     */
+    NO_STEP_SOURCE,
+
     /** A recent refresh worked. A 0 from a getter now is real: HealthKit saw no steps. */
     AVAILABLE,
 }
@@ -53,15 +61,16 @@ internal object IosStepBuckets {
  * The getters are called inside the dosing loop and must never wait for HealthKit, so they only
  * read this cache. Every method here is plain memory work.
  *
- * **Unknown is not zero.** Before the first good refresh, and when the last good refresh is older
- * than [MAX_AGE_MS], [status] is not [IosStepDataStatus.AVAILABLE]. The getters then return `null`.
- * Only when the status is available is a `0` a measurement.
+ * **Unknown is not zero.** Before the first good refresh, when the last good refresh is older
+ * than [MAX_AGE_MS], and when no step source could be proven ([IosStepDataStatus.NO_STEP_SOURCE]),
+ * [status] is not [IosStepDataStatus.AVAILABLE]. The getters then return `null`. Only when the
+ * status is available is a `0` a measurement.
  *
  * @param nowMs the clock, a parameter so a test can move time.
  */
 internal class IosStepCache(private val nowMs: () -> Long) {
 
-    private class Snapshot(val buckets: Map<Long, Int>, val refreshedAtMs: Long)
+    private class Snapshot(val buckets: Map<Long, Int>, val refreshedAtMs: Long, val noStepSource: Boolean = false)
 
     @Volatile
     private var snapshot: Snapshot? = null
@@ -69,6 +78,15 @@ internal class IosStepCache(private val nowMs: () -> Long) {
     /** Replaces the cache with the buckets of one good refresh. Buckets with no steps may be left out. */
     fun update(buckets: Map<Long, Int>, refreshedAtMs: Long = nowMs()) {
         snapshot = Snapshot(buckets.toMap(), refreshedAtMs)
+    }
+
+    /**
+     * Records a refresh in which HealthKit answered but no step source could be proven. The status
+     * becomes [IosStepDataStatus.NO_STEP_SOURCE] and the getters answer `null`. Old buckets are
+     * dropped: they cannot be shown as current when the source is not known to work.
+     */
+    fun markNoStepSource(refreshedAtMs: Long = nowMs()) {
+        snapshot = Snapshot(emptyMap(), refreshedAtMs, noStepSource = true)
     }
 
     /** Forgets everything. The status goes back to [IosStepDataStatus.NEVER_REFRESHED]. */
@@ -81,10 +99,10 @@ internal class IosStepCache(private val nowMs: () -> Long) {
 
     fun status(): IosStepDataStatus {
         val current = snapshot ?: return IosStepDataStatus.NEVER_REFRESHED
-        return if (nowMs() - current.refreshedAtMs <= MAX_AGE_MS) {
-            IosStepDataStatus.AVAILABLE
-        } else {
-            IosStepDataStatus.STALE
+        return when {
+            nowMs() - current.refreshedAtMs > MAX_AGE_MS -> IosStepDataStatus.STALE
+            current.noStepSource                         -> IosStepDataStatus.NO_STEP_SOURCE
+            else                                         -> IosStepDataStatus.AVAILABLE
         }
     }
 

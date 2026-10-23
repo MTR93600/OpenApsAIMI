@@ -5,16 +5,14 @@ import app.aaps.core.interfaces.logging.L
 import app.aaps.core.interfaces.logging.LTag
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.Foundation.NSDate
-import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSFileHandle
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSISO8601DateFormatter
+import platform.Foundation.NSLock
 import platform.Foundation.NSLog
-import platform.Foundation.NSSearchPathForDirectoriesInDomains
 import platform.Foundation.NSString
 import platform.Foundation.NSURL
 import platform.Foundation.NSUTF8StringEncoding
-import platform.Foundation.NSUserDomainMask
 import platform.Foundation.closeFile
 import platform.Foundation.create
 import platform.Foundation.dataUsingEncoding
@@ -35,21 +33,34 @@ import platform.Foundation.writeData
  * Kotlin/Native exposes `os_log_create` and `OS_LOG_DEFAULT` with nothing to call them with.
  * `NSLog` ends up in the same unified log.
  *
- * ## What this does not do yet
+ * ## Rotation and retention
  *
- * Rotation is by size and keeps one previous file, so a run cannot fill the device. It does not zip
- * and it does not keep a dated history, which the Android side does - that belongs with whatever
- * ends up sharing logs off the phone, and there is no such path on iOS yet.
+ * Rotation is by size: at [maxBytes] the live file becomes `aaps.log.1`, `.1` becomes `.2`, and so
+ * on, keeping [maxFiles] files in all (20 x 5 MB by default, so at most about 100 MB). Android keeps
+ * a longer, dated history of zipped 5 MB files; zipping each file here would cost CPU on every
+ * rotation, so the files are zipped only when they are sent (see `IosMaintenance`). The names are in
+ * [IosLogFiles], which the maintenance code uses too.
+ *
+ * ## Threads
+ *
+ * Every line is written under one lock. The logger is called from any thread, and without the lock
+ * two writers could interleave inside a line, or one could rotate the file while another was
+ * appending to it.
  */
 @OptIn(ExperimentalForeignApi::class)
 class AAPSLoggerIos(
-    private val fileName: String = "aaps.log",
+    private val fileName: String = IosLogFiles.LOG_NAME,
     private val maxBytes: Long = 5L * 1024 * 1024,
+    /** How many files to keep, the live one included. */
+    private val maxFiles: Int = 20,
+    /** Where the files go. Null means the app's Documents directory; a test passes its own. */
+    private val directory: String? = null,
     /** Reads the stored per-tag switches. Null before the graph can supply one - see [enabled]. */
     private val logConfig: (() -> L)? = null
 ) : AAPSLogger {
 
     private val timestamps = NSISO8601DateFormatter()
+    private val lock = NSLock()
 
     // ---------------------------------------------------------------------------------------------
     // AAPSLogger
@@ -123,7 +134,12 @@ class AAPSLoggerIos(
         // NSLog is a C varargs function, so `%@` needs a real Obj-C object. Passing the Kotlin
         // String straight through segfaults - it is not boxed into an NSString on the way.
         NSLog("%@", NSString.create(string = line))
-        appendToFile(line)
+        lock.lock()
+        try {
+            appendToFile(line)
+        } finally {
+            lock.unlock()
+        }
     }
 
     /**
@@ -162,21 +178,30 @@ class AAPSLoggerIos(
         handle.closeFile()
     }
 
-    /** Keeps one previous file, so the worst case on disk is twice [maxBytes]. */
+    /**
+     * Moves the live file to `.1` when it has reached [maxBytes], shifting the older ones up and
+     * dropping the oldest, so at most [maxFiles] files exist. Called with the lock held.
+     */
     private fun rotateIfNeeded(manager: NSFileManager, path: String) {
         val size = (manager.attributesOfItemAtPath(path, null)?.get("NSFileSize") as? Number)?.toLong() ?: return
         if (size < maxBytes) return
-        val previous = "$path.1"
-        manager.removeItemAtPath(previous, null)
-        manager.moveItemAtPath(path, previous, null)
+        val oldest = maxFiles - 1
+        if (oldest < 1) {
+            manager.removeItemAtPath(path, null)
+            return
+        }
+        manager.removeItemAtPath(IosLogFiles.rotatedName(path, oldest), null)
+        for (index in oldest - 1 downTo 1) {
+            val from = IosLogFiles.rotatedName(path, index)
+            if (manager.fileExistsAtPath(from)) manager.moveItemAtPath(from, IosLogFiles.rotatedName(path, index + 1), null)
+        }
+        manager.moveItemAtPath(path, IosLogFiles.rotatedName(path, 1), null)
     }
 
-    private fun logPath(): String? {
-        val documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true)
-            .firstOrNull() as? String ?: return null
-        return "$documents/$fileName"
-    }
+    private fun logDirectory(): String? = directory ?: IosLogFiles.defaultDirectory()
 
-    /** Where the log file is, so the app can offer it for sharing once there is a way to. */
+    private fun logPath(): String? = logDirectory()?.let { "$it/$fileName" }
+
+    /** Where the live log file is. */
     fun logFileUrl(): NSURL? = logPath()?.let { NSURL.fileURLWithPath(it) }
 }

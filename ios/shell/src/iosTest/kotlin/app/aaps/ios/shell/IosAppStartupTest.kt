@@ -17,6 +17,8 @@ import app.aaps.core.keys.interfaces.TextRef
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -174,5 +176,82 @@ class IosAppStartupTest {
         ).run()
 
         assertEquals(listOf("register", "initialize", "periodic", "master"), registry.calls)
+    }
+
+    /**
+     * The Nightscout role change moves the upload marks. It must be done before any plugin starts,
+     * or the first upload could already be on its way with the old marks.
+     */
+    @Test
+    fun `the step before the plugins runs after register and before initialize`() {
+        val registry = RecordingRegistry()
+        IosAppStartup(
+            SilentLogger, registry, mapOf(1 to NamedPlugin("a")),
+            startPeriodicWork = {},
+            beforePluginsStart = { registry.calls.add("before") }
+        ).run()
+
+        assertEquals(listOf("register", "before", "initialize"), registry.calls)
+    }
+
+    /** The version record, the start note and `EventAppInitialized` come last, as in `MainApp.doInit`. */
+    @Test
+    fun `the step after start runs after the master services`() {
+        val registry = RecordingRegistry()
+        IosAppStartup(
+            SilentLogger, registry, mapOf(1 to NamedPlugin("a")),
+            startPeriodicWork = {},
+            startMasterServices = { registry.calls.add("master") },
+            afterStart = { registry.calls.add("after") }
+        ).run()
+
+        assertEquals(listOf("register", "initialize", "master", "after"), registry.calls)
+    }
+
+    /** A failing last step is logged; it must not take the app down. */
+    @Test
+    fun `a failing step after start does not throw`() {
+        val registry = RecordingRegistry()
+        IosAppStartup(
+            SilentLogger, registry, emptyMap(),
+            startPeriodicWork = {},
+            afterStart = { throw IllegalStateException("database not ready") }
+        ).run()
+
+        assertEquals(listOf("register", "initialize"), registry.calls)
+    }
+
+    /**
+     * The master services wait for the plugins to finish starting, as `MainApp` waits on Android,
+     * and `run()` itself does not wait - it is called on the main thread.
+     */
+    @Test
+    fun `master services wait for the plugin start jobs`() = runTest {
+        val pluginStart = Job()
+        val registry = object : PluginRegistry {
+            val calls = mutableListOf<String>()
+            override fun register(plugins: List<PluginBase>) {
+                calls.add("register")
+            }
+
+            override fun initializeConfig(): List<Job> {
+                calls.add("initialize")
+                return listOf(pluginStart)
+            }
+        }
+        IosAppStartup(
+            SilentLogger, registry, emptyMap(),
+            startPeriodicWork = {},
+            startMasterServices = { registry.calls.add("master") },
+            startupScope = this
+        ).run()
+
+        // run() has returned, and the services have not started yet.
+        runCurrent()
+        assertEquals(listOf("register", "initialize"), registry.calls)
+
+        pluginStart.complete()
+        runCurrent()
+        assertEquals(listOf("register", "initialize", "master"), registry.calls)
     }
 }

@@ -5,6 +5,7 @@ import app.aaps.core.keys.interfaces.PreferenceEnabledCondition
 import app.aaps.core.keys.interfaces.StringPreferenceKey
 import app.aaps.core.keys.interfaces.StringValidator
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.pump.medtrum.MedtrumSettingsDefaults
 import app.aaps.pump.medtrum.R
 
 enum class MedtrumStringKey(
@@ -22,7 +23,8 @@ enum class MedtrumStringKey(
 
     MedtrumAlarmSettings(
         key = "alarm_setting",
-        defaultValue = "6",
+        // "6": beep only.
+        defaultValue = MedtrumSettingsDefaults.ALARM_SETTING.code.toString(),
         titleResId = R.string.alarm_setting_title,
         summaryResId = R.string.alarm_setting_summary,
         preferenceType = PreferenceType.LIST,

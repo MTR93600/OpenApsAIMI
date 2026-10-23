@@ -1,7 +1,5 @@
 package app.aaps.plugins.constraints.storage
 
-import android.os.Environment
-import android.os.StatFs
 import app.aaps.annotations.OpenForTesting
 import app.aaps.core.data.configuration.Constants
 import app.aaps.core.data.plugin.PluginType
@@ -25,6 +23,12 @@ import dev.zacsweers.metro.IntKey
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.binding
 
+/**
+ * Closes the loop off when the phone is nearly out of storage.
+ *
+ * Shared by every platform. Only the free space itself is read by the platform, through
+ * [availableInternalStorageMb]: `StatFs` on Android, the volume's capacity on iOS.
+ */
 @OpenForTesting
 @ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
 @APS
@@ -54,12 +58,6 @@ class StorageConstraintPlugin(
         return value
     }
 
-    fun availableInternalMemorySize(): Long {
-        val path = Environment.getDataDirectory()
-        val stat = StatFs(path.path)
-        val blockSize = stat.blockSizeLong
-        val blocksAvailable = stat.availableBlocksLong
-        val size = 1048576 // block size of 1 Mb
-        return blocksAvailable * blockSize / size
-    }
+    /** Free space in MB where the app keeps its data. Open so a test can give its own answer. */
+    fun availableInternalMemorySize(): Long = availableInternalStorageMb()
 }

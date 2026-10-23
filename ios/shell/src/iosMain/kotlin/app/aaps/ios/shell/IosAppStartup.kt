@@ -4,6 +4,15 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.ios.shell.di.GeneratedStringOwners
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * What has to happen before the first screen is composed - the iOS counterpart of `MainApp`.
@@ -17,11 +26,27 @@ import app.aaps.ios.shell.di.GeneratedStringOwners
  * there is nothing to gain from doing it in the background, and everything to lose: a view model
  * built while the list was still empty would fail exactly as before.
  *
- * ## The master services
+ * ## Waiting for the plugins, without blocking the main thread
  *
- * After the plugins, [startMasterServices] starts what `MainApp` starts on an Android master: the
- * running-mode reconciler and its expiry scheduler, the profile switch scheduler and the automation
- * runtime. Each of them checks `config.APS` or `config.AAPSCLIENT` itself, as on Android.
+ * `ConfigBuilder.initialize` only schedules each plugin's `onStart`. Android's `MainApp` waits for
+ * those jobs (at most 30 s) before it starts anything that reads plugin state. `run()` is called on
+ * the iOS main thread, where the same wait would freeze the screen for as long as the slowest
+ * driver takes. So the wait happens in [startupScope] instead, and [run] returns at once. When the
+ * plugins have started, or 30 s have passed:
+ *
+ * 1. [startMasterServices] starts what `MainApp` starts on an Android master: the running-mode
+ *    reconciler and its expiry scheduler, the profile switch scheduler, the automation runtime and
+ *    the keep-alive checks. They are started in [servicesContext], the main thread in the app, which
+ *    is where they were started before and where `CLLocationManager` and friends expect to be made.
+ * 2. [afterStart] does the rest of `MainApp.doInit` that a master needs: the version change record,
+ *    the "AAPS started" note and `EventAppInitialized`.
+ *
+ * The screen may be shown before step 1, as on Android after the splash; nothing it shows needs the
+ * master services to be running.
+ *
+ * Before the plugins start, [beforePluginsStart] runs. It is for work that must finish before any
+ * plugin can act - today the Nightscout role change, which has to move the upload marks before the
+ * first upload.
  *
  * ## What Android also does here, and this does not
  *
@@ -39,7 +64,18 @@ internal class IosAppStartup(
     /** Starts the shared periodic housekeeping. A lambda so a test can run this without building it. */
     private val startPeriodicWork: () -> Unit,
     /** Starts the services a master phone runs. A lambda for the same reason. */
-    private val startMasterServices: () -> Unit = {}
+    private val startMasterServices: () -> Unit = {},
+    /** Runs after the plugins are registered and before they start. */
+    private val beforePluginsStart: () -> Unit = {},
+    /** Runs after the master services, off the main thread. */
+    private val afterStart: suspend () -> Unit = {},
+    /**
+     * Where the wait for the plugins runs. Unconfined by default, so a test with no plugin jobs runs
+     * every step before [run] returns.
+     */
+    private val startupScope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined),
+    /** Where [startMasterServices] runs. The main thread in the app; the caller's thread in a test. */
+    private val servicesContext: CoroutineContext = EmptyCoroutineContext
 ) {
 
     fun run() {
@@ -61,13 +97,8 @@ internal class IosAppStartup(
         // `ConfigBuilderImpl` is shared, so this is the same `initialize()` Android's `MainApp` and
         // the desktop `Main` call, rather than a copy of part of what it does. Calling only the
         // category check - which is what this did before - left every enabled plugin unstarted.
-        // The jobs are deliberately not waited for here, and that is a gap rather than a decision made
-        // in comfort. Android waits for them (`MainApp`, bounded by 30 s) because everything it does
-        // next reads plugin state. `run()` is called on the iOS main thread, so the same wait would be
-        // a `runBlocking` that can freeze the UI for as long as the slowest driver's `onStart` - worse
-        // than the race it closes. Whoever wires up the splash screen described above should move this
-        // off the main thread and then wait, like Android does.
-        registry.initializeConfig()
+        beforePluginsStart()
+        val started = registry.initializeConfig()
 
         // The periodic housekeeping Android gets from KeepAliveWorker: the missed-reading alarm,
         // snooze shortening, and log and database trimming. The work is shared; only the trigger is
@@ -75,9 +106,19 @@ internal class IosAppStartup(
         // preference was drawn on this platform and did nothing, and the database never shrank.
         startPeriodicWork()
 
-        startMasterServices()
+        startupScope.launch {
+            if (withTimeoutOrNull(PLUGIN_START_WAIT) { started.joinAll() } == null)
+                aapsLogger.warn(LTag.CORE, "Plugins did not finish starting within $PLUGIN_START_WAIT")
+            withContext(servicesContext) { startMasterServices() }
+            try {
+                afterStart()
+            } catch (e: Exception) {
+                aapsLogger.error(LTag.CORE, "Start-up step after the plugins failed", e)
+            }
+            aapsLogger.debug(LTag.CORE, "Plugins and master services started")
+        }
 
-        aapsLogger.debug(LTag.CORE, "Plugins started and selection verified, starting the UI")
+        aapsLogger.debug(LTag.CORE, "Plugins registered and starting, showing the UI")
     }
 
     /**
@@ -94,5 +135,11 @@ internal class IosAppStartup(
             merged[key] = plugin
         }
         return merged
+    }
+
+    private companion object {
+
+        /** The same bound as `MainApp`. */
+        val PLUGIN_START_WAIT = 30.seconds
     }
 }

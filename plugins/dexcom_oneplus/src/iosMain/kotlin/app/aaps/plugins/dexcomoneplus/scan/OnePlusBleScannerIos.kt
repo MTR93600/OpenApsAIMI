@@ -210,7 +210,7 @@ class OnePlusBleScannerIos(
     private fun handle(event: BleCentralEvent.ScanResult) {
         val address = event.id
         val name = event.name
-        val result = OnePlusScanResult(address = address, name = name, rssi = RSSI_UNKNOWN)
+        val result = OnePlusScanResult(address = address, name = name, rssi = event.rssi ?: RSSI_UNKNOWN)
             .apply { seenElapsedMs = nowMs() }
         offerToPendingWait(address, name, result)
         offerToScreen(address, name, event, result)
@@ -254,7 +254,9 @@ class OnePlusBleScannerIos(
 
         val changed = lock.withLock {
             val previous = seen.put(address, result)
-            previous == null || previous.name != result.name
+            // The signal counts too, as on Android: the list is sorted by it, so a sensor that
+            // came closer has to move up.
+            previous == null || previous.name != result.name || previous.rssi != result.rssi
         }
         if (!changed) return
         val score = OnePlusAdvCandidate.rankScore(name, address, result.rssi, currentHint)
@@ -317,12 +319,13 @@ class OnePlusBleScannerIos(
     companion object {
 
         /**
-         * The RSSI of a hit, which iOS does not give us here.
+         * The RSSI of a hit that came with no signal strength.
          *
-         * `BleCentralEvent.ScanResult` carries no signal strength. It is used for ranking only, and
-         * every ranking rule in [OnePlusAdvCandidate] is a boost rather than a filter, so a fixed
-         * value changes the order of two equally matching sensors and nothing else. It is NOT
-         * reported as a real measurement: a screen that shows bars must treat this as unknown.
+         * CoreBluetooth gives the RSSI of every advertisement, and `BleCentralEvent.ScanResult`
+         * carries it, so a real hit is ranked by its real signal, as on Android. This value is
+         * only for a hit where iOS measured none (it reports 127 then, which the central turns
+         * into null). Zero is what the start screen already reads as "no live signal" and shows as
+         * no bars, so it is never taken for a real measurement.
          */
         const val RSSI_UNKNOWN = 0
 

@@ -2,6 +2,7 @@ package app.aaps.ios.shell.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.material3.Icon
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -28,15 +29,24 @@ import app.aaps.appshell.navigation.appNavGraph
 import app.aaps.appshell.navigation.handleNotificationAction
 import app.aaps.appshell.navigation.handleQuickLaunchAction
 import app.aaps.appshell.navigation.handleSearchResultClick
+import app.aaps.core.data.model.GlucoseUnit
+import app.aaps.core.data.model.TE
+import app.aaps.core.data.ue.Action
+import app.aaps.core.data.ue.Sources
+import app.aaps.core.interfaces.dst.DstHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.navigation.ElementType
 import app.aaps.core.interfaces.notifications.AlarmSound
 import app.aaps.core.interfaces.notifications.IosNotificationDelegate
+import app.aaps.core.interfaces.plugin.PermissionGroup
 import app.aaps.core.interfaces.protection.ProtectionCheck
 import app.aaps.core.interfaces.protection.ProtectionResult
 import app.aaps.core.interfaces.resources.TextRefValueRegistry
+import app.aaps.core.interfaces.rx.events.EventAppInitialized
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.delayUntilWallClock
+import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.BooleanNonKey
 import app.aaps.core.keys.StringKey
 import app.aaps.core.objects.di.CoreObjectsGraph
@@ -57,8 +67,6 @@ import app.aaps.ios.shell.platform.IosLanguage
 import app.aaps.ios.shell.platform.notOnThisPlatform
 import app.aaps.plugins.aps.openAPSAIMI.background.IosAimiBackgroundTasks
 import app.aaps.plugins.aps.openAPSAIMI.dashboard.AimiGlassDashboardSnapshotFeed
-import app.aaps.plugins.aps.openAPSAIMI.di.IosAimiEngineGraph
-import app.aaps.plugins.aps.openAPSAIMI.di.IosAimiEngineHolder
 import app.aaps.plugins.sync.nsclientV3.ws.NsSocketFactory
 import app.aaps.shared.clientbindings.ClientGraphBindings
 import app.aaps.shared.clientbindings.ClientViewModelFactory
@@ -73,6 +81,7 @@ import app.aaps.ui.compose.manageSheet.ManageViewModel
 import app.aaps.ui.compose.overview.chips.ChipsViewModel
 import app.aaps.ui.compose.overview.graphs.GraphViewModel
 import app.aaps.ui.compose.overview.statusLights.StatusViewModel
+import app.aaps.ui.compose.permissionsSheet.PermissionsSheet
 import app.aaps.ui.compose.permissionsSheet.PermissionsViewModel
 import app.aaps.ui.compose.profileManagement.viewmodels.ProfileEditorViewModel
 import app.aaps.ui.compose.profileManagement.viewmodels.ProfileHelperViewModel
@@ -88,9 +97,12 @@ import app.aaps.ui.compose.treatmentsSheet.TreatmentViewModel
 import app.aaps.ui.search.SearchViewModel
 import dev.zacsweers.metro.createGraphFactory
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import platform.Foundation.NSBundle
 import platform.Foundation.NSNotificationCenter
 import platform.Foundation.NSOperationQueue
 import platform.UIKit.UIApplicationDidBecomeActiveNotification
@@ -135,50 +147,25 @@ private fun startedOnce(nsSocketFactory: NsSocketFactory): StartedApp {
             graph.runningModeExpiryScheduler.start()
             graph.profileSwitchScheduler.start()
             graph.automationRuntime.start()
-            startKeepAliveChecks(graph.keepAliveChecks, graph.dateUtil, graph.appScope, logger)
-        }
+            startKeepAliveChecks(graph.keepAliveChecks, graph.dstHelper, graph.dateUtil, graph.appScope, logger)
+        },
+        // Blocking, but only reads one stored value - the database is touched once, on the first
+        // start after the phone stopped being a client. It has to be finished before the Nightscout
+        // plugin starts, or its first upload could still use the old marks.
+        beforePluginsStart = { runBlocking { graph.nsRoleChange.applyIfChanged() } },
+        afterStart = { recordAppStart(graph) },
+        // The wait for the plugins runs here, not on the main thread `startAapsApp` is called on.
+        startupScope = graph.appScope,
+        // Started on the main thread, as they were before the wait was added.
+        servicesContext = Dispatchers.Main
     ).run()
 
-    // The real AIMI engine, built from the shell's own bindings and installed where iOS scene
-    // code can reach it (`IosAimiEngineHolder.engine`). Built after startup on purpose: the
-    // plugin registry above is a lateinit, and some of the engine's transitive dependencies
-    // read it at construction time.
-    //
-    // A failure here must not take the app down. The neutral engine stays the fallback, so this
-    // logs loudly and moves on - `IosAimiEngineHolder.engine` stays null, which scenes read as
-    // "engine not wired".
-    try {
-        val engineGraph = createGraphFactory<IosAimiEngineGraph.Factory>().create(
-            profileUtil = graph.profileUtil,
-            fabricPrivacy = graph.fabricPrivacy,
-            preferences = graph.preferences,
-            uiInteraction = graph.uiInteraction,
-            notificationManager = graph.notificationManager,
-            persistenceLayer = graph.persistenceLayer,
-            tddCalculator = graph.tddCalculator,
-            tirCalculator = graph.tirCalculator,
-            dateUtil = graph.dateUtil,
-            profileFunction = graph.profileFunction,
-            iobCobCalculator = graph.iobCobCalculator,
-            activePlugin = graph.activePlugin,
-            textResolver = graph.textResolver,
-            aapsLogger = graph.logger,
-            decimalFormatter = graph.decimalFormatter,
-            constraintsChecker = graph.constraintsChecker,
-            keyValueStore = graph.keyValueStore,
-        )
-        IosAimiEngineHolder.install(engineGraph)
-        logger.debug(LTag.APS, "AIMI engine graph installed")
-
-        // The background jobs (ML training, telemetry retention) need the coordinator from this
-        // graph, so they are configured and queued here. Their handlers were registered earlier by
-        // `registerAimiBackgroundTasks`, from the Swift `init`: iOS only allows that before launch
-        // ends, and this function runs later. `install` catches its own failures, for the same
-        // reason as the try around it: a background job must not take the app down.
-        IosAimiBackgroundTasks.install(engineGraph.mlTrainingCoordinator, logger)
-    } catch (e: Exception) {
-        logger.error(LTag.APS, "AIMI engine graph failed to build; neutral engine remains the fallback", e)
-    }
+    // The AIMI background jobs (ML training, telemetry retention). The coordinator is the one the
+    // loop's engine holds, so a model trained in the background reloads the learner the loop doses
+    // with - on the next tick, as on Android. Their handlers were registered earlier by
+    // `registerAimiBackgroundTasks`, from the Swift `init`: iOS only allows that before launch ends.
+    // `install` catches its own failures: a background job must not take the app down.
+    IosAimiBackgroundTasks.install(graph.basalMlTrainingCoordinator, logger)
 
     // Attach to the notification centre. Registering a category only records it now, so that building
     // the graph does not need an app bundle - see `IosNotificationDelegate.install`. It is done here
@@ -212,6 +199,10 @@ private fun startedOnce(nsSocketFactory: NsSocketFactory): StartedApp {
     // gets from `ProcessLifecycleListener.onPause`. Same placement and the same UIKit reason.
     IosProtectionLifecycle(logger, graph.protectionCheck).start()
 
+    // Rebuilds the Nightscout socket when the app comes back after iOS suspended it. Same placement
+    // and the same UIKit reason as the two above.
+    graph.nsAppLifecycle.start()
+
     return StartedApp(graph, viewModelFactory).also { startedApp = it }
 }
 
@@ -223,17 +214,11 @@ private fun startedOnce(nsSocketFactory: NsSocketFactory): StartedApp {
  * modal). This file supplies the two things it cannot: the platform's own graph, and the navigation
  * that fills the space it leaves for `content`.
  *
- * ## What this is not, yet
+ * ## What iOS answers differently
  *
- * The overview - the home screen with the graph and the treatment buttons - is still assembled
- * inline inside `ComposeMainActivity` rather than in the shared navigation graph, so there is
- * nothing here to call for it. The app therefore opens on the preference screen, which **is** in
- * `appNavGraph` and is a fair test of the layers underneath: it reads and writes real preferences
- * through `NSUserDefaults`.
- *
- * The callbacks below are placeholders and say so in the log when used. They are the wiring a
- * platform is supposed to supply - opening a document picker, asking for a permission - and each
- * needs an iOS answer of its own rather than a shared one.
+ * Most callbacks below do what `ComposeMainActivity` does. The ones that cannot are reported on
+ * screen and in the log: `reportNotReady` for work still to do (a document picker), and
+ * `reportNotAvailable` for what iOS does not allow (opening an Android CGM app, closing the app).
  */
 fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
     val started = startedOnce(nsSocketFactory)
@@ -249,9 +234,8 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
 
     // Read once, outside the composition, for the same reason as the graph: decoding the icon on
     // every recomposition would be work for nothing.
-    // From the bundle, like the icon and for the same reason: one framework serves both AAPSClient
-    // and AAPSClient2, so each target's own `CFBundleDisplayName` is the only thing that can tell
-    // them apart. This was the literal "AAPS" before - the name of the *master*, on a follower.
+    // From the bundle, like the icon and for the same reason: one framework serves both Xcode
+    // targets, so each target's own `CFBundleDisplayName` is the only thing that can tell them apart.
     val appName = graph.textResolver.gs(graph.config.appName)
     val appIcon = loadAppIcon()
     if (appIcon == null) logger.error(LTag.CORE, "The app bundle gave no icon; showing the plain AAPS mark")
@@ -367,12 +351,12 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
                 // from a broken one. Both still log; they now also say so on screen.
                 //
                 // The two are kept apart because the answers are not the same. `reportNotReady` is
-                // work still to do - a document picker, a quick wizard - and will go away one at a
-                // time, so it logs at error like the rest of the missing pieces. `reportNotAvailable`
-                // is what an iOS client is: there is no Dexcom app to open and no Android permission
-                // to grant, and no amount of work will change that. Promising "not ready yet" there
-                // would be a lie, and logging it at error would fill the log with correct behaviour -
-                // which is exactly the split `notOnThisPlatform` already draws.
+                // work still to do - a document picker - and will go away one at a time, so it logs
+                // at error like the rest of the missing pieces. `reportNotAvailable` is what iOS is:
+                // there is no Dexcom app to open and an app may not close itself, and no amount of
+                // work will change that. Promising "not ready yet" there would be a lie, and logging
+                // it at error would fill the log with correct behaviour - which is exactly the split
+                // `notOnThisPlatform` already draws.
                 val snackbarHostState = LocalSnackbarHostState.current
                 val uiScope = rememberCoroutineScope()
                 val notReadyMessage = stringResource(CoreUiStrings.not_implemented_yet)
@@ -410,6 +394,39 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
                 )
                 val mainViewModel = metroViewModel<MainViewModel>()
 
+                // One instance for the overview badge and the sheet below, as `ComposeMainActivity`
+                // holds one for the whole activity. Asked for inside the overview it would be a
+                // second instance, and the badge and the sheet would disagree.
+                val permissionsViewModel = metroViewModel<PermissionsViewModel>()
+                val refreshPermissions: () -> Unit = remember {
+                    { graph.iosPluginPermissions.refresh { permissionsViewModel.refresh() } }
+                }
+                val requestPermission: (PermissionGroup) -> Unit = remember {
+                    { group -> graph.iosPluginPermissions.request(group, refreshPermissions) }
+                }
+                // Android refreshes in `onResume`. Here: once now, and each time the app is in front
+                // again - the user may have changed a permission in the Settings app meanwhile.
+                DisposableEffect(Unit) {
+                    refreshPermissions()
+                    val observer = NSNotificationCenter.defaultCenter.addObserverForName(
+                        name = UIApplicationDidBecomeActiveNotification,
+                        `object` = null,
+                        queue = NSOperationQueue.mainQueue,
+                        usingBlock = { refreshPermissions() }
+                    )
+                    onDispose { NSNotificationCenter.defaultCenter.removeObserver(observer) }
+                }
+                val permState by permissionsViewModel.uiState.collectAsState()
+                val permissionsSnackbarHostState = remember { SnackbarHostState() }
+                if (permState.showSheet) {
+                    PermissionsSheet(
+                        items = permState.items,
+                        snackbarHostState = permissionsSnackbarHostState,
+                        onRequestPermission = requestPermission,
+                        onDismiss = { permissionsViewModel.dismissSheet() }
+                    )
+                }
+
                 // The shared navigator: every route a tap can lead to is mapped in :appshell, so the
                 // only per-platform parts are the four actions below. iOS can honour one of them.
                 val navigator = ElementNavigator(
@@ -419,9 +436,10 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
                     protectionCheck = graph.protectionCheck,
                     configBuilder = graph.configBuilder,
                     dexcomBoyda = graph.dexcomBoyda,
-                    // The Dexcom build is an Android app; an iOS client reads glucose from Nightscout.
+                    // The CGM apps this opens are Android apps, found by package name.
                     onOpenCgmApp = { pkg -> reportNotAvailable("open CGM app $pkg") },
-                    // iOS gives an app no way to quit itself, and Apple treats that as a crash.
+                    // Only for a path that reaches the navigator with EXIT without going through
+                    // `handleOnIos` below. iOS gives an app no way to quit itself.
                     onExit = { reportNotAvailable("exit from the menu") },
                     // Needs a UIDocumentPicker, which nothing on iOS has yet.
                     onRequestDirectoryAccess = { reportNotReady("directory access") },
@@ -435,9 +453,20 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
                 //
                 // `rememberUpdatedState` because a new navigator is built on each recomposition,
                 // while the attachment should outlive them all.
-                val latestNavigator by rememberUpdatedState(navigator)
+                // Every request goes through here rather than straight to the navigator, for one
+                // element: EXIT. The navigator answers it with `configBuilder.exitApp`, which sends
+                // `EventAppExit` - and that stops Nightscout sync and other services - before asking
+                // the platform to end the process. iOS may not end it, so the app would keep running
+                // with sync stopped and nothing on screen saying so. The drawer already hides Exit on
+                // iOS (`MainViewModel.showExit`); this makes sure no other path reaches it.
+                val handleOnIos: (NavigationRequest) -> Unit = { request ->
+                    if (request is NavigationRequest.Element && request.type == ElementType.EXIT) reportNotAvailable("exit")
+                    else navigator.handleNavigationRequest(request)
+                }
+
+                val latestHandler by rememberUpdatedState(handleOnIos)
                 DisposableEffect(Unit) {
-                    navigationRelay.attach { request -> latestNavigator.handleNavigationRequest(request) }
+                    navigationRelay.attach { request -> latestHandler(request) }
                     onDispose { navigationRelay.attach(null) }
                 }
 
@@ -493,7 +522,7 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
                         prefFileList = graph.prefsFileInfo,
                         persistenceLayer = graph.persistenceLayer,
                         visibilityContext = graph.visibilityContext,
-                        onNavigationRequest = { request, _ -> navigator.handleNavigationRequest(request) },
+                        onNavigationRequest = { request, _ -> handleOnIos(request) },
                         // The same alarm as `ComposeMainActivity`: a dose that did not reach the pump
                         // has to be heard, not only written to the log.
                         onShowDeliveryError = { comment, title ->
@@ -504,17 +533,18 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
                         // with a "not wired yet" line, which is a stub that fails open on a protection
                         // check: with settings protection configured, the edit pencil on the
                         // QuickWizard, profile, insulin and temp-target screens opened with no prompt.
-                        // Those values feed dosing, and a client's edits are pushed to the master.
+                        // Those values feed dosing.
                         // `protectionCheck` was already on the graph - `withProtection` above uses it.
                         requestEditModeAuthorization = { onGranted ->
                             graph.protectionCheck.requestAuthorization(ProtectionCheck.Protection.PREFERENCES) { result ->
                                 if (result.grantedLevel != null) onGranted()
                             }
                         },
-                        onRefreshPermissions = { reportNotAvailable("permission refresh") },
-                        onExecuteQuickWizard = { guid -> reportNotReady("quick wizard $guid") },
+                        onRefreshPermissions = refreshPermissions,
+                        // The same call as `ComposeMainActivity`.
+                        onExecuteQuickWizard = { guid -> mainViewModel.executeQuickWizard(guid) },
                         onRequestDirectoryAccess = { reportNotReady("directory access - iOS needs a document picker") },
-                        onRequestPermission = { group -> reportNotAvailable("permission request $group") },
+                        onRequestPermission = requestPermission,
                         overview = {
                             OverviewScreen(
                                 mainViewModel = mainViewModel,
@@ -525,7 +555,7 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
                                 scenesViewModel = metroViewModel<ScenesViewModel>(),
                                 loopActionViewModel = metroViewModel<LoopActionViewModel>(),
                                 searchViewModel = metroViewModel<SearchViewModel>(),
-                                permissionsViewModel = metroViewModel<PermissionsViewModel>(),
+                                permissionsViewModel = permissionsViewModel,
                                 graphViewModel = graphs,
                                 chipsViewModel = chips,
                                 aimiGlassDashboardData = remember { AimiGlassDashboardSnapshotFeed.observe() },
@@ -543,7 +573,7 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
                                 pumpCommunicationStatus = graph.pumpCommunicationStatus,
                                 appName = appName,
                                 authorizationFailedMessage = "Authorization failed",
-                                onNavigate = { request -> navigator.handleNavigationRequest(request) },
+                                onNavigate = handleOnIos,
                                 onSearchResultClick = { entry -> navigator.handleSearchResultClick(entry) },
                                 onNotificationActionClick = { n -> navigator.handleNotificationAction(n.id) },
                                 onQuickLaunchActionClick = { action -> navigator.handleQuickLaunchAction(action) },
@@ -602,17 +632,49 @@ fun registerAimiBackgroundTasks() {
 }
 
 /**
+ * What `MainApp.doInit` records once the app has started: a version change, the "AAPS started" note
+ * and `EventAppInitialized`, which makes the IOB/COB calculator start its first calculation.
+ *
+ * Android waits 10 s before the two records, so that its resources are ready for translations.
+ * Nothing here needs that: the text registry is set up before the plugins start.
+ */
+private suspend fun recordAppStart(graph: IosAppGraph) {
+    // The build number is the counterpart of Android's version code. iOS has no git data in the build.
+    val buildNumber = (NSBundle.mainBundle.objectForInfoDictionaryKey("CFBundleVersion") as? String)?.toIntOrNull() ?: 0
+    graph.persistenceLayer.insertVersionChangeIfChanged(graph.config.VERSION_NAME, buildNumber, null, null)
+    if (graph.preferences.get(BooleanKey.NsClientLogAppStart))
+        graph.persistenceLayer.insertPumpTherapyEventIfNewByTimestamp(
+            therapyEvent = TE(
+                timestamp = graph.dateUtil.now(),
+                type = TE.Type.NOTE,
+                // The same stored text as Android, which builds it the same way. It is a record
+                // that is synced to Nightscout, not text on a screen.
+                note = graph.textResolver.gs(CoreUiStrings.androidaps_start) + " - " + graph.config.deviceManufacturer + " " + graph.config.deviceModelForUpload,
+                glucoseUnit = GlucoseUnit.MGDL
+            ),
+            action = Action.START_AAPS,
+            source = Sources.Aaps,
+            note = "",
+            listValues = listOf()
+        )
+    graph.rxBus.send(EventAppInitialized())
+}
+
+/**
  * Runs the master pump and APS checks every five minutes, as the Android `KeepAliveWorker` does.
  *
  * Waits on the wall clock: while iOS suspends the app a plain delay stops counting, so a check that
  * was due during the suspension runs at the first wake-up - a sensor reading, a pump event -
  * instead of five minutes after it. The first pass waits too, as Android's first worker run does.
  */
-private fun startKeepAliveChecks(checks: KeepAliveChecks, dateUtil: DateUtil, scope: CoroutineScope, logger: AAPSLogger) {
+private fun startKeepAliveChecks(checks: KeepAliveChecks, dstHelper: DstHelper, dateUtil: DateUtil, scope: CoroutineScope, logger: AAPSLogger) {
     scope.launch {
         while (isActive) {
             delayUntilWallClock(dateUtil.now() + KEEP_ALIVE_INTERVAL_MS, dateUtil::now)
             try {
+                // Before the checks, in the same order as `KeepAliveWorker`: a clock change found
+                // here suspends the loop before the checks look at it.
+                dstHelper.dstCheck()
                 checks.run()
             } catch (e: Exception) {
                 logger.error(LTag.CORE, "Keep-alive checks failed", e)

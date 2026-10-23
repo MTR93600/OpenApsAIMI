@@ -13,15 +13,9 @@ import dev.zacsweers.metro.SingleIn
 /**
  * Bindings that every iOS `AppScope` graph needs for the AIMI plugin and its engine.
  *
- * ### Why one shared container
- *
- * `IosAppGraph` (the shell) and `IosAimiEngineGraph` are both `AppScope` graphs, and both need
- * these two bindings. A container contributed to `AppScope` is added to every such graph, so each
- * binding lives in exactly one place. Providing them in the engine graph and again in the shell
- * would give one graph two bindings for the same type, and Metro would report a duplicate.
- *
- * Both are `@SingleIn(AppScope::class)` or stateless, so each graph keeps the same behaviour it
- * had when the engine graph provided them itself.
+ * Contributed to `AppScope`, so `IosAppGraph` - the one iOS app graph - gets them without naming
+ * them. There used to be a second graph for the engine; it was removed, because it built a second
+ * engine and learner that the loop never used.
  */
 @ContributesTo(AppScope::class)
 @BindingContainer

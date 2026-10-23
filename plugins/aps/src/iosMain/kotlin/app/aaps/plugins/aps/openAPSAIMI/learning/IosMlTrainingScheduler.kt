@@ -1,5 +1,8 @@
 package app.aaps.plugins.aps.openAPSAIMI.learning
 
+import app.aaps.plugins.aps.openAPSAIMI.background.BackgroundTaskSubmit
+import app.aaps.plugins.aps.openAPSAIMI.background.reportBackgroundTaskSubmit
+import app.aaps.plugins.aps.openAPSAIMI.background.submitToBackgroundTaskScheduler
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.CoroutineScope
@@ -9,6 +12,7 @@ import kotlinx.coroutines.launch
 import kotlin.concurrent.Volatile
 import platform.BackgroundTasks.BGProcessingTask
 import platform.BackgroundTasks.BGProcessingTaskRequest
+import platform.BackgroundTasks.BGTaskRequest
 import platform.BackgroundTasks.BGTaskScheduler
 import platform.Foundation.NSDate
 import platform.Foundation.dateWithTimeIntervalSinceNow
@@ -71,14 +75,26 @@ object IosMlTrainingScheduler {
     @Volatile
     private var coordinator: BasalMlTrainingCoordinator? = null
 
+    @Volatile
+    private var logger: (String) -> Unit = {}
+
+    /** How a request reaches iOS. A test replaces it to see what happens when iOS says no. */
+    @Volatile
+    internal var submit: (BGTaskRequest) -> BackgroundTaskSubmit = ::submitToBackgroundTaskScheduler
+
     /**
-     * Provides the training coordinator. Call once at app launch, before [register].
+     * Provides the training coordinator. Call once at app launch.
      *
-     * The coordinator is normally built from the app's DI graph:
-     * `BasalMlTrainingCoordinator(iosAimiStorage(), basalNeuralLearner, logger)`.
+     * It must be the coordinator of the app graph, the one the loop's `DetermineBasalaimiSMB2`
+     * holds. That coordinator reloads the learner the loop doses with, so a model trained here is
+     * used from the next tick, as on Android. A coordinator from a second graph reloads a second
+     * learner that nothing doses with, and the new model then reaches dosing only after a restart.
+     *
+     * @param logger gets a line when iOS refuses to queue the next run.
      */
-    fun configure(coordinator: BasalMlTrainingCoordinator) {
+    fun configure(coordinator: BasalMlTrainingCoordinator, logger: (String) -> Unit = {}) {
         this.coordinator = coordinator
+        this.logger = logger
     }
 
     /**
@@ -129,7 +145,8 @@ object IosMlTrainingScheduler {
         }
 
     /**
-     * Enqueues the next training run.
+     * Enqueues the next training run. Returns what iOS answered: `false`, with a log line, when the
+     * request was refused (identifier missing from Info.plist, background refresh off, simulator).
      *
      * `requiresExternalPower` stays false on purpose. Asking for a charger is what stopped Android
      * from ever training, and training is a short on-device job, so there is nothing to protect the
@@ -137,15 +154,8 @@ object IosMlTrainingScheduler {
      *
      * `requiresNetworkConnectivity` stays false: training is fully on-device.
      */
-    fun schedule(): Boolean {
-        val request = newTrainingRequest()
-        return try {
-            BGTaskScheduler.sharedScheduler.submitTaskRequest(request, error = null)
-            true
-        } catch (e: Exception) {
-            false
-        }
-    }
+    fun schedule(): Boolean =
+        reportBackgroundTaskSubmit(TASK_IDENTIFIER, submit(newTrainingRequest()), logger)
 
     /**
      * Removes the planned training request, if there is one.

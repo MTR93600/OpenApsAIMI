@@ -14,6 +14,8 @@ import app.aaps.pump.medtrum.comm.RecordingPumpSync
 import app.aaps.pump.medtrum.comm.FakeDetailedBolusInfoStorage
 import app.aaps.pump.medtrum.comm.FakeTemporaryBasalStorage
 import app.aaps.pump.medtrum.comm.enums.MedtrumPumpState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.test.runTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -80,7 +82,8 @@ class IosMedtrumPluginWiringTest {
         pumpSync = pumpSync,
         detailedBolusInfoStorage = FakeDetailedBolusInfoStorage(),
         temporaryBasalStorage = FakeTemporaryBasalStorage(),
-        notificationManager = RecordingNotificationManager()
+        notificationManager = RecordingNotificationManager(),
+        bolusProgressData = testBolusProgressData(CoroutineScope(SupervisorJob()))
     )
 
     // -- The plugin's own declaration -----------------------------------------------------------
@@ -129,10 +132,19 @@ class IosMedtrumPluginWiringTest {
         assertTrue(host.driver.isSuspended())
     }
 
+    // This test used to say that the pump is always the Nano. Android takes the model from the device
+    // type (`MedtrumPump.pumpType()`), so a fresh host with no device type yet is "untested", like on
+    // Android, and a 300U is no longer reported as a Nano.
     @Test
-    fun `the pump is the Nano and follows daylight saving like on Android`() {
+    fun `the model comes from the device type and the pump follows daylight saving like on Android`() {
         val host = newHost()
+        assertEquals(PumpType.MEDTRUM_UNTESTED, host.driver.model())
+        host.state.deviceType = 80 // MD0201
         assertEquals(PumpType.MEDTRUM_NANO, host.driver.model())
+        host.state.deviceType = 98 // MD8301
+        assertEquals(PumpType.MEDTRUM_300U, host.driver.model())
+        // The description follows: the 300U holds 300 U, the Nano 200 U.
+        assertEquals(300, host.driver.pumpDescription.maxReservoirReading)
         assertEquals(ManufacturerType.Medtrum, host.driver.manufacturer())
         assertTrue(host.driver.canHandleDST())
     }

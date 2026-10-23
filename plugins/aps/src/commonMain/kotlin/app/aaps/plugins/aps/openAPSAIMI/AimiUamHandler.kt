@@ -9,9 +9,13 @@ import kotlin.concurrent.Volatile
  * The pure state — live runtime confidence and the persisted-confidence supplier —
  * lives here in common code. Model inference itself is platform-specific, so
  * [predictSmbUam] delegates to an installed [AimiUamPredictor]:
- * - Android installs its TFLite interpreter.
- * - iOS has [IosUamTflite][app.aaps.plugins.aps.openAPSAIMI.ml.IosUamTflite] for raw
- *   inference, not yet wired — until then the model-absent path applies.
+ * - Android has `AimiModelHandler.installAsPredictor`, but since commit 2f2a30e920 (the move of
+ *   this object to common code) nothing calls it. So today Android also runs the model-absent path.
+ * - iOS has `IosUamTflite` for raw inference, matched bit for bit against Android, and nothing
+ *   installs it either.
+ *
+ * Both phones therefore dose the same today. Installing a predictor on one phone only would make
+ * them differ, so the two must be switched on together, as one decision.
  *
  * With no predictor installed, [predictSmbUam] returns 0f (model absent). The
  * engine already handles that: the SMB falls back to the rule-based dose.

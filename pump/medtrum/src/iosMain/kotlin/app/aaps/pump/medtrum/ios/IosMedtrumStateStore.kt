@@ -1,5 +1,6 @@
 package app.aaps.pump.medtrum.ios
 
+import app.aaps.pump.medtrum.MedtrumSettingsDefaults
 import app.aaps.pump.medtrum.comm.enums.AlarmSetting
 import app.aaps.pump.medtrum.comm.enums.MedtrumPumpState
 import app.aaps.pump.medtrum.session.MedtrumSessionState
@@ -27,6 +28,8 @@ class IosMedtrumStateStore(
 
     fun save(state: MedtrumSessionState) {
         defaults.setInteger(state.pumpSN, forKey = key("pumpSN"))
+        // The model of the pump (Nano or 300U). Android keeps it under `MedtrumIntNonKey.DeviceType`.
+        defaults.setInteger(state.deviceType.toLong(), forKey = key("deviceType"))
         defaults.setInteger(state.patchId, forKey = key("patchId"))
         defaults.setInteger(state.patchSessionToken, forKey = key("patchSessionToken"))
         defaults.setInteger(state.patchStartTime, forKey = key("patchStartTime"))
@@ -37,6 +40,8 @@ class IosMedtrumStateStore(
         defaults.setInteger(state.desiredAlarmSetting.ordinal.toLong(), forKey = key("desiredAlarmSetting"))
         defaults.setInteger(state.desiredHourlyMaxInsulin.toLong(), forKey = key("desiredHourlyMaxInsulin"))
         defaults.setInteger(state.desiredDailyMaxInsulin.toLong(), forKey = key("desiredDailyMaxInsulin"))
+        defaults.setBool(state.desiredPatchExpiration, forKey = key("desiredPatchExpiration"))
+        defaults.setInteger(USER_SETTINGS_VERSION, forKey = key("userSettingsVersion"))
         defaults.setObject(state.actualBasalProfile.toHex(), forKey = key("actualBasalProfile"))
         defaults.setDouble(state.reservoir, forKey = key("reservoir"))
         // The offset the pump was last given, so a restart does not hide a time zone change.
@@ -73,6 +78,13 @@ class IosMedtrumStateStore(
         defaults.synchronize()
     }
 
+    /** Forgets the saved CoreBluetooth identifier, for example because another pump was chosen. */
+    fun forgetPeripheralId() {
+        defaults.removeObjectForKey(key("peripheralId"))
+        defaults.removeObjectForKey(key("peripheralSerial"))
+        defaults.synchronize()
+    }
+
     /** The identifier saved for [serial], or null: an identifier of another pump is never returned. */
     fun loadPeripheralId(serial: Long): String? {
         if (serial == 0L) return null
@@ -89,6 +101,7 @@ class IosMedtrumStateStore(
             return // nothing else persisted yet
         }
         state.pumpSN = serial ?: defaults.integerForKey(key("pumpSN"))
+        state.deviceType = defaults.integerForKey(key("deviceType")).toInt()
         state.patchId = defaults.integerForKey(key("patchId"))
         state.patchSessionToken = defaults.integerForKey(key("patchSessionToken"))
         state.patchStartTime = defaults.integerForKey(key("patchStartTime"))
@@ -100,11 +113,17 @@ class IosMedtrumStateStore(
             // An unknown byte is not trusted: stay NONE (not active).
             state.pumpState = MedtrumPumpState.entries.find { it.state == saved } ?: MedtrumPumpState.NONE
         }
-        state.desiredAlarmSetting = AlarmSetting.entries.getOrNull(
-            defaults.integerForKey(key("desiredAlarmSetting")).toInt()
-        ) ?: AlarmSetting.LIGHT_VIBRATE_AND_BEEP
-        state.desiredHourlyMaxInsulin = defaults.integerForKey(key("desiredHourlyMaxInsulin")).toInt()
-        state.desiredDailyMaxInsulin = defaults.integerForKey(key("desiredDailyMaxInsulin")).toInt()
+        // Older versions saved their own defaults here (40 U, 180 U, light + vibrate + beep), not
+        // values a person chose: there was no screen to choose them. Those are not read back, so
+        // the state keeps the Android defaults.
+        if (defaults.integerForKey(key("userSettingsVersion")) == USER_SETTINGS_VERSION) {
+            state.desiredAlarmSetting = AlarmSetting.entries.getOrNull(
+                defaults.integerForKey(key("desiredAlarmSetting")).toInt()
+            ) ?: MedtrumSettingsDefaults.ALARM_SETTING
+            state.desiredHourlyMaxInsulin = defaults.integerForKey(key("desiredHourlyMaxInsulin")).toInt()
+            state.desiredDailyMaxInsulin = defaults.integerForKey(key("desiredDailyMaxInsulin")).toInt()
+            state.desiredPatchExpiration = defaults.boolForKey(key("desiredPatchExpiration"))
+        }
         defaults.stringForKey(key("actualBasalProfile"))?.fromHex()?.let {
             state.actualBasalProfile = it
         }
@@ -121,15 +140,25 @@ class IosMedtrumStateStore(
 
     fun clear() {
         listOf(
-            "snInput", "peripheralId", "peripheralSerial", "pumpSN", "patchId", "patchSessionToken", "patchStartTime",
-            "currentSequenceNumber", "syncedSequenceNumber", "pumpState", "desiredAlarmSetting",
-            "desiredHourlyMaxInsulin", "desiredDailyMaxInsulin", "actualBasalProfile", "pumpTimeZoneOffset",
+            "snInput", "peripheralId", "peripheralSerial", "pumpSN", "deviceType", "patchId", "patchSessionToken",
+            "patchStartTime", "currentSequenceNumber", "syncedSequenceNumber", "pumpState", "desiredAlarmSetting",
+            "desiredHourlyMaxInsulin", "desiredDailyMaxInsulin", "desiredPatchExpiration", "userSettingsVersion",
+            "actualBasalProfile", "pumpTimeZoneOffset",
             "reservoir", "lastBolusTime", "lastBolusAmount",
         ).forEach { defaults.removeObjectForKey(key(it)) }
         defaults.synchronize()
     }
 
     private fun key(name: String) = "$prefix$name"
+
+    private companion object {
+
+        /**
+         * Marks the pump settings saved since they have the Android defaults. Saved settings
+         * without this mark are the old iPhone defaults and are not read back.
+         */
+        const val USER_SETTINGS_VERSION: Long = 2
+    }
 
     private fun ByteArray.toHex(): String =
         joinToString("") { it.toInt().and(0xFF).toString(16).padStart(2, '0') }

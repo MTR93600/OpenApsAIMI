@@ -4,6 +4,7 @@ import app.aaps.core.interfaces.pump.ble.session.BleAdapterState
 import app.aaps.core.interfaces.pump.ble.session.BleCentralEvent
 import app.aaps.plugins.dexcomoneplus.FakeBleCentral
 import app.aaps.plugins.dexcomoneplus.gatt.OnePlusBluetoothUuids
+import app.aaps.plugins.dexcomoneplus.identity.OnePlusAdvCandidate
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorIdentity
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusStoredSession
 import kotlin.test.AfterTest
@@ -76,6 +77,54 @@ class OnePlusBleScannerIosTest {
         assertEquals(1, found.size)
         assertEquals("PERIPHERAL-1", found[0].address)
         assertTrue(scanner.isScanning())
+    }
+
+    @Test
+    fun aHitCarriesTheSignalStrengthCoreBluetoothMeasured() {
+        val central = FakeBleCentral()
+        val scanner = scanner(central)
+        val found = mutableListOf<OnePlusScanResult>()
+
+        scanner.startScan { found += it }
+        scanner.onEvent(advertisement(name = "DX02aS", id = "PERIPHERAL-1").copy(rssi = -63))
+
+        assertEquals(-63, found.single().rssi)
+    }
+
+    @Test
+    fun aHitWithNoMeasuredSignalIsReportedAsUnknown() {
+        val central = FakeBleCentral()
+        val scanner = scanner(central)
+        val found = mutableListOf<OnePlusScanResult>()
+
+        scanner.startScan { found += it }
+        scanner.onEvent(advertisement(name = "DX02aS", id = "PERIPHERAL-1"))
+
+        assertEquals(OnePlusBleScannerIos.RSSI_UNKNOWN, found.single().rssi)
+    }
+
+    /** As on Android: the list is sorted by signal, so a sensor that came closer is reported again. */
+    @Test
+    fun aChangedSignalIsReportedAgainButTheSameSignalIsNot() {
+        val central = FakeBleCentral()
+        val scanner = scanner(central)
+        val found = mutableListOf<OnePlusScanResult>()
+
+        scanner.startScan { found += it }
+        scanner.onEvent(advertisement(name = "DX02aS", id = "PERIPHERAL-1").copy(rssi = -80))
+        scanner.onEvent(advertisement(name = "DX02aS", id = "PERIPHERAL-1").copy(rssi = -80))
+        scanner.onEvent(advertisement(name = "DX02aS", id = "PERIPHERAL-1").copy(rssi = -55))
+
+        assertEquals(listOf(-80, -55), found.map { it.rssi })
+    }
+
+    /** Two sensors in range: the stronger one ranks higher when nothing else tells them apart. */
+    @Test
+    fun theStrongerOfTwoEqualSensorsRanksHigher() {
+        val near = OnePlusAdvCandidate.rankScore("DX02aS", "PERIPHERAL-1", -50, null)
+        val far = OnePlusAdvCandidate.rankScore("DX02bT", "PERIPHERAL-2", -85, null)
+
+        assertTrue(near > far)
     }
 
     @Test

@@ -7,6 +7,7 @@ import app.aaps.core.interfaces.configuration.ConfigBuilder
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.constraints.Objectives
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.dst.DstHelper
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
@@ -47,11 +48,15 @@ import app.aaps.database.di.IosAppDatabaseBuilder
 import app.aaps.implementation.maintenance.PeriodicMaintenance
 import app.aaps.implementation.maintenance.cloud.AuthBrowser
 import app.aaps.implementation.notifications.SnackbarNotificationFallback
+import app.aaps.implementation.plugin.IosPluginPermissions
 import app.aaps.implementation.plugin.PluginStore
 import app.aaps.implementation.receivers.IosReceiverStatusStore
 import app.aaps.plugins.aps.openAPSAIMI.OpenAPSAIMIPlugin
+import app.aaps.plugins.aps.openAPSAIMI.learning.BasalMlTrainingCoordinator
 import app.aaps.plugins.automation.AutomationRuntime
 import app.aaps.plugins.configuration.setupwizard.SWDefinition
+import app.aaps.plugins.sync.nsclientV3.IosNsRoleChange
+import app.aaps.plugins.sync.nsclientV3.ws.IosNsAppLifecycle
 import app.aaps.plugins.sync.nsclientV3.ws.NsSocketFactory
 import app.aaps.shared.clientbindings.ClientGraphBindings
 import app.aaps.ui.compose.overview.chips.ChipsViewModel
@@ -206,6 +211,24 @@ interface IosAppGraph : MetroViewModelMultibindings {
     val runningModeExpiryScheduler: IosRunningModeExpiryScheduler
     val profileSwitchScheduler: ProfileSwitchScheduler
     val keepAliveChecks: KeepAliveChecks
+
+    /** The coordinator the loop's `DetermineBasalaimiSMB2` holds; it reloads the learner the loop doses with. */
+    val basalMlTrainingCoordinator: BasalMlTrainingCoordinator
+
+    /** Run by the keep-alive loop before the checks, as `KeepAliveWorker` does on Android. */
+    val dstHelper: DstHelper
+
+    /** Moves the Nightscout upload marks once when a former client becomes the master. */
+    val nsRoleChange: IosNsRoleChange
+
+    /** Checks the Nightscout connection when the app comes back from the background. */
+    val nsAppLifecycle: IosNsAppLifecycle
+
+    /**
+     * The concrete permissions class, not only [pluginPermissions]: the shell asks it to read the
+     * states again on resume and to ask for a permission, which the shared interface has no words for.
+     */
+    val iosPluginPermissions: IosPluginPermissions
     val automationRuntime: AutomationRuntime
     // The periodic housekeeping shared with Android, and the scope the shell drives it on.
     val periodicMaintenance: PeriodicMaintenance

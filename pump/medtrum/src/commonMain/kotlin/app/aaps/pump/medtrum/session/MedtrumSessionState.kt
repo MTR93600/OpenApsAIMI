@@ -1,5 +1,6 @@
 package app.aaps.pump.medtrum.session
 
+import app.aaps.pump.medtrum.MedtrumSettingsDefaults
 import app.aaps.pump.medtrum.code.ConnectionState
 import app.aaps.pump.medtrum.comm.MedtrumLogger
 import app.aaps.pump.medtrum.comm.MedtrumProtocolState
@@ -42,10 +43,20 @@ class MedtrumSessionState(
     override var patchStartTime: Long = 0L
     override var currentSequenceNumber: Int = 0
     override var syncedSequenceNumber: Int = 0
-    override var desiredPatchExpiration: Boolean = false
-    override var desiredAlarmSetting: AlarmSetting = AlarmSetting.LIGHT_VIBRATE_AND_BEEP
-    override var desiredHourlyMaxInsulin: Int = 40
-    override var desiredDailyMaxInsulin: Int = 180
+
+    // The settings the patch gets at activation and with SetPatch. The same defaults as the Android
+    // preferences, so an iPhone sets up a patch exactly like Android does.
+    override var desiredPatchExpiration: Boolean = MedtrumSettingsDefaults.PATCH_EXPIRATION
+    override var desiredAlarmSetting: AlarmSetting = MedtrumSettingsDefaults.ALARM_SETTING
+    override var desiredHourlyMaxInsulin: Int = MedtrumSettingsDefaults.HOURLY_MAX_INSULIN
+    override var desiredDailyMaxInsulin: Int = MedtrumSettingsDefaults.DAILY_MAX_INSULIN
+
+    /** Android `MedtrumPump.desiredPumpWarning`: pump warnings are shown to the person. */
+    var desiredPumpWarning: Boolean = MedtrumSettingsDefaults.PUMP_WARNING_NOTIFICATION
+
+    /** Android `MedtrumPump.desiredPumpWarningExpiryThresholdHours`: when the "expires soon" warning comes. */
+    var desiredPumpWarningExpiryThresholdHours: Int = MedtrumSettingsDefaults.PUMP_EXPIRY_WARNING_HOURS
+
     override var actualBasalProfile: ByteArray = byteArrayOf(0)
     override var pumpTimeZoneOffset: Int = 0
 
@@ -104,6 +115,10 @@ class MedtrumSessionState(
 
     val tempBasalInProgress: Boolean
         get() = lastBasalType == BasalType.ABSOLUTE_TEMP || lastBasalType == BasalType.RELATIVE_TEMP
+
+    /** Android `MedtrumPump.tempBasalAbsoluteRate`: the rate of the running temp basal, 0 without one. */
+    val tempBasalAbsoluteRate: Double
+        get() = if (tempBasalInProgress) lastBasalRate else 0.0
 
     override fun handleBasalStatusUpdate(
         basalType: BasalType,

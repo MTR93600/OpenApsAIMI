@@ -19,11 +19,22 @@ import kotlin.test.assertTrue
  * The real driver is shared code and the host can reach it, so the tests below say which of the
  * two comes back and when. Nothing here builds `OnePlusIosPlatform`: that opens a
  * `CBCentralManager`, which a unit test on the simulator has no business doing. The config
- * builder is never reached either - only the start screen asks for it.
+ * builder and the other providers are never reached either - only the screens, the notifications
+ * and the missed-reading alarm ask for them, and those are tested on their own parts:
+ * `DexcomOnePlusIosNoticesTest` and `DexcomOnePlusMissedReadingAlarmTest`.
  */
 class DexcomOnePlusIosHostTest {
 
-    private val host = DexcomOnePlusIosHost(SilentLogger, { error("the config builder is not used here") })
+    private val host = DexcomOnePlusIosHost(
+        aapsLogger = SilentLogger,
+        configBuilder = { error("the config builder is not used here") },
+        notificationManager = { error("the notification manager is not used here") },
+        rh = { error("the text resolver is not used here") },
+        dateUtil = { error("the date util is not used here") },
+        preferences = { error("the preferences are not used here") },
+        persistenceLayer = { error("the database is not used here") },
+        profileUtil = { error("the profile util is not used here") },
+    )
 
     @Test
     fun `nothing locks the plugin on iPhone any more`() {

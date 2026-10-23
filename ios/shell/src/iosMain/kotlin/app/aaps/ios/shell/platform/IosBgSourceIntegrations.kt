@@ -12,20 +12,20 @@ import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 
 /*
- * The glucose-source integrations a client does not have, answered rather than left missing.
+ * The glucose-source integrations iOS does not have, answered rather than left missing.
  *
- * On iOS the only glucose source is `NSClientSourcePlugin` - it is the one source plugin in
- * `commonMain`, and every other (xDrip, Dexcom, Glimp, Aidex and the rest) is androidMain. That is
- * not a porting gap: xDrip and the Dexcom app talk to AAPS through Android broadcast intents, one
- * app messaging another, and iOS has no equivalent channel. Reaching those services from iOS would
- * be a different design, not a translation of this one.
+ * On iOS glucose comes from a sensor driver in this app (the Dexcom ONE+ / G7 driver) or from
+ * Nightscout (`NSClientSourcePlugin`). The sources that work by talking to another app - xDrip, the
+ * Dexcom app, Glimp, Aidex and the rest - stay androidMain. That is not a porting gap: they reach
+ * AAPS through Android broadcast intents, one app messaging another, and iOS has no equivalent
+ * channel. Reaching those services from iOS would be a different design, not a translation of this
+ * one.
  *
  * These bindings still have to exist, because **shared UI asks about them**:
  * `CalibrationDialogViewModel` decides whether to offer sending a calibration,
  * `ElementAvailability` and `TreatmentViewModel` decide which entries to show, and
  * `MaintenanceViewModel` reads the xDrip upload queue. Each of them asks "is this enabled?" and
- * hides the option when the answer is no - which is exactly right for a client whose glucose comes
- * from Nightscout.
+ * hides the option when the answer is no - which is right, because none of them can exist here.
  *
  * So all four report themselves disabled, which is true, and every call is logged. They are answers
  * about what this platform is, not placeholders waiting to be finished.

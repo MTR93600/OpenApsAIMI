@@ -222,6 +222,7 @@ class IosMedtrumPlugin(
         super.onStart()
         aapsLogger.debug(LTag.PUMP, "IosMedtrumPlugin onStart()")
         host.openRadio()
+        host.startExpiryWarningCheck()
     }
 
     override suspend fun onStop() {

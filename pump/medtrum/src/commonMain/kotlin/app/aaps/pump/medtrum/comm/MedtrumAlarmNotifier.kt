@@ -10,9 +10,10 @@ import app.aaps.pump.medtrum.comm.enums.AlarmState
 import app.aaps.pump.medtrum.comm.enums.MedtrumPumpState
 
 /**
- * What the person is told when the pump state changes: the notifications of the Android
- * `MedtrumService.handlePumpStateUpdate` and `notifyPumpWarning`, with the same ids, levels,
- * sounds and texts.
+ * What the person is told when the pump state changes: the notifications of
+ * `MedtrumService.handlePumpStateUpdate`, `notifyPumpWarning`, `checkExpiryWarning` and
+ * `syncRecords`, with the same ids, levels, sounds and texts. Android and iPhone both use this
+ * class, so the two cannot drift apart.
  *
  * Without it an occlusion, an empty reservoir, an expired patch or an hourly or daily maximum
  * stop was only written to the treatment history on iPhone - no notification, no sound.
@@ -21,6 +22,17 @@ import app.aaps.pump.medtrum.comm.enums.MedtrumPumpState
  * stays with the driver that owns them.
  */
 class MedtrumAlarmNotifier(private val notifications: NotificationManager) {
+
+    companion object {
+
+        /**
+         * Android `MedtrumService.CHECK_EXPIRY_WARNING_TIME_MS`: how often the expiry warning is
+         * checked, and how long after the warning time it is still shown.
+         */
+        const val CHECK_EXPIRY_WARNING_TIME_MS: Long = 5 * 60 * 1000L
+
+        private const val HOUR_MS: Long = 60 * 60 * 1000L
+    }
 
     /**
      * Raises or clears the notifications for [state].
@@ -107,6 +119,25 @@ class MedtrumAlarmNotifier(private val notifications: NotificationManager) {
     fun onPumpWarning(alarm: AlarmState, warningsOn: Boolean, alarmText: (AlarmState) -> String) {
         if (!warningsOn || alarm == AlarmState.NONE) return
         notifications.post(NotificationId.PUMP_WARNING, MedtrumStrings.pump_warning.withArgs(alarmText(alarm)))
+    }
+
+    /**
+     * Android `MedtrumService.checkExpiryWarning`, run every [CHECK_EXPIRY_WARNING_TIME_MS]: when
+     * the patch has run for [thresholdHours], say that it expires soon. The warning is shown only in
+     * the first [CHECK_EXPIRY_WARNING_TIME_MS] after that time, so a check every
+     * [CHECK_EXPIRY_WARNING_TIME_MS] shows it once.
+     *
+     * @param expirationOn the patch expiry setting (`desiredPatchExpiration`)
+     * @param warningsOn the pump warning setting (`desiredPumpWarning`)
+     * @return true when the warning was shown. The caller then writes the announcement to the history.
+     */
+    fun checkExpiryWarning(now: Long, patchStartTime: Long, thresholdHours: Int, expirationOn: Boolean, warningsOn: Boolean): Boolean {
+        if (!expirationOn || !warningsOn) return false
+        val warningAt = patchStartTime + thresholdHours * HOUR_MS
+        if (now < warningAt || now > warningAt + CHECK_EXPIRY_WARNING_TIME_MS) return false
+        // Keep the id's own NORMAL level, as Android does.
+        notifications.post(NotificationId.PUMP_WARNING, MedtrumStrings.alarm_pump_expires_soon)
+        return true
     }
 
     /** A history record could not be read, as on Android: the first failure is told, loudly. */

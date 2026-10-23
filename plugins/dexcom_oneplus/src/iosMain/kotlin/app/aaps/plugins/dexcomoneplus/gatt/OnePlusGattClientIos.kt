@@ -45,10 +45,12 @@ import kotlin.time.TimeSource
  * - **Connection interval.** There is no equivalent of `requestConnectionPriority`, so
  *   [setLowPower] records that the request was dropped rather than reporting a change nobody made.
  * - **Write-without-response completion.** iOS does not call back for one, so the ExtraData chunk
- *   loop paces itself with the same gaps Android uses and does not wait for an acknowledgement
- *   that will never arrive. It therefore cannot notice a chunk the stack dropped. CoreBluetooth
- *   does offer `canSendWriteWithoutResponse`, which would give real flow control, but [BleCentral]
- *   has no way to ask for it yet.
+ *   loop keeps the same gaps Android uses and does not wait for an acknowledgement that will never
+ *   arrive. Before each chunk it asks [BleCentral.canSendWriteWithoutResponse], which is
+ *   CoreBluetooth's `canSendWriteWithoutResponse`, and waits a short time while the stack has no
+ *   room - a chunk sent then may be dropped. If the room does not come back in time, the chunk is
+ *   sent anyway and the log says so, which is what happened before this check existed. A dropped
+ *   chunk still cannot be noticed here; the KEKS round that follows fails instead.
  *
  * Three settings in [OemDeviceProfile] have no iOS meaning and are not acted on: `requestMtu` and
  * `preferredMtu` (CoreBluetooth negotiates the ATT size by itself and never asks us),
@@ -202,8 +204,9 @@ class OnePlusGattClientIos(
         while (offset < payload.size) {
             val end = minOf(offset + EXTRA_DATA_CHUNK, payload.size)
             val chunk = payload.copyOfRange(offset, end)
-            // Write without response, as Ob1 does. iOS never calls back for one, so there is
-            // nothing to wait for and the pacing below is the only flow control we have.
+            // Write without response, as Ob1 does. iOS never calls back for one; the stack only
+            // says whether it has room for the next one, so that is asked first.
+            awaitWriteWithoutResponseRoom(id, chunkStart = offset)
             val accepted = opLock.withLock {
                 central.write(id, OnePlusBluetoothUuids.ExtraData, chunk, withResponse = false)
             }
@@ -213,6 +216,34 @@ class OnePlusGattClientIos(
         }
         sleep(EXTRA_DATA_AFTER_MS)
         OnePlusLog.d("${OnePlusLogMarkers.SESSION}: wrote ExtraData ${payload.size}b unacknowledged")
+    }
+
+    /**
+     * Wait, a little, until the stack can take one more write without response.
+     *
+     * Counted in polls rather than measured on [nowMs], so a test clock that never moves cannot
+     * make this loop forever. Gives up after [EXTRA_DATA_ROOM_POLLS] polls and lets the write go
+     * ahead: that is the old behaviour, and refusing would end a handshake that might still work.
+     */
+    private fun awaitWriteWithoutResponseRoom(id: String, chunkStart: Int) {
+        var polls = 0
+        while (!central.canSendWriteWithoutResponse(id)) {
+            if (polls >= EXTRA_DATA_ROOM_POLLS) {
+                OnePlusLog.w(
+                    "${OnePlusLogMarkers.SESSION}: ExtraData chunk at $chunkStart sent without room " +
+                        "after ${polls * EXTRA_DATA_ROOM_POLL_MS}ms - iOS may drop it",
+                )
+                return
+            }
+            sleep(EXTRA_DATA_ROOM_POLL_MS)
+            polls++
+        }
+        if (polls > 0) {
+            OnePlusLog.d(
+                "${OnePlusLogMarkers.SESSION}: ExtraData chunk at $chunkStart waited " +
+                    "${polls * EXTRA_DATA_ROOM_POLL_MS}ms for room in the stack",
+            )
+        }
     }
 
     // -- subscriptions ---------------------------------------------------------------------------
@@ -646,6 +677,12 @@ class OnePlusGattClientIos(
         private const val GATT_OP_TIMEOUT_MS = 10_000L
         private const val EXTRA_DATA_CHUNK = 20
         private const val EXTRA_DATA_CHUNK_GAP_MS = 40L
+
+        /** Pause between two questions "is there room for a write without response?". */
+        private const val EXTRA_DATA_ROOM_POLL_MS = 5L
+
+        /** How many times that is asked before a chunk goes out anyway: 500 ms in all. */
+        private const val EXTRA_DATA_ROOM_POLLS = 100
 
         /** Ob1 waits about half a second after the ExtraData chunks before the Auth write. */
         private const val EXTRA_DATA_AFTER_MS = 500L

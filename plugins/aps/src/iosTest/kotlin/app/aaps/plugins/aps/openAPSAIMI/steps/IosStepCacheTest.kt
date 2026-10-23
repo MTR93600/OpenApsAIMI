@@ -144,22 +144,160 @@ class IosStepCacheTest {
     fun `a failed refresh keeps unknown and a good one makes it available`() = runBlocking {
         val logs = mutableListOf<String>()
         var answer: Map<Long, Int>? = null
-        val source = object : IosStepBucketSource {
-            override suspend fun fetchStepBuckets(nowMs: Long): Map<Long, Int>? = answer
-        }
-        refreshStepCache(source, cache, now) { _, text -> logs += text }
+        val source = FakeSource { answer }
+        val evidence = IosStepEvidence()
+        refreshStepCache(source, cache, evidence, now) { _, text -> logs += text }
         assertEquals(IosStepDataStatus.NEVER_REFRESHED, cache.status())
-        assertTrue(logs.single().contains("means unknown"))
+        assertTrue(logs.single().contains("null (unknown)"))
+        assertFalse(logs.single().contains("answer 0"))
 
         answer = mapOf(key - 1 to 42)
-        refreshStepCache(source, cache, now) { _, text -> logs += text }
+        refreshStepCache(source, cache, evidence, now) { _, text -> logs += text }
         assertEquals(IosStepDataStatus.AVAILABLE, cache.status())
         assertEquals(42, cache.singleBucket(1))
 
         // A later failure must not renew the time of the old data.
         answer = null
         now += IosStepCache.MAX_AGE_MS + 1
-        refreshStepCache(source, cache, now) { _, text -> logs += text }
+        refreshStepCache(source, cache, evidence, now) { _, text -> logs += text }
         assertEquals(IosStepDataStatus.STALE, cache.status())
+    }
+
+    /** A step source whose answers a test sets. Counts the look-ups for a step sample. */
+    private class FakeSource(
+        private val newestSample: () -> Long? = { null },
+        private val buckets: () -> Map<Long, Int>?,
+    ) : IosStepBucketSource {
+
+        var probes = 0
+
+        override suspend fun fetchStepBuckets(nowMs: Long): Map<Long, Int>? = buckets()
+
+        override suspend fun newestStepSampleMs(sinceMs: Long, nowMs: Long): Long? {
+            probes++
+            return newestSample()?.takeIf { it in sinceMs..nowMs }
+        }
+    }
+
+    @Test
+    fun `no step sample for a whole day is unknown and not a real zero`() = runBlocking {
+        // What a refused HealthKit read looks like: every answer is empty.
+        val source = FakeSource(buckets = { emptyMap() })
+        val logs = mutableListOf<String>()
+        refreshStepCache(source, cache, IosStepEvidence(), now) { _, text -> logs += text }
+
+        assertEquals(IosStepDataStatus.NO_STEP_SOURCE, cache.status())
+        assertFalse(cache.hasData())
+        assertEquals(null, cache.singleBucket(1))
+        assertEquals(null, cache.windowSum(34))
+        assertTrue(logs.single().contains("not 0"))
+
+        StepService.cache = cache
+        assertEquals(null, StepService.getRecentStepCount5Min())
+        assertEquals(null, StepService.getRecentStepCount180Min())
+    }
+
+    @Test
+    fun `an empty window is a real zero when a step sample exists within the day`() = runBlocking {
+        // A night: nothing in the last three hours, but the phone walked this evening.
+        val eveningMs = now - 6 * 60 * 60_000L
+        val source = FakeSource(newestSample = { eveningMs }, buckets = { emptyMap() })
+        refreshStepCache(source, cache, IosStepEvidence(), now) { _, _ -> }
+
+        assertEquals(IosStepDataStatus.AVAILABLE, cache.status())
+        assertEquals(0, cache.singleBucket(1))
+        assertEquals(0, cache.windowSum(34))
+    }
+
+    @Test
+    fun `steps in a bucket prove the source without a look-up`() = runBlocking {
+        val source = FakeSource(buckets = { mapOf(key - 2 to 15) })
+        val evidence = IosStepEvidence()
+        refreshStepCache(source, cache, evidence, now) { _, _ -> }
+        assertEquals(IosStepDataStatus.AVAILABLE, cache.status())
+        assertEquals(0, source.probes)
+        assertTrue(evidence.isProven(now))
+    }
+
+    @Test
+    fun `proof runs out after a day without any step`() = runBlocking {
+        var buckets: Map<Long, Int> = mapOf(key - 1 to 30)
+        // HealthKit keeps answering with that walk while it is inside the 24 h look-up window.
+        val walkedAt = now - 60_000L
+        val source = FakeSource(newestSample = { walkedAt }, buckets = { buckets })
+        val evidence = IosStepEvidence()
+        refreshStepCache(source, cache, evidence, now) { _, _ -> }
+        assertEquals(IosStepDataStatus.AVAILABLE, cache.status())
+
+        buckets = emptyMap()
+        now += 23 * 60 * 60_000L
+        refreshStepCache(source, cache, evidence, now) { _, _ -> }
+        assertEquals(IosStepDataStatus.AVAILABLE, cache.status())
+        assertEquals(0, cache.windowSum(34))
+
+        now += 2 * 60 * 60_000L
+        refreshStepCache(source, cache, evidence, now) { _, _ -> }
+        assertEquals(IosStepDataStatus.NO_STEP_SOURCE, cache.status())
+        assertEquals(null, cache.windowSum(34))
+    }
+
+    /** A revoked read hides the old samples too: the steps turn unknown, not a fake 0, within one probe. */
+    @Test
+    fun `a revoked read permission turns the steps unknown`() = runBlocking {
+        var buckets: Map<Long, Int> = mapOf(key - 1 to 30)
+        var readAllowed = true
+        val walkedAt = now - 60_000L
+        val source = FakeSource(newestSample = { walkedAt.takeIf { readAllowed } }, buckets = { buckets })
+        val evidence = IosStepEvidence()
+        refreshStepCache(source, cache, evidence, now) { _, _ -> }
+        assertEquals(IosStepDataStatus.AVAILABLE, cache.status())
+
+        readAllowed = false
+        buckets = emptyMap()
+        now += IosStepEvidence.PROBE_RETRY_MS
+        refreshStepCache(source, cache, evidence, now) { _, _ -> }
+
+        assertEquals(IosStepDataStatus.NO_STEP_SOURCE, cache.status())
+        assertEquals(null, cache.windowSum(34))
+    }
+
+    @Test
+    fun `an empty look-up is not repeated on every refresh`() = runBlocking {
+        val source = FakeSource(buckets = { emptyMap() })
+        val evidence = IosStepEvidence()
+        refreshStepCache(source, cache, evidence, now) { _, _ -> }
+        now += 60_000L
+        refreshStepCache(source, cache, evidence, now) { _, _ -> }
+        assertEquals(1, source.probes)
+
+        now += IosStepEvidence.PROBE_RETRY_MS
+        refreshStepCache(source, cache, evidence, now) { _, _ -> }
+        assertEquals(2, source.probes)
+        assertEquals(IosStepDataStatus.NO_STEP_SOURCE, cache.status())
+    }
+
+    @Test
+    fun `a source that appears later makes the counts available`() = runBlocking {
+        var buckets: Map<Long, Int> = emptyMap()
+        val source = FakeSource(buckets = { buckets })
+        val evidence = IosStepEvidence()
+        refreshStepCache(source, cache, evidence, now) { _, _ -> }
+        assertEquals(IosStepDataStatus.NO_STEP_SOURCE, cache.status())
+
+        // The person allowed the read: steps now come back.
+        buckets = mapOf(key - 1 to 12)
+        now += 60_000L
+        refreshStepCache(source, cache, evidence, now) { _, _ -> }
+        assertEquals(IosStepDataStatus.AVAILABLE, cache.status())
+        assertEquals(12, cache.singleBucket(1))
+    }
+
+    @Test
+    fun `a marked cache with no refresh for ten minutes is stale`() {
+        cache.markNoStepSource(now)
+        assertEquals(IosStepDataStatus.NO_STEP_SOURCE, cache.status())
+        now += IosStepCache.MAX_AGE_MS + 1
+        assertEquals(IosStepDataStatus.STALE, cache.status())
+        assertEquals(null, cache.singleBucket(1))
     }
 }

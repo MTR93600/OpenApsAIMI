@@ -2,15 +2,21 @@ package app.aaps.pump.medtrum.ios
 
 import app.aaps.core.data.pump.defs.PumpDescription
 import app.aaps.core.data.model.BS
+import app.aaps.core.interfaces.notifications.NotificationId
+import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.pump.medtrum.MedtrumStrings
 import app.aaps.pump.medtrum.code.ConnectionState
 import app.aaps.pump.medtrum.comm.RecordingPumpSync
 import app.aaps.pump.medtrum.comm.FakeDetailedBolusInfoStorage
 import app.aaps.pump.medtrum.comm.FakeTemporaryBasalStorage
+import app.aaps.pump.medtrum.comm.MedtrumAlarmNotifier
 import app.aaps.pump.medtrum.comm.MedtrumLogger
+import app.aaps.pump.medtrum.comm.RecordingNotificationManager
+import app.aaps.pump.medtrum.comm.enums.AlarmSetting
 import app.aaps.pump.medtrum.comm.enums.AlarmState
 import app.aaps.pump.medtrum.comm.enums.CommandType
 import app.aaps.pump.medtrum.comm.enums.MedtrumPumpState
@@ -20,6 +26,7 @@ import app.aaps.pump.medtrum.session.MedtrumSession
 import app.aaps.pump.medtrum.session.MedtrumSessionState
 import app.aaps.pump.medtrum.session.errorResponse
 import app.aaps.pump.medtrum.session.successResponse
+import app.aaps.pump.medtrum.util.MedtrumSnUtil
 import app.aaps.pump.medtrum.util.MedtrumTimeUtil
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -65,7 +72,11 @@ class IosMedtrumPumpTest {
         val tbrs: FakeTemporaryBasalStorage,
     )
 
-    private fun CoroutineScope.newRig(clock: MedtrumClock = MedtrumClock.fixed(nowMs, minuteOfDay = 600, utcOffsetMinutes = 120)): Rig {
+    private fun CoroutineScope.newRig(
+        clock: MedtrumClock = MedtrumClock.fixed(nowMs, minuteOfDay = 600, utcOffsetMinutes = 120),
+        alarmNotifier: MedtrumAlarmNotifier? = null,
+        bolusProgressData: BolusProgressData? = null,
+    ): Rig {
         val fake = FakeMedtrumBleTransport()
         val state = MedtrumSessionState(MedtrumLogger.NO_OP, clock).apply {
             pumpSN = 0x12345678L
@@ -87,7 +98,8 @@ class IosMedtrumPumpTest {
         val pump = IosMedtrumPump(
             fake, state, clock, TestTextResolver,
             pumpSync = sync, detailedBolusInfoStorage = infos, temporaryBasalStorage = tbrs,
-            scope = this, store = null, logger = logger
+            scope = this, store = null, logger = logger,
+            alarmNotifier = alarmNotifier, bolusProgressData = bolusProgressData
         )
         return Rig(fake, state, pump, logs, sync, infos, tbrs)
     }
@@ -115,8 +127,8 @@ class IosMedtrumPumpTest {
         return condition()
     }
 
-    private suspend fun CoroutineScope.readyRig(): Rig {
-        val rig = newRig()
+    private suspend fun CoroutineScope.readyRig(bolusProgressData: BolusProgressData? = null): Rig {
+        val rig = newRig(bolusProgressData = bolusProgressData)
         scriptAuthSuccess(rig.fake)
         rig.pump.connect("test")
         assertTrue(waitUntil { rig.pump.isReady() }, "pump should reach READY")
@@ -475,6 +487,9 @@ class IosMedtrumPumpTest {
             CommandType.SET_TEMP_BASAL.code, 6, 20, 0, 3, 0, 0, 0,
             pumpSeconds.toByte(), (pumpSeconds shr 8).toByte(), (pumpSeconds shr 16).toByte(), (pumpSeconds shr 24).toByte()
         )
+        // The answer moves the sequence number to 3, so the records are read after the temp basal, as
+        // on Android. A broken record answer keeps that read short and writes no history.
+        rig.fake.responses[CommandType.GET_RECORD.code] = errorResponse(CommandType.GET_RECORD.code)
         val result = rig.pump.setTempBasalAbsolute(1.0, 30, false, PumpSync.TemporaryBasalType.NORMAL)
         assertTrue(result.success, result.comment)
         assertEquals(
@@ -499,7 +514,244 @@ class IosMedtrumPumpTest {
         assertEquals(2, rig.sync.calls.size)
     }
 
+    // -- Temp basal checks, as Android `MedtrumPlugin` ---------------------------------------------
+
+    /** A temp basal answer: basal type, rate in 0.05 U/h steps and sequence number 3. */
+    private fun basalAnswer(opcode: Byte, basalType: Int, rateSteps: Int): ByteArray {
+        val pumpSeconds = (nowMs - MedtrumTimeUtil.PUMP_EPOCH_MILLIS) / 1000
+        return successResponse(
+            opcode, basalType.toByte(), rateSteps.toByte(), (rateSteps shr 8).toByte(), 3, 0, 0, 0,
+            pumpSeconds.toByte(), (pumpSeconds shr 8).toByte(), (pumpSeconds shr 16).toByte(), (pumpSeconds shr 24).toByte()
+        )
+    }
+
+    @Test
+    fun tempBasalFailsWhenThePumpDoesNotRunATempBasal() = runBlocking {
+        val rig = readyRig()
+        rig.fake.responses[CommandType.GET_RECORD.code] = errorResponse(CommandType.GET_RECORD.code)
+        // The pump answers, but reports its standard basal (type 1).
+        rig.fake.responses[CommandType.SET_TEMP_BASAL.code] = basalAnswer(CommandType.SET_TEMP_BASAL.code, basalType = 1, rateSteps = 20)
+
+        val result = rig.pump.setTempBasalAbsolute(1.0, 30, false, PumpSync.TemporaryBasalType.NORMAL)
+
+        assertFalse(result.success, "an answer without a running temp basal is no success, as on Android")
+        assertFalse(result.enacted)
+    }
+
+    @Test
+    fun tempBasalFailsWhenThePumpRunsAnotherRate() = runBlocking {
+        val rig = readyRig()
+        rig.fake.responses[CommandType.GET_RECORD.code] = errorResponse(CommandType.GET_RECORD.code)
+        // Asked 1.0 U/h, the pump reports 2.0 U/h (40 steps of 0.05).
+        rig.fake.responses[CommandType.SET_TEMP_BASAL.code] = basalAnswer(CommandType.SET_TEMP_BASAL.code, basalType = 6, rateSteps = 40)
+
+        val result = rig.pump.setTempBasalAbsolute(1.0, 30, false, PumpSync.TemporaryBasalType.NORMAL)
+
+        assertFalse(result.success, "a rate more than 0.05 U/h off is no success, as on Android")
+    }
+
+    @Test
+    fun tempBasalReportsTheRateThePumpRuns() = runBlocking {
+        val rig = readyRig()
+        rig.fake.responses[CommandType.GET_RECORD.code] = errorResponse(CommandType.GET_RECORD.code)
+        // Asked 1.02 U/h, the pump runs 1.0 U/h: within 0.05, and the pump rate is reported.
+        rig.fake.responses[CommandType.SET_TEMP_BASAL.code] = basalAnswer(CommandType.SET_TEMP_BASAL.code, basalType = 6, rateSteps = 20)
+
+        val result = rig.pump.setTempBasalAbsolute(1.02, 30, false, PumpSync.TemporaryBasalType.NORMAL)
+
+        assertTrue(result.success, result.comment)
+        assertEquals(1.0, result.absolute, 0.0001)
+    }
+
+    @Test
+    fun cancelTempBasalFailsWhileATempBasalStillRuns() = runBlocking {
+        val rig = readyRig()
+        rig.fake.responses[CommandType.GET_RECORD.code] = errorResponse(CommandType.GET_RECORD.code)
+        rig.fake.responses[CommandType.CANCEL_TEMP_BASAL.code] = basalAnswer(CommandType.CANCEL_TEMP_BASAL.code, basalType = 6, rateSteps = 20)
+
+        assertFalse(rig.pump.cancelTempBasal(false).success, "the pump still runs a temp basal")
+
+        rig.fake.responses[CommandType.CANCEL_TEMP_BASAL.code] = basalAnswer(CommandType.CANCEL_TEMP_BASAL.code, basalType = 1, rateSteps = 20)
+        assertTrue(rig.pump.cancelTempBasal(false).success, "the pump is back on its standard basal")
+    }
+
+    // -- Record reads, as often as Android ----------------------------------------------------------
+
+    @Test
+    fun recordsAreReadAfterATempBasal() = runBlocking {
+        val rig = readyRig()
+        rig.fake.responses[CommandType.GET_RECORD.code] = errorResponse(CommandType.GET_RECORD.code)
+        rig.fake.responses[CommandType.SET_TEMP_BASAL.code] = basalAnswer(CommandType.SET_TEMP_BASAL.code, basalType = 6, rateSteps = 20)
+
+        rig.pump.setTempBasalAbsolute(1.0, 30, false, PumpSync.TemporaryBasalType.NORMAL)
+
+        val opcodes = rig.fake.sentMessages.map { it[0] }
+        assertTrue(
+            opcodes.lastIndexOf(CommandType.GET_RECORD.code) > opcodes.indexOf(CommandType.SET_TEMP_BASAL.code),
+            "the records are read after the temp basal"
+        )
+    }
+
+    @Test
+    fun recordsAreReadAfterACancelledTempBasal() = runBlocking {
+        val rig = readyRig()
+        rig.fake.responses[CommandType.GET_RECORD.code] = errorResponse(CommandType.GET_RECORD.code)
+        rig.fake.responses[CommandType.CANCEL_TEMP_BASAL.code] = basalAnswer(CommandType.CANCEL_TEMP_BASAL.code, basalType = 1, rateSteps = 20)
+
+        rig.pump.cancelTempBasal(false)
+
+        val opcodes = rig.fake.sentMessages.map { it[0] }
+        assertTrue(opcodes.lastIndexOf(CommandType.GET_RECORD.code) > opcodes.indexOf(CommandType.CANCEL_TEMP_BASAL.code))
+    }
+
+    @Test
+    fun recordsAreReadWhenThePumpStopsAtItsHourlyMaximum() = runBlocking {
+        val rig = readyRig()
+        rig.fake.responses[CommandType.GET_RECORD.code] = errorResponse(CommandType.GET_RECORD.code)
+        rig.state.currentSequenceNumber = rig.state.syncedSequenceNumber + 1
+        rig.fake.sentMessages.clear()
+
+        rig.state.pumpState = MedtrumPumpState.HOURLY_MAX_SUSPENDED
+        rig.pump.publishState()
+
+        assertTrue(waitUntil { rig.sent(CommandType.GET_RECORD) }, "Android reads the records on a stop of the pump")
+    }
+
+    // -- Patch expires soon -------------------------------------------------------------------------
+
+    @Test
+    fun patchExpiresSoonIsShownAndWrittenAtTheThresholdHour() = runBlocking {
+        val notifications = RecordingNotificationManager()
+        val rig = newRig(alarmNotifier = MedtrumAlarmNotifier(notifications))
+        rig.state.patchStartTime = nowMs - 72 * 60 * 60 * 1000L
+
+        rig.pump.checkExpiryWarning()
+
+        assertEquals(NotificationId.PUMP_WARNING, notifications.posted.single().id)
+        assertEquals(
+            listOf("insertAnnouncement(error=resolved:${MedtrumStrings.alarm_pump_expires_soon}, pumpId=null, pumpType=MEDTRUM_NANO, pumpSerial=12345678)"),
+            rig.sync.calls
+        )
+    }
+
+    @Test
+    fun patchExpiresSoonIsNotShownBeforeTheThresholdHour() = runBlocking {
+        val notifications = RecordingNotificationManager()
+        val rig = newRig(alarmNotifier = MedtrumAlarmNotifier(notifications))
+        rig.state.patchStartTime = nowMs - 71 * 60 * 60 * 1000L
+
+        rig.pump.checkExpiryWarning()
+
+        assertTrue(notifications.posted.isEmpty())
+        assertTrue(rig.sync.calls.isEmpty())
+    }
+
+    // -- Bolus progress -----------------------------------------------------------------------------
+
+    @Test
+    fun bolusProgressFollowsWhatThePumpReports() = runBlocking {
+        val progress = testBolusProgressData(this)
+        val rig = readyRig(bolusProgressData = progress)
+        rig.fake.responses[CommandType.SET_BOLUS.code] = successResponse(CommandType.SET_BOLUS.code)
+        // The queue starts the progress before the bolus runs.
+        progress.start(insulin = 2.0, isSMB = false)
+
+        val delivery = async { rig.pump.deliverTreatment(bolusInfo(2.0)) }
+        assertTrue(waitUntil { rig.sent(CommandType.SET_BOLUS) })
+        rig.state.handleBolusStatusUpdate(1, false, 0.5)
+        assertEquals(0.5, progress.state.value?.delivered?.cU, "the dialog shows what the pump reports")
+        assertEquals(25, progress.state.value?.percent)
+
+        rig.state.handleBolusStatusUpdate(1, true, 2.0)
+        delivery.await()
+        assertEquals(2.0, progress.state.value?.delivered?.cU)
+    }
+
+    @Test
+    fun aBolusIsNotStartedWhenStopWasPressedBefore() = runBlocking {
+        val progress = testBolusProgressData(this)
+        val rig = readyRig(bolusProgressData = progress)
+        rig.fake.responses[CommandType.SET_BOLUS.code] = successResponse(CommandType.SET_BOLUS.code)
+        progress.start(insulin = 1.0, isSMB = false)
+        progress.stopPressed()
+
+        val result = rig.pump.deliverTreatment(bolusInfo(1.0))
+
+        assertFalse(result.success)
+        assertFalse(rig.sent(CommandType.SET_BOLUS), "Android `canSetBolus` refuses, nothing is sent")
+    }
+
+    // -- A new pump serial, as Android on a new `SnInput` --------------------------------------------
+
+    @Test
+    fun aNewPumpSerialResetsThePatchAndTellsTheHistory() = runBlocking {
+        val rig = newRig()
+        rig.state.patchId = 7
+        rig.state.currentSequenceNumber = 40
+        rig.state.syncedSequenceNumber = 40
+        rig.state.pumpSN = 0x2F4A1BL
+
+        rig.pump.onNewPumpSerial()
+
+        // Done on the driver scope, under the command lock, so wait for it.
+        assertTrue(waitUntil { "connectNewPump" in rig.sync.calls }, "the history must hear about the new pump")
+        assertEquals(MedtrumSnUtil().getDeviceTypeFromSerial(0x2F4A1BL).value, rig.state.deviceType)
+        assertEquals(0L, rig.state.patchId)
+        assertEquals(1, rig.state.currentSequenceNumber)
+        assertEquals(1, rig.state.syncedSequenceNumber)
+        assertTrue(waitUntil { "connectNewPump" in rig.sync.calls }, "the history must hear about the new pump")
+        assertTrue(waitUntil { rig.sync.calls.any { it.startsWith("syncTemporaryBasalWithPumpId") } }, "no insulin until a patch runs")
+    }
+
     // -- Store: patch state survives a restart -------------------------------------------
+
+    @Test
+    fun storeKeepsTheDeviceTypeAndTheSettings() {
+        val defaults = NSUserDefaults(suiteName = "medtrum-test-settings-${nowMs}")!!
+        val store = IosMedtrumStateStore(defaults, prefix = "t.")
+        try {
+            val saved = MedtrumSessionState(clock = MedtrumClock.fixed(nowMs)).apply {
+                pumpSN = 77L
+                deviceType = 98
+                desiredHourlyMaxInsulin = 30
+                desiredDailyMaxInsulin = 100
+                desiredPatchExpiration = false
+                desiredAlarmSetting = AlarmSetting.NONE
+            }
+            store.save(saved)
+            val loaded = MedtrumSessionState(clock = MedtrumClock.fixed(nowMs))
+            store.load(loaded)
+            assertEquals(98, loaded.deviceType)
+            assertEquals(30, loaded.desiredHourlyMaxInsulin)
+            assertEquals(100, loaded.desiredDailyMaxInsulin)
+            assertFalse(loaded.desiredPatchExpiration)
+            assertEquals(AlarmSetting.NONE, loaded.desiredAlarmSetting)
+        } finally {
+            store.clear()
+        }
+    }
+
+    @Test
+    fun oldIphoneSettingsAreNotReadBack() {
+        val defaults = NSUserDefaults(suiteName = "medtrum-test-oldsettings-${nowMs}")!!
+        val store = IosMedtrumStateStore(defaults, prefix = "t.")
+        try {
+            // What an older version saved: its own defaults, without the settings mark.
+            defaults.setInteger(77L, forKey = "t.pumpSN")
+            defaults.setInteger(40L, forKey = "t.desiredHourlyMaxInsulin")
+            defaults.setInteger(180L, forKey = "t.desiredDailyMaxInsulin")
+            defaults.setInteger(0L, forKey = "t.desiredAlarmSetting")
+            val loaded = MedtrumSessionState(clock = MedtrumClock.fixed(nowMs))
+            store.load(loaded)
+            assertEquals(77L, loaded.pumpSN)
+            assertEquals(25, loaded.desiredHourlyMaxInsulin, "the Android default, not the old iPhone value")
+            assertEquals(80, loaded.desiredDailyMaxInsulin)
+            assertEquals(AlarmSetting.BEEP_ONLY, loaded.desiredAlarmSetting)
+            assertTrue(loaded.desiredPatchExpiration)
+        } finally {
+            store.clear()
+        }
+    }
 
     @Test
     fun storeKeepsThePatchState() {

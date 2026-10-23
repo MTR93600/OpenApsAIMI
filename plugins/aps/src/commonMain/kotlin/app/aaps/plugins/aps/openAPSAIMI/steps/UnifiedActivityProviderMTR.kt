@@ -55,6 +55,16 @@ class UnifiedActivityProviderMTR @Inject constructor(
         const val DEFAULT_MODE = MODE_AUTO_FALLBACK
 
         private const val SOURCE_HC = "HealthConnect"
+
+        /**
+         * Device name of the rows the iPhone writes from HealthKit (`IosHeartRateSync`).
+         *
+         * HealthKit has the role on iOS that Health Connect has on Android: it is the phone's own
+         * health store. So these rows take every branch a Health Connect row takes, see
+         * [isPlatformHealthStore]. No Android writer uses this name, and heart rate rows are not
+         * synced to Nightscout, so on Android nothing here changes.
+         */
+        internal const val HEALTHKIT_DEVICE = "HealthKit"
         private const val SOURCE_PHONE = "PhoneSensor"
         private const val SOURCE_GARMIN = "Garmin-Watchface"
         /** [LoopHubImpl.storeHeartRate] default when watchface omits `device`. */
@@ -115,12 +125,12 @@ class UnifiedActivityProviderMTR @Inject constructor(
                         .ifEmpty { records.filter { it.device == SOURCE_GARMIN } }
 
                 MODE_HEALTH_CONNECT_ONLY ->
-                    records.filter { it.device == SOURCE_HC }
+                    records.filter { isPlatformHealthStore(it.device) }
 
                 MODE_AUTO_FALLBACK -> {
                     val garmin = records.filter { it.device == SOURCE_GARMIN }
                     val wear = records.filter { isWearDevice(it.device) }
-                    val hcPhone = records.filter { it.device == SOURCE_HC || it.device == SOURCE_PHONE }
+                    val hcPhone = records.filter { isPlatformHealthStore(it.device) || it.device == SOURCE_PHONE }
                     when {
                         garmin.isNotEmpty() -> garmin
                         wear.isNotEmpty() -> wear
@@ -162,7 +172,7 @@ class UnifiedActivityProviderMTR @Inject constructor(
             val sorted = if (records.size <= 1) records else records.sortedByDescending { it.timestamp }
             val garminRecord = sorted.firstOrNull { isGarminDevice(it.device) }
             val wearRecord = sorted.firstOrNull { isWearDevice(it.device) }
-            val hcRecord = sorted.firstOrNull { it.device == SOURCE_HC }
+            val hcRecord = sorted.firstOrNull { isPlatformHealthStore(it.device) }
 
             val picked = when (mode) {
                 MODE_PREFER_WEAR -> wearRecord ?: garminRecord ?: hcRecord
@@ -173,13 +183,17 @@ class UnifiedActivityProviderMTR @Inject constructor(
             return picked?.let { hrToResult(it) }
         }
 
+        /** True for a row from the phone's own health store: Health Connect on Android, HealthKit on iOS. */
+        internal fun isPlatformHealthStore(device: String?): Boolean =
+            device == SOURCE_HC || device == HEALTHKIT_DEVICE
+
         internal fun isGarminDevice(device: String?): Boolean =
             device == SOURCE_GARMIN || device == SOURCE_GARMIN_LEGACY
 
         internal fun isWearDevice(device: String?): Boolean {
             if (device == null) return false
             if (isGarminDevice(device)) return false
-            return device != SOURCE_HC && device != SOURCE_PHONE
+            return !isPlatformHealthStore(device) && device != SOURCE_PHONE
         }
 
         private fun hrToResult(hr: HR): HrResult =
@@ -200,7 +214,7 @@ class UnifiedActivityProviderMTR @Inject constructor(
 
             val garminRecord = selectLatestDeltaRecord(records.filter { it.device == SOURCE_GARMIN })
             val wearRecord = selectLatestDeltaRecord(records.filter { isWearDevice(it.device) })
-            val hcRecord = selectLatestDeltaRecord(records.filter { it.device == SOURCE_HC })
+            val hcRecord = selectLatestDeltaRecord(records.filter { isPlatformHealthStore(it.device) })
             val phoneRecord = selectLatestDeltaRecord(records.filter { it.device == SOURCE_PHONE })
 
             val result = when (mode) {

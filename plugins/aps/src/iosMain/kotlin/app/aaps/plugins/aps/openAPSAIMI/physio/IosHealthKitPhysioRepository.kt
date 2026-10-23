@@ -18,6 +18,8 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.thermal.ThermalSourceTier
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiPhysioSource
 import app.aaps.plugins.aps.openAPSAIMI.steps.IosStepBucketSource
 import app.aaps.plugins.aps.openAPSAIMI.steps.IosStepBuckets
+import app.aaps.plugins.aps.openAPSAIMI.steps.IosHeartRateReading
+import app.aaps.plugins.aps.openAPSAIMI.steps.IosHeartRateSource
 import app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiKeyValueCache
 import dev.zacsweers.metro.AppScope
@@ -36,6 +38,7 @@ import kotlinx.datetime.TimeZone
 import platform.Foundation.NSDate
 import platform.Foundation.NSDateComponents
 import platform.Foundation.NSPredicate
+import platform.Foundation.NSSortDescriptor
 import platform.Foundation.dateWithTimeIntervalSince1970
 import platform.Foundation.timeIntervalSince1970
 import platform.HealthKit.HKCategorySample
@@ -58,6 +61,7 @@ import platform.HealthKit.HKQueryOptionNone
 import platform.HealthKit.HKQueryOptionStrictStartDate
 import platform.HealthKit.HKSample
 import platform.HealthKit.HKSampleQuery
+import platform.HealthKit.HKSampleSortIdentifierEndDate
 import platform.HealthKit.HKSampleType
 import platform.HealthKit.HKStatistics
 import platform.HealthKit.HKStatisticsCollectionQuery
@@ -115,7 +119,7 @@ class IosHealthKitPhysioRepository @Inject constructor(
     private val aapsLogger: AAPSLogger,
     private val ouraApiThermalClient: OuraApiThermalClient,
     private val keyValueCache: AimiKeyValueCache,
-) : AimiPhysioSource, AimiPhysioDataSource, IosStepBucketSource {
+) : AimiPhysioSource, AimiPhysioDataSource, IosStepBucketSource, IosHeartRateSource {
 
     private companion object {
 
@@ -346,8 +350,10 @@ class IosHealthKitPhysioRepository @Inject constructor(
      * half a bucket before the epoch so that each one matches an [IosStepBuckets] key.
      *
      * Returns `null` when the answer is unknown: no HealthKit store, no step type, a query error or
-     * a timeout. An empty map is a real answer: HealthKit answered and saw no steps. HealthKit does
-     * not say whether the person refused the read, so a refused read looks like an empty map.
+     * a timeout. An empty map means HealthKit answered and saw no steps in the window. HealthKit does
+     * not say whether the person refused the read, so a refused read also looks like an empty map.
+     * That is why an empty map alone is not taken as a real 0: `refreshStepCache` first asks
+     * [newestStepSampleMs] whether any step sample exists at all.
      */
     @OptIn(ExperimentalForeignApi::class)
     override suspend fun fetchStepBuckets(nowMs: Long): Map<Long, Int>? = withContext(aapsIoDispatcher) {
@@ -387,6 +393,38 @@ class IosHealthKitPhysioRepository @Inject constructor(
             query
         }
     }
+
+    /**
+     * End time of the newest step sample between [sinceMs] and [nowMs], or `null`.
+     *
+     * `null` means "no evidence that steps can be read": there is no sample in the window, or the
+     * query failed. HealthKit does not say whether the person refused the read, and a refused read
+     * looks exactly like a store with no steps. The step cache uses this to tell a real 0 from an
+     * unknown count, see `refreshStepCache`.
+     */
+    override suspend fun newestStepSampleMs(sinceMs: Long, nowMs: Long): Long? = withContext(aapsIoDispatcher) {
+        val healthStore = authorizedStore() ?: return@withContext null
+        val stepCount = quantityType(HKQuantityTypeIdentifierStepCount) ?: return@withContext null
+        readNewestSample(healthStore, stepCount, sinceMs, nowMs)?.endDate?.toEpochMs()
+    }
+
+    /**
+     * The newest heart rate sample between [sinceMs] and [nowMs], or `null` when there is none.
+     *
+     * This is what the Android Health Connect sync takes: of all heart rate samples in its window,
+     * the one with the newest time. One HealthKit sample is one reading, so its end date is that
+     * time. A refused read gives `null`, so no row is written - never a made up one.
+     */
+    override suspend fun fetchNewestHeartRate(sinceMs: Long, nowMs: Long): IosHeartRateReading? =
+        withContext(aapsIoDispatcher) {
+            val healthStore = authorizedStore() ?: return@withContext null
+            val heartRate = quantityType(HKQuantityTypeIdentifierHeartRate) ?: return@withContext null
+            val newest = readNewestSample(healthStore, heartRate, sinceMs, nowMs) ?: return@withContext null
+            IosHeartRateReading(
+                timestampMs = newest.endDate.toEpochMs(),
+                beatsPerMinute = newest.quantity.doubleValueForUnit(bpmUnit()),
+            )
+        }
 
     // ═══════════════════════════════════════════════════════════════════════
     // AimiPhysioDataSource - WHOLE READ, AVAILABILITY, CACHE
@@ -834,6 +872,22 @@ class IosHealthKitPhysioRepository @Inject constructor(
         null
     }
 
+    /** The one sample with the newest end date in the window, or `null` when there is none or the read failed. */
+    private suspend fun readNewestSample(
+        healthStore: HKHealthStore,
+        sampleType: HKSampleType,
+        startMs: Long,
+        endMs: Long,
+    ): HKQuantitySample? =
+        readSamples(
+            healthStore = healthStore,
+            sampleType = sampleType,
+            startMs = startMs,
+            endMs = endMs,
+            limit = 1u,
+            sortDescriptors = listOf(NSSortDescriptor.sortDescriptorWithKey(HKSampleSortIdentifierEndDate, ascending = false)),
+        )?.filterIsInstance<HKQuantitySample>()?.firstOrNull()
+
     private suspend fun readSamples(
         healthStore: HKHealthStore,
         sampleType: HKSampleType,
@@ -841,12 +895,13 @@ class IosHealthKitPhysioRepository @Inject constructor(
         endMs: Long,
         options: ULong = HKQueryOptionStrictStartDate,
         limit: ULong = HKObjectQueryNoLimit,
+        sortDescriptors: List<NSSortDescriptor>? = null,
     ): List<HKSample>? = awaitQuery(healthStore, sampleType.identifier) { continuation ->
         HKSampleQuery(
             sampleType,
             predicate(startMs, endMs, options),
             limit,
-            null,
+            sortDescriptors,
         ) { _, raw, error ->
             if (error != null) {
                 aapsLogger.warn(

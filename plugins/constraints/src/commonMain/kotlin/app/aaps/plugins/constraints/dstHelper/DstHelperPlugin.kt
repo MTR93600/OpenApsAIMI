@@ -18,7 +18,7 @@ import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginBaseWithPreferences
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.profile.ProfileFunction
-import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.plugins.constraints.ConstraintsStrings
@@ -31,8 +31,20 @@ import dev.zacsweers.metro.IntKey
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.binding
 import kotlinx.coroutines.runBlocking
-import java.util.Calendar
+import kotlinx.datetime.TimeZone
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Instant
 
+/**
+ * Warns before a daylight saving change and suspends the loop just after one, for pumps that cannot
+ * follow a clock change by themselves.
+ *
+ * Shared by every platform. A change is found by comparing the daylight saving part of the offset
+ * now with the same part some hours away - exactly what Android compared with `Calendar.DST_OFFSET`.
+ * That one value comes from each platform's own time zone database ([daylightSavingPartMs]): the
+ * same Java call as before on Android and the desktop, `NSTimeZone` on iOS.
+ */
 @ContributesBinding(AppScope::class, binding = binding<DstHelper>())
 @ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
 @IntKey(850)
@@ -40,7 +52,7 @@ import java.util.Calendar
 @Inject
 class DstHelperPlugin(
     aapsLogger: AAPSLogger,
-    rh: ResourceHelper,
+    rh: TextResolver,
     preferences: Preferences,
     private val activePlugin: ActivePlugin,
     notificationManager: NotificationManager,
@@ -66,19 +78,21 @@ class DstHelperPlugin(
     override fun dstCheck() {
         val pump = activePlugin.activePump
         if (pump.canHandleDST()) return
-        val cal = Calendar.getInstance()
-        if (willBeDST(cal)) {
+        val now = Clock.System.now()
+        val zone = TimeZone.currentSystemDefault()
+        val nowMs = now.toEpochMilliseconds()
+        if (willBeDST(now, zone)) {
             val snoozedTo: Long = preferences.get(DstHelperLongKey.SnoozeDstIn24h)
-            if (snoozedTo == 0L || System.currentTimeMillis() > snoozedTo) {
+            if (snoozedTo == 0L || nowMs > snoozedTo) {
                 notificationManager.post(
                     NotificationId.DST_IN_24H,
                     ConstraintsStrings.dst_in_24h_warning,
                     actions = listOf(NotificationAction(CoreUiStrings.snooze) {
-                        preferences.put(DstHelperLongKey.SnoozeDstIn24h, System.currentTimeMillis() + T.hours(24).msecs())
+                        preferences.put(DstHelperLongKey.SnoozeDstIn24h, Clock.System.now().toEpochMilliseconds() + T.hours(24).msecs())
                     }))
             }
         }
-        if (wasDST(cal)) {
+        if (wasDST(now, zone)) {
             // dstCheck() is invoked from KeepAliveWorker on a background scope; the file
             // already uses runBlocking for profileFunction. Keeping the same pattern here.
             val mode = runBlocking { loop.runningMode() }
@@ -88,12 +102,12 @@ class DstHelperPlugin(
                     loop.handleRunningModeChange(newRM = RM.Mode.SUSPENDED_BY_DST, durationInMinutes = T.hours((-DISABLE_TIME_FRAME_HOURS).toLong()).mins().toInt(), action = Action.SUSPEND, source = Sources.Aaps, profile = profile)
                 }
                 val snoozedTo: Long = preferences.get(DstHelperLongKey.SnoozeLoopDisabled)
-                if (snoozedTo == 0L || System.currentTimeMillis() > snoozedTo) {
+                if (snoozedTo == 0L || nowMs > snoozedTo) {
                     notificationManager.post(
                         NotificationId.DST_LOOP_DISABLED,
                         ConstraintsStrings.dst_loop_disabled_warning,
                         actions = listOf(NotificationAction(CoreUiStrings.snooze) {
-                            preferences.put(DstHelperLongKey.SnoozeLoopDisabled, System.currentTimeMillis() + T.hours(24).msecs())
+                            preferences.put(DstHelperLongKey.SnoozeLoopDisabled, Clock.System.now().toEpochMilliseconds() + T.hours(24).msecs())
                         }))
                 }
             } else {
@@ -102,15 +116,13 @@ class DstHelperPlugin(
         }
     }
 
-    internal fun wasDST(now: Calendar): Boolean {
-        val ago = now.clone() as Calendar
-        ago.add(Calendar.HOUR, DISABLE_TIME_FRAME_HOURS)
-        return now[Calendar.DST_OFFSET] != ago[Calendar.DST_OFFSET]
-    }
+    /** True when the clock changed within the last three hours. Same comparison as Android always made. */
+    internal fun wasDST(now: Instant, zone: TimeZone): Boolean =
+        dstPart(zone, now) != dstPart(zone, now + DISABLE_TIME_FRAME_HOURS.hours)
 
-    internal fun willBeDST(now: Calendar): Boolean {
-        val ago = now.clone() as Calendar
-        ago.add(Calendar.HOUR, WARN_PRIOR_TIME_FRAME_HOURS)
-        return now[Calendar.DST_OFFSET] != ago[Calendar.DST_OFFSET]
-    }
+    /** True when the clock will change within the next twelve hours. */
+    internal fun willBeDST(now: Instant, zone: TimeZone): Boolean =
+        dstPart(zone, now) != dstPart(zone, now + WARN_PRIOR_TIME_FRAME_HOURS.hours)
+
+    private fun dstPart(zone: TimeZone, at: Instant): Long = daylightSavingPartMs(zone.id, at.toEpochMilliseconds())
 }

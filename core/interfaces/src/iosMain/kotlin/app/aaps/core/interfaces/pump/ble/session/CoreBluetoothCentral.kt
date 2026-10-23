@@ -206,6 +206,17 @@ class CoreBluetoothCentral(
         return true
     }
 
+    /**
+     * `CBPeripheral.canSendWriteWithoutResponse`, read on the radio queue.
+     *
+     * False for an id this central does not know, because there is no link to write on. The
+     * matching delegate call, `peripheralIsReadyToSendWriteWithoutResponse`, is not forwarded: it
+     * would need a new [BleCentralEvent], and every driver lists those events one by one. A caller
+     * asks this again after a short pause instead, which gives the same answer.
+     */
+    override fun canSendWriteWithoutResponse(id: String): Boolean =
+        syncValue { peripherals[id]?.canSendWriteWithoutResponse ?: false }
+
     override fun enableNotify(id: String, characteristicUuid: String, indicate: Boolean): Boolean {
         val peripheral = peripherals[id] ?: return false
         val characteristic = characteristics[key(id, characteristicUuid)] ?: return false
@@ -335,7 +346,8 @@ class CoreBluetoothCentral(
                     name = name,
                     id = id,
                     advertisementBytes = manufacturer?.toByteArray(),
-                    serviceUuids = advertised
+                    serviceUuids = advertised,
+                    rssi = scanRssi(RSSI.intValue)
                 )
             )
         }
@@ -497,6 +509,17 @@ private fun platform.CoreBluetooth.CBManagerState?.toAdapterState(): BleAdapterS
     CBManagerStatePoweredOn -> BleAdapterState.PoweredOn
     else -> BleAdapterState.Unknown
 }
+
+/**
+ * The signal strength CoreBluetooth reported, or null when it measured none.
+ *
+ * CoreBluetooth uses 127 for "RSSI not available". A real advertisement is always below 0 dBm, so
+ * 127 is turned into null rather than passed on as a very strong signal.
+ */
+internal fun scanRssi(raw: Int): Int? = if (raw == RSSI_NOT_AVAILABLE) null else raw
+
+/** The value CoreBluetooth reports when it has no RSSI for an advertisement. */
+private const val RSSI_NOT_AVAILABLE = 127
 
 private fun statusOf(error: NSError?): Int {
     if (error == null) return 0

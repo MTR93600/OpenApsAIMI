@@ -3,6 +3,7 @@ package app.aaps.pump.medtrum.ios
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.NotificationManager
+import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.pump.DetailedBolusInfoStorage
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.interfaces.pump.TemporaryBasalStorage
@@ -17,10 +18,14 @@ import app.aaps.pump.medtrum.session.MedtrumSessionState
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Builds the iOS Medtrum driver and owns the parts it needs: the radio, the clock, the stored
@@ -45,7 +50,8 @@ class IosMedtrumDriverHost(
     private val pumpSync: PumpSync,
     detailedBolusInfoStorage: DetailedBolusInfoStorage,
     temporaryBasalStorage: TemporaryBasalStorage,
-    notificationManager: NotificationManager
+    notificationManager: NotificationManager,
+    bolusProgressData: BolusProgressData
 ) {
 
     private val logger: MedtrumLogger = AapsMedtrumLogger(aapsLogger)
@@ -92,7 +98,8 @@ class IosMedtrumDriverHost(
         scope = scope,
         store = store,
         logger = logger,
-        alarmNotifier = MedtrumAlarmNotifier(notificationManager)
+        alarmNotifier = MedtrumAlarmNotifier(notificationManager),
+        bolusProgressData = bolusProgressData
     )
 
     /**
@@ -100,7 +107,7 @@ class IosMedtrumDriverHost(
      * test does. [openRadio] has to have run first, or Bluetooth is not on and the scan refuses
      * to start.
      */
-    val discovery = IosMedtrumDiscoverySession(transport.scanner, store, state)
+    val discovery = IosMedtrumDiscoverySession(transport.scanner, store, state, onNewPump = driver::onNewPumpSerial)
 
     /**
      * Priming, activating and deactivating a patch. A screen drives this; until there is one, a
@@ -123,6 +130,34 @@ class IosMedtrumDriverHost(
     init {
         // The transport reads central events; the central has to know where to send them.
         central.events = transport::onEvent
+    }
+
+    /** The repeating expiry warning check, or null while it does not run. */
+    private var expiryWarningCheck: Job? = null
+
+    /**
+     * Starts the patch expiry warning check, every five minutes like the Android
+     * `MedtrumService.onCreate` loop. The plugin calls this when it starts, so a pump that is not
+     * used never warns. A second call does nothing; [shutdown] ends it.
+     *
+     * While iOS keeps the app suspended the check does not run, and a warning time that passes
+     * then is missed. Android misses it the same way while its service is not running.
+     */
+    fun startExpiryWarningCheck() {
+        if (expiryWarningCheck != null) return
+        expiryWarningCheck = scope.launch {
+            while (true) {
+                // One failure must not end the check for the rest of the run, as on Android.
+                try {
+                    driver.checkExpiryWarning()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    aapsLogger.error(LTag.PUMP, "checkExpiryWarning failed", e)
+                }
+                delay(MedtrumAlarmNotifier.CHECK_EXPIRY_WARNING_TIME_MS)
+            }
+        }
     }
 
     /** Starts CoreBluetooth. The first call is what makes iOS ask for the Bluetooth permission. */

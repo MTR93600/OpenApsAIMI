@@ -5,9 +5,11 @@ package app.aaps.plugins.dexcomoneplus.session
  *
  * Production path: [OnePlusSessionAuthKeks] via `:plugins:libkeks` (GPL-3 xDrip pin). Both are
  * shared code: the library was ported to Kotlin Multiplatform, so the handshake compiles and runs
- * on Apple too, and `OnePlusCgmDriverReal` around it is shared as well. What is still Android only
- * is OS bonding, which CoreBluetooth does not offer at all, so the unbonded four digit pairing
- * cannot complete on an iPhone.
+ * on Apple too, and `OnePlusCgmDriverReal` around it is shared as well. What differs is OS
+ * bonding: CoreBluetooth has no API to start one. iOS pairs by itself on the next encrypted
+ * operation and shows its own dialog, and the iOS GATT client gives that operation a pairing
+ * window so the person can accept it (see `OnePlusGattClientIos.createBond`). The unbonded four
+ * digit pairing has not been tried on an iPhone with a real sensor yet.
  * **No proprietary Dexcom secrets or hard-coded session keys belong in this module.**
  */
 interface OnePlusSessionAuth {

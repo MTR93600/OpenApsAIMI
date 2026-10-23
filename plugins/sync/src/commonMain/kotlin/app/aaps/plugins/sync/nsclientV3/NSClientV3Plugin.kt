@@ -188,6 +188,12 @@ class NSClientV3Plugin(
         // to notice it was cancelled, short enough that a child which never cooperates cannot hold
         // the stop open.
         private val STOP_JOIN_TIMEOUT_MS = T.secs(5).msecs()
+
+        // How long the app may be in the background before its socket is no longer trusted. Shorter
+        // than the time socket.io needs to notice a dead connection by itself (ping interval plus
+        // ping timeout, 45 s by default), so a socket that died while the app was suspended is
+        // rebuilt rather than believed.
+        internal val STALE_SOCKET_AFTER_MS = T.secs(30).msecs()
     }
 
     private var scope = CoroutineScope(aapsIoDispatcher + SupervisorJob())
@@ -666,6 +672,36 @@ class NSClientV3Plugin(
             executeUpload("START $reason")
         else
             executeLoop("START $reason")
+    }
+
+    /**
+     * The app is in front again after [awayMs] in the background. Only the iOS shell calls this.
+     *
+     * iOS suspends an app in the background, and its websocket with it. A suspended socket gets no
+     * disconnect event, so [NsConnection.connected] can still say true long after the server closed
+     * the connection. While it says true, [needsPolling] is false and nothing fetches at all. Android
+     * keeps the socket alive in a service and does not need this.
+     *
+     * - After a long absence ([STALE_SOCKET_AFTER_MS]) the socket is closed and opened again. That
+     *   clears the old `connected` flag, so the round below fetches by REST, and the new socket's
+     *   connect asks for the usual catch-up round.
+     * - In every case one round and one upload are asked for. A round that is not needed returns at
+     *   once (see [executeLoop]), and rows written while the app was away are sent now instead of
+     *   at the next database change.
+     */
+    fun onAppForeground(awayMs: Long) {
+        // The same rule as the connectivity handler: Wi-Fi only, charging only and the rest still apply.
+        if (!isEnabled() || !isAllowed) return
+        scope.launch {
+            if (awayMs >= STALE_SOCKET_AFTER_MS && nsConnection.hasLiveSocket) {
+                nsClientRepository.addLog("● WS", "back after ${awayMs / 1000} s in the background, reconnecting")
+                nsConnection.stop()
+            }
+            // Opens the socket if there is none, and does nothing to one that is up.
+            setClient()
+            executeLoop("FOREGROUND")
+            executeUpload("FOREGROUND")
+        }
     }
 
     override fun pause(newState: Boolean) {

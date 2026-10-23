@@ -1,5 +1,8 @@
 package app.aaps.plugins.aps.openAPSAIMI.retention
 
+import app.aaps.plugins.aps.openAPSAIMI.background.BackgroundTaskSubmit
+import app.aaps.plugins.aps.openAPSAIMI.background.reportBackgroundTaskSubmit
+import app.aaps.plugins.aps.openAPSAIMI.background.submitToBackgroundTaskScheduler
 import app.aaps.plugins.aps.openAPSAIMI.utils.iosTickAimiRoot
 import kotlin.concurrent.Volatile
 import kotlinx.cinterop.BetaInteropApi
@@ -10,6 +13,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import platform.BackgroundTasks.BGProcessingTask
 import platform.BackgroundTasks.BGProcessingTaskRequest
+import platform.BackgroundTasks.BGTaskRequest
 import platform.BackgroundTasks.BGTaskScheduler
 import platform.Foundation.NSDate
 import platform.Foundation.dateWithTimeIntervalSinceNow
@@ -49,6 +53,10 @@ object IosRetentionScheduler {
 
     @Volatile
     private var logger: (String) -> Unit = {}
+
+    /** How a request reaches iOS. A test replaces it to see what happens when iOS says no. */
+    @Volatile
+    internal var submit: (BGTaskRequest) -> BackgroundTaskSubmit = ::submitToBackgroundTaskScheduler
 
     /**
      * Points the scheduler at the telemetry directory. Optional: when never called, the
@@ -94,6 +102,9 @@ object IosRetentionScheduler {
      * Enqueues the next janitor run [delaySeconds] from now.
      *
      * No external power or network required: the pass is local I/O only.
+     *
+     * Returns what iOS answered: `false`, with a line on the configured logger, when the request
+     * was refused (identifier missing from Info.plist, background refresh off, simulator).
      */
     fun schedule(delaySeconds: Double = EARLIEST_BEGIN_SECONDS): Boolean {
         val request = BGProcessingTaskRequest(TASK_IDENTIFIER).apply {
@@ -101,12 +112,7 @@ object IosRetentionScheduler {
             setRequiresExternalPower(false)
             setRequiresNetworkConnectivity(false)
         }
-        return try {
-            BGTaskScheduler.sharedScheduler.submitTaskRequest(request, error = null)
-            true
-        } catch (e: Exception) {
-            false
-        }
+        return reportBackgroundTaskSubmit(TASK_IDENTIFIER, submit(request), logger)
     }
 
     /**

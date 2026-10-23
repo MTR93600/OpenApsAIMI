@@ -10,7 +10,6 @@ import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.interfaces.notifications.AlarmSound
 import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.interfaces.notifications.NotificationLevel
 import app.aaps.core.interfaces.notifications.NotificationManager
@@ -68,6 +67,7 @@ import app.aaps.pump.medtrum.keys.MedtrumIntKey
 import app.aaps.pump.medtrum.keys.MedtrumStringKey
 import app.aaps.pump.medtrum.keys.MedtrumStringNonKey
 import app.aaps.pump.medtrum.comm.AapsMedtrumLogger
+import app.aaps.pump.medtrum.comm.MedtrumAlarmNotifier
 import app.aaps.pump.medtrum.comm.MedtrumPumpSyncHistory
 import app.aaps.pump.medtrum.util.MedtrumSnUtil
 import app.aaps.pump.medtrum.util.MedtrumTimeUtil
@@ -78,6 +78,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -140,6 +141,12 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
         )
     }
 
+    /**
+     * The notifications for pump states, warnings and failed record reads. Shared with the iPhone
+     * driver, so both phones post the same ids, levels, sounds and texts.
+     */
+    private val alarmNotifier by lazy { MedtrumAlarmNotifier(notificationManager) }
+
     companion object {
 
         private const val COMMAND_DEFAULT_TIMEOUT_SEC: Long = 60
@@ -147,8 +154,6 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
         private const val COMMAND_CONNECTING_TIMEOUT_SEC: Long = 30
         private const val ALARM_HOURLY_MAX_CLEAR_CODE = 4
         private const val ALARM_DAILY_MAX_CLEAR_CODE = 5
-
-        private const val CHECK_EXPIRY_WARNING_TIME_MS = 5 * 60 * 1000L
     }
 
     private val mBinder: IBinder = LocalBinder()
@@ -241,7 +246,7 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
                 } catch (e: Exception) {
                     aapsLogger.error(LTag.PUMP, "checkExpiryWarning failed", e)
                 }
-                kotlinx.coroutines.delay(CHECK_EXPIRY_WARNING_TIME_MS)
+                delay(MedtrumAlarmNotifier.CHECK_EXPIRY_WARNING_TIME_MS)
             }
         }
     }
@@ -653,11 +658,7 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
                     aapsLogger.error(LTag.PUMPCOMM, "Failed to sync record $sequence, failureCount: $failureCount")
                     if (failureCount == 1) {
                         // Show notification to alert user of failure
-                        notificationManager.post(
-                            NotificationId.PUMP_SYNC_ERROR,
-                            TextRef.AndroidRes(R.string.pump_sync_error),
-                            level = NotificationLevel.URGENT,
-                            sound = AlarmSound.ALARM)
+                        alarmNotifier.onRecordSyncFailed()
                     } else if (failureCount >= 2) {
                         break
                     }
@@ -672,25 +673,7 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
 
     private fun handlePumpStateUpdate(state: MedtrumPumpState) {
         // Map the pump state to an alarm state and add it to the active alarms
-        val alarmState = when (state) {
-            MedtrumPumpState.NONE                 -> AlarmState.NONE
-            MedtrumPumpState.LOW_BG_SUSPENDED     -> AlarmState.LOW_BG_SUSPENDED
-            MedtrumPumpState.LOW_BG_SUSPENDED2    -> AlarmState.LOW_BG_SUSPENDED2
-            MedtrumPumpState.AUTO_SUSPENDED       -> AlarmState.AUTO_SUSPENDED
-            MedtrumPumpState.HOURLY_MAX_SUSPENDED -> AlarmState.HOURLY_MAX_SUSPENDED
-            MedtrumPumpState.DAILY_MAX_SUSPENDED  -> AlarmState.DAILY_MAX_SUSPENDED
-            MedtrumPumpState.SUSPENDED            -> AlarmState.SUSPENDED
-            MedtrumPumpState.PAUSED               -> AlarmState.PAUSED
-            MedtrumPumpState.OCCLUSION            -> AlarmState.OCCLUSION
-            MedtrumPumpState.EXPIRED              -> AlarmState.EXPIRED
-            MedtrumPumpState.RESERVOIR_EMPTY      -> AlarmState.RESERVOIR_EMPTY
-            MedtrumPumpState.PATCH_FAULT          -> AlarmState.PATCH_FAULT
-            MedtrumPumpState.PATCH_FAULT2         -> AlarmState.PATCH_FAULT2
-            MedtrumPumpState.BASE_FAULT           -> AlarmState.BASE_FAULT
-            MedtrumPumpState.BATTERY_OUT          -> AlarmState.BATTERY_OUT
-            MedtrumPumpState.NO_CALIBRATION       -> AlarmState.NO_CALIBRATION
-            else                                  -> null
-        }
+        val alarmState = MedtrumPumpSyncHistory.alarmFor(state)
         if (alarmState != null && alarmState != AlarmState.NONE) {
             medtrumPump.addAlarm(alarmState)
             runBlocking {
@@ -703,17 +686,13 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
             }
         }
 
-        // Map the pump state to a notification
+        // Map the pump state to a notification. The shared notifier posts and dismisses exactly what
+        // this method used to; the rest of the work for each state stays below.
+        alarmNotifier.onPumpState(state, medtrumPump.patchPrimed, medtrumPump::alarmStateToString)
+
         when (state) {
             MedtrumPumpState.NONE,
             MedtrumPumpState.STOPPED              -> {
-                notificationManager.dismiss(NotificationId.PUMP_WARNING)
-                notificationManager.dismiss(NotificationId.PUMP_ERROR)
-                notificationManager.dismiss(NotificationId.PUMP_SUSPENDED)
-                notificationManager.post(
-                    NotificationId.PATCH_NOT_ACTIVE,
-                    TextRef.AndroidRes(R.string.patch_not_active),
-                    level = NotificationLevel.IMPORTANT)
                 medtrumPump.setFakeTBRIfNotSet()
                 medtrumPump.clearAlarmState()
 
@@ -723,8 +702,6 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
 
             MedtrumPumpState.IDLE,
             MedtrumPumpState.FILLED               -> {
-                notificationManager.dismiss(NotificationId.PUMP_ERROR)
-                notificationManager.dismiss(NotificationId.PUMP_SUSPENDED)
                 medtrumPump.setFakeTBRIfNotSet()
                 medtrumPump.clearAlarmState()
 
@@ -738,12 +715,6 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
                             medtrumPump.pumpSN.toString(radix = 16)
                         )
                     }
-
-                    notificationManager.post(
-                        NotificationId.PUMP_ERROR,
-                        TextRef.AndroidRes(R.string.patch_reset_after_primed_error),
-                        level = NotificationLevel.URGENT,
-                        sound = AlarmSound.ALARM)
                 }
             }
 
@@ -751,16 +722,12 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
             MedtrumPumpState.PRIMED,
             MedtrumPumpState.EJECTING,
             MedtrumPumpState.EJECTED              -> {
-                notificationManager.dismiss(NotificationId.PUMP_ERROR)
-                notificationManager.dismiss(NotificationId.PUMP_SUSPENDED)
                 medtrumPump.setFakeTBRIfNotSet()
                 medtrumPump.clearAlarmState()
             }
 
             MedtrumPumpState.ACTIVE,
             MedtrumPumpState.ACTIVE_ALT           -> {
-                notificationManager.dismiss(NotificationId.PATCH_NOT_ACTIVE)
-                notificationManager.dismiss(NotificationId.PUMP_SUSPENDED)
                 medtrumPump.clearAlarmState()
             }
 
@@ -768,30 +735,9 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
             MedtrumPumpState.LOW_BG_SUSPENDED2,
             MedtrumPumpState.AUTO_SUSPENDED,
             MedtrumPumpState.SUSPENDED,
-            MedtrumPumpState.PAUSED               -> {
-                notificationManager.post(
-                    NotificationId.PUMP_SUSPENDED,
-                    TextRef.AndroidRes(R.string.pump_is_suspended))
-                // Pump will report proper TBR for this from loadEvents()
-                scope.launch { commandQueue.loadEvents() }
-            }
-
-            MedtrumPumpState.HOURLY_MAX_SUSPENDED -> {
-                notificationManager.post(
-                    NotificationId.PUMP_SUSPENDED,
-                    TextRef.AndroidRes(R.string.pump_is_suspended_hour_max),
-                    level = NotificationLevel.URGENT,
-                    sound = AlarmSound.ALARM)
-                // Pump will report proper TBR for this from loadEvents()
-                scope.launch { commandQueue.loadEvents() }
-            }
-
+            MedtrumPumpState.PAUSED,
+            MedtrumPumpState.HOURLY_MAX_SUSPENDED,
             MedtrumPumpState.DAILY_MAX_SUSPENDED  -> {
-                notificationManager.post(
-                    NotificationId.PUMP_SUSPENDED,
-                    TextRef.AndroidRes(R.string.pump_is_suspended_day_max),
-                    level = NotificationLevel.URGENT,
-                    sound = AlarmSound.ALARM)
                 // Pump will report proper TBR for this from loadEvents()
                 scope.launch { commandQueue.loadEvents() }
             }
@@ -804,14 +750,7 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
             MedtrumPumpState.BASE_FAULT,
             MedtrumPumpState.BATTERY_OUT,
             MedtrumPumpState.NO_CALIBRATION       -> {
-                notificationManager.dismiss(NotificationId.PATCH_NOT_ACTIVE)
-                notificationManager.dismiss(NotificationId.PUMP_SUSPENDED)
-                // Pump suspended due to error, show error!
-                notificationManager.post(
-                    NotificationId.PUMP_ERROR,
-                    TextRef.AndroidRes(R.string.pump_error, listOf(alarmState?.let { medtrumPump.alarmStateToString(it) }.toString())),
-                    sound = AlarmSound.ALARM)
-                // Get pump status, use readStatus here as for loadEvents() we cannot be sure callback is executed
+                // Pump suspended due to error. Get pump status, use readStatus here as for loadEvents() we cannot be sure callback is executed
                 scope.launch {
                     commandQueue.readStatus(rh.gs(app.aaps.core.ui.R.string.device_changed))
                     // Make sure a 0 temp is set
@@ -839,10 +778,7 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
             // ANNOUNCEMENT, which is the LOWEST tier of all - below INFO - so the notification badge took
             // the colour of any routine INFO message instead. A low reservoir warning was left showing
             // the green "Basal profile in pump updated" colour, which reads as "nothing is wrong".
-            notificationManager.post(
-                NotificationId.PUMP_WARNING,
-                TextRef.AndroidRes(R.string.pump_warning, listOf(medtrumPump.alarmStateToString(alarmState)))
-            )
+            alarmNotifier.onPumpWarning(alarmState, warningsOn = true, medtrumPump::alarmStateToString)
             runBlocking {
                 pumpSync.insertAnnouncement(
                     medtrumPump.alarmStateToString(alarmState),
@@ -855,22 +791,21 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
     }
 
     private fun checkExpiryWarning() {
-        if (medtrumPump.desiredPatchExpiration && medtrumPump.desiredPumpWarning) {
-            val warningAt = medtrumPump.patchStartTime + T.hours(medtrumPump.desiredPumpWarningExpiryThresholdHours.toLong()).msecs()
-            if (dateUtil.now() >= warningAt && dateUtil.now() <= warningAt + CHECK_EXPIRY_WARNING_TIME_MS) {
-                // Keep the id's own NORMAL level, for the same reason as notifyPumpWarning above.
-                notificationManager.post(
-                    NotificationId.PUMP_WARNING,
-                    TextRef.AndroidRes(R.string.alarm_pump_expires_soon)
+        val shown = alarmNotifier.checkExpiryWarning(
+            now = dateUtil.now(),
+            patchStartTime = medtrumPump.patchStartTime,
+            thresholdHours = medtrumPump.desiredPumpWarningExpiryThresholdHours,
+            expirationOn = medtrumPump.desiredPatchExpiration,
+            warningsOn = medtrumPump.desiredPumpWarning
+        )
+        if (shown) {
+            runBlocking {
+                pumpSync.insertAnnouncement(
+                    rh.gs(R.string.alarm_pump_expires_soon),
+                    null,
+                    medtrumPump.pumpType(),
+                    medtrumPump.pumpSN.toString(radix = 16)
                 )
-                runBlocking {
-                    pumpSync.insertAnnouncement(
-                        rh.gs(R.string.alarm_pump_expires_soon),
-                        null,
-                        medtrumPump.pumpType(),
-                        medtrumPump.pumpSN.toString(radix = 16)
-                    )
-                }
             }
         }
     }

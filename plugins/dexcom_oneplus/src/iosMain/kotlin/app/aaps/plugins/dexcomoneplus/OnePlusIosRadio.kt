@@ -51,6 +51,30 @@ import kotlin.concurrent.Volatile
  * Nothing is dropped in silence: every restored peripheral is logged and released here, and both
  * listeners are told as well so a field trace shows what each of them decided.
  *
+ * ## Why this was looked at again, and kept
+ *
+ * Unlike Medtrum, a ONE+ session is short and stateless: connect, authenticate, read the glucose,
+ * let go, and do it again five minutes later. So "take the restored link back" was checked once
+ * more (2026-10-23). It does not buy anything that releasing does not:
+ *
+ * - The session cannot continue on the restored link anyway. A new KEKS handshake is needed on
+ *   every link, and leftover Control indications are the stale-reading danger described above.
+ *   So "keeping" it would mean cancelling it and connecting again - which is what the driver
+ *   already does from a released peripheral, because the central finds it again by its identifier
+ *   (`retrievePeripheralsWithIdentifiers`) or by the FEBC scan.
+ * - A pending connect that nobody owns would connect while no GATT client waits for it. Every
+ *   client ignores events for an id that is not its own link, so that link would hold the sensor
+ *   with nobody talking on it, and the driver's own connect would then race it.
+ *
+ * So restoration is still useful here, just not through the link: the restore identifier is what
+ * makes iOS start the app again for the pending scan or connect, and the driver then reconnects
+ * from the stored sensor, as at every plugin start. Whether the app shell starts the plugin during
+ * such a background launch is not decided in this module, and nothing here has met a real sensor.
+ *
+ * Releasing has one cost worth naming: if the plugin does **not** start after the relaunch, the
+ * released connect was the last thing that could wake the app, and nothing wakes it again. That
+ * is why the start path, not this class, is where the next step belongs.
+ *
  * ⚠️ ASYNC IMPACT: [onEvent] runs on the central's serial queue. Both listeners only record what
  * they heard and wake whoever is waiting, and [BleCentral.release] does not block, so nothing here
  * holds that queue up.

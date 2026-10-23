@@ -493,4 +493,33 @@ class MedtrumSessionTest {
         stop.join()
         bolus.join()
     }
+
+    /**
+     * The session keeps one command that waits for its answer. A second command, for example a
+     * temp basal from the loop while the patch screen stops the patch, used to replace it: the
+     * first one then never got its answer and timed out. Android refuses the second one instead.
+     */
+    @Test
+    fun aSecondCommandIsRefusedWhileOneWaitsForItsAnswer() = runBlocking {
+        val fake = FakeMedtrumBleTransport()
+        val session = newSession(fake)
+        scriptAuthSuccess(fake)
+        assertTrue(session.connect("test"))
+        fake.responses[CommandType.RESUME_PUMP.code] = successResponse(CommandType.RESUME_PUMP.code)
+        // No scripted answer for PRIME: the command stays in flight.
+        var primed: Boolean? = null
+        val prime = launch { primed = session.prime() }
+        var tries = 0
+        while (fake.sentMessages.none { it[0] == CommandType.PRIME.code } && tries++ < 100) kotlinx.coroutines.delay(10)
+
+        assertFalse(session.resumePump(), "the second command must be refused")
+        assertTrue(fake.sentMessages.none { it[0] == CommandType.RESUME_PUMP.code }, "nothing is sent for the refused command")
+
+        // The first command is still the one waiting, so its answer reaches it.
+        session.onIndication(successResponse(CommandType.PRIME.code))
+        prime.join()
+        assertEquals(true, primed)
+        // And once it is done, the next command goes out again.
+        assertTrue(session.resumePump())
+    }
 }

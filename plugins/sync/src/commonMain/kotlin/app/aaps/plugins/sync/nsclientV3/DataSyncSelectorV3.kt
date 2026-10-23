@@ -148,6 +148,52 @@ class DataSyncSelectorV3(
         else preferences.remove(NsclientLongKey.DeviceStatusLastSyncedId)
     }
 
+    /**
+     * Treats every row that is in the database now as already uploaded.
+     *
+     * For a phone that was a client and is now the master. A client uploads nothing (see [doUpload]),
+     * so all its `*LastSyncedId` values are still 0. Left like that, the first upload as master walks
+     * the whole database and sends what only ever lived on this phone: "AAPS started" notes, and
+     * changes to records that came from Nightscout. The second kind is the dangerous one, because it
+     * overwrites the real master's records with this phone's old copy of them.
+     *
+     * So the marks are moved to the last id of each table, and only rows written from now on are
+     * uploaded. A mark is never moved back, so nothing that was already queued is sent twice. The
+     * profile store is treated the same way through its timestamp: the copy on this phone came from
+     * Nightscout, and it is uploaded again only after it is changed here.
+     *
+     * This is not [resetToNextFullSync], which does the opposite: it moves the marks to 0 so that
+     * everything is sent again.
+     */
+    suspend fun markAllAsSynced() {
+        suspend fun moveUp(key: NsclientLongKey, lastId: Long?) {
+            if (lastId != null && lastId > preferences.get(key)) preferences.put(key, lastId)
+        }
+        moveUp(NsclientLongKey.GlucoseValueLastSyncedId, persistenceLayer.getLastGlucoseValueId())
+        moveUp(NsclientLongKey.CalibrationEntryLastSyncedId, persistenceLayer.getLastCalibrationEntryId())
+        moveUp(NsclientLongKey.TemporaryBasalLastSyncedId, persistenceLayer.getLastTemporaryBasalId())
+        moveUp(NsclientLongKey.TemporaryTargetLastSyncedId, persistenceLayer.getLastTemporaryTargetId())
+        moveUp(NsclientLongKey.ExtendedBolusLastSyncedId, persistenceLayer.getLastExtendedBolusId())
+        moveUp(NsclientLongKey.FoodLastSyncedId, persistenceLayer.getLastFoodId())
+        moveUp(NsclientLongKey.BolusLastSyncedId, persistenceLayer.getLastBolusId())
+        moveUp(NsclientLongKey.CarbsLastSyncedId, persistenceLayer.getLastCarbsId())
+        moveUp(NsclientLongKey.BolusCalculatorLastSyncedId, persistenceLayer.getLastBolusCalculatorResultId())
+        moveUp(NsclientLongKey.TherapyEventLastSyncedId, persistenceLayer.getLastTherapyEventId())
+        moveUp(NsclientLongKey.ProfileSwitchLastSyncedId, persistenceLayer.getLastProfileSwitchId())
+        moveUp(NsclientLongKey.EffectiveProfileSwitchLastSyncedId, persistenceLayer.getLastEffectiveProfileSwitchId())
+        moveUp(NsclientLongKey.RunningModeLastSyncedId, persistenceLayer.getLastRunningModeId())
+        moveUp(NsclientLongKey.DeviceStatusLastSyncedId, persistenceLayer.getLastDeviceStatusId())
+        moveUp(NsclientLongKey.ProfileStoreLastSyncedId, preferences.get(LongNonKey.LocalProfileLastChange).takeIf { it != 0L })
+        aapsLogger.info(LTag.NSCLIENT, "All rows in the database are now treated as uploaded")
+    }
+
+    /**
+     * True when this phone has already uploaded a device status. Only a master writes and uploads
+     * device statuses - a client receives them - so this tells a phone that already ran as master
+     * from one that only ever ran as a client.
+     */
+    fun hasUploadedAsMaster(): Boolean = preferences.get(NsclientLongKey.DeviceStatusLastSyncedId) > 0
+
     @OpenForTesting
     fun confirmLastBolusIdIfGreater(lastSynced: Long) {
         if (lastSynced > preferences.get(NsclientLongKey.BolusLastSyncedId)) {

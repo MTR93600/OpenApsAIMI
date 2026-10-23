@@ -81,12 +81,18 @@ sealed class BleCentralEvent {
      * would find. A Dexcom ONE+ often advertises with no name at all and is recognised only by the
      * service UUID it carries, so a scanner that cannot read this list cannot find that sensor.
      * Empty means the platform reported none.
+     *
+     * [rssi] is the signal strength of this advertisement in dBm, or null when the platform did not
+     * measure one. CoreBluetooth reports 127 for "not available", and that becomes null here, so a
+     * reader never takes 127 dBm for a very strong signal. A central that cannot read the signal
+     * at all leaves the default.
      */
     data class ScanResult(
         val name: String?,
         val id: String,
         val advertisementBytes: ByteArray?,
-        val serviceUuids: List<String> = emptyList()
+        val serviceUuids: List<String> = emptyList(),
+        val rssi: Int? = null
     ) : BleCentralEvent()
     data class ScanFailed(val message: String) : BleCentralEvent()
     data class OperationFailed(val operation: String, val message: String) : BleCentralEvent()
@@ -193,6 +199,18 @@ interface BleCentral {
     fun discoverServices(id: String)
     fun discoverCharacteristics(id: String, serviceUuid: String)
     fun write(id: String, characteristicUuid: String, data: ByteArray, withResponse: Boolean): Boolean
+
+    /**
+     * True when the stack has room for one more write without response to [id].
+     *
+     * A write without response has no completion callback, so this is the only flow control there
+     * is: CoreBluetooth says that a write sent while this is false may be dropped. A caller sending
+     * many such writes in a row asks before each one and waits while it is false.
+     *
+     * True by default, for a central that has no such signal. That answer keeps the old behaviour
+     * (write and hope), it does not promise that the write will arrive.
+     */
+    fun canSendWriteWithoutResponse(id: String): Boolean = true
     fun enableNotify(id: String, characteristicUuid: String, indicate: Boolean): Boolean
     fun cachedName(id: String): String?
 }

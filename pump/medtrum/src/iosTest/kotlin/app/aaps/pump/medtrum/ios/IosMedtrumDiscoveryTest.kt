@@ -62,7 +62,8 @@ class IosMedtrumDiscoveryTest {
         val defaults = NSUserDefaults(suiteName = suite)!!
         val store = IosMedtrumStateStore(defaults, prefix = "t.")
         val state = MedtrumSessionState(clock = MedtrumClock.fixed(1_700_000_000_000L))
-        val session = IosMedtrumDiscoverySession(transport.scanner, store, state)
+        var newPumpCalls = 0
+        val session = IosMedtrumDiscoverySession(transport.scanner, store, state, onNewPump = { newPumpCalls++ })
 
         fun advertise(name: String?, id: String, bytes: ByteArray?) {
             transport.onEvent(BleCentralEvent.ScanResult(name = name, id = id, advertisementBytes = bytes))
@@ -240,6 +241,45 @@ class IosMedtrumDiscoveryTest {
             assertFalse(rig.session.select(madeUp))
             assertNull(rig.session.selectedSerial())
             assertEquals(0L, rig.state.pumpSN)
+        } finally {
+            rig.store.clear()
+        }
+    }
+
+    // -- Another pump, as Android on a new `SnInput` ------------------------------------------
+
+    @Test
+    fun anotherPumpForgetsTheOldPeripheralAndIsReportedAsANewPump() {
+        val rig = rig("newpump")
+        try {
+            rig.store.savePumpSerial("11")
+            rig.store.savePeripheralId(0x11L, "old-pump")
+            assertTrue(rig.session.start())
+            rig.advertise(name = "MT", id = "pump-9", bytes = medtrumAdvertisement(0x2F4A1BL))
+
+            assertTrue(rig.session.select(rig.session.pumps.value.single()))
+
+            assertEquals(1, rig.newPumpCalls, "Android calls connectNewPump and resets the patch")
+            assertNull(rig.store.loadPeripheralId(0x11L), "the identifier of the old pump is gone")
+            assertEquals(0x2F4A1BL, rig.state.pumpSN, "the new serial is in the state before the driver is told")
+        } finally {
+            rig.store.clear()
+        }
+    }
+
+    @Test
+    fun choosingTheSamePumpAgainIsNoNewPump() {
+        val rig = rig("samepump")
+        try {
+            rig.store.savePumpSerial("2F4A1B")
+            rig.store.savePeripheralId(0x2F4A1BL, "same-pump")
+            assertTrue(rig.session.start())
+            rig.advertise(name = "MT", id = "pump-10", bytes = medtrumAdvertisement(0x2F4A1BL))
+
+            assertTrue(rig.session.select(rig.session.pumps.value.single()))
+
+            assertEquals(0, rig.newPumpCalls)
+            assertEquals("same-pump", rig.store.loadPeripheralId(0x2F4A1BL))
         } finally {
             rig.store.clear()
         }

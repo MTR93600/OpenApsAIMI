@@ -268,6 +268,33 @@ class OnePlusGattClientIosTest {
         assertEquals(5, central.writes[2].data.size)
     }
 
+    @Test
+    fun anExtraDataChunkWaitsUntilTheStackHasRoom() {
+        val (central, gatt) = connected()
+        // No room for the first two questions, then room for every chunk after that.
+        central.canSendAnswers.addAll(listOf(false, false))
+        val before = clock
+
+        gatt.writeExtraData(ByteArray(45) { it.toByte() })
+
+        assertEquals(3, central.writes.size)
+        // Two waits of 5 ms, two gaps of 40 ms between the chunks, 500 ms after them.
+        assertEquals(10L + 80L + 500L, clock - before)
+        assertEquals(5, central.canSendQuestions)
+    }
+
+    @Test
+    fun anExtraDataChunkIsSentAnywayWhenTheRoomNeverComes() {
+        val (central, gatt) = connected()
+        central.canSendByDefault = false
+
+        gatt.writeExtraData(ByteArray(10) { it.toByte() })
+
+        // The old behaviour: the write goes out, and the handshake decides whether it arrived.
+        assertEquals(1, central.writes.size)
+        assertEquals(101, central.canSendQuestions)
+    }
+
     // -- disconnect ------------------------------------------------------------------------------
 
     @Test

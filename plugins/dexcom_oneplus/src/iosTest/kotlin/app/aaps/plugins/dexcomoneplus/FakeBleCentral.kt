@@ -109,6 +109,22 @@ class FakeBleCentral : BleCentral {
         return true
     }
 
+    /**
+     * The answers to [canSendWriteWithoutResponse], one per question, oldest first. When it is
+     * empty the answer is [canSendByDefault].
+     */
+    val canSendAnswers = ArrayDeque<Boolean>()
+    var canSendByDefault: Boolean = true
+
+    /** How often [canSendWriteWithoutResponse] was asked. */
+    var canSendQuestions: Int = 0
+        private set
+
+    override fun canSendWriteWithoutResponse(id: String): Boolean {
+        canSendQuestions++
+        return canSendAnswers.removeFirstOrNull() ?: canSendByDefault
+    }
+
     override fun enableNotify(id: String, characteristicUuid: String, indicate: Boolean): Boolean {
         if (!notifyAccepted) return false
         val subscribe = Subscribe(id, characteristicUuid, indicate)

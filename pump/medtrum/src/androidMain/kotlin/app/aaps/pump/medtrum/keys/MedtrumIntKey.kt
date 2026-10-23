@@ -3,6 +3,7 @@ package app.aaps.pump.medtrum.keys
 import app.aaps.core.keys.interfaces.BooleanPreferenceKey
 import app.aaps.core.keys.interfaces.IntPreferenceKey
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.pump.medtrum.MedtrumSettingsDefaults
 import app.aaps.pump.medtrum.R
 
 enum class MedtrumIntKey(
@@ -17,7 +18,7 @@ enum class MedtrumIntKey(
 
     MedtrumPumpExpiryWarningHours(
         key = "pump_expiry_warning_hour",
-        defaultValue = 72,
+        defaultValue = MedtrumSettingsDefaults.PUMP_EXPIRY_WARNING_HOURS,
         titleResId = R.string.pump_warning_expiry_hour_title,
         summaryResId = R.string.pump_warning_expiry_hour_summary,
         min = 48,
@@ -26,7 +27,7 @@ enum class MedtrumIntKey(
     ),
     MedtrumHourlyMaxInsulin(
         key = "hourly_max_insulin",
-        defaultValue = 25,
+        defaultValue = MedtrumSettingsDefaults.HOURLY_MAX_INSULIN,
         titleResId = R.string.hourly_max_insulin_title,
         summaryResId = R.string.hourly_max_insulin_summary,
         min = 10,
@@ -34,7 +35,7 @@ enum class MedtrumIntKey(
     ),
     MedtrumDailyMaxInsulin(
         key = "daily_max_insulin",
-        defaultValue = 80,
+        defaultValue = MedtrumSettingsDefaults.DAILY_MAX_INSULIN,
         titleResId = R.string.daily_max_insulin_title,
         summaryResId = R.string.daily_max_insulin_summary,
         min = 20,

@@ -2,6 +2,7 @@ package app.aaps.pump.medtrum.keys
 
 import app.aaps.core.keys.interfaces.BooleanPreferenceKey
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.pump.medtrum.MedtrumSettingsDefaults
 import app.aaps.pump.medtrum.R
 
 enum class MedtrumBooleanKey(
@@ -13,13 +14,13 @@ enum class MedtrumBooleanKey(
 
     MedtrumWarningNotification(
         key = "pump_warning_notification",
-        defaultValue = true,
+        defaultValue = MedtrumSettingsDefaults.PUMP_WARNING_NOTIFICATION,
         titleResId = R.string.pump_warning_notification_title,
         summaryResId = R.string.pump_warning_notification_summary
     ),
     MedtrumPatchExpiration(
         key = "patch_expiration",
-        defaultValue = true,
+        defaultValue = MedtrumSettingsDefaults.PATCH_EXPIRATION,
         titleResId = R.string.patch_expiration_title,
         summaryResId = R.string.patch_expiration_summary
     ),

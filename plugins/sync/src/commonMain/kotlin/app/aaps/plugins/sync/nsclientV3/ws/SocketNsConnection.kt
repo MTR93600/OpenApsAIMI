@@ -25,19 +25,19 @@ import kotlinx.serialization.json.JsonObject
  *
  * ## What happens when the socket drops
  *
- * Nothing here closes the socket on backgrounding: [stop] is called only on app exit, on a
- * connection setting changing, and when connectivity becomes disallowed. `IosForegroundWatcher` was
- * written to drive that and is wired to nothing, so a dropped connection is left to the transport's
- * own reconnect. When it does come back, `onConnectStorage` clears `initialLoadFinished` and asks
- * for a catch-up round, and that round refetches the missed window from the persisted high-water
- * mark.
+ * Nothing here closes the socket on backgrounding: [stop] is called on app exit, on a connection
+ * setting changing, when connectivity becomes disallowed, and by `NSClientV3Plugin.onAppForeground`.
+ * When the socket comes back, `onConnectStorage` clears `initialLoadFinished` and asks for a
+ * catch-up round, and that round refetches the missed window from the persisted high-water mark.
  *
- * **There is no REST polling fallback behind that**, which this comment used to claim there was. The
- * five-minute tick in `NSClientV3Plugin` runs a load only when websockets are switched off or the
- * platform has none; while they are on it logs and does nothing. `wsDisconnectGraceMs` debounces the
- * `masterReachable` flow and starts no load. So the catch-up is the only recovery, a socket that
- * never reconnects is a real hole, and on a platform that suspends the whole process there is
- * nothing else to close it.
+ * While the socket is not connected, the tick in `NSClientV3Plugin` fetches by REST
+ * (`needsPolling` is true whenever [connected] is false), so a socket that does not come back is
+ * covered by polling.
+ *
+ * The case polling cannot see is a socket that died while iOS suspended the app: no disconnect event
+ * arrives, so [connected] stays true. On iOS, `IosNsAppLifecycle` calls `onAppForeground` when the
+ * app comes back, and after a long absence that closes and reopens the socket, which clears the
+ * stale flag.
  *
  * ## What is deliberately different from Android
  *

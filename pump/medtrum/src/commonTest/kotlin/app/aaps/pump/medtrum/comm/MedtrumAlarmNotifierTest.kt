@@ -3,10 +3,12 @@ package app.aaps.pump.medtrum.comm
 import app.aaps.core.interfaces.notifications.AlarmSound
 import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.interfaces.notifications.NotificationLevel
+import app.aaps.pump.medtrum.MedtrumStrings
 import app.aaps.pump.medtrum.comm.enums.AlarmState
 import app.aaps.pump.medtrum.comm.enums.MedtrumPumpState
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /** The person must be told about pump alarms the way Android tells them: same id, level and sound. */
@@ -76,5 +78,47 @@ class MedtrumAlarmNotifierTest {
 
         notifier.onPumpWarning(AlarmState.PUMP_LOW_RESERVOIR, warningsOn = true, MedtrumPumpSyncHistory::alarmText)
         assertEquals(NotificationId.PUMP_WARNING, notifications.posted.single().id)
+    }
+
+    // -- Patch expires soon (Android `MedtrumService.checkExpiryWarning`) ---------------------------
+
+    private val patchStart = 1_700_000_000_000L
+    private val hour = 60 * 60 * 1000L
+
+    private fun checkExpiry(now: Long, expirationOn: Boolean = true, warningsOn: Boolean = true) =
+        notifier.checkExpiryWarning(now, patchStart, thresholdHours = 72, expirationOn = expirationOn, warningsOn = warningsOn)
+
+    @Test
+    fun `the expiry warning comes at the threshold hour`() {
+        assertTrue(checkExpiry(patchStart + 72 * hour))
+
+        val warning = notifications.posted.single()
+        assertEquals(NotificationId.PUMP_WARNING, warning.id)
+        assertEquals(MedtrumStrings.alarm_pump_expires_soon, warning.text)
+    }
+
+    @Test
+    fun `the expiry warning is shown only in the first check window`() {
+        assertFalse(checkExpiry(patchStart + 72 * hour - 1))
+        assertTrue(checkExpiry(patchStart + 72 * hour + MedtrumAlarmNotifier.CHECK_EXPIRY_WARNING_TIME_MS))
+        assertFalse(checkExpiry(patchStart + 72 * hour + MedtrumAlarmNotifier.CHECK_EXPIRY_WARNING_TIME_MS + 1))
+        assertEquals(1, notifications.posted.size)
+    }
+
+    @Test
+    fun `no expiry warning without patch expiry or without pump warnings`() {
+        assertFalse(checkExpiry(patchStart + 72 * hour, expirationOn = false))
+        assertFalse(checkExpiry(patchStart + 72 * hour, warningsOn = false))
+        assertTrue(notifications.posted.isEmpty())
+    }
+
+    @Test
+    fun `a failed record read is urgent and sounds`() {
+        notifier.onRecordSyncFailed()
+
+        val error = notifications.posted.single()
+        assertEquals(NotificationId.PUMP_SYNC_ERROR, error.id)
+        assertEquals(NotificationLevel.URGENT, error.level)
+        assertEquals(AlarmSound.ALARM, error.sound)
     }
 }

@@ -1,12 +1,12 @@
 import SwiftUI
 import AapsShared
 
-/// The app shell, built once into both AAPSClient and AAPSClient2.
+/// The app shell, built once into both Xcode targets (still called AAPSClient and AAPSClient2).
 ///
-/// The two products differ only in bundle id, name and icon, exactly as the Android `aapsclient`
-/// and `aapsclient2` flavours do, so that one phone can follow two Nightscout sites at once. None
-/// of that belongs in the code: the name is read back from the bundle, so this file does not know
-/// or care which of the two it is running as.
+/// The names come from the first iOS port, which was a follower. They no longer say what the app
+/// is: the app is a master phone that runs the loop, and the role is set in `IosConfig`, not here.
+/// The two targets differ only in bundle id, name and icon. The name is read back from the bundle,
+/// so this file does not know or care which of the two it is running as.
 @main
 struct ClientApp: App {
 

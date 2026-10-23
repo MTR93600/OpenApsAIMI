@@ -49,12 +49,17 @@ object IosAimiBackgroundTasks {
      *
      * A failure in one job is logged and does not stop the other, and never reaches the caller.
      * Returns true only when both jobs were configured and enqueued.
+     *
+     * @param coordinator must be the app graph's coordinator, the one the loop's
+     *   `DetermineBasalaimiSMB2` holds - see `IosMlTrainingScheduler.configure` for why.
      */
     fun install(coordinator: BasalMlTrainingCoordinator, logger: AAPSLogger): Boolean =
         installWith(
             coordinator = { coordinator },
             logger = logger,
-            configureMl = IosMlTrainingScheduler::configure,
+            configureMl = { mlCoordinator ->
+                IosMlTrainingScheduler.configure(mlCoordinator) { line -> logger.warn(LTag.APS, line) }
+            },
             scheduleMl = IosMlTrainingScheduler::schedule,
             configureRetention = { sink -> IosRetentionScheduler.configure(iosTickAimiRoot(), sink) },
             scheduleRetention = { IosRetentionScheduler.schedule() },
@@ -77,7 +82,8 @@ object IosAimiBackgroundTasks {
             scheduleMl()
         }
         val retentionOk = guarded(logger, "retention") {
-            configureRetention { line -> logger.debug(LTag.APS, line) }
+            // Info, not debug: a refused re-queue of the daily pass is reported on this sink.
+            configureRetention { line -> logger.info(LTag.APS, line) }
             scheduleRetention()
         }
         return mlOk && retentionOk

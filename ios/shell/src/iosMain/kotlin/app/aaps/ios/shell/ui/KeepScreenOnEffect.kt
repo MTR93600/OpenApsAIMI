@@ -27,8 +27,9 @@ import platform.UIKit.UIApplication
 fun KeepScreenOnEffect(preferences: Preferences) {
     // `observe` answers from the stored value through the `BooleanNonPreferenceKey` overload of
     // `get`, which falls back to `key.defaultValue` and so never applies `calculatedDefaultValue` -
-    // the one that makes this true on a client. Observing is therefore only a change signal here,
-    // and the value itself is read with the `BooleanPreferenceKey` overload, which does apply it.
+    // the one that gives a client build a different default. Observing is therefore only a change
+    // signal here, and the value itself is read with the `BooleanPreferenceKey` overload, which does
+    // apply it.
     // `ComposeMainActivity.setupWakeLock` splits it the same way for the same reason.
     val changed by preferences.observe(BooleanKey.OverviewKeepScreenOn).collectAsState()
     val keepScreenOn = remember(changed) { preferences.get(BooleanKey.OverviewKeepScreenOn) }

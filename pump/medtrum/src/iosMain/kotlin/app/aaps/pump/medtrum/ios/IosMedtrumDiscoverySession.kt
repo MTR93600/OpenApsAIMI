@@ -19,7 +19,13 @@ import kotlinx.coroutines.flow.StateFlow
 class IosMedtrumDiscoverySession(
     private val scanner: IosMedtrumPumpScanner,
     private val store: IosMedtrumStateStore,
-    private val state: MedtrumSessionState
+    private val state: MedtrumSessionState,
+    /**
+     * Called when the chosen serial is not the saved one, after [MedtrumSessionState.pumpSN] holds
+     * the new serial. The driver then does what the Android `MedtrumService` does on a new
+     * `SnInput`: model from the serial, patch reset, `connectNewPump`. See `IosMedtrumPump.onNewPumpSerial`.
+     */
+    private val onNewPump: () -> Unit = {}
 ) {
 
     /** The pumps found so far. Empty means none was found, never a pump with an unknown serial. */
@@ -41,14 +47,22 @@ class IosMedtrumDiscoverySession(
      * Keeps the chosen pump: the scan stops, the serial is saved, and the live state carries it
      * at once, so the next connect attempt uses it without a restart.
      *
+     * When it is another pump than the saved one, the saved Bluetooth identifier is forgotten (it
+     * belongs to the old pump) and [onNewPump] runs. Choosing the same pump again changes nothing.
+     *
      * Returns false when the pump is not one that this scan offered. A serial from anywhere else
      * is never written.
      */
     fun select(pump: MedtrumScannedPump): Boolean {
         if (scanner.pumps.value.none { it.id == pump.id && it.serial == pump.serial }) return false
+        val previous = store.loadPumpSerial()
         scanner.stopScan()
         store.savePumpSerial(pump.serialHex)
         state.pumpSN = pump.serial
+        if (previous != pump.serial) {
+            store.forgetPeripheralId()
+            onNewPump()
+        }
         store.save(state)
         return true
     }

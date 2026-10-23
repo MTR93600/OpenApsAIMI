@@ -13,10 +13,12 @@ import kotlin.concurrent.Volatile
  * 6, 12 and 34 buckets.
  *
  * **When there is no data, the getters return `null`.** That is the case before the first refresh,
- * when HealthKit is not available or a query failed, and when the last good refresh is older than
- * ten minutes (`NEVER_REFRESHED` and `STALE`). When the status is `AVAILABLE` the getters return
- * the real count, and that includes a real 0. The engine reads `null` as "unknown" and does not
- * take a step-driven decision from it. [dataStatus] shows the state for logs and tests.
+ * when HealthKit is not available or a query failed, when the last good refresh is older than
+ * ten minutes (`NEVER_REFRESHED` and `STALE`), and when HealthKit has held no step sample for 24
+ * hours (`NO_STEP_SOURCE`, which is what a refused read looks like). When the status is
+ * `AVAILABLE` the getters return the real count, and that includes a real 0. The engine reads
+ * `null` as "unknown" and does not take a step-driven decision from it. [dataStatus] shows the
+ * state for logs and tests.
  */
 actual object StepService {
 

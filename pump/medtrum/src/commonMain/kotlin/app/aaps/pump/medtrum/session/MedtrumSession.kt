@@ -25,6 +25,8 @@ import app.aaps.pump.medtrum.comm.packets.StopPatchPacket
 import app.aaps.pump.medtrum.comm.packets.SubscribePacket
 import app.aaps.pump.medtrum.comm.packets.SynchronizePacket
 import app.aaps.pump.medtrum.util.MedtrumTimeUtil
+import kotlin.concurrent.Volatile
+import kotlin.math.abs
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -32,8 +34,8 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withTimeout
-import kotlin.math.abs
 
 /**
  * Portable Medtrum session: connection/auth flow, command/response flow,
@@ -92,6 +94,10 @@ class MedtrumSession(
      */
     var onStateChanged: (() -> Unit)? = null
 
+    /** Counts stop presses, so [setBolus] can see one that came in before its command was sent. */
+    @Volatile
+    private var stopRequests = 0
+
     /** Called on the first history record that could not be read in a sync, as Android notifies there. */
     var onRecordSyncFailed: (() -> Unit)? = null
 
@@ -111,6 +117,9 @@ class MedtrumSession(
 
     private var pendingAuth: PendingPacket? = null
     private var pendingCommand: PendingPacket? = null
+
+    /** Held while a command waits for its answer. See [sendCommand]. */
+    private val commandSlot = Mutex()
     private var authResult: CompletableDeferred<Boolean>? = null
 
     /** Release resources (mirrors Service.onDestroy). */
@@ -273,11 +282,24 @@ class MedtrumSession(
             logger.error("PUMPCOMM", "Send packet attempt when in phase: $phase")
             return false
         }
-        val deferred = CompletableDeferred<PacketResult>()
-        pendingCommand = PendingPacket(packet, deferred)
-        transport.sendMessage(packet.getRequest())
-        val result = awaitResult(deferred, timeoutSec)
-        pendingCommand = null
+        // Only one command can wait for its answer. Android refuses a second one in the same way:
+        // `sendPacketAndGetResponse` sends only from ReadyState, and a command in flight is
+        // CommandState. Without this a second caller replaced the first pending command - for
+        // example a temp basal from the loop while the patch screen stops the patch. The first
+        // command then never got its answer, timed out after a minute and dropped the link.
+        if (!commandSlot.tryLock()) {
+            logger.error("PUMPCOMM", "Send packet attempt while another command waits for its answer: ${packet.opCode}")
+            return false
+        }
+        val result = try {
+            val deferred = CompletableDeferred<PacketResult>()
+            pendingCommand = PendingPacket(packet, deferred)
+            transport.sendMessage(packet.getRequest())
+            awaitResult(deferred, timeoutSec)
+        } finally {
+            pendingCommand = null
+            commandSlot.unlock()
+        }
         return when (result) {
             PacketResult.Success -> true
             PacketResult.Failed  -> false // Android: back to ReadyState
@@ -353,6 +375,9 @@ class MedtrumSession(
      * [waitForBolusProgress].
      */
     suspend fun setBolus(insulin: Double, onStarted: suspend (startTime: Long) -> Unit = {}): BolusResult {
+        // A stop pressed from here on must win even before the bolus command is out: stopBolus only
+        // waits for a command that is already sent, so its cancel could go first and the bolus after it.
+        val stopsAtStart = stopRequests
         // Reset the per-bolus verdict inputs FIRST (Android comment preserved in intent)
         state.bolusAmountDelivered = 0.0
         state.bolusStopped = false
@@ -374,6 +399,12 @@ class MedtrumSession(
         state.bolusProgressLastTimeStamp = state.bolusStartTime
         state.bolusAmountToBeDelivered = insulin
 
+        if (stopRequests != stopsAtStart) {
+            logger.debug("PUMPCOMM", "setBolus: stop pressed before the bolus command was sent, nothing sent")
+            state.bolusDone = true
+            state.bolusStopped = true
+            return BolusResult.STOPPED
+        }
         val sent = sendCommand(SetBolusPacket(insulin))
         if (!sent) {
             state.bolusDone = true
@@ -466,6 +497,7 @@ class MedtrumSession(
 
     /** Mirrors `MedtrumService.stopBolus` (retry loop, 30 s cap, 200 ms between retries). */
     suspend fun stopBolus(): Boolean {
+        stopRequests++
         state.bolusErrorReason = "user_stop"
         if (phase != Phase.READY || state.connectionState != ConnectionState.CONNECTED) {
             state.bolusStopped = true

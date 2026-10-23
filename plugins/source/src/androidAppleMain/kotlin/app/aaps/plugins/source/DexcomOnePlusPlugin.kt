@@ -84,17 +84,17 @@ import kotlin.time.Clock
  *
  * The slots, the pre-soak rules, the promotion gates and the ingest path are the same on Android
  * and on iPhone, so they live in one file. Everything that is not the same is asked of
- * [DexcomOnePlusHost]: the driver registry, the three setup screens, the foreground service and
- * the warm-up notification.
+ * [DexcomOnePlusHost]: the driver registry, how the three setup screens are opened, the foreground
+ * service, the warm-up notification and the missed-reading alarm of a phone that suspends apps.
  *
- * **On iPhone this plugin is locked off and says why.** `DexcomOnePlusIosHost` returns a reason
- * from [DexcomOnePlusHost.notUsableReason], which becomes both the description and the text on the
- * locked switch. The handshake and the driver around it are shared code and do run on iPhone now,
- * but four things still stand in the way and the text hides none of them: nothing has met a real
- * sensor, an unbonded pairing needs an OS pairing prompt CoreBluetooth cannot ask for, there is no
- * screen on iPhone for entering a pairing code, and CoreBluetooth state restoration is not
- * implemented, so an app iOS has terminated is not woken by the sensor until someone opens it
- * again.
+ * **On iPhone this plugin can be switched on, and its description says what is different.**
+ * `DexcomOnePlusIosHost` returns no [DexcomOnePlusHost.notUsableReason] and a
+ * [DexcomOnePlusHost.platformNote] instead, which replaces the description. The handshake and the
+ * driver around it are shared code and run on iPhone, the start, warm-up and status screens are
+ * shared too, and warm-up and alert messages reach the person through the notification manager.
+ * What the note still says: nothing has met a real sensor, a new sensor pairs through the iPhone
+ * dialog, and an app iOS has ended is only woken again if the app starts this plugin during that
+ * background launch.
  */
 @ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
 @IntKey(446)
@@ -408,6 +408,7 @@ class DexcomOnePlusPlugin @Inject constructor(
         runCatching { stagingDriver.removeWatcher(stagingWatcher) }
         runCatching { stagingDriver.shutdown() }
         host.cancelWarmupNotification()
+        host.cancelMissedReadingAlarm()
         host.setSessionServiceWanted(false)
         aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_SESSION: plugin stop")
         super.onStop()
@@ -484,6 +485,8 @@ class DexcomOnePlusPlugin @Inject constructor(
             // Persist the ingest high-water mark so a restart/update can't re-insert this reading,
             // and anchor the production sensor's lifecycle (session start) on first reading.
             store.saveLastIngest(sample.sequence, sample.timestampMs)
+            // After the insert, so the alarm is only moved for a reading the loop really has.
+            host.onReadingStored(sample.timestampMs)
             // Off: the reading time, as before P5.5. On: a manual SENSOR_CHANGE from the last day.
             val sessionStartMs = if (preferences.get(DexcomOnePlusBooleanKey.AnchorSessionToManualSensorChange)) {
                 DexcomOnePlusSensorChangeAnchor.resolve(

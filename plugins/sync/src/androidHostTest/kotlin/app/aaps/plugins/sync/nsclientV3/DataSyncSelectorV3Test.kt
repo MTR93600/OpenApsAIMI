@@ -98,6 +98,37 @@ class DataSyncSelectorV3Test : TestBaseWithProfile() {
         verify(preferences, Times(1)).remove(NsclientLongKey.DeviceStatusLastSyncedId)
     }
 
+    /** A former client: every mark is still 0, so each moves up to the last row of its table. */
+    @Test
+    fun markAllAsSyncedMovesEveryMarkToTheLastRow() = runTest {
+        whenever(persistenceLayer.getLastBolusId()).thenReturn(10)
+        whenever(persistenceLayer.getLastCarbsId()).thenReturn(11)
+        whenever(persistenceLayer.getLastTherapyEventId()).thenReturn(12)
+        whenever(persistenceLayer.getLastDeviceStatusId()).thenReturn(13)
+        whenever(preferences.get(LongNonKey.LocalProfileLastChange)).thenReturn(5000L)
+
+        sut.markAllAsSynced()
+
+        verify(preferences).put(NsclientLongKey.BolusLastSyncedId, 10L)
+        verify(preferences).put(NsclientLongKey.CarbsLastSyncedId, 11L)
+        verify(preferences).put(NsclientLongKey.TherapyEventLastSyncedId, 12L)
+        verify(preferences).put(NsclientLongKey.DeviceStatusLastSyncedId, 13L)
+        verify(preferences).put(NsclientLongKey.ProfileStoreLastSyncedId, 5000L)
+        // An empty table has no last id, so its mark is left alone.
+        verify(preferences, Times(0)).put(eq(NsclientLongKey.GlucoseValueLastSyncedId), any<Long>())
+    }
+
+    /** A mark is never moved back: rows already confirmed must not be sent a second time. */
+    @Test
+    fun markAllAsSyncedNeverMovesAMarkBack() = runTest {
+        whenever(persistenceLayer.getLastBolusId()).thenReturn(10)
+        whenever(preferences.get(NsclientLongKey.BolusLastSyncedId)).thenReturn(20L)
+
+        sut.markAllAsSynced()
+
+        verify(preferences, Times(0)).put(eq(NsclientLongKey.BolusLastSyncedId), any<Long>())
+    }
+
     @Test
     fun confirmLastTest() {
         // Bolus

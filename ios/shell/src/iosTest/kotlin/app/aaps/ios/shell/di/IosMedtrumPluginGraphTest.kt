@@ -66,7 +66,8 @@ class IosMedtrumPluginGraphTest {
     fun `the plugin answers as the driver it delegates to`() {
         val plugin = graph().medtrumPump
 
-        assertEquals(PumpType.MEDTRUM_NANO, plugin.model())
+        // No pump chosen yet, so no device type: the same answer as Android `MedtrumPump.pumpType()`.
+        assertEquals(PumpType.MEDTRUM_UNTESTED, plugin.model())
         assertTrue(plugin.canHandleDST())
         assertFalse(plugin.isConfigured(), "no pump has been chosen in this test, so it is not configured")
     }
