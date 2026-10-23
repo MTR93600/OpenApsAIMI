@@ -9,6 +9,7 @@ import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.safety.RiseConfirmation
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientMode
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientModeOrchestrator
@@ -172,6 +173,7 @@ internal fun decideRecursiveBeliefResolve(
     autodriveGateOpen: Boolean,
     mpcFeedForwardRa: Double?,
     cbfShieldDeltaU: Double?,
+    riseLevel: RiseConfirmation.Level?,
     preferences: Preferences,
     consoleLog: MutableList<String>,
     fields: AimiRbtResolveFields,
@@ -249,6 +251,7 @@ internal fun decideRecursiveBeliefResolve(
         endogenousCounterRegulatory = endogenousCounterRegulatory,
         mealAbsorptionPhase = fields.mealAbsorption()?.phase ?: MealAbsorptionPhase.NONE,
         mealModeActive = fields.mealModeActive(),
+        riseLevel = riseLevel,
     )
     writes.setStacking(stackingEval)
     wCycle.ensure()

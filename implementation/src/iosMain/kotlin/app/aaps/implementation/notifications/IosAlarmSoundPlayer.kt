@@ -3,6 +3,7 @@ package app.aaps.implementation.notifications
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.AlarmSound
+import app.aaps.core.interfaces.notifications.AlarmSoundCategory
 import app.aaps.core.interfaces.notifications.AlarmSoundPlayer
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
@@ -46,6 +47,14 @@ import platform.Foundation.NSURL
  * What it does **not** cover: the app not running at all. There is no counterpart to Android's
  * foreground service, so an alarm cannot start from nothing. See `_docs/ios_blockers.md`.
  *
+ * ## Soft melodies
+ *
+ * When the user chose a soft melody for the alarm's category, the melody plays instead of the AAPS
+ * sound. It is rendered by the shared [AlarmMelodySynth] and played from memory, so it is the same
+ * sound Android plays. If it cannot be opened or started, the AAPS sound plays instead: an alarm must
+ * never be silent because of a melody. Android also raises a too-low alarm volume to half for the
+ * alarm; iOS gives an app no way to set the system volume, so that part does not exist here.
+ *
  * ## Threading
  *
  * Everything runs on the main dispatcher, which is how the Android class confines its state to the
@@ -70,11 +79,11 @@ class IosAlarmSoundPlayer(
 
     /**
      * [postedAtElapsedRealtime] is ignored: it exists so Android can wait out a notification's own
-     * one-shot channel sound before starting the loop, and an iOS notification posted by
-     * `IosSystemNotificationPlatform` deliberately carries no sound.
+     * one-shot channel sound before starting the loop. On iOS the only notification sound is the
+     * short one iOS plays itself for an urgent notification, and there is nothing to wait for.
      */
-    override fun play(sound: AlarmSound, ownerTag: String, postedAtElapsedRealtime: Long) {
-        scope.launch { doPlay(sound, ownerTag) }
+    override fun play(sound: AlarmSound, ownerTag: String, postedAtElapsedRealtime: Long, category: AlarmSoundCategory) {
+        scope.launch { doPlay(sound, ownerTag, category) }
     }
 
     override fun stop(ownerTag: String) {
@@ -86,44 +95,71 @@ class IosAlarmSoundPlayer(
         }
     }
 
-    private fun doPlay(sound: AlarmSound, ownerTag: String) {
+    private fun doPlay(sound: AlarmSound, ownerTag: String, category: AlarmSoundCategory) {
         doStop()
-        val url = urlFor(sound) ?: run {
-            aapsLogger.error(LTag.NOTIFICATION, "Alarm sound ${fileName(sound)} is not in the app bundle, cannot alarm")
-            return
-        }
         activateSession()
 
-        val created = memScoped {
-            val error = alloc<ObjCObjectVar<NSError?>>()
-            val p = AVAudioPlayer(contentsOfURL = url, error = error.ptr)
-            error.value?.let { aapsLogger.error(LTag.NOTIFICATION, "Cannot open ${fileName(sound)}: ${it.localizedDescription}") }
-            p
+        val melody = AlarmAudioPolicy.chosenMelody(preferences, category)
+        val melodyPlayer = melody?.let { startLooping(openMelody(it), "melody ${it.id}") }
+        if (melody != null && melodyPlayer == null) {
+            aapsLogger.error(LTag.NOTIFICATION, "Melody ${melody.id} cannot play, the AAPS sound plays instead")
         }
-        // -1 loops until stopped, which is what an alarm has to do.
-        created.numberOfLoops = -1
-
-        val ramping = preferences.get(BooleanKey.AlertIncreaseVolume)
-        val prepared = created.prepareToPlay()
-        if (!created.play()) {
-            aapsLogger.error(
-                LTag.NOTIFICATION,
-                "AVAudioPlayer refused to start for ${fileName(sound)}: prepared=$prepared duration=${created.duration} " +
-                    "volume=${created.volume} loops=${created.numberOfLoops} url=${created.url?.lastPathComponent} " +
-                    "category=${AVAudioSession.sharedInstance().category}"
-            )
-            return
-        }
+        val created = melodyPlayer ?: run {
+            val url = urlFor(sound) ?: run {
+                aapsLogger.error(LTag.NOTIFICATION, "Alarm sound ${fileName(sound)} is not in the app bundle, cannot alarm")
+                return
+            }
+            startLooping(openFile(url, sound), fileName(sound))
+        } ?: return
 
         // Volume is set after the start, not before it: AVAudioPlayer will not begin at volume 0,
         // where Android's MediaPlayer happily does. Starting silent and turning it up immediately is
         // the same thing from the listener's side, and it is what lets the ramp begin from nothing.
+        val ramping = preferences.get(BooleanKey.AlertIncreaseVolume)
         created.volume = if (ramping) 0f else 1f
 
         player = created
         currentOwner = ownerTag
-        aapsLogger.debug(LTag.NOTIFICATION, "Alarm ${sound.name} playing for $ownerTag, ramping=$ramping")
+        aapsLogger.debug(LTag.NOTIFICATION, "Alarm ${sound.name} (${melody?.id ?: "AAPS sound"}) playing for $ownerTag, ramping=$ramping")
         if (ramping) rampJob = scope.launch { runRamp(created) }
+    }
+
+    private fun openFile(url: NSURL, sound: AlarmSound): AVAudioPlayer? = memScoped {
+        val error = alloc<ObjCObjectVar<NSError?>>()
+        val p = AVAudioPlayer(contentsOfURL = url, error = error.ptr)
+        error.value?.let { aapsLogger.error(LTag.NOTIFICATION, "Cannot open ${fileName(sound)}: ${it.localizedDescription}") }
+        p
+    }
+
+    /** The melody from memory. `null` when it cannot be opened, so the caller falls back to the AAPS sound. */
+    private fun openMelody(melody: AlarmMelody): AVAudioPlayer? = try {
+        memScoped {
+            val error = alloc<ObjCObjectVar<NSError?>>()
+            val p = AVAudioPlayer(data = IosMelodyAudio.wavData(melody), error = error.ptr)
+            error.value?.let { aapsLogger.error(LTag.NOTIFICATION, "Cannot open melody ${melody.id}: ${it.localizedDescription}") }
+            if (error.value != null) null else p
+        }
+    } catch (ex: Throwable) {
+        aapsLogger.error(LTag.NOTIFICATION, "Cannot open melody ${melody.id}", ex)
+        null
+    }
+
+    /** Loops [created] until stopped and starts it. `null` when there is no player or it refuses to start. */
+    private fun startLooping(created: AVAudioPlayer?, label: String): AVAudioPlayer? {
+        if (created == null) return null
+        // -1 loops until stopped, which is what an alarm has to do.
+        created.numberOfLoops = -1
+        val prepared = created.prepareToPlay()
+        if (!created.play()) {
+            aapsLogger.error(
+                LTag.NOTIFICATION,
+                "AVAudioPlayer refused to start for $label: prepared=$prepared duration=${created.duration} " +
+                    "volume=${created.volume} loops=${created.numberOfLoops} url=${created.url?.lastPathComponent} " +
+                    "category=${AVAudioSession.sharedInstance().category}"
+            )
+            return null
+        }
+        return created
     }
 
     private fun doStop() {

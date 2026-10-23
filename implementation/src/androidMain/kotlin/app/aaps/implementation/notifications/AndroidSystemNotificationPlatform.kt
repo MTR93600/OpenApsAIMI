@@ -14,6 +14,7 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.AapsNotification
 import app.aaps.core.interfaces.notifications.AlarmSound
+import app.aaps.core.interfaces.notifications.AlarmSoundCategory
 import app.aaps.core.interfaces.notifications.AlarmSoundPlayer
 import app.aaps.core.interfaces.notifications.NotificationHolder
 import app.aaps.core.interfaces.notifications.NotificationLevel
@@ -111,7 +112,11 @@ class AndroidSystemNotificationPlatform(
         alarmNotificationManager().cancelAlarm()
     }
 
-    override fun setAudibleAlarm(instanceKey: Int?, sound: AlarmSound?) {
+    /** Without a category, the "other urgent alarms" sound choice applies. */
+    override fun setAudibleAlarm(instanceKey: Int?, sound: AlarmSound?) =
+        setAudibleAlarm(instanceKey, sound, AlarmSoundCategory.OTHER)
+
+    override fun setAudibleAlarm(instanceKey: Int?, sound: AlarmSound?, category: AlarmSoundCategory) {
         if (instanceKey == null || sound == null) {
             if (soundingKey != null) {
                 soundingKey = null
@@ -122,7 +127,7 @@ class AndroidSystemNotificationPlatform(
         // Called again with the same key means "keep playing" - restarting would reset the ramp.
         if (instanceKey != soundingKey) {
             soundingKey = instanceKey
-            alarmSoundPlayer().play(sound, AlarmSoundPlayer.OWNER_INTERNAL)
+            alarmSoundPlayer().play(sound, AlarmSoundPlayer.OWNER_INTERNAL, category = category)
         }
     }
 

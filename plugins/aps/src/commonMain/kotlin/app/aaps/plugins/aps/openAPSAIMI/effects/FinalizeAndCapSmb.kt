@@ -10,6 +10,7 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdictCache
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt3
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.safety.RiseConfirmation
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaAction
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecision
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaHarmonizer
@@ -247,6 +248,7 @@ internal fun decideFinalizeAndCapSmb(
     slowCarbDeliveredU: Double,
     ceilingRepeatCount: Int,
     ceilingRepeatLastMs: Long,
+    riseLevel: RiseConfirmation.Level?,
     preferences: Preferences,
     consoleLog: MutableList<String>,
     uamConfidence: AimiUamConfidence,
@@ -481,6 +483,7 @@ internal fun decideFinalizeAndCapSmb(
             physiologicalPhase?.phase == PhysiologicalPhase.ENDOGENOUS_COUNTER_REGULATORY,
         mealAbsorptionPhase = mealAbsorption?.phase ?: MealAbsorptionPhase.NONE,
         mealModeActive = mealFlags.anyManualMeal(),
+        riseLevel = riseLevel,
     )
     // Read after the IOB surveillance stance, as the reference reads it after Red Carpet.
     val coffeeSmbCeilingU = restoreGuards.coffeeSmbCeilingU(modelOutputU)

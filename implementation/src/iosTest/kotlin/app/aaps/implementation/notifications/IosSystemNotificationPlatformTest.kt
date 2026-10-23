@@ -4,6 +4,7 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.AapsNotification
 import app.aaps.core.interfaces.notifications.AlarmSound
+import app.aaps.core.interfaces.notifications.AlarmSoundCategory
 import app.aaps.core.interfaces.notifications.AlarmSoundPlayer
 import app.aaps.core.interfaces.notifications.NotificationAction
 import app.aaps.core.interfaces.notifications.NotificationId
@@ -54,9 +55,11 @@ class IosSystemNotificationPlatformTest {
     private class RecordingAlarmPlayer : AlarmSoundPlayer {
 
         val calls = mutableListOf<String>()
+        val categories = mutableListOf<AlarmSoundCategory>()
 
-        override fun play(sound: AlarmSound, ownerTag: String, postedAtElapsedRealtime: Long) {
+        override fun play(sound: AlarmSound, ownerTag: String, postedAtElapsedRealtime: Long, category: AlarmSoundCategory) {
             calls.add("play:${sound.name}")
+            categories.add(category)
         }
 
         override fun stop(ownerTag: String) {
@@ -268,5 +271,23 @@ class IosSystemNotificationPlatformTest {
         platform.setAudibleAlarm(null, null)
 
         assertEquals(listOf("play:ERROR", "stop"), alarmPlayer.calls)
+    }
+
+    /** The sound choice must reach the player, or a chosen soft melody would never play on iOS. */
+    @Test
+    fun theSoundChoiceReachesThePlayer() {
+        platform.setAudibleAlarm(7, AlarmSound.ERROR, AlarmSoundCategory.LOW_GLUCOSE)
+        platform.setAudibleAlarm(8, AlarmSound.ALARM)
+
+        assertEquals(listOf(AlarmSoundCategory.LOW_GLUCOSE, AlarmSoundCategory.OTHER), alarmPlayer.categories)
+    }
+
+    /** The melody AVAudioPlayer is given is the shared WAV, whole: header plus every sample. */
+    @Test
+    fun melodyWavDataHasTheSharedSamples() {
+        val melody = AlarmMelody.SOFT_CHIME
+        val expected = AlarmMelodySynth.toWav(AlarmMelodySynth.render(melody)).size
+
+        assertEquals(expected.toULong(), IosMelodyAudio.wavData(melody).length)
     }
 }

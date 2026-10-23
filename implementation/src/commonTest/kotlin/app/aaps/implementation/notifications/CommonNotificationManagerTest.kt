@@ -4,6 +4,7 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.AapsNotification
 import app.aaps.core.interfaces.notifications.AlarmSound
+import app.aaps.core.interfaces.notifications.AlarmSoundCategory
 import app.aaps.core.interfaces.notifications.NotificationAction
 import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.interfaces.notifications.NotificationLevel
@@ -39,6 +40,7 @@ class CommonNotificationManagerTest {
         val calls = mutableListOf<String>()
         var audibleKey: Int? = null
         var audibleSound: AlarmSound? = null
+        var audibleCategory: AlarmSoundCategory? = null
         var audibleCallCount = 0
 
         /** The last notification handed over, so tests can assert on fields Android decides with. */
@@ -63,6 +65,11 @@ class CommonNotificationManagerTest {
             audibleSound = sound
             audibleCallCount++
             calls.add("audible:$instanceKey")
+        }
+
+        override fun setAudibleAlarm(instanceKey: Int?, sound: AlarmSound?, category: AlarmSoundCategory) {
+            audibleCategory = category
+            setAudibleAlarm(instanceKey, sound)
         }
 
         override fun onDismissed(callback: (Int) -> Unit) {}
@@ -240,6 +247,16 @@ class CommonNotificationManagerTest {
 
         assertEquals(handle.instanceKey, platform.audibleKey)
         assertEquals(AlarmSound.ERROR, platform.audibleSound)
+    }
+
+    /** The registry tells the platform which sound choice applies, so a chosen melody can play. */
+    @Test
+    fun theAudibleAlarmCarriesItsSoundCategory() = runTest {
+        val sut = createSut()
+
+        sut.post(NotificationId.PUMP_UNREACHABLE, "pump", sound = AlarmSound.ALARM)
+
+        assertEquals(AlarmSoundCategory.OTHER, platform.audibleCategory)
     }
 
     /** Sound is gated on URGENT: a sound on a lower level is deliberately ignored. */

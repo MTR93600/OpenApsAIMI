@@ -55,6 +55,16 @@ interface SystemNotificationPlatform {
     fun setAudibleAlarm(instanceKey: Int?, sound: AlarmSound?)
 
     /**
+     * Same as the two-argument [setAudibleAlarm], and also says which user sound choice applies, so a
+     * platform that can play the chosen soft melody does so. The shared registry calls this one.
+     *
+     * The default ignores [category] and calls the two-argument version. That is right for a
+     * platform that has only one sound to give (the desktop beep). Android and iOS override it.
+     */
+    fun setAudibleAlarm(instanceKey: Int?, sound: AlarmSound?, category: AlarmSoundCategory) =
+        setAudibleAlarm(instanceKey, sound)
+
+    /**
      * Register interest in dismissals the user made outside the app, by swiping the system
      * notification away. Called once during start up.
      */

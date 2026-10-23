@@ -16,10 +16,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.aaps.core.interfaces.overview.graph.BgInfoData
+import app.aaps.core.interfaces.source.CgmWarmupStatus
 import app.aaps.core.ui.CoreUiStrings
+import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.stringResource
+import app.aaps.ui.UiStrings
 import app.aaps.ui.compose.overview.BgInfoSection
 
 internal fun glassMetricDisplayText(value: String, unavailableLabel: String): String =
@@ -28,6 +32,11 @@ internal fun glassMetricDisplayText(value: String, unavailableLabel: String): St
 /**
  * GLASS-style metric card populated only with the already formatted Overview values.
  * No clinical values are recalculated or assigned fallback telemetry by this presentation.
+ *
+ * @param cgmWarmup link state of the active CGM source (connecting, reconnecting, warm-up), or
+ *   null when the source reports none. With a stale value it shows the banner of [GlassCgmLinkStatus].
+ * @param nowMs current time from a ticker, so a value that gets old between two overview refreshes
+ *   is still shown as stale. Null keeps `BgInfoData.isOutdated` as it is.
  */
 @Composable
 internal fun GlassOverviewMetricsCard(
@@ -45,7 +54,24 @@ internal fun GlassOverviewMetricsCard(
     onStatistics: () -> Unit,
     onTreatments: () -> Unit,
     modifier: Modifier = Modifier,
+    cgmWarmup: CgmWarmupStatus? = null,
+    nowMs: Long? = null,
 ) {
+    val glucoseTimestampMs = bgInfo?.timestamp?.takeIf { nowMs != null }
+    val checkNowMs = nowMs ?: 0L
+    val glucoseStale = GlassCgmLinkStatus.isStale(
+        isGlucoseActual = bgInfo != null && !bgInfo.isOutdated,
+        glucoseTimestampMs = glucoseTimestampMs,
+        nowMs = checkNowMs,
+    )
+    val linkBanner = GlassCgmLinkStatus.banner(
+        warmup = cgmWarmup,
+        isGlucoseActual = bgInfo != null && !bgInfo.isOutdated,
+        glucoseTimestampMs = glucoseTimestampMs,
+        nowMs = checkNowMs,
+    )
+    // An old value stays visible, struck through, like the classic overview.
+    val shownBgInfo = if (bgInfo != null && glucoseStale && !bgInfo.isOutdated) bgInfo.copy(isOutdated = true) else bgInfo
     val outline = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f)
     val unavailableLabel = stringResource(CoreUiStrings.value_unavailable_short)
     Surface(
@@ -75,10 +101,11 @@ internal fun GlassOverviewMetricsCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 BgInfoSection(
-                    bgInfo = bgInfo,
+                    bgInfo = shownBgInfo,
                     timeAgoText = timeAgoText,
                     size = 96.dp,
                 )
+                linkBanner?.let { GlassCgmLinkBannerText(it) }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 GlassMetricTile(iobLabel, glassMetricDisplayText(iobText, unavailableLabel), modifier = Modifier.weight(1f))
@@ -95,6 +122,30 @@ internal fun GlassOverviewMetricsCard(
             }
         }
     }
+}
+
+/** "Reconnecting… · last value 14 min ago", in the warning colour of the theme. */
+@Composable
+private fun GlassCgmLinkBannerText(banner: GlassCgmLinkStatus.Banner) {
+    val phase = stringResource(
+        when (banner.phase) {
+            CgmWarmupStatus.Phase.CONNECTING -> UiStrings.dashboard_glass_cgm_phase_connecting
+            CgmWarmupStatus.Phase.RECONNECTING -> UiStrings.dashboard_glass_cgm_phase_reconnecting
+            CgmWarmupStatus.Phase.PAIRING -> UiStrings.dashboard_glass_cgm_phase_pairing
+            CgmWarmupStatus.Phase.WARMING,
+            CgmWarmupStatus.Phase.OTHER -> UiStrings.dashboard_glass_cgm_phase_warmup
+        },
+    )
+    Text(
+        text = banner.minutesSinceLastValue?.let {
+            stringResource(UiStrings.dashboard_glass_cgm_link_banner, phase, it.toInt())
+        } ?: phase,
+        modifier = Modifier.fillMaxWidth(),
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.Bold,
+        color = AapsTheme.generalColors.statusWarning,
+        textAlign = TextAlign.Center,
+    )
 }
 
 @Composable

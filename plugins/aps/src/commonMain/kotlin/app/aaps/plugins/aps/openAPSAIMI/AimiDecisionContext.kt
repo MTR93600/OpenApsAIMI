@@ -302,6 +302,13 @@ internal data class AimiDecisionContext(
         var autodrive_gate_kind: String? = null,
         /** The same reason with its live numbers, for reading. */
         var autodrive_gate_reason: String? = null,
+        /** Rise confirmation from the glucose history alone (NONE, WEAK, CONFIRMED); null when history is too short. */
+        var rise_confirmation_level: String? = null,
+        /** True when the undeclared-rise evidence cap limited Autodrive on this tick. */
+        var evidence_cap_active: Boolean? = null,
+        var rise_confirmation_window_ticks: Int? = null,
+        var rise_confirmation_positive_share: Double? = null,
+        var rise_confirmation_net_mgdl: Double? = null,
         /**
          * Shadow measurement of the rise ceiling guard (`RiseCeilingGuard`).
          *
@@ -695,6 +702,11 @@ internal data class AimiDecisionContext(
             base.put("autodrive_gate_engaged", baseline_state.autodrive_gate_engaged ?: AimiJson.NULL)
             base.put("autodrive_gate_kind", baseline_state.autodrive_gate_kind ?: AimiJson.NULL)
             base.put("autodrive_gate_reason", baseline_state.autodrive_gate_reason ?: AimiJson.NULL)
+            base.put("rise_confirmation_level", baseline_state.rise_confirmation_level ?: AimiJson.NULL)
+            base.put("evidence_cap_active", baseline_state.evidence_cap_active ?: AimiJson.NULL)
+            base.put("rise_confirmation_window_ticks", baseline_state.rise_confirmation_window_ticks ?: AimiJson.NULL)
+            base.put("rise_confirmation_positive_share", baseline_state.rise_confirmation_positive_share ?: AimiJson.NULL)
+            base.put("rise_confirmation_net_mgdl", baseline_state.rise_confirmation_net_mgdl ?: AimiJson.NULL)
             base.put("rise_ceiling_guard_would_block", baseline_state.rise_ceiling_guard_would_block ?: AimiJson.NULL)
             base.put("rise_ceiling_guard_reason", baseline_state.rise_ceiling_guard_reason ?: AimiJson.NULL)
             base.put("rise_ceiling_guard_repeats", baseline_state.rise_ceiling_guard_repeats ?: AimiJson.NULL)

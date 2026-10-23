@@ -20,6 +20,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentCaptor
@@ -401,6 +402,15 @@ class GarminPluginTest : TestBaseWithProfile() {
         verify(loopHub, times(0)).postTempTarget(any(), any())
     }
 
+    /** "coffee": the loop meets the rise with a bounded basal, not with SMBs (CoffeeRiseMode). No temp target. */
+    @Test
+    fun testOnPostMode_CoffeeDefaultDuration() {
+        val uri = createUri(mapOf("mode" to "Coffee"))
+        assertEquals("""{"ok":true,"mode":"coffee","duration":90}""", gp.onPostMode(uri))
+        verify(loopHub).postTherapyMode("coffee", 90)
+        verify(loopHub, times(0)).postTempTarget(any(), any())
+    }
+
     @Test
     fun testOnPostMode_InvalidRejected() {
         val uri = createUri(mapOf("mode" to "hack"))
@@ -481,6 +491,8 @@ class GarminPluginTest : TestBaseWithProfile() {
         whenever(loopHub.insulinBasalOnboard).thenReturn(2.5)
         whenever(loopHub.temporaryBasal).thenReturn(0.8)
         whenever(loopHub.carbsOnboard).thenReturn(10.7)
+        whenever(loopHub.temporaryBasalHistory(any())).thenReturn(emptyList())
+        whenever(loopHub.smbHistoryTimestamps(any())).thenReturn(emptyList())
         whenever(loopHub.getGlucoseValues(any(), eq(false))).thenReturn(
             listOf(
                 createGlucoseValue(
@@ -489,11 +501,16 @@ class GarminPluginTest : TestBaseWithProfile() {
             )
         )
         assertEquals(
-            """[{"_id":"-900000","device":"RANDOM","deviceString":"1969-12-31T23:58:30Z","sysTime":"1969-12-31T23:58:30Z","unfiltered":90.0,"date":-90000,"sgv":99,"direction":"Flat","noise":4.5,"units_hint":"mmol","iob":5.2,"tbr":80,"cob":10.7}]""",
+            """[{"_id":"-900000","device":"RANDOM","deviceString":"1969-12-31T23:58:30Z","sysTime":"1969-12-31T23:58:30Z","unfiltered":90.0,"date":-90000,"sgv":99,"direction":"Flat","noise":4.5,"units_hint":"mmol","iob":5.2,"tbr":80,"cob":10.7,"basalHistory":[],"smbHistory":[]}]""",
             gp.onSgv(createUri(mapOf()))
         )
         verify(loopHub).getGlucoseValues(clock.instant().minusSeconds(25L * 300L), false)
         verify(loopHub).glucoseUnit
+        verify(loopHub, atLeastOnce()).currentTargetMgdl
+        verify(loopHub, atLeastOnce()).activeTherapyMode
+        verify(loopHub, atLeastOnce()).temporaryBasalRemainingMinutes
+        verify(loopHub, atLeastOnce()).temporaryBasalHistory(any())
+        verify(loopHub, atLeastOnce()).smbHistoryTimestamps(any())
     }
 
     @Test
@@ -503,6 +520,8 @@ class GarminPluginTest : TestBaseWithProfile() {
         whenever(loopHub.insulinBasalOnboard).thenReturn(2.5)
         whenever(loopHub.temporaryBasal).thenReturn(0.8)
         whenever(loopHub.carbsOnboard).thenReturn(10.7)
+        whenever(loopHub.temporaryBasalHistory(any())).thenReturn(emptyList())
+        whenever(loopHub.smbHistoryTimestamps(any())).thenReturn(emptyList())
         whenever(loopHub.getGlucoseValues(any(), eq(false))).thenAnswer { i ->
             val from = i.getArgument<Instant>(0)
             fromClosedRange(from.toEpochMilli(), clock.instant().toEpochMilli(), 300_000L)
@@ -510,7 +529,7 @@ class GarminPluginTest : TestBaseWithProfile() {
                 .mapIndexed { idx, ts -> createGlucoseValue(ts, 100.0 + (10 * idx)) }.reversed()
         }
         assertEquals(
-            """[{"_id":"100000","device":"RANDOM","deviceString":"1970-01-01T00:00:10Z","sysTime":"1970-01-01T00:00:10Z","unfiltered":90.0,"date":10000,"sgv":120,"delta":10,"direction":"Flat","noise":4.5,"units_hint":"mmol","iob":5.2,"tbr":80,"cob":10.7}]""",
+            """[{"_id":"100000","device":"RANDOM","deviceString":"1970-01-01T00:00:10Z","sysTime":"1970-01-01T00:00:10Z","unfiltered":90.0,"date":10000,"sgv":120,"delta":10,"direction":"Flat","noise":4.5,"units_hint":"mmol","iob":5.2,"tbr":80,"cob":10.7,"basalHistory":[],"smbHistory":[]}]""",
             gp.onSgv(createUri(mapOf("count" to "1")))
         )
         verify(loopHub).getGlucoseValues(
@@ -519,7 +538,7 @@ class GarminPluginTest : TestBaseWithProfile() {
 
 
         assertEquals(
-            """[{"_id":"100000","device":"RANDOM","deviceString":"1970-01-01T00:00:10Z","sysTime":"1970-01-01T00:00:10Z","unfiltered":90.0,"date":10000,"sgv":130,"delta":10,"direction":"Flat","noise":4.5,"units_hint":"mmol","iob":5.2,"tbr":80,"cob":10.7},""" +
+            """[{"_id":"100000","device":"RANDOM","deviceString":"1970-01-01T00:00:10Z","sysTime":"1970-01-01T00:00:10Z","unfiltered":90.0,"date":10000,"sgv":130,"delta":10,"direction":"Flat","noise":4.5,"units_hint":"mmol","iob":5.2,"tbr":80,"cob":10.7,"basalHistory":[],"smbHistory":[]},""" +
                 """{"_id":"-2900000","device":"RANDOM","deviceString":"1969-12-31T23:55:10Z","sysTime":"1969-12-31T23:55:10Z","unfiltered":90.0,"date":-290000,"sgv":120,"delta":10,"direction":"Flat","noise":4.5}]""",
             gp.onSgv(createUri(mapOf("count" to "2")))
         )
@@ -528,7 +547,7 @@ class GarminPluginTest : TestBaseWithProfile() {
         )
 
         assertEquals(
-            """[{"date":10000,"sgv":130,"delta":10,"direction":"Flat","noise":4.5,"units_hint":"mmol","iob":5.2,"tbr":80,"cob":10.7},""" +
+            """[{"date":10000,"sgv":130,"delta":10,"direction":"Flat","noise":4.5,"units_hint":"mmol","iob":5.2,"tbr":80,"cob":10.7,"basalHistory":[],"smbHistory":[]},""" +
                 """{"date":-290000,"sgv":120,"delta":10,"direction":"Flat","noise":4.5}]""",
             gp.onSgv(createUri(mapOf("count" to "2", "brief_mode" to "true")))
         )
@@ -537,6 +556,44 @@ class GarminPluginTest : TestBaseWithProfile() {
         )
 
         verify(loopHub, atLeastOnce()).glucoseUnit
+        verify(loopHub, atLeastOnce()).currentTargetMgdl
+        verify(loopHub, atLeastOnce()).activeTherapyMode
+        verify(loopHub, atLeastOnce()).temporaryBasalRemainingMinutes
+        verify(loopHub, atLeastOnce()).temporaryBasalHistory(any())
+        verify(loopHub, atLeastOnce()).smbHistoryTimestamps(any())
+    }
+
+    /** Fields added for the AIMI watchfaces: target, mode, TBR minutes, basal staircase and SMB times. */
+    @Test
+    fun onSgv_IncludesTargetModeTbrMinsAndHistory() {
+        whenever(loopHub.glucoseUnit).thenReturn(GlucoseUnit.MGDL)
+        whenever(loopHub.insulinOnboard).thenReturn(1.0)
+        whenever(loopHub.insulinBasalOnboard).thenReturn(0.5)
+        whenever(loopHub.temporaryBasal).thenReturn(1.2)
+        whenever(loopHub.carbsOnboard).thenReturn(5.0)
+        whenever(loopHub.currentTargetMgdl).thenReturn(100.0)
+        whenever(loopHub.activeTherapyMode).thenReturn("FCL")
+        whenever(loopHub.temporaryBasalRemainingMinutes).thenReturn(27)
+        whenever(loopHub.temporaryBasalHistory(any())).thenReturn(
+            listOf(BasalHistoryStep(t = 1000L, p = 100), BasalHistoryStep(t = 2000L, p = 130))
+        )
+        whenever(loopHub.smbHistoryTimestamps(any())).thenReturn(listOf(1500L, 2500L))
+        whenever(loopHub.getGlucoseValues(any(), eq(false))).thenReturn(
+            listOf(createGlucoseValue(clock.instant(), 110.0))
+        )
+        val json = gp.onSgv(createUri(mapOf("count" to "1", "brief_mode" to "true"))).toString()
+        assertTrue(json.contains("\"target\":100"), json)
+        assertTrue(json.contains("\"mode\":\"FCL\""), json)
+        assertTrue(json.contains("\"tbrMins\":27"), json)
+        assertTrue(json.contains("\"basalHistory\":[{\"t\":1000,\"p\":100},{\"t\":2000,\"p\":130}]"), json)
+        assertTrue(json.contains("\"smbHistory\":[1500,2500]"), json)
+        verify(loopHub).getGlucoseValues(any(), eq(false))
+        verify(loopHub, atLeastOnce()).glucoseUnit
+        verify(loopHub, atLeastOnce()).currentTargetMgdl
+        verify(loopHub, atLeastOnce()).activeTherapyMode
+        verify(loopHub, atLeastOnce()).temporaryBasalRemainingMinutes
+        verify(loopHub, atLeastOnce()).temporaryBasalHistory(any())
+        verify(loopHub, atLeastOnce()).smbHistoryTimestamps(any())
     }
 
 }

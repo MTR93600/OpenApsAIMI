@@ -519,6 +519,30 @@ class GarminPlugin(
                     }
                 }
                 jo.addProperty("cob", loopHub.carbsOnboard)
+                // Blueprint / Cockpit / Atelier: target (mg/dL), AIMI mode, TBR minutes left
+                loopHub.currentTargetMgdl?.takeIf { it.isFinite() && it > 0.0 }?.let {
+                    jo.addProperty("target", it.roundToInt())
+                }
+                loopHub.activeTherapyMode?.takeIf { it.isNotBlank() }?.let {
+                    jo.addProperty("mode", it)
+                }
+                loopHub.temporaryBasalRemainingMinutes?.takeIf { it > 0 }?.let {
+                    jo.addProperty("tbrMins", it)
+                }
+                // Millimétré: 3 h basal staircase + SMB times
+                val basalArr = JsonArray()
+                for (step in loopHub.temporaryBasalHistory()) {
+                    val s = JsonObject()
+                    s.addProperty("t", step.t)
+                    s.addProperty("p", step.p)
+                    basalArr.add(s)
+                }
+                jo.add("basalHistory", basalArr)
+                val smbArr = JsonArray()
+                for (ts in loopHub.smbHistoryTimestamps()) {
+                    smbArr.add(ts)
+                }
+                jo.add("smbHistory", smbArr)
             }
             joa.add(jo)
         }

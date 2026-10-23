@@ -5,6 +5,9 @@ import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.interfaces.profile.Profile
 import java.time.Instant
 
+/** One step of temporary basal for the Millimétré staircase (`t` = start in ms, `p` = percent). */
+data class BasalHistoryStep(val t: Long, val p: Int)
+
 /** Abstraction from all the functionality we need from the AAPS app. */
 interface LoopHub {
 
@@ -34,6 +37,38 @@ interface LoopHub {
 
     /** Returns the factor by which the basal rate is currently raised (> 1) or lowered (< 1). */
     val temporaryBasal: Double
+
+    /**
+     * Remaining temporary basal duration in whole minutes, or null if no TBR or extended bolus is active.
+     * Used by the Blueprint / Cockpit / Atelier watchfaces (`tbrMins`).
+     */
+    val temporaryBasalRemainingMinutes: Int?
+
+    /**
+     * Current glucose target in mg/dL for the watch (`target`):
+     * the target of the last APS run when there is one, else the middle of the active temporary
+     * target, else the rounded profile target.
+     */
+    val currentTargetMgdl: Double?
+
+    /**
+     * Short label of the active AIMI therapy mode for the watch (`FCL`, `DINNER`, `COFFEE`, ...),
+     * or null when none is active. Read from Careportal NOTE keywords, see [GarminActiveTherapyMode].
+     */
+    val activeTherapyMode: String?
+
+    /**
+     * Temporary basal staircase for Millimétré (`basalHistory`): steps of (start ms, percent) over
+     * [windowMs], one new step only when the percent changes. Percent 100 = profile basal.
+     * ⚠️ ASYNC IMPACT: runBlocking + TBR lookup.
+     */
+    fun temporaryBasalHistory(windowMs: Long = 3L * 60L * 60L * 1000L): List<BasalHistoryStep>
+
+    /**
+     * Times (epoch ms) of the SMBs in the last [windowMs], for Millimétré (`smbHistory`).
+     * ⚠️ ASYNC IMPACT: runBlocking + bolus database query.
+     */
+    fun smbHistoryTimestamps(windowMs: Long = 3L * 60L * 60L * 1000L): List<Long>
 
     /** Returns the lower bound of the target glucose range. */
     val lowGlucoseMark: Double

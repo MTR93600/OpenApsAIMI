@@ -10,12 +10,15 @@ import android.content.Intent
 import android.graphics.BitmapFactory
 import android.media.AudioAttributes
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.AlarmIntent
 import app.aaps.core.interfaces.notifications.AlarmSound
+import app.aaps.core.interfaces.notifications.AlarmSoundCategory
 import app.aaps.core.interfaces.notifications.AlarmSoundPlayer
 import app.aaps.core.interfaces.notifications.NotificationHolder
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -27,6 +30,7 @@ import app.aaps.core.ui.rawRes
 import app.aaps.implementation.R
 import app.aaps.implementation.androidNotification.AlarmNotificationManager.Companion.CHANNEL_SILENT
 import app.aaps.implementation.androidNotification.AlarmNotificationManager.Companion.CHANNEL_SILENT_URGENT
+import app.aaps.implementation.notifications.AlarmAudioPolicy
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
@@ -35,7 +39,8 @@ import dev.zacsweers.metro.SingleIn
  * Builds and posts Android notifications for AAPS alarms. Replaces the old `AlarmSoundService` /
  * `AlarmSoundServiceHelper` foreground-service-based path.
  * Two alarm modalities:
- *  - [postFullScreenAlarm]: posts a notification on a sound-bearing channel and starts the looping
+ *  - [postFullScreenAlarm]: posts a notification on a sound-bearing channel (a silent one when the
+ *    player owns the sound: volume ramp or a chosen soft melody) and starts the looping
  *    [AlarmSoundPlayer], so the alarm is audible even when no activity can launch. It no longer uses a
  *    full-screen intent. When exact alarms are allowed it also wakes the screen and launches ErrorActivity
  *    through two `setAlarmClock` alarms (`scheduleScreenWakeAndLaunch`); without that permission only the
@@ -81,6 +86,20 @@ class AlarmNotificationManager(
          */
         private val OLD_CHANNEL_IDS = listOf("aaps_alarm_fullscreen", "aaps_alarm_fullscreen_silent") +
             listOf("alarm", "boluserror", "error", "urgentalarm").flatMap { listOf("aaps_alarm_${it}_alarm", "aaps_alarm_${it}_notify") }
+
+        /**
+         * Bypass-DND channel with NO sound, used by [postFullScreenAlarm] when the looping
+         * [AlarmSoundPlayer] owns the sound (volume ramp, or a chosen soft melody) and the user wants
+         * alarms to override Do Not Disturb: it vibrates and shows the alarm through Do Not Disturb,
+         * and the player owns the audio. See [AlarmChannelPolicy].
+         */
+        const val CHANNEL_RAMP_BYPASS = "aaps_alarm_ramp_bypass"
+
+        /** How often the silent-channel alarm checks that the player really plays (see [SilentChannelWatch]). */
+        private const val SILENT_CHANNEL_CHECK_MS = 5_000L
+
+        /** Vibration of [CHANNEL_RAMP_BYPASS]: three pulses, inside the player's silent start. */
+        private val RAMP_VIBRATION_PATTERN = longArrayOf(0, 600, 400, 600, 400, 600)
 
         /** Delay, vibrate, pause, vibrate... in ms */
         private val VIBRATION_URGENT = longArrayOf(1000, 1000, 1000, 1000)
@@ -183,6 +202,23 @@ class AlarmNotificationManager(
             )
         }
 
+        // Player-owned sound with DND override: vibration first, then the player's sound. Bypasses DND
+        // like the sound channels below (honoured only with notification-policy access).
+        mgr.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_RAMP_BYPASS,
+                context.getString(R.string.alarm_channel_ramp_bypass),
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                setSound(null, null)
+                enableVibration(true)
+                vibrationPattern = RAMP_VIBRATION_PATTERN
+                setBypassDnd(true)
+                group = GROUP_ID
+                description = context.getString(R.string.alarm_channel_ramp_bypass_description)
+            }
+        )
+
         // Two sound-bearing channels per R.raw sound: one routed to STREAM_ALARM (overrides DND),
         // one routed to STREAM_NOTIFICATION (respects DND/silent). Picked at post time based on
         // the user's AlertOverrideDoNotDisturb preference.
@@ -192,6 +228,9 @@ class AlarmNotificationManager(
         // screen wake has brought up ErrorActivity - or when it cannot (no exact alarms, another app
         // on top). When ErrorActivity does come up, its looping ramped audio takes over — its volume
         // ramp starts at 0 so the overlap with the channel one-shot is inaudible.
+        // They are used only when the OS must play the sound (no ramp, no chosen melody, or Do Not
+        // Disturb blocking alarms): a channel clip plays at the full stream volume and nothing can
+        // lower or change it, so otherwise the silent channels are used (see AlarmChannelPolicy).
         // These are only used by postFullScreenAlarm, so all of them vibrate with the urgent pattern.
         for ((sound, nameRes) in DISPLAY_NAMES) {
             val displayName = context.getString(nameRes)
@@ -243,11 +282,53 @@ class AlarmNotificationManager(
     }
 
     /**
+     * True when Do Not Disturb would mute alarm audio now (total silence, or priority mode without
+     * alarms). Unreadable policy counts as blocked: then the bypass-DND sound channel is used.
+     */
+    private fun dndBlocksAlarms(): Boolean {
+        val filter = mgr.currentInterruptionFilter
+        val alarmsAllowed = try {
+            (mgr.notificationPolicy.priorityCategories and NotificationManager.Policy.PRIORITY_CATEGORY_ALARMS) != 0
+        } catch (_: Exception) {
+            null
+        }
+        return AlarmDndPolicy.dndBlocksAlarms(filter, alarmsAllowed)
+    }
+
+    /**
+     * True when the looping player owns the alarm sound (volume ramp, or a chosen soft melody), so the
+     * notification channel must stay silent. False when the OS must play it through the channel.
+     */
+    private fun playerOwnsSound(category: AlarmSoundCategory): Boolean {
+        val overrideDnd = preferences.get(BooleanKey.AlertOverrideDoNotDisturb)
+        val dndBlocks = overrideDnd && dndBlocksAlarms()
+        val owns = AlarmAudioPolicy.playerOwnsSound(
+            increaseVolume = preferences.get(BooleanKey.AlertIncreaseVolume),
+            customMelody = AlarmAudioPolicy.chosenMelody(preferences, category) != null,
+            overrideDnd = overrideDnd,
+            dndBlocksAlarms = dndBlocks,
+        )
+        if (!owns && dndBlocks) {
+            aapsLogger.debug(LTag.NOTIFICATION, "Do Not Disturb blocks alarms: urgent alarm rings through the bypass-DND sound channel")
+        }
+        return owns
+    }
+
+    /**
      * Raise an alarm while AAPS is in the background: a sound-bearing notification, the looping
      * [AlarmSoundPlayer], and - when exact alarms are allowed - a screen wake that brings up
      * [UiInteraction.errorHelperActivity]. Without that permission the alarm still rings; only the screen
      * stays dark.
      */
+    private val watchHandler = Handler(Looper.getMainLooper())
+
+    /** See [SilentChannelWatch]: a silent-channel alarm rings by itself when the player is silent. */
+    private val silentChannelWatch = SilentChannelWatch(
+        schedule = { check, delayMs -> watchHandler.postDelayed(check, delayMs) },
+        unschedule = { check -> watchHandler.removeCallbacks(check) },
+        intervalMs = SILENT_CHANNEL_CHECK_MS
+    )
+
     fun postFullScreenAlarm(status: String, title: String, sound: AlarmSound?) {
         channels // created on first post, see the field
         // Reached only from the background / off-main branches of UiInteraction.runAlarm.
@@ -268,7 +349,11 @@ class AlarmNotificationManager(
         // EXTRA_POSTED_AT_ELAPSED_REALTIME stamp defers the loop past the channel one-shot to avoid
         // double-audio; if ErrorActivity does launch, it re-requests the same owner+sound, which the
         // player treats as idempotent (no restart glitch).
-        val postedAt = SystemClock.elapsedRealtime()
+        val overrideDnd = preferences.get(BooleanKey.AlertOverrideDoNotDisturb)
+        // No sound means the player will not play: then the channel must keep its own sound.
+        val rampChoice = if (sound == null) null else AlarmChannelPolicy.forPlayerOwnedSound(playerOwnsSound(AlarmSoundCategory.OTHER), overrideDnd)
+        // When the player owns the sound the channel is silent, so the player starts at once (postedAt 0 = no wait).
+        val postedAt = if (rampChoice == null) SystemClock.elapsedRealtime() else 0L
         val intent = Intent(context, uiInteractionProvider().errorHelperActivity.java).apply {
             putExtra(AlarmIntent.EXTRA_SOUND, sound?.name)
             putExtra(AlarmIntent.EXTRA_STATUS, status)
@@ -283,10 +368,11 @@ class AlarmNotificationManager(
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val overrideDnd = preferences.get(BooleanKey.AlertOverrideDoNotDisturb)
-        // Always a sound-bearing channel (matching the requested sound + DND preference) so the alarm
-        // is audible from the notification regardless of whether the alarm activity ever launches.
-        val channelId = channelIdForSound(sound ?: AlarmSound.ERROR, overrideDnd)
+        // Player does not own the sound: a sound-bearing channel (matching the requested sound + DND
+        // preference) so the alarm is audible from the notification regardless of whether the alarm
+        // activity ever launches.
+        // Player owns the sound (ramp or melody): a silent channel, and the player below starts at once.
+        val channelId = rampChoice?.channelId ?: channelIdForSound(sound ?: AlarmSound.ERROR, overrideDnd)
 
         // Mute action so the user can silence the looping alarm straight from the lock-screen
         // notification when ErrorActivity isn't in the foreground (see AlarmMuteReceiver).
@@ -296,7 +382,7 @@ class AlarmNotificationManager(
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val notification = NotificationCompat.Builder(context, channelId)
+        fun fullScreenNotification(channel: String) = NotificationCompat.Builder(context, channel)
             .setSmallIcon(iconsProvider.getNotificationIcon())
             .setContentTitle(title)
             .setContentText(status)
@@ -309,9 +395,26 @@ class AlarmNotificationManager(
             .addAction(0, rh.gs(app.aaps.core.ui.R.string.mute), mutePendingIntent)
             .build()
 
+        silentChannelWatch.stop()
         try {
-            mgr.notify(NOTIFICATION_ID_FULL_SCREEN, notification)
+            mgr.notify(NOTIFICATION_ID_FULL_SCREEN, fullScreenNotification(channelId))
             aapsLogger.debug(LTag.NOTIFICATION, "Posted full-screen alarm: $title - $status")
+            // A silent channel leaves the whole sound to the player. If the player cannot start, or
+            // another alarm takes it, this alarm would stay silent - so watch it, and ring from a
+            // sound-bearing channel then.
+            if (rampChoice != null && sound != null) {
+                silentChannelWatch.start(
+                    isAudible = { alarmSoundPlayer.isAudibleFor(AlarmSoundPlayer.OWNER_FULLSCREEN) },
+                    ringFromChannel = {
+                        aapsLogger.error(LTag.NOTIFICATION, "Full-screen alarm player is silent: ringing from the notification channel")
+                        try {
+                            mgr.notify(NOTIFICATION_ID_FULL_SCREEN, fullScreenNotification(channelIdForSound(sound, overrideDnd)))
+                        } catch (ex: SecurityException) {
+                            aapsLogger.error(LTag.NOTIFICATION, "Could not post the full-screen alarm again", ex)
+                        }
+                    }
+                )
+            }
         } catch (ex: SecurityException) {
             // POST_NOTIFICATIONS revoked at runtime (Android 13+). The user's next return to
             // ComposeMainActivity refreshes the global PermissionsSheet (onResume → refresh),
@@ -449,6 +552,7 @@ class AlarmNotificationManager(
      * Wear "mute all" gesture.
      */
     fun cancelAlarm() {
+        silentChannelWatch.stop()
         mgr.cancel(NOTIFICATION_ID_FULL_SCREEN)
         synchronized(activeSoundKeys) {
             activeSoundKeys.forEach { mgr.cancel(SOUND_ID_OFFSET + it) }

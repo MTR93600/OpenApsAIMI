@@ -38,11 +38,26 @@ interface AlarmSoundPlayer {
      *   the start is deferred until that one-shot finishes (avoids brief double-audio on full-screen
      *   auto-launch). Pass 0 (the default) when there is no accompanying channel sound — the
      *   duration probe is then skipped entirely.
+     * @param category which user sound choice applies. When the user chose a soft melody for this
+     *   category, the melody plays instead of [sound]; if the melody cannot be played, [sound] is used.
      */
-    fun play(sound: AlarmSound, ownerTag: String, postedAtElapsedRealtime: Long = 0L)
+    fun play(
+        sound: AlarmSound,
+        ownerTag: String,
+        postedAtElapsedRealtime: Long = 0L,
+        category: AlarmSoundCategory = AlarmSoundCategory.OTHER,
+    )
 
     /** Stop and release playback **only if** [ownerTag] is the current owner. No-op otherwise. */
     fun stop(ownerTag: String)
+
+    /**
+     * True while the sound of [ownerTag] is really playing. A notification that left its sound to
+     * the player (a silent channel) uses this to find out that the player failed or was taken by
+     * another owner, and then rings by itself. A player that cannot tell answers true, which keeps
+     * the caller's previous behaviour.
+     */
+    fun isAudibleFor(ownerTag: String): Boolean = true
 
     companion object {
 

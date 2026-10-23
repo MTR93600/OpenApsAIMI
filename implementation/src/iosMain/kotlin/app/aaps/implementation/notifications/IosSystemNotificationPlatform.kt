@@ -4,6 +4,7 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.AapsNotification
 import app.aaps.core.interfaces.notifications.AlarmSound
+import app.aaps.core.interfaces.notifications.AlarmSoundCategory
 import app.aaps.core.interfaces.notifications.AlarmSoundPlayer
 import app.aaps.core.interfaces.notifications.IosNotificationDelegate
 import app.aaps.core.interfaces.notifications.NotificationLevel
@@ -37,6 +38,15 @@ import platform.UserNotifications.UNUserNotificationCenter
 class IosSystemNotificationPlatform(
     private val aapsLogger: AAPSLogger,
     private val alarmSoundPlayer: AlarmSoundPlayer,
+    /**
+     * The soft melody the user chose for an alarm category, `null` for the AAPS sound. Read fresh each
+     * time, like [overrideDoNotDisturb]. It decides the sound of an urgent notification, which is what
+     * the person hears while iOS has suspended the app.
+     *
+     * The default (no melody) keeps the iOS default sound, so a caller that does not pass this still
+     * gets an audible urgent notification - only the melody choice is not applied to it.
+     */
+    private val chosenMelody: (AlarmSoundCategory) -> AlarmMelody? = { null },
     /**
      * `AlertOverrideDoNotDisturb`, read fresh each time so a change takes effect without a restart.
      *
@@ -98,10 +108,10 @@ class IosSystemNotificationPlatform(
             // same split the Android side uses so a replaced alarm does not restart the sound.
             // Without the category the dismiss callback never fires - see onDismissed.
             setCategoryIdentifier(CATEGORY)
-            // An urgent alarm also carries the system sound. While iOS suspends the app, the alarm
-            // player cannot start any audio, so with the phone locked this sound - played by iOS
-            // itself - is the only sound the person hears.
-            if (notification.level == NotificationLevel.URGENT) setSound(UNNotificationSound.defaultSound)
+            // An urgent alarm also carries a sound. While iOS suspends the app, the alarm player
+            // cannot start any audio, so with the phone locked this sound - played by iOS itself - is
+            // the only sound the person hears.
+            if (notification.level == NotificationLevel.URGENT) setSound(urgentSound(notification))
             setInterruptionLevel(
                 if (breakThroughFocus) UNNotificationInterruptionLevelTimeSensitive
                 else UNNotificationInterruptionLevelActive
@@ -118,6 +128,15 @@ class IosSystemNotificationPlatform(
             if (error != null) aapsLogger.error(LTag.NOTIFICATION, "Cannot post notification: $error")
         }
     }
+
+    /**
+     * The sound of an urgent notification: the soft melody the user chose for its category, as on
+     * Android, or the iOS default sound. If the melody file cannot be written, the default sound is
+     * used, so the notification is never silent because of a melody.
+     */
+    private fun urgentSound(notification: AapsNotification): UNNotificationSound =
+        chosenMelody(AlarmAudioPolicy.categoryOf(notification.id))?.let { IosMelodyAudio.notificationSound(it) }
+            ?: UNNotificationSound.defaultSound
 
     /**
      * Whether this notification is allowed past a Focus mode.
@@ -207,14 +226,18 @@ class IosSystemNotificationPlatform(
      * again with the same key must not restart the audio - that is what stops a second alarm
      * cutting the first one off, and why the owner key is compared here rather than in the player.
      */
-    override fun setAudibleAlarm(instanceKey: Int?, sound: AlarmSound?) {
+    override fun setAudibleAlarm(instanceKey: Int?, sound: AlarmSound?) =
+        setAudibleAlarm(instanceKey, sound, AlarmSoundCategory.OTHER)
+
+    /** Same, with the sound choice that applies, so `IosAlarmSoundPlayer` can play the chosen melody. */
+    override fun setAudibleAlarm(instanceKey: Int?, sound: AlarmSound?, category: AlarmSoundCategory) {
         if (instanceKey == soundingKey) return
         soundingKey = instanceKey
         if (instanceKey == null || sound == null) {
             alarmSoundPlayer.stop(AlarmSoundPlayer.OWNER_INTERNAL)
             aapsLogger.debug(LTag.NOTIFICATION, "Alarm audio stopped")
         } else {
-            alarmSoundPlayer.play(sound, AlarmSoundPlayer.OWNER_INTERNAL)
+            alarmSoundPlayer.play(sound, AlarmSoundPlayer.OWNER_INTERNAL, category = category)
             aapsLogger.debug(LTag.NOTIFICATION, "Alarm audio owner is now $instanceKey ($sound)")
         }
     }

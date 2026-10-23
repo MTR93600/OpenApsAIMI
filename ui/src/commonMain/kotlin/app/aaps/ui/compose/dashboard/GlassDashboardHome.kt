@@ -3,6 +3,7 @@ package app.aaps.ui.compose.dashboard
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,6 +14,7 @@ import app.aaps.core.interfaces.InterfacesStrings
 import app.aaps.core.interfaces.dashboard.AimiGlassDashboardData
 import app.aaps.core.interfaces.navigation.ElementType
 import app.aaps.core.interfaces.protection.ProtectionCheck
+import app.aaps.core.interfaces.source.CgmWarmupStatus
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.LocalProfileUtil
@@ -24,6 +26,8 @@ import app.aaps.ui.compose.overview.chips.ChipsViewModel
 import app.aaps.ui.compose.overview.graphs.GraphViewModel
 import app.aaps.ui.compose.overview.statusLights.StatusViewModel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -44,6 +48,9 @@ internal fun aimiContextNavigationRequest(): NavigationRequest.PluginPreferences
  *
  * No Glass-only clinical values are inferred here. Each metric is the text/value already exposed
  * by the Overview graph or chips ViewModel, and detail actions navigate only to registered routes.
+ *
+ * @param cgmWarmupStatus link state of the active CGM source, null when the source cannot report
+ *   one. Used for the "sensor link lost" banner under the glucose value.
  */
 @Composable
 fun GlassDashboardHome(
@@ -59,8 +66,13 @@ fun GlassDashboardHome(
     title: String,
     settingsLabel: String,
     modifier: Modifier = Modifier,
+    cgmWarmupStatus: StateFlow<CgmWarmupStatus?>? = null,
 ) {
     val bgInfoState by graphViewModel.bgInfoState.collectAsStateWithLifecycle()
+    // 30 s ticker: keeps the stale check and the age in the link banner moving between refreshes.
+    val nowMs by graphViewModel.nowTimestamp.collectAsStateWithLifecycle()
+    val noCgmWarmup = remember { MutableStateFlow<CgmWarmupStatus?>(null) }
+    val cgmWarmup by (cgmWarmupStatus ?: noCgmWarmup).collectAsStateWithLifecycle()
     val iobState by chipsViewModel.iobUiState.collectAsStateWithLifecycle()
     val cobState by chipsViewModel.cobUiState.collectAsStateWithLifecycle()
     val sensitivityState by chipsViewModel.sensitivityUiState.collectAsStateWithLifecycle()
@@ -113,6 +125,8 @@ fun GlassDashboardHome(
                     onTreatments = {
                         onNavigate(NavigationRequest.Element(ElementType.TREATMENTS))
                     },
+                    cgmWarmup = cgmWarmup,
+                    nowMs = nowMs,
                 )
                 GlassAimiRuntimeCards(
                     data = aimiData,

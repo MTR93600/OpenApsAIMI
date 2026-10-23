@@ -57,6 +57,11 @@
     <string name="dashboard_glass_loop_ml_file_smb_size_label">SMB model size</string>
     <string name="dashboard_glass_loop_ml_file_size_bytes" comment="%1$d=file size in bytes. Example: 2048 bytes">%1$d bytes</string>
     <string name="dashboard_glass_loop_ml_file_missing">Not created yet</string>
+    <string name="dashboard_glass_cgm_phase_connecting">Connecting…</string>
+    <string name="dashboard_glass_cgm_phase_reconnecting">Reconnecting…</string>
+    <string name="dashboard_glass_cgm_phase_pairing">Pairing…</string>
+    <string name="dashboard_glass_cgm_phase_warmup">WARM-UP</string>
+    <string name="dashboard_glass_cgm_link_banner" comment="Sensor link line on the GLASS home screen. %1$s=link phase, e.g. Reconnecting…; %2$d=minutes since the last glucose value. Example: Reconnecting… · last value 14 min ago">%1$s · last value %2$d min ago</string>
     <string name="cancel_action_with_details" comment="%1$s=the word Cancel, %2$s=the active item being cancelled (e.g. a running temp basal or extended bolus description). Example: 'Cancel 150% 30min'">%1$s %2$s</string>
     <string name="no_temp_basal_running">No temp basal running</string>
     <string name="start_activity_tt">Start Activity TT</string>

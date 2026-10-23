@@ -38,6 +38,14 @@
     <string name="pref_title_alert_carbs_required">Alert on carbs required</string>
     <string name="pref_title_alert_urgent_as_android_notification">Raise urgent alarms as Android notifications</string>
     <string name="pref_title_alert_increase_volume">Gradually increase notification volume</string>
+    <string name="pref_title_alert_sound_low_glucose">Sound of low glucose alarms</string>
+    <string name="pref_title_alert_sound_other_alarms">Sound of other urgent alarms</string>
+    <string name="pref_summary_alert_sound">The AAPS sound, or a softer melody if loud sounds are hard for you. If a melody cannot be played, the AAPS sound is used.</string>
+    <string name="alert_sound_default">AAPS sound</string>
+    <string name="alert_sound_soft_chime" comment="Name of a soft alarm melody: four light rising bell notes">Soft chime</string>
+    <string name="alert_sound_warm_bells" comment="Name of a soft alarm melody: three low bells with a long ring">Warm bells</string>
+    <string name="alert_sound_marimba" comment="Name of a soft alarm melody: short wooden notes, like the marimba instrument">Marimba</string>
+    <string name="alert_sound_gentle_pulse" comment="Name of a soft alarm melody: one soft tone that pulses slowly">Gentle pulse</string>
     <string name="pref_title_alert_override_dnd">Override Do Not Disturb mode</string>
     <string name="pref_summary_alert_override_dnd">When enabled, AAPS alarms sound even if the phone is silenced or in Do Not Disturb. When disabled, alarms stay quiet in those modes.</string>
 

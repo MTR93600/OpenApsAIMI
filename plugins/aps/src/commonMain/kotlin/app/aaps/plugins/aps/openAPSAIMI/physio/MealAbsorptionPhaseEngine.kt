@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.physio
 
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.safety.RiseConfirmation
 import app.aaps.plugins.aps.openAPSAIMI.release.HyperTrajectoryHypoCredibility
 import kotlin.math.max
 import kotlin.math.min
@@ -38,6 +39,8 @@ object MealAbsorptionPhaseEngine {
         val estimatedRa: Double? = null,
         val hoursSinceBolus: Double? = null,
         val lateFatProteinRise: Boolean = false,
+        /** Glucose-history confirmation of the rise; null when unknown. Only NONE changes a decision. */
+        val riseLevel: RiseConfirmation.Level? = null,
         val nowMs: Long,
     )
 
@@ -261,6 +264,14 @@ object MealAbsorptionPhaseEngine {
                     input.physiologicalPhase == PhysiologicalPhase.STRESS_CORTISOL ||
                     input.physiologicalPhase.isEndogenousRisk
                 )
+        ) {
+            return false
+        }
+        // INTER_WAVE and SECOND_WAVE come from the memory, not from this tick's glucose. Without a
+        // declared meal, COB or a confirmed rise they must not claim delivery priority.
+        val memoryDerived = phase == MealAbsorptionPhase.INTER_WAVE || phase == MealAbsorptionPhase.SECOND_WAVE
+        if (memoryDerived && !input.mealIntent && input.mealCobG < 6.0 &&
+            input.riseLevel == RiseConfirmation.Level.NONE
         ) {
             return false
         }

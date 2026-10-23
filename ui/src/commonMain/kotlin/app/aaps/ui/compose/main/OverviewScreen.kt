@@ -23,6 +23,7 @@ import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.queue.CommandQueue
+import app.aaps.core.interfaces.source.CgmWarmupProvider
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.keys.StringKey
 import app.aaps.core.ui.CoreUiStrings
@@ -303,6 +304,7 @@ fun OverviewScreen(
                     },
                     title = stringResource(UiStrings.dashboard_glass_home_title),
                     settingsLabel = stringResource(CoreUiStrings.settings),
+                    cgmWarmupStatus = (activePlugin.activeBgSource as? CgmWarmupProvider)?.warmupStatus,
                 )
             }
             DashboardHomeSelection.OVERVIEW -> null

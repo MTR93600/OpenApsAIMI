@@ -200,6 +200,9 @@ internal class AimiTickWorkingState {
     var raNetShortAvgDeltaAdj: Float = 0.0f
     var lastPostHypoSmbBeforeCapU: Double? = null
     var lastPostHypoSmbAfterCapU: Double? = null
+
+    /** "Enable SMB" for this tick (`microBolusAllowed`), read by every SMB writer through `SmbSwitchGate`. */
+    var smbSwitchOnThisTick: Boolean = true
     var lastEffortSmbFactorRaw: Double? = null
     var lastEffortSmbFactorApplied: Double? = null
     var lastEffortSmbBeforeU: Double? = null

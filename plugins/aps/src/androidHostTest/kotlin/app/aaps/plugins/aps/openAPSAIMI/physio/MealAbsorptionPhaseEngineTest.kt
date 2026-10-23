@@ -288,4 +288,30 @@ class MealAbsorptionPhaseEngineTest {
         assertEquals(MealAbsorptionPhase.NONE, out.phase)
         assertFalse(out.mealDeliveryPriority)
     }
+
+    /** The belief is exported in parts (Thomas, 2026-10-21): base + each bonus actually applied = belief. */
+    @Test
+    fun beliefPartsAddUpToTheBelief() {
+        val out = MealAbsorptionPhaseEngine.evaluate(
+            baseInput(bg = 135.0, delta = 1.6, shortAvg = 0.5, bestT = 135.0, floorT = 130.0, hour = 3)
+                .copy(mealIntent = true, physiologicalPhase = PhysiologicalPhase.OFF),
+        )
+        val p = requireNotNull(out.beliefParts)
+        assertEquals(0.25, p.intent, 1e-9)
+        assertEquals(0.0, p.cob, 1e-9)
+        assertEquals(0.0, p.physioMeal, 1e-9)
+        assertEquals(out.belief, p.base + p.intent + p.cob + p.physioMeal + p.ra, 1e-9)
+        assertEquals("NONE", out.rawPhase)
+    }
+
+    /** At the 1.0 clamp a bonus only counts for what it really added. */
+    @Test
+    fun clampedBonusCountsOnlyWhatItAdded() {
+        val out = MealAbsorptionPhaseEngine.evaluate(
+            baseInput(bg = 105.0, delta = 9.0, shortAvg = 7.5, bestT = 218.0).copy(mealIntent = true, mealCobG = 20.0),
+        )
+        val p = requireNotNull(out.beliefParts)
+        assertEquals(1.0, out.belief, 1e-9)
+        assertEquals(out.belief, p.base + p.intent + p.cob + p.physioMeal + p.ra, 1e-9)
+    }
 }

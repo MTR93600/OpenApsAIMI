@@ -22,6 +22,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.implementation.logging.AAPSLoggerIos
 import app.aaps.implementation.maintenance.KeepAliveChecks
+import app.aaps.implementation.notifications.AlarmAudioPolicy
 import app.aaps.implementation.notifications.IosSystemNotificationPlatform
 import app.aaps.ios.shell.config.IosConfig
 import app.aaps.ios.shell.platform.IosHistoryScope
@@ -114,7 +115,12 @@ object IosPlatformBindings {
     @Provides
     @SingleIn(AppScope::class)
     fun systemNotificationPlatform(logger: AAPSLogger, alarmSoundPlayer: AlarmSoundPlayer, preferences: Preferences): SystemNotificationPlatform =
-        IosSystemNotificationPlatform(logger, alarmSoundPlayer) { preferences.get(BooleanKey.AlertOverrideDoNotDisturb) }
+        IosSystemNotificationPlatform(
+            logger,
+            alarmSoundPlayer,
+            // The melody the person chose, so a locked phone plays it too, not only the app.
+            chosenMelody = { category -> AlarmAudioPolicy.chosenMelody(preferences, category) }
+        ) { preferences.get(BooleanKey.AlertOverrideDoNotDisturb) }
 
     /**
      * One history browsing window, app-scoped so every injection point sees the same one.

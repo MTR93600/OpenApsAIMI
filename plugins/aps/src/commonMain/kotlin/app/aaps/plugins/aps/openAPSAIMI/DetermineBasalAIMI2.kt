@@ -66,6 +66,7 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.buildRbtExtendedSignals as decid
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiAggressiveRiseFloor
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiAutodriveDebug
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiAutodriveGater
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiRiseConfirmation
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiEstimatedRa
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiAutodriveTickWrites
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiBasalCap
@@ -471,6 +472,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionRuntime
 import app.aaps.plugins.aps.openAPSAIMI.safety.SmbRestoreCeiling
+import app.aaps.plugins.aps.openAPSAIMI.safety.SmbSwitchGate
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhaseClassifier
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioContextMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioLatentState
@@ -583,6 +585,8 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSoftFloorPathMin
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSoftFloorTelemetry
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.AutodriveEngine
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.PhysiologicalStressMaskBuilder
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.safety.RiseConfirmation
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.safety.UndeclaredEvidenceCap
 import app.aaps.plugins.aps.openAPSAIMI.keys.AimiLongKey
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
@@ -917,6 +921,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val determineIoScope = CoroutineScope(SupervisorJob() + aapsIoDispatcher)
 
     /** Latest CGM noise from the current determine_basal invocation (for basal governance context). */
+    /**
+     * Limits of the undeclared-rise evidence cap, set by the Autodrive V3 branch before it hands
+     * the SMB to `deliverV3SmbFromRbt`. A field of the engine, not of one tick, exactly as on
+     * dev_OAPSAIMI (`ac78a11883`): it keeps the last limits until the V3 branch sets new ones.
+     */
+    private var lastEvidenceLimits: UndeclaredEvidenceCap.Limits = UndeclaredEvidenceCap.NO_LIMIT
+
     private var lastLoopCgmNoise: Double = 0.0
 
     // 🦋 Thyroid (Basedow) Module
@@ -2600,6 +2611,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 work.lastPhysiologicalPhaseOutput?.phase ?: PhysiologicalPhase.OFF
             override fun estimatedRa() =
                 continuousStateEstimator.getLastRa().takeIf { it.isFinite() && it > 0.0 }
+            override fun riseLevel() = currentRiseLevel()
             override fun writeMealIntentSource(source: String) {
                 work.lastMealIntentSource = source
             }
@@ -3167,6 +3179,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         autodriveGateOpen = autodriveGateOpen,
         mpcFeedForwardRa = mpcFeedForwardRa,
         cbfShieldDeltaU = cbfShieldDeltaU,
+        riseLevel = currentRiseLevel(),
         preferences = preferences,
         consoleLog = work.consoleLog,
         fields = object : AimiRbtResolveFields {
@@ -3412,7 +3425,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
             finalizeAndCapSMB(
                 rT = rT,
-                proposedUnits = liftedV3Smb,
+                proposedUnits = UndeclaredEvidenceCap.capSmb(liftedV3Smb, lastEvidenceLimits),
                 reasonHeader = htrReason,
                 mealData = ctx.mealData,
                 hypoThreshold = hypoThresholdMgdl,
@@ -3422,7 +3435,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 } else {
                     "AutodriveV3"
                 },
-                hyperReleaseFloorU = if (effectiveHtr.active) effectiveHtr.smbFloorU else 0.0,
+                hyperReleaseFloorU = if (effectiveHtr.active) {
+                    UndeclaredEvidenceCap.capSmb(effectiveHtr.smbFloorU, lastEvidenceLimits)
+                } else 0.0,
             )
         } else if (effectiveHtr.active) {
             work.consoleLog.add("🚀 HTR active but lifted SMB=0 (IOB/headroom); floor=${aimiFmt2(effectiveHtr.smbFloorU)}U")
@@ -3773,6 +3788,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun applySmbUnits(rT: RT, requestedU: Double, owner: String) {
         val requested = if (requestedU.isFinite()) requestedU.coerceAtLeast(0.0) else 0.0
         AimiEffectProbe.noteSmb(requested, owner)
+        if (requested > 0.0 && !SmbSwitchGate.allows(work.smbSwitchOnThisTick, owner)) {
+            work.consoleLog.add("⛔ SMB_DISABLED[$owner]: ${aimiFmt2(requested)} U refused (Enable SMB is off)")
+            rT.units = 0.0
+            return
+        }
         val current = rT.units ?: 0.0
         if (!work.smbTerminalSealed || requested <= current + 1e-9) {
             rT.units = requested
@@ -3928,6 +3948,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             dinnerTime = dinnerTime,
             highCarbTime = highCarbTime,
             snackTime = work.snackTime,
+            fclTime = fclTime,
+            anticipTime = anticipTime,
             variableSensitivity = variableSensitivity,
             hourOfDay = work.hourOfDay,
             exerciseInsulinLockoutActive = work.exerciseInsulinLockoutActive,
@@ -3937,6 +3959,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             maxSmb = work.maxSMB,
             maxSmbHb = work.maxSMBHB,
             postHypo = { work.lastPostHypoDeliveryAuthority },
+            mealAbsorptionBelief = { work.lastMealAbsorptionOutput?.belief },
             mealChannelHint = work.lastRbtAppliedHints?.mealChannel,
             basePhysioMultipliers = work.lastBasePhysioMultipliers,
             eventualBg = work.eventualBG,
@@ -3956,8 +3979,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             preferences = preferences,
             dateUtil = dateUtil,
             consoleLog = work.consoleLog,
-            gater = AimiAutodriveGater { bg, combined, cob, uamConfidence, explicitMeal, recentMeal, minBg75, ra, mealChannel ->
+            gater = AimiAutodriveGater { bg, combined, cob, uamConfidence, explicitMeal, recentMeal, minBg75, ra, mealChannel, rise ->
                 autodriveGater.shouldEngageV3(
+                    riseConfirmation = rise,
                     bg = bg,
                     combinedDelta = combined,
                     cob = cob,
@@ -3968,6 +3992,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     estimatedRa = ra,
                     mealChannelHint = mealChannel,
                 )
+            },
+            riseConfirmationSource = AimiRiseConfirmation {
+                RiseConfirmation.evaluate(recentCleanBgNewestFirst(RiseConfirmation.SLOW_WINDOW_TICKS + 1))
             },
             estimatedRa = AimiEstimatedRa { continuousStateEstimator.getLastRa() },
             debug = AimiAutodriveDebug { message -> aapsLogger.debug(LTag.APS, message) },
@@ -4005,6 +4032,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 }
                 override fun setPostHypoSmbAfterCapU(units: Double) {
                     work.lastPostHypoSmbAfterCapU = units
+                }
+                override fun noteRiseConfirmation(result: RiseConfirmation.Result?) {
+                    work.pendingDecisionCtxForExport?.baseline_state?.let { baseline ->
+                        baseline.rise_confirmation_level = result?.level?.name
+                        baseline.rise_confirmation_window_ticks = result?.windowTicks
+                        baseline.rise_confirmation_positive_share = result?.positiveShare
+                        baseline.rise_confirmation_net_mgdl = result?.netRiseMgdl
+                    }
+                }
+                override fun setEvidenceLimits(limits: UndeclaredEvidenceCap.Limits) {
+                    work.pendingDecisionCtxForExport?.baseline_state?.evidence_cap_active = limits.active
+                    lastEvidenceLimits = limits
                 }
             },
             uam = AimiUamConfidence { AimiUamHandler.confidenceOrZero() },
@@ -5109,6 +5148,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         intervalsmb = intervalsmb,
         smbToGive = smbToGive,
         iob = work.iob,
+        riseLevel = currentRiseLevel(),
         preferences = preferences,
         consoleLog = work.consoleLog,
         state = object : AimiPkpdGuardState {
@@ -6807,21 +6847,24 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 val smb30min = calculateSmbLast30Min()
                 val predictionAvailable = (finalResult.predBGs?.IOB?.size ?: 0) > 0
                 val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
+                // getTimeElapsedSinceLastEvent already returns minutes (-1 = none in the last 60 min).
+                // These lines divided it by 60000 again, so the runtime was always 0 and every meal mode
+                // looked "in the prebolus window" to the auditor for its whole duration.
                 val inPrebolusWindow = when {
                     therapy.bfastTime -> {
-                        val runtimeMin = therapy.getTimeElapsedSinceLastEvent("bfast") / 60000
+                        val runtimeMin = therapy.getTimeElapsedSinceLastEvent("bfast")
                         runtimeMin in 0..30
                     }
                     therapy.lunchTime -> {
-                        val runtimeMin = therapy.getTimeElapsedSinceLastEvent("lunch") / 60000
+                        val runtimeMin = therapy.getTimeElapsedSinceLastEvent("lunch")
                         runtimeMin in 0..30
                     }
                     therapy.dinnerTime -> {
-                        val runtimeMin = therapy.getTimeElapsedSinceLastEvent("dinner") / 60000
+                        val runtimeMin = therapy.getTimeElapsedSinceLastEvent("dinner")
                         runtimeMin in 0..30
                     }
                     therapy.highCarbTime -> {
-                        val runtimeMin = therapy.getTimeElapsedSinceLastEvent("highcarb") / 60000
+                        val runtimeMin = therapy.getTimeElapsedSinceLastEvent("highcarb")
                         runtimeMin in 0..30
                     }
                     else -> false
@@ -6836,14 +6879,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     else -> null
                 }
                 val modeRuntimeMin = when {
-                    therapy.bfastTime -> (therapy.getTimeElapsedSinceLastEvent("bfast") / 60000).toInt()
-                    therapy.lunchTime -> (therapy.getTimeElapsedSinceLastEvent("lunch") / 60000).toInt()
-                    therapy.dinnerTime -> (therapy.getTimeElapsedSinceLastEvent("dinner") / 60000).toInt()
-                    therapy.highCarbTime -> (therapy.getTimeElapsedSinceLastEvent("highcarb") / 60000).toInt()
-                    therapy.snackTime -> (therapy.getTimeElapsedSinceLastEvent("snack") / 60000).toInt()
-                    therapy.mealTime -> (therapy.getTimeElapsedSinceLastEvent("meal") / 60000).toInt()
+                    therapy.bfastTime -> therapy.getTimeElapsedSinceLastEvent("bfast").toInt()
+                    therapy.lunchTime -> therapy.getTimeElapsedSinceLastEvent("lunch").toInt()
+                    therapy.dinnerTime -> therapy.getTimeElapsedSinceLastEvent("dinner").toInt()
+                    therapy.highCarbTime -> therapy.getTimeElapsedSinceLastEvent("highcarb").toInt()
+                    therapy.snackTime -> therapy.getTimeElapsedSinceLastEvent("snack").toInt()
+                    therapy.mealTime -> therapy.getTimeElapsedSinceLastEvent("meal").toInt()
                     else -> null
-                }
+                }?.takeIf { it >= 0 }
                 val autodriveState = causalState.lastAutodriveState.toString()
                 val wcyclePhase = wCycleFacade.getPhase()?.name
                 val wcycleFactor = wCycleFacade.getIcMultiplier()
@@ -8857,6 +8900,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun refineRbtMergeAfterDoseSnapshot(rT: RT) =
         decideRefineRbtMergeAfterDoseSnapshot(
             rT = rT,
+            riseLevel = currentRiseLevel(),
             preferences = preferences,
             consoleLog = work.consoleLog,
             state = object : AimiRbtRefineState {
@@ -11065,6 +11109,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         hyperReleaseFloorU: Double = 0.0,
         bypassSmbRefractory: Boolean = false,
     ) {
+        // "Enable SMB" off: no automatic SMB from any path (Autodrive V3, DriftTerminator, GlobalAIMI).
+        if (!isExplicitUserAction && !SmbSwitchGate.allows(work.smbSwitchOnThisTick, decisionSource)) {
+            if (proposedUnits > 0.0) {
+                work.consoleLog.add("⛔ SMB_DISABLED[$decisionSource]: ${aimiFmt2(proposedUnits)} U refused (Enable SMB is off)")
+            }
+            rT.units = 0.0
+            sealSmbTerminal()
+            recordSmbActionType("none")
+            return
+        }
         val side = decideFinalizeAndCapSmb(
             rT = rT,
             proposedUnits = proposedUnits,
@@ -11108,6 +11162,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             slowCarbDeliveredU = causalState.slowCarbBudgetDeliveredU,
             ceilingRepeatCount = ceilingRepeatCount,
             ceilingRepeatLastMs = ceilingRepeatLastMs,
+            riseLevel = currentRiseLevel(),
             preferences = preferences,
             consoleLog = work.consoleLog,
             uamConfidence = AimiUamConfidence { AimiUamHandler.confidenceOrZero() },
@@ -12014,6 +12069,34 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private fun FloatArray.toDoubleArray(): DoubleArray {
         return this.map { it.toDouble() }.toDoubleArray()
+    }
+
+    /**
+     * Rise confirmation level for the IOB surveillance and the meal-absorption phase. Null during a
+     * declared meal (FCL, anticip note or a meal mode), so a declared meal is never held back, and
+     * null when the glucose history is too short.
+     */
+    private fun currentRiseLevel(): RiseConfirmation.Level? =
+        if (fclTime || anticipTime || work.mealTime || bfastTime || lunchTime || dinnerTime || work.snackTime || highCarbTime) {
+            null
+        } else RiseConfirmation.evaluate(recentCleanBgNewestFirst(RiseConfirmation.SLOW_WINDOW_TICKS + 1))?.level
+
+    /**
+     * Glucose values newest first, one per 5 min. It stops at the first gap or filled value, so a
+     * short result means the history is not clean enough to confirm a rise.
+     */
+    private fun recentCleanBgNewestFirst(count: Int): List<Double> {
+        val data = iobCobCalculator.ads.getBucketedDataTableCopy() ?: return emptyList()
+        val clean = ArrayList<Double>(count)
+        var previousTs = 0L
+        for (entry in data) {
+            if (entry.value <= 39 || entry.filledGap) break
+            if (clean.isNotEmpty() && abs(previousTs - entry.timestamp - 5 * 60_000L) > 90_000L) break
+            clean.add(entry.recalculated)
+            previousTs = entry.timestamp
+            if (clean.size >= count) break
+        }
+        return clean
     }
 
     private fun getRecentDeltas(): List<Double> {
@@ -14422,6 +14505,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Reset under the tick lock: a tick that cannot acquire the lock must not
             // clobber the scratch of the tick currently holding it.
             work = AimiTickWorkingState()
+            work.smbSwitchOnThisTick = ctx.microBolusAllowed
             AimiDetermineBasalTickOrchestrator.run(this, ctx)
         }
     }

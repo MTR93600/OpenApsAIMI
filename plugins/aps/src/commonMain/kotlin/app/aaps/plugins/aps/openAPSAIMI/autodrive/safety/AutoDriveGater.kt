@@ -2,6 +2,7 @@ package app.aaps.plugins.aps.openAPSAIMI.autodrive.safety
 
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiHealthContext
 import app.aaps.plugins.aps.openAPSAIMI.recursive.MealChannelHint
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
@@ -35,6 +36,7 @@ class AutoDriveGater @Inject constructor(
         minBgLookback75m: Double = 200.0,
         estimatedRa: Double = 0.0,
         mealChannelHint: MealChannelHint? = null,
+        riseConfirmation: RiseConfirmation.Result? = null,
     ): GatingResult {
         // 1. Fetch real-time health data
         val health = healthRepo.fetchSnapshotForAutodriveGater()
@@ -71,8 +73,13 @@ class AutoDriveGater @Inject constructor(
                     )
 
         // 4. Refined glycemic entry thresholds
-        val isHighPlateau = bg > 150.0
-        val isActivelyRising = when {
+        // A glycemic entry without a declared or implicit meal must come with a confirmed rise in the
+        // glucose history. Very high glucose is a correction, not a meal guess, so it needs no proof.
+        val awaitsConfirmation = riseConfirmation != null &&
+            riseConfirmation.level == RiseConfirmation.Level.NONE &&
+            !explicitMealMode && !implicitMealContext && bg < PLATEAU_NO_CONFIRMATION_BG
+        val isHighPlateau = bg > 150.0 && !awaitsConfirmation
+        val isActivelyRising = !awaitsConfirmation && when {
             bg >= 150.0 -> combinedDelta > 0.8
             bg >= 120.0 -> combinedDelta > 1.2 ||
                 (combinedDelta > 0.8 && (uamConfidence >= 0.5 || estimatedRa >= 0.7))
@@ -81,6 +88,15 @@ class AutoDriveGater @Inject constructor(
         val isMealRising = implicitMealContext && combinedDelta > 0.25
 
         val shouldEngage = isHighPlateau || isActivelyRising || isMealRising
+
+        if (!shouldEngage && awaitsConfirmation && (bg > 150.0 || combinedDelta > 0.8)) {
+            return GatingResult(
+                engage = false,
+                reason = "⏳ Awaiting rise confirmation (BG=$bg, Trend=$combinedDelta, " +
+                    "window=${riseConfirmation?.windowTicks} ticks, up=${aimiFmt2(riseConfirmation?.positiveShare ?: 0.0)})",
+                kind = GateKind.AWAITING_CONFIRMATION,
+            )
+        }
 
         if (!shouldEngage) {
             val reason =
@@ -162,5 +178,12 @@ class AutoDriveGater @Inject constructor(
 
         /** A rise strong enough on its own. */
         STRONG_RISE,
+
+        /** A glycemic entry was met, but the glucose history does not confirm a rise yet. */
+        AWAITING_CONFIRMATION,
+    }
+
+    private companion object {
+        const val PLATEAU_NO_CONFIRMATION_BG = 180.0
     }
 }

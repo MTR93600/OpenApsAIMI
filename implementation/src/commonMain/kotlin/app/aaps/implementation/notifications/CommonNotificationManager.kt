@@ -253,7 +253,7 @@ class CommonNotificationManager(
 
             top.instanceKey != soundingKey -> {
                 soundingKey = top.instanceKey
-                platform.setAudibleAlarm(top.instanceKey, top.sound)
+                platform.setAudibleAlarm(top.instanceKey, top.sound, AlarmAudioPolicy.categoryOf(top.id))
             }
             // else: already playing the top alarm - leave the ramp running.
         }

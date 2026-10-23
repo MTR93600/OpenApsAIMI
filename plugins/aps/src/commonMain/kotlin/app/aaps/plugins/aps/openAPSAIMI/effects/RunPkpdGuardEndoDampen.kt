@@ -6,6 +6,7 @@ import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.safety.RiseConfirmation
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiTickContext
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.prediction.minPredictedAcrossCurves
@@ -97,6 +98,7 @@ internal fun decidePkpdGuardEndoDampenRedCarpetAndCapSmb(
     intervalsmb: Int,
     smbToGive: Float,
     iob: Float,
+    riseLevel: RiseConfirmation.Level?,
     preferences: Preferences,
     consoleLog: MutableList<String>,
     state: AimiPkpdGuardState,
@@ -218,6 +220,7 @@ internal fun decidePkpdGuardEndoDampenRedCarpetAndCapSmb(
         endogenousCounterRegulatory = state.endogenousCounterRegulatory(),
         mealAbsorptionPhase = state.mealAbsorptionPhase(),
         mealModeActive = mealTime || bfastTime || lunchTime || dinnerTime || snackTime || highCarbTime,
+        riseLevel = riseLevel,
     )
     val carpet = AimiLegacySmbCapMath.redCarpetOrCap(
         smbAfterGuards = smbToGiveLocal,

@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.effects
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.safety.RiseConfirmation
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
 import app.aaps.plugins.aps.openAPSAIMI.safety.MealSafetyContext
@@ -54,6 +55,9 @@ internal interface AimiMealAbsorptionCalls {
     fun anticipTime(): Boolean
     fun physiologicalPhase(): PhysiologicalPhase
     fun estimatedRa(): Double?
+
+    /** Glucose-history confirmation of the rise; null during a declared meal or with too short a history. */
+    fun riseLevel(): RiseConfirmation.Level?
     fun writeMealIntentSource(source: String)
     fun writeOutput(output: MealAbsorptionPhaseEngine.Output)
 }
@@ -123,6 +127,7 @@ internal fun decideRefreshMealAbsorptionPhase(
             estimatedRa = calls.estimatedRa(),
             hoursSinceBolus = hoursSinceBolus,
             lateFatProteinRise = lateFatRise,
+            riseLevel = calls.riseLevel(),
             nowMs = nowMs,
         ),
     )

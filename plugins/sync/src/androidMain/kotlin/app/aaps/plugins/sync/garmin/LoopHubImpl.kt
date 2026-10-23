@@ -1,6 +1,7 @@
 package app.aaps.plugins.sync.garmin
 
 import androidx.annotation.VisibleForTesting
+import app.aaps.core.data.model.BS
 import app.aaps.core.data.model.GV
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.HR
@@ -108,6 +109,82 @@ class LoopHubImpl(
                 tb?.convertedToPercent(clock.millis(), it)?.div(100.0)
             } ?: Double.NaN
         }
+
+    override val temporaryBasalRemainingMinutes: Int?
+        get() = runBlocking {
+            val now = clock.millis()
+            val tb = processedTbrEbData.getTempBasalIncludingConvertedExtended(now) ?: return@runBlocking null
+            val remainingMs = tb.end - now
+            if (remainingMs <= 0L) null else (remainingMs / 60_000L).toInt().coerceAtLeast(1)
+        }
+
+    override val currentTargetMgdl: Double?
+        get() = runBlocking {
+            // Prefer the targetBG of the last APS run (AIMI writes it in rT.targetBG), the same
+            // value the overview shows. Not the static profile middle.
+            val apsTarget = loop.lastRun?.constraintsProcessed?.targetBG
+            if (apsTarget != null && apsTarget.isFinite() && apsTarget > 0.0) {
+                return@runBlocking apsTarget
+            }
+            val now = clock.millis()
+            val tt = persistenceLayer.getTemporaryTargetActiveAt(now)
+            when {
+                tt != null -> (tt.lowTarget + tt.highTarget) / 2.0
+                else -> currentProfile?.getRoundedTargetMgdl()
+            }
+        }
+
+    override val activeTherapyMode: String?
+        get() = runBlocking {
+            val now = clock.millis()
+            // Look back far enough for long modes (sport / highcarb up to several hours).
+            val from = now - TimeUnit.HOURS.toMillis(12)
+            val notes = persistenceLayer.getTherapyEventDataFromTime(from, TE.Type.NOTE, ascending = false)
+            GarminActiveTherapyMode.detect(notes, now)
+        }
+
+    /**
+     * Reads the TBR (also a converted extended bolus) every 5 minutes over [windowMs] and keeps a
+     * step only when the percent changes.
+     * ⚠️ ASYNC IMPACT: runBlocking on processedTbrEbData + profile.
+     */
+    override fun temporaryBasalHistory(windowMs: Long): List<BasalHistoryStep> = runBlocking {
+        val now = clock.millis()
+        val from = now - windowMs.coerceAtLeast(TimeUnit.MINUTES.toMillis(5))
+        val profile = currentProfile
+        val stepMs = TimeUnit.MINUTES.toMillis(5)
+        val out = ArrayList<BasalHistoryStep>()
+        var t = from
+        var lastPct = Int.MIN_VALUE
+        while (t <= now) {
+            val pct = if (profile == null) {
+                100
+            } else {
+                val tb = processedTbrEbData.getTempBasalIncludingConvertedExtended(t)
+                tb?.convertedToPercent(t, profile) ?: 100
+            }
+            if (pct != lastPct) {
+                out.add(BasalHistoryStep(t = t, p = pct.coerceIn(0, 500)))
+                lastPct = pct
+            }
+            t += stepMs
+        }
+        if (out.isEmpty()) out.add(BasalHistoryStep(t = from, p = 100))
+        out
+    }
+
+    /**
+     * Times of the valid SMBs in [windowMs].
+     * ⚠️ ASYNC IMPACT: runBlocking on persistenceLayer.getBolusesFromTime.
+     */
+    override fun smbHistoryTimestamps(windowMs: Long): List<Long> = runBlocking {
+        val from = clock.millis() - windowMs.coerceAtLeast(0L)
+        persistenceLayer.getBolusesFromTime(from, ascending = true)
+            .asSequence()
+            .filter { it.isValid && it.type == BS.Type.SMB }
+            .map { it.timestamp }
+            .toList()
+    }
 
     override val lowGlucoseMark
         get() = profileUtil.convertToMgdl(

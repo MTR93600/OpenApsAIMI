@@ -9,10 +9,12 @@ import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.AutodriveBasalPolicy
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt0
+import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.AutodriveEngine
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.safety.UndeclaredEvidenceCap
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiTickContext
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientRefreshSource
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioMultipliersMTR
@@ -41,6 +43,8 @@ internal class AutodriveV3TickState(
     val dinnerTime: Boolean,
     val highCarbTime: Boolean,
     val snackTime: Boolean,
+    val fclTime: Boolean,
+    val anticipTime: Boolean,
     val variableSensitivity: Float,
     val hourOfDay: Int,
     val exerciseInsulinLockoutActive: Boolean,
@@ -55,6 +59,11 @@ internal class AutodriveV3TickState(
      * this state object was built would cap the SMB on a mode the tick no longer ends with.
      */
     val postHypo: () -> PostHypoDeliveryAuthority.Decision,
+    /**
+     * Read live: the meal-absorption belief of this tick, after the branch refreshed the phase.
+     * Null when no phase was computed.
+     */
+    val mealAbsorptionBelief: () -> Double?,
     val mealChannelHint: MealChannelHint?,
     val basePhysioMultipliers: PhysioMultipliersMTR,
     val eventualBg: Double,
@@ -76,6 +85,7 @@ internal fun runAutodriveV3MultiVariableBranch(
     dateUtil: DateUtil,
     consoleLog: MutableList<String>,
     gater: AimiAutodriveGater,
+    riseConfirmationSource: AimiRiseConfirmation,
     estimatedRa: AimiEstimatedRa,
     debug: AimiAutodriveDebug,
     engine: AutodriveEngine,
@@ -125,7 +135,9 @@ internal fun runAutodriveV3MultiVariableBranch(
     }
     val hasRecentMealEstimate = recentEstimateCarbs > 10.0 && estimateAgeMinutes in 0.0..45.0
 
+    val riseConfirmation = riseConfirmationSource.evaluate()
     val gate = gater.shouldEngageV3(
+        riseConfirmation = riseConfirmation,
         bg = ctx.glucoseStatus.glucose,
         combinedDelta = combinedDelta.toDouble(),
         cob = ctx.mealData.mealCOB,
@@ -139,6 +151,7 @@ internal fun runAutodriveV3MultiVariableBranch(
     )
 
     writes.noteAutodriveGate(engaged = gate.engage, kindName = gate.kind.name, reason = gate.reason)
+    writes.noteRiseConfirmation(riseConfirmation)
 
     if (!gate.engage) {
         raObserve.observeRaIfNotAlreadyRun(
@@ -281,6 +294,20 @@ internal fun runAutodriveV3MultiVariableBranch(
         htrExport.markHtrRaFloorForExport(htrRaFloor, estimatedRaForMpc)
 
         val v3CommandSafe = adCommand != null && adCommand.isSafe
+        val evidenceLimits = UndeclaredEvidenceCap.limits(
+            undeclared = !autodriveMealSignals && !state.fclTime && !state.anticipTime &&
+                !autodriveMealContext.declaredMealIntent,
+            bgMgdl = bg,
+            belief = state.mealAbsorptionBelief(),
+            riseLevel = riseConfirmation?.level,
+        )
+        writes.setEvidenceLimits(evidenceLimits)
+        if (evidenceLimits.active) {
+            consoleLog.add(
+                "🧪 UNDECLARED_EVIDENCE_CAP: belief=${aimiFmt2(state.mealAbsorptionBelief() ?: 0.0)} " +
+                    "basal<=${aimiFmt1(evidenceLimits.basalFactor)}x smb<=${aimiFmt2(evidenceLimits.smbCapU)}U"
+            )
+        }
         if (v3CommandSafe) {
             val v3TbrRate = adCommand!!.temporaryBasalRate
             if (v3TbrRate != null && v3TbrRate >= 0.0) {
@@ -297,10 +324,14 @@ internal fun runAutodriveV3MultiVariableBranch(
                             "${aimiFmt2(v3AdaptiveMult)}x at BG=${aimiFmt0(bg)}",
                     )
                 }
-                val cappedV3Tbr = basalCap.capBasalRateForCorrectionAggression(
-                    requestedRateUph = v3TbrRate,
+                val cappedV3Tbr = UndeclaredEvidenceCap.capBasal(
+                    requestedUph = basalCap.capBasalRateForCorrectionAggression(
+                        requestedRateUph = v3TbrRate,
+                        profileBasalUph = profile.current_basal,
+                        source = "AUTODRIVE_V3_DIRECT",
+                    ),
                     profileBasalUph = profile.current_basal,
-                    source = "AUTODRIVE_V3_DIRECT",
+                    limits = evidenceLimits,
                 )
                 effects.setTempBasal(
                     cappedV3Tbr,
@@ -313,6 +344,11 @@ internal fun runAutodriveV3MultiVariableBranch(
                     adaptiveMultiplier = v3AdaptiveMult,
                     mealContext = autodriveMealContext,
                 )
+                // setTempBasal applies more multipliers after the cap, so the ceiling is enforced on the final rate.
+                rT.rate?.let { finalRate ->
+                    val limited = UndeclaredEvidenceCap.capBasal(finalRate, profile.current_basal, evidenceLimits)
+                    if (limited < finalRate - 1e-6) rT.rate = limited
+                }
             }
         } else {
             consoleLog.add("🧘 [AUTODRIVE V3] Command not safe — HTR may still lift SMB (${adCommand?.reason ?: "null"})")
@@ -328,7 +364,7 @@ internal fun runAutodriveV3MultiVariableBranch(
         } else {
             0.0
         }
-        val v3SmbRaw = maxOf(v3SmbModel, v3SmbFloor)
+        val v3SmbRaw = UndeclaredEvidenceCap.capSmb(maxOf(v3SmbModel, v3SmbFloor), evidenceLimits)
         riseNote.noteRiseFloorContribution(v3SmbRaw - v3SmbModel)
         val smallPrebolusPref = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
         val largePrebolusPref = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)

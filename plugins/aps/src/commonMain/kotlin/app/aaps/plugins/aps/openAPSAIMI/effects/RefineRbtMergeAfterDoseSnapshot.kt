@@ -4,6 +4,7 @@ import app.aaps.core.interfaces.aps.RT
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.safety.RiseConfirmation
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.DoseTerminalSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
@@ -62,6 +63,7 @@ internal fun interface AimiRbtHtrMerge {
  */
 internal fun decideRefineRbtMergeAfterDoseSnapshot(
     rT: RT,
+    riseLevel: RiseConfirmation.Level?,
     preferences: Preferences,
     consoleLog: MutableList<String>,
     state: AimiRbtRefineState,
@@ -91,6 +93,7 @@ internal fun decideRefineRbtMergeAfterDoseSnapshot(
         mealAbsorptionPhase = state.mealAbsorptionPhase() ?: MealAbsorptionPhase.NONE,
         mealModeActive = state.mealTime() || state.bfastTime() || state.lunchTime() ||
             state.dinnerTime() || state.snackTime() || state.highCarbTime(),
+        riseLevel = riseLevel,
     )
     state.setStackingEvaluation(stackingEval)
     val refreshed = merge.merge(

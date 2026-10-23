@@ -191,7 +191,9 @@ class BuiltInSearchables(
             BooleanKey.AlertCarbsRequired,
             BooleanKey.AlertUrgentAsAndroidNotification,
             BooleanKey.AlertIncreaseVolume,
-            BooleanKey.AlertOverrideDoNotDisturb
+            BooleanKey.AlertOverrideDoNotDisturb,
+            StringKey.AlertSoundLowGlucose,
+            StringKey.AlertSoundOtherAlarms
         ),
         icon = Icons.Default.Notifications
     )

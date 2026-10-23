@@ -200,6 +200,8 @@ aimi_support_package_compose|ApsIntentKey|false
 aimi_tuning_context_selection|StringKey|true
 alarm_setting|MedtrumStringKey|true
 alert_override_dnd|BooleanKey|true
+alert_sound_low_glucose|StringKey|true
+alert_sound_other_alarms|StringKey|true
 allow_hardware_pump|BooleanNonKey|true
 always_use_shortavg|BooleanKey|true
 app_expiration_%s|LongComposedKey|true

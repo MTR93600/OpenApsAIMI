@@ -6,6 +6,8 @@ import app.aaps.core.interfaces.aps.MealData
 import app.aaps.core.interfaces.aps.OapsProfileAimi
 import app.aaps.core.interfaces.aps.RT
 import app.aaps.plugins.aps.openAPSAIMI.autodrive.safety.AutoDriveGater
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.safety.RiseConfirmation
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.safety.UndeclaredEvidenceCap
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiTickContext
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientRefreshSource
 import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextSnapshot
@@ -30,7 +32,16 @@ internal fun interface AimiAutodriveGater {
         minBgLookback75m: Double,
         estimatedRa: Double,
         mealChannelHint: app.aaps.plugins.aps.openAPSAIMI.recursive.MealChannelHint?,
+        riseConfirmation: RiseConfirmation.Result?,
     ): AutoDriveGater.GatingResult
+}
+
+/**
+ * `RiseConfirmation.evaluate` on the clean glucose history of the tick (newest first, one value per
+ * 5 min). Null when the history is too short or not clean.
+ */
+internal fun interface AimiRiseConfirmation {
+    fun evaluate(): RiseConfirmation.Result?
 }
 
 /** `continuousStateEstimator.getLastRa`. L'estimateur n'est lu qu'à cet appel. */
@@ -233,4 +244,10 @@ internal interface AimiAutodriveTickWrites {
     fun setSmbBindingDraft(draft: SmbBindingTrace.Draft)
     fun setPostHypoSmbBeforeCapU(units: Double)
     fun setPostHypoSmbAfterCapU(units: Double)
+
+    /** Export only: the rise confirmation the gate was given. */
+    fun noteRiseConfirmation(result: RiseConfirmation.Result?)
+
+    /** Limits of the undeclared-rise evidence cap, read again by `deliverV3SmbFromRbt`. */
+    fun setEvidenceLimits(limits: UndeclaredEvidenceCap.Limits)
 }
