@@ -61,6 +61,8 @@ class RawPreferenceStoreScanTest {
         "plugins/aps/src/commonMain/kotlin/app/aaps/plugins/aps/openAPSAIMI/OpenAPSAIMIPlugin.kt" to
             "reads the retired key key_use_Aimi_autoDrive once, to migrate it to BooleanKey.OApsAIMIautoDriveActive. A key that no longer exists cannot be read through Preferences",
         "tools/aimi_viewer/android/app/src/main/kotlin/app/aaps/aimi_viewer/MainActivity.kt" to "a separate viewer app, not part of AAPS and with no access to its key registry",
+        "plugins/sync/src/iosMain/kotlin/app/aaps/plugins/sync/nsclientV3/IosNsRoleChange.kt" to
+            "remembers whether this iPhone last ran as Nightscout client or master - a fact about the install, not a setting, so it must stay out of the settings screens, the preference schema and settings exports",
 
         // --- Moves the whole store, not a setting ---
         // These are the import, the export and the cloud copies of them. They are SUPPOSED to see every
