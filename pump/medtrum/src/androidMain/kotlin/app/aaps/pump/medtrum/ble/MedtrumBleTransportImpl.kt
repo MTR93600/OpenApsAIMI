@@ -166,6 +166,13 @@ class MedtrumBleTransportImpl(
                 bluetoothAdapter?.getRemoteDevice(cachedDeviceAddress)?.let { connectGatt(it) }
             }
 
+            // The wizard retries on every disconnect and the command queue calls connect() on its
+            // own, and both land here while the service state machine is still Idle. Without this,
+            // each of them starts one more scan for the same pump.
+            connectionScanCallback != null && cachedDeviceSN == deviceSN -> {
+                aapsLogger.debug(LTag.PUMPBTCOMM, "Connection scan for SN $deviceSN already running ($from)")
+            }
+
             else                                                      -> {
                 aapsLogger.debug(LTag.PUMPBTCOMM, "No cached address, scanning for deviceSN: $deviceSN")
                 cachedDeviceAddress = null
@@ -425,6 +432,11 @@ class MedtrumBleTransportImpl(
     private fun startConnectionScan(deviceSN: Long) {
         if (!hasPermission(Manifest.permission.BLUETOOTH_SCAN)) return
         aapsLogger.debug(LTag.PUMPBTCOMM, "startConnectionScan for SN: $deviceSN")
+        // Never overwrite a running scan. The old callback is the only handle the platform accepts
+        // for stopScan, so losing it leaves a SCAN_MODE_LOW_LATENCY scan registered until the
+        // process dies. A few of those and Android silently stops delivering results to this app,
+        // which looks exactly like a pump that cannot be found any more.
+        stopConnectionScan()
         connectionScanCallback = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 val mfData = result.scanRecord?.getManufacturerSpecificData(MANUFACTURER_ID)?.let { ManufacturerData(it) }
@@ -439,13 +451,28 @@ class MedtrumBleTransportImpl(
 
             override fun onScanFailed(errorCode: Int) {
                 aapsLogger.error(LTag.PUMPBTCOMM, "Connection scan failed: $errorCode")
+                // Clear the callback, or connect() would think the scan still runs and never retry.
+                stopConnectionScan()
+                isConnecting = false
+                medtrumCallback?.onDisconnected()
             }
         }
         val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
         val filters = listOf(ScanFilter.Builder().setDeviceName("MT").build())
+        // With Bluetooth off there is no scanner and no scan starts. Do not keep a callback then: the
+        // guard in connect() would take it for a running scan and never start a new one.
+        val scanner = bluetoothAdapter?.bluetoothLeScanner
+        if (scanner == null) {
+            aapsLogger.warn(LTag.PUMPBTCOMM, "No BLE scanner (Bluetooth off?), connection scan not started")
+            connectionScanCallback = null
+            return
+        }
         try {
-            bluetoothAdapter?.bluetoothLeScanner?.startScan(filters, settings, connectionScanCallback)
+            scanner.startScan(filters, settings, connectionScanCallback)
         } catch (_: IllegalStateException) { /* BT off */
+            connectionScanCallback = null
+        } catch (_: SecurityException) { /* permission taken away */
+            connectionScanCallback = null
         }
     }
 

@@ -32,4 +32,26 @@ interface LocalAlertUtils {
      * Overview notification with sound, Therapy event
      */
     suspend fun checkStaleBGAlert()
+
+    /**
+     * Check the current glucose against the alarms the user has set up (low, high, rapid fall) and
+     * raise or dismiss their notifications.
+     *
+     * Works for any CGM source, because it reads the last stored glucose. It only notifies: it never
+     * changes dosing or the loop. It does nothing when the data is stale, because the stale-data
+     * alarm owns that case.
+     */
+    suspend fun checkGlucoseAlerts()
+
+    /**
+     * The user says they treated the current hypo (took carbs): clear the low-glucose alarm and hold
+     * it for about the time carbs need to work, instead of the shorter automatic repeat.
+     *
+     * This only silences. The alarm comes back by itself if glucose is still low when the hold ends,
+     * and [checkGlucoseAlerts] clears the hold as soon as glucose has recovered.
+     *
+     * Returns at once. The hold is written in the background, after a check that is running at that
+     * moment has finished, so the check cannot overwrite it.
+     */
+    fun snoozeHypoAfterTreatment()
 }

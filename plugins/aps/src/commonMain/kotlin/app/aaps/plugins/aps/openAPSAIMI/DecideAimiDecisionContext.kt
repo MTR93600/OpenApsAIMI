@@ -37,6 +37,8 @@ internal fun decideAimiDecisionContext(
         isf_age_ms = IsfSourceTelemetry.lastAgeMs,
         isf_cache_key = IsfSourceTelemetry.lastCacheKey,
         isf_cache_glucose_mgdl = IsfSourceTelemetry.lastCacheGlucoseMgdl,
+        isf_calc_path = IsfSourceTelemetry.lastCalcPath,
+        isf_cache_size = IsfSourceTelemetry.lastCacheSize,
         isf_kalman_fast_mgdl = IsfSourceTelemetry.lastKalmanFastIsf,
         isf_adj_engine_mgdl = IsfSourceTelemetry.lastIsfAdjEngine,
         isf_fused_slow_mgdl = IsfSourceTelemetry.lastFusedSlowIsf,

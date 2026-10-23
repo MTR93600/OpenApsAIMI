@@ -1,17 +1,21 @@
 package app.aaps.plugins.sync.garmin
 
 import androidx.annotation.VisibleForTesting
+import app.aaps.core.data.iob.InMemoryGlucoseValue
 import app.aaps.core.data.model.BS
 import app.aaps.core.data.model.GV
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.HR
 import app.aaps.core.data.model.RM
+import app.aaps.core.data.model.SC
 import app.aaps.core.data.model.TE
 import app.aaps.core.data.model.TT
+import app.aaps.core.data.time.T
 import app.aaps.core.data.ue.Action
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.data.ue.ValueWithUnit
 import app.aaps.core.interfaces.aps.Loop
+import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.core.interfaces.bolus.MasterActionExecutor
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.db.PersistenceLayer
@@ -28,6 +32,7 @@ import app.aaps.core.interfaces.queue.CommandQueue
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.objects.constraints.ConstraintObject
 import app.aaps.core.objects.extensions.convertedToPercent
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
@@ -40,6 +45,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.time.Clock
 import java.time.Instant
+import kotlin.math.abs
 
 /**
  * Interface to the functionality of the looping algorithm and storage systems.
@@ -67,6 +73,10 @@ class LoopHubImpl(
 
     @VisibleForTesting
     var clock: Clock = Clock.systemUTC()
+
+    // The same half bucket that AutosensDataStoreObject.isAbout5minData() uses to decide that readings
+    // are "about" 5 minutes apart. See getGlucoseValues for why an exact time match cannot be used.
+    private val overlayToleranceMs = T.mins(2).plus(T.secs(30)).msecs()
 
     /** Returns the active insulin profile. */
     override val currentProfile: Profile? get() = runBlocking { profileFunction.getProfile() }
@@ -221,9 +231,57 @@ class LoopHubImpl(
         }
     }
 
-    /** Retrieves the glucose values starting at from. */
+    /**
+     * Retrieves the glucose values starting at from.
+     *
+     * The stored [GV] rows hold the raw sensor value. When the recent smoothing or calibration data
+     * ([iobCobCalculator]'s `ads.bucketedData`) has an entry within [overlayToleranceMs] that is not a
+     * filled gap, its `recalculated` value (smoothed, else calibrated) is used instead. So the watch
+     * shows the same number as the main screen of the app.
+     *
+     * The time of that entry does not always match the raw row exactly: when a CGM does not send
+     * readings every 5 minutes on the dot, the smoothed data is rebuilt on a 5 minute grid. So the
+     * nearest entry within the tolerance is used, not an exact match. Rows with no entry near them
+     * (older history, or no smoothed data at all) keep their raw value.
+     *
+     * With a CGM that sends more often than every 5 minutes (a 1 minute CGM like Libre 3), several raw
+     * rows fall on the same grid entry and would all get the same value. The delta the watch computes
+     * from rows next to each other would then be about 0, with the whole change in one jump at the
+     * next entry. So rows that share one grid entry are reduced to one row: the one nearest to the
+     * time of that entry.
+     */
     override fun getGlucoseValues(from: Instant, ascending: Boolean): List<GV> = runBlocking {
-        persistenceLayer.getBgReadingsDataFromTime(from.toEpochMilli(), ascending)
+        val raw = persistenceLayer.getBgReadingsDataFromTime(from.toEpochMilli(), ascending)
+        // Copied under the data lock: the store is rebuilt by another thread while we read it.
+        val ads = iobCobCalculator.ads
+        val overlay = ads.dataLock.withLock {
+            ads.bucketedData.orEmpty().filterNot { it.filledGap }.sortedBy { it.timestamp }
+        }
+        val result = mutableListOf<GV>()
+        var lastSlot: InMemoryGlucoseValue? = null
+        for (gv in raw) {
+            val slot = nearestOverlay(overlay, gv.timestamp)
+            if (slot != null && slot === lastSlot) {
+                val prev = result[result.lastIndex]
+                if (abs(gv.timestamp - slot.timestamp) < abs(prev.timestamp - slot.timestamp)) {
+                    result[result.lastIndex] = gv.copy(value = slot.recalculated)
+                }
+                continue
+            }
+            result.add(slot?.let { gv.copy(value = it.recalculated) } ?: gv)
+            lastSlot = slot
+        }
+        result
+    }
+
+    private fun nearestOverlay(overlay: List<InMemoryGlucoseValue>, timestamp: Long): InMemoryGlucoseValue? {
+        if (overlay.isEmpty()) return null
+        val index = overlay.binarySearch { it.timestamp.compareTo(timestamp) }
+        if (index >= 0) return overlay[index]
+        val insertionPoint = -(index + 1)
+        val candidates = listOfNotNull(overlay.getOrNull(insertionPoint - 1), overlay.getOrNull(insertionPoint))
+        return candidates.minByOrNull { abs(it.timestamp - timestamp) }
+            ?.takeIf { abs(it.timestamp - timestamp) <= overlayToleranceMs }
     }
 
     /** Notifies the system that carbs were eaten and stores the value. */
@@ -240,6 +298,34 @@ class LoopHubImpl(
                 onError = { aapsLogger.error(LTag.GARMIN, "carbs delivery failed: ${it.comment}") }
             )
         }
+    }
+
+    /**
+     * Limits the bolus with the bolus constraints (max bolus) and sends it through the shared executor,
+     * the same path as a fixed-amount bolus from the phone: it logs the user entry and refuses the bolus
+     * when the running mode does not allow one.
+     * ⚠️ ASYNC IMPACT: the delivery runs on [appScope]; the limited amount is returned at once.
+     */
+    override fun postBolus(bolus: Double, onNotDelivered: (String) -> Unit): Double {
+        if (!bolus.isFinite() || bolus <= 0.0) return 0.0
+        val limited = constraintChecker.applyBolusConstraints(ConstraintObject(bolus, aapsLogger)).value()
+        if (limited <= 0.0) {
+            aapsLogger.warn(LTag.GARMIN, "bolus of $bolus U refused by the bolus constraints")
+            return 0.0
+        }
+        aapsLogger.info(LTag.GARMIN, "bolus of $bolus U asked, $limited U after the bolus constraints")
+        appScope.launch {
+            masterActionExecutor.deliverInsulin(
+                insulin = limited,
+                note = null,
+                source = Sources.Garmin,
+                onError = {
+                    aapsLogger.error(LTag.GARMIN, "bolus delivery failed: ${it.comment}")
+                    onNotDelivered(it.comment)
+                }
+            )
+        }
+        return limited
     }
 
     /**
@@ -334,6 +420,40 @@ class LoopHubImpl(
         )
         appScope.launch {
             persistenceLayer.insertOrUpdateHeartRates(listOf(hr))
+        }
+    }
+
+    override fun storeStepsCount(
+        samplingStart: Instant,
+        samplingEnd: Instant,
+        steps5min: Int,
+        steps10min: Int,
+        steps15min: Int,
+        steps30min: Int,
+        steps60min: Int,
+        steps180min: Int,
+        device: String?,
+    ) {
+        val sc = SC(
+            duration = samplingEnd.toEpochMilli() - samplingStart.toEpochMilli(),
+            timestamp = samplingEnd.toEpochMilli(),
+            steps5min = steps5min,
+            steps10min = steps10min,
+            steps15min = steps15min,
+            steps30min = steps30min,
+            steps60min = steps60min,
+            steps180min = steps180min,
+            device = device ?: "Garmin",
+            dateCreated = clock.millis(),
+        )
+        appScope.launch {
+            try {
+                val result = persistenceLayer.insertOrUpdateStepsCount(sc)
+                val id = result.inserted.firstOrNull()?.id ?: result.updated.firstOrNull()?.id
+                aapsLogger.info(LTag.GARMIN, "steps stored: id=$id 5min=$steps5min at ${samplingEnd.toEpochMilli()}")
+            } catch (error: Exception) {
+                aapsLogger.error(LTag.GARMIN, "failed to store steps", error)
+            }
         }
     }
 }

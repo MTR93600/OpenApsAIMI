@@ -31,7 +31,9 @@ import app.aaps.core.interfaces.notifications.NotificationLevel.URGENT
 enum class NotificationId(
     val defaultLevel: NotificationLevel,
     val category: NotificationCategory,
-    val allowMultiple: Boolean = false
+    val allowMultiple: Boolean = false,
+    /** Extra action button carried by this alarm's system notification, if any. */
+    val alarmAction: AlarmAction? = null
 ) {
 
     // Profile
@@ -277,7 +279,16 @@ enum class NotificationId(
     DEXCOM_ONEPLUS_WARMUP(NORMAL, CGM),
 
     /** A ONE+ / G7 problem the person must see on iPhone: silent sensor, wrong sensor, failure. Appended last on purpose. */
-    DEXCOM_ONEPLUS_ALERT(IMPORTANT, CGM);
+    DEXCOM_ONEPLUS_ALERT(IMPORTANT, CGM),
+
+    // CGM - glucose alarms the user sets up (low, high, rapid fall). They work for any CGM source.
+    // They only notify; they never change dosing. Appended last on purpose, see the comment above.
+    BG_HYPO(URGENT, CGM, alarmAction = AlarmAction.HYPO_TREATED),
+    BG_HYPER(IMPORTANT, CGM),
+    BG_RAPID_FALL(URGENT, CGM),
+
+    /** A bolus asked for by the Garmin watch was refused or limited; the watch cannot show why. Appended last on purpose. */
+    GARMIN_BOLUS(IMPORTANT, SYNC);
 
     companion object {
 

@@ -25,6 +25,8 @@
     <string name="permission_notifications_description">Required to show alerts, alarms, and pump status updates</string>
     <string name="permission_schedule_exact_alarm_title">Alarms and reminders</string>
     <string name="permission_schedule_exact_alarm_description">Required so alarms can wake the screen while AAPS is in the background, and so reminders ring on time</string>
+    <string name="permission_dnd_title">Alarms through Do Not Disturb</string>
+    <string name="permission_dnd_description">Required so urgent alarms (for example low glucose) can sound through Do Not Disturb and bedtime modes</string>
 
     <!--    Notification channels, shown in the Android settings-->
     <string name="alarm_channel_group">AAPS alarms</string>

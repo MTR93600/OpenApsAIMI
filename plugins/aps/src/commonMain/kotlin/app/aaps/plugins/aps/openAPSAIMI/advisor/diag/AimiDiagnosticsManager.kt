@@ -7,7 +7,13 @@ import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.aimiCsvTimestamp
+import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
+import app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiDiagPlatform
+import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoPersistence
+import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoSessionStatus
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 
 /**
  * Secure diagnostic engine for AIMI.
@@ -22,7 +28,9 @@ import app.aaps.plugins.aps.openAPSAIMI.ports.AimiDiagPlatform
 class AimiDiagnosticsManager(
     private val platform: AimiDiagPlatform,
     private val preferences: Preferences,
-    private val logger: AAPSLogger
+    private val logger: AAPSLogger,
+    /** Where the TPO session file lives, for the `[TPO SESSION]` section. */
+    private val storage: AimiStorage,
 ) {
 
     companion object {
@@ -122,9 +130,129 @@ class AimiDiagnosticsManager(
         }
         sb.append("\n")
 
+        // What TPO has written to the preferences above.
+        sb.append("[TPO SESSION]\n")
+        appendTpoState(sb, allPrefs)
+        sb.append("\n")
+
+        // The SMB ML trainer's own account of its last attempt: without this, "training does not
+        // work" support tickets could not tell "waiting for data" from "a gate keeps rejecting it"
+        // from "never even tried since the last restart".
+        sb.append("[SMB ML TRAINING]\n")
+        appendSmbTrainingState(sb)
+        sb.append("\n")
+
         sb.append("[VITAL STATS]\n")
         sb.append("(Stats deep analysis requires DB access - available in V2)\n")
 
         return sb.toString()
     }
+
+    /**
+     * Writes what the time-period override (TPO) has done to the preferences printed above.
+     *
+     * TPO writes preference values from inside a loop tick, with no user action, and puts them back
+     * when the session ends. Without this section a support package showed only the value in force at
+     * export time, so a setting that TPO had changed looked exactly like a setting the user had
+     * changed, and a value left behind by a session that never reverted could not be told from a
+     * deliberate choice.
+     *
+     * For every key a session touched three values are printed: the value the user had (`baseline`),
+     * the value the session wrote (`overlay`), and the value live right now. At revert time the
+     * baseline comes back only when the live value is still the one the session wrote (see
+     * `TpoRevertPolicy`). A key marked `DIVERGED EARLIER` was seen with another value during the
+     * session; that mark is kept for diagnostics only and does not block the revert any more.
+     *
+     * When there is no session this is said in words rather than left out: an empty section would
+     * read as "TPO did nothing", and that is the conclusion this section must not let anyone draw
+     * for free.
+     */
+    private fun appendTpoState(sb: StringBuilder, allPrefs: Map<String, Any?>) {
+        val enabled = preferences.get(BooleanKey.OApsAIMITpoEnabled)
+        sb.append("Enabled: ").append(enabled).append(" (default is on)\n")
+        val persistence = TpoPersistence(storage)
+        val reverts = try {
+            persistence.loadLastRevertAtMsByPack()
+        } catch (e: Exception) {
+            logger.error(LTag.CORE, "TPO diagnostics: revert map not readable", e)
+            emptyMap()
+        }
+        if (reverts.isEmpty()) {
+            sb.append("Last revert per pack: none recorded\n")
+        } else {
+            reverts.forEach { (pack, atMs) ->
+                sb.append("Last revert ").append(pack.name).append(": ").append(formatMs(atMs)).append('\n')
+            }
+        }
+        val session = try {
+            persistence.loadSession()
+        } catch (e: Exception) {
+            logger.error(LTag.CORE, "TPO diagnostics: session not readable", e)
+            sb.append("Session file present but unreadable.\n")
+            return
+        }
+        // loadSession() also answers null for a file it cannot parse, so look at the file itself.
+        if (session == null && persistence.hasSessionFile()) {
+            sb.append("Session file present but unreadable.\n")
+            return
+        }
+        if (session == null) {
+            sb.append("No session stored. Any value above is either the user's own or was left by a\n")
+            sb.append("session whose file is gone - the revert times above are the only trace left.\n")
+            return
+        }
+        sb.append("Session: ").append(session.sessionId).append('\n')
+        sb.append("Pack: ").append(session.packId.name).append("  tier: ").append(session.tier.name).append('\n')
+        sb.append("Status: ").append(session.status.name).append('\n')
+        sb.append("Started: ").append(formatMs(session.startedAtMs)).append('\n')
+        sb.append("Expires: ").append(formatMs(session.expiresAtMs))
+        val live = session.status == TpoSessionStatus.ACTIVE || session.status == TpoSessionStatus.PENDING_LLM
+        if (live && aimiWallClockMs() > session.expiresAtMs) {
+            sb.append("  PAST ITS EXPIRY AND STILL WRITTEN - the loop has not reverted it")
+        }
+        sb.append('\n')
+        sb.append("Trigger: ").append(session.triggerReasonCodes.joinToString(","))
+            .append("  confidence: ").append(aimiFmt2(session.triggerAlgoConfidence)).append('\n')
+        if (session.baseline.isEmpty() && session.overlay.isEmpty()) {
+            sb.append("No key recorded on this session.\n")
+            return
+        }
+        sb.append("Keys (user value -> written value | live now):\n")
+        val keys = (session.baseline.keys + session.overlay.keys).sorted()
+        keys.forEach { key ->
+            sb.append("  ").append(key).append(": ")
+                .append(session.baseline[key] ?: "?").append(" -> ")
+                .append(session.overlay[key] ?: "?").append(" | ")
+                .append(allPrefs[key] ?: "absent")
+            if (key in session.userOwnedKeys) sb.append("  DIVERGED EARLIER (diagnostic only, revert decides on the live value)")
+            sb.append('\n')
+        }
+    }
+
+    /**
+     * Writes the SMB trainer's own record of its last attempt ([AimiSmbTrainer.lastResult]).
+     *
+     * The trainer used to fail silently: a support package showed only whether a weight file existed,
+     * never why it had not been refreshed. This prints the outcome, the row counts and, for a rejected
+     * candidate or a refused header, the measured value against its threshold, so a support ticket can
+     * be answered from the report alone.
+     */
+    private fun appendSmbTrainingState(sb: StringBuilder) {
+        val result = AimiSmbTrainer.lastResult()
+        if (result == null) {
+            sb.append("No attempt recorded since the app was last started (and none was persisted).\n")
+            return
+        }
+        sb.append("Last attempt: ").append(formatMs(result.atMs)).append('\n')
+        sb.append("Outcome: ").append(result.outcome.name).append('\n')
+        sb.append("CSV rows: ").append(result.totalRows).append('\n')
+        sb.append("Samples after quality filter: ").append(result.samplesAfterFilter)
+            .append("  rejected by filter: ").append(result.rowsRejectedByFilter).append('\n')
+        if (result.gateDetail.isNotBlank()) {
+            sb.append("Detail: ").append(result.gateDetail).append('\n')
+        }
+    }
+
+    /** One date format for every timestamp in this report, so two lines can be compared by eye. */
+    private fun formatMs(atMs: Long): String = if (atMs <= 0L) "not set" else aimiCsvTimestamp(atMs)
 }

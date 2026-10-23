@@ -1209,8 +1209,10 @@ class DexcomOnePlusPlugin @Inject constructor(
      * Healed once per session start: if the user deliberately deletes the event again, it is not
      * resurrected on the next reading.
      *
-     * Ref `3dd0ca64772` `healMissingSensorChange` (commit `5f02b1718e`). The engineering switch is
-     * off because the owner has not confirmed this net. An occupied timestamp is stepped by
+     * Ref `3dd0ca64772` `healMissingSensorChange` (commit `5f02b1718e`). The switch
+     * [DexcomOnePlusBooleanKey.RepairMissingSensorChange] is on by default, for parity with
+     * dev_OAPSAIMI, and it is shown in engineering mode only. Nothing is written while "create
+     * sensor change" is off (see below). An occupied timestamp is stepped by
      * [DexcomOnePlusSensorStartCorrection.freeTimestamp], which arrived with the insertion-date lot.
      */
     private suspend fun healMissingSensorChange(startMs: Long) {

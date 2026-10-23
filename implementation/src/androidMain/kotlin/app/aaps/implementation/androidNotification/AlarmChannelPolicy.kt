@@ -24,4 +24,40 @@ internal object AlarmChannelPolicy {
         val channel = if (overrideDnd) AlarmNotificationManager.CHANNEL_RAMP_BYPASS else AlarmNotificationManager.CHANNEL_SILENT_URGENT
         return Choice(channelId = channel, waitForChannelSound = false)
     }
+
+    /** How an in-app alarm (low glucose, pump unreachable...) is posted. */
+    enum class InternalAlarmChannel {
+
+        /** Silent channel that respects Do Not Disturb. The player owns the sound. */
+        SILENT,
+
+        /** Silent channel that shows and vibrates through Do Not Disturb. The player owns the sound. */
+        BYPASS_VIBRATE,
+
+        /** Sound channel that rings through Do Not Disturb. The player waits for the clip to end. */
+        BYPASS_SOUND
+    }
+
+    /**
+     * The channel of an in-app alarm that carries a sound.
+     *
+     * Rule: exactly one of the channel and the player makes the sound at a time.
+     * - Override off: the silent channel; the player owns the sound and respects Do Not Disturb.
+     * - Player owns the sound (ramp or melody, and Do Not Disturb does not block alarms): the silent
+     *   bypass channel.
+     * - Do Not Disturb blocks alarms: the sound channel, because the player is muted then and the
+     *   channel clip is the only thing the person hears. This is also true when the player is already
+     *   sounding this alarm, since it cannot be heard.
+     * - The player already sounds an alarm (this one posted again, or an earlier one): the silent
+     *   bypass channel. The player keeps playing (or moves to the new alarm at once), and a clip on top
+     *   of it would be two sounds at once.
+     * - Otherwise: the sound channel plays the clip, and the player starts after it.
+     */
+    fun forInternalAlarm(overrideDnd: Boolean, playerOwnsSound: Boolean, dndBlocksAlarms: Boolean, playerAlreadySounding: Boolean): InternalAlarmChannel = when {
+        !overrideDnd          -> InternalAlarmChannel.SILENT
+        playerOwnsSound       -> InternalAlarmChannel.BYPASS_VIBRATE
+        dndBlocksAlarms       -> InternalAlarmChannel.BYPASS_SOUND
+        playerAlreadySounding -> InternalAlarmChannel.BYPASS_VIBRATE
+        else                  -> InternalAlarmChannel.BYPASS_SOUND
+    }
 }

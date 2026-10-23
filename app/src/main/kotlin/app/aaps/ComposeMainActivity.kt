@@ -445,6 +445,14 @@ class ComposeMainActivity : MetroAppCompatActivity() {
 
                             effect.group.permissions.contains(PluginPermissionsImpl.PERMISSION_NOTIFICATION_LISTENER)   ->
                                 startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+
+                            effect.group.permissions.contains(Manifest.permission.ACCESS_NOTIFICATION_POLICY)           ->
+                                // Do Not Disturb access is granted in a system list, not by a dialog.
+                                try {
+                                    startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
+                                } catch (_: ActivityNotFoundException) {
+                                    permissionsSnackbarHostState.showSnackbar(getString(app.aaps.ui.R.string.permission_denied_go_to_settings))
+                                }
                         }
 
                     is PermissionsSideEffect.ShowError ->

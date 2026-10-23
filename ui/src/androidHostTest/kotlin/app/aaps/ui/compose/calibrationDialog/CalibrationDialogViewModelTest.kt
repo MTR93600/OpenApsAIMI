@@ -1,11 +1,13 @@
 package app.aaps.ui.compose.calibrationDialog
 
+import app.aaps.core.data.configuration.Constants
 import app.aaps.core.data.model.CAL
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.TE
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.data.ui.ConfirmationLine
 import app.aaps.core.data.ui.ConfirmationRole
+import app.aaps.core.interfaces.aps.GlucoseStatus
 import app.aaps.core.interfaces.bolus.BatchAction
 import app.aaps.core.interfaces.bolus.BatchExecutor
 import app.aaps.core.interfaces.calibration.AddEntryResult
@@ -43,6 +45,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -238,6 +241,110 @@ internal class CalibrationDialogViewModelTest {
         verify(batchExecutor).prepare(actions.capture(), eq(Sources.SensorInsert), any())
         assertThat(actions.firstValue).containsExactly(BatchAction.TherapyEvent(teType = TE.Type.SENSOR_CHANGE, timestamp = 1_000L, source = Sources.SensorInsert))
         verify(batchExecutor).commit(eq(9L), eq(Sources.SensorInsert), any(), any())
+    }
+
+    // ----- large gap between the entered blood value and the sensor value -----
+    // Provenance: dev_OAPSAIMI `CalibrationDialogViewModelTest` (commit c653fc4485). The cases that
+    // send the value to the sensor itself were not ported, that feature is not on this branch.
+
+    /**
+     * Builds a view model for a mg/dL profile with a known last sensor reading. In mg/dL the
+     * display value and the mg/dL value are the same number, so the conversions are identities.
+     */
+    private fun viewModelWithSensorMgdl(sensorMgdl: Double): CalibrationDialogViewModel {
+        val status = mock<GlucoseStatus>()
+        whenever(status.glucose).thenReturn(sensorMgdl)
+        whenever(glucoseStatusProvider.glucoseStatusData).thenReturn(status)
+        whenever(profileUtil.fromMgdlToUnits(any(), any())).thenAnswer { it.getArgument<Double>(0) }
+        whenever(profileUtil.convertToMgdl(any(), any())).thenAnswer { it.getArgument<Double>(0) }
+        return CalibrationDialogViewModel(
+            profileUtil, glucoseStatusProvider, activePlugin, persistenceLayer, dateUtil, rh, decimalFormatter, batchExecutor, config
+        )
+    }
+
+    @Test
+    fun `warns when blood 209 is entered against a sensor reading of 309`() {
+        val viewModel = viewModelWithSensorMgdl(309.0)
+
+        viewModel.updateBg(209.0)
+
+        val warning = viewModel.uiState.value.gapWarning
+        assertThat(warning).isNotNull()
+        assertThat(warning!!.bloodValue).isEqualTo(209.0)
+        assertThat(warning.sensorValue).isEqualTo(309.0)
+        // The entry can still be saved.
+        assertThat(viewModel.hasAction()).isTrue()
+    }
+
+    @Test
+    fun `does not warn on a small gap`() {
+        val viewModel = viewModelWithSensorMgdl(100.0)
+
+        viewModel.updateBg(90.0)
+
+        assertThat(viewModel.uiState.value.gapWarning).isNull()
+    }
+
+    @Test
+    fun `warns exactly at the 25 percent boundary and not just below it`() {
+        val atBoundary = viewModelWithSensorMgdl(100.0)
+        atBoundary.updateBg(75.0) // gap 25 mg/dL = 25 percent of 100, and below the 50 mg/dL rule
+        assertThat(atBoundary.uiState.value.gapWarning).isNotNull()
+
+        val belowBoundary = viewModelWithSensorMgdl(100.0)
+        belowBoundary.updateBg(76.0) // gap 24 mg/dL = 24 percent of 100
+        assertThat(belowBoundary.uiState.value.gapWarning).isNull()
+    }
+
+    @Test
+    fun `warns exactly at the 50 mgdl boundary and not just below it`() {
+        val atBoundary = viewModelWithSensorMgdl(400.0)
+        atBoundary.updateBg(350.0) // gap 50 mg/dL, only 12.5 percent of 400
+        assertThat(atBoundary.uiState.value.gapWarning).isNotNull()
+
+        val belowBoundary = viewModelWithSensorMgdl(400.0)
+        belowBoundary.updateBg(351.0) // gap 49 mg/dL, about 12 percent of 400
+        assertThat(belowBoundary.uiState.value.gapWarning).isNull()
+    }
+
+    @Test
+    fun `does not warn when no sensor reading is known`() {
+        val viewModel = viewModelWithSensorMgdl(0.0)
+
+        viewModel.updateBg(209.0)
+
+        assertThat(viewModel.uiState.value.gapWarning).isNull()
+    }
+
+    @Test
+    fun `the warning goes away when the value is corrected`() {
+        val viewModel = viewModelWithSensorMgdl(309.0)
+        viewModel.updateBg(209.0)
+        assertThat(viewModel.uiState.value.gapWarning).isNotNull()
+
+        viewModel.updateBg(300.0)
+
+        assertThat(viewModel.uiState.value.gapWarning).isNull()
+    }
+
+    @Test
+    fun `in mmol the gap is measured in mgdl and both values are shown in mmol`() {
+        val status = mock<GlucoseStatus>()
+        whenever(status.glucose).thenReturn(180.0)
+        whenever(glucoseStatusProvider.glucoseStatusData).thenReturn(status)
+        whenever(profileUtil.units).thenReturn(GlucoseUnit.MMOL)
+        whenever(profileUtil.fromMgdlToUnits(any(), any())).thenAnswer { it.getArgument<Double>(0) / Constants.MMOLL_TO_MGDL }
+        whenever(profileUtil.convertToMgdl(any(), any())).thenAnswer { it.getArgument<Double>(0) * Constants.MMOLL_TO_MGDL }
+        val viewModel = CalibrationDialogViewModel(
+            profileUtil, glucoseStatusProvider, activePlugin, persistenceLayer, dateUtil, rh, decimalFormatter, batchExecutor, config
+        )
+
+        viewModel.updateBg(6.0) // about 108 mg/dL against a sensor value of 180 mg/dL
+
+        val warning = viewModel.uiState.value.gapWarning
+        assertThat(warning).isNotNull()
+        assertThat(warning!!.bloodValue).isEqualTo(6.0)
+        assertThat(warning.sensorValue).isWithin(0.01).of(180.0 / Constants.MMOLL_TO_MGDL)
     }
 
     private suspend fun prepareAndApplyCalibration() {

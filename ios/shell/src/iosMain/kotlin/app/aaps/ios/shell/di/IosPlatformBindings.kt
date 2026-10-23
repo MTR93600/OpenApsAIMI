@@ -8,6 +8,7 @@ import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.L
+import app.aaps.core.interfaces.notifications.AlarmAction
 import app.aaps.core.interfaces.notifications.AlarmSoundPlayer
 import app.aaps.core.interfaces.notifications.SystemNotificationPlatform
 import app.aaps.core.interfaces.plugin.ActivePlugin
@@ -111,15 +112,38 @@ object IosPlatformBindings {
         basalOutdatedLabel = { rh.gs(CoreUiStrings.keepalive_basal_outdated) }
     )
 
-    /** Notifications through UNUserNotificationCenter, with the shared registry above it. */
+    /**
+     * Notifications through UNUserNotificationCenter, with the shared registry above it.
+     *
+     * [localAlertUtils] is a provider: `LocalAlertUtils` posts through the notification manager,
+     * which is built on this platform, so asking for it directly would be a cycle. It is resolved
+     * only when the user presses an alarm button.
+     */
     @Provides
     @SingleIn(AppScope::class)
-    fun systemNotificationPlatform(logger: AAPSLogger, alarmSoundPlayer: AlarmSoundPlayer, preferences: Preferences): SystemNotificationPlatform =
+    fun systemNotificationPlatform(
+        logger: AAPSLogger,
+        alarmSoundPlayer: AlarmSoundPlayer,
+        preferences: Preferences,
+        rh: TextResolver,
+        localAlertUtils: () -> LocalAlertUtils
+    ): SystemNotificationPlatform =
         IosSystemNotificationPlatform(
             logger,
             alarmSoundPlayer,
             // The melody the person chose, so a locked phone plays it too, not only the app.
-            chosenMelody = { category -> AlarmAudioPolicy.chosenMelody(preferences, category) }
+            chosenMelody = { category -> AlarmAudioPolicy.chosenMelody(preferences, category) },
+            alarmActionLabel = { action ->
+                when (action) {
+                    AlarmAction.HYPO_TREATED -> rh.gs(CoreUiStrings.alert_hypo_treated)
+                }
+            },
+            // "Hypo treated" on the lock screen, same as the Android notification button.
+            onAlarmAction = { action ->
+                when (action) {
+                    AlarmAction.HYPO_TREATED -> localAlertUtils().snoozeHypoAfterTreatment()
+                }
+            }
         ) { preferences.get(BooleanKey.AlertOverrideDoNotDisturb) }
 
     /**

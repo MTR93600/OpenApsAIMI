@@ -128,7 +128,7 @@ internal class NSClientV3PluginTest : TestBaseWithProfile() {
                 aapsLogger, text, preferences, rxBus,
                 receiverDelegate, config, dateUtil, dataSyncSelectorV3, persistenceLayer,
                 nsClientSource, storeDataForDb, decimalFormatter, l, nsClientRepository, uel,
-                mock(), mock(), mock(), mock(), mock(), mock(), profileRepository, nsConnection, nsLoadExecutor, mock()
+                mock(), mock(), mock(), mock(), mock(), mock(), profileRepository, nsConnection, nsLoadExecutor, mock(), mock()
             )
         whenever(nsConnection.connected).thenReturn(wsConnectedState)
         // idle is collected in onStart; a mock would hand back null and NPE there.
@@ -171,7 +171,7 @@ internal class NSClientV3PluginTest : TestBaseWithProfile() {
             aapsLogger, text, preferences, rxBus,
             receiverDelegate, config, dateUtil, dataSyncSelectorV3, persistenceLayer,
             nsClientSource, storeDataForDb, decimalFormatter, l, nsClientRepository, uel,
-            mock(), mock(), mock(), orphanDetector, mock(), mock(), profileRepository, nsConnection, nsLoadExecutor, mock()
+            mock(), mock(), mock(), orphanDetector, mock(), mock(), profileRepository, nsConnection, nsLoadExecutor, mock(), mock()
         ).also { extraPlugins += it }
 
     // ---- storing the client-control switch for clients paired before it was stored at pairing ----
@@ -184,7 +184,7 @@ internal class NSClientV3PluginTest : TestBaseWithProfile() {
             aapsLogger, text, preferences, rxBus,
             receiverDelegate, config, dateUtil, dataSyncSelectorV3, persistenceLayer,
             nsClientSource, storeDataForDb, decimalFormatter, l, nsClientRepository, uel,
-            mock(), mock(), mock(), mock(), repository, mock(), profileRepository, nsConnection, nsLoadExecutor, mock()
+            mock(), mock(), mock(), mock(), repository, mock(), profileRepository, nsConnection, nsLoadExecutor, mock(), mock()
         ).also { extraPlugins += it }
     }
 

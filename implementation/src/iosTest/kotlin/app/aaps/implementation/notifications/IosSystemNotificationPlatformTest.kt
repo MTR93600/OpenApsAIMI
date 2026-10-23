@@ -3,6 +3,7 @@ package app.aaps.implementation.notifications
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.AapsNotification
+import app.aaps.core.interfaces.notifications.AlarmAction
 import app.aaps.core.interfaces.notifications.AlarmSound
 import app.aaps.core.interfaces.notifications.AlarmSoundCategory
 import app.aaps.core.interfaces.notifications.AlarmSoundPlayer
@@ -289,5 +290,45 @@ class IosSystemNotificationPlatformTest {
         val expected = AlarmMelodySynth.toWav(AlarmMelodySynth.render(melody)).size
 
         assertEquals(expected.toULong(), IosMelodyAudio.wavData(melody).length)
+    }
+
+    // "Hypo treated" on the lock screen: the low glucose alarm gets a category with the button.
+
+    private val pressed = mutableListOf<AlarmAction>()
+    private val platformWithActions = IosSystemNotificationPlatform(
+        SilentLogger,
+        alarmPlayer,
+        alarmActionLabel = { "Hypo treated" },
+        onAlarmAction = { pressed += it }
+    ) { overrideDnd }
+
+    @Test
+    fun `the low glucose alarm is posted with the hypo treated button`() {
+        val hypo = platformWithActions.categoryFor(NotificationId.BG_HYPO)
+        val plain = platformWithActions.categoryFor(NotificationId.BG_HYPER)
+
+        assertTrue(hypo != plain)
+        assertEquals(plain, platformWithActions.categoryFor(NotificationId.PUMP_UNREACHABLE))
+    }
+
+    /** A button that does nothing would make the user think the alarm was handled, so none is shown. */
+    @Test
+    fun `without a handler the low glucose alarm gets no button`() {
+        assertEquals(platform.categoryFor(NotificationId.BG_HYPER), platform.categoryFor(NotificationId.BG_HYPO))
+    }
+
+    @Test
+    fun `pressing hypo treated reaches the handler`() {
+        assertTrue(platformWithActions.handleAlarmAction(platformWithActions.alarmActionId(AlarmAction.HYPO_TREATED)))
+
+        assertEquals(listOf(AlarmAction.HYPO_TREATED), pressed)
+    }
+
+    @Test
+    fun `another action is not taken as hypo treated`() {
+        assertFalse(platformWithActions.handleAlarmAction("aaps-ignore-15"))
+        assertFalse(platform.handleAlarmAction(platform.alarmActionId(AlarmAction.HYPO_TREATED)))
+
+        assertTrue(pressed.isEmpty())
     }
 }

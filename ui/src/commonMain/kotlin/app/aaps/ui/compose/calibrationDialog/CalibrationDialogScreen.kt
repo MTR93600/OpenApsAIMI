@@ -51,6 +51,7 @@ import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.NumberInputRow
+import app.aaps.core.ui.compose.banner.WarningBanner
 import app.aaps.core.ui.compose.bottomBarSafeArea
 import app.aaps.core.ui.compose.clearFocusOnTap
 import app.aaps.core.ui.compose.dialogs.ElementConfirmationDialog
@@ -210,6 +211,18 @@ internal fun CalibrationDialogContent(
                         decimalPlaces = uiState.bgDecimalPlaces
                     )
                 }
+            }
+
+            // Advice only: the user can still save the entry.
+            uiState.gapWarning?.let { warning ->
+                val warningFormat = remember(uiState.isMgdl) { if (uiState.isMgdl) NumberFormat.INTEGER else NumberFormat.DECIMAL_1 }
+                WarningBanner(
+                    message = stringResource(
+                        UiStrings.cal_large_gap_warning,
+                        stringResource(CoreUiStrings.value_with_unit, warningFormat.format(warning.bloodValue), uiState.unitLabel),
+                        stringResource(CoreUiStrings.value_with_unit, warningFormat.format(warning.sensorValue), uiState.unitLabel)
+                    )
+                )
             }
 
             Spacer(modifier = Modifier.height(AapsSpacing.medium))

@@ -959,16 +959,25 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         fusedSlowIsfOverride: Double? = null,
         useDbShortcut: Boolean = true,
     ): Pair<String, Double?> {
-        if (!preferences.get(BooleanKey.ApsUseDynamicSensitivity)) return "OFF" to null
+        if (!preferences.get(BooleanKey.ApsUseDynamicSensitivity)) {
+            IsfSourceTelemetry.recordCalcPath("OFF", dynIsfCache.size())
+            return "OFF" to null
+        }
 
         // 0) cache DB existant
         if (useDbShortcut) {
             val result = persistenceLayer.getApsResultCloseTo(timestamp)
-            if (result?.variableSens != null) return "DB" to result.variableSens
+            if (result?.variableSens != null) {
+                IsfSourceTelemetry.recordCalcPath("DB", dynIsfCache.size())
+                return "DB" to result.variableSens
+            }
         }
 
         // 1) BG & deltas actuels
-        val glucose = glucoseStatusProvider.glucoseStatusData?.glucose ?: return "GLUC" to null
+        val glucose = glucoseStatusProvider.glucoseStatusData?.glucose ?: run {
+            IsfSourceTelemetry.recordCalcPath("GLUC", dynIsfCache.size())
+            return "GLUC" to null
+        }
         val currentDelta = glucoseStatusProvider.glucoseStatusData?.delta
         val recentDeltas = getRecentDeltas()
         val predictedDelta = predictedDelta(recentDeltas)
@@ -1107,6 +1116,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
         // 11) cache
         dynIsfCache.put(atMs = timestamp, isfMgdl = blended, glucoseMgdl = glucose)
+        IsfSourceTelemetry.recordCalcPath("CALC", dynIsfCache.size())
 
         return "CALC" to blended
     }
@@ -1955,8 +1965,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 ),
                 this
             )
-
-            // TODO(kmp): AfrezzaMaxBasalConstraints not on kmp yet
         }
 
         return absoluteRate
@@ -2006,7 +2014,6 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
      */
     private fun buildAimiComposePreferenceItems(): List<PreferenceItem> = buildList {
         add(DoubleKey.ApsMaxBasal)
-        // TODO(kmp): AfrezzaMaxBasalConstraints not on kmp yet
         add(DoubleKey.ApsSmbMaxIob)
         add(BooleanKey.ApsUseDynamicSensitivity)
         add(BooleanKey.ApsUseAutosens)

@@ -854,7 +854,14 @@ class PersistenceLayerImpl(
     override suspend fun insertCgmSourceData(caller: Sources, glucoseValues: List<GV>, calibrations: List<PersistenceLayer.Calibration>, sensorInsertionTime: Long?)
         : PersistenceLayer.TransactionResult<GV> = withContext(aapsIoDispatcher) {
         try {
-            val result = repository.runTransactionForResultSuspend(CgmSourceTransaction(glucoseValues.asSequence().map { it.toDb() }.toList(), calibrations.asSequence().map { it.toDb() }.toList(), sensorInsertionTime))
+            val result = repository.runTransactionForResultSuspend(
+                CgmSourceTransaction(
+                    glucoseValues.asSequence().map { it.toDb() }.toList(),
+                    calibrations.asSequence().map { it.toDb() }.toList(),
+                    sensorInsertionTime,
+                    fromNsClient = caller == Sources.NSClient
+                )
+            )
             val transactionResult = PersistenceLayer.TransactionResult<GV>()
             val ueValues = mutableListOf<UE>()
             result.inserted.forEach {

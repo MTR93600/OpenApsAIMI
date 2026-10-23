@@ -4,8 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
@@ -34,10 +33,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Dp
@@ -206,7 +206,6 @@ fun MainScreen(
             val previewMode = maxHeight < PREVIEW_MODE_MIN_HEIGHT
             var chromeVisible by remember { mutableStateOf(false) }
             val showChrome = !previewMode || chromeVisible
-            val interactionSource = remember { MutableInteractionSource() }
             val accessibilityManager = LocalAccessibilityManager.current
 
             // Measure actual bar heights for content padding in non-preview mode
@@ -256,7 +255,25 @@ fun MainScreen(
                 val masterOrPairedClient by mainViewModel.masterOrPairedClient.collectAsStateWithLifecycle()
                 // (Probe-while-offline is now global — see ComposeMainActivity. This screen still reads
                 // masterReachable for its own gating.)
-                Box(modifier = Modifier.fillMaxSize()) {
+                // In preview mode with the bars hidden, a tap on the screen brings them back. It is read
+                // on the parent and not on a full screen box above the content: such a box took every
+                // gesture, so the dashboard could not be scrolled or touched until a first tap.
+                // A child that uses the tap itself (a button, a scroll) still gets it first.
+                val showControls = stringResource(UiStrings.a11y_show_controls)
+                val restoreChrome = if (previewMode && !chromeVisible) {
+                    Modifier
+                        .pointerInput(previewMode, chromeVisible) {
+                            detectTapGestures(onTap = { chromeVisible = true })
+                        }
+                        // Named: the top bar, menu and toolbar come back only through this.
+                        .semantics {
+                            onClick(label = showControls) {
+                                chromeVisible = true
+                                true
+                            }
+                        }
+                } else Modifier
+                Box(modifier = Modifier.fillMaxSize().then(restoreChrome)) {
                     // Main content
                     if (dashboardV2Content != null) {
                         DashboardHomeContent(contentPadding = contentPadding) {
@@ -478,21 +495,6 @@ fun MainScreen(
                         )
                     }
 
-                    // Tap overlay to restore chrome in preview mode (only when hidden)
-                    if (previewMode && !chromeVisible) {
-                        // Named: the top bar, menu and toolbar come back only through this, and a
-                        // screen reader announced it as a nameless control.
-                        val showControls = stringResource(UiStrings.a11y_show_controls)
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clickable(
-                                    interactionSource = interactionSource,
-                                    indication = null
-                                ) { chromeVisible = true }
-                                .semantics { contentDescription = showControls }
-                        )
-                    }
                 }
             }
         }

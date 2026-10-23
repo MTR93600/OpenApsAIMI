@@ -16,6 +16,7 @@ import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.notifications.AlarmAction
 import app.aaps.core.interfaces.notifications.AlarmIntent
 import app.aaps.core.interfaces.notifications.AlarmSound
 import app.aaps.core.interfaces.notifications.AlarmSoundCategory
@@ -26,6 +27,7 @@ import app.aaps.core.interfaces.ui.IconsProvider
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.ui.R as CoreUiR
 import app.aaps.core.ui.rawRes
 import app.aaps.implementation.R
 import app.aaps.implementation.androidNotification.AlarmNotificationManager.Companion.CHANNEL_SILENT
@@ -85,7 +87,10 @@ class AlarmNotificationManager(
          * channels that must vibrate got new ids (#5217). The old ones are deleted.
          */
         private val OLD_CHANNEL_IDS = listOf("aaps_alarm_fullscreen", "aaps_alarm_fullscreen_silent") +
-            listOf("alarm", "boluserror", "error", "urgentalarm").flatMap { listOf("aaps_alarm_${it}_alarm", "aaps_alarm_${it}_notify") }
+            listOf("alarm", "boluserror", "error", "urgentalarm").flatMap { listOf("aaps_alarm_${it}_alarm", "aaps_alarm_${it}_notify") } +
+            // The "override DND" sound channels before they carried setBypassDnd(true). The setting of a
+            // channel cannot change after it is created, so they got new ids (see channelIdForSound).
+            listOf("alarm", "boluserror", "error", "urgentalarm").map { "aaps_alarm_v2_${it}_alarm" }
 
         /**
          * Bypass-DND channel with NO sound, used by [postFullScreenAlarm] when the looping
@@ -113,6 +118,9 @@ class AlarmNotificationManager(
 
         /** Request code for the notification Mute action PendingIntent. */
         private const val MUTE_REQUEST_CODE = 4714
+
+        /** Request code for the extra action button of an alarm (see [AlarmAction]). */
+        private const val ALARM_ACTION_REQUEST_CODE = 4715
 
         /**
          * Delay before the screen-wake / activity-launch alarms fire. Small buffer so both
@@ -249,6 +257,10 @@ class AlarmNotificationManager(
                     setSound(uri, alarmAttrs)
                     enableVibration(true)
                     vibrationPattern = VIBRATION_URGENT
+                    // The only reliable way to ring through Do Not Disturb and bedtime modes. Android
+                    // honours it ONLY while AAPS holds Do Not Disturb access (ACCESS_NOTIFICATION_POLICY,
+                    // granted by the user) and ignores it otherwise, so it is safe to always set.
+                    setBypassDnd(true)
                     group = GROUP_ID
                 }
             )
@@ -277,7 +289,10 @@ class AlarmNotificationManager(
 
     private fun channelIdForSound(sound: AlarmSound, overrideDnd: Boolean): String {
         val name = SOUND_NAMES[sound] ?: "error"
-        val suffix = if (overrideDnd) "alarm" else "notify"
+        // "alarm_bypass" (was "alarm") is a new id because the setting of a channel cannot change
+        // after it is created, and the override channels needed setBypassDnd(true). The old ids are
+        // in OLD_CHANNEL_IDS and are deleted.
+        val suffix = if (overrideDnd) "alarm_bypass" else "notify"
         return "aaps_alarm_v2_${name}_$suffix"
     }
 
@@ -285,7 +300,7 @@ class AlarmNotificationManager(
      * True when Do Not Disturb would mute alarm audio now (total silence, or priority mode without
      * alarms). Unreadable policy counts as blocked: then the bypass-DND sound channel is used.
      */
-    private fun dndBlocksAlarms(): Boolean {
+    fun dndBlocksAlarms(): Boolean {
         val filter = mgr.currentInterruptionFilter
         val alarmsAllowed = try {
             (mgr.notificationPolicy.priorityCategories and NotificationManager.Policy.PRIORITY_CATEGORY_ALARMS) != 0
@@ -299,7 +314,7 @@ class AlarmNotificationManager(
      * True when the looping player owns the alarm sound (volume ramp, or a chosen soft melody), so the
      * notification channel must stay silent. False when the OS must play it through the channel.
      */
-    private fun playerOwnsSound(category: AlarmSoundCategory): Boolean {
+    fun playerOwnsSound(category: AlarmSoundCategory): Boolean {
         val overrideDnd = preferences.get(BooleanKey.AlertOverrideDoNotDisturb)
         val dndBlocks = overrideDnd && dndBlocksAlarms()
         val owns = AlarmAudioPolicy.playerOwnsSound(
@@ -492,12 +507,14 @@ class AlarmNotificationManager(
      * [cancelSoundAlarm] / [cancelAlarm] clear it.
      * @param notificationKey unique-per-AAPS-notification identifier (the `AapsNotification.instanceKey`)
      * @param urgent          true for URGENT-level alerts (stronger vibration)
+     * @param alarmAction     extra action button the alarm declares, if any (see [addAlarmAction])
      */
     fun postSilentAlarmNotification(
         notificationKey: Int,
         title: String,
         body: String,
-        urgent: Boolean
+        urgent: Boolean,
+        alarmAction: AlarmAction? = null
     ) {
         channels // created on first post, see the field
         val builder = NotificationCompat.Builder(context, if (urgent) CHANNEL_SILENT_URGENT else CHANNEL_SILENT)
@@ -511,6 +528,7 @@ class AlarmNotificationManager(
             .setOngoing(true)
             .setAutoCancel(false)
             .setContentIntent(notificationHolderProvider().openAppIntent())
+        addAlarmAction(builder, alarmAction)
 
         val systemId = SOUND_ID_OFFSET + notificationKey
         try {
@@ -528,6 +546,85 @@ class AlarmNotificationManager(
                 ex
             )
         }
+    }
+
+    /**
+     * Post an alarm notification on a channel that rings through Do Not Disturb. Used for the
+     * in-app alarms (low glucose, pump unreachable...) when [BooleanKey.AlertOverrideDoNotDisturb]
+     * is on. The channels honour Do Not Disturb only while the user has granted Do Not Disturb access
+     * (see `PluginPermissionsImpl`).
+     *
+     * - [rampMode] false: the sound channel of [sound] plays the clip itself. The caller must tell
+     *   the player to wait for the clip to end (`postedAtElapsedRealtime`), so the two never play
+     *   together.
+     * - [rampMode] true: the player owns the sound (volume ramp or a chosen melody). The notification
+     *   goes on the silent [CHANNEL_RAMP_BYPASS], which vibrates and shows through Do Not Disturb.
+     *
+     * Tracked in [activeSoundKeys] exactly like [postSilentAlarmNotification].
+     *
+     * @param notificationKey unique-per-AAPS-notification identifier (the `AapsNotification.instanceKey`)
+     * @param alarmAction     extra action button the alarm declares, if any (see [addAlarmAction])
+     */
+    fun postSoundAlarmNotification(
+        notificationKey: Int,
+        title: String,
+        body: String,
+        sound: AlarmSound,
+        alarmAction: AlarmAction? = null,
+        rampMode: Boolean = false
+    ) {
+        channels // created on first post, see the field
+        val channelId = if (rampMode) CHANNEL_RAMP_BYPASS else channelIdForSound(sound, overrideDnd = true)
+        val builder = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(iconsProvider.getNotificationIcon())
+            .setLargeIcon(BitmapFactory.decodeResource(context.resources, iconsProvider.getIcon()))
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setOngoing(true)
+            .setAutoCancel(false)
+            .setContentIntent(notificationHolderProvider().openAppIntent())
+        addAlarmAction(builder, alarmAction)
+
+        val systemId = SOUND_ID_OFFSET + notificationKey
+        try {
+            // notify + add must be atomic relative to cancelAlarm/cancelSoundAlarm — see activeSoundKeys.
+            synchronized(activeSoundKeys) {
+                mgr.notify(systemId, builder.build())
+                activeSoundKeys.add(notificationKey)
+            }
+            aapsLogger.debug(LTag.NOTIFICATION, "Posted bypass-DND ${if (rampMode) "vibrate" else "sound"} alarm key=$notificationKey: $title - $body")
+        } catch (ex: SecurityException) {
+            // POST_NOTIFICATIONS revoked at runtime (Android 13+) — see postFullScreenAlarm.
+            aapsLogger.error(
+                LTag.NOTIFICATION,
+                "Failed to post bypass-DND alarm \"$title\" key=$notificationKey — POST_NOTIFICATIONS likely revoked",
+                ex
+            )
+        }
+    }
+
+    /**
+     * Adds the extra action button of an alarm (for example "Hypo treated") to [builder], when the
+     * alarm declares one.
+     *
+     * The button goes to a `BroadcastReceiver` and not to the in-app `NotificationAction` lambda,
+     * because during the moment that matters, a real hypo, the phone is locked and the app is not
+     * open.
+     */
+    private fun addAlarmAction(builder: NotificationCompat.Builder, action: AlarmAction?) {
+        if (action == null) return
+        val (labelRes, receiver) = when (action) {
+            AlarmAction.HYPO_TREATED -> CoreUiR.string.alert_hypo_treated to HypoTreatedReceiver::class.java
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context, ALARM_ACTION_REQUEST_CODE,
+            Intent(context, receiver),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        builder.addAction(0, rh.gs(labelRes), pendingIntent)
     }
 
     /**

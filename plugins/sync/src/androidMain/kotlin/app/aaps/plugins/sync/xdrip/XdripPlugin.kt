@@ -16,6 +16,7 @@ import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.interfaces.aps.Loop
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.glucose.GlucoseCorrection
 import app.aaps.core.interfaces.db.ProcessedTbrEbData
 import app.aaps.core.interfaces.iob.GlucoseStatusProvider
 import app.aaps.core.interfaces.iob.IobCobCalculator
@@ -113,6 +114,7 @@ class XdripPlugin(
     private val dataSyncSelector: DataSyncSelectorXdrip,
     private val persistenceLayer: PersistenceLayer,
     notificationManager: NotificationManager,
+    private val glucoseCorrection: GlucoseCorrection,
 ) : XDripBroadcast, Sync, PluginBaseWithPreferences(
     pluginDescription = PluginDescription()
         .mainType(PluginType.SYNC)
@@ -341,7 +343,10 @@ class XdripPlugin(
     private fun sendEntries(dataPairs: List<DataSyncSelector.DataPair>, progress: String) {
         val array = JSONArray()
         for (dataPair in dataPairs)
-            (dataPair as DataSyncSelector.PairGlucoseValue?)?.value?.toXdripJson()?.also { gv -> array.put(gv) }
+            // The value the phone shows (calibrated and smoothed), not the plain sensor value.
+            (dataPair as DataSyncSelector.PairGlucoseValue?)?.value?.let { gv ->
+                array.put(gv.toXdripJson(sgvOverride = glucoseCorrection.correctedMgdl(gv.timestamp, gv.value)))
+            }
         addLog("SENDING", "Sent ${array.length()} BGs ($progress)")
         broadcast(
             Intent(Intents.ACTION_NEW_SGV)

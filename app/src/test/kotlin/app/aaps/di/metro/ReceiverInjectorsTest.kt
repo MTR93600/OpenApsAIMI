@@ -1,6 +1,7 @@
 package app.aaps.di.metro
 
 import app.aaps.implementation.androidNotification.AlarmMuteReceiver
+import app.aaps.implementation.androidNotification.HypoTreatedReceiver
 import app.aaps.persistentNotification.DummyService
 import app.aaps.plugins.automation.TimerReminderReceiver
 import app.aaps.plugins.automation.services.LocationService
@@ -45,6 +46,12 @@ class ReceiverInjectorsTest {
     @Test
     fun `the alarm notification receiver has an injector`() {
         assertThat(injectors.keys).contains(AlarmMuteReceiver::class)
+    }
+
+    /** Same case for the "Hypo treated" button on the low glucose alarm notification. */
+    @Test
+    fun `the hypo treated receiver has an injector`() {
+        assertThat(injectors.keys).contains(HypoTreatedReceiver::class)
     }
 
     @Test

@@ -2,6 +2,7 @@ package app.aaps.implementation.plugin
 
 import android.Manifest
 import android.app.AlarmManager
+import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
@@ -15,6 +16,7 @@ import app.aaps.core.interfaces.plugin.PermissionGroup
 import app.aaps.core.interfaces.plugin.PermissionProvider
 import app.aaps.core.interfaces.plugin.PluginPermissions
 import app.aaps.core.interfaces.plugin.missingPermissions
+import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.TextRef
@@ -124,6 +126,20 @@ class PluginPermissionsImpl(
                 special = true,
             )
         )
+        // Do Not Disturb access, asked only while the user keeps "Override Do Not Disturb" on (the
+        // default). The alarm channels carry setBypassDnd(true), but Android honours it only after the
+        // user grants this access in Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS. Without it
+        // the setting promises something the phone does not do.
+        if (preferences.get(BooleanKey.AlertOverrideDoNotDisturb)) {
+            add(
+                PermissionGroup(
+                    permissions = listOf(Manifest.permission.ACCESS_NOTIFICATION_POLICY),
+                    rationaleTitle = TextRef.AndroidRes(R.string.permission_dnd_title),
+                    rationaleDescription = TextRef.AndroidRes(R.string.permission_dnd_description),
+                    special = true,
+                )
+            )
+        }
     }
 
     private fun isPermissionMissing(context: Context, perm: String): Boolean =
@@ -143,6 +159,11 @@ class PluginPermissionsImpl(
 
             PERMISSION_NOTIFICATION_LISTENER                         ->
                 !isNotificationListenerEnabled(context)
+
+            Manifest.permission.ACCESS_NOTIFICATION_POLICY           -> {
+                val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                nm.isNotificationPolicyAccessGranted.not()
+            }
 
             else                                                     ->
                 ContextCompat.checkSelfPermission(context, perm) != PackageManager.PERMISSION_GRANTED

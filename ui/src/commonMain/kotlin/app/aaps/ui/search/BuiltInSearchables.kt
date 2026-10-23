@@ -193,7 +193,14 @@ class BuiltInSearchables(
             BooleanKey.AlertIncreaseVolume,
             BooleanKey.AlertOverrideDoNotDisturb,
             StringKey.AlertSoundLowGlucose,
-            StringKey.AlertSoundOtherAlarms
+            StringKey.AlertSoundOtherAlarms,
+            BooleanKey.AlertHypo,
+            UnitDoubleKey.AlertHypoThreshold,
+            BooleanKey.AlertHyper,
+            UnitDoubleKey.AlertHyperThreshold,
+            BooleanKey.AlertRapidFall,
+            IntKey.AlertRapidFallDrop,
+            IntKey.AlertRapidFallWindow
         ),
         icon = Icons.Default.Notifications
     )

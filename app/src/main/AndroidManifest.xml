@@ -17,6 +17,9 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Lets the bypass-DND alarm channels ring through Do Not Disturb and bedtime modes for urgent
+         alarms. Special access: the user must still grant it in the system settings. -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
@@ -89,6 +92,11 @@
         <!-- "Mute" action on the background alarm notification → silences the looping alarm. -->
         <receiver
             android:name="app.aaps.implementation.androidNotification.AlarmMuteReceiver"
+            android:exported="false" />
+
+        <!-- "Hypo treated" action on the low glucose alarm notification: holds the alarm 20 min. -->
+        <receiver
+            android:name="app.aaps.implementation.androidNotification.HypoTreatedReceiver"
             android:exported="false" />
 
         <!-- Receive new BG readings from other local apps -->

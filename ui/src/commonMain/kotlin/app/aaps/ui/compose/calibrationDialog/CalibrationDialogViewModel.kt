@@ -45,6 +45,7 @@ import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 /**
  * The calibration dialog. A calibration and a sensor change are stored by the MASTER, on its own sensor data, so
@@ -101,7 +102,8 @@ class CalibrationDialogViewModel(
 
     init {
         val units = profileUtil.units
-        val currentBg = profileUtil.fromMgdlToUnits(glucoseStatusProvider.glucoseStatusData?.glucose ?: 0.0)
+        val sensorBgMgdl = glucoseStatusProvider.glucoseStatusData?.glucose ?: 0.0
+        val currentBg = profileUtil.fromMgdlToUnits(sensorBgMgdl)
         val isMmol = units == GlucoseUnit.MMOL
 
         _uiState.update {
@@ -110,7 +112,8 @@ class CalibrationDialogViewModel(
                 units = units,
                 bgRange = if (isMmol) 2.0..30.0 else 36.0..500.0,
                 bgStep = if (isMmol) 0.1 else 1.0,
-                bgDecimalPlaces = if (isMmol) 1 else 0
+                bgDecimalPlaces = if (isMmol) 1 else 0,
+                sensorBgMgdl = sensorBgMgdl
             )
         }
         refreshPreconditions()
@@ -148,7 +151,23 @@ class CalibrationDialogViewModel(
     }
 
     fun updateBg(value: Double) {
-        _uiState.update { it.copy(bg = value) }
+        _uiState.update { it.copy(bg = value, gapWarning = gapWarningFor(value, it)) }
+    }
+
+    /**
+     * Advice only, it never blocks the save. The calibration engine needs at least two entries before
+     * it corrects anything, so one very different fingerstick value changes nothing. Tell the user
+     * that, instead of letting them believe the sensor was fixed.
+     */
+    private fun gapWarningFor(value: Double, state: CalibrationDialogUiState): CalibrationGapWarning? {
+        val sensorBgMgdl = state.sensorBgMgdl
+        if (value <= 0.0 || sensorBgMgdl <= 0.0) return null
+        val bloodMgdl = profileUtil.convertToMgdl(value, state.units)
+        if (!isLargeGap(bloodMgdl, sensorBgMgdl)) return null
+        return CalibrationGapWarning(
+            bloodValue = value,
+            sensorValue = profileUtil.fromMgdlToUnits(sensorBgMgdl, state.units)
+        )
     }
 
     fun hasAction(): Boolean = uiState.value.bg > 0.0
@@ -232,6 +251,25 @@ class CalibrationDialogViewModel(
     private fun formatDeltaInDisplayUnit(mgdlPer5Min: Double): String {
         val displayDelta = profileUtil.fromMgdlToUnits(mgdlPer5Min)
         return if (profileUtil.units == GlucoseUnit.MMOL) decimalFormatter.to1Decimal(displayDelta) else decimalFormatter.to0Decimal(displayDelta)
+    }
+
+    companion object {
+
+        /** A gap of this share of the sensor value is already large, whatever the glucose level. */
+        const val GAP_WARN_FRACTION = 0.25
+
+        /** A gap of this many mg/dL is large even when the sensor value is high. */
+        const val GAP_WARN_MGDL = 50.0
+
+        /**
+         * True when the fingerstick value is far away from the sensor value. Both inputs are in
+         * mg/dL. Either rule is enough: the share rule catches low glucose, the absolute rule
+         * catches high glucose.
+         */
+        fun isLargeGap(bloodMgdl: Double, sensorMgdl: Double): Boolean {
+            val gap = abs(bloodMgdl - sensorMgdl)
+            return gap >= GAP_WARN_MGDL || gap >= sensorMgdl * GAP_WARN_FRACTION
+        }
     }
 }
 

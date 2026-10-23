@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.effects
 
+import app.aaps.core.data.model.SourceSensor
 import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.OapsProfileAimi
 import app.aaps.core.interfaces.aps.RT
@@ -262,13 +263,13 @@ internal fun runAutodriveV3MultiVariableBranch(
             )
         }
 
-        if (adState.sourceSensor == app.aaps.core.data.model.SourceSensor.DEXCOM_G6_NATIVE) {
+        if (adState.sourceSensor == SourceSensor.DEXCOM_G6_NATIVE) {
             consoleLog.add("🤖 SENSOR_AWARE: G6 Detected -> Engaging Lead Compensator (UKF +50% Vel).")
-        } else if (adState.sourceSensor == app.aaps.core.data.model.SourceSensor.DEXCOM_ONEPLUS_NATIVE) {
+        } else if (adState.sourceSensor == SourceSensor.DEXCOM_ONEPLUS_NATIVE) {
             consoleLog.add("🤖 SENSOR_AWARE: One+ Detected -> Fast Sensor, Real-Time Maths Engaged (no G6 lead).")
-        } else if (adState.sourceSensor == app.aaps.core.data.model.SourceSensor.DEXCOM_G7_NATIVE) {
+        } else if (adState.sourceSensor == SourceSensor.DEXCOM_G7_NATIVE) {
             consoleLog.add("🤖 SENSOR_AWARE: G7 Detected -> Fast Sensor, Real-Time Maths Engaged.")
-        } else if (adState.sourceSensor == app.aaps.core.data.model.SourceSensor.LIBRE_3_NATIVE) {
+        } else if (adState.sourceSensor == SourceSensor.LIBRE_3_NATIVE) {
             consoleLog.add("🤖 SENSOR_AWARE: Libre 3 native Detected -> Fast Sensor, Real-Time Maths Engaged (no G6 lead).")
         }
 

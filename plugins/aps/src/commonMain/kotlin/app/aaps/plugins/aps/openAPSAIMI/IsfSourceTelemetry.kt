@@ -54,21 +54,45 @@ object IsfSourceTelemetry {
         private set
 
     /**
-     * Key of the cache entry that was used.
+     * Time the cache entry that was used was written.
      *
-     * [lastAgeMs] is derived from the key's 30-minute bucket, so it cannot tell two entries of the
-     * same bucket apart — and the read rule selects **within** a bucket by glucose. Production data
-     * showed 4 sensitivity jumps out of 20 where the age kept rising while the value changed, which
-     * is exactly that case and was unreadable without the key.
+     * It used to be `bucketStart + glucose`, a time and a glucose summed into one scalar, and
+     * [lastAgeMs] was derived from its 30-minute bucket. It is now the exact write time of the
+     * sample (`DynIsfCache` is keyed on time alone), so [lastAgeMs] is exact too.
      */
     @Volatile
     var lastCacheKey: Long? = null
         private set
 
-    /** Glucose embedded in the cache key, i.e. the reading the used value was computed for. */
+    /** Glucose the used value was computed for, when it is known. */
     @Volatile
     var lastCacheGlucoseMgdl: Long? = null
         private set
+
+    /**
+     * Exit path of the last `OpenAPSAIMIPlugin.calculateVariableIsf` pass:
+     * `OFF`, `DB`, `GLUC` or `CALC`.
+     *
+     * Only `CALC` writes the cache. Measured on a 24-hour package of 1412 cycles, the loop took the
+     * `DB` short cut on nearly every cycle, so `CALC` appeared on about **0 %** of the ticks and the
+     * cache was never refreshed: 93.9 % of the cycles served a stale value, median age 45.7 min,
+     * max 241.9 min. Since the background refresh does not take the short cut, this should read
+     * `CALC` on close to **100 %** of the ticks.
+     */
+    @Volatile
+    var lastCalcPath: String? = null
+        private set
+
+    /** How many samples the dynamic ISF store held at the end of the last pass. */
+    @Volatile
+    var lastCacheSize: Int? = null
+        private set
+
+    /** Records the exit path of one `calculateVariableIsf` pass and the store size it left behind. */
+    fun recordCalcPath(path: String, cacheSize: Int) {
+        lastCalcPath = path
+        lastCacheSize = cacheSize
+    }
 
     /**
      * User profile ISF block for the current time of day, captured where the profile is in hand.

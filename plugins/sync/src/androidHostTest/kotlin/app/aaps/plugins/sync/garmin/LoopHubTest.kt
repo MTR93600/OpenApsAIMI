@@ -1,12 +1,14 @@
 package app.aaps.plugins.sync.garmin
 
 import app.aaps.core.data.iob.CobInfo
+import app.aaps.core.data.iob.InMemoryGlucoseValue
 import app.aaps.core.data.model.EPS
 import app.aaps.core.data.model.GV
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.HR
 import app.aaps.core.data.model.ICfg
 import app.aaps.core.data.model.RM
+import app.aaps.core.data.model.SC
 import app.aaps.core.data.model.SourceSensor
 import app.aaps.core.data.model.TB
 import app.aaps.core.data.model.TE
@@ -15,8 +17,10 @@ import app.aaps.core.data.model.TrendArrow
 import app.aaps.core.data.ue.Action
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.data.ue.ValueWithUnit
+import app.aaps.core.interfaces.aps.AutosensDataStore
 import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.Loop
+import app.aaps.core.interfaces.concurrent.AapsLock
 import app.aaps.core.interfaces.bolus.MasterActionExecutor
 import app.aaps.core.interfaces.constraints.Constraint
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
@@ -29,6 +33,7 @@ import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.queue.CommandQueue
 import app.aaps.core.keys.StringKey
+import app.aaps.core.objects.constraints.ConstraintObject
 import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.shared.tests.TestBase
@@ -282,11 +287,115 @@ class LoopHubTest : TestBase() {
         )
         whenever(persistenceLayer.getBgReadingsDataFromTime(1001_000, false))
             .thenReturn(glucoseValues)
+        // No smoothed or calibrated data: the stored values come back as they are.
+        val ads = mock<AutosensDataStore>()
+        whenever(ads.dataLock).thenReturn(AapsLock())
+        whenever(iobCobCalculator.ads).thenReturn(ads)
         assertArrayEquals(
             glucoseValues.toTypedArray(),
             loopHub.getGlucoseValues(Instant.ofEpochMilli(1001_000), false).toTypedArray()
         )
         verify(persistenceLayer).getBgReadingsDataFromTime(1001_000, false)
+        verify(iobCobCalculator).ads
+    }
+
+    private fun rawReading(timestamp: Long, value: Double) = GV(
+        timestamp = timestamp, raw = value, value = value,
+        trendArrow = TrendArrow.FLAT, noise = null, sourceSensor = SourceSensor.DEXCOM_G6
+    )
+
+    private fun stubOverlay(vararg entries: InMemoryGlucoseValue) {
+        val ads = mock<AutosensDataStore>()
+        whenever(ads.dataLock).thenReturn(AapsLock())
+        whenever(ads.bucketedData).thenReturn(entries.toMutableList())
+        whenever(iobCobCalculator.ads).thenReturn(ads)
+    }
+
+    @Test
+    fun testGetGlucoseValues_UsesSmoothedValueNearby() = runTest {
+        whenever(persistenceLayer.getBgReadingsDataFromTime(0, true)).thenReturn(
+            listOf(rawReading(300_000L, 100.0), rawReading(600_000L, 110.0), rawReading(1_200_000L, 130.0))
+        )
+        // 2 min off still matches; the last reading has no entry within 2.5 min and stays raw.
+        stubOverlay(
+            InMemoryGlucoseValue(timestamp = 300_000L, value = 100.0, smoothed = 98.0),
+            InMemoryGlucoseValue(timestamp = 720_000L, value = 110.0, smoothed = 107.0),
+            InMemoryGlucoseValue(timestamp = 900_000L, value = 120.0, smoothed = 118.0, filledGap = true),
+        )
+        val values = loopHub.getGlucoseValues(Instant.ofEpochMilli(0), true).map { it.value }
+        assertEquals(listOf(98.0, 107.0, 130.0), values)
+        verify(persistenceLayer).getBgReadingsDataFromTime(0, true)
+        verify(iobCobCalculator).ads
+    }
+
+    /** A 1 minute CGM: readings that share one 5 minute entry become one row, so the delta is not flattened. */
+    @Test
+    fun testGetGlucoseValues_OneRowPerGridEntry() = runTest {
+        whenever(persistenceLayer.getBgReadingsDataFromTime(0, true)).thenReturn(
+            (0..4).map { rawReading(240_000L + it * 60_000L, 100.0 + it) }
+        )
+        stubOverlay(InMemoryGlucoseValue(timestamp = 300_000L, value = 101.0, smoothed = 101.5))
+        val values = loopHub.getGlucoseValues(Instant.ofEpochMilli(0), true)
+        // 240..420 s fall on the entry at 300 s; 480 s is 3 min away and keeps its raw value.
+        assertEquals(listOf(300_000L to 101.5, 480_000L to 104.0), values.map { it.timestamp to it.value })
+        verify(persistenceLayer).getBgReadingsDataFromTime(0, true)
+        verify(iobCobCalculator).ads
+    }
+
+    @Test
+    fun testPostBolus_IsLimitedAndSentThroughTheExecutor() = runTest {
+        whenever(constraints.applyBolusConstraints(any())).thenAnswer { ConstraintObject(10.0, aapsLogger) }
+        assertEquals(10.0, loopHub.postBolus(12.0) { })
+        verify(constraints).applyBolusConstraints(any())
+        verify(masterActionExecutor).deliverInsulin(eq(10.0), isNull(), eq(Sources.Garmin), any(), anyOrNull(), anyOrNull(), eq(false), anyOrNull(), any())
+    }
+
+    @Test
+    fun testPostBolus_RefusalIsReported() = runTest {
+        whenever(constraints.applyBolusConstraints(any())).thenAnswer { ConstraintObject(1.0, aapsLogger) }
+        whenever(masterActionExecutor.deliverInsulin(any(), anyOrNull(), any(), any(), anyOrNull(), anyOrNull(), any(), anyOrNull(), any())).thenAnswer {
+            it.getArgument<(MasterActionExecutor.Failure) -> Unit>(3)(MasterActionExecutor.Failure("Loop is suspended"))
+        }
+        var reason: String? = null
+        assertEquals(1.0, loopHub.postBolus(1.0) { reason = it })
+        assertEquals("Loop is suspended", reason)
+        verify(constraints).applyBolusConstraints(any())
+    }
+
+    @Test
+    fun testPostBolus_NothingAllowedSendsNothing() {
+        whenever(constraints.applyBolusConstraints(any())).thenAnswer { ConstraintObject(0.0, aapsLogger) }
+        assertEquals(0.0, loopHub.postBolus(3.0) { })
+        verify(constraints).applyBolusConstraints(any())
+        verifyNoInteractions(masterActionExecutor)
+    }
+
+    @Test
+    fun testPostBolus_BadValueSendsNothing() {
+        assertEquals(0.0, loopHub.postBolus(Double.NaN) { })
+        assertEquals(0.0, loopHub.postBolus(-1.0) { })
+        verifyNoInteractions(masterActionExecutor)
+    }
+
+    @Test
+    fun testStoreStepsCount() = runTest {
+        val samplingStart = Instant.ofEpochMilli(1_001_000)
+        val samplingEnd = Instant.ofEpochMilli(1_301_000)
+        val sc = SC(
+            duration = 300_000,
+            timestamp = samplingEnd.toEpochMilli(),
+            steps5min = 12,
+            steps10min = 18,
+            steps15min = 24,
+            steps30min = 36,
+            steps60min = 48,
+            steps180min = 60,
+            device = "Test Device",
+            dateCreated = clock.millis(),
+        )
+        whenever(persistenceLayer.insertOrUpdateStepsCount(sc)).thenReturn(PersistenceLayer.TransactionResult())
+        loopHub.storeStepsCount(samplingStart, samplingEnd, 12, 18, 24, 36, 48, 60, "Test Device")
+        verify(persistenceLayer).insertOrUpdateStepsCount(sc)
     }
 
     @Test

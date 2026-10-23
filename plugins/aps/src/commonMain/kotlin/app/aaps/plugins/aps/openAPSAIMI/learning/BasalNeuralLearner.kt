@@ -778,8 +778,11 @@ class BasalNeuralLearner @Inject constructor(
         }
         val hypoRateGovernance = if (weightSum > 0.0) hypoWeightedSum / weightSum else hypoRateUnweighted
         val meanGovernanceWeight = if (count > 0) weightSum / count.toDouble() else 1.0
+        // `bgAfter` is `rT.eventualBG`, which floors at 39 mg/dL on a real clip artefact (not a real
+        // hypo) on a meaningful fraction of ticks. Using it directly here armed the severe tier on
+        // phantom hypos even though `samples` is already filtered to realised-only rows.
         val severeHypoCount = samples.count {
-            it.bgAfter < p.severeBgThreshold && governanceSampleWeight(it) >= GOVERNANCE_SEVERE_MIN_SAMPLE_WEIGHT
+            outcome(it) < p.severeBgThreshold && governanceSampleWeight(it) >= GOVERNANCE_SEVERE_MIN_SAMPLE_WEIGHT
         }
         val highRate = highCount.toDouble() / count.toDouble()
         val confidence = (count.toDouble() / GOVERNANCE_WINDOW_MAX.toDouble()).coerceIn(0.0, 1.0)
@@ -878,8 +881,13 @@ class BasalNeuralLearner @Inject constructor(
                     anticipationRelief.coerceIn(0.0, 1.0) * p.anticipationDecayBlendMax.coerceIn(0.0, 1.0)
                 val basalDecay = blendDecayTowardNeutral(basalDecayRaw, decayBlend)
                 val aggDecay = blendDecayTowardNeutral(aggDecayRaw, decayBlend)
-                internalBasalScalingFactor = max(basalFloor, internalBasalScalingFactor * basalDecay)
-                internalAggressivenessFactor = max(aggFloor, internalAggressivenessFactor * aggDecay)
+                // Decay the DEVIATION from neutral (1.0), not the raw value: `x * decay` only moves toward
+                // neutral when x > 1.0. Below 1.0 - exactly where a value sits once it has been pushed down
+                // to the floor - the same multiplication pushes further AWAY from neutral, so every
+                // governance tick this branch runs cancels out any heuristic step that tried to recover, and
+                // the value gets stuck exactly at the floor for as long as HOLD stays active.
+                internalBasalScalingFactor = max(basalFloor, 1.0 + (internalBasalScalingFactor - 1.0) * basalDecay)
+                internalAggressivenessFactor = max(aggFloor, 1.0 + (internalAggressivenessFactor - 1.0) * aggDecay)
             }
             GovernanceAction.ALLOW_GENTLE_INCREASE -> {
                 // Keep adaptation gentle even in strong hyper windows.
@@ -919,6 +927,8 @@ class BasalNeuralLearner @Inject constructor(
     /**
      * Replaces the governance window (for unit tests).
      * [bgAfters] is chronological (oldest → newest); internal deque matches production (newest at front).
+     * [bgAfters] are the realised outcomes. [eventualBgs], when given, replaces the predicted
+     * `bgAfter` of each sample (for example a 39 mg/dL floor artefact); by default it equals the outcome.
      */
     internal fun replaceGovernanceSamplesForTesting(
         bgAfters: List<Double>,
@@ -927,6 +937,7 @@ class BasalNeuralLearner @Inject constructor(
         iobUnits: List<Double>? = null,
         deltasMgDl: List<Double>? = null,
         shortMinPredBgs: List<Double>? = null,
+        eventualBgs: List<Double>? = null,
     ) {
         governanceWindow.clear()
         val slice = bgAfters.takeLast(GOVERNANCE_WINDOW_MAX)
@@ -939,11 +950,12 @@ class BasalNeuralLearner @Inject constructor(
             val iob = iobUnits?.getOrNull(idx)?.takeIf { it.isFinite() } ?: 0.0
             val d = deltasMgDl?.getOrNull(idx)?.takeIf { it.isFinite() } ?: 0.0
             val pred = shortMinPredBgs?.getOrNull(idx)?.takeIf { it.isFinite() }
+            val eventual = eventualBgs?.getOrNull(idx)?.takeIf { it.isFinite() } ?: bg
             governanceWindow.addFirst(
                 LearningSample(
                     timestamp = idx.toLong(),
                     bgBefore = bg,
-                    bgAfter = bg,
+                    bgAfter = eventual,
                     targetBg = targetBg,
                     deltaMgDl = d,
                     iobUnits = iob,

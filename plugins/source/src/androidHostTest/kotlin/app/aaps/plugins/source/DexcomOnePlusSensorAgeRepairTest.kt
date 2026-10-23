@@ -145,9 +145,9 @@ class DexcomOnePlusSensorAgeRepairTest : TestBase() {
     }
 
     @Test
-    fun `the manual anchor switch defaults to off and is not exported`() {
+    fun `the manual anchor switch defaults to on like the reference and is not exported`() {
         val key = DexcomOnePlusBooleanKey.AnchorSessionToManualSensorChange
-        assertThat(key.defaultValue).isFalse()
+        assertThat(key.defaultValue).isTrue()
         assertThat(key.engineeringModeOnly).isTrue()
         assertThat(key.exportable).isFalse()
     }

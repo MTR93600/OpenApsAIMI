@@ -14,6 +14,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionRuntime
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhase
+import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionBasalCap
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
 
 /** Lectures de champs, chacune au moment où la branche les consulte. */
@@ -44,6 +45,9 @@ internal interface AimiMealHyperFields {
 
     /** Runtime of the meal-absorption overlay of this tick, for the export. Nothing to do by default. */
     fun recordMealAbsorptionRuntime(result: MealAbsorptionRuntime.Result) {}
+
+    /** Tier ceiling record of the meal-absorption boost, for the export only. Nothing to do by default. */
+    fun recordMealBoostCap(record: CorrectionAggressionBasalCap.MealBoostCapRecord) {}
 }
 
 /** `setTempBasal`. Le corps reste dans la coquille Android. */
@@ -215,6 +219,20 @@ internal fun decideMealHyperBasalBoost(
                 )
             } else {
                 null
+            }
+            // Measurement only - see `CorrectionAggressionBasalCap.MealBoostCapRecord`. This branch does
+            // not apply the tier ceiling itself, and it does not need to: the merged rate meets the same
+            // ceiling, with the same gate, at `FINAL_BASAL_MERGE`. The record counts how often the branch
+            // asks for more than its tier allows at the moment it asks. It is read only by the export and
+            // never by a dose. The base is `profile.current_basal`, the same one `FINAL_BASAL_MERGE` uses.
+            optionalRate?.let { requested ->
+                fields.recordMealBoostCap(
+                    CorrectionAggressionBasalCap.evaluateMealBoostCap(
+                        requestedRateUph = requested,
+                        profileBasalUph = profile.current_basal,
+                        gate = aggressionDecision,
+                    ),
+                )
             }
             consoleLog.add(
                 "🍽️ MEAL_ABSORPTION_BASAL: phase=${fields.mealAbsorption()?.phase?.name} " +

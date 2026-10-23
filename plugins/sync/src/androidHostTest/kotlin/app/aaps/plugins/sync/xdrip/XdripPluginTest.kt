@@ -42,7 +42,7 @@ class XdripPluginTest : TestBaseWithProfile() {
             glucoseStatusProvider,
             xdripMvvmRepository,
             dataSyncSelector,
-            persistenceLayer, mock()
+            persistenceLayer, mock(), mock()
         )
     }
 }

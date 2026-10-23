@@ -64,6 +64,54 @@ class CgmSourceTransactionTest {
     }
 
     @Test
+    fun `does not let an NS round-trip overwrite the locally stored value`() = runTest {
+        val staleEchoFromNs = createGlucoseValue(timestamp = 1000L, value = 110.0)
+        val existing = createGlucoseValue(timestamp = 1000L, value = 160.0)
+
+        whenever(glucoseValueDao.findByTimestampAndSensor(1000L, GlucoseValue.SourceSensor.DEXCOM_G6)).thenReturn(existing)
+
+        val transaction = CgmSourceTransaction(listOf(staleEchoFromNs), emptyList(), null, fromNsClient = true)
+        transaction.database = database
+        val result = transaction.run()
+
+        assertThat(result.updated).isEmpty()
+        assertThat(existing.value).isEqualTo(160.0)
+    }
+
+    @Test
+    fun `NS round-trip still links a missing nsId without touching value`() = runTest {
+        val staleEchoFromNs = createGlucoseValue(timestamp = 1000L, value = 110.0, nsId = "ns-123")
+        val existing = createGlucoseValue(timestamp = 1000L, value = 160.0, nsId = null)
+
+        whenever(glucoseValueDao.findByTimestampAndSensor(1000L, GlucoseValue.SourceSensor.DEXCOM_G6)).thenReturn(existing)
+
+        val transaction = CgmSourceTransaction(listOf(staleEchoFromNs), emptyList(), null, fromNsClient = true)
+        transaction.database = database
+        val result = transaction.run()
+
+        assertThat(result.updatedNsId).hasSize(1)
+        assertThat(existing.interfaceIDs.nightscoutId).isEqualTo("ns-123")
+        assertThat(existing.value).isEqualTo(160.0)
+    }
+
+    @Test
+    fun `NS value with no local reading is still inserted`() = runTest {
+        // The guard only protects a value that is already stored. A follower phone gets all its
+        // glucose from Nightscout, and those readings must still come in.
+        val fromNs = createGlucoseValue(timestamp = 1000L, value = 110.0, nsId = "ns-123")
+
+        whenever(glucoseValueDao.findByTimestampAndSensor(1000L, GlucoseValue.SourceSensor.DEXCOM_G6)).thenReturn(null)
+
+        val transaction = CgmSourceTransaction(listOf(fromNs), emptyList(), null, fromNsClient = true)
+        transaction.database = database
+        val result = transaction.run()
+
+        assertThat(result.inserted).hasSize(1)
+        assertThat(result.inserted[0].value).isEqualTo(110.0)
+        verify(glucoseValueDao).insertNewEntry(fromNs)
+    }
+
+    @Test
     fun `updates nsId when provided but not present in existing`() = runTest {
         val gv = createGlucoseValue(timestamp = 1000L, value = 120.0, nsId = "ns-123")
         val existing = createGlucoseValue(timestamp = 1000L, value = 120.0, nsId = null)

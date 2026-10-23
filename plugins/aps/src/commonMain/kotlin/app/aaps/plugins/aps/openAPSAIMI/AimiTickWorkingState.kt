@@ -32,6 +32,7 @@ import app.aaps.plugins.aps.openAPSAIMI.recursive.RecursiveBeliefSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.release.HyperTrajectoryReleaseResult
 import app.aaps.plugins.aps.openAPSAIMI.risk.DecisionPredictionAuthority
 import app.aaps.plugins.aps.openAPSAIMI.risk.SafetyPredictionTerminals
+import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionBasalCap
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
 import app.aaps.plugins.aps.openAPSAIMI.safety.HyperClampTubeBound
 import app.aaps.plugins.aps.openAPSAIMI.safety.InsulinStackingStance
@@ -179,6 +180,18 @@ internal class AimiTickWorkingState {
     var lastStackTerminalVerdict: BasalStackTerminalCap.Verdict? = null
     var lastEngineHyperBound: EngineHyperRateBound.Verdict? = null
     var lastMealAbsorptionRuntime: MealAbsorptionRuntime.Result? = null
+
+    /**
+     * Tier ceiling record of the meal-absorption basal boost of this tick, `null` when that branch did
+     * not produce a rate. Export only (`baseline_state.meal_boost_*`), never read by a dose.
+     */
+    var mealBoostCapRecord: CorrectionAggressionBasalCap.MealBoostCapRecord? = null
+
+    /**
+     * What the engine / rT basal merge saw this tick. Export only (`engine_rate_uph`, `rt_rate_uph`,
+     * `merge_mode`, `merge_winner`), nothing reads it back.
+     */
+    var basalMergeRecord: AimiBasalMergeRecord? = null
 
     // "coffee" note of this tick (see CoffeeRiseMode) and the profile values its basal band needs.
     var coffeeNote: Therapy.CoffeeNote? = null

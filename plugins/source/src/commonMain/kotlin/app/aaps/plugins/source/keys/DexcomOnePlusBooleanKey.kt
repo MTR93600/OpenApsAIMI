@@ -89,12 +89,13 @@ enum class DexcomOnePlusBooleanKey(
      * Replace the automatic session start with a SENSOR_CHANGE the user already logged.
      *
      * The reference does this on every start and on the first accepted reading. That rolls
-     * the stored start back by up to 24 hours. The owner asked for the same code behind a
-     * switch that stays off, so a start keeps the time it had before this lot.
+     * the stored start back by up to 24 hours. On by default, as the reference: a sensor inserted
+     * (and logged) before it is paired, or soaked before it is promoted, keeps its real age. The
+     * switch stays, in engineering mode only, to go back to the plain automatic time.
      */
     AnchorSessionToManualSensorChange(
         key = "dexcom_oneplus_anchor_session_to_manual_sensor_change",
-        defaultValue = false,
+        defaultValue = true,
         title = SourceStrings.dexcom_oneplus_anchor_session_to_manual_sensor_change,
         summary = SourceStrings.dexcom_oneplus_anchor_session_to_manual_sensor_change_summary,
         engineeringModeOnly = true,

@@ -89,6 +89,17 @@ interface LoopHub {
     /** Notifies the system that carbs were eaten and stores the value. */
     fun postCarbs(carbohydrates: Int)
 
+    /**
+     * Gives a bolus asked for by the watch, limited by the bolus constraints (max bolus) like any
+     * other bolus. Returns the amount sent to the pump after that limit, 0.0 when nothing is given.
+     * The caller must refuse the request on a client and when no request key is set.
+     *
+     * The pump command is sent later, so a returned amount means "sent on", not "delivered".
+     * [onNotDelivered] gets the reason when AAPS refuses or fails it after that (for example the loop
+     * is suspended), so the caller can tell the user.
+     */
+    fun postBolus(bolus: Double, onNotDelivered: (String) -> Unit): Double
+
     /** Stores or cancels a temporary target. A target or duration of zero cancels the current one. */
     fun postTempTarget(target: Double, duration: Int)
 
@@ -104,5 +115,18 @@ interface LoopHub {
         samplingStart: Instant, samplingEnd: Instant,
         avgHeartRate: Int,
         device: String?
+    )
+
+    /** Stores step counts that the watch summed over several intervals. */
+    fun storeStepsCount(
+        samplingStart: Instant,
+        samplingEnd: Instant,
+        steps5min: Int,
+        steps10min: Int,
+        steps15min: Int,
+        steps30min: Int,
+        steps60min: Int,
+        steps180min: Int,
+        device: String?,
     )
 }

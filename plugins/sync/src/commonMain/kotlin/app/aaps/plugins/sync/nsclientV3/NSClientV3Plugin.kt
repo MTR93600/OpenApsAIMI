@@ -11,6 +11,7 @@ import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.configuration.ExternalOptions
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.glucose.GlucoseCorrection
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.L
 import app.aaps.core.interfaces.logging.LTag
@@ -153,6 +154,7 @@ class NSClientV3Plugin(
     private val nsConnection: NsConnection,
     private val nsLoadExecutor: NsLoadExecutor,
     notificationManager: NotificationManager,
+    private val glucoseCorrection: GlucoseCorrection,
 ) : NsClient, Sync, PluginBaseWithPreferences(
     PluginDescription()
         .mainType(PluginType.SYNC)
@@ -862,7 +864,10 @@ class NSClientV3Plugin(
             Operation.UPDATE -> nsAndroidClient?.let { return@let it::updateSvg }
         }
         try {
-            val data = dataPair.value.toNSSvgV3()
+            // The value the phone shows (calibrated and smoothed), so Nightscout and every follower
+            // show it too. The plain sensor value goes to `unfiltered`.
+            val gv = dataPair.value
+            val data = gv.toNSSvgV3(sgvOverride = glucoseCorrection.correctedMgdl(gv.timestamp, gv.value))
             val id = dataPair.value.ids.nightscoutId
             nsClientRepository.addLog(
                 when (operation) {

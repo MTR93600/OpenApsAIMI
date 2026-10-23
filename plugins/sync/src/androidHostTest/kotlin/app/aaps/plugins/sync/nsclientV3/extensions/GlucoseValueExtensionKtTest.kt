@@ -31,4 +31,25 @@ internal class GlucoseValueExtensionKtTest : TestBaseWithProfile() {
         assertThat(glucoseValue.contentEqualsTo(glucoseValue2!!)).isTrue()
         assertThat(glucoseValue.ids.contentEqualsTo(glucoseValue2.ids)).isTrue()
     }
+
+    /** Nightscout gets the value the phone shows; the plain sensor value goes to `unfiltered`. */
+    @Test
+    fun correctedValueIsSentAsSgvAndTheSensorValueIsKept() {
+        val gv = GV(timestamp = 10000, raw = 101.0, value = 99.0, trendArrow = TrendArrow.FLAT, noise = null, sourceSensor = SourceSensor.DEXCOM_G6)
+
+        val ns = gv.toNSSvgV3(sgvOverride = 92.0)
+
+        assertThat(ns.sgv).isEqualTo(92.0)
+        assertThat(ns.unfiltered).isEqualTo(99.0)
+    }
+
+    @Test
+    fun withoutACorrectionTheSensorValueIsSentAsBefore() {
+        val gv = GV(timestamp = 10000, raw = 101.0, value = 99.0, trendArrow = TrendArrow.FLAT, noise = null, sourceSensor = SourceSensor.DEXCOM_G6)
+
+        val ns = gv.toNSSvgV3()
+
+        assertThat(ns.sgv).isEqualTo(99.0)
+        assertThat(ns.unfiltered).isEqualTo(0.0)
+    }
 }

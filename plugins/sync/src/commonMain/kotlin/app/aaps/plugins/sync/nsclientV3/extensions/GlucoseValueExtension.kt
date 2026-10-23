@@ -24,14 +24,20 @@ fun NSSgvV3.toGV(): GV {
     )
 }
 
-fun GV.toNSSvgV3(): NSSgvV3 =
+/**
+ * @param sgvOverride value the app really shows for this reading (calibrated and smoothed), or `null`
+ *   when there is none. Without it Nightscout, and every follower reading from it, would show the plain
+ *   sensor value while the phone shows a corrected one. The sensor value is then kept in `unfiltered`,
+ *   the Nightscout field meant for it, so nothing is lost.
+ */
+fun GV.toNSSvgV3(sgvOverride: Double? = null): NSSgvV3 =
     NSSgvV3(
         isValid = isValid,
         date = timestamp,
         utcOffset = T.msecs(utcOffset).mins(),
         filtered = raw,
-        unfiltered = 0.0,
-        sgv = value,
+        unfiltered = if (sgvOverride != null) value else 0.0,
+        sgv = sgvOverride ?: value,
         units = NsUnits.MG_DL,
         direction = Direction.fromString(trendArrow.text),
         noise = noise,

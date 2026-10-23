@@ -252,6 +252,33 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
      */
     fun savedSharedKey(): ByteArray? = sensorStore?.load()?.sharedKey
 
+    /**
+     * Let go of a session that has ended on its own, so the reconnect watchdog can start a new one.
+     *
+     * `startWithPairingCode` blocks for the whole life of the link and returns when the link is
+     * over. That includes the terminal `OnePlusBleSession.fail` path (for example after
+     * `ONEPLUS_RECONNECT_EXHAUSTED` or a bad PIN), which sets its own `running` flag to false and
+     * **returns normally instead of throwing**. Before this, nothing then cleared [session] and
+     * [resumeQueued], so the driver stayed "busy" for ever with a link that was down:
+     * `isSessionUp()` said false, while every wake-up of the plugin's reconnect watchdog got the
+     * answer "auto-resume already active". The only ways out were an app restart or a manual
+     * Connect, and no glucose came in until then.
+     *
+     * Guarded on both the operation generation and the session identity: a newer connect may have
+     * replaced this one while its thread was ending, and the old session must not release the newer
+     * one.
+     */
+    private fun releaseSessionIfCurrent(generation: Long, ended: OnePlusBleSession) {
+        lifecycleLock.withLock {
+            if (generation != operationGeneration || session !== ended) return
+            session = null
+            resumeQueued = false
+        }
+        OnePlusLog.i(
+            "${OnePlusLogMarkers.SESSION}: [$slot] session released — the watchdog may start a new one",
+        )
+    }
+
     /** Persist the MAC / KEKS key of a successful auth into the slot this instance owns right now. */
     fun onAuthSucceeded(address: String, key: ByteArray) {
         val store = sensorStore
@@ -363,6 +390,8 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
                                 ),
                             )
                         }
+                    } finally {
+                        releaseSessionIfCurrent(generation, created)
                     }
                 }
             }
@@ -435,12 +464,6 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
                     try {
                         created.startWithPairingCode(deviceAddress, pairingCode)
                     } catch (t: Throwable) {
-                        lifecycleLock.withLock {
-                            if (generation == operationGeneration && session === created) {
-                                resumeQueued = false
-                                session = null
-                            }
-                        }
                         OnePlusLog.e(
                             "${OnePlusLogMarkers.ERROR}: [$slot] auto-resume ${t.message}",
                             t,
@@ -448,6 +471,8 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
                         watchersSnapshot().forEach {
                             it.onError(t.message ?: "ONEPLUS_AUTO_RESUME_FAILED", fatal = false)
                         }
+                    } finally {
+                        releaseSessionIfCurrent(generation, created)
                     }
                 }
             }

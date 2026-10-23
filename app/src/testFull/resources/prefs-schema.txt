@@ -94,7 +94,6 @@ active_scene|StringNonKey|false
 actual_basal_profile|MedtrumStringNonKey|true
 age|StringKey|true
 aimi_activity_source_mode|AimiStringKey|true
-aimi_adaptive_basal_reenabled_on_upgrade|BooleanNonKey|false
 aimi_advisor_claude_key|StringKey|true
 aimi_advisor_claude_model|AimiStringKey|true
 aimi_advisor_deepseek_key|StringKey|true
@@ -199,7 +198,11 @@ aimi_sos_permissions_compose|ApsIntentKey|false
 aimi_support_package_compose|ApsIntentKey|false
 aimi_tuning_context_selection|StringKey|true
 alarm_setting|MedtrumStringKey|true
+alert_hyper_threshold|UnitDoubleKey|true
+alert_hypo_threshold|UnitDoubleKey|true
 alert_override_dnd|BooleanKey|true
+alert_rapid_fall_drop_mgdl|IntKey|true
+alert_rapid_fall_window|IntKey|true
 alert_sound_low_glucose|StringKey|true
 alert_sound_other_alarms|StringKey|true
 allow_hardware_pump|BooleanNonKey|true
@@ -316,8 +319,11 @@ enableSMB_with_high_temptarget|BooleanKey|true
 enableSMB_with_temptarget|BooleanKey|true
 enable_carbs_required_alert_local|BooleanKey|true
 enable_fabric2|BooleanKey|true
+enable_hyper_alert|BooleanKey|true
+enable_hypo_alert|BooleanKey|true
 enable_missed_bg_readings|BooleanKey|true
 enable_pump_unreachable_alert|BooleanKey|true
+enable_rapid_fall_alert|BooleanKey|true
 enable_unattended_export|BooleanKey|true
 eopatch_alarms|EopatchStringNonKey|true
 eopatch_bolus_current|EopatchStringNonKey|true
@@ -340,6 +346,8 @@ fill_button2|DoubleKey|true
 fill_button3|DoubleKey|true
 g8_bolusspeed|DiaconnIntKey|true
 garmin_aaps_key|GarminStringKey|true
+garmin_http_last_steps_ts|GarminLongNonKey|false
+garmin_http_last_steps|GarminIntNonKey|false
 google_drive_folder_id|StringNonKey|true
 google_drive_refresh_token|StringNonKey|true
 google_drive_storage_type|StringNonKey|true
@@ -616,8 +624,11 @@ medtronic_std_boluses_delivered|MedtronicLongNonKey|true
 medtronic_tbrs_set|MedtronicLongNonKey|true
 medtrum_session_token|MedtrumLongNonKey|true
 missed_bg_readings_threshold|IntKey|true
+nextHyperAlarm|LocalAlertLongKey|false
+nextHypoAlarm|LocalAlertLongKey|false
 nextMissedReadingsAlarm|LocalAlertLongKey|false
 nextPumpDisconnectedAlarm|LocalAlertLongKey|false
+nextRapidFallAlarm|LocalAlertLongKey|false
 notification_reader_dedup_state|StringNonKey|true
 notification_reader_packages|StringNonKey|true
 ns_alarm_stale_data_value|IntKey|true

@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.retention
 
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiCrc32
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.allocArrayOf
@@ -24,8 +25,8 @@ import platform.Foundation.create
  *
  * A gzip member needs that raw deflate stream wrapped in the 10-byte gzip header
  * and the 8-byte trailer (CRC32 of the uncompressed data + ISIZE), which is written
- * by hand below. The CRC32 is the standard IEEE polynomial, computed in pure Kotlin,
- * so it matches what `java.util.zip` produces on Android.
+ * by hand below. The CRC32 is the standard IEEE polynomial, computed in pure Kotlin by
+ * [AimiCrc32], so it matches what `java.util.zip` produces on Android.
  *
  * The output is a complete, self-contained gzip member. Concatenated members form a
  * valid multi-member gzip stream, which is exactly how `AimiArchive` on Android lays
@@ -46,7 +47,7 @@ internal object IosGzip {
         val out = ByteArray(GZIP_HEADER.size + deflate.size + TRAILER_SIZE)
         GZIP_HEADER.copyInto(out, 0)
         deflate.copyInto(out, GZIP_HEADER.size)
-        putIntLe(out, GZIP_HEADER.size + deflate.size, crc32(data))
+        putIntLe(out, GZIP_HEADER.size + deflate.size, AimiCrc32.of(data))
         putIntLe(out, GZIP_HEADER.size + deflate.size + 4, data.size)
         return out
     }
@@ -62,15 +63,6 @@ internal object IosGzip {
             ?.toByteArray() ?: return null
         if (deflate.isEmpty()) return null
         return deflate
-    }
-
-    /** IEEE CRC32. Same result as `java.util.zip.CRC32` on the same bytes. */
-    private fun crc32(data: ByteArray): Int {
-        var crc = CRC32_INIT
-        for (b in data) {
-            crc = CRC32_TABLE[(crc xor b.toInt()) and 0xFF] xor (crc ushr 8)
-        }
-        return crc xor CRC32_INIT
     }
 
     private fun putIntLe(out: ByteArray, at: Int, value: Int) {
@@ -95,14 +87,4 @@ internal object IosGzip {
     )
 
     private const val TRAILER_SIZE = 8 // CRC32 + ISIZE
-
-    private const val CRC32_INIT = 0xFFFFFFFF.toInt()
-
-    private val CRC32_TABLE: IntArray = IntArray(256) { i ->
-        var c = i
-        repeat(8) {
-            c = if (c and 1 != 0) 0xEDB88320.toInt() xor (c ushr 1) else c ushr 1
-        }
-        c
-    }
 }

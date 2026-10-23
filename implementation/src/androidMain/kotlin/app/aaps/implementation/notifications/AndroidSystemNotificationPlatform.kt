@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.BitmapFactory
 import android.os.Build
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
@@ -24,6 +25,8 @@ import app.aaps.core.interfaces.ui.IconsProvider
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.implementation.R
+import app.aaps.implementation.androidNotification.AlarmChannelPolicy
+import app.aaps.implementation.androidNotification.AlarmChannelPolicy.InternalAlarmChannel
 import app.aaps.implementation.androidNotification.AlarmNotificationManager
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
@@ -58,6 +61,14 @@ class AndroidSystemNotificationPlatform(
 
     private var dismissCallback: ((Int) -> Unit)? = null
 
+    /**
+     * When the sound channel of an alarm started its clip ([SystemClock.elapsedRealtime]), by
+     * instanceKey. [setAudibleAlarm] passes it to the player, which then starts only after the clip,
+     * so the two never play together. Only alarms posted with [InternalAlarmChannel.BYPASS_SOUND] are
+     * here.
+     */
+    private val channelClipStartedAt = mutableMapOf<Int, Long>()
+
     /** Guards the one-off channel + receiver setup done by [ensureStarted]. */
     private var started = false
 
@@ -74,9 +85,11 @@ class AndroidSystemNotificationPlatform(
     /**
      * Three outcomes, and the whole reason this method takes the notification rather than a few
      * chosen fields:
-     * 1. an URGENT notification **carrying a sound** is posted **silently**, because the ramping
-     *    audio belongs to [AlarmSoundPlayer] through [setAudibleAlarm]. Posting it normally would
-     *    alert the user twice for one alarm.
+     * 1. an URGENT notification **carrying a sound** is an alarm. With
+     *    [BooleanKey.AlertOverrideDoNotDisturb] off it is posted **silently**, because the ramping
+     *    audio belongs to [AlarmSoundPlayer] through [setAudibleAlarm]. With the override on it goes
+     *    on a channel that rings through Do Not Disturb, and [AlarmChannelPolicy.forInternalAlarm]
+     *    decides whether that channel or the player makes the sound - never both at once.
      * 2. anything else is shown only when the user asked for it with
      *    [BooleanKey.AlertUrgentAsAndroidNotification] **and** it carries no actions - a notification
      *    with actions is answered in the app, not from the tray.
@@ -84,19 +97,56 @@ class AndroidSystemNotificationPlatform(
      */
     override fun show(notification: AapsNotification, title: String) {
         ensureStarted()
-        if (notification.level == NotificationLevel.URGENT && notification.sound != null) {
-            alarmNotificationManager().postSilentAlarmNotification(
-                notificationKey = notification.instanceKey,
-                title = title,
-                body = notification.text,
-                urgent = true
-            )
+        val sound = notification.sound
+        if (notification.level == NotificationLevel.URGENT && sound != null) {
+            showAlarm(notification, title, sound)
         } else if (preferences.get(BooleanKey.AlertUrgentAsAndroidNotification) && notification.actions.isEmpty()) {
             raiseSystemNotification(notification, title)
         }
     }
 
+    private fun showAlarm(notification: AapsNotification, title: String, sound: AlarmSound) {
+        val key = notification.instanceKey
+        val manager = alarmNotificationManager()
+        val overrideDnd = preferences.get(BooleanKey.AlertOverrideDoNotDisturb)
+        val channel = if (!overrideDnd) InternalAlarmChannel.SILENT
+        else AlarmChannelPolicy.forInternalAlarm(
+            overrideDnd = true,
+            playerOwnsSound = manager.playerOwnsSound(AlarmAudioPolicy.categoryOf(notification.id)),
+            dndBlocksAlarms = manager.dndBlocksAlarms(),
+            // Any alarm, not only this one: the newest alarm takes the player over at once, so a clip
+            // for it would play over the loop of the alarm before.
+            playerAlreadySounding = soundingKey != null && alarmSoundPlayer().isAudibleFor(AlarmSoundPlayer.OWNER_INTERNAL)
+        )
+        when (channel) {
+            InternalAlarmChannel.SILENT         -> {
+                channelClipStartedAt.remove(key)
+                manager.postSilentAlarmNotification(
+                    notificationKey = key, title = title, body = notification.text, urgent = true,
+                    alarmAction = notification.id.alarmAction
+                )
+            }
+
+            InternalAlarmChannel.BYPASS_VIBRATE -> {
+                channelClipStartedAt.remove(key)
+                manager.postSoundAlarmNotification(
+                    notificationKey = key, title = title, body = notification.text, sound = sound,
+                    alarmAction = notification.id.alarmAction, rampMode = true
+                )
+            }
+
+            InternalAlarmChannel.BYPASS_SOUND   -> {
+                channelClipStartedAt[key] = SystemClock.elapsedRealtime()
+                manager.postSoundAlarmNotification(
+                    notificationKey = key, title = title, body = notification.text, sound = sound,
+                    alarmAction = notification.id.alarmAction, rampMode = false
+                )
+            }
+        }
+    }
+
     override fun cancel(instanceKey: Int) {
+        channelClipStartedAt.remove(instanceKey)
         // Harmless when this key never carried a sound - the alarm manager only tracks the ones it posted.
         alarmNotificationManager().cancelSoundAlarm(instanceKey)
         notificationManager.cancel(instanceKey)
@@ -109,6 +159,7 @@ class AndroidSystemNotificationPlatform(
      * same set `NotificationManagerImpl` cleared on that path.
      */
     override fun cancelAll() {
+        channelClipStartedAt.clear()
         alarmNotificationManager().cancelAlarm()
     }
 
@@ -127,7 +178,8 @@ class AndroidSystemNotificationPlatform(
         // Called again with the same key means "keep playing" - restarting would reset the ramp.
         if (instanceKey != soundingKey) {
             soundingKey = instanceKey
-            alarmSoundPlayer().play(sound, AlarmSoundPlayer.OWNER_INTERNAL, category = category)
+            // When the channel plays a clip for this alarm, the player starts after it (0 = at once).
+            alarmSoundPlayer().play(sound, AlarmSoundPlayer.OWNER_INTERNAL, channelClipStartedAt[instanceKey] ?: 0L, category)
         }
     }
 

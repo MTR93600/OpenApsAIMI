@@ -25,4 +25,15 @@ class GlucoseValueExtensionTest : TestBase() {
         assertThat(json.getDouble("mgdl")).isEqualTo(120.0)
         assertThat(json.getString("direction")).isEqualTo(TrendArrow.FLAT.text)
     }
+
+    /** The receiver must get the value the phone shows, not the plain sensor value. */
+    @Test
+    fun toXdripJson_sendsTheCorrectedValue() {
+        val gv = GV(
+            id = 1L, timestamp = 1000L, value = 120.0, isValid = true, utcOffset = 0,
+            raw = 120000.0, trendArrow = TrendArrow.FLAT, noise = 1.0,
+            sourceSensor = SourceSensor.DEXCOM_G6, ids = IDs()
+        )
+        assertThat(gv.toXdripJson(sgvOverride = 112.0).getDouble("mgdl")).isEqualTo(112.0)
+    }
 }

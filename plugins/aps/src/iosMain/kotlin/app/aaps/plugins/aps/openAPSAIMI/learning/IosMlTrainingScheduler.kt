@@ -3,8 +3,12 @@ package app.aaps.plugins.aps.openAPSAIMI.learning
 import app.aaps.plugins.aps.openAPSAIMI.background.BackgroundTaskSubmit
 import app.aaps.plugins.aps.openAPSAIMI.background.reportBackgroundTaskSubmit
 import app.aaps.plugins.aps.openAPSAIMI.background.submitToBackgroundTaskScheduler
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDataBackfiller
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveNeuralTrainer
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -43,6 +47,16 @@ import platform.Foundation.dateWithTimeIntervalSinceNow
  *
  * Call [configure] once at app launch, then [register] (before the app finishes launching),
  * then [schedule] to enqueue the next run. Each completed run re-schedules automatically.
+ *
+ * ### Autodrive attention gate
+ *
+ * Android runs two more jobs in `AimiMlTrainingScheduler`: the Autodrive label backfill every 6 hours
+ * and the attention gate training every 24 hours. They never ran on iOS, so the attention gate kept
+ * its untrained weights there. They now run inside this same task, when their time is due (see
+ * [runAutodriveJobsIfDue]), so no second task identifier is needed in Info.plist. The times are kept
+ * in memory only: after the app was killed, the first run does both jobs once, which costs one pass
+ * over the dataset and changes nothing else (the trainer refuses to train below 2880 labelled rows,
+ * exactly as on Android).
  */
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 object IosMlTrainingScheduler {
@@ -120,6 +134,7 @@ object IosMlTrainingScheduler {
                     scope.launch {
                         try {
                             coordinator.runScheduledTraining()
+                            runAutodriveJobsIfDue(aimiWallClockMs())
                             processingTask.setTaskCompletedWithSuccess(true)
                         } catch (e: Exception) {
                             processingTask.setTaskCompletedWithSuccess(false)
@@ -167,6 +182,63 @@ object IosMlTrainingScheduler {
     fun cancel() {
         BGTaskScheduler.sharedScheduler.cancelTaskRequestWithIdentifier(TASK_IDENTIFIER)
     }
+
+    @Volatile
+    private var lastBackfillMs: Long? = null
+
+    @Volatile
+    private var lastAttentionTrainingMs: Long? = null
+
+    /**
+     * Runs the Autodrive label backfill and the attention gate training when their time is due, the
+     * same jobs and the same cadence as Android's `AutodriveBackfillWorker` (6 h) and
+     * `AutodriveNeuralTrainerWorker` (24 h). Both classes register their `instance` when the graph
+     * builds them; `IosAimiTrainingScheduler` injects them so that this happens. A missing instance
+     * skips the job and it is tried again on the next run, as Android's `Result.retry()` does.
+     * A failure in one job is logged and does not stop the other.
+     */
+    internal suspend fun runAutodriveJobsIfDue(nowMs: Long) {
+        val backfiller = AutodriveDataBackfiller.instance
+        if (backfiller != null && isDue(lastBackfillMs, nowMs, BACKFILL_INTERVAL_MS)) {
+            try {
+                backfiller.processPendingLines()
+                lastBackfillMs = nowMs
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                logger("Autodrive backfill failed: ${e.message}")
+            }
+        }
+        val trainer = AutodriveNeuralTrainer.instance
+        if (backfiller != null && trainer != null && isDue(lastAttentionTrainingMs, nowMs, ATTENTION_INTERVAL_MS)) {
+            try {
+                // Same gate as Android: no training before 10 days of labelled rows.
+                if (!backfiller.isDatasetReadyForTraining(MIN_LABELLED_ROWS) || trainer.trainAttentionWeights()) {
+                    lastAttentionTrainingMs = nowMs
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                logger("Autodrive attention training failed: ${e.message}")
+            }
+        }
+    }
+
+    /** True when a job never ran, ran [intervalMs] ago or more, or the clock moved back. */
+    internal fun isDue(lastMs: Long?, nowMs: Long, intervalMs: Long): Boolean {
+        if (lastMs == null) return true
+        val elapsed = nowMs - lastMs
+        return elapsed < 0 || elapsed >= intervalMs
+    }
+
+    /** Android `AutodriveBackfillWorker` cadence. */
+    internal const val BACKFILL_INTERVAL_MS = 6L * 60L * 60L * 1000L
+
+    /** Android `AutodriveNeuralTrainerWorker` cadence. */
+    internal const val ATTENTION_INTERVAL_MS = 24L * 60L * 60L * 1000L
+
+    /** The volume gate `AutodriveNeuralTrainerWorker` uses. */
+    private const val MIN_LABELLED_ROWS = 2880
 
     /**
      * Runs one training pass through the commonMain pipeline.

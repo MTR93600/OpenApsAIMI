@@ -1,11 +1,13 @@
 package app.aaps.workflow
 
+import app.aaps.core.data.iob.InMemoryGlucoseValue
 import app.aaps.core.data.model.CA
 import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.aps.AutosensData
 import app.aaps.core.interfaces.aps.AutosensDataStore
 import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.Sensitivity
+import app.aaps.core.interfaces.calibration.Calibration
 import app.aaps.core.interfaces.concurrent.AapsLock
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.iob.IobCobCalculator
@@ -17,6 +19,9 @@ import app.aaps.core.interfaces.overview.graph.TimeRange
 import app.aaps.core.interfaces.profiling.Profiler
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventBucketedDataCreated
+import app.aaps.core.interfaces.smoothing.Smoothing
+import app.aaps.core.interfaces.source.BgSource
+import app.aaps.core.interfaces.source.NSClientSource
 import app.aaps.core.interfaces.workflow.CalculationSignalsEmitter
 import app.aaps.core.interfaces.workflow.CalculationWorkflow.ProgressData
 import app.aaps.core.objects.workflow.WorkOutcome
@@ -51,6 +56,8 @@ class PrepareGraphDataRunnerTest : TestBaseWithProfile() {
     @Mock lateinit var cache: OverviewDataCache
     @Mock lateinit var overviewData: OverviewData
     @Mock lateinit var signals: CalculationSignalsEmitter
+    @Mock lateinit var activeCalibration: Calibration
+    @Mock lateinit var activeSmoothing: Smoothing
 
     private val autosensDataProvider = { mock<AutosensData>() }
 
@@ -212,5 +219,61 @@ class PrepareGraphDataRunnerTest : TestBaseWithProfile() {
         verify(dataIobCob, never()).clearCache()
         // Terminal-only progress not emitted when emitFinalProgress = false
         verify(signals, never()).emitProgress(eq(ProgressData.DRAW_FINAL), any())
+    }
+
+    // ----- never correct twice: glucose that is already corrected is not calibrated again here -----
+
+    /** Makes the smoothing step run on one real reading, with [source] as the active BG source. */
+    private suspend fun stubSmoothingCalls(source: BgSource) {
+        val data = mutableListOf(InMemoryGlucoseValue(timestamp = 1000L, value = 100.0))
+        whenever(dataAds.bucketedData).thenReturn(data)
+        whenever(dataIobCob.calculateIobFromBolus()).thenReturn(IobTotal(0L))
+        whenever(dataIobCob.calculateIobFromTempBasalsIncludingConvertedExtended()).thenReturn(IobTotal(0L))
+        whenever(activePlugin.activeBgSource).thenReturn(source)
+        whenever(activePlugin.activeCalibration).thenReturn(activeCalibration)
+        whenever(activeCalibration.calibrate(any(), any())).thenAnswer { it.getArgument(0) }
+        whenever(activePlugin.activeSmoothing).thenReturn(activeSmoothing)
+        whenever(activeSmoothing.smooth(any(), any())).thenAnswer { it.getArgument(0) }
+    }
+
+    private fun source(calibratesInSensor: Boolean): BgSource = mock<BgSource>().also {
+        whenever(it.calibratesInSensor()).thenReturn(calibratesInSensor)
+    }
+
+    @Test
+    fun `no calibration in the app when the source calibrates in the sensor`() = runTest {
+        stubSuspendCalls()
+        stubSmoothingCalls(source(calibratesInSensor = true))
+        whenever(workflowChainData.prepareFor(anyOrNull(), any())).thenReturn(buildData(bgDataReload = true, emitFinalProgress = false))
+
+        assertIs<WorkOutcome.Success>(run())
+
+        verify(activeCalibration, never()).calibrate(any(), any())
+        // Smoothing is a local filter, so it still runs.
+        verify(activeSmoothing).smooth(any(), any())
+    }
+
+    /** The master already sends the corrected value to Nightscout; a follower must not correct it again. */
+    @Test
+    fun `no calibration in the app when the glucose comes from Nightscout`() = runTest {
+        stubSuspendCalls()
+        stubSmoothingCalls(mock<BgSource>(extraInterfaces = arrayOf(NSClientSource::class)))
+        whenever(workflowChainData.prepareFor(anyOrNull(), any())).thenReturn(buildData(bgDataReload = true, emitFinalProgress = false))
+
+        assertIs<WorkOutcome.Success>(run())
+
+        verify(activeCalibration, never()).calibrate(any(), any())
+        verify(activeSmoothing).smooth(any(), any())
+    }
+
+    @Test
+    fun `calibration runs in the app for a normal source`() = runTest {
+        stubSuspendCalls()
+        stubSmoothingCalls(source(calibratesInSensor = false))
+        whenever(workflowChainData.prepareFor(anyOrNull(), any())).thenReturn(buildData(bgDataReload = true, emitFinalProgress = false))
+
+        assertIs<WorkOutcome.Success>(run())
+
+        verify(activeCalibration).calibrate(any(), any())
     }
 }

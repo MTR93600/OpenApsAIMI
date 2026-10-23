@@ -12,6 +12,9 @@ import app.aaps.core.keys.interfaces.LongNonPreferenceKey
  *
  * They were missed by the 2026-09-22 sweep that made pump identity and the sync cursors
  * non-exportable; same category, found later by review.
+ *
+ * The glucose alarm keys (low, high, rapid fall) are the same kind of deadline: they hold back a
+ * repeat of the same alarm, and 0 means "may fire now".
  */
 enum class LocalAlertLongKey(
     override val key: String,
@@ -20,5 +23,8 @@ enum class LocalAlertLongKey(
 ) : LongNonPreferenceKey {
 
     NextPumpDisconnectedAlarm("nextPumpDisconnectedAlarm", 0L),
-    NextMissedReadingsAlarm("nextMissedReadingsAlarm", 0L)
+    NextMissedReadingsAlarm("nextMissedReadingsAlarm", 0L),
+    NextHypoAlarm("nextHypoAlarm", 0L),
+    NextHyperAlarm("nextHyperAlarm", 0L),
+    NextRapidFallAlarm("nextRapidFallAlarm", 0L)
 }

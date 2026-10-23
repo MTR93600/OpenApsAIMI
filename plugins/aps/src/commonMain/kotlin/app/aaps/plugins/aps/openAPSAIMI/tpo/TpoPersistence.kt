@@ -25,6 +25,9 @@ internal class TpoPersistence(
         prettyPrintIndent = "  "
     }
 
+    /** True when a session file exists, readable or not. [loadSession] returns null for both cases. */
+    fun hasSessionFile(): Boolean = storage.exists(sessionFile())
+
     fun loadSession(): TpoSessionDocument? {
         val path = sessionFile()
         if (!storage.exists(path)) return null

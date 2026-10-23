@@ -1,10 +1,52 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
 import app.aaps.plugins.aps.openAPSAIMI.quality.IobSurveillanceExport
+import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionBasalCap
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiJson
 import app.aaps.plugins.aps.openAPSAIMI.utils.JsonArr
 import app.aaps.plugins.aps.openAPSAIMI.utils.JsonObj
 import kotlinx.serialization.json.JsonObject
+
+/**
+ * One reading of `CorrectionAggressionBasalCap.mergeEngineAndRtRates`, for the export only.
+ *
+ * The merge keeps the smaller of the basal engine's own rate and `rT.rate` when the tier forbids rocket
+ * scaling, and the larger otherwise. Every 0.0 the engine returns is a safety decision, so on the `max`
+ * side a boost on `rT.rate` can win over one. This record carries the two inputs, which side of the
+ * merge ran, and which input the merged rate came from. It is never read back into a decision.
+ */
+internal data class AimiBasalMergeRecord(
+    val engineRateUph: Double,
+    val rtRateUph: Double?,
+    val mergeMode: String,
+    val mergeWinner: String,
+)
+
+/**
+ * Copies the two passive basal records of a tick into the exported baseline state.
+ *
+ * A `null` record leaves its fields alone. Both records live on the tick scratch, which is new for
+ * every tick, so a tick that did not reach the meal-absorption boost branch, or did not reach the
+ * merge, exports nothing for it instead of repeating the previous tick's numbers.
+ */
+internal fun AimiDecisionContext.BaselineState.applyBasalShadowRecords(
+    mealBoost: CorrectionAggressionBasalCap.MealBoostCapRecord?,
+    merge: AimiBasalMergeRecord?,
+) {
+    mealBoost?.let { record ->
+        meal_boost_requested_uph = record.requestedUph
+        meal_boost_cap_tier = record.tier?.name
+        meal_boost_cap_max_uph = record.maxAllowedUph
+        meal_boost_capped_uph = record.cappedUph
+        meal_boost_cap_would_bind = record.wouldBind
+    }
+    merge?.let { record ->
+        engine_rate_uph = record.engineRateUph
+        rt_rate_uph = record.rtRateUph
+        merge_mode = record.mergeMode
+        merge_winner = record.mergeWinner
+    }
+}
 
 internal data class AimiDecisionContext(
     val event_id: String,
@@ -47,9 +89,9 @@ internal data class AimiDecisionContext(
         val isf_source: String? = null,
         /** Age (ms) of the cached dynamic entry that was used, when one was used. */
         val isf_age_ms: Long? = null,
-        /** Key of the cached entry used. Distinguishes two entries sharing a 30-minute bucket. */
+        /** Key of the cached entry used: its exact write time (ms). */
         val isf_cache_key: Long? = null,
-        /** Glucose the cached value was computed for (the key's within-bucket remainder). */
+        /** Glucose the cached value was computed for, when known. */
         val isf_cache_glucose_mgdl: Long? = null,
         /**
          * Sensitivity the **outcomes** imply, in mg/dL per U, measured as `-dBG / insulin absorbed`
@@ -95,23 +137,50 @@ internal data class AimiDecisionContext(
         var isf_cache_size: Int? = null,
         /** Whether effort-based SMB was armed this tick (telemetry). */
         var effort_smb_armed: Boolean? = null,
-        /** Requested meal boost rate in U/h (telemetry). */
+        /**
+         * Where the meal-absorption basal boost stands against the correction-aggression tier ceiling, at
+         * the moment the branch asks for it. Written on every tick where that branch produced a rate,
+         * `null` otherwise. Filled by [applyBasalShadowRecords].
+         *
+         * **Measurement only. These five fields say nothing about the delivered rate.** Nothing applies
+         * the ceiling here, and nothing needs to: the merged rate meets the same ceiling, with the same
+         * gate, at `FINAL_BASAL_MERGE`. The branch rate can also be dropped before it gets there - the
+         * `min` merge can pick the engine rate, T3C or Harmonia can replace the whole plan, an LGS halt
+         * can zero it, and early returns skip the merge. So a bound ceiling here is not a dose that was
+         * cut; it is one branch asking above its tier.
+         *
+         * The base is `profile.current_basal`, the same one `FINAL_BASAL_MERGE` uses, so the two ceilings
+         * are the same number.
+         */
         var meal_boost_requested_uph: Double? = null,
-        /** Meal boost cap tier name (telemetry). */
+        /** Correction-aggression tier of the tick: `FULL`, `MODERATE` or `REBOUND_GUARD`. */
         var meal_boost_cap_tier: String? = null,
-        /** Maximum allowed meal boost rate in U/h (telemetry). */
+        /**
+         * Tier ceiling in U/h. `null` whenever no ceiling was computed: the tier waives it
+         * (`allowRocketBasalScale`), there is no gate decision yet, or the requested rate is zero,
+         * negative or not finite.
+         */
         var meal_boost_cap_max_uph: Double? = null,
-        /** Requested rate after the tier ceiling, never above requested (telemetry). */
+        /** The requested rate after the tier ceiling. Never above `meal_boost_requested_uph`. */
         var meal_boost_capped_uph: Double? = null,
-        /** Whether the meal boost cap would bind (telemetry). */
+        /**
+         * True when the tier ceiling is below the rate this branch asked for. It does **not** mean a
+         * dose was or would be changed.
+         */
         var meal_boost_cap_would_bind: Boolean? = null,
-        /** Engine rate in U/h (telemetry). */
+        /**
+         * The engine / rT basal merge, as `CorrectionAggressionBasalCap.mergeEngineAndRtRates` saw it.
+         *
+         * Strictly passive, no key, no behaviour attached. The merge takes the smaller of the two rates
+         * when the tier forbids rocket scaling and the larger otherwise, so a rate the basal engine set
+         * to 0.0 for a hypo reason can lose to a boost. These four fields make that countable.
+         */
         var engine_rate_uph: Double? = null,
-        /** RT rate in U/h (telemetry). */
+        /** `rT.rate` at the merge, `null` when nothing earlier in the tick wrote it. */
         var rt_rate_uph: Double? = null,
-        /** Merge mode (telemetry). */
+        /** `min` or `max`: which side of the merge ran. */
         var merge_mode: String? = null,
-        /** Merge winner (telemetry). */
+        /** `engine`, `rt`, `equal` or `unknown`: which input the merged rate came from. */
         var merge_winner: String? = null,
         /**
          * Shadow late fat damping window: the late part of an absorption episode while a large
@@ -638,13 +707,16 @@ internal data class AimiDecisionContext(
             base.put("isf_obs_last_window_drop_mgdl", baseline_state.isf_obs_last_window_drop_mgdl ?: AimiJson.NULL)
             base.put("isf_obs_last_window_absorbed_u", baseline_state.isf_obs_last_window_absorbed_u ?: AimiJson.NULL)
             base.put("effort_smb_armed", baseline_state.effort_smb_armed ?: AimiJson.NULL)
-            base.put("meal_boost_requested_uph", baseline_state.meal_boost_requested_uph ?: AimiJson.NULL)
+            // A non-finite Double would throw and replace the whole tick record with the error string of
+            // the catch below. engine_rate_uph is the raw basal engine output, taken before setTempBasal
+            // hardens non-finite rates, so it can really arrive non-finite. Write JSON null instead.
+            base.putFiniteOrNull("meal_boost_requested_uph", baseline_state.meal_boost_requested_uph)
             base.put("meal_boost_cap_tier", baseline_state.meal_boost_cap_tier ?: AimiJson.NULL)
-            base.put("meal_boost_cap_max_uph", baseline_state.meal_boost_cap_max_uph ?: AimiJson.NULL)
-            base.put("meal_boost_capped_uph", baseline_state.meal_boost_capped_uph ?: AimiJson.NULL)
+            base.putFiniteOrNull("meal_boost_cap_max_uph", baseline_state.meal_boost_cap_max_uph)
+            base.putFiniteOrNull("meal_boost_capped_uph", baseline_state.meal_boost_capped_uph)
             base.put("meal_boost_cap_would_bind", baseline_state.meal_boost_cap_would_bind ?: AimiJson.NULL)
-            base.put("engine_rate_uph", baseline_state.engine_rate_uph ?: AimiJson.NULL)
-            base.put("rt_rate_uph", baseline_state.rt_rate_uph ?: AimiJson.NULL)
+            base.putFiniteOrNull("engine_rate_uph", baseline_state.engine_rate_uph)
+            base.putFiniteOrNull("rt_rate_uph", baseline_state.rt_rate_uph)
             base.put("merge_mode", baseline_state.merge_mode ?: AimiJson.NULL)
             base.put("merge_winner", baseline_state.merge_winner ?: AimiJson.NULL)
             base.put("late_fat_damping_window", baseline_state.late_fat_damping_window ?: AimiJson.NULL)

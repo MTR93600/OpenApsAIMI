@@ -32,13 +32,17 @@ class AlarmAudioPolicyTest {
         assertTrue(AlarmAudioPolicy.playerOwnsSound(increaseVolume = true, customMelody = false, overrideDnd = false, dndBlocksAlarms = true))
     }
 
-    /**
-     * The low-glucose alarms of `dev_OAPSAIMI` (`BG_HYPO`, `BG_RAPID_FALL`) are not on this branch yet,
-     * so today every alarm uses the "other urgent alarms" choice - the predicted hypo alarm too, as on
-     * `dev_OAPSAIMI`.
-     */
+    /** The low glucose and rapid fall alarms use the low-glucose sound choice. */
     @Test
-    fun alarmsOnThisBranchUseTheOtherAlarmsSoundChoice() {
+    fun lowAndFallingGlucoseAlarmsUseTheLowGlucoseSoundChoice() {
+        assertEquals(AlarmSoundCategory.LOW_GLUCOSE, AlarmAudioPolicy.categoryOf(NotificationId.BG_HYPO))
+        assertEquals(AlarmSoundCategory.LOW_GLUCOSE, AlarmAudioPolicy.categoryOf(NotificationId.BG_RAPID_FALL))
+    }
+
+    /** Every other alarm uses the "other urgent alarms" choice - the predicted hypo alarm too, as on `dev_OAPSAIMI`. */
+    @Test
+    fun otherAlarmsUseTheOtherAlarmsSoundChoice() {
+        assertEquals(AlarmSoundCategory.OTHER, AlarmAudioPolicy.categoryOf(NotificationId.BG_HYPER))
         assertEquals(AlarmSoundCategory.OTHER, AlarmAudioPolicy.categoryOf(NotificationId.PUMP_UNREACHABLE))
         assertEquals(AlarmSoundCategory.OTHER, AlarmAudioPolicy.categoryOf(NotificationId.HYPO_RISK_ALARM))
     }

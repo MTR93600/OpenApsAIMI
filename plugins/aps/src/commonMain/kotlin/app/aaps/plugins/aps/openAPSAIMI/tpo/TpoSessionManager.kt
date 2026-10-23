@@ -8,7 +8,6 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningChange
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningStepTier
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
-import kotlin.math.abs
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
@@ -302,9 +301,5 @@ internal class TpoSessionManager(
     }
 
     private fun valuesDiffer(current: Any, overlayValue: Any): Boolean =
-        when {
-            current is Double && overlayValue is Double -> abs(current - overlayValue) >= 0.0001
-            current is Boolean && overlayValue is Boolean -> current != overlayValue
-            else -> current.toString() != overlayValue.toString()
-        }
+        !TpoRevertPolicy.sameValue(current, overlayValue)
 }

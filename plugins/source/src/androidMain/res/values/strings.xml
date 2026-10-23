@@ -117,7 +117,7 @@
     <string name="dexcom_oneplus_repair_missing_sensor_change">Repair a missing sensor change (engineering)</string>
     <string name="dexcom_oneplus_repair_missing_sensor_change_summary">Off by default. When on, and when "Create sensor change" is on, a missing SENSOR_CHANGE for the running ONE+ session is written once. It does not replace an event you deleted after that write.</string>
     <string name="dexcom_oneplus_anchor_session_to_manual_sensor_change">Anchor the session to a manual sensor change (engineering)</string>
-    <string name="dexcom_oneplus_anchor_session_to_manual_sensor_change_summary">Off by default. When off, a new ONE+ session keeps the time of the start or of the first reading, and a sensor change logged earlier is not used to move that time back. When on, a sensor change from the last 24 hours that is earlier than that automatic time becomes the session start.</string>
+    <string name="dexcom_oneplus_anchor_session_to_manual_sensor_change_summary">On by default. When off, a new ONE+ session keeps the time of the start or of the first reading, and a sensor change logged earlier is not used to move that time back. When on, a sensor change from the last 24 hours that is earlier than that automatic time becomes the session start.</string>
     <string name="dexcom_oneplus_correct_sensor_start">Correct the insertion date (engineering)</string>
     <string name="dexcom_oneplus_correct_sensor_start_summary">Off by default. When on, the Status screen can move the insertion time of this sensor. That invalidates SENSOR_CHANGE events in the window. It does not delete calibration entries.</string>
     <string name="dexcom_oneplus_correct_insertion_date">Correct insertion date</string>

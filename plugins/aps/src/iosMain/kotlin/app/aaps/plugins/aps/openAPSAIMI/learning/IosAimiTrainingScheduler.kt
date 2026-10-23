@@ -2,6 +2,8 @@ package app.aaps.plugins.aps.openAPSAIMI.learning
 
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveDataBackfiller
+import app.aaps.plugins.aps.openAPSAIMI.autodrive.learning.AutodriveNeuralTrainer
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiTrainingScheduler
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
@@ -24,6 +26,10 @@ import dev.zacsweers.metro.SingleIn
 @SingleIn(AppScope::class)
 class IosAimiTrainingScheduler @Inject constructor(
     private val aapsLogger: AAPSLogger,
+    // Injected so their `instance` companions exist before the training task looks them up, as in
+    // Android's `AimiMlTrainingScheduler`. Without this the attention trainer is never built.
+    @Suppress("unused") private val autodriveNeuralTrainer: AutodriveNeuralTrainer,
+    @Suppress("unused") private val autodriveDataBackfiller: AutodriveDataBackfiller,
 ) : AimiTrainingScheduler {
 
     override fun schedule() {

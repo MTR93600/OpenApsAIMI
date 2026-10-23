@@ -23,13 +23,11 @@ object AlarmAudioPolicy {
     const val MIN_ALARM_VOLUME_FRACTION = 0.5
 
     /**
-     * Alarms that use the low-glucose sound choice.
-     *
-     * On `dev_OAPSAIMI` these are `BG_HYPO` and `BG_RAPID_FALL`, from the glucose value and rate
-     * alarms. Those alarms are not on this branch yet, so the set is empty and every alarm uses the
-     * "other urgent alarms" choice. Add the two ids here when the glucose alarms are ported.
+     * Alarms that use the low-glucose sound choice: the low glucose alarm and the rapid fall alarm,
+     * both from the glucose alarms the user sets up. The high glucose alarm and the predicted hypo
+     * alarm (`HYPO_RISK_ALARM`) use the "other urgent alarms" choice, as on `dev_OAPSAIMI`.
      */
-    private val LOW_GLUCOSE_ALARMS: Set<NotificationId> = emptySet()
+    private val LOW_GLUCOSE_ALARMS: Set<NotificationId> = setOf(NotificationId.BG_HYPO, NotificationId.BG_RAPID_FALL)
 
     /** The alarm stream volume to set for the alarm, `null` when the current one is loud enough. */
     fun raisedAlarmVolume(current: Int, max: Int): Int? {

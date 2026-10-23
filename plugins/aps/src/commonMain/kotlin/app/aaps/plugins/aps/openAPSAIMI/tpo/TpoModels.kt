@@ -7,7 +7,6 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.doubleOrNull
-import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import app.aaps.core.data.json.OrgJsonCompat.hasCompat
 import app.aaps.core.data.json.OrgJsonCompat.optDoubleCompat
@@ -173,6 +172,20 @@ data class TpoSessionDocument(
                 }
             }
 
+        /**
+         * Read a `baseline` / `overlay` map back, with every number as a `Double`.
+         *
+         * JSON does not know that 1.0 is a preference value and not a count: a whole number can be
+         * written **without a decimal point**, and `1` is then read back as an `Int`. The revert path
+         * compared that `Int` with the live preference (always a `Double`) and gave it to a writer
+         * that only accepts a `Double` - so a user value that was a whole number was silently never
+         * put back, and the session's own value stayed for good.
+         * Field report 2026-09-18: `max_smb` 1.0 stuck at 0.80, `high_bg_max_smb` 2.0 stuck at 1.25.
+         *
+         * Normalising here fixes the write-back, the restore gate, the user-owned tracking and the
+         * overlay application in one place. Safe because `TpoPreferenceKeys` allows only `Double`
+         * and `Boolean` keys - there is no number in these maps that is not a preference.
+         */
         private fun jsonToMap(json: JsonObject?): Map<String, Any> {
             if (json == null) return emptyMap()
             val out = linkedMapOf<String, Any>()
@@ -184,15 +197,6 @@ data class TpoSessionDocument(
                         out[key] = primitive.booleanOrNull!!
                     primitive.isString ->
                         out[key] = primitive.content
-                    primitive.longOrNull != null && '.' !in primitive.content &&
-                        'e' !in primitive.content && 'E' !in primitive.content -> {
-                        val number = primitive.longOrNull!!
-                        out[key] = if (number in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) {
-                            number.toInt()
-                        } else {
-                            number
-                        }
-                    }
                     primitive.doubleOrNull != null ->
                         out[key] = primitive.doubleOrNull!!
                     else ->

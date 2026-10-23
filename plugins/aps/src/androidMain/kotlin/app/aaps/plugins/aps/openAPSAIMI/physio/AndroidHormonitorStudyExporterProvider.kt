@@ -4,6 +4,7 @@ import android.content.Context
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
@@ -34,11 +35,12 @@ import dev.zacsweers.metro.SingleIn
 class AndroidHormonitorStudyExporterProvider @Inject constructor(
     private val context: Context,
     private val aapsLogger: AAPSLogger,
-    private val preferences: Preferences
+    private val preferences: Preferences,
+    private val storage: AimiStorage,
 ) : HormonitorStudyExporterProvider {
 
     private val exporter: HormonitorStudyExporter? by lazy {
-        runCatching { AimiHormonitorStudyExporterMTR(context, aapsLogger, preferences) }
+        runCatching { AimiHormonitorStudyExporterMTR(context, aapsLogger, preferences, storage) }
             .onFailure { aapsLogger.error(LTag.APS, "Hormonitor exporter init failed — telemetry disabled this session", it) }
             .getOrNull()
     }
