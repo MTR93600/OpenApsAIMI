@@ -88,8 +88,8 @@ class AlarmNotificationManager(
          */
         private val OLD_CHANNEL_IDS = listOf("aaps_alarm_fullscreen", "aaps_alarm_fullscreen_silent") +
             listOf("alarm", "boluserror", "error", "urgentalarm").flatMap { listOf("aaps_alarm_${it}_alarm", "aaps_alarm_${it}_notify") } +
-            // The "override DND" sound channels before they carried setBypassDnd(true). The setting of a
-            // channel cannot change after it is created, so they got new ids (see channelIdForSound).
+            // The "override DND" sound channels before they carried setBypassDnd(true). Re-creating them
+            // would not give the bypass to every user, so they got new ids (see channelIdForSound).
             listOf("alarm", "boluserror", "error", "urgentalarm").map { "aaps_alarm_v2_${it}_alarm" }
 
         /**
@@ -183,7 +183,41 @@ class AlarmNotificationManager(
      * missed by a code path that gets an instance some other way.
      * `lazy` is synchronized by default, so two threads posting at once still create them once.
      */
-    private val channels: Unit by lazy { createChannels() }
+    private val channels: Unit by lazy {
+        // Read before creating: if access comes at the same moment, the next post re-creates them.
+        val hasDndAccess = hasDndAccess()
+        createChannels()
+        channelsHaveDndAccess = hasDndAccess
+    }
+
+    /**
+     * Whether the channels were last created while AAPS held Do Not Disturb access.
+     *
+     * Android honours `setBypassDnd(true)` only when the channel is created (or created again) while
+     * the app holds that access. So the channels made before the user granted it ring in Do Not
+     * Disturb only after the next app start. [ensureChannels] creates them again once access is there.
+     * For an existing channel Android then applies the bypass only when the user has not edited the
+     * channel, and keeps sound and vibration as they were.
+     */
+    @Volatile private var channelsHaveDndAccess = false
+
+    private fun hasDndAccess(): Boolean =
+        try {
+            mgr.isNotificationPolicyAccessGranted
+        } catch (_: Exception) {
+            false
+        }
+
+    /** Makes sure the channels exist, and re-creates them once Do Not Disturb access is granted. */
+    @Synchronized
+    private fun ensureChannels() {
+        channels
+        if (!channelsHaveDndAccess && hasDndAccess()) {
+            createChannels()
+            channelsHaveDndAccess = true
+            aapsLogger.debug(LTag.NOTIFICATION, "Alarm channels created again after Do Not Disturb access was granted")
+        }
+    }
 
     private fun createChannels() {
         mgr.createNotificationChannelGroup(NotificationChannelGroup(GROUP_ID, context.getString(R.string.alarm_channel_group)))
@@ -289,9 +323,12 @@ class AlarmNotificationManager(
 
     private fun channelIdForSound(sound: AlarmSound, overrideDnd: Boolean): String {
         val name = SOUND_NAMES[sound] ?: "error"
-        // "alarm_bypass" (was "alarm") is a new id because the setting of a channel cannot change
-        // after it is created, and the override channels needed setBypassDnd(true). The old ids are
-        // in OLD_CHANNEL_IDS and are deleted.
+        // "alarm_bypass" (was "alarm") is a new id because the override channels needed
+        // setBypassDnd(true). When an app creates a channel that already exists, Android applies the
+        // bypass only while the app holds Do Not Disturb access and only when the user has not edited
+        // the channel (ensureChannels relies on that). A user who had edited the old channel would
+        // never get it, so a new id gives the bypass to everyone. The old ids are in OLD_CHANNEL_IDS
+        // and are deleted.
         val suffix = if (overrideDnd) "alarm_bypass" else "notify"
         return "aaps_alarm_v2_${name}_$suffix"
     }
@@ -345,7 +382,7 @@ class AlarmNotificationManager(
     )
 
     fun postFullScreenAlarm(status: String, title: String, sound: AlarmSound?) {
-        channels // created on first post, see the field
+        ensureChannels() // created on first post, see the `channels` field
         // Reached only from the background / off-main branches of UiInteraction.runAlarm.
         //
         // Screen-wake + full-screen ErrorActivity launch no longer rely on USE_FULL_SCREEN_INTENT
@@ -516,7 +553,7 @@ class AlarmNotificationManager(
         urgent: Boolean,
         alarmAction: AlarmAction? = null
     ) {
-        channels // created on first post, see the field
+        ensureChannels() // created on first post, see the `channels` field
         val builder = NotificationCompat.Builder(context, if (urgent) CHANNEL_SILENT_URGENT else CHANNEL_SILENT)
             .setSmallIcon(iconsProvider.getNotificationIcon())
             .setLargeIcon(BitmapFactory.decodeResource(context.resources, iconsProvider.getIcon()))
@@ -573,7 +610,7 @@ class AlarmNotificationManager(
         alarmAction: AlarmAction? = null,
         rampMode: Boolean = false
     ) {
-        channels // created on first post, see the field
+        ensureChannels() // created on first post, see the `channels` field
         val channelId = if (rampMode) CHANNEL_RAMP_BYPASS else channelIdForSound(sound, overrideDnd = true)
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(iconsProvider.getNotificationIcon())

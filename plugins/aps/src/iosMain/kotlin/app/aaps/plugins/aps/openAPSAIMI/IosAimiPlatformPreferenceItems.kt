@@ -22,7 +22,12 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiAdvisorService
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiAdvisorStringsTextResolver
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiSharing
 import app.aaps.plugins.aps.openAPSAIMI.advisor.compose.AimiProfileAdvisorScreen
+import app.aaps.plugins.aps.openAPSAIMI.advisor.compose.AimiSupportPackageScreen
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
+import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiDiagnosticsManager
+import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiSupportPackageExporter
+import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.IosAimiDiagPlatform
+import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.IosAimiSupportZipFactory
 import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.FoodRecognitionService
 import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.ui.AimiMealAdvisorScreen
 import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.ui.IosMealAdvisorCameraCapture
@@ -60,13 +65,17 @@ import dev.zacsweers.metro.SingleIn
  *   engine writes.
  * - `PROFILE_ADVISOR`: the report, history, settings export and advisor screens use shared code.
  *   iOS has no ONNX runtime linked yet, so the OREF risk scores are reported as unavailable.
+ * - `SUPPORT_PACKAGE`: the screen and the package are shared code
+ *   ([AimiSupportPackageExporter]), so the ZIP holds the same entries as on Android. Only the ZIP
+ *   bytes differ: [IosAimiSupportZipFactory] writes STORED (not compressed) entries to the app
+ *   temporary directory, and the iOS share sheet sends it. The mail subject date is formatted like
+ *   Android's `java.util.Date.toString()`.
  * - `PKPD_SETUP`: the screen is shared code. Android also passes a loader for advisor
  *   recommendations, which is built on Android classes (`AimiAdvisorService`). iOS passes none,
  *   and the screen then shows its settings without the recommendations block. The profile insulin
  *   hint is passed, because `ProfileFunction` is shared.
  *
  * Not answered (`null`):
- * - `SUPPORT_PACKAGE`: the screen is shared, but building and sharing the zip is Android code.
  * - `MODE_SETTINGS`: this screen is not yet registered on iOS.
  * - `SOS_PERMISSIONS`, `HEALTH_CONNECT_PERMISSIONS`: Android permission screens. iOS asks for
  *   these permissions in its own system prompts.
@@ -165,6 +174,7 @@ class IosAimiPlatformPreferenceItems @Inject constructor(
                 )
             },
         )
+        AimiPlatformPreferenceSlot.SUPPORT_PACKAGE   -> supportPackage()
         AimiPlatformPreferenceSlot.PKPD_SETUP        -> ApsIntentKey.PkpdSetup.withCompose(
             ComposeScreenContent { onBack ->
                 AimiPkpdSettingsScreen(
@@ -180,7 +190,36 @@ class IosAimiPlatformPreferenceItems @Inject constructor(
         else                                         -> null
     }
 
+    private fun supportPackage(): PreferenceItem =
+        ApsIntentKey.AimiSupportPackage.withCompose(
+            ComposeScreenContent { onBack ->
+                val diagPlatform = remember { IosAimiDiagPlatform() }
+                val exporter = remember {
+                    AimiSupportPackageExporter(
+                        platform = diagPlatform,
+                        preferences = preferences,
+                        logger = aapsLogger,
+                        profileFunction = profileFunction,
+                        textResolver = textResolver,
+                        storage = storage,
+                        sharing = sharing,
+                        zipFactory = IosAimiSupportZipFactory(),
+                        subjectTime = { IosDateFormatter().format(aimiWallClockMs(), JAVA_DATE_TO_STRING) },
+                    )
+                }
+                AimiSupportPackageScreen(
+                    onBack = onBack,
+                    verifyCode = { code -> AimiDiagnosticsManager.verifyCode(code, diagPlatform) },
+                    buildPackage = { issue -> exporter.build(issue) },
+                    sharePackage = { zip, issue -> exporter.share(zip, issue) },
+                )
+            },
+        )
+
     internal companion object {
+
+        /** The pattern of `java.util.Date.toString()`, which Android puts in the mail subject. */
+        private const val JAVA_DATE_TO_STRING = "EEE MMM dd HH:mm:ss zzz yyyy"
 
         /** The slots this class answers. A test pins this, so a new slot is a decision. */
         val ANSWERED: Set<AimiPlatformPreferenceSlot> = setOf(
@@ -189,6 +228,7 @@ class IosAimiPlatformPreferenceItems @Inject constructor(
             AimiPlatformPreferenceSlot.PKPD_SETUP,
             AimiPlatformPreferenceSlot.MEAL_ADVISOR,
             AimiPlatformPreferenceSlot.PROFILE_ADVISOR,
+            AimiPlatformPreferenceSlot.SUPPORT_PACKAGE,
         )
     }
 }

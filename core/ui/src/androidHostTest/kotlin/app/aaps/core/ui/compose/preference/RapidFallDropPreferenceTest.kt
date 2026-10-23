@@ -1,5 +1,6 @@
 package app.aaps.core.ui.compose.preference
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.test.assertIsDisplayed
@@ -10,6 +11,7 @@ import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.UnitType
+import app.aaps.core.keys.interfaces.AppPlatform
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.LocalConfig
 import app.aaps.core.ui.compose.LocalPreferences
@@ -20,6 +22,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
@@ -43,7 +46,8 @@ class RapidFallDropPreferenceTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private val config: AppConfig = mock()
+    // A mocked platform would be null, which no key lists, so the row would not be drawn at all.
+    private val config: AppConfig = mock { on { platform } doReturn AppPlatform.Android }
 
     /** A preferences mock that really keeps the drop value, so a write can be read back. */
     private fun preferencesWithStore(initial: Int): Preferences {
@@ -79,7 +83,8 @@ class RapidFallDropPreferenceTest {
                 LocalConfig provides config,
                 LocalProfileUtil provides profileUtilIn(units)
             ) {
-                PreviewTheme { AdaptiveIntPreferenceItem(intKey = IntKey.AlertRapidFallDrop) }
+                // Not PreviewTheme: it provides its own fake Preferences over these.
+                MaterialTheme { ProvidePreferenceTheme { AdaptiveIntPreferenceItem(intKey = IntKey.AlertRapidFallDrop) } }
             }
         }
         compose.onNodeWithText("20 mg/dL", substring = true).assertIsDisplayed()

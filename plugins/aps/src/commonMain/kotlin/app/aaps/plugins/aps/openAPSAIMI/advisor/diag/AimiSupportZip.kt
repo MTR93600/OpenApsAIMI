@@ -51,6 +51,10 @@ interface AimiSupportZipOutput {
     /** Writes the end of the archive and closes the file. Answers the size of the file in bytes. */
     fun finish(): Long
 
-    /** Closes the file after a failure, without finishing it. Does nothing once the file is closed. */
+    /**
+     * Gives up after a failure: closes the file without finishing it and deletes it, because a
+     * partial package still holds health data. Also works when [finish] itself failed. Does nothing
+     * after a [finish] that worked. Never throws.
+     */
     fun abort()
 }

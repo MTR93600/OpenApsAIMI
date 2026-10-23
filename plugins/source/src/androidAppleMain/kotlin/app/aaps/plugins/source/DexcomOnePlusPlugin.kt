@@ -286,9 +286,11 @@ class DexcomOnePlusPlugin @Inject constructor(
      * A fingerstick goes to the sensor only while the engineering switch is on.
      *
      * See [DexcomOnePlusBooleanKey.SendCalibrationToSensor]. When it is true the app must not also
-     * fit a software line on the same readings. That second gate (the calibration dialog and the
-     * graph worker) is not in this lot; the switch stays off, so [calibrateSensor] returns
-     * [SensorCalibrationResult.NotSupported] and no opcode 0x34 is queued.
+     * fit a software line on the same readings. The graph worker already does this: its
+     * `PrepareGraphDataRunner.smoothData` skips the software calibration while this returns true.
+     * Nothing calls [calibrateSensor] from the calibration dialog yet. While the switch is off (the
+     * default), [calibrateSensor] returns [SensorCalibrationResult.NotSupported] and no opcode 0x34
+     * is queued.
      */
     override fun calibratesInSensor(): Boolean =
         preferences.get(DexcomOnePlusBooleanKey.SendCalibrationToSensor)

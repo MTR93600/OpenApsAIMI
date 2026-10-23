@@ -102,7 +102,7 @@ class NotificationCollectorServiceTest {
         whenever(packageConfig.isSupportedPackage(any())).thenReturn(true)
         whenever(plugin.isEnabled()).thenReturn(true)
         whenever(parser.extractGlucose(any(), any(), any())).thenReturn(NotificationParser.GlucoseResult(100, SourceSensor.DEXCOM_UNKNOWN))
-        whenever(deduplicator.process(any(), any())).thenReturn(true)
+        whenever(deduplicator.process(any(), any(), any())).thenReturn(true)
         runBlocking {
             whenever(persistenceLayer.insertCgmSourceData(anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
                 .thenReturn(PersistenceLayer.TransactionResult())
@@ -120,7 +120,7 @@ class NotificationCollectorServiceTest {
         whenever(packageConfig.isSupportedPackage(any())).thenReturn(true)
         whenever(plugin.isEnabled()).thenReturn(true)
         whenever(parser.extractGlucose(any(), any(), any())).thenReturn(NotificationParser.GlucoseResult(100, SourceSensor.DEXCOM_UNKNOWN))
-        whenever(deduplicator.process(any(), any())).thenReturn(false)
+        whenever(deduplicator.process(any(), any(), any())).thenReturn(false)
 
         service.onNotificationPosted(sbn("com.foo"))
 

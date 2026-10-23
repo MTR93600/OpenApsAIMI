@@ -59,12 +59,21 @@ internal class DirectoryAimiStorage(
         return text.removeSuffix("\n").removeSuffix("\r").split(Regex("\r?\n"))
     }
 
-    override fun readFirstLine(path: AimiPath): String? = readLines(path).firstOrNull()
+    /** Reads only up to the first line break: this runs on every loop tick against CSVs that only grow. */
+    override fun readFirstLine(path: AimiPath): String? {
+        if (!io.exists(path.value)) return null
+        return runCatching { AimiStreamingLines.firstLine(path) }.getOrNull()
+    }
 
+    /**
+     * Streams the file with [AimiStreamingLines], so memory stays bounded however big the journal
+     * is. The lines are the same as [readLines] gives. A failure, also one thrown by [action], stops
+     * the walk and answers `false`.
+     */
     override fun forEachLine(path: AimiPath, action: (String) -> Unit): Boolean {
         if (!io.exists(path.value)) return false
         return runCatching {
-            readLines(path).forEach(action)
+            AimiStreamingLines.forEach(path, action)
             true
         }.getOrDefault(false)
     }
@@ -131,9 +140,10 @@ internal class DirectoryAimiStorage(
         return true
     }
 
+    /** Reads backwards from the end, so the cost depends on [maxLines], not on the file size. */
     override fun readTailLines(path: AimiPath, maxLines: Int): List<String> {
-        if (maxLines <= 0) return emptyList()
-        return readLines(path).takeLast(maxLines).asReversed()
+        if (maxLines <= 0 || !io.exists(path.value)) return emptyList()
+        return runCatching { AimiStreamingLines.lastLines(path, maxLines) }.getOrDefault(emptyList())
     }
 
     override fun sizeBytes(path: AimiPath): Long = io.length(path.value)

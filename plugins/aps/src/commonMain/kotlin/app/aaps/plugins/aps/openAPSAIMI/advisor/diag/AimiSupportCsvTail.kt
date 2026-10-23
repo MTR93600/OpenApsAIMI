@@ -25,12 +25,34 @@ internal object AimiSupportCsvTail {
         val body: List<String>,
     )
 
-    fun select(lines: List<String>): Selected? {
-        if (lines.isEmpty()) return null
-        return Selected(
-            header = lines.first(),
-            body = lines.drop(1).takeLast(MAX_CSV_ROWS_IN_PACKAGE),
-        )
+    /**
+     * Picks the header and the newest rows while the file is read line by line.
+     *
+     * Only the header and the last [MAX_CSV_ROWS_IN_PACKAGE] rows are kept, never the whole file:
+     * the corpus only grows, and the package is built on the phone whose problem it reports.
+     */
+    class Collector {
+
+        private var header: String? = null
+        private val rows = ArrayDeque<String>()
+
+        /** Every row seen after the header, also the ones that were dropped. */
+        var totalRows: Int = 0
+            private set
+
+        /** Takes the next line of the file. The first line is the header. */
+        fun add(line: String) {
+            if (header == null) {
+                header = line
+                return
+            }
+            totalRows++
+            if (rows.size == MAX_CSV_ROWS_IN_PACKAGE) rows.removeFirst()
+            rows.addLast(line)
+        }
+
+        /** The header and the kept rows, newest last, or `null` when the file had no line. */
+        fun result(): Selected? = header?.let { Selected(header = it, body = rows.toList()) }
     }
 
     fun toText(tail: Selected): String {

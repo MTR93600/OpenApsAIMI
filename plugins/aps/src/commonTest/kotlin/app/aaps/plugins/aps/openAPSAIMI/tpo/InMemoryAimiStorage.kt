@@ -54,7 +54,17 @@ internal class InMemoryAimiStorage : AimiStorage {
         return true
     }
 
-    override fun readText(path: AimiPath): String? = files[path.value]
+    /**
+     * How many times a whole file was read as one piece, by [readText] or [readLines]. A test of a
+     * reader that must stream checks that this stays at 0.
+     */
+    var wholeFileReads = 0
+        private set
+
+    override fun readText(path: AimiPath): String? {
+        wholeFileReads++
+        return files[path.value]
+    }
 
     /**
      * The lines of the file, the way `java.io.File.readLines` reads them.
@@ -64,6 +74,7 @@ internal class InMemoryAimiStorage : AimiStorage {
      * count one row too many, so the final line break is dropped here as the real reader drops it.
      */
     override fun readLines(path: AimiPath): List<String> {
+        wholeFileReads++
         val text = files[path.value] ?: return emptyList()
         if (text.isEmpty()) return emptyList()
         return text.removeSuffix("\n").split("\n")
@@ -72,10 +83,22 @@ internal class InMemoryAimiStorage : AimiStorage {
     override fun readFirstLine(path: AimiPath): String? =
         files[path.value]?.takeIf { it.isNotEmpty() }?.lineSequence()?.firstOrNull()
 
+    /**
+     * The same lines as [readLines], one at a time and without a list: a final line break gives no
+     * extra empty line, as with the real storages. Like them, a throw from [action] stops the walk
+     * and answers `false`.
+     */
     override fun forEachLine(path: AimiPath, action: (String) -> Unit): Boolean {
         val text = files[path.value] ?: return false
-        text.lineSequence().forEach(action)
-        return true
+        return runCatching {
+            var start = 0
+            while (start < text.length) {
+                val end = text.indexOf('\n', start).let { if (it < 0) text.length else it }
+                action(text.substring(start, end))
+                start = end + 1
+            }
+            true
+        }.getOrDefault(false)
     }
 
     override fun writeText(path: AimiPath, text: String): Boolean {

@@ -15,21 +15,37 @@ import kotlin.test.assertNull
  */
 class AimiSupportCsvTailTest {
 
+    private fun select(lines: List<String>): AimiSupportCsvTail.Selected? {
+        val collector = AimiSupportCsvTail.Collector()
+        lines.forEach(collector::add)
+        return collector.result()
+    }
+
+    @Test
+    fun `rows are counted also when they are dropped`() {
+        val collector = AimiSupportCsvTail.Collector()
+        collector.add("hdr")
+        repeat(AimiSupportCsvTail.MAX_CSV_ROWS_IN_PACKAGE + 7) { collector.add("row$it") }
+
+        assertEquals(AimiSupportCsvTail.MAX_CSV_ROWS_IN_PACKAGE + 7, collector.totalRows)
+        assertEquals(AimiSupportCsvTail.MAX_CSV_ROWS_IN_PACKAGE, collector.result()?.body?.size)
+    }
+
     @Test
     fun `an empty file is skipped`() {
-        assertNull(AimiSupportCsvTail.select(emptyList()))
+        assertNull(select(emptyList()))
     }
 
     @Test
     fun `header only is kept with an empty body`() {
-        val tail = AimiSupportCsvTail.select(listOf("dateStr,smbGiven"))
+        val tail = select(listOf("dateStr,smbGiven"))
         assertEquals("dateStr,smbGiven", tail?.header)
         assertEquals(emptyList(), tail?.body)
     }
 
     @Test
     fun `a short file keeps every body row newest last`() {
-        val tail = AimiSupportCsvTail.select(
+        val tail = select(
             listOf("hdr", "r1", "r2", "r3"),
         )
         assertEquals("hdr", tail?.header)
@@ -40,7 +56,7 @@ class AimiSupportCsvTailTest {
     fun `a long file keeps the header and the last 3000 body rows`() {
         val header = "dateStr,smbGiven"
         val body = (1..4000).map { "row$it" }
-        val tail = AimiSupportCsvTail.select(listOf(header) + body)
+        val tail = select(listOf(header) + body)
         assertEquals(header, tail?.header)
         assertEquals(AimiSupportCsvTail.MAX_CSV_ROWS_IN_PACKAGE, tail?.body?.size)
         assertEquals("row1001", tail?.body?.first())

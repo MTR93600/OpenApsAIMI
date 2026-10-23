@@ -24,7 +24,7 @@ class GlucoseCorrectionImpl(
 ) : GlucoseCorrection {
 
     override fun correctedMgdl(timestamp: Long, storedMgdl: Double): Double? {
-        if (storedMgdl <= 0.0) return null
+        if (!storedMgdl.isFinite() || storedMgdl <= 0.0) return null
         return correctedFromSeries(iobCobCalculator().ads.getBucketedDataTableCopy(), timestamp, storedMgdl)
     }
 
@@ -43,10 +43,15 @@ class GlucoseCorrectionImpl(
          *
          * Pure, so the rules are tested in `commonTest` and run on iOS too. [series] is the corrected
          * (calibrated + smoothed) series, newest first.
+         *
+         * A value that is not a finite number (NaN or infinite), stored or in the series, keeps the
+         * stored value. NaN passes every `<` and `>` check below, and rounding it throws, which would
+         * make every glucose alarm check fail.
          */
         internal fun correctedFromSeries(series: List<InMemoryGlucoseValue>?, timestamp: Long, storedMgdl: Double): Double? {
-            if (storedMgdl <= 0.0) return null
+            if (!storedMgdl.isFinite() || storedMgdl <= 0.0) return null
             val corrected = correctedSeriesValueAt(series, timestamp, storedMgdl) ?: return null
+            if (!corrected.isFinite()) return null
             // Plausibility net. It is not meant to limit calibration (a fit is already bounded by its own
             // slope and offset checks), only to make sure a broken corrected series can never send a wild
             // number to Nightscout, where a follower may dose on it, or silence a real hypo alarm.
@@ -70,7 +75,7 @@ class GlucoseCorrectionImpl(
         private fun correctedSeriesValueAt(series: List<InMemoryGlucoseValue>?, timestamp: Long, storedMgdl: Double): Double? {
             if (series.isNullOrEmpty()) return null
             val head = series.first()
-            if (timestamp == head.timestamp) return head.recalculated
+            if (timestamp == head.timestamp) return head.recalculated.finiteOrNull()
             if (timestamp > head.timestamp) {
                 // Newer than the newest corrected point: the series head sits on a five minute grid, so
                 // the last readings of a one minute sensor land here. They keep their own stored value
@@ -81,21 +86,27 @@ class GlucoseCorrectionImpl(
                 // the low alarm compared 100 and stayed quiet, and Nightscout got the previous reading.
                 // A head older than MAX_HEAD_AGE_MS says nothing about this reading: keep the stored value.
                 if (timestamp - head.timestamp > MAX_HEAD_AGE_MS) return null
-                return storedMgdl + (head.recalculated - head.value)
+                val headCorrected = head.recalculated.finiteOrNull() ?: return null
+                val headStored = head.value.finiteOrNull() ?: return null
+                return storedMgdl + (headCorrected - headStored)
             }
             // Older than the whole series: there is nothing to map onto, keep the stored value.
             if (timestamp < series.last().timestamp) return null
             for (i in series.indices) {
                 val older = series[i]
                 if (older.timestamp > timestamp) continue
-                if (older.timestamp == timestamp) return older.recalculated
+                val olderValue = older.recalculated.finiteOrNull() ?: return null
+                if (older.timestamp == timestamp) return olderValue
                 val newer = series[i - 1]
                 val span = (newer.timestamp - older.timestamp).toDouble()
-                if (span <= 0.0) return older.recalculated
+                if (span <= 0.0) return olderValue
+                val newerValue = newer.recalculated.finiteOrNull() ?: return null
                 val part = (timestamp - older.timestamp) / span
-                return older.recalculated + part * (newer.recalculated - older.recalculated)
+                return olderValue + part * (newerValue - olderValue)
             }
             return null
         }
+
+        private fun Double.finiteOrNull(): Double? = takeIf { it.isFinite() }
     }
 }

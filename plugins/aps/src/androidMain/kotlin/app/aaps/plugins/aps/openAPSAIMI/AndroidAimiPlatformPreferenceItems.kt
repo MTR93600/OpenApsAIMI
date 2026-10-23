@@ -28,6 +28,7 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
 import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiDiagnosticsManager
 import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AimiSupportPackageExporter
 import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AndroidAimiDiagPlatform
+import app.aaps.plugins.aps.openAPSAIMI.advisor.diag.AndroidAimiSupportZipFactory
 import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.FoodRecognitionService
 import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.toAimiImage
 import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.ui.AimiMealAdvisorScreen
@@ -57,6 +58,7 @@ import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.Date
 
 /**
  * Android half of [AimiPlatformPreferenceItems]: the AIMI settings entries that need Android
@@ -118,13 +120,15 @@ class AndroidAimiPlatformPreferenceItems @Inject constructor(
         ApsIntentKey.AimiSupportPackage.withCompose(
             ComposeScreenContent { onBack ->
                 val exporter = AimiSupportPackageExporter(
-                    context = context,
+                    platform = AndroidAimiDiagPlatform(context),
                     preferences = preferences,
                     logger = aapsLogger,
                     profileFunction = profileFunction,
-                    rh = rh,
+                    textResolver = rh,
                     storage = storage,
                     sharing = sharing,
+                    zipFactory = AndroidAimiSupportZipFactory(context.cacheDir),
+                    subjectTime = { Date().toString() },
                 )
                 AimiSupportPackageScreen(
                     onBack = onBack,

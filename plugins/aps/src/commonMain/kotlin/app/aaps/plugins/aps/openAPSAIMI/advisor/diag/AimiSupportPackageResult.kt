@@ -5,11 +5,8 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 /**
  * What came of building the AIMI Advisor support package.
  *
- * It was a nested `AimiSupportPackageExporter.Result` before. It is here on its own because the
- * screen that reacts to it is shared code while the exporter is not: the exporter still builds the
- * archive with `java.util.zip` and writes it to the Android cache directory, which has no shared
- * answer yet. The result itself has nothing Android in it - a path and a message - so it can live
- * where both sides can see it.
+ * Answered by [AimiSupportPackageExporter.build] and read by the shared support package screen. It
+ * has nothing platform specific in it - a path and a message - so both phones use it as it is.
  */
 sealed interface AimiSupportPackageResult {
 

@@ -163,4 +163,76 @@ class GlucoseCorrectionImplTest {
     fun seriesWithoutCalibrationAndSmoothingReturnsThePlainValue() {
         assertEquals(56.0, corrected(listOf(InMemoryGlucoseValue(timestamp = head, value = 56.0)), head, 56.0))
     }
+
+    // ---- values that are not finite numbers ------------------------------------------------------
+
+    /**
+     * NaN passes every range check, and rounding it throws. The throw used to reach the code that
+     * shows the value, so every glucose alarm check failed. A value that is not finite keeps the
+     * stored value instead.
+     */
+    @Test
+    fun aNaNStoredValueKeepsTheStoredValue() {
+        assertNull(corrected(series(65.0), head, Double.NaN))
+        assertNull(corrected(series(90.0), head + T.mins(1).msecs(), Double.NaN))
+    }
+
+    @Test
+    fun anInfiniteStoredValueKeepsTheStoredValue() {
+        assertNull(corrected(series(65.0), head, Double.POSITIVE_INFINITY))
+    }
+
+    @Test
+    fun aNaNHeadKeepsTheStoredValue() {
+        val nanHead = listOf(InMemoryGlucoseValue(timestamp = head, value = 100.0, smoothed = Double.NaN))
+        assertNull(corrected(nanHead, head, 80.0))
+        assertNull(corrected(nanHead, head + T.mins(1).msecs(), 80.0))
+    }
+
+    @Test
+    fun aNaNStoredValueOnTheHeadKeepsTheStoredValue() {
+        val nanHead = listOf(InMemoryGlucoseValue(timestamp = head, value = Double.NaN, smoothed = 90.0))
+        assertNull(corrected(nanHead, head + T.mins(1).msecs(), 80.0))
+    }
+
+    @Test
+    fun aNaNNeighbourKeepsTheStoredValue() {
+        val betweenTheTwo = head - T.mins(2).msecs()
+        assertNull(corrected(series(Double.NaN, 75.0), betweenTheTwo, 70.0))
+        assertNull(corrected(series(65.0, Double.NaN), betweenTheTwo, 70.0))
+    }
+
+    @Test
+    fun anInfiniteNeighbourKeepsTheStoredValue() {
+        assertNull(corrected(series(Double.POSITIVE_INFINITY, 75.0), head - T.mins(2).msecs(), 70.0))
+    }
+
+    @Test
+    fun aNaNPointOutsideTheInterpolationIsNotUsed() {
+        // Only the two points around the reading count. A broken point further back changes nothing.
+        assertEquals(70.0, corrected(series(65.0, 75.0, Double.NaN), head - T.mins(2).msecs() - T.secs(30).msecs(), 60.0))
+    }
+
+    // ---- small and gap-filled series -------------------------------------------------------------
+
+    @Test
+    fun aSingleEntrySeriesWorksOnItsOnlyPointAndAfterIt() {
+        val single = series(90.0)
+        assertEquals(90.0, corrected(single, head, 100.0))
+        assertEquals(70.0, corrected(single, head + T.mins(1).msecs(), 80.0))
+        assertNull(corrected(single, head - T.mins(1).msecs(), 80.0))
+    }
+
+    /**
+     * A gap-filled point is itself made by interpolation between real readings, so a reading next to
+     * it is interpolated as usual.
+     */
+    @Test
+    fun aFilledGapNeighbourIsInterpolatedAsUsual() {
+        val withGap = listOf(
+            InMemoryGlucoseValue(timestamp = head, value = 100.0, smoothed = 65.0),
+            InMemoryGlucoseValue(timestamp = head - fiveMin, value = 100.0, smoothed = 75.0, filledGap = true),
+        )
+        assertEquals(70.0, corrected(withGap, head - T.mins(2).msecs() - T.secs(30).msecs(), 60.0))
+    }
 }

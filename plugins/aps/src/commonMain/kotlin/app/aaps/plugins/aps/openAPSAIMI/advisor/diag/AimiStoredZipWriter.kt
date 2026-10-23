@@ -29,6 +29,14 @@ interface AimiZipByteSink {
 
     /** Flushes and closes. Throws when the data could not be saved. */
     fun close()
+
+    /**
+     * Closes without saving, when still open, and removes the file. Never throws.
+     *
+     * Used after a failure. The file holds health data, so a broken half of it must not stay on
+     * the phone.
+     */
+    fun discard()
 }
 
 /**
@@ -52,6 +60,10 @@ interface AimiZipByteSink {
  * Entries are streamed: each [write] goes straight to the sink. Only the names and offsets of the
  * entries are kept until [finish].
  *
+ * After the sink throws once, the writer is failed: every later call throws too, so a package with
+ * a hole in it can never be finished and shared as complete. The size and checksum of an entry
+ * only count bytes the sink really took.
+ *
  * @param modifiedAtMs the time stored on every entry, in epoch milliseconds.
  * @param zone the time zone of that stored time. ZIP stores local time, as `java.util.zip` does.
  */
@@ -72,6 +84,8 @@ class AimiStoredZipWriter(
     private var current: Entry? = null
     private val crc = AimiCrc32()
     private var closed = false
+    private var finished = false
+    private var failed = false
     private val dosTime: Int
     private val dosDate: Int
 
@@ -87,7 +101,7 @@ class AimiStoredZipWriter(
         }
     }
 
-    override fun beginEntry(name: String) {
+    override fun beginEntry(name: String) = guarded {
         check(!closed) { "the archive is closed" }
         check(current == null) { "the previous entry was not ended" }
         check(entries.size < MAX_ENTRIES) { "too many entries for a ZIP without ZIP64" }
@@ -113,16 +127,18 @@ class AimiStoredZipWriter(
         current = entry
     }
 
-    override fun write(bytes: ByteArray) {
+    override fun write(bytes: ByteArray) = guarded {
         val entry = checkNotNull(current) { "no entry was begun" }
-        if (bytes.isEmpty()) return
-        entry.size += bytes.size
-        checkFits(entry.size)
-        crc.update(bytes)
+        if (bytes.isEmpty()) return@guarded
+        val newSize = entry.size + bytes.size
+        checkFits(newSize)
         sink.write(bytes, 0, bytes.size)
+        // Counted only once the sink has taken the bytes.
+        entry.size = newSize
+        crc.update(bytes)
     }
 
-    override fun endEntry() {
+    override fun endEntry() = guarded {
         val entry = checkNotNull(current) { "no entry was begun" }
         entry.crc = crc.value
         val sizes = LittleEndianBytes(12)
@@ -134,7 +150,7 @@ class AimiStoredZipWriter(
         current = null
     }
 
-    override fun finish(): Long {
+    override fun finish(): Long = guarded {
         check(!closed) { "the archive is closed" }
         check(current == null) { "the last entry was not ended" }
         val directoryOffset = sink.position
@@ -176,13 +192,27 @@ class AimiStoredZipWriter(
         val size = sink.position
         closed = true
         sink.close()
-        return size
+        finished = true
+        size
     }
 
+    /** Removes the file, also when [finish] itself failed. Does nothing after a [finish] that worked. */
     override fun abort() {
-        if (closed) return
+        if (finished) return
         closed = true
-        runCatching { sink.close() }
+        failed = true
+        sink.discard()
+    }
+
+    /** Runs [block], refusing to start when an earlier call failed, and marking the writer failed when it throws. */
+    private inline fun <T> guarded(block: () -> T): T {
+        check(!failed) { "an earlier write to the support package failed" }
+        try {
+            return block()
+        } catch (e: Throwable) {
+            failed = true
+            throw e
+        }
     }
 
     private fun checkFits(value: Long) {

@@ -19,6 +19,7 @@ class IosAimiPlatformPreferenceItemsTest {
                 AimiPlatformPreferenceSlot.PKPD_SETUP,
                 AimiPlatformPreferenceSlot.MEAL_ADVISOR,
                 AimiPlatformPreferenceSlot.PROFILE_ADVISOR,
+                AimiPlatformPreferenceSlot.SUPPORT_PACKAGE,
             ),
             IosAimiPlatformPreferenceItems.ANSWERED,
         )
@@ -27,6 +28,6 @@ class IosAimiPlatformPreferenceItemsTest {
     @Test
     fun `the other slots are left out`() {
         val left = AimiPlatformPreferenceSlot.entries - IosAimiPlatformPreferenceItems.ANSWERED
-        assertEquals(4, left.size)
+        assertEquals(3, left.size)
     }
 }
