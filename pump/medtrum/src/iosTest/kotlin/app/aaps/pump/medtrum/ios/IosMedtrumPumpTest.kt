@@ -50,7 +50,6 @@ object TestTextResolver : TextResolver {
     override fun gs(ref: TextRef): String = "resolved:$ref"
     override fun gs(ref: TextRef, vararg args: Any?): String = "resolved:$ref"
     override fun gsNotLocalised(ref: TextRef): String = "resolved:$ref"
-    override fun shortTextMode(): Boolean = false
 }
 
 /**

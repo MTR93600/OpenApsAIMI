@@ -702,7 +702,7 @@ private fun SectionHeader(title: String) {
  */
 @Composable
 private fun MetricsCard(metrics: AdvisorMetrics) {
-    val percent = CoreUiStrings.format_percent
+    val percent = CoreUiStrings.units_format_percent
     // A metric that was not measured shows this text. It is never shown as a number.
     val missing = stringResource(ApsStrings.aimi_adv_metric_value_missing)
     Card(modifier = Modifier.fillMaxWidth()) {

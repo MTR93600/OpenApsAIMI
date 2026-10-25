@@ -199,7 +199,6 @@ private object SportBasalPhrase : TextResolver {
     override fun gs(ref: TextRef): String = "phrase"
     override fun gs(ref: TextRef, vararg args: Any?): String = "phrase"
     override fun gsNotLocalised(ref: TextRef): String = "phrase"
-    override fun shortTextMode(): Boolean = false
 }
 
 private object SportBasalFormatter : DecimalFormatter {

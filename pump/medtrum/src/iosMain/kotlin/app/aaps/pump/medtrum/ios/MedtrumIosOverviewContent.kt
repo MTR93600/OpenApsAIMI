@@ -14,10 +14,9 @@ import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.ComposablePluginContent
+import app.aaps.core.ui.compose.ScreenAction
 import app.aaps.core.ui.compose.StatusLevel
 import app.aaps.core.ui.compose.ToolbarConfig
-import app.aaps.core.ui.compose.pump.ActionCategory
-import app.aaps.core.ui.compose.pump.PumpAction
 import app.aaps.core.ui.compose.pump.PumpInfoRow
 import app.aaps.core.ui.compose.pump.PumpOverviewScreen
 import app.aaps.core.ui.compose.pump.PumpOverviewUiState
@@ -66,22 +65,19 @@ internal class MedtrumIosOverviewContent(
             state = PumpOverviewUiState(
                 infoRows = rows,
                 primaryActions = listOf(
-                    PumpAction(
+                    ScreenAction(
                         label = refreshReason,
-                        category = ActionCategory.PRIMARY,
                         onClick = { scope.launch { commandQueue.readStatus(refreshReason) } }
                     ),
-                    PumpAction(
+                    ScreenAction(
                         label = rh.gs(MedtrumStrings.reset_alarms_label),
-                        category = ActionCategory.PRIMARY,
                         enabled = state.activeAlarms.isNotEmpty() || state.pumpState.isSuspendedByPump(),
                         onClick = { scope.launch { commandQueue.clearAlarms() } }
                     )
                 ),
                 managementActions = listOf(
-                    PumpAction(
+                    ScreenAction(
                         label = rh.gs(MedtrumStrings.change_patch_label),
-                        category = ActionCategory.MANAGEMENT,
                         onClick = { showWizard = true }
                     )
                 )

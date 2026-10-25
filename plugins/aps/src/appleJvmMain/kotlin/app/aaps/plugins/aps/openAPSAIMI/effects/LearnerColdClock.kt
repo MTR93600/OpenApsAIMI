@@ -68,7 +68,6 @@ internal class LearnerColdClock : DateUtil {
     override fun isAfterNoon(): Boolean = unused()
     override fun isSameDayGroup(timestamp1: Long, timestamp2: Long): Boolean = unused()
     override fun computeDiff(date1: Long, date2: Long): TimeDiff = unused()
-    override fun age(milliseconds: Long, useShortText: Boolean, rh: TextResolver): String = unused()
     override fun niceTimeScalar(time: Long, rh: TextResolver): String = unused()
     override fun qs(x: Double, numDigits: Int): String = unused()
     override fun formatHHMM(timeAsSeconds: Int): String = unused()

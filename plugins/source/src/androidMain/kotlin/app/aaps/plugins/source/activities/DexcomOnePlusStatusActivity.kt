@@ -66,6 +66,7 @@ import app.aaps.plugins.source.compose.CgmStepTimeline
 import app.aaps.plugins.source.compose.CgmUiState
 import app.aaps.plugins.source.compose.DexcomOnePlusProductionCard
 import app.aaps.plugins.source.compose.DexcomOnePlusUiLabels
+import app.aaps.plugins.source.compose.formatSensorAge
 import app.aaps.plugins.source.compose.toUiState
 import app.aaps.plugins.source.logs.DriverLogFilter
 import javax.inject.Inject
@@ -118,7 +119,7 @@ class DexcomOnePlusStatusActivity : MetroAppCompatActivity() {
                         lifecycleFlow = dexcomOnePlusPlugin.lifecycle,
                         formatGlucose = { mgdl -> profileUtil.fromMgdlToStringWithUnits(mgdl) },
                         formatTime = { epochMs -> dateUtil.timeString(epochMs) },
-                        formatAge = { millis -> dateUtil.age(millis, false, rh) },
+                        formatAge = { millis -> formatSensorAge(millis, rh) },
                         lastGlucose = { persistenceLayer.getLastGlucoseValue() },
                         onCancelStaging = { dexcomOnePlusPlugin.cancelStaging() },
                         onPromote = { allowEarly -> dexcomOnePlusPlugin.promoteStagingToProduction(allowEarly) },

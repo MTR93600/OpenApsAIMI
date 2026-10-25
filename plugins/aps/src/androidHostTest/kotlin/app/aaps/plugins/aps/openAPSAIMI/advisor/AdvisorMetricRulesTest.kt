@@ -57,7 +57,6 @@ class AdvisorMetricRulesTest : TestBase() {
         override fun gs(ref: TextRef): String = name(ref)
         override fun gs(ref: TextRef, vararg args: Any?): String = name(ref)
         override fun gsNotLocalised(ref: TextRef): String = name(ref)
-        override fun shortTextMode(): Boolean = false
 
         private fun name(ref: TextRef): String = when (ref) {
             is TextRef.Named      -> ref.name

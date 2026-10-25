@@ -38,5 +38,4 @@ class AimiAdvisorStringsAndroid(private val rh: ResourceHelper) : AimiAdvisorStr
     override fun gs(ref: TextRef): String = rh.gs(ref)
     override fun gs(ref: TextRef, vararg args: Any?): String = rh.gs(ref, *args)
     override fun gsNotLocalised(ref: TextRef): String = rh.gsNotLocalised(ref)
-    override fun shortTextMode(): Boolean = rh.shortTextMode()
 }

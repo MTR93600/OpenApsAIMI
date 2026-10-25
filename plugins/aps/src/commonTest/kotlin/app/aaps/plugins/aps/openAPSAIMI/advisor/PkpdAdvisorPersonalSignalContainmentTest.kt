@@ -30,7 +30,6 @@ class PkpdAdvisorPersonalSignalContainmentTest {
         override fun gs(ref: TextRef): String = "text"
         override fun gs(ref: TextRef, vararg args: Any?): String = "text"
         override fun gsNotLocalised(ref: TextRef): String = "text"
-        override fun shortTextMode(): Boolean = false
     }
 
     private fun metrics(

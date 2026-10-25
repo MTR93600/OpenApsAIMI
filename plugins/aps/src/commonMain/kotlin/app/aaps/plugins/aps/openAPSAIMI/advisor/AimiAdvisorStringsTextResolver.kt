@@ -33,5 +33,4 @@ class AimiAdvisorStringsTextResolver(private val textResolver: TextResolver) : A
     override fun gs(ref: TextRef): String = textResolver.gs(ref)
     override fun gs(ref: TextRef, vararg args: Any?): String = textResolver.gs(ref, *args)
     override fun gsNotLocalised(ref: TextRef): String = textResolver.gsNotLocalised(ref)
-    override fun shortTextMode(): Boolean = textResolver.shortTextMode()
 }

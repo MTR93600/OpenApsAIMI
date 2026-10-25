@@ -165,7 +165,8 @@ class LoopPlugin(
 
     // Debounces the device-status upload. Was a Handler on its own HandlerThread; a Job on the app
     // scope does the same and is the only part of this class that was ever Android.
-    private var deviceStatusJob: Job? = null
+    // internal, not private, so a test can cancel it: a pending store left by one test would run in the next.
+    internal var deviceStatusJob: Job? = null
 
     /**
      * The deferred loop re-run scheduled when an SMB fails, held so [onStop] can take it back.
@@ -745,7 +746,7 @@ class LoopPlugin(
                                         lastRun.lastSMBEnact = dateUtil.now()
                                         scheduleBuildAndStoreDeviceStatus("applySMBRequest")
                                     } else {
-                                        scheduleSmbFallback(allowNotification)
+                                        onSmbNotEnacted(allowNotification, tempBasalFallback)
                                     }
                                 } else {
                                     aapsLogger.debug(LTag.APS, "No SMB requested")
@@ -1026,6 +1027,24 @@ class LoopPlugin(
             note = note,
             listValues = listValues
         )
+    }
+
+    /**
+     * An SMB was asked for and not enacted. Re-run the loop once with `tempBasalFallback = true`, so
+     * the temp basal still gets a chance - but only from a normal run, never from a fallback run.
+     *
+     * oref sends no SMB in a fallback run, but AIMI can: `SmbSwitchGate` lets the meal prebolus owners
+     * through even when `microBolusAllowed` is false. While the refusal holds (for example `SmbPause`,
+     * a bolus waiting for confirmation), each fallback run asked again, was refused again and
+     * scheduled the next one: a loop run every 1-2 s for minutes. The temp basal of the fallback run
+     * is already applied at this point, so stopping here loses nothing.
+     */
+    internal fun onSmbNotEnacted(allowNotification: Boolean, tempBasalFallback: Boolean) {
+        if (tempBasalFallback) {
+            aapsLogger.debug(LTag.APS, "SMB not enacted in a fallback run, no further fallback")
+            return
+        }
+        scheduleSmbFallback(allowNotification)
     }
 
     /**

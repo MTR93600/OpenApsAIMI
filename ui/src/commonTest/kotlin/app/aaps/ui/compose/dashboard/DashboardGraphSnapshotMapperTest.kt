@@ -76,6 +76,7 @@ class DashboardGraphSnapshotMapperTest {
             carbs = emptyList(),
             extendedBoluses = emptyList(),
             therapyEvents = emptyList(),
+            calibrations = emptyList(),
         )
 
         val snapshot = DashboardGraphSnapshotMapper.create(

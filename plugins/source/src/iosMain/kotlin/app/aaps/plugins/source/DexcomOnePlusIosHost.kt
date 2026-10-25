@@ -35,6 +35,7 @@ import app.aaps.plugins.source.compose.DexcomOnePlusStartScreen
 import app.aaps.plugins.source.compose.DexcomOnePlusStatusSummaryScreen
 import app.aaps.plugins.source.compose.DexcomOnePlusWarmupScreen
 import app.aaps.plugins.source.compose.OnePlusBlePermissionGate
+import app.aaps.plugins.source.compose.formatSensorAge
 import app.aaps.plugins.source.keys.DexcomOnePlusIntentKey
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
@@ -302,7 +303,7 @@ class DexcomOnePlusIosHost(
                     lastGlucose = { persistenceLayer().getLastGlucoseValue() },
                     formatGlucose = { mgdl -> profileUtil().fromMgdlToStringWithUnits(mgdl) },
                     formatTime = { epochMs -> dateUtil().timeString(epochMs) },
-                    formatAge = { millis -> dateUtil().age(millis, false, rh()) },
+                    formatAge = { millis -> formatSensorAge(millis, rh()) },
                 )
             },
         ),

@@ -59,7 +59,5 @@ class CalibrationSavedEntryNoticeTest {
         }
 
         override fun gsNotLocalised(ref: TextRef): String = gs(ref)
-
-        override fun shortTextMode(): Boolean = false
     }
 }

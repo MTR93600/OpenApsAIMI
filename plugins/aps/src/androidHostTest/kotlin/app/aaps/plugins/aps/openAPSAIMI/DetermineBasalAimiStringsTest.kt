@@ -143,7 +143,6 @@ class DetermineBasalAimiStringsTest {
             context.resources.getQuantityString(id, quantity, *args)
 
         override fun gsNotLocalised(id: Int, vararg args: Any?): String = context.getString(id, *args)
-        override fun shortTextMode(): Boolean = false
     }
 
     companion object {

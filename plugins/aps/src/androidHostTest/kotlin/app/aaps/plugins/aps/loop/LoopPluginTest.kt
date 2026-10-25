@@ -62,6 +62,7 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
+import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
@@ -116,6 +117,8 @@ class LoopPluginTest : TestBaseWithProfile() {
      */
     @AfterEach fun cancelPendingWork() {
         loopPlugin.smbFallbackJob?.cancel()
+        // Stored 5 s later on a real scope: left pending, it runs in a later test after the mocks were cleared.
+        loopPlugin.deviceStatusJob?.cancel()
     }
 
     @Test
@@ -1067,6 +1070,43 @@ class LoopPluginTest : TestBaseWithProfile() {
 
         assertThat(first!!.isCancelled).isTrue()
         assertThat(loopPlugin.smbFallbackJob).isNotSameInstanceAs(first)
+        assertThat(loopPlugin.smbFallbackJob!!.isActive).isTrue()
+    }
+
+    /**
+     * A refused SMB inside a fallback run must not schedule another fallback.
+     *
+     * AIMI's meal prebolus owners can ask for an SMB even in a fallback run. While the refusal holds,
+     * each fallback would schedule the next one, a loop run every 1-2 s.
+     */
+    @Test
+    fun `a refused SMB in a fallback run does not schedule another fallback`() = runTest {
+        loopPlugin.onSmbNotEnacted(allowNotification = false, tempBasalFallback = true)
+
+        assertThat(loopPlugin.smbFallbackJob).isNull()
+    }
+
+    /**
+     * The two tests around this call [LoopPlugin.onSmbNotEnacted] directly, so they would still pass if
+     * the SMB branch of `invoke` went back to calling `scheduleSmbFallback` itself. This reads the
+     * source to pin the call site: the run's own `tempBasalFallback` is passed on, and the fallback is
+     * scheduled from nowhere else.
+     */
+    @Test
+    fun `the SMB branch passes its own fallback flag and nothing else schedules the fallback`() {
+        val source = File("src/commonMain/kotlin/app/aaps/plugins/aps/loop/LoopPlugin.kt").readText()
+        assertThat(source).contains("onSmbNotEnacted(allowNotification, tempBasalFallback)")
+        assertThat(Regex("scheduleSmbFallback\\(allowNotification\\)").findAll(source).count()).isEqualTo(1)
+        val inside = source.substringAfter("internal fun onSmbNotEnacted(").substringBefore("\n    }")
+        assertThat(inside).contains("scheduleSmbFallback(allowNotification)")
+    }
+
+    /** In a normal run the fallback is still scheduled, so the temp basal gets its chance. */
+    @Test
+    fun `a refused SMB in a normal run schedules the fallback`() = runTest {
+        loopPlugin.onSmbNotEnacted(allowNotification = false, tempBasalFallback = false)
+
+        assertThat(loopPlugin.smbFallbackJob).isNotNull()
         assertThat(loopPlugin.smbFallbackJob!!.isActive).isTrue()
     }
 }

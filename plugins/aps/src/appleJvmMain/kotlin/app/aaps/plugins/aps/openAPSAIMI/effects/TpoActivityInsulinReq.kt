@@ -80,5 +80,4 @@ private object SilentTextResolver : TextResolver {
     override fun gs(ref: TextRef): String = ""
     override fun gs(ref: TextRef, vararg args: Any?): String = ""
     override fun gsNotLocalised(ref: TextRef): String = ""
-    override fun shortTextMode(): Boolean = false
 }

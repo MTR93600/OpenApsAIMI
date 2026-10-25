@@ -63,6 +63,7 @@ import app.aaps.plugins.source.compose.CgmWarmupRing
 import app.aaps.plugins.source.compose.Libre3PresoakCurve
 import app.aaps.plugins.source.compose.Libre3UiLabels
 import app.aaps.plugins.source.compose.Libre3WarmupCountdown
+import app.aaps.plugins.source.compose.formatSensorAge
 import app.aaps.plugins.source.compose.toCgmWarmupInfo
 import app.aaps.plugins.source.compose.toUiState
 import app.aaps.plugins.source.keys.Libre3BooleanKey
@@ -134,7 +135,7 @@ class Libre3StatusActivity : MetroAppCompatActivity() {
                         stagingCurveFlow = plugin.stagingCurve,
                         formatGlucose = { mgdl -> profileUtil.fromMgdlToStringWithUnits(mgdl) },
                         formatTime = { epochMs -> dateUtil.timeString(epochMs) },
-                        formatAge = { millis -> dateUtil.age(millis, false, rh) },
+                        formatAge = { millis -> formatSensorAge(millis, rh) },
                         // A pre-soak failure must never take production with it (invariant I9), so
                         // every staging call from this screen is wrapped here.
                         onPromote = { plugin.promoteStagingToProduction(allowEarly = true) },
