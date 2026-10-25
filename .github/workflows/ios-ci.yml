@@ -91,6 +91,35 @@ jobs:
         with:
           fetch-depth: 1
 
+      # Cheap and first, because it fails in seconds and the compile below takes minutes.
+      #
+      # Kotlin/Native refuses a comma inside a backticked name: `Name contains illegal characters`.
+      # The JVM accepts it, so a test named `a, b` passes jvmTest and testAndroidHostTest on Windows
+      # and breaks dev for Apple only - which is how it reached dev twice, once in :ui and :workflow
+      # and once while writing an iOS test on a Mac. Only source sets that reach a native target are
+      # searched; androidHostTest is JVM-only and may keep its commas.
+      #
+      # git grep, not grep: it searches tracked files only, so build output needs no excluding, and it
+      # behaves the same on a Mac and on the runner. Plain grep here was silently useless - macOS has
+      # ugrep as grep, a long directory list made it exit 2, and the suppressed error read as "clean".
+      - name: No commas in backticked names that reach Kotlin/Native
+        run: |
+          rc=0
+          hits=$(git grep -nE 'fun `[^`]*,[^`]*`' -- \
+            '*/src/commonMain/*.kt' '*/src/commonTest/*.kt' \
+            '*/src/iosMain/*.kt' '*/src/iosTest/*.kt') || rc=$?
+          # 0 = found something, 1 = found nothing (the passing case), anything else = check broken.
+          if [ "$rc" -gt 1 ]; then
+            echo "::error::git grep exited $rc, so the check could not run. Treating it as a failure rather than a pass."
+            exit 1
+          fi
+          if [ -n "$hits" ]; then
+            echo "$hits"
+            echo "::error::A backticked name contains a comma. Kotlin/Native rejects it, so this breaks the Apple targets while passing on the JVM. Remove the comma."
+            exit 1
+          fi
+          echo "No commas in backticked names."
+
       # Android ships org.tensorflow:tensorflow-lite:2.4.0. The reference words
       # are the arm64-v8a slice of that AAR. This step runs the published 2.4.0
       # x86_64 simulator slice, one thread, no delegate. It passes only when
@@ -196,6 +225,7 @@ jobs:
             :core:nssdk:compileKotlinIosArm64 :core:nssdk:compileKotlinIosSimulatorArm64 \
             :core:keys:compileKotlinIosArm64 :core:keys:compileKotlinIosSimulatorArm64 \
             :plugins:aps:linkDebugTestIosArm64 \
+            :plugins:sync:compileKotlinIosArm64 :plugins:sync:compileKotlinIosSimulatorArm64 \
             | tee compile.log
 
       # A disabled Kotlin/Native task reports SKIPPED and still exits 0, so "BUILD SUCCESSFUL" alone
@@ -253,6 +283,7 @@ jobs:
             :core:objects:iosSimulatorArm64Test \
             :implementation:iosSimulatorArm64Test :ios:shell:iosSimulatorArm64Test \
             :plugins:aps:iosSimulatorArm64Test \
+            :plugins:sync:iosSimulatorArm64Test \
             | tee test.log
 
       # Every module that HAS iOS tests is checked by name. A module added to the run above but not
@@ -289,6 +320,7 @@ jobs:
           # Without this line a SKIPPED iosSimulatorArm64Test still exits 0 and the module disappears.
           check ":core:objects" core/objects
           check ":plugins:aps" plugins/aps
+          check ":plugins:sync" plugins/sync
           exit $fail
 
       - name: Prove the simulator test binary links only the source TFLite archive
@@ -304,4 +336,5 @@ jobs:
             implementation/build/test-results/iosSimulatorArm64Test/**
             ios/shell/build/test-results/iosSimulatorArm64Test/**
             plugins/aps/build/test-results/iosSimulatorArm64Test/**
+            plugins/sync/build/test-results/iosSimulatorArm64Test/**
           if-no-files-found: warn

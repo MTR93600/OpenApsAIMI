@@ -18,6 +18,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -33,6 +34,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
@@ -41,6 +44,7 @@ import app.aaps.core.keys.interfaces.ClientRole
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.clientcontrol.label
 import app.aaps.core.ui.compose.AapsSpacing
+import app.aaps.core.ui.compose.qrScannerAvailable
 import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.clearFocusOnTap
 import app.aaps.core.ui.compose.metroViewModel
@@ -53,11 +57,18 @@ private const val PIN_LENGTH = 8
 @Composable
 fun PairWithMasterScreen(
     onNavigateBack: () -> Unit,
+    /** After a successful pairing. From the setup wizard it finishes the wizard. */
+    onPaired: () -> Unit = onNavigateBack,
+    /** Opens the scanner for the master's QR code. Null hides the button; it is hidden anyway where there is no camera. */
+    onScanQr: (() -> Unit)? = null,
     viewModel: PairWithMasterViewModel = metroViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val hardenedMode by viewModel.hardenedMode.collectAsStateWithLifecycle()
     val clientRole by viewModel.clientRole.collectAsStateWithLifecycle()
+
+    // Back from the scanner, which may have paired the phone.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refreshPairing() }
 
     // While the hello upload is in flight, swallow Back to keep the ViewModel (and therefore
     // viewModelScope) alive until publishHello() completes — otherwise the master never sees
@@ -71,13 +82,13 @@ fun PairWithMasterScreen(
     )
 
     // After successful pair, drop back to the previous screen so the user lands wherever they came
-    // from. Latched so a recomposition while state is still Success cannot pop twice — the
-    // ViewModel's Success state is sticky, but onNavigateBack is not idempotent.
+    // from (or out of the setup wizard). Latched so a recomposition while state is still Success cannot
+    // pop twice — the ViewModel's Success state is sticky, but onPaired is not idempotent.
     var navigated by remember { mutableStateOf(false) }
     LaunchedEffect(state) {
         if (state is PairWithMasterViewModel.UiState.Success && !navigated) {
             navigated = true
-            onNavigateBack()
+            onPaired()
         }
     }
 
@@ -107,7 +118,10 @@ fun PairWithMasterScreen(
                     onCancel = onNavigateBack
                 )
 
-                PairWithMasterViewModel.UiState.PinEntry         -> PinEntryContent(onSubmit = viewModel::onPinEntered)
+                PairWithMasterViewModel.UiState.PinEntry         -> PinEntryContent(
+                    onSubmit = viewModel::onPinEntered,
+                    onScanQr = onScanQr?.takeIf { qrScannerAvailable }
+                )
 
                 PairWithMasterViewModel.UiState.Fetching         -> FetchingContent()
 
@@ -132,7 +146,7 @@ fun PairWithMasterScreen(
 }
 
 @Composable
-private fun PinEntryContent(onSubmit: (String) -> Unit) {
+private fun PinEntryContent(onSubmit: (String) -> Unit, onScanQr: (() -> Unit)?) {
     var pin by remember { mutableStateOf("") }
     val complete = pin.length == PIN_LENGTH
     val focusManager = LocalFocusManager.current
@@ -175,6 +189,17 @@ private fun PinEntryContent(onSubmit: (String) -> Unit) {
                 .fillMaxWidth()
         ) {
             Text(stringResource(SyncStrings.pair_with_master_pin_entry_submit))
+        }
+        // The other way: the master shows a QR code that pairs (and sets up Nightscout) in one scan.
+        onScanQr?.let {
+            OutlinedButton(
+                onClick = it,
+                modifier = Modifier
+                    .padding(top = AapsSpacing.medium)
+                    .fillMaxWidth()
+            ) {
+                Text(stringResource(SyncStrings.client_setup_scan_button))
+            }
         }
     }
 }

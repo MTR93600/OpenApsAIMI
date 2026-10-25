@@ -123,6 +123,12 @@ class AlarmNotificationManager(
         private const val ALARM_ACTION_REQUEST_CODE = 4715
 
         /**
+         * Request code for the PendingIntent sent when the user swipes the notification away.
+         * Upstream uses 4715, but this fork already uses 4715 for [ALARM_ACTION_REQUEST_CODE].
+         */
+        private const val SWIPE_REQUEST_CODE = 4716
+
+        /**
          * Delay before the screen-wake / activity-launch alarms fire. Small buffer so both
          * setAlarmClock alarms register before firing; a ~1.5s wait to light the screen is
          * negligible for a medical alarm.
@@ -174,6 +180,16 @@ class AlarmNotificationManager(
      * (which is harmless — `mgr.cancel(id)` for a no-longer-active id is a no-op).
      */
     private val activeSoundKeys: MutableSet<Int> = mutableSetOf()
+
+    /**
+     * The alarm screen intent of the background alarm the user has not answered yet, or null. Set by
+     * [postFullScreenAlarm] and cleared by [cancelAlarm], where every way of answering the alarm ends.
+     * Read through [unansweredAlarmIntent].
+     * Guarded by [fullScreenLock], together with the paired `mgr.notify`/`mgr.cancel` of
+     * [NOTIFICATION_ID_FULL_SCREEN], for the same reason as [activeSoundKeys].
+     */
+    private var unansweredAlarm: Intent? = null
+    private val fullScreenLock = Any()
 
     /**
      * The channels, created once on first use rather than in an `init` block.
@@ -433,6 +449,14 @@ class AlarmNotificationManager(
             Intent(context, AlarmMuteReceiver::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
+        // Since Android 14 the user can swipe away even an ongoing notification (not on the lock
+        // screen). A swipe works like Mute. Before, the looping sound went on with nothing left on
+        // screen to stop it, and only a force stop of AAPS ended it (#5338).
+        val swipePendingIntent = PendingIntent.getBroadcast(
+            context, SWIPE_REQUEST_CODE,
+            Intent(context, AlarmMuteReceiver::class.java).putExtra(AlarmMuteReceiver.EXTRA_SWIPED, true),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
 
         fun fullScreenNotification(channel: String) = NotificationCompat.Builder(context, channel)
             .setSmallIcon(iconsProvider.getNotificationIcon())
@@ -444,38 +468,50 @@ class AlarmNotificationManager(
             .setOngoing(true)
             .setAutoCancel(false)
             .setContentIntent(pendingIntent)
+            .setDeleteIntent(swipePendingIntent)
             .addAction(0, rh.gs(app.aaps.core.ui.R.string.mute), mutePendingIntent)
             .build()
 
         silentChannelWatch.stop()
-        try {
-            mgr.notify(NOTIFICATION_ID_FULL_SCREEN, fullScreenNotification(channelId))
-            aapsLogger.debug(LTag.NOTIFICATION, "Posted full-screen alarm: $title - $status")
-            // A silent channel leaves the whole sound to the player. If the player cannot start, or
-            // another alarm takes it, this alarm would stay silent - so watch it, and ring from a
-            // sound-bearing channel then.
-            if (rampChoice != null && sound != null) {
-                silentChannelWatch.start(
-                    isAudible = { alarmSoundPlayer.isAudibleFor(AlarmSoundPlayer.OWNER_FULLSCREEN) },
-                    ringFromChannel = {
-                        aapsLogger.error(LTag.NOTIFICATION, "Full-screen alarm player is silent: ringing from the notification channel")
-                        try {
-                            mgr.notify(NOTIFICATION_ID_FULL_SCREEN, fullScreenNotification(channelIdForSound(sound, overrideDnd)))
-                        } catch (ex: SecurityException) {
-                            aapsLogger.error(LTag.NOTIFICATION, "Could not post the full-screen alarm again", ex)
+        // notify + set must be atomic relative to cancelAlarm - see unansweredAlarm.
+        synchronized(fullScreenLock) {
+            // Set even when the notification cannot be posted. The sound below still plays, and
+            // opening AAPS is then the only way left to reach the alarm screen.
+            unansweredAlarm = intent
+            try {
+                mgr.notify(NOTIFICATION_ID_FULL_SCREEN, fullScreenNotification(channelId))
+                aapsLogger.debug(LTag.NOTIFICATION, "Posted full-screen alarm: $title - $status")
+                // A silent channel leaves the whole sound to the player. If the player cannot start, or
+                // another alarm takes it, this alarm would stay silent - so watch it, and ring from a
+                // sound-bearing channel then.
+                if (rampChoice != null && sound != null) {
+                    silentChannelWatch.start(
+                        isAudible = { alarmSoundPlayer.isAudibleFor(AlarmSoundPlayer.OWNER_FULLSCREEN) },
+                        ringFromChannel = {
+                            synchronized(fullScreenLock) {
+                                // The alarm was answered (cancelAlarm) while this check was on its way:
+                                // do not post it again.
+                                if (unansweredAlarm == null) return@synchronized
+                                aapsLogger.error(LTag.NOTIFICATION, "Full-screen alarm player is silent: ringing from the notification channel")
+                                try {
+                                    mgr.notify(NOTIFICATION_ID_FULL_SCREEN, fullScreenNotification(channelIdForSound(sound, overrideDnd)))
+                                } catch (ex: SecurityException) {
+                                    aapsLogger.error(LTag.NOTIFICATION, "Could not post the full-screen alarm again", ex)
+                                }
+                            }
                         }
-                    }
+                    )
+                }
+            } catch (ex: SecurityException) {
+                // POST_NOTIFICATIONS revoked at runtime (Android 13+). The user's next return to
+                // ComposeMainActivity refreshes the global PermissionsSheet (onResume → refresh),
+                // which will surface the missing-permission state and offer to open Android settings.
+                aapsLogger.error(
+                    LTag.NOTIFICATION,
+                    "Failed to post full-screen alarm \"$title\" — POST_NOTIFICATIONS likely revoked",
+                    ex
                 )
             }
-        } catch (ex: SecurityException) {
-            // POST_NOTIFICATIONS revoked at runtime (Android 13+). The user's next return to
-            // ComposeMainActivity refreshes the global PermissionsSheet (onResume → refresh),
-            // which will surface the missing-permission state and offer to open Android settings.
-            aapsLogger.error(
-                LTag.NOTIFICATION,
-                "Failed to post full-screen alarm \"$title\" — POST_NOTIFICATIONS likely revoked",
-                ex
-            )
         }
 
         // Continuous looping/ramping audio so the alarm keeps sounding even if ErrorActivity never
@@ -681,13 +717,27 @@ class AlarmNotificationManager(
     }
 
     /**
+     * An intent that opens the alarm screen for the background alarm the user has not answered yet,
+     * or null when there is none.
+     *
+     * Android lets [postFullScreenAlarm] bring up that screen only in some cases, for example not
+     * while another app is on top. Then the notification is the only way to reach the alarm, and
+     * nothing in the main screen can stop it. `ComposeMainActivity` starts this intent when it comes
+     * to the foreground, so opening AAPS also shows the alarm (#5338).
+     */
+    fun unansweredAlarmIntent(): Intent? = synchronized(fullScreenLock) { unansweredAlarm?.let { Intent(it) } }
+
+    /**
      * Cancel all active AAPS alarm notifications (full-screen + every tracked sound alarm).
-     * Used by the global stop paths: user-acknowledge from ErrorActivity, app onTerminate,
-     * Wear "mute all" gesture.
+     * Used by the global stop paths: user-acknowledge from ErrorActivity, Mute on the notification
+     * or a swipe of it (both through AlarmMuteReceiver), app onTerminate, Wear "mute all" gesture.
      */
     fun cancelAlarm() {
         silentChannelWatch.stop()
-        mgr.cancel(NOTIFICATION_ID_FULL_SCREEN)
+        synchronized(fullScreenLock) {
+            mgr.cancel(NOTIFICATION_ID_FULL_SCREEN)
+            unansweredAlarm = null
+        }
         synchronized(activeSoundKeys) {
             activeSoundKeys.forEach { mgr.cancel(SOUND_ID_OFFSET + it) }
             activeSoundKeys.clear()

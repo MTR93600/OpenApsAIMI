@@ -59,6 +59,7 @@ import app.aaps.plugins.sync.nsclientV3.IosNsRoleChange
 import app.aaps.plugins.sync.nsclientV3.ws.IosNsAppLifecycle
 import app.aaps.plugins.sync.nsclientV3.ws.NsSocketFactory
 import app.aaps.shared.clientbindings.ClientGraphBindings
+import app.aaps.shared.clientbindings.ClientHistoryWindowGraph
 import app.aaps.ui.compose.overview.chips.ChipsViewModel
 import app.aaps.ui.compose.overview.graphs.GraphViewModel
 import app.aaps.ui.search.BuiltInSearchables
@@ -161,9 +162,9 @@ interface IosAppGraph : MetroViewModelMultibindings {
      * factory looks like an ordinary missing binding, which is exactly how it first failed.
      *
      * Each window it creates is a separate scope with its own calculation objects - see
-     * [IosHistoryWindowGraph] for why that matters.
+     * [ClientHistoryWindowGraph] for why that matters. Shared with desktop.
      */
-    val historyWindowFactory: IosHistoryWindowGraph.Factory
+    val historyWindowFactory: ClientHistoryWindowGraph.Factory
 
     /** The loop's own calculator and cache, exposed so a test can prove a window does not share them. */
     val iobCobCalculator: IobCobCalculator

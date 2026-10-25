@@ -77,6 +77,8 @@ import kotlin.reflect.KMutableProperty
 import kotlin.reflect.full.declaredMemberProperties
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import app.aaps.core.interfaces.R as InterfacesR
+import app.aaps.core.ui.R as CoreUiR
 
 class MainApp : Application(), MetroMemberInjector, MetroViewModelFactoryOwner, Configuration.Provider {
 
@@ -386,7 +388,7 @@ class MainApp : Application(), MetroMemberInjector, MetroViewModelFactoryOwner, 
                             therapyEvent = TE(
                                 timestamp = dateUtil.now(),
                                 type = TE.Type.NOTE,
-                                note = rh.gs(app.aaps.core.ui.R.string.androidaps_start) + " - " + Build.MANUFACTURER + " " + Build.MODEL,
+                                note = rh.gs(InterfacesR.string.values_with_dash, rh.gs(CoreUiR.string.androidaps_start), "${Build.MANUFACTURER} ${Build.MODEL}"),
                                 glucoseUnit = GlucoseUnit.MGDL
                             ),
                             action = Action.START_AAPS,
@@ -466,7 +468,7 @@ class MainApp : Application(), MetroMemberInjector, MetroViewModelFactoryOwner, 
     private suspend fun passwordResetCheck() {
         val fh = fileListProvider.ensureExtraDirExists()?.findFile("PasswordReset")
         if (fh?.exists() == true) {
-            config.updateInitProgress(getString(app.aaps.core.ui.R.string.waiting_for_pump))
+            config.updateInitProgress(getString(CoreUiR.string.waiting_for_pump))
             val serialNumber = withTimeoutOrNull(30_000.milliseconds) {
                 while (activePlugin.activePump.serialNumber().isEmpty()) {
                     delay(100.milliseconds)

@@ -26,12 +26,10 @@ import app.aaps.implementation.maintenance.KeepAliveChecks
 import app.aaps.implementation.notifications.AlarmAudioPolicy
 import app.aaps.implementation.notifications.IosSystemNotificationPlatform
 import app.aaps.ios.shell.config.IosConfig
-import app.aaps.ios.shell.platform.IosHistoryScope
 import app.aaps.ios.shell.prefs.IosSp
 import app.aaps.plugins.constraints.bgQualityCheck.BgQualityCheckPlugin
 import app.aaps.shared.impl.utils.DateUtilImpl
 import app.aaps.shared.impl.utils.IosDateFormatPlatform
-import app.aaps.ui.compose.history.HistoryScope
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.BindingContainer
 import dev.zacsweers.metro.ContributesTo
@@ -145,17 +143,5 @@ object IosPlatformBindings {
                 }
             }
         ) { preferences.get(BooleanKey.AlertOverrideDoNotDisturb) }
-
-    /**
-     * One history browsing window, app-scoped so every injection point sees the same one.
-     *
-     * Unscoped would hand out a fresh window per injection point, which quietly undoes the isolation
-     * the extension exists for: two windows calculating over different ranges, with the screen
-     * reading one and writing the other.
-     */
-    @Provides
-    @SingleIn(AppScope::class)
-    fun historyScope(windowFactory: IosHistoryWindowGraph.Factory): HistoryScope =
-        IosHistoryScope(windowFactory.create())
 
 }

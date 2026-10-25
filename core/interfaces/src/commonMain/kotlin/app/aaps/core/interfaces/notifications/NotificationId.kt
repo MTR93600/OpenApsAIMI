@@ -244,8 +244,14 @@ enum class NotificationId(
     // A scene can leave its temporary profile active after it ends; the user has to choose a profile to restore normal delivery.
     // Appended at the END for the same reason as above.
     SCENE_PROFILE_NOT_RESTORED(IMPORTANT, AUTOMATION),
-    // Appended at the END for the same reason as above.
+    // A Garmin watch connected to a client sent carbs or a pump disconnect. A client does not store them, because
+    // they would never reach the master, and the watch cannot show why. Appended at the END for the same reason as above.
     GARMIN_NOT_ON_CLIENT(NORMAL, SYNC),
+
+    // The Combo gave the bolus, but its history also had boluses that AAPS did not know about. Its own id,
+    // so that it does not replace the low reservoir warning of the same bolus on COMBO_PUMP_ALARM (#5379).
+    // Appended at the END of the upstream block for the same reason as above.
+    COMBO_UNKNOWN_BOLUS(URGENT, PUMP),
 
     // ---- Fork entries (ONE+/Libre 3 native, AIMI, calibration) ----
     // Kept after the upstream block on purpose: upstream keeps appending at its end, so a future
