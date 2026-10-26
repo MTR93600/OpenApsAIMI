@@ -255,15 +255,20 @@ class IosAimiEmergencySos @Inject constructor() : AimiEmergencySos {
         setBool(KEY_STALE_ALERT_TRIGGERED, false)
     }
 
-    private fun getLong(key: String): Long = NSUserDefaults.standardUserDefaults.integerForKey(key)
+    /**
+     * The SOS state lives in its own suite, like Android's own `aimi_sos_advanced_prefs` file. The
+     * standard domain is moved into the encrypted settings store and emptied on every start
+     * (`UserDefaultsMigration`), which reset the observation window each time the app started.
+     */
+    private val state: NSUserDefaults = NSUserDefaults(suiteName = STATE_SUITE) ?: NSUserDefaults.standardUserDefaults
 
-    private fun setLong(key: String, value: Long) =
-        NSUserDefaults.standardUserDefaults.setInteger(value, forKey = key)
+    private fun getLong(key: String): Long = state.integerForKey(key)
 
-    private fun getBool(key: String): Boolean = NSUserDefaults.standardUserDefaults.boolForKey(key)
+    private fun setLong(key: String, value: Long) = state.setInteger(value, forKey = key)
 
-    private fun setBool(key: String, value: Boolean) =
-        NSUserDefaults.standardUserDefaults.setBool(value, forKey = key)
+    private fun getBool(key: String): Boolean = state.boolForKey(key)
+
+    private fun setBool(key: String, value: Boolean) = state.setBool(value, forKey = key)
 
     private fun formatTime(ms: Long): String {
         // Per-call instance: NSDateFormatter is not thread-safe and this runs rarely.
@@ -273,9 +278,9 @@ class IosAimiEmergencySos @Inject constructor() : AimiEmergencySos {
     }
 
     companion object {
-        // State keys mirror Android's "aimi_sos_advanced_prefs" file, as plain
-        // NSUserDefaults keys. integerForKey/boolForKey return 0/false when absent,
+        // Same name as Android's own file. integerForKey/boolForKey return 0/false when absent,
         // matching Android's getLong(key, 0L)/getBoolean(key, false).
+        private const val STATE_SUITE = "aimi_sos_advanced_prefs"
         private const val KEY_FIRST_BELOW_THRESHOLD_TIME = "aimi_sos.first_below_threshold_time"
         private const val KEY_LAST_ACTION_TIME = "aimi_sos.last_action_time"
         private const val KEY_LAST_VALID_BG_TIME = "aimi_sos.last_valid_bg_time"

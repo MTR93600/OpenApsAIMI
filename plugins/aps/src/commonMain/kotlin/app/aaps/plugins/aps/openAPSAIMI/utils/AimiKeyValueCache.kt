@@ -39,11 +39,12 @@ interface AimiKeyValueCache {
     /**
      * [key] from [store], or `null` when [store] has no such key or is unreadable.
      *
-     * [store] names one of AIMI's own caches (for example `"aimi_gemini_cache"`) - or is `null` for
-     * the platform's own default preference store, the one
-     * [app.aaps.core.interfaces.sharedPreferences.SP] already reads and writes.
+     * [store] names one of AIMI's own caches (for example `"aimi_gemini_cache"`). It cannot name the
+     * settings: those live in the encrypted settings store, read through `Preferences`. The old
+     * `null` meaning "the platform's default preference file" was removed with that store, because
+     * that file is only read once to move the settings and then stays frozen.
      */
-    fun getString(store: String?, key: String): String?
+    fun getString(store: String, key: String): String?
 
     /**
      * Writes [key] into [store]. `false` on failure.
@@ -52,13 +53,13 @@ interface AimiKeyValueCache {
      * reads its own write back (as [app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository]
      * does) must see it.
      */
-    fun putString(store: String?, key: String, value: String): Boolean
+    fun putString(store: String, key: String, value: String): Boolean
 
     /** [key] from [store], or [default] when missing or unreadable. See [getString] for [store]. */
-    fun getLong(store: String?, key: String, default: Long): Long
+    fun getLong(store: String, key: String, default: Long): Long
 
     /** Writes [key] into [store]. `false` on failure. See [putString] for the write guarantee. */
-    fun putLong(store: String?, key: String, value: Long): Boolean
+    fun putLong(store: String, key: String, value: Long): Boolean
 
     /**
      * Whether the timestamp [putLong] last wrote to [key] in [store] is younger than [ttlMs].
@@ -67,5 +68,5 @@ interface AimiKeyValueCache {
      * the one decision [app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver] makes
      * before it decides whether to hit the network.
      */
-    fun isFresh(store: String?, key: String, ttlMs: Long): Boolean
+    fun isFresh(store: String, key: String, ttlMs: Long): Boolean
 }

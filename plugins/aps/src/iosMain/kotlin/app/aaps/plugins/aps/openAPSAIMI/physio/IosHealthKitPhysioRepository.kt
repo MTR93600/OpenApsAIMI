@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.physio
 
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
@@ -21,7 +22,6 @@ import app.aaps.plugins.aps.openAPSAIMI.steps.IosStepBuckets
 import app.aaps.plugins.aps.openAPSAIMI.steps.IosHeartRateReading
 import app.aaps.plugins.aps.openAPSAIMI.steps.IosHeartRateSource
 import app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR
-import app.aaps.plugins.aps.openAPSAIMI.utils.AimiKeyValueCache
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
@@ -118,7 +118,7 @@ import platform.HealthKit.unitDividedByUnit
 class IosHealthKitPhysioRepository @Inject constructor(
     private val aapsLogger: AAPSLogger,
     private val ouraApiThermalClient: OuraApiThermalClient,
-    private val keyValueCache: AimiKeyValueCache,
+    private val preferences: Preferences,
 ) : AimiPhysioSource, AimiPhysioDataSource, IosStepBucketSource, IosHeartRateSource {
 
     private companion object {
@@ -311,7 +311,7 @@ class IosHealthKitPhysioRepository @Inject constructor(
     override suspend fun fetchStepsData(daysBack: Int, ignoreUnifiedSourceMode: Boolean): Int =
         withContext(aapsIoDispatcher) {
             if (!ignoreUnifiedSourceMode) {
-                val mode = UnifiedActivityProviderMTR.getMode(keyValueCache)
+                val mode = UnifiedActivityProviderMTR.getMode(preferences)
                 if (mode == UnifiedActivityProviderMTR.MODE_PREFER_WEAR ||
                     mode == UnifiedActivityProviderMTR.MODE_DISABLED
                 ) {

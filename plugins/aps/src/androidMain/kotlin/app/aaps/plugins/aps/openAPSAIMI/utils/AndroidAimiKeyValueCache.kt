@@ -27,22 +27,21 @@ class AndroidAimiKeyValueCache @Inject constructor(
     private val context: Context
 ) : AimiKeyValueCache {
 
-    private fun prefsOf(store: String?): SharedPreferences =
-        if (store == null) context.getSharedPreferences(context.packageName + "_preferences", Context.MODE_PRIVATE)
-        else context.getSharedPreferences(store, Context.MODE_PRIVATE)
+    private fun prefsOf(store: String): SharedPreferences =
+        context.getSharedPreferences(store, Context.MODE_PRIVATE)
 
-    override fun getString(store: String?, key: String): String? =
+    override fun getString(store: String, key: String): String? =
         runCatching { prefsOf(store).getString(key, null) }.getOrNull()
 
-    override fun putString(store: String?, key: String, value: String): Boolean =
+    override fun putString(store: String, key: String, value: String): Boolean =
         runCatching { prefsOf(store).edit().putString(key, value).commit() }.getOrDefault(false)
 
-    override fun getLong(store: String?, key: String, default: Long): Long =
+    override fun getLong(store: String, key: String, default: Long): Long =
         runCatching { prefsOf(store).getLong(key, default) }.getOrDefault(default)
 
-    override fun putLong(store: String?, key: String, value: Long): Boolean =
+    override fun putLong(store: String, key: String, value: Long): Boolean =
         runCatching { prefsOf(store).edit().putLong(key, value).commit() }.getOrDefault(false)
 
-    override fun isFresh(store: String?, key: String, ttlMs: Long): Boolean =
+    override fun isFresh(store: String, key: String, ttlMs: Long): Boolean =
         runCatching { aimiWallClockMs() - prefsOf(store).getLong(key, 0L) < ttlMs }.getOrDefault(false)
 }

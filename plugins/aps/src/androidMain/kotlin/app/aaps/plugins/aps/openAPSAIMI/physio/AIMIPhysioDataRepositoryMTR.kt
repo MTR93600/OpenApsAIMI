@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.physio
 
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiPhysioSource
 import android.content.Context
@@ -61,7 +62,7 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
     private val context: Context,
     private val aapsLogger: AAPSLogger,
     private val ouraApiThermalClient: OuraApiThermalClient,
-    private val keyValueCache: app.aaps.plugins.aps.openAPSAIMI.utils.AimiKeyValueCache,
+    private val preferences: Preferences,
 ) : AimiPhysioSource, AimiPhysioDataSource {
     
     companion object {
@@ -535,7 +536,7 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
      */
     override suspend fun fetchStepsData(daysBack: Int, ignoreUnifiedSourceMode: Boolean): Int {
         if (!ignoreUnifiedSourceMode) {
-            val mode = app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR.getMode(keyValueCache)
+            val mode = UnifiedActivityProviderMTR.getMode(preferences)
             if (mode == app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR.MODE_PREFER_WEAR ||
                 mode == app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR.MODE_DISABLED) {
                 return 0
@@ -601,7 +602,7 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
      * callers should fall back to persistence-layer bucket logic.
      */
     suspend fun fetchTodayStepsTotalAggregated(dayStartMs: Long, nowMs: Long): Long? {
-        val mode = UnifiedActivityProviderMTR.getMode(keyValueCache)
+        val mode = UnifiedActivityProviderMTR.getMode(preferences)
         if (mode == UnifiedActivityProviderMTR.MODE_PREFER_WEAR ||
             mode == UnifiedActivityProviderMTR.MODE_DISABLED
         ) {

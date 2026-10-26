@@ -24,23 +24,23 @@ class AdvisorHistoryRepositoryTest {
         val strings = mutableMapOf<String, String>()
         private val longs = mutableMapOf<String, Long>()
 
-        private fun id(store: String?, key: String) = "$store/$key"
+        private fun id(store: String, key: String) = "$store/$key"
 
-        override fun getString(store: String?, key: String): String? = strings[id(store, key)]
+        override fun getString(store: String, key: String): String? = strings[id(store, key)]
 
-        override fun putString(store: String?, key: String, value: String): Boolean {
+        override fun putString(store: String, key: String, value: String): Boolean {
             strings[id(store, key)] = value
             return true
         }
 
-        override fun getLong(store: String?, key: String, default: Long): Long = longs[id(store, key)] ?: default
+        override fun getLong(store: String, key: String, default: Long): Long = longs[id(store, key)] ?: default
 
-        override fun putLong(store: String?, key: String, value: Long): Boolean {
+        override fun putLong(store: String, key: String, value: Long): Boolean {
             longs[id(store, key)] = value
             return true
         }
 
-        override fun isFresh(store: String?, key: String, ttlMs: Long): Boolean = false
+        override fun isFresh(store: String, key: String, ttlMs: Long): Boolean = false
     }
 
     private companion object {

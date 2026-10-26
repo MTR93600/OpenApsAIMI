@@ -1,5 +1,6 @@
 package app.aaps.di.metro
 
+import app.aaps.implementation.alerts.EatReminderReceiver
 import app.aaps.implementation.androidNotification.AlarmMuteReceiver
 import app.aaps.implementation.androidNotification.HypoTreatedReceiver
 import app.aaps.persistentNotification.DummyService
@@ -52,6 +53,12 @@ class ReceiverInjectorsTest {
     @Test
     fun `the hypo treated receiver has an injector`() {
         assertThat(injectors.keys).contains(HypoTreatedReceiver::class)
+    }
+
+    /** The "time to eat" alarm and its Stop / +5 min buttons; a missing entry is a crash when the timer ends. */
+    @Test
+    fun `the eat reminder receiver has an injector`() {
+        assertThat(injectors.keys).contains(EatReminderReceiver::class)
     }
 
     @Test

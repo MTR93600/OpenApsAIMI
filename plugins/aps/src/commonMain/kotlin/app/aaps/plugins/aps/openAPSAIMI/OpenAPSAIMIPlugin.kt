@@ -36,6 +36,8 @@ import app.aaps.core.interfaces.aps.AutosensResult
 import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.CurrentTemp
 import app.aaps.core.interfaces.aps.OapsProfileAimi
+import app.aaps.core.interfaces.aps.RT
+import app.aaps.plugins.aps.openAPSAIMI.math.AimiTickPolicyMath
 import app.aaps.core.interfaces.bgQualityCheck.BgQualityCheck
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.constraints.Constraint
@@ -1827,6 +1829,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         diaGovernor = kineticsView.diaGovernor,
                     )
                 }
+                holdSmbInsideLoopInterval(it, now)
                 val determineBasalResult = apsResultProvider().with(it)
                 
                 if (it.predBGs != null) {
@@ -2610,5 +2613,28 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 items = listOf(setup),
             )
         }
+
+
+    /**
+     * Drops an SMB the loop would refuse for coming too soon after the last bolus.
+     *
+     * AIMI has its own SMB spacing, which can be shorter than the "Max SMB frequency" setting
+     * ([IntKey.ApsMaxSmbFrequency]). The loop used to set such an SMB to 0 before it set the temp
+     * basal, so the temp basal AIMI chose for this tick still went out. Upstream (3e210eadab7) moved
+     * that check after the temp basal: the SMB is refused there, and the loop runs the whole APS again
+     * one second later without SMB, which for AIMI means a second tick with a different temp basal
+     * and every learner moved twice. Applying the loop's own rule here keeps the old result: no SMB
+     * this tick, the temp basal of this tick.
+     */
+    private suspend fun holdSmbInsideLoopInterval(rt: RT, now: Long) {
+        val units = rt.units ?: return
+        if (units <= 0.0) return
+        val intervalMinutes = preferences.get(IntKey.ApsMaxSmbFrequency)
+        val lastBolusTime = persistenceLayer.getNewestBolus()?.timestamp ?: 0L
+        if (!AimiTickPolicyMath.smbHeldByLoopInterval(units, lastBolusTime, intervalMinutes, now)) return
+        aapsLogger.debug(LTag.APS, "AIMI SMB ${units}U held: still inside the $intervalMinutes min SMB interval of the loop")
+        rt.reason.append("; SMB ${units}U held: still inside the $intervalMinutes min SMB interval")
+        rt.units = 0.0
+    }
 
 }

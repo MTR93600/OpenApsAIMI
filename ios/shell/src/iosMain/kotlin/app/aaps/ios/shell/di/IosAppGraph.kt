@@ -1,5 +1,6 @@
 package app.aaps.ios.shell.di
 
+import app.aaps.core.interfaces.alerts.EatReminder
 import app.aaps.core.interfaces.bgQualityCheck.BgQualityCheck
 import app.aaps.core.interfaces.clientcontrol.ClientControlActionDispatcher
 import app.aaps.core.interfaces.configuration.Config
@@ -125,7 +126,7 @@ interface IosAppGraph : MetroViewModelMultibindings {
      */
     val constraintsChecker: ConstraintsChecker
 
-    /** `IosSp` over `NSUserDefaults`, exposed for graphs that take it as a factory parameter. */
+    /** The encrypted settings store opened by `IosStorage`, exposed for graphs that take it as a factory parameter. */
     val keyValueStore: KeyValueStore
     val profileUtil: ProfileUtil
     val profileFunction: ProfileFunction
@@ -235,6 +236,7 @@ interface IosAppGraph : MetroViewModelMultibindings {
     val periodicMaintenance: PeriodicMaintenance
     // Turns a snackbar into a notification when no screen is up to show it. Shared with Android.
     val snackbarNotificationFallback: SnackbarNotificationFallback
+    val eatReminder: EatReminder
     val appScope: CoroutineScope
     val swDefinition: SWDefinition
     val builtInSearchables: BuiltInSearchables

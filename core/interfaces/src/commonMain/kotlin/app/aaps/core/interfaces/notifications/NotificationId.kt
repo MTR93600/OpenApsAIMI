@@ -253,6 +253,12 @@ enum class NotificationId(
     // Appended at the END of the upstream block for the same reason as above.
     COMBO_UNKNOWN_BOLUS(URGENT, PUMP),
 
+    // Desktop only: no OS key store was found (Linux without a keyring), so the keys that protect the settings
+    // and the pairing secrets are plain files next to the data. IMPORTANT, not URGENT: nothing is wrong with
+    // therapy, but a copy of the folder gives everything away, and the user can fix it. Appended at the END of
+    // the upstream block for the same reason as above.
+    SECRETS_NOT_PROTECTED(IMPORTANT, SYSTEM),
+
     // ---- Fork entries (ONE+/Libre 3 native, AIMI, calibration) ----
     // Kept after the upstream block on purpose: upstream keeps appending at its end, so a future
     // merge renumbers only these, which this fork controls, rather than any upstream id.

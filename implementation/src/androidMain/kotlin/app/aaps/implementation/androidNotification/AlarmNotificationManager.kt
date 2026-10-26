@@ -14,6 +14,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
+import app.aaps.core.interfaces.alerts.EatReminder
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.AlarmAction
@@ -27,9 +28,11 @@ import app.aaps.core.interfaces.ui.IconsProvider
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.R as CoreUiR
 import app.aaps.core.ui.rawRes
 import app.aaps.implementation.R
+import app.aaps.implementation.alerts.EatReminderReceiver
 import app.aaps.implementation.androidNotification.AlarmNotificationManager.Companion.CHANNEL_SILENT
 import app.aaps.implementation.androidNotification.AlarmNotificationManager.Companion.CHANNEL_SILENT_URGENT
 import app.aaps.implementation.notifications.AlarmAudioPolicy
@@ -382,12 +385,6 @@ class AlarmNotificationManager(
         return owns
     }
 
-    /**
-     * Raise an alarm while AAPS is in the background: a sound-bearing notification, the looping
-     * [AlarmSoundPlayer], and - when exact alarms are allowed - a screen wake that brings up
-     * [UiInteraction.errorHelperActivity]. Without that permission the alarm still rings; only the screen
-     * stays dark.
-     */
     private val watchHandler = Handler(Looper.getMainLooper())
 
     /** See [SilentChannelWatch]: a silent-channel alarm rings by itself when the player is silent. */
@@ -397,7 +394,16 @@ class AlarmNotificationManager(
         intervalMs = SILENT_CHANNEL_CHECK_MS
     )
 
-    fun postFullScreenAlarm(status: String, title: String, sound: AlarmSound?) {
+    /**
+     * Raise an alarm while AAPS is in the background: a sound-bearing notification, the looping
+     * [AlarmSoundPlayer], and - when exact alarms are allowed - a screen wake that brings up
+     * [UiInteraction.errorHelperActivity]. Without that permission the alarm still rings; only the screen
+     * stays dark.
+     *
+     * [eatReminder] marks the alarm of the "time to eat" timer: the notification then also has +5 min, and the
+     * alarm screen offers +5 min instead of its 5 minute mute.
+     */
+    fun postFullScreenAlarm(status: String, title: String, sound: AlarmSound?, eatReminder: Boolean = false) {
         ensureChannels() // created on first post, see the `channels` field
         // Reached only from the background / off-main branches of UiInteraction.runAlarm.
         //
@@ -427,6 +433,7 @@ class AlarmNotificationManager(
             putExtra(AlarmIntent.EXTRA_STATUS, status)
             putExtra(AlarmIntent.EXTRA_TITLE, title)
             putExtra(AlarmIntent.EXTRA_POSTED_AT_ELAPSED_REALTIME, postedAt)
+            putExtra(AlarmIntent.EXTRA_EAT_REMINDER, eatReminder)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
         val pendingIntent = PendingIntent.getActivity(
@@ -470,6 +477,18 @@ class AlarmNotificationManager(
             .setContentIntent(pendingIntent)
             .setDeleteIntent(swipePendingIntent)
             .addAction(0, rh.gs(app.aaps.core.ui.R.string.mute), mutePendingIntent)
+            .apply {
+                // +5 min next to Mute, so the timer can be moved from the lock screen. Mute ends the timer
+                // (EatReminder.onAlarmStopped), like every other way of stopping its alarm.
+                if (eatReminder) addAction(
+                    0, rh.gs(CoreUiStrings.eat_reminder_extend, EatReminder.EXTEND_MINUTES),
+                    PendingIntent.getBroadcast(
+                        context, EatReminderReceiver.requestCodeOf(EatReminderReceiver.ACTION_EXTEND),
+                        Intent(context, EatReminderReceiver::class.java).setAction(EatReminderReceiver.ACTION_EXTEND),
+                        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                    )
+                )
+            }
             .build()
 
         silentChannelWatch.stop()

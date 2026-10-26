@@ -40,28 +40,27 @@ class IosAimiKeyValueCache @Inject constructor() : AimiKeyValueCache {
      * store AIMI uses has either name, but a null here falls back to the standard store rather
      * than throwing, because losing a cache must not take a dosing tick down.
      */
-    private fun defaultsOf(store: String?): NSUserDefaults =
-        if (store == null) NSUserDefaults.standardUserDefaults
-        else NSUserDefaults(suiteName = store) ?: NSUserDefaults.standardUserDefaults
+    private fun defaultsOf(store: String): NSUserDefaults =
+        NSUserDefaults(suiteName = store) ?: NSUserDefaults.standardUserDefaults
 
-    override fun getString(store: String?, key: String): String? =
+    override fun getString(store: String, key: String): String? =
         runCatching { defaultsOf(store).stringForKey(key) }.getOrNull()
 
-    override fun putString(store: String?, key: String, value: String): Boolean =
+    override fun putString(store: String, key: String, value: String): Boolean =
         runCatching {
             val defaults = defaultsOf(store)
             defaults.setObject(value, forKey = key)
             defaults.stringForKey(key) == value
         }.getOrDefault(false)
 
-    override fun getLong(store: String?, key: String, default: Long): Long =
+    override fun getLong(store: String, key: String, default: Long): Long =
         runCatching {
             val defaults = defaultsOf(store)
             // Ask whether the key is there at all: integerForKey cannot tell absent from zero.
             if (defaults.objectForKey(key) == null) default else defaults.integerForKey(key)
         }.getOrDefault(default)
 
-    override fun putLong(store: String?, key: String, value: Long): Boolean =
+    override fun putLong(store: String, key: String, value: Long): Boolean =
         runCatching {
             val defaults = defaultsOf(store)
             defaults.setInteger(value, forKey = key)
@@ -77,7 +76,7 @@ class IosAimiKeyValueCache @Inject constructor() : AimiKeyValueCache {
      * (the clock moved back) gives a negative difference and answers `true`; that is what Android
      * does, so it is kept rather than corrected here.
      */
-    override fun isFresh(store: String?, key: String, ttlMs: Long): Boolean =
+    override fun isFresh(store: String, key: String, ttlMs: Long): Boolean =
         runCatching {
             val defaults = defaultsOf(store)
             val stored = if (defaults.objectForKey(key) == null) 0L else defaults.integerForKey(key)

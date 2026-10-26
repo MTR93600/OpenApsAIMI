@@ -2,6 +2,7 @@ package app.aaps.plugins.aps.openAPSAIMI.math
 
 import app.aaps.core.interfaces.aps.OapsProfileAimi
 import app.aaps.core.interfaces.aps.RT
+import app.aaps.core.interfaces.aps.SmbIntervalGate
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSoftFloorPathMin
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSoftFloorTelemetry
 import app.aaps.plugins.aps.openAPSAIMI.safety.CompressionReboundGuard
@@ -28,6 +29,13 @@ internal object AimiTickPolicyMath {
      */
     fun isMealContextActive(manualMealMode: Boolean, fclNote: Boolean, mealCobG: Double): Boolean =
         manualMealMode || fclNote || mealCobG > 5.0
+
+    /**
+     * True when the loop would refuse this SMB for coming too soon after the last bolus, with the
+     * loop's own rule ([SmbIntervalGate], "Max SMB frequency"). See `OpenAPSAIMIPlugin.holdSmbInsideLoopInterval`.
+     */
+    fun smbHeldByLoopInterval(units: Double, lastBolusTime: Long, intervalMinutes: Int, now: Long): Boolean =
+        units > 0.0 && SmbIntervalGate.tooSoon(lastBolusTime, intervalMinutes, now)
 
     /**
      * OpenJDK `Math.round(double)` bit algorithm. Ties toward +∞. NaN is 0.

@@ -51,23 +51,23 @@ class GeminiModelResolverTest {
         /** What [isFresh] answers. The real one compares a stored stamp against the wall clock. */
         var fresh = false
 
-        private fun id(store: String?, key: String) = "$store/$key"
+        private fun id(store: String, key: String) = "$store/$key"
 
-        override fun getString(store: String?, key: String): String? = strings[id(store, key)]
+        override fun getString(store: String, key: String): String? = strings[id(store, key)]
 
-        override fun putString(store: String?, key: String, value: String): Boolean {
+        override fun putString(store: String, key: String, value: String): Boolean {
             strings[id(store, key)] = value
             return true
         }
 
-        override fun getLong(store: String?, key: String, default: Long): Long = longs[id(store, key)] ?: default
+        override fun getLong(store: String, key: String, default: Long): Long = longs[id(store, key)] ?: default
 
-        override fun putLong(store: String?, key: String, value: Long): Boolean {
+        override fun putLong(store: String, key: String, value: Long): Boolean {
             longs[id(store, key)] = value
             return true
         }
 
-        override fun isFresh(store: String?, key: String, ttlMs: Long): Boolean {
+        override fun isFresh(store: String, key: String, ttlMs: Long): Boolean {
             freshnessQuestions += Triple(store, key, ttlMs)
             return fresh
         }

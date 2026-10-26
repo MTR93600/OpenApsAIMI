@@ -78,11 +78,14 @@ class UnifiedActivityProviderMTR @Inject constructor(
         private const val WINDOW_SLACK_MS = 150_000L
 
         /**
-         * Same read as the instance [getMode], for a caller that has no [KeyValueStore] to inject - this is
-         * the platform's default preference store either way, via [cache]'s `null`-store convention.
+         * Same read as the instance [getMode], for a caller that is not this class.
+         *
+         * It must go through [Preferences]: that is where the AIMI settings screen writes the value. It
+         * used to read the platform's old preference file directly, which since the encrypted settings
+         * store (upstream 74c37d157fc) is only read once to move the settings, so a change made after
+         * the update was never seen here.
          */
-        fun getMode(cache: app.aaps.plugins.aps.openAPSAIMI.utils.AimiKeyValueCache): String =
-            cache.getString(null, PREF_KEY_SOURCE_MODE) ?: DEFAULT_MODE
+        fun getMode(preferences: Preferences): String = preferences.get(AimiStringKey.ActivitySourceMode)
 
         /**
          * Picks the freshest HR row for [mode] (Garmin / Wear / HC priority).

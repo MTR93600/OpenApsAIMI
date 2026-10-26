@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
+import org.jetbrains.kotlin.gradle.plugin.mpp.TestExecutable
 import java.text.SimpleDateFormat
 import java.util.Date
 
@@ -231,5 +233,21 @@ kotlin {
                 implementation(libs.kotlinx.coroutines.test)
             }
         }
+    }
+}
+
+// AIMI's UAM model runs TensorFlow Lite C on iOS (IosUamPredictor), so a binary that links the app
+// graph needs the same archive as the :plugins:aps tests: here, the test binary. AapsShared itself is
+// a static framework, so the app gets the archive from the Xcode project (OTHER_LDFLAGS) instead.
+// The archives are built by plugins/aps/src/tfliteParity/build-uam24-*.sh.
+kotlin.targets.withType<KotlinNativeTarget>().configureEach {
+    val libDir = when (name) {
+        "iosArm64" -> "tflite-24-device-arm64"
+        "iosSimulatorArm64" -> "tflite-24-sim-arm64"
+        else -> return@configureEach
+    }
+    val staticLib = project(":plugins:aps").layout.buildDirectory.file("$libDir/libtensorflow-lite.a").get().asFile.absolutePath
+    binaries.withType<TestExecutable>().configureEach {
+        linkerOpts("-force_load", staticLib, "-lc++", "-framework", "CoreFoundation")
     }
 }

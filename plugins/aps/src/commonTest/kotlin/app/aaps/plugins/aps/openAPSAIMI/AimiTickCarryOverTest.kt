@@ -99,6 +99,18 @@ class AimiTickCarryOverTest {
     }
 
     @Test
+    fun `an SMB inside the loop interval is held and one after it is not`() {
+        val now = 1_700_000_000_000L
+        val twoMinutesAgo = now - 2 * 60_000L
+        assertTrue(AimiTickPolicyMath.smbHeldByLoopInterval(0.3, twoMinutesAgo, intervalMinutes = 3, now = now))
+        assertFalse(AimiTickPolicyMath.smbHeldByLoopInterval(0.3, twoMinutesAgo, intervalMinutes = 2, now = now))
+        // The loop's 6 s tolerance: 3 min minus 5 s is already allowed.
+        assertFalse(AimiTickPolicyMath.smbHeldByLoopInterval(0.3, now - 3 * 60_000L + 5_000L, intervalMinutes = 3, now = now))
+        assertFalse(AimiTickPolicyMath.smbHeldByLoopInterval(0.0, twoMinutesAgo, intervalMinutes = 3, now = now))
+        assertFalse(AimiTickPolicyMath.smbHeldByLoopInterval(0.3, lastBolusTime = 0L, intervalMinutes = 3, now = now))
+    }
+
+    @Test
     fun `an FCL note alone is a meal context`() {
         assertTrue(AimiTickPolicyMath.isMealContextActive(manualMealMode = false, fclNote = true, mealCobG = 0.0))
     }
