@@ -13,6 +13,7 @@ import app.aaps.core.interfaces.source.SensorCalibrationResult
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriverReal
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers
+import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseSample
 import app.aaps.plugins.dexcomoneplus.OnePlusCalibrationOutcome
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.dexcomoneplus.session.OnePlusBleSession
@@ -71,8 +72,8 @@ class DexcomOnePlusSensorCalibrationTest : TestBase() {
 
     @Test
     fun `the switch defaults to off`() {
-        assertThat(DexcomOnePlusBooleanKey.SendCalibrationToSensor.defaultValue).isFalse()
-        assertThat(DexcomOnePlusBooleanKey.SendCalibrationToSensor.engineeringModeOnly).isTrue()
+        assertThat(DexcomOnePlusBooleanKey.SendCalibrationToSensor.defaultValue).isTrue()
+        assertThat(DexcomOnePlusBooleanKey.SendCalibrationToSensor.engineeringModeOnly).isFalse()
         assertThat(DexcomOnePlusBooleanKey.SendCalibrationToSensor.exportable).isFalse()
     }
 
@@ -96,6 +97,7 @@ class DexcomOnePlusSensorCalibrationTest : TestBase() {
     fun `switch on and session down refuses without queueing`() {
         whenever(preferences.get(DexcomOnePlusBooleanKey.SendCalibrationToSensor)).thenReturn(true)
         val driver = OnePlusCgmDrivers.realProduction()
+        giveReading(rate = 0.5)
 
         val result = plugin.calibrateSensor(glucoseMgdl = 150, bloodAtMs = System.currentTimeMillis())
 
@@ -111,6 +113,7 @@ class DexcomOnePlusSensorCalibrationTest : TestBase() {
         whenever(preferences.get(DexcomOnePlusBooleanKey.SendCalibrationToSensor)).thenReturn(true)
         val driver = OnePlusCgmDrivers.realProduction()
         markSessionUp(driver)
+        giveReading(rate = 0.5)
 
         val low = plugin.calibrateSensor(glucoseMgdl = 39, bloodAtMs = System.currentTimeMillis())
         val high = plugin.calibrateSensor(glucoseMgdl = 401, bloodAtMs = System.currentTimeMillis())
@@ -127,6 +130,7 @@ class DexcomOnePlusSensorCalibrationTest : TestBase() {
         whenever(preferences.get(DexcomOnePlusBooleanKey.SendCalibrationToSensor)).thenReturn(true)
         val driver = OnePlusCgmDrivers.realProduction()
         markSessionUp(driver)
+        giveReading(rate = 0.5)
         val now = System.currentTimeMillis()
 
         val first = plugin.calibrateSensor(glucoseMgdl = 150, bloodAtMs = now)
@@ -137,6 +141,44 @@ class DexcomOnePlusSensorCalibrationTest : TestBase() {
         assertThat(driver.calibrationPending()).isTrue()
         assertThat(driver.lastCalibrationOutcome()).isEqualTo(OnePlusCalibrationOutcome.Pending)
         assertThat(queueOf(driver).peek()?.glucoseMgdl).isEqualTo(150)
+    }
+
+    @Test
+    fun `switch on without a recent reading refuses before the value is shown to the sensor`() {
+        whenever(preferences.get(DexcomOnePlusBooleanKey.SendCalibrationToSensor)).thenReturn(true)
+        val driver = OnePlusCgmDrivers.realProduction()
+        markSessionUp(driver)
+        val now = System.currentTimeMillis()
+
+        assertThat(plugin.sensorCalibrationRefusal(glucoseMgdl = 150, bloodAtMs = now)).isNotNull()
+        assertThat(plugin.calibrateSensor(glucoseMgdl = 150, bloodAtMs = now)).isInstanceOf(SensorCalibrationResult.Refused::class.java)
+        assertThat(queueOf(driver).peek()).isNull()
+    }
+
+    @Test
+    fun `switch on and glucose changing fast refuses`() {
+        whenever(preferences.get(DexcomOnePlusBooleanKey.SendCalibrationToSensor)).thenReturn(true)
+        val driver = OnePlusCgmDrivers.realProduction()
+        markSessionUp(driver)
+        giveReading(rate = 3.0)
+        val now = System.currentTimeMillis()
+
+        assertThat(plugin.calibrateSensor(glucoseMgdl = 150, bloodAtMs = now)).isInstanceOf(SensorCalibrationResult.Refused::class.java)
+        assertThat(queueOf(driver).peek()).isNull()
+    }
+
+    @Test
+    fun `switch off asks nothing of the sensor`() {
+        whenever(preferences.get(DexcomOnePlusBooleanKey.SendCalibrationToSensor)).thenReturn(false)
+
+        assertThat(plugin.sensorCalibrationRefusal(glucoseMgdl = 150, bloodAtMs = System.currentTimeMillis())).isNull()
+    }
+
+    /** A production reading one minute old, as `onGlucose` would have left it. */
+    private fun giveReading(rate: Double?) {
+        val field = DexcomOnePlusPlugin::class.java.getDeclaredField("lastProductionReading")
+        field.isAccessible = true
+        field.set(plugin, OnePlusGlucoseSample(mgdl = 120.0, timestampMs = System.currentTimeMillis() - 60_000L, trendSlopeMgdlPerMin = rate))
     }
 
     private fun markSessionUp(driver: OnePlusCgmDriverReal) {

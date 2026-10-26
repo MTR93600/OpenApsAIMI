@@ -21,6 +21,7 @@ import app.aaps.core.interfaces.iob.GlucoseStatusProvider
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.resources.TextResolver
+import app.aaps.core.interfaces.source.BgSource
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.core.keys.interfaces.TextRef
@@ -81,6 +82,7 @@ internal class CalibrationDialogViewModelTest {
         whenever(profileUtil.fromMgdlToUnits(any(), any())).thenReturn(0.0)
         whenever(profileUtil.convertToMgdl(any(), any())).thenReturn(120.0)
         whenever(activePlugin.activeCalibration).thenReturn(activeCalibration)
+        whenever(activePlugin.activeBgSource).thenReturn(mock<BgSource>())
         whenever(dateUtil.now()).thenReturn(1_700_000_000_000L)
         whenever(config.AAPSCLIENT).thenReturn(false)
         whenever(persistenceLayer.observeChanges(TE::class)).thenReturn(emptyFlow())

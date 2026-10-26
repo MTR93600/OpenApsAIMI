@@ -8,6 +8,7 @@ import app.aaps.plugins.dexcomoneplus.gatt.OnePlusGattClient
 import app.aaps.plugins.dexcomoneplus.onePlusSleep
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrateRx
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrateTx
+import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrationBoundsRx
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrationMapper
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrationState
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusEGlucoseTx
@@ -51,12 +52,16 @@ class OnePlusEgvSession(
     private val requestNewSensorStart: Boolean = false,
     /**
      * Fingersticks waiting to be handed to the sensor's own algorithm, or null when this session may
-     * not calibrate at all — which is the default. The plugin switch is off unless the user turns
-     * it on, and a null queue here never builds opcode 0x34.
+     * not calibrate at all. A null queue here never builds opcode 0x34.
      */
     private val calibrationQueue: OnePlusCalibrationQueue? = null,
-    /** What the sensor answered to a calibration (0x35), so a refusal can reach the user. */
+    /** What the sensor answered to a calibration (0x34 echo, or 0x35), so a refusal can reach the user. */
     private val onCalibrationResult: (OnePlusCalibrateRx?) -> Unit = {},
+    /**
+     * The sensor's calibration state (0x32) read right after, and whether it holds the value just
+     * sent. That is how a lost answer is resolved without sending the value a second time.
+     */
+    private val onCalibrationState: (OnePlusCalibrationBoundsRx, Boolean) -> Unit = { _, _ -> },
 ) {
 
     @Volatile
@@ -269,11 +274,46 @@ class OnePlusEgvSession(
             return false
         }
         awaitCalibrationReply(shouldContinue)
+        readCalibrationState(pending.glucoseMgdl, dexTime, shouldContinue)
         return true
     }
 
     /**
-     * Wait for the 0x35 answer, letting anything else through on the way.
+     * Ask the sensor for its calibration state (0x32) and report it.
+     *
+     * Never sends the value again, whatever comes back: a sensor keeps every calibration it takes,
+     * so a second copy cannot be undone. A sensor that does not answer changes nothing.
+     */
+    private fun readCalibrationState(sentGlucoseMgdl: Int, sentDexTimeSeconds: Int, shouldContinue: () -> Boolean) {
+        if (!shouldContinue() || !gatt.isConnected()) return
+        try {
+            gatt.writeControl(OnePlusCalibrationBoundsRx.request())
+        } catch (t: Throwable) {
+            OnePlusLog.w("${OnePlusLogMarkers.SESSION}: calibration state request failed: ${t.message}")
+            return
+        }
+        for (attempt in 0 until CALIBRATION_REPLY_ROUNDS) {
+            if (!shouldContinue() || !gatt.isConnected()) return
+            val packet = gatt.awaitControlNotify(CALIBRATION_REPLY_TIMEOUT_MS) ?: break
+            val bounds = OnePlusCalibrationBoundsRx.parse(packet)
+            if (bounds == null) {
+                handleControlPacket(packet, shouldContinue)
+                continue
+            }
+            val matches = bounds.matches(sentGlucoseMgdl, sentDexTimeSeconds)
+            OnePlusLog.i(
+                "${OnePlusLogMarkers.SESSION}: calibration state last=${bounds.lastGlucoseMgdl} " +
+                    "at=${bounds.lastCalibrationTimeSeconds} processing=${bounds.processing} " +
+                    "permitted=${bounds.calibrationsPermitted} matchesSent=$matches",
+            )
+            onCalibrationState(bounds, matches)
+            return
+        }
+        OnePlusLog.i("${OnePlusLogMarkers.SESSION}: no calibration state answer")
+    }
+
+    /**
+     * Wait for the answer (0x34 echo, or 0x35), letting anything else through on the way.
      *
      * The sensor may well send a glucose packet before it answers, and dropping it here would lose a
      * reading, so every other packet keeps going through the normal handling.
@@ -288,7 +328,7 @@ class OnePlusEgvSession(
                 continue
             }
             OnePlusLog.i(
-                "${OnePlusLogMarkers.SESSION}: CalibrateRx result=0x${parsed.result.toString(16)} " +
+                "${OnePlusLogMarkers.SESSION}: CalibrateRx form=${parsed.form} result=0x${parsed.result.toString(16)} " +
                     "accepted=${parsed.accepted()} msg=${parsed.message()}",
             )
             onCalibrationResult(parsed)
@@ -487,17 +527,21 @@ class OnePlusEgvSession(
         if (parsed.usable && sample != null) {
             OnePlusLog.i(
                 "${OnePlusLogMarkers.BG}: mgdl=${sample.mgdl} ts=${sample.timestampMs} " +
-                    "cal=${parsed.calibration.name} op=0x${parsed.opcode.toString(16)}",
+                    "cal=${parsed.calibration.name} op=0x${parsed.opcode.toString(16)} flags=${flagsHex(parsed)}",
             )
             onGlucose(sample)
             maybeBackfillAfterEgv(shouldContinue)
         } else {
             OnePlusLog.i(
                 "${OnePlusLogMarkers.WARMUP}: egv cal=${parsed.calibration.name} usable=false " +
+                    "displayOnly=${parsed.glucoseIsDisplayOnly} flags=${flagsHex(parsed)} " +
                     "age=${parsed.ageSeconds} sessionAge=${parsed.sessionAgeSeconds}",
             )
         }
     }
+
+    private fun flagsHex(parsed: OnePlusGlucoseParser.ParsedEgv): String =
+        parsed.flags?.let { "0x" + it.toString(16).padStart(2, '0') } ?: "-"
 
     /** Juggluco askbackfill after first glucose when dex time is known. */
     private fun maybeBackfillAfterEgv(shouldContinue: () -> Boolean) {
@@ -516,10 +560,10 @@ class OnePlusEgvSession(
         /** xDrip `SessionStopTxMessage.postExecuteGuardTime`. */
         const val SESSION_STOP_GUARD_MS: Long = 1_000L
 
-        /** Per-wait for the 0x35 answer. */
+        /** Per-wait for the calibration answer, and for the calibration state. */
         const val CALIBRATION_REPLY_TIMEOUT_MS: Long = 10_000L
 
-        /** How many packets may arrive before the 0x35 — a glucose packet often comes first. */
+        /** How many packets may arrive before the answer — a glucose packet often comes first. */
         const val CALIBRATION_REPLY_ROUNDS: Int = 3
     }
 }

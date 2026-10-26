@@ -7,7 +7,8 @@ import kotlin.time.Clock
  * Assembles ProbablyBackfill notifications and decodes G7/ONE+ records.
  *
  * Short-TxId path (`streamType > 0` in xDrip): concatenate payload bytes; each
- * record is 9 bytes: dexTime | glucose12 | type | extra | trend.
+ * record is 9 bytes: dexTime | glucose12 | type | flags | trend. A record whose flags carry
+ * [OnePlusGlucoseParser.DISPLAY_ONLY_FLAG] repeats a fingerstick and is skipped.
  *
  * Provenance: xDrip `BackFillStream` at pin
  * `1e86d9a2a52577ed2c30fbf7b69d75fd56e6918f` (GPL-3.0).
@@ -58,10 +59,11 @@ class OnePlusBackFillStream {
                 val dexTime = view.int()
                 val glucose = view.short().toInt() and 0x0fff
                 val type = view.u8()
-                view.skip(1) // extra (G7)
+                val flags = view.u8()
                 val trend = view.byte().toInt()
                 val state = OnePlusCalibrationState.parse(type)
                 if (!state.usableGlucose()) continue
+                if (flags and OnePlusGlucoseParser.DISPLAY_ONLY_FLAG != 0) continue
                 if (dexTime == 0) continue
                 val ts = fromDexTime(dexTime, currentDexTimeSeconds, nowMs)
                 val age = nowMs - ts

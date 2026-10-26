@@ -63,15 +63,31 @@ class OnePlusGlucoseParserTest {
     }
 
     @Test
-    fun `parse EGV2 display-only bit and invalid trend`() {
-        val packet = buildEgv2(
-            glucoseMasked = 0x1078, // display-only + 120
-            trend = OnePlusGlucoseParser.TREND_INVALID,
-        )
+    fun `a display-only EGV2 value never becomes a sample`() {
+        val packet = buildEgv2(flags = OnePlusGlucoseParser.DISPLAY_ONLY_FLAG)
         val parsed = OnePlusGlucoseParser.parseControlPacket(packet, nowMs = 1000L)
         requireNotNull(parsed)
         assertThat(parsed.glucoseIsDisplayOnly).isTrue()
+        assertThat(parsed.flags).isEqualTo(0x10)
+        assertThat(parsed.sample).isNull()
+        assertThat(parsed.usable).isFalse()
+        // The state is still read, so the session still counts as alive.
+        assertThat(parsed.calibration).isEqualTo(OnePlusCalibrationState.Ok)
+    }
+
+    @Test
+    fun `the top bits of the glucose field are not the display-only flag on a G7`() {
+        // xDrip's G6 reading of the flag. On a G7 these bits are 0 and the flag is byte 18.
+        val packet = buildEgv2(glucoseMasked = 0x1078)
+        val parsed = requireNotNull(OnePlusGlucoseParser.parseControlPacket(packet, nowMs = 1000L))
+        assertThat(parsed.glucoseIsDisplayOnly).isFalse()
         assertThat(parsed.sample?.mgdl).isEqualTo(120.0)
+    }
+
+    @Test
+    fun `an invalid trend gives a sample without a slope`() {
+        val packet = buildEgv2(trend = OnePlusGlucoseParser.TREND_INVALID)
+        val parsed = requireNotNull(OnePlusGlucoseParser.parseControlPacket(packet, nowMs = 1000L))
         assertThat(parsed.sample?.trendSlopeMgdlPerMin).isNull()
     }
 
@@ -150,6 +166,7 @@ class OnePlusGlucoseParserTest {
         trend: Int = 0,
         sessionAge: Int = 1000,
         status: Int = 0,
+        flags: Int = 0,
     ): ByteArray {
         val buf = ByteBuffer.allocate(19).order(ByteOrder.LITTLE_ENDIAN)
         buf.put(0x4e.toByte())
@@ -162,6 +179,7 @@ class OnePlusGlucoseParserTest {
         buf.put(state.toByte())
         buf.put(trend.toByte())
         buf.putShort(0) // predicted
+        buf.put(flags.toByte())
         return buf.array()
     }
 

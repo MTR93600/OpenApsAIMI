@@ -16,17 +16,11 @@ class OnePlusCalibrateMessageTest {
     private fun hex(bytes: ByteArray): String = bytes.joinToString("") { "%02x".format(it) }
 
     @Test
-    fun `the packet is opcode, glucose and dex time, little endian, with a CRC`() {
+    fun `the packet is opcode, glucose and sensor time, little endian, without a CRC`() {
         val packet = OnePlusCalibrateTx.build(glucoseMgdl = 150, dexTimeSeconds = 0x01020304)!!
 
-        assertThat(packet).hasLength(OnePlusCalibrateTx.PACKET_LENGTH)
-        assertThat(packet[0]).isEqualTo(OnePlusCalibrateTx.OPCODE)
-        assertThat(hex(packet.copyOfRange(1, 3))).isEqualTo("9600")
-        assertThat(hex(packet.copyOfRange(3, 7))).isEqualTo("04030201")
-        val expected = OnePlusFastCrc16.calculate(packet, OnePlusCalibrateTx.PACKET_LENGTH - 2)
-        assertThat(packet[7]).isEqualTo(expected[0])
-        assertThat(packet[8]).isEqualTo(expected[1])
-        assertThat(OnePlusFastCrc16.check(packet)).isTrue()
+        assertThat(packet).hasLength(7)
+        assertThat(hex(packet)).isEqualTo("34960004030201")
     }
 
     @Test
@@ -43,7 +37,7 @@ class OnePlusCalibrateMessageTest {
         val packet = OnePlusCalibrateTx.build(glucoseMgdl = 150, dexTimeSeconds = 123_456)
 
         assertThat(packet).isNotNull()
-        assertThat(OnePlusFastCrc16.check(packet!!)).isTrue()
+        assertThat(packet!!).hasLength(OnePlusCalibrateTx.PACKET_LENGTH)
     }
 
     private fun reply(result: Int): ByteArray {

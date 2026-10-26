@@ -12,6 +12,7 @@ import app.aaps.plugins.dexcomoneplus.oem.DeviceProfileRegistry
 import app.aaps.plugins.dexcomoneplus.oem.OemDeviceProfile
 import app.aaps.plugins.dexcomoneplus.onePlusSleep
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrateRx
+import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrationBoundsRx
 import app.aaps.plugins.dexcomoneplus.reconnect.OemAwareReconnectPolicy
 import app.aaps.plugins.dexcomoneplus.reconnect.OnePlusReconnectPolicy
 import app.aaps.plugins.dexcomoneplus.warmup.OnePlusWarmupClock
@@ -326,12 +327,14 @@ class OnePlusBleSessionSkeleton(
      *
      * Null is the default and stays the default: the driver only passes a queue for the production
      * slot. A pre-soak sensor must never be calibrated — it is not the one feeding the loop, and a
-     * sensor keeps a calibration for good. The engineering switch is a second gate, in the plugin:
-     * while it is off nothing is offered, so this queue stays empty.
+     * sensor keeps a calibration for good. The plugin switch and its checks are a second gate:
+     * while the switch is off nothing is offered, so this queue stays empty.
      */
     private val calibrationQueue: OnePlusCalibrationQueue? = null,
     /** What the sensor answered to a calibration, so a refusal or an unreadable answer reaches the user. */
     private val onCalibrationResult: (OnePlusCalibrateRx?) -> Unit = {},
+    /** The sensor's calibration state read after a calibration, and whether it holds the value sent. */
+    private val onCalibrationState: (OnePlusCalibrationBoundsRx, Boolean) -> Unit = { _, _ -> },
 ) : OnePlusBleSession {
 
     @Volatile
@@ -731,6 +734,7 @@ class OnePlusBleSessionSkeleton(
                 requestNewSensorStart = requestNewSensorStart,
                 calibrationQueue = calibrationQueue,
                 onCalibrationResult = onCalibrationResult,
+                onCalibrationState = onCalibrationState,
             )
             try {
                 egv.run(shouldContinue = { running && gatt.isConnected() })

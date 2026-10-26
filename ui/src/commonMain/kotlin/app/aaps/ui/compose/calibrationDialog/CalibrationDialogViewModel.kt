@@ -200,7 +200,9 @@ class CalibrationDialogViewModel(
             try {
                 when (val result = batchExecutor.commit(pending.id, Sources.CalibrationDialog, label())) {
                     ActionProgress.Applied     -> {
-                        val message = if (config.AAPSCLIENT) null else notYetEffectiveMessage(activePlugin.activeCalibration.status(), rh)
+                        // A value sent to the sensor is not an entry of the calibration plugin, so its status says nothing about it.
+                        val message = if (config.AAPSCLIENT || activePlugin.activeBgSource.calibratesInSensor()) null
+                        else notYetEffectiveMessage(activePlugin.activeCalibration.status(), rh)
                         _sideEffect.emit(SideEffect.EntryAccepted(message))
                     }
                     is ActionProgress.Rejected -> reject(result)

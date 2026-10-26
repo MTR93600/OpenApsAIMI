@@ -3,23 +3,25 @@ package app.aaps.plugins.dexcomoneplus.parse
 /**
  * Control Calibrate request (opcode 0x34) — hands a fingerstick to the sensor's own algorithm.
  *
- * Layout (9 bytes incl. CRC): opcode | glucose(u16 LE, mg/dL) | dexTime(u32 LE) | crc16
+ * Layout (7 bytes, no CRC): opcode | glucose (u16 LE, mg/dL) | sensor time (u32 LE)
  *
- * The time is the moment the BLOOD was measured, in transmitter seconds, not the moment the value is
- * sent: the sensor needs it to line the fingerstick up with its own history. A value whose dex time
+ * This is the G7 layout used by the Dexcom G7 driver of AAPS PR 5397, which was tested on G7
+ * sensors. The earlier layout of this file was xDrip's G6 message with a CRC on the end (9
+ * bytes). A ONE+ answered that one with `34 00 02 00`, which the G7 layout reads as a refusal.
+ * Whether the ONE+ takes the 7-byte form has to be seen on a real sensor: check the answer in
+ * the log the first time.
+ *
+ * The time is the moment the BLOOD was measured, in sensor seconds, not the moment the value is
+ * sent: the sensor needs it to line the fingerstick up with its own history. A value whose time
  * is wrong is worse than no calibration at all.
  *
  * Nothing here decides WHETHER to send. The sensor keeps a calibration for good — it cannot be
- * edited or deleted afterwards — so the gates live at the call site (range, age, stability), and the
- * whole path is behind an engineering switch that is off by default.
- *
- * Provenance: xDrip `CalibrateTxMessage` (GPL-3.0), whose G7 path sends this same opcode.
- * Ported from ref `f61474bb73` at `3dd0ca64772`. Android library module. Opened: no `android.*` import.
+ * edited or deleted afterwards — so the gates live at the call site (range, age, stability).
  */
 object OnePlusCalibrateTx {
 
     const val OPCODE: Byte = 0x34
-    const val PACKET_LENGTH: Int = 9
+    const val PACKET_LENGTH: Int = 7
 
     /** Range the sensor itself accepts, and the same one the official app and xDrip apply. */
     const val MIN_GLUCOSE_MGDL = 40
@@ -27,7 +29,7 @@ object OnePlusCalibrateTx {
 
     /**
      * @param glucoseMgdl fingerstick value in mg/dL, [MIN_GLUCOSE_MGDL]..[MAX_GLUCOSE_MGDL]
-     * @param dexTimeSeconds transmitter time of the FINGERSTICK (not of this call)
+     * @param dexTimeSeconds sensor time of the FINGERSTICK (not of this call)
      * @return the packet, or null when the value is outside the range the sensor accepts
      */
     fun build(glucoseMgdl: Int, dexTimeSeconds: Int): ByteArray? {
@@ -37,10 +39,6 @@ object OnePlusCalibrateTx {
         buf.put(OPCODE)
         buf.putShort(glucoseMgdl.toShort())
         buf.putInt(dexTimeSeconds)
-        val packet = buf.array()
-        val crc = OnePlusFastCrc16.calculate(packet, PACKET_LENGTH - 2)
-        packet[PACKET_LENGTH - 2] = crc[0]
-        packet[PACKET_LENGTH - 1] = crc[1]
-        return packet
+        return buf.array()
     }
 }

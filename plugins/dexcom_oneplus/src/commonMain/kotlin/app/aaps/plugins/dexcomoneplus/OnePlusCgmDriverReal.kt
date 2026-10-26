@@ -10,6 +10,7 @@ import app.aaps.plugins.dexcomoneplus.identity.OnePlusStoredSession
 import app.aaps.plugins.dexcomoneplus.oem.DeviceProfileRegistry
 import app.aaps.plugins.dexcomoneplus.oem.OemDeviceProfile
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrateRx
+import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrationBoundsRx
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScanner
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScannerStub
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusScanBudget
@@ -196,8 +197,7 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
      *
      * A null reply means the write itself failed, or nothing came back before the loop gave up. It
      * is [OnePlusCalibrationOutcome.Unknown] and not a refusal: the packet may well have reached a
-     * sensor that simply did not answer, and this firmware is not known to answer in a readable way
-     * at all.
+     * sensor whose answer was lost. The calibration state read just after can still settle it.
      */
     private fun onCalibrationAnswered(reply: OnePlusCalibrateRx?) {
         lastCalibrationResult = when (reply?.outcome()) {
@@ -208,6 +208,27 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
         }
         OnePlusLog.i(
             "${OnePlusLogMarkers.SESSION}: [$slot] calibration outcome = $lastCalibrationResult",
+        )
+    }
+
+    /**
+     * The sensor's calibration state, read right after a calibration was sent.
+     *
+     * When the answer to the calibration itself was lost, a state that holds exactly the value and
+     * time we sent is the sensor saying it took it. The value is never sent again either way.
+     */
+    private fun onCalibrationState(state: OnePlusCalibrationBoundsRx, matchesSent: Boolean) {
+        val current = lastCalibrationResult
+        lastCalibrationResult = when {
+            matchesSent && current is OnePlusCalibrationOutcome.Unknown  ->
+                OnePlusCalibrationOutcome.Accepted("Found in the sensor's calibration state (${state.processing})")
+            matchesSent && current is OnePlusCalibrationOutcome.Accepted ->
+                OnePlusCalibrationOutcome.Accepted("${current.detail}, ${state.processing}")
+            else                                                         -> current
+        }
+        OnePlusLog.i(
+            "${OnePlusLogMarkers.SESSION}: [$slot] calibration state matchesSent=$matchesSent " +
+                "processing=${state.processing} outcome=$lastCalibrationResult",
         )
     }
 
@@ -630,6 +651,7 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
             // Always passed, see [calibrationQueue]: the pre-soak refusal lives in offerCalibration.
             calibrationQueue = calibrationQueue,
             onCalibrationResult = { reply -> onCalibrationAnswered(reply) },
+            onCalibrationState = { state, matchesSent -> onCalibrationState(state, matchesSent) },
         )
         return created
     }

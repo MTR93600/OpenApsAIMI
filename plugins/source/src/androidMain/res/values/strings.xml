@@ -108,8 +108,14 @@
     <string name="dexcom_oneplus_pairing_code_invalid">Enter a valid 4-digit sensor pairing code</string>
     <string name="dexcom_oneplus_request_permissions">Allow Bluetooth</string>
     <string name="dexcom_oneplus_permissions_needed">Bluetooth permission is required before starting the sensor</string>
-    <string name="dexcom_oneplus_send_calibration_to_sensor">Send calibration to the sensor (engineering)</string>
-    <string name="dexcom_oneplus_send_calibration_to_sensor_summary">Off: a finger prick value is used to correct readings inside the app, and can be removed later. On: the value is sent to the sensor itself. The sensor keeps it for good and it cannot be edited or deleted, this sensor does not report clearly whether it took the value, and the app stops correcting readings on its own.</string>
+    <string name="dexcom_oneplus_send_calibration_to_sensor">Send calibration to the sensor</string>
+    <string name="dexcom_oneplus_send_calibration_to_sensor_summary">On: a finger prick value is sent to the sensor itself, as the Dexcom app does. The sensor keeps it for good and it cannot be edited or deleted. Off: the value is used to correct readings inside the app, and can be removed later.</string>
+    <string name="dexcom_oneplus_calibration_refused_range">The sensor accepts a finger prick value from 40 to 400 mg/dL (2.2 to 22.2 mmol/L) only.</string>
+    <string name="dexcom_oneplus_calibration_refused_too_old">This finger prick value is more than one hour old. Measure again.</string>
+    <string name="dexcom_oneplus_calibration_refused_not_ready">The sensor is still warming up, or has stopped. Calibrate when it shows readings again.</string>
+    <string name="dexcom_oneplus_calibration_refused_no_reading">No sensor reading in the last 10 minutes. Wait for the next reading, then try again.</string>
+    <string name="dexcom_oneplus_calibration_refused_rate_unknown">The sensor did not give a trend with its last reading. Wait for the next reading, then try again.</string>
+    <string name="dexcom_oneplus_calibration_refused_too_fast">Glucose is changing too fast. Calibrate when it is stable.</string>
     <string name="dexcom_oneplus_repair_missing_sensor_change">Repair a missing sensor change (engineering)</string>
     <string name="dexcom_oneplus_repair_missing_sensor_change_summary">Off by default. When on, and when "Create sensor change" is on, a missing SENSOR_CHANGE for the running ONE+ session is written once. It does not replace an event you deleted after that write.</string>
     <string name="dexcom_oneplus_anchor_session_to_manual_sensor_change">Anchor the session to a manual sensor change (engineering)</string>
@@ -126,7 +132,7 @@
     <string name="dexcom_oneplus_calibration_waiting">Your value is waiting to be sent to the sensor. It goes out the next time the app and the sensor talk, which is usually within a few minutes.</string>
     <string name="dexcom_oneplus_calibration_accepted">The sensor says it took your value.</string>
     <string name="dexcom_oneplus_calibration_refused">The sensor says it did not take your value. Your reading was not changed.</string>
-    <string name="dexcom_oneplus_calibration_unknown">The sensor answered something this app cannot read, so it is not possible to say whether your value was used. This is what a Dexcom ONE+ normally answers. It is not an app error and it is not a success. Compare the sensor with a finger prick within the next hour before you rely on its readings, and ask your care team if you are unsure.</string>
+    <string name="dexcom_oneplus_calibration_unknown">The sensor did not give a clear answer, so it is not possible to say whether your value was used. It is not an app error and it is not a success. Do not send the value again. Compare the sensor with a finger prick within the next hour before you rely on its readings, and ask your care team if you are unsure.</string>
     <string name="dexcom_oneplus_calibration_detail" comment="%1$s=what the sensor answered, as a short technical line, often raw bytes.">Sensor answer: %1$s</string>
     <string name="dexcom_oneplus_calibration_state_needs">The sensor is asking for a calibration.</string>
     <string name="dexcom_oneplus_calibration_state_needs_first">The sensor is asking for its first calibration.</string>

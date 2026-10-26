@@ -514,11 +514,11 @@ private fun CorrectInsertionDateAction(
 /**
  * What became of a finger prick value handed to the sensor itself.
  *
- * On screen only while [DexcomOnePlusBooleanKey.SendCalibrationToSensor] is on. That switch
- * defaults to false, so this card is not shown unless someone turns it on.
+ * On screen only while [DexcomOnePlusBooleanKey.SendCalibrationToSensor] is on, which is the
+ * default.
  *
- * [OnePlusCalibrationOutcome.Unknown] is not softened: a Dexcom ONE+ answers with four bytes
- * nobody has decoded, so it is neither a failure of the app nor a success.
+ * [OnePlusCalibrationOutcome.Unknown] is not softened: the answer was lost or unreadable, so it is
+ * neither a failure of the app nor a success.
  */
 @Composable
 private fun SensorCalibrationCard(

@@ -38,4 +38,11 @@ interface BgSource {
      */
     fun calibrateSensor(glucoseMgdl: Int, bloodAtMs: Long): SensorCalibrationResult =
         SensorCalibrationResult.NotSupported
+
+    /**
+     * Why the sensor must not get this fingerstick now, already readable by the user, or null when
+     * it may. Asked before the user confirms, so a refusal is shown before anything is sent.
+     * Only meaningful while [calibratesInSensor] is true.
+     */
+    fun sensorCalibrationRefusal(glucoseMgdl: Int, bloodAtMs: Long): String? = null
 }

@@ -29,6 +29,9 @@ object OnePlusGlucoseParser {
     /** Upstream invalid trend marker (`BaseGlucoseRxMessage` / G7 `getTrend`). */
     const val TREND_INVALID: Int = 127
 
+    /** Bit of the flags byte (0x4E byte 18, backfill record byte 7) that marks a display-only value. */
+    const val DISPLAY_ONLY_FLAG: Int = 0x10
+
     fun inRange(mgdl: Double): Boolean = mgdl in MIN_MGDL..MAX_MGDL
 
     /**
@@ -68,8 +71,14 @@ object OnePlusGlucoseParser {
         val ageSeconds: Int?,
         val sessionAgeSeconds: Int?,
         val opcode: Int,
+        /**
+         * The sensor marks the value as for display only: it repeats a fingerstick right after a
+         * calibration, it is not a measurement. It never becomes a [sample].
+         */
         val glucoseIsDisplayOnly: Boolean = false,
         val predictedGlucose: Int? = null,
+        /** Byte 18 of a 0x4E packet, raw, for the log. Null for 0x4F. */
+        val flags: Int? = null,
     )
 
     /**
@@ -142,12 +151,17 @@ object OnePlusGlucoseParser {
         readUnsignedShort(data) // unused / "bogus" upstream
         val age = readUnsignedShort(data)
         val glucoseBytes = data.short().toInt() and 0xffff
-        val glucoseIsDisplayOnly = (glucoseBytes and 0xf000) != 0
         val glucose = glucoseBytes and 0x0fff
         val state = data.u8()
         val trend = data.byte().toInt() // signed byte promoted
         var predicted: Int? = data.short().toInt() and 0x03ff
         if (predicted == 0x3ff) predicted = null // Message2 invalid marker
+        // Display only is bit 0x10 of byte 18, as in Loop's G7SensorKit (`G7GlucoseMessage`) and in
+        // the Dexcom G7 driver of AAPS PR 5397. xDrip reads it from the top bits of the glucose
+        // field, which is the G6 layout: on a G7 those bits are always 0, so a value echoed after a
+        // calibration was never recognised and went to the loop.
+        val flags = data.u8()
+        val glucoseIsDisplayOnly = glucoseBytes != 0xffff && (flags and DISPLAY_ONLY_FLAG) != 0
         val cal = OnePlusCalibrationState.parse(state)
         val adjusted = if (cal == OnePlusCalibrationState.Stopped && sessionAge * 1000L < 30L * 60L * 1000L) {
             OnePlusCalibrationState.WarmingUp
@@ -156,7 +170,7 @@ object OnePlusGlucoseParser {
         }
         val ts = nowMs - age * 1000L
         // Sample when usable + in range; ageRecent (age < 305) is Ob1 sync-only, not an insert gate.
-        val sample = if (adjusted.usableGlucose() && glucose > 13) {
+        val sample = if (adjusted.usableGlucose() && glucose > 13 && !glucoseIsDisplayOnly) {
             toSample(
                 mgdl = glucose.toDouble(),
                 timestampMs = ts,
@@ -175,6 +189,7 @@ object OnePlusGlucoseParser {
             opcode = OPCODE_EGV2,
             glucoseIsDisplayOnly = glucoseIsDisplayOnly,
             predictedGlucose = predicted,
+            flags = flags,
         )
     }
 

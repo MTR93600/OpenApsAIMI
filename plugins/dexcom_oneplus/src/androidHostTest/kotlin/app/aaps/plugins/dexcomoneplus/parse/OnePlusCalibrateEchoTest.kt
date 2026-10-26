@@ -4,10 +4,8 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 
 /**
- * What a Dexcom ONE+ really answers to a calibration.
- *
- * An echo is read and never counted as an acceptance. Provenance: ref
- * `OnePlusCalibrateEchoTest` at `3dd0ca64772`.
+ * What a G7 / Dexcom ONE+ answers to a calibration: the opcode 0x34 again, then a status where 1
+ * means the value was taken. Read as in AAPS PR 5397 (`G7CalibrateRxMessage`).
  */
 class OnePlusCalibrateEchoTest {
 
@@ -23,14 +21,27 @@ class OnePlusCalibrateEchoTest {
     }
 
     @Test
-    fun `an echo is never reported as an acceptance`() {
-        for (statusByte in listOf(0x00, 0x01, 0x02)) {
-            val parsed = OnePlusCalibrateRx.parse(bytes(0x34, 0x00, statusByte, 0x00))!!
+    fun `echo status 1 is an acceptance`() {
+        val parsed = OnePlusCalibrateRx.parse(bytes(0x34, 0x00, 0x01, 0x00))!!
+
+        assertThat(parsed.accepted()).isTrue()
+        assertThat(parsed.outcome()).isEqualTo(OnePlusCalibrateRx.Outcome.ACCEPTED)
+    }
+
+    @Test
+    fun `any other echo status is a refusal`() {
+        for (status in listOf(bytes(0x34, 0x00, 0x00, 0x00), bytes(0x34, 0x00, 0x02, 0x00), bytes(0x34, 0x00, 0x01, 0x01))) {
+            val parsed = OnePlusCalibrateRx.parse(status)!!
 
             assertThat(parsed.accepted()).isFalse()
             assertThat(parsed.wantsSecondCalibration()).isFalse()
-            assertThat(parsed.outcome()).isEqualTo(OnePlusCalibrateRx.Outcome.UNKNOWN)
+            assertThat(parsed.outcome()).isEqualTo(OnePlusCalibrateRx.Outcome.REFUSED)
         }
+    }
+
+    @Test
+    fun `a longer echo is still read`() {
+        assertThat(OnePlusCalibrateRx.parse(bytes(0x34, 0x00, 0x01, 0x00, 0x00))!!.accepted()).isTrue()
     }
 
     @Test

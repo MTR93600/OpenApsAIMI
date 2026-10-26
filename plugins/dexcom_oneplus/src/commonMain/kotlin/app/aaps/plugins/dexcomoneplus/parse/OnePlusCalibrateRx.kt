@@ -3,26 +3,18 @@ package app.aaps.plugins.dexcomoneplus.parse
 /**
  * What the sensor answered to a calibration.
  *
- * There are two shapes, and only one of them can be read.
+ * There are two shapes.
+ *
+ * [Form.Echo] is the G7 answer, and what a Dexcom ONE+ sends: 4 bytes or more, `34 | info |
+ * status (u16 LE)`. Status 1 means the sensor took the value; anything else is a refusal. This is
+ * how the Dexcom G7 driver of AAPS PR 5397 reads it, tested on G7 sensors. The two public ONE+
+ * captures, `34 00 01 00` and `34 00 02 00`, are then one acceptance and one refusal.
  *
  * [Form.Status] is the G5/G6 answer xDrip documents: opcode 0x35, 5 bytes `opcode | info | result |
- * crc16`, with a result byte that says plainly whether the value was taken.
+ * crc16`. Kept in case a sensor answers that way.
  *
- * [Form.Echo] is what a Dexcom ONE+ really sends. The only public field captures of a ONE+ being
- * calibrated show 4 bytes that echo the request opcode — `34 00 01 00` and `34 00 02 00` — with no
- * 0x35 and no CRC that matches this family's trailer. Nothing published says what the third byte
- * means, and the two readings of it point opposite ways: it may be a private status from a sensor
- * that accepted the value, or it may be the firmware refusing an opcode it does not support. The
- * other Control commands of this driver all answer with opcode+1 (0x26 → 0x27), never an echo, so
- * an echo here is not this characteristic's normal shape either.
- *
- * So an echo is reported as [Outcome.UNKNOWN] and never as an acceptance. Telling the user their
- * fingerstick was taken, on a guess, would be worse than telling them we cannot say: a calibration
- * the sensor keeps cannot be edited or deleted afterwards.
- *
- * Provenance: xDrip `CalibrateRxMessage` (GPL-3.0) for the 0x35 shape; xDrip discussion #4034 for
- * the ONE+ capture. Ported from ref `f61474bb73` at `3dd0ca64772`. Android library. Opened: no
- * `android.*` import.
+ * Provenance: xDrip `CalibrateRxMessage` (GPL-3.0) for the 0x35 shape; AAPS PR 5397
+ * (`G7CalibrateRxMessage`) for the echo.
  */
 data class OnePlusCalibrateRx(
     val info: Int,
@@ -38,7 +30,7 @@ data class OnePlusCalibrateRx(
         /** Opcode 0x35, result byte readable against the code table below. */
         Status,
 
-        /** The 4-byte ONE+ echo of opcode 0x34. Carries a byte we cannot name. */
+        /** The G7 / ONE+ answer: opcode 0x34 again, then a status where 1 means taken. */
         Echo
     }
 
@@ -55,26 +47,26 @@ data class OnePlusCalibrateRx(
     }
 
     fun outcome(): Outcome = when {
-        !valid             -> Outcome.UNKNOWN
-        form == Form.Echo  -> Outcome.UNKNOWN
-        accepted()         -> Outcome.ACCEPTED
-        else               -> Outcome.REFUSED
+        !valid     -> Outcome.UNKNOWN
+        accepted() -> Outcome.ACCEPTED
+        else       -> Outcome.REFUSED
     }
 
     /**
-     * The sensor took the value. [SECOND_NEEDED] and [DUPLICATE] are accepted outcomes too.
-     *
-     * False for an echo: not a refusal, simply not something this answer lets us claim.
+     * The sensor took the value. For an echo that is status [ECHO_ACCEPTED]. For the 0x35 answer,
+     * [SECOND_NEEDED] and [DUPLICATE] are accepted outcomes too.
      */
-    fun accepted(): Boolean =
-        valid && form == Form.Status && (result == OK || result == SECOND_NEEDED || result == DUPLICATE)
+    fun accepted(): Boolean = valid && when (form) {
+        Form.Echo   -> result == ECHO_ACCEPTED
+        Form.Status -> result == OK || result == SECOND_NEEDED || result == DUPLICATE
+    }
 
     /** The sensor took it and asks for a second fingerstick before it fully trusts itself again. */
     fun wantsSecondCalibration(): Boolean = valid && form == Form.Status && result == SECOND_NEEDED
 
     fun message(): String = when {
         !valid                  -> "Unable to decode"
-        form == Form.Echo       -> "Sensor answered $rawHex — this firmware does not send a readable result"
+        form == Form.Echo       -> if (result == ECHO_ACCEPTED) "Accepted ($rawHex)" else "Refused, status $result ($rawHex)"
         result == OK            -> "OK"
         result == 0x01          -> "Code 1"
         result == SECOND_NEEDED -> "Second calibration needed"
@@ -90,9 +82,12 @@ data class OnePlusCalibrateRx(
         const val OPCODE: Byte = 0x35
         const val PACKET_LENGTH: Int = 5
 
-        /** A ONE+ answers by echoing the request opcode instead of using [OPCODE]. */
+        /** A G7 / ONE+ answers by echoing the request opcode instead of using [OPCODE]. */
         const val ECHO_OPCODE: Byte = OnePlusCalibrateTx.OPCODE
         const val ECHO_PACKET_LENGTH: Int = 4
+
+        /** Echo status for "taken". */
+        const val ECHO_ACCEPTED = 1
 
         const val OK = 0x00
         const val SECOND_NEEDED = 0x06
@@ -108,10 +103,10 @@ data class OnePlusCalibrateRx(
          * here is an answer to our own request and not a stray command.
          */
         fun parse(packet: ByteArray): OnePlusCalibrateRx? {
-            if (packet.size == ECHO_PACKET_LENGTH && packet[0] == ECHO_OPCODE) {
+            if (packet.size >= ECHO_PACKET_LENGTH && packet[0] == ECHO_OPCODE) {
                 return OnePlusCalibrateRx(
                     info = packet[1].toInt() and 0xff,
-                    result = packet[2].toInt() and 0xff,
+                    result = (packet[2].toInt() and 0xff) or ((packet[3].toInt() and 0xff) shl 8),
                     valid = true,
                     form = Form.Echo,
                     rawHex = packet.toHex(),

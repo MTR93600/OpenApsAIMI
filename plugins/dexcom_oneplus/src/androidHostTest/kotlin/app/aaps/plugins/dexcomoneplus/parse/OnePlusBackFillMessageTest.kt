@@ -51,6 +51,19 @@ class OnePlusBackFillMessageTest {
     }
 
     @Test
+    fun `a display-only backfill record is skipped`() {
+        val record = ByteBuffer.allocate(9).order(ByteOrder.LITTLE_ENDIAN)
+        record.putInt(9_700)
+        record.putShort(120)
+        record.put(0x06) // Ok
+        record.put(OnePlusGlucoseParser.DISPLAY_ONLY_FLAG.toByte())
+        record.put(0x00)
+        val stream = OnePlusBackFillStream()
+        stream.pushG7(record.array())
+        assertThat(stream.decode(currentDexTimeSeconds = 10_000, nowMs = 1_700_000_000_000L)).isEmpty()
+    }
+
+    @Test
     fun backFillControlRx_ack() {
         assertThat(OnePlusBackFillControlRx.isAck(byteArrayOf(0x59, 0x00))).isTrue()
         assertThat(OnePlusBackFillControlRx.isAck(byteArrayOf(0x4e))).isFalse()

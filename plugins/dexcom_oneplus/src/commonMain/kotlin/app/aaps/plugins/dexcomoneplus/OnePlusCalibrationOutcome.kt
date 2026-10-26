@@ -6,11 +6,10 @@ package app.aaps.plugins.dexcomoneplus
  * Kept separate from the wire type so the app side never has to know about opcodes, and so the one
  * state the wire cannot express — [Pending] — has a place.
  *
- * [Unknown] is not a failure and not a success, and it is the outcome a Dexcom ONE+ is expected to
- * produce: this firmware answers a calibration with four bytes nobody has decoded. It must be shown
- * as "we cannot tell", never quietly rounded to either side. A sensor keeps a calibration it
- * accepted for good, so claiming success we have not seen would leave a user re-sending a value the
- * sensor already holds.
+ * [Unknown] is not a failure and not a success: the answer was lost or could not be read, and the
+ * sensor's calibration state did not settle it. It must be shown as "we cannot tell", never quietly
+ * rounded to either side. A sensor keeps a calibration it accepted for good, so claiming success we
+ * have not seen would leave a user re-sending a value the sensor already holds.
  *
  * Provenance: ref `OnePlusCalibrationOutcome.kt` at `3dd0ca64772`. Android library module. Opened:
  * no `android.*` import.

@@ -24,19 +24,19 @@ enum class DexcomOnePlusBooleanKey(
     /**
      * Send a fingerstick to the sensor instead of correcting its readings inside the phone.
      *
-     * Off by default, and engineering only. A sensor keeps a calibration it accepts for good — it
-     * cannot be edited or deleted — and a Dexcom ONE+ does not answer in a way anyone has decoded,
-     * so the app cannot tell the user whether the value was taken. Owner decision 7 is unsettled:
-     * the code is ported and the switch stays off.
+     * On by default (owner decision, 2026-10-26): a fingerstick is the reference, so it goes to the
+     * sensor's own algorithm, as the Dexcom app does. A sensor keeps a calibration it accepts for
+     * good — it cannot be edited or deleted — so the confirmation says so, and
+     * `OnePlusCalibrationGate` refuses a value at a bad moment (warm-up, no recent reading, glucose
+     * changing fast, blood older than one hour). Off: the value corrects readings inside the app.
      *
      * Provenance: ref `DexcomOnePlusBooleanKey.SendCalibrationToSensor` at `3dd0ca64772`.
      */
     SendCalibrationToSensor(
         key = "dexcom_oneplus_send_calibration_to_sensor",
-        defaultValue = false,
+        defaultValue = true,
         title = SourceStrings.dexcom_oneplus_send_calibration_to_sensor,
         summary = SourceStrings.dexcom_oneplus_send_calibration_to_sensor_summary,
-        engineeringModeOnly = true,
         exportable = false,
     ),
 

@@ -14,8 +14,7 @@ import kotlin.concurrent.Volatile
  * So: one slot, not a list. A second fingerstick while one is still waiting is a mistake far more
  * often than an intention, and a sensor keeps every calibration it accepts for good.
  *
- * Nothing in this file sends anything. The path stays behind an engineering switch that is off
- * by default until a Dexcom ONE+ has been seen to answer 0x35.
+ * Nothing in this file sends anything. What may be offered is decided by `OnePlusCalibrationGate`.
  *
  * Provenance: ref `OnePlusCalibrationQueue.kt` at `3dd0ca64772` (`f61474bb73`). Android library.
  * Opened: no `android.*` import.

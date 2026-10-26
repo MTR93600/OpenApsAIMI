@@ -90,9 +90,7 @@ class OnePlusBytesTest {
 
         assertEquals(OnePlusCalibrateTx.PACKET_LENGTH, packet.size)
         assertEquals(OnePlusCalibrateTx.OPCODE, packet[0])
-        assertEquals("9600", packet.copyOfRange(1, 3).onePlusToHex())
-        assertEquals("04030201", packet.copyOfRange(3, 7).onePlusToHex())
-        assertTrue(OnePlusFastCrc16.check(packet))
+        assertEquals("34960004030201", packet.onePlusToHex())
     }
 
     @Test
