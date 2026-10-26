@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.safety
 
+import app.aaps.core.interfaces.aps.SmbIntervalGate
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt0
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
@@ -226,7 +227,10 @@ internal object AimiSmbFinalizeMath {
             input.baseRefractoryMinutes
         }
         val sinceBolus = if (input.lastBolusAgeMinutes.isNaN()) 999.0 else input.lastBolusAgeMinutes
-        val refractoryBlocked = sinceBolus < refractoryWindow && !input.isExplicitUserAction && !input.bypassSmbRefractory
+        // Same 6 s tolerance as the loop's SMB interval rule (SmbIntervalGate), so the refractory window
+        // does not hold back an SMB the interval check above has just allowed.
+        val refractoryBlocked = sinceBolus < refractoryWindow - REFRACTORY_TOLERANCE_MIN &&
+            !input.isExplicitUserAction && !input.bypassSmbRefractory
         var gatedUnits = safetyCappedUnits
         var absorptionFactor = 1.0
 
@@ -256,7 +260,7 @@ internal object AimiSmbFinalizeMath {
                 gatedUnits = 0f
                 logs += "⏸️ REFRACTORY_BLOCK sinceBolus=${aimiFmt1(sinceBolus)}m window=${aimiFmt1(refractoryWindow)}m (SMB blocked)"
             }
-        } else if (sinceBolus < refractoryWindow && (input.isExplicitUserAction || input.bypassSmbRefractory)) {
+        } else if (sinceBolus < refractoryWindow - REFRACTORY_TOLERANCE_MIN && (input.isExplicitUserAction || input.bypassSmbRefractory)) {
             val bypassLabel = if (input.bypassSmbRefractory) "Classic autodrive prebolus" else "Meal mode override"
             logs += "✅ REFRACTORY_BYPASS sinceBolus=${aimiFmt1(sinceBolus)}m " +
                 "window=${aimiFmt1(refractoryWindow)}m ($bypassLabel)"
@@ -573,3 +577,6 @@ internal object AimiSmbFinalizeMath {
         )
     }
 }
+
+/** [SmbIntervalGate.TOLERANCE_MS] in minutes, the unit of the refractory window. */
+private const val REFRACTORY_TOLERANCE_MIN = SmbIntervalGate.TOLERANCE_MS / 60_000.0

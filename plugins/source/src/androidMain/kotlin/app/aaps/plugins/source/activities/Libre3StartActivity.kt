@@ -109,6 +109,9 @@ class Libre3StartActivity : MetroAppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Other apps may not draw over this screen: an overlay could hide what a tap really does, here on a
+        // sensor (start, calibration, pre-soak). Same as ComposeMainActivity. Needs HIDE_OVERLAY_WINDOWS.
+        window.setHideOverlayWindows(true)
         slot = readSlot(savedInstanceState)
         presoakEnabled = preferences.get(Libre3BooleanKey.PresoakEnabled)
         // The reader is built once and never rebuilt on a slot change: it owns an executor and it

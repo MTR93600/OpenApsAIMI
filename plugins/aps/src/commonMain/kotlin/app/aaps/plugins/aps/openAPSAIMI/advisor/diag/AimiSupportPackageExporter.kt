@@ -19,7 +19,8 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
  *
  * The package content is shared ([AimiSupportPackageContent]). The platform parts come in from
  * outside:
- * - [platform]: app version, device and preferences for the report;
+ * - [platform]: app version and device for the report;
+ * - [allSettings]: every stored setting, read from the settings store;
  * - [zipFactory]: where the file goes and how the ZIP bytes are written;
  * - [sharing]: the share sheet;
  * - [subjectTime]: the date text in the mail subject. Android keeps `java.util.Date().toString()`,
@@ -35,11 +36,13 @@ class AimiSupportPackageExporter(
     private val sharing: AimiSharing,
     private val zipFactory: AimiSupportZipFactory,
     private val subjectTime: () -> String,
+    /** Every stored setting, for the report. See [AimiDiagnosticsManager]. */
+    private val allSettings: () -> Map<String, *>,
 ) {
 
     suspend fun build(issue: String): AimiSupportPackageResult {
         val reportContent = try {
-            val diagManager = AimiDiagnosticsManager(platform, preferences, logger, storage)
+            val diagManager = AimiDiagnosticsManager(platform, preferences, logger, storage, allSettings)
             val runningProfile = runCatching { profileFunction.getProfile() }.getOrNull()
             val runningProfileName = runCatching { profileFunction.getProfileName() }.getOrNull()
             diagManager.generateReport(

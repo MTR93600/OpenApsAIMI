@@ -19,9 +19,6 @@ interface AimiDiagPlatform {
     /** e.g. "Google Pixel 8". */
     fun deviceInfo(): String
 
-    /** Raw key/value dump of the app preferences, for the report's filtered section. */
-    fun allPreferences(): Map<String, Any?>
-
     /** Lowercase hex SHA-256 of [input]. */
     fun sha256Hex(input: String): String
 }

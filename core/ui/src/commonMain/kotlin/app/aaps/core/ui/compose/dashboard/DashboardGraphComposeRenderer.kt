@@ -134,7 +134,13 @@ internal fun DashboardGraphComposeRenderer(
         val targetLow = renderInput.targetLowMgdl
         val targetHigh = renderInput.targetHighMgdl
         val rawMinY = listOfNotNull(valuesMin, predMin, targetLow, targetHigh).minOrNull() ?: valuesMin
-        val rawMaxY = listOfNotNull(valuesMax, predMax, targetLow, targetHigh).maxOrNull() ?: valuesMax
+        // Same rule as the Overview graph (upstream f26dc43be61, `bgAxisTop` in :ui): a prediction widens
+        // the axis only up to PREDICTION_AXIS_HEADROOM_MGDL above the real readings and the high target.
+        // An AIMI or COB curve heading to 400 used to press the real readings together at the bottom.
+        // Above that it is clipped at the top edge. Downwards there is no cap: a predicted low stays in view.
+        val realTop = listOfNotNull(valuesMax, targetHigh).maxOrNull() ?: valuesMax
+        val cappedPredMax = predMax?.coerceAtMost(realTop + PREDICTION_AXIS_HEADROOM_MGDL)
+        val rawMaxY = listOfNotNull(valuesMax, cappedPredMax, targetLow, targetHigh).maxOrNull() ?: valuesMax
         val valueSpan = (rawMaxY - rawMinY).coerceAtLeast(1.0)
         val yPadding = (valueSpan * 0.12).coerceAtLeast(5.0)
         val minY = rawMinY - yPadding
@@ -479,3 +485,6 @@ internal fun DashboardGraphComposeRenderer(
         }
     }
 }
+
+/** How far above the real readings a prediction may push the top of the axis. Same value as `:ui`'s. */
+private const val PREDICTION_AXIS_HEADROOM_MGDL = 54.0

@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
+import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import androidx.compose.runtime.remember
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -88,6 +89,8 @@ class IosAimiPlatformPreferenceItems @Inject constructor(
     private val profileFunction: ProfileFunction,
     private val storage: AimiStorage,
     private val sharing: AimiSharing,
+    // The diagnostic report lists every stored key, also keys Preferences does not know.
+    private val keyValueStore: KeyValueStore,
     private val keyValueCache: AimiKeyValueCache,
     private val importExportPrefs: ImportExportPrefs,
     private val exportPasswordDataStore: ExportPasswordDataStore,
@@ -205,6 +208,7 @@ class IosAimiPlatformPreferenceItems @Inject constructor(
                         sharing = sharing,
                         zipFactory = IosAimiSupportZipFactory(),
                         subjectTime = { IosDateFormatter().format(aimiWallClockMs(), JAVA_DATE_TO_STRING) },
+                        allSettings = { keyValueStore.getAll() },
                     )
                 }
                 AimiSupportPackageScreen(

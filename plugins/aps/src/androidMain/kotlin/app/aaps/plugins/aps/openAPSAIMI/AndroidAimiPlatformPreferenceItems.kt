@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
+import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import android.content.Context
 import androidx.compose.runtime.remember
 import app.aaps.core.interfaces.db.PersistenceLayer
@@ -76,6 +77,8 @@ class AndroidAimiPlatformPreferenceItems @Inject constructor(
     private val persistenceLayer: PersistenceLayer,
     private val storage: AimiStorage,
     private val sharing: AimiSharing,
+    // The diagnostic report lists every stored key, also keys Preferences does not know.
+    private val keyValueStore: KeyValueStore,
     private val contextManager: ContextManager,
     private val healthContextRepository: HealthContextRepository,
     private val physioContextStore: AIMIPhysioContextStoreMTR,
@@ -129,6 +132,7 @@ class AndroidAimiPlatformPreferenceItems @Inject constructor(
                     sharing = sharing,
                     zipFactory = AndroidAimiSupportZipFactory(context.cacheDir),
                     subjectTime = { Date().toString() },
+                    allSettings = { keyValueStore.getAll() },
                 )
                 AimiSupportPackageScreen(
                     onBack = onBack,

@@ -1,8 +1,10 @@
 package app.aaps.implementation.alerts
 
+import app.aaps.core.interfaces.alerts.EatReminder
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.resources.TextResolver
+import app.aaps.core.interfaces.notifications.IosNotificationDelegate
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.ui.CoreUiStrings
 import dev.zacsweers.metro.AppScope
@@ -12,6 +14,11 @@ import dev.zacsweers.metro.SingleIn
 import platform.UserNotifications.UNAuthorizationOptionAlert
 import platform.UserNotifications.UNAuthorizationOptionSound
 import platform.UserNotifications.UNMutableNotificationContent
+import platform.UserNotifications.UNNotificationAction
+import platform.UserNotifications.UNNotificationCategory
+import platform.UserNotifications.UNNotificationCategoryOptionCustomDismissAction
+import platform.UserNotifications.UNNotificationDefaultActionIdentifier
+import platform.UserNotifications.UNNotificationDismissActionIdentifier
 import platform.UserNotifications.UNNotificationInterruptionLevel.UNNotificationInterruptionLevelTimeSensitive
 import platform.UserNotifications.UNNotificationRequest
 import platform.UserNotifications.UNNotificationSound
@@ -24,8 +31,10 @@ import platform.UserNotifications.UNUserNotificationCenter
  * The system holds the notification, so it rings at the time even when the app was terminated since. It has
  * one fixed identifier: scheduling again replaces the pending one, and [cancel] takes it back.
  *
- * Today the iOS app is a client, and a client never sets this alarm (the master owns the timer). It is still
- * a real implementation, so the shared timer is never silent on this platform.
+ * In this fork the iOS app is a master, so it owns the timer and sets this alarm. The notification carries the
+ * same two buttons as Android's alarm, Stop and +5 min. Opening it or swiping it away is the answer to the
+ * alarm, like stopping Android's alarm screen: the timer has rung and ends ([EatReminder.onRang], then
+ * [EatReminder.onAlarmStopped]). Without that the bar kept showing a timer that had already rung.
  */
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
@@ -33,8 +42,28 @@ import platform.UserNotifications.UNUserNotificationCenter
 class IosEatReminderAlarm(
     private val rh: TextResolver,
     private val dateUtil: DateUtil,
-    private val aapsLogger: AAPSLogger
+    private val aapsLogger: AAPSLogger,
+    // A function: the timer itself owns this alarm, so taking it directly would be a cycle.
+    private val eatReminder: () -> EatReminder,
 ) : EatReminderAlarm {
+
+    init {
+        IosNotificationDelegate.register(setOf(category())) { actionId, notificationId ->
+            if (notificationId != IDENTIFIER) return@register false
+            when (actionId) {
+                ACTION_STOP                          -> eatReminder().stop()
+                ACTION_EXTEND                        -> eatReminder().extend()
+                UNNotificationDefaultActionIdentifier,
+                UNNotificationDismissActionIdentifier -> eatReminder().run {
+                    onRang()
+                    onAlarmStopped()
+                }
+
+                else                                 -> return@register false
+            }
+            true
+        }
+    }
 
     // Lazy for the same reason as in IosReminderScheduler: it needs an app bundle, which a test binary has not.
     private val center by lazy { UNUserNotificationCenter.currentNotificationCenter() }
@@ -53,6 +82,7 @@ class IosEatReminderAlarm(
             setSound(UNNotificationSound.defaultSound())
             // Breaks through Focus, which is what an alarm the user set is for.
             setInterruptionLevel(UNNotificationInterruptionLevelTimeSensitive)
+            setCategoryIdentifier(CATEGORY)
         }
         val trigger = UNTimeIntervalNotificationTrigger.triggerWithTimeInterval(timeInterval = seconds, repeats = false)
         center.addNotificationRequest(UNNotificationRequest.requestWithIdentifier(IDENTIFIER, content, trigger)) { error ->
@@ -74,8 +104,30 @@ class IosEatReminderAlarm(
         }
     }
 
-    private companion object {
+    /**
+     * Stop and +5 min. No button option, so pressing one does not open the app: iOS runs it in the background.
+     * `customDismissAction` is what reports a swipe away.
+     */
+    private fun category(): UNNotificationCategory =
+        UNNotificationCategory.categoryWithIdentifier(
+            identifier = CATEGORY,
+            actions = listOf(
+                UNNotificationAction.actionWithIdentifier(identifier = ACTION_STOP, title = rh.gs(CoreUiStrings.stop), options = 0u),
+                UNNotificationAction.actionWithIdentifier(
+                    identifier = ACTION_EXTEND,
+                    title = rh.gs(CoreUiStrings.eat_reminder_extend, EatReminder.EXTEND_MINUTES),
+                    options = 0u
+                ),
+            ),
+            intentIdentifiers = emptyList<Any>(),
+            options = UNNotificationCategoryOptionCustomDismissAction
+        )
+
+    internal companion object {
 
         const val IDENTIFIER = "aaps-eat-reminder"
+        const val CATEGORY = "aaps-eat-reminder-category"
+        const val ACTION_STOP = "aaps-eat-reminder-stop"
+        const val ACTION_EXTEND = "aaps-eat-reminder-extend"
     }
 }

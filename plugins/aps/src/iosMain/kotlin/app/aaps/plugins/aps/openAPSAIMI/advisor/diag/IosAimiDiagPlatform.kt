@@ -1,17 +1,10 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.diag
 
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiDiagPlatform
-import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.get
-import platform.Foundation.NSData
-import platform.Foundation.NSDate
-import platform.Foundation.NSNumber
-import platform.Foundation.NSString
-import platform.Foundation.NSUserDefaults
 import platform.Foundation.NSBundle
 import platform.UIKit.UIDevice
 
-/** [AimiDiagPlatform] backed by iOS APIs: `NSBundle.mainBundle` + `UIDevice` + `NSUserDefaults`. */
+/** [AimiDiagPlatform] backed by iOS APIs: `NSBundle.mainBundle` + `UIDevice`. */
 class IosAimiDiagPlatform : AimiDiagPlatform {
 
     override fun appVersionName(): String =
@@ -28,34 +21,9 @@ class IosAimiDiagPlatform : AimiDiagPlatform {
     override fun deviceInfo(): String =
         "Apple ${UIDevice.currentDevice.model}"
 
-    override fun allPreferences(): Map<String, Any?> =
-        NSUserDefaults.standardUserDefaults.dictionaryRepresentation()
-            .mapNotNull { (key, value) ->
-                (key as? String)?.let { it to nsToKotlin(value) }
-            }
-            .toMap()
-
     override fun sha256Hex(input: String): String =
         sha256(input.encodeToByteArray())
             .joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
-
-    /**
-     * Bridges an NSUserDefaults value to a Kotlin value, mirroring what Android's
-     * `SharedPreferences.all` answers: strings stay strings, booleans stay booleans,
-     * numbers stay numbers. Anything else degrades to its description.
-     */
-    @OptIn(ExperimentalForeignApi::class)
-    private fun nsToKotlin(value: Any?): Any? = when (value) {
-        is NSString -> value.toString()
-        is NSNumber -> {
-            // BOOL is a signed char ('c'); without this check booleans print as 0/1.
-            val typeChar = value.objCType?.get(0)?.toInt()?.toChar()
-            if (typeChar == 'c') value.boolValue else value
-        }
-        is NSData -> "<${value.length} bytes>"
-        is NSDate -> value.toString()
-        else -> value?.toString()
-    }
 
     /**
      * SHA-256 in pure Kotlin, byte-identical to `java.security.MessageDigest("SHA-256")`.

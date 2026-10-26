@@ -39,6 +39,30 @@ class AimiSmbFinalizeMathTest {
     }
 
     @Test
+    fun `refractory lets an SMB through 5 s before the end like the loop does`() {
+        val nearlyDone = AimiSmbFinalizeMath.decide(
+            AimiSmbFinalizeMath.Input(
+                proposedUnits = 2.0,
+                safetyUnits = 2f,
+                lastBolusAgeMinutes = 3.0 - 5.0 / 60.0,
+                baseRefractoryMinutes = 3.0,
+            ),
+        )
+        assertNear(2.0, nearlyDone.finalUnits)
+        assertFalse(nearlyDone.logs.any { it.startsWith("⏸️ REFRACTORY_BLOCK") })
+
+        val tooEarly = AimiSmbFinalizeMath.decide(
+            AimiSmbFinalizeMath.Input(
+                proposedUnits = 2.0,
+                safetyUnits = 2f,
+                lastBolusAgeMinutes = 3.0 - 10.0 / 60.0,
+                baseRefractoryMinutes = 3.0,
+            ),
+        )
+        assertNear(0.0, tooEarly.finalUnits)
+    }
+
+    @Test
     fun `meal priority relaxes refractory by progress`() {
         val out = AimiSmbFinalizeMath.decide(
             AimiSmbFinalizeMath.Input(

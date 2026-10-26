@@ -22,7 +22,8 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
  * Unparked from `_docs/kmp/staging/openAPSAIMI-android-wip/advisor/diag/` and updated with
  * `origin/dev_OAPSAIMI` @ `02c90656b1` ([ACTIVE PROFILE] via [ProfileFunction][app.aaps.core.interfaces.profile.ProfileFunction]).
  *
- * Platform details (app version, device, raw preferences, SHA-256) come from [AimiDiagPlatform];
+ * Platform details (app version, device, SHA-256) come from [AimiDiagPlatform], the stored settings from
+ * `allSettings`;
  * everything else is shared. Observation / tools only. Not on the dose path.
  */
 class AimiDiagnosticsManager(
@@ -31,6 +32,12 @@ class AimiDiagnosticsManager(
     private val logger: AAPSLogger,
     /** Where the TPO session file lives, for the `[TPO SESSION]` section. */
     private val storage: AimiStorage,
+    /**
+     * Every stored setting, including keys `Preferences` has never heard of, for the filtered
+     * preferences section. It comes from the settings store itself: since the encrypted store
+     * (upstream 74c37d157fc) the old preference file only holds a frozen copy.
+     */
+    private val allSettings: () -> Map<String, *>,
 ) {
 
     companion object {
@@ -98,11 +105,11 @@ class AimiDiagnosticsManager(
 
         AimiDiagnosticsActiveProfile.writeSection(sb, activeProfile, activeProfileName)
         AimiDiagnosticsActiveProfile.writePreferencesPreamble(sb)
-        val allPrefs = try {
-            platform.allPreferences()
+        val allPrefs: Map<String, *> = try {
+            allSettings()
         } catch (e: Exception) {
             logger.error(LTag.CORE, "Error reading preferences", e)
-            emptyMap()
+            emptyMap<String, Any?>()
         }
 
         val interestKeys = listOf("aimi", "aps", "smb", "max", "basal", "target", "profile", "opt_")

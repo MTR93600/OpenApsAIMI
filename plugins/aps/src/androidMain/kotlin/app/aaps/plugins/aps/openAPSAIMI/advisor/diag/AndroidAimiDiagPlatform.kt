@@ -31,11 +31,6 @@ class AndroidAimiDiagPlatform(private val context: Context) : AimiDiagPlatform {
 
     override fun deviceInfo(): String = "${Build.MANUFACTURER} ${Build.MODEL}"
 
-    override fun allPreferences(): Map<String, Any?> {
-        val prefs = context.getSharedPreferences(context.packageName + "_preferences", Context.MODE_PRIVATE)
-        return prefs.all.mapValues { it.value }
-    }
-
     override fun sha256Hex(input: String): String =
         MessageDigest.getInstance("SHA-256")
             .digest(input.toByteArray())

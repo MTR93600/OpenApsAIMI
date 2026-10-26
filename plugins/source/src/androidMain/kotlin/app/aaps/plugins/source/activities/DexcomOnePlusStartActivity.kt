@@ -37,6 +37,9 @@ class DexcomOnePlusStartActivity : MetroAppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Other apps may not draw over this screen: an overlay could hide what a tap really does, here on a
+        // sensor (start, calibration, pre-soak). Same as ComposeMainActivity. Needs HIDE_OVERLAY_WINDOWS.
+        window.setHideOverlayWindows(true)
         dexcomOnePlusPlugin.syncDriverFromPrefs()
         dexcomOnePlusHost.attachPlatform(OnePlusCgmDrivers.default())
         setContent {

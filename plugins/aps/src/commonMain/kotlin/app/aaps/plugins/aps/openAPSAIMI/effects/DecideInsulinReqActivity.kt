@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.effects
 import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.MealData
 import app.aaps.core.interfaces.aps.RT
+import app.aaps.core.interfaces.aps.SmbIntervalGate
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
@@ -126,7 +127,10 @@ internal fun decideInsulinReqActivityRelaxAndMicrobolus(
 
         val nextBolusMins = AimiTickPolicyMath.round(smbInterval - lastBolusAge, 0)
         val nextBolusSeconds = AimiTickPolicyMath.round((smbInterval - lastBolusAge) * 60, 0) % 60
-        if (lastBolusAge > smbInterval) {
+        // The loop's own rule (SmbIntervalGate), with its 6 s tolerance. A strict `lastBolusAge >
+        // smbInterval` on the rounded age needed about 3.05 min for a 3 min interval, so on a 1-minute
+        // CGM every SMB waited one more reading. lastBolusAge stays for the reason text.
+        if (!SmbIntervalGate.tooSoon(iobTotal.lastBolusTime, smbInterval, systemTime)) {
             if (microBolus > 0) {
                 val htrFloorU = state.hyperReleaseFloorU()
                 finalize.finalizeAndCapSMB(

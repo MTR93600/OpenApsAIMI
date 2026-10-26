@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -280,7 +281,20 @@ fun MainScreen(
                     // Main content
                     if (dashboardV2Content != null) {
                         DashboardHomeContent(contentPadding = contentPadding) {
-                            dashboardV2Content(masterOrPairedClient)
+                            // The "time to eat" bar is shown on every home, not only on the Overview: on an
+                            // iPhone the in-app bar is the only place with Stop and +5 min.
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                EatReminderBanner(
+                                    state = eatReminderState,
+                                    onStop = mainViewModel::stopEatReminder,
+                                    onExtend = mainViewModel::extendEatReminder,
+                                    // Like End scene: a client's buttons ask the master, which needs the connection.
+                                    controlsEnabled = masterReachable
+                                )
+                                Box(modifier = Modifier.weight(1f)) {
+                                    dashboardV2Content(masterOrPairedClient)
+                                }
+                            }
                         }
                     } else {
                     OverviewScreen(
