@@ -30,8 +30,8 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.iosTickAimiRoot
  * ## When a task fires before [install] ran
  *
  * iOS can start the app in the background just to run a task. The first screen may never be built
- * then, so [install] may not have run. The ML handler then reports failure (`NOT_CONFIGURED`),
- * which is honest. The retention handler does not need the graph, so it still does its job with
+ * then, so [install] may not have run. The ML handler then completes the task as failed, which
+ * is honest. The retention handler does not need the graph, so it still does its job with
  * the default directory.
  */
 object IosAimiBackgroundTasks {

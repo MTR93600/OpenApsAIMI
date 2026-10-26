@@ -13,8 +13,9 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
  *
  * Two ways of choosing rows live here, because the code has two callers with two different meanings:
  *
- * - [keepAllButDay] is the "bad day" clean up. It removes the rows of one named day, which is what
- *   the user is told happened.
+ * - [keepAllButDay] / [moveDay] is the "bad day" clean up. It takes the rows of one named day out
+ *   of the corpus and keeps them in a separate file ([moveDay]), so the model stops learning from
+ *   them but nothing is lost: the user can read them, and put them back by hand.
  * - [keepAllButNewest] is the older count based clean up, kept unchanged for the therapy note
  *   trigger, which asks for a deletion without naming a day.
  *
@@ -50,6 +51,9 @@ internal object AimiCorpusPruner {
 
         /** The backup could not be written, so the file was left exactly as it was. */
         BACKUP_FAILED,
+
+        /** The rows could not be written to the set-aside file, so the corpus was left exactly as it was. */
+        SET_ASIDE_FAILED,
 
         /** The backup was made but the rewrite failed. The backup still holds every row. */
         WRITE_FAILED,
@@ -129,6 +133,42 @@ internal object AimiCorpusPruner {
      */
     fun removeDay(storage: AimiStorage, csv: AimiPath, backup: AimiPath, dayText: String): Result =
         rewrite(storage, csv, backup) { lines -> keepAllButDay(lines, dayText) }
+
+    /**
+     * Moves the rows of [dayText] from [csv] to [setAside], then takes them out of [csv].
+     *
+     * The order is what keeps a row from being lost: the rows are written to [setAside] first, and
+     * [csv] is only rewritten when that worked (and after the usual full copy at [backup]).
+     *
+     * [setAside] starts with the corpus header, so it reads like the corpus. Rows of a day that is
+     * already in it are not added again: a rewrite that failed is tried again on the next tick, and the
+     * day must not appear twice. When the corpus header has changed since [setAside] was started, the
+     * old file is kept as `<name>.previous` and a new one is started, because rows under two headers
+     * in one file could not be read back.
+     */
+    fun moveDay(storage: AimiStorage, csv: AimiPath, backup: AimiPath, setAside: AimiPath, dayText: String): Result {
+        if (!storage.exists(csv)) return Result(Outcome.FILE_MISSING, removedRows = 0, keptRows = 0)
+        val lines = storage.readLines(csv)
+        if (lines.size <= 1) return Result(Outcome.NOTHING_REMOVED, removedRows = 0, keptRows = lines.size)
+        val header = lines.first()
+        val dayRows = lines.drop(1).filter { isRowOfDay(it, dayText) }
+        if (dayRows.isEmpty()) return Result(Outcome.NOTHING_REMOVED, removedRows = 0, keptRows = lines.size)
+        if (!writeSetAside(storage, setAside, header, dayRows, dayText)) {
+            return Result(Outcome.SET_ASIDE_FAILED, removedRows = 0, keptRows = lines.size)
+        }
+        return removeDay(storage, csv, backup, dayText)
+    }
+
+    private fun writeSetAside(storage: AimiStorage, setAside: AimiPath, header: String, rows: List<String>, dayText: String): Boolean {
+        val existingHeader = if (storage.exists(setAside)) storage.readFirstLine(setAside) else null
+        if (existingHeader == header) {
+            val alreadyThere = storage.readLines(setAside).drop(1).any { isRowOfDay(it, dayText) }
+            if (alreadyThere) return true
+            return storage.appendText(setAside, rowPrefix(storage.lastChar(setAside)) + renderCsv(rows))
+        }
+        if (existingHeader != null && !storage.copy(setAside, storage.sibling(setAside, ".previous"))) return false
+        return storage.writeText(setAside, renderCsv(listOf(header) + rows))
+    }
 
     /**
      * Removes the newest [count] lines of [csv], keeping a copy of the whole file at [backup] first.

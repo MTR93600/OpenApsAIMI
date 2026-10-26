@@ -26,6 +26,75 @@ class AimiCorpusPrunerTest {
     private fun storageWith(text: String): InMemoryAimiStorage =
         InMemoryAimiStorage().also { it.files[csv.value] = text }
 
+    // ---- setting a bad day aside ---------------------------------------------------------------
+
+    private val setAside = AimiPath("/aimi/oapsaimiML2_records_excluded.csv")
+
+    private val threeDays = "$header\n" +
+        "28/09/2026 23:55,120,1.0,0.3\n" +
+        "29/09/2026 00:05,118,1.1,0.2\n" +
+        "29/09/2026 23:55,140,0.8,0.5\n" +
+        "30/09/2026 00:05,130,0.9,0.4\n"
+
+    @Test
+    fun theRowsOfABadDayLeaveTheCorpusAndAreKeptAside() {
+        val storage = storageWith(threeDays)
+
+        val result = AimiCorpusPruner.moveDay(storage, csv, backup, setAside, "29/09/2026")
+
+        assertEquals(AimiCorpusPruner.Outcome.REMOVED, result.outcome)
+        assertEquals("$header\n28/09/2026 23:55,120,1.0,0.3\n30/09/2026 00:05,130,0.9,0.4\n", storage.files[csv.value])
+        assertEquals("$header\n29/09/2026 00:05,118,1.1,0.2\n29/09/2026 23:55,140,0.8,0.5\n", storage.files[setAside.value])
+    }
+
+    @Test
+    fun aSecondBadDayIsAddedUnderTheSameHeader() {
+        val storage = storageWith(threeDays)
+        AimiCorpusPruner.moveDay(storage, csv, backup, setAside, "29/09/2026")
+
+        AimiCorpusPruner.moveDay(storage, csv, backup, setAside, "30/09/2026")
+
+        assertEquals(
+            "$header\n29/09/2026 00:05,118,1.1,0.2\n29/09/2026 23:55,140,0.8,0.5\n30/09/2026 00:05,130,0.9,0.4\n",
+            storage.files[setAside.value],
+        )
+    }
+
+    @Test
+    fun aDayAlreadySetAsideIsNotAddedTwice() {
+        // The corpus rewrite failed once, so the day is still in the corpus on the next tick.
+        val storage = storageWith(threeDays)
+        storage.files[setAside.value] = "$header\n29/09/2026 00:05,118,1.1,0.2\n29/09/2026 23:55,140,0.8,0.5\n"
+
+        val result = AimiCorpusPruner.moveDay(storage, csv, backup, setAside, "29/09/2026")
+
+        assertEquals(AimiCorpusPruner.Outcome.REMOVED, result.outcome)
+        assertEquals("$header\n29/09/2026 00:05,118,1.1,0.2\n29/09/2026 23:55,140,0.8,0.5\n", storage.files[setAside.value])
+    }
+
+    @Test
+    fun whenTheRowsCannotBeSetAsideTheCorpusIsNotTouched() {
+        val storage = storageWith(threeDays)
+        storage.deniedPaths += setAside.value
+
+        val result = AimiCorpusPruner.moveDay(storage, csv, backup, setAside, "29/09/2026")
+
+        assertEquals(AimiCorpusPruner.Outcome.SET_ASIDE_FAILED, result.outcome)
+        assertEquals(threeDays, storage.files[csv.value])
+    }
+
+    @Test
+    fun aSetAsideFileUnderAnOldHeaderIsKeptAndANewOneStarted() {
+        val storage = storageWith(threeDays)
+        val old = "dateStr, bg\n01/09/2026 10:00,150\n"
+        storage.files[setAside.value] = old
+
+        AimiCorpusPruner.moveDay(storage, csv, backup, setAside, "29/09/2026")
+
+        assertEquals(old, storage.files["${setAside.value}.previous"])
+        assertEquals("$header\n29/09/2026 00:05,118,1.1,0.2\n29/09/2026 23:55,140,0.8,0.5\n", storage.files[setAside.value])
+    }
+
     // ---- choosing the rows ----------------------------------------------------------------------
 
     @Test

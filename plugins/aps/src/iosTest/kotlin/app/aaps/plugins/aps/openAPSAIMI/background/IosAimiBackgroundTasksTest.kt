@@ -27,7 +27,7 @@ class IosAimiBackgroundTasksTest {
     @Test
     fun nothingIsConfiguredUntilInstallRuns() {
         // The state a background launch finds: ML must say "not configured", not "done".
-        assertEquals(IosMlTrainingScheduler.TrainingResult.NOT_CONFIGURED, IosMlTrainingScheduler.runTraining())
+        assertFalse(IosMlTrainingScheduler.isConfigured)
     }
 
     @Test

@@ -42,8 +42,8 @@ import platform.Foundation.dateWithTimeIntervalSinceNow
  *
  * Training reuses the commonMain pipeline (`BasalMlTrainingCoordinator`, `NeuralModelTrainer`,
  * dataset parsers). The coordinator is injected via [configure], typically at app launch from
- * the DI graph. Until configured, [runTraining] reports [TrainingResult.NOT_CONFIGURED] instead
- * of silently doing nothing.
+ * the DI graph. Until configured, [isConfigured] is false and the task handler reports the
+ * failure instead of silently doing nothing.
  *
  * Call [configure] once at app launch, then [register] (before the app finishes launching),
  * then [schedule] to enqueue the next run. Each completed run re-schedules automatically.
@@ -72,17 +72,6 @@ object IosMlTrainingScheduler {
      * for; this is the soonest the system is allowed to say yes.
      */
     const val EARLIEST_BEGIN_SECONDS = 15.0 * 60.0
-
-    enum class TrainingResult {
-        /** Training ran (or was correctly skipped by the coordinator gates). */
-        DONE,
-
-        /** No coordinator was provided via [configure] yet. */
-        NOT_CONFIGURED,
-
-        /** The task could not be scheduled (e.g. identifier not in Info.plist). */
-        SCHEDULE_FAILED,
-    }
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
@@ -240,17 +229,6 @@ object IosMlTrainingScheduler {
     /** The volume gate `AutodriveNeuralTrainerWorker` uses. */
     private const val MIN_LABELLED_ROWS = 2880
 
-    /**
-     * Runs one training pass through the commonMain pipeline.
-     *
-     * Returns [TrainingResult.NOT_CONFIGURED] if [configure] was not called. This keeps the
-     * feature visibly absent instead of silently doing nothing.
-     *
-     * Note: this is a synchronous convenience for tests. The BGTask handler in [register]
-     * calls the coordinator directly on a background coroutine.
-     */
-    fun runTraining(): TrainingResult {
-        if (coordinator == null) return TrainingResult.NOT_CONFIGURED
-        return TrainingResult.DONE
-    }
+    /** True once [configure] has handed over the coordinator, so a background run can train. */
+    val isConfigured: Boolean get() = coordinator != null
 }

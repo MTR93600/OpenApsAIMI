@@ -4,6 +4,7 @@ import app.aaps.implementation.maintenance.ImportExportPrefsImpl
 import app.aaps.implementation.receivers.KeepAliveWorker
 import app.aaps.implementation.scenes.SceneExpiryWorker
 import app.aaps.plugins.aps.loop.runningMode.RunningModeExpiryWorker
+import app.aaps.plugins.aps.openAPSAIMI.learning.BasalMlTrainerWorker
 import app.aaps.plugins.aps.openAPSAIMI.retention.AimiRetentionWorker
 import app.aaps.plugins.sync.nsclientV3.workers.DataSyncWorker
 import app.aaps.plugins.sync.nsclientV3.workers.LoadBgWorker
@@ -49,9 +50,10 @@ class AppWorkersGraphTest {
             LoadTreatmentsWorker::class,
             XdripDataSyncWorker::class,
             SmsCommunicatorPlugin.SmsCommunicatorWorker::class,
-            // The one AIMI worker Metro builds. The other AIMI jobs are plain WorkManager workers
+            // The two AIMI workers Metro builds. The other AIMI jobs are plain WorkManager workers
             // that look their collaborators up themselves, so they never reach this map.
-            AimiRetentionWorker::class
+            AimiRetentionWorker::class,
+            BasalMlTrainerWorker::class,
         )
     }
 }

@@ -6518,7 +6518,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
                 val etaText = if (metrics.convergenceVelocity > 0) {
                     val eta = app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryMetricsCalculator.estimateConvergenceTime(history, targetOrb)
-                    if (eta != null) "$eta min to work.stable orbit" else "Approaching..."
+                    if (eta != null) "$eta min to stable orbit" else "Approaching..."
                 } else {
                     "Diverging from target"
                 }
@@ -7845,8 +7845,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             "🌀🛡️ TRAJ_SPIRAL SMB-cap$modeNote: E=${aimiFmt1(energy)}U (>${aimiFmt1(energyTh)}) " +
                 "IOB=${aimiFmt1(iobNow)}U (>${aimiFmt1(iobTh)}) " +
                 "TDD24h=${aimiFmt1(tdd24hU)}U w=${aimiFmt0(weightKg)}kg " +
-                "work.maxSMB ${aimiFmt2(prevMb)}→${aimiFmt2(work.maxSMB)}U " +
-                "work.maxSMBHB ${aimiFmt2(prevHb)}→${aimiFmt2(work.maxSMBHB)}U " +
+                "maxSMB ${aimiFmt2(prevMb)}→${aimiFmt2(work.maxSMB)}U " +
+                "maxSMBHB ${aimiFmt2(prevHb)}→${aimiFmt2(work.maxSMBHB)}U " +
                 "(≤OApsAIMIMaxSMB ${aimiFmt2(stdMaxSMB)}U)"
         )
     }
@@ -10683,7 +10683,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                             "verneuil" to wCyclePreferences.verneuil().name,
                             "bg" to bg,
                             "delta5" to delta.toDouble(),
-                            "work.iob" to work.iob.toDouble(),
+                            "iob" to work.iob.toDouble(),
                             "tdd24h" to (tdd24HrsPerHour * 24f).toDouble(),
                             "isfProfile" to profileForLog.sens,
                             "dynIsf" to variableSensitivity.toDouble(),
@@ -10983,12 +10983,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         val dateStr = dateUtil.dateAndTimeString(dateUtil.now())
 
-        val headerRow = "dateStr,work.hourOfDay,work.weekend," +
-            "bg,targetBg,work.iob,delta,shortAvgDelta,longAvgDelta," +
+        // Column names, not code: the `work.` move of the tick state must not reach them, or the
+        // header check rewrites the header of a file dev_OAPSAIMI already wrote.
+        val headerRow = "dateStr,hourOfDay,weekend," +
+            "bg,targetBg,iob,delta,shortAvgDelta,longAvgDelta," +
             "tdd7DaysPerHour,tdd2DaysPerHour,tddPerHour,tdd24HrsPerHour," +
             "recentSteps5Minutes,recentSteps10Minutes,recentSteps15Minutes,recentSteps30Minutes,recentSteps60Minutes,recentSteps180Minutes," +
-            "work.tags0to60minAgo,work.tags60to120minAgo,work.tags120to180minAgo,work.tags180to240minAgo," +
-            "predictedSMB,work.maxIob,work.maxSMB,smbGiven,dynamicPeak,adjustedDia\n"
+            "tags0to60minAgo,tags60to120minAgo,tags120to180minAgo,tags180to240minAgo," +
+            "predictedSMB,maxIob,maxSMB,smbGiven,dynamicPeak,adjustedDia\n"
         val valuesToRecord = "$dateStr,${work.hourOfDay},${work.weekend}," +
             "$bg,$targetBg,${work.iob},$delta,$shortAvgDelta,$longAvgDelta," +
             "$tdd7DaysPerHour,$tdd2DaysPerHour,$tddPerHour,$tdd24HrsPerHour," +
@@ -11084,10 +11086,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 keptRows = 0,
             )
         }
-        val result = AimiCorpusPruner.removeDay(
+        val result = AimiCorpusPruner.moveDay(
             storage = storage,
             csv = csvFile,
             backup = storage.file(backupFileName()),
+            setAside = storage.file(BAD_DAY_SET_ASIDE_FILE),
             dayText = dayText,
         )
         aapsLogger.info(
@@ -11100,8 +11103,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private fun automateDeletionIfBadDay(tir1DAYIR: Int) {
         val reasonBuilder = StringBuilder()
-        // Only when the time in range of the last day is under 85 %.
-        if (tir1DAYIR < 85) {
+        // Only when the time in range (65-180 mg/dL) of the last day is under 65 %: a really bad day.
+        // At 85 % most ordinary days went too, and the model was left with the easy ones (owner
+        // decision 2026-10-26). The rows are set aside, not deleted: see AimiCorpusPruner.moveDay.
+        if (tir1DAYIR < BAD_DAY_TIR_THRESHOLD_PCT) {
             // Only between 00:05 and 00:10, local time.
             val deletionNowMs = aimiWallClockMs()
             if (aimiStrictlyInsideLocalWindow(deletionNowMs, 0, 5, 0, 10)) {
@@ -11447,7 +11452,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                             "verneuil" to wCyclePreferences.verneuil().name,
                             "bg" to bg,
                             "delta5" to delta.toDouble(),
-                            "work.iob" to work.iob.toDouble(),
+                            "iob" to work.iob.toDouble(),
                             "tdd24h" to (tdd24HrsPerHour * 24f).toDouble(),
                             "isfProfile" to profile.sens,
                             "dynIsf" to variableSensitivity.toDouble(),
@@ -12356,7 +12361,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 "verneuil" to wCyclePreferences.verneuil().name,
                 "bg" to bg,
                 "delta5" to delta.toDouble(),
-                "work.iob" to work.iob.toDouble(),
+                "iob" to work.iob.toDouble(),
                 "tdd24h" to (tdd24HrsPerHour * 24f).toDouble(),
                 "isfProfile" to profile.sens,
                 "dynIsf" to variableSensitivity.toDouble()
@@ -15173,3 +15178,9 @@ enum class AutodriveState {
     WATCHING,
     ENGAGED
 }
+
+/** A day whose time in range (65-180 mg/dL) is under this is taken out of the training corpus. */
+private const val BAD_DAY_TIR_THRESHOLD_PCT = 65
+
+/** Where the rows of a bad day go, next to the corpus, instead of being deleted. */
+private const val BAD_DAY_SET_ASIDE_FILE = "oapsaimiML2_records_excluded.csv"

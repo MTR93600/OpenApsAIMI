@@ -8,6 +8,7 @@ import app.aaps.implementation.receivers.KeepAliveWorker
 import app.aaps.implementation.scenes.SceneExpiryWorker
 import app.aaps.plugins.aps.loop.runningMode.RunningModeExpiryScheduler
 import app.aaps.plugins.aps.loop.runningMode.RunningModeExpiryWorker
+import app.aaps.plugins.aps.openAPSAIMI.learning.BasalMlTrainerWorker
 import app.aaps.plugins.aps.openAPSAIMI.retention.AimiRetentionWorker
 import app.aaps.plugins.sync.nsclientV3.workers.DataSyncWorker
 import app.aaps.plugins.sync.nsclientV3.workers.LoadBgWorker
@@ -50,6 +51,16 @@ interface AppWorkersGraph {
     @IntoMap
     @WorkerKey(AimiRetentionWorker::class)
     fun bindAimiRetentionWorker(factory: AimiRetentionWorker.Factory): MetroWorkerCreator = factory
+
+    /**
+     * The hourly basal / T3C trainer and its first run after install. Without this entry WorkManager
+     * falls back to its own factory, which cannot build a worker with injected parameters, so every
+     * run failed without a word (dev_OAPSAIMI had it through `@HiltWorker`).
+     */
+    @Provides
+    @IntoMap
+    @WorkerKey(BasalMlTrainerWorker::class)
+    fun bindBasalMlTrainerWorker(factory: BasalMlTrainerWorker.Factory): MetroWorkerCreator = factory
 
     @Provides
     @IntoMap
