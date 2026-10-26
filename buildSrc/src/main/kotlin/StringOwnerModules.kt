@@ -11,7 +11,12 @@ data class StringOwnerModule(
     val owner: String,
     val packageName: String,
     val objectName: String,
-    val idsObjectName: String
+    val idsObjectName: String,
+    /**
+     * True for a pump driver module. `:app` puts pump drivers in the `full` and `pumpcontrol`
+     * flavors only, so the client flavors must not register it: the import would not resolve.
+     */
+    val pumpDriver: Boolean = false
 ) : Serializable {
 
     /** The generated `name -> English text` map. Lives in commonMain, so every platform has it. */
@@ -19,7 +24,7 @@ data class StringOwnerModule(
 
     companion object {
 
-        private const val serialVersionUID: Long = 1L
+        private const val serialVersionUID: Long = 2L
     }
 }
 
@@ -60,11 +65,17 @@ object StringOwnerModules {
         StringOwnerModule("configuration", "app.aaps.plugins.configuration", "ConfigurationStrings", "ConfigurationStringIds"),
         StringOwnerModule("constraints", "app.aaps.plugins.constraints", "ConstraintsStrings", "ConstraintsStringIds"),
         StringOwnerModule("main", "app.aaps.plugins.main", "MainStrings", "MainStringIds"),
-        StringOwnerModule("medtrum", "app.aaps.pump.medtrum", "MedtrumStrings", "MedtrumStringIds"),
+        StringOwnerModule("medtrum", "app.aaps.pump.medtrum", "MedtrumStrings", "MedtrumStringIds", pumpDriver = true),
         StringOwnerModule("sensitivity", "app.aaps.plugins.sensitivity", "SensitivityStrings", "SensitivityStringIds"),
         StringOwnerModule("smoothing", "app.aaps.plugins.smoothing", "SmoothingStrings", "SmoothingStringIds"),
         StringOwnerModule("source", "app.aaps.plugins.source", "SourceStrings", "SourceStringIds"),
         StringOwnerModule("sync", "app.aaps.plugins.sync", "SyncStrings", "SyncStringIds"),
         StringOwnerModule("virtual", "app.aaps.pump.virtual", "VirtualStrings", "VirtualStringIds")
     )
+
+    /**
+     * [ALL] without the pump drivers, for an app built without them (the `aapsclient` flavors).
+     * `:pump:virtual` is not a driver in this sense: every flavor has it.
+     */
+    val WITHOUT_PUMP_DRIVERS: List<StringOwnerModule> = ALL.filterNot { it.pumpDriver }
 }

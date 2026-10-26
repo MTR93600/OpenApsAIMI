@@ -105,11 +105,27 @@ val generateAppStringOwners = tasks.register<GenerateStringOwnerRegistryTask>("g
     outputDir.set(layout.buildDirectory.dir("generated/stringOwners"))
 }
 
+/**
+ * The same registry for the flavors built without pump drivers. They do not depend on
+ * `:pump:medtrum`, so registering its strings there failed with "Unresolved reference 'medtrum'".
+ */
+val generateAppStringOwnersWithoutPumpDrivers = tasks.register<GenerateStringOwnerRegistryTask>("generateAppStringOwnersWithoutPumpDrivers") {
+    owners.set(StringOwnerModules.WITHOUT_PUMP_DRIVERS)
+    packageName.set("app.aaps.di")
+    objectName.set("GeneratedStringOwners")
+    useResourceIds.set(true)
+    outputDir.set(layout.buildDirectory.dir("generated/stringOwnersWithoutPumpDrivers"))
+}
+
+/** The flavors that get the pump drivers (see the dependency block) and so their strings. */
+val flavorsWithPumpDrivers = setOf("full", "pumpcontrol")
+
 // AGP will not take a Provider through the SourceSet API, so the directory is attached per variant.
 // addGeneratedSourceDirectory also wires the task dependency, which a bare srcDir would not.
 androidComponents {
     onVariants { variant ->
-        variant.sources.kotlin?.addGeneratedSourceDirectory(generateAppStringOwners, GenerateStringOwnerRegistryTask::outputDir)
+        val owners = if (variant.flavorName in flavorsWithPumpDrivers) generateAppStringOwners else generateAppStringOwnersWithoutPumpDrivers
+        variant.sources.kotlin?.addGeneratedSourceDirectory(owners, GenerateStringOwnerRegistryTask::outputDir)
     }
 }
 android {
@@ -262,9 +278,8 @@ dependencies {
     val pumpExclusions = setOf(":pump:virtual")
     rootProject.subprojects
         .filter { it.path.startsWith(":pump:") && it.path !in pumpExclusions && it.buildFile.exists() }
-        .forEach {
-            "fullImplementation"(project(it.path))
-            "pumpcontrolImplementation"(project(it.path))
+        .forEach { pump ->
+            flavorsWithPumpDrivers.forEach { flavor -> "${flavor}Implementation"(project(pump.path)) }
         }
 
     implementation(libs.androidx.core)
