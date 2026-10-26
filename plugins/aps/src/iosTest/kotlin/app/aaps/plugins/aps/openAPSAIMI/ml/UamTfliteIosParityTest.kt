@@ -9,8 +9,8 @@ import kotlin.test.assertTrue
  * [UamTfliteCorpus]. The linked runtime must be TensorFlow Lite C 2.4, one
  * thread, no delegate. Any differing word fails the test.
  *
- * Nothing in the basal tick calls this. `predictSmbUam` stays on the
- * model-absent path.
+ * The basal tick reaches this inference through `IosUamPredictor`, so these bits are what the
+ * iPhone doses on.
  */
 class UamTfliteIosParityTest {
 

@@ -53,14 +53,12 @@ object AimiModelHandler {
     @Volatile private var lastLoadTime: Long = 0L
 
     /**
-     * Registers the TFLite interpreter as the platform predictor of the shared [AimiUamHandler].
-     * Called once by the Android plugin shell. With no predictor installed the shared facade
-     * returns 0f (model absent) and the engine falls back to the rule-based dose.
+     * The TFLite interpreter as the platform predictor of the shared [AimiUamHandler]. The plugin
+     * installs it on start through [aimiPlatformUamPredictor], together with the iOS one. Without a
+     * model file it answers 0f, the same as no predictor at all.
      */
-    fun installAsPredictor() {
-        AimiUamHandler.installPredictor(AimiUamHandler.AimiUamPredictor { features, reason, rh ->
-            predictWithTflite(features, reason, rh)
-        })
+    val predictor: AimiUamHandler.AimiUamPredictor = AimiUamHandler.AimiUamPredictor { features, reason, rh ->
+        predictWithTflite(features, reason, rh)
     }
 
     /** Ligne de statut prête à logguer dans rT.reason */
@@ -141,7 +139,7 @@ object AimiModelHandler {
     ): Float {
         appendStatus(reason, rh) // affiche d'entrée l'état du modèle
 
-        val (inputs, replaced) = sanitizeWithCount(features)
+        val (inputs, replaced) = AimiUamInference.sanitizeWithCount(features)
         if (replaced > 0) {
             //reason?.appendLine("🧹 Sanitize: $replaced entrées non finies -> 0")
             reason?.appendLine(rh.gs(ApsStrings.sanitize_info, replaced))
@@ -149,7 +147,7 @@ object AimiModelHandler {
 
         val key = cacheKey("UAM", inputs)
         smbCache.getIfPresent(key)?.let { cached ->
-            if (isUsable(cached)) {
+            if (AimiUamInference.isUsable(cached)) {
                 //reason?.appendLine("⚡ Cache HIT → ${"%.4f".format(cached)} U")
                 reason?.appendLine(rh.gs(ApsStrings.cache_hit, "%.4f".format(cached)))
                 return cached
@@ -185,8 +183,8 @@ object AimiModelHandler {
             return 0f
         }
 
-        val result = if (isUsable(raw)) round4(raw) else 0f
-        if (isUsable(result)) {
+        val result = if (AimiUamInference.isUsable(raw)) AimiUamInference.round4(raw) else 0f
+        if (AimiUamInference.isUsable(result)) {
             smbCache.put(key, result)
             //reason?.appendLine("✅ UAM exécuté → ${"%.4f".format(result)} U")
             reason?.appendLine(rh.gs(ApsStrings.uam_executed, "%.2f".format(result)))
@@ -256,24 +254,6 @@ object AimiModelHandler {
     }
 
     // ────────────────────────── Utilitaires ──────────────────────────
-
-    private fun sanitizeWithCount(values: FloatArray): Pair<FloatArray, Int> {
-        var replaced = 0
-        val out = FloatArray(values.size)
-        for (i in values.indices) {
-            val v = values[i]
-            val ok = v.isFinite() && !v.isNaN()
-            out[i] = if (ok) v else {
-                replaced += 1
-                0f
-            }
-        }
-        return out to replaced
-    }
-
-    private fun isUsable(v: Float): Boolean = v.isFinite() && !v.isNaN()
-
-    private fun round4(v: Float): Float = (v * 10000f).toInt() / 10000f.toFloat()
 
     private fun cacheKey(modelName: String, inputs: FloatArray): String {
         val md = MessageDigest.getInstance("SHA-256")

@@ -431,6 +431,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         // AimiUamHandler, in any commit, so the line never ran - the Android build was red and hid
         // it. Nothing is lost by dropping it: the handler keeps no cache to clear, the detector
         // pushes a fresh runtime confidence every tick, and the supplier is re-installed just below.
+        // The UAM model, on Android and on iOS together (aimiPlatformUamPredictor). Without a model
+        // file the predictor answers 0f, the same as before it was installed.
+        AimiUamHandler.installPredictor(aimiPlatformUamPredictor())
         AimiUamHandler.installConfidenceSupplier {
             // retourne null si tu veux "laisser la main" au runtime
             preferences.get(DoubleKey.AimiUamConfidence)
@@ -1281,7 +1284,14 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 tdd24h = tdd24Hrs,
                 combinedDelta = currentDelta ?: 0.0,
                 uamConfidence = AimiUamHandler.confidenceOrZero(),
-                allowLearning = !preferences.get(BooleanKey.OApsAIMIIntelligenceSingleLearnPath),
+                // Read-only by design: signal-prep is the only learning path per tick. This call
+                // passes a fixed window and no bolus samples, so letting it learn would pollute the
+                // shared learned state.
+                allowLearning = false,
+                // Distinct PkPdIntegration instance: this is its ONLY fused() call per tick, so it must
+                // own the slew anchor or the limiter stays inert. Without it the 0.45-1.40 per-tick
+                // ISF limit never applied on this branch (dev_OAPSAIMI parity, 2026-10-26).
+                isfRateLimitAuthority = true,
             )
             lastPkpdScale = pkpdRuntimeForActivity?.pkpdScale ?: 1.0
 

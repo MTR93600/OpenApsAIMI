@@ -24,8 +24,8 @@ import kotlinx.cinterop.usePinned
 /**
  * CPU inference of `modelUAM.tflite` through TensorFlow Lite C.
  *
- * One thread, no delegate. XNNPACK is not added. Nothing in the basal tick calls this.
- * `predictSmbUam` stays on the model-absent path.
+ * One thread, no delegate. XNNPACK is not added. The basal tick reaches it through
+ * `IosUamPredictor`.
  */
 @OptIn(ExperimentalForeignApi::class)
 internal object IosUamTflite {

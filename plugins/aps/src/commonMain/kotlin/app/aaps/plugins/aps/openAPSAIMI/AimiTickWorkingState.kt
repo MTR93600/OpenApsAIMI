@@ -264,3 +264,51 @@ internal class AimiTickWorkingState {
     var pkpdThrottleIntervalAdd: Int = 0       // 🚀 PKPD interval boost (0 si normal/modes repas)
     var pkpdPreferTbrBoost: Double = 1.0       // 🚀 PKPD TBR boost factor (1.0 si normal/modes repas)
 }
+
+/**
+ * What a new tick takes from the one before it.
+ *
+ * dev_OAPSAIMI kept these in fields that lived from one tick to the next, and some stages read
+ * them before this tick writes them. Starting them from their empty value changed the dose:
+ * - [AimiTickWorkingState.pkpdThrottleIntervalAdd]: the SMB interval and the refractory window
+ *   are worked out before finalize writes the new value, so they used the previous tick's extra
+ *   minutes. With 0 the SMB could come back sooner than on dev_OAPSAIMI.
+ * - [AimiTickWorkingState.pkpdPreferTbrBoost]: the temp basals set before finalize (MAX_IOB gate,
+ *   Autodrive V3, meal advisor, SMB switched off, post-hypo) used the previous tick's boost.
+ * - [AimiTickWorkingState.activityProtectionMode]: the scenario projection reads it before the
+ *   activity stage writes it, so it used the previous tick's value. With false, sport was never
+ *   seen by the projection.
+ * - [AimiTickWorkingState.basalaimi]: Harmonia's environment reads it before the basal stage
+ *   writes it. With 0 it fell back to 1.0 U/h, so the Harmonia basal was worked out on 1.0 U/h
+ *   instead of the patient's basal.
+ * - [AimiTickWorkingState.lastPatientState] and [AimiTickWorkingState.lastPatientModeDecision]:
+ *   the basal neural net reads them at the physiology bootstrap, before the decision-context stage
+ *   clears them for the tick. Both branches clear them at that same point, so carrying them only
+ *   restores the bootstrap read.
+ * - [AimiTickWorkingState.mealTime] and [AimiTickWorkingState.snackTime]: the early PKPD meal
+ *   context reads them before the therapy stage writes them. The other meal flags are class fields
+ *   and already carried.
+ * - [AimiTickWorkingState.hourOfDay]: the tick clock sets it later in the tick, but the G6 BYODA
+ *   check and the reactivity learner read it earlier. 0 read as night, so the G6 day compensation
+ *   never ran. This one takes [hourNow], the real hour. dev_OAPSAIMI read the previous tick's hour,
+ *   so the two differ on the first tick of an hour (and on the first tick after a start). That is a
+ *   deliberate deviation: the real hour is the intent.
+ *
+ * Everything else stays tick-local on purpose. dev_OAPSAIMI also never reset these, but they are
+ * stale values, not memory, so they are not copied:
+ * - `cob`: kept a value until the app restarted.
+ * - `lastInsulinStackingEvaluation`: an old stacking verdict could block a basal-first plan or cap
+ *   the SMB on a tick where the recursive belief resolve left early.
+ * - `lastEventualBgSnapshot`: an old eventual BG used as a fallback on ticks without a scenario.
+ */
+internal fun AimiTickWorkingState.takeCarryOverFrom(previous: AimiTickWorkingState, hourNow: Int) {
+    pkpdThrottleIntervalAdd = previous.pkpdThrottleIntervalAdd
+    pkpdPreferTbrBoost = previous.pkpdPreferTbrBoost
+    activityProtectionMode = previous.activityProtectionMode
+    basalaimi = previous.basalaimi
+    lastPatientState = previous.lastPatientState
+    lastPatientModeDecision = previous.lastPatientModeDecision
+    mealTime = previous.mealTime
+    snackTime = previous.snackTime
+    hourOfDay = hourNow
+}

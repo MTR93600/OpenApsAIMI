@@ -52,8 +52,13 @@ internal class AutodriveV3TickState(
     val adaptiveMult: Double,
     val maxIob: Double,
     val iob: Float,
-    val maxSmb: Double,
-    val maxSmbHb: Double,
+    /**
+     * Read live, not captured: TPO can rewrite MaxSMB and MaxSMBHB in the middle of this branch
+     * (`DecidePhysioLatent`), and dev_OAPSAIMI read the field after that rewrite. A copy taken when
+     * this state object was built kept the old ceiling for the MPC and the floor on those ticks.
+     */
+    val maxSmb: () -> Double,
+    val maxSmbHb: () -> Double,
     /**
      * Read live, not captured: [AimiPatientStateRefresh] can change the patient mode in the middle of
      * this branch, and the authority is then evaluated again on the new mode. A snapshot taken when
@@ -240,8 +245,8 @@ internal fun runAutodriveV3MultiVariableBranch(
             rhr = snapshot.rhrResting,
             sourceSensor = ctx.glucoseStatus.sourceSensor,
             maxIOB = state.maxIob,
-            maxSMB = state.maxSmb,
-            highBgMaxSMB = state.maxSmbHb,
+            maxSMB = state.maxSmb(),
+            highBgMaxSMB = state.maxSmbHb(),
             combinedDelta = combinedDelta.toDouble(),
             uamConfidence = uam.confidenceOrZero(),
             applyHypoRecoveryRaDampening = applyHypoRecoveryRaDampening,
@@ -358,7 +363,7 @@ internal fun runAutodriveV3MultiVariableBranch(
 
         val v3SmbModel = if (v3CommandSafe) adCommand!!.scheduledMicroBolus ?: 0.0 else 0.0
         val iobHeadroomForFloor = (state.maxIob - state.iob).coerceAtLeast(0.0)
-        val smbCeilingForFloor = state.maxSmb.coerceAtLeast(0.0)
+        val smbCeilingForFloor = state.maxSmb().coerceAtLeast(0.0)
         val v3SmbFloor = if (v3CommandSafe) {
             riseFloor.aggressiveRiseSmbFloorU(bg, combinedDelta, shortAvgDeltaAdj)
                 .coerceAtMost(minOf(smbCeilingForFloor, iobHeadroomForFloor))
@@ -383,8 +388,8 @@ internal fun runAutodriveV3MultiVariableBranch(
             smallPrebolusPrefU = smallPrebolusPref,
             largePrebolusPrefU = largePrebolusPref,
             autodriveFloorU = v3SmbFloor,
-            maxSmbU = state.maxSmb,
-            maxSmbHighBgU = state.maxSmbHb,
+            maxSmbU = state.maxSmb(),
+            maxSmbHighBgU = state.maxSmbHb(),
             iobHeadroomU = iobHeadroomForFloor,
         ).appendStage(
             name = "AUTODRIVE_FLOOR",

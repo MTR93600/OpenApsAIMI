@@ -129,9 +129,11 @@ internal fun decideT9PhysioEarlyPkpd(
     }
     physioDetail.log()
     val earlySens = profile.sens / 1.0
-    val singleLearnPath = preferences.get(BooleanKey.OApsAIMIIntelligenceSingleLearnPath)
     val pkpdRuntime = try {
-        runtime.compute(earlySens, iobTotal, allowLearning = !singleLearnPath)
+        // Read-only, whatever OApsAIMIIntelligenceSingleLearnPath says: this early call uses a
+        // substitute TDD (max basal x 24), so letting it learn would pollute the shared learned
+        // state. Same as dev_OAPSAIMI.
+        runtime.compute(earlySens, iobTotal, allowLearning = false)
     } catch (e: Exception) {
         consoleError.add("❌ Early PKPD Runtime init failed: ${e.message}")
         null

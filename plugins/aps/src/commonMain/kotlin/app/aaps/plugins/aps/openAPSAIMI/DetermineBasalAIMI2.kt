@@ -3963,8 +3963,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             adaptiveMult = causalState.adaptiveMult,
             maxIob = work.maxIob,
             iob = work.iob,
-            maxSmb = work.maxSMB,
-            maxSmbHb = work.maxSMBHB,
+            maxSmb = { work.maxSMB },
+            maxSmbHb = { work.maxSMBHB },
             postHypo = { work.lastPostHypoDeliveryAuthority },
             mealAbsorptionBelief = { work.lastMealAbsorptionOutput?.belief },
             mealChannelHint = work.lastRbtAppliedHints?.mealChannel,
@@ -7049,7 +7049,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val physioMults = work.lastFusedPhysioMultipliers ?: work.lastBasePhysioMultipliers
         val learningDiagnostics = PkpdLearningDiagnostics.from(
             causalStatePosterior = work.lastPatientState?.causalPosterior,
-            allowLearning = preferences.get(BooleanKey.OApsAIMIIntelligenceSingleLearnPath),
+            // Signal-prep is the one learning path of the tick and it always learns, so the
+            // snapshot must say so. Reading the preference here reported "read_only_path" while
+            // learning was in fact running (same as dev_OAPSAIMI).
+            allowLearning = true,
             exerciseFlag = work.sportTime,
             iobU = ctx.iobDataArray.firstOrNull()?.iob ?: 0.0,
             carbsActiveG = ctx.mealData.mealCOB,
@@ -11712,9 +11715,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
 
     private fun isMealContextActive(mealData: MealData): Boolean {
-        val manualFlags = work.mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || work.snackTime
-        val cobActive = mealData.mealCOB > 5.0
-        return manualFlags || cobActive
+        return AimiTickPolicyMath.isMealContextActive(
+            manualMealMode = work.mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime || work.snackTime,
+            fclNote = fclTime,
+            mealCobG = mealData.mealCOB,
+        )
     }
 
     private fun resolveMealCorrectionContext(
@@ -14527,10 +14532,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Fresh tick-local scratch. Helpers access via work.field.
             // Reset under the tick lock: a tick that cannot acquire the lock must not
             // clobber the scratch of the tick currently holding it.
+            val previousTick = work
             work = AimiTickWorkingState()
+            carryOverFromPreviousTick(previousTick, work)
             work.smbSwitchOnThisTick = ctx.microBolusAllowed
             AimiDetermineBasalTickOrchestrator.run(this, ctx)
         }
+    }
+
+    /** See [takeCarryOverFrom]: the hour comes from the tick clock, the rest from [previous]. */
+    private fun carryOverFromPreviousTick(previous: AimiTickWorkingState, next: AimiTickWorkingState) {
+        next.takeCarryOverFrom(previous, hourNow = aimiCivilClock(injectedTickEpochMs ?: aimiWallClockMs()).hour)
     }
 
     /**

@@ -20,6 +20,16 @@ import kotlin.math.pow
 internal object AimiTickPolicyMath {
 
     /**
+     * A meal is going on: a meal mode, an FCL note, or more than 5 g of carbs on board.
+     *
+     * The FCL note counts on its own because an FCL meal is declared without carbs, so the COB
+     * test cannot see it. dev_OAPSAIMI added it in d77938dbdc1; without it the meal weights, the
+     * guard scale and the PKPD meal bounds stayed off during an FCL meal.
+     */
+    fun isMealContextActive(manualMealMode: Boolean, fclNote: Boolean, mealCobG: Double): Boolean =
+        manualMealMode || fclNote || mealCobG > 5.0
+
+    /**
      * OpenJDK `Math.round(double)` bit algorithm. Ties toward +∞. NaN is 0.
      * ±Infinity and values outside the long range saturate at the long extremes.
      */

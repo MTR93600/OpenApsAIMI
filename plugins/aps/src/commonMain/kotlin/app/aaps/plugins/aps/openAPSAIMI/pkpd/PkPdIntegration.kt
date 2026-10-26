@@ -453,6 +453,7 @@ class PkPdIntegration(
         lastFusionBounds = null
         lastTailPolicy = null
         cachedStructuralConfig = null
+        learningWindowGate.clear()
         // seenLearnedStateGeneration is kept on purpose: turning OApsAIMIPkpdEnabled off and on
         // again must not look like an external reset on the next tick.
     }

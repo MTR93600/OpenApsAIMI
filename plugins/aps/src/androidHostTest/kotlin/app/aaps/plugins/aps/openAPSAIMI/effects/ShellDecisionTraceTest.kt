@@ -4885,7 +4885,6 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.40
             READ key=BooleanKey.OApsAIMIIntelligenceKineticsProfiler value=false
             READ key=BooleanKey.AimiPhysioAssistantEnable value=false
-            READ key=BooleanKey.OApsAIMIIntelligenceSingleLearnPath value=false
             READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
             READ key=DoubleKey.OApsAIMIweight value=0.00
             READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
@@ -5191,7 +5190,6 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.40
             READ key=BooleanKey.OApsAIMIIntelligenceKineticsProfiler value=false
             READ key=BooleanKey.AimiPhysioAssistantEnable value=false
-            READ key=BooleanKey.OApsAIMIIntelligenceSingleLearnPath value=false
             READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
             READ key=DoubleKey.OApsAIMIweight value=0.00
             READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
@@ -5588,7 +5586,6 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.00
             READ key=BooleanKey.OApsAIMIIntelligenceKineticsProfiler value=false
             READ key=BooleanKey.AimiPhysioAssistantEnable value=false
-            READ key=BooleanKey.OApsAIMIIntelligenceSingleLearnPath value=false
             READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
             READ key=DoubleKey.OApsAIMIweight value=0.00
             READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
@@ -5798,7 +5795,6 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.00
             READ key=BooleanKey.OApsAIMIIntelligenceKineticsProfiler value=false
             READ key=BooleanKey.AimiPhysioAssistantEnable value=false
-            READ key=BooleanKey.OApsAIMIIntelligenceSingleLearnPath value=false
             READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
             READ key=DoubleKey.OApsAIMIweight value=0.00
             READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
@@ -5998,7 +5994,6 @@ READ key=DoubleKey.OApsAIMIMaxSMB value=0.00
 READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.00
 READ key=BooleanKey.OApsAIMIIntelligenceKineticsProfiler value=false
 READ key=BooleanKey.AimiPhysioAssistantEnable value=false
-READ key=BooleanKey.OApsAIMIIntelligenceSingleLearnPath value=false
 READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
 READ key=DoubleKey.OApsAIMIweight value=0.00
 READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
@@ -6098,7 +6093,6 @@ READ key=DoubleKey.OApsAIMIMaxSMB value=0.00
 READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.00
 READ key=BooleanKey.OApsAIMIIntelligenceKineticsProfiler value=false
 READ key=BooleanKey.AimiPhysioAssistantEnable value=false
-READ key=BooleanKey.OApsAIMIIntelligenceSingleLearnPath value=false
 READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
 READ key=DoubleKey.OApsAIMIweight value=0.00
 READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
@@ -6890,7 +6884,6 @@ Failed to save AIMI Decision JSON: lateinit property appendCap has not been init
         private val T9_ACTIVE_TRACE = """
             READ key=BooleanKey.AimiPhysioAssistantEnable value=true
             LOG 🏥 PHYSIO: ISF×1.100 Basal×1.050 SMB×1.080 Conf=80%
-            READ key=BooleanKey.OApsAIMIIntelligenceSingleLearnPath value=false
             READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=5.00
             READ key=DoubleKey.OApsAIMIweight value=70.00
             READ key=BooleanKey.OApsAIMIPkpdEnabled value=true
@@ -6977,7 +6970,6 @@ Failed to save AIMI Decision JSON: lateinit property appendCap has not been init
 
         private val T9_NEUTRAL_TRACE = """
             READ key=BooleanKey.AimiPhysioAssistantEnable value=false
-            READ key=BooleanKey.OApsAIMIIntelligenceSingleLearnPath value=false
             READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
             READ key=DoubleKey.OApsAIMIweight value=0.00
             READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
