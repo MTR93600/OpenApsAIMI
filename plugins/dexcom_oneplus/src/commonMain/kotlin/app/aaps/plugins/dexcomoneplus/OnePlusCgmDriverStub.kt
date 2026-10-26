@@ -6,14 +6,11 @@ import app.aaps.plugins.dexcomoneplus.scan.OnePlusScanListener
 import kotlin.concurrent.Volatile
 
 /**
- * Stub driver until A6 ports the Direct session stack and A3 GO unlocks Real.
- * Emits FAILED on connect so UI can show "protocol not yet wired".
- * Remains the **default** via [instance] / `OnePlusCgmDrivers.default`.
+ * A driver that never connects. Emits FAILED on connect.
  *
- * It is shared code, not Android code, and both platforms get it until the engineering switch is
- * turned on. It never reports a reading and never claims a session, so nothing downstream can
- * mistake it for a working sensor. On iPhone it is also what the pre-soak slot always gets, since
- * a second slot cannot have a scan of its own there.
+ * Production never uses it. It is left for tests, and for the pre-soak slot on iPhone, where a
+ * second slot cannot have a scan of its own. It never reports a reading and never claims a
+ * session, so nothing downstream can mistake it for a working sensor.
  */
 class OnePlusCgmDriverStub : OnePlusCgmDriver {
 

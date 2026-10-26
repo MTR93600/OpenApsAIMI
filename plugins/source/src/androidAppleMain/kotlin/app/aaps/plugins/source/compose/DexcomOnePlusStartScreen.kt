@@ -169,7 +169,6 @@ fun DexcomOnePlusStartScreen(
     val codeInvalid = stringResource(SourceStrings.dexcom_oneplus_pairing_code_invalid)
     val permissionsNeeded = stringResource(SourceStrings.dexcom_oneplus_permissions_needed)
     val deviceRequired = stringResource(SourceStrings.dexcom_oneplus_device_required)
-    val realSkeletonRequired = stringResource(SourceStrings.dexcom_oneplus_real_skeleton_required)
     val serialNone = stringResource(SourceStrings.dexcom_oneplus_applicator_serial_none)
     val newSensorCodeWarning = stringResource(SourceStrings.dexcom_oneplus_new_sensor_code_warning)
     val stagingIsProduction = stringResource(SourceStrings.dexcom_oneplus_staging_is_production)
@@ -200,12 +199,6 @@ fun DexcomOnePlusStartScreen(
     // user with a selected device and no way to validate it — and the slot store still holding the
     // PREVIOUS sensor's MAC.
     val onConnectClick: () -> Unit = onConnectClick@{
-        // The real-skeleton gate is a PRODUCTION-only concern (the default driver may be
-        // the Stub). The staging driver is always the Real skeleton.
-        if (slot == SensorSlot.PRODUCTION && !OnePlusCgmDrivers.useRealSkeleton) {
-            errorText = realSkeletonRequired
-            return@onConnectClick
-        }
         val identity = parsedIdentity
             ?: OnePlusGs1ApplicatorParser.parse(applicatorInput)
         if (identity == null) {
@@ -691,15 +684,6 @@ private fun ColumnScope.HelpSection(slot: SensorSlot, slotChoiceOffered: Boolean
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
-    }
-    // The real-skeleton gate only applies to the PRODUCTION default driver; the staging driver is
-    // always the Real skeleton, so the warning is irrelevant when starting in staging.
-    if (slot == SensorSlot.PRODUCTION && !OnePlusCgmDrivers.useRealSkeleton) {
-        Text(
-            text = stringResource(SourceStrings.dexcom_oneplus_real_skeleton_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.error,
-        )
     }
 }
 

@@ -18,14 +18,12 @@ import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.dexcomoneplus.OnePlusAndroidPlatform
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriverReal
-import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriverStub
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorIdentity
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
 import app.aaps.plugins.dexcomoneplus.session.OnePlusMacArbiter
 import app.aaps.plugins.source.activities.dexcomOnePlusPromotionMessage
-import app.aaps.plugins.source.keys.DexcomOnePlusBooleanKey
 import app.aaps.shared.tests.AAPSLoggerTest
 import app.aaps.shared.tests.SharedPreferencesMock
 import app.aaps.shared.tests.TestBase
@@ -95,9 +93,7 @@ class DexcomOnePlusPromotionOrderTest : TestBase() {
 
     @AfterEach
     fun tearDownDrivers() {
-        OnePlusCgmDrivers.select(useReal = true)
-        OnePlusCgmDrivers.promoteStagingInstance()?.shutdown()
-        OnePlusCgmDrivers.select(useReal = false)
+        OnePlusCgmDrivers.shutdownAll()
         OnePlusMacArbiter.reset()
     }
 
@@ -176,12 +172,10 @@ class DexcomOnePlusPromotionOrderTest : TestBase() {
         val startMs = System.currentTimeMillis() - 60_000L
         readyStaging(mac = "AA:BB:CC:DD:EE:24", ageMs = 60_000L, startMs = startMs)
         val soak = OnePlusCgmDrivers.staging()
-        var useRealAtBound = true
         var productionWasSoakAtBound = false
         var stagingClearedAtBound = false
         var identityAdoptedAtBound = false
         whenever(activeCalibration.ignoreEntriesBefore(any())).thenAnswer {
-            useRealAtBound = OnePlusCgmDrivers.useRealSkeleton
             productionWasSoakAtBound = OnePlusCgmDrivers.realProduction() === soak
             stagingClearedAtBound = stagingPrefs.getString(KEY_PIN, null) == null
             identityAdoptedAtBound = productionPrefs.getString(KEY_PIN, null) == "1234"
@@ -191,16 +185,13 @@ class DexcomOnePlusPromotionOrderTest : TestBase() {
         val result = plugin.promoteStagingToProduction(allowEarly = true)
 
         assertThat(result).isEqualTo(PromotionResult.Ok)
-        // At the bound the exchange is done and `select` has not flipped the in-memory flag yet.
+        // At the bound the exchange is done.
         assertThat(identityAdoptedAtBound).isTrue()
         assertThat(stagingClearedAtBound).isTrue()
         assertThat(productionWasSoakAtBound).isTrue()
-        assertThat(useRealAtBound).isFalse()
         val order = inOrder(preferences, activeCalibration)
-        order.verify(preferences).put(DexcomOnePlusBooleanKey.UseRealSkeleton, true)
         order.verify(preferences).get(BooleanKey.BgSourceCreateSensorChange)
         order.verify(activeCalibration).ignoreEntriesBefore(any())
-        assertThat(OnePlusCgmDrivers.useRealSkeleton).isTrue()
         assertThat(OnePlusCgmDrivers.default()).isSameInstanceAs(soak)
         verify(persistenceLayer, timeout(2_000L)).insertCgmSourceData(any(), any(), any(), eq(startMs))
     }
@@ -221,7 +212,6 @@ class DexcomOnePlusPromotionOrderTest : TestBase() {
         assertThat(productionPrefs.getString(KEY_PIN, null)).isEqualTo("1234")
         assertThat(stagingPrefs.getString(KEY_PIN, null)).isNull()
         assertThat(OnePlusCgmDrivers.default()).isSameInstanceAs(soak)
-        assertThat(OnePlusCgmDrivers.useRealSkeleton).isTrue()
         assertThat(alerts).containsExactly(BOUND_FAILED_TEXT)
         assertThat(logger.errors).contains(BOUND_FAILED_TEXT)
     }
@@ -421,11 +411,9 @@ class DexcomOnePlusPromotionOrderTest : TestBase() {
     private suspend fun assertNothingIrreversible(stagingBefore: Map<String, *>) {
         verify(activeCalibration, never()).ignoreEntriesBefore(any())
         verify(persistenceLayer, never()).insertCgmSourceData(any(), any(), any(), anyOrNull())
-        verify(preferences, never()).put(DexcomOnePlusBooleanKey.UseRealSkeleton, true)
         assertThat(productionPrefs.getString(KEY_PIN, null)).isNull()
         assertThat(productionPrefs.getString(KEY_MAC, null)).isNull()
-        assertThat(OnePlusCgmDrivers.useRealSkeleton).isFalse()
-        assertThat(OnePlusCgmDrivers.default()).isSameInstanceAs(OnePlusCgmDriverStub.instance)
+        assertThat(OnePlusCgmDrivers.default()).isNotSameInstanceAs(OnePlusCgmDrivers.staging())
         // getAll() is the live map. The copy taken before promote must still match.
         assertThat(stagingPrefs.all.toMap()).isEqualTo(stagingBefore)
     }

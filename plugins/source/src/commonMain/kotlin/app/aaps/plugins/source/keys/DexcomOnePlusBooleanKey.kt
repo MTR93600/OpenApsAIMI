@@ -22,19 +22,6 @@ enum class DexcomOnePlusBooleanKey(
 ) : BooleanPreferenceKey {
 
     /**
-     * Routes the production slot to the Real skeleton
-     * (still fails closed at GATT/auth). For A3 spike only — not a production BLE claim.
-     */
-    UseRealSkeleton(
-        key = "dexcom_oneplus_use_real_skeleton",
-        defaultValue = true,
-        title = SourceStrings.dexcom_oneplus_use_real_skeleton,
-        summary = SourceStrings.dexcom_oneplus_use_real_skeleton_summary,
-        engineeringModeOnly = true,
-        exportable = false,
-    ),
-
-    /**
      * Send a fingerstick to the sensor instead of correcting its readings inside the phone.
      *
      * Off by default, and engineering only. A sensor keeps a calibration it accepts for good — it

@@ -3,6 +3,7 @@ package app.aaps.plugins.source
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriverStub
+import app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers
 import kotlin.test.Test
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -47,9 +48,8 @@ class DexcomOnePlusIosHostTest {
     }
 
     @Test
-    fun `the production slot hands out the stub until the engineering switch is turned on`() {
-        assertSame(OnePlusCgmDriverStub.instance, host.productionDriver())
-        assertTrue(!host.useRealSkeleton())
+    fun `the production slot is the real driver`() {
+        assertSame(OnePlusCgmDrivers.realProduction(), host.productionDriver())
     }
 
     @Test

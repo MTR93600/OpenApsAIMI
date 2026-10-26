@@ -5,7 +5,7 @@ import app.aaps.plugins.dexcomoneplus.scan.OnePlusScanListener
 /**
  * Native Dexcom ONE+ BLE driver façade.
  *
- * Default impl: [OnePlusCgmDriverStub]. Real stack: [OnePlusCgmDriverReal], which is shared code:
+ * The implementation is [OnePlusCgmDriverReal], which is shared code:
  * it builds and drives the session on both phones, and everything the phone itself owns is behind
  * [OnePlusPlatform]. The KEKS handshake (`:plugins:libkeks`) and `OnePlusSessionAuthKeks` are
  * shared too. See docs/spikes/ONEPLUS_BLE_PORT_MAP.md.

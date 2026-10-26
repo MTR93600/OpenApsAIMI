@@ -62,13 +62,11 @@ class DexcomOnePlusSensorCalibrationTest : TestBase() {
             rh, aapsLogger, preferences, config, notificationManager, DexcomOnePlusAndroidHost(context), persistenceLayer,
             warmupBasalGuard, bleRadioPriority, activePlugin, rxBus,
         )
-        OnePlusCgmDrivers.select(useReal = true)
     }
 
     @AfterEach
     fun tearDownDrivers() {
-        OnePlusCgmDrivers.select(useReal = true)
-        OnePlusCgmDrivers.select(useReal = false)
+        OnePlusCgmDrivers.shutdownAll()
     }
 
     @Test

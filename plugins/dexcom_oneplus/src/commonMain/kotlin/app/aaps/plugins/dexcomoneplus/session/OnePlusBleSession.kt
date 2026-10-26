@@ -59,6 +59,25 @@ private data class PersistentRetry(
 /**
  * Pure decisions for the post-Control-loop transition, kept separate from Android BLE calls so the
  * normal duty-cycle behavior can be unit tested.
+ *
+ * **Link robustness.** Early builds lost the sensor after a while in a car with its Bluetooth on,
+ * with a Bluetooth headset playing audio, and in crowded places such as a metro. Audio uses the
+ * same radio as BLE and goes first, so connects fail (133, 147) and links drop (8) far more often
+ * there. These rules are what keeps the sensor connected in those places. Nothing in their names
+ * says so, so check this list before you simplify any of them:
+ * - a session that has sent Control traffic never ends in a terminal failure. It goes to the
+ *   persistent ADV wait ([recoverExhaustedBudgetWithPersistentWait], [applyFailureBudget]);
+ * - the wait listens in long windows that stay inside the platform scan quota
+ *   ([PERSISTENT_ADV_SCAN_MS]), so the platform does not block our scans;
+ * - it ignores the end of the burst of the cycle that just closed ([POST_CYCLE_ADV_GUARD_MS]);
+ * - after a failed `autoConnect` it does not retry at once ([skipAdvWaitAfterFailedConnect]), and
+ *   it connects without an ADV at most once per silence window ([authorizeBlindConnect]). Both
+ *   stop a burst of connects on a busy radio;
+ * - the link never asks for `CONNECTION_PRIORITY_HIGH` (`OemDeviceProfile.forceHighConnectionPriority`).
+ *
+ * `OnePlusBleSessionCyclePolicyTest` holds these rules for every OEM profile. On Android the GATT
+ * client logs the Bluetooth audio state on every link loss, so a field log shows whether a car
+ * or a headset was in use.
  */
 internal object OnePlusBleSessionCyclePolicy {
     const val POST_COLLECTION_RECONNECT_ATTEMPT = 1

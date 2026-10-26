@@ -69,17 +69,14 @@ interface DexcomOnePlusHost {
      */
     val platformNote: TextRef?
 
-    /** True while the production slot is routed to the real driver rather than the stub. */
-    fun useRealSkeleton(): Boolean
-
     /** The driver feeding the loop. */
     fun productionDriver(): OnePlusCgmDriver
 
     /** The second, independent driver for a pre-soak sensor. */
     fun stagingDriver(): OnePlusCgmDriver
 
-    /** Switch the production slot between the stub and the real driver, carrying [watcher] over. */
-    fun selectProductionDriver(useReal: Boolean, watcher: OnePlusGlucoseWatcher?): OnePlusCgmDriver
+    /** The driver feeding the loop, with [watcher] attached. */
+    fun attachProductionDriver(watcher: OnePlusGlucoseWatcher): OnePlusCgmDriver
 
     /**
      * Hand the pre-soak driver the production role, keeping its live link.

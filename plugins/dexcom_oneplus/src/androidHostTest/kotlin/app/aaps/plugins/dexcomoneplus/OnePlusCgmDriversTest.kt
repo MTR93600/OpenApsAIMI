@@ -9,28 +9,26 @@ import org.junit.jupiter.api.Test
 class OnePlusCgmDriversTest {
 
     @AfterEach
-    fun resetToStub() {
+    fun reset() {
         // A leftover staging instance must be dropped too: `by lazy` used to keep a shut-down
         // driver for the next test, which is the bug this registry exists to avoid.
-        OnePlusCgmDrivers.select(useReal = true)
-        OnePlusCgmDrivers.promoteStagingInstance()?.shutdown()
-        OnePlusCgmDrivers.select(useReal = false)
+        OnePlusCgmDrivers.shutdownAll()
         OnePlusMacArbiter.reset()
     }
 
     @Test
-    fun select_switchesStubAndReal() {
-        val stub = OnePlusCgmDrivers.select(useReal = false)
-        assertThat(OnePlusCgmDrivers.useRealSkeleton).isFalse()
-        assertThat(stub).isSameInstanceAs(OnePlusCgmDriverStub.instance)
+    fun `production is always the real driver`() {
+        assertThat(OnePlusCgmDrivers.default()).isSameInstanceAs(OnePlusCgmDrivers.realProduction())
+        assertThat(OnePlusCgmDrivers.default()).isNotInstanceOf(OnePlusCgmDriverStub::class.java)
+    }
 
-        val real = OnePlusCgmDrivers.select(useReal = true)
-        assertThat(OnePlusCgmDrivers.useRealSkeleton).isTrue()
-        assertThat(real).isSameInstanceAs(OnePlusCgmDrivers.realSkeleton())
+    @Test
+    fun `a shut-down registry builds a new production driver`() {
+        val first = OnePlusCgmDrivers.default()
 
-        val back = OnePlusCgmDrivers.select(useReal = false)
-        assertThat(OnePlusCgmDrivers.useRealSkeleton).isFalse()
-        assertThat(back).isSameInstanceAs(OnePlusCgmDriverStub.instance)
+        OnePlusCgmDrivers.shutdownAll()
+
+        assertThat(OnePlusCgmDrivers.default()).isNotSameInstanceAs(first)
     }
 
     @Test
@@ -42,7 +40,6 @@ class OnePlusCgmDriversTest {
 
     @Test
     fun `a promotion makes the pre-soak instance the production default`() {
-        OnePlusCgmDrivers.select(useReal = true)
         val soak = OnePlusCgmDrivers.staging()
 
         val retired = OnePlusCgmDrivers.promoteStagingInstance()
@@ -56,7 +53,6 @@ class OnePlusCgmDriversTest {
 
     @Test
     fun `a second promotion does not reuse a shut-down instance`() {
-        OnePlusCgmDrivers.select(useReal = true)
         val firstSoak = OnePlusCgmDrivers.staging()
         val retiredFirst = OnePlusCgmDrivers.promoteStagingInstance()
         retiredFirst?.shutdown()

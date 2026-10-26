@@ -101,8 +101,6 @@ class DexcomOnePlusStartStringsTest {
             SourceStrings.dexcom_oneplus_pairing_code_required,
             SourceStrings.dexcom_oneplus_permissions_hint,
             SourceStrings.dexcom_oneplus_permissions_needed,
-            SourceStrings.dexcom_oneplus_real_skeleton_hint,
-            SourceStrings.dexcom_oneplus_real_skeleton_required,
             SourceStrings.dexcom_oneplus_request_permissions,
             SourceStrings.dexcom_oneplus_scan_empty,
             SourceStrings.dexcom_oneplus_scan_hint,
@@ -134,7 +132,7 @@ class DexcomOnePlusStartStringsTest {
             SourceStrings.dexcom_oneplus_step_prepare,
             SourceStrings.dexcom_oneplus_step_warmup,
         )
-        assertEquals(51, plain.size, "the screen names 57 strings - 6 of them take arguments")
+        assertEquals(49, plain.size, "the screen names 55 strings - 6 of them take arguments")
         for (ref in plain) {
             val name = (ref as TextRef.Named).name
             assertTrue(!template(ref).contains('%'), "$name has a placeholder but is used without arguments")

@@ -117,10 +117,9 @@ class DexcomOnePlusStartScreenTest {
         override val stagingNamespace: String = "staging"
         override val notUsableReason: TextRef? = null
         override val platformNote: TextRef? = null
-        override fun useRealSkeleton(): Boolean = false
         override fun productionDriver(): OnePlusCgmDriver = OnePlusCgmDriverStub.instance
         override fun stagingDriver(): OnePlusCgmDriver = OnePlusCgmDriverStub.instance
-        override fun selectProductionDriver(useReal: Boolean, watcher: OnePlusGlucoseWatcher?): OnePlusCgmDriver =
+        override fun attachProductionDriver(watcher: OnePlusGlucoseWatcher): OnePlusCgmDriver =
             OnePlusCgmDriverStub.instance
 
         override fun promoteStagingInstance(): OnePlusCgmDriverReal? = null

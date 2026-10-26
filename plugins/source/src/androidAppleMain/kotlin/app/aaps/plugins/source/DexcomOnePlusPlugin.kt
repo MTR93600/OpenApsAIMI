@@ -312,7 +312,6 @@ class DexcomOnePlusPlugin @Inject constructor(
         // thing. A host that has none contributes none, so the settings screen does not offer a
         // button that would do nothing.
         items = host.screenItems(this) + listOf(
-            DexcomOnePlusBooleanKey.UseRealSkeleton,
             DexcomOnePlusBooleanKey.SendCalibrationToSensor,
             DexcomOnePlusBooleanKey.AutoPromote,
             DexcomOnePlusIntKey.AutoPromoteHours,
@@ -357,7 +356,7 @@ class DexcomOnePlusPlugin @Inject constructor(
         aapsLogger.info(
             LTag.BGSOURCE,
             "DEXCOM_ONEPLUS_SESSION: plugin start " +
-                "realSkeleton=${host.useRealSkeleton()} autoResumeQueued=$autoResumeQueued " +
+                "autoResumeQueued=$autoResumeQueued " +
                 "stagingResumeQueued=$stagingResumeQueued",
         )
         // SAFETY (DRAFT — see DexcomOnePlusWarmupBasalGuard): while warm-up is active and no glucose
@@ -417,13 +416,11 @@ class DexcomOnePlusPlugin @Inject constructor(
     }
 
     /**
-     * Keep Stub/Real selection aligned with the engineering pref and ensure this plugin
-     * watches the active driver. Safe to call from Start UI before connect.
+     * Make sure this plugin watches the production driver and that the driver has its platform.
+     * Safe to call from the Start screen before connect.
      */
     fun syncDriverFromPrefs() {
-        val wantReal = preferences.get(DexcomOnePlusBooleanKey.UseRealSkeleton)
-        val selected = host.selectProductionDriver(useReal = wantReal, watcher = this)
-        host.attachPlatform(selected)
+        host.attachPlatform(host.attachProductionDriver(watcher = this))
     }
 
     override fun onWarmup(state: OnePlusWarmupState) {
@@ -950,8 +947,6 @@ class DexcomOnePlusPlugin @Inject constructor(
             "DEXCOM_ONEPLUS_PROMOTE: staging → production (by ${if (byAuto) "auto" else "user"}) early=$allowEarly " +
                 "soakMs=${nowMs() - startMs} egvCount=$stagingValidEgvCount",
         )
-        // The promoted sensor is a real sensor — ensure it resumes on the Real driver after a restart.
-        preferences.put(DexcomOnePlusBooleanKey.UseRealSkeleton, true)
         // The net must not ask for a link while the two instances are being swapped: it would ask the
         // instance that is about to be retired.
         cancelReconnectWatchdog()
@@ -1015,9 +1010,8 @@ class DexcomOnePlusPlugin @Inject constructor(
         if (boundFailure != null) {
             notifyPromotionProblem(SourceStrings.dexcom_oneplus_staging_promote_bound_failed, boundFailure)
         }
-        // Flips `useRealSkeleton` for THIS session too — the preferences write above only takes
-        // effect after a restart, so without this `default()` kept handing out the Stub.
-        runCatching { host.selectProductionDriver(useReal = true, watcher = this) }
+        // The promoted instance is now `default()`. Make sure this plugin watches it.
+        runCatching { host.attachProductionDriver(watcher = this) }
         // The production status (_warmup) was last set by the OLD production driver and nothing else
         // pushes to it here: a steady-state promoted driver emits no new phase-change event, so
         // without this the Status screen keeps showing whatever phase production had before the

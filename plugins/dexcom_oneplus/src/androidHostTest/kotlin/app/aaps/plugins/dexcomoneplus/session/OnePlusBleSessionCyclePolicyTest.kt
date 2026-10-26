@@ -1,6 +1,8 @@
 package app.aaps.plugins.dexcomoneplus.session
 
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
+import app.aaps.plugins.dexcomoneplus.oem.DeviceProfileRegistry
+import app.aaps.plugins.dexcomoneplus.oem.OemProfileId
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusScanBudget
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
@@ -332,6 +334,60 @@ class OnePlusBleSessionCyclePolicyTest {
         assertThat(startsPerWindowPerSlot).isLessThan(
             OnePlusScanBudget.MAX_STARTS_PER_WINDOW_PLATFORM.toDouble() / 2,
         )
+    }
+
+    /**
+     * The busy-radio case: car Bluetooth, a headset playing audio, a crowded metro. Every connect
+     * fails and no ADV is heard for an hour. The session must keep trying, and must not turn that
+     * into a burst of connects. See the KDoc of [OnePlusBleSessionCyclePolicy].
+     */
+    @Test
+    fun `an hour of failed connects on a busy radio never ends the session and never bursts connects`() {
+        val hourMs = 60L * 60_000L
+        val stepMs = 10_000L
+        for (id in OemProfileId.entries) {
+            val profile = DeviceProfileRegistry.byId(id)
+
+            // Asking for more radio time than audio leaves us correlated with peer status 19.
+            assertThat(profile.forceHighConnectionPriority).isFalse()
+
+            // Never a terminal failure once the sensor has sent Control traffic.
+            assertThat(OnePlusBleSessionCyclePolicy.recoverExhaustedBudgetWithPersistentWait(true)).isTrue()
+            assertThat(OnePlusBleSessionCyclePolicy.applyFailureBudget(preparedPostCollectionAdvertisement = true)).isFalse()
+
+            // A failed connect is retried without an ADV wait at most once in a row.
+            var attempt = OnePlusBleSessionCyclePolicy.POST_COLLECTION_RECONNECT_ATTEMPT
+            var lastUsedAutoConnect = false
+            var skipsInARow = 0
+            repeat(50) {
+                val skip = OnePlusBleSessionCyclePolicy.skipAdvWaitAfterFailedConnect(
+                    lastConnectUsedAutoConnect = lastUsedAutoConnect,
+                    nextAttempt = OnePlusBleSessionCyclePolicy.nextPersistentAttempt(attempt),
+                    autoConnectFromAttempt = profile.autoConnectFromAttempt,
+                )
+                skipsInARow = if (skip) skipsInARow + 1 else 0
+                assertThat(skipsInARow).isAtMost(1)
+                attempt = OnePlusBleSessionCyclePolicy.nextPersistentAttempt(attempt)
+                lastUsedAutoConnect = OnePlusBleSessionCyclePolicy.useAutoConnect(
+                    advFresh = false,
+                    attempt = attempt,
+                    autoConnectFromAttempt = profile.autoConnectFromAttempt,
+                )
+            }
+
+            // Without any ADV, a connect is still tried once per silence window: never less, never more.
+            val blindAt = mutableListOf<Long>()
+            var t = 0L
+            while (t <= hourMs) {
+                val sinceBlind = blindAt.lastOrNull()?.let { t - it }
+                if (OnePlusBleSessionCyclePolicy.authorizeBlindConnect(t, sinceBlind)) blindAt += t
+                t += stepMs
+            }
+            val window = OnePlusBleSessionCyclePolicy.BLIND_CONNECT_AFTER_ADV_SILENCE_MS
+            assertThat(blindAt.first()).isEqualTo(window)
+            blindAt.zipWithNext { a, b -> assertThat(b - a).isEqualTo(window) }
+            assertThat(blindAt.size.toLong()).isEqualTo(hourMs / window)
+        }
     }
 
     @Test

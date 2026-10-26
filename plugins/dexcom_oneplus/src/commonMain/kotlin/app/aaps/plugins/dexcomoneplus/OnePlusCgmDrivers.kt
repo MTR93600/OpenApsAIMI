@@ -6,10 +6,9 @@ import app.aaps.core.interfaces.source.SensorSlot
 import kotlin.concurrent.Volatile
 
 /**
- * Driver selection. **Stub remains default** until A3 device GO and Real protocol is filled.
- *
- * Use [select] (not a bare flag flip) so watchers stay on the active instance when the
- * engineering pref changes.
+ * The driver instances for the two sensor slots. Production always runs the real driver: the
+ * engineering switch that could route it to [OnePlusCgmDriverStub] is gone, because a source that
+ * is switched on but never connects is worse than no source at all.
  *
  * The instances are plain nullable fields and not `by lazy` on purpose.
  *
@@ -19,10 +18,6 @@ import kotlin.concurrent.Volatile
  * next call, so a second pre-soak and a second promotion still work. Mirrors `Libre3CgmDrivers`.
  */
 object OnePlusCgmDrivers {
-
-    @Volatile
-    var useRealSkeleton: Boolean = false
-        private set
 
     /** Key-value namespace for the staging slot's sensor store. */
     const val STAGING_NAMESPACE = "staging"
@@ -35,8 +30,7 @@ object OnePlusCgmDrivers {
     /**
      * Second, independent Real driver for the STAGING (pre-soak) sensor — its own BLE session,
      * executor, scanner and namespaced sensor store, so it can run concurrently with production
-     * without sharing identity / key / ingest markers. Always Real (staging is a real second sensor);
-     * the Stub path only applies to the production default.
+     * without sharing identity / key / ingest markers.
      *
      * ⚠️ Android only in practice. An iPhone gets one Bluetooth scan for the whole app, so a second
      * slot would take the radio from the first; `DexcomOnePlusIosHost` keeps the pre-soak slot on
@@ -69,12 +63,27 @@ object OnePlusCgmDrivers {
         stagingReal ?: OnePlusCgmDriverReal(storeNamespace = STAGING_NAMESPACE).also { stagingReal = it }
     }
 
-    /** Production / Phase-A path — Stub unless engineering Real skeleton is enabled. */
-    fun default(): OnePlusCgmDriver =
-        if (useRealSkeleton) realProduction() else OnePlusCgmDriverStub.instance
+    /** The driver feeding the loop. */
+    fun default(): OnePlusCgmDriver = realProduction()
 
-    /** Explicit Real skeleton (same instance as when [useRealSkeleton] is true). */
-    fun realSkeleton(): OnePlusCgmDriver = realProduction()
+    /** The production driver, with [watcher] attached. Adding the same watcher twice is harmless. */
+    fun production(watcher: OnePlusGlucoseWatcher): OnePlusCgmDriver =
+        realProduction().also { it.addWatcher(watcher) }
+
+    /**
+     * Shuts both instances down and drops them, so the next call builds fresh ones. Tests use it to
+     * start from a registry with no live session and no leftover pre-soak.
+     */
+    fun shutdownAll() {
+        val instances = lock.withLock {
+            val both = listOfNotNull(productionReal, stagingReal)
+            productionReal = null
+            stagingReal = null
+            both
+        }
+        // Outside the lock: shutdown disconnects GATT.
+        instances.forEach { runCatching { it.shutdown() } }
+    }
 
     /**
      * Hands the staging instance the production role, keeping its live BLE link.
@@ -100,46 +109,5 @@ object OnePlusCgmDrivers {
             productionReal = promoted
             stagingReal = null
             retired
-        }
-
-    /**
-     * Atomically switch Stub ↔ Real, migrating an optional [watcher] and shutting down the
-     * previous driver so sessions / scanners do not linger on the unused instance.
-     *
-     * This only ever swaps stub and real for the **production** slot. It must never touch the
-     * staging instance: turning the engineering switch off does not end a pre-soak, it only stops
-     * production from using the real driver.
-     *
-     * ⚠️ ASYNC IMPACT: may call [OnePlusCgmDriver.shutdown] which disconnects GATT.
-     */
-    fun select(useReal: Boolean, watcher: OnePlusGlucoseWatcher? = null): OnePlusCgmDriver =
-        lock.withLock {
-            if (useRealSkeleton == useReal) {
-                val current = default()
-                if (watcher != null) {
-                    current.addWatcher(watcher)
-                }
-                return@withLock current
-            }
-            val previous = default()
-            if (watcher != null) {
-                try {
-                    previous.removeWatcher(watcher)
-                } catch (_: Throwable) {
-                }
-            }
-            try {
-                previous.shutdown()
-            } catch (_: Throwable) {
-            }
-            // A driver that was shut down cannot open a session again, so it is dropped here and
-            // the next call builds a fresh one.
-            if (previous === productionReal) productionReal = null
-            useRealSkeleton = useReal
-            val next = default()
-            if (watcher != null) {
-                next.addWatcher(watcher)
-            }
-            next
         }
 }

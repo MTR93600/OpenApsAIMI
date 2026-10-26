@@ -64,14 +64,12 @@ class DexcomOnePlusAndroidHost(
 
     private val warmupNotification by lazy { DexcomOnePlusWarmupNotification(appContext) }
 
-    override fun useRealSkeleton(): Boolean = OnePlusCgmDrivers.useRealSkeleton
-
     override fun productionDriver(): OnePlusCgmDriver = OnePlusCgmDrivers.default()
 
     override fun stagingDriver(): OnePlusCgmDriver = OnePlusCgmDrivers.staging()
 
-    override fun selectProductionDriver(useReal: Boolean, watcher: OnePlusGlucoseWatcher?): OnePlusCgmDriver =
-        OnePlusCgmDrivers.select(useReal = useReal, watcher = watcher)
+    override fun attachProductionDriver(watcher: OnePlusGlucoseWatcher): OnePlusCgmDriver =
+        OnePlusCgmDrivers.production(watcher)
 
     override fun promoteStagingInstance(): OnePlusCgmDriver? = OnePlusCgmDrivers.promoteStagingInstance()
 

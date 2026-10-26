@@ -101,10 +101,7 @@ import kotlin.time.Clock
  *
  * Every member below is now reachable, because the plugin can start:
  *
- * - [productionDriver] is `OnePlusCgmDrivers.default()`, the same registry Android uses: the stub
- *   until the engineering switch is turned on, the shared real driver after that. The stub reports
- *   FAILED on connect and never claims a session or a reading, so the default cannot be mistaken
- *   for a working sensor;
+ * - [productionDriver] is `OnePlusCgmDrivers.default()`, the same shared real driver Android uses;
  * - [stagingDriver] stays the stub, and [promoteStagingInstance] stays null. The pre-soak slot is
  *   a **second** driver with its own scanner and its own link, and an app gets one Bluetooth scan
  *   from CoreBluetooth: a second slot would take the radio from the first and the two would stop
@@ -152,8 +149,6 @@ class DexcomOnePlusIosHost(
 
     override val platformNote: TextRef = SourceStrings.dexcom_oneplus_ios_caution
 
-    override fun useRealSkeleton(): Boolean = OnePlusCgmDrivers.useRealSkeleton
-
     override fun attachPlatform(driver: OnePlusCgmDriver) {
         driver.attach(platform)
     }
@@ -165,8 +160,8 @@ class DexcomOnePlusIosHost(
     /** The stub, always. A second slot cannot have its own scan on this phone - see the class doc. */
     override fun stagingDriver(): OnePlusCgmDriver = OnePlusCgmDriverStub.instance
 
-    override fun selectProductionDriver(useReal: Boolean, watcher: OnePlusGlucoseWatcher?): OnePlusCgmDriver =
-        OnePlusCgmDrivers.select(useReal, watcher)
+    override fun attachProductionDriver(watcher: OnePlusGlucoseWatcher): OnePlusCgmDriver =
+        OnePlusCgmDrivers.production(watcher)
 
     /** There is no pre-soak driver to promote, because [stagingDriver] never builds one. */
     override fun promoteStagingInstance(): OnePlusCgmDriver? = null

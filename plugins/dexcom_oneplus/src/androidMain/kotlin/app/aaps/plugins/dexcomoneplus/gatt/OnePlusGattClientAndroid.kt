@@ -148,6 +148,10 @@ class OnePlusGattClientAndroid(
                     beginPostConnect(g)
                 }
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                OnePlusLog.i(
+                    "${OnePlusLogMarkers.SESSION}: link down status=$status " +
+                        OnePlusAudioLinkState.describe(appContext, bluetoothManager.adapter),
+                )
                 connected = false
                 readyLatch.fail("disconnected status=$status")
                 completePendingOp(BluetoothGatt.GATT_FAILURE)
@@ -315,6 +319,10 @@ class OnePlusGattClientAndroid(
         }
         val ok = readyLatch.await(timeout)
         if (!ok) {
+            OnePlusLog.w(
+                "${OnePlusLogMarkers.SESSION}: connect timeout autoConnect=$autoConnect " +
+                    OnePlusAudioLinkState.describe(appContext, adapter),
+            )
             disconnectInternal(poisonQueues = true)
             error("ONEPLUS_GATT: connect/discover timeout ${timeout}ms")
         }

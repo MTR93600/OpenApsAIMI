@@ -101,8 +101,6 @@
     <string name="dexcom_oneplus_scan_device_line" comment="%1$s=Bluetooth MAC, %2$d=RSSI. Example: AA:BB:CC:DD:EE:FF · −67 dBm">%1$s · %2$d dBm</string>
     <string name="dexcom_oneplus_device_required">Select a sensor from the scan list</string>
     <string name="dexcom_oneplus_new_sensor_code_warning">This is a different sensor from the paired one, but the pairing code has not changed. Paste the new applicator code — or press Connect again to keep the current one.</string>
-    <string name="dexcom_oneplus_real_skeleton_hint">Engineering: enable “Use Real BLE skeleton” in plugin prefs before Start if you want GATT+KEKS (otherwise Stub fails closed after connect).</string>
-    <string name="dexcom_oneplus_real_skeleton_required">Enable “Use Real BLE skeleton” (engineering) in ONE+ / G7 plugin settings before connecting.</string>
     <string name="dexcom_oneplus_dexcom_recovery_warning">Stop the Dexcom app and xDrip first (one Bluetooth master). This build attaches to an existing sensor session and does not stop it. Returning to the Dexcom app afterward is not guaranteed — prefer a spare sensor for testing.</string>
     <string name="dexcom_oneplus_connect_follow">Connect / follow sensor</string>
     <string name="dexcom_oneplus_pairing_code_label">Sensor pairing code</string>
@@ -110,8 +108,6 @@
     <string name="dexcom_oneplus_pairing_code_invalid">Enter a valid 4-digit sensor pairing code</string>
     <string name="dexcom_oneplus_request_permissions">Allow Bluetooth</string>
     <string name="dexcom_oneplus_permissions_needed">Bluetooth permission is required before starting the sensor</string>
-    <string name="dexcom_oneplus_use_real_skeleton">Use Real BLE skeleton (engineering)</string>
-    <string name="dexcom_oneplus_use_real_skeleton_summary">Routes to the Real GATT+KEKS+EGV driver (default on). Disable only to force the Stub. Not a production BLE claim until device-confirmed.</string>
     <string name="dexcom_oneplus_send_calibration_to_sensor">Send calibration to the sensor (engineering)</string>
     <string name="dexcom_oneplus_send_calibration_to_sensor_summary">Off: a finger prick value is used to correct readings inside the app, and can be removed later. On: the value is sent to the sensor itself. The sensor keeps it for good and it cannot be edited or deleted, this sensor does not report clearly whether it took the value, and the app stops correcting readings on its own.</string>
     <string name="dexcom_oneplus_repair_missing_sensor_change">Repair a missing sensor change (engineering)</string>
