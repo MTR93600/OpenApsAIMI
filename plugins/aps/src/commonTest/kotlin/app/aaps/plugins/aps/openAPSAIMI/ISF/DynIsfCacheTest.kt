@@ -3,7 +3,6 @@ package app.aaps.plugins.aps.openAPSAIMI.ISF
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -90,21 +89,6 @@ class DynIsfCacheTest {
         assertTrue(cache.size() <= 24 * 60 / 5 + 1, "size was ${cache.size()}")
         assertTrue(cache.size() < 400)
         assertEquals(tenAm + 399 * step, cache.newest()?.atMs)
-    }
-
-    /** T5 — the 24-hour average must only see the window it was asked for. */
-    @Test
-    fun `averageSince ignores samples outside the window`() {
-        val cache = DynIsfCache()
-
-        cache.put(atMs = tenAm, isfMgdl = 10.0, glucoseMgdl = 200.0)
-        cache.put(atMs = tenAm + 1 * hour, isfMgdl = 20.0, glucoseMgdl = 150.0)
-        cache.put(atMs = tenAm + 2 * hour, isfMgdl = 30.0, glucoseMgdl = 120.0)
-
-        val average = cache.averageSince(fromMs = tenAm + 1 * hour, toMs = tenAm + 2 * hour)
-
-        assertEquals(25.0, average)
-        assertNull(cache.averageSince(fromMs = tenAm + 10 * hour, toMs = tenAm + 11 * hour))
     }
 
     /**

@@ -96,23 +96,6 @@ class DynIsfCache(
     /** The most recent sample, or `null` when nothing is stored. Never chosen by glucose. */
     fun newest(): Sample? = lock.withLock { lastEntryValue() }
 
-    /**
-     * Mean sensitivity of the samples written in `[fromMs, toMs]`.
-     *
-     * Returns `null` when the window holds no sample.
-     */
-    fun averageSince(fromMs: Long, toMs: Long): Double? = lock.withLock {
-        var count = 0
-        var sum = 0.0
-        for (sample in samples.values) {
-            if (sample.atMs in fromMs..toMs) {
-                count++
-                sum += sample.isfMgdl
-            }
-        }
-        if (count == 0) null else sum / count
-    }
-
     /** How many samples are stored. */
     fun size(): Int = lock.withLock { samples.size }
 

@@ -50,6 +50,7 @@ internal class LearnerColdPersistence : PersistenceLayer {
     override suspend fun vacuumDatabase(): VacuumResult = unused()
     override suspend fun databaseMaintenanceInfo(retentionDays: Long): DatabaseMaintenanceInfo = unused()
     override suspend fun getVariableSensitivities(start: Long, end: Long): List<PersistenceLayer.VariableSensitivity> = unused()
+    override suspend fun getLoopSensitivities(start: Long, end: Long): List<PersistenceLayer.LoopSensitivity> = unused()
     override fun <T : Any> observeChanges(type: KClass<T>): Flow<List<T>> = unused()
     override fun observeAnyChange(): Flow<Set<KClass<*>>> = unused()
     override val databaseClearedFlow: Flow<Unit> get() = unused()

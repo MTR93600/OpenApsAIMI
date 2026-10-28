@@ -455,9 +455,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     val glucose = it.glucoseStatus?.glucose ?: return@forEach
                     val variableSens = it.variableSens ?: return@forEach
                     // These history rows carry the late DetermineBasal value, so they already hold
-                    // the physiological factor. They are loaded so `getAverageIsfMgdl` has a 24-hour
-                    // window right after a restart; the first refresh of the tick writes a freshly
-                    // computed value on top of them, and that is what `newest()` then serves.
+                    // the physiological factor. They are loaded so `getIsfMgdl` has a value right
+                    // after a restart; the first refresh of the tick writes a freshly computed value
+                    // on top of them, and that is what `newest()` then serves.
                     dynIsfCache.put(atMs = it.date, isfMgdl = variableSens, glucoseMgdl = glucose)
                     count++
                 }
@@ -792,34 +792,10 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         return cached?.let { it * multiplier }
     }
 
-    override fun getAverageIsfMgdl(timestamp: Long, caller: String): Double? {
-        if (dynIsfCache.isEmpty()) {
-            maybeLogDynIsfCacheEmptyWarning(caller)
-            return null
-        }
-        val sensitivity = dynIsfCache.averageSince(timestamp - T.hours(24).msecs(), timestamp)
-        aapsLogger.debug(LTag.APS, "getAverageIsfMgdl() $sensitivity over 24 h ${dateUtil.dateAndTimeAndSecondsString(timestamp)} $caller")
-        return sensitivity
-    }
-
-    @Volatile
-    private var lastDynIsfCacheEmptyWarnMs: Long = 0L
-
-    /**
-     * Throttle noisy warning to avoid log storms when cache is cold.
-     * In this branch we return null, and upstream profile logic applies the profile ISF fallback.
-     */
-    private fun maybeLogDynIsfCacheEmptyWarning(caller: String) {
-        val nowMs = dateUtil.now()
-        if (nowMs - lastDynIsfCacheEmptyWarnMs < (5).minutes.inWholeMilliseconds) return
-        lastDynIsfCacheEmptyWarnMs = nowMs
-        aapsLogger.warn(
-            LTag.APS,
-            "dynIsfCache is empty; returning null average ISF (profile fallback upstream). caller=$caller",
-        )
-    }
-
-
+    // The ISF for carbs (COB, bolus wizard, overview) no longer comes from the APS plugin: since
+    // upstream #5404 every phone works it out with `IsfForCarbs` from the stored loop results, where
+    // AIMI writes its variable sensitivity (`rT.variable_sens`). That gives the same value on the
+    // master and on its clients. This cache only serves `getIsfMgdl` now.
     private val dynIsfCache = DynIsfCache()
 
     /** Time of the last background refresh that was started, used by [dynIsfRefreshDue]. */

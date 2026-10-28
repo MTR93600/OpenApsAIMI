@@ -160,7 +160,7 @@ class GlassUiStateBuilderTest {
 
     @Test
     fun `status lights give the short age and status and label`() {
-        val sensor = StatusItem(label = "Sensor", age = "3 days 4 hours", ageShort = "3d4h", ageStatus = StatusLevel.WARNING, icon = IcCgmInsert)
+        val sensor = StatusItem(label = "Sensor", age = "3d4h", ageStatus = StatusLevel.WARNING, icon = IcCgmInsert)
         val state = build(lights = StatusUiState(sensorStatus = sensor))
         assertEquals("3d4h", state.sensorAge)
         assertEquals(StatusLevel.WARNING, state.sensorAgeStatus)
