@@ -91,13 +91,13 @@ class AIMIPhoneStepsSyncServiceMTR @Inject constructor(
         try {
             val now = System.currentTimeMillis()
             
-            // Read all windows from StepService
-            val steps5 = StepService.getRecentStepCount5Min()
-            val steps10 = StepService.getRecentStepCount10Min()
-            val steps15 = StepService.getRecentStepCount15Min()
-            val steps30 = StepService.getRecentStepCount30Min()
-            val steps60 = StepService.getRecentStepCount60Min()
-            val steps180 = StepService.getRecentStepCount180Min()
+            // Read all windows from StepService. Unknown (null) becomes 0 and is not written: only steps5 > 0 is stored.
+            val steps5 = StepService.getRecentStepCount5Min() ?: 0
+            val steps10 = StepService.getRecentStepCount10Min() ?: 0
+            val steps15 = StepService.getRecentStepCount15Min() ?: 0
+            val steps30 = StepService.getRecentStepCount30Min() ?: 0
+            val steps60 = StepService.getRecentStepCount60Min() ?: 0
+            val steps180 = StepService.getRecentStepCount180Min() ?: 0
             
             // Only write if we have data
             if (steps5 > 0) {

@@ -53,10 +53,49 @@ class GlucoseCorrectionImplTest : TestBaseWithProfile() {
     }
 
     @Test
-    fun `reading newer than the newest point still takes the newest value`() {
-        // A one minute sensor sends readings between two points of the five minute series.
-        givenSeries(65.0, 70.0, 75.0)
-        assertThat(sut.correctedMgdl(head + T.mins(2).msecs(), 52.0)).isEqualTo(65.0)
+    fun `reading newer than a fresh head gets the head correction as an offset`() {
+        // A one minute sensor sends readings between two points of the five minute series. The head
+        // was stored as 100 and is shown as 90, so a correction of -10 is added to the new reading.
+        givenSeries(90.0, 95.0)
+        assertThat(sut.correctedMgdl(head + T.mins(2).msecs(), 80.0)).isEqualTo(70.0)
+    }
+
+    @Test
+    fun `reading exactly five minutes after the head still gets the offset`() {
+        givenSeries(90.0, 95.0)
+        assertThat(sut.correctedMgdl(head + GlucoseCorrectionImpl.MAX_HEAD_AGE_MS, 80.0)).isEqualTo(70.0)
+    }
+
+    @Test
+    fun `reading newer than an old head keeps the stored value`() {
+        // The head is 6 minutes old. Its correction says nothing about this reading.
+        givenSeries(90.0, 95.0)
+        assertThat(sut.correctedMgdl(head + T.mins(6).msecs(), 80.0)).isNull()
+    }
+
+    /**
+     * The bug: a fresh low reading of 50 took the value 100 of an old head (the ratio 2.0 still
+     * passed the plausibility net), so the low alarm compared 100 and stayed quiet.
+     */
+    @Test
+    fun `fresh low reading is not replaced by an old head value`() {
+        whenever(autosensDataStore.getBucketedDataTableCopy())
+            .thenReturn(mutableListOf(InMemoryGlucoseValue(timestamp = head, value = 100.0, smoothed = 100.0)))
+        assertThat(sut.correctedMgdl(head + T.mins(20).msecs(), 50.0)).isNull()
+    }
+
+    @Test
+    fun `offset from a fresh head still passes the plausibility net`() {
+        // Head stored 100, shown 60: offset -40. A new reading of 70 would become 30, under the 39 floor.
+        givenSeries(60.0)
+        assertThat(sut.correctedMgdl(head + T.mins(1).msecs(), 70.0)).isNull()
+    }
+
+    @Test
+    fun `an offset reading comes back whole`() {
+        // Head stored 100, shown 90.4: offset -9.6, so 80 becomes 70.4, rounded to 70.
+        givenSeries(90.4)
+        assertThat(sut.correctedMgdl(head + T.mins(1).msecs(), 80.0)).isEqualTo(70.0)
     }
 
     @Test
@@ -160,5 +199,65 @@ class GlucoseCorrectionImplTest : TestBaseWithProfile() {
         whenever(autosensDataStore.getBucketedDataTableCopy())
             .thenReturn(mutableListOf(InMemoryGlucoseValue(timestamp = head, value = 56.0)))
         assertThat(sut.correctedMgdl(head, 56.0)).isEqualTo(56.0)
+    }
+
+    // ---- values that are not finite numbers ------------------------------------------------------
+
+    private fun corrected(series: List<InMemoryGlucoseValue>?, timestamp: Long, storedMgdl: Double) =
+        GlucoseCorrectionImpl.correctedFromSeries(series, timestamp, storedMgdl)
+
+    /**
+     * NaN passes every range check, and rounding it throws. The throw used to reach the glucose
+     * alarm checks and the Nightscout upload. A value that is not finite keeps the stored value instead.
+     */
+    @Test
+    fun `a NaN stored value keeps the stored value`() {
+        givenSeries(65.0)
+        assertThat(sut.correctedMgdl(head, Double.NaN)).isNull()
+        assertThat(corrected(series(90.0), head + T.mins(1).msecs(), Double.NaN)).isNull()
+    }
+
+    @Test
+    fun `an infinite stored value keeps the stored value`() {
+        assertThat(corrected(series(65.0), head, Double.POSITIVE_INFINITY)).isNull()
+    }
+
+    @Test
+    fun `a NaN head keeps the stored value`() {
+        val nanHead = listOf(InMemoryGlucoseValue(timestamp = head, value = 100.0, smoothed = Double.NaN))
+        assertThat(corrected(nanHead, head, 80.0)).isNull()
+        assertThat(corrected(nanHead, head + T.mins(1).msecs(), 80.0)).isNull()
+    }
+
+    @Test
+    fun `a NaN stored value on the head keeps the stored value`() {
+        val nanHead = listOf(InMemoryGlucoseValue(timestamp = head, value = Double.NaN, smoothed = 90.0))
+        assertThat(corrected(nanHead, head + T.mins(1).msecs(), 80.0)).isNull()
+    }
+
+    @Test
+    fun `a NaN neighbour keeps the stored value`() {
+        val betweenTheTwo = head - T.mins(2).msecs()
+        assertThat(corrected(series(Double.NaN, 75.0), betweenTheTwo, 70.0)).isNull()
+        assertThat(corrected(series(65.0, Double.NaN), betweenTheTwo, 70.0)).isNull()
+    }
+
+    @Test
+    fun `an infinite neighbour keeps the stored value`() {
+        assertThat(corrected(series(Double.POSITIVE_INFINITY, 75.0), head - T.mins(2).msecs(), 70.0)).isNull()
+    }
+
+    @Test
+    fun `a NaN point outside the interpolation is not used`() {
+        // Only the two points around the reading count. A broken point further back changes nothing.
+        assertThat(corrected(series(65.0, 75.0, Double.NaN), head - T.mins(2).msecs() - T.secs(30).msecs(), 60.0)).isEqualTo(70.0)
+    }
+
+    @Test
+    fun `a single entry series works on its only point and after it`() {
+        val single = series(90.0)
+        assertThat(corrected(single, head, 100.0)).isEqualTo(90.0)
+        assertThat(corrected(single, head + T.mins(1).msecs(), 80.0)).isEqualTo(70.0)
+        assertThat(corrected(single, head - T.mins(1).msecs(), 80.0)).isNull()
     }
 }

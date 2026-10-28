@@ -52,7 +52,14 @@ class AuditorNotificationManager @Inject constructor(
     val cached = AuditorVerdictCache.resolveForDisplay() ?: return false
     if (cached.cached.timestamp == lastNotifiedVerdictTimestampMs) return false
 
-    val posted = postInAppNotification() || postSystemNotification(uiState)
+    // Both, and each one evaluated. This used to be
+    // `postInAppNotification() || postSystemNotification(uiState)`, and `postInAppNotification`
+    // always returns true, so `||` stopped there and the system notification was never posted.
+    // Keep the two calls on their own lines: writing this back as an `||` would silently drop one
+    // of them again.
+    val postedInApp = postInAppNotification()
+    val postedSystem = postSystemNotification(uiState)
+    val posted = postedInApp || postedSystem
     if (posted) {
       lastNotifiedVerdictTimestampMs = cached.cached.timestamp
     }
@@ -164,9 +171,12 @@ class AuditorNotificationManager @Inject constructor(
     val intent = Intent(context, AuditorReportActivity::class.java).apply {
       flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
     }
+    // Its own request code, not 0. Android tells two PendingIntents apart with
+    // `Intent.filterEquals`, which ignores the extras, so a shared request code lets
+    // `FLAG_UPDATE_CURRENT` overwrite another notification's intent.
     return PendingIntent.getActivity(
       context,
-      0,
+      NOTIFICATION_ID,
       intent,
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )

@@ -28,6 +28,7 @@ import app.aaps.core.data.ue.ValueWithUnit
 import app.aaps.core.interfaces.aps.APSResult
 import app.aaps.core.interfaces.aps.Loop
 import app.aaps.core.interfaces.aps.Loop.LastRun
+import app.aaps.core.interfaces.aps.SmbIntervalGate
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.constraints.Constraint
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
@@ -754,9 +755,9 @@ class LoopPlugin @Inject constructor(
             resultAfterConstraints.smbConstraint = ConstraintObject(resultAfterConstraints.smb, aapsLogger)
             resultAfterConstraints.smb = constraintChecker.applyBolusConstraints(resultAfterConstraints.smbConstraint!!).value()
 
-            // safety check for multiple SMBs
+            // Safety check for multiple SMBs, with the same rule (and 6 s tolerance) as the APS and the queue.
             val lastBolusTime = persistenceLayer.getNewestBolus()?.timestamp ?: 0L
-            if (lastBolusTime != 0L && lastBolusTime + T.mins(preferences.get(IntKey.ApsMaxSmbFrequency).toLong()).msecs() > dateUtil.now()) {
+            if (SmbIntervalGate.tooSoon(lastBolusTime, preferences.get(IntKey.ApsMaxSmbFrequency), dateUtil.now())) {
                 aapsLogger.debug(LTag.APS, "SMB requested but still in ${preferences.get(IntKey.ApsMaxSmbFrequency)} min interval")
                 resultAfterConstraints.smb = 0.0
             }
@@ -893,7 +894,7 @@ class LoopPlugin @Inject constructor(
                                     lastRun.lastSMBEnact = dateUtil.now()
                                     scheduleBuildAndStoreDeviceStatus("applySMBRequest")
                                 } else {
-                                    handler?.postDelayed({ appScope.launch { invoke("tempBasalFallback", allowNotification, true) } }, 1000)
+                                    onSmbNotEnacted(allowNotification, tempBasalFallback)
                                 }
                             } else {
                                 aapsLogger.debug(LTag.APS, "No SMB requested")
@@ -1094,13 +1095,34 @@ class LoopPlugin @Inject constructor(
         }
     }
 
+    /**
+     * An SMB was asked for and not enacted. Re-run the loop once with `tempBasalFallback = true`, so
+     * the temp basal still gets a chance - but only from a normal run, never from a fallback run.
+     *
+     * oref sends no SMB in a fallback run, but AIMI can: `SmbSwitchGate` lets the meal prebolus owners
+     * through even when `microBolusAllowed` is false. While the refusal held (for example a paused SMB,
+     * or a bolus waiting for confirmation), each fallback run asked again, was refused again and
+     * scheduled the next one: a loop run every 1-2 s for minutes. The temp basal of the fallback run
+     * is already applied at this point, so stopping here loses nothing.
+     *
+     * @return true when a fallback run was scheduled.
+     */
+    internal fun onSmbNotEnacted(allowNotification: Boolean, tempBasalFallback: Boolean): Boolean {
+        if (tempBasalFallback) {
+            aapsLogger.debug(LTag.APS, "SMB not enacted in a fallback run, no further fallback")
+            return false
+        }
+        handler?.postDelayed({ appScope.launch { invoke("tempBasalFallback", allowNotification, true) } }, 1000)
+        return true
+    }
+
     private suspend fun applySMBRequest(request: APSResult): PumpEnactResult {
         val pump = activePlugin.activePump
         val lastBolusTime = persistenceLayer.getNewestBolus()?.timestamp ?: 0L
         val now = dateUtil.now()
         val smbIntervalMin = preferences.get(IntKey.ApsMaxSmbFrequency)
         val lastBolusAgeSec = if (lastBolusTime > 0L) ((now - lastBolusTime).coerceAtLeast(0L) / 1000.0) else Double.NaN
-        if (lastBolusTime != 0L && lastBolusTime + T.mins(smbIntervalMin.toLong()).msecs() > now) {
+        if (SmbIntervalGate.tooSoon(lastBolusTime, smbIntervalMin, now)) {
             aapsLogger.debug(
                 LTag.APS,
                 "SMB blocked by interval: requested=%.2fU lastBolusAge=%.0fs interval=%dm deliverAt=%s".format(

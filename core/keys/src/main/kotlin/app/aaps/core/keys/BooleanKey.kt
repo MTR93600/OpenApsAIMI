@@ -870,6 +870,20 @@ enum class BooleanKey(
     AimiPhysioSleepDataEnable("aimi_physio_sleep_enable", true),
     AimiPhysioHRVDataEnable("aimi_physio_hrv_enable", true),
     AimiPhysioLLMAnalysisEnable("aimi_physio_llm_enable", false),
+
+    /**
+     * Build the HRV baseline from one value per night instead of one per physio pipeline run.
+     *
+     * The pipeline runs every 15 minutes while HRV itself arrives a few times a night, so counting
+     * runs makes a "7-day" baseline that really covers about 7 hours and collapses the spread. The
+     * HRV z-score and `HrvDepression` divide by that spread on the way to an insulin decision.
+     * Off by default: the night path is newer and has not been measured on real days yet.
+     */
+    AimiHrvBaselinePerNight(
+        key = "aimi_hrv_baseline_per_night", defaultValue = false,
+        titleResId = R.string.pref_title_aimi_hrv_baseline_per_night,
+        summaryResId = R.string.pref_summary_aimi_hrv_baseline_per_night
+    ),
     AimiPhysioDebugLogs("aimi_physio_debug_logs", false),
 
     // 🌸 Endometriosis & Cycle Management (MTR)

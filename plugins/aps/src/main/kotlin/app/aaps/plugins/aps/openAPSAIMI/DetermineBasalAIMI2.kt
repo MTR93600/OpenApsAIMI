@@ -20,6 +20,7 @@ import app.aaps.core.interfaces.aps.MealData
 import app.aaps.core.interfaces.aps.OapsProfileAimi
 import app.aaps.core.interfaces.aps.Predictions
 import app.aaps.core.interfaces.aps.RT
+import app.aaps.core.interfaces.aps.SmbIntervalGate
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.plugin.ActivePlugin
@@ -72,6 +73,8 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import app.aaps.plugins.aps.openAPSAIMI.model.Constants
 import app.aaps.core.data.model.HR
 import app.aaps.plugins.aps.openAPSAIMI.model.DecisionResult
+import app.aaps.plugins.aps.openAPSAIMI.ml.AimiCorpusPruner
+import app.aaps.plugins.aps.openAPSAIMI.safety.BioSyncDiaRule
 import app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer
 import app.aaps.plugins.aps.openAPSAIMI.ml.SmbRefinementFeatureSchema
 import app.aaps.plugins.aps.openAPSAIMI.ml.SmbTrainingRowBuffer
@@ -298,6 +301,7 @@ import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Calendar
 import java.util.Date
@@ -1928,6 +1932,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     TirWarmupSnapshot(
                         tir1DayAbove = tir1DayAvg.abovePct() ?: 0.0,
                         tir1DayInRange = tir1DayAvg.inRangePct() ?: 0.0,
+                        tir1DayReadings = tir1DayAvg.count,
                         currentTirLow = tirToday.belowPct() ?: 0.0,
                         currentTirRange = tirToday.inRangePct() ?: 0.0,
                         currentTirAbove = tirToday.abovePct() ?: 0.0,
@@ -2006,6 +2011,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private data class TirWarmupSnapshot(
         val tir1DayAbove: Double = 0.0,
         val tir1DayInRange: Double = 0.0,
+        /** Glucose readings behind [tir1DayInRange]. 0 means the TIR is unknown, not 0 %. */
+        val tir1DayReadings: Int = 0,
         val currentTirLow: Double = 0.0,
         val currentTirRange: Double = 0.0,
         val currentTirAbove: Double = 0.0,
@@ -3259,7 +3266,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         tirbasalhAP = tirSnapshot.tirBasalHourAbove
         //this.enablebasal = preferences.get(BooleanKey.OApsAIMIEnableBasal)
         this.now = System.currentTimeMillis()
-        automateDeletionIfBadDay(tir1DAYIR.toInt())
+        automateDeletionIfBadDay(tirSnapshot.tir1DayInRange, tirSnapshot.tir1DayReadings)
 
         this.weekend = if (dayOfWeek == Calendar.SUNDAY || dayOfWeek == Calendar.SATURDAY) 1 else 0
         var lastCarbTimestamp = ctx.mealData.lastCarbTime
@@ -3308,13 +3315,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val therapy = Therapy(persistenceLayer).also {
             it.updateStatesBasedOnTherapyEvents(forceRefresh = true)
         }
-        val deleteEventDate = therapy.deleteEventDate
-        val deleteTime = therapy.deleteTime
-        if (deleteTime) {
-            //removeLastNLines(100)
-            //createFilteredAndSortedCopy(csvfile,deleteEventDate.toString())
-            removeLast200Lines(csvfile)
-        }
+        handleCorpusDeleteNote(therapy.deleteNote)
         this.sleepTime = therapy.sleepTime
         this.snackTime = therapy.snackTime
         this.sportTime = therapy.sportTime
@@ -4142,7 +4143,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             hrNowBpm = snapshot.hrNow,
             rhrRestingBpm = snapshot.rhrResting,
             sleepDebtMinutes = snapshot.sleepDebtMinutes,
-            hrvRmssd = snapshot.hrvRmssd,
+            hrvDepression = snapshot.hrvDepression,
             wCyclePhase = wCycleInfoForRun?.phase,
         )
         return snapshot.copy(thermalBelief = thermalBelief)
@@ -6436,7 +6437,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val halfBasalTarget = profile.half_basal_exercise_target
 
         when {
-            !profile.temptargetSet && recentSteps5Minutes >= 0 && (recentSteps30Minutes >= 500 || recentSteps180Minutes > 1500) && recentSteps10Minutes > 0 && predictedBg < 140 -> {
+            !profile.temptargetSet && (recentSteps5Minutes ?: 0) >= 0 && ((recentSteps30Minutes ?: 0) >= 500 || (recentSteps180Minutes ?: 0) > 1500) && (recentSteps10Minutes ?: 0) > 0 && predictedBg < 140 -> {
                 this.targetBg = 130.0f
             }
 
@@ -6582,22 +6583,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 allStepsCounts.filter { it.timestamp >= (now - 30 * 60 * 1000) }.maxByOrNull { it.timestamp }
             } else null
 
-            this.recentSteps5Minutes = valid5?.steps5min ?: fallbackRecord?.steps5min ?: 0
+            // No record in the window = unknown (null), not 0 steps.
+            this.recentSteps5Minutes = valid5?.steps5min ?: fallbackRecord?.steps5min
 
             this.recentSteps10Minutes = allStepsCounts.filter { it.timestamp >= timeMillis10 }
-                .maxByOrNull { it.timestamp }?.steps10min ?: 0
+                .maxByOrNull { it.timestamp }?.steps10min
 
             this.recentSteps15Minutes = allStepsCounts.filter { it.timestamp >= timeMillis15 }
-                .maxByOrNull { it.timestamp }?.steps15min ?: 0
+                .maxByOrNull { it.timestamp }?.steps15min
 
             this.recentSteps30Minutes = allStepsCounts.filter { it.timestamp >= timeMillis30 }
-                .maxByOrNull { it.timestamp }?.steps30min ?: 0
+                .maxByOrNull { it.timestamp }?.steps30min
 
             this.recentSteps60Minutes = allStepsCounts.filter { it.timestamp >= timeMillis60 }
-                .maxByOrNull { it.timestamp }?.steps60min ?: 0
+                .maxByOrNull { it.timestamp }?.steps60min
 
             this.recentSteps180Minutes = allStepsCounts.filter { it.timestamp >= timeMillis180 }
-                .maxByOrNull { it.timestamp }?.steps180min ?: 0
+                .maxByOrNull { it.timestamp }?.steps180min
         } else {
             this.recentSteps5Minutes = StepService.getRecentStepCount5Min()
             this.recentSteps10Minutes = StepService.getRecentStepCount10Min()
@@ -6605,6 +6607,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             this.recentSteps30Minutes = StepService.getRecentStepCount30Min()
             this.recentSteps60Minutes = StepService.getRecentStepCount60Min()
             this.recentSteps180Minutes = StepService.getRecentStepCount180Min()
+        }
+        // Rule: a declared meal never gets less insulin than before. Before 2026-10-28 unknown steps read
+        // as 0 everywhere, and the calm-meal basal x1.5 and the HR-trend ISF x0.9 could fire on that.
+        // During a declared meal (mode active, or meal note under 3 h / 4 h high-carb) unknown steps
+        // still read as 0, so the meal is dosed exactly as before. Outside a meal they stay unknown.
+        if (declaredMealWindowActive()) {
+            recentSteps5Minutes = recentSteps5Minutes ?: 0
+            recentSteps10Minutes = recentSteps10Minutes ?: 0
+            recentSteps15Minutes = recentSteps15Minutes ?: 0
+            recentSteps30Minutes = recentSteps30Minutes ?: 0
+            recentSteps60Minutes = recentSteps60Minutes ?: 0
+            recentSteps180Minutes = recentSteps180Minutes ?: 0
         }
 
         try {
@@ -6685,7 +6699,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (heartRateTrendMultiplier < 1.0) {
             this.variableSensitivity *= heartRateTrendMultiplier.toFloat()
             consoleLog.add(
-                "💓 HR_TREND_ISF x%.2f (hr10 %.0f / hr60 %.0f, steps10 %d)".format(
+                "💓 HR_TREND_ISF x%.2f (hr10 %.0f / hr60 %.0f, steps10 %s)".format(
                     Locale.US, heartRateTrendMultiplier,
                     averageBeatsPerMinute10, averageBeatsPerMinute60, recentSteps10Minutes,
                 )
@@ -8800,7 +8814,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
             val nextBolusMins = round(smbInterval - lastBolusAge, 0)
             val nextBolusSeconds = round((smbInterval - lastBolusAge) * 60, 0) % 60
-            if (lastBolusAge > smbInterval) {
+            // The loop's own rule (SmbIntervalGate), with its 6 s tolerance. A strict `lastBolusAge >
+            // smbInterval` on the rounded age needed about 3.05 min for a 3 min interval, so on a 1-minute
+            // CGM every SMB waited one more reading. lastBolusAge stays for the reason text.
+            if (!SmbIntervalGate.tooSoon(iobTotal.lastBolusTime, smbInterval, systemTime)) {
                 if (microBolus > 0) {
                     val htrFloorU = lastHyperTrajectoryRelease
                         ?.takeIf { it.active }
@@ -12361,12 +12378,18 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var tdd24HrsPerHour = 0.0f
     private var hourOfDay: Int = 0
     private var weekend: Int = 0
-    private var recentSteps5Minutes: Int = 0
-    private var recentSteps10Minutes: Int = 0
-    private var recentSteps15Minutes: Int = 0
-    private var recentSteps30Minutes: Int = 0
-    private var recentSteps60Minutes: Int = 0
-    private var recentSteps180Minutes: Int = 0
+    // Step counts of the last 5..180 minutes. `null` means UNKNOWN (no step record, no live sensor),
+    // which is not the same as 0 steps: no step-driven decision that can add insulin may fire on it
+    // (calm-meal basal x1.5, DIA x1.2 / x0.90, HR-trend ISF). Readers that only use steps to be more
+    // careful keep reading `?: 0`, which is what they always saw. Exceptions: during a declared meal
+    // unknown steps read as 0 (a declared meal is never dosed less than before), and the Bio-Sync peak
+    // reads unknown as 0 like the KMP branch.
+    private var recentSteps5Minutes: Int? = null
+    private var recentSteps10Minutes: Int? = null
+    private var recentSteps15Minutes: Int? = null
+    private var recentSteps30Minutes: Int? = null
+    private var recentSteps60Minutes: Int? = null
+    private var recentSteps180Minutes: Int? = null
     private var basalaimi = 0.0f
     private var endoSmbMult = 1.0  // Written by applyEndoAndActivityAdjustments each cycle
     private var activityProtectionMode = false  // Written by applyEndoAndActivityAdjustments
@@ -13604,19 +13627,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }    
 
         // 3b. BIO-SYNC Stress Mode (Correction for High HR at Rest)
-        val s = steps ?: 0
+        // Unknown steps (null) apply neither factor: see BioSyncDiaRule.
         val h = heartRate ?: 0
-        if (h > 95 && s < 100) {
-             // Stress / Maladie : Résistance -> DIA plus long
-             diaMinutes *= 1.2f
-             reasonBuilder.append(context.getString(R.string.reason_bio_sync_stress, h, s))
-        } else if (s > 350) {
-             // Flow / Sport (Undeclared): > 70spm (Brisk Walk)
-             // Absorption rapide -> DIA plus court (si pas déjà appliqué par ActivityContext)
-             if (activityContext.state != app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.INTENSE) {
-                 diaMinutes *= 0.90f
-                 reasonBuilder.append(context.getString(R.string.reason_bio_sync_flow, s, h, 0.90f))
-             }
+        val isIntense = activityContext.state == app.aaps.plugins.aps.openAPSAIMI.activity.ActivityState.INTENSE
+        when (BioSyncDiaRule.decide(steps, heartRate, isIntense)) {
+            BioSyncDiaRule.Kind.STRESS -> {
+                // Stress / Maladie : Résistance -> DIA plus long
+                diaMinutes *= BioSyncDiaRule.STRESS_FACTOR
+                reasonBuilder.append(context.getString(R.string.reason_bio_sync_stress, h, steps))
+            }
+            BioSyncDiaRule.Kind.FLOW   -> {
+                // Flow / Sport (Undeclared): > 70spm (Brisk Walk). Absorption rapide -> DIA plus court
+                diaMinutes *= BioSyncDiaRule.FLOW_FACTOR
+                reasonBuilder.append(context.getString(R.string.reason_bio_sync_flow, steps, h, BioSyncDiaRule.FLOW_FACTOR))
+            }
+            BioSyncDiaRule.Kind.NONE   -> Unit
         }
 
         // 5. Ajustement en fonction de l'IOB (Insulin on Board)
@@ -13945,7 +13970,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         tp: Double,
         bg: Double,
         delta: Float,
-        recentSteps5Minutes: Int,
+        recentSteps5Minutes: Int?,
         averageBeatsPerMinute: Double,
     ) {
         rT.reason.appendLine(
@@ -14843,7 +14868,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val valuesToRecord = "$dateStr,$hourOfDay,$weekend," +
             "$bg,$targetBg,$iob,$delta,$shortAvgDelta,$longAvgDelta," +
             "$tdd7DaysPerHour,$tdd2DaysPerHour,$tddPerHour,$tdd24HrsPerHour," +
-            "$recentSteps5Minutes,$recentSteps10Minutes,$recentSteps15Minutes,$recentSteps30Minutes,$recentSteps60Minutes,$recentSteps180Minutes," +
+            "${recentSteps5Minutes ?: 0},${recentSteps10Minutes ?: 0},${recentSteps15Minutes ?: 0},${recentSteps30Minutes ?: 0},${recentSteps60Minutes ?: 0},${recentSteps180Minutes ?: 0}," +
             "$tags0to60minAgo,$tags60to120minAgo,$tags120to180minAgo,$tags180to240minAgo," +
             "$predictedSMB,$maxIob,$maxSMB,$smbToGive,$peakintermediaire,$latestAdjustedDia"
         appendCsvSafely(
@@ -14893,7 +14918,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         } else {
             ensureCsvHeaderIsCurrent(file, headerRow)
         }
-        file.appendText(valuesRow + "\n")
+        // A file rewritten without a final line break would glue this row to its last one.
+        file.appendText(AimiCorpusPruner.rowPrefix(AimiCorpusPruner.FileStorage.lastChar(file)) + valuesRow + "\n")
     }
 
     /** Files whose header was already compared with the wanted one since the app started. */
@@ -14920,66 +14946,122 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
     }
 
-    fun removeLast200Lines(csvFile: File) {
-        val reasonBuilder = StringBuilder()
-        if (!csvFile.exists()) {
-            //println("Le fichier original n'existe pas.")
-            println(context.getString(R.string.original_file_missing))
-            return
-        }
+    /** `backup_yyyyMMdd_HHmmss.csv`, the name `AimiRetentionPolicy.DROP_GLOBS` tidies up later. */
+    private fun corpusBackupFileName(): String =
+        "backup_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date(dateUtil.now())) + ".csv"
 
-        // Lire toutes les lignes du fichier
-        val lines = csvFile.readLines(Charsets.UTF_8)
+    /**
+     * The training corpus files that exist: the shared one and, when shared storage was denied, the
+     * app-scoped copy the writer falls back to.
+     */
+    private fun existingTrainingCorpusFiles(): List<File> =
+        listOf(csvfile, File(appExternalFallbackDir, "oapsaimiML2_records.csv"))
+            .distinctBy { it.absolutePath }
+            .filter { it.exists() }
 
-        if (lines.size <= 200) {
-            //reasonBuilder.append("Le fichier contient moins ou égal à 200 lignes, aucune suppression effectuée.")
-            reasonBuilder.append(context.getString(R.string.file_too_short))
-            return
-        }
-
-        // Conserver toutes les lignes sauf les 200 dernières
-        val newLines = lines.dropLast(200)
-
-        // Création d'un nom de sauvegarde avec timestamp
-        val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
-        val timestamp = dateFormat.format(Date())
-        val backupFileName = "backup_$timestamp.csv"
-        val backupFile = File(csvFile.parentFile, backupFileName)
-
-        // Sauvegarder le fichier original
-        csvFile.copyTo(backupFile, overwrite = true)
-
-        // Réécrire le fichier original avec les lignes restantes
-        csvFile.writeText(newLines.joinToString("\n"), Charsets.UTF_8)
-
-        //reasonBuilder.append("Les 200 dernières lignes ont été supprimées. Le fichier original a été sauvegardé sous '$backupFileName'.")
-        reasonBuilder.append(context.getString(R.string.last_200_deleted, backupFileName))
-    }
-    @SuppressLint("StringFormatInvalid")
-    private fun automateDeletionIfBadDay(tir1DAYIR: Int) {
-        val reasonBuilder = StringBuilder()
-        // Vérifier si le TIR est inférieur à 85%
-        if (tir1DAYIR < 85) {
-            // Vérifier si l'heure actuelle est entre 00:05 et 00:10
-            val currentTime = LocalTime.now()
-            val start = LocalTime.of(0, 5)
-            val end = LocalTime.of(0, 10)
-
-            if (currentTime.isAfter(start) && currentTime.isBefore(end)) {
-                // Calculer la date de la veille au format dd/MM/yyyy
-                val yesterday = LocalDate.now().minusDays(1)
-                val dateToRemove = yesterday.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
-
-                // Appeler la méthode de suppression
-                //createFilteredAndSortedCopy(csvfile,dateToRemove)
-                removeLast200Lines(csvfile)
-                //reasonBuilder.append("Les données pour la date $dateToRemove ont été supprimées car TIR1DAIIR est inférieur à 85%.")
-                reasonBuilder.append(context.getString(R.string.reason_data_removed, dateToRemove))
-            } else {
-                //reasonBuilder.append("La suppression ne peut être exécutée qu'entre 00:05 et 00:10.")
-                reasonBuilder.append(context.getString(R.string.reason_deletion_time_restricted))
+    /**
+     * Moves the rows of one day out of every training corpus file, into
+     * [AimiCorpusPruner.SET_ASIDE_FILE_NAME] next to it. See [AimiCorpusPruner.moveDay].
+     *
+     * [dayText] is the day written with `DateUtil.dateString`, the same function the row writer uses
+     * for column 0, so it only matches rows of that day.
+     *
+     * @return one result per corpus file. Empty when no corpus file exists.
+     */
+    private fun moveDayOutOfTrainingCorpus(dayText: String): List<AimiCorpusPruner.Result> =
+        existingTrainingCorpusFiles().map { corpus ->
+            val result = runCatching {
+                AimiCorpusPruner.moveDay(
+                    storage = AimiCorpusPruner.FileStorage,
+                    csv = corpus,
+                    backup = File(corpus.parentFile, corpusBackupFileName()),
+                    setAside = File(corpus.parentFile, AimiCorpusPruner.SET_ASIDE_FILE_NAME),
+                    dayText = dayText,
+                )
+            }.getOrElse { error ->
+                aapsLogger.error(LTag.APS, "AIMI training CSV clean up failed for ${corpus.name}", error)
+                AimiCorpusPruner.Result(AimiCorpusPruner.Outcome.WRITE_FAILED, removedRows = 0, keptRows = 0)
             }
+            aapsLogger.info(
+                LTag.APS,
+                "AIMI training CSV clean up for $dayText in ${corpus.absolutePath}: ${result.outcome}, " +
+                    "removed ${result.removedRows} rows, kept ${result.keptRows}",
+            )
+            result
         }
+
+    /** The day as `DateUtil.dateString` writes it, read at midday so a clock change cannot shift it. */
+    private fun corpusDayText(day: LocalDate): String =
+        dateUtil.dateString(day.atTime(12, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli())
+
+    /**
+     * Once a night, between 00:05 and 00:10, moves YESTERDAY's rows out of the training corpus when
+     * yesterday was a bad day ([AimiCorpusPruner.isBadDay]: time in range 65-180 mg/dL under 65 %).
+     *
+     * It is called on every tick of that window, but only the first call does work: after it, the
+     * rows of yesterday are no longer in the corpus, so the next calls find nothing, write nothing
+     * and make no backup. A day with no glucose reading is unknown, not bad, and is kept.
+     */
+    private fun automateDeletionIfBadDay(tir1DayInRangePct: Double, tir1DayReadings: Int) {
+        if (!AimiCorpusPruner.isBadDay(tir1DayInRangePct, tir1DayReadings)) return
+        if (!AimiCorpusPruner.isInsideBadDayWindow(LocalTime.now())) return
+        val dayText = corpusDayText(LocalDate.now().minusDays(1))
+        val results = moveDayOutOfTrainingCorpus(dayText)
+        if (results.any { it.outcome == AimiCorpusPruner.Outcome.REMOVED }) {
+            consoleLog.add(context.getString(R.string.reason_data_removed, dayText))
+        }
+    }
+
+    /** Remembers the newest delete note already done, so a restart does not do it again. */
+    private val corpusDeleteNoteDoneFile by lazy { File(appExternalFallbackDir, "oapsaimiML2_delete_note_done.txt") }
+
+    private fun lastDoneCorpusDeleteNoteTimestamp(): Long =
+        runCatching { corpusDeleteNoteDoneFile.readText().trim().toLong() }.getOrDefault(0L)
+
+    private fun markCorpusDeleteNoteDone(timestamp: Long) {
+        runCatching {
+            corpusDeleteNoteDoneFile.parentFile?.mkdirs()
+            corpusDeleteNoteDoneFile.writeText(timestamp.toString())
+        }.onFailure { error ->
+            aapsLogger.warn(LTag.APS, "Could not store the done delete note: ${error.message}")
+        }
+    }
+
+    /**
+     * Handles a "delete" therapy note ([Therapy.deleteNote]) ONCE: it moves the rows of the day the
+     * note names (yesterday when it names none) out of the training corpus.
+     *
+     * The note is keyed on its timestamp, stored in a small file, so the same note is not done again
+     * on the next tick or after a restart. When the work could not finish (backup or write failed)
+     * the note is not marked done, and the next tick tries again; that is safe because
+     * [AimiCorpusPruner.moveDay] never removes a row twice. A note whose day cannot be read removes
+     * nothing.
+     *
+     * Before, every tick while the note was active removed the newest 200 rows: a 30 minute note on a
+     * 1-minute CGM removed about 6000 rows, and the date in the note was ignored.
+     */
+    private fun handleCorpusDeleteNote(note: CorpusDeleteNote?) {
+        note ?: return
+        if (note.timestamp <= lastDoneCorpusDeleteNoteTimestamp()) return
+        val day = when (val asked = AimiCorpusPruner.deleteNoteDay(note.note)) {
+            AimiCorpusPruner.DeleteNoteDay.Yesterday   -> LocalDate.now().minusDays(1)
+            is AimiCorpusPruner.DeleteNoteDay.OnDate   -> asked.date
+            AimiCorpusPruner.DeleteNoteDay.Unreadable  -> null
+        }
+        if (day == null) {
+            consoleLog.add(context.getString(R.string.reason_delete_note_unreadable, note.note))
+            markCorpusDeleteNoteDone(note.timestamp)
+            return
+        }
+        val dayText = corpusDayText(day)
+        val results = moveDayOutOfTrainingCorpus(dayText)
+        val removed = results.sumOf { it.removedRows }
+        if (removed > 0) {
+            consoleLog.add(context.getString(R.string.reason_delete_note_done, dayText, removed))
+        } else if (results.all { it.isFinal }) {
+            consoleLog.add(context.getString(R.string.reason_delete_note_nothing, dayText))
+        }
+        if (results.all { it.isFinal }) markCorpusDeleteNoteDone(note.timestamp)
     }
 
     /**
@@ -15234,7 +15316,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
          }
          
          val sinceBolus = if (lastBolusAgeMinutes.isNaN()) 999.0 else lastBolusAgeMinutes
-         val refractoryBlocked = sinceBolus < refractoryWindow && !isExplicitUserAction && !bypassSmbRefractory
+         // Same 6 s tolerance as the loop's SMB interval rule (SmbIntervalGate), so the refractory window
+         // does not hold back an SMB the interval check has just allowed.
+         val refractoryBlocked = sinceBolus < refractoryWindow - SMB_REFRACTORY_TOLERANCE_MIN && !isExplicitUserAction && !bypassSmbRefractory
          var gatedUnits = safetyCappedUnits
          var absorptionFactor = 1.0
 
@@ -15280,7 +15364,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 gatedUnits = 0f
                 consoleLog.add("⏸️ REFRACTORY_BLOCK sinceBolus=${"%.1f".format(sinceBolus)}m window=${"%.1f".format(refractoryWindow)}m (SMB blocked)")
             }
-         } else if (sinceBolus < refractoryWindow && (isExplicitUserAction || bypassSmbRefractory)) {
+         } else if (sinceBolus < refractoryWindow - SMB_REFRACTORY_TOLERANCE_MIN && (isExplicitUserAction || bypassSmbRefractory)) {
              val bypassLabel = if (bypassSmbRefractory) "Classic autodrive prebolus" else "Meal mode override"
              consoleLog.add(
                  "✅ REFRACTORY_BYPASS sinceBolus=${"%.1f".format(sinceBolus)}m " +
@@ -16859,6 +16943,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             (context.bg < context.targetBg || context.delta < -2.0)
 
     private fun isSportSafetyCondition(): Boolean {
+        // Unknown steps read as 0 here, as they always did: this check only makes dosing more careful.
+        val recentSteps5Minutes = this.recentSteps5Minutes ?: 0
+        val recentSteps10Minutes = this.recentSteps10Minutes ?: 0
+        val recentSteps30Minutes = this.recentSteps30Minutes ?: 0
+        val recentSteps60Minutes = this.recentSteps60Minutes ?: 0
+        val recentSteps180Minutes = this.recentSteps180Minutes ?: 0
         // [User Request]: Immediate release if steps stopped (0 steps in 5 min)
         // This allows AIMI to resume SMBs immediately after a walk to handle the meal rise.
         if (recentSteps5Minutes == 0 && !sportTime && !aimiContextActivityActive) return false
@@ -16923,15 +17013,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         var interval = modeInterval
 
         // 4) Sécurité : sport important ou low carb -> au moins 10 min
-        val safetySport = recentSteps180Minutes > 1500 && bg < 120f
+        val safetySport = (recentSteps180Minutes ?: 0) > 1500 && bg < 120f
         val safetyLowCarb = lowCarbTime
         if (safetySport || safetyLowCarb) {
             interval = interval.coerceAtLeast(10)
         }
 
         // 5) Activité très soutenue -> on peut monter jusqu'à 15 min
-        val strongActivity = recentSteps5Minutes > 100 &&
-            recentSteps30Minutes > 500 &&
+        val strongActivity = (recentSteps5Minutes ?: 0) > 100 &&
+            (recentSteps30Minutes ?: 0) > 500 &&
             lastsmbtime > 20
         if (strongActivity) {
             interval = interval.coerceAtLeast(15)
@@ -17108,9 +17198,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 bg.toFloat(), targetBg, iob,
                 delta, shortAvgDelta, longAvgDelta,
                 tdd7DaysPerHour, tdd2DaysPerHour, tddPerHour, tdd24HrsPerHour,
-                recentSteps5Minutes.toFloat(), recentSteps10Minutes.toFloat(),
-                recentSteps15Minutes.toFloat(), recentSteps30Minutes.toFloat(),
-                recentSteps60Minutes.toFloat(), recentSteps180Minutes.toFloat()
+                (recentSteps5Minutes ?: 0).toFloat(), (recentSteps10Minutes ?: 0).toFloat(),
+                (recentSteps15Minutes ?: 0).toFloat(), (recentSteps30Minutes ?: 0).toFloat(),
+                (recentSteps60Minutes ?: 0).toFloat(), (recentSteps180Minutes ?: 0).toFloat()
             ),
             reason, // 👈 logs visibles si non-null
             context
@@ -17188,8 +17278,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val trendIndicator = calculateTrendIndicator(
             delta, shortAvgDelta, longAvgDelta,
             bg.toFloat(), iob, variableSensitivity, cob, normalBgThreshold,
-            recentSteps180Minutes, averageBeatsPerMinute.toFloat(), averageBeatsPerMinute10.toFloat(),
-            profile.insulinDivisor.toFloat(), recentSteps5Minutes, recentSteps10Minutes
+            recentSteps180Minutes ?: 0, averageBeatsPerMinute.toFloat(), averageBeatsPerMinute10.toFloat(),
+            profile.insulinDivisor.toFloat(), recentSteps5Minutes ?: 0, recentSteps10Minutes ?: 0
         )
         val baseFeatures = floatArrayOf(
             bg.toFloat(), iob.toFloat(), cob.toFloat(), delta, shortAvgDelta, longAvgDelta,
@@ -17388,7 +17478,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Calculer le facteur de retard ajusté en fonction de l'activité physique
         val adjustedDelayFactor = calculateAdjustedDelayFactor(
             bg,
-            recentSteps180Minutes,
+            recentSteps180Minutes ?: 0,
             averageBeatsPerMinute,
             averageBeatsPerMinute10
         )
@@ -17722,9 +17812,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // 4️⃣ & 5️⃣ BIO-SYNC FUSION : Steps & HeartRate
         // On détecte 3 états : FLOW (Sport), STRESS (Cortisol), ou REST
+        // Unknown steps read as 0 here, as on the KMP branch (maintainer decision 2026-10-28).
         val steps = stepCount ?: 0
         val hr = heartRate ?: 0
-        
+
         val isStress = hr > 95 && steps < 100 // Tachycardie au repos -> Stress/Maladie
         val isFlow = steps > 500 || (steps > 200 && hr > 100) // Activité significative
 
@@ -17997,9 +18088,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 mealTime = mealTime, bfastTime = bfastTime, lunchTime = lunchTime,
                 dinnerTime = dinnerTime, highCarbTime = highCarbTime, snackTime = snackTime,
                 sleepTime = sleepTime,
-                recentSteps5Minutes = recentSteps5Minutes, recentSteps10Minutes = recentSteps10Minutes,
-                recentSteps30Minutes = recentSteps30Minutes, recentSteps60Minutes = recentSteps60Minutes,
-                recentSteps180Minutes = recentSteps180Minutes,
+                recentSteps5Minutes = recentSteps5Minutes, recentSteps10Minutes = recentSteps10Minutes ?: 0,
+                recentSteps30Minutes = recentSteps30Minutes ?: 0, recentSteps60Minutes = recentSteps60Minutes ?: 0,
+                recentSteps180Minutes = recentSteps180Minutes ?: 0,
                 averageBeatsPerMinute = averageBeatsPerMinute, averageBeatsPerMinute60 = averageBeatsPerMinute60,
                 pumpAgeDays = pumpAgeDaysLocal.toInt(),
                 sens = sens, tp = tp.toInt(), variableSensitivity = variableSensitivity,
@@ -19547,7 +19638,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             bg = bg, delta = delta,
             mealTime = mealTime, bfastTime = bfastTime, lunchTime = lunchTime,
             dinnerTime = dinnerTime, highCarbTime = highCarbTime, snackTime = snackTime,
-            recentSteps5Minutes = recentSteps5Minutes, recentSteps10Minutes = recentSteps10Minutes,
+            recentSteps5Minutes = recentSteps5Minutes ?: 0, recentSteps10Minutes = recentSteps10Minutes ?: 0,
             averageBeatsPerMinute = averageBeatsPerMinute.toDouble(), averageBeatsPerMinute60 = averageBeatsPerMinute60
         )
 
@@ -21139,3 +21230,6 @@ internal object BasalFirstPolicyMath {
         )
     }
 }
+
+/** [SmbIntervalGate.TOLERANCE_MS] in minutes, the unit of the SMB refractory window. */
+private const val SMB_REFRACTORY_TOLERANCE_MIN = SmbIntervalGate.TOLERANCE_MS / 60_000.0

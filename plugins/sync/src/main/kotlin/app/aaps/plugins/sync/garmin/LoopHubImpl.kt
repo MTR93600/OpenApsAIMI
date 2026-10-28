@@ -33,12 +33,14 @@ import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.objects.constraints.ConstraintObject
 import app.aaps.core.objects.extensions.convertedToPercent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.time.Clock
 import java.time.Instant
+import kotlin.coroutines.cancellation.CancellationException
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -368,22 +370,44 @@ class LoopHubImpl @Inject constructor(
     }
 
     // mod Bolus and temp target
-    /** Triggers a bolus. */
-    override fun postBolus(bolus: Double) {
-        aapsLogger.info(LTag.GARMIN, "trigger a bolus of $bolus U")
+    /**
+     * Limits the bolus with the bolus constraints (max bolus) and sends it to the command queue, which
+     * applies the bolus constraints again before the pump.
+     * ⚠️ ASYNC IMPACT: the delivery runs on [appScope]; the limited amount is returned at once.
+     */
+    override fun postBolus(bolus: Double, onNotDelivered: (String) -> Unit): Double {
+        if (!bolus.isFinite() || bolus <= 0.0) return 0.0
+        val limited = constraintChecker.applyBolusConstraints(ConstraintObject(bolus, aapsLogger)).value()
+        if (!limited.isFinite() || limited <= 0.0) {
+            aapsLogger.warn(LTag.GARMIN, "bolus of $bolus U refused by the bolus constraints")
+            return 0.0
+        }
+        aapsLogger.info(LTag.GARMIN, "bolus of $bolus U asked, $limited U after the bolus constraints")
         userEntryLogger.log(
             action = Action.BOLUS,
             source = Sources.Garmin,
             note = null,
-            ValueWithUnit.Insulin(bolus)
+            ValueWithUnit.Insulin(limited)
         )
         val detailedBolusInfo = DetailedBolusInfo().apply {
             eventType = TE.Type.SNACK_BOLUS
-            insulin = bolus
+            insulin = limited
         }
         appScope.launch {
-            commandQueue.bolus(detailedBolusInfo)
+            try {
+                val result = commandQueue.bolus(detailedBolusInfo)
+                if (!result.success) {
+                    aapsLogger.error(LTag.GARMIN, "bolus delivery failed: ${result.comment}")
+                    onNotDelivered(result.comment)
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                aapsLogger.error(LTag.GARMIN, "bolus delivery failed", error)
+                onNotDelivered(error.message ?: error.javaClass.simpleName)
+            }
         }
+        return limited
     }
 
     override fun postTempTarget(target: Double, duration: Int) {

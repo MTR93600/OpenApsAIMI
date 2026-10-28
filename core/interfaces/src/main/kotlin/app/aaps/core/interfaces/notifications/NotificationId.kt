@@ -237,7 +237,10 @@ enum class NotificationId(
      * A pre-soak sensor (ONE+ / G7 or Libre 3) was switched to production by itself, without the
      * user pressing the promote button. Appended last on purpose, see the comment above.
      */
-    CGM_STAGING_AUTO_PROMOTED(NORMAL, CGM);
+    CGM_STAGING_AUTO_PROMOTED(NORMAL, CGM),
+
+    /** A bolus asked from a Garmin watch was refused, limited or not delivered. */
+    GARMIN_BOLUS(IMPORTANT, SYNC);
 
     companion object {
 

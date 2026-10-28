@@ -34,6 +34,27 @@ data class HealthContextSnapshot(
      */
     val hrMeasuredAtMs: Long = 0L,
     val hrvRmssd: Double = 0.0,   // Most recent valid HRV (Nocturnal preferred)
+    /**
+     * How far below this person's own normal their HRV is, from 0.0 to 1.0. See [HrvDepression].
+     *
+     * **A consumer should read this, not [hrvRmssd].** Three places used to compare the raw value
+     * against fixed bands (`1.0..22.0`, `< 30`, `1.0..30.0`), so a person whose own normal RMSSD is
+     * 25 was read as stressed all the time, and a person whose normal is 90 never was.
+     *
+     * `0.0` means "normal, or not known". A cold start answers `0.0` on purpose: with fewer than
+     * three baseline samples there is no personal normal to compare against.
+     */
+    val hrvDepression: Double = 0.0,
+    /**
+     * The person's HRV baseline when this snapshot was taken, exported so the change from fixed
+     * bands to a person-relative reading can be judged from real data later.
+     *
+     * Without the sample count a reader cannot tell the two reasons for [hrvDepression] `0.0`
+     * apart: a cold start with no baseline yet, and an HRV sitting exactly at this person's normal.
+     */
+    val hrvBaselineMean: Double = 0.0,
+    val hrvBaselineSd: Double = 0.0,
+    val hrvBaselineSamples: Int = 0,
     val rhrResting: Int = 0,      // Today's RHR (or 7d baseline if missing)
     
     // 😴 Sleep & Recovery
@@ -64,6 +85,15 @@ data class HealthContextSnapshot(
         put("steps60", stepsLast60m)
         put("hr", hrNow)
         put("hrv", hrvRmssd)
+        // Exported for the move from fixed HRV bands to a person-relative reading. `hrv_was_low` is
+        // what the old `hrvRmssd < 30` band would have answered, kept beside the new value so the
+        // two can be compared over real days before the sigma threshold in `HrvDepression` is
+        // settled. Remove these once that is done.
+        put("hrv_depression", hrvDepression)
+        put("hrv_base_mean", hrvBaselineMean)
+        put("hrv_base_sd", hrvBaselineSd)
+        put("hrv_base_n", hrvBaselineSamples)
+        put("hrv_was_low", hrvRmssd > 0 && hrvRmssd < 30)
         put("rhr", rhrResting)
         put("sleepDebt", sleepDebtMinutes)
         put("hcSleepActive", hcSleepSessionActive)
@@ -97,11 +127,10 @@ data class HealthContextSnapshot(
         }
         
         // 3. HRV Suppression (+0.0 to +0.2)
-        // Lower HRV = Higher Stress
-        if (hrvRmssd > 0 && hrvRmssd < 30) {
-             val suppression = ((30 - hrvRmssd) / 30.0).coerceIn(0.0, 0.2)
-             score += suppression
-        }
+        // Lower HRV = Higher Stress. Was `hrvRmssd < 30` ramped over a fixed 30 ms. The ramp is now
+        // over this person's own spread, so the same share of the score is reached at the same
+        // distance from *their* normal. An unknown baseline gives 0.0, as an absent HRV always did.
+        score += (hrvDepression * 0.2).coerceIn(0.0, 0.2)
         
         return score.coerceIn(0.0, 1.0)
     }

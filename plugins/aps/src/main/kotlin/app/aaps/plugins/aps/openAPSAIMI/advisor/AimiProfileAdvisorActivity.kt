@@ -529,17 +529,16 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                 aapsLogger.info(LTag.APS, "AIMI_DIAG: $fileName not found, not added to the package")
                 return
             }
-            val lines = source.readLines(Charsets.UTF_8)
-            if (lines.isEmpty()) return
-            val header = lines.first()
-            val body = lines.drop(1).takeLast(MAX_CSV_ROWS_IN_PACKAGE)
+            // Read line by line and keep only the last rows. These CSV files can be many MB, and
+            // `readLines` held the whole file in memory just to keep its tail.
+            val tail = readCsvTail(source, MAX_CSV_ROWS_IN_PACKAGE) ?: return
             out.putNextEntry(ZipEntry(fileName))
-            out.write((header + "\n").toByteArray(Charsets.UTF_8))
-            body.forEach { row -> out.write((row + "\n").toByteArray(Charsets.UTF_8)) }
+            out.write((tail.header + "\n").toByteArray(Charsets.UTF_8))
+            tail.rows.forEach { row -> out.write((row + "\n").toByteArray(Charsets.UTF_8)) }
             out.closeEntry()
             aapsLogger.info(
                 LTag.APS,
-                "AIMI_DIAG: added $fileName to the package (${body.size} rows of ${lines.size - 1})"
+                "AIMI_DIAG: added $fileName to the package (${tail.rows.size} rows of ${tail.totalRows})"
             )
         } catch (e: Exception) {
             aapsLogger.warn(LTag.APS, "AIMI_DIAG: could not add $fileName: ${e.message}")
@@ -1108,8 +1107,10 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
             setTypeface(Typeface.MONOSPACE, Typeface.NORMAL)
         })
 
+        // Only when all three shares were measured. A missing share drawn as a zero bar looks like a
+        // measured period with no time in that range, which is the opposite of "not measured".
         val canShowCgmChart =
-            oref.timeBelow70Pct != null || oref.timeInRange70180Pct != null || oref.timeAbove180Pct != null
+            oref.timeBelow70Pct != null && oref.timeInRange70180Pct != null && oref.timeAbove180Pct != null
         if (canShowCgmChart) {
             val chartBlock = createOrefCgmRangeChart(oref).apply {
                 visibility = View.GONE
@@ -1164,7 +1165,8 @@ class AimiProfileAdvisorActivity : TranslatedDaggerAppCompatActivity() {
                     }
                     setBackgroundColor(Color.parseColor("#334155"))
                 }
-                track.addView(View(this@AimiProfileAdvisorActivity).apply {
+                // No bar at all for a share that was not measured (the label shows "—").
+                if (pct != null) track.addView(View(this@AimiProfileAdvisorActivity).apply {
                     layoutParams = FrameLayout.LayoutParams(barWidthPx, fillH, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL)
                     setBackgroundColor(barColor)
                 })

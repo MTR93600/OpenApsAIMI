@@ -32,15 +32,16 @@ class AIMIPhoneStepsProviderMTR @Inject constructor(
         private const val PRIORITY = 2 // Higher priority than Health Connect
     }
     
+    /** Answers a plain `Int` for the provider contract: an unknown count (`null`) is reported as 0 here. */
     override fun getStepsDelta(windowMinutes: Int, now: Instant): Int {
         return try {
             val steps = when (windowMinutes) {
-                5 -> StepService.getRecentStepCount5Min()
-                10 -> StepService.getRecentStepCount10Min()
-                15 -> StepService.getRecentStepCount15Min()
-                30 -> StepService.getRecentStepCount30Min()
-                60 -> StepService.getRecentStepCount60Min()
-                180 -> StepService.getRecentStepCount180Min()
+                5 -> (StepService.getRecentStepCount5Min() ?: 0)
+                10 -> (StepService.getRecentStepCount10Min() ?: 0)
+                15 -> (StepService.getRecentStepCount15Min() ?: 0)
+                30 -> (StepService.getRecentStepCount30Min() ?: 0)
+                60 -> (StepService.getRecentStepCount60Min() ?: 0)
+                180 -> (StepService.getRecentStepCount180Min() ?: 0)
                 else -> {
                     aapsLogger.warn(LTag.APS, "[$SOURCE_NAME] Unsupported window: {$windowMinutes}min")
                     0
@@ -61,7 +62,7 @@ class AIMIPhoneStepsProviderMTR @Inject constructor(
     override fun getLastUpdateMillis(): Long {
         // StepService doesn't track update time, use current time if data exists
         return try {
-            val has5MinData = StepService.getRecentStepCount5Min() > 0
+            val has5MinData = (StepService.getRecentStepCount5Min() ?: 0) > 0
             if (has5MinData) System.currentTimeMillis() else 0L
         } catch (e: Exception) {
             0L
@@ -73,9 +74,9 @@ class AIMIPhoneStepsProviderMTR @Inject constructor(
         // but data might be 0 if sensor not active
         return try {
             // Check if we have any recent data (last 15 minutes)
-            val recentSteps = StepService.getRecentStepCount5Min() +
-                    StepService.getRecentStepCount10Min() +
-                    StepService.getRecentStepCount15Min()
+            val recentSteps = (StepService.getRecentStepCount5Min() ?: 0) +
+                    (StepService.getRecentStepCount10Min() ?: 0) +
+                    (StepService.getRecentStepCount15Min() ?: 0)
             
             recentSteps >= 0 // Always true, but validates StepService is accessible
         } catch (e: Exception) {

@@ -28,7 +28,9 @@ class ThermalBeliefEngineTest {
             hrNowBpm = 102,
             rhrRestingBpm = 68,
             sleepDebtMinutes = 90,
-            hrvRmssd = 22.0,
+            // Was hrvRmssd = 22.0. The engine now takes the person-relative reading, and
+            // the old band turned 22.0 into exactly this, so the assertions below are unchanged.
+            hrvDepression = 0.2666666667,
             wCyclePhase = null,
         )
 
@@ -56,7 +58,9 @@ class ThermalBeliefEngineTest {
             hrNowBpm = 74,
             rhrRestingBpm = 68,
             sleepDebtMinutes = 0,
-            hrvRmssd = 42.0,
+            // Was hrvRmssd = 42.0. The engine now takes the person-relative reading, and
+            // the old band turned 42.0 into exactly this, so the assertions below are unchanged.
+            hrvDepression = 0.0,
             wCyclePhase = CyclePhase.LUTEAL,
         )
 
@@ -81,7 +85,9 @@ class ThermalBeliefEngineTest {
             hrNowBpm = 70,
             rhrRestingBpm = 68,
             sleepDebtMinutes = 0,
-            hrvRmssd = 40.0,
+            // Was hrvRmssd = 40.0. The engine now takes the person-relative reading, and
+            // the old band turned 40.0 into exactly this, so the assertions below are unchanged.
+            hrvDepression = 0.0,
             wCyclePhase = null,
         )
 
@@ -111,7 +117,9 @@ class ThermalBeliefEngineTest {
             hrNowBpm = 95,
             rhrRestingBpm = 65,
             sleepDebtMinutes = 120,
-            hrvRmssd = 18.0,
+            // Was hrvRmssd = 18.0. The engine now takes the person-relative reading, and
+            // the old band turned 18.0 into exactly this, so the assertions below are unchanged.
+            hrvDepression = 0.4,
             wCyclePhase = null,
         )
 

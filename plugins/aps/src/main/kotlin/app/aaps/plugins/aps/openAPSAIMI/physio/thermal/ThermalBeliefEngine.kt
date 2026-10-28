@@ -17,7 +17,8 @@ internal object ThermalBeliefEngine {
         hrNowBpm: Int,
         rhrRestingBpm: Int,
         sleepDebtMinutes: Int,
-        hrvRmssd: Double,
+        /** How far below this person's own normal their HRV is, 0.0..1.0. See `HrvDepression`. */
+        hrvDepression: Double,
         wCyclePhase: CyclePhase? = null,
     ): ThermalBeliefDigest {
         val samples = window.skinSamples.sortedBy { it.timestampMs }
@@ -43,11 +44,8 @@ internal object ThermalBeliefEngine {
             0.0
         }
         val sleepDebtScore = (sleepDebtMinutes / 180.0).coerceIn(0.0, 1.0)
-        val hrvStress = if (hrvRmssd in 1.0..30.0) {
-            ((30.0 - hrvRmssd) / 30.0).coerceIn(0.0, 1.0)
-        } else {
-            0.0
-        }
+        // Was a ramp over a fixed 30 ms of RMSSD. It is now the caller's person-relative reading.
+        val hrvStress = hrvDepression.coerceIn(0.0, 1.0)
 
         val inflammationIndex = combine(
             positive(deltaVsBaseline) * 0.45,
@@ -102,11 +100,15 @@ internal object ThermalBeliefEngine {
         )
     }
 
+    /**
+     * [build] on the cached thermal window. [hrvDepression] is `HealthContextSnapshot.hrvDepression`:
+     * 0 at the person's own mean HRV, 1 at two standard deviations below it.
+     */
     fun buildFromCache(
         hrNowBpm: Int,
         rhrRestingBpm: Int,
         sleepDebtMinutes: Int,
-        hrvRmssd: Double,
+        hrvDepression: Double = 0.0,
         wCyclePhase: CyclePhase? = null,
     ): ThermalBeliefDigest =
         build(
@@ -114,7 +116,7 @@ internal object ThermalBeliefEngine {
             hrNowBpm = hrNowBpm,
             rhrRestingBpm = rhrRestingBpm,
             sleepDebtMinutes = sleepDebtMinutes,
-            hrvRmssd = hrvRmssd,
+            hrvDepression = hrvDepression,
             wCyclePhase = wCyclePhase,
         )
 

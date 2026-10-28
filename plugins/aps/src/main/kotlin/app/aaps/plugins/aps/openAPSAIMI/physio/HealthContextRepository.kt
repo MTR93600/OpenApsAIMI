@@ -40,6 +40,9 @@ class HealthContextRepository @Inject constructor(
     private val aggregator: PhysioAggregator,
     private val unifiedProvider: app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR, // 🚀 NEW INJECTION
     private val persistenceLayer: PersistenceLayer,
+    // Reads the person's own rolling HRV baseline, so "low HRV" means low for them and not below a
+    // fixed number. See HrvDepression.
+    private val baselineModel: AIMIPhysioBaselineModelMTR,
     private val aapsLogger: AAPSLogger
 ) {
 
@@ -137,6 +140,8 @@ class HealthContextRepository @Inject constructor(
             warmupHcPending -> lastSnapshot.hrvRmssd
             else -> 0.0
         }
+        val hrvBaseline = baselineModel.getCurrentBaseline().hrvRMSSD
+        val hrvDepression = HrvDepression.of(hrv, hrvBaseline)
 
         val rhr = when {
             rhrList.isNotEmpty() -> rhrList.minByOrNull { it.bpm }?.bpm ?: 60
@@ -174,7 +179,7 @@ class HealthContextRepository @Inject constructor(
             hrNowBpm = currentHR,
             rhrRestingBpm = rhr,
             sleepDebtMinutes = sleepDebt,
-            hrvRmssd = hrv,
+            hrvDepression = hrvDepression,
             wCyclePhase = null,
         )
         if (thermalBelief.hasUsableData()) {
@@ -211,6 +216,10 @@ class HealthContextRepository @Inject constructor(
             hrAvg15m = currentHR, // Approximation if simple point
             hrMeasuredAtMs = if (currentHR > 0) System.currentTimeMillis() else 0L,
             hrvRmssd = hrv,
+            hrvDepression = hrvDepression,
+            hrvBaselineMean = hrvBaseline.mean,
+            hrvBaselineSd = hrvBaseline.stdDev,
+            hrvBaselineSamples = hrvBaseline.sampleCount,
             rhrResting = rhr,
             sleepDebtMinutes = sleepDebt,
             sleepEfficiency = sleepEfficiency,

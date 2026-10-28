@@ -1056,7 +1056,10 @@
     <string name="original_file_missing">The original file does not exist.</string>
     <string name="file_too_short">The file contains 200 lines or fewer, no deletion performed.</string>
     <string name="last_200_deleted">The last 200 lines have been deleted. The original file was saved as \'%1$s\'.</string>
-    <string name="reason_data_removed">The values for date %1$s have been deleted because TIR1DAYIR is lower than 85%%.</string>
+    <string name="reason_data_removed" comment="%1$s=the day, as the phone writes a date. Example: 25/10/2026">The rows of %1$s were moved out of the training file into oapsaimiML2_records_excluded.csv, because the time in range of that day was under 65%%.</string>
+    <string name="reason_delete_note_done" comment="%1$s=the day, as the phone writes a date. Example: 25/10/2026. %2$d=number of rows">Delete note: %2$d rows of %1$s were moved out of the training file into oapsaimiML2_records_excluded.csv.</string>
+    <string name="reason_delete_note_nothing" comment="%1$s=the day, as the phone writes a date. Example: 25/10/2026">Delete note: the training file has no rows of %1$s. Nothing was removed.</string>
+    <string name="reason_delete_note_unreadable" comment="%1$s=the note text as the user wrote it. Example: delete 2026-10-25">Delete note \"%1$s\": the day cannot be read. Write \"delete\" for yesterday, or \"delete dd/mm/yyyy\". Nothing was removed.</string>
     <string name="reason_deletion_time_restricted">The deletion can only be executed between 00:05 and 00:10.</string>
     <string name="reason_no_deletion_needed">No deletion needed: tir1DAYIR is greater than or equal to 85%.</string>
     <string name="safety_sport_smb_zero">🏃‍♂️ Safety sport → SMB=0</string>

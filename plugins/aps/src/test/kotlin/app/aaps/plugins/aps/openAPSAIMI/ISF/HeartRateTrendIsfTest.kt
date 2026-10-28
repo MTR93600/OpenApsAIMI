@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test
 class HeartRateTrendIsfTest {
 
     private fun multiplier(
-        steps10m: Int = 0,
+        steps10m: Int? = 0,
         avgBpm10: Double = 100.0,
         avgBpm60: Double = 70.0,
         baselineIsReal: Boolean = true,
@@ -39,6 +39,21 @@ class HeartRateTrendIsfTest {
     @Test
     fun walkingStopsIt() {
         assertThat(multiplier(steps10m = HeartRateTrendIsf.MAX_STEPS_10M)).isEqualTo(1.0)
+    }
+
+    @Test
+    fun unknownStepsStopIt() {
+        // Not the same as zero steps. "The person is still" is a premise of this gesture, and with
+        // no step data we cannot claim it. Before, the caller passed 0 for unknown, so a phone with
+        // no step source read as perfect stillness and this path strengthened the dose.
+        assertThat(multiplier(steps10m = null)).isEqualTo(1.0)
+    }
+
+    @Test
+    fun unknownStepsStopItEvenWhenEveryOtherConditionHolds() {
+        // The defaults are the firing case, so only the null makes the difference here.
+        assertThat(multiplier(steps10m = 0)).isEqualTo(HeartRateTrendIsf.ISF_MULTIPLIER)
+        assertThat(multiplier(steps10m = null)).isEqualTo(1.0)
     }
 
     @Test

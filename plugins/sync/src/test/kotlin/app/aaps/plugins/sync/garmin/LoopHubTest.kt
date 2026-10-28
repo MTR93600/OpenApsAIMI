@@ -28,11 +28,14 @@ import app.aaps.core.interfaces.logging.UserEntryLogger
 import app.aaps.core.interfaces.profile.EffectiveProfile
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
+import app.aaps.core.interfaces.pump.DetailedBolusInfo
+import app.aaps.core.interfaces.pump.PumpEnactResult
 import app.aaps.core.interfaces.queue.CommandQueue
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.UnitDoubleKey
+import app.aaps.core.objects.constraints.ConstraintObject
 import app.aaps.shared.tests.TestBase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -42,6 +45,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -49,6 +53,8 @@ import org.mockito.ArgumentMatchers.anyString
 import org.mockito.ArgumentMatchers.isNull
 import org.mockito.Mock
 import org.mockito.kotlin.any
+import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.atLeast
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -380,5 +386,54 @@ class LoopHubTest : TestBase() {
         val t0 = 1_700_000_000_000L
         val events = listOf(note("coffee", t0, 90), note("bfast", t0, 60))
         assertEquals("BFAST", loopHub.detectActiveTherapyMode(events, t0 + 10 * 60_000L))
+    }
+
+    @Test
+    fun postBolus_limitedByConstraintsAndSentToQueue() = runTest {
+        whenever(constraints.applyBolusConstraints(any())).thenReturn(ConstraintObject(1.5, aapsLogger))
+        val result = mock<PumpEnactResult> { on { success } doReturn true }
+        whenever(commandQueue.bolus(any())).thenReturn(result)
+        var failure: String? = null
+
+        assertEquals(1.5, loopHub.postBolus(3.0) { failure = it }, 1e-9)
+
+        verify(constraints).applyBolusConstraints(any())
+        val captor = argumentCaptor<DetailedBolusInfo>()
+        verify(commandQueue).bolus(captor.capture())
+        assertEquals(1.5, captor.firstValue.insulin, 1e-9)
+        assertNull(failure)
+    }
+
+    @Test
+    fun postBolus_queueFailureIsReported() = runTest {
+        whenever(constraints.applyBolusConstraints(any())).thenReturn(ConstraintObject(1.0, aapsLogger))
+        val result = mock<PumpEnactResult> {
+            on { success } doReturn false
+            on { comment } doReturn "Loop is suspended"
+        }
+        whenever(commandQueue.bolus(any())).thenReturn(result)
+        var failure: String? = null
+
+        assertEquals(1.0, loopHub.postBolus(1.0) { failure = it }, 1e-9)
+
+        verify(constraints).applyBolusConstraints(any())
+        verify(commandQueue).bolus(any())
+        assertEquals("Loop is suspended", failure)
+    }
+
+    @Test
+    fun postBolus_zeroAfterConstraintsIsNotSent() {
+        whenever(constraints.applyBolusConstraints(any())).thenReturn(ConstraintObject(0.0, aapsLogger))
+
+        assertEquals(0.0, loopHub.postBolus(2.0) { }, 1e-9)
+
+        verify(constraints).applyBolusConstraints(any())
+    }
+
+    @Test
+    fun postBolus_invalidAmountIsNotSent() {
+        assertEquals(0.0, loopHub.postBolus(Double.NaN) { }, 1e-9)
+        assertEquals(0.0, loopHub.postBolus(-1.0) { }, 1e-9)
+        assertEquals(0.0, loopHub.postBolus(0.0) { }, 1e-9)
     }
 }

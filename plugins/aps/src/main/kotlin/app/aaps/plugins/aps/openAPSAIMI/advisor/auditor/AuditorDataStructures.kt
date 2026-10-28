@@ -326,25 +326,33 @@ data class History(
 /**
  * C) Stats: 7-day summary (compressed)
  */
+/**
+ * The seven-day picture sent to the auditor.
+ *
+ * Every field is `null` when it could not be measured, and it is written to JSON as `null`. A zero
+ * here would read as a real measurement (no time below range, no variability), which is the
+ * opposite of "we do not know", and the auditor reasons on exactly these numbers.
+ */
 data class Stats7d(
-    val tir: Double,
-    val hypoPct: Double,
-    val hyperPct: Double,
-    val meanBG: Double,
-    val cv: Double,
-    val tdd7dAvg: Double,
-    val basalPct: Double,
-    val bolusPct: Double
+    val tir: Double?,
+    val hypoPct: Double?,
+    val hyperPct: Double?,
+    val meanBG: Double?,
+    val cv: Double?,
+    val tdd7dAvg: Double?,
+    val basalPct: Double?,
+    val bolusPct: Double?
 ) {
     fun toJSON(): JSONObject = JSONObject().apply {
-        put("tir", tir)
-        put("hypoPct", hypoPct)
-        put("hyperPct", hyperPct)
-        put("meanBG", meanBG)
-        put("cv", cv)
-        put("tdd7dAvg", tdd7dAvg)
-        put("basalPct", basalPct)
-        put("bolusPct", bolusPct)
+        // `put(name, null)` removes the key in org.json, so a missing value is written as JSON null.
+        put("tir", tir ?: JSONObject.NULL)
+        put("hypoPct", hypoPct ?: JSONObject.NULL)
+        put("hyperPct", hyperPct ?: JSONObject.NULL)
+        put("meanBG", meanBG ?: JSONObject.NULL)
+        put("cv", cv ?: JSONObject.NULL)
+        put("tdd7dAvg", tdd7dAvg ?: JSONObject.NULL)
+        put("basalPct", basalPct ?: JSONObject.NULL)
+        put("bolusPct", bolusPct ?: JSONObject.NULL)
     }
 }
 

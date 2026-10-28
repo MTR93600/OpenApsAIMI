@@ -110,6 +110,12 @@
     <string name="garmin_description">Connection to Garmin device (Fenix, Edge, …)</string>
     <string name="garmin_local_http_server_port">Local HTTP server port</string>
     <string name="garmin_local_http_server">Local HTTP server</string>
+    <string name="garmin_bolus_not_on_client" comment="%1$s=insulin with unit, example: 1.50 U. A client is a phone that follows and controls the main AAPS phone (the master).">The Garmin watch asked for a bolus of %1$s. This phone is a client, so no bolus was given. Give it in AAPS.</string>
+    <string name="garmin_bolus_needs_key" comment="%1$s=insulin with unit, example: 1.50 U.">The Garmin watch asked for a bolus of %1$s. No bolus was given: a bolus from the watch needs a request key in the Garmin settings.</string>
+    <string name="garmin_bolus_refused_by_limits" comment="%1$s=insulin with unit, example: 1.50 U.">The Garmin watch asked for a bolus of %1$s. No bolus was given: the bolus limits do not allow it now.</string>
+    <string name="garmin_bolus_limited" comment="%1$s=insulin asked for, %2$s=insulin given, both with unit. Example: asked 12.00 U, given 10.00 U.">The Garmin watch asked for a bolus of %1$s. It was limited to the maximum bolus: %2$s.</string>
+    <string name="garmin_bolus_too_soon" comment="%1$s=insulin with unit, example: 1.50 U.">The Garmin watch asked for a bolus of %1$s less than one minute after the last one. No bolus was given, so a repeated request cannot give it twice. Ask again in a minute if you really want it.</string>
+    <string name="garmin_bolus_not_delivered" comment="%1$s=insulin with unit, example: 1.50 U. %2$s=the reason given by AAPS, for example: Loop is suspended.">The Garmin watch asked for a bolus of %1$s. It was not given: %2$s</string>
 
     <!--    Wear-->
     <string name="wear_shortname">WEAR</string>

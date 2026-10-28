@@ -3,11 +3,11 @@ package app.aaps.plugins.aps.openAPSAIMI
 import app.aaps.core.data.model.TE
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.plugins.aps.openAPSAIMI.basal.CoffeeRiseMode
+import app.aaps.plugins.aps.openAPSAIMI.ml.AimiCorpusPruner
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
-import java.util.regex.Pattern
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -43,8 +43,19 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
     var fastingTime = false
     var stopTime = false
     var calibrationTime = false
-    var deleteEventDate: String? = null
-    var deleteTime = false
+    /**
+     * The newest active note that asks to remove rows from the training corpus, or `null`.
+     *
+     * The note must START with "delete" (any case, see [AimiCorpusPruner.isDeleteNote]) and still be
+     * inside its duration. "delete" alone means yesterday; "delete 25/10/2026" names the day
+     * (see [AimiCorpusPruner.deleteNoteDay]). The caller acts once per note, keyed on
+     * [CorpusDeleteNote.timestamp]; this class only reports the note.
+     */
+    var deleteNote: CorpusDeleteNote? = null
+
+    /** True while a corpus delete note is active. See [deleteNote]. */
+    val deleteTime: Boolean
+        get() = deleteNote != null
     private var latestNoteEvents: List<TE> = emptyList()
 
     fun updateStatesBasedOnTherapyEvents(forceRefresh: Boolean = false) {
@@ -96,7 +107,6 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
         val noteEvents = events.filter { it.type == TE.Type.NOTE }
         val stop = findActivestopEvents(events, now)
         if (!stop) {
-            val deleteNote = noteEvents.find { it.note?.contains("delete", ignoreCase = true) == true }?.note
             return TherapySnapshot(
                 sleepTime = findActiveSleepEvents(events, now),
                 sportTime = findActiveSportEvents(events, now),
@@ -112,8 +122,7 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
                 fastingTime = findActiveFastingEvents(events, now),
                 stopTime = false,
                 calibrationTime = isCalibrationEvent(events, now),
-                deleteTime = findActivedeleteEvents(events, now),
-                deleteEventDate = extractDateFromDeleteEvent(deleteNote),
+                deleteNote = findActiveDeleteNote(events, now),
                 latestNoteEvents = noteEvents,
                 generatedAtMs = now
             )
@@ -135,8 +144,7 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
             fastingTime = false,
             stopTime = true,
             calibrationTime = false,
-            deleteTime = false,
-            deleteEventDate = null,
+            deleteNote = null,
             latestNoteEvents = noteEvents,
             generatedAtMs = now
         )
@@ -174,8 +182,7 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
         fastingTime = snapshot.fastingTime
         stopTime = snapshot.stopTime
         calibrationTime = snapshot.calibrationTime
-        deleteTime = snapshot.deleteTime
-        deleteEventDate = snapshot.deleteEventDate
+        deleteNote = snapshot.deleteNote
         latestNoteEvents = snapshot.latestNoteEvents
     }
 
@@ -192,7 +199,7 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
         lunchTime = false
         dinnerTime = false
         fastingTime = false
-        deleteTime = false
+        deleteNote = null
     }
 
     private fun findActiveSleepEvents(events: List<TE>, now: Long): Boolean =
@@ -206,16 +213,6 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
         val cutoff = now - TimeUnit.MINUTES.toMillis(15)
         return events.filter { it.type == TE.Type.FINGER_STICK_BG_VALUE && it.timestamp >= cutoff }
             .any { event -> now <= (event.timestamp + event.duration) }
-    }
-
-    private fun extractDateFromDeleteEvent(note: String?): String? {
-        val deletePattern = Pattern.compile("delete (\\d{2}/\\d{2}/\\d{4})", Pattern.CASE_INSENSITIVE)
-        val matcher = deletePattern.matcher(note ?: "")
-        return if (matcher.find()) {
-            matcher.group(1)
-        } else {
-            null
-        }
     }
 
     private fun findActiveSportEvents(events: List<TE>, now: Long): Boolean =
@@ -298,12 +295,11 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
                     now <= (event.timestamp + event.duration)
             }
 
-    private fun findActivedeleteEvents(events: List<TE>, now: Long): Boolean =
+    private fun findActiveDeleteNote(events: List<TE>, now: Long): CorpusDeleteNote? =
         events.filter { it.type == TE.Type.NOTE }
-            .any { event ->
-                event.note?.contains("delete", ignoreCase = true) == true &&
-                    now <= (event.timestamp + event.duration)
-            }
+            .filter { event -> AimiCorpusPruner.isDeleteNote(event.note) && now <= (event.timestamp + event.duration) }
+            .maxByOrNull { it.timestamp }
+            ?.let { event -> CorpusDeleteNote(timestamp = event.timestamp, note = event.note.orEmpty().trim()) }
 
     private fun findActiveDinnerEvents(events: List<TE>, now: Long): Boolean =
         events.filter { it.type == TE.Type.NOTE }
@@ -400,8 +396,7 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
         val fastingTime: Boolean,
         val stopTime: Boolean,
         val calibrationTime: Boolean,
-        val deleteTime: Boolean,
-        val deleteEventDate: String?,
+        val deleteNote: CorpusDeleteNote?,
         val latestNoteEvents: List<TE>,
         val generatedAtMs: Long
     )
@@ -428,3 +423,12 @@ class Therapy(private val persistenceLayer: PersistenceLayer) {
         private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     }
 }
+
+/**
+ * A therapy note that asks to remove rows from the training corpus.
+ *
+ * @property timestamp when the note was written. It is the key that makes the removal happen
+ *   once per note.
+ * @property note the note text, trimmed, for example "delete" or "delete 25/10/2026".
+ */
+data class CorpusDeleteNote(val timestamp: Long, val note: String)

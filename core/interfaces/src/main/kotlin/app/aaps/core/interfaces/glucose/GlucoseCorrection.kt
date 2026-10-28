@@ -17,8 +17,9 @@ interface GlucoseCorrection {
      * Corrected value in mg/dL for a reading at [timestamp] whose stored value is [storedMgdl].
      *
      * The corrected series is 5 minutes apart while a sensor may speak every minute, so the value in
-     * between two points is interpolated. The newest reading gets the value of the newest corrected
-     * point, which is exactly the big number on the dashboard.
+     * between two points is interpolated. A reading newer than the newest corrected point keeps its own
+     * stored value plus that point's offset (corrected minus stored), and only while that point is at
+     * most 5 minutes old; after that the stored value is kept. A NaN or infinite value never passes.
      *
      * The answer is a **whole mg/dL**, like the stored reading and like the screen, so a caller can
      * hand it straight to Nightscout or to an alarm without rounding again.

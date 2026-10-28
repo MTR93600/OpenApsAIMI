@@ -66,7 +66,11 @@ object HeartRateTrendIsf {
      *
      * Pure: it reads no clock and keeps no state.
      *
-     * @param steps10m steps in the last ten minutes.
+     * @param steps10m steps in the last ten minutes, or null when there is no step data.
+     *   Null is not zero here. "The person is still" is a premise of the whole reading, and with no
+     *   data we cannot claim it, so the gesture stands down - the same rule as [baselineIsReal].
+     *   Before, the caller passed 0 for "unknown", which read as perfect stillness and let this
+     *   gesture strengthen a dose for someone who might have been walking.
      * @param avgBpm10 the ten-minute mean heart rate.
      * @param avgBpm60 the one-hour mean heart rate, used as the baseline.
      * @param baselineIsReal false when [avgBpm60] is a substitute rather than a measurement.
@@ -74,7 +78,7 @@ object HeartRateTrendIsf {
      * @param deltaMgdl5m glucose change over the last 5 minutes.
      */
     fun multiplier(
-        steps10m: Int,
+        steps10m: Int?,
         avgBpm10: Double,
         avgBpm60: Double,
         baselineIsReal: Boolean,
@@ -82,6 +86,7 @@ object HeartRateTrendIsf {
         deltaMgdl5m: Double,
     ): Double {
         if (!baselineIsReal) return 1.0
+        if (steps10m == null) return 1.0
         if (!avgBpm10.isFinite() || !avgBpm60.isFinite() || !bgMgdl.isFinite() || !deltaMgdl5m.isFinite()) {
             return 1.0
         }

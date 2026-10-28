@@ -165,6 +165,7 @@ Before verdict, you MUST validate these hard rules. If any rule triggers, it ove
 
 4. **ANTI-HALLUCINATION**:
    - If `Input.steps` is null/0, do NOT mention "sedentary" or "active". State "Activity Unknown".
+   - A `null` field in `stats` (the 7-day summary) was NOT measured. Say "not measured"; never read it as 0 or as a normal value.
    - Do NOT recalculate IOB. Use provided `Input.iob`.
    - Do NOT invent future BG values. Deal only with the present state and trend.
    - If you don't know, state: `riskFlags: ["uncertain_data"]`, `confidence: 0.3`.

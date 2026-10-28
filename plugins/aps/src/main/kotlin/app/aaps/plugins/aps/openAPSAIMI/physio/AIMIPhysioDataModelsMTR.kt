@@ -592,7 +592,11 @@ class InflammationLatentEstimatorMTR {
         val autonomicScore = when {
             context.hrvDepressed && context.rhrElevated -> 0.9
             context.hrvDepressed || context.rhrElevated -> 0.6
-            snapshot.hrvRmssd in 1.0..22.0 -> 0.55
+            // Was `hrvRmssd in 1.0..22.0`, a fixed RMSSD band that a person with a naturally low
+            // RMSSD never left. hrvDepression says the same thing about the person instead of about
+            // the number. 0.5 is one sigma below their own mean, about where the old band sat for
+            // a typical adult.
+            snapshot.hrvDepression >= 0.5 -> 0.55
             else -> 0.15
         }
         add(0.35, autonomicScore, "autonomic_stress", context.hrvDepressed || context.rhrElevated)

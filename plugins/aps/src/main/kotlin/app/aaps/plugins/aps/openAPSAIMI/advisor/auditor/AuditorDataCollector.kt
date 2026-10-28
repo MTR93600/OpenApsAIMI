@@ -509,20 +509,24 @@ class AuditorDataCollector @Inject constructor(
         val tdd7d = try {
             tddCalculator.averageTDD(
                 tddCalculator.calculate(7L, allowMissingDays = true)
-            )?.data?.totalAmount ?: 0.0
+            )?.data?.totalAmount
         } catch (e: Exception) {
-            0.0
+            // A failed read is not a daily dose of zero.
+            null
         }
 
+        // Anything not measured stays null. These numbers reach the auditor, which reasons on them,
+        // so a stand-in would be read as a fact about this person. The four that used to be
+        // hardcoded (a mean of 100, a CV of 0 and a 50/50 basal split) were never measured at all.
         return Stats7d(
-            tir = tirStats?.let { it.inRangePct() } ?: 0.0,
-            hypoPct = tirStats?.let { it.belowPct() } ?: 0.0,
-            hyperPct = tirStats?.let { it.abovePct() } ?: 0.0,
-            meanBG = 100.0,  // TODO: calculate from glucose values when implementing buildHistory()
-            cv = 0.0,  // TODO: calculate CV from std dev when available
+            tir = tirStats?.inRangePct(),
+            hypoPct = tirStats?.belowPct(),
+            hyperPct = tirStats?.abovePct(),
+            meanBG = null,     // TODO: calculate from glucose values when implementing buildHistory()
+            cv = null,         // TODO: calculate CV from std dev when available
             tdd7dAvg = tdd7d,
-            basalPct = 50.0,  // TODO: calculate from actual basal vs bolus ratio
-            bolusPct = 50.0
+            basalPct = null,   // TODO: calculate from actual basal vs bolus ratio
+            bolusPct = null
         )
     }
 }

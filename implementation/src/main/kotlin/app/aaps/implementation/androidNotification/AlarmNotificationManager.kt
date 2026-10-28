@@ -150,8 +150,41 @@ class AlarmNotificationManager @Inject constructor(
      */
     private val activeSoundKeys: MutableSet<Int> = mutableSetOf()
 
+    /**
+     * Whether the channels were last created while AAPS held Do Not Disturb access.
+     *
+     * Android honours `setBypassDnd(true)` only when the channel is created (or created again) while
+     * the app holds that access. So the channels made before the user granted it ring in Do Not
+     * Disturb only after the next app start. [ensureChannels] creates them again once access is there.
+     * For an existing channel Android then applies the bypass only when the user has not edited the
+     * channel, and keeps sound and vibration as they were.
+     *
+     * Declared before `init`, so its initial value is set before `init` writes it.
+     */
+    @Volatile private var channelsHaveDndAccess = false
+
     init {
+        // Read before creating: if access comes at the same moment, the next post re-creates them.
+        val hasDndAccess = hasDndAccess()
         createChannels()
+        channelsHaveDndAccess = hasDndAccess
+    }
+
+    private fun hasDndAccess(): Boolean =
+        try {
+            mgr.isNotificationPolicyAccessGranted
+        } catch (_: Exception) {
+            false
+        }
+
+    /** Re-creates the channels once Do Not Disturb access is granted. Called before every alarm post. */
+    @Synchronized
+    private fun ensureChannels() {
+        if (!channelsHaveDndAccess && hasDndAccess()) {
+            createChannels()
+            channelsHaveDndAccess = true
+            aapsLogger.debug(LTag.NOTIFICATION, "Alarm channels created again after Do Not Disturb access was granted")
+        }
     }
 
     private fun createChannels() {
@@ -329,6 +362,7 @@ class AlarmNotificationManager @Inject constructor(
      * The activity is responsible for sound playback.
      */
     fun postFullScreenAlarm(status: String, title: String, @RawRes soundId: Int) {
+        ensureChannels()
         // Reached only from the background / off-main branches of UiInteraction.runAlarm.
         //
         // Screen-wake + full-screen ErrorActivity launch no longer rely on USE_FULL_SCREEN_INTENT
@@ -464,6 +498,7 @@ class AlarmNotificationManager @Inject constructor(
         urgent: Boolean,
         alarmAction: AlarmAction? = null
     ) {
+        ensureChannels()
         val builder = NotificationCompat.Builder(context, CHANNEL_FULL_SCREEN_SILENT)
             .setSmallIcon(iconsProvider.getNotificationIcon())
             .setLargeIcon(rh.decodeResource(iconsProvider.getIcon()))
@@ -525,6 +560,7 @@ class AlarmNotificationManager @Inject constructor(
         /** Player owns the sound (ramp or melody): post on the silent [CHANNEL_RAMP_BYPASS] (vibration only). */
         rampMode: Boolean = false,
     ) {
+        ensureChannels()
         val channelId = if (rampMode) CHANNEL_RAMP_BYPASS else channelIdForSound(soundId, overrideDnd = true)
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(iconsProvider.getNotificationIcon())

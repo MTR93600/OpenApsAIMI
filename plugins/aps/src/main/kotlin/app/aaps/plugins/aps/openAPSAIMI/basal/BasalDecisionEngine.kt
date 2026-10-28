@@ -84,7 +84,8 @@ class BasalDecisionEngine @Inject constructor(
         val highCarbRuntimeMin: Int,
         val timenow: Int,
         val sixAmHour: Int,
-        val recentSteps5Minutes: Int,
+        /** Steps in the last 5 minutes. `null` means unknown: no step-driven branch may fire on it. */
+        val recentSteps5Minutes: Int?,
         val nightMode: Boolean,
         val modesCondition: Boolean,
         val autodrive: Boolean,
@@ -438,13 +439,13 @@ class BasalDecisionEngine @Inject constructor(
 
         if (chosenRate == null) {
             if ((input.timenow in 11..13 || input.timenow in 18..21) &&
-                input.iob < 0.8 && input.recentSteps5Minutes < 100 &&
+                input.iob < 0.8 && input.recentSteps5Minutes != null && input.recentSteps5Minutes < 100 &&
                 input.combinedDelta > -1 && input.slopeFromMinDeviation > 0.3 &&
                 input.bgAcceleration > 0.0
             ) {
                 chosenRate = input.profileCurrentBasal * 1.5
                 rT.reason.append(context.getString(R.string.calm_meal_and_timing))
-            } else if (input.timenow > input.sixAmHour && input.recentSteps5Minutes > 100) {
+            } else if (input.timenow > input.sixAmHour && input.recentSteps5Minutes != null && input.recentSteps5Minutes > 100) {
                 chosenRate = input.profileCurrentBasal * 0.5
                 rT.reason.append("Morning activity: 50%")
             } else if (input.timenow <= input.sixAmHour && input.delta > 0 && input.bgAcceleration > 0.0) {

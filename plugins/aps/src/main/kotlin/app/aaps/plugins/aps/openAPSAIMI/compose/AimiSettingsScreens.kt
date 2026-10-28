@@ -591,6 +591,7 @@ internal object AimiSettingsScreens {
             kind = AimiSettingsSectionKind.FIELDS,
             keys = listOf(
                 BooleanKey.AimiPhysioLLMAnalysisEnable,
+                BooleanKey.AimiHrvBaselinePerNight,
                 // AimiPhysioLLMProvider is NOT here: no `add(...)` in `aimi_compose_physio` shows
                 // it today. It stays in `AimiSettingsManifest.REACHABILITY_DEBT`.
                 BooleanKey.AimiPhysioDebugLogs,

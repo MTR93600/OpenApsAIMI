@@ -5,9 +5,13 @@ import androidx.annotation.VisibleForTesting
 import app.aaps.core.data.model.GV
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.plugin.PluginType
+import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.notifications.NotificationId
+import app.aaps.core.interfaces.notifications.NotificationLevel
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.PluginBaseWithPreferences
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.ResourceHelper
@@ -15,6 +19,7 @@ import app.aaps.core.interfaces.rx.collectResilient
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.icons.IcPluginGarmin
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
+import app.aaps.core.ui.R as CoreUiR
 import app.aaps.plugins.sync.R
 import app.aaps.plugins.sync.garmin.keys.GarminBooleanKey
 import app.aaps.plugins.sync.garmin.keys.GarminIntKey
@@ -62,7 +67,9 @@ class GarminPlugin @Inject constructor(
     private val sp: SP,
     private val context: Context,
     private val loopHub: LoopHub,
-    private val persistenceLayer: PersistenceLayer
+    private val persistenceLayer: PersistenceLayer,
+    private val config: Config,
+    private val notificationManager: NotificationManager
 ) : PluginBaseWithPreferences(
     pluginDescription = PluginDescription()
         .mainType(PluginType.SYNC)
@@ -105,6 +112,21 @@ class GarminPlugin @Inject constructor(
         /** FCL companion temporary target (mg/dL) — ends FCL meal basal with the TT. */
         private const val FCL_TEMP_TARGET_MGDL = 80.0
         private const val FCL_TEMP_TARGET_DURATION_MIN = 30
+
+        /** Answer to the watch when a bolus is not given. */
+        @VisibleForTesting
+        const val BOLUS_REFUSED_JSON = "{\"ok\":false}"
+
+        /** A new watch bolus is refused this long after the last one: long enough to stop a retry. */
+        @VisibleForTesting
+        const val BOLUS_REPEAT_BLOCK_MS = 60_000L
+
+        /**
+         * Notification used when a watch bolus is refused or limited.
+         * There is no Garmin specific id in [NotificationId] yet, so the bolus failure id is used,
+         * with a lower level (no alarm sound): see [refuseBolus].
+         */
+        private val GARMIN_BOLUS_NOTIFICATION = NotificationId.GARMIN_BOLUS
     }
 
     @VisibleForTesting
@@ -737,10 +759,58 @@ class GarminPlugin @Inject constructor(
     }
 
     // mod Post bolus and temp targets
-    private fun onPostBolus(uri: URI): CharSequence {
+    /**
+     * A bolus asked for by the watch (`bolus` in U).
+     *
+     * The local HTTP server has no other protection than the request key, and any app on the phone can
+     * reach it. So a bolus is refused unless a request key is set in the Garmin settings, and it is
+     * always refused on a client, where it would never reach the pump. A repeat within
+     * [BOLUS_REPEAT_BLOCK_MS] is refused. The amount is limited by the max bolus, like every other
+     * bolus. The watch cannot show why a bolus was refused or limited, so the phone says it with a
+     * notification.
+     */
+    @VisibleForTesting
+    fun onPostBolus(uri: URI): CharSequence {
         val bolus: Double = getQueryParameter(uri, "bolus", 0.0)
-        loopHub.postBolus(bolus)
-        return ""
+        if (!bolus.isFinite() || bolus <= 0.0) return BOLUS_REFUSED_JSON
+        val asked = rh.gs(CoreUiR.string.format_insulin_units, bolus)
+        if (config.AAPSCLIENT) {
+            refuseBolus(rh.gs(R.string.garmin_bolus_not_on_client, asked))
+            return BOLUS_REFUSED_JSON
+        }
+        if (garminAapsKey.isEmpty()) {
+            refuseBolus(rh.gs(R.string.garmin_bolus_needs_key, asked))
+            return BOLUS_REFUSED_JSON
+        }
+        // A watch that retries, or a repeated request, must not give the bolus twice. Each bolus is
+        // limited on its own, so without this nothing limits the total.
+        val now = clock.millis()
+        val last = lastWatchBolusMs
+        if (last != null && now - last in 0 until BOLUS_REPEAT_BLOCK_MS) {
+            refuseBolus(rh.gs(R.string.garmin_bolus_too_soon, asked))
+            return BOLUS_REFUSED_JSON
+        }
+        val given = loopHub.postBolus(bolus) { reason ->
+            refuseBolus(rh.gs(R.string.garmin_bolus_not_delivered, asked, reason))
+        }
+        if (given <= 0.0) {
+            refuseBolus(rh.gs(R.string.garmin_bolus_refused_by_limits, asked))
+            return BOLUS_REFUSED_JSON
+        }
+        lastWatchBolusMs = now
+        if (given < bolus) {
+            refuseBolus(rh.gs(R.string.garmin_bolus_limited, asked, rh.gs(CoreUiR.string.format_insulin_units, given)))
+        }
+        return "{\"ok\":true,\"bolus\":$given}"
+    }
+
+    /** When the last watch bolus was sent on, see [BOLUS_REPEAT_BLOCK_MS]. */
+    @Volatile
+    private var lastWatchBolusMs: Long? = null
+
+    private fun refuseBolus(text: String) {
+        aapsLogger.warn(LTag.GARMIN, text)
+        notificationManager.post(id = GARMIN_BOLUS_NOTIFICATION, text = text, level = NotificationLevel.IMPORTANT, validMinutes = 0)
     }
 
     /** Handles temp targets from the device. */

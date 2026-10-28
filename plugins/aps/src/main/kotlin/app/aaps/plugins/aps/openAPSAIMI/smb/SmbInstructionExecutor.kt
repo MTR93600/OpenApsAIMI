@@ -50,7 +50,8 @@ object SmbInstructionExecutor {
         val highCarbTime: Boolean,
         val snackTime: Boolean,
         val sleepTime: Boolean,
-        val recentSteps5Minutes: Int,
+        /** Steps in the last 5 minutes. `null` means unknown: the DIA is then not changed for steps. */
+        val recentSteps5Minutes: Int?,
         val recentSteps10Minutes: Int,
         val recentSteps30Minutes: Int,
         val recentSteps60Minutes: Int,
@@ -93,7 +94,7 @@ object SmbInstructionExecutor {
     data class Hooks(
         val refineSmb: (Float, Float, Float, Float, OapsProfileAimi) -> Float,
         // ❌ adjustFactors REMOVED: UnifiedReactivityLearner replaces time-based factors
-        val calculateAdjustedDia: (Float, Int, Int, Float, Float, Float, Double) -> Double,
+        val calculateAdjustedDia: (Float, Int, Int?, Float, Float, Float, Double) -> Double,
         val costFunction: (Double, Double, Double, Int, Double, Double) -> Double,
         val applySafety: (MealData, Float, Double?, StringBuilder?, PkPdRuntime?, Boolean, Boolean, Boolean) -> Float,
         val runtimeToMinutes: (Long?) -> Int,

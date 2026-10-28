@@ -534,4 +534,20 @@ class LoopPluginTest : TestBaseWithProfile() {
 
 // endregion
 
+    /**
+     * A refused SMB inside a fallback run must not schedule another fallback.
+     *
+     * AIMI's meal prebolus owners can ask for an SMB even in a fallback run. While the refusal holds,
+     * each fallback would schedule the next one, a loop run every 1-2 s.
+     */
+    @Test
+    fun `a refused SMB in a fallback run does not schedule another fallback`() {
+        assertThat(loopPlugin.onSmbNotEnacted(allowNotification = false, tempBasalFallback = true)).isFalse()
+    }
+
+    /** In a normal run the fallback is still scheduled, so the temp basal gets its chance. */
+    @Test
+    fun `a refused SMB in a normal run schedules the fallback`() {
+        assertThat(loopPlugin.onSmbNotEnacted(allowNotification = false, tempBasalFallback = false)).isTrue()
+    }
 }

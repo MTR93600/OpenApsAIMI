@@ -62,6 +62,13 @@ class AIMIPhysioManagerMTR @Inject constructor(
     }
     
     private val isRunning = AtomicBoolean(false)
+
+    /**
+     * Held for the length of one pipeline run. See [performUpdate].
+     *
+     * [isRunning] only guards [start]. It does not stop two runs from overlapping.
+     */
+    private val pipelineGate = SingleFlightGate()
     private var lastUpdateTime: Long = 0
     private var previousFeatures: PhysioFeaturesMTR? = null
     
@@ -276,7 +283,7 @@ class AIMIPhysioManagerMTR @Inject constructor(
      */
     suspend fun performUpdate(daysBack: Int = 7, runLLM: Boolean = false): Boolean {
         return try {
-            runPhysioPipeline(daysBack, runLLM)
+            runPhysioPipelineOnce(daysBack, runLLM)
         } finally {
             // Restores pre–Mar 23 behavior: workers had fetchSnapshot(); pipeline alone never updated getLastSnapshot().
             try {
@@ -284,6 +291,30 @@ class AIMIPhysioManagerMTR @Inject constructor(
             } catch (e: Exception) {
                 aapsLogger.warn(LTag.APS, "[$TAG] Merged health snapshot refresh failed: ${e.message}")
             }
+        }
+    }
+
+    /**
+     * Runs the pipeline, unless a run is already going on.
+     *
+     * Step 3 feeds [AIMIPhysioBaselineModelMTR], whose per-run history is keyed by the time of the
+     * run. Two overlapping runs therefore add two points for one HRV reading, and the mean and the
+     * spread they give are what the HRV z-score and [HrvDepression] read - which reaches a dose.
+     *
+     * Five paths reach a run (the realtime, metabolic and daily workers, the bootstrap worker and
+     * the watchdog), and the 15-minute and 30-minute workers line up every half hour. A skipped call
+     * answers `false`: the next scheduled run comes soon, and a skipped duplicate is better than a
+     * sample counted twice.
+     */
+    private suspend fun runPhysioPipelineOnce(daysBack: Int, runLLM: Boolean): Boolean {
+        if (!pipelineGate.tryEnter()) {
+            aapsLogger.info(LTag.APS, "[$TAG] ⏭️ Pipeline already running - this call is skipped")
+            return false
+        }
+        return try {
+            runPhysioPipeline(daysBack, runLLM)
+        } finally {
+            pipelineGate.exit()
         }
     }
 
@@ -324,7 +355,9 @@ class AIMIPhysioManagerMTR @Inject constructor(
             extractMs = System.currentTimeMillis() - t1
 
             // Step 3: Update baseline
-            val baseline = baselineModel.updateBaseline(features)
+            // The raw HRV readings go in too: with the per-night switch on, the baseline is rebuilt
+            // from them and not from the run.
+            val baseline = baselineModel.updateBaseline(features, rawData.hrv, isHrvBaselinePerNight())
 
             // Step 4: Analyze context
             val t2 = System.currentTimeMillis()
@@ -392,6 +425,20 @@ class AIMIPhysioManagerMTR @Inject constructor(
     private fun isLLMEnabled(): Boolean {
         return sp.getBoolean(BooleanKey.AimiPhysioLLMAnalysisEnable.key, false)
     }
+
+    /**
+     * Whether the HRV baseline uses one value per night instead of one per run. **Off by default.**
+     *
+     * Off, the baseline keeps one point per run and caps at 28 of them. The pipeline runs every
+     * 15 minutes, so that window is seven hours, not seven days. On, a closed night gives one value,
+     * its median, and the window really is seven days.
+     *
+     * It is a switch and not a straight fix because turning it on changes the mean and the spread,
+     * which changes the HRV z-score and [HrvDepression], which reach a dose. It must be turned on
+     * on purpose, by someone who watches the result.
+     */
+    private fun isHrvBaselinePerNight(): Boolean =
+        sp.getBoolean(BooleanKey.AimiHrvBaselinePerNight.key, BooleanKey.AimiHrvBaselinePerNight.defaultValue)
     
     // ═══════════════════════════════════════════════════════════════════════
     // STATUS & DEBUGGING

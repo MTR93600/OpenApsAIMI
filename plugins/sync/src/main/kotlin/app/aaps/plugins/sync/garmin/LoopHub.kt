@@ -90,8 +90,16 @@ interface LoopHub {
     fun postCarbs(carbohydrates: Int)
 
     // mod Bolus and temp target
-    /** Triggers a bolus. */
-    fun postBolus(bolus: Double)
+    /**
+     * Gives a bolus asked for by the watch, limited by the bolus constraints (max bolus) like any
+     * other bolus. Returns the amount sent to the pump after that limit, 0.0 when nothing is given.
+     * The caller must refuse the request on a client and when no request key is set.
+     *
+     * The pump command is sent later, so a returned amount means "sent on", not "delivered".
+     * [onNotDelivered] gets the reason when the command queue refuses or fails it after that, so the
+     * caller can tell the user.
+     */
+    fun postBolus(bolus: Double, onNotDelivered: (String) -> Unit): Double
 
     /** Stores or cancels a temptarget. */
     fun postTempTarget(target: Double, duration: Int)
