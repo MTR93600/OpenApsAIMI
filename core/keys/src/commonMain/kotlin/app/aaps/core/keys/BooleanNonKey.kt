@@ -45,4 +45,13 @@ enum class BooleanNonKey(
     // with a key on each connection, which is also how a phone paired from a QR code says hello at all. Belongs to the
     // pairing.
     NsClientControlSecretReplaced("nsclient_control_secret_replaced", false, exportable = false),
+
+    /**
+     * One-shot: on first launch after the Glass top-grid pills (pump/cannula/battery/sensor/loop/activity)
+     * became personalizable, merges their defaults into any already-persisted [StringNonKey.GlassSelectedPills]
+     * value. Installs that customized their pill selection before would otherwise never see the new pills
+     * (their raw value predates those IDs). No-op for a fresh install (its value already has them from the
+     * class default). The Glass home runs this migration with `withTopGridDefaultsMerged`.
+     */
+    GlassTopGridPillsMigrated("glass_top_grid_pills_migrated", false, exportable = false),
 }

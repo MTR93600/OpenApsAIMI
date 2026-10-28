@@ -126,6 +126,28 @@ sealed class AppRoute(val route: String) {
         fun createRoute(siteType: app.aaps.core.data.model.TE.Type) = "siteLocationPicker/${siteType.ordinal}"
     }
 
+    // Glass dashboard information screens
+    data object GlassLoopDashboard : AppRoute("glass_loop_dashboard")
+    data object GlassSensorQuality : AppRoute("glass_sensor_quality")
+    data object GlassPumpDetail : AppRoute("glass_pump_detail")
+    data object GlassBatteryDetail : AppRoute("glass_battery_detail")
+
+    // Glass dashboard screens that start a treatment or change the loop
+    data object GlassInsulinDetail : AppRoute("glass_insulin_detail")
+    data object GlassCannulaDetail : AppRoute("glass_cannula_detail/{preselect}") {
+
+        fun createRoute(preselect: Int) = "glass_cannula_detail/$preselect"
+    }
+
+    data object GlassBasalDetail : AppRoute("glass_basal_detail")
+    data object GlassSensorInsertDetail : AppRoute("glass_sensor_insert_detail/{eventTypeOrdinal}") {
+
+        fun createRoute(eventTypeOrdinal: Int) = "glass_sensor_insert_detail/$eventTypeOrdinal"
+    }
+
+    data object GlassTargetDetail : AppRoute("glass_target_detail")
+    data object GlassLoopDetail : AppRoute("glass_loop_detail")
+
     data object FoodManagement : AppRoute("food_management")
     data object SiteRotationManagement : AppRoute("siteRotationManagement")
     data object SetupWizard : AppRoute("setup_wizard")

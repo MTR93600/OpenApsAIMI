@@ -121,10 +121,7 @@ fun RunningModeScreen(
             }
 
             // Loop Control Section
-            val showLoopSection = state.allowedNextModes.any {
-                it in listOf(RM.Mode.DISABLED_LOOP, RM.Mode.OPEN_LOOP, RM.Mode.CLOSED_LOOP, RM.Mode.CLOSED_LOOP_LGS)
-            }
-            if (showLoopSection) {
+            if (state.showLoopSection) {
                 LoopControlSection(
                     allowedModes = state.allowedNextModes,
                     onAction = { action ->
@@ -136,9 +133,7 @@ fun RunningModeScreen(
             }
 
             // Suspend Section
-            val showSuspendSection = state.allowedNextModes.contains(RM.Mode.SUSPENDED_BY_USER) ||
-                (state.allowedNextModes.contains(RM.Mode.RESUME) && state.currentMode == RM.Mode.SUSPENDED_BY_USER)
-            if (showSuspendSection) {
+            if (state.showSuspendSection) {
                 SuspendSection(
                     currentMode = state.currentMode,
                     allowedModes = state.allowedNextModes,
@@ -152,10 +147,7 @@ fun RunningModeScreen(
 
             // Pump Disconnect Section. Available on follower (AAPSCLIENT) too — the mode write
             // propagates via NS sync to the main phone whose reconciler enacts it on the pump.
-            val showPumpSection =
-                state.allowedNextModes.contains(RM.Mode.DISCONNECTED_PUMP) ||
-                    (state.allowedNextModes.contains(RM.Mode.RESUME) && state.currentMode == RM.Mode.DISCONNECTED_PUMP)
-            if (showPumpSection) {
+            if (state.showPumpSection) {
                 PumpDisconnectSection(
                     currentMode = state.currentMode,
                     allowedModes = state.allowedNextModes,
@@ -172,7 +164,23 @@ fun RunningModeScreen(
     }
 }
 
-private fun executeAction(viewModel: RunningModeManagementViewModel, action: PendingRunningModeAction) {
+/** Loop modes the user may switch to now. */
+internal val RunningModeManagementUiState.showLoopSection: Boolean
+    get() = allowedNextModes.any {
+        it in listOf(RM.Mode.DISABLED_LOOP, RM.Mode.OPEN_LOOP, RM.Mode.CLOSED_LOOP, RM.Mode.CLOSED_LOOP_LGS)
+    }
+
+/** Suspend, or resume a suspend. */
+internal val RunningModeManagementUiState.showSuspendSection: Boolean
+    get() = allowedNextModes.contains(RM.Mode.SUSPENDED_BY_USER) ||
+        (allowedNextModes.contains(RM.Mode.RESUME) && currentMode == RM.Mode.SUSPENDED_BY_USER)
+
+/** Disconnect the pump, or reconnect it. */
+internal val RunningModeManagementUiState.showPumpSection: Boolean
+    get() = allowedNextModes.contains(RM.Mode.DISCONNECTED_PUMP) ||
+        (allowedNextModes.contains(RM.Mode.RESUME) && currentMode == RM.Mode.DISCONNECTED_PUMP)
+
+internal fun executeAction(viewModel: RunningModeManagementViewModel, action: PendingRunningModeAction) {
     viewModel.executeAction(action.targetMode, action.action, action.durationMinutes)
 }
 
@@ -183,12 +191,23 @@ private fun executeAction(viewModel: RunningModeManagementViewModel, action: Pen
  */
 private val LocalSectionTitle = staticCompositionLocalOf<String?> { null }
 
+/**
+ * The card around one section of the running mode screen. The Glass skin passes its own card, so
+ * the sections and the actions of their buttons stay in one place.
+ */
+internal typealias RunningModeSectionContainer = @Composable (content: @Composable () -> Unit) -> Unit
+
+private val AapsSectionContainer: RunningModeSectionContainer = { content ->
+    AapsCard(modifier = Modifier.fillMaxWidth()) { content() }
+}
+
 @Composable
-private fun SectionCard(
+internal fun SectionCard(
     title: String,
+    container: RunningModeSectionContainer = AapsSectionContainer,
     content: @Composable () -> Unit
 ) {
-    AapsCard(modifier = Modifier.fillMaxWidth()) {
+    container {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
                 text = title,
@@ -204,16 +223,17 @@ private fun SectionCard(
 }
 
 @Composable
-private fun LoopControlSection(
+internal fun LoopControlSection(
     allowedModes: List<RM.Mode>,
-    onAction: (PendingRunningModeAction) -> Unit
+    onAction: (PendingRunningModeAction) -> Unit,
+    container: RunningModeSectionContainer = AapsSectionContainer
 ) {
     val closedLoopText = stringResource(CoreUiStrings.closedloop)
     val lgsText = stringResource(CoreUiStrings.lowglucosesuspend)
     val openLoopText = stringResource(CoreUiStrings.openloop)
     val disableLoopText = stringResource(CoreUiStrings.disableloop)
 
-    SectionCard(title = stringResource(CoreUiStrings.running_mode)) {
+    SectionCard(title = stringResource(CoreUiStrings.running_mode), container = container) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -251,10 +271,11 @@ private fun LoopControlSection(
 }
 
 @Composable
-private fun SuspendSection(
+internal fun SuspendSection(
     currentMode: RM.Mode,
     allowedModes: List<RM.Mode>,
-    onAction: (PendingRunningModeAction) -> Unit
+    onAction: (PendingRunningModeAction) -> Unit,
+    container: RunningModeSectionContainer = AapsSectionContainer
 ) {
     val isSuspended = currentMode == RM.Mode.SUSPENDED_BY_USER
 
@@ -266,7 +287,7 @@ private fun SuspendSection(
 
     // While suspended both rows are shown: Resume, and the durations to extend the suspend.
     // A duration picked while suspended starts a new suspend from now.
-    SectionCard(title = stringResource(CoreUiStrings.suspendloop)) {
+    SectionCard(title = stringResource(CoreUiStrings.suspendloop), container = container) {
         if (isSuspended && allowedModes.contains(RM.Mode.RESUME)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                 CompactButton(
@@ -303,12 +324,13 @@ private fun SuspendSection(
 }
 
 @Composable
-private fun PumpDisconnectSection(
+internal fun PumpDisconnectSection(
     currentMode: RM.Mode,
     allowedModes: List<RM.Mode>,
     tempDurationStep15mAllowed: Boolean,
     tempDurationStep30mAllowed: Boolean,
-    onAction: (PendingRunningModeAction) -> Unit
+    onAction: (PendingRunningModeAction) -> Unit,
+    container: RunningModeSectionContainer = AapsSectionContainer
 ) {
     val isDisconnected = currentMode == RM.Mode.DISCONNECTED_PUMP
 
@@ -321,7 +343,7 @@ private fun PumpDisconnectSection(
 
     // While disconnected both rows are shown: Reconnect, and the durations to extend the disconnect.
     // A duration picked while disconnected starts a new disconnect from now.
-    SectionCard(title = stringResource(UiStrings.disconnectpump)) {
+    SectionCard(title = stringResource(UiStrings.disconnectpump), container = container) {
         if (isDisconnected && allowedModes.contains(RM.Mode.RESUME)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                 CompactButton(
@@ -405,7 +427,7 @@ private fun CompactButton(
     }
 }
 
-private data class PendingRunningModeAction(
+internal data class PendingRunningModeAction(
     val targetMode: RM.Mode,
     val action: Action,
     val durationMinutes: Int = 0

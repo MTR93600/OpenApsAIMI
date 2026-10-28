@@ -75,6 +75,22 @@ enum class StringNonKey(
     QuickLaunchActions(key = "quick_launch_actions", defaultValue = "[{\"type\":\"wizard\"},{\"type\":\"quick_launch_config\"}]"),
     InsulinConfiguration("insulin_configuration", "{}", sync = SyncSpec(SyncChannel.Cold, SyncDirection.Bidirectional)),
     ComposeGraphConfig("compose_graphconfig", ""),
+    // Default lists the Glass top-grid pills that are visible today (defaultSelected = true in
+    // GLASS_PILL_CATALOG, :ui). core:keys cannot reference that catalog (wrong dependency direction),
+    // so this literal list must be kept in sync with it by hand. GlassPersonalizationTest checks it.
+    GlassSelectedPills(
+        key = "glass_selected_pills",
+        defaultValue = "PUMP_RESERVOIR,CANNULA,BATTERY,SENSOR,LOOP_STATUS,ACTIVITY",
+        exportable = false
+    ),
+    // Default lists every DashboardV2ToolAction entry (all tiles are visible). :ui's DashboardV2ToolAction
+    // is the source of truth; keep this literal list in sync with it by hand. GlassPersonalizationTest
+    // checks it.
+    GlassSelectedTools(
+        key = "glass_selected_tools",
+        defaultValue = "ACTIONS,RAPID_ACTING,PROFILE,AUTOMATION,NSCLIENT,TIDEPOOL,XDRIP,MAINTENANCE,XDRIP_BG,SENSOR,ADVISOR,MEAL_ADVISOR,AIMI_CONTEXT,AUDITOR_REPORT",
+        exportable = false
+    ),
     // The tab the Statistics screen opens on: the last one used (per-device UI state, not a user-facing preference)
     StatsTab(key = "stats_tab", defaultValue = "", exportable = false),
 

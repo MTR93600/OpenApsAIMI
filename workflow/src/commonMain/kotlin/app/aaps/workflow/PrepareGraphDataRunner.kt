@@ -13,6 +13,7 @@ import app.aaps.core.interfaces.calibration.CalibrationContext
 import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.glucose.GlucoseCorrection
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
@@ -85,6 +86,7 @@ class PrepareGraphDataRunner(
     private val profiler: Profiler,
     private val decimalFormatter: DecimalFormatter,
     private val processedDeviceStatusData: ProcessedDeviceStatusData,
+    private val glucoseCorrection: GlucoseCorrection,
     private val scope: CoroutineScope,
     private val autosensDataProvider: () -> AutosensData
 ) : CalculationPhase {
@@ -259,7 +261,11 @@ class PrepareGraphDataRunner(
         val bgDataPoints = bgReadingsArray
             .filter { it.timestamp in fromTime..toTime }
             .map { bg ->
-                val valueInUnits = profileUtil.fromMgdlToUnits(bg.value)
+                // bg.value is the raw stored reading; calibration and smoothing only live in the
+                // bucketed series in memory (see GlucoseCorrection). Without this the chart shows a
+                // different number than the dashboard, the alarms and Nightscout for the same instant.
+                val mgdl = glucoseCorrection.correctedMgdl(bg.timestamp, bg.value) ?: bg.value
+                val valueInUnits = profileUtil.fromMgdlToUnits(mgdl)
                 BgDataPoint(
                     timestamp = bg.timestamp,
                     value = valueInUnits,

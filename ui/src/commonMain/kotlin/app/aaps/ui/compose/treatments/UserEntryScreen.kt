@@ -48,7 +48,6 @@ import app.aaps.core.interfaces.navigation.ElementType
 import app.aaps.core.interfaces.userEntry.UserEntryPresentationHelper
 import app.aaps.core.interfaces.utils.Translator
 import app.aaps.core.ui.CoreUiStrings
-import app.aaps.core.ui.compose.AapsCard
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.LocalDateUtil
 import app.aaps.core.ui.compose.MenuItemData
@@ -56,6 +55,9 @@ import app.aaps.core.ui.compose.SelectableListToolbar
 import app.aaps.core.ui.compose.StyledArg
 import app.aaps.core.ui.compose.ToolbarConfig
 import app.aaps.core.ui.compose.dialogs.OkCancelDialog
+import app.aaps.core.ui.compose.glass.GlassCard
+import app.aaps.core.ui.compose.glass.GlassColors
+import app.aaps.core.ui.compose.glass.isGlassDarkMode
 import app.aaps.core.ui.compose.navigation.color
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.core.ui.compose.styledStringResource
@@ -85,6 +87,7 @@ fun UserEntryScreen(
     onNavigateBack: () -> Unit = { }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val isDark = isGlassDarkMode()
 
     // Dialog state
     var showExportDialog by remember { mutableStateOf(false) }
@@ -143,7 +146,8 @@ fun UserEntryScreen(
                         modifier = Modifier
                             .align(Alignment.Center)
                             .padding(50.dp),
-                        style = MaterialTheme.typography.bodyLarge
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = GlassColors.textMuted(isDark)
                     )
                 }
 
@@ -168,12 +172,12 @@ fun UserEntryScreen(
                                     text = viewModel.dateUtil.dateStringRelative(itemsForDay.first().timestamp, viewModel.rh),
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .background(MaterialTheme.colorScheme.surface)
+                                        .background(GlassColors.screenBgTop(isDark))
                                         .padding(horizontal = 8.dp, vertical = 6.dp),
                                     textAlign = TextAlign.Center,
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
+                                    color = GlassColors.skyBlue
                                 )
                             }
 
@@ -203,8 +207,10 @@ private fun UserEntryItem(
     userEntryPresentationHelper: UserEntryPresentationHelper,
     translator: Translator
 ) {
+    val isDark = isGlassDarkMode()
     val dateUtil = LocalDateUtil.current
-    AapsCard(
+    GlassCard(
+        isDark = isDark,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 2.dp)

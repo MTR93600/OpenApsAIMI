@@ -329,5 +329,5 @@ fun MainNavigationBar(
  * setting a state - on a genuinely selectable item this would need to keep the framework's
  * "Selected" as well.
  */
-private fun Modifier.badgeState(state: String?): Modifier =
+internal fun Modifier.badgeState(state: String?): Modifier =
     if (state != null) semantics { stateDescription = state } else this

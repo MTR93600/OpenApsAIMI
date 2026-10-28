@@ -2,6 +2,7 @@ package app.aaps.appshell.navigation
 
 import androidx.navigation.NavController
 import app.aaps.core.data.ue.Sources
+import app.aaps.core.interfaces.aps.AimiAuditorReport
 import app.aaps.core.interfaces.configuration.ConfigBuilder
 import app.aaps.core.interfaces.navigation.ElementType
 import app.aaps.core.interfaces.notifications.NotificationId
@@ -12,6 +13,7 @@ import app.aaps.core.interfaces.protection.ProtectionResult
 import app.aaps.core.interfaces.source.DexcomBoyda
 import app.aaps.core.keys.StringKey
 import app.aaps.core.ui.compose.ScreenMode
+import app.aaps.core.ui.compose.navigation.GlassDestination
 import app.aaps.core.ui.compose.navigation.NavigationRequest
 import app.aaps.core.ui.search.SearchableItem
 import app.aaps.ui.compose.careDialog.CareportalEventType
@@ -35,6 +37,8 @@ import app.aaps.ui.search.SearchIndexEntry
  *   open, and the caller should say so rather than doing nothing quietly.
  * @param onExit closes the window or activity. Called **before** `configBuilder.exitApp`, which is
  *   what the phone did: the UI goes first, then the app records the exit and stops the process.
+ * @param auditorReport opens the AIMI auditor report. Null where the graph has no AIMI (desktop);
+ *   there the Glass tile that sends [NavigationRequest.AuditorReport] is disabled.
  */
 @Suppress("LongParameterList")
 class ElementNavigator(
@@ -44,6 +48,7 @@ class ElementNavigator(
     val protectionCheck: ProtectionCheck,
     private val configBuilder: ConfigBuilder,
     private val dexcomBoyda: DexcomBoyda,
+    private val auditorReport: AimiAuditorReport?,
     private val onOpenCgmApp: (packageName: String) -> Unit,
     private val onExit: () -> Unit,
     val onRequestDirectoryAccess: () -> Unit,
@@ -64,6 +69,14 @@ class ElementNavigator(
                     .find { it::class.simpleName == request.className } ?: return
                 openPlugin(plugin, navController, activePlugin)
             }
+
+            // The information screens need no protection, the treatment and loop screens BOLUS, as on dev_OAPSAIMI.
+            is NavigationRequest.Glass             -> guarded(request.destination.protection) {
+                navController.navigate(glassRoute(request.destination))
+            }
+
+            // A dialog with text only, no protection, as on dev_OAPSAIMI.
+            NavigationRequest.AuditorReport        -> auditorReport?.openReport()
 
             is NavigationRequest.PluginPreferences -> guarded(request.requiredProtection) {
                 navController.navigate(
@@ -193,6 +206,31 @@ class ElementNavigator(
 }
 
 
+
+/** The registered route (the template) of a Glass dashboard screen. */
+fun glassAppRoute(destination: GlassDestination): AppRoute = when (destination) {
+    GlassDestination.LOOP_DASHBOARD       -> AppRoute.GlassLoopDashboard
+    GlassDestination.SENSOR_QUALITY       -> AppRoute.GlassSensorQuality
+    GlassDestination.PUMP_DETAIL          -> AppRoute.GlassPumpDetail
+    GlassDestination.BATTERY_DETAIL       -> AppRoute.GlassBatteryDetail
+    GlassDestination.INSULIN_DETAIL       -> AppRoute.GlassInsulinDetail
+    GlassDestination.CANNULA_DETAIL       -> AppRoute.GlassCannulaDetail
+    GlassDestination.BASAL_DETAIL         -> AppRoute.GlassBasalDetail
+    GlassDestination.SENSOR_INSERT_DETAIL -> AppRoute.GlassSensorInsertDetail
+    GlassDestination.TARGET_DETAIL        -> AppRoute.GlassTargetDetail
+    GlassDestination.LOOP_DETAIL          -> AppRoute.GlassLoopDetail
+}
+
+/**
+ * The route to navigate to for a Glass dashboard screen. The cannula screen opens with the site
+ * change selected, like the normal cannula change; the sensor insert screen is the care dialog for
+ * a sensor insert.
+ */
+fun glassRoute(destination: GlassDestination): String = when (destination) {
+    GlassDestination.CANNULA_DETAIL       -> AppRoute.GlassCannulaDetail.createRoute(FillPreselect.SITE_CHANGE.ordinal)
+    GlassDestination.SENSOR_INSERT_DETAIL -> AppRoute.GlassSensorInsertDetail.createRoute(CareportalEventType.SENSOR_INSERT.ordinal)
+    else                                  -> glassAppRoute(destination).route
+}
 
 /** Opens a plugin's own screen, when it has one. Public because search results reach a plugin directly. */
 fun openPlugin(plugin: PluginBase, navController: NavController, activePlugin: ActivePlugin) {

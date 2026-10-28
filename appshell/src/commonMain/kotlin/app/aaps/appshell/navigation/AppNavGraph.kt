@@ -35,6 +35,7 @@ import app.aaps.core.data.model.TE
 import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.configuration.ConfigBuilder
 import app.aaps.core.interfaces.constraints.Objectives
+import app.aaps.core.interfaces.dashboard.AimiGlassDashboardData
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.maintenance.PrefsFileInfo
 import app.aaps.core.interfaces.navigation.ElementType
@@ -79,6 +80,16 @@ import app.aaps.ui.compose.carbsDialog.CarbsDialogScreen
 import app.aaps.ui.compose.careDialog.CareDialogScreen
 import app.aaps.ui.compose.configuration.ConfigurationScreen
 import app.aaps.ui.compose.configuration.ConfigurationViewModel
+import app.aaps.ui.compose.dashboard.glass.GlassBasalDetailScreen
+import app.aaps.ui.compose.dashboard.glass.GlassBatteryDetailScreen
+import app.aaps.ui.compose.dashboard.glass.GlassCannulaDetailScreen
+import app.aaps.ui.compose.dashboard.glass.GlassInsulinDetailScreen
+import app.aaps.ui.compose.dashboard.glass.GlassLoopDashboardRoute
+import app.aaps.ui.compose.dashboard.glass.GlassLoopDetailScreen
+import app.aaps.ui.compose.dashboard.glass.GlassPumpDetailScreen
+import app.aaps.ui.compose.dashboard.glass.GlassSensorInsertDetailScreen
+import app.aaps.ui.compose.dashboard.glass.GlassSensorQualityScreen
+import app.aaps.ui.compose.dashboard.glass.GlassTargetDetailScreen
 import app.aaps.ui.compose.extendedBolusDialog.ExtendedBolusDialogScreen
 import app.aaps.ui.compose.fillDialog.FillDialogScreen
 import app.aaps.ui.compose.foodManagement.FoodManagementViewModel
@@ -119,6 +130,7 @@ import app.aaps.ui.compose.treatments.TreatmentsScreen
 import app.aaps.ui.compose.treatments.viewmodels.TreatmentsViewModel
 import app.aaps.ui.compose.wizardDialog.WizardDialogScreen
 import app.aaps.ui.search.BuiltInSearchables
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 
@@ -167,6 +179,8 @@ fun NavGraphBuilder.appNavGraph(
     prefFileList: PrefsFileInfo,
     persistenceLayer: PersistenceLayer,
     visibilityContext: VisibilityContext,
+    /** Read-only AIMI values for the Glass loop dashboard; each host passes the AIMI snapshot feed. */
+    aimiGlassDashboardData: Flow<AimiGlassDashboardData>,
     // Callbacks
     onNavigationRequest: (NavigationRequest, NavHostController) -> Unit,
     onShowDeliveryError: (comment: String, title: TextRef) -> Unit,
@@ -518,6 +532,102 @@ fun NavGraphBuilder.appNavGraph(
     composable(AppRoute.Stats.route) {
         StatsScreen(
             viewModel = statsViewModel,
+            onNavigateBack = { navController.safePopBackStack() }
+        )
+    }
+
+    // Glass dashboard information screens. Display only, no protection.
+    composable(AppRoute.GlassLoopDashboard.route) {
+        GlassLoopDashboardRoute(
+            aimiDashboardData = aimiGlassDashboardData,
+            onBack = { navController.safePopBackStack() },
+            onNavigate = { request -> onNavigationRequest(request, navController) },
+        )
+    }
+
+    composable(AppRoute.GlassSensorQuality.route) {
+        GlassSensorQualityScreen(onBack = { navController.safePopBackStack() })
+    }
+
+    composable(AppRoute.GlassPumpDetail.route) {
+        GlassPumpDetailScreen(onBack = { navController.safePopBackStack() })
+    }
+
+    composable(AppRoute.GlassBatteryDetail.route) {
+        GlassBatteryDetailScreen(onBack = { navController.safePopBackStack() })
+    }
+
+    // Glass dashboard screens that start a treatment or change the loop. Each one is built like the
+    // normal screen it replaces: same view model (route scoped, or the same activity scoped instance),
+    // same site location round trip, same delivery error handling. The navigator asks for BOLUS first.
+    composable(AppRoute.GlassInsulinDetail.route) {
+        GlassInsulinDetailScreen(
+            insulinButtonsDef = builtInSearchables.insulinButtons,
+            bgInfoState = graphViewModel.bgInfoState,
+            iobUiState = chipsViewModel.iobUiState,
+            cobUiState = chipsViewModel.cobUiState,
+            onNavigateBack = { navController.safePopBackStack() },
+            onShowDeliveryError = { comment ->
+                onShowDeliveryError(comment, CoreUiStrings.treatmentdeliveryerror)
+            }
+        )
+    }
+
+    composable(
+        route = AppRoute.GlassCannulaDetail.route,
+        arguments = listOf(navArgument("preselect") { type = NavType.IntType })
+    ) { backStackEntry ->
+        val siteLocation = backStackEntry.savedStateHandle.get<String>("site_location")
+        val siteArrow = backStackEntry.savedStateHandle.get<String>("site_arrow")
+        val siteResult = if (siteLocation != null || siteArrow != null) Pair(siteLocation, siteArrow) else null
+
+        GlassCannulaDetailScreen(
+            fillButtonsDef = builtInSearchables.fillButtons,
+            onNavigateBack = { navController.safePopBackStack() },
+            // No delivery error callback, as on the fill dialog: the view model reports on the app dialog bus.
+            onPickSiteLocation = {
+                navController.navigate(AppRoute.SiteLocationPicker.createRoute(TE.Type.CANNULA_CHANGE))
+            },
+            siteLocationResult = siteResult
+        )
+    }
+
+    composable(AppRoute.GlassBasalDetail.route) {
+        GlassBasalDetailScreen(
+            onNavigateBack = { navController.safePopBackStack() },
+            onShowDeliveryError = { comment ->
+                onShowDeliveryError(comment, CoreUiStrings.temp_basal_delivery_error)
+            }
+        )
+    }
+
+    composable(
+        route = AppRoute.GlassSensorInsertDetail.route,
+        arguments = listOf(navArgument("eventTypeOrdinal") { type = NavType.IntType })
+    ) { backStackEntry ->
+        val siteLocation = backStackEntry.savedStateHandle.get<String>("site_location")
+        val siteArrow = backStackEntry.savedStateHandle.get<String>("site_arrow")
+        val siteResult = if (siteLocation != null || siteArrow != null) Pair(siteLocation, siteArrow) else null
+
+        GlassSensorInsertDetailScreen(
+            onNavigateBack = { navController.safePopBackStack() },
+            onPickSiteLocation = {
+                navController.navigate(AppRoute.SiteLocationPicker.createRoute(TE.Type.SENSOR_CHANGE))
+            },
+            siteLocationResult = siteResult
+        )
+    }
+
+    composable(AppRoute.GlassTargetDetail.route) {
+        GlassTargetDetailScreen(
+            viewModel = tempTargetManagementViewModel,
+            onNavigateBack = { navController.safePopBackStack() }
+        )
+    }
+
+    composable(AppRoute.GlassLoopDetail.route) {
+        GlassLoopDetailScreen(
+            viewModel = runningModeManagementViewModel,
             onNavigateBack = { navController.safePopBackStack() }
         )
     }

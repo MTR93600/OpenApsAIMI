@@ -14,11 +14,15 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.AdvancedPredictionCurves
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.TrajectoryRuntimeRepository
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 
 /**
@@ -119,14 +123,14 @@ data class AimiGlassDashboardSnapshot(
                     thermalDeltaVsBaselineC = it.thermalDeltaVsBaselineC,
                     thermalInflammationIndex = it.thermalInflammationIndex,
                     thermalNarrative = it.thermalNarrative,
-                    presentation = physioPresentation?.let { presentation ->
-                        AimiGlassDashboardData.Physio.Presentation(
-                            modeHeadline = presentation.modeHeadline,
-                            intentSummary = presentation.intentSummary,
-                            thermalSummary = presentation.thermalSummary,
-                            updatedSummary = presentation.updatedSummary,
-                        )
-                    },
+                )
+            },
+            physioPresentation = physioPresentation?.let { presentation ->
+                AimiGlassDashboardData.Physio.Presentation(
+                    modeHeadline = presentation.modeHeadline,
+                    intentSummary = presentation.intentSummary,
+                    thermalSummary = presentation.thermalSummary,
+                    updatedSummary = presentation.updatedSummary,
                 )
             },
             training = if (basalTraining == null && smbTraining == null) {
@@ -246,15 +250,22 @@ object AimiGlassDashboardSnapshotFeed {
         }
         val freshnessJob = launch(start = CoroutineStart.UNDISPATCHED) {
             while (true) {
-                kotlinx.coroutines.delay(60_000L)
+                delay(60_000L)
                 send(currentSnapshot())
             }
         }
         val safetyMetricsJob = launch(start = CoroutineStart.UNDISPATCHED) {
             while (true) {
-                safetyMetrics.value = safetyMetricsProvider.value?.invoke()
+                // A failed read keeps the last good summary: an exception here would end the flow and
+                // reach the screen that collects it.
+                try {
+                    safetyMetrics.value = safetyMetricsProvider.value?.invoke()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                }
                 send(currentSnapshot())
-                kotlinx.coroutines.delay(60_000L)
+                delay(60_000L)
             }
         }
         val basalCoordinator = BasalMlTrainingCoordinator.instance
@@ -275,6 +286,9 @@ object AimiGlassDashboardSnapshotFeed {
             safetyMetricsJob.cancel()
         }
     }
+        // The safety summary reads the database (TIR, TDD, steps) and the snapshot reads AIMI state.
+        // The screens collect this on the main thread, so the work must not run there.
+        .flowOn(aapsIoDispatcher)
 
     private fun currentSnapshot(): AimiGlassDashboardData {
         val nowEpochMs = aimiWallClockMs()

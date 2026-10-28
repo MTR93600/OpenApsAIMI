@@ -13,6 +13,42 @@ sealed class NavigationRequest {
         val composeScreenKey: String? = null,
         val requiredProtection: ProtectionCheck.Protection = ProtectionCheck.Protection.PREFERENCES,
     ) : NavigationRequest()
+
+    /** A screen of the Glass dashboard skin. The navigator asks for [GlassDestination.protection] first. */
+    data class Glass(val destination: GlassDestination) : NavigationRequest()
+
+    /**
+     * The AIMI auditor report. It is a dialog, not a screen, so the navigator calls
+     * [app.aaps.core.interfaces.aps.AimiAuditorReport.openReport] instead of opening a route. No
+     * protection, as on `dev_OAPSAIMI`: the report only shows text.
+     */
+    data object AuditorReport : NavigationRequest()
+}
+
+/**
+ * The Glass dashboard screens a [NavigationRequest.Glass] can open.
+ *
+ * The information screens only show values and need no protection. The screens that start a
+ * treatment or change the loop ask for [ProtectionCheck.Protection.BOLUS], as on `dev_OAPSAIMI`
+ * (also the sensor insert, where the normal care dialog asks for nothing).
+ *
+ * @param element the normal screen this one replaces. Its client role and its "master or paired
+ *   client" rule also apply here; null for an information screen.
+ */
+enum class GlassDestination(
+    val protection: ProtectionCheck.Protection = ProtectionCheck.Protection.NONE,
+    val element: ElementType? = null,
+) {
+    LOOP_DASHBOARD,
+    SENSOR_QUALITY,
+    PUMP_DETAIL,
+    BATTERY_DETAIL,
+    INSULIN_DETAIL(ProtectionCheck.Protection.BOLUS, ElementType.INSULIN),
+    CANNULA_DETAIL(ProtectionCheck.Protection.BOLUS, ElementType.CANNULA_CHANGE),
+    BASAL_DETAIL(ProtectionCheck.Protection.BOLUS, ElementType.TEMP_BASAL),
+    SENSOR_INSERT_DETAIL(ProtectionCheck.Protection.BOLUS, ElementType.SENSOR_INSERT),
+    TARGET_DETAIL(ProtectionCheck.Protection.BOLUS, ElementType.TEMP_TARGET_MANAGEMENT),
+    LOOP_DETAIL(ProtectionCheck.Protection.BOLUS, ElementType.RUNNING_MODE),
 }
 
 /**

@@ -15,8 +15,6 @@ import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.interfaces.notifications.NotificationLevel
 import app.aaps.core.interfaces.notifications.NotificationManager as AapsNotificationManager
 import app.aaps.core.interfaces.resources.TextResolver
-import app.aaps.core.interfaces.rx.bus.RxBus
-import app.aaps.core.interfaces.rx.events.EventShowDialog
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.ui.R as CoreUiR
 import app.aaps.plugins.aps.ApsStrings
@@ -37,8 +35,6 @@ class AuditorNotificationManager @Inject constructor(
   private val context: Context,
   private val uiInteraction: UiInteraction,
   private val notificationManager: AapsNotificationManager,
-  private val auditorStatusStateHolder: AuditorStatusStateHolder,
-  private val rxBus: RxBus,
   private val rh: TextResolver,
   private val aapsLogger: AAPSLogger,
 ) : AimiAuditorNotifier {
@@ -87,25 +83,13 @@ class AuditorNotificationManager @Inject constructor(
     return posted
   }
 
-  fun cancelNotification() {
+  /**
+   * Removes both notifications: the system one and the in-app one. The report itself is opened by
+   * the shared `AuditorReportOpener`, which calls this.
+   */
+  override fun cancelNotification() {
     NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
     notificationManager.dismiss(NotificationId.AIMI_AUDITOR_INSIGHT)
-  }
-
-  /**
-   * Presents the full auditor report dialog and clears notification state.
-   */
-  fun openReport(onFinish: (() -> Unit)? = null) {
-    auditorStatusStateHolder.markAsRead()
-    cancelNotification()
-    val (message, _) = AuditorReportFormatter.buildFullReportMessageWithFallback(rh)
-    rxBus.send(
-      EventShowDialog.Ok(
-        title = rh.gs(ApsStrings.aimi_auditor_report_dialog_title),
-        message = message,
-        onOk = onFinish,
-      )
-    )
   }
 
   private fun postInAppNotification(): Boolean {

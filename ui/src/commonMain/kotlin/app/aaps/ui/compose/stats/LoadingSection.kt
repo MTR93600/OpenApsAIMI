@@ -11,8 +11,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import app.aaps.core.ui.compose.glass.GlassColors
 
 /**
  * Composable displaying a loading state with title and message.
@@ -20,11 +22,13 @@ import androidx.compose.ui.unit.dp
  *
  * @param title The title of the section being loaded
  * @param message The loading message to display
+ * @param accentColor Tint for the progress spinner
  */
 @Composable
 fun LoadingSection(
     title: String,
-    message: String
+    message: String,
+    accentColor: Color = GlassColors.skyBlue
 ) {
     Box(
         modifier = Modifier
@@ -36,7 +40,7 @@ fun LoadingSection(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            CircularProgressIndicator()
+            CircularProgressIndicator(color = accentColor)
             Text(
                 text = "$title\n$message",
                 style = MaterialTheme.typography.labelMedium,

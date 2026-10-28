@@ -21,7 +21,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,8 +30,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -40,10 +41,12 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import app.aaps.core.ui.CoreUiStrings
-import app.aaps.core.ui.compose.AapsCard
 import app.aaps.core.ui.compose.AapsSpacing
-import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.dialogs.OkCancelDialog
+import app.aaps.core.ui.compose.glass.GlassColors
+import app.aaps.core.ui.compose.glass.GlassScreenBackground
+import app.aaps.core.ui.compose.glass.GlassSectionCard
+import app.aaps.core.ui.compose.glass.isGlassDarkMode
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.ui.UiStrings
 import app.aaps.ui.compose.stats.viewmodels.StatsTab
@@ -58,6 +61,8 @@ import kotlinx.coroutines.launch
  * Tabs, not one long list: the sections are read one at a time, and only the tab on screen is
  * calculated. Four, not one per section: Material says to avoid more than four fixed tabs, and the
  * sections in one tab are read together. The screen opens on the tab used last.
+ *
+ * Drawn in the Glass look (gradient background, Glass cards), for every dashboard skin.
  *
  * @param viewModel ViewModel containing all statistics state and business logic
  * @param onNavigateBack Callback when back navigation is requested
@@ -82,27 +87,36 @@ fun StatsScreen(
         snapshotFlow { pagerState.settledPage }.collect { viewModel.selectTab(StatsTab.entries[it]) }
     }
 
-    Scaffold(
-        topBar = {
-            AapsTopAppBar(
-                title = { Text(stringResource(CoreUiStrings.statistics)) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(CoreUiStrings.back)
-                        )
-                    }
+    val isDark = isGlassDarkMode()
+
+    GlassScreenBackground(isDark = isDark) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = AapsSpacing.extraLarge, vertical = AapsSpacing.large),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onNavigateBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(CoreUiStrings.back),
+                        tint = GlassColors.textBright(isDark)
+                    )
                 }
-            )
-        }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            PrimaryTabRow(selectedTabIndex = pagerState.currentPage) {
+                Text(
+                    text = stringResource(CoreUiStrings.statistics),
+                    color = GlassColors.textBright(isDark),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.semantics { heading() }
+                )
+            }
+            PrimaryTabRow(
+                selectedTabIndex = pagerState.currentPage,
+                containerColor = Color.Transparent,
+                contentColor = GlassColors.textBright(isDark)
+            ) {
                 StatsTab.entries.forEachIndexed { index, tab ->
                     Tab(
                         selected = pagerState.currentPage == index,
@@ -116,10 +130,10 @@ fun StatsScreen(
                 modifier = Modifier.fillMaxSize()
             ) { page ->
                 when (StatsTab.entries[page]) {
-                    StatsTab.INSULIN       -> InsulinTab(state, viewModel)
-                    StatsTab.TIME_IN_RANGE -> TimeInRangeTab(state)
-                    StatsTab.GLUCOSE       -> GlucoseTab(state, viewModel)
-                    StatsTab.CYCLE         -> CycleTab(state, viewModel)
+                    StatsTab.INSULIN       -> InsulinTab(state, viewModel, isDark)
+                    StatsTab.TIME_IN_RANGE -> TimeInRangeTab(state, isDark)
+                    StatsTab.GLUCOSE       -> GlucoseTab(state, viewModel, isDark)
+                    StatsTab.CYCLE         -> CycleTab(state, viewModel, isDark)
                 }
             }
         }
@@ -143,10 +157,11 @@ private fun StatsTab.label(): String = when (this) {
 }
 
 @Composable
-private fun InsulinTab(state: StatsUiState, viewModel: StatsViewModel) {
+private fun InsulinTab(state: StatsUiState, viewModel: StatsViewModel, isDark: Boolean) {
     StatsPage {
         StatsSection(
             title = stringResource(CoreUiStrings.tdd),
+            isDark = isDark,
             trailing = if (state.tddLoading) null else {
                 {
                     FilledTonalButton(onClick = { viewModel.showRecalculateDialog() }) {
@@ -179,9 +194,9 @@ private fun InsulinTab(state: StatsUiState, viewModel: StatsViewModel) {
 
 /** A tab of its own: 168 days of TDD, so it is calculated only when this tab is opened. */
 @Composable
-private fun CycleTab(state: StatsUiState, viewModel: StatsViewModel) {
+private fun CycleTab(state: StatsUiState, viewModel: StatsViewModel, isDark: Boolean) {
     StatsPage {
-        StatsSection(title = stringResource(CoreUiStrings.tdd_cycle_pattern)) {
+        StatsSection(title = stringResource(CoreUiStrings.tdd_cycle_pattern), isDark = isDark) {
             // Progress indicator (visible while still loading)
             if (state.tddCycleLoading) {
                 Column(
@@ -195,7 +210,9 @@ private fun CycleTab(state: StatsUiState, viewModel: StatsViewModel) {
                         progress = { state.tddCycleProgress },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(8.dp)
+                            .height(8.dp),
+                        color = GlassColors.skyBlue,
+                        trackColor = GlassColors.borderCard(isDark)
                     )
                     Text(
                         text = stringResource(
@@ -220,7 +237,7 @@ private fun CycleTab(state: StatsUiState, viewModel: StatsViewModel) {
                 Text(
                     text = stringResource(UiStrings.not_enough_data_for_cycles),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = GlassColors.textMuted(isDark)
                 )
             }
         }
@@ -228,9 +245,9 @@ private fun CycleTab(state: StatsUiState, viewModel: StatsViewModel) {
 }
 
 @Composable
-private fun TimeInRangeTab(state: StatsUiState) {
+private fun TimeInRangeTab(state: StatsUiState, isDark: Boolean) {
     StatsPage {
-        StatsSection(title = stringResource(CoreUiStrings.tir)) {
+        StatsSection(title = stringResource(CoreUiStrings.tir), isDark = isDark) {
             Crossfade(
                 targetState = state.tirLoading,
                 label = stringResource(CoreUiStrings.loading)
@@ -250,7 +267,7 @@ private fun TimeInRangeTab(state: StatsUiState) {
                 }
             }
         }
-        StatsSection(title = stringResource(UiStrings.dexcom_tir)) {
+        StatsSection(title = stringResource(UiStrings.dexcom_tir), isDark = isDark) {
             Crossfade(
                 targetState = state.dexcomTirLoading,
                 label = stringResource(CoreUiStrings.loading)
@@ -274,9 +291,9 @@ private fun TimeInRangeTab(state: StatsUiState) {
 }
 
 @Composable
-private fun GlucoseTab(state: StatsUiState, viewModel: StatsViewModel) {
+private fun GlucoseTab(state: StatsUiState, viewModel: StatsViewModel, isDark: Boolean) {
     StatsPage {
-        StatsSection(title = stringResource(UiStrings.agp)) {
+        StatsSection(title = stringResource(UiStrings.agp), isDark = isDark) {
             AGPStats(
                 selectedRange = state.agpRange,
                 onSelectRange = viewModel::loadAgpStats,
@@ -286,7 +303,7 @@ private fun GlucoseTab(state: StatsUiState, viewModel: StatsViewModel) {
             )
         }
         // Comprehensive Glucose Pentagon, drawn from the Dexcom TIR numbers
-        StatsSection(title = stringResource(UiStrings.cgp_title)) {
+        StatsSection(title = stringResource(UiStrings.cgp_title), isDark = isDark) {
             Crossfade(targetState = state.dexcomTirLoading, label = "cgp_loading") { isLoading ->
                 if (isLoading) {
                     LoadingSection(title = stringResource(UiStrings.cgp_title), message = stringResource(UiStrings.calculation_in_progress))
@@ -313,31 +330,22 @@ private fun StatsPage(content: @Composable ColumnScope.() -> Unit) {
     )
 }
 
+/**
+ * One section of a tab, drawn as a Glass card. Not collapsible: each tab holds only one or two
+ * sections, so there is nothing to fold away.
+ */
 @Composable
 private fun StatsSection(
     title: String,
+    isDark: Boolean,
     trailing: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    AapsCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(AapsSpacing.extraLarge)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = AapsSpacing.medium),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    // A heading, so a screen reader can jump between the sections of this screen.
-                    modifier = Modifier
-                        .weight(1f)
-                        .semantics { heading() }
-                )
-                trailing?.invoke()
-            }
-            content()
-        }
-    }
+    GlassSectionCard(
+        title = title,
+        isDark = isDark,
+        modifier = Modifier.fillMaxWidth(),
+        trailingAction = trailing,
+        content = content
+    )
 }

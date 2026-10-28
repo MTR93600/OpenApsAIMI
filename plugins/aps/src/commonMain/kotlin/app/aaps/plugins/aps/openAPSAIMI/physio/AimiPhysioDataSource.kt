@@ -41,4 +41,13 @@ interface AimiPhysioDataSource {
 
     /** Drops every cached answer, so the next fetch reads the platform health store again. */
     fun clearCache()
+
+    /**
+     * Steps from local midnight ([dayStartMs]) to [nowMs] as the platform health store totals them.
+     * Display only: the dashboard compares it with the database total and shows the larger one.
+     *
+     * Null when this platform has no such total, the user has not allowed it, or the read failed.
+     * Never 0 as a stand-in: an absent total must stay absent.
+     */
+    suspend fun fetchTodayStepsTotalAggregated(dayStartMs: Long, nowMs: Long): Long?
 }

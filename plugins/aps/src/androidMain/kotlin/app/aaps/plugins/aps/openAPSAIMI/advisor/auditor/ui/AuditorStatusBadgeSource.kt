@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui
 
+import app.aaps.core.interfaces.aps.AimiAuditorReport
 import app.aaps.core.interfaces.overview.PluginStatusBadge
 import app.aaps.core.interfaces.overview.PluginStatusBadgeSource
 import app.aaps.core.interfaces.overview.PluginStatusLevel
@@ -20,10 +21,10 @@ import kotlinx.coroutines.flow.stateIn
  * AIMI half of [PluginStatusBadgeSource] - turns [AuditorStatusStateHolder]'s auditor state into
  * the chip the shared Overview (`:ui`) draws.
  *
- * The state itself is shared code now, so this class is only the mapping plus the click. It stays
- * on Android because of the click: [onBadgeClick] opens the report through
- * [AuditorNotificationManager], which is Android notifications and an Android dialog intent. When
- * iOS gets its own way to show that report, this class can move too.
+ * The state itself is shared code now, so this class is only the mapping plus the click.
+ * [onBadgeClick] opens the report through the shared [AimiAuditorReport], the same call the Glass
+ * Tools tile makes. Nothing here is Android any more, so this class could move to commonMain and
+ * give the iOS Overview the same chip.
  *
  * The scope below is never cancelled, on purpose: this is a process-scoped singleton with no
  * lifecycle of its own, so the badge must follow the state for as long as the app runs. The
@@ -33,7 +34,7 @@ import kotlinx.coroutines.flow.stateIn
 @SingleIn(AppScope::class)
 class AuditorStatusBadgeSource @Inject constructor(
     auditorStatusStateHolder: AuditorStatusStateHolder,
-    private val auditorNotificationManager: AuditorNotificationManager,
+    private val auditorReport: AimiAuditorReport,
 ) : PluginStatusBadgeSource {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
@@ -44,7 +45,7 @@ class AuditorStatusBadgeSource @Inject constructor(
             .stateIn(scope, SharingStarted.Eagerly, toBadge(auditorStatusStateHolder.uiState.value))
 
     override fun onBadgeClick() {
-        auditorNotificationManager.openReport()
+        auditorReport.openReport()
     }
 
     companion object {

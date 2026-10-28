@@ -34,6 +34,8 @@ import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.LocalDecimalFormatter
 import app.aaps.core.ui.compose.LocalProfileUtil
+import app.aaps.core.ui.compose.glass.GlassColors
+import app.aaps.core.ui.compose.glass.isGlassDarkMode
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.ui.UiStrings
 import kotlin.math.PI
@@ -178,6 +180,7 @@ internal fun GlucosePentagonCard(
     meanGlucoseFormatted: String,
     modifier: Modifier = Modifier
 ) {
+    val isDark = isGlassDarkMode()
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally
@@ -202,7 +205,7 @@ internal fun GlucosePentagonCard(
             )
             Spacer(modifier = Modifier.size(24.dp))
             LegendItem(
-                color = MaterialTheme.colorScheme.primary,
+                color = GlassColors.skyBlue,
                 text = stringResource(UiStrings.cgp_patient)
             )
         }
@@ -211,9 +214,9 @@ internal fun GlucosePentagonCard(
         val pgrColor = when {
             cgpData.pgr <= 2.0 -> AapsTheme.generalColors.bgInRange
             cgpData.pgr <= 3.0 -> AapsTheme.generalColors.bgInRange
-            cgpData.pgr <= 4.0 -> MaterialTheme.colorScheme.tertiary
-            cgpData.pgr <= 4.5 -> MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
-            else               -> MaterialTheme.colorScheme.error
+            cgpData.pgr <= 4.0 -> GlassColors.amber
+            cgpData.pgr <= 4.5 -> GlassColors.red.copy(alpha = 0.7f)
+            else               -> GlassColors.red
         }
         Text(
             text = stringResource(InterfacesStrings.confirmation_line, stringResource(UiStrings.cgp_pgr), LocalDecimalFormatter.current.to1Decimal(cgpData.pgr)),
@@ -232,7 +235,7 @@ internal fun GlucosePentagonCard(
         Text(
             text = pgrExplanation,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = GlassColors.textMuted(isDark),
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth()
         )
@@ -248,11 +251,12 @@ fun GlucosePentagonChart(
     meanGlucoseFormatted: String,
     modifier: Modifier = Modifier
 ) {
-    val gridColor = MaterialTheme.colorScheme.outlineVariant
-    val axisColor = MaterialTheme.colorScheme.outline
+    val isDark = isGlassDarkMode()
+    val gridColor = GlassColors.borderCard(isDark)
+    val axisColor = GlassColors.textMuted(isDark)
     val refColor = AapsTheme.generalColors.bgInRange
-    val patientColor = MaterialTheme.colorScheme.primary
-    val labelColor = MaterialTheme.colorScheme.onSurface
+    val patientColor = GlassColors.skyBlue
+    val labelColor = GlassColors.textBright(isDark)
 
     val textMeasurer = rememberTextMeasurer()
     val labelStyle = TextStyle(fontSize = 11.sp, color = labelColor, textAlign = TextAlign.Center)

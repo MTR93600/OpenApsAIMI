@@ -14,7 +14,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -33,11 +32,13 @@ import app.aaps.core.data.model.RM
 import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.utils.Translator
 import app.aaps.core.ui.CoreUiStrings
-import app.aaps.core.ui.compose.AapsCard
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.LocalDateUtil
 import app.aaps.core.ui.compose.ToolbarConfig
 import app.aaps.core.ui.compose.dialogs.RecordRemovalDialog
+import app.aaps.core.ui.compose.glass.GlassCard
+import app.aaps.core.ui.compose.glass.GlassColors
+import app.aaps.core.ui.compose.glass.isGlassDarkMode
 import app.aaps.core.ui.compose.icons.Ns
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.ui.UiStrings
@@ -61,6 +62,7 @@ fun RunningModeScreen(
     onNavigateBack: () -> Unit = { }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val isDark = isGlassDarkMode()
 
     val currentlyActiveMode = remember(uiState.runningModes) {
         viewModel.getActiveMode()
@@ -83,11 +85,15 @@ fun RunningModeScreen(
         Box(modifier = Modifier.fillMaxSize()) {
             ContentContainer(
                 isLoading = uiState.isLoading,
-                isEmpty = uiState.runningModes.isEmpty()
+                isEmpty = uiState.runningModes.isEmpty(),
+                emptyIconTint = GlassColors.textMuted(isDark).copy(alpha = 0.6f),
+                emptyTextColor = GlassColors.textMuted(isDark)
             ) {
                 val haptic = LocalHapticFeedback.current
 
                 TreatmentLazyColumn(
+                    headerBackgroundColor = GlassColors.screenBgTop(isDark),
+                    headerTextColor = GlassColors.skyBlue,
                     items = uiState.runningModes,
                     getTimestamp = { it.timestamp },
                     getItemKey = { it.id },
@@ -136,8 +142,10 @@ private fun RunningModeItem(
     onLongPress: () -> Unit,
     translator: Translator
 ) {
+    val isDark = isGlassDarkMode()
     val dateUtil = LocalDateUtil.current
-    AapsCard(
+    GlassCard(
+        isDark = isDark,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 2.dp)
@@ -167,7 +175,7 @@ private fun RunningModeItem(
                     color = when {
                         isActive -> Color(AapsTheme.generalColors.activeInsulinText.value)
                         isFuture -> Color(AapsTheme.generalColors.futureRecord.value)
-                        else     -> MaterialTheme.colorScheme.onSurface
+                        else     -> GlassColors.textBright(isDark)
                     }
                 )
 

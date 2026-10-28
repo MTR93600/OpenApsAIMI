@@ -9,6 +9,11 @@ package app.aaps.core.interfaces.dashboard
 data class AimiGlassDashboardData(
     val trajectory: Trajectory? = null,
     val physio: Physio? = null,
+    /**
+     * Text summary of the latest AIMI patient state. Present whenever AIMI has published a patient
+     * state, also when it has no live physio digest ([physio] is then null).
+     */
+    val physioPresentation: Physio.Presentation? = null,
     val training: Training? = null,
     val keyFactors: KeyFactors? = null,
     val safety: Safety? = null,
@@ -28,6 +33,18 @@ data class AimiGlassDashboardData(
         val lowTirLastHourPercent: Double?,
         val lowTirTodayPercent: Double?,
         val stepsLast5Minutes: Int?,
+        /**
+         * Steps since local midnight as the platform health store totals them (Health Connect on
+         * Android). Null when there is no such total on this platform, it is not allowed, or the read
+         * failed. Never a stand-in 0.
+         */
+        val stepsToday: StepsToday? = null,
+    )
+
+    /** A step total for the day that starts at [dayStartMs] (local midnight), up to the read time. */
+    data class StepsToday(
+        val dayStartMs: Long,
+        val steps: Long,
     )
 
     data class Trajectory(
@@ -60,7 +77,6 @@ data class AimiGlassDashboardData(
         val thermalDeltaVsBaselineC: Double,
         val thermalInflammationIndex: Double,
         val thermalNarrative: String,
-        val presentation: Presentation?,
     ) {
         data class Presentation(
             val modeHeadline: String,

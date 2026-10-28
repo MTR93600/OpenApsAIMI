@@ -1,6 +1,7 @@
 package app.aaps.appshell.navigation
 
 import androidx.navigation.NavController
+import app.aaps.core.interfaces.aps.AimiAuditorReport
 import app.aaps.core.interfaces.configuration.ConfigBuilder
 import app.aaps.core.interfaces.navigation.ElementType
 import app.aaps.core.interfaces.plugin.ActivePlugin
@@ -9,7 +10,10 @@ import app.aaps.core.interfaces.protection.ProtectionCheck
 import app.aaps.core.interfaces.protection.ProtectionResult
 import app.aaps.core.interfaces.source.DexcomBoyda
 import app.aaps.core.ui.compose.ScreenMode
+import app.aaps.core.ui.compose.navigation.GlassDestination
 import app.aaps.core.ui.compose.navigation.NavigationRequest
+import app.aaps.ui.compose.careDialog.CareportalEventType
+import app.aaps.ui.compose.fillDialog.FillPreselect
 import app.aaps.ui.compose.main.MainViewModel
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.BeforeEach
@@ -39,6 +43,12 @@ class ElementNavigatorTest {
     private lateinit var dexcomBoyda: DexcomBoyda
 
     private val openedCgmApps = mutableListOf<String>()
+    private var auditorReportsOpened = 0
+    private val auditorReport = object : AimiAuditorReport {
+        override fun openReport() {
+            auditorReportsOpened++
+        }
+    }
     private var exited = false
 
     private lateinit var sut: ElementNavigator
@@ -52,6 +62,7 @@ class ElementNavigatorTest {
         configBuilder = mock()
         dexcomBoyda = mock()
         openedCgmApps.clear()
+        auditorReportsOpened = 0
         exited = false
         sut = ElementNavigator(
             navController = navController,
@@ -60,6 +71,7 @@ class ElementNavigatorTest {
             protectionCheck = protectionCheck,
             configBuilder = configBuilder,
             dexcomBoyda = dexcomBoyda,
+            auditorReport = auditorReport,
             onOpenCgmApp = { openedCgmApps += it },
             onExit = { exited = true },
             onRequestDirectoryAccess = {},
@@ -304,6 +316,89 @@ class ElementNavigatorTest {
         sut.handleNavigationRequest(NavigationRequest.Element(ElementType.CGM_DEX))
 
         assertThat(openedCgmApps).containsExactly("com.dexcom.g6", "com.dexcom.g7").inOrder()
+    }
+
+    // endregion
+
+    // region glass
+
+    @Test
+    fun `a glass information screen opens without protection`() {
+        sut.handleNavigationRequest(NavigationRequest.Glass(GlassDestination.PUMP_DETAIL))
+
+        assertThat(mockingDetails(protectionCheck).invocations).isEmpty()
+        assertThat(navigatedRoutes()).containsExactly("glass_pump_detail")
+    }
+
+    @Test
+    fun `a glass treatment or loop screen asks for bolus protection and opens when granted`() {
+        resolveProtection(ProtectionResult.GRANTED)
+        val treatmentScreens = listOf(
+            GlassDestination.INSULIN_DETAIL,
+            GlassDestination.CANNULA_DETAIL,
+            GlassDestination.BASAL_DETAIL,
+            GlassDestination.SENSOR_INSERT_DETAIL,
+            GlassDestination.TARGET_DETAIL,
+            GlassDestination.LOOP_DETAIL
+        )
+
+        treatmentScreens.forEach { sut.handleNavigationRequest(NavigationRequest.Glass(it)) }
+
+        assertThat(requestedProtectionLevels()).containsExactlyElementsIn(List(treatmentScreens.size) { ProtectionCheck.Protection.BOLUS })
+        assertThat(navigatedRoutes()).containsExactly(
+            "glass_insulin_detail",
+            // Site change selected, like the normal cannula change.
+            "glass_cannula_detail/${FillPreselect.SITE_CHANGE.ordinal}",
+            "glass_basal_detail",
+            "glass_sensor_insert_detail/${CareportalEventType.SENSOR_INSERT.ordinal}",
+            "glass_target_detail",
+            "glass_loop_detail"
+        ).inOrder()
+    }
+
+    @Test
+    fun `a glass treatment screen does not open when protection is denied`() {
+        resolveProtection(ProtectionResult.DENIED)
+
+        sut.handleNavigationRequest(NavigationRequest.Glass(GlassDestination.INSULIN_DETAIL))
+        sut.handleNavigationRequest(NavigationRequest.Glass(GlassDestination.LOOP_DETAIL))
+
+        assertThat(requestedProtectionLevels()).containsExactly(ProtectionCheck.Protection.BOLUS, ProtectionCheck.Protection.BOLUS)
+        assertThat(navigatedRoutes()).isEmpty()
+    }
+
+    // endregion
+
+    // region auditor report
+
+    @Test
+    fun `the auditor report opens once without protection and without a route`() {
+        sut.handleNavigationRequest(NavigationRequest.AuditorReport)
+
+        assertThat(auditorReportsOpened).isEqualTo(1)
+        assertThat(mockingDetails(protectionCheck).invocations).isEmpty()
+        assertThat(navigatedRoutes()).isEmpty()
+    }
+
+    @Test
+    fun `without an auditor report the request does nothing and does not crash`() {
+        val desktopLike = ElementNavigator(
+            navController = navController,
+            mainViewModel = mainViewModel,
+            activePlugin = activePlugin,
+            protectionCheck = protectionCheck,
+            configBuilder = configBuilder,
+            dexcomBoyda = dexcomBoyda,
+            auditorReport = null,
+            onOpenCgmApp = {},
+            onExit = {},
+            onRequestDirectoryAccess = {},
+            onOpenUrl = {}
+        )
+
+        desktopLike.handleNavigationRequest(NavigationRequest.AuditorReport)
+
+        assertThat(navigatedRoutes()).isEmpty()
     }
 
     // endregion

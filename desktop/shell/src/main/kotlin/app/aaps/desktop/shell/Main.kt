@@ -49,6 +49,7 @@ import app.aaps.desktop.shell.secure.KeyVaultUnavailableException
 import app.aaps.implementation.logging.AAPSLoggerDesktop
 import app.aaps.desktop.shell.platform.openFolder
 import app.aaps.implementation.maintenance.DesktopFolders
+import app.aaps.plugins.aps.openAPSAIMI.dashboard.AimiGlassDashboardSnapshotFeed
 import app.aaps.shared.clientbindings.ClientGraphBindings
 import app.aaps.shared.clientbindings.ClientViewModelFactory
 import app.aaps.shared.impl.sharedPreferences.StoreUnreadableException
@@ -415,6 +416,8 @@ private fun AapsDesktopApp(graph: DesktopAppGraph, appIcon: Painter, appName: St
                 protectionCheck = graph.protectionCheck,
                 configBuilder = graph.configBuilder,
                 dexcomBoyda = graph.dexcomBoyda,
+                // No AIMI on desktop (see DesktopAppGraph), so no report. The Glass tile is disabled here.
+                auditorReport = null,
                 onOpenCgmApp = { pkg -> logger.error(LTag.CORE, "No CGM app to open on desktop: $pkg") },
                 onExit = { logger.debug(LTag.CORE, "Exit requested from the menu") },
                 onRequestDirectoryAccess = { logger.debug(LTag.CORE, "Desktop reads its own folder; nothing to grant") },
@@ -482,6 +485,7 @@ private fun AapsDesktopApp(graph: DesktopAppGraph, appIcon: Painter, appName: St
                     prefFileList = graph.prefsFileInfo,
                     persistenceLayer = graph.persistenceLayer,
                     visibilityContext = graph.visibilityContext,
+                    aimiGlassDashboardData = AimiGlassDashboardSnapshotFeed.observe(),
                     onNavigationRequest = { request, _ -> navigator.handleNavigationRequest(request) },
                     onShowDeliveryError = { comment, title ->
                         logger.error(LTag.CORE, "Delivery error: ${graph.textResolver.gs(title)} - $comment")
@@ -518,8 +522,7 @@ private fun AapsDesktopApp(graph: DesktopAppGraph, appIcon: Painter, appName: St
                             permissionsViewModel = metroViewModel<PermissionsViewModel>(),
                             graphViewModel = graphs,
                             chipsViewModel = chips,
-                            aimiGlassDashboardData = app.aaps.plugins.aps.openAPSAIMI.dashboard.AimiGlassDashboardSnapshotFeed.observe(),
-                            dateUtil = graph.dateUtil,
+                            aimiGlassDashboardData = AimiGlassDashboardSnapshotFeed.observe(),
                             activePlugin = graph.activePlugin,
                             config = graph.config,
                             objectives = graph.objectives,

@@ -14,7 +14,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,12 +40,14 @@ import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.core.objects.extensions.getCustomizedName
 import app.aaps.core.objects.profile.ProfileSealed
 import app.aaps.core.ui.CoreUiStrings
-import app.aaps.core.ui.compose.AapsCard
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.LocalDateUtil
 import app.aaps.core.ui.compose.ToolbarConfig
 import app.aaps.core.ui.compose.dialogs.OkCancelDialog
 import app.aaps.core.ui.compose.dialogs.RecordRemovalDialog
+import app.aaps.core.ui.compose.glass.GlassCard
+import app.aaps.core.ui.compose.glass.GlassColors
+import app.aaps.core.ui.compose.glass.isGlassDarkMode
 import app.aaps.core.ui.compose.icons.Ns
 import app.aaps.core.ui.compose.icons.Pump
 import app.aaps.core.ui.compose.stringResource
@@ -73,6 +74,7 @@ fun ProfileSwitchScreen(
     onNavigateBack: () -> Unit = { }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val isDark = isGlassDarkMode()
 
     // Dialog states
     var showCloneDialog by remember { mutableStateOf(false) }
@@ -117,11 +119,15 @@ fun ProfileSwitchScreen(
         Box(modifier = Modifier.fillMaxSize()) {
             ContentContainer(
                 isLoading = uiState.isLoading,
-                isEmpty = uiState.profileSwitches.isEmpty()
+                isEmpty = uiState.profileSwitches.isEmpty(),
+                emptyIconTint = GlassColors.textMuted(isDark).copy(alpha = 0.6f),
+                emptyTextColor = GlassColors.textMuted(isDark)
             ) {
                 val haptic = LocalHapticFeedback.current
 
                 TreatmentLazyColumn(
+                    headerBackgroundColor = GlassColors.screenBgTop(isDark),
+                    headerTextColor = GlassColors.skyBlue,
                     items = uiState.profileSwitches,
                     getTimestamp = { it.timestamp },
                     getItemKey = { if (it is ProfileSealed.EPS) "eps_${it.id}" else "ps_${it.id}" },
@@ -195,8 +201,10 @@ private fun ProfileSwitchItem(
     onClone: (ProfileSealed.PS) -> Unit,
     decimalFormatter: DecimalFormatter
 ) {
+    val isDark = isGlassDarkMode()
     val dateUtil = LocalDateUtil.current
-    AapsCard(
+    GlassCard(
+        isDark = isDark,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 2.dp)
@@ -241,7 +249,7 @@ private fun ProfileSwitchItem(
                 color = when {
                     isActive -> Color(AapsTheme.generalColors.activeInsulinText.value)
                     isFuture -> Color(AapsTheme.generalColors.futureRecord.value)
-                    else     -> MaterialTheme.colorScheme.onSurface
+                    else     -> GlassColors.textBright(isDark)
                 }
             )
 
@@ -270,7 +278,7 @@ private fun ProfileSwitchItem(
                         }
                         .padding(start = 5.dp, top = 4.dp, bottom = 4.dp, end = 4.dp),
                     fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = GlassColors.skyBlue,
                     fontWeight = FontWeight.Bold,
                     textDecoration = TextDecoration.Underline
                 )

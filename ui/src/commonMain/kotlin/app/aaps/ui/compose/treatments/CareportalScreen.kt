@@ -31,13 +31,15 @@ import app.aaps.core.data.model.TE
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.utils.Translator
 import app.aaps.core.ui.CoreUiStrings
-import app.aaps.core.ui.compose.AapsCard
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.LocalDateUtil
 import app.aaps.core.ui.compose.LocalProfileUtil
 import app.aaps.core.ui.compose.MenuItemData
 import app.aaps.core.ui.compose.ToolbarConfig
 import app.aaps.core.ui.compose.dialogs.RecordRemovalDialog
+import app.aaps.core.ui.compose.glass.GlassCard
+import app.aaps.core.ui.compose.glass.GlassColors
+import app.aaps.core.ui.compose.glass.isGlassDarkMode
 import app.aaps.core.ui.compose.icons.Ns
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.ui.UiStrings
@@ -61,6 +63,7 @@ fun CareportalScreen(
     onNavigateBack: () -> Unit = { }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val isDark = isGlassDarkMode()
 
     // Update toolbar configuration whenever state changes
     LaunchedEffect(uiState.isRemovingMode, uiState.selectedItems.size, uiState.showInvalidated) {
@@ -85,11 +88,15 @@ fun CareportalScreen(
         Box(modifier = Modifier.fillMaxSize()) {
             ContentContainer(
                 isLoading = uiState.isLoading,
-                isEmpty = uiState.therapyEvents.isEmpty()
+                isEmpty = uiState.therapyEvents.isEmpty(),
+                emptyIconTint = GlassColors.textMuted(isDark).copy(alpha = 0.6f),
+                emptyTextColor = GlassColors.textMuted(isDark)
             ) {
                 val haptic = LocalHapticFeedback.current
 
                 TreatmentLazyColumn(
+                    headerBackgroundColor = GlassColors.screenBgTop(isDark),
+                    headerTextColor = GlassColors.skyBlue,
                     items = uiState.therapyEvents,
                     getTimestamp = { it.timestamp },
                     getItemKey = { it.id },
@@ -136,9 +143,11 @@ private fun TherapyEventItem(
     rh: TextResolver,
     translator: Translator
 ) {
+    val isDark = isGlassDarkMode()
     val profileUtil = LocalProfileUtil.current
     val dateUtil = LocalDateUtil.current
-    AapsCard(
+    GlassCard(
+        isDark = isDark,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 2.dp)

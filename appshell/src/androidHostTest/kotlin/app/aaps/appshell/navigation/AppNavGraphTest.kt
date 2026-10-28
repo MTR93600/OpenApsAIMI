@@ -7,7 +7,9 @@ import androidx.navigation.compose.DialogNavigator
 import androidx.navigation.createGraph
 import androidx.test.core.app.ApplicationProvider
 import app.aaps.core.interfaces.plugin.ActivePlugin
+import app.aaps.core.ui.compose.navigation.GlassDestination
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.flow.emptyFlow
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.kotlin.mock
@@ -68,6 +70,7 @@ class AppNavGraphTest {
                 prefFileList = mock(),
                 persistenceLayer = mock(),
                 visibilityContext = mock(),
+                aimiGlassDashboardData = emptyFlow(),
                 onNavigationRequest = { _, _ -> },
                 onShowDeliveryError = { _, _ -> },
                 withProtection = { _, action -> action() },
@@ -95,6 +98,27 @@ class AppNavGraphTest {
             AppRoute.RunningMode.route,
             AppRoute.Configuration.route,
             AppRoute.SetupWizard.route
+        )
+    }
+
+    @Test
+    fun everyGlassScreenIsRegistered() {
+        val routes = buildGraph(withOverview = true)
+
+        assertThat(routes).containsAtLeastElementsIn(GlassDestination.entries.map { glassAppRoute(it).route })
+    }
+
+    @Test
+    fun theGlassTreatmentAndLoopScreensAreRegistered() {
+        val routes = buildGraph(withOverview = true)
+
+        assertThat(routes).containsAtLeast(
+            "glass_insulin_detail",
+            "glass_cannula_detail/{preselect}",
+            "glass_basal_detail",
+            "glass_sensor_insert_detail/{eventTypeOrdinal}",
+            "glass_target_detail",
+            "glass_loop_detail"
         )
     }
 

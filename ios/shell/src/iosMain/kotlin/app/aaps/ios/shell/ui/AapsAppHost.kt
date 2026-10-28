@@ -506,6 +506,7 @@ private fun AapsApp(app: StartedApp, navigationRelay: NavigationRelay, onPending
                 protectionCheck = graph.protectionCheck,
                 configBuilder = graph.configBuilder,
                 dexcomBoyda = graph.dexcomBoyda,
+                auditorReport = graph.aimiAuditorReport,
                 // The CGM apps this opens are Android apps, found by package name.
                 onOpenCgmApp = { pkg -> reportNotAvailable("open CGM app $pkg") },
                 // Only for a path that reaches the navigator with EXIT without going through
@@ -592,6 +593,7 @@ private fun AapsApp(app: StartedApp, navigationRelay: NavigationRelay, onPending
                     prefFileList = graph.prefsFileInfo,
                     persistenceLayer = graph.persistenceLayer,
                     visibilityContext = graph.visibilityContext,
+                    aimiGlassDashboardData = AimiGlassDashboardSnapshotFeed.observe(),
                     onNavigationRequest = { request, _ -> handleOnIos(request) },
                     // The same alarm as `ComposeMainActivity`: a dose that did not reach the pump
                     // has to be heard, not only written to the log.
@@ -629,7 +631,6 @@ private fun AapsApp(app: StartedApp, navigationRelay: NavigationRelay, onPending
                             graphViewModel = graphs,
                             chipsViewModel = chips,
                             aimiGlassDashboardData = remember { AimiGlassDashboardSnapshotFeed.observe() },
-                            dateUtil = graph.dateUtil,
                             activePlugin = graph.activePlugin,
                             config = graph.config,
                             objectives = graph.objectives,

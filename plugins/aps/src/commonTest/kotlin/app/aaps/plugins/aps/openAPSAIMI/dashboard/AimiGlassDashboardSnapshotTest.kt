@@ -108,13 +108,13 @@ class AimiGlassDashboardSnapshotTest {
         assertEquals(0.3, shared.physio?.thermalDeltaVsBaselineC)
         assertEquals(0.2, shared.physio?.thermalInflammationIndex)
         assertEquals("Thermal recovery", shared.physio?.thermalNarrative)
-        assertEquals("Mode (80%)", shared.physio?.presentation?.modeHeadline)
+        assertEquals("Mode (80%)", shared.physioPresentation?.modeHeadline)
         assertEquals(
             "Dominant EXERCISE · 80% confidence across 1 context",
-            shared.physio?.presentation?.intentSummary,
+            shared.physioPresentation?.intentSummary,
         )
-        assertEquals("Thermal recovery (+0.3°C vs baseline)", shared.physio?.presentation?.thermalSummary)
-        assertEquals("Updated just now", shared.physio?.presentation?.updatedSummary)
+        assertEquals("Thermal recovery (+0.3°C vs baseline)", shared.physioPresentation?.thermalSummary)
+        assertEquals("Updated just now", shared.physioPresentation?.updatedSummary)
     }
 
     @Test
@@ -185,6 +185,46 @@ class AimiGlassDashboardSnapshotTest {
         assertEquals(1.0, shared.safety?.lowTirLastHourPercent)
         assertEquals(2.0, shared.safety?.lowTirTodayPercent)
         assertEquals(42, shared.safety?.stepsLast5Minutes)
+    }
+
+    @Test
+    fun patientStatePresentationIsKeptWhenThereIsNoLivePhysioDigest() {
+        val shared = AimiGlassDashboardSnapshot.from(curves = null, physio = null).toSharedData(
+            physioPresentation = AimiGlassDashboardSnapshot.PhysioPresentation(
+                modeHeadline = "Mode",
+                intentSummary = "Intent",
+                thermalSummary = "Thermal",
+                updatedSummary = "",
+            ),
+        )
+
+        assertNull(shared.physio)
+        assertEquals("Mode", shared.physioPresentation?.modeHeadline)
+    }
+
+    @Test
+    fun stepsTodayFromTheHealthStoreIsPassedOnAndStaysNullWhenAbsent() {
+        val withSteps = AimiGlassDashboardSnapshot.from(null, null).toSharedData(
+            safety = AimiGlassDashboardData.Safety(
+                tdd7DaysPerHour = null,
+                lowTirLastHourPercent = null,
+                lowTirTodayPercent = null,
+                stepsLast5Minutes = null,
+                stepsToday = AimiGlassDashboardData.StepsToday(dayStartMs = 1_000L, steps = 4_200L),
+            ),
+        )
+        val withoutSteps = AimiGlassDashboardSnapshot.from(null, null).toSharedData(
+            safety = AimiGlassDashboardData.Safety(
+                tdd7DaysPerHour = null,
+                lowTirLastHourPercent = null,
+                lowTirTodayPercent = null,
+                stepsLast5Minutes = null,
+            ),
+        )
+
+        assertEquals(4_200L, withSteps.safety?.stepsToday?.steps)
+        assertEquals(1_000L, withSteps.safety?.stepsToday?.dayStartMs)
+        assertNull(withoutSteps.safety?.stepsToday)
     }
 
     @Test

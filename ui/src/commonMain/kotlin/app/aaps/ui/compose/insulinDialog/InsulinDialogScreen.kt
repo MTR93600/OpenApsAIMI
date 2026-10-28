@@ -429,7 +429,7 @@ internal fun InsulinDialogContent(
 }
 
 @Composable
-private fun InsulinQuickAddButtons(
+internal fun InsulinQuickAddButtons(
     increment1: Double,
     increment2: Double,
     increment3: Double,
@@ -463,7 +463,7 @@ private fun InsulinQuickAddButtons(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun InsulinButtonSettingsSheet(
+internal fun InsulinButtonSettingsSheet(
     settingsDef: PreferenceSubScreenDef,
     onDismiss: () -> Unit
 ) {

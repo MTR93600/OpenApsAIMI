@@ -11,6 +11,7 @@ import app.aaps.core.interfaces.aps.Sensitivity
 import app.aaps.core.interfaces.calibration.Calibration
 import app.aaps.core.interfaces.concurrent.AapsLock
 import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.glucose.GlucoseCorrection
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
 import app.aaps.core.interfaces.overview.OverviewData
@@ -63,11 +64,17 @@ class PrepareGraphDataRunnerTest : TestBaseWithProfile() {
 
     private val autosensDataProvider = { mock<AutosensData>() }
 
+    /** What the corrected series answers for a stored reading; null keeps the stored value. */
+    private var correction: (timestamp: Long, storedMgdl: Double) -> Double? = { _, _ -> null }
+    private val glucoseCorrection = object : GlucoseCorrection {
+        override fun correctedMgdl(timestamp: Long, storedMgdl: Double): Double? = correction(timestamp, storedMgdl)
+    }
+
     private fun runner() =
         PrepareGraphDataRunner(
             aapsLogger, workflowChainData, dateUtil, mockedRxBus, persistenceLayer,
             activePlugin, profileFunction, profileUtil, preferences, config, profiler, decimalFormatter,
-            processedDeviceStatusData, TestScope(), autosensDataProvider
+            processedDeviceStatusData, glucoseCorrection, TestScope(), autosensDataProvider
         )
 
     // The runner asks this between phases; nothing in these tests stops a run part way.
@@ -228,6 +235,37 @@ class PrepareGraphDataRunnerTest : TestBaseWithProfile() {
         assertThat(readings.lastValue.single().utcOffset).isEqualTo(gv.utcOffset)
         // Terminal-only progress not emitted when emitFinalProgress = false
         verify(signals, never()).emitProgress(eq(ProgressData.DRAW_FINAL), any())
+    }
+
+    // ----- the chart shows the corrected value, like the dashboard, the alarms and Nightscout -----
+
+    /** Runs the BG reload phase on one stored reading of [storedMgdl] and returns the charted point. */
+    private suspend fun chartedPoint(storedMgdl: Double): BgDataPoint {
+        stubSuspendCalls()
+        val gv = mock<GV>()
+        whenever(gv.timestamp).thenReturn(-60_000L)
+        whenever(gv.value).thenReturn(storedMgdl)
+        whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), any())).thenReturn(listOf(gv))
+        whenever(workflowChainData.prepareFor(any(), any())).thenReturn(buildData(bgDataReload = true, emitFinalProgress = false))
+        run()
+        val readings = argumentCaptor<List<BgDataPoint>>()
+        verify(cache).updateBgReadings(readings.capture())
+        return readings.lastValue.single()
+    }
+
+    @Test
+    fun `a calibrated reading is charted at its corrected value`() = runTest {
+        correction = { _, stored -> if (stored == 140.0) 125.0 else null }
+        val point = chartedPoint(storedMgdl = 140.0)
+        assertThat(point.value).isEqualTo(profileUtil.fromMgdlToUnits(125.0))
+        assertThat(point.value).isNotEqualTo(profileUtil.fromMgdlToUnits(140.0))
+    }
+
+    @Test
+    fun `a reading without a correction keeps its stored value`() = runTest {
+        correction = { _, _ -> null }
+        val point = chartedPoint(storedMgdl = 140.0)
+        assertThat(point.value).isEqualTo(profileUtil.fromMgdlToUnits(140.0))
     }
 
     // ----- never correct twice: glucose that is already corrected is not calibrated again here -----

@@ -46,6 +46,7 @@ import app.aaps.implementation.maintenance.cloud.AuthBrowser
 import app.aaps.implementation.notifications.SnackbarNotificationFallback
 import app.aaps.implementation.plugin.PluginStore
 import app.aaps.plugins.aps.openAPSAIMI.OpenAPSAIMIPlugin
+import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorReportOpener
 import app.aaps.plugins.automation.AutomationRuntime
 import app.aaps.plugins.configuration.setupwizard.SWDefinition
 import app.aaps.shared.clientbindings.ClientGraphBindings
@@ -108,8 +109,11 @@ import java.io.File
  * do-nothing stubs would give desktop a dosing plugin that looks present and decides nothing, which
  * is the worse answer. The plugin is absent here instead, and says so by being excluded in one
  * place rather than hidden behind empty implementations.
+ *
+ * `AuditorReportOpener` is excluded for the same reason: it needs the AIMI notifier. Without the
+ * plugin the Glass "Auditor report" tile is disabled, and the navigator gets no report to open.
  */
-@DependencyGraph(AppScope::class, excludes = [OpenAPSAIMIPlugin::class])
+@DependencyGraph(AppScope::class, excludes = [OpenAPSAIMIPlugin::class, AuditorReportOpener::class])
 interface DesktopAppGraph : MetroViewModelMultibindings {
 
     // Everything AapsAppRoot takes.

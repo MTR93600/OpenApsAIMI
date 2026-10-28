@@ -348,6 +348,9 @@ g8_bolusspeed|DiaconnIntKey|true
 garmin_aaps_key|GarminStringKey|true
 garmin_http_last_steps_ts|GarminLongNonKey|false
 garmin_http_last_steps|GarminIntNonKey|false
+glass_selected_pills|StringNonKey|false
+glass_selected_tools|StringNonKey|false
+glass_top_grid_pills_migrated|BooleanNonKey|false
 google_drive_folder_id|StringNonKey|true
 google_drive_refresh_token|StringNonKey|true
 google_drive_storage_type|StringNonKey|true

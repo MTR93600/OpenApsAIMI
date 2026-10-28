@@ -45,6 +45,7 @@ import app.aaps.appshell.navigation.appNavGraph
 import app.aaps.appshell.navigation.handleNotificationAction
 import app.aaps.appshell.navigation.handleQuickLaunchAction
 import app.aaps.appshell.navigation.handleSearchResultClick
+import app.aaps.core.interfaces.aps.AimiAuditorReport
 import app.aaps.core.interfaces.bgQualityCheck.BgQualityCheck
 import app.aaps.core.interfaces.clientcontrol.ClientControlActionDispatcher
 import app.aaps.core.interfaces.configuration.Config
@@ -167,6 +168,7 @@ class ComposeMainActivity : MetroAppCompatActivity() {
     @Inject lateinit var profileUtil: ProfileUtil
     @Inject lateinit var visibilityContext: VisibilityContext
     @Inject lateinit var dexcomBoyda: DexcomBoyda
+    @Inject lateinit var aimiAuditorReport: AimiAuditorReport
     @Inject lateinit var persistenceLayer: PersistenceLayer
     @Inject lateinit var prefFileList: FileListProvider
     @Inject lateinit var notificationManager: NotificationManager
@@ -534,6 +536,7 @@ class ComposeMainActivity : MetroAppCompatActivity() {
                 prefFileList = prefFileList,
                 persistenceLayer = persistenceLayer,
                 visibilityContext = visibilityContext,
+                aimiGlassDashboardData = AimiGlassDashboardSnapshotFeed.observe(),
                 onNavigationRequest = { request, nc -> handleNavigationRequest(request, nc) },
                 onShowDeliveryError = { comment, title ->
                     uiInteraction.runAlarm(comment, rh.gs(title), AlarmSound.BOLUS_ERROR)
@@ -567,7 +570,6 @@ class ComposeMainActivity : MetroAppCompatActivity() {
                         graphViewModel = graphViewModel,
                         chipsViewModel = chipsViewModel,
                         aimiGlassDashboardData = remember { AimiGlassDashboardSnapshotFeed.observe() },
-                        dateUtil = dateUtil,
                         activePlugin = activePlugin,
                         config = config,
                         objectives = objectives,
@@ -715,6 +717,7 @@ class ComposeMainActivity : MetroAppCompatActivity() {
         protectionCheck = protectionCheck,
         configBuilder = configBuilder,
         dexcomBoyda = dexcomBoyda,
+        auditorReport = aimiAuditorReport,
         onOpenCgmApp = { packageName -> openCgmApp(packageName) },
         onExit = { finish() },
         onRequestDirectoryAccess = {

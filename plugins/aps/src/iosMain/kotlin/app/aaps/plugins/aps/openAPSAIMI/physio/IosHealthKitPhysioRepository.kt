@@ -521,6 +521,12 @@ class IosHealthKitPhysioRepository @Inject constructor(
         aapsLogger.debug(LTag.APS, "[$TAG] Cache cleared")
     }
 
+    /**
+     * No HealthKit day total is read here yet, so there is no total: null, never 0. The dashboard then
+     * shows the step total of the database alone, which is what it showed before.
+     */
+    override suspend fun fetchTodayStepsTotalAggregated(dayStartMs: Long, nowMs: Long): Long? = null
+
     // ═══════════════════════════════════════════════════════════════════════
     // AimiPhysioDataSource - SLEEP
     // ═══════════════════════════════════════════════════════════════════════

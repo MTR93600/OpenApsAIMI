@@ -185,7 +185,6 @@ fun FillDialogScreen(
     if (showButtonSettings) {
         FillButtonSettingsSheet(
             settingsDef = fillButtonsDef,
-            viewModel = viewModel,
             onDismiss = {
                 showButtonSettings = false
                 viewModel.refreshPresetButtons()
@@ -442,7 +441,7 @@ internal fun FillDialogContent(
 }
 
 @Composable
-private fun PresetButtonsRow(
+internal fun PresetButtonsRow(
     presetButton1: Double,
     presetButton2: Double,
     presetButton3: Double,
@@ -469,9 +468,8 @@ private fun PresetButtonsRow(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FillButtonSettingsSheet(
+internal fun FillButtonSettingsSheet(
     settingsDef: PreferenceSubScreenDef,
-    viewModel: FillDialogViewModel,
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)

@@ -155,6 +155,9 @@ fun MainScreen(
     onStopBolus: () -> Unit = {},
     /** Replaces only the home content; drawer, toolbar, notifications and shell chrome remain. */
     dashboardV2Content: (@Composable (commandsAllowed: Boolean) -> Unit)? = null,
+    /** True only for the GLASS skin: shows [GlassNavigationBar] instead of [MainNavigationBar] and hides
+     *  the Quick Launch toolbar. The other skins keep [MainNavigationBar]. */
+    isGlassSkin: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     LocalDateUtil.current
@@ -236,7 +239,9 @@ fun MainScreen(
             // WindowInsets.statusBars / navigationBars, which would be consumed
             // (returning zero height) if those Scaffold slots were populated.
             Scaffold { scaffoldPadding ->
-                val hasToolbar = quickLaunchItems.isNotEmpty()
+                // Glass has its own shortcut pills and its own bottom bar, so the Quick Launch toolbar
+                // would only float on top of them.
+                val hasToolbar = quickLaunchItems.isNotEmpty() && !isGlassSkin
 
                 // Content padding: in preview mode use only system bars;
                 // in normal mode add measured bar heights
@@ -470,7 +475,26 @@ fun MainScreen(
                             .padding(bottom = scaffoldPadding.calculateBottomPadding())
                     ) {
                         val loopActionState = loopActionViewModel.uiState.collectAsStateWithLifecycle().value
-                        MainNavigationBar(
+                        if (isGlassSkin) {
+                            GlassNavigationBar(
+                                masterOrPairedClient = masterOrPairedClient,
+                                onTreatmentClick = {
+                                    treatmentViewModel.refreshState()
+                                    showTreatmentSheet = true
+                                },
+                                onScenariosClick = {
+                                    scenesViewModel.refreshState()
+                                    showAutomationSheet = true
+                                },
+                                onManagementClick = { manageSheetState.show() },
+                                onNavigate = onNavigate,
+                                loopActionAvailable = loopActionState.actionAvailable,
+                                onLoopActionClick = { showLoopActionSheet = true },
+                                modifier = Modifier.onSizeChanged {
+                                    if (it.height > 0 && it.height != bottomBarHeightPx) bottomBarHeightPx = it.height
+                                }
+                            )
+                        } else MainNavigationBar(
                             onManageClick = { manageSheetState.show() },
                             onTreatmentClick = {
                                 treatmentViewModel.refreshState()

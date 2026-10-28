@@ -13,12 +13,10 @@ import app.aaps.core.interfaces.clientcontrol.ClientControlActionDispatcher
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.constraints.Objectives
 import app.aaps.core.interfaces.dashboard.AimiGlassDashboardData
-import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.notifications.AapsNotification
 import app.aaps.core.interfaces.notifications.AlarmSound
 import app.aaps.core.interfaces.notifications.NotificationHandle
 import app.aaps.core.interfaces.notifications.NotificationManager
-import app.aaps.core.interfaces.navigation.ElementType
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.pump.BolusProgressData
@@ -26,7 +24,6 @@ import app.aaps.core.interfaces.queue.CommandQueue
 import app.aaps.core.interfaces.source.CgmWarmupProvider
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.keys.StringKey
-import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.dialogs.OkDialog
 import app.aaps.core.ui.compose.navigation.NavigationRequest
@@ -35,9 +32,8 @@ import app.aaps.core.ui.compose.stringResource
 import app.aaps.ui.UiStrings
 import app.aaps.ui.compose.loopSheet.LoopActionViewModel
 import app.aaps.ui.compose.dashboard.DashboardHomeSelection
-import app.aaps.ui.compose.dashboard.GlassDashboardScreen
 import app.aaps.ui.compose.dashboard.DashboardV2GraphScreen
-import app.aaps.ui.compose.dashboard.GlassDashboardHome
+import app.aaps.ui.compose.dashboard.glass.GlassDashboardHome
 import app.aaps.ui.compose.maintenance.ImportSource
 import app.aaps.ui.compose.maintenance.MaintenanceViewModel
 import app.aaps.ui.compose.manageSheet.ManageSheetHost
@@ -93,7 +89,6 @@ fun OverviewScreen(
     graphViewModel: GraphViewModel,
     chipsViewModel: ChipsViewModel,
     aimiGlassDashboardData: Flow<AimiGlassDashboardData>,
-    dateUtil: DateUtil,
     // Dependencies
     activePlugin: ActivePlugin,
     config: Config,
@@ -292,22 +287,22 @@ fun OverviewScreen(
             DashboardHomeSelection.GLASS -> { commandsAllowed ->
                 GlassDashboardHome(
                     graphViewModel = graphViewModel,
-                    aimiDashboardData = aimiGlassDashboardData,
-                    dateUtil = dateUtil,
                     chipsViewModel = chipsViewModel,
                     statusViewModel = statusViewModel,
-                    statusLightsDef = builtInSearchables.statusLights,
+                    notifications = notifications,
+                    onDismissNotification = { notification -> notificationManager.dismiss(NotificationHandle(notification.instanceKey)) },
+                    onNotificationActionClick = onNotificationActionClick,
+                    availablePluginClassNames = activePlugin.getPluginsList().mapNotNull { it::class.simpleName }.toSet(),
+                    bgSourcePluginClassName = bgSourcePlugin?.let { it::class.simpleName },
                     commandsAllowed = commandsAllowed,
                     onNavigate = onNavigate,
-                    onOpenSettings = {
-                        onNavigate(NavigationRequest.Element(ElementType.SETTINGS))
-                    },
-                    title = stringResource(UiStrings.dashboard_glass_home_title),
-                    settingsLabel = stringResource(CoreUiStrings.settings),
+                    onOpenActions = { manageSheetState.show() },
+                    aimiDashboardData = aimiGlassDashboardData,
                     cgmWarmupStatus = (activePlugin.activeBgSource as? CgmWarmupProvider)?.warmupStatus,
                 )
             }
             DashboardHomeSelection.OVERVIEW -> null
         },
+        isGlassSkin = homeSelection == DashboardHomeSelection.GLASS,
     )
 }

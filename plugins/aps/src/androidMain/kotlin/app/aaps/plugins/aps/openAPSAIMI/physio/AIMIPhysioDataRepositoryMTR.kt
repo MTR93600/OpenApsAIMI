@@ -601,7 +601,7 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
      * Returns **null** when unified activity mode skips HC, HC is unavailable, or the query fails —
      * callers should fall back to persistence-layer bucket logic.
      */
-    suspend fun fetchTodayStepsTotalAggregated(dayStartMs: Long, nowMs: Long): Long? {
+    override suspend fun fetchTodayStepsTotalAggregated(dayStartMs: Long, nowMs: Long): Long? {
         val mode = UnifiedActivityProviderMTR.getMode(preferences)
         if (mode == UnifiedActivityProviderMTR.MODE_PREFER_WEAR ||
             mode == UnifiedActivityProviderMTR.MODE_DISABLED

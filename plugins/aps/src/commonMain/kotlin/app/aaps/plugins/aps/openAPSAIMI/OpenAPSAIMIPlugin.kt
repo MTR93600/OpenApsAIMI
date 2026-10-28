@@ -343,11 +343,17 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 now - 24L * 60L * 60L * 1000L,
                 now,
             )?.steps5min
+            // Display only. The repository keeps its own short cache, as on dev_OAPSAIMI.
+            val dayStart = dateUtil.beginOfDay(now)
+            val stepsToday = healthContextRepository.getHcRepo()
+                .fetchTodayStepsTotalAggregated(dayStart, now)
+                ?.let { AimiGlassDashboardData.StepsToday(dayStartMs = dayStart, steps = it) }
             AimiGlassDashboardData.Safety(
                 tdd7DaysPerHour = tdd,
                 lowTirLastHourPercent = lowTirHour,
                 lowTirTodayPercent = lowTirToday,
                 stepsLast5Minutes = stepsLast5Minutes,
+                stepsToday = stepsToday,
             )
         }
         // Fresh cross-tick hysteresis for a new plugin lifetime (not per APS tick).

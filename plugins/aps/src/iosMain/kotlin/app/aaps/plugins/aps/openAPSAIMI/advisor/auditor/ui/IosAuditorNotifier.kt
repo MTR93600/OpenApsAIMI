@@ -85,9 +85,11 @@ internal class AuditorAnnouncer(private val post: (AuditorUIState) -> Boolean) {
  * ## What is different from Android
  *
  * Android also has an in-app notification with a "view" button that opens a report dialog. iOS
- * has only the system notification. A tap opens the AIMI settings screen, not the report, because
- * no report screen is wired for iOS yet. The full report text is in the notification body, so the
- * content is still there.
+ * has only the system notification. A tap opens the AIMI settings screen, not the report: the
+ * notification tap goes through a route, and the report is a dialog, not a route. The full report
+ * text is in the notification body, so the content is still there. The report dialog itself is
+ * opened by the shared `AuditorReportOpener` (the Glass Tools tile), which calls
+ * [cancelNotification] to take this notification away.
  */
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
@@ -106,6 +108,15 @@ class IosAuditorNotifier @Inject constructor(
 
     override fun showInsightAvailable(uiState: AuditorUIState): Boolean =
         announcer.announce(uiState, AuditorVerdictCache.resolveForDisplay()?.cached?.timestamp)
+
+    /**
+     * Removes the notification from Notification Center, and a request that is not delivered yet.
+     * Both calls are safe when there is nothing to remove.
+     */
+    override fun cancelNotification() {
+        center.removeDeliveredNotificationsWithIdentifiers(listOf(IDENTIFIER))
+        center.removePendingNotificationRequestsWithIdentifiers(listOf(IDENTIFIER))
+    }
 
     private fun post(uiState: AuditorUIState): Boolean {
         requestAuthorizationOnce()

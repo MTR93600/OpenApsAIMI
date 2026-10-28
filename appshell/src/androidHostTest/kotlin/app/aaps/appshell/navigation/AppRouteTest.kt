@@ -36,6 +36,18 @@ class AppRouteTest {
     }
 
     @Test
+    fun glassCannulaDetail_embedsPreselect() {
+        assertThat(AppRoute.GlassCannulaDetail.route).isEqualTo("glass_cannula_detail/{preselect}")
+        assertThat(AppRoute.GlassCannulaDetail.createRoute(1)).isEqualTo("glass_cannula_detail/1")
+    }
+
+    @Test
+    fun glassSensorInsertDetail_embedsEventType() {
+        assertThat(AppRoute.GlassSensorInsertDetail.route).isEqualTo("glass_sensor_insert_detail/{eventTypeOrdinal}")
+        assertThat(AppRoute.GlassSensorInsertDetail.createRoute(1)).isEqualTo("glass_sensor_insert_detail/1")
+    }
+
+    @Test
     fun profile_defaultMode_isEdit() {
         assertThat(AppRoute.Profile.createRoute()).isEqualTo("profile?mode=EDIT")
     }

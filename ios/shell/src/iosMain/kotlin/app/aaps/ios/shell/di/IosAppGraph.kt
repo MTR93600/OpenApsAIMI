@@ -1,6 +1,7 @@
 package app.aaps.ios.shell.di
 
 import app.aaps.core.interfaces.alerts.EatReminder
+import app.aaps.core.interfaces.aps.AimiAuditorReport
 import app.aaps.core.interfaces.bgQualityCheck.BgQualityCheck
 import app.aaps.core.interfaces.clientcontrol.ClientControlActionDispatcher
 import app.aaps.core.interfaces.configuration.Config
@@ -259,6 +260,8 @@ interface IosAppGraph : MetroViewModelMultibindings {
     val commandQueue: CommandQueue
     val pumpCommunicationStatus: PumpCommunicationStatus
     val dexcomBoyda: DexcomBoyda
+    /** Opens the AIMI auditor report dialog. The Glass Tools tile reaches it through the navigator. */
+    val aimiAuditorReport: AimiAuditorReport
     /** Concrete, not the interface: the app has to start the battery watch, which is iOS-only. */
     val receiverStatusStore: IosReceiverStatusStore
 

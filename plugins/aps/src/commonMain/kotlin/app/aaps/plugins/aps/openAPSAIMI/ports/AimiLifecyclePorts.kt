@@ -70,4 +70,7 @@ interface AimiAuditorNotifier {
      * @return true if a notification was posted for this verdict.
      */
     fun showInsightAvailable(uiState: AuditorUIState): Boolean
+
+    /** Removes the notification posted by [showInsightAvailable], if it is still shown. */
+    fun cancelNotification()
 }
