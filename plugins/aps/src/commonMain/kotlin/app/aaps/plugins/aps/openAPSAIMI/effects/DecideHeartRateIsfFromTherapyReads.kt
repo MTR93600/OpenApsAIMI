@@ -22,6 +22,9 @@ internal data class HeartRateIsfFromReads(
  * The four watch samples of `autosensHalfDoublesScheduledBasalAndRestingHeartRateStrengthensIsf`
  * (80, 80, 80, then 110 bpm) produce `HR_TREND_ISF x0.90` and ISF 45 from 50.
  * A failed heart-rate read leaves the sensitivity unchanged.
+ *
+ * [declaredMealActive] stands for the tick's declared-meal rule; during a declared meal unknown steps
+ * read as 0 (see [AimiRecentSteps.unknownAsZeroDuringDeclaredMeal]).
  */
 internal fun decideHeartRateIsfFromTherapyReads(
     reads: AimiTherapyReads,
@@ -37,6 +40,7 @@ internal fun decideHeartRateIsfFromTherapyReads(
     profile: OapsProfileAimi,
     preferences: Preferences,
     consoleLog: MutableList<String>,
+    declaredMealActive: Boolean = false,
 ): HeartRateIsfFromReads {
     check(stepsFromWatch == preferences.get(BooleanKey.OApsAIMIEnableStepsFromWatch)) {
         "stepsFromWatch disagrees with OApsAIMIEnableStepsFromWatch"
@@ -79,6 +83,7 @@ internal fun decideHeartRateIsfFromTherapyReads(
             override fun setRecentSteps(steps5: Int?, steps10: Int?, steps15: Int?, steps30: Int?, steps60: Int?, steps180: Int?) {
                 recentSteps10 = steps10
             }
+            override fun declaredMealWindowActive(): Boolean = declaredMealActive
             override fun phoneSteps5(): Int? = null
             override fun phoneSteps10(): Int? = null
             override fun phoneSteps15(): Int? = null

@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
 import kotlinx.datetime.DatePeriod
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
@@ -82,3 +83,9 @@ internal fun aimiYesterdayMiddayEpochMs(
     val yesterday = local.date.minus(DatePeriod(days = 1))
     return LocalDateTime(yesterday, LocalTime(12, 0)).toInstant(zone).toEpochMilliseconds()
 }
+
+/** [date] at 12:00 in [zone], the same instant `date.atTime(12, 0).atZone(zone)` names. */
+internal fun aimiLocalMiddayEpochMs(
+    date: LocalDate,
+    zone: TimeZone = TimeZone.currentSystemDefault(),
+): Long = LocalDateTime(date, LocalTime(12, 0)).toInstant(zone).toEpochMilliseconds()

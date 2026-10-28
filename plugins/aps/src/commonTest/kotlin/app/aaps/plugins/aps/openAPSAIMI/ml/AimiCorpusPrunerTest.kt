@@ -1,10 +1,14 @@
 package app.aaps.plugins.aps.openAPSAIMI.ml
 
+import app.aaps.plugins.aps.openAPSAIMI.aimiEpochAtLocalTime
 import app.aaps.plugins.aps.openAPSAIMI.tpo.InMemoryAimiStorage
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -48,6 +52,23 @@ class AimiCorpusPrunerTest {
     }
 
     @Test
+    fun aSecondRunForTheSameDayDoesNothingAndMakesNoSecondBackup() {
+        val storage = storageWith(threeDays)
+        AimiCorpusPruner.moveDay(storage, csv, backup, setAside, "29/09/2026")
+        val corpusAfterFirst = storage.files[csv.value]
+        val asideAfterFirst = storage.files[setAside.value]
+        val secondBackup = AimiPath("/aimi/backup_20260930_000800.csv")
+
+        val result = AimiCorpusPruner.moveDay(storage, csv, secondBackup, setAside, "29/09/2026")
+
+        assertEquals(AimiCorpusPruner.Outcome.NOTHING_REMOVED, result.outcome)
+        assertTrue(result.isFinal)
+        assertEquals(corpusAfterFirst, storage.files[csv.value])
+        assertEquals(asideAfterFirst, storage.files[setAside.value])
+        assertNull(storage.files[secondBackup.value])
+    }
+
+    @Test
     fun aSecondBadDayIsAddedUnderTheSameHeader() {
         val storage = storageWith(threeDays)
         AimiCorpusPruner.moveDay(storage, csv, backup, setAside, "29/09/2026")
@@ -80,6 +101,7 @@ class AimiCorpusPrunerTest {
         val result = AimiCorpusPruner.moveDay(storage, csv, backup, setAside, "29/09/2026")
 
         assertEquals(AimiCorpusPruner.Outcome.SET_ASIDE_FAILED, result.outcome)
+        assertFalse(result.isFinal)
         assertEquals(threeDays, storage.files[csv.value])
     }
 
@@ -167,14 +189,6 @@ class AimiCorpusPrunerTest {
     fun anEmptyFileAndAHeaderOnlyFileAreSafe() {
         assertEquals(emptyList(), AimiCorpusPruner.keepAllButDay(emptyList(), "29/09/2026"))
         assertEquals(listOf(header), AimiCorpusPruner.keepAllButDay(listOf(header), "29/09/2026"))
-    }
-
-    @Test
-    fun theCountRuleStillDropsTheNewestLinesAndOnlyAboveTheCount() {
-        val lines = (0 until 5).map { "row$it" }
-        assertEquals(listOf("row0", "row1"), AimiCorpusPruner.keepAllButNewest(lines, 3))
-        assertEquals(lines, AimiCorpusPruner.keepAllButNewest(lines, 5))
-        assertEquals(lines, AimiCorpusPruner.keepAllButNewest(lines, 6))
     }
 
     // ---- the trailing line break ----------------------------------------------------------------
@@ -283,29 +297,85 @@ class AimiCorpusPrunerTest {
         assertEquals(original, inner.files[backup.value])
     }
 
+    // ---- when to clean up: the bad day rule -----------------------------------------------------
+
     @Test
-    fun removeNewestKeepsTheCountRuleAndBacksUpTheFile() {
-        val original = "$header\nrow1\nrow2\nrow3\n"
-        val storage = storageWith(original)
-
-        val result = AimiCorpusPruner.removeNewest(storage, csv, backup, 2)
-
-        assertEquals(AimiCorpusPruner.Outcome.REMOVED, result.outcome)
-        assertEquals(2, result.removedRows)
-        assertEquals(original, storage.files[backup.value])
-        assertEquals("$header\nrow1\n", storage.files[csv.value])
+    fun aDayUnder65PercentInRangeIsABadDay() {
+        assertTrue(AimiCorpusPruner.isBadDay(64.9, readingCount = 1440))
+        assertFalse(AimiCorpusPruner.isBadDay(65.0, readingCount = 1440))
+        // 84 % was a bad day under the old 85 % rule. It is an ordinary day now.
+        assertFalse(AimiCorpusPruner.isBadDay(84.0, readingCount = 1440))
     }
 
     @Test
-    fun removeNewestDoesNothingWhenTheFileIsNotLongerThanTheCount() {
-        val original = "$header\nrow1\n"
-        val storage = storageWith(original)
+    fun aDayWithNoGlucoseReadingIsUnknownAndNeverABadDay() {
+        // The TIR code answers 0 % for an empty day, and the warm-up snapshot starts at 0 %.
+        assertFalse(AimiCorpusPruner.isBadDay(0.0, readingCount = 0))
+        assertFalse(AimiCorpusPruner.isBadDay(null, readingCount = 1440))
+        assertFalse(AimiCorpusPruner.isBadDay(Double.NaN, readingCount = 1440))
+    }
 
-        val result = AimiCorpusPruner.removeNewest(storage, csv, backup, 2)
+    @Test
+    fun theBadDayWindowIsStrictlyBetween0005And0010() {
+        val utc = TimeZone.UTC
+        assertFalse(AimiCorpusPruner.isInsideBadDayWindow(aimiEpochAtLocalTime(0, 5, zone = utc), utc))
+        assertTrue(AimiCorpusPruner.isInsideBadDayWindow(aimiEpochAtLocalTime(0, 7, zone = utc), utc))
+        assertFalse(AimiCorpusPruner.isInsideBadDayWindow(aimiEpochAtLocalTime(0, 10, zone = utc), utc))
+        assertFalse(AimiCorpusPruner.isInsideBadDayWindow(aimiEpochAtLocalTime(12, 7, zone = utc), utc))
+    }
 
-        assertEquals(AimiCorpusPruner.Outcome.NOTHING_REMOVED, result.outcome)
-        assertEquals(original, storage.files[csv.value])
-        assertNull(storage.files[backup.value])
+    // ---- the delete note ------------------------------------------------------------------------
+
+    @Test
+    fun onlyANoteThatStartsWithDeleteIsADeleteNote() {
+        assertTrue(AimiCorpusPruner.isDeleteNote("delete"))
+        assertTrue(AimiCorpusPruner.isDeleteNote("  Delete 25/10/2026"))
+        assertTrue(AimiCorpusPruner.isDeleteNote("DELETE"))
+        assertFalse(AimiCorpusPruner.isDeleteNote("please delete yesterday"))
+        assertFalse(AimiCorpusPruner.isDeleteNote("lunch, delete later"))
+        assertFalse(AimiCorpusPruner.isDeleteNote("deleted the old pod"))
+        assertFalse(AimiCorpusPruner.isDeleteNote(null))
+    }
+
+    @Test
+    fun aDeleteNoteWithNoDayMeansYesterday() {
+        assertEquals(AimiCorpusPruner.DeleteNoteDay.Yesterday, AimiCorpusPruner.deleteNoteDay("delete"))
+        assertEquals(AimiCorpusPruner.DeleteNoteDay.Yesterday, AimiCorpusPruner.deleteNoteDay(" Delete  "))
+    }
+
+    @Test
+    fun aDeleteNoteReadsTheDayWrittenAsDdMmYyyy() {
+        assertEquals(
+            AimiCorpusPruner.DeleteNoteDay.OnDate(LocalDate(2026, 10, 25)),
+            AimiCorpusPruner.deleteNoteDay("delete 25/10/2026"),
+        )
+        assertEquals(
+            AimiCorpusPruner.DeleteNoteDay.OnDate(LocalDate(2026, 1, 5)),
+            AimiCorpusPruner.deleteNoteDay("DELETE   05/01/2026"),
+        )
+    }
+
+    @Test
+    fun aDeleteNoteWhoseDayCannotBeReadRemovesNothing() {
+        assertEquals(AimiCorpusPruner.DeleteNoteDay.Unreadable, AimiCorpusPruner.deleteNoteDay("delete 2026-10-25"))
+        assertEquals(AimiCorpusPruner.DeleteNoteDay.Unreadable, AimiCorpusPruner.deleteNoteDay("delete 31/02/2026"))
+        assertEquals(AimiCorpusPruner.DeleteNoteDay.Unreadable, AimiCorpusPruner.deleteNoteDay("delete 25/10/2026 and more"))
+        assertEquals(AimiCorpusPruner.DeleteNoteDay.Unreadable, AimiCorpusPruner.deleteNoteDay("delete everything"))
+    }
+
+    @Test
+    fun aDeleteNoteRemovesOnlyTheNamedDayNotTheNewestRows() {
+        // The old trigger removed the newest 200 lines on every tick. Now only the named day goes.
+        val rows = (0 until 300).map {
+            "30/09/2026 ${(it / 60).toString().padStart(2, '0')}:${(it % 60).toString().padStart(2, '0')},120,1.0,0.1"
+        }
+        val storage = storageWith((listOf(header, "29/09/2026 10:00,118,1.1,0.2") + rows).joinToString("\n", postfix = "\n"))
+
+        val result = AimiCorpusPruner.moveDay(storage, csv, backup, setAside, "29/09/2026")
+
+        assertEquals(1, result.removedRows)
+        assertEquals(301, storage.readLines(csv).size)
+        assertTrue(storage.files[csv.value].orEmpty().endsWith("\n"))
     }
 
     /** Storage whose backup copy always fails, to check nothing is rewritten without a backup. */

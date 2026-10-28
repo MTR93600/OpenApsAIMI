@@ -1012,6 +1012,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 TirWarmupSnapshot(
                     tir1DayAbove = tir1DayAvg.abovePct() ?: 0.0,
                     tir1DayInRange = tir1DayAvg.inRangePct() ?: 0.0,
+                    tir1DayReadings = tir1DayAvg.count,
                     currentTirLow = tirToday.belowPct() ?: 0.0,
                     currentTirRange = tirToday.inRangePct() ?: 0.0,
                     currentTirAbove = tirToday.abovePct() ?: 0.0,
@@ -1081,6 +1082,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private data class TirWarmupSnapshot(
         val tir1DayAbove: Double = 0.0,
         val tir1DayInRange: Double = 0.0,
+        /** Glucose readings behind [tir1DayInRange]. 0 means the TIR is unknown, not 0 %. */
+        val tir1DayReadings: Int = 0,
         val currentTirLow: Double = 0.0,
         val currentTirRange: Double = 0.0,
         val currentTirAbove: Double = 0.0,
@@ -2049,6 +2052,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             AimiTirWarmupView(
                 tir1DayAbove = snapshot.tir1DayAbove,
                 tir1DayInRange = snapshot.tir1DayInRange,
+                tir1DayReadings = snapshot.tir1DayReadings,
                 currentTirLow = snapshot.currentTirLow,
                 currentTirRange = snapshot.currentTirRange,
                 currentTirAbove = snapshot.currentTirAbove,
@@ -2063,7 +2067,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 tirBasalHourAbove = snapshot.tirBasalHourAbove,
             )
         },
-        badDay = AimiBadDayDeletion { automateDeletionIfBadDay(it) },
+        badDay = AimiBadDayDeletion { inRangePct, readings -> automateDeletionIfBadDay(inRangePct, readings) },
         carbs = AimiCarbContextRead { nowMs, lastCarb, cobNow ->
             val snapshot = latestCarbContextSnapshot(nowMs, lastCarb, cobNow)
             AimiCarbContextView(
@@ -2094,14 +2098,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     val therapy = Therapy(persistenceLayer).also {
                         it.updateStatesBasedOnTherapyEvents(forceRefresh = true)
                     }
-                    val deleteTime = therapy.deleteTime
-                    if (deleteTime) {
-                        // Still the count based clean up on purpose: the owner asked for the date based one on
-                        // the "bad day" trigger only. `Therapy.deleteEventDate` does carry the day of the note,
-                        // so this path could be moved to `removeRowsForDay` later, but that is a change of
-                        // behaviour and needs to be asked for.
-                        removeLast200Lines(csvfilePath)
-                    }
+                    handleCorpusDeleteNote(therapy.deleteNote)
                     work.sleepTime = therapy.sleepTime
                     work.snackTime = therapy.snackTime
                     work.sportTime = therapy.sportTime
@@ -4316,6 +4313,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     recentSteps60Minutes = steps60
                     recentSteps180Minutes = steps180
                 }
+                override fun declaredMealWindowActive() = this@DetermineBasalaimiSMB2.declaredMealWindowActive()
                 override fun phoneSteps5() = StepService.getRecentStepCount5Min()
                 override fun phoneSteps10() = StepService.getRecentStepCount10Min()
                 override fun phoneSteps15() = StepService.getRecentStepCount15Min()
@@ -11009,9 +11007,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * The name of the copy of the training CSV, taken before the file is rewritten.
      *
      * `backup_yyyyMMdd_HHmmss.csv`, which is the name `AimiRetentionPolicy.DROP_GLOBS` already looks
-     * for when it tidies old backups up. The caller puts it in the AIMI directory with
-     * [AimiStorage.file]; before the storage port it was placed next to the CSV itself, which is the
-     * same place, because both pruned files are named with [AimiStorage.file] as well.
+     * for when it tidies old backups up. The caller puts it next to the CSV it copies: the AIMI
+     * directory ([AimiStorage.file]) or the app-scoped fallback directory ([AimiStorage.fallbackFile]).
      *
      * `Locale.getDefault()` rather than `Locale.US` is kept from the reference even though it means a
      * non Gregorian calendar writes a non Gregorian year into the name - a Thai locale writes 2569 for
@@ -11035,97 +11032,129 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     /**
-     * Removes the newest 200 lines of the training CSV, after copying the whole file aside.
-     *
-     * This is the count based clean up, kept for the therapy note trigger, which asks for a deletion
-     * without naming a day. The rule itself lives in [AimiCorpusPruner.keepAllButNewest] so it can be
-     * tested; the "bad day" trigger uses [removeRowsForDay] instead, which removes the rows of the
-     * day the user is told about.
+     * The training corpus files that exist: the shared one and, when shared storage was denied, the
+     * app-scoped copy the writer falls back to (see `flushWritableTrainingRows`).
      */
-    fun removeLast200Lines(csvFile: AimiPath) {
-        val reasonBuilder = StringBuilder()
-        if (!storage.exists(csvFile)) {
-            aapsLogger.info(LTag.APS, rh.gs(ApsStrings.original_file_missing))
-            return
+    private fun existingTrainingCorpusFiles(): List<AimiPath> =
+        listOf(csvfilePath, storage.fallbackFile(TRAINING_CORPUS_FILE))
+            .distinct()
+            .filter { storage.exists(it) }
+
+    /**
+     * Moves the rows of one day out of every training corpus file, into
+     * [AimiCorpusPruner.SET_ASIDE_FILE_NAME] next to it. See [AimiCorpusPruner.moveDay].
+     *
+     * [dayText] is the day written with `DateUtil.dateString`, the same function the row writer uses
+     * for column 0, so it only matches rows of that day. A row whose date cannot be read, or that was
+     * written while the phone was set to another language, does not match and is kept.
+     *
+     * @return one result per corpus file. Empty when no corpus file exists.
+     */
+    private fun moveDayOutOfTrainingCorpus(dayText: String): List<AimiCorpusPruner.Result> =
+        existingTrainingCorpusFiles().map { corpus ->
+            // The backup and the set-aside file go next to the corpus they come from.
+            val inShared = corpus == csvfilePath
+            val result = runCatching {
+                AimiCorpusPruner.moveDay(
+                    storage = storage,
+                    csv = corpus,
+                    backup = if (inShared) storage.file(backupFileName()) else storage.fallbackFile(backupFileName()),
+                    setAside = if (inShared) {
+                        storage.file(AimiCorpusPruner.SET_ASIDE_FILE_NAME)
+                    } else {
+                        storage.fallbackFile(AimiCorpusPruner.SET_ASIDE_FILE_NAME)
+                    },
+                    dayText = dayText,
+                )
+            }.getOrElse { error ->
+                aapsLogger.error(LTag.APS, "AIMI training CSV clean up failed for ${storage.displayPath(corpus)}", error)
+                AimiCorpusPruner.Result(AimiCorpusPruner.Outcome.WRITE_FAILED, removedRows = 0, keptRows = 0)
+            }
+            aapsLogger.info(
+                LTag.APS,
+                "AIMI training CSV clean up for $dayText in ${storage.displayPath(corpus)}: ${result.outcome}, " +
+                    "removed ${result.removedRows} rows, kept ${result.keptRows}",
+            )
+            result
         }
 
-        val backupName = backupFileName()
-        val result = AimiCorpusPruner.removeNewest(
-            storage = storage,
-            csv = csvFile,
-            backup = storage.file(backupName),
-            count = 200,
-        )
-        when (result.outcome) {
-            AimiCorpusPruner.Outcome.REMOVED         ->
-                reasonBuilder.append(rh.gs(ApsStrings.last_200_deleted, backupName))
-
-            AimiCorpusPruner.Outcome.NOTHING_REMOVED ->
-                reasonBuilder.append(rh.gs(ApsStrings.file_too_short))
-
-            else                                     ->
-                aapsLogger.warn(LTag.APS, "AIMI training CSV not cleaned up: ${result.outcome}")
+    /**
+     * Once a night, between 00:05 and 00:10, moves YESTERDAY's rows out of the training corpus when
+     * yesterday was a bad day ([AimiCorpusPruner.isBadDay]: time in range 65-180 mg/dL under 65 %).
+     *
+     * It is called on every tick of that window, but only the first call does work: after it, the
+     * rows of yesterday are no longer in the corpus, so the next calls find nothing, write nothing
+     * and make no backup. A day with no glucose reading is unknown, not bad, and is kept.
+     *
+     * Training data only: nothing here changes a dose.
+     */
+    private fun automateDeletionIfBadDay(tir1DayInRangePct: Double, tir1DayReadings: Int) {
+        if (!AimiCorpusPruner.isBadDay(tir1DayInRangePct, tir1DayReadings)) return
+        val deletionNowMs = aimiWallClockMs()
+        if (!AimiCorpusPruner.isInsideBadDayWindow(deletionNowMs)) return
+        // The day that has just ended, in the phone's own time zone, which is both the zone the
+        // window above is read in and the zone the rows were dated in. Midday is used rather than
+        // midnight because in a few time zones a day starts without a midnight when the clocks change.
+        // The very text the row writer put in column 0 for that day.
+        val dayText = dateUtil.dateString(aimiYesterdayMiddayEpochMs(deletionNowMs))
+        val results = moveDayOutOfTrainingCorpus(dayText)
+        if (results.any { it.outcome == AimiCorpusPruner.Outcome.REMOVED }) {
+            work.consoleLog.add(rh.gs(ApsStrings.reason_data_removed, dayText))
         }
+    }
+
+    /** Remembers the newest delete note already done, so a restart does not do it again. */
+    private val corpusDeleteNoteDoneFile: AimiPath by lazy { storage.fallbackFile(CORPUS_DELETE_NOTE_DONE_FILE) }
+
+    private fun lastDoneCorpusDeleteNoteTimestamp(): Long =
+        runCatching { storage.readText(corpusDeleteNoteDoneFile)?.trim()?.toLongOrNull() }.getOrNull() ?: 0L
+
+    private fun markCorpusDeleteNoteDone(timestamp: Long) {
+        val stored = runCatching {
+            storage.createParentDirectories(corpusDeleteNoteDoneFile)
+            storage.writeText(corpusDeleteNoteDoneFile, timestamp.toString())
+        }.getOrElse { false }
+        if (!stored) aapsLogger.warn(LTag.APS, "Could not store the done delete note")
     }
 
     /**
-     * Removes the rows of one day from the training CSV, keeping every other row and the header.
+     * Handles a "delete" therapy note ([Therapy.deleteNote]) ONCE: it moves the rows of the day the
+     * note names (yesterday when it names none) out of the training corpus.
      *
-     * The day is passed as text, not as a date, because column 0 of a row is written with
-     * `DateUtil.dateAndTimeString`, which is the short date in the phone's own language and time
-     * zone. The caller builds the same text with the same function, so the two can only match when
-     * they mean the same day. A row whose date cannot be read, or that was written while the phone
-     * was set to another language, does not match and is kept.
+     * The note is keyed on its timestamp, stored in a small file, so the same note is not done again
+     * on the next tick or after a restart. When the work could not finish (backup or write failed)
+     * the note is not marked done, and the next tick tries again; that is safe because
+     * [AimiCorpusPruner.moveDay] never removes a row twice. A note whose day cannot be read removes
+     * nothing.
+     *
+     * Before, every tick while the note was active removed the newest 200 rows: a 30 minute note on a
+     * 1-minute CGM removed about 6000 rows, and the date in the note was ignored.
+     *
+     * Training data only: nothing here changes a dose.
      */
-    private fun removeRowsForDay(csvFile: AimiPath, dayText: String): AimiCorpusPruner.Result {
-        if (!storage.exists(csvFile)) {
-            aapsLogger.info(LTag.APS, rh.gs(ApsStrings.original_file_missing))
-            return AimiCorpusPruner.Result(
-                outcome = AimiCorpusPruner.Outcome.FILE_MISSING,
-                removedRows = 0,
-                keptRows = 0,
-            )
+    private fun handleCorpusDeleteNote(note: CorpusDeleteNote?) {
+        note ?: return
+        if (note.timestamp <= lastDoneCorpusDeleteNoteTimestamp()) return
+        val dayMiddayMs = when (val asked = AimiCorpusPruner.deleteNoteDay(note.note)) {
+            AimiCorpusPruner.DeleteNoteDay.Yesterday  -> aimiYesterdayMiddayEpochMs(aimiWallClockMs())
+            is AimiCorpusPruner.DeleteNoteDay.OnDate  -> aimiLocalMiddayEpochMs(asked.date)
+            AimiCorpusPruner.DeleteNoteDay.Unreadable -> null
         }
-        val result = AimiCorpusPruner.moveDay(
-            storage = storage,
-            csv = csvFile,
-            backup = storage.file(backupFileName()),
-            setAside = storage.file(BAD_DAY_SET_ASIDE_FILE),
-            dayText = dayText,
-        )
-        aapsLogger.info(
-            LTag.APS,
-            "AIMI training CSV clean up for $dayText: ${result.outcome}, " +
-                "removed ${result.removedRows} rows, kept ${result.keptRows}",
-        )
-        return result
-    }
-
-    private fun automateDeletionIfBadDay(tir1DAYIR: Int) {
-        val reasonBuilder = StringBuilder()
-        // Only when the time in range (65-180 mg/dL) of the last day is under 65 %: a really bad day.
-        // At 85 % most ordinary days went too, and the model was left with the easy ones (owner
-        // decision 2026-10-26). The rows are set aside, not deleted: see AimiCorpusPruner.moveDay.
-        if (tir1DAYIR < BAD_DAY_TIR_THRESHOLD_PCT) {
-            // Only between 00:05 and 00:10, local time.
-            val deletionNowMs = aimiWallClockMs()
-            if (aimiStrictlyInsideLocalWindow(deletionNowMs, 0, 5, 0, 10)) {
-                // The day that has just ended, in the phone's own time zone, which is both the zone
-                // the window above is read in and the zone the rows were dated in. Midday is used
-                // rather than midnight because in a few time zones a day starts without a midnight
-                // when the clocks change.
-                val yesterdayMiddayMs = aimiYesterdayMiddayEpochMs(deletionNowMs)
-                // The very text the row writer put in column 0 for that day.
-                val dateToRemove = dateUtil.dateString(yesterdayMiddayMs)
-
-                val result = removeRowsForDay(csvfilePath, dateToRemove)
-                if (result.outcome == AimiCorpusPruner.Outcome.REMOVED) {
-                    reasonBuilder.append(rh.gs(ApsStrings.reason_data_removed, dateToRemove))
-                }
-            } else {
-                reasonBuilder.append(rh.gs(ApsStrings.reason_deletion_time_restricted))
-            }
+        if (dayMiddayMs == null) {
+            work.consoleLog.add(rh.gs(ApsStrings.reason_delete_note_unreadable, note.note))
+            markCorpusDeleteNoteDone(note.timestamp)
+            return
         }
+        val dayText = dateUtil.dateString(dayMiddayMs)
+        val results = moveDayOutOfTrainingCorpus(dayText)
+        val removed = results.sumOf { it.removedRows }
+        val allFinal = results.all { it.isFinal }
+        if (removed > 0) {
+            work.consoleLog.add(rh.gs(ApsStrings.reason_delete_note_done, dayText, removed))
+        } else if (allFinal) {
+            work.consoleLog.add(rh.gs(ApsStrings.reason_delete_note_nothing, dayText))
+        }
+        if (allFinal) markCorpusDeleteNoteDone(note.timestamp)
     }
 
     private fun finalizeAndCapSMB(
@@ -15179,8 +15208,8 @@ enum class AutodriveState {
     ENGAGED
 }
 
-/** A day whose time in range (65-180 mg/dL) is under this is taken out of the training corpus. */
-private const val BAD_DAY_TIR_THRESHOLD_PCT = 65
+/** The SMB training corpus, in the AIMI directory or in the app-scoped fallback directory. */
+private const val TRAINING_CORPUS_FILE = "oapsaimiML2_records.csv"
 
-/** Where the rows of a bad day go, next to the corpus, instead of being deleted. */
-private const val BAD_DAY_SET_ASIDE_FILE = "oapsaimiML2_records_excluded.csv"
+/** Holds the timestamp of the newest "delete" note already handled. See `handleCorpusDeleteNote`. */
+private const val CORPUS_DELETE_NOTE_DONE_FILE = "oapsaimiML2_delete_note_done.txt"

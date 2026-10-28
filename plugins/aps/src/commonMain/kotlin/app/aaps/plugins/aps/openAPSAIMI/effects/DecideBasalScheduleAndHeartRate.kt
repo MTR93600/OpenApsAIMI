@@ -217,12 +217,57 @@ internal fun decideBasalSchedule(
     )
 }
 
+/**
+ * The step counts of one tick, for the last 5, 10, 15, 30, 60 and 180 minutes.
+ *
+ * `null` means UNKNOWN (no step record in the window, no live sensor). It is not the same as 0 steps:
+ * no step-driven decision that can add insulin may fire on it.
+ */
+internal data class AimiRecentSteps(
+    val steps5: Int?,
+    val steps10: Int?,
+    val steps15: Int?,
+    val steps30: Int?,
+    val steps60: Int?,
+    val steps180: Int?,
+) {
+
+    /**
+     * Rule: a declared meal never gets less insulin than before ("sur un repas déclaré on ne dégrade
+     * pas", maintainer, 2026-10-28).
+     *
+     * Before 74b9f17836e unknown steps read as 0 everywhere, and the calm-meal basal x1.5 and the
+     * HR-trend ISF x0.9 could fire on that. When [declaredMeal] is true, every unknown window reads
+     * as 0 again, so the meal is dosed exactly as before. Otherwise the steps are returned unchanged
+     * and unknown stays unknown.
+     */
+    fun unknownAsZeroDuringDeclaredMeal(declaredMeal: Boolean): AimiRecentSteps =
+        if (!declaredMeal) {
+            this
+        } else {
+            AimiRecentSteps(
+                steps5 = steps5 ?: 0,
+                steps10 = steps10 ?: 0,
+                steps15 = steps15 ?: 0,
+                steps30 = steps30 ?: 0,
+                steps60 = steps60 ?: 0,
+                steps180 = steps180 ?: 0,
+            )
+        }
+}
+
 internal interface AimiHeartRateIsfCalls {
     fun iob(): Float
     fun roundDisplay(value: Double): Int
     fun stepsCached(now: Long): List<SC>
     fun logSteps(samples: List<SC>)
     fun setRecentSteps(steps5: Int?, steps10: Int?, steps15: Int?, steps30: Int?, steps60: Int?, steps180: Int?)
+
+    /**
+     * True while a meal is declared: the same rule as `DynamicBasalStackCap.declaredMealActive`,
+     * read from the therapy flags of this tick. See [AimiRecentSteps.unknownAsZeroDuringDeclaredMeal].
+     */
+    fun declaredMealWindowActive(): Boolean
     fun phoneSteps5(): Int?
     fun phoneSteps10(): Int?
     fun phoneSteps15(): Int?
@@ -294,7 +339,7 @@ internal fun decideHeartRateIsf(
     val timeMillis60 = now - 60 * 60 * 1000
     val timeMillis180 = now - 180 * 60 * 1000
 
-    if (preferences.get(BooleanKey.OApsAIMIEnableStepsFromWatch)) {
+    val loadedSteps = if (preferences.get(BooleanKey.OApsAIMIEnableStepsFromWatch)) {
         val allStepsCounts = calls.stepsCached(now)
         calls.logSteps(allStepsCounts)
 
@@ -303,7 +348,7 @@ internal fun decideHeartRateIsf(
             allStepsCounts.filter { it.timestamp >= (now - 30 * 60 * 1000) }.maxByOrNull { it.timestamp }
         } else null
 
-        calls.setRecentSteps(
+        AimiRecentSteps(
             steps5 = valid5?.steps5min ?: fallbackRecord?.steps5min,
             steps10 = allStepsCounts.filter { it.timestamp >= timeMillis10 }.maxByOrNull { it.timestamp }?.steps10min,
             steps15 = allStepsCounts.filter { it.timestamp >= timeMillis15 }.maxByOrNull { it.timestamp }?.steps15min,
@@ -312,7 +357,7 @@ internal fun decideHeartRateIsf(
             steps180 = allStepsCounts.filter { it.timestamp >= timeMillis180 }.maxByOrNull { it.timestamp }?.steps180min,
         )
     } else {
-        calls.setRecentSteps(
+        AimiRecentSteps(
             steps5 = calls.phoneSteps5(),
             steps10 = calls.phoneSteps10(),
             steps15 = calls.phoneSteps15(),
@@ -321,6 +366,16 @@ internal fun decideHeartRateIsf(
             steps180 = calls.phoneSteps180(),
         )
     }
+    // The therapy flags of this tick are already known here: hydrateClocks runs earlier in the tick.
+    val steps = loadedSteps.unknownAsZeroDuringDeclaredMeal(calls.declaredMealWindowActive())
+    calls.setRecentSteps(
+        steps5 = steps.steps5,
+        steps10 = steps.steps10,
+        steps15 = steps.steps15,
+        steps30 = steps.steps30,
+        steps60 = steps.steps60,
+        steps180 = steps.steps180,
+    )
 
     try {
         val allHeartRates = calls.heartRatesCached(now)

@@ -46,8 +46,7 @@ internal class GlassNavigationCommands(
     private fun glass(destination: GlassDestination) = onNavigate(NavigationRequest.Glass(destination))
 
     private fun command(destination: GlassDestination) {
-        val role = destination.element?.role ?: ClientRole.ReadOnly
-        if (commandsAllowed && clientRole.allows(role)) glass(destination)
+        if (destination.isAllowed(commandsAllowed, clientRole)) glass(destination)
     }
 
     override fun openLoop() = command(GlassDestination.LOOP_DETAIL)

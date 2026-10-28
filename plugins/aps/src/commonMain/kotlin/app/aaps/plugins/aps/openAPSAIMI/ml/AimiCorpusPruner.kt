@@ -1,7 +1,10 @@
 package app.aaps.plugins.aps.openAPSAIMI.ml
 
+import app.aaps.plugins.aps.openAPSAIMI.aimiStrictlyInsideLocalWindow
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
 
 /**
  * Removes rows from the AIMI training CSV, and never more than it was asked to.
@@ -11,13 +14,14 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
  * when it is not sure: a line whose date cannot be read stays, the first line always stays, and
  * nothing is written at all when the backup could not be made.
  *
- * Two ways of choosing rows live here, because the code has two callers with two different meanings:
+ * Rows are never thrown away: [moveDay] writes the rows of the day to a separate file
+ * ([SET_ASIDE_FILE_NAME]) first, so the model stops learning from them but the user can still read
+ * them, and put them back by hand. Two callers use it:
  *
- * - [keepAllButDay] / [moveDay] is the "bad day" clean up. It takes the rows of one named day out
- *   of the corpus and keeps them in a separate file ([moveDay]), so the model stops learning from
- *   them but nothing is lost: the user can read them, and put them back by hand.
- * - [keepAllButNewest] is the older count based clean up, kept unchanged for the therapy note
- *   trigger, which asks for a deletion without naming a day.
+ * - the "bad day" clean up, once a night, for yesterday, when the time in range was under
+ *   [BAD_DAY_TIR_THRESHOLD_PCT] (see [isBadDay]);
+ * - a therapy note that starts with "delete", once per note, for the day written in the note
+ *   (see [deleteNoteDay]).
  *
  * ## How a day is matched
  *
@@ -39,6 +43,17 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
  * corpus for good.
  */
 internal object AimiCorpusPruner {
+
+    /**
+     * A day whose time in range (65-180 mg/dL) is under this is taken out of the training corpus.
+     *
+     * 65 %, not 85 %: at 85 % most ordinary days went too, and the model was left with the easy ones
+     * (owner decision 2026-10-26, kept on 2026-10-28).
+     */
+    const val BAD_DAY_TIR_THRESHOLD_PCT = 65.0
+
+    /** Where the rows of a removed day go, next to the corpus, instead of being deleted. */
+    const val SET_ASIDE_FILE_NAME = "oapsaimiML2_records_excluded.csv"
 
     /** What a clean up did to the file. */
     enum class Outcome {
@@ -67,7 +82,85 @@ internal object AimiCorpusPruner {
         val outcome: Outcome,
         val removedRows: Int,
         val keptRows: Int,
-    )
+    ) {
+
+        /** True when the work is finished, so the same request must not be tried again. */
+        val isFinal: Boolean
+            get() = outcome == Outcome.REMOVED || outcome == Outcome.NOTHING_REMOVED || outcome == Outcome.FILE_MISSING
+    }
+
+    // ---- when to clean up -------------------------------------------------------------------------
+
+    /**
+     * True when the day must leave the corpus: its time in range is known and under
+     * [BAD_DAY_TIR_THRESHOLD_PCT].
+     *
+     * A day with no glucose reading at all ([readingCount] 0), or with no percentage, is unknown, not
+     * bad. The TIR code answers 0 % for an empty day, and the warm-up snapshot also starts at 0 %
+     * before the first read. Without this rule a sensor gap, or the first ticks after an app start,
+     * looked like the worst day possible.
+     */
+    fun isBadDay(inRangePct: Double?, readingCount: Int): Boolean {
+        if (readingCount <= 0) return false
+        if (inRangePct == null || !inRangePct.isFinite()) return false
+        return inRangePct < BAD_DAY_TIR_THRESHOLD_PCT
+    }
+
+    /** True strictly between 00:05 and 00:10 local time, the only time the bad day clean up runs. */
+    fun isInsideBadDayWindow(epochMs: Long, zone: TimeZone = TimeZone.currentSystemDefault()): Boolean =
+        aimiStrictlyInsideLocalWindow(epochMs, 0, 5, 0, 10, zone)
+
+    /** What a "delete" note asks for. */
+    sealed class DeleteNoteDay {
+
+        /** The note names no day: remove yesterday. */
+        object Yesterday : DeleteNoteDay()
+
+        /** The note names this day. */
+        data class OnDate(val date: LocalDate) : DeleteNoteDay()
+
+        /** The text after "delete" is not a day we can read. Nothing is removed. */
+        object Unreadable : DeleteNoteDay()
+    }
+
+    /**
+     * True when [note] is a corpus delete request: it STARTS with "delete" (any case) followed by
+     * the end of the text or a space.
+     *
+     * Only the start counts. Before, "delete" anywhere in a note was enough, so a note about
+     * something else could remove training rows.
+     */
+    fun isDeleteNote(note: String?): Boolean {
+        val text = note?.trim() ?: return false
+        if (!text.startsWith(DELETE_KEYWORD, ignoreCase = true)) return false
+        return text.length == DELETE_KEYWORD.length || text[DELETE_KEYWORD.length].isWhitespace()
+    }
+
+    /**
+     * The day a delete note asks for. "delete" alone means yesterday, "delete 25/10/2026" means that
+     * day (dd/MM/yyyy). Anything else after "delete" is [DeleteNoteDay.Unreadable]: we do not guess.
+     *
+     * The date is read strictly: two digits for the day and the month, four for the year, and a day
+     * that does not exist (31/02/2026) is unreadable.
+     */
+    fun deleteNoteDay(note: String): DeleteNoteDay {
+        val rest = note.trim().drop(DELETE_KEYWORD.length).trim()
+        if (rest.isEmpty()) return DeleteNoteDay.Yesterday
+        val match = NOTE_DATE.matchEntire(rest) ?: return DeleteNoteDay.Unreadable
+        val (day, month, year) = match.destructured
+        return try {
+            DeleteNoteDay.OnDate(LocalDate(year.toInt(), month.toInt(), day.toInt()))
+        } catch (_: IllegalArgumentException) {
+            DeleteNoteDay.Unreadable
+        }
+    }
+
+    private const val DELETE_KEYWORD = "delete"
+
+    /** dd/MM/yyyy, ASCII digits only. */
+    private val NOTE_DATE = Regex("([0-9]{2})/([0-9]{2})/([0-9]{4})")
+
+    // ---- choosing the rows ------------------------------------------------------------------------
 
     /**
      * True when [line] is a data row of the day written as [dayText].
@@ -102,16 +195,6 @@ internal object AimiCorpusPruner {
         return kept
     }
 
-    /**
-     * [lines] without the newest [count] lines, or [lines] unchanged when there are not more than
-     * [count] of them.
-     *
-     * This is the rule the file has always used for the therapy note trigger, kept as it was: the
-     * newest lines are the last ones, and the size check means the header can never be one of them.
-     */
-    fun keepAllButNewest(lines: List<String>, count: Int): List<String> =
-        if (lines.size <= count) lines else lines.dropLast(count)
-
     /** [lines] as CSV text, always ending with one line break so the next row starts on its own. */
     fun renderCsv(lines: List<String>): String =
         if (lines.isEmpty()) "" else lines.joinToString(separator = "\n", postfix = "\n")
@@ -139,6 +222,9 @@ internal object AimiCorpusPruner {
      *
      * The order is what keeps a row from being lost: the rows are written to [setAside] first, and
      * [csv] is only rewritten when that worked (and after the usual full copy at [backup]).
+     *
+     * A second call for the same day does nothing: the rows are no longer in [csv], so no backup is
+     * made and nothing is written.
      *
      * [setAside] starts with the corpus header, so it reads like the corpus. Rows of a day that is
      * already in it are not added again: a rewrite that failed is tried again on the next tick, and the
@@ -169,14 +255,6 @@ internal object AimiCorpusPruner {
         if (existingHeader != null && !storage.copy(setAside, storage.sibling(setAside, ".previous"))) return false
         return storage.writeText(setAside, renderCsv(listOf(header) + rows))
     }
-
-    /**
-     * Removes the newest [count] lines of [csv], keeping a copy of the whole file at [backup] first.
-     *
-     * Nothing is written when the file does not hold more than [count] lines.
-     */
-    fun removeNewest(storage: AimiStorage, csv: AimiPath, backup: AimiPath, count: Int): Result =
-        rewrite(storage, csv, backup) { lines -> keepAllButNewest(lines, count) }
 
     private fun rewrite(
         storage: AimiStorage,

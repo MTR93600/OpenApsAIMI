@@ -152,7 +152,7 @@ class DetermineBasalAimiStringsTest {
 
         /**
          * Every string the AIMI dosing core resolves, with the number of arguments its call sites
-         * pass. 164 names over 175 call sites, read off the files when they stopped using
+         * pass. 163 names, read off the files when they stopped using
          * `context.getString`.
          *
          * Three files, because they build one text between them: `DetermineBasalaimiSMB2` itself,
@@ -218,7 +218,6 @@ class DetermineBasalAimiStringsTest {
             ApsStrings.dia_base_info to 2,
             ApsStrings.dia_calculation_details to 0,
             ApsStrings.fcl_prebolus to 1,
-            ApsStrings.file_too_short to 0,
             ApsStrings.final_dia_constrained to 1,
             ApsStrings.finalization_smb to 2,
             ApsStrings.first_bg_value to 1,
@@ -228,7 +227,6 @@ class DetermineBasalAimiStringsTest {
             ApsStrings.hypo_risk_notification_text to 0,
             ApsStrings.insulin_effect to 1,
             ApsStrings.iob_high_reduction to 1,
-            ApsStrings.last_200_deleted to 1,
             ApsStrings.last_bg_value to 1,
             ApsStrings.lgs_triggered to 2,
             ApsStrings.lgs_triggered_min_pred to 2,
@@ -255,7 +253,6 @@ class DetermineBasalAimiStringsTest {
             ApsStrings.oaps_aimi_ngr_basal_applied to 2,
             ApsStrings.oaps_aimi_ngr_headroom to 2,
             ApsStrings.oaps_aimi_ngr_smb_applied to 3,
-            ApsStrings.original_file_missing to 0,
             ApsStrings.peak_time to 3,
             ApsStrings.profile_peak_time to 1,
             ApsStrings.pump_age_adjustment to 2,
@@ -274,7 +271,9 @@ class DetermineBasalAimiStringsTest {
             ApsStrings.reason_cgm_calibrating to 0,
             ApsStrings.reason_cgm_flat to 0,
             ApsStrings.reason_data_removed to 1,
-            ApsStrings.reason_deletion_time_restricted to 0,
+            ApsStrings.reason_delete_note_done to 2,
+            ApsStrings.reason_delete_note_nothing to 1,
+            ApsStrings.reason_delete_note_unreadable to 1,
             ApsStrings.reason_eventual_bg to 2,
             ApsStrings.reason_hyper_correction to 1,
             ApsStrings.reason_hypo_guard to 5,

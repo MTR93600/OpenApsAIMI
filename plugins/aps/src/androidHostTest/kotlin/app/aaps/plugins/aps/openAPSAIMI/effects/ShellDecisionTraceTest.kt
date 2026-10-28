@@ -738,7 +738,8 @@ class ShellDecisionTraceTest {
             "tirWarmupCache",
             privateData(
                 "TirWarmupSnapshot",
-                listOf(18.0, 72.0, 4.0, 70.0, 26.0, 3.0, 22.0, 5.0, 11.0, 30.0, 68.0, 6.0, 26.0, 14.0),
+                // 1440 = tir1DayReadings, a full day of 1-minute readings.
+                listOf(18.0, 72.0, 1440, 4.0, 70.0, 26.0, 3.0, 22.0, 5.0, 11.0, 30.0, 68.0, 6.0, 26.0, 14.0),
             ),
         )
         seedCache(

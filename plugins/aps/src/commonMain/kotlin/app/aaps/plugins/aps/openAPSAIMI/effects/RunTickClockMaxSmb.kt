@@ -24,6 +24,8 @@ internal data class AimiCachedSmb(
 internal data class AimiTirWarmupView(
     val tir1DayAbove: Double,
     val tir1DayInRange: Double,
+    /** Glucose readings behind [tir1DayInRange]. 0 means the TIR is unknown, not 0 %. */
+    val tir1DayReadings: Int,
     val currentTirLow: Double,
     val currentTirRange: Double,
     val currentTirAbove: Double,
@@ -136,7 +138,7 @@ internal fun interface AimiTirWarmupRead {
 }
 
 internal fun interface AimiBadDayDeletion {
-    fun automate(tir1DayInRange: Int)
+    fun automate(tir1DayInRangePct: Double, tir1DayReadings: Int)
 }
 
 internal fun interface AimiCarbContextRead {
@@ -279,7 +281,7 @@ internal fun decideTickClockMaxSmb(
     state.setLastHourTirAbove170(tirSnapshot.lastHourTirAbove170)
     state.setLastHourTirAbove120(tirSnapshot.lastHourTirAbove120)
     state.setNow(state.epochMs())
-    badDay.automate(tir1DAYIR.toInt())
+    badDay.automate(tir1DAYIR, tirSnapshot.tir1DayReadings)
     // Calendar.SUNDAY = 1, Calendar.SATURDAY = 7, the numbering aimiCivilClock already uses.
     state.setWeekend(if (dayOfWeek == 1 || dayOfWeek == 7) 1 else 0)
     val carbSnapshot = carbs.latest(state.nowMs(), mealLastCarbTime, state.cob())

@@ -3,6 +3,7 @@ package app.aaps.core.ui.compose.navigation
 import androidx.compose.runtime.compositionLocalOf
 import app.aaps.core.interfaces.navigation.ElementType
 import app.aaps.core.interfaces.protection.ProtectionCheck
+import app.aaps.core.keys.interfaces.ClientRole
 
 sealed class NavigationRequest {
     data class Element(val type: ElementType) : NavigationRequest()
@@ -49,6 +50,19 @@ enum class GlassDestination(
     SENSOR_INSERT_DETAIL(ProtectionCheck.Protection.BOLUS, ElementType.SENSOR_INSERT),
     TARGET_DETAIL(ProtectionCheck.Protection.BOLUS, ElementType.TEMP_TARGET_MANAGEMENT),
     LOOP_DETAIL(ProtectionCheck.Protection.BOLUS, ElementType.RUNNING_MODE),
+    ;
+
+    /**
+     * True when this phone may open the screen. An information screen opens on every phone. A
+     * treatment or loop screen needs a master or a paired client ([masterOrPairedClient]) and a
+     * [clientRole] that allows the normal screen, the same rules the drawer and the treatment sheet use.
+     *
+     * The navigator checks this for every request, so a new way to open these screens cannot skip it.
+     */
+    fun isAllowed(masterOrPairedClient: Boolean, clientRole: ClientRole): Boolean {
+        val normalScreen = element ?: return true
+        return masterOrPairedClient && clientRole.allows(normalScreen.role)
+    }
 }
 
 /**

@@ -209,7 +209,7 @@ class DecideHeartRateIsfFromTherapyReadsTest {
         iCfg = ICfg(insulinLabel = "test", peak = 75, dia = 5.0, concentration = 1.0),
     )
 
-    private fun profile() = OapsProfileAimi(
+    internal fun profile() = OapsProfileAimi(
         dia = 5.0,
         min_5m_carbimpact = 0.0,
         max_iob = 10.0,

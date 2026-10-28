@@ -62,6 +62,7 @@ import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.StringNonKey
 import app.aaps.core.keys.interfaces.AppPlatform
+import app.aaps.core.keys.interfaces.ClientRole
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.VisibilityContext
 import app.aaps.core.objects.constraints.ConstraintObject
@@ -174,6 +175,9 @@ class MainViewModel(
      * flapping [masterReachable] exhibits.
      */
     val masterOrPairedClient: StateFlow<Boolean> = nsClient.masterOrPairedClientFlow
+
+    /** This phone's role on its master; the navigator checks it before it opens a treatment screen. */
+    val clientRole: StateFlow<ClientRole> = nsClient.clientRole
 
     // Ticker for time-based progress updates (every 30 seconds). Cold flow — only runs while the
     // toolbar items or the chipStateFlow it feeds have subscribers (both are WhileSubscribed below).

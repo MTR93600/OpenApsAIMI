@@ -71,8 +71,16 @@ class ElementNavigator(
             }
 
             // The information screens need no protection, the treatment and loop screens BOLUS, as on dev_OAPSAIMI.
-            is NavigationRequest.Glass             -> guarded(request.destination.protection) {
-                navController.navigate(glassRoute(request.destination))
+            // The role and "master or paired client" rules are checked here, not only by the caller, so a
+            // new way to open a treatment screen cannot skip them.
+            is NavigationRequest.Glass             -> {
+                val allowed = request.destination.isAllowed(
+                    masterOrPairedClient = mainViewModel.masterOrPairedClient.value,
+                    clientRole = mainViewModel.clientRole.value,
+                )
+                if (allowed) guarded(request.destination.protection) {
+                    navController.navigate(glassRoute(request.destination))
+                }
             }
 
             // A dialog with text only, no protection, as on dev_OAPSAIMI.
@@ -222,12 +230,12 @@ fun glassAppRoute(destination: GlassDestination): AppRoute = when (destination) 
 }
 
 /**
- * The route to navigate to for a Glass dashboard screen. The cannula screen opens with the site
- * change selected, like the normal cannula change; the sensor insert screen is the care dialog for
- * a sensor insert.
+ * The route to navigate to for a Glass dashboard screen. The cannula screen opens with nothing
+ * selected, as on `dev_OAPSAIMI`: the user picks prime, site change or cartridge change there. The
+ * sensor insert screen is the care dialog for a sensor insert.
  */
 fun glassRoute(destination: GlassDestination): String = when (destination) {
-    GlassDestination.CANNULA_DETAIL       -> AppRoute.GlassCannulaDetail.createRoute(FillPreselect.SITE_CHANGE.ordinal)
+    GlassDestination.CANNULA_DETAIL       -> AppRoute.GlassCannulaDetail.createRoute(FillPreselect.NONE.ordinal)
     GlassDestination.SENSOR_INSERT_DETAIL -> AppRoute.GlassSensorInsertDetail.createRoute(CareportalEventType.SENSOR_INSERT.ordinal)
     else                                  -> glassAppRoute(destination).route
 }

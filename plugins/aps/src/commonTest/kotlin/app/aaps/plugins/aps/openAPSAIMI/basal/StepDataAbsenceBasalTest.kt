@@ -31,7 +31,7 @@ class StepDataAbsenceBasalTest {
     private val trend = 1.3
 
     /** Midday, low IOB, a slow rise of 5 per 5 minutes (strongest rise 5 gives trend multiplier 1.3). */
-    private fun rateWith(steps: Int?, hour: Int = 12): Double {
+    internal fun rateWith(steps: Int?, hour: Int = 12): Double {
         val input = fixtures.lunchInput(
             variableSensitivity = 21.6,
             profileSens = 60.0,

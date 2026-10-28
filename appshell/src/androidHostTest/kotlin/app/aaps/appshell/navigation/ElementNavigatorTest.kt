@@ -12,10 +12,12 @@ import app.aaps.core.interfaces.source.DexcomBoyda
 import app.aaps.core.ui.compose.ScreenMode
 import app.aaps.core.ui.compose.navigation.GlassDestination
 import app.aaps.core.ui.compose.navigation.NavigationRequest
+import app.aaps.core.keys.interfaces.ClientRole
 import app.aaps.ui.compose.careDialog.CareportalEventType
 import app.aaps.ui.compose.fillDialog.FillPreselect
 import app.aaps.ui.compose.main.MainViewModel
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mockingDetails
@@ -50,6 +52,8 @@ class ElementNavigatorTest {
         }
     }
     private var exited = false
+    private val masterOrPairedClient = MutableStateFlow(true)
+    private val clientRole = MutableStateFlow(ClientRole.Admin)
 
     private lateinit var sut: ElementNavigator
 
@@ -57,6 +61,10 @@ class ElementNavigatorTest {
     fun setUp() {
         navController = mock()
         mainViewModel = mock()
+        masterOrPairedClient.value = true
+        clientRole.value = ClientRole.Admin
+        whenever(mainViewModel.masterOrPairedClient).thenReturn(masterOrPairedClient)
+        whenever(mainViewModel.clientRole).thenReturn(clientRole)
         activePlugin = mock()
         protectionCheck = mock()
         configBuilder = mock()
@@ -347,8 +355,8 @@ class ElementNavigatorTest {
         assertThat(requestedProtectionLevels()).containsExactlyElementsIn(List(treatmentScreens.size) { ProtectionCheck.Protection.BOLUS })
         assertThat(navigatedRoutes()).containsExactly(
             "glass_insulin_detail",
-            // Site change selected, like the normal cannula change.
-            "glass_cannula_detail/${FillPreselect.SITE_CHANGE.ordinal}",
+            // Nothing selected, as on dev_OAPSAIMI.
+            "glass_cannula_detail/${FillPreselect.NONE.ordinal}",
             "glass_basal_detail",
             "glass_sensor_insert_detail/${CareportalEventType.SENSOR_INSERT.ordinal}",
             "glass_target_detail",
@@ -365,6 +373,33 @@ class ElementNavigatorTest {
 
         assertThat(requestedProtectionLevels()).containsExactly(ProtectionCheck.Protection.BOLUS, ProtectionCheck.Protection.BOLUS)
         assertThat(navigatedRoutes()).isEmpty()
+    }
+
+    @Test
+    fun `an unpaired client cannot open a glass treatment screen but still sees information`() {
+        resolveProtection(ProtectionResult.GRANTED)
+        masterOrPairedClient.value = false
+
+        sut.handleNavigationRequest(NavigationRequest.Glass(GlassDestination.INSULIN_DETAIL))
+        sut.handleNavigationRequest(NavigationRequest.Glass(GlassDestination.LOOP_DETAIL))
+        sut.handleNavigationRequest(NavigationRequest.Glass(GlassDestination.PUMP_DETAIL))
+
+        // Refused before the protection is even asked.
+        assertThat(requestedProtectionLevels()).isEmpty()
+        assertThat(navigatedRoutes()).containsExactly("glass_pump_detail")
+    }
+
+    @Test
+    fun `a client role opens only the glass treatment screens its normal screens allow`() {
+        resolveProtection(ProtectionResult.GRANTED)
+        clientRole.value = ClientRole.MealAssistant
+
+        GlassDestination.entries.forEach { sut.handleNavigationRequest(NavigationRequest.Glass(it)) }
+
+        val opened = GlassDestination.entries.filter { it.element == null || ClientRole.MealAssistant.allows(it.element!!.role) }
+        assertThat(navigatedRoutes()).containsExactlyElementsIn(opened.map { glassRoute(it) })
+        // Some treatment screens need more than a meal assistant, so the role really refuses something.
+        assertThat(opened.size).isLessThan(GlassDestination.entries.size)
     }
 
     // endregion
