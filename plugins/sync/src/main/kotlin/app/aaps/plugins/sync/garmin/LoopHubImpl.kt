@@ -180,15 +180,15 @@ class LoopHubImpl @Inject constructor(
     }
 
     /**
-     * SMB bolus timestamps in [windowMs].
+     * SMB boluses in [windowMs] with insulin amount.
      * ⚠️ ASYNC IMPACT: runBlocking on persistenceLayer.getBolusesFromTime.
      */
-    override fun smbHistoryTimestamps(windowMs: Long): List<Long> = runBlocking {
+    override fun smbHistory(windowMs: Long): List<SmbHistoryStep> = runBlocking {
         val from = clock.millis() - windowMs.coerceAtLeast(0L)
         persistenceLayer.getBolusesFromTime(from, ascending = true)
             .asSequence()
             .filter { it.isValid && it.type == BS.Type.SMB }
-            .map { it.timestamp }
+            .map { SmbHistoryStep(t = it.timestamp, u = it.amount) }
             .toList()
     }
 
