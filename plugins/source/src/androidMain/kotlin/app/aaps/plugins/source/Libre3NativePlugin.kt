@@ -37,6 +37,7 @@ import app.aaps.plugins.libre3.Libre3CgmDrivers
 import app.aaps.plugins.libre3.Libre3GlucoseSample
 import app.aaps.plugins.libre3.Libre3GlucoseWatcher
 import app.aaps.plugins.libre3.Libre3LogMarkers
+import app.aaps.plugins.libre3.Libre3LogMask
 import app.aaps.plugins.libre3.Libre3WarmupState
 import app.aaps.plugins.libre3.identity.Libre3SensorIdentity
 import app.aaps.plugins.libre3.identity.Libre3SensorStore
@@ -389,8 +390,8 @@ class Libre3NativePlugin @Inject constructor(
         val nowMs = System.currentTimeMillis()
         aapsLogger.info(
             LTag.BGSOURCE,
-            "${Libre3LogMarkers.PRESOAK}: promote asked by=${if (byAuto) "auto" else "user"} serial=${staged.serialNumber} " +
-                "soakMs=${nowMs - staged.activatedAtMs} readings=$stagingValidReadingCount",
+            "${Libre3LogMarkers.PRESOAK}: promote asked by=${if (byAuto) "auto" else "user"} " +
+                "serial=${Libre3LogMask.serial(staged.serialNumber)} soakMs=${nowMs - staged.activatedAtMs} readings=$stagingValidReadingCount",
         )
         // The last reversible step. One commit, so a false means nothing at all was written and the
         // running sensor keeps going, untouched. There is no reject reason for "the phone could not
@@ -481,7 +482,7 @@ class Libre3NativePlugin @Inject constructor(
             }
             aapsLogger.info(
                 LTag.BGSOURCE,
-                "${Libre3LogMarkers.PRESOAK}: promote done serial=${staged.serialNumber} " +
+                "${Libre3LogMarkers.PRESOAK}: promote done serial=${Libre3LogMask.serial(staged.serialNumber)} " +
                     "retired=${retired != null} sessionUp=${promoted.isSessionUp()}",
             )
             null
@@ -1020,7 +1021,7 @@ class Libre3NativePlugin @Inject constructor(
             refreshSessionService()
             aapsLogger.info(
                 LTag.BGSOURCE,
-                "${Libre3LogMarkers.PRESOAK}: begin serial=${identity.serialNumber} sameSensor=$sameSensor " +
+                "${Libre3LogMarkers.PRESOAK}: begin serial=${Libre3LogMask.serial(identity.serialNumber)} sameSensor=$sameSensor " +
                     "readings=$stagingValidReadingCount warmupDone=$stagingWarmupDone",
             )
             true

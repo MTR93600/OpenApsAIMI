@@ -18,15 +18,22 @@ import kotlin.time.Clock
  *
  * The bytes matter as much as the clock. A pairing that fails at the last step fails because one
  * of the values below is not what the sensor expected, and the only way to find out which is to
- * compare them with a trace from a reference implementation. So the values that travel on the
- * radio are written down as well.
+ * compare them with a trace from a reference implementation. That is why the trace can write the
+ * values down, but only when [TRACE_SECRETS] is on. Otherwise every value is written as its length
+ * only.
  *
- * ⚠️ [TRACE_SECRETS] writes key material to the log. It is on while the first pairing is being
- * brought up, because without it the failing step cannot be compared with anything. Turn it off
- * once the first pairing works, and remember that a log taken with it on must not be shared
- * outside the people debugging this sensor.
+ * ⚠️ [TRACE_SECRETS] writes key material, the sensor certificate and the whole pairing exchange to
+ * `AndroidAPS.log`, and users send that log to other people when they ask for help. It must stay
+ * false in every build that is given to users. Turn it on only in a local build while a pairing
+ * is being debugged, and never share a log taken with it on outside the people debugging this
+ * sensor.
+ *
+ * @param write where a trace line goes. Tests replace it to read the lines back.
  */
-class Libre3PairingTrace(private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() }) {
+class Libre3PairingTrace(
+    private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
+    private val write: (String) -> Unit = { Libre3Log.i(it) },
+) {
 
     private val startedAt = nowMs()
     private var lastStepAt = startedAt
@@ -40,31 +47,40 @@ class Libre3PairingTrace(private val nowMs: () -> Long = { Clock.System.now().to
         val now = nowMs()
         val sinceLast = now - lastStepAt
         lastStepAt = now
-        Libre3Log.i("${Libre3LogMarkers.TRACE}: $step +${sinceLast}ms (t=${now - startedAt}ms)")
+        write("${Libre3LogMarkers.TRACE}: $step +${sinceLast}ms (t=${now - startedAt}ms)")
     }
 
-    /** Writes down a value that travels on the radio, so nothing about it is a secret. */
-    fun bytes(label: String, value: ByteArray) {
-        Libre3Log.i("${Libre3LogMarkers.TRACE}: $label ${value.size} bytes ${hex(value)}")
-    }
+    /**
+     * Writes down a value that travels on the radio.
+     *
+     * Such a value is not a key, but it is tied to this user's sensor (the certificate, the
+     * challenge, the encrypted answers), so only the length is logged unless [TRACE_SECRETS] is on.
+     */
+    fun bytes(label: String, value: ByteArray) = writeValue(label, value)
 
     /**
      * Writes down a value that never leaves the phone.
      *
      * Only the length is logged unless [TRACE_SECRETS] is on.
      */
-    fun secret(label: String, value: ByteArray) {
+    fun secret(label: String, value: ByteArray) = writeValue(label, value)
+
+    private fun writeValue(label: String, value: ByteArray) {
         if (TRACE_SECRETS) {
-            Libre3Log.i("${Libre3LogMarkers.TRACE}: $label ${value.size} bytes ${hex(value)}")
+            write("${Libre3LogMarkers.TRACE}: $label ${value.size} bytes ${hex(value)}")
         } else {
-            Libre3Log.i("${Libre3LogMarkers.TRACE}: $label ${value.size} bytes, not shown")
+            write("${Libre3LogMarkers.TRACE}: $label ${value.size} bytes, not shown")
         }
     }
 
     companion object {
 
-        /** Whether key material is written to the log. See the warning on this class. */
-        const val TRACE_SECRETS = true
+        /**
+         * Whether raw pairing bytes, key material included, are written to the log.
+         *
+         * Must stay false in every build given to users. See the warning on this class.
+         */
+        const val TRACE_SECRETS = false
 
         fun hex(value: ByteArray): String = value.libre3HexLower()
     }

@@ -17,6 +17,7 @@ import android.content.Context
 import android.os.Build
 import app.aaps.plugins.libre3.Libre3Log
 import app.aaps.plugins.libre3.Libre3LogMarkers
+import app.aaps.plugins.libre3.Libre3LogMask
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
@@ -188,7 +189,7 @@ class Libre3GattClientAndroid(context: Context) : Libre3GattClient {
                 val device = result.device ?: return
                 if (!device.address.equals(address, ignoreCase = true)) return
                 if (found.compareAndSet(null, device)) {
-                    Libre3Log.i("${Libre3LogMarkers.SCAN}: seen ${device.address} rssi=${result.rssi}")
+                    Libre3Log.i("${Libre3LogMarkers.SCAN}: seen ${Libre3LogMask.mac(device.address)} rssi=${result.rssi}")
                     latch.countDown()
                 }
             }
@@ -209,7 +210,7 @@ class Libre3GattClientAndroid(context: Context) : Libre3GattClient {
             .build()
         try {
             scanner.startScan(listOf(filter), settings, callback)
-            Libre3Log.i("${Libre3LogMarkers.SCAN}: looking for $address")
+            Libre3Log.i("${Libre3LogMarkers.SCAN}: looking for ${Libre3LogMask.mac(address)}")
             latch.await(timeoutMs, TimeUnit.MILLISECONDS)
         } catch (e: Exception) {
             Libre3Log.w("${Libre3LogMarkers.SCAN}: the search threw ${e.javaClass.simpleName}")

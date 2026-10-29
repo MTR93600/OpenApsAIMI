@@ -2,6 +2,7 @@ package app.aaps.plugins.libre3.nfc
 
 import app.aaps.plugins.libre3.Libre3Log
 import app.aaps.plugins.libre3.Libre3LogMarkers
+import app.aaps.plugins.libre3.Libre3LogMask
 import app.aaps.plugins.libre3.identity.Libre3IdentityStore
 import app.aaps.plugins.libre3.identity.Libre3SensorIdentity
 import app.aaps.plugins.libre3.identity.Libre3SensorStore
@@ -85,7 +86,7 @@ class Libre3NfcSession(
         // a patch info frame. Both end here, before any activation command can be sent.
         val patchInfo = Libre3NfcCommands.parsePatchInfo(transceiver.transceive(Libre3NfcCommands.patchInfoFrame()))
         Libre3Log.i(
-            "${Libre3LogMarkers.NFC}: sensor read serial=${patchInfo.serialNumber} " +
+            "${Libre3LogMarkers.NFC}: sensor read serial=${Libre3LogMask.serial(patchInfo.serialNumber)} " +
                 "generation=${patchInfo.generation} state=0x${patchInfo.state.libre3HexUpper()} " +
                 "warmupMinutes=${patchInfo.warmupMinutes} wearMinutes=${patchInfo.wearDurationMinutes}",
         )
@@ -95,7 +96,8 @@ class Libre3NfcSession(
         // other slot already holds has to be refused here and nowhere later — invariant I4.
         if (veto(patchInfo.serialNumber)) {
             Libre3Log.w(
-                "${Libre3LogMarkers.NFC}: scan stopped, serial=${patchInfo.serialNumber} is held by the other slot",
+                "${Libre3LogMarkers.NFC}: scan stopped, serial=${Libre3LogMask.serial(patchInfo.serialNumber)} " +
+                    "is held by the other slot",
             )
             throw Libre3NfcException(
                 "this sensor is already held by the other slot",
@@ -113,7 +115,7 @@ class Libre3NfcSession(
         val activation = Libre3NfcCommands.parseActivationResponse(transceiver.transceive(frame))
         Libre3Log.i(
             "${Libre3LogMarkers.NFC}: command=0x${command.libre3HexUpper()} answered, " +
-                "address=${activation.bleAddressDisplay}",
+                "address=${Libre3LogMask.mac(activation.bleAddressDisplay)}",
         )
 
         // Sample times are counted from the activation moment, so it must be the sensor's own

@@ -4,6 +4,7 @@ import app.aaps.core.interfaces.concurrent.AapsLock
 import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.plugins.libre3.Libre3Log
 import app.aaps.plugins.libre3.Libre3LogMarkers
+import app.aaps.plugins.libre3.Libre3LogMask
 
 /**
  * Gives the physical sensor an owner.
@@ -53,7 +54,7 @@ object Libre3MacArbiter {
             val current = owners[key]
             if (current != null && current != owner) {
                 Libre3Log.w(
-                    "${Libre3LogMarkers.SESSION}: [$owner] sensor claim refused — ***${key.takeLast(5)} " +
+                    "${Libre3LogMarkers.SESSION}: [$owner] sensor claim refused — ${Libre3LogMask.mac(key)} " +
                         "is held by [$current]; two links on one sensor break both pairings",
                 )
                 return false
