@@ -2,6 +2,7 @@ package app.aaps.database.daos
 
 import androidx.room.Dao
 import androidx.room.Query
+import androidx.room.SkipQueryVerification
 import app.aaps.database.entities.APSResult
 import app.aaps.database.entities.TABLE_APS_RESULTS
 
@@ -36,8 +37,17 @@ internal interface APSResultDao : TraceableDao<APSResult> {
      * them in Kotlin decodes all seven JSON columns of about 288 rows on every calculation. In a desktop
      * benchmark that was about 29 times slower (#5248). `json_extract` gives NULL when the field is
      * missing and when it is `NaN`.
+     *
+     * A row that is not JSON gives NULL too. `json_extract` would fail the whole query on it, and the
+     * graph phase of every calculation with it. Such rows were written when a text was cut in the middle
+     * of an emoji. `json_valid` flag 2 means JSON5, so `NaN` and `Infinity` still pass.
+     *
+     * Room checks queries with an older SQLite that knows only `json_valid` with one argument, which is
+     * strict JSON and would drop every row with a `NaN` in it. So the check is skipped here, and
+     * `ApsResultVariableSensTest` runs the query on the bundled SQLite instead.
      */
-    @Query("SELECT timestamp, json_extract(resultJson, '\$.variable_sens') AS variableSens FROM $TABLE_APS_RESULTS WHERE timestamp >= :start AND timestamp <= :end ORDER BY timestamp ASC")
+    @SkipQueryVerification
+    @Query("SELECT timestamp, CASE WHEN json_valid(resultJson, 2) THEN json_extract(resultJson, '\$.variable_sens') END AS variableSens FROM $TABLE_APS_RESULTS WHERE timestamp >= :start AND timestamp <= :end ORDER BY timestamp ASC")
     suspend fun getVariableSens(start: Long, end: Long): List<ApsResultVariableSens>
 }
 

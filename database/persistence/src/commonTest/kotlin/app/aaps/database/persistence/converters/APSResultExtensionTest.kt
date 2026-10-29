@@ -101,6 +101,27 @@ internal class APSResultExtensionTest {
         assertEquals(19.7, (read.rawData() as RT).variable_sens)
     }
 
+    // A reason cut in the middle of an emoji used to be stored as it was, and SQLite then broke the row.
+    @Test
+    fun loneHalfOfAnEmojiIsReplacedBeforeStoring() {
+        val result = FakeApsResult(APSResult.Algorithm.SMB)
+        (result.rawData() as RT).reason.append("ok \uD83D\uDE00 cut \uD83D")
+
+        val stored = result.toDb()
+
+        val read = stored.fromDb { FakeApsResult() }
+        assertEquals("ok \uD83D\uDE00 cut \uFFFD", (read.rawData() as RT).reason.toString())
+    }
+
+    @Test
+    fun withoutLoneSurrogatesKeepsPairsAndReplacesHalves() {
+        assertEquals("abc", "abc".withoutLoneSurrogates())
+        assertEquals("\uD83D\uDE00", "\uD83D\uDE00".withoutLoneSurrogates())
+        assertEquals("a\uFFFD", "a\uD83D".withoutLoneSurrogates())
+        assertEquals("\uFFFDa", "\uDE00a".withoutLoneSurrogates())
+        assertEquals("\uFFFD\uFFFD", "\uDE00\uD83D".withoutLoneSurrogates())
+    }
+
     /** Only the members `fromDb` and `toDb` use do something. The rest is never called by them. */
     private class FakeApsResult(
         override var algorithm: APSResult.Algorithm = APSResult.Algorithm.UNKNOWN,

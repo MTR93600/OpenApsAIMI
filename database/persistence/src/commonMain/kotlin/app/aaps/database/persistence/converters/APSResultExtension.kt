@@ -83,6 +83,34 @@ private fun <T : GlucoseStatus> String.toGlucoseStatus(serializer: KSerializer<T
         null
     }
 
+/**
+ * Replaces each half of an emoji that has lost its other half with U+FFFD.
+ *
+ * An emoji is two UTF-16 chars. Code that shortens the reason or a log line with `take(n)` can cut
+ * between them, and kotlinx writes the lone half as it is. SQLite then joins it with the next char,
+ * which is the closing quote, so the stored `resultJson` is no longer JSON. That row could not be
+ * read back, and it made the `json_extract` of the graph query fail for every row in its window.
+ */
+internal fun String.withoutLoneSurrogates(): String {
+    if (none { it.isSurrogate() }) return this
+    val out = StringBuilder(length)
+    var i = 0
+    while (i < length) {
+        val c = this[i]
+        when {
+            c.isHighSurrogate() && i + 1 < length && this[i + 1].isLowSurrogate() -> {
+                out.append(c).append(this[i + 1])
+                i++
+            }
+
+            c.isSurrogate()                                                      -> out.append('\uFFFD')
+            else                                                                 -> out.append(c)
+        }
+        i++
+    }
+    return out.toString()
+}
+
 @OptIn(ExperimentalSerializationApi::class)
 fun APSResult.toDb(): app.aaps.database.entities.APSResult =
     when (algorithm) {
@@ -97,7 +125,7 @@ fun APSResult.toDb(): app.aaps.database.entities.APSResult =
                 profileJson = this.oapsProfile?.let { Json.encodeToString(OapsProfile.serializer(), it) },
                 mealDataJson = this.mealData?.let { Json.encodeToString(MealData.serializer(), it) },
                 autosensDataJson = this.autosensResult?.let { Json.encodeToString(AutosensResult.serializer(), it) },
-                resultJson = rtJson.encodeToString(RT.serializer(), this.rawData() as RT)
+                resultJson = rtJson.encodeToString(RT.serializer(), this.rawData() as RT).withoutLoneSurrogates()
             )
 
         APSResult.Algorithm.AUTO_ISF ->
@@ -110,7 +138,7 @@ fun APSResult.toDb(): app.aaps.database.entities.APSResult =
                 profileJson = this.oapsProfileAutoIsf?.let { Json.encodeToString(OapsProfileAutoIsf.serializer(), it) },
                 mealDataJson = this.mealData?.let { Json.encodeToString(MealData.serializer(), it) },
                 autosensDataJson = this.autosensResult?.let { Json.encodeToString(AutosensResult.serializer(), it) },
-                resultJson = rtJson.encodeToString(RT.serializer(), this.rawData() as RT)
+                resultJson = rtJson.encodeToString(RT.serializer(), this.rawData() as RT).withoutLoneSurrogates()
             )
 
         APSResult.Algorithm.AIMI     ->
@@ -123,7 +151,7 @@ fun APSResult.toDb(): app.aaps.database.entities.APSResult =
                 profileJson = this.oapsProfileAimi?.let { Json.encodeToString(OapsProfileAimi.serializer(), it) },
                 mealDataJson = this.mealData?.let { Json.encodeToString(MealData.serializer(), it) },
                 autosensDataJson = this.autosensResult?.let { Json.encodeToString(AutosensResult.serializer(), it) },
-                resultJson = rtJson.encodeToString(RT.serializer(), this.rawData() as RT)
+                resultJson = rtJson.encodeToString(RT.serializer(), this.rawData() as RT).withoutLoneSurrogates()
             )
 
         else                         -> error("Unsupported")

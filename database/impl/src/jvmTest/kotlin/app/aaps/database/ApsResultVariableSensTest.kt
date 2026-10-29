@@ -63,6 +63,22 @@ class ApsResultVariableSensTest {
         ).inOrder()
     }
 
+    @Test
+    fun `a row that is not JSON gives null without failing the other rows`() = runTest {
+        database.apsResultDao.insert(apsResult(NOW, """{"variable_sens":40.0}"""))
+        // Half of an emoji: SQLite joins it with the closing quote, so the stored text is not JSON
+        database.apsResultDao.insert(apsResult(NOW + FIVE_MIN, "{\"reason\":\"cut \uD83D\",\"variable_sens\":41.0}"))
+        database.apsResultDao.insert(apsResult(NOW + 2 * FIVE_MIN, ""))
+        database.apsResultDao.insert(apsResult(NOW + 3 * FIVE_MIN, """{"variable_sens":43.0}"""))
+
+        assertThat(database.apsResultDao.getVariableSens(NOW, NOW + 3 * FIVE_MIN)).containsExactly(
+            ApsResultVariableSens(NOW, 40.0),
+            ApsResultVariableSens(NOW + FIVE_MIN, null),
+            ApsResultVariableSens(NOW + 2 * FIVE_MIN, null),
+            ApsResultVariableSens(NOW + 3 * FIVE_MIN, 43.0)
+        ).inOrder()
+    }
+
     private fun apsResult(timestamp: Long, resultJson: String) = APSResult(
         timestamp = timestamp,
         algorithm = APSResult.Algorithm.SMB,
