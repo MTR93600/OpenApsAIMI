@@ -828,8 +828,12 @@ class GarminPlugin(
                 }
                 jo.add("basalHistory", basalArr)
                 val smbArr = JsonArray()
-                for (ts in loopHub.smbHistoryTimestamps()) {
-                    smbArr.add(ts)
+                for (step in loopHub.smbHistory()) {
+                    val s = JsonObject()
+                    s.addProperty("t", step.t)
+                    // Two decimal places keep 0.05 U visible on the watch log
+                    s.addProperty("u", kotlin.math.round(step.u * 100.0) / 100.0)
+                    smbArr.add(s)
                 }
                 jo.add("smbHistory", smbArr)
             }

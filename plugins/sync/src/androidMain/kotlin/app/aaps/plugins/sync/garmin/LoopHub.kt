@@ -8,6 +8,9 @@ import java.time.Instant
 /** One step of temporary basal for the Millimétré staircase (`t` = start in ms, `p` = percent). */
 data class BasalHistoryStep(val t: Long, val p: Int)
 
+/** One SMB for watch logs (`t` = epoch ms, `u` = insulin units). */
+data class SmbHistoryStep(val t: Long, val u: Double)
+
 /** Abstraction from all the functionality we need from the AAPS app. */
 interface LoopHub {
 
@@ -65,10 +68,10 @@ interface LoopHub {
     fun temporaryBasalHistory(windowMs: Long = 3L * 60L * 60L * 1000L): List<BasalHistoryStep>
 
     /**
-     * Times (epoch ms) of the SMBs in the last [windowMs], for Millimétré (`smbHistory`).
+     * SMBs in the last [windowMs] for Millimétré / Téléscripteur (`smbHistory`: `{t,u}`).
      * ⚠️ ASYNC IMPACT: runBlocking + bolus database query.
      */
-    fun smbHistoryTimestamps(windowMs: Long = 3L * 60L * 60L * 1000L): List<Long>
+    fun smbHistory(windowMs: Long = 3L * 60L * 60L * 1000L): List<SmbHistoryStep>
 
     /** Returns the lower bound of the target glucose range. */
     val lowGlucoseMark: Double

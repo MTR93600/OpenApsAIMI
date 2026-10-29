@@ -706,7 +706,7 @@ class GarminPluginTest : TestBaseWithProfile() {
         whenever(loopHub.temporaryBasal).thenReturn(0.8)
         whenever(loopHub.carbsOnboard).thenReturn(10.7)
         whenever(loopHub.temporaryBasalHistory(any())).thenReturn(emptyList())
-        whenever(loopHub.smbHistoryTimestamps(any())).thenReturn(emptyList())
+        whenever(loopHub.smbHistory(any())).thenReturn(emptyList())
         whenever(loopHub.getGlucoseValues(any(), eq(false))).thenReturn(
             listOf(
                 createGlucoseValue(
@@ -724,7 +724,7 @@ class GarminPluginTest : TestBaseWithProfile() {
         verify(loopHub, atLeastOnce()).activeTherapyMode
         verify(loopHub, atLeastOnce()).temporaryBasalRemainingMinutes
         verify(loopHub, atLeastOnce()).temporaryBasalHistory(any())
-        verify(loopHub, atLeastOnce()).smbHistoryTimestamps(any())
+        verify(loopHub, atLeastOnce()).smbHistory(any())
     }
 
     @Test
@@ -735,7 +735,7 @@ class GarminPluginTest : TestBaseWithProfile() {
         whenever(loopHub.temporaryBasal).thenReturn(0.8)
         whenever(loopHub.carbsOnboard).thenReturn(10.7)
         whenever(loopHub.temporaryBasalHistory(any())).thenReturn(emptyList())
-        whenever(loopHub.smbHistoryTimestamps(any())).thenReturn(emptyList())
+        whenever(loopHub.smbHistory(any())).thenReturn(emptyList())
         whenever(loopHub.getGlucoseValues(any(), eq(false))).thenAnswer { i ->
             val from = i.getArgument<Instant>(0)
             fromClosedRange(from.toEpochMilli(), clock.instant().toEpochMilli(), 300_000L)
@@ -774,7 +774,7 @@ class GarminPluginTest : TestBaseWithProfile() {
         verify(loopHub, atLeastOnce()).activeTherapyMode
         verify(loopHub, atLeastOnce()).temporaryBasalRemainingMinutes
         verify(loopHub, atLeastOnce()).temporaryBasalHistory(any())
-        verify(loopHub, atLeastOnce()).smbHistoryTimestamps(any())
+        verify(loopHub, atLeastOnce()).smbHistory(any())
     }
 
     /** Fields added for the AIMI watchfaces: target, mode, TBR minutes, basal staircase and SMB times. */
@@ -791,7 +791,9 @@ class GarminPluginTest : TestBaseWithProfile() {
         whenever(loopHub.temporaryBasalHistory(any())).thenReturn(
             listOf(BasalHistoryStep(t = 1000L, p = 100), BasalHistoryStep(t = 2000L, p = 130))
         )
-        whenever(loopHub.smbHistoryTimestamps(any())).thenReturn(listOf(1500L, 2500L))
+        whenever(loopHub.smbHistory(any())).thenReturn(
+            listOf(SmbHistoryStep(t = 1500L, u = 0.35), SmbHistoryStep(t = 2500L, u = 0.20))
+        )
         whenever(loopHub.getGlucoseValues(any(), eq(false))).thenReturn(
             listOf(createGlucoseValue(clock.instant(), 110.0))
         )
@@ -800,14 +802,14 @@ class GarminPluginTest : TestBaseWithProfile() {
         assertTrue(json.contains("\"mode\":\"FCL\""), json)
         assertTrue(json.contains("\"tbrMins\":27"), json)
         assertTrue(json.contains("\"basalHistory\":[{\"t\":1000,\"p\":100},{\"t\":2000,\"p\":130}]"), json)
-        assertTrue(json.contains("\"smbHistory\":[1500,2500]"), json)
+        assertTrue(json.contains("\"smbHistory\":[{\"t\":1500,\"u\":0.35},{\"t\":2500,\"u\":0.2}]"), json)
         verify(loopHub).getGlucoseValues(any(), eq(false))
         verify(loopHub, atLeastOnce()).glucoseUnit
         verify(loopHub, atLeastOnce()).currentTargetMgdl
         verify(loopHub, atLeastOnce()).activeTherapyMode
         verify(loopHub, atLeastOnce()).temporaryBasalRemainingMinutes
         verify(loopHub, atLeastOnce()).temporaryBasalHistory(any())
-        verify(loopHub, atLeastOnce()).smbHistoryTimestamps(any())
+        verify(loopHub, atLeastOnce()).smbHistory(any())
     }
 
 }
