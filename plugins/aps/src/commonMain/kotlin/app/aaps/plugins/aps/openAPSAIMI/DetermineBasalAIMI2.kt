@@ -12112,7 +12112,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         AimiSmbTrainer.maybeTrainAsync(
             storage = storage,
             dir = externalDirPath,
-            csvFile = csvfilePath
+            csvFile = csvfilePath,
+            minLearningQuality = preferences.get(DoubleKey.OApsAIMISmbTrainingMinQuality).toFloat(),
+            relaxedFilter = preferences.get(BooleanKey.OApsAIMISmbTrainingRelaxedFilter),
         )
 
         // 🎯 Inference-only O(1): fallback to predictedSMB on any issue

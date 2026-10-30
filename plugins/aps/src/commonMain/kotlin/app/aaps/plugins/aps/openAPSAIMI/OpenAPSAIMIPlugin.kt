@@ -2204,6 +2204,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             title = ApsStrings.aimi_lab_title,
             items = buildList {
                 add(BooleanKey.OApsAIMIMLtraining)
+                add(DoubleKey.OApsAIMISmbTrainingMinQuality)
+                add(BooleanKey.OApsAIMISmbTrainingRelaxedFilter)
                 platformItem(AimiPlatformPreferenceSlot.HORMONITOR_VIEWER)?.let(::add)
                 add(DoubleKey.OApsAIMIMaxSMB)
                 add(DoubleKey.OApsAIMIHighBGMaxSMB)

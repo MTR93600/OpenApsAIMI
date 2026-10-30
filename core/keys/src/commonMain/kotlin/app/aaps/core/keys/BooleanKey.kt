@@ -297,6 +297,11 @@ enum class BooleanKey(
         defaultedBySM = true
     ),
     OApsAIMIMLtraining("key_enable_ML_training", false, title = KeysStrings.pref_title_oaps_aimi_m_ltraining),
+    OApsAIMISmbTrainingRelaxedFilter(
+        "aimi_smb_training_relaxed_filter", true,
+        title = KeysStrings.pref_title_aimi_smb_training_relaxed_filter,
+        summary = KeysStrings.pref_summary_aimi_smb_training_relaxed_filter,
+    ),
     OApsAIMIEnableBasal("key_enable_basal", false, title = KeysStrings.pref_title_oaps_aimi_enable_basal),
     OApsAIMIEnableStepsFromWatch("count_steps_watch", false, title = KeysStrings.pref_title_oaps_aimi_enable_steps_from_watch),
     OApsAIMIpregnancy("key_use_AimiPregnancy",false, title = KeysStrings.pref_title_oaps_aimi_pregnancy),

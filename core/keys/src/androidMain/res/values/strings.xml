@@ -701,6 +701,10 @@
     <string name="pref_title_oaps_aimi_red_carpet_restore_threshold">AIMI red carpet restore threshold</string>
     <string name="pref_title_oaps_aimi_priority_max_iob_factor">AIMI priority max IOB factor</string>
     <string name="pref_title_oaps_aimi_priority_max_iob_extra_u">AIMI priority max IOB extra u</string>
+    <string name="pref_title_aimi_smb_training_min_quality">SMB training: row quality limit</string>
+    <string name="pref_summary_aimi_smb_training_min_quality">Rows with a quality value below this limit are not used to train the SMB model. A lower limit gives more rows, but rougher data. A higher limit gives cleaner data, but fewer rows. Standard: 0.40. Changing it starts a new training at the next loop run.</string>
+    <string name="pref_title_aimi_smb_training_relaxed_filter">SMB training: relaxed row filter</string>
+    <string name="pref_summary_aimi_smb_training_relaxed_filter">On: rows that only have the harmless dual delivery flag (SMB and temp basal in the same loop run) are kept, and check rows are taken from every period. Off: the old filter, any flag removes the row, so the model may get almost no SMB rows.</string>
     <string name="pref_title_oaps_aimi_meal_factor">AIMI meal factor</string>
     <string name="pref_title_oaps_aimi_fcl_factor">AIMI FCL factor</string>
     <string name="pref_title_oaps_aimi_bf_factor">AIMI BF factor</string>

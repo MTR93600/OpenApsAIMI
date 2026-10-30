@@ -98,6 +98,10 @@ object AimiSmbTrainer {
     private val lastTrainMs     = AtomicLong(0L)
     private val rowsAtLastTrain = AtomicLong(0L)
 
+    /** The row filter the last call used. When it changes, the next attempt runs at once. In memory only. */
+    private data class TrainingFilterSettings(val minLearningQuality: Float, val relaxedFilter: Boolean)
+    private val lastFilterSettingsUsed = AtomicReference<TrainingFilterSettings?>(null)
+
     /**
      * Outcome of the most recent training ATTEMPT that really ran the gates: [TrainingOutcome.TRAINED],
      * [TrainingOutcome.REJECTED_BY_GATES], [TrainingOutcome.TOO_FEW_SAMPLES],
@@ -158,8 +162,22 @@ object AimiSmbTrainer {
      * Respects the rate limit (6h since the last ATTEMPT) and the gates in [AimiSmbTrainingSchedule.shouldAttempt].
      * Never blocks the caller.
      */
-    fun maybeTrainAsync(storage: AimiStorage, dir: AimiPath, csvFile: AimiPath) {
+    fun maybeTrainAsync(
+        storage: AimiStorage,
+        dir: AimiPath,
+        csvFile: AimiPath,
+        minLearningQuality: Float = SmbRefinementFeatureSchema.MIN_TRAINING_LEARNING_QUALITY,
+        relaxedFilter: Boolean = true,
+    ) {
         val now = aimiWallClockMs()
+
+        // The user changed the quality limit or the filter mode: forget the last attempt time,
+        // so the next attempt runs now and does not wait for the 6 hour limit.
+        val settings = TrainingFilterSettings(minLearningQuality, relaxedFilter)
+        val previousSettings = lastFilterSettingsUsed.exchange(settings)
+        if (previousSettings != null && previousSettings != settings) {
+            lastAttemptMs.store(0L)
+        }
 
         // Rate limit guard (fast path, no coroutine needed). This alone cannot tell bootstrap or staleness
         // apart from a plain "not due" skip — that needs the row count from the CSV — so it only ever
@@ -182,7 +200,7 @@ object AimiSmbTrainer {
             if (trainMutex.isLocked) return@launch  // Another training in progress
             trainMutex.withLock {
                 try {
-                    trainNow(storage, dir, csvFile)
+                    trainNow(storage, dir, csvFile, minLearningQuality, relaxedFilter)
                 } catch (e: Exception) {
                     recordFailure()
                     recordResult(
@@ -293,7 +311,13 @@ object AimiSmbTrainer {
      * await its result instead of racing the fire-and-forget coroutine [maybeTrainAsync] launches. No
      * production call site does this.
      */
-    internal suspend fun trainNow(storage: AimiStorage, dir: AimiPath, csvFile: AimiPath) {
+    internal suspend fun trainNow(
+        storage: AimiStorage,
+        dir: AimiPath,
+        csvFile: AimiPath,
+        minLearningQuality: Float = SmbRefinementFeatureSchema.MIN_TRAINING_LEARNING_QUALITY,
+        relaxedFilter: Boolean = true,
+    ) {
         // Caller already holds [trainMutex] (`maybeTrainAsync`). Do not take it again: Mutex is not reentrant.
         ensureStateLoadedLocked(storage, dir)
 
@@ -400,7 +424,7 @@ object AimiSmbTrainer {
             )
             return
         }
-        val corpus = AimiSmbCorpus.buildTrainingCorpus(headers, dataLines)
+        val corpus = AimiSmbCorpus.buildTrainingCorpus(headers, dataLines, minLearningQuality, relaxedFilter)
         if (corpus == null) {
             recordResult(
                 storage,
@@ -457,7 +481,7 @@ object AimiSmbTrainer {
         val net = NeuralModelTrainer.trainAndPublish(
             storage = storage,
             weightsPath = AimiSmbModelStore.modelFile(storage, dir),
-            split = NeuralModelTrainer.split80_20(inputs, targets),
+            split = if (relaxedFilter) NeuralModelTrainer.splitInBlocks(inputs, targets) else NeuralModelTrainer.split80_20(inputs, targets),
             config = TrainingConfig(learningRate = 0.001, epochs = 300),
             inputSize = INPUT_SIZE,
             regularizationLambda = 0.01,

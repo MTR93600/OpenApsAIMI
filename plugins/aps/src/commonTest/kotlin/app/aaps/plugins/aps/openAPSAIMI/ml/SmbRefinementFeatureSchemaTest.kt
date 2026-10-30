@@ -10,6 +10,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /**
  * Locks the SMB-refinement feature schema: runtime vector layout, old-CSV fallback neutrals,
@@ -252,5 +253,66 @@ class SmbRefinementFeatureSchemaTest {
 
         val parsed = assertNotNull(SmbRefinementFeatureSchema.parseTrainingFeatures(headers, cols))
         assertFalse(SmbRefinementFeatureSchema.shouldUseCsvRowForTraining(headers, cols, parsed))
+    }
+
+    /** Raw features with only the protective confidence and the learning quality set. */
+    private fun causalFeatures(protective: Float, quality: Float): FloatArray {
+        // Causal block starts after the base, latent (4) and mode (3) features.
+        val causalStart = SmbRefinementFeatureSchema.BASE_FEATURE_COUNT + 4 + 3
+        return FloatArray(SmbRefinementFeatureSchema.INPUT_SIZE - 1).also {
+            it[causalStart + 1] = protective
+            it[causalStart + 2] = quality
+        }
+    }
+
+    @Test
+    fun `should use for training uses the learning quality threshold`() {
+        val threshold = SmbRefinementFeatureSchema.MIN_TRAINING_LEARNING_QUALITY
+
+        assertTrue(SmbRefinementFeatureSchema.shouldUseForTraining(causalFeatures(0.2f, threshold)))
+        assertFalse(SmbRefinementFeatureSchema.shouldUseForTraining(causalFeatures(0.2f, threshold - 0.01f)))
+        // A real phone had quality 0.40 on average: such a row must be usable.
+        assertTrue(SmbRefinementFeatureSchema.shouldUseForTraining(causalFeatures(0.2f, 0.45f)))
+        assertFalse(SmbRefinementFeatureSchema.shouldUseForTraining(causalFeatures(0.9f, 0.60f)))
+    }
+
+    @Test
+    fun `should use for training accepts a limit set by the user`() {
+        // Quality 0.35: dropped by the standard limit, kept when the user lowers the limit to 0.30.
+        assertFalse(SmbRefinementFeatureSchema.shouldUseForTraining(causalFeatures(0.2f, 0.35f)))
+        assertTrue(SmbRefinementFeatureSchema.shouldUseForTraining(causalFeatures(0.2f, 0.35f), minLearningQuality = 0.30f))
+        // Quality 0.45: kept by the standard limit, dropped when the user raises the limit to 0.50.
+        assertTrue(SmbRefinementFeatureSchema.shouldUseForTraining(causalFeatures(0.2f, 0.45f)))
+        assertFalse(SmbRefinementFeatureSchema.shouldUseForTraining(causalFeatures(0.2f, 0.45f), minLearningQuality = 0.50f))
+    }
+
+    @Test
+    fun `relaxed filter keeps rows with only dual delivery flags`() {
+        val headers = listOf(
+            "dateStr", "bg", "iob", "cob", "delta", "shortAvgDelta", "longAvgDelta",
+            "tdd7DaysPerHour", "tdd2DaysPerHour", "tddPerHour", "tdd24HrsPerHour",
+            "mealProb", "endogenousGlucoseDrive", "circadianSiFactor", "transientResistanceProb",
+            "patientModeMealBias", "patientModeProtectionBias", "contextIntentConfidence",
+            "causalMealConfidence", "causalProtectiveConfidence", "causalLearningQuality",
+            "eventMemoryPostHyperExhaustionScore", "eventMemoryCorrectionFragilityScore", "decisionConflictFlags",
+        )
+
+        fun used(flags: String, relaxed: Boolean): Boolean {
+            val cols = listOf(
+                "06/11/2026 08:00", "182", "1.8", "0.0", "2.5", "2.1", "1.5", "0.8", "0.7", "0.9", "1.0",
+                "1.0", "0.18", "0.93", "0.28", "0.80", "0.20", "0.54", "0.72", "0.22", "0.78", "0.10", "0.10", flags,
+            )
+            val parsed = assertNotNull(SmbRefinementFeatureSchema.parseTrainingFeatures(headers, cols))
+            return SmbRefinementFeatureSchema.shouldUseCsvRowForTraining(headers, cols, parsed, relaxedFilter = relaxed)
+        }
+
+        assertTrue(used("", relaxed = true))
+        assertTrue(used("dual_delivery|dual_delivery_tbr_up", relaxed = true))
+        assertTrue(used("dual_delivery|dual_delivery_tbr_down", relaxed = true))
+        assertFalse(used("dual_delivery|dual_delivery_suspend", relaxed = true))
+        assertFalse(used("some_other_conflict", relaxed = true))
+        // Strict mode: any flag blocks the row, as before.
+        assertTrue(used("", relaxed = false))
+        assertFalse(used("dual_delivery|dual_delivery_tbr_up", relaxed = false))
     }
 }

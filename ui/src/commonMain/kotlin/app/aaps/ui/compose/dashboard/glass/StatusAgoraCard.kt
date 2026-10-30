@@ -30,6 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -341,11 +342,13 @@ private fun LoopDot(running: Boolean) {
                 repeatMode = RepeatMode.Reverse
             )
         )
+        // pulseAlpha is read in the draw phase only: reading it in composition
+        // recomposed this dot on every frame and kept the render thread busy.
         Box(
             modifier = Modifier
                 .size(10.dp)
                 .clip(CircleShape)
-                .background(LOOP_RUNNING_HALO.copy(alpha = pulseAlpha), CircleShape),
+                .drawBehind { drawCircle(LOOP_RUNNING_HALO, alpha = pulseAlpha) },
             contentAlignment = Alignment.Center
         ) {
             Box(

@@ -68,7 +68,12 @@ internal object AimiSmbCorpus {
      * dropped, because it cannot be lined up with any column: the production file holds one such row,
      * 65 fields wide, made of two writes that got interleaved.
      */
-    fun buildTrainingCorpus(headers: List<String>, dataLines: List<String>): TrainingCorpus? {
+    fun buildTrainingCorpus(
+        headers: List<String>,
+        dataLines: List<String>,
+        minLearningQuality: Float = SmbRefinementFeatureSchema.MIN_TRAINING_LEARNING_QUALITY,
+        relaxedFilter: Boolean = true,
+    ): TrainingCorpus? {
         val headerCheck = checkCorpusHeader(headers)
         if (!headerCheck.valid) return null
         val targetIndex = SmbRefinementFeatureSchema.targetColumnIndex
@@ -83,7 +88,7 @@ internal object AimiSmbCorpus {
             if (cols.size > headers.size) continue
 
             val raw = SmbRefinementFeatureSchema.parseTrainingFeatures(headers, cols) ?: continue
-            if (!SmbRefinementFeatureSchema.shouldUseCsvRowForTraining(headers, cols, raw)) continue
+            if (!SmbRefinementFeatureSchema.shouldUseCsvRowForTraining(headers, cols, raw, minLearningQuality, relaxedFilter)) continue
 
             // Approximate trendIndicator for offline training (copied from AimiSmbTrainer).
             val trendIndicator = computeTrendIndicator(raw)

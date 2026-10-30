@@ -194,6 +194,8 @@ aimi_smb_exercise_damping|DoubleKey|true
 aimi_smb_late_fat_damping|DoubleKey|true
 aimi_smb_tail_damping|DoubleKey|true
 aimi_smb_tail_threshold|DoubleKey|true
+aimi_smb_training_min_quality|DoubleKey|true
+aimi_smb_training_relaxed_filter|BooleanKey|true
 aimi_sos_permissions_compose|ApsIntentKey|false
 aimi_support_package_compose|ApsIntentKey|false
 aimi_tuning_context_selection|StringKey|true
