@@ -180,18 +180,43 @@ internal object SmbRefinementFeatureSchema {
             causalStatePosterior?.learningQuality?.toFloat() ?: NEUTRAL_CAUSAL_LEARNING_QUALITY,
         )
 
-    fun shouldUseForTraining(rawFeatures: FloatArray): Boolean {
+    /**
+     * Lowest causal learning quality a CSV row may have to be used for training.
+     *
+     * It was 0.52. On a real phone the quality was 0.40 on average and never above 0.62, so 0.52 dropped
+     * about 95% of the rows (452 of 9027 were left). Those rows were all from the first days, and their
+     * newest 20% had only zero labels, so the SMB model could never train. 0.40 keeps the weaker half of
+     * the quality range out and still leaves enough rows to learn from.
+     */
+    const val MIN_TRAINING_LEARNING_QUALITY = 0.40f
+
+    fun shouldUseForTraining(
+        rawFeatures: FloatArray,
+        minLearningQuality: Float = MIN_TRAINING_LEARNING_QUALITY,
+    ): Boolean {
         val causalStart = BASE_FEATURE_COUNT + LATENT_FEATURE_COUNT + MODE_FEATURE_COUNT
         val protectiveConfidence = rawFeatures.getOrElse(causalStart + 1) { NEUTRAL_CAUSAL_PROTECTIVE_CONFIDENCE }
         val learningQuality = rawFeatures.getOrElse(causalStart + 2) { NEUTRAL_CAUSAL_LEARNING_QUALITY }
-        return learningQuality >= 0.52f && protectiveConfidence < 0.86f
+        return learningQuality >= minLearningQuality && protectiveConfidence < 0.86f
     }
 
-    fun shouldUseCsvRowForTraining(headers: List<String>, cols: List<String>, rawFeatures: FloatArray): Boolean {
-        if (!shouldUseForTraining(rawFeatures)) return false
+    fun shouldUseCsvRowForTraining(
+        headers: List<String>,
+        cols: List<String>,
+        rawFeatures: FloatArray,
+        minLearningQuality: Float = MIN_TRAINING_LEARNING_QUALITY,
+        relaxedFilter: Boolean = true,
+    ): Boolean {
+        if (!shouldUseForTraining(rawFeatures, minLearningQuality)) return false
 
         val conflictFlags = headerValue(headers, cols, "decisionConflictFlags").orEmpty().trim()
-        if (conflictFlags.isNotEmpty() && conflictFlags != "[]" && conflictFlags.lowercase() != "none") {
+        // Relaxed mode ignores the harmless dual delivery flags. Normal mode: any flag blocks the row.
+        val blockedByFlags = if (relaxedFilter) {
+            hasBlockingConflictFlag(conflictFlags)
+        } else {
+            conflictFlags.isNotEmpty() && conflictFlags != "[]" && conflictFlags.lowercase() != "none"
+        }
+        if (blockedByFlags) {
             return false
         }
 
@@ -208,6 +233,23 @@ internal object SmbRefinementFeatureSchema {
         }
 
         return true
+    }
+
+    /**
+     * Flags that only say "an SMB and a temp basal change were sent in the same loop run".
+     *
+     * The flag is written for almost every real SMB, so a filter that drops it drops almost every SMB row
+     * and leaves only rows with no SMB. On a real phone 453 of 499 rows with a dose of 0.5 U or more had it.
+     * These flags are not a conflict. `dual_delivery_suspend` is not listed here, so it still blocks the row.
+     */
+    private val harmlessDualDeliveryFlags = setOf("dual_delivery", "dual_delivery_tbr_up", "dual_delivery_tbr_down")
+
+    private fun hasBlockingConflictFlag(conflictFlags: String): Boolean {
+        if (conflictFlags.isEmpty() || conflictFlags == "[]" || conflictFlags.lowercase() == "none") return false
+        return conflictFlags.split("|")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .any { it !in harmlessDualDeliveryFlags }
     }
 
     private fun headerValue(headers: List<String>, cols: List<String>, name: String): String? {

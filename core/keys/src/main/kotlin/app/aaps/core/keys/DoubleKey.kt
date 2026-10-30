@@ -379,6 +379,12 @@ enum class DoubleKey(
     OApsAIMIRedCarpetRestoreThreshold("aimi_red_carpet_restore_threshold", 0.75, 0.50, 0.95),
     OApsAIMIPriorityMaxIobFactor("aimi_priority_max_iob_factor", 1.20, 1.0, 1.6),
     OApsAIMIPriorityMaxIobExtraU("aimi_priority_max_iob_extra_u", 2.0, 0.0, 5.0),
+    /** Lower bound 0.30: below it the quality filter would let almost every row through. */
+    OApsAIMISmbTrainingMinQuality(
+        "aimi_smb_training_min_quality", 0.40, 0.30, 1.0,
+        titleResId = R.string.pref_title_aimi_smb_training_min_quality,
+        summaryResId = R.string.pref_summary_aimi_smb_training_min_quality,
+    ),
     // ❌ TIME-BASED REACTIVITY REMOVED - replaced by UnifiedReactivityLearner.globalFactor
     // Previously: OApsAIMIMorningFactor, OApsAIMIAfternoonFactor, OApsAIMIEveningFactor
 

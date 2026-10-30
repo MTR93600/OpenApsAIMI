@@ -76,4 +76,43 @@ class NeuralModelTrainerTest {
 
         assertThat(baseline).isWithin(1e-9).of(0.0)
     }
+
+    @Test
+    fun `splitInBlocks puts every fifth block of rows in validation`() {
+        val rows = NeuralModelTrainer.BLOCK_SIZE * 10
+        val inputs = (0 until rows).map { floatArrayOf(it.toFloat()) }
+        val targets = (0 until rows).map { doubleArrayOf(it.toDouble()) }
+
+        val split = NeuralModelTrainer.splitInBlocks(inputs, targets)
+
+        // 10 blocks: blocks 4 and 9 are validation, the other 8 blocks are train.
+        assertThat(split.valInputs).hasSize(NeuralModelTrainer.BLOCK_SIZE * 2)
+        assertThat(split.trainInputs).hasSize(NeuralModelTrainer.BLOCK_SIZE * 8)
+        assertThat(split.valInputs.first()[0]).isEqualTo((NeuralModelTrainer.BLOCK_SIZE * 4).toFloat())
+        assertThat(split.valInputs.map { it[0] }).containsNoneIn(split.trainInputs.map { it[0] })
+    }
+
+    @Test
+    fun `splitInBlocks keeps non zero labels from an early period in validation`() {
+        // Non zero labels only in the first half. A newest-20% split would see only zeros in validation.
+        val rows = NeuralModelTrainer.BLOCK_SIZE * 20
+        val inputs = (0 until rows).map { floatArrayOf(it.toFloat()) }
+        val targets = (0 until rows).map { doubleArrayOf(if (it < rows / 2) 0.3 else 0.0) }
+
+        val split = NeuralModelTrainer.splitInBlocks(inputs, targets)
+
+        assertThat(split.valTargets.any { it[0] > 0.0 }).isTrue()
+        assertThat(NeuralModelTrainer.split80_20(inputs, targets).valTargets.any { it[0] > 0.0 }).isFalse()
+    }
+
+    @Test
+    fun `splitInBlocks falls back when there are too few rows for a validation block`() {
+        val inputs = (0 until 5).map { floatArrayOf(it.toFloat()) }
+        val targets = (0 until 5).map { doubleArrayOf(it.toDouble()) }
+
+        val split = NeuralModelTrainer.splitInBlocks(inputs, targets)
+
+        assertThat(split.trainInputs).isNotEmpty()
+        assertThat(split.valInputs).isNotEmpty()
+    }
 }

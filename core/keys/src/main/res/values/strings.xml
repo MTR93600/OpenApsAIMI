@@ -718,5 +718,9 @@
     <string name="pref_summary_aimi_tube_hyper_clamp_physical_bound">Above 160 mg/dL the prediction is held at 80 mg/dL, whatever insulin is on board. With this on, the dose check uses instead the glucose that the insulin on board would reach by itself. With little insulin on board, a rising glucose can get more SMB. With a lot of insulin on board, the SMB is blocked. ON by default; every case is recorded so it can be reviewed.</string>
     <string name="pref_title_aimi_hrv_baseline_per_night">HRV baseline: one value per night</string>
     <string name="pref_summary_aimi_hrv_baseline_per_night">Your normal HRV is learned from one value per night (the middle reading between 22:00 and 06:00), over the last 7 nights. When this is off, it is learned from the last 28 physio runs, which is only about 7 hours. This changes how a low HRV is judged, and that can change insulin. Off by default.</string>
+    <string name="pref_title_aimi_smb_training_min_quality">SMB training: row quality limit</string>
+    <string name="pref_summary_aimi_smb_training_min_quality">Rows with a quality value below this limit are not used to train the SMB model. A lower limit gives more rows, but rougher data. A higher limit gives cleaner data, but fewer rows. Standard: 0.40. Changing it starts a new training at the next loop run.</string>
+    <string name="pref_title_aimi_smb_training_relaxed_filter">SMB training: relaxed row filter</string>
+    <string name="pref_summary_aimi_smb_training_relaxed_filter">On: rows that only have the harmless dual delivery flag (SMB and temp basal in the same loop run) are kept, and check rows are taken from every period. Off: the old filter, any flag removes the row, so the model may get almost no SMB rows.</string>
 </resources>
 

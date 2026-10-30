@@ -284,6 +284,8 @@ internal object AimiSettingsManifest {
     /** Every AIMI setting, exactly once. */
     val entries: List<AimiSettingEntry> = listOf(
         AimiSettingEntry(BooleanKey.OApsAIMIMLtraining, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
+        AimiSettingEntry(BooleanKey.OApsAIMISmbTrainingRelaxedFilter, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
+        AimiSettingEntry(DoubleKey.OApsAIMISmbTrainingMinQuality, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIEnableBasal, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIEnableStepsFromWatch, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIpregnancy, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),

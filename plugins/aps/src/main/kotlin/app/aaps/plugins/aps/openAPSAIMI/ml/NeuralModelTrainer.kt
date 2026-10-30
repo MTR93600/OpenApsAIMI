@@ -38,6 +38,31 @@ internal object NeuralModelTrainer {
         return Split(trainInputs, trainTargets, valInputs, valTargets)
     }
 
+    /** Number of rows in one block of [splitInBlocks]. At one row per 5 minutes, 12 rows are one hour. */
+    const val BLOCK_SIZE = 12
+
+    /**
+     * Split for sparse labels such as SMB doses, where most labels are 0.
+     *
+     * The oldest 80% / newest 20% split of [split80_20] can put every non-zero label on the train side. Then
+     * the held-out rows are all the same number and the gate cannot compare anything. Here the rows are cut
+     * into blocks of [BLOCK_SIZE] rows and every 5th block goes to validation, so validation sees all periods.
+     * Whole blocks are used, not single rows, because neighbouring rows are almost the same and single rows
+     * would leak from train into validation. If either side would be empty it falls back like [split80_20].
+     */
+    fun splitInBlocks(inputs: List<FloatArray>, targets: List<DoubleArray>): Split {
+        val isValidation = { index: Int -> (index / BLOCK_SIZE) % 5 == 4 }
+        val trainIdx = inputs.indices.filter { !isValidation(it) }
+        val valIdx = inputs.indices.filter { isValidation(it) }
+        if (trainIdx.isEmpty() || valIdx.isEmpty()) return split80_20(inputs, targets)
+        return Split(
+            trainInputs = trainIdx.map { inputs[it] },
+            trainTargets = trainIdx.map { targets[it] },
+            valInputs = valIdx.map { inputs[it] },
+            valTargets = valIdx.map { targets[it] },
+        )
+    }
+
     /**
      * Per-feature mean and standard deviation of [rows], used to scale the network inputs.
      *
@@ -483,7 +508,7 @@ internal object NeuralModelTrainer {
                 return null
             }
             if (baselineError <= 0.0) {
-                log("every training label is the same number, there is nothing to learn — discard")
+                log("every held-out label equals the training baseline, there is nothing to learn — discard")
                 return null
             }
             val ratio = candidateError / baselineError

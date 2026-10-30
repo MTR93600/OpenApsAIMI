@@ -749,6 +749,8 @@ internal object AimiSettingsScreens {
             kind = AimiSettingsSectionKind.FIELDS,
             keys = listOf(
                 BooleanKey.OApsAIMIMLtraining,
+                DoubleKey.OApsAIMISmbTrainingMinQuality,
+                BooleanKey.OApsAIMISmbTrainingRelaxedFilter,
             ),
         ),
         AimiSettingsSection(

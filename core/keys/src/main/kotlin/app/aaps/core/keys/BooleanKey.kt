@@ -285,6 +285,11 @@ enum class BooleanKey(
     SiteRotationManageCgm("site_rotation_manage_cgm", defaultValue = false, titleResId = R.string.pref_title_site_rotation_manage_cgm, sync = SyncSpec(SyncChannel.Cold, SyncDirection.Bidirectional)),
 
     OApsAIMIMLtraining("key_enable_ML_training", false),
+    OApsAIMISmbTrainingRelaxedFilter(
+        "aimi_smb_training_relaxed_filter", true,
+        titleResId = R.string.pref_title_aimi_smb_training_relaxed_filter,
+        summaryResId = R.string.pref_summary_aimi_smb_training_relaxed_filter,
+    ),
     OApsAIMIEnableBasal("key_enable_basal", false),
     OApsAIMIEnableStepsFromWatch("count_steps_watch", false),
     OApsAIMIpregnancy("key_use_AimiPregnancy",false),

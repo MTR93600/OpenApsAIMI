@@ -34,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -301,11 +302,13 @@ internal fun StatusAgoraCard(
                                             repeatMode = RepeatMode.Reverse
                                         )
                                     )
+                                    // pulseAlpha is read in the draw phase only: reading it in composition
+                                    // recomposed this pill on every frame and kept the render thread busy.
                                     Box(
                                         modifier = Modifier
                                             .size(10.dp)
                                             .clip(CircleShape)
-                                            .background(Color(0xFF22C55E).copy(alpha = pulseAlpha), CircleShape),
+                                            .drawBehind { drawCircle(Color(0xFF22C55E), alpha = pulseAlpha) },
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Box(

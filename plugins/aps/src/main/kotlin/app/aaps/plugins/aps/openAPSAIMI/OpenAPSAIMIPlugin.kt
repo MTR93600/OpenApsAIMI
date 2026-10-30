@@ -2144,6 +2144,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             titleResId = R.string.aimi_lab_title,
             items = buildList {
                 add(BooleanKey.OApsAIMIMLtraining)
+                add(DoubleKey.OApsAIMISmbTrainingMinQuality)
+                add(BooleanKey.OApsAIMISmbTrainingRelaxedFilter)
                 add(aimiComposeHormonitorViewerItem())
                 add(DoubleKey.OApsAIMIMaxSMB)
                 add(DoubleKey.OApsAIMIHighBGMaxSMB)
