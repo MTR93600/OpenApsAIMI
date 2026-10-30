@@ -47,7 +47,7 @@
     <string name="alert_sound_marimba" comment="Name of a soft alarm melody: short wooden notes, like the marimba instrument">Marimba</string>
     <string name="alert_sound_gentle_pulse" comment="Name of a soft alarm melody: one soft tone that pulses slowly">Gentle pulse</string>
     <string name="pref_title_alert_override_dnd">Override Do Not Disturb mode</string>
-    <string name="pref_summary_alert_override_dnd">When enabled, AAPS alarms sound even if the phone is silenced or in Do Not Disturb. When disabled, alarms stay quiet in those modes.</string>
+    <string name="pref_summary_alert_override_dnd">On: alarms ring even when the phone is silent or in Do Not Disturb. Off: alarms do not ring then. In Do Not Disturb they only vibrate.</string>
     <string name="pref_title_alert_hypo">Alert on low glucose</string>
     <string name="pref_summary_alert_hypo">Sound an alarm when glucose is at or below the low threshold.</string>
     <string name="pref_title_alert_hypo_threshold">Low glucose alarm threshold</string>

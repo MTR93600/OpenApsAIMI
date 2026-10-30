@@ -34,7 +34,8 @@ import platform.UserNotifications.UNUserNotificationCenter
  * In this fork the iOS app is a master, so it owns the timer and sets this alarm. The notification carries the
  * same two buttons as Android's alarm, Stop and +5 min. Opening it or swiping it away is the answer to the
  * alarm, like stopping Android's alarm screen: the timer has rung and ends ([EatReminder.onRang], then
- * [EatReminder.onAlarmStopped]). Without that the bar kept showing a timer that had already rung.
+ * [EatReminder.stop], which ends only this timer and its own alarm). Without that the bar kept showing a timer
+ * that had already rung.
  */
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
@@ -56,7 +57,7 @@ class IosEatReminderAlarm(
                 UNNotificationDefaultActionIdentifier,
                 UNNotificationDismissActionIdentifier -> eatReminder().run {
                     onRang()
-                    onAlarmStopped()
+                    stop()
                 }
 
                 else                                 -> return@register false

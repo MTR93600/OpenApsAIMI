@@ -259,6 +259,12 @@ enum class NotificationId(
     // the upstream block for the same reason as above.
     SECRETS_NOT_PROTECTED(IMPORTANT, SYSTEM),
 
+    // A real pump is selected, but AAPS has no Bluetooth (Nearby devices) permission, so no command can reach the
+    // pump and the queue fails them (#5440). It removes itself once the permission is back. IMPORTANT, not URGENT:
+    // a bolus that fails because of it raises its own alarm. Appended at the END of the upstream block for the
+    // same reason as above.
+    BLUETOOTH_PERMISSION_MISSING(IMPORTANT, PUMP),
+
     // ---- Fork entries (ONE+/Libre 3 native, AIMI, calibration) ----
     // Kept after the upstream block on purpose: upstream keeps appending at its end, so a future
     // merge renumbers only these, which this fork controls, rather than any upstream id.

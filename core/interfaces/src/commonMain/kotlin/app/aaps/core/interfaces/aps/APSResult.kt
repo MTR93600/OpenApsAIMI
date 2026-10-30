@@ -25,6 +25,18 @@ interface APSResult {
     var scriptDebug: List<String>?
     var isHypoRisk: Boolean
 
+    /**
+     * The algorithm stopped at its first checks, because the CGM data could not be used: too old, in the
+     * future, flat for 45 minutes, 38 mg/dL or noisy. It may still replace a high temp with a neutral one or
+     * shorten a long zero temp, and it still goes to Nightscout with its reason. But it calculated nothing:
+     * no eventual BG, no predictions, no variable sensitivity.
+     *
+     * Such a result is not stored, on the master or on a client. The stored results are read as
+     * calculations, and the ISF for carbs (`IsfForCarbs`) took one without a variable sensitivity as
+     * "dynamic ISF off" and switched to the profile ISF (#5413).
+     */
+    val stoppedEarly: Boolean get() = false
+
     val predictionsAsGv: MutableList<GV>
     val latestPredictionsTime: Long
     suspend fun isChangeRequested(): Boolean

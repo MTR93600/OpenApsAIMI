@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.window.ComposeUIViewController
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -58,6 +59,7 @@ import app.aaps.core.ui.compose.LocalSnackbarHostState
 import app.aaps.core.ui.compose.icons.IcAaps
 import app.aaps.core.ui.compose.metroViewModel
 import app.aaps.core.ui.compose.navigation.NavigationRequest
+import app.aaps.core.ui.compose.rememberOwnViewModelStoreOwner
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.implementation.lifecycle.IosProtectionLifecycle
 import app.aaps.implementation.logging.AAPSLoggerIos
@@ -337,7 +339,11 @@ private fun AapsApp(app: StartedApp, navigationRelay: NavigationRelay, onPending
     val restart by graph.uiRestart.signal.collectAsState()
     key(restart) {
     // iOS has no ambient application object, so the factory is provided here rather than found.
-    CompositionLocalProvider(LocalMetroViewModelFactory provides viewModelFactory) {
+    CompositionLocalProvider(
+        LocalMetroViewModelFactory provides viewModelFactory,
+        // New with every rebuild, so the view models are rebuilt too, not only the screens
+        LocalViewModelStoreOwner provides rememberOwnViewModelStoreOwner()
+    ) {
         AapsAppRoot(
             config = graph.config,
             preferences = graph.preferences,

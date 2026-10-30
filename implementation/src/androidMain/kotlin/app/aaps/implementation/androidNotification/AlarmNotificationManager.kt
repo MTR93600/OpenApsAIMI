@@ -22,6 +22,7 @@ import app.aaps.core.interfaces.notifications.AlarmIntent
 import app.aaps.core.interfaces.notifications.AlarmSound
 import app.aaps.core.interfaces.notifications.AlarmSoundCategory
 import app.aaps.core.interfaces.notifications.AlarmSoundPlayer
+import app.aaps.core.interfaces.notifications.DoNotDisturbRule
 import app.aaps.core.interfaces.notifications.NotificationHolder
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.ui.IconsProvider
@@ -50,8 +51,8 @@ import dev.zacsweers.metro.SingleIn
  *    full-screen intent. When exact alarms are allowed it also wakes the screen and launches ErrorActivity
  *    through two `setAlarmClock` alarms (`scheduleScreenWakeAndLaunch`); without that permission only the
  *    screen stays dark. When the activity does launch it takes over the looping/ramped audio.
- *  - [postSoundOnlyAlarm]: posts on a sound-bearing channel chosen by the
- *    [BooleanKey.AlertOverrideDoNotDisturb] preference. No activity, system plays channel sound.
+ *  - [postSilentAlarmNotification]: posts on a silent channel (heads-up and vibration). The sound comes
+ *    from [AlarmSoundPlayer], which the caller starts.
  * Channels are created on the first post rather than at construction - see the `channels` field. Both
  * posting methods touch it before building anything, so a post can still never race their creation.
  */
@@ -283,8 +284,10 @@ class AlarmNotificationManager(
         )
 
         // Two sound-bearing channels per R.raw sound: one routed to STREAM_ALARM (overrides DND),
-        // one routed to STREAM_NOTIFICATION (respects DND/silent). Picked at post time based on
-        // the user's AlertOverrideDoNotDisturb preference.
+        // one routed to STREAM_NOTIFICATION (respects silent mode). Picked at post time based on
+        // the user's AlertOverrideDoNotDisturb preference. The second one does not respect DND: the
+        // notification is CATEGORY_ALARM, which DND lets ring when the profile allows alarms. So under
+        // DND with the override off postFullScreenAlarm uses the silent channel instead.
         //
         // Both `runAlarm` (full-screen) and `startAlarm` (sound-only) use these channels. On the
         // full-screen path the channel's one-shot sound gives an audio cue at post time, before the
@@ -324,7 +327,7 @@ class AlarmNotificationManager(
                 .setUsage(AudioAttributes.USAGE_NOTIFICATION)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build()
-            // IMPORTANCE_HIGH gives heads-up popup behavior regardless of DND choice — DND/silent
+            // IMPORTANCE_HIGH gives heads-up popup behavior regardless of DND choice — silent mode
             // is enforced by USAGE_NOTIFICATION at the audio layer, not by channel importance.
             // For medical alarms we always want heads-up visibility.
             mgr.createNotificationChannel(
@@ -400,7 +403,8 @@ class AlarmNotificationManager(
      * Raise an alarm while AAPS is in the background: a sound-bearing notification, the looping
      * [AlarmSoundPlayer], and - when exact alarms are allowed - a screen wake that brings up
      * [UiInteraction.errorHelperActivity]. Without that permission the alarm still rings; only the screen
-     * stays dark.
+     * stays dark. While Do Not Disturb is on and the override is off it does not ring at all, it only
+     * vibrates, see [DoNotDisturbRule].
      *
      * [eatReminder] marks the alarm of the "time to eat" timer: the notification then also has +5 min, and the
      * alarm screen offers +5 min instead of its 5 minute mute.
@@ -445,11 +449,18 @@ class AlarmNotificationManager(
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+        // Player owns the sound (ramp or melody): its silent channel, and the player below starts at once.
+        // The player applies DoNotDisturbRule itself.
         // Player does not own the sound: a sound-bearing channel (matching the requested sound + DND
         // preference) so the alarm is audible from the notification regardless of whether the alarm
-        // activity ever launches.
-        // Player owns the sound (ramp or melody): a silent channel, and the player below starts at once.
-        val channelId = rampChoice?.channelId ?: channelIdForSound(sound ?: AlarmSound.ERROR, overrideDnd)
+        // activity ever launches. Not while DND is on and the override is off: DND would let this
+        // CATEGORY_ALARM notification ring, so the silent channel is used and only the vibration is
+        // left, see DoNotDisturbRule.
+        val channelId = when {
+            rampChoice != null                                                        -> rampChoice.channelId
+            DoNotDisturbRule.staysQuiet(overrideDnd, mgr.currentInterruptionFilter) -> CHANNEL_SILENT_URGENT
+            else                                                                      -> channelIdForSound(sound ?: AlarmSound.ERROR, overrideDnd)
+        }
 
         // Mute action so the user can silence the looping alarm straight from the lock-screen
         // notification when ErrorActivity isn't in the foreground (see AlarmMuteReceiver).
@@ -480,8 +491,8 @@ class AlarmNotificationManager(
             .setDeleteIntent(swipePendingIntent)
             .addAction(0, rh.gs(app.aaps.core.ui.R.string.mute), mutePendingIntent)
             .apply {
-                // +5 min next to Mute, so the timer can be moved from the lock screen. Mute ends the timer
-                // (EatReminder.onAlarmStopped), like every other way of stopping its alarm.
+                // +5 min next to Mute, so the timer can be moved from the lock screen. Mute ends the timer, like
+                // every other way of stopping its alarm: UiInteraction.stopAlarm knows the eat alarm is the one shown.
                 if (eatReminder) addAction(
                     0, rh.gs(CoreUiStrings.eat_reminder_extend, EatReminder.EXTEND_MINUTES),
                     PendingIntent.getBroadcast(
@@ -597,8 +608,7 @@ class AlarmNotificationManager(
      * Post a **silent** alarm notification on [CHANNEL_SILENT_URGENT] or [CHANNEL_SILENT]
      * (heads-up + vibration, no channel sound). The audio is owned by [AlarmSoundPlayer]; this
      * notification provides shade/lock-screen visibility and a tap target to open the app.
-     * Tracked in [activeSoundKeys] exactly like [postSoundAlarmNotification], so
-     * [cancelSoundAlarm] / [cancelAlarm] clear it.
+     * Tracked in [activeSoundKeys], so [cancelSoundAlarm] / [cancelAlarm] clear it.
      * @param notificationKey unique-per-AAPS-notification identifier (the `AapsNotification.instanceKey`)
      * @param urgent          true for URGENT-level alerts (stronger vibration)
      * @param alarmAction     extra action button the alarm declares, if any (see [addAlarmAction])

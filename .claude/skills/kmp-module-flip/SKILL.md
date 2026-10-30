@@ -60,19 +60,23 @@ before believing a processor is unnecessary.**
 
 ## Build file
 
-Copy `core/ui/build.gradle.kts`. It is the closest template: resources, Compose and Robolectric.
+Copy `plugins/smoothing/build.gradle.kts` for a small module, or `core/ui/build.gradle.kts` for one
+with resources, Compose and Robolectric.
 
-- `kotlin("multiplatform")` + `alias(libs.plugins.android.kmp.library)`. **Not** `com.android.library`
-  - AGP 9 refuses that plugin together with the multiplatform plugin.
-- **No convention plugin can be applied** (`android-module-dependencies`, `test-module-dependencies`,
-  `compose-test-module-dependencies`, `jacoco-module-dependencies`, `all-open-dependencies`) - they
-  all apply `com.android.library`. Restate by hand what you need: the `lint { disable += ... }` block,
-  `withHostTest { isIncludeAndroidResources = true }`, the test dependencies, the
-  `JacocoTaskExtension` block, and `kotlin("plugin.allopen")` with its `allOpen { annotation(...) }`.
+- `id("kmp-android-library")` replaces `kotlin("multiplatform")` + the AGP KMP library plugin +
+  `kmp-test-defaults`. It also sets `compileSdk`, `minSdk`, the `lint { disable += ... }` block and
+  the `iosArm64()`, `iosSimulatorArm64()` and `jvm()` targets. **Not** `com.android.library` - AGP 9
+  refuses that plugin together with the multiplatform plugin.
+- The module keeps only what is its own: `namespace`, `androidResources`, `withHostTest { ... }`, and
+  `minSdk = min(Versions.minSdk, Versions.wearMinSdk)` if the watch uses it.
+- The Android convention plugins (`android-module-dependencies`, `test-module-dependencies`,
+  `compose-test-module-dependencies`, `jacoco-module-dependencies`) **cannot be applied** - they apply
+  `com.android.library`. Write the test dependencies by hand. `all-open-dependencies` can be applied.
+  The JaCoCo Robolectric setting and `jvmTarget` come from the root build file; do not restate them.
 - `androidResources { enable = true }` - off by default here, unlike a plain Android library.
 - There are **no product flavours and no build types**, so `debugImplementation` does not exist.
-- Add `iosArm64()` and `iosSimulatorArm64()` as soon as anything lands in commonMain. They are what
-  makes an Android import in common code fail the build instead of quietly compiling.
+- `ios/shell` must link every module that builds for iOS: `checkMigratedModules` fails the framework
+  link until the module is added to `migratedModules` there.
 
 ### Flavours are no longer a problem
 
@@ -237,18 +241,15 @@ be forced: `AapsLock` has `lock`/`unlock` and no timed `tryLock`, so anything bu
 
 `R.string.x` cannot exist in commonMain. The fix is `GenerateKeyStringsTask`, which turns the
 module's `strings.xml` into a `XxxStrings` object of `TextRef.Named` (commonMain) plus a
-`XxxStringIds` map (androidMain). Copy the task registration from `ui/build.gradle.kts`, then:
+`XxxStringIds` map (androidMain). Add one line for the module to `StringOwnerModules.ALL` in
+buildSrc, then `val generateXxxStrings = registerKeyStrings("xxx")` in the module's build file. The
+build fails if the owner is not in the list. Then:
 
 1. Add `kotlin.srcDir(...)` for the common output to `commonMain` and the android output to
    `androidMain`, and `implementation(project(":core:keys"))` to commonMain for `TextRef`.
-2. Add one line for the module to `buildSrc/src/main/kotlin/StringOwnerModules.kt`, giving the same
-   four values the task was configured with. Every platform's resolver registry is **generated** from
-   that single list, so there is no `register(` call to write by hand any more. A module generated but
-   missing from the list draws raw resource names on screen; a module in the list but not generated
-   fails the build, which is the better direction of the two. Older notes - and five KDoc comments
-   still in the tree - tell you to edit `MainApp.registerStringOwners()` and `BaseTestApp`; both lists
-   are gone, and that is why four hand-written copies drifted before (the desktop one had five of
-   sixteen modules).
+2. Nothing to register by hand. Every shell (`:app`, its instrumented tests, desktop, iOS) generates
+   `GeneratedStringOwners` from `StringOwnerModules.ALL`. Add one of the module's strings to
+   `DesktopStringOwnersTest` and `IosStringOwnersTest`.
 3. Swap `R.string.foo` for `XxxStrings.foo`. The substitution is name-preserving, so a wrong mapping
    cannot happen silently - it fails to compile.
 4. In Composables import `app.aaps.core.ui.compose.stringResource` alongside the androidx one. Both

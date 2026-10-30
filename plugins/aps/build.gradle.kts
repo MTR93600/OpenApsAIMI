@@ -1,58 +1,27 @@
 import java.net.URI
 
 plugins {
-    id("kmp-test-defaults")
-    kotlin("multiplatform")
-    // NOT com.android.library. AGP 9 refuses that plugin together with the multiplatform plugin.
-    // Same reason as the :core modules and the other converted plugins.
-    alias(libs.plugins.android.kmp.library)
+    id("kmp-android-library")
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.compose.multiplatform)
     // Metro, so this module can wire its own Android entry points.
     alias(libs.plugins.metro)
 }
 
-// Same generator as the other converted plugins, pointed at this module's strings.
-val generateApsStrings = tasks.register<GenerateKeyStringsTask>("generateApsStrings") {
-    resDir.set(layout.projectDirectory.dir("src/androidMain/res"))
-    packageName.set("app.aaps.plugins.aps")
-    owner.set("aps")
-    objectName.set("ApsStrings")
-    idsObjectName.set("ApsStringIds")
-    reportFile.set(layout.buildDirectory.file("reports/apsStrings/translations.txt"))
-    // Set explicitly: addGeneratedSourceDirectory derives its convention from the task name, so both
-    // properties would land on one directory and the second file written would delete the first.
-    commonOutputDir.set(layout.buildDirectory.dir("generated/apsStrings/common"))
-    androidOutputDir.set(layout.buildDirectory.dir("generated/apsStrings/android"))
-}
+registerKeyStrings("aps")
 
 kotlin {
     android {
         namespace = "app.aaps.plugins.aps"
-        compileSdk = Versions.compileSdk
-        minSdk = Versions.minSdk
         androidResources { enable = true }
         // isIncludeAndroidResources is what makes Robolectric work - see :core:ui for the detail.
         withHostTest {
             isIncludeAndroidResources = true
             isReturnDefaultValues = true
         }
-        compilerOptions { jvmTarget.set(Versions.jvmTarget) }
-
-        lint {
-            checkReleaseBuilds = false
-            disable += "MissingTranslation"
-            disable += "ExtraTranslation"
-        }
     }
 
-    iosArm64()
-    iosSimulatorArm64()
-
-    // Desktop (Windows/macOS/Linux). Compose Multiplatform resolves its `desktop` variant from a
-    // plain jvm() target, so no special target name is needed.
-    jvm()
-
+    // The iOS and jvm targets come from the kmp-android-library convention.
     // Explicit: the manual dependsOn below would otherwise switch the automatic hierarchy off
     // and silently unwire iosMain.
     applyDefaultHierarchyTemplate()
@@ -100,7 +69,6 @@ kotlin {
         iosTest.get().kotlin.srcDir("src/tfliteParity/kotlin")
 
         commonMain {
-            kotlin.srcDir(generateApsStrings.flatMap { it.commonOutputDir })
             dependencies {
                 implementation(project(":core:data"))
                 implementation(project(":core:interfaces"))
@@ -125,8 +93,6 @@ kotlin {
         }
 
         androidMain {
-            // Android only: the string name to R.string id map.
-            kotlin.srcDir(generateApsStrings.flatMap { it.androidOutputDir })
             dependencies {
                 // AimiParityCaptureHook turns the real Android tick into contract types so the run
                 // can be replayed against the shared engine. That hook is the thing that proves the

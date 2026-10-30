@@ -1,9 +1,5 @@
 plugins {
-    id("kmp-test-defaults")
-    kotlin("multiplatform")
-    // NOT com.android.library. AGP 9 refuses that plugin together with the multiplatform plugin.
-    // Same reason as the :core modules and the other converted plugins.
-    alias(libs.plugins.android.kmp.library)
+    id("kmp-android-library")
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.metro)
@@ -23,27 +19,11 @@ metro {
     }
 }
 
-// Generates SourceStrings (commonMain) and SourceStringIds (androidMain) from this module's
-// res/values, the same generator the other plugins use. The strings themselves do not move, and AAPT
-// keeps resolving them on Android exactly as before.
-val generateSourceStrings = tasks.register<GenerateKeyStringsTask>("generateSourceStrings") {
-    resDir.set(layout.projectDirectory.dir("src/androidMain/res"))
-    packageName.set("app.aaps.plugins.source")
-    owner.set("source")
-    objectName.set("SourceStrings")
-    idsObjectName.set("SourceStringIds")
-    reportFile.set(layout.buildDirectory.file("reports/sourceStrings/translations.txt"))
-    // Set explicitly: addGeneratedSourceDirectory only derives a convention from the task name, so
-    // both properties would land on one directory and the second file written would delete the first.
-    commonOutputDir.set(layout.buildDirectory.dir("generated/sourceStrings/common"))
-    androidOutputDir.set(layout.buildDirectory.dir("generated/sourceStrings/android"))
-}
+registerKeyStrings("source")
 
 kotlin {
     android {
         namespace = "app.aaps.plugins.source"
-        compileSdk = Versions.compileSdk
-        minSdk = Versions.minSdk
         androidResources { enable = true }
         // isIncludeAndroidResources is what makes Robolectric work - see :core:ui for the detail.
         // InstaraStaleCheckWorker's test needs a real Context for WorkManager and Intent broadcasts.
@@ -51,27 +31,9 @@ kotlin {
             isIncludeAndroidResources = true
             isReturnDefaultValues = true
         }
-        compilerOptions { jvmTarget.set(Versions.jvmTarget) }
-
-        // Restated from android-module-dependencies, which this module can no longer apply. Without it
-        // MissingTranslation would switch on here and every incomplete locale file would fail a release
-        // build.
-        lint {
-            checkReleaseBuilds = false
-            disable += "MissingTranslation"
-            disable += "ExtraTranslation"
-        }
     }
 
-    // These are what stop an android-only import from quietly reaching common code: the shared
-    // plugins and the BG source abstractions build for them now.
-    iosArm64()
-    iosSimulatorArm64()
-
-    // Desktop (Windows/macOS/Linux). Compose Multiplatform resolves its `desktop` variant from a
-    // plain jvm() target, so no special target name is needed.
-    jvm()
-
+    // The iOS and jvm targets come from the kmp-android-library convention.
     // Explicit: the manual dependsOn below would otherwise switch the automatic hierarchy off and
     // silently unwire iosMain.
     applyDefaultHierarchyTemplate()
@@ -105,7 +67,6 @@ kotlin {
         iosTest.get().dependsOn(androidAppleTest)
 
         commonMain {
-            kotlin.srcDir(generateSourceStrings.flatMap { it.commonOutputDir })
             dependencies {
                 implementation(project(":core:data"))
                 implementation(project(":core:interfaces"))
@@ -126,7 +87,6 @@ kotlin {
         }
 
         androidMain {
-            kotlin.srcDir(generateSourceStrings.flatMap { it.androidOutputDir })
             dependencies {
                 // Fork-only CGM source plugin whose wrapper is still Android only. Libre 3 stays
                 // here until it gets a shared caller, the way Dexcom ONE+ just did.
@@ -169,16 +129,5 @@ kotlin {
                 runtimeOnly(libs.org.junit.platform.launcher)
             }
         }
-    }
-}
-
-tasks.withType<Test> {
-    // useJUnitPlatform() and the heap cap come from kmp-test-defaults; only the JaCoCo part is
-    // specific here. Restated from jacoco-module-dependencies, which applies com.android.library.
-    // Robolectric rewrites bytecode in its own classloader, so the default on-the-fly agent records
-    // no coverage for the classes those tests drive.
-    extensions.configure<JacocoTaskExtension> {
-        isIncludeNoLocationClasses = true
-        excludes = listOf("jdk.internal.*")
     }
 }
