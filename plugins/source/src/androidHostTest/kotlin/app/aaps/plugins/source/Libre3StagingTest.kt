@@ -44,7 +44,7 @@ class Libre3StagingTest {
 
     @Test
     fun `a sensor within twelve hours of its end is end of life`() {
-        val activatedAt = now - (Libre3Staging.DEFAULT_LIFE_MS + Libre3Staging.SENSOR_GRACE_MS - 6 * hour)
+        val activatedAt = now - (Libre3Staging.DEFAULT_LIFE_MS - 6 * hour)
         val lifecycle = Libre3Staging.computeLifecycle(SensorSlot.PRODUCTION, activatedAt, null, now)!!
 
         assertThat(lifecycle.endOfLife).isTrue()
@@ -57,7 +57,7 @@ class Libre3StagingTest {
         val lifecycle = Libre3Staging.computeLifecycle(SensorSlot.PRODUCTION, activatedAt, null, now)!!
 
         assertThat(lifecycle.expiresAtEpochMs)
-            .isEqualTo(activatedAt + 14 * day + Libre3Staging.SENSOR_GRACE_MS)
+            .isEqualTo(activatedAt + 14 * day)
     }
 
     @Test
@@ -75,7 +75,7 @@ class Libre3StagingTest {
         val lifecycle = Libre3Staging.computeLifecycle(SensorSlot.PRODUCTION, activatedAt, 0, now)!!
 
         assertThat(lifecycle.expiresAtEpochMs)
-            .isEqualTo(activatedAt + 14 * day + Libre3Staging.SENSOR_GRACE_MS)
+            .isEqualTo(activatedAt + 14 * day)
     }
 
     @Test
