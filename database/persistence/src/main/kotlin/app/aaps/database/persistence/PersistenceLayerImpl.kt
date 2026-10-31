@@ -2623,6 +2623,25 @@ class PersistenceLayerImpl @Inject constructor(
         repository.getApsResults(start, end).map { it.fromDb(apsResultProvider) }
     }
 
+    // Variable sensitivity per stored result (key: row id and version). A stored result does not change, and
+    // decoding its JSON on every graph refresh used a lot of CPU. Small on purpose: it holds one number per row.
+    private val variableSensCache = object : LinkedHashMap<Long, Double?>(512, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, Double?>?): Boolean = size > 1500
+    }
+
+    override suspend fun getApsVariableSens(start: Long, end: Long): List<Pair<Long, Double>> = withContext(Dispatchers.IO) {
+        repository.getApsResults(start, end).mapNotNull { row ->
+            val key = (row.id shl 8) or (row.version.toLong() and 0xFF)
+            val known = synchronized(variableSensCache) { variableSensCache.containsKey(key) }
+            val sens = if (known) {
+                synchronized(variableSensCache) { variableSensCache[key] }
+            } else {
+                row.fromDb(apsResultProvider).variableSens.also { synchronized(variableSensCache) { variableSensCache[key] = it } }
+            }
+            sens?.let { row.timestamp to it }
+        }
+    }
+
     private val nonFiniteFieldRegex = Regex("(\\w+)=(NaN|Infinity|-Infinity)\\b")
 
     // Diagnostic only — must never let a reporting failure block persistence of the APSResult, so the whole

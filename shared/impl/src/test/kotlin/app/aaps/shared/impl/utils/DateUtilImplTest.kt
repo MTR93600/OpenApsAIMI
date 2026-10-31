@@ -1522,6 +1522,8 @@ class DateUtilImplTest {
         override fun gq(id: Int, quantity: Int, vararg args: Any?): String = ""
         override fun gsNotLocalised(id: Int, vararg args: Any?): String = ""
         override fun gc(id: Int): Int = 0
+        override fun gac(attributeId: Int): Int = 0
+        override fun gac(context: Context?, attributeId: Int): Int = 0
         override fun gd(id: Int): Drawable? = null
         override fun gb(id: Int): Boolean = false
         override fun gcs(id: Int): String = ""

@@ -164,4 +164,32 @@ class SPImplTest {
         sut.putString(someResource, "a")
         assertThat(sut.getLong(someResource, 1L)).isEqualTo(1L)
     }
+
+    // The mock never calls the change listener, so these tests show that a write alone drops the parsed copy.
+
+    @Test
+    fun `a double read from text and then written as a float gives the new value`() {
+        sut.putString("dbl", "0.4")
+        assertThat(sut.getDouble("dbl", 1.0)).isEqualTo(0.4)
+        sut.putDouble("dbl", 0.5)
+        assertThat(sut.getDouble("dbl", 1.0)).isEqualTo(0.5)
+    }
+
+    @Test
+    fun `a double read from text and then written as text gives the new value`() {
+        sut.putString("dbl", "0.4")
+        assertThat(sut.getDouble("dbl", 1.0)).isEqualTo(0.4)
+        sut.putString("dbl", "0.6")
+        assertThat(sut.getDouble("dbl", 1.0)).isEqualTo(0.6)
+        sut.edit { putDouble("dbl", 0.7) }
+        assertThat(sut.getDouble("dbl", 1.0)).isEqualTo(0.7)
+    }
+
+    @Test
+    fun `a removed double gives the default value`() {
+        sut.putString("dbl", "0.4")
+        assertThat(sut.getDouble("dbl", 1.0)).isEqualTo(0.4)
+        sut.remove("dbl")
+        assertThat(sut.getDouble("dbl", 1.0)).isEqualTo(1.0)
+    }
 }

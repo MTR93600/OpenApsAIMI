@@ -784,12 +784,9 @@ class PrepareGraphDataWorker @AssistedInject constructor(
         aapsLogger.debug(LTag.AUTOSENS, "IOB prediction for AS=" + decimalFormatter.to2Decimal(lastAutosensResult.ratio) + ": " + data.iobCobCalculator.iobArrayToString(iobPredictionArray))
 
         val varSensListCompose: MutableList<GraphDataPoint> = ArrayList()
-        val apsResults = persistenceLayer.getApsResults(fromTime, endTime)
-        apsResults.forEach {
-            it.variableSens?.let { variableSens ->
-                val varSens = profileUtil.fromMgdlToUnits(variableSens)
-                varSensListCompose.add(GraphDataPoint(it.date, varSens))
-            }
+        persistenceLayer.getApsVariableSens(fromTime, endTime).forEach { (date, variableSens) ->
+            val varSens = profileUtil.fromMgdlToUnits(variableSens)
+            varSensListCompose.add(GraphDataPoint(date, varSens))
         }
 
         data.cache.updateIobGraph(IobGraphData(iob = iobListCompose, predictions = iobPredictionsListCompose))

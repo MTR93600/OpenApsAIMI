@@ -1648,6 +1648,17 @@ interface PersistenceLayer {
     suspend fun getApsResults(start: Long, end: Long): List<APSResult>
 
     /**
+     * Time and variable sensitivity (mg/dL) of the APSResults in the interval, oldest first. Same data as
+     * [getApsResults], but a result that was read before is not decoded again (the graph asks every minute).
+     *
+     * @param start from
+     * @param end to
+     * @return list of pairs (time in ms, variable sensitivity) for results that have a variable sensitivity
+     */
+    suspend fun getApsVariableSens(start: Long, end: Long): List<Pair<Long, Double>> =
+        getApsResults(start, end).mapNotNull { result -> result.variableSens?.let { result.date to it } }
+
+    /**
      * Insert or update ApsResult record
      *
      * @param apsResult record

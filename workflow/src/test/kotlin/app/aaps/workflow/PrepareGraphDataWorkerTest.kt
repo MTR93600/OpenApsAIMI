@@ -100,6 +100,8 @@ class PrepareGraphDataWorkerTest : TestBaseWithProfile() {
         whenever(dataAds.getLastAutosensData(any(), any(), any())).thenReturn(null)
         whenever(persistenceLayer.getBgReadingsDataFromTimeToTime(any(), any(), any())).thenReturn(emptyList())
         whenever(persistenceLayer.getApsResults(any(), any())).thenReturn(emptyList())
+        // The variable sensitivity graph reads this, not getApsResults. A Mockito mock answers null for it.
+        whenever(persistenceLayer.getApsVariableSens(any(), any())).thenReturn(emptyList())
         whenever(persistenceLayer.getTemporaryTargetActiveAt(any())).thenReturn(null)
         whenever(dataIobCob.calculateIobArrayForSMB(any(), any(), any(), any())).thenReturn(emptyArray())
         whenever(dataIobCob.iobArrayToString(any())).thenReturn("")
