@@ -418,6 +418,8 @@ enum class DoubleKey(
         "aimi_smb_training_min_quality", 0.40, 0.30, 1.0,
         title = KeysStrings.pref_title_aimi_smb_training_min_quality,
         summary = KeysStrings.pref_summary_aimi_smb_training_min_quality,
+        // Slider step 0.01. Without it UnitType.NONE gives a step of 1, and the slider jumps from 0.30 to 1.
+        unitType = UnitType.DOUBLE_2,
     ),
     // ❌ TIME-BASED REACTIVITY REMOVED - replaced by UnifiedReactivityLearner.globalFactor
     // Previously: OApsAIMIMorningFactor, OApsAIMIAfternoonFactor, OApsAIMIEveningFactor
