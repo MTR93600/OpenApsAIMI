@@ -867,7 +867,12 @@ class AppRepository @Inject internal constructor(
      * the table. The copy is dropped at once when any temp basal is written (see
      * [invalidateSnapshotsIfNeeded]), so an answer from memory is the same as the SQL answer.
      */
-    private class TbrSnapshot(val fromTimestamp: Long, val loadedAtMs: Long, val rows: List<TemporaryBasal>)
+    /**
+     * [epoch] is the write count when the copy was loaded. The copy is used only while that count has not
+     * changed, so a copy loaded while a write ran is never used after that write, even if it is stored after
+     * the write dropped the previous one.
+     */
+    private class TbrSnapshot(val fromTimestamp: Long, val loadedAtMs: Long, val epoch: Long, val rows: List<TemporaryBasal>)
 
     @Volatile
     private var tbrSnapshot: TbrSnapshot? = null
@@ -892,7 +897,7 @@ class AppRepository @Inject internal constructor(
     }
 
     /** Same idea for boluses (valid, not historic, newest id first), used by the IOB and graph code. */
-    private class BolusSnapshot(val fromTimestamp: Long, val loadedAtMs: Long, val rows: List<Bolus>)
+    private class BolusSnapshot(val fromTimestamp: Long, val loadedAtMs: Long, val epoch: Long, val rows: List<Bolus>)
 
     @Volatile
     private var bolusSnapshot: BolusSnapshot? = null
@@ -904,34 +909,35 @@ class AppRepository @Inject internal constructor(
     }
 
     private suspend fun bolusSnapshotCovering(from: Long): BolusSnapshot? {
-        val current = bolusSnapshot?.takeIf { System.currentTimeMillis() - it.loadedAtMs <= TBR_SNAPSHOT_MAX_AGE_MS }
+        val current = bolusSnapshot?.takeIf {
+            it.epoch == bolusEpoch.get() && System.currentTimeMillis() - it.loadedAtMs <= TBR_SNAPSHOT_MAX_AGE_MS
+        }
         val snapshot = current ?: run {
+            // The epoch is read before the rows, see TbrSnapshot.
             val epoch = bolusEpoch.get()
             val now = System.currentTimeMillis()
             val start = now - TBR_SNAPSHOT_WINDOW_MS
-            val loaded = BolusSnapshot(start, now, database.bolusDao.getBolusesFromTime(start))
-            if (bolusEpoch.get() == epoch) bolusSnapshot = loaded
-            loaded
+            BolusSnapshot(start, now, epoch, database.bolusDao.getBolusesFromTime(start)).also { bolusSnapshot = it }
         }
         return snapshot.takeIf { from >= it.fromTimestamp }
     }
 
-    private suspend fun loadTbrSnapshot(): TbrSnapshot {
+    /** The current temp basal copy, loaded again when a write happened since or it is too old. */
+    private suspend fun currentTbrSnapshot(): TbrSnapshot {
+        tbrSnapshot?.takeIf { it.epoch == tbrEpoch.get() && System.currentTimeMillis() - it.loadedAtMs <= TBR_SNAPSHOT_MAX_AGE_MS }
+            ?.let { return it }
+        // The epoch is read before the rows: a write that commits during the load counts after it, so this copy
+        // is never used again. This read still gets an answer the SQL could have given at that moment.
         val epoch = tbrEpoch.get()
         val now = System.currentTimeMillis()
         val from = now - TBR_SNAPSHOT_WINDOW_MS
-        val snapshot = TbrSnapshot(from, now, database.temporaryBasalDao.getTemporaryBasalDataFromTime(from))
-        // Keep it only if nothing was written while it was loading.
-        if (tbrEpoch.get() == epoch) tbrSnapshot = snapshot
-        return snapshot
+        return TbrSnapshot(from, now, epoch, database.temporaryBasalDao.getTemporaryBasalDataFromTime(from)).also { tbrSnapshot = it }
     }
 
     suspend fun getTemporaryBasalActiveAt(timestamp: Long): TemporaryBasal? {
         val earliest = TemporaryBasalQueryBounds.earliestTimestampForActiveAt(timestamp)
         val maxDuration = TemporaryBasalQueryBounds.MAX_REASONABLE_DURATION_MS
-        val snapshot = tbrSnapshot
-            ?.takeIf { System.currentTimeMillis() - it.loadedAtMs <= TBR_SNAPSHOT_MAX_AGE_MS }
-            ?: loadTbrSnapshot()
+        val snapshot = currentTbrSnapshot()
         if (earliest >= snapshot.fromTimestamp) {
             // Same conditions as TemporaryBasalDao.getTemporaryBasalActiveAt. Rows are valid, not historic, oldest first.
             return snapshot.rows.lastOrNull {
@@ -953,9 +959,7 @@ class AppRepository @Inject internal constructor(
         database.temporaryBasalDao.getTemporaryBasalDataFromTime(timestamp).reversedIf(!ascending)
 
     suspend fun getTemporaryBasalsStartingFromTimeToTime(from: Long, to: Long, ascending: Boolean): List<TemporaryBasal> {
-        val snapshot = tbrSnapshot
-            ?.takeIf { System.currentTimeMillis() - it.loadedAtMs <= TBR_SNAPSHOT_MAX_AGE_MS }
-            ?: loadTbrSnapshot()
+        val snapshot = currentTbrSnapshot()
         val rows = if (from >= snapshot.fromTimestamp) {
             // Same conditions as the SQL query: valid, not historic, start time inside the range, oldest first.
             snapshot.rows.filter { it.timestamp in from..to }
