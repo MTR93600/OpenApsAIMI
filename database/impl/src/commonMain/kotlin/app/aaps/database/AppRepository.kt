@@ -99,6 +99,13 @@ class AppRepository internal constructor(
      */
     private val repositoryScope = CoroutineScope(SupervisorJob() + databaseDispatcher)
 
+    /** In-memory copies of recent temp basals and boluses for the frequent reads, see [RecentTreatmentSnapshots]. */
+    private val treatmentSnapshots = RecentTreatmentSnapshots(
+        now = { Clock.System.now().toEpochMilliseconds() },
+        loadTemporaryBasals = { from -> database.temporaryBasalDao.getTemporaryBasalDataFromTime(from) },
+        loadBoluses = { from -> database.bolusDao.getBolusesFromTime(from) },
+    )
+
     /**
      * SharedFlow for broadcasting database changes
      * - replay = 0: No replay, only new changes
@@ -152,6 +159,8 @@ class AppRepository internal constructor(
                     transaction.run()
                 }
             }
+            // Before the change event, so an observer that reads at once does not get the old copy.
+            treatmentSnapshots.invalidateAfter(changes)
             // Notify observers
             if (changes.isNotEmpty()) {
                 _changeFlow.emit(changes)
@@ -178,6 +187,8 @@ class AppRepository internal constructor(
                     transaction.run()
                 }
             }
+            // Before the change event, so an observer that reads at once does not get the old copy.
+            treatmentSnapshots.invalidateAfter(changes)
             // Notify observers
             if (changes.isNotEmpty()) {
                 _changeFlow.emit(changes)
@@ -187,6 +198,7 @@ class AppRepository internal constructor(
 
     suspend fun clearDatabases() {
         database.clearAllTablesCompat()
+        treatmentSnapshots.invalidateAll()
         repositoryScope.launch { _databaseClearedFlow.emit(Unit) }
     }
 
@@ -206,6 +218,8 @@ class AppRepository internal constructor(
         removed.add(Pair("TemporaryBasal", database.temporaryBasalDao.deleteOlderThan(than)))
         removed.add(Pair("ExtendedBolus", database.extendedBolusDao.deleteOlderThan(than)))
         removed.add(Pair("Bolus", database.bolusDao.deleteOlderThan(than)))
+        // Direct deletes, outside a transaction: drop the in-memory copies after them.
+        treatmentSnapshots.invalidateAll()
         removed.add(Pair("TotalDailyDose", database.totalDailyDoseDao.deleteOlderThan(than)))
         removed.add(Pair("Carbs", database.carbsDao.deleteOlderThan(than)))
         removed.add(Pair("TemporaryTarget", database.temporaryTargetDao.deleteOlderThan(than)))
@@ -710,14 +724,16 @@ class AppRepository internal constructor(
     suspend fun getBoluses(): List<Bolus> =
         database.bolusDao.getAllBoluses()
 
+    // A direct write, outside a transaction: the bolus copy must be dropped here, or the IOB code keeps reading
+    // the old insulin settings from memory.
     suspend fun bulkMigrateBolusInsulinConfig(label: String, end: Long, peak: Long, conc: Double): Int =
-        database.bolusDao.bulkMigrateInsulinConfig(label, end, peak, conc)
+        database.bolusDao.bulkMigrateInsulinConfig(label, end, peak, conc).also { treatmentSnapshots.invalidateBoluses() }
 
     suspend fun getBolusesDataFromTime(timestamp: Long, ascending: Boolean): List<Bolus> =
-        database.bolusDao.getBolusesFromTime(timestamp).reversedIf(!ascending)
+        treatmentSnapshots.bolusesFrom(timestamp) { database.bolusDao.getBolusesFromTime(timestamp) }.reversedIf(!ascending)
 
     suspend fun getBolusesDataFromTimeToTime(from: Long, to: Long, ascending: Boolean): List<Bolus> =
-        database.bolusDao.getBolusesFromTime(from, to).reversedIf(!ascending)
+        treatmentSnapshots.bolusesBetween(from, to) { database.bolusDao.getBolusesFromTime(from, to) }.reversedIf(!ascending)
 
     suspend fun getBolusesIncludingInvalidFromTime(timestamp: Long, ascending: Boolean): List<Bolus> =
         database.bolusDao.getBolusesIncludingInvalidFromTime(timestamp).reversedIf(!ascending)
@@ -879,7 +895,7 @@ class AppRepository internal constructor(
     }
 
     suspend fun getTemporaryBasalActiveAt(timestamp: Long): TemporaryBasal? =
-        database.temporaryBasalDao.getTemporaryBasalActiveAt(timestamp)
+        treatmentSnapshots.temporaryBasalActiveAt(timestamp) { database.temporaryBasalDao.getTemporaryBasalActiveAt(timestamp) }
 
     suspend fun getTemporaryBasalsActiveAt(timestamp: Long): List<TemporaryBasal> =
         database.temporaryBasalDao.getTemporaryBasalsActiveAt(timestamp)
@@ -888,7 +904,9 @@ class AppRepository internal constructor(
         database.temporaryBasalDao.getTemporaryBasalDataFromTime(timestamp).reversedIf(!ascending)
 
     suspend fun getTemporaryBasalsStartingFromTimeToTime(from: Long, to: Long, ascending: Boolean): List<TemporaryBasal> =
-        database.temporaryBasalDao.getTemporaryBasalStartingFromTimeToTime(from, to).reversedIf(!ascending)
+        treatmentSnapshots.temporaryBasalsStartingBetween(from, to) {
+            database.temporaryBasalDao.getTemporaryBasalStartingFromTimeToTime(from, to)
+        }.reversedIf(!ascending)
 
     suspend fun getTemporaryBasalsStartingFromTimeIncludingInvalid(timestamp: Long, ascending: Boolean): List<TemporaryBasal> =
         database.temporaryBasalDao.getTemporaryBasalDataIncludingInvalidFromTime(timestamp).reversedIf(!ascending)

@@ -83,6 +83,17 @@ kotlin {
             }
         }
 
+        // Shared tests run on the JVM and on the iOS simulator. runTest is needed for the suspend reads of
+        // RecentTreatmentSnapshots.
+        getByName("commonTest") {
+            dependencies {
+                implementation(kotlin("test"))
+                // The version of kotlinx-coroutines-test comes from the BOM. Without it Kotlin/Native finds none.
+                implementation(project.dependencies.platform(libs.kotlinx.coroutines.bom))
+                implementation(libs.kotlinx.coroutines.test)
+            }
+        }
+
         // Hand written rather than taken from test-module-dependencies, because that convention
         // plugin applies com.android.library and so cannot be used here.
         getByName("androidHostTest") {
