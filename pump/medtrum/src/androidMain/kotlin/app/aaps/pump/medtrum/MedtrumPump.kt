@@ -23,13 +23,10 @@ import app.aaps.pump.medtrum.comm.enums.MedtrumPumpState
 import app.aaps.pump.medtrum.comm.enums.ModelType
 import app.aaps.pump.medtrum.extension.toByteArray
 import app.aaps.pump.medtrum.extension.toInt
-import app.aaps.pump.medtrum.keys.MedtrumBooleanKey
 import app.aaps.pump.medtrum.keys.MedtrumBooleanNonKey
 import app.aaps.pump.medtrum.keys.MedtrumDoubleNonKey
-import app.aaps.pump.medtrum.keys.MedtrumIntKey
 import app.aaps.pump.medtrum.keys.MedtrumIntNonKey
 import app.aaps.pump.medtrum.keys.MedtrumLongNonKey
-import app.aaps.pump.medtrum.keys.MedtrumStringKey
 import app.aaps.pump.medtrum.keys.MedtrumStringNonKey
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
@@ -394,13 +391,14 @@ class MedtrumPump(
     }
 
     fun loadUserSettingsFromSP() {
-        desiredPatchExpiration = preferences.get(MedtrumBooleanKey.MedtrumPatchExpiration)
-        val alarmSettingCode = preferences.get(MedtrumStringKey.MedtrumAlarmSettings).toByte()
-        desiredAlarmSetting = AlarmSetting.entries.firstOrNull { it.code == alarmSettingCode } ?: AlarmSetting.LIGHT_VIBRATE_AND_BEEP
-        desiredHourlyMaxInsulin = preferences.get(MedtrumIntKey.MedtrumHourlyMaxInsulin)
-        desiredDailyMaxInsulin = preferences.get(MedtrumIntKey.MedtrumDailyMaxInsulin)
-        desiredPumpWarning = preferences.get(MedtrumBooleanKey.MedtrumWarningNotification)
-        desiredPumpWarningExpiryThresholdHours = preferences.get(MedtrumIntKey.MedtrumPumpExpiryWarningHours)
+        // The same mapping as on the iPhone.
+        val settings = MedtrumUserSettings.from(preferences)
+        desiredPatchExpiration = settings.patchExpiration
+        desiredAlarmSetting = settings.alarmSetting
+        desiredHourlyMaxInsulin = settings.hourlyMaxInsulin
+        desiredDailyMaxInsulin = settings.dailyMaxInsulin
+        desiredPumpWarning = settings.pumpWarning
+        desiredPumpWarningExpiryThresholdHours = settings.pumpWarningExpiryThresholdHours
         _pumpSN = pumpSNFromSP
 
     }
