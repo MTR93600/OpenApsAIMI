@@ -17,10 +17,6 @@ import platform.Foundation.NSDate
 import platform.Foundation.NSDateFormatter
 import platform.Foundation.NSUserDefaults
 import platform.Foundation.dateWithTimeIntervalSince1970
-import platform.UserNotifications.UNAuthorizationOptionAlert
-import platform.UserNotifications.UNAuthorizationOptionBadge
-import platform.UserNotifications.UNAuthorizationOptionCriticalAlert
-import platform.UserNotifications.UNAuthorizationOptionSound
 import platform.UserNotifications.UNMutableNotificationContent
 import platform.UserNotifications.UNNotificationInterruptionLevel.UNNotificationInterruptionLevelCritical
 import platform.UserNotifications.UNNotificationInterruptionLevel.UNNotificationInterruptionLevelTimeSensitive
@@ -240,9 +236,7 @@ class IosAimiEmergencySos @Inject constructor() : AimiEmergencySos {
     private fun ensureAuthorization(aapsLogger: AAPSLogger) {
         if (authorizationAsked) return
         authorizationAsked = true
-        val options = UNAuthorizationOptionAlert or UNAuthorizationOptionSound or
-            UNAuthorizationOptionBadge or UNAuthorizationOptionCriticalAlert
-        center.requestAuthorizationWithOptions(options) { granted, error ->
+        center.requestAuthorizationWithOptions(SOS_AUTHORIZATION_OPTIONS) { granted, error ->
             if (error != null) aapsLogger.error(LTag.APS, "SOS notification permission failed: $error")
             else aapsLogger.debug(LTag.APS, "SOS notification permission granted=$granted")
         }

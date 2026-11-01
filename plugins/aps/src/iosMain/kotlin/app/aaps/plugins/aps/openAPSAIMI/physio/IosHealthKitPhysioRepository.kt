@@ -210,28 +210,10 @@ class IosHealthKitPhysioRepository @Inject constructor(
     }
 
     /**
-     * Every type this class ever reads, asked for in one sheet.
-     *
-     * Nothing more than that: the sheet must not ask for data the app no longer reads. The
-     * heartbeat series type was dropped here when HRV moved to the SDNN quantity.
+     * Every type this class ever reads, asked for in one sheet. The list lives in
+     * [iosHealthKitReadTypes], because the Apple Health access screen asks for the same sheet.
      */
-    private fun readTypes(): Set<HKObjectType> {
-        val types = mutableSetOf<HKObjectType>()
-        listOf(
-            HKQuantityTypeIdentifierStepCount,
-            HKQuantityTypeIdentifierHeartRate,
-            HKQuantityTypeIdentifierRestingHeartRate,
-            HKQuantityTypeIdentifierHeartRateVariabilitySDNN,
-            HKQuantityTypeIdentifierAppleSleepingWristTemperature,
-            HKQuantityTypeIdentifierBasalBodyTemperature,
-        ).forEach { identifier ->
-            quantityType(identifier)?.let { types += it }
-        }
-        HKCategoryTypeIdentifierSleepAnalysis?.let { identifier ->
-            HKObjectType.categoryTypeForIdentifier(identifier)?.let { types += it }
-        }
-        return types
-    }
+    private fun readTypes(): Set<HKObjectType> = iosHealthKitReadTypes()
 
     private suspend fun requestReadAuthorization(healthStore: HKHealthStore): Boolean =
         suspendCancellableCoroutine { continuation ->

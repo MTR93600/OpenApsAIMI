@@ -2380,4 +2380,23 @@
 <string name="zero_basal_forced">Zero basal duration (%1$d min) exceeded, forcing minimal basal; </string>
 <string name="aimi_permission_steps_title">Physical activity</string>
 <string name="aimi_permission_steps_description">AIMI reads the step counter of this phone to see when you are active. Without this permission the phone steps stay unknown.</string>
+<string name="aimi_permission_state_granted">Allowed</string>
+<string name="aimi_permission_state_denied">Not allowed</string>
+<string name="aimi_permission_state_not_asked">Not asked yet</string>
+<string name="aimi_permission_state_answered">Answered. iOS does not tell apps what you chose.</string>
+<string name="aimi_permission_state_unavailable">Not available</string>
+<string name="aimi_permission_ask_button">Ask now</string>
+<string name="aimi_permission_open_settings_button">Open iPhone Settings</string>
+<string name="pref_title_aimi_sos_alert_ios">SOS alert on this iPhone</string>
+<string name="pref_summary_aimi_sos_alert_ios">An iPhone app cannot send SMS. On iPhone, SOS shows an alert on this phone instead. Tap to check that the alert is allowed.</string>
+<string name="aimi_sos_ios_screen_title">SOS alert</string>
+<string name="aimi_sos_ios_intro">On iPhone, Emergency SOS does not send any SMS and does not share your location. When SOS starts, AAPS shows an alert on this phone with your glucose data and the emergency numbers you entered, so you or someone near you can call them. The alert can only appear if notifications are allowed.</string>
+<string name="aimi_sos_ios_row_notifications">Notifications</string>
+<string name="aimi_sos_ios_row_critical">Critical alerts (sound in silent mode)</string>
+<string name="aimi_sos_ios_note">Critical alerts need a special right that Apple gives only on request. Without it, the SOS alert is a time-sensitive notification and follows the sound settings of the phone. To change a choice you already made, open iPhone Settings.</string>
+<string name="pref_title_aimi_healthkit_access">Apple Health access</string>
+<string name="pref_summary_aimi_healthkit_access">Let AIMI read steps, heart rate, heart rate variability, resting heart rate, sleep and temperature from Apple Health.</string>
+<string name="aimi_healthkit_intro">AIMI reads steps, heart rate, heart rate variability, resting heart rate, sleep and temperature from Apple Health. It does not write anything to Apple Health.</string>
+<string name="aimi_healthkit_row_read">Read access to Apple Health</string>
+<string name="aimi_healthkit_note">iOS asks only once. After that, iOS does not tell apps which data you allowed, and data you did not allow simply looks empty. To change your choice, open the Health app, tap your profile picture, then Apps under Privacy, then this app.</string>
 </resources>
