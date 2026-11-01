@@ -9,5 +9,8 @@ enum class IntNonKey(
 ) : IntNonPreferenceKey {
 
     ObjectivesManualEnacts("ObjectivesmanualEnacts", 0),
-    TddCycleOffset("tdd_cycle_offset", 0)
+    TddCycleOffset("tdd_cycle_offset", 0),
+
+    /** Hours shown by the AIMI dashboard graph (6, 9, 12, 18 or 24). Same key and default as `dev_OAPSAIMI`. */
+    RangeToDisplay("rangetodisplay", 6)
 }

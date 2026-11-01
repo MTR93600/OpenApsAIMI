@@ -84,7 +84,8 @@ data class DashboardHeroUiState(
     val trendDescription: String = "",
     val deltaText: String = "--",
     val iobText: String = "--",
-    val cobText: String = "0g",
+    /** Ready-made COB line for the extended metrics, e.g. "COB: 12 g". Blank hides it. */
+    val cobText: String = "",
     val loopStatusText: String = "Loop",
     val timeAgo: String = "--",
     val timeAgoDescription: String = "--",
@@ -108,9 +109,9 @@ data class DashboardHeroUiState(
     val tirHigh: Double? = null,
     val tirVeryHigh: Double? = null,
     val tirStatsLine: String = "",
-    val insightT3c: String? = null,
-    val insightManoeuvre: String? = null,
-    val insightFactor: String? = null,
+    val insightT3c: String = "",
+    val insightManoeuvre: String = "",
+    val insightFactor: String = "",
     val aimiHealthScore: Double? = null,
     val aimiAdaptationSummary: String = "",
     val aimiAdaptationContentDescription: String = "",
@@ -140,13 +141,11 @@ data class DashboardHeroUiState(
 
 /** Resolved strings for the hero. */
 data class DashboardHeroStrings(
-    val back: String,
     val aimiContext: String,
     val warmupA11y: String,
     val metricsOverflowA11y: String,
     val metricsModeSimple: String,
     val metricsModeExtended: String,
-    val dashboardMetricsTitle: String,
     val stepsLabel: String,
     val iobLabel: String,
     val hrLabel: String,
@@ -156,14 +155,11 @@ data class DashboardHeroStrings(
     val cgmSmoothingChipTwo: (String, String) -> String,
     val cgmSmoothingDialogTitle: String,
     val heroStatusSensorLine: (String) -> String,
-    val heroStatusReadingLine: (String) -> String,
     val aimiAdaptationLabel: String,
-    val mlStripSeparator: String,
-    val tirVeryLowLabel: String,
-    val tirLowLabel: String,
-    val tirTargetLabel: String,
-    val tirHighLabel: String,
-    val tirVeryHighLabel: String,
+    /** The AIMI insight strip: time to a stable trajectory, trajectory type, relevance factor. */
+    val insightsLine: (t3c: String, trajectory: String, factor: String) -> String,
+    /** The AIMI pulse card first line: title and summary. */
+    val pulseLine: (title: String, summary: String) -> String,
 )
 
 /** Hoisted colors (replaces `colorResource`). */
@@ -502,7 +498,7 @@ fun DashboardCircleTopCompose(
 
             if (extendedMetrics) {
                 ExtendedMetricsBlock(state, Modifier.padding(top = 10.dp))
-                TirComposeBar(state, strings, Modifier.padding(top = 10.dp))
+                TirComposeBar(state, Modifier.padding(top = 10.dp))
                 InsightsBlock(state, strings, Modifier.padding(top = 8.dp))
                 AimiAdaptationSummaryCard(
                     state = state,
@@ -703,11 +699,17 @@ private fun MetricCell(label: String, value: String) {
     }
 }
 
+/** COB line of the extended metrics. Reservoir, battery and site are in [PumpCompactBadgeRow], as on DEV. */
 @Composable
 private fun ExtendedMetricsBlock(state: DashboardHeroUiState, modifier: Modifier = Modifier) {
-    // Extended metrics are rendered by the platform-specific block;
-    // the commonMain hero keeps the slot for layout parity.
-    Box(modifier = modifier.fillMaxWidth())
+    if (state.cobText.isBlank()) return
+    Text(
+        text = state.cobText,
+        style = MaterialTheme.typography.bodySmall,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = modifier.fillMaxWidth(),
+    )
 }
 
 @Composable
@@ -748,7 +750,6 @@ private fun HeroPumpBadge(text: String, contentDescription: String) {
 @Composable
 private fun TirComposeBar(
     state: DashboardHeroUiState,
-    strings: DashboardHeroStrings,
     modifier: Modifier = Modifier,
 ) {
     val segments = listOf(
@@ -800,14 +801,7 @@ private fun InsightsBlock(
             .background(bg, RoundedCornerShape(8.dp))
             .padding(8.dp),
     ) {
-        val sep = strings.mlStripSeparator
-        val insightsLine = buildString {
-            append(state.insightT3c ?: "🎯 --")
-            append(sep)
-            append(state.insightManoeuvre ?: "🌀 --")
-            append(sep)
-            append(state.insightFactor ?: "⚡ x1.0")
-        }
+        val insightsLine = strings.insightsLine(state.insightT3c, state.insightManoeuvre, state.insightFactor)
         Text(
             text = insightsLine,
             style = MaterialTheme.typography.bodySmall,
@@ -875,9 +869,8 @@ private fun AimiPulseCard(
             .clickable { commands.onAimiPulseClicked() }
             .padding(10.dp),
     ) {
-        val sep = strings.mlStripSeparator
         Text(
-            text = "${state.aimiPulseTitle}$sep${state.aimiPulseSummary}",
+            text = strings.pulseLine(state.aimiPulseTitle, state.aimiPulseSummary),
             style = MaterialTheme.typography.bodySmall,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,

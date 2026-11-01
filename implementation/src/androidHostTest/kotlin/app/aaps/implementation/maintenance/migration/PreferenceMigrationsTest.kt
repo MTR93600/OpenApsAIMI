@@ -376,4 +376,44 @@ class PreferenceMigrationsTest {
         verify(profileUtil).convertToMgdlDetect(100.0)
     }
 
+    // ----- The dev_OAPSAIMI skin choice -----
+
+    private suspend fun homeAfterMigratingSkin(skin: String): String? {
+        val store = storeOf("skin" to skin)
+        sut().migrate(store)
+        assertThat(store.contains("skin")).isFalse()
+        return store.getAll()["dashboard_home_skin"] as String?
+    }
+
+    @Test fun `the dev default skin becomes the aimi dashboard`() = runTest {
+        assertThat(homeAfterMigratingSkin("app.aaps.plugins.main.skins.SkinMinimal")).isEqualTo("aimi_dashboard")
+        // DEV stored "" until its start-up sync wrote the class name; "" meant its first skin, SkinMinimal.
+        assertThat(homeAfterMigratingSkin("")).isEqualTo("aimi_dashboard")
+    }
+
+    @Test fun `the glass skin becomes the glass home`() = runTest {
+        assertThat(homeAfterMigratingSkin("app.aaps.plugins.main.skins.SkinGlass")).isEqualTo("glass")
+        // DEV also matched the simple class name.
+        assertThat(homeAfterMigratingSkin("SkinGlass")).isEqualTo("glass")
+    }
+
+    @Test fun `the removed view skins become the overview`() = runTest {
+        listOf("SkinClassic", "SkinButtonsOn", "SkinLargeDisplay", "SkinLowRes").forEach { skin ->
+            assertThat(homeAfterMigratingSkin("app.aaps.plugins.main.skins.$skin")).isEqualTo("overview")
+        }
+    }
+
+    @Test fun `a skin dev did not know falls back to the aimi dashboard as dev did`() = runTest {
+        assertThat(homeAfterMigratingSkin("app.aaps.plugins.main.skins.SkinThatNeverExisted")).isEqualTo("aimi_dashboard")
+    }
+
+    @Test fun `a home screen already chosen here is kept and the old skin is removed`() = runTest {
+        val store = storeOf("skin" to "app.aaps.plugins.main.skins.SkinGlass", "dashboard_home_skin" to "overview")
+
+        sut().migrate(store)
+
+        assertThat(store.getString("dashboard_home_skin", "")).isEqualTo("overview")
+        assertThat(store.contains("skin")).isFalse()
+    }
+
 }

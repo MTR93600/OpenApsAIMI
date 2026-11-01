@@ -117,6 +117,27 @@ class PreferenceMigrations(
         apsMode(sp)
         tempTargetPresets(sp)
         activityMonitorRetired(sp)
+        dashboardSkin(sp)
+    }
+
+    /**
+     * The `dev_OAPSAIMI` home screen choice `skin` becomes [StringKey.GeneralDashboardSkin].
+     *
+     * On DEV `skin` holds the class name of a skin. An empty value, or a name DEV did not know, gave the
+     * first skin, `SkinMinimal`, which is the AIMI dashboard. `SkinGlass` is the Glass home. The View skins
+     * (`SkinClassic`, `SkinButtonsOn`, `SkinLargeDisplay`, `SkinLowRes`) were removed upstream, so their
+     * users get the Overview.
+     *
+     * A home screen already chosen on this build is kept: only the old name is removed then.
+     */
+    private fun dashboardSkin(sp: KeyValueStore) {
+        if (!sp.contains(LEGACY_SKIN)) return
+        val stored = LegacyPreferenceValue.asString(sp.getAll()[LEGACY_SKIN])
+            ?: return skip(LEGACY_SKIN, "expected a skin name, found ${LegacyPreferenceValue.describeType(sp.getAll()[LEGACY_SKIN])}")
+        if (!sp.contains(StringKey.GeneralDashboardSkin.key)) {
+            sp.putString(StringKey.GeneralDashboardSkin.key, dashboardHomeForLegacySkin(stored))
+        }
+        sp.remove(LEGACY_SKIN)
     }
 
     /**
@@ -474,6 +495,28 @@ class PreferenceMigrations(
     )
 
     private companion object {
+
+        /** The `dev_OAPSAIMI` skin choice (`StringKey.GeneralSkin` there). */
+        const val LEGACY_SKIN = "skin"
+
+        /** Values of [StringKey.GeneralDashboardSkin], as `DashboardHomeSelection` in `:ui` stores them. */
+        const val HOME_OVERVIEW = "overview"
+        const val HOME_AIMI_DASHBOARD = "aimi_dashboard"
+        const val HOME_GLASS = "glass"
+
+        /** The View skins of DEV that have no home screen here any more. */
+        val VIEW_SKINS = setOf("SkinClassic", "SkinButtonsOn", "SkinLargeDisplay", "SkinLowRes")
+
+        /**
+         * The home screen for a DEV skin value. DEV matched the full class name or the simple name and
+         * fell back to its first skin, `SkinMinimal`, for anything else, also an empty value.
+         */
+        fun dashboardHomeForLegacySkin(skin: String): String =
+            when (skin.trim().substringAfterLast('.')) {
+                "SkinGlass"   -> HOME_GLASS
+                in VIEW_SKINS -> HOME_OVERVIEW
+                else          -> HOME_AIMI_DASHBOARD
+            }
 
         const val LOCAL_PROFILE_PREFIX = "LocalProfile_"
 

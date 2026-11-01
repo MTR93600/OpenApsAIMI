@@ -24,8 +24,13 @@ import androidx.compose.ui.unit.dp
 import app.aaps.core.ui.compose.htmlToAnnotatedString
 import app.aaps.core.ui.compose.formatKmp
 
+/**
+ * The AIMI adjustments summary: glucose, prediction, IOB, last decision, pump ages, safety and the active
+ * adjustments. The "Run loop" button is shown only when [DashboardAdjustmentCardUiState.onRunLoopRequested]
+ * is set, so a phone that does not loop has no button that does nothing.
+ */
 @Composable
-internal fun DashboardAdjustmentComposeCard(
+fun DashboardAdjustmentComposeCard(
     state: DashboardAdjustmentCardUiState?,
     strings: DashboardCardStrings,
     modifier: Modifier = Modifier,
@@ -107,7 +112,7 @@ internal fun DashboardAdjustmentComposeCard(
                             .fillMaxWidth()
                             .background(
                                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
-                                shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                                shape = RoundedCornerShape(8.dp),
                             )
                             .padding(horizontal = chipPaddingH, vertical = chipPaddingV)
                             .padding(bottom = chipSpacing),
@@ -115,11 +120,13 @@ internal fun DashboardAdjustmentComposeCard(
                 }
             }
 
-            Button(
-                onClick = { state.onRunLoopRequested?.invoke() },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(strings.runLoop)
+            state.onRunLoopRequested?.let { runLoop ->
+                Button(
+                    onClick = runLoop,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(strings.runLoop)
+                }
             }
         }
     }

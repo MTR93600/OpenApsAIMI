@@ -13,6 +13,7 @@ import app.aaps.core.interfaces.protection.ProtectionResult
 import app.aaps.core.interfaces.source.DexcomBoyda
 import app.aaps.core.keys.StringKey
 import app.aaps.core.ui.compose.ScreenMode
+import app.aaps.core.ui.compose.navigation.AimiDashboardDestination
 import app.aaps.core.ui.compose.navigation.GlassDestination
 import app.aaps.core.ui.compose.navigation.NavigationRequest
 import app.aaps.core.ui.search.SearchableItem
@@ -85,6 +86,9 @@ class ElementNavigator(
 
             // A dialog with text only, no protection, as on dev_OAPSAIMI.
             NavigationRequest.AuditorReport        -> auditorReport?.openReport()
+
+            // Information screens of the AIMI dashboard, no protection, as on dev_OAPSAIMI.
+            is NavigationRequest.AimiDashboard     -> navController.navigate(aimiDashboardRoute(request.destination).route)
 
             is NavigationRequest.PluginPreferences -> guarded(request.requiredProtection) {
                 navController.navigate(
@@ -214,6 +218,12 @@ class ElementNavigator(
 }
 
 
+
+/** The route of a screen opened from the AIMI dashboard. */
+fun aimiDashboardRoute(destination: AimiDashboardDestination): AppRoute = when (destination) {
+    AimiDashboardDestination.ADAPTATION_STATUS  -> AppRoute.AimiAdaptationStatus
+    AimiDashboardDestination.ADJUSTMENT_DETAILS -> AppRoute.AimiAdjustmentDetails
+}
 
 /** The registered route (the template) of a Glass dashboard screen. */
 fun glassAppRoute(destination: GlassDestination): AppRoute = when (destination) {

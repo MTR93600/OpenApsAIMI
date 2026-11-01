@@ -32,7 +32,6 @@ import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.objects.extensions.isInProgress
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.pump.tickerFlow
-import app.aaps.ui.UiStrings
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
@@ -227,20 +226,12 @@ class GlassHomeViewModel(
         return GlassPumpStatusLine(
             reservoirText = reservoirText,
             unreachableText = if (unreachable) rh.gs(CoreUiStrings.pump_unreachable) else null,
-            siteAgeText = formatAge(siteAgeMs),
+            siteAgeText = formatDeviceAge(rh, siteAgeMs),
             siteAgeWarning = GlassPumpStatusRules.siteAgeWarning(siteAgeMs),
-            sensorAgeText = formatAge(sensorAgeMs),
+            sensorAgeText = formatDeviceAge(rh, sensorAgeMs),
             sensorAgeWarning = GlassPumpStatusRules.sensorAgeWarning(sensorAgeMs),
         )
     }
-
-    private fun formatAge(ageMs: Long?): String =
-        when (val age = ageMs?.let { GlassPumpStatusRules.age(it) }) {
-            null                                    -> rh.gs(CoreUiStrings.value_unavailable_short)
-            is GlassPumpStatusRules.Age.DaysHours    -> rh.gs(UiStrings.status_age_short, age.days, age.hours)
-            is GlassPumpStatusRules.Age.HoursMinutes -> rh.gs(CoreUiStrings.format_hour_minute, age.hours, age.minutes)
-            is GlassPumpStatusRules.Age.Minutes      -> rh.gs(CoreUiStrings.format_mins, age.minutes)
-        }
 
     private companion object {
 

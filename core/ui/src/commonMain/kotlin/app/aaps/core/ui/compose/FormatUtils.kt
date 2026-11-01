@@ -92,14 +92,21 @@ fun formatSliderDisplayValue(
 }
 
 /**
- * KMP-safe replacement for JVM's `String.format()`.
- * Replaces `%s` and `%d` placeholders sequentially with the provided args.
+ * KMP-safe replacement for JVM's `String.format()`, for already formatted values.
+ *
+ * Fills `%s` and `%d` in order, and `%1$s` / `%2$d` by position, which is how string resources are
+ * written; `%%` becomes `%`. Numbers are not formatted here: pass them as ready text when they need
+ * decimals. A placeholder with no matching argument is kept as written.
+ *
  * Used by dashboard composables that receive format strings from the platform.
  */
 fun String.formatKmp(vararg args: Any?): String {
-    var result = this
-    for (arg in args) {
-        result = result.replaceFirst("%s", arg.toString()).replaceFirst("%d", arg.toString())
+    var next = 0
+    return FORMAT_PLACEHOLDER.replace(this) { match ->
+        if (match.value == "%%") return@replace "%"
+        val index = match.groupValues[1].toIntOrNull()?.minus(1) ?: next++
+        args.getOrNull(index)?.toString() ?: match.value
     }
-    return result
 }
+
+private val FORMAT_PLACEHOLDER = Regex("""%%|%(?:(\d+)\$)?[sd]""")

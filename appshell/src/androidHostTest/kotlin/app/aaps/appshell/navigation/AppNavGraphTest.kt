@@ -7,6 +7,7 @@ import androidx.navigation.compose.DialogNavigator
 import androidx.navigation.createGraph
 import androidx.test.core.app.ApplicationProvider
 import app.aaps.core.interfaces.plugin.ActivePlugin
+import app.aaps.core.ui.compose.navigation.AimiDashboardDestination
 import app.aaps.core.ui.compose.navigation.GlassDestination
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.flow.emptyFlow
@@ -106,6 +107,13 @@ class AppNavGraphTest {
         val routes = buildGraph(withOverview = true)
 
         assertThat(routes).containsAtLeastElementsIn(GlassDestination.entries.map { glassAppRoute(it).route })
+    }
+
+    @Test
+    fun everyAimiDashboardScreenIsRegistered() {
+        val routes = buildGraph(withOverview = true)
+
+        assertThat(routes).containsAtLeastElementsIn(AimiDashboardDestination.entries.map { aimiDashboardRoute(it).route })
     }
 
     @Test

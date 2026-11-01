@@ -152,6 +152,10 @@ sealed class AppRoute(val route: String) {
     data object GlassTargetDetail : AppRoute("glass_target_detail")
     data object GlassLoopDetail : AppRoute("glass_loop_detail")
 
+    // AIMI dashboard information screens
+    data object AimiAdaptationStatus : AppRoute("aimi_adaptation_status")
+    data object AimiAdjustmentDetails : AppRoute("aimi_adjustment_details")
+
     data object FoodManagement : AppRoute("food_management")
     data object SiteRotationManagement : AppRoute("siteRotationManagement")
     data object SetupWizard : AppRoute("setup_wizard")
