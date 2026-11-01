@@ -100,6 +100,7 @@ import app.aaps.ui.compose.insulinManagement.InsulinManagementViewModel
 import app.aaps.ui.compose.maintenance.ImportSettingsScreen
 import app.aaps.ui.compose.maintenance.ImportSource
 import app.aaps.ui.compose.maintenance.ImportViewModel
+import app.aaps.ui.compose.manual.UserManualScreen
 import app.aaps.ui.compose.overview.chips.ChipsViewModel
 import app.aaps.ui.compose.preferences.AllPreferencesScreen
 import app.aaps.ui.compose.preferences.PreferenceScreenView
@@ -644,6 +645,10 @@ fun NavGraphBuilder.appNavGraph(
             title = stringResource(MainStrings.nav_history_browser),
             onNavigateBack = { navController.safePopBackStack() }
         )
+    }
+
+    composable(AppRoute.UserManual.route) {
+        UserManualScreen(onNavigateBack = { navController.safePopBackStack() })
     }
 
     composable(AppRoute.Preferences.route) {

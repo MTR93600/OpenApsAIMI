@@ -42,6 +42,8 @@ import app.aaps.core.interfaces.source.BgSource
 import app.aaps.core.interfaces.stats.TddCalculator
 import app.aaps.core.interfaces.sync.NsClient
 import app.aaps.core.interfaces.utils.DecimalFormatter
+import app.aaps.core.keys.BooleanKey
+import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.interfaces.ClientRole
 import app.aaps.core.keys.interfaces.VisibilityContext
@@ -51,6 +53,7 @@ import app.aaps.ui.compose.manageSheet.FakePumpPlugin
 import app.aaps.ui.compose.manageSheet.ManageViewModel
 import app.aaps.ui.compose.overview.chips.ChipsViewModel
 import app.aaps.ui.compose.overview.graphs.GraphViewModel
+import app.aaps.ui.compose.overview.graphs.VicoChartAppearance
 import app.aaps.ui.compose.overview.statusLights.StatusViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -152,6 +155,10 @@ internal class OverviewViewModelFixture(private val screen: AapsScreenFixture) {
         whenever(screen.preferences.get(UnitDoubleKey.OverviewLowMark)).thenReturn(72.0)
         whenever(screen.preferences.observe(UnitDoubleKey.OverviewHighMark)).thenReturn(MutableStateFlow(180.0))
         whenever(screen.preferences.observe(UnitDoubleKey.OverviewLowMark)).thenReturn(MutableStateFlow(72.0))
+        whenever(screen.preferences.get(StringKey.OverviewVicoBgReadingTint)).thenReturn(VicoChartAppearance.TINT_THEME)
+        whenever(screen.preferences.get(StringKey.OverviewVicoChartBackdrop)).thenReturn(VicoChartAppearance.BACKDROP_THEME)
+        whenever(screen.preferences.observe(StringKey.OverviewVicoBgReadingTint)).thenReturn(MutableStateFlow(VicoChartAppearance.TINT_THEME))
+        whenever(screen.preferences.observe(StringKey.OverviewVicoChartBackdrop)).thenReturn(MutableStateFlow(VicoChartAppearance.BACKDROP_THEME))
         whenever(graphConfigRepository.graphConfigFlow).thenReturn(MutableStateFlow(GraphConfig()))
 
         // ----- ChipsViewModel: the three chip flows evaluate as soon as a composable collects them,
@@ -167,6 +174,7 @@ internal class OverviewViewModelFixture(private val screen: AapsScreenFixture) {
         whenever(constraintChecker.isAutosensModeEnabled()).thenReturn(autosensEnabled)
 
         // ----- StatusViewModel / ManageViewModel -----
+        whenever(screen.preferences.observe(BooleanKey.GeneralLowEndStabilityMode)).thenReturn(MutableStateFlow(false))
         whenever(activePlugin.activePump).thenReturn(activePump)
         whenever(activePlugin.activePumpInternal).thenReturn(pumpPlugin)
         whenever(activePlugin.activeBgSource).thenReturn(bgSource)

@@ -24,6 +24,7 @@ import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.StringNonKey
 import app.aaps.core.keys.UnitDoubleKey
 import dev.zacsweers.metro.Inject
+import kotlin.math.roundToInt
 
 /**
  * The preference migrations, as an ordered list of functions over the store they are given.
@@ -117,6 +118,7 @@ class PreferenceMigrations(
         apsMode(sp)
         tempTargetPresets(sp)
         activityMonitorRetired(sp)
+        rapidFallDropToMgdl(sp)
     }
 
     /**
@@ -444,6 +446,29 @@ class PreferenceMigrations(
         if (sp.contains("stats_activity_expanded")) sp.remove("stats_activity_expanded")
     }
 
+    /**
+     * The rapid-fall drop size moved from the float `alert_rapid_fall_drop` (dev_OAPSAIMI) to the Int
+     * key `alert_rapid_fall_drop_mgdl`, see [IntKey.AlertRapidFallDrop].
+     *
+     * The old key was a unit-double, which guessed the unit from the number, so the stored value is
+     * often wrong (a typed 25 could be stored as 450). Only a value inside the new key's range of
+     * 15-60 mg/dL can be a real setting, so only such a value is copied. Anything else is dropped and
+     * the default applies, as before this migration.
+     *
+     * It runs once: the old name is removed after it is read. A value already stored under the new
+     * name is the user's newer choice, so it is never overwritten. A value that cannot be read as a
+     * number is left in place, like in every other migration here.
+     */
+    private fun rapidFallDropToMgdl(sp: KeyValueStore) {
+        val stored = sp.getAll()[LEGACY_RAPID_FALL_DROP] ?: return
+        val value = LegacyPreferenceValue.asDouble(stored)
+            ?: return skip(LEGACY_RAPID_FALL_DROP, "expected a number, found ${LegacyPreferenceValue.describeType(stored)}")
+        val key = IntKey.AlertRapidFallDrop
+        val inRange = value >= key.min && value <= key.max
+        if (inRange && !sp.contains(key.key)) sp.putInt(key.key, value.roundToInt())
+        sp.remove(LEGACY_RAPID_FALL_DROP)
+    }
+
     /** Moves a legacy name holding a whole number to [destinationPrefix] + [argument]. */
     private fun moveLong(sp: KeyValueStore, name: String, value: Any?, argument: String?, destinationPrefix: String) {
         if (argument == null) return skip(name, "the name does not say what it belongs to")
@@ -476,6 +501,9 @@ class PreferenceMigrations(
     private companion object {
 
         const val LOCAL_PROFILE_PREFIX = "LocalProfile_"
+
+        /** The dev_OAPSAIMI float key of the rapid-fall drop size, replaced by [IntKey.AlertRapidFallDrop]. */
+        const val LEGACY_RAPID_FALL_DROP = "alert_rapid_fall_drop"
 
         /** The five schedules a profile carries, and the key each one moves to. */
         val SCHEDULE_FIELDS = mapOf(

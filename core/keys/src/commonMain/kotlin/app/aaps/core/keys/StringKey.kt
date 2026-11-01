@@ -118,6 +118,36 @@ enum class StringKey(
         ),
     ),
 
+    // Look of the BG graph on the home screen. Same names, values and defaults as on dev_OAPSAIMI.
+    OverviewVicoBgReadingTint(
+        key = "overview_vico_bg_reading_tint",
+        defaultValue = "theme",
+        title = KeysStrings.pref_title_vico_bg_reading_tint,
+        summary = KeysStrings.pref_summary_vico_bg_reading_tint,
+        preferenceType = PreferenceType.LIST,
+        entriesRefs = mapOf(
+            "theme" to KeysStrings.pref_vico_tint_theme,
+            "mauve" to KeysStrings.pref_vico_tint_mauve,
+            "ocean" to KeysStrings.pref_vico_tint_ocean,
+            "amber" to KeysStrings.pref_vico_tint_amber,
+            "rose" to KeysStrings.pref_vico_tint_rose,
+        ),
+    ),
+    OverviewVicoChartBackdrop(
+        key = "overview_vico_chart_backdrop",
+        defaultValue = "theme",
+        title = KeysStrings.pref_title_vico_chart_backdrop,
+        summary = KeysStrings.pref_summary_vico_chart_backdrop,
+        preferenceType = PreferenceType.LIST,
+        entriesRefs = mapOf(
+            "theme" to KeysStrings.pref_vico_backdrop_theme,
+            "deep" to KeysStrings.pref_vico_backdrop_deep,
+            "warm" to KeysStrings.pref_vico_backdrop_warm,
+            "cool" to KeysStrings.pref_vico_backdrop_cool,
+            "muted" to KeysStrings.pref_vico_backdrop_muted,
+        ),
+    ),
+
     AapsDirectoryUri(key = "aaps_directory", defaultValue = "", title = KeysStrings.pref_title_aaps_directory),
 
     ProtectionMasterPassword(key = "master_password", defaultValue = "", title = KeysStrings.pref_title_master_password, isPassword = true, isHashed = true),

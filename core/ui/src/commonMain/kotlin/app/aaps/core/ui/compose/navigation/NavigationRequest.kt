@@ -24,6 +24,9 @@ sealed class NavigationRequest {
      * protection, as on `dev_OAPSAIMI`: the report only shows text.
      */
     data object AuditorReport : NavigationRequest()
+
+    /** The in-app user manual. Text only, so no protection, as on `dev_OAPSAIMI`. */
+    data object UserManual : NavigationRequest()
 }
 
 /**

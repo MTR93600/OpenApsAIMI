@@ -19,6 +19,7 @@ import app.aaps.core.interfaces.rx.events.EventNsClientStatusUpdated
 import app.aaps.core.interfaces.stats.TddCalculator
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
+import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.interfaces.IntPreferenceKey
 import app.aaps.core.keys.interfaces.Preferences
@@ -37,11 +38,14 @@ import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.emptyFlow
@@ -57,7 +61,7 @@ import kotlinx.coroutines.withContext
 
 // Registers itself: @ViewModelKey infers the key from the class. No graph entry, and deliberately
 // unscoped so each screen gets its own.
-@OptIn(ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 @ViewModelKey
 @Stable
@@ -79,29 +83,60 @@ class StatusViewModel(
     private val _uiState = MutableStateFlow(StatusUiState())
     val uiState: StateFlow<StatusUiState> = _uiState.asStateFlow()
 
+    /**
+     * How often the status lights refresh. [SAFE] is the "Low-end device stability mode" setting
+     * (`BooleanKey.GeneralLowEndStabilityMode`), ported from dev_OAPSAIMI with the same numbers: on a
+     * slow phone the lights refresh less often, so the screen stays smooth. Only the display is
+     * slower; nothing here changes what the loop does.
+     *
+     * [BALANCED] keeps the normal behaviour of this screen exactly as it was: no wait, and a refresh
+     * every minute.
+     */
+    internal enum class PerformanceProfile(
+        /** Wait for triggers to settle before one refresh; 0 means no wait. */
+        val coalesceDebounceMs: Long,
+        /** Wait for a burst of NS client status events to settle; 0 means no wait. */
+        val nsSourceDebounceMs: Long,
+        /** Time between two refreshes that only move the ages forward. */
+        val tickIntervalMs: Long,
+    ) {
+        BALANCED(coalesceDebounceMs = 0L, nsSourceDebounceMs = 0L, tickIntervalMs = 60_000L),
+        SAFE(coalesceDebounceMs = 220L, nsSourceDebounceMs = 450L, tickIntervalMs = 180_000L);
+
+        companion object {
+
+            fun of(lowEndStabilityMode: Boolean): PerformanceProfile = if (lowEndStabilityMode) SAFE else BALANCED
+        }
+    }
+
     init {
         // Refresh only while a screen shows the status lights. Every screen collects uiState with
         // collectAsStateWithLifecycle, so in the background there is no subscriber and nothing here runs.
         // The ticker emits at once, so a screen that starts collecting gets a fresh state straight away.
-        _uiState.subscriptionCount
-            .map { it > 0 }
+        combine(
+            _uiState.subscriptionCount.map { it > 0 }.distinctUntilChanged(),
+            preferences.observe(BooleanKey.GeneralLowEndStabilityMode).map { PerformanceProfile.of(it) }.distinctUntilChanged()
+        ) { visible, profile -> if (visible) profile else null }
             .distinctUntilChanged()
-            .flatMapLatest { visible -> if (visible) refreshTriggers() else emptyFlow() }
+            .flatMapLatest { profile -> if (profile != null) refreshTriggers(profile) else emptyFlow() }
             .onEach { refreshState() }
             .launchIn(viewModelScope)
     }
 
-    private fun refreshTriggers(): Flow<Unit> = merge(
+    private fun refreshTriggers(profile: PerformanceProfile): Flow<Unit> = merge(
         // The ages move with time, and the cannula usage grows with every bolus and temp basal
-        tickerFlow(60_000L),
+        tickerFlow(profile.tickIntervalMs),
         rxBus.toFlow(EventInitializationChanged::class).map { },
         rxBus.toFlow(EventConfigBuilderChange::class).map { },
         persistenceLayer.observeChanges(TE::class).map { },
         persistenceLayer.databaseClearedFlow.map { },
-        // AAPSCLIENT: the reservoir comes from the NS device status
-        rxBus.toFlow(EventNsClientStatusUpdated::class).map { },
+        // AAPSCLIENT: the reservoir comes from the NS device status, which can come in bursts
+        rxBus.toFlow(EventNsClientStatusUpdated::class).map { }.settle(profile.nsSourceDebounceMs),
         pumpLevelChanges()
-    )
+    ).settle(profile.coalesceDebounceMs)
+
+    /** Debounces by [waitMs], or passes everything through when it is 0 (the normal profile). */
+    private fun Flow<Unit>.settle(waitMs: Long): Flow<Unit> = if (waitMs > 0L) debounce(waitMs) else this
 
     /**
      * Reservoir and battery level are the only values here that come from the pump. Both are StateFlows,

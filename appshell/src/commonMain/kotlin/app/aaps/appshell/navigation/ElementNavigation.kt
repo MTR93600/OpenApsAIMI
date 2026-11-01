@@ -86,6 +86,9 @@ class ElementNavigator(
             // A dialog with text only, no protection, as on dev_OAPSAIMI.
             NavigationRequest.AuditorReport        -> auditorReport?.openReport()
 
+            // Text only, no protection, as on dev_OAPSAIMI.
+            NavigationRequest.UserManual           -> navController.navigate(AppRoute.UserManual.route)
+
             is NavigationRequest.PluginPreferences -> guarded(request.requiredProtection) {
                 navController.navigate(
                     AppRoute.PluginPreferences.createRoute(

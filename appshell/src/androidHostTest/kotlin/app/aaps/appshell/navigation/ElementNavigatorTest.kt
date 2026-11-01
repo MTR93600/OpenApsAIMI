@@ -255,6 +255,14 @@ class ElementNavigatorTest {
     }
 
     @Test
+    fun `the user manual opens without a protection check`() {
+        sut.handleNavigationRequest(NavigationRequest.UserManual)
+
+        assertThat(navigatedRoutes()).containsExactly(AppRoute.UserManual.route)
+        assertThat(mockingDetails(protectionCheck).invocations).isEmpty()
+    }
+
+    @Test
     fun `a plugin preferences request opens that plugin's preferences`() {
         resolveProtection(ProtectionResult.GRANTED)
 

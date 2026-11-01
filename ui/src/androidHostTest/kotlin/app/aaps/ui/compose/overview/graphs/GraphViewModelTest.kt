@@ -10,6 +10,7 @@ import app.aaps.core.interfaces.overview.graph.OverviewDataCache
 import app.aaps.core.interfaces.overview.graph.TimeRange
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import com.google.common.truth.Truth.assertThat
@@ -53,6 +54,10 @@ internal class GraphViewModelTest {
         // init{} builds a cold flow chain (.drop(1)...) on each observed key — must be non-null.
         whenever(preferences.observe(UnitDoubleKey.OverviewHighMark)).thenReturn(MutableStateFlow(180.0))
         whenever(preferences.observe(UnitDoubleKey.OverviewLowMark)).thenReturn(MutableStateFlow(72.0))
+        whenever(preferences.get(StringKey.OverviewVicoBgReadingTint)).thenReturn(VicoChartAppearance.TINT_OCEAN)
+        whenever(preferences.get(StringKey.OverviewVicoChartBackdrop)).thenReturn(VicoChartAppearance.BACKDROP_WARM)
+        whenever(preferences.observe(StringKey.OverviewVicoBgReadingTint)).thenReturn(MutableStateFlow(VicoChartAppearance.TINT_OCEAN))
+        whenever(preferences.observe(StringKey.OverviewVicoChartBackdrop)).thenReturn(MutableStateFlow(VicoChartAppearance.BACKDROP_WARM))
         // fullWindow = false: the overview behaviour, where the axis hugs the data.
         sut = GraphViewModel(cache, false, graphConfigRepository, aapsLogger, preferences, dateUtil, rh)
     }
@@ -102,6 +107,13 @@ internal class GraphViewModelTest {
         val config = sut.chartConfigFlow.value
         assertThat(config.highMark).isEqualTo(180.0)
         assertThat(config.lowMark).isEqualTo(72.0)
+    }
+
+    @Test
+    fun `chart look reflects the tint and backdrop preferences`() {
+        val look = sut.vicoChartLookFlow.value
+        assertThat(look.bgReadingTintKey).isEqualTo(VicoChartAppearance.TINT_OCEAN)
+        assertThat(look.chartBackdropKey).isEqualTo(VicoChartAppearance.BACKDROP_WARM)
     }
 
     @Test

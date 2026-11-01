@@ -14,6 +14,7 @@ import app.aaps.core.interfaces.overview.graph.SeriesType
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.BooleanNonKey
+import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import dev.zacsweers.metro.Assisted
@@ -79,6 +80,15 @@ class GraphViewModel(
     )
     val chartConfigFlow: StateFlow<ChartConfig> = _chartConfigFlow.asStateFlow()
 
+    // Look of the BG graph (dot tint, background), from the "Home graph (Vico) appearance" settings
+    private val _vicoChartLook = MutableStateFlow(
+        VicoChartLook(
+            bgReadingTintKey = preferences.get(StringKey.OverviewVicoBgReadingTint),
+            chartBackdropKey = preferences.get(StringKey.OverviewVicoChartBackdrop),
+        )
+    )
+    val vicoChartLookFlow: StateFlow<VicoChartLook> = _vicoChartLook.asStateFlow()
+
     init {
         // Update chart config when high/low mark preferences change
         // drop(1) skips the initial emission (already set in field initializer)
@@ -89,6 +99,14 @@ class GraphViewModel(
         preferences.observe(UnitDoubleKey.OverviewLowMark)
             .drop(1)
             .onEach { lowMark -> _chartConfigFlow.update { it.copy(lowMark = lowMark) } }
+            .launchIn(viewModelScope)
+        preferences.observe(StringKey.OverviewVicoBgReadingTint)
+            .drop(1)
+            .onEach { tint -> _vicoChartLook.update { it.copy(bgReadingTintKey = tint) } }
+            .launchIn(viewModelScope)
+        preferences.observe(StringKey.OverviewVicoChartBackdrop)
+            .drop(1)
+            .onEach { backdrop -> _vicoChartLook.update { it.copy(chartBackdropKey = backdrop) } }
             .launchIn(viewModelScope)
     }
 

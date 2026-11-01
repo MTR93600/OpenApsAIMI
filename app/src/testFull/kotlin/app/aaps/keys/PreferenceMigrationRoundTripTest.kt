@@ -74,7 +74,9 @@ class PreferenceMigrationRoundTripTest {
         "LocalProfile_0_ic" to SCHEDULE,
         "LocalProfile_0_basal" to SCHEDULE,
         "LocalProfile_0_targetlow" to SCHEDULE,
-        "LocalProfile_0_targethigh" to SCHEDULE
+        "LocalProfile_0_targethigh" to SCHEDULE,
+        // dev_OAPSAIMI float key, see PreferenceMigrations.rapidFallDropToMgdl
+        "alert_rapid_fall_drop" to 30.0
     )
 
     @Test

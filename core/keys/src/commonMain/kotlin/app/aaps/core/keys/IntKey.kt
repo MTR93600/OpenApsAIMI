@@ -420,7 +420,8 @@ enum class IntKey(
      * mmol/L), which is right for a glucose level but wrong for a small difference: 30 mg/dL was shown
      * as 540, and a typed 25 was stored as 450, so the alarm could never fire. The key string ends in
      * `_mgdl` because the old `alert_rapid_fall_drop` holds a float, which an int read cannot load,
-     * and its value was already wrong. The old value is ignored and the default applies.
+     * and its value was often wrong. `PreferenceMigrations` copies the old value once, and only when
+     * it is inside 15-60 mg/dL; any other old value is dropped and the default applies.
      */
     AlertRapidFallDrop(
         key = "alert_rapid_fall_drop_mgdl",

@@ -44,6 +44,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -310,6 +311,13 @@ fun GraphsSection(
     // maps to different time when x-axis ranges differ).
     val derivedTimeRange by graphViewModel.derivedTimeRange.collectAsStateWithLifecycle()
 
+    // Background wash behind the BG graph, from the "Chart background style" setting (as on dev_OAPSAIMI)
+    val vicoChartLook by graphViewModel.vicoChartLookFlow.collectAsStateWithLifecycle()
+    val schemeForBackdrop = MaterialTheme.colorScheme
+    val backdropPalette = remember(vicoChartLook.chartBackdropKey, schemeForBackdrop) {
+        vicoChartBackdropPalette(vicoChartLook.chartBackdropKey, schemeForBackdrop)
+    }
+
     // BG's own visible window, sourced from the fixed IOB graph's already-computed visible range
     // (its scroll/zoom are synced to BG's, see the sync LaunchedEffect below) — not from a
     // decoration on BG's own chart, since that was tried and found to break BG's pinch-zoom
@@ -562,6 +570,7 @@ fun GraphsSection(
         Box(
             modifier = Modifier
                 .offset(y = (-16).dp)
+                .drawBehind { drawVicoChartBackdrop(backdropPalette) }
                 .graphInspectTouch(inspect)
         ) {
             BgGraphCompose(
