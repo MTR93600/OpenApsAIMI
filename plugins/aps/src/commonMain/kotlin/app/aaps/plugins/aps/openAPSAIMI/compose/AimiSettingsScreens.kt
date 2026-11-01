@@ -178,19 +178,21 @@ internal data class AimiSettingsSection(
  * Some screens read their key list from here directly, through
  * [AimiSettingsScreens.preferenceKeysOf] — for those, a section can never drift from what is
  * really drawn, because it IS what is drawn. The three PK/PD contents and a handful of
- * `OpenAPSAIMIPlugin.kt` sub-screens (TPO, adaptive basal, T3C, the meal mode screens) work this
- * way.
+ * [AimiPreferenceTree] sub-screens (TPO, adaptive basal, T3C, night growth, the meal mode screens,
+ * the autodrive prebolus variables) work this way.
  *
  * Most screens still hold their own hand written `items = buildList { add(...) }`, because that
  * list interleaves AIMI keys with non-AIMI keys, `withEntries(...)` wrappers and `ApsIntentKey`
  * items that this manifest has no room for. For those, a section here is a **declared mirror**:
  * it must list the same AIMI keys, in the same screen, by hand. If you add, remove or move an AIMI
- * key in one of those `OpenAPSAIMIPlugin.kt` sub-screens, update the matching section in this file
- * in the same change — nothing else will catch the drift.
+ * key in one of those `AimiPreferenceTree.kt` sub-screens, update the matching section in this file
+ * in the same change. `AimiPreferenceTreeTest` fails when a section key is missing from the tree,
+ * but nothing catches a key that is in the tree and missing here.
  *
  * `AimiSettingsManifestTest` checks three things against this file: every key is in a section of
  * a routed content, a key's level is the lowest level that offers it, and a `FIELDS` section holds
- * only keys of its own level.
+ * only keys of its own level. `AimiPreferenceTreeTest` checks the other half: every key of a
+ * section drawn by the preference tree can really be reached there by browsing.
  */
 internal object AimiSettingsScreens {
 
@@ -519,7 +521,7 @@ internal object AimiSettingsScreens {
             ),
         ),
         AimiSettingsSection(
-            // Declared mirror of the top of `aimi_compose_ai_keys` in `OpenAPSAIMIPlugin.kt`.
+            // Declared mirror of the top of `aimi_compose_ai_keys` in `AimiPreferenceTree.kt`.
             id = AimiSettingsSectionId.AiAdvisorKeys,
             content = AimiSettingsContentId.PreferencesAiKeys,
             level = AimiSettingsLevel.EXPERT,
@@ -563,7 +565,7 @@ internal object AimiSettingsScreens {
             ),
         ),
         AimiSettingsSection(
-            // Declared mirror of the top of `aimi_compose_physio` in `OpenAPSAIMIPlugin.kt`.
+            // Declared mirror of the top of `aimi_compose_physio` in `AimiPreferenceTree.kt`.
             id = AimiSettingsSectionId.PhysioModuleToggles,
             content = AimiSettingsContentId.PreferencesPhysio,
             level = AimiSettingsLevel.ADVANCED,
@@ -585,13 +587,15 @@ internal object AimiSettingsScreens {
             ),
         ),
         AimiSettingsSection(
-            // Declared mirror of the bottom of `aimi_compose_physio` in `OpenAPSAIMIPlugin.kt`.
+            // Declared mirror of the bottom of `aimi_compose_physio` in `AimiPreferenceTree.kt`.
             id = AimiSettingsSectionId.PhysioAiAnalysis,
             content = AimiSettingsContentId.PreferencesPhysio,
             level = AimiSettingsLevel.EXPERT,
             kind = AimiSettingsSectionKind.FIELDS,
             keys = listOf(
                 BooleanKey.AimiPhysioLLMAnalysisEnable,
+                // Feeds the HRV insulin multiplier; shown next to the AI analysis switch, as on dev.
+                BooleanKey.AimiHrvBaselinePerNight,
                 // AimiPhysioLLMProvider is NOT here: no `add(...)` in `aimi_compose_physio` shows
                 // it today. It stays in `AimiSettingsManifest.REACHABILITY_DEBT`.
                 BooleanKey.AimiPhysioDebugLogs,
@@ -694,7 +698,7 @@ internal object AimiSettingsScreens {
             ),
         ),
         AimiSettingsSection(
-            // Declared mirror of the top of `aimi_compose_endo` in `OpenAPSAIMIPlugin.kt`. A
+            // Declared mirror of the top of `aimi_compose_endo` in `AimiPreferenceTree.kt`. A
             // clinical status, the same way honeymoon and pregnancy are: if a clinician would
             // recognise "does the person have this condition, is it flaring today", it is SIMPLE.
             // AimiEndometriosisHormonalSuppression is NOT here: see
@@ -766,7 +770,7 @@ internal object AimiSettingsScreens {
             ),
         ),
         AimiSettingsSection(
-            // Declared mirror of the `OApsxdriponeminute` item in `aimiComposeLabSubScreen()`.
+            // Declared mirror of the `OApsxdriponeminute` item in `AimiPreferenceTree` (Lab).
             id = AimiSettingsSectionId.LabXdripOneMinute,
             content = AimiSettingsContentId.PreferencesLab,
             level = AimiSettingsLevel.ADVANCED,
@@ -776,7 +780,7 @@ internal object AimiSettingsScreens {
             ),
         ),
         AimiSettingsSection(
-            // Declared mirror of the `AimiParityCaptureEnable` item in `aimiComposeLabSubScreen()`.
+            // Declared mirror of the `AimiParityCaptureEnable` item in `AimiPreferenceTree` (Lab).
             id = AimiSettingsSectionId.LabParityCapture,
             content = AimiSettingsContentId.PreferencesLab,
             level = AimiSettingsLevel.EXPERT,
@@ -922,7 +926,7 @@ internal object AimiSettingsScreens {
         ),
         AimiSettingsSection(
             // Declared mirror of the nested "aimi_compose_tube_mpc" sub-screen in
-            // `aimiComposeTrajectorySubScreen()`. AimiTubeHypoFloorMgdl and AimiTubeAggressiveness
+            // `AimiPreferenceTree` (Trajectory). AimiTubeHypoFloorMgdl and AimiTubeAggressiveness
             // are also rewritten by the transient preference overlay: see
             // `tpo/TpoPreferenceKeys.kt`.
             id = AimiSettingsSectionId.TubeAdvancedTunables,
@@ -939,7 +943,7 @@ internal object AimiSettingsScreens {
         ),
         // A ceiling on insulin is the person's own setting, so it is SIMPLE, and a FIELDS list may
         // hold only one level — hence its own one-key section rather than a line in the mode list.
-        // It mirrors the first item of `aimiComposeManualModesSubScreen()`.
+        // It mirrors the first item of `AimiPreferenceTree` (manual modes).
         AimiSettingsSection(
             id = AimiSettingsSectionId.ManualModesMaxBasal,
             content = AimiSettingsContentId.PreferencesManualModes,
@@ -1139,7 +1143,7 @@ internal object AimiSettingsScreens {
             ),
         ),
         AimiSettingsSection(
-            // Declared mirror of the rest of `aimi_compose_ai_auditor` in `OpenAPSAIMIPlugin.kt`.
+            // Declared mirror of the rest of `aimi_compose_ai_auditor` in `AimiPreferenceTree.kt`.
             id = AimiSettingsSectionId.AuditorSettings,
             content = AimiSettingsContentId.PreferencesAiAuditor,
             level = AimiSettingsLevel.EXPERT,
@@ -1176,7 +1180,7 @@ internal object AimiSettingsScreens {
         // A BOOKKEEPING-only key is exempt from reachability; see `AimiSettingsManifestTest`'s
         // `userOwned` filter.
         AimiSettingsSection(
-            // Declared mirror of the top of `aimi_compose_sos` in `OpenAPSAIMIPlugin.kt`.
+            // Declared mirror of the top of `aimi_compose_sos` in `AimiPreferenceTree.kt`.
             id = AimiSettingsSectionId.SosEnable,
             content = AimiSettingsContentId.PreferencesEmergencySos,
             level = AimiSettingsLevel.ADVANCED,

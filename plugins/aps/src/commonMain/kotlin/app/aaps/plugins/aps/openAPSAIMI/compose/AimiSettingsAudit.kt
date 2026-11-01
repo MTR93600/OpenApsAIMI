@@ -24,7 +24,7 @@ import kotlin.math.abs
  */
 /**
  * Who changed a setting, in display order. The localized label comes from
- * [AimiSettingsAuditStrings.label], because the strings live in Android resources.
+ * `AimiSettingsAuditChangedBy.label(strings)`, so a test can pass its own text.
  */
 internal enum class AimiSettingsAuditChangedBy {
     LOOP,
