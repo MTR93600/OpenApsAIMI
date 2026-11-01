@@ -137,5 +137,19 @@
     <string name="aimi_prefs_claude_model_fable51">Claude Fable 5.1 (strongest, most expensive)</string>
     <string name="aimi_prefs_claude_model_opus55">Claude Opus 5.5</string>
     <string name="aimi_prefs_claude_model_haiku45">Claude Haiku 4.5 (fastest, cheapest)</string>
+    <string name="oaps_aimi_pkpd_curve_learning_gate_title">Learn insulin timing only on quiet glucose</string>
+    <string name="oaps_aimi_pkpd_curve_learning_gate_summary">OFF by default. The learned insulin duration and peak are updated only when glucose has not risen for one hour, is not rising now, and no meal is suspected. Without declared carbs, a meal that is still being absorbed makes insulin look slower than it is. With this ON, learning is rarer but cleaner. It never learns faster. When OFF, the logs still show what this check would have done.</string>
+    <string name="context_preset_cardio">🏃 Cardio</string>
+    <string name="context_preset_strength">💪 Strength</string>
+    <string name="context_preset_yoga">🧘 Yoga</string>
+    <string name="context_preset_sport">⚽ Sport</string>
+    <string name="context_preset_walking">🚶 Walking</string>
+    <string name="context_preset_sick">🤒 Sick</string>
+    <string name="context_preset_stress">😰 Stress</string>
+    <string name="context_preset_meal_risk">🍕 Meal Risk</string>
+    <string name="context_preset_alcohol">🍷 Alcohol</string>
+    <string name="context_preset_travel">✈️ Travel</string>
+    <string name="context_preset_slow_carb">🧀 Slow meal (fatty)</string>
+    <string name="context_preset_hypo_recovery">🍬 Hypo recovery</string>
 
 </resources>
