@@ -353,8 +353,8 @@ enum class DoubleKey(
     ),
 
     // AIMI keys ported from freeze aimi-baseline-2026-08-26
-    OApsAIMIMaxSMB("key_openapsaimi_max_smb", 1.0, 0.05, 15.0, title = KeysStrings.pref_title_oaps_aimi_max_smb),
-    OApsAIMIHighBGMaxSMB("key_openapsaimi_high_bg_max_smb", 1.0, 0.05, 15.0, title = KeysStrings.pref_title_oaps_aimi_high_bg_max_smb),
+    OApsAIMIMaxSMB("key_openapsaimi_max_smb", 1.0, 0.05, 15.0, unitType = UnitType.INSULIN, title = KeysStrings.pref_title_oaps_aimi_max_smb),
+    OApsAIMIHighBGMaxSMB("key_openapsaimi_high_bg_max_smb", 1.0, 0.05, 15.0, unitType = UnitType.INSULIN, title = KeysStrings.pref_title_oaps_aimi_high_bg_max_smb),
     OApsAIMIweight("key_aimiweight", 50.0, 1.0, 200.0, title = KeysStrings.pref_title_oaps_aimi_weight),
     /** MPC: max insulin (U) per kg body weight per 5-minute dose search; combined with Max SMB / High BG SMB caps. */
     OApsAIMIMpcInsulinUPerKgPerStep("aimi_mpc_insulin_u_per_kg_per_5min", 0.065, 0.03, 0.12, title = KeysStrings.pref_title_oaps_aimi_mpc_insulin_u_per_kg_per_step),
