@@ -31,6 +31,9 @@ enum class BooleanKey(
 ) : BooleanPreferenceKey {
 
     GeneralSimpleMode(key = "simple_mode", defaultValue = true, title = KeysStrings.pref_title_simple_mode, sync = SyncSpec(SyncChannel.Cold, SyncDirection.Bidirectional)),
+    // Local to this phone, like on dev_OAPSAIMI: it only makes the status lights refresh less often,
+    // to lower the load on a slow phone. Not synced, a client phone decides for itself.
+    GeneralLowEndStabilityMode(key = "general_low_end_stability_mode", defaultValue = false, title = KeysStrings.pref_title_low_end_stability_mode),
     GeneralInsulinConcentration(
         key = "insulin_concentration_enabled", defaultValue = false, title = KeysStrings.pref_title_insulin_concentration, summary = KeysStrings.pref_summary_insulin_concentration,
         defaultedBySM = true,

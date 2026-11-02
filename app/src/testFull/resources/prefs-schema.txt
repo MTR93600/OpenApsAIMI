@@ -351,6 +351,7 @@ g8_bolusspeed|DiaconnIntKey|true
 garmin_aaps_key|GarminStringKey|true
 garmin_http_last_steps_ts|GarminLongNonKey|false
 garmin_http_last_steps|GarminIntNonKey|false
+general_low_end_stability_mode|BooleanKey|true
 glass_selected_pills|StringNonKey|false
 glass_selected_tools|StringNonKey|false
 glass_top_grid_pills_migrated|BooleanNonKey|false
@@ -734,6 +735,8 @@ openhumans_refresh_token|OhStringKey|true
 openhumans_upload_offset|OhLongKey|false
 overview_dashboard_extended_metrics|BooleanKey|true
 overview_show_hybrid_aimi_pulse|BooleanKey|true
+overview_vico_bg_reading_tint|StringKey|true
+overview_vico_chart_backdrop|StringKey|true
 patch_expiration|MedtrumBooleanKey|true
 patch_id|MedtrumLongNonKey|true
 patch_primed_flag|MedtrumBooleanNonKey|true

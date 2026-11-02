@@ -48,6 +48,9 @@ fun PreferenceSheetContent(
                 val looseKeys = settingsDef.items.filterNot { it is PreferenceSubScreenDef }
                 if (looseKeys.isNotEmpty()) AdaptivePreferenceList(items = looseKeys, visibilityContext = visibilityContext)
                 groups.forEach { group ->
+                    // Same rule as the settings screen: a group whose controlling key is hidden (for
+                    // example the super bolus switch in simple mode) is not shown as an empty card.
+                    if (!shouldShowSubScreenInline(group, visibilityContext)) return@forEach
                     var expanded by remember(group.key) { mutableStateOf(false) }
                     CollapsibleCardSectionContent(
                         title = group.title,

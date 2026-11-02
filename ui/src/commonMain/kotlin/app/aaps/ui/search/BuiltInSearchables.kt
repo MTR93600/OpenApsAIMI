@@ -14,6 +14,7 @@ import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.IntKey
+import app.aaps.core.keys.KeysStrings
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.interfaces.withChangeGuard
@@ -63,7 +64,7 @@ class BuiltInSearchables(
         insulinManager.insulins.any { it.concentration != 1.0 } || profileFunction.runningICfg.value?.concentration?.let { it != 1.0 } == true
 
     /**
-     * General preferences (units, language, simple mode, patient name, skin, dark mode)
+     * General preferences (units, language, simple mode, low-end stability mode, patient name, skin, dark mode)
      */
     val general: PreferenceSubScreenDef
         get() = PreferenceSubScreenDef(
@@ -77,6 +78,7 @@ class BuiltInSearchables(
                         rh.gs(CoreUiStrings.simple_mode_blocked_by_concentration)
                     else null
                 },
+                BooleanKey.GeneralLowEndStabilityMode,
                 BooleanKey.GeneralInsulinConcentration.withChangeGuard { newValue ->
                     if (!newValue && hasNonU100Insulin())
                         rh.gs(CoreUiStrings.concentration_disable_blocked)
@@ -100,6 +102,16 @@ class BuiltInSearchables(
                 items = listOf(
                     UnitDoubleKey.OverviewLowMark,
                     UnitDoubleKey.OverviewHighMark
+                )
+            ),
+
+            // Home graph look subscreen, as on dev_OAPSAIMI
+            PreferenceSubScreenDef(
+                key = "vico_chart_appearance",
+                title = KeysStrings.prefs_vico_chart_appearance_title,
+                items = listOf(
+                    StringKey.OverviewVicoBgReadingTint,
+                    StringKey.OverviewVicoChartBackdrop
                 )
             ),
 
@@ -316,7 +328,15 @@ class BuiltInSearchables(
         items = listOf(
             IntKey.OverviewBolusPercentage,
             IntKey.OverviewResetBolusPercentageTime,
-            BooleanKey.OverviewUseBolusAdvisor
+            BooleanKey.OverviewUseBolusAdvisor,
+            // Its own group, as on dev_OAPSAIMI ('overview_advanced_settings'). The key hides its parent
+            // screen when it is hidden (simple mode), so it must not sit directly in this list: that
+            // would hide the whole wizard settings screen in simple mode.
+            PreferenceSubScreenDef(
+                key = "overview_advanced_settings",
+                title = CoreUiStrings.advanced_settings_title,
+                items = listOf(BooleanKey.OverviewUseSuperBolus)
+            )
         ),
         icon = IcCalculator
     )

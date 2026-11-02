@@ -416,4 +416,56 @@ class PreferenceMigrationsTest {
         assertThat(store.contains("skin")).isFalse()
     }
 
+    // ----- Rapid-fall drop size: old float key of dev_OAPSAIMI to the Int key in mg/dL -----
+
+    @Test fun `a rapid fall drop inside 15 to 60 is copied to the mgdl key once`() = runTest {
+        val store = storeOf("alert_rapid_fall_drop" to 25.0)
+
+        sut().migrate(store)
+
+        assertThat(store.getAll()["alert_rapid_fall_drop_mgdl"]).isEqualTo(25)
+        assertThat(store.contains("alert_rapid_fall_drop")).isFalse()
+
+        // A second run finds no old key, so the value the user sets later is never touched.
+        store.putInt("alert_rapid_fall_drop_mgdl", 40)
+        sut().migrate(store)
+        assertThat(store.getAll()["alert_rapid_fall_drop_mgdl"]).isEqualTo(40)
+    }
+
+    @Test fun `a rapid fall drop read from a backup file as text is copied`() = runTest {
+        val store = storeOf("alert_rapid_fall_drop" to "60.0")
+
+        sut().migrate(store)
+
+        assertThat(store.getAll()["alert_rapid_fall_drop_mgdl"]).isEqualTo(60)
+    }
+
+    @Test fun `a rapid fall drop outside 15 to 60 is dropped and the default applies`() = runTest {
+        listOf(450.0, 14.9, 60.1, 1.5).forEach { old ->
+            val store = storeOf("alert_rapid_fall_drop" to old)
+
+            sut().migrate(store)
+
+            assertThat(store.contains("alert_rapid_fall_drop_mgdl")).isFalse()
+            assertThat(store.contains("alert_rapid_fall_drop")).isFalse()
+        }
+    }
+
+    @Test fun `a rapid fall drop already set on the new key is not overwritten`() = runTest {
+        val store = storeOf("alert_rapid_fall_drop" to 25.0, "alert_rapid_fall_drop_mgdl" to 45)
+
+        sut().migrate(store)
+
+        assertThat(store.getAll()["alert_rapid_fall_drop_mgdl"]).isEqualTo(45)
+        assertThat(store.contains("alert_rapid_fall_drop")).isFalse()
+    }
+
+    @Test fun `a rapid fall drop that is not a number is left in place`() = runTest {
+        val store = storeOf("alert_rapid_fall_drop" to "abc")
+
+        sut().migrate(store)
+
+        assertThat(store.contains("alert_rapid_fall_drop_mgdl")).isFalse()
+        assertThat(store.getAll()["alert_rapid_fall_drop"]).isEqualTo("abc")
+    }
 }

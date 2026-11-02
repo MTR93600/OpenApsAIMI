@@ -1,22 +1,29 @@
 package app.aaps.core.objects.wizard
 
+import app.aaps.core.data.iob.InMemoryGlucoseValue
+import app.aaps.core.data.model.RM
 import app.aaps.core.interfaces.aps.Loop
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.iob.GlucoseStatusProvider
+import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.StringNonKey
 import app.aaps.shared.tests.TestBaseWithProfile
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
+import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 
 class QuickWizardTest : TestBaseWithProfile() {
@@ -140,5 +147,42 @@ class QuickWizardTest : TestBaseWithProfile() {
         assertThat(quickWizard.reorder(listOf(0, 1, 5))).isFalse()       // out of range
 
         assertThat(buttonTexts()).containsExactly("Meal", "Lunch", "Dinner").inOrder()
+    }
+
+    // ----- Super bolus: the entry asks for it, the "Use super bolus" setting allows it (same rule as dev) -----
+
+    /** Every "use" flag is NEVER except super bolus, which is ALWAYS, so only the super bolus rule is tested. */
+    private val superBolusData = "{\"buttonText\":\"Snack\",\"carbs\":20,\"validFrom\":0,\"validTo\":86399," +
+        "\"useBG\":1,\"useCOB\":1,\"useBolusIOB\":1,\"useBasalIOB\":1,\"useTrend\":1,\"useSuperBolus\":0,\"useTemptarget\":1}"
+
+    private suspend fun superBolusPassedToWizard(settingOn: Boolean, runningMode: RM.Mode): Boolean {
+        whenever(preferences.get(BooleanKey.OverviewUseSuperBolus)).thenReturn(settingOn)
+        whenever(loop.runningMode()).thenReturn(runningMode)
+        val entry = QuickWizardEntry(aapsLogger, preferences, profileFunction, loop, iobCobCalculator, persistenceLayer, dateUtil, glucoseStatusProvider, { bolusWizard }, { quickWizardMock })
+            .from(entries(superBolusData).single(), 0)
+        clearInvocations(bolusWizard)
+
+        entry.doCalc(validProfile, TESTPROFILENAME, InMemoryGlucoseValue(timestamp = dateUtil.now(), value = 120.0))
+
+        val useSuperBolus = argumentCaptor<Boolean>()
+        verifyBlocking(bolusWizard) {
+            doCalc(
+                any(), any(), anyOrNull(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                useSuperBolus.capture(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any()
+            )
+        }
+        return useSuperBolus.firstValue
+    }
+
+    @Test
+    fun superBolusIsUsedOnlyWhenTheSettingIsOn() = runTest {
+        assertThat(superBolusPassedToWizard(settingOn = true, runningMode = RM.Mode.CLOSED_LOOP)).isTrue()
+        assertThat(superBolusPassedToWizard(settingOn = false, runningMode = RM.Mode.CLOSED_LOOP)).isFalse()
+    }
+
+    @Test
+    fun superBolusIsNotUsedTwiceWhileOneIsRunning() = runTest {
+        assertThat(superBolusPassedToWizard(settingOn = true, runningMode = RM.Mode.SUPER_BOLUS)).isFalse()
     }
 }

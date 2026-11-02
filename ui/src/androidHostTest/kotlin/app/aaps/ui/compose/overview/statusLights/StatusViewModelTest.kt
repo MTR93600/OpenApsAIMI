@@ -20,6 +20,7 @@ import app.aaps.core.interfaces.stats.TddCalculator
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.core.interfaces.utils.TimeDiff
+import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.ui.CoreUiStrings
@@ -71,6 +72,7 @@ internal class StatusViewModelTest {
 
     private val teChanges = MutableSharedFlow<List<TE>>()
     private val reservoir = MutableStateFlow(PumpInsulin(10.0))
+    private val lowEndMode = MutableStateFlow(false)
 
     /** Refreshes that have started: each one reads the cannula change once. */
     private val started = AtomicInteger(0)
@@ -87,6 +89,7 @@ internal class StatusViewModelTest {
         whenever(rxBus.toFlow(EventNsClientStatusUpdated::class)).thenReturn(emptyFlow())
         whenever(persistenceLayer.observeChanges(TE::class)).thenReturn(teChanges)
         whenever(persistenceLayer.databaseClearedFlow).thenReturn(emptyFlow())
+        whenever(preferences.observe(BooleanKey.GeneralLowEndStabilityMode)).thenReturn(lowEndMode)
     }
 
     @AfterEach
@@ -204,6 +207,59 @@ internal class StatusViewModelTest {
         // back to Main. tearDown() then resets Main, the resume crashes, and the next runTest in this
         // JVM fails with UncaughtExceptionsBeforeTest (seen on CI in an unrelated test class).
         awaitValue(finished, 1)
+        screen.cancelAndJoin()
+    }
+
+    /** Same numbers as dev_OAPSAIMI for the slow phone profile; the normal profile keeps this screen as it was. */
+    @Test
+    fun `the low-end stability mode picks the slow refresh profile`() {
+        assertThat(StatusViewModel.PerformanceProfile.of(false)).isEqualTo(StatusViewModel.PerformanceProfile.BALANCED)
+        assertThat(StatusViewModel.PerformanceProfile.of(true)).isEqualTo(StatusViewModel.PerformanceProfile.SAFE)
+        with(StatusViewModel.PerformanceProfile.SAFE) {
+            assertThat(coalesceDebounceMs).isEqualTo(220L)
+            assertThat(nsSourceDebounceMs).isEqualTo(450L)
+            assertThat(tickIntervalMs).isEqualTo(180_000L)
+        }
+        with(StatusViewModel.PerformanceProfile.BALANCED) {
+            assertThat(coalesceDebounceMs).isEqualTo(0L)
+            assertThat(nsSourceDebounceMs).isEqualTo(0L)
+            assertThat(tickIntervalMs).isEqualTo(60_000L)
+        }
+    }
+
+    /**
+     * On a slow phone, changes that come close together give one refresh, not one each, and only after
+     * the wait. The wait is a coroutine delay on Main, so it runs on the virtual clock of the test
+     * dispatcher: the test moves that clock by hand, in small bounded steps (the minute ticker never
+     * gets near its next tick). The refresh itself still hops to other threads, so the counters are
+     * read with the real-time waits.
+     */
+    @Test
+    fun `in low-end stability mode a burst of changes gives one refresh`() = runBlocking<Unit> {
+        val main = UnconfinedTestDispatcher()
+        Dispatchers.setMain(main)
+        val wait = StatusViewModel.PerformanceProfile.SAFE.coalesceDebounceMs
+        givenStatusData()
+        lowEndMode.value = true
+        val viewModel = newViewModel()
+        val screen = show(viewModel)
+
+        // The first tick also waits before it refreshes.
+        delay(QUIET_MS)
+        assertThat(started.get()).isEqualTo(0)
+        main.scheduler.advanceTimeBy(wait + 1)
+        assertThat(awaitValue(finished, 1)).isEqualTo(1)
+
+        repeat(3) { teChanges.emit(emptyList()) }
+        delay(QUIET_MS)
+        main.scheduler.advanceTimeBy(wait - 1)
+        delay(QUIET_MS)
+        assertThat(started.get()).isEqualTo(1)
+
+        main.scheduler.advanceTimeBy(2)
+        assertThat(awaitValue(finished, 2)).isEqualTo(2)
+        delay(QUIET_MS)
+        assertThat(started.get()).isEqualTo(2)
         screen.cancelAndJoin()
     }
 

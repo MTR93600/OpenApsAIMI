@@ -2,6 +2,7 @@
 <resources>
     <!-- General preferences -->
     <string name="pref_title_simple_mode">Simple mode</string>
+    <string name="pref_title_low_end_stability_mode">Low-end device stability mode</string>
     <string name="pref_title_dashboard_home_skin">Home screen</string>
     <string name="pref_dashboard_home_overview">Overview</string>
     <string name="pref_dashboard_home_aimi">New skin dashboard</string>
@@ -28,6 +29,23 @@
     <string name="pref_summary_use_bolus_reminder">Enable bolus reminder notifications to help track insulin administration.</string>
     <string name="pref_title_use_super_bolus">Use super bolus</string>
     <string name="pref_summary_use_super_bolus">Enable super bolus feature which borrows insulin from basal for immediate delivery.</string>
+
+    <!-- Home graph look -->
+    <string name="prefs_vico_chart_appearance_title">Home graph (Vico) appearance</string>
+    <string name="pref_title_vico_bg_reading_tint">BG reading dot color</string>
+    <string name="pref_summary_vico_bg_reading_tint">Tint for discrete CGM dots on the main glucose chart. Range-colored bucketed points are unchanged.</string>
+    <string name="pref_title_vico_chart_backdrop">Chart background style</string>
+    <string name="pref_summary_vico_chart_backdrop">Background wash behind the dashboard / overview glucose chart.</string>
+    <string name="pref_vico_tint_theme">Theme default</string>
+    <string name="pref_vico_tint_mauve">Mauve</string>
+    <string name="pref_vico_tint_ocean">Ocean</string>
+    <string name="pref_vico_tint_amber">Amber</string>
+    <string name="pref_vico_tint_rose">Rose</string>
+    <string name="pref_vico_backdrop_theme">Theme default</string>
+    <string name="pref_vico_backdrop_deep">Deep</string>
+    <string name="pref_vico_backdrop_warm">Warm</string>
+    <string name="pref_vico_backdrop_cool">Cool</string>
+    <string name="pref_vico_backdrop_muted">Muted</string>
 
     <!-- Pump preferences -->
     <string name="pref_title_bt_watchdog">BT Watchdog</string>

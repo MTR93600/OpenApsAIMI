@@ -89,6 +89,8 @@ class ElementNavigator(
 
             // Information screens of the AIMI dashboard, no protection, as on dev_OAPSAIMI.
             is NavigationRequest.AimiDashboard     -> navController.navigate(aimiDashboardRoute(request.destination).route)
+            // Text only, no protection, as on dev_OAPSAIMI.
+            NavigationRequest.UserManual           -> navController.navigate(AppRoute.UserManual.route)
 
             is NavigationRequest.PluginPreferences -> guarded(request.requiredProtection) {
                 navController.navigate(

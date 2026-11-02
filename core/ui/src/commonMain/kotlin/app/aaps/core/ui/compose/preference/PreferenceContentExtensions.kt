@@ -143,10 +143,10 @@ private fun RenderPreferenceItems(
 
 /**
  * Determines if a subscreen should be shown based on hideParentScreenIfHidden logic.
- * Used in inline rendering context (AllPreferencesScreen).
+ * Used in inline rendering context (AllPreferencesScreen) and by [PreferenceSheetContent].
  */
 @Composable
-private fun shouldShowSubScreenInline(
+internal fun shouldShowSubScreenInline(
     subScreen: PreferenceSubScreenDef,
     visibilityContext: VisibilityContext?
 ): Boolean {

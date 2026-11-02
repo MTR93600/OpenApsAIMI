@@ -25,6 +25,9 @@ sealed class NavigationRequest {
      */
     data object AuditorReport : NavigationRequest()
 
+    /** The in-app user manual. Text only, so no protection, as on `dev_OAPSAIMI`. */
+    data object UserManual : NavigationRequest()
+
     /**
      * A screen opened from the AIMI dashboard home. They only show values, so they need no protection,
      * as on `dev_OAPSAIMI`.

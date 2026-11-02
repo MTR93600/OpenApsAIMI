@@ -91,6 +91,9 @@ private val PREDICTION_SERIES = listOf(
  */
 private val MARKER_TIP_GAP = 4.dp
 
+/** Fill of a BG dot when the user picked a tint other than the theme default (dev_OAPSAIMI overview value). */
+private const val CUSTOM_TINT_DOT_FILL_ALPHA = 0.52f
+
 /** Height of a marker that has no reading near it, as a share of the Y axis above its floor. */
 private const val MARKER_FALLBACK_FRACTION = 0.04
 
@@ -186,6 +189,7 @@ fun BgGraphCompose(
     val showActivity = SeriesType.ACTIVITY in bgOverlays
     val activityData by viewModel.activityGraphFlow.collectAsStateWithLifecycle()
     val chartConfig by viewModel.chartConfigFlow.collectAsStateWithLifecycle()
+    val vicoChartLook by viewModel.vicoChartLookFlow.collectAsStateWithLifecycle()
 
     // Use derived time range or fall back to default (last GRAPH_TIME_RANGE_HOURS hours)
     val (minTimestamp, maxTimestamp) = derivedTimeRange ?: run {
@@ -197,8 +201,11 @@ fun BgGraphCompose(
     // Single model producer shared by all layers
     val modelProducer = remember { CartesianChartModelProducer() }
 
-    // Colors from theme (stable - won't change)
-    val regularColor = AapsTheme.generalColors.originalBgValue
+    // Colors from theme, plus the optional dot tint setting (discrete BG dots only, as on dev_OAPSAIMI)
+    val regularColorBase = AapsTheme.generalColors.originalBgValue
+    val regularColor = remember(vicoChartLook.bgReadingTintKey, regularColorBase) {
+        bgReadingTintColor(vicoChartLook.bgReadingTintKey, regularColorBase)
+    }
     val lowColor = AapsTheme.generalColors.bgLow
     val inRangeColor = AapsTheme.generalColors.bgInRange
     val highColor = AapsTheme.generalColors.bgHigh
@@ -254,9 +261,14 @@ fun BgGraphCompose(
         bucketedData.associateBy { timestampToX(it.timestamp, minTimestamp) }
     }
 
-    val bucketedPointProvider = remember(bucketedLookup, lowColor, inRangeColor, highColor) {
-        BucketedPointProvider(bucketedLookup, lowColor, inRangeColor, highColor)
+    // A tint other than the theme default also fills the dots, and the in-range bucketed points take the
+    // same color, so the chosen tint is what the user sees. Same rule as on dev_OAPSAIMI.
+    val customTintDots = vicoChartLook.bgReadingTintKey != VicoChartAppearance.TINT_THEME
+    val bucketedInRangeColor = if (customTintDots) regularColor else inRangeColor
+    val bucketedPointProvider = remember(bucketedLookup, lowColor, bucketedInRangeColor, highColor) {
+        BucketedPointProvider(bucketedLookup, lowColor, bucketedInRangeColor, highColor)
     }
+    val regularDotFillAlpha = if (customTintDots) CUSTOM_TINT_DOT_FILL_ALPHA else 0f
 
     // Time formatter and axis configuration
     val timeFormatter = rememberTimeFormatter(minTimestamp)
@@ -266,14 +278,14 @@ fun BgGraphCompose(
     // BG layer lines (layer 0)
     // =========================================================================
 
-    val regularLine = remember(regularColor) {
+    val regularLine = remember(regularColor, regularDotFillAlpha) {
         LineCartesianLayer.Line(
             fill = LineCartesianLayer.LineFill.single(Fill(Color.Transparent)),
             areaFill = null,
             pointProvider = LineCartesianLayer.PointProvider.single(
                 LineCartesianLayer.Point(
                     component = ShapeComponent(
-                        fill = Fill(Color.Transparent),
+                        fill = Fill(if (regularDotFillAlpha > 0f) regularColor.copy(alpha = regularDotFillAlpha) else Color.Transparent),
                         shape = CircleShape,
                         strokeFill = Fill(regularColor.copy(alpha = 0.3f)),
                         strokeThickness = 1.dp

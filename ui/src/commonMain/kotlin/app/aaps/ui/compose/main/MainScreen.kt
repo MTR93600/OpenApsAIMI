@@ -451,6 +451,7 @@ fun MainScreen(
                                     onMenuClick()
                                 }
                             },
+                            onUserManualClick = { onNavigate(NavigationRequest.UserManual) },
                             onPreferencesClick = { onNavigate(NavigationRequest.Element(ElementType.SETTINGS)) },
                             onSearchQueryChange = onSearchQueryChange,
                             onSearchClear = onSearchClear,
