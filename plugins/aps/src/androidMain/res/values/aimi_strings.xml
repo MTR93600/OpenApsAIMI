@@ -651,57 +651,21 @@
 
 <string name="oaps_aimi_thyroid_log_verbosity_summary">Adds extreme detail to the Thyroid state machine and effect model calculation logs.</string>
 
-<string-array name="oaps_aimi_thyroid_mode_entries">
-        <item>Manual Selection</item>
-        <item>Auto (Labs + Physio) - Experimental</item>
-    </string-array>
-
-<string-array name="oaps_aimi_thyroid_mode_values">
-        <item>MANUAL</item>
-        <item>AUTO</item>
-    </string-array>
-
-<string-array name="oaps_aimi_thyroid_status_entries">
-        <item>Euthyroid (Normal)</item>
-        <item>Mild Hyper</item>
-        <item>Moderate Hyper</item>
-        <item>Severe Hyper</item>
-        <item>Normalizing (High Risk)</item>
-    </string-array>
-
-<string-array name="oaps_aimi_thyroid_status_values">
-        <item>EUTHYROID</item>
-        <item>HYPER_MILD</item>
-        <item>HYPER_MODERATE</item>
-        <item>HYPER_SEVERE</item>
-        <item>NORMALIZING</item>
-    </string-array>
-
-<string-array name="oaps_aimi_thyroid_phase_entries">
-        <item>None (Stable Euthyroid)</item>
-        <item>Titration (Starting Meds)</item>
-        <item>Stable Treatment</item>
-        <item>De-escalation (Stopping Meds)</item>
-    </string-array>
-
-<string-array name="oaps_aimi_thyroid_phase_values">
-        <item>NONE</item>
-        <item>TITRATION</item>
-        <item>STABLE</item>
-        <item>DE_ESCALATION</item>
-    </string-array>
-
-<string-array name="oaps_aimi_thyroid_guard_entries">
-        <item>Low (Minimal caps)</item>
-        <item>Medium (Standard caps)</item>
-        <item>High (Strict block on fast drops)</item>
-    </string-array>
-
-<string-array name="oaps_aimi_thyroid_guard_values">
-        <item>LOW</item>
-        <item>MEDIUM</item>
-        <item>HIGH</item>
-    </string-array>
+<!-- Labels of the thyroid module lists. One string per entry, so common code (iOS too) can show them. -->
+<string name="aimi_thyroid_mode_manual">Manual Selection</string>
+<string name="aimi_thyroid_mode_auto">Auto (Labs + Physio) - Experimental</string>
+<string name="aimi_thyroid_status_euthyroid">Euthyroid (Normal)</string>
+<string name="aimi_thyroid_status_hyper_mild">Mild Hyper</string>
+<string name="aimi_thyroid_status_hyper_moderate">Moderate Hyper</string>
+<string name="aimi_thyroid_status_hyper_severe">Severe Hyper</string>
+<string name="aimi_thyroid_status_normalizing">Normalizing (High Risk)</string>
+<string name="aimi_thyroid_phase_none">None (Stable Euthyroid)</string>
+<string name="aimi_thyroid_phase_titration">Titration (Starting Meds)</string>
+<string name="aimi_thyroid_phase_stable">Stable Treatment</string>
+<string name="aimi_thyroid_phase_de_escalation">De-escalation (Stopping Meds)</string>
+<string name="aimi_thyroid_guard_low">Low (Minimal caps)</string>
+<string name="aimi_thyroid_guard_medium">Medium (Standard caps)</string>
+<string name="aimi_thyroid_guard_high">High (Strict block on fast drops)</string>
 
 <string name="oaps_aimi_LunchAdjFact_summary">Lunch Mode DynISF Factor</string>
 
@@ -2380,4 +2344,56 @@
 <string name="zero_basal_forced">Zero basal duration (%1$d min) exceeded, forcing minimal basal; </string>
 <string name="aimi_permission_steps_title">Physical activity</string>
 <string name="aimi_permission_steps_description">AIMI reads the step counter of this phone to see when you are active. Without this permission the phone steps stay unknown.</string>
+
+<!-- Labels of the women cycle and inflammatory disease lists. One string per entry. -->
+<string name="aimi_wcycle_tracking_fixed_28">Fixed 28 days</string>
+<string name="aimi_wcycle_tracking_calendar_variable">Variable calendar</string>
+<string name="aimi_wcycle_tracking_no_menses_larc" comment="LARC = long-acting reversible contraception (hormonal IUD, implant). Menstrual periods stop.">No periods (LARC)</string>
+<string name="aimi_wcycle_tracking_perimenopause">Perimenopause</string>
+<string name="aimi_wcycle_tracking_menopause">Menopause</string>
+<string name="aimi_wcycle_contraceptive_none" comment="Birth control method: none">None</string>
+<string name="aimi_wcycle_contraceptive_coc_pill">Combined pill (COC)</string>
+<string name="aimi_wcycle_contraceptive_pop_pill">Progestin-only pill (POP)</string>
+<string name="aimi_wcycle_contraceptive_hormonal_iud">Hormonal IUD</string>
+<string name="aimi_wcycle_contraceptive_copper_iud">Copper IUD</string>
+<string name="aimi_wcycle_contraceptive_implant" comment="Birth control method: contraceptive implant">Implant</string>
+<string name="aimi_wcycle_contraceptive_injection" comment="Birth control method: contraceptive injection">Injection</string>
+<string name="aimi_wcycle_contraceptive_ring" comment="Birth control method: vaginal ring">Ring</string>
+<string name="aimi_wcycle_contraceptive_patch" comment="Birth control method: contraceptive skin patch">Patch</string>
+<string name="aimi_wcycle_thyroid_euthyroid">Euthyroid</string>
+<string name="aimi_wcycle_thyroid_hypothyroid_treated">Treated hypothyroidism</string>
+<string name="aimi_wcycle_thyroid_hashimoto">Hashimoto</string>
+<string name="aimi_wcycle_thyroid_thyroidectomy">Thyroidectomy</string>
+<string name="aimi_wcycle_verneuil_none" comment="Hidradenitis suppurativa (Verneuil disease) state: the person does not have it">None</string>
+<string name="aimi_wcycle_verneuil_quiescent" comment="Hidradenitis suppurativa (Verneuil disease) state: present but quiet">Quiet</string>
+<string name="aimi_wcycle_verneuil_active" comment="Hidradenitis suppurativa (Verneuil disease) state: active">Active</string>
+<string name="aimi_wcycle_verneuil_flare" comment="Hidradenitis suppurativa (Verneuil disease) state: a flare is going on">Flare</string>
+
+<!-- Labels of the AI auditor mode list. -->
+<string name="aimi_auditor_mode_audit_only">Audit only (log verdicts)</string>
+<string name="aimi_auditor_mode_soft_modulation">Soft modulation (apply if confident)</string>
+<string name="aimi_auditor_mode_high_risk_only">High risk only (apply with risk flags)</string>
+
+<!-- Settings audit screen. -->
+<string name="aimi_settings_audit_entry_title">Settings audit</string>
+<string name="aimi_settings_audit_entry_summary">See which of your settings are not what the app ships, and who changed them.</string>
+<string name="aimi_settings_audit_title">Settings audit</string>
+<string name="aimi_settings_audit_summary" comment="%1$s=number of settings that differ, %2$s=total number of settings checked. Example: 3 of 230 settings differ from their shipped default.">%1$s of %2$s settings differ from their shipped default.</string>
+<string name="aimi_settings_audit_empty">Every setting matches what the app ships.</string>
+<string name="aimi_settings_audit_row_tags" comment="%1$s=level such as Advanced, %2$s=family such as Protection. Example: Advanced · Protection">%1$s · %2$s</string>
+<string name="aimi_settings_audit_changed_by_loop">Changed by the loop</string>
+<string name="aimi_settings_audit_changed_by_slider">Set by a slider</string>
+<string name="aimi_settings_audit_changed_by_preset">From a preset</string>
+<string name="aimi_settings_audit_changed_by_user">Changed by you</string>
+<string name="aimi_settings_audit_stored_label">Current value</string>
+<string name="aimi_settings_audit_default_label">Shipped default</string>
+<string name="aimi_settings_audit_secret_set">Set</string>
+<string name="aimi_settings_audit_secret_not_set">Not set</string>
+<string name="aimi_settings_audit_reset_button">Reset to default</string>
+<string name="aimi_settings_audit_reset_done">Setting reset to its shipped default.</string>
+<string name="aimi_settings_audit_stored_ignored">Stored, but not used: the loop is running on the shipped default. Turn off simple mode to make this value count.</string>
+<string name="aimi_settings_audit_runtime_state">The loop keeps this value itself. It is shown here so you can see it, and cannot be reset by hand.</string>
+<string name="aimi_settings_audit_reset_confirm_title">Reset this setting?</string>
+<string name="aimi_settings_audit_reset_confirm_message" comment="%1$s=setting name, %2$s=the value that will be written. Example: Body weight will be set back to 50.">%1$s will be set back to %2$s. This changes how the loop doses.</string>
+<string name="aimi_settings_audit_reset_confirm_message_secret" comment="%1$s=setting name. Example: Oura access token will be cleared.">%1$s will be cleared. You will have to enter it again.</string>
 </resources>

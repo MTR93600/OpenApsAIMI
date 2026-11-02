@@ -29,6 +29,13 @@ enum class ApsIntentKey(
         preferenceType = PreferenceType.CLICK,
     ),
 
+    AimiSettingsAudit(
+        key = "aimi_settings_audit_compose",
+        title = ApsStrings.aimi_settings_audit_entry_title,
+        summary = ApsStrings.aimi_settings_audit_entry_summary,
+        preferenceType = PreferenceType.CLICK,
+    ),
+
     AimiSupportPackage(
         key = "aimi_support_package_compose",
         title = ApsStrings.pref_title_aimi_support_package,

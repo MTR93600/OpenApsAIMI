@@ -202,7 +202,6 @@ internal object AimiSettingsManifest {
         BooleanKey.OApsAIMIEffectiveIobReleaseEnabled.key,
         BooleanKey.OApsAIMIEnableBasal.key,
         BooleanKey.OApsAIMIEnableStepsFromWatch.key,
-        BooleanKey.AimiHrvBaselinePerNight.key,
         BooleanKey.AimiPhoneStepsSyncEnable.key,
         BooleanKey.AimiHealthConnectStepsEnable.key,
         DoubleKey.OApsAIMIFCLFactor.key,

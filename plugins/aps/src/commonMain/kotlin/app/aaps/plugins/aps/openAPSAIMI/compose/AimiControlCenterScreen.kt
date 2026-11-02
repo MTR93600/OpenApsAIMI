@@ -1009,7 +1009,8 @@ private fun ControlPill(text: String) {
     }
 }
 
-private fun AimiBehaviorFamilyId.title(): TextRef =
+/** Title of a behavior family. Also used by the settings audit screen to tag each row. */
+internal fun AimiBehaviorFamilyId.title(): TextRef =
     when (this) {
         AimiBehaviorFamilyId.Protection -> ApsStrings.aimi_control_center_protection_title
         AimiBehaviorFamilyId.MealCapture -> ApsStrings.aimi_control_center_meal_title
