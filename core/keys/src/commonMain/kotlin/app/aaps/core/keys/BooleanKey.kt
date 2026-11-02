@@ -288,6 +288,12 @@ enum class BooleanKey(
     WearNotifyOnSmb(key = "wear_notifySMB", defaultValue = true, title = KeysStrings.pref_title_wear_notify_on_smb, summary = KeysStrings.pref_summary_wear_notify_on_smb),
     WearBroadcastData(key = "wear_broadcast_data", defaultValue = false, title = KeysStrings.pref_title_wear_broadcast_data, summary = KeysStrings.pref_summary_wear_broadcast_data, showInApsMode = false, showInPumpControlMode = false),
 
+    // The native Eversense driver is Android only, and these keys are not synced, so they are not
+    // offered on iOS or on the desktop.
+    EversenseCloudUploadEnabled("eversense_cloud_upload_enabled", true, KeysStrings.eversense_cloud_upload_enabled, platforms = AppPlatform.ANDROID_ONLY),
+    EversenseCloudUploadToast("eversense_notif_cloud_upload_toast", false, KeysStrings.eversense_cloud_upload_toast, KeysStrings.eversense_cloud_upload_toast_summary, platforms = AppPlatform.ANDROID_ONLY),
+    EversenseEuropeanRegion("eversense_european_region", false, KeysStrings.eversense_european_region, KeysStrings.eversense_european_region_summary, platforms = AppPlatform.ANDROID_ONLY),
+
     SiteRotationManagePump("site_rotation_manage_pump", defaultValue = false, title = KeysStrings.pref_title_site_rotation_manage_pump, sync = SyncSpec(SyncChannel.Cold, SyncDirection.Bidirectional)),
     SiteRotationManageCgm("site_rotation_manage_cgm", defaultValue = false, title = KeysStrings.pref_title_site_rotation_manage_cgm, sync = SyncSpec(SyncChannel.Cold, SyncDirection.Bidirectional)),
 

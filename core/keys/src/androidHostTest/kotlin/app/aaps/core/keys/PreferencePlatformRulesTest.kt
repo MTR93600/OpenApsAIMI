@@ -55,6 +55,9 @@ class PreferencePlatformRulesTest {
      * left out genuinely cannot honour it rather than merely not having got round to it.
      * - the notification policy switch: iOS gives an app no say in whether an OS notification appears
      * - allow roaming: iOS publishes no roaming state and desktop reports every link as wifi
+     * - the three Eversense switches: the Eversense driver is Android BLE with JVM BouncyCastle and
+     *   has no iOS or desktop port, so the BG source they belong to does not exist there. Without
+     *   the restriction the settings search would still offer them on iOS, wired to nothing.
      */
     @Test
     fun `restrictions are the exception`() {
@@ -63,7 +66,10 @@ class PreferencePlatformRulesTest {
         assertThat(restricted).containsExactly(
             "raise_urgent_alarms_as_android_notification", AppPlatform.ANDROID_ONLY,
             "keep_screen_on", setOf(AppPlatform.Android, AppPlatform.Ios),
-            "ns_allow_roaming", AppPlatform.ANDROID_ONLY
+            "ns_allow_roaming", AppPlatform.ANDROID_ONLY,
+            "eversense_cloud_upload_enabled", AppPlatform.ANDROID_ONLY,
+            "eversense_notif_cloud_upload_toast", AppPlatform.ANDROID_ONLY,
+            "eversense_european_region", AppPlatform.ANDROID_ONLY
         )
     }
 }

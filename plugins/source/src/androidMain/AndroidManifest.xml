@@ -20,6 +20,19 @@
         </service>
 
         <activity
+            android:name=".activities.RequestEversensePermissionActivity"
+            android:exported="false" />
+        <activity
+            android:name=".activities.EversenseCalibrationActivity"
+            android:exported="false" />
+        <activity
+            android:name=".activities.EversensePlacementActivity"
+            android:exported="false" />
+        <activity
+            android:name=".activities.EversenseStatusActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".activities.DexcomOnePlusStatusActivity"
             android:exported="false" />
         <activity

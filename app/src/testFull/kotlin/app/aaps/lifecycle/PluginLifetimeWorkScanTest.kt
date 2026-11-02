@@ -69,6 +69,11 @@ class PluginLifetimeWorkScanTest {
      * Nothing may be added here without a decision recorded next to it.
      */
     private val survivesStop: Map<String, String> = mapOf(
+        "EversensePlugin#mainHandler" to
+            "main-thread Handler, kept as in dev_OAPSAIMI. It only posts one-shot notifications and toasts from the " +
+                "driver callbacks and reschedules nothing. onStop removes the plugin as a watcher, so nothing new is posted " +
+                "after a stop. A post already queued only shows an alarm or a notice, and an alarm must not be dropped " +
+                "because of a restart, so onStop deliberately does not clear it.",
         "VirtualPumpPlugin#deliverTreatment" to
             "one-shot appScope.launch that persists a bolus; it reschedules nothing, but it can still write during a restart window",
         "InsightPlugin#bolusProgressData" to

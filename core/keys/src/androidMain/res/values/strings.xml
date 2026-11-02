@@ -208,6 +208,13 @@
     <string name="pref_title_wear_broadcast_data">Broadcast data to watch</string>
     <string name="pref_summary_wear_broadcast_data">Broadcast AAPS data to 3rd party watch apps via intent.</string>
 
+    <!-- Eversense preferences (Android only) -->
+    <string name="eversense_cloud_upload_enabled">Enable Eversense cloud upload</string>
+    <string name="eversense_cloud_upload_toast">Show a message after each upload</string>
+    <string name="eversense_cloud_upload_toast_summary">Shows a short message on the screen every time your readings are sent to the Eversense servers. This happens about every 5 minutes, so most people leave this off. Turn it on only while you are checking that the upload works.</string>
+    <string name="eversense_european_region">Eversense 365: use European servers</string>
+    <string name="eversense_european_region_summary">Turn this on if your Eversense account and 365 transmitter are European. AAPS will then sign in and sync with the European Eversense servers instead of the ones in the United States. Leave it off for a United States account. If this is set wrong, the transmitter cannot finish pairing and you will get no readings.</string>
+
     <!-- Site rotation preferences -->
     <string name="pref_title_site_rotation_manage_pump">Manage pump site rotation</string>
     <string name="pref_title_site_rotation_manage_cgm">Manage CGM site rotation</string>

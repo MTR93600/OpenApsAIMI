@@ -412,4 +412,94 @@
     <string name="staging_auto_promote_summary">After the set number of hours, the pre-soak sensor feeds the loop if its recent readings are good. The sensor in use is stopped. The promote button still works.</string>
     <string name="staging_auto_promote_hours_title">Hours before the automatic switch</string>
     <string name="staging_auto_promote_done" comment="%1$s=hours since the pre-soak start, with unit. Example: The pre-soak sensor now feeds the loop. Automatic switch after 10 h.">The pre-soak sensor now feeds the loop. Automatic switch after %1$s.</string>
+
+    <!-- Eversense native plugin (Android only) -->
+    <string name="source_eversense">Eversense</string>
+    <string name="description_source_eversense">Native BLE driver for Eversense E3 (180-day) and E365 (365-day) transmitters. Pair in Config Builder, set 365 cloud credentials if needed, calibrate from Status. Works with AIMI loop, adaptive smoothing, and unified AAPS alarms.</string>
+    <string name="eversense_plugin_summary">Native CGM over BLE — not the notification reader. Supports E3/E365, calibration, placement guide, optional cloud upload, and coexistence with the official Eversense app.</string>
+    <string name="eversense_about_title">About Eversense in OpenApsAIMI</string>
+    <string name="eversense_about_summary">Tap for setup notes, AIMI integration, and alarm behaviour.</string>
+    <string name="eversense_about_detail">Setup: enable this source in Config Builder, scan and pair your transmitter, open Status for battery and sync, use Calibration when ready, and Placement if signal is weak.\n\nE365: enter DMS username/password under Credentials for cloud-backed readings.\n\nAIMI: glucose flows into the AIMI loop like any CGM; no extra AIMI preference is required. Physio assistant uses Health Connect separately (not Eversense BLE).\n\nAlarms: sensor/placement/credential issues use unified AAPS notifications (EVERSENSE_* ids). Hypo-risk while looping is handled by AIMI HYPO_RISK_ALARM, not the Eversense driver.</string>
+    <string name="eversense_information_connected">Connected</string>
+    <string name="eversense_battery_low" comment="%1$d = transmitter battery level in percent. Example: 5">Eversense transmitter battery is low (%1$d%%). Please charge your transmitter.</string>
+    <string name="eversense_information_insertion_date">Insertion date</string>
+    <string name="eversense_information_last_sync">Last synchronisation</string>
+    <string name="eversense_calibration_last">Last calibration</string>
+    <string name="eversense_calibration_next">Next calibration</string>
+    <string name="eversense_calibration_action">Calibrate transmitter</string>
+    <string name="eversense_sign_out">Sign out</string>
+    <string name="eversense_credentials_missing">Eversense 365: credentials not set — please sign in to enable cloud sync and readings</string>
+    <string name="eversense_no_cloud_key">This AAPS build has no Eversense cloud key. An Eversense 365 transmitter cannot pair, and the cloud upload does not work. Ask the person who built AAPS to add the key (EVERSENSE_CLIENT_SECRET).</string>
+    <string name="eversense_status_title">Eversense Status &amp; Connection</string>
+    <string name="eversense_not_connected">Not connected</string>
+    <string name="eversense_credentials_title">Eversense 365 credentials</string>
+    <string name="eversense_credentials_username">Username</string>
+    <string name="eversense_credentials_password">Password</string>
+    <string name="eversense_credentials_not_set">Not set</string>
+    <string name="eversense_scan_title">Select Eversense transmitter</string>
+    <string name="eversense_scan_cancel">Cancel</string>
+    <string name="eversense_scan_in_progress">Scanning for Eversense devices (10 seconds)…</string>
+    <string name="eversense_scan_none_found">No Eversense transmitters found. Make sure the transmitter is nearby and try again.</string>
+    <string name="eversense_change_transmitter">Change transmitter</string>
+    <string name="eversense_change_transmitter_confirm">Forget this transmitter and look for a new one? You will then pick the new transmitter from the scan results.</string>
+    <string name="eversense_disconnect_confirm">Disconnect from the transmitter? The app will also forget it, so you will pick it again from the scan results next time you connect.</string>
+    <string name="eversense_connect">Connect</string>
+    <string name="eversense_disconnect">Disconnect</string>
+    <string name="eversense_mark_yes" translatable="false">✅</string>
+    <string name="eversense_mark_no" translatable="false">❌</string>
+    <string name="eversense_percent" comment="%1$d = a percentage. Example: 85%">%1$d%%</string>
+    <string name="eversense_status_battery">Battery</string>
+    <string name="eversense_status_last_sync">Last sync</string>
+    <string name="eversense_status_calibration_phase">Calibration phase</string>
+    <string name="eversense_status_calibration_readiness">Calibration readiness</string>
+    <string name="eversense_calibration_ready">Ready to calibrate</string>
+    <string name="eversense_calibration_status">Calibration status</string>
+    <string name="eversense_calibration_bg_value">Blood glucose value</string>
+    <string name="eversense_calibration_bg_hint">Enter BG value</string>
+    <string name="eversense_calibration_submit">Submit calibration</string>
+    <string name="eversense_calibration_invalid_value">Please enter a valid blood glucose value</string>
+    <string name="eversense_calibration_not_ready">The transmitter is not ready for a calibration yet. Open Settings, Eversense, Calibration to see why.</string>
+    <string name="eversense_calibration_success">Calibration submitted successfully</string>
+    <string name="eversense_calibration_failed">Failed to submit calibration. Make sure the transmitter is connected and ready.</string>
+    <string name="eversense_calibration_sending">Sending calibration…</string>
+    <string name="eversense_calibration_due">Eversense calibration is due. Open AAPS to calibrate your sensor.</string>
+    <string name="eversense_calibration_due_now">Eversense calibration due now</string>
+    <string name="eversense_readiness_not_enough_data">Not enough data yet. Wait for more readings.</string>
+    <string name="eversense_readiness_glucose_too_high">Glucose too high to calibrate</string>
+    <string name="eversense_readiness_too_soon">Calibration done recently. Wait 2 hours.</string>
+    <string name="eversense_readiness_dropout_phase">Sensor in dropout phase</string>
+    <string name="eversense_readiness_sensor_eol">Sensor end of life</string>
+    <string name="eversense_readiness_no_sensor_linked">No sensor linked to transmitter</string>
+    <string name="eversense_readiness_unsupported_mode">Transmitter in unsupported mode</string>
+    <string name="eversense_readiness_waiting_post_calibration">Waiting for post-calibration processing</string>
+    <string name="eversense_readiness_led_disconnect">Sensor disconnect detected</string>
+    <string name="eversense_readiness_transmitter_eol">Transmitter end of life</string>
+    <string name="eversense_readiness_unknown">Unknown readiness state</string>
+    <string name="eversense_reconnecting">Reconnecting…</string>
+    <string name="eversense_sensor_expiry_plan" comment="%1$d = days until the sensor expires. Example: 45">Eversense sensor expires in %1$d days. Plan your sensor replacement.</string>
+    <string name="eversense_sensor_expiry_soon" comment="%1$d = days until the sensor expires. Example: 20">Eversense sensor expires in %1$d days. Replace your sensor soon.</string>
+    <string name="eversense_sensor_expiry_now" comment="%1$d = days until the sensor expires. Example: 5">Eversense sensor expires in %1$d days. Replace your sensor immediately.</string>
+    <string name="eversense_firmware_notice" comment="%1$s = transmitter firmware version. Example: 6.02.10">Eversense firmware: %1$s. Open the official Eversense app to check for updates.</string>
+    <string name="eversense_cloud_upload_ok" comment="%1$d = number of glucose readings sent. Example: 3">Eversense cloud upload: %1$d reading(s) sent</string>
+    <string name="eversense_cloud_upload_failed">Eversense cloud upload failed. Check credentials and internet.</string>
+    <string name="eversense_placement_signal">Placement signal</string>
+    <string name="eversense_placement_title">Transmitter Placement</string>
+    <string name="eversense_placement_guide_heading">Transmitter Placement Guide</string>
+    <string name="eversense_placement_guide_subtitle">Adjust your transmitter position\nto improve signal strength</string>
+    <string name="eversense_signal_excellent">Excellent</string>
+    <string name="eversense_signal_good">Good</string>
+    <string name="eversense_signal_fair">Fair</string>
+    <string name="eversense_signal_low">Low</string>
+    <string name="eversense_signal_weak">Weak</string>
+    <string name="eversense_signal_poor">Poor</string>
+    <string name="eversense_signal_very_poor">Very poor</string>
+    <string name="eversense_placement_instruction_excellent">Great placement! Keep the transmitter in this position.</string>
+    <string name="eversense_placement_instruction_good">Good placement. Signal is strong.</string>
+    <string name="eversense_placement_instruction_fair">Signal is acceptable. Try moving the transmitter slightly for a better reading.</string>
+    <string name="eversense_placement_instruction_weak">Weak signal. Reposition the transmitter closer to the sensor.</string>
+    <string name="eversense_placement_instruction_poor">Poor signal. Make sure the transmitter is placed directly over the sensor site.</string>
+    <string name="eversense_placement_instruction_not_connected">Connect to your transmitter to view signal strength.</string>
+    <string name="eversense_placement_last_update" comment="%1$s = time of the last signal reading. Example: 14:05:12">Last update: %1$s</string>
+    <string name="eversense_placement_reading">Reading…</string>
+    <string name="eversense_transmitter_not_placed">Eversense transmitter not detecting — check placement</string>
 </resources>

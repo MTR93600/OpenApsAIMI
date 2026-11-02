@@ -133,6 +133,22 @@ class RawPreferenceStoreScanTest {
             "ONE+ sensor identity, including the pairing key. Live device state, so it needs a migration. The export question IS answered (owner, 2026-10-15): ALL of these keys are exportable, identity and session state alike, because a sensor has to survive a change of phone. 14 keys here and 18 in the Libre 3 store, each composed with the store namespace, so the move needs registered composed keys plus a migration that COPIES from the old file and leaves it in place until the move is confirmed on a real sensor.",
         "plugins/libre3/src/androidMain/kotlin/app/aaps/plugins/libre3/identity/Libre3SensorPrefsAndroid.kt" to
             "Libre 3 sensor identity, same as the ONE+ store above, and exportable for the same reason.",
+        // The Eversense driver, ported from dev_OAPSAIMI as it is. It keeps its own preference file
+        // "EversenseCGMManager": transmitter state, the cloud token, and a copy of the sign in that
+        // EversensePlugin syncs from the registered keys EversenseStringKey. The settings the user sets
+        // ARE registered keys; this file holds driver state only. Same question as the ONE+ and Libre 3
+        // stores above: live device state, so moving it needs a migration that copies the old file.
+        "plugins/eversense/src/main/kotlin/app/aaps/plugins/eversense/EversenseCGMPlugin.kt" to
+            "Eversense driver state store. Live device state, needs a migration like the ONE+ store above.",
+        "plugins/eversense/src/main/kotlin/app/aaps/plugins/eversense/EversenseGattCallback.kt" to "Eversense driver, same store",
+        "plugins/eversense/src/main/kotlin/app/aaps/plugins/eversense/packets/Eversense365Communicator.kt" to "Eversense driver, same store",
+        "plugins/eversense/src/main/kotlin/app/aaps/plugins/eversense/packets/EversenseE3Communicator.kt" to "Eversense driver, same store",
+        "plugins/eversense/src/main/kotlin/app/aaps/plugins/eversense/util/EversenseCrypto365Util.kt" to "Eversense driver, same store",
+        "plugins/eversense/src/main/kotlin/app/aaps/plugins/eversense/util/EversenseHttp365Util.kt" to "Eversense driver, same store (cloud token)",
+        "plugins/eversense/src/main/kotlin/app/aaps/plugins/eversense/util/EversenseHttpE3Util.kt" to "Eversense driver, same store (cloud token)",
+        "plugins/source/src/androidMain/kotlin/app/aaps/plugins/source/EversensePlugin.kt" to
+            "Eversense plugin, same store: copies the sign in from the registered keys into it and keeps one-time notice flags there",
+        "plugins/source/src/androidMain/kotlin/app/aaps/plugins/source/activities/EversenseStatusActivity.kt" to "Eversense status screen, reads the same store",
         "pump/combov2/src/main/kotlin/info/nightscout/pump/combov2/AAPSPumpStateStore.kt" to
             "ComboV2 pump state. Deferred WITH a migration (agreed 2026-09-22) - the values are live pump state, so they have to be carried across, not abandoned. Plan 3.1.2.",
         "pump/combov2/src/main/kotlin/info/nightscout/pump/combov2/ComboV2Plugin.kt" to "ComboV2, same migration",
