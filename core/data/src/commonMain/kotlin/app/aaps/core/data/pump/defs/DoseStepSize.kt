@@ -40,6 +40,11 @@ enum class DoseStepSize(private val entries: Array<DoseStepSizeEntry>) {
             DoseStepSizeEntry(2.0, 15.0, 0.1),
             DoseStepSizeEntry(15.0, 40.0, 0.5)
         )
+    ),
+    Apex(
+        arrayOf(
+            DoseStepSizeEntry(0.0, Double.MAX_VALUE, 0.05)
+        )
     );
 
     fun getStepSizeForAmount(amount: Double): Double {

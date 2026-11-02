@@ -306,7 +306,16 @@ enum class NotificationId(
     BG_RAPID_FALL(URGENT, CGM),
 
     /** A bolus asked for by the Garmin watch was refused or limited; the watch cannot show why. Appended last on purpose. */
-    GARMIN_BOLUS(IMPORTANT, SYNC);
+    GARMIN_BOLUS(IMPORTANT, SYNC),
+
+    /**
+     * Fork driver :pump:apex (in the build, not in the app). A message from the Apex driver that only
+     * engineering mode shows, such as pump data it could not read. Appended last on purpose.
+     */
+    APEX_SERVICE_MSG(INFO, PUMP),
+
+    /** Fork driver :pump:apex: the Apex pump is locked and will not take commands. Appended last on purpose. */
+    PUMP_IS_LOCKED(URGENT, PUMP);
 
     companion object {
 

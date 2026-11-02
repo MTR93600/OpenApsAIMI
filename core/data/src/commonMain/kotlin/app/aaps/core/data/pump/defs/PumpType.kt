@@ -501,6 +501,24 @@ enum class PumpType(
         maxReservoirReading = 200,
         source = Source.EQuil,
         useHardwareLink = true,
+    ),
+
+    // Fork driver :pump:apex. The module is in the build but not in the app, so no user can pick
+    // this pump. The entry is here because the driver needs it to compile, and dev has it too.
+    APEX_TRUCARE_III(
+        description = "Apex TruCare III",
+        manufacturer = ManufacturerType.Apex,
+        model = "TruCare III",
+        bolusSize = 0.05,
+        extendedBolusSettings = DoseSettings(0.05, 0, 0, 0.0),
+        pumpTempBasalType = PumpTempBasalType.Absolute,
+        tbrSettings = DoseSettings(0.01, 30, 24 * 60, 0.0, 25.0),
+        specialBasalDurations = arrayOf(Capability.BasalRate_Duration30minAllowed),
+        baseBasalMinValue = 0.05,
+        baseBasalMaxValue = 25.0,
+        baseBasalStep = 0.05,
+        pumpCapability = PumpCapability.ApexCapabilities,
+        source = Source.Apex
     );
 
     fun manufacturer() = parent?.manufacturer ?: manufacturer ?: throw IllegalStateException()
@@ -540,7 +558,8 @@ enum class PumpType(
         VirtualPump,
         Unknown,
         EQuil,
-        Carelevo
+        Carelevo,
+        Apex
     }
 
     companion object {
