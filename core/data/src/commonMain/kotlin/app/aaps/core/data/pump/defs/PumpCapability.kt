@@ -23,7 +23,8 @@ enum class PumpCapability {
     CarelevoCapabilities(arrayOf(Capability.Bolus, Capability.ExtendedBolus, Capability.TempBasal, Capability.BasalProfileSet, Capability.BasalRate30min)),
 
     // Diaconn set without Refill and ReplaceBattery: the Equil wizard fills the reservoir and fits the charged battery
-    EquilCapabilities(arrayOf(Capability.Bolus, Capability.ExtendedBolus, Capability.TempBasal, Capability.BasalProfileSet, Capability.TDD, Capability.ManualTDDLoad));
+    EquilCapabilities(arrayOf(Capability.Bolus, Capability.ExtendedBolus, Capability.TempBasal, Capability.BasalProfileSet, Capability.TDD, Capability.ManualTDDLoad)),
+    ApexCapabilities(arrayOf(Capability.Bolus, Capability.TempBasal, Capability.BasalProfileSet, Capability.Refill, Capability.ReplaceBattery, Capability.TDD));
 
     var children: ArrayList<Capability> = ArrayList()
 
