@@ -36,6 +36,7 @@ import app.aaps.core.objects.workflow.MetroService
 import app.aaps.pump.medtrum.MedtrumPlugin
 import app.aaps.pump.medtrum.MedtrumPump
 import app.aaps.pump.medtrum.R
+import app.aaps.pump.medtrum.watchMedtrumUserSettings
 import app.aaps.pump.medtrum.ble.MedtrumBleCallback
 import app.aaps.pump.medtrum.ble.MedtrumBleTransport
 import app.aaps.pump.medtrum.code.ConnectionState
@@ -62,9 +63,6 @@ import app.aaps.pump.medtrum.comm.packets.SetTimeZonePacket
 import app.aaps.pump.medtrum.comm.packets.StopPatchPacket
 import app.aaps.pump.medtrum.comm.packets.SubscribePacket
 import app.aaps.pump.medtrum.comm.packets.SynchronizePacket
-import app.aaps.pump.medtrum.keys.MedtrumBooleanKey
-import app.aaps.pump.medtrum.keys.MedtrumIntKey
-import app.aaps.pump.medtrum.keys.MedtrumStringKey
 import app.aaps.pump.medtrum.keys.MedtrumStringNonKey
 import app.aaps.pump.medtrum.comm.AapsMedtrumLogger
 import app.aaps.pump.medtrum.comm.MedtrumAlarmNotifier
@@ -184,48 +182,21 @@ class MedtrumService : MetroService(), MedtrumBleCallback {
             pumpSync.connectNewPump()
             medtrumPump.setFakeTBRIfNotSet()
         }
-        preferences.observe(MedtrumBooleanKey.MedtrumWarningNotification).drop(1).collectResilient(scope, aapsLogger, LTag.PUMP) {
-            medtrumPump.loadUserSettingsFromSP()
-        }
-        preferences.observe(MedtrumIntKey.MedtrumPumpExpiryWarningHours).drop(1).collectResilient(scope, aapsLogger, LTag.PUMP) {
-            medtrumPump.loadUserSettingsFromSP()
-        }
-        preferences.observe(MedtrumStringKey.MedtrumAlarmSettings).drop(1).collectResilient(scope, aapsLogger, LTag.PUMP) {
-            medtrumPump.loadUserSettingsFromSP()
-            val r = commandQueue.setUserOptions()
-            if (medtrumPlugin.isInitialized() && !r.success) {
-                notificationManager.post(
-                    NotificationId.PUMP_SETTINGS_FAILED,
-                    TextRef.AndroidRes(R.string.pump_setting_failed))
+        // The pump settings: the same code as on the iPhone.
+        watchMedtrumUserSettings(
+            preferences = preferences,
+            scope = scope,
+            aapsLogger = aapsLogger,
+            reload = medtrumPump::loadUserSettingsFromSP,
+            sendToPatch = {
+                val r = commandQueue.setUserOptions()
+                if (medtrumPlugin.isInitialized() && !r.success) {
+                    notificationManager.post(
+                        NotificationId.PUMP_SETTINGS_FAILED,
+                        TextRef.AndroidRes(R.string.pump_setting_failed))
+                }
             }
-        }
-        preferences.observe(MedtrumBooleanKey.MedtrumPatchExpiration).drop(1).collectResilient(scope, aapsLogger, LTag.PUMP) {
-            medtrumPump.loadUserSettingsFromSP()
-            val r = commandQueue.setUserOptions()
-            if (medtrumPlugin.isInitialized() && !r.success) {
-                notificationManager.post(
-                    NotificationId.PUMP_SETTINGS_FAILED,
-                    TextRef.AndroidRes(R.string.pump_setting_failed))
-            }
-        }
-        preferences.observe(MedtrumIntKey.MedtrumHourlyMaxInsulin).drop(1).collectResilient(scope, aapsLogger, LTag.PUMP) {
-            medtrumPump.loadUserSettingsFromSP()
-            val r = commandQueue.setUserOptions()
-            if (medtrumPlugin.isInitialized() && !r.success) {
-                notificationManager.post(
-                    NotificationId.PUMP_SETTINGS_FAILED,
-                    TextRef.AndroidRes(R.string.pump_setting_failed))
-            }
-        }
-        preferences.observe(MedtrumIntKey.MedtrumDailyMaxInsulin).drop(1).collectResilient(scope, aapsLogger, LTag.PUMP) {
-            medtrumPump.loadUserSettingsFromSP()
-            val r = commandQueue.setUserOptions()
-            if (medtrumPlugin.isInitialized() && !r.success) {
-                notificationManager.post(
-                    NotificationId.PUMP_SETTINGS_FAILED,
-                    TextRef.AndroidRes(R.string.pump_setting_failed))
-            }
-        }
+        )
         medtrumPump.pumpStateFlow.collectResilient(scope, aapsLogger, LTag.PUMP) { pumpState ->
             handlePumpStateUpdate(pumpState)
         }

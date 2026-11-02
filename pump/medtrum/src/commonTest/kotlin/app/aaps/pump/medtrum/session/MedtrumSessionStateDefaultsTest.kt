@@ -6,8 +6,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * The settings a new patch gets must be the Android defaults. The iPhone has no screen for them, so
- * these values are what an iPhone sends at activation.
+ * The settings a new patch gets must be the Android defaults. The iPhone plugin copies the
+ * preferences over them (`MedtrumUserSettingsTest`), so these only count until that happens.
  */
 class MedtrumSessionStateDefaultsTest {
 

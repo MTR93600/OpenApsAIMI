@@ -116,6 +116,9 @@ class IosMedtrumStateStore(
         // Older versions saved their own defaults here (40 U, 180 U, light + vibrate + beep), not
         // values a person chose: there was no screen to choose them. Those are not read back, so
         // the state keeps the Android defaults.
+        // Since the settings screen exists, the person's values live in the preferences, and
+        // `IosMedtrumPlugin` copies them over these right after the load (`MedtrumUserSettings`).
+        // What is kept here is only the last copy.
         if (defaults.integerForKey(key("userSettingsVersion")) == USER_SETTINGS_VERSION) {
             state.desiredAlarmSetting = AlarmSetting.entries.getOrNull(
                 defaults.integerForKey(key("desiredAlarmSetting")).toInt()

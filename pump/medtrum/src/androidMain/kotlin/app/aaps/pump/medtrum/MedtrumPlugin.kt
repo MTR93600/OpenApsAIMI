@@ -69,7 +69,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.drop
 import kotlin.math.abs
-import kotlin.math.min
 import dev.zacsweers.metro.IntKey as MetroIntKey
 
 @ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
@@ -126,7 +125,8 @@ class MedtrumPlugin(
         rxBus.toFlow(EventAppExit::class)
             .collectResilient(newScope, aapsLogger, LTag.PUMP, start = CoroutineStart.UNDISPATCHED) { context.unbindService(mConnection) }
         preferences.observe(MedtrumStringNonKey.SnInput).drop(1).collectResilient(newScope, aapsLogger, LTag.PUMP) {
-            updateMaxInsulinLimitsForPumpType()
+            // A new pump model changes the insulin limits (shared with the iPhone).
+            MedtrumInsulinLimits.applyFor(medtrumPump.pumpType(), preferences)
         }
 
         // Force enable pump unreachable alert due to some failure modes of Medtrum pump
@@ -423,19 +423,20 @@ class MedtrumPlugin(
         return pumpEnactResultProvider().success(connectionOK)
     }
 
-    // getPreferenceScreenContent() has a side effect (updateMaxInsulinLimitsForPumpType) we don't want
+    // getPreferenceScreenContent() has a side effect (MedtrumInsulinLimits.applyFor) we don't want
     // triggered by hasPreferences() caching. Override to skip calling the builder for the existence check.
     override fun hasPreferences(): Boolean = true
 
     override fun getPreferenceScreenContent(): PreferenceSubScreenDef {
-        updateMaxInsulinLimitsForPumpType()
+        // The same limits and alarm choices as on the iPhone.
+        MedtrumInsulinLimits.applyFor(medtrumPump.pumpType(), preferences)
 
         return PreferenceSubScreenDef(
             key = "medtrum_settings",
             titleResId = R.string.medtrum_pump_setting,
             items = listOf(
                 MedtrumStringKey.MedtrumAlarmSettings.withEntriesProvider(
-                    provider = { getAlarmEntriesForPumpType() }
+                    provider = { MedtrumInsulinLimits.alarmEntries(medtrumPump.pumpType()) }
                 ),
                 MedtrumBooleanKey.MedtrumWarningNotification,
                 MedtrumBooleanKey.MedtrumPatchExpiration,
@@ -453,49 +454,4 @@ class MedtrumPlugin(
             icon = pluginDescription.icon
         )
     }
-
-    private fun updateMaxInsulinLimitsForPumpType() {
-        when (medtrumPump.pumpType()) {
-            PumpType.MEDTRUM_NANO -> {
-                MedtrumIntKey.MedtrumHourlyMaxInsulin.max = 40
-                MedtrumIntKey.MedtrumDailyMaxInsulin.max = 180
-            }
-
-            PumpType.MEDTRUM_300U -> {
-                MedtrumIntKey.MedtrumHourlyMaxInsulin.max = 60
-                MedtrumIntKey.MedtrumDailyMaxInsulin.max = 270
-            }
-
-            else                  -> {
-                // Default values (same as NANO)
-                MedtrumIntKey.MedtrumHourlyMaxInsulin.max = 40
-                MedtrumIntKey.MedtrumDailyMaxInsulin.max = 180
-            }
-        }
-        // Clamp current values to new max limits
-        preferences.put(MedtrumIntKey.MedtrumHourlyMaxInsulin, min(preferences.get(MedtrumIntKey.MedtrumHourlyMaxInsulin), MedtrumIntKey.MedtrumHourlyMaxInsulin.max))
-        preferences.put(MedtrumIntKey.MedtrumDailyMaxInsulin, min(preferences.get(MedtrumIntKey.MedtrumDailyMaxInsulin), MedtrumIntKey.MedtrumDailyMaxInsulin.max))
-    }
-
-    private fun getAlarmEntriesForPumpType(): Map<String, TextRef> {
-        // For NANO and 300U pumps, only Beep and Silent options are available
-        return when (medtrumPump.pumpType()) {
-            PumpType.MEDTRUM_NANO, PumpType.MEDTRUM_300U -> mapOf(
-                "6" to TextRef.AndroidRes(R.string.alarm_setting_beep),
-                "7" to TextRef.AndroidRes(R.string.alarm_setting_silent)
-            )
-
-            else                                         -> mapOf(
-                "0" to TextRef.AndroidRes(R.string.alarm_setting_light_vibrate_beep),
-                "1" to TextRef.AndroidRes(R.string.alarm_setting_light_vibrate),
-                "2" to TextRef.AndroidRes(R.string.alarm_setting_light_beep),
-                "3" to TextRef.AndroidRes(R.string.alarm_setting_light),
-                "4" to TextRef.AndroidRes(R.string.alarm_setting_vibrate_beep),
-                "5" to TextRef.AndroidRes(R.string.alarm_setting_vibrate),
-                "6" to TextRef.AndroidRes(R.string.alarm_setting_beep),
-                "7" to TextRef.AndroidRes(R.string.alarm_setting_silent)
-            )
-        }
-    }
-
 }
