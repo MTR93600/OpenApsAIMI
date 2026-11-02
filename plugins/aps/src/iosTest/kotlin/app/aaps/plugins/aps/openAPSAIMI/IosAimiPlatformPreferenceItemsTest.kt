@@ -11,7 +11,7 @@ import kotlin.test.assertEquals
 class IosAimiPlatformPreferenceItemsTest {
 
     @Test
-    fun `shared advisor and other supported screens are answered`() {
+    fun `every AIMI platform screen is answered on iOS`() {
         assertEquals(
             setOf(
                 AimiPlatformPreferenceSlot.CONTEXT,
@@ -20,14 +20,17 @@ class IosAimiPlatformPreferenceItemsTest {
                 AimiPlatformPreferenceSlot.MEAL_ADVISOR,
                 AimiPlatformPreferenceSlot.PROFILE_ADVISOR,
                 AimiPlatformPreferenceSlot.SUPPORT_PACKAGE,
+                AimiPlatformPreferenceSlot.MODE_SETTINGS,
+                AimiPlatformPreferenceSlot.SOS_PERMISSIONS,
+                AimiPlatformPreferenceSlot.HEALTH_CONNECT_PERMISSIONS,
             ),
             IosAimiPlatformPreferenceItems.ANSWERED,
         )
     }
 
     @Test
-    fun `the other slots are left out`() {
+    fun `no slot is left out`() {
         val left = AimiPlatformPreferenceSlot.entries - IosAimiPlatformPreferenceItems.ANSWERED
-        assertEquals(3, left.size)
+        assertEquals(emptySet(), left.toSet())
     }
 }

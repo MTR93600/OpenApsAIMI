@@ -34,6 +34,7 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.FoodRecognitionService
 import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.toAimiImage
 import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.ui.AimiMealAdvisorScreen
 import app.aaps.plugins.aps.openAPSAIMI.advisor.meal.ui.MealAdvisorCameraCapture
+import app.aaps.plugins.aps.openAPSAIMI.advisor.modesettings.AndroidAimiModeDurationStore
 import app.aaps.plugins.aps.openAPSAIMI.advisor.modesettings.ui.AimiModeSettingsScreen
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiPkpdSettingsScreen
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextManager
@@ -191,6 +192,8 @@ class AndroidAimiPlatformPreferenceItems @Inject constructor(
                     preferences = preferences,
                     persistenceLayer = persistenceLayer,
                     aapsLogger = aapsLogger,
+                    textResolver = rh,
+                    durationStore = remember { AndroidAimiModeDurationStore(context) },
                     onBack = onBack,
                 )
             },

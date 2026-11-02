@@ -1,6 +1,5 @@
 package app.aaps.plugins.aps.openAPSAIMI.advisor.modesettings.ui
 
-import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,28 +32,30 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.TE
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTopAppBar
 import app.aaps.core.ui.compose.preference.ProvidePreferenceTheme
-import app.aaps.plugins.aps.R
+import app.aaps.core.ui.compose.stringResource
+import app.aaps.plugins.aps.ApsStrings
+import app.aaps.plugins.aps.openAPSAIMI.advisor.modesettings.AimiModeDurationStore
+import app.aaps.plugins.aps.openAPSAIMI.advisor.modesettings.AimiModeDurationStore.Companion.DEFAULT_MODE_DURATION_MIN
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.Locale
-
-private const val MODE_ACTIVITY_PREFS_FILE = "aimi_mode_activity"
 
 /**
  * The 4 modes this screen edits. [noteText] is read downstream by
@@ -63,11 +64,11 @@ private const val MODE_ACTIVITY_PREFS_FILE = "aimi_mode_activity"
  * feeds `DetermineBasalAIMI2`'s mode-specific dosing. It must stay exactly "Lunch" / "Dinner" /
  * "Breakfast" / "High Carb" - not translated, not reworded - or the match breaks silently.
  */
-enum class AimiModeType(val durationPrefKey: String, val noteText: String, val tabLabelRes: Int) {
-    LUNCH("aimi_mode_lunch_duration", "Lunch", R.string.aimi_mode_settings_tab_lunch),
-    DINNER("aimi_mode_dinner_duration", "Dinner", R.string.aimi_mode_settings_tab_dinner),
-    BFAST("aimi_mode_bfast_duration", "Breakfast", R.string.aimi_mode_settings_tab_bfast),
-    HIGHCARB("aimi_mode_hc_duration", "High Carb", R.string.aimi_mode_settings_tab_highcarb),
+enum class AimiModeType(val durationPrefKey: String, val noteText: String, val tabLabel: TextRef) {
+    LUNCH("aimi_mode_lunch_duration", "Lunch", ApsStrings.aimi_mode_settings_tab_lunch),
+    DINNER("aimi_mode_dinner_duration", "Dinner", ApsStrings.aimi_mode_settings_tab_dinner),
+    BFAST("aimi_mode_bfast_duration", "Breakfast", ApsStrings.aimi_mode_settings_tab_bfast),
+    HIGHCARB("aimi_mode_hc_duration", "High Carb", ApsStrings.aimi_mode_settings_tab_highcarb),
 }
 
 private data class ModePrefKeys(val prebolus1: DoubleKey, val prebolus2: DoubleKey, val reactivity: DoubleKey, val interval: IntKey)
@@ -85,20 +86,22 @@ private fun modePrefKeysFor(mode: AimiModeType): ModePrefKeys = when (mode) {
  * [app.aaps.plugins.aps.openAPSAIMI.DetermineBasalAIMI2] reads through `therapy.kt`'s mode
  * detectors to switch into that meal's prebolus/reactivity profile.
  *
- * Duration stays in its own `SharedPreferences` file (not an `IntKey`/preference-tree entry) -
- * an existing decision, kept as-is here, not reopened by this port.
+ * Duration stays in its own small store (not an `IntKey`/preference-tree entry), see
+ * [AimiModeDurationStore] - an existing decision, kept as-is here, not reopened by this port.
+ *
+ * Shared by Android and iOS. Only the duration store differs per platform.
  */
 @Composable
 fun AimiModeSettingsScreen(
     preferences: Preferences,
     persistenceLayer: PersistenceLayer,
     aapsLogger: AAPSLogger,
+    textResolver: TextResolver,
+    durationStore: AimiModeDurationStore,
     onBack: () -> Unit,
 ) {
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
-    val modeActivityPrefs = remember { context.getSharedPreferences(MODE_ACTIVITY_PREFS_FILE, Context.MODE_PRIVATE) }
 
     var selectedMode by remember { mutableStateOf(AimiModeType.LUNCH) }
     var prebolus1Text by remember { mutableStateOf("") }
@@ -109,16 +112,14 @@ fun AimiModeSettingsScreen(
     var showActivateConfirm by remember { mutableStateOf(false) }
     var activating by remember { mutableStateOf(false) }
 
-    val activatedTemplate = stringResource(R.string.aimi_mode_settings_activated_message)
-    val activateErrorTemplate = stringResource(R.string.aimi_mode_settings_activate_error)
-    val modeDisplayName = stringResource(selectedMode.tabLabelRes)
+    val modeDisplayName = stringResource(selectedMode.tabLabel)
 
     fun loadValues(mode: AimiModeType) {
         val keys = modePrefKeysFor(mode)
         prebolus1Text = preferences.get(keys.prebolus1).toString()
         prebolus2Text = preferences.get(keys.prebolus2).toString()
         reactivityText = preferences.get(keys.reactivity).toString()
-        durationText = modeActivityPrefs.getInt(mode.durationPrefKey, 60).toString()
+        durationText = durationStore.minutes(mode.durationPrefKey).toString()
         intervalText = preferences.get(keys.interval).toString()
     }
 
@@ -129,13 +130,13 @@ fun AimiModeSettingsScreen(
         val prebolus1 = prebolus1Text.toDoubleOrNull() ?: 0.0
         val prebolus2 = prebolus2Text.toDoubleOrNull() ?: 0.0
         val reactivity = reactivityText.toDoubleOrNull() ?: 100.0
-        val duration = durationText.toIntOrNull() ?: 60
+        val duration = durationText.toIntOrNull() ?: DEFAULT_MODE_DURATION_MIN
         val interval = intervalText.toIntOrNull() ?: 5
 
         preferences.put(keys.prebolus1, prebolus1)
         preferences.put(keys.prebolus2, prebolus2)
         preferences.put(keys.reactivity, reactivity)
-        modeActivityPrefs.edit().putInt(selectedMode.durationPrefKey, duration).apply()
+        durationStore.save(selectedMode.durationPrefKey, duration)
         preferences.put(keys.interval, interval)
     }
 
@@ -149,11 +150,11 @@ fun AimiModeSettingsScreen(
         if (activating) return
         activating = true
         val modeNote = selectedMode.noteText
-        val durationMin = durationText.toIntOrNull() ?: 60
+        val durationMin = durationText.toIntOrNull() ?: DEFAULT_MODE_DURATION_MIN
         val durationMs = durationMin * 60 * 1000L
         scope.launch {
             try {
-                withContext(Dispatchers.IO) {
+                withContext(aapsIoDispatcher) {
                     val te = TE(
                         timestamp = aimiWallClockMs(),
                         type = TE.Type.NOTE,
@@ -165,12 +166,18 @@ fun AimiModeSettingsScreen(
                     persistenceLayer.insertOrUpdateTherapyEvent(te)
                 }
                 showActivateConfirm = false
-                snackbarHostState.showSnackbar(String.format(Locale.getDefault(), activatedTemplate, modeNote, durationMin))
+                snackbarHostState.showSnackbar(
+                    textResolver.gs(ApsStrings.aimi_mode_settings_activated_message, modeNote, durationMin)
+                )
                 onBack()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 aapsLogger.error(LTag.APS, "AimiModeSettingsScreen activate failed", e)
                 showActivateConfirm = false
-                snackbarHostState.showSnackbar(String.format(Locale.getDefault(), activateErrorTemplate, e.message ?: e.toString()))
+                snackbarHostState.showSnackbar(
+                    textResolver.gs(ApsStrings.aimi_mode_settings_activate_error, e.message ?: e.toString())
+                )
             } finally {
                 activating = false
             }
@@ -181,12 +188,12 @@ fun AimiModeSettingsScreen(
         Scaffold(
             topBar = {
                 AapsTopAppBar(
-                    title = { Text(stringResource(R.string.aimi_mode_settings_title)) },
+                    title = { Text(stringResource(ApsStrings.aimi_mode_settings_title)) },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = stringResource(app.aaps.core.ui.R.string.back),
+                                contentDescription = stringResource(CoreUiStrings.back),
                             )
                         }
                     },
@@ -208,7 +215,7 @@ fun AimiModeSettingsScreen(
                         Tab(
                             selected = selectedMode == mode,
                             onClick = { onSelectMode(mode) },
-                            text = { Text(stringResource(mode.tabLabelRes)) },
+                            text = { Text(stringResource(mode.tabLabel)) },
                         )
                     }
                 }
@@ -221,40 +228,40 @@ fun AimiModeSettingsScreen(
                         OutlinedTextField(
                             value = prebolus1Text,
                             onValueChange = { prebolus1Text = it },
-                            label = { Text(stringResource(R.string.aimi_mode_settings_prebolus1_label)) },
-                            placeholder = { Text(stringResource(R.string.aimi_mode_settings_prebolus1_hint)) },
+                            label = { Text(stringResource(ApsStrings.aimi_mode_settings_prebolus1_label)) },
+                            placeholder = { Text(stringResource(ApsStrings.aimi_mode_settings_prebolus1_hint)) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier.fillMaxWidth(),
                         )
                         OutlinedTextField(
                             value = prebolus2Text,
                             onValueChange = { prebolus2Text = it },
-                            label = { Text(stringResource(R.string.aimi_mode_settings_prebolus2_label)) },
-                            placeholder = { Text(stringResource(R.string.aimi_mode_settings_prebolus2_hint)) },
+                            label = { Text(stringResource(ApsStrings.aimi_mode_settings_prebolus2_label)) },
+                            placeholder = { Text(stringResource(ApsStrings.aimi_mode_settings_prebolus2_hint)) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier.fillMaxWidth(),
                         )
                         OutlinedTextField(
                             value = reactivityText,
                             onValueChange = { reactivityText = it },
-                            label = { Text(stringResource(R.string.aimi_mode_settings_reactivity_label)) },
-                            placeholder = { Text(stringResource(R.string.aimi_mode_settings_reactivity_hint)) },
+                            label = { Text(stringResource(ApsStrings.aimi_mode_settings_reactivity_label)) },
+                            placeholder = { Text(stringResource(ApsStrings.aimi_mode_settings_reactivity_hint)) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier.fillMaxWidth(),
                         )
                         OutlinedTextField(
                             value = durationText,
                             onValueChange = { durationText = it },
-                            label = { Text(stringResource(R.string.aimi_mode_settings_duration_label)) },
-                            placeholder = { Text(stringResource(R.string.aimi_mode_settings_duration_hint)) },
+                            label = { Text(stringResource(ApsStrings.aimi_mode_settings_duration_label)) },
+                            placeholder = { Text(stringResource(ApsStrings.aimi_mode_settings_duration_hint)) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.fillMaxWidth(),
                         )
                         OutlinedTextField(
                             value = intervalText,
                             onValueChange = { intervalText = it },
-                            label = { Text(stringResource(R.string.aimi_mode_settings_interval_label)) },
-                            placeholder = { Text(stringResource(R.string.aimi_mode_settings_interval_hint)) },
+                            label = { Text(stringResource(ApsStrings.aimi_mode_settings_interval_label)) },
+                            placeholder = { Text(stringResource(ApsStrings.aimi_mode_settings_interval_hint)) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -262,7 +269,7 @@ fun AimiModeSettingsScreen(
                 }
 
                 Button(onClick = { saveValues(); onBack() }, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.aimi_mode_settings_save_button))
+                    Text(stringResource(ApsStrings.aimi_mode_settings_save_button))
                 }
 
                 OutlinedButton(
@@ -272,26 +279,26 @@ fun AimiModeSettingsScreen(
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(stringResource(R.string.aimi_mode_settings_activate_button, modeDisplayName))
+                    Text(stringResource(ApsStrings.aimi_mode_settings_activate_button, modeDisplayName))
                 }
             }
         }
     }
 
     if (showActivateConfirm) {
-        val durationMin = durationText.toIntOrNull() ?: 60
+        val durationMin = durationText.toIntOrNull() ?: DEFAULT_MODE_DURATION_MIN
         AlertDialog(
             onDismissRequest = { if (!activating) showActivateConfirm = false },
-            title = { Text(stringResource(R.string.aimi_mode_settings_activate_confirm_title, modeDisplayName)) },
-            text = { Text(stringResource(R.string.aimi_mode_settings_activate_confirm_message, modeDisplayName, durationMin)) },
+            title = { Text(stringResource(ApsStrings.aimi_mode_settings_activate_confirm_title, modeDisplayName)) },
+            text = { Text(stringResource(ApsStrings.aimi_mode_settings_activate_confirm_message, modeDisplayName, durationMin)) },
             confirmButton = {
                 TextButton(onClick = { confirmActivate() }, enabled = !activating) {
-                    Text(stringResource(app.aaps.core.ui.R.string.ok))
+                    Text(stringResource(CoreUiStrings.ok))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showActivateConfirm = false }, enabled = !activating) {
-                    Text(stringResource(app.aaps.core.ui.R.string.cancel))
+                    Text(stringResource(CoreUiStrings.cancel))
                 }
             },
         )
