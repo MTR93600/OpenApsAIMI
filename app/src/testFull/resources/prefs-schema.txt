@@ -189,7 +189,9 @@ aimi_priority_max_iob_extra_u|DoubleKey|true
 aimi_priority_max_iob_factor|DoubleKey|true
 aimi_profile_advisor_compose|ApsIntentKey|false
 aimi_red_carpet_restore_threshold|DoubleKey|true
+aimi_remote_access_password_hash|RemoteControlStringKey|false
 aimi_remote_control_pin|AimiStringKey|true
+aimi_remote_follower_pin|RemoteControlStringKey|false
 aimi_smb_exercise_damping|DoubleKey|true
 aimi_smb_late_fat_damping|DoubleKey|true
 aimi_smb_tail_damping|DoubleKey|true

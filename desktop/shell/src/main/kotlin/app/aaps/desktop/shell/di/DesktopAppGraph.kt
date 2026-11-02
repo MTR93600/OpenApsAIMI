@@ -47,8 +47,12 @@ import app.aaps.implementation.notifications.SnackbarNotificationFallback
 import app.aaps.implementation.plugin.PluginStore
 import app.aaps.plugins.aps.openAPSAIMI.OpenAPSAIMIPlugin
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui.AuditorReportOpener
+import app.aaps.plugins.aps.openAPSAIMI.context.AimiRemoteContextImpl
+import app.aaps.plugins.aps.openAPSAIMI.context.AimiRemoteContextOptionalBinding
 import app.aaps.plugins.automation.AutomationRuntime
 import app.aaps.plugins.configuration.setupwizard.SWDefinition
+import app.aaps.plugins.sync.nsclientV3.remotecontrol.RemoteControlPlugin
+import app.aaps.plugins.sync.nsclientV3.remotecontrol.RemoteControlViewModel
 import app.aaps.shared.clientbindings.ClientGraphBindings
 import app.aaps.shared.clientbindings.ClientHistoryWindowGraph
 import app.aaps.ui.compose.history.HistoryScope
@@ -112,8 +116,26 @@ import java.io.File
  *
  * `AuditorReportOpener` is excluded for the same reason: it needs the AIMI notifier. Without the
  * plugin the Glass "Auditor report" tile is disabled, and the navigator gets no report to open.
+ *
+ * `AimiRemoteContextImpl` and its `AimiRemoteContextOptionalBinding` are excluded for the same
+ * reason: they are the AIMI context system, which needs the AIMI network and cache ports desktop does
+ * not have. Without them the AIMI Remote Control cannot
+ * send contexts, so `RemoteControlPlugin` and its `RemoteControlViewModel` are excluded too: desktop
+ * has no Remote Control entry, rather than one whose context buttons do nothing.
+ * `NsIncomingDataProcessor` then gets no context system and does not apply `AIMI_CONTEXT:` notes,
+ * which is right for a phone that runs no AIMI.
  */
-@DependencyGraph(AppScope::class, excludes = [OpenAPSAIMIPlugin::class, AuditorReportOpener::class])
+@DependencyGraph(
+    AppScope::class,
+    excludes = [
+        OpenAPSAIMIPlugin::class,
+        AuditorReportOpener::class,
+        AimiRemoteContextImpl::class,
+        AimiRemoteContextOptionalBinding::class,
+        RemoteControlPlugin::class,
+        RemoteControlViewModel::class
+    ]
+)
 interface DesktopAppGraph : MetroViewModelMultibindings {
 
     // Everything AapsAppRoot takes.

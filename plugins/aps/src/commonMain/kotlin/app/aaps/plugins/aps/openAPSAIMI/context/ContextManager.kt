@@ -672,17 +672,18 @@ class ContextManager @Inject constructor(
     /**
      * Inject ContextIntent received from Nightscout.
      * Skips local parsing, direct injection.
+     *
+     * @return true if the context was added; false if the PIN is wrong or missing, or it is known already.
      */
-    fun injectContextFromNS(intentId: String, intent: ContextIntent, receivedPin: String? = null) {
-        val configuredPin = preferences.get(AimiStringKey.RemoteControlPin).trim()
-        val incomingPin = receivedPin?.trim().orEmpty()
+    fun injectContextFromNS(intentId: String, intent: ContextIntent, receivedPin: String? = null): Boolean {
+        val configuredPin = preferences.get(AimiStringKey.RemoteControlPin)
         if (configuredPin.isBlank()) {
             aapsLogger.warn(LTag.APS, "[ContextManager] Rejecting NS context $intentId: AIMI remote PIN not configured")
-            return
+            return false
         }
-        if (incomingPin != configuredPin) {
+        if (!isRemotePinAccepted(configuredPin, receivedPin)) {
             aapsLogger.warn(LTag.APS, "[ContextManager] Rejecting NS context $intentId: invalid or missing PIN")
-            return
+            return false
         }
 
         // Check if already exists (deduplication) and insert in one step.
@@ -696,13 +697,14 @@ class ContextManager @Inject constructor(
         }
         if (!inserted) {
             aapsLogger.debug(LTag.APS, "[ContextManager] Context $intentId already exists, skipping NS injection")
-            return
+            return false
         }
 
         aapsLogger.info(LTag.APS, "[ContextManager] ✅ Injected context from NS: $intentId -> $intent")
 
         saveToStorage()
         notifyPatientStateChanged()
+        return true
     }
 
     private fun notifyPatientStateChanged() {

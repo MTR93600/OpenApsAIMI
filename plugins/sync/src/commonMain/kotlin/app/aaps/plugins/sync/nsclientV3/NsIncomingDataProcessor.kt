@@ -6,6 +6,7 @@ import app.aaps.core.data.model.GV
 import app.aaps.core.data.model.ICfg
 import app.aaps.core.data.model.TE
 import app.aaps.core.data.time.T
+import app.aaps.core.interfaces.aps.AimiRemoteContext
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.insulin.InsulinType
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -73,7 +74,13 @@ class NsIncomingDataProcessor(
     private val config: Config,
     private val profileStoreProvider: () -> ProfileStore,
     private val notificationManager: NotificationManager,
-    private val nsClientRepository: NSClientRepository
+    private val nsClientRepository: NSClientRepository,
+    /**
+     * The AIMI context system, which takes `AIMI_CONTEXT:` notes sent by the AIMI Remote Control.
+     * Null only on a build that has no AIMI at all (the desktop client excludes it from its graph):
+     * such a build cannot run contexts, so there is nothing to apply them to.
+     */
+    private val aimiRemoteContext: AimiRemoteContext? = null
 ) {
 
     /**
@@ -229,6 +236,11 @@ class NsIncomingDataProcessor(
                     is NSTherapyEvent           ->
                         if (preferences.get(BooleanKey.NsClientAcceptTherapyEvent) || config.AAPSCLIENT || doFullSync)
                             treatment.toTherapyEvent().let { therapyEvent ->
+                                // An AIMI context sent by the follower phone (AIMI remote control). It is
+                                // applied only with the right PIN, and stored as history either way.
+                                therapyEvent.note?.let { note ->
+                                    if (note.startsWith(TE.AIMI_CONTEXT_NOTE_PREFIX)) aimiRemoteContext?.applyNightscoutNote(note)
+                                }
                                 storeDataForDb.addToTherapyEvents(therapyEvent)
                                 if (therapyEvent.type == TE.Type.ANNOUNCEMENT &&
                                     preferences.get(BooleanKey.NsClientNotificationsFromAnnouncements) &&

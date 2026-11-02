@@ -3,6 +3,7 @@ package app.aaps.plugins.sync.nsclientV3
 import app.aaps.core.data.model.BCR
 import app.aaps.core.data.model.TrendArrow
 import app.aaps.core.data.time.T
+import app.aaps.core.interfaces.aps.AimiRemoteContext
 import app.aaps.core.interfaces.insulin.InsulinType
 import app.aaps.core.interfaces.nsclient.NSClientRepository
 import app.aaps.core.interfaces.nsclient.StoreDataForDb
@@ -25,6 +26,7 @@ import app.aaps.core.nssdk.localmodel.treatment.NSOfflineEvent
 import app.aaps.core.nssdk.localmodel.treatment.NSProfileSwitch
 import app.aaps.core.nssdk.localmodel.treatment.NSTemporaryBasal
 import app.aaps.core.nssdk.localmodel.treatment.NSTemporaryTarget
+import app.aaps.core.nssdk.localmodel.treatment.NSTherapyEvent
 import app.aaps.core.nssdk.localmodel.treatment.NSTreatment
 import app.aaps.plugins.sync.nsclientV3.extensions.toNSBolusWizard
 import app.aaps.shared.tests.TestBaseWithProfile
@@ -56,6 +58,7 @@ class NsIncomingDataProcessorTest : TestBaseWithProfile() {
     @Mock lateinit var nsClientRepository: NSClientRepository
     @Mock lateinit var nsClient: NsClient
     @Mock lateinit var dataSyncSelector: DataSyncSelector
+    @Mock lateinit var aimiRemoteContext: AimiRemoteContext
     private val nsiCfg = NSICfg(insulinLabel = "Fake", insulinEndTime = 9 * 3600 * 1000, insulinPeakTime = 60 * 60 * 1000, concentration = 1.0)
 
     @BeforeEach
@@ -80,8 +83,53 @@ class NsIncomingDataProcessorTest : TestBaseWithProfile() {
             config = config,
             profileStoreProvider = { profileStoreProvider() },
             notificationManager = notificationManager,
-            nsClientRepository = nsClientRepository
+            nsClientRepository = nsClientRepository,
+            aimiRemoteContext = aimiRemoteContext
         )
+    }
+
+    private fun note(text: String) = NSTherapyEvent(
+        date = now - T.mins(1).msecs(),
+        identifier = "note_id",
+        units = NsUnits.MG_DL,
+        utcOffset = null,
+        isValid = true,
+        eventType = EventType.NOTE,
+        notes = text,
+        pumpId = null,
+        endId = null,
+        pumpType = null,
+        pumpSerial = null,
+        duration = 0L
+    )
+
+    @Test
+    fun `an AIMI context note is given to the AIMI context system and still stored`() {
+        whenever(preferences.get(BooleanKey.NsClientAcceptTherapyEvent)).thenReturn(true)
+        val text = "AIMI_CONTEXT:CTX_1:PIN:4242:{\"type\":\"Activity\"}"
+
+        processor.processTreatments(listOf(note(text)), doFullSync = false)
+
+        verify(aimiRemoteContext).applyNightscoutNote(text)
+        verify(storeDataForDb).addToTherapyEvents(argThat { note == text })
+    }
+
+    @Test
+    fun `an AIMI context note is ignored when therapy events are not accepted`() {
+        whenever(preferences.get(BooleanKey.NsClientAcceptTherapyEvent)).thenReturn(false)
+
+        processor.processTreatments(listOf(note("AIMI_CONTEXT:CTX_1:PIN:4242:{}")), doFullSync = false)
+
+        verify(aimiRemoteContext, never()).applyNightscoutNote(any())
+    }
+
+    @Test
+    fun `an ordinary note is not given to the AIMI context system`() {
+        whenever(preferences.get(BooleanKey.NsClientAcceptTherapyEvent)).thenReturn(true)
+
+        processor.processTreatments(listOf(note("lunch 60")), doFullSync = false)
+
+        verify(aimiRemoteContext, never()).applyNightscoutNote(any())
     }
 
     @Test
