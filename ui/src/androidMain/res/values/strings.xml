@@ -543,4 +543,221 @@
     <string name="cal_saved_unsafe_fit">Calibration saved, but the calculated correction is outside the safe range, so it was not applied. Add another entry, or check your fingerstick value.</string>
     <string name="cal_large_gap_warning" comment="%1$s=fingerstick value with unit, for example 209 mg/dl. %2$s=current sensor value with unit, for example 309 mg/dl. Shown as advice only, the user can still save the entry.">Your blood value (%1$s) is very far from the sensor value (%2$s). One calibration cannot correct a gap this big. A sensor that stays this far off is usually replaced, so you can ask the maker for a replacement. Please talk about it with your care team.</string>
 
+    <!-- AIMI dashboard home (dev_OAPSAIMI SkinMinimal) -->
+    <string name="dashboard_warmup_a11y">Sensor warm-up in progress</string>
+    <string name="dashboard_hero_a11y" comment="Screen reader text of the glucose circle. %1$s=glucose value, e.g. 120, %2$s=age of the reading, e.g. 3 min">Blood glucose %1$s, %2$s</string>
+    <string name="dashboard_warmup_ends_at" comment="%1$s=local time when the sensor warm-up ends, e.g. 14:05. Shown under the countdown.">Ends %1$s</string>
+    <string name="dashboard_sensor_end_of_life" comment="%1$d=whole hours until the sensor expires. Example: Expires in 4 h">Expires in %1$d h</string>
+    <string name="dashboard_sensor_early_life" comment="%1$d=1-based day of the sensor session, %2$d=whole hours since it started. Example: Day 1 · settling · 6 h">Day %1$d · settling · %2$d h</string>
+    <string name="dashboard_metrics_overflow_a11y">Dashboard layout options</string>
+    <string name="dashboard_metrics_mode_simple">Simple</string>
+    <string name="dashboard_metrics_mode_extended">Extended</string>
+    <string name="dashboard_compact_label_steps" comment="Short label of the step count on the dashboard">Steps</string>
+    <string name="dashboard_compact_label_iob">IOB</string>
+    <string name="dashboard_compact_label_hr" comment="Short label of the heart rate on the dashboard">HR</string>
+    <string name="dashboard_compact_label_tbr">TBR</string>
+    <string name="dashboard_hero_sensor_badge_short" comment="%1$s=sensor age, e.g. 3d4h. Example: CGM 3d4h">CGM %1$s</string>
+    <string name="dashboard_hero_sensor_dialog_title">CGM</string>
+    <string name="dashboard_hero_cgm_smoothing_chip_two" comment="%1$s=sensor badge, e.g. CGM 3d4h, %2$s=smoothing quality, e.g. OK. Example: CGM 3d4h · OK">%1$s · %2$s</string>
+    <string name="dashboard_hero_cgm_smoothing_dialog_title">Sensor &amp; smoothing</string>
+    <string name="dashboard_hero_status_sensor_line" comment="%1$s=sensor age, e.g. 3d4h">Sensor · %1$s</string>
+    <string name="dashboard_hero_status_reading_line" comment="%1$s=age of the last glucose reading, e.g. 3 min ago">Reading · %1$s</string>
+    <string name="dashboard_aimi_adaptation_label">Adaptation</string>
+    <string name="dashboard_aimi_adaptation_no_data">Waiting for AIMI adaptation status</string>
+    <string name="dashboard_aimi_adaptation_a11y" comment="%1$s=the adaptation count summary. Example: AIMI adaptation status. Active 2 · Ready 1 · Waiting/learning 5 · Attention 1">AIMI adaptation status. %1$s</string>
+    <string name="dashboard_aimi_insights_line" comment="Three AIMI values in one line. %1$s=time to stable trajectory, %2$s=trajectory type, %3$s=relevance factor">%1$s · %2$s · %3$s</string>
+    <string name="dashboard_aimi_insight_t3c" comment="%1$d=minutes until AIMI expects a stable trajectory">🎯 %1$d min</string>
+    <string name="dashboard_aimi_insight_t3c_none">🎯 --</string>
+    <string name="dashboard_aimi_insight_trajectory_none">🌀 --</string>
+    <string name="dashboard_aimi_insight_factor" comment="%1$s=relevance factor with one decimal, e.g. 0.8">⚡ x%1$s</string>
+    <string name="dashboard_aimi_pulse_line" comment="%1$s=card title, e.g. Last AIMI run · 3 min, %2$s=short summary of the last AIMI decision">%1$s · %2$s</string>
+    <string name="dashboard_aimi_pulse_title">Last AIMI run</string>
+    <string name="dashboard_aimi_pulse_title_with_age" comment="%1$s=time since the last AIMI run, e.g. 3 min">Last AIMI run · %1$s</string>
+    <string name="dashboard_aimi_pulse_summary_none">No APS output yet. Run the loop or wait for the next glucose reading.</string>
+    <string name="dashboard_aimi_pulse_fallback" comment="%1$s=SMB in units, e.g. 0.30, %2$s=basal rate in U/h, e.g. 0.85">SMB %1$s U · scheduled basal %2$s U/h</string>
+    <string name="dashboard_aimi_pulse_hypo" comment="%1$s=short summary of the last AIMI decision">Hypo risk — %1$s</string>
+    <string name="dashboard_aimi_pulse_meta" comment="%1$s=SMB in units, e.g. 0.30, %2$s=basal rate with unit or a dash, %3$s=autosens percent, e.g. 100">SMB %1$s U · demand %2$s · AutoSens %3$s%%</string>
+    <string name="dashboard_tir_stats_format" comment="%1$s=average glucose with no unit, e.g. 132, %2$s=estimated A1C in percent with one decimal, e.g. 6.4">Avg %1$s - A1C %2$s%%</string>
+    <string name="dashboard_tir_stats_placeholder">Avg -- - A1C --</string>
+    <string name="dashboard_cob_line" comment="%1$s=carbs on board with unit, e.g. 12 g">COB: %1$s</string>
+    <string name="dashboard_rate_uh" comment="%1$s=insulin rate with two decimals, e.g. 0.85">%1$s U/h</string>
+    <string name="dashboard_rate_uh_percent" comment="%1$s=insulin rate with two decimals, e.g. 0.85, %2$d=percent of the profile basal, e.g. 120">%1$s U/h (%2$d%%)</string>
+    <string name="dashboard_pump_pill_reservoir" comment="%1$s=insulin left in the pump, e.g. 120.00 U">Res. %1$s</string>
+    <string name="dashboard_pump_pill_reservoir_a11y" comment="%1$s=insulin left in the pump, e.g. 120.00 U">Reservoir %1$s</string>
+    <string name="dashboard_pump_pill_battery" comment="%1$s=pump battery, e.g. 80 percent">Batt. %1$s</string>
+    <string name="dashboard_pump_pill_battery_a11y" comment="%1$s=pump battery, e.g. 80 percent">Pump battery %1$s</string>
+    <string name="dashboard_pump_pill_site" comment="%1$s=age of the infusion site, e.g. 2d5h">Site %1$s</string>
+    <string name="dashboard_pump_pill_site_a11y" comment="%1$s=age of the infusion site, e.g. 2d5h">Infusion site age %1$s</string>
+    <string name="dashboard_pump_pill_sensor" comment="%1$s=age of the sensor, e.g. 3d4h">Sens. %1$s</string>
+    <string name="dashboard_pump_pill_sensor_a11y" comment="%1$s=age of the sensor, e.g. 3d4h">Sensor age %1$s</string>
+    <string name="dashboard_battery_percent" comment="%1$d=pump battery in percent, e.g. 80">%1$d%%</string>
+    <string name="dashboard_adjustments">Active adjustments</string>
+    <string name="dashboard_no_adjustments">No active adjustments</string>
+    <string name="dashboard_run_loop">Run loop</string>
+    <string name="dashboard_loop_run_requested">Loop run requested</string>
+    <string name="dashboard_notifications_compact_header" comment="%1$d=number of notifications, %2$s=text of the first one. Example: 3× Pump battery low">%1$d× %2$s</string>
+    <string name="dashboard_staging_title_warmup">New sensor · warming up</string>
+    <string name="dashboard_staging_warmup_countdown" comment="%1$d=whole minutes left in the new sensor warm-up. Example: Ready in 25 min">Ready in %1$d min</string>
+    <string name="dashboard_staging_title_settling" comment="%1$d=whole hours until the new sensor is stable enough to switch to. Example: New sensor · stabilising · ready in 8 h">New sensor · stabilising · ready in %1$d h</string>
+    <string name="dashboard_staging_readings" comment="%1$d=how many glucose readings the new sensor has sent so far. Example: Readings collected: 12">Readings collected: %1$d</string>
+    <string name="dashboard_staging_ready">Ready to switch</string>
+    <string name="dashboard_staging_promote_button">Switch</string>
+    <string name="dashboard_staging_promote_ok">New sensor is now active</string>
+    <string name="dashboard_staging_promote_ok_bound_failed">New sensor is now active, but older calibrations were not cleared. Check your calibrations.</string>
+    <string name="dashboard_staging_promote_ok_follow_up_failed">New sensor is now active, but a later step failed. Check the sensor screen.</string>
+    <string name="dashboard_staging_promote_rejected_absent">No new sensor to switch to</string>
+    <string name="dashboard_staging_promote_rejected_not_settled">New sensor is not stable yet</string>
+    <string name="dashboard_staging_promote_rejected_no_glucose">New sensor has no valid reading yet</string>
+    <string name="dashboard_staging_promote_rejected_no_recent_glucose">New sensor has not sent a reading in the last minutes</string>
+    <string name="dashboard_staging_promote_rejected_loop_busy">Loop is busy. Try again in a moment.</string>
+    <string name="dashboard_quick_advisor">Advisor</string>
+    <string name="dashboard_quick_advisor_a11y">Open AIMI advisor recommendations</string>
+    <string name="dashboard_quick_advisor_announced">Advisor opened</string>
+    <string name="dashboard_quick_adjust">Adjust</string>
+    <string name="dashboard_quick_adjust_a11y">Open adjustment details</string>
+    <string name="dashboard_quick_adjust_announced">Adjustments opened</string>
+    <string name="dashboard_quick_meal">Meal</string>
+    <string name="dashboard_quick_meal_a11y">Open the meal advisor</string>
+    <string name="dashboard_quick_meal_announced">Meal advisor opened</string>
+    <string name="dashboard_quick_context">AIMI Context</string>
+    <string name="dashboard_quick_context_a11y">Open AIMI context</string>
+    <string name="dashboard_quick_context_announced">AIMI context opened</string>
+    <string name="dashboard_trajectory_open_diverging">↗️ Trajectory diverging - BG not controlled</string>
+    <string name="dashboard_trajectory_slow_drift">🐌 Slow drift away from target</string>
+    <string name="dashboard_trajectory_closing_converging">🔄 Trajectory closing - returning to target</string>
+    <string name="dashboard_trajectory_tight_spiral">🌀 Trajectory compressed - over-correction risk</string>
+    <string name="dashboard_trajectory_stable_orbit">⭕ Stable orbit maintained</string>
+    <string name="dashboard_trajectory_hovering">➖ Hovering stable but off-target</string>
+    <string name="dashboard_trajectory_uncertain">❓ Trajectory unclear - need more data</string>
+    <string name="dashboard_trajectory_metrics" comment="Trajectory numbers, not words. %1$s=curvature, %2$s=energy in units, %3$s=openness, %4$s=relevance">κ=%1$s  E=%2$sU  Θ=%3$s  R=%4$s</string>
+    <!-- Adjustment details screen -->
+    <string name="dashboard_adjustments_details_title">Adjustments</string>
+    <string name="dashboard_adjustment_decision" comment="%1$s=SMB in units, e.g. 0.30, %2$s=basal rate in U/h or ---">AIMI decision: SMB %1$s U | Basal %2$s U/h</string>
+    <string name="dashboard_adjustment_decision_unavailable">AIMI decision: unavailable</string>
+    <string name="dashboard_adjustment_glycemia" comment="%1$s=glucose, %2$s=trend arrow, %3$s=glucose change, e.g. Δ +5">Glycemia: %1$s %2$s (%3$s)</string>
+    <string name="dashboard_adjustment_prediction_unavailable">Prediction: unavailable</string>
+    <string name="dashboard_adjustment_scenario_projection" comment="%1$s=predicted glucose of the best scenario, %2$s=predicted glucose of the floor scenario, %3$d=minutes ahead">Scenario %1$s · Floor %2$s (+%3$d min)</string>
+    <string name="dashboard_adjustment_iob_activity" comment="%1$s=insulin on board with unit, e.g. 1.20 U, %2$s=autosens percent, e.g. 100">IOB: %1$s | Activity: %2$s%%</string>
+    <string name="dashboard_adjustment_mode" comment="%1$s=meal or activity mode, e.g. Lunch, %2$s=time left, e.g. 45 min">Mode: %1$s (%2$s)</string>
+    <string name="dashboard_adjustment_safety" comment="%1$s=safety level, e.g. Neutral, %2$s=reasons, e.g. BG 120, stable trend">Safety: %1$s (%2$s)</string>
+    <string name="dashboard_adjustment_safety_hypo" comment="%1$s=reasons, e.g. BG 80, falling trend">Hypo risk! %1$s</string>
+    <string name="dashboard_adjustment_safety_unknown">Safety: unavailable</string>
+    <string name="dashboard_adjustment_safety_level_critical">Critical</string>
+    <string name="dashboard_adjustment_safety_level_limited">Limited</string>
+    <string name="dashboard_adjustment_safety_level_normal">Neutral</string>
+    <string name="dashboard_adjustment_reason_bg" comment="%1$s=glucose with no unit, e.g. 120">BG %1$s</string>
+    <string name="dashboard_adjustment_reason_trend" comment="%1$s=trend word, e.g. rising">%1$s trend</string>
+    <string name="dashboard_adjustment_reason_list" comment="Two safety reasons. %1$s=glucose reason, e.g. BG 120, %2$s=trend reason, e.g. stable trend">%1$s, %2$s</string>
+    <string name="dashboard_adjustment_reason_unknown">no recent data</string>
+    <string name="dashboard_adjustment_trend_rising">rising</string>
+    <string name="dashboard_adjustment_trend_falling">falling</string>
+    <string name="dashboard_adjustment_trend_stable">stable</string>
+    <string name="dashboard_adjustment_temp_basal" comment="%1$s=temp basal, e.g. 1.20 U/h 30 min">Temp basal: %1$s</string>
+    <string name="dashboard_adjustment_temp_target" comment="%1$s=target range, %2$s=time left">Temp target: %1$s %2$s</string>
+    <string name="dashboard_adjustment_extended_bolus" comment="%1$s=extended bolus description">Extended bolus: %1$s</string>
+    <string name="dashboard_adjustment_peak_label">Peak time</string>
+    <string name="dashboard_adjustment_dia_label">DIA</string>
+    <string name="dashboard_adjustment_target_label">Target</string>
+    <string name="dashboard_adjustment_smb_label">SMB</string>
+    <string name="dashboard_adjustment_basal_label">Basal</string>
+    <string name="dashboard_adjustment_minutes" comment="%1$s=minutes with no decimals, e.g. 75">%1$s min</string>
+    <string name="dashboard_adjustment_hours" comment="%1$s=hours with one decimal, e.g. 5.0">%1$s h</string>
+    <string name="dashboard_adjustment_units" comment="%1$s=insulin with two decimals, e.g. 0.30">%1$s U</string>
+    <string name="dashboard_adjustment_parameters_title">AIMI parameters</string>
+    <string name="dashboard_adjustment_reason_title">Reason</string>
+    <string name="dashboard_mode_meal">Meal</string>
+    <string name="dashboard_mode_breakfast">Breakfast</string>
+    <string name="dashboard_mode_lunch">Lunch</string>
+    <string name="dashboard_mode_dinner">Dinner</string>
+    <string name="dashboard_mode_highcarb">High carb</string>
+    <string name="dashboard_mode_lowcarb">Low carb</string>
+    <string name="dashboard_mode_snack">Snack</string>
+    <string name="dashboard_mode_sport">Sport</string>
+    <string name="dashboard_mode_sleep">Sleep</string>
+    <!-- AIMI adaptation status screen -->
+    <string name="aimi_adaptation_status_title">AIMI adaptation status</string>
+    <string name="aimi_adaptation_status_no_data">Waiting for AIMI adaptation status. Results will appear after an AIMI loop run.</string>
+    <string name="aimi_adaptation_status_counts" comment="%1$d=active modules, %2$d=ready modules, %3$d=waiting or learning modules, %4$d=blocked or stale modules. Example: Active 2 · Ready 1 · Waiting/learning 5 · Attention 1">Active %1$d · Ready %2$d · Waiting/learning %3$d · Attention %4$d</string>
+    <string name="aimi_adaptation_no_module_update">No learner update yet</string>
+    <string name="aimi_adaptation_progress_format" comment="%1$s=evidence type, %2$d=completed evidence count, %3$d=required evidence count. Example: Samples: 4 / 12">%1$s: %2$d / %3$d</string>
+    <string name="aimi_adaptation_metrics_title">Metrics</string>
+    <string name="aimi_adaptation_freshness_now">just now</string>
+    <string name="aimi_adaptation_freshness_minutes" comment="%1$d=whole minutes since the update. Example: 4 min ago">%1$d min ago</string>
+    <string name="aimi_adaptation_freshness_hours" comment="%1$d=whole hours since the update. Example: 2 h ago">%1$d h ago</string>
+    <string name="aimi_adaptation_last_update_format" comment="%1$s=date and time, %2$s=freshness. Example: Last update: 7/24/26, 23:10 · 4 min ago">Last update: %1$s · %2$s</string>
+    <string name="aimi_adaptation_module_basal_neural_governance">Basal neural governance</string>
+    <string name="aimi_adaptation_module_unified_reactivity">Unified reactivity</string>
+    <string name="aimi_adaptation_module_basal_multi_scale">Basal multi-scale learner</string>
+    <string name="aimi_adaptation_module_pkpd">Adaptive PK/PD</string>
+    <string name="aimi_adaptation_module_online_learner">Online learner</string>
+    <string name="aimi_adaptation_module_night_growth_resistance">Night growth resistance</string>
+    <string name="aimi_adaptation_module_wcycle">Cycle adaptation</string>
+    <string name="aimi_adaptation_module_peak_governor">Peak governor</string>
+    <string name="aimi_adaptation_module_dia_governor">DIA governor</string>
+    <string name="aimi_adaptation_phase_disabled">Disabled</string>
+    <string name="aimi_adaptation_phase_waiting">Waiting</string>
+    <string name="aimi_adaptation_phase_learning">Learning</string>
+    <string name="aimi_adaptation_phase_ready">Ready</string>
+    <string name="aimi_adaptation_phase_active">Active</string>
+    <string name="aimi_adaptation_phase_stale">Stale</string>
+    <string name="aimi_adaptation_phase_blocked">Blocked</string>
+    <string name="aimi_adaptation_reason_feature_disabled">Feature is disabled</string>
+    <string name="aimi_adaptation_reason_waiting_for_samples">Waiting for enough samples</string>
+    <string name="aimi_adaptation_reason_waiting_for_events">Waiting for qualifying events</string>
+    <string name="aimi_adaptation_reason_waiting_for_feedbacks">Waiting for evaluated feedback</string>
+    <string name="aimi_adaptation_reason_waiting_for_observations">Waiting for observations</string>
+    <string name="aimi_adaptation_reason_warmup">Warm-up in progress</string>
+    <string name="aimi_adaptation_reason_learning_in_progress">Learning in progress</string>
+    <string name="aimi_adaptation_reason_ready">Ready to adapt</string>
+    <string name="aimi_adaptation_reason_active">Adaptation is active</string>
+    <string name="aimi_adaptation_reason_data_stale">Adaptation data is stale</string>
+    <string name="aimi_adaptation_reason_safety_hold">Held by a safety rule</string>
+    <string name="aimi_adaptation_reason_context_blocked">Blocked by the current context</string>
+    <string name="aimi_adaptation_reason_dependency_disabled">A required dependency is disabled</string>
+    <string name="aimi_adaptation_reason_no_result">No adaptation result yet</string>
+    <string name="aimi_adaptation_evidence_samples">Samples</string>
+    <string name="aimi_adaptation_evidence_events">Events</string>
+    <string name="aimi_adaptation_evidence_feedbacks">Feedback</string>
+    <string name="aimi_adaptation_evidence_observations">Observations</string>
+    <string name="aimi_adaptation_metric_sample_count">Samples</string>
+    <string name="aimi_adaptation_metric_short_buffer_count">Short buffer</string>
+    <string name="aimi_adaptation_metric_medium_buffer_count">Medium buffer</string>
+    <string name="aimi_adaptation_metric_fasting_sample_count">Fasting samples</string>
+    <string name="aimi_adaptation_metric_short_update_count">Short updates</string>
+    <string name="aimi_adaptation_metric_medium_update_count">Medium updates</string>
+    <string name="aimi_adaptation_metric_long_update_count">Long updates</string>
+    <string name="aimi_adaptation_metric_short_analysis_count">Short analyses</string>
+    <string name="aimi_adaptation_metric_long_analysis_count">Long analyses</string>
+    <string name="aimi_adaptation_metric_pending_prediction_count">Pending predictions</string>
+    <string name="aimi_adaptation_metric_evaluated_feedback_count">Evaluated feedback</string>
+    <string name="aimi_adaptation_metric_release_count">Exercise-release corrections</string>
+    <string name="aimi_adaptation_metric_accepted_update_count">Accepted updates</string>
+    <string name="aimi_adaptation_metric_short_multiplier">Short multiplier</string>
+    <string name="aimi_adaptation_metric_medium_multiplier">Medium multiplier</string>
+    <string name="aimi_adaptation_metric_long_multiplier">Long multiplier</string>
+    <string name="aimi_adaptation_metric_combined_multiplier">Combined multiplier</string>
+    <string name="aimi_adaptation_metric_global_factor">Global factor</string>
+    <string name="aimi_adaptation_metric_short_factor">Short factor</string>
+    <string name="aimi_adaptation_metric_segment_factor">Segment factor</string>
+    <string name="aimi_adaptation_metric_sensitivity_factor">Sensitivity factor</string>
+    <string name="aimi_adaptation_metric_last_error">Last prediction error</string>
+    <string name="aimi_adaptation_metric_dia">DIA</string>
+    <string name="aimi_adaptation_metric_peak">Peak time</string>
+    <string name="aimi_adaptation_metric_tir">Time in range</string>
+    <string name="aimi_adaptation_metric_cv">Glucose variability</string>
+    <string name="aimi_adaptation_metric_confidence">Confidence</string>
+    <string name="aimi_adaptation_metric_smb_multiplier">SMB multiplier</string>
+    <string name="aimi_adaptation_metric_basal_multiplier">Basal multiplier</string>
+    <string name="aimi_adaptation_metric_extra_iob_headroom">Extra IOB headroom</string>
+    <string name="aimi_adaptation_metric_day_in_cycle">Day in cycle</string>
+    <string name="aimi_adaptation_metric_ic_multiplier">IC multiplier</string>
+    <string name="aimi_adaptation_metric_effective_value">Effective value</string>
+    <string name="aimi_adaptation_metric_prior_value">Prior value</string>
+    <string name="aimi_adaptation_metric_learned_value">Learned value</string>
+    <string name="aimi_adaptation_metric_value_hours" comment="%1$s=a duration in hours with one decimal. Example: 6.0 h">%1$s h</string>
+    <string name="aimi_adaptation_metric_value_minutes" comment="%1$s=a duration in minutes. Example: 55 min">%1$s min</string>
+    <string name="aimi_adaptation_metric_value_percent" comment="%1$s=a percentage with one decimal. Example: 82.5 percent">%1$s%%</string>
+    <string name="aimi_adaptation_metric_value_units" comment="%1$s=insulin units with two decimals. Example: 0.50 U">%1$s U</string>
+    <string name="aimi_adaptation_metric_value_mgdl" comment="%1$s=a glucose error in mg/dL with one decimal. Example: 12.5 mg/dL">%1$s mg/dL</string>
+
 </resources>

@@ -15,12 +15,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.aaps.core.interfaces.notifications.Notification
 import app.aaps.core.ui.compose.formatKmp
 
 @Composable
-internal fun DashboardNotificationsComposeList(
+fun DashboardNotificationsComposeList(
     notifications: List<DashboardNotificationUiItem>,
     strings: DashboardCardStrings,
     onDismissNotification: ((Int) -> Unit)? = null,
@@ -83,7 +84,7 @@ internal fun DashboardNotificationsComposeList(
 private fun NotificationItemCard(
     item: DashboardNotificationUiItem,
     strings: DashboardCardStrings,
-    itemPadding: androidx.compose.ui.unit.Dp,
+    itemPadding: Dp,
     onDismiss: () -> Unit,
 ) {
     val bg: Color = when (item.level) {

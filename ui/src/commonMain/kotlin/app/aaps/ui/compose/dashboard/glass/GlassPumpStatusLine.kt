@@ -3,6 +3,9 @@ package app.aaps.ui.compose.dashboard.glass
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
+import app.aaps.core.interfaces.resources.TextResolver
+import app.aaps.core.ui.CoreUiStrings
+import app.aaps.ui.UiStrings
 
 /**
  * The pump line under the Glass charts: reservoir, "pump unreachable", site age and sensor age.
@@ -60,6 +63,18 @@ internal object GlassPumpStatusRules {
         }
     }
 }
+
+/**
+ * An age as the pump line and the AIMI dashboard show it: the two largest units ("2d5h", "3h 20m",
+ * "45 min"), or "n/a" when unknown. Same text as DEV `DateUtil.age(…, useShortText = true)`.
+ */
+internal fun formatDeviceAge(rh: TextResolver, ageMs: Long?): String =
+    when (val age = ageMs?.let { GlassPumpStatusRules.age(it) }) {
+        null                                    -> rh.gs(CoreUiStrings.value_unavailable_short)
+        is GlassPumpStatusRules.Age.DaysHours    -> rh.gs(UiStrings.status_age_short, age.days, age.hours)
+        is GlassPumpStatusRules.Age.HoursMinutes -> rh.gs(CoreUiStrings.format_hour_minute, age.hours, age.minutes)
+        is GlassPumpStatusRules.Age.Minutes      -> rh.gs(CoreUiStrings.format_mins, age.minutes)
+    }
 
 private val PLACEHOLDER = Regex("""%%|%(?:(\d+)\$)?s""")
 

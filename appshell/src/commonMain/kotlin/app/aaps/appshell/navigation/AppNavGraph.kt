@@ -80,6 +80,8 @@ import app.aaps.ui.compose.carbsDialog.CarbsDialogScreen
 import app.aaps.ui.compose.careDialog.CareDialogScreen
 import app.aaps.ui.compose.configuration.ConfigurationScreen
 import app.aaps.ui.compose.configuration.ConfigurationViewModel
+import app.aaps.ui.compose.dashboard.aimi.AimiAdaptationStatusRoute
+import app.aaps.ui.compose.dashboard.aimi.AimiAdjustmentDetailsScreen
 import app.aaps.ui.compose.dashboard.glass.GlassBasalDetailScreen
 import app.aaps.ui.compose.dashboard.glass.GlassBatteryDetailScreen
 import app.aaps.ui.compose.dashboard.glass.GlassCannulaDetailScreen
@@ -630,6 +632,15 @@ fun NavGraphBuilder.appNavGraph(
             viewModel = runningModeManagementViewModel,
             onNavigateBack = { navController.safePopBackStack() }
         )
+    }
+
+    // AIMI dashboard information screens. Display only, no protection.
+    composable(AppRoute.AimiAdaptationStatus.route) {
+        AimiAdaptationStatusRoute(onBack = { navController.safePopBackStack() })
+    }
+
+    composable(AppRoute.AimiAdjustmentDetails.route) {
+        AimiAdjustmentDetailsScreen(onBack = { navController.safePopBackStack() })
     }
 
     composable(AppRoute.ProfileHelper.route) {

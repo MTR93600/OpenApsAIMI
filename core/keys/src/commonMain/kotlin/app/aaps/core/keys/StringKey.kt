@@ -108,11 +108,13 @@ enum class StringKey(
     ),
     GeneralDashboardSkin(
         key = "dashboard_home_skin",
-        defaultValue = "overview",
+        // The AIMI dashboard is the home screen of a new install, as on dev_OAPSAIMI (SkinMinimal).
+        defaultValue = "aimi_dashboard",
         title = KeysStrings.pref_title_dashboard_home_skin,
         preferenceType = PreferenceType.LIST,
         entriesRefs = mapOf(
             "overview" to KeysStrings.pref_dashboard_home_overview,
+            "aimi_dashboard" to KeysStrings.pref_dashboard_home_aimi,
             "dashboard_v2" to KeysStrings.pref_dashboard_home_v2,
             "glass" to KeysStrings.pref_dashboard_home_glass,
         ),

@@ -296,6 +296,16 @@ enum class BooleanKey(
         KeysStrings.pref_summary_overview_show_hybrid_aimi_pulse,
         defaultedBySM = true
     ),
+    /**
+     * AIMI dashboard: true shows the extended metrics (TIR bar, AIMI insights, adaptation card), false the
+     * compact row (steps, IOB, heart rate, TBR). Switched from the dashboard itself. No [defaultedBySM]: in
+     * simple mode the stored value would then be ignored, as on `dev_OAPSAIMI`.
+     */
+    OverviewDashboardExtendedMetrics(
+        "overview_dashboard_extended_metrics", false,
+        KeysStrings.pref_title_overview_dashboard_extended_metrics,
+        KeysStrings.pref_summary_overview_dashboard_extended_metrics
+    ),
     OApsAIMIMLtraining("key_enable_ML_training", false, title = KeysStrings.pref_title_oaps_aimi_m_ltraining),
     OApsAIMISmbTrainingRelaxedFilter(
         "aimi_smb_training_relaxed_filter", true,

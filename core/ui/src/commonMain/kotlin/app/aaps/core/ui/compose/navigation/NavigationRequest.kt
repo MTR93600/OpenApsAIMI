@@ -24,6 +24,22 @@ sealed class NavigationRequest {
      * protection, as on `dev_OAPSAIMI`: the report only shows text.
      */
     data object AuditorReport : NavigationRequest()
+
+    /**
+     * A screen opened from the AIMI dashboard home. They only show values, so they need no protection,
+     * as on `dev_OAPSAIMI`.
+     */
+    data class AimiDashboard(val destination: AimiDashboardDestination) : NavigationRequest()
+}
+
+/** The screens a [NavigationRequest.AimiDashboard] can open. */
+enum class AimiDashboardDestination {
+
+    /** State of each AIMI learner (`AimiAdaptationStatusActivity` on `dev_OAPSAIMI`). */
+    ADAPTATION_STATUS,
+
+    /** The last AIMI decision and the active adjustments (`AdjustmentDetailsActivity` on `dev_OAPSAIMI`). */
+    ADJUSTMENT_DETAILS,
 }
 
 /**

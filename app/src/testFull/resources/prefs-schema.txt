@@ -732,6 +732,7 @@ openhumans_expires_at|OhLongKey|true
 openhumans_project_member_id|OhStringKey|true
 openhumans_refresh_token|OhStringKey|true
 openhumans_upload_offset|OhLongKey|false
+overview_dashboard_extended_metrics|BooleanKey|true
 overview_show_hybrid_aimi_pulse|BooleanKey|true
 patch_expiration|MedtrumBooleanKey|true
 patch_id|MedtrumLongNonKey|true
@@ -766,6 +767,7 @@ quick_launch_actions|StringNonKey|true
 raise_urgent_alarms_as_android_notification|BooleanKey|true
 randombg_interval_min|IntKey|true
 randombg_randomize|BooleanKey|true
+rangetodisplay|IntNonKey|true
 resistance_lowers_target|BooleanKey|true
 rs_last_clear_key_request|DanaLongKey|true
 rs_logcanulachange|DanaBooleanKey|true

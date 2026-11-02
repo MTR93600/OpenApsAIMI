@@ -33,6 +33,7 @@ import app.aaps.ui.UiStrings
 import app.aaps.ui.compose.loopSheet.LoopActionViewModel
 import app.aaps.ui.compose.dashboard.DashboardHomeSelection
 import app.aaps.ui.compose.dashboard.DashboardV2GraphScreen
+import app.aaps.ui.compose.dashboard.aimi.AimiDashboardHome
 import app.aaps.ui.compose.dashboard.glass.GlassDashboardHome
 import app.aaps.ui.compose.maintenance.ImportSource
 import app.aaps.ui.compose.maintenance.MaintenanceViewModel
@@ -272,6 +273,20 @@ fun OverviewScreen(
             }
         },
         dashboardV2Content = when (homeSelection) {
+            DashboardHomeSelection.AIMI_DASHBOARD -> { commandsAllowed ->
+                AimiDashboardHome(
+                    graphViewModel = graphViewModel,
+                    chipsViewModel = chipsViewModel,
+                    notifications = notifications,
+                    onDismissNotification = { notification -> notificationManager.dismiss(NotificationHandle(notification.instanceKey)) },
+                    onNotificationActionClick = onNotificationActionClick,
+                    aimiDashboardData = aimiGlassDashboardData,
+                    cgmSource = activePlugin.activeBgSource as? CgmWarmupProvider,
+                    availablePluginClassNames = activePlugin.getPluginsList().mapNotNull { it::class.simpleName }.toSet(),
+                    commandsAllowed = commandsAllowed,
+                    onNavigate = onNavigate,
+                )
+            }
             DashboardHomeSelection.DASHBOARD_V2 -> { commandsAllowed ->
                 DashboardV2GraphScreen(
                     graphViewModel = graphViewModel,
