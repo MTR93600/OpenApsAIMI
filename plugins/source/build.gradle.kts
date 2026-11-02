@@ -91,6 +91,9 @@ kotlin {
                 // Fork-only CGM source plugin whose wrapper is still Android only. Libre 3 stays
                 // here until it gets a shared caller, the way Dexcom ONE+ just did.
                 implementation(project(":plugins:libre3"))
+                // Native Eversense driver, a plain Android library (Android BLE and JVM
+                // BouncyCastle). Android only, so the Eversense source is absent on iOS.
+                implementation(project(":plugins:eversense"))
 
                 implementation(project.dependencies.platform(libs.androidx.compose.bom))
                 implementation(libs.androidx.compose.material3)

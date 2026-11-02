@@ -2,6 +2,7 @@ package app.aaps.ios.shell.platform
 
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.source.DexcomBoyda
+import app.aaps.core.interfaces.source.EversenseCalibrationSource
 import app.aaps.core.interfaces.source.XDripSource
 import app.aaps.core.interfaces.sync.DataSyncSelector
 import app.aaps.core.interfaces.sync.DataSyncSelectorXdrip
@@ -27,7 +28,11 @@ import dev.zacsweers.metro.SingleIn
  * `MaintenanceViewModel` reads the xDrip upload queue. Each of them asks "is this enabled?" and
  * hides the option when the answer is no - which is right, because none of them can exist here.
  *
- * So all four report themselves disabled, which is true, and every call is logged. They are answers
+ * Eversense is the same answer for a different reason: its native driver is Android BLE with JVM
+ * BouncyCastle crypto, and there is no CoreBluetooth port. The Eversense source is not in the iOS
+ * plugin list at all, and [IosEversenseCalibrationSource] keeps its quick launch entry hidden.
+ *
+ * So all five report themselves disabled, which is true, and every call is logged. They are answers
  * about what this platform is, not placeholders waiting to be finished.
  */
 
@@ -100,4 +105,32 @@ class IosDexcomBoyda(
     override fun requestPermissionIfNeeded() = aapsLogger.notOnThisPlatform("DexcomBoyda.requestPermissionIfNeeded")
 
     override fun dexcomPackages(): List<String> = emptyList()
+}
+
+/**
+ * Eversense calibration over Bluetooth. The native Eversense driver is Android only, so it is never
+ * the BG source here, and the quick launch entry that asks [isEnabled] is never shown.
+ */
+@SingleIn(AppScope::class)
+@ContributesBinding(AppScope::class)
+@Inject
+class IosEversenseCalibrationSource(
+    private val aapsLogger: AAPSLogger
+) : EversenseCalibrationSource {
+
+    override fun isEnabled(): Boolean = false
+
+    override fun isConnected(): Boolean = false
+
+    override fun isReadyToCalibrate(): Boolean = false
+
+    override fun readinessMessage(): String {
+        aapsLogger.notOnThisPlatform("EversenseCalibrationSource.readinessMessage - no Eversense driver on iOS")
+        return ""
+    }
+
+    override suspend fun calibrate(bgMgDl: Int): Boolean {
+        aapsLogger.notOnThisPlatform("EversenseCalibrationSource.calibrate - no Eversense driver on iOS")
+        return false
+    }
 }

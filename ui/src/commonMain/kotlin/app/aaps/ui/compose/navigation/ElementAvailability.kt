@@ -4,6 +4,7 @@ import app.aaps.core.interfaces.navigation.ElementType
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.source.DexcomBoyda
+import app.aaps.core.interfaces.source.EversenseCalibrationSource
 import app.aaps.core.interfaces.source.XDripSource
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
@@ -22,22 +23,26 @@ import dev.zacsweers.metro.SingleIn
 class ElementAvailability(
     private val xDripSource: XDripSource,
     private val dexcomBoyda: DexcomBoyda,
+    private val eversenseCalibrationSource: EversenseCalibrationSource,
     private val activePlugin: ActivePlugin
 ) {
 
     fun isAvailable(elementType: ElementType): Boolean = when (elementType) {
-        ElementType.CALIBRATION    -> xDripSource.isEnabled() || isCalibrationOverrideActive()
-        ElementType.CGM_XDRIP      -> xDripSource.isEnabled()
-        ElementType.CGM_DEX        -> dexcomBoyda.isEnabled()
+        ElementType.CALIBRATION           -> xDripSource.isEnabled() || isCalibrationOverrideActive()
+        ElementType.CGM_XDRIP             -> xDripSource.isEnabled()
+        ElementType.CGM_DEX               -> dexcomBoyda.isEnabled()
+        // Only while Eversense is the BG source in use. Never on iOS or the desktop: the driver
+        // is Android only, and the binding there reports itself disabled.
+        ElementType.EVERSENSE_CALIBRATION -> eversenseCalibrationSource.isEnabled()
 
         // Patch pumps fill and change the battery in their own activation wizard, so they have no
         // Refill / ReplaceBattery capability. Same rule as the Manage sheet, but without its
         // isInitialized check: this is a capability, not a connection state, and QuickLaunch removes
         // unavailable entries from the saved toolbar for good.
-        ElementType.FILL           -> activePlugin.activePump.pumpDescription.isRefillingCapable
-        ElementType.BATTERY_CHANGE -> activePlugin.activePump.let { it.pumpDescription.isBatteryReplaceable || it.isBatteryChangeLoggingEnabled() }
+        ElementType.FILL                  -> activePlugin.activePump.pumpDescription.isRefillingCapable
+        ElementType.BATTERY_CHANGE        -> activePlugin.activePump.let { it.pumpDescription.isBatteryReplaceable || it.isBatteryChangeLoggingEnabled() }
 
-        else                       -> true
+        else                              -> true
     }
 
     /**

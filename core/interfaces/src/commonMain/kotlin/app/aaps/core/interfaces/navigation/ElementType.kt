@@ -42,6 +42,13 @@ enum class ElementType(
     // On a client a calibration goes to the master as BatchAction.Calibration, which hands it to its CGM plugin.
     CALIBRATION(category = ElementCategory.CGM, searchable = true, role = ClientRole.Caregiver),
 
+    // Eversense's own calibration: writes a fingerstick value straight to the transmitter over
+    // Bluetooth, not through the activeCalibration / xDrip broadcast that CALIBRATION above uses.
+    // A client has no Bluetooth link to the transmitter, so this stays local to the phone that runs
+    // the Eversense source. It is hidden wherever Eversense is not the BG source in use, which
+    // includes iOS. The role is the same as CALIBRATION, because both change later sensor values.
+    EVERSENSE_CALIBRATION(category = ElementCategory.CGM, searchable = true, role = ClientRole.Caregiver),
+
     // Profile & Targets — minimum level is BOLUS; screen mode (PLAY/EDIT) determined by granted auth level.
     // Mutating editors whose writes ride Client-Control → CLIENT_PAIRED (hidden on an unpaired client).
     // PROFILE_MANAGEMENT is the exception and stays visible: profiles are state an unpaired client still

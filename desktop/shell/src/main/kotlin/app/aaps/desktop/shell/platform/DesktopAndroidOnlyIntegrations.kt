@@ -3,6 +3,7 @@ package app.aaps.desktop.shell.platform
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.source.DexcomBoyda
+import app.aaps.core.interfaces.source.EversenseCalibrationSource
 import app.aaps.core.interfaces.source.XDripSource
 import app.aaps.core.interfaces.sync.DataSyncSelector
 import app.aaps.core.interfaces.sync.DataSyncSelectorXdrip
@@ -108,5 +109,30 @@ class DesktopDataSyncSelectorXdrip(
 
     override fun profileReceived(timestamp: Long) {
         aapsLogger.debug(LTag.CORE, "No xDrip sync on desktop; profile at $timestamp ignored")
+    }
+}
+
+/**
+ * The Eversense transmitter is reached over Android Bluetooth by an Android only driver, so a
+ * desktop never has it as the BG source. [isEnabled] false keeps the calibration entry hidden.
+ */
+@ContributesBinding(AppScope::class)
+@SingleIn(AppScope::class)
+@Inject
+class DesktopEversenseCalibrationSource(
+    private val aapsLogger: AAPSLogger
+) : EversenseCalibrationSource {
+
+    override fun isEnabled(): Boolean = false
+
+    override fun isConnected(): Boolean = false
+
+    override fun isReadyToCalibrate(): Boolean = false
+
+    override fun readinessMessage(): String = ""
+
+    override suspend fun calibrate(bgMgDl: Int): Boolean {
+        aapsLogger.error(LTag.CORE, "Desktop cannot calibrate an Eversense transmitter")
+        return false
     }
 }

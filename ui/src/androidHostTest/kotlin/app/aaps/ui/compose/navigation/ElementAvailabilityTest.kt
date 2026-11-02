@@ -8,6 +8,7 @@ import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.pump.PumpWithConcentration
 import app.aaps.core.interfaces.source.DexcomBoyda
+import app.aaps.core.interfaces.source.EversenseCalibrationSource
 import app.aaps.core.interfaces.source.XDripSource
 import app.aaps.shared.tests.TestBase
 import com.google.common.truth.Truth.assertThat
@@ -23,6 +24,7 @@ import org.mockito.kotlin.whenever
  *  - CGM_XDRIP → only when XDrip source plugin is enabled
  *  - CGM_DEX   → only when Dexcom/BYODA source plugin is enabled
  *  - CALIBRATION → when XDrip is enabled OR a non-default calibration override plugin is active
+ *  - EVERSENSE_CALIBRATION → only when the Eversense source plugin is enabled
  *  - FILL → only when the pump can be refilled (not on patch pumps)
  *  - BATTERY_CHANGE → when the pump battery is replaceable OR battery change logging is enabled
  *  - everything else → always available
@@ -31,13 +33,14 @@ class ElementAvailabilityTest : TestBase() {
 
     @Mock lateinit var xDripSource: XDripSource
     @Mock lateinit var dexcomBoyda: DexcomBoyda
+    @Mock lateinit var eversenseCalibrationSource: EversenseCalibrationSource
     @Mock lateinit var activePlugin: ActivePlugin
 
     private lateinit var elementAvailability: ElementAvailability
 
     @BeforeEach
     fun setUp() {
-        elementAvailability = ElementAvailability(xDripSource, dexcomBoyda, activePlugin)
+        elementAvailability = ElementAvailability(xDripSource, dexcomBoyda, eversenseCalibrationSource, activePlugin)
     }
 
     // -------- CGM_XDRIP --------
@@ -128,6 +131,21 @@ class ElementAvailabilityTest : TestBase() {
         assertThat(elementAvailability.isCalibrationOverrideActive()).isTrue()
     }
 
+    // -------- EVERSENSE_CALIBRATION --------
+
+    @Test
+    fun eversenseCalibration_isAvailable_whenEversenseEnabled() {
+        whenever(eversenseCalibrationSource.isEnabled()).thenReturn(true)
+        assertThat(elementAvailability.isAvailable(ElementType.EVERSENSE_CALIBRATION)).isTrue()
+    }
+
+    @Test
+    fun eversenseCalibration_isUnavailable_whenEversenseDisabled() {
+        whenever(eversenseCalibrationSource.isEnabled()).thenReturn(false)
+        whenever(xDripSource.isEnabled()).thenReturn(true)
+        assertThat(elementAvailability.isAvailable(ElementType.EVERSENSE_CALIBRATION)).isFalse()
+    }
+
     // -------- FILL --------
 
     @Test
@@ -171,7 +189,7 @@ class ElementAvailabilityTest : TestBase() {
         // Every type except the CGM/calibration and pump entries falls through to `true`. Looping
         // catches the case where someone adds a new entry to the gating `when` without
         // intentional defaults — this test will start failing for the new type.
-        val gated = setOf(ElementType.CGM_XDRIP, ElementType.CGM_DEX, ElementType.CALIBRATION, ElementType.FILL, ElementType.BATTERY_CHANGE)
+        val gated = setOf(ElementType.CGM_XDRIP, ElementType.CGM_DEX, ElementType.CALIBRATION, ElementType.EVERSENSE_CALIBRATION, ElementType.FILL, ElementType.BATTERY_CHANGE)
         ElementType.entries
             .filterNot { it in gated }
             .forEach { type ->

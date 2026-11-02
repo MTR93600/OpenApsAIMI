@@ -40,9 +40,12 @@ plugins {
  * targets, but what reaches them from here is still Android only - the plugin wrappers in
  * `:plugins:source/androidMain` - so they stay in this list until an iOS caller exists.
  * `:plugins:libkeks` is a plain Android library and has no Apple variant at all.
+ * `:plugins:eversense` is a plain Android library too (Android BLE and JVM BouncyCastle), so the
+ * Eversense source is absent on iOS.
  */
 val ANDROID_ONLY_PLUGINS = listOf(
     ":plugins:dexcom_oneplus",
+    ":plugins:eversense",
     ":plugins:libkeks",
     ":plugins:libre3",
 )
