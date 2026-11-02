@@ -19,14 +19,13 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -40,6 +39,10 @@ import androidx.compose.ui.Modifier
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.decimalPlaces
+import app.aaps.core.keys.interfaces.BooleanPreferenceKey
+import app.aaps.core.keys.interfaces.DoublePreferenceKey
+import app.aaps.core.keys.interfaces.IntPreferenceKey
+import app.aaps.core.keys.interfaces.PreferenceKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.keys.step
@@ -53,6 +56,7 @@ import app.aaps.core.ui.compose.LocalPreferences
 import app.aaps.core.ui.compose.SliderWithButtons
 import app.aaps.core.data.format.NumberFormat
 import app.aaps.core.ui.compose.preference.AdaptiveDoublePreferenceItem
+import app.aaps.core.ui.compose.preference.AdaptiveIntPreferenceItem
 import app.aaps.core.ui.compose.preference.AdaptiveSwitchPreferenceItem
 import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiRecommendation
@@ -189,11 +193,7 @@ fun PkpdSimpleSettingsContent(
             )
         }
 
-    AdaptiveSwitchPreferenceItem(
-        booleanKey = BooleanKey.OApsAIMIPkpdEnabled,
-        title = ApsStrings.oaps_aimi_pkpd_enabled_title,
-        summary = ApsStrings.aimi_pkpd_enabled_simple_summary,
-    )
+    PkpdScreenLayout.simpleFieldSections.forEach { PkpdDeclaredFields(it) }
 
     Text(
         stringResource(ApsStrings.aimi_pkpd_preset_section_title),
@@ -310,66 +310,28 @@ fun PkpdAdvancedSettingsContent(
         )
     }
 
-    PkpdReactiveDoubleSlider(
-        key = DoubleKey.OApsAIMIPkpdInitialDiaH,
-        title = ApsStrings.aimi_pkpd_starting_dia_title,
-        preferenceRevision = preferenceRevision,
-    )
-    PkpdReactiveDoubleSlider(
-        key = DoubleKey.OApsAIMIPkpdInitialPeakMin,
-        title = ApsStrings.aimi_pkpd_starting_peak_title,
-        preferenceRevision = preferenceRevision,
-    )
-
-    if (preset == PkpdInsulinPreset.CUSTOM) {
-        Text(
-            stringResource(ApsStrings.aimi_pkpd_custom_bounds_title),
-            style = MaterialTheme.typography.titleSmall,
-            modifier = Modifier.padding(top = AapsSpacing.small),
-        )
-        PkpdReactiveDoubleSlider(
-            key = DoubleKey.OApsAIMIPkpdBoundsDiaMinH,
-            title = ApsStrings.oaps_aimi_pkpd_dia_min_title,
-            preferenceRevision = preferenceRevision,
-        )
-        PkpdReactiveDoubleSlider(
-            key = DoubleKey.OApsAIMIPkpdBoundsDiaMaxH,
-            title = ApsStrings.oaps_aimi_pkpd_dia_max_title,
-            preferenceRevision = preferenceRevision,
-        )
-        PkpdReactiveDoubleSlider(
-            key = DoubleKey.OApsAIMIPkpdBoundsPeakMinMin,
-            title = ApsStrings.oaps_aimi_pkpd_peak_min_title,
-            preferenceRevision = preferenceRevision,
-        )
-        PkpdReactiveDoubleSlider(
-            key = DoubleKey.OApsAIMIPkpdBoundsPeakMinMax,
-            title = ApsStrings.oaps_aimi_pkpd_peak_max_title,
-            preferenceRevision = preferenceRevision,
-        )
-        PkpdReactiveDoubleSlider(
-            key = DoubleKey.OApsAIMIPkpdAnchorDiaH,
-            title = ApsStrings.oaps_aimi_pkpd_anchor_dia_title,
-            preferenceRevision = preferenceRevision,
-        )
-        PkpdReactiveDoubleSlider(
-            key = DoubleKey.OApsAIMIPkpdAnchorPeakMin,
-            title = ApsStrings.oaps_aimi_pkpd_anchor_peak_title,
-            preferenceRevision = preferenceRevision,
-        )
-    } else {
-        Text(
-            stringResource(ApsStrings.aimi_pkpd_bounds_from_preset),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    PkpdScreenLayout.advancedSliderSections.forEach { sectionId ->
+        if (sectionId == AimiSettingsSectionId.PkpdAdvancedCustomBounds) {
+            if (preset == PkpdInsulinPreset.CUSTOM) {
+                Text(
+                    stringResource(ApsStrings.aimi_pkpd_custom_bounds_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(top = AapsSpacing.small),
+                )
+                PkpdDeclaredReactiveSliders(sectionId = sectionId, preferenceRevision = preferenceRevision)
+            } else {
+                Text(
+                    stringResource(ApsStrings.aimi_pkpd_bounds_from_preset),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            PkpdDeclaredReactiveSliders(sectionId = sectionId, preferenceRevision = preferenceRevision)
+        }
     }
 
-    AdaptiveSwitchPreferenceItem(
-        booleanKey = BooleanKey.OApsAIMIPkpdStackAwareGuardB,
-        title = ApsStrings.oaps_aimi_pkpd_stack_aware_guardb_title,
-        summary = ApsStrings.oaps_aimi_pkpd_stack_aware_guardb_summary,
-    )
+    PkpdScreenLayout.advancedFieldSections.forEach { PkpdDeclaredFields(it) }
 
     OutlinedButton(onClick = { showResetConfirm = true }) {
         Text(stringResource(ApsStrings.aimi_pkpd_reset_to_profile_action))
@@ -401,78 +363,15 @@ fun PkpdAdvancedSettingsContent(
 
 @Composable
 fun PkpdExpertSettingsContent(preferenceRevision: Int) {
-    ExpandableSection(title = stringResource(ApsStrings.aimi_pkpd_expert_peak_governor), initiallyExpanded = false) {
-        AdaptiveSwitchPreferenceItem(booleanKey = BooleanKey.OApsAIMIPeakGovernorEnabled)
-        AdaptiveDoublePreferenceItem(doubleKey = DoubleKey.OApsAIMIPeakGovernorLearnedWeight)
-    }
-
-    ExpandableSection(title = stringResource(ApsStrings.aimi_pkpd_expert_isf_fusion), initiallyExpanded = false) {
-        AdaptiveDoublePreferenceItem(
-            doubleKey = DoubleKey.OApsAIMIIsfFusionMinFactor,
-            title = ApsStrings.oaps_aimi_isf_fusion_min_title,
-        )
-        AdaptiveDoublePreferenceItem(
-            doubleKey = DoubleKey.OApsAIMIIsfFusionMaxFactor,
-            title = ApsStrings.oaps_aimi_isf_fusion_max_title,
-        )
-        AdaptiveDoublePreferenceItem(
-            doubleKey = DoubleKey.OApsAIMIIsfFusionMaxChangePerTick,
-            title = ApsStrings.oaps_aimi_isf_fusion_slope_title,
-        )
-    }
-
-    ExpandableSection(title = stringResource(ApsStrings.aimi_dyn_isf_trajectory_section_title), initiallyExpanded = false) {
-        AdaptiveSwitchPreferenceItem(booleanKey = BooleanKey.OApsAIMIDynIsfTrajectoryTuningEnabled)
-        AdaptiveSwitchPreferenceItem(booleanKey = BooleanKey.OApsAIMIDynIsfTrajectoryShadowOnly)
-        AdaptiveDoublePreferenceItem(doubleKey = DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction)
-    }
-
-    ExpandableSection(title = stringResource(ApsStrings.aimi_pkpd_expert_smb_tail), initiallyExpanded = false) {
-        AdaptiveDoublePreferenceItem(
-            doubleKey = DoubleKey.OApsAIMISmbTailThreshold,
-            title = ApsStrings.oaps_aimi_smb_tail_threshold_title,
-        )
-        AdaptiveDoublePreferenceItem(
-            doubleKey = DoubleKey.OApsAIMISmbTailDamping,
-            title = ApsStrings.oaps_aimi_smb_tail_damping_title,
-        )
-        AdaptiveDoublePreferenceItem(
-            doubleKey = DoubleKey.OApsAIMISmbExerciseDamping,
-            title = ApsStrings.oaps_aimi_smb_exercise_damping_title,
-        )
-        AdaptiveDoublePreferenceItem(
-            doubleKey = DoubleKey.OApsAIMISmbLateFatDamping,
-            title = ApsStrings.oaps_aimi_smb_late_fat_damping_title,
-        )
-    }
-
-    ExpandableSection(title = stringResource(ApsStrings.aimi_pkpd_section_expert), initiallyExpanded = false) {
-        AdaptiveSwitchPreferenceItem(
-            booleanKey = BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled,
-            title = ApsStrings.oaps_aimi_pkpd_relief_enabled_title,
-            summary = ApsStrings.oaps_aimi_pkpd_relief_enabled_summary,
-        )
-        AdaptiveDoublePreferenceItem(
-            doubleKey = DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor,
-            title = ApsStrings.oaps_aimi_pkpd_relief_factor_title,
-        )
-        AdaptiveDoublePreferenceItem(
-            doubleKey = DoubleKey.OApsAIMIRedCarpetRestoreThreshold,
-            title = ApsStrings.oaps_aimi_redcarpet_restore_title,
-        )
-        AdaptiveSwitchPreferenceItem(
-            booleanKey = BooleanKey.OApsAIMIIobSurveillanceGuard,
-            title = ApsStrings.aimi_iob_surveillance_guard_title,
-            summary = ApsStrings.aimi_iob_surveillance_guard_summary,
-        )
-        AdaptiveDoublePreferenceItem(
-            doubleKey = DoubleKey.OApsAIMIPriorityMaxIobFactor,
-            title = ApsStrings.oaps_aimi_priority_max_iob_factor_title,
-        )
-        AdaptiveDoublePreferenceItem(
-            doubleKey = DoubleKey.OApsAIMIPriorityMaxIobExtraU,
-            title = ApsStrings.oaps_aimi_priority_max_iob_extra_title,
-        )
+    // The groups and their keys come from PkpdScreenLayout and AimiSettingsScreens, so a key that is
+    // declared for this content is always drawn. preferenceRevision makes the items read again after
+    // the wizard or a preset changed a key.
+    key(preferenceRevision) {
+        PkpdScreenLayout.expertGroups.forEach { group ->
+            ExpandableSection(title = stringResource(group.title), initiallyExpanded = false) {
+                group.sections.forEach { PkpdDeclaredFields(it) }
+            }
+        }
     }
 }
 
@@ -744,6 +643,178 @@ fun PkpdReactiveDoubleSlider(
             unitLabel = unitLabelRef,
             dialogLabel = stringResource(title),
             dialogSummary = summaryRes,
+        )
+    }
+}
+
+/** One folding group of the PK/PD expert tab: a title and the declared sections it draws. */
+internal data class PkpdExpertGroup(
+    val title: TextRef,
+    val sections: List<AimiSettingsSectionId>,
+)
+
+/**
+ * Which declared sections each PK/PD tab draws, and in which order.
+ *
+ * The keys themselves come from `AimiSettingsScreens`. This object only says where a section goes
+ * on the screen. `PkpdScreenLayoutTest` checks that every `FIELDS` section of a PK/PD content is
+ * listed here, so a declared key can not be left out of the screen again (that is how the curve
+ * learning gate and the whole expert tab were lost).
+ */
+internal object PkpdScreenLayout {
+
+    /** Simple tab: sections shown as plain preference items. */
+    val simpleFieldSections: List<AimiSettingsSectionId> = listOf(
+        AimiSettingsSectionId.PkpdSimpleEnable,
+    )
+
+    /** Advanced tab: sections shown as reactive sliders. Custom bounds only show for the custom preset. */
+    val advancedSliderSections: List<AimiSettingsSectionId> = listOf(
+        AimiSettingsSectionId.PkpdAdvancedStartingKinetics,
+        AimiSettingsSectionId.PkpdAdvancedCustomBounds,
+    )
+
+    /** Advanced tab: sections shown as plain preference items, after the sliders. */
+    val advancedFieldSections: List<AimiSettingsSectionId> = listOf(
+        AimiSettingsSectionId.PkpdAdvancedStackAwareGuardB,
+        AimiSettingsSectionId.PkpdAdvancedCurveLearningGate,
+    )
+
+    /** Expert tab: folding groups, each with its sections. */
+    val expertGroups: List<PkpdExpertGroup> = listOf(
+        PkpdExpertGroup(
+            title = ApsStrings.aimi_pkpd_expert_peak_governor,
+            sections = listOf(AimiSettingsSectionId.PkpdExpertPeakGovernor),
+        ),
+        PkpdExpertGroup(
+            title = ApsStrings.aimi_pkpd_expert_isf_fusion,
+            sections = listOf(
+                AimiSettingsSectionId.PkpdExpertIsfFusionBounds,
+                // The slope budget: the key that was stored but unreachable before this screen was routed.
+                AimiSettingsSectionId.PkpdExpertIsfFusionSlope,
+            ),
+        ),
+        PkpdExpertGroup(
+            title = ApsStrings.aimi_dyn_isf_trajectory_section_title,
+            sections = listOf(
+                AimiSettingsSectionId.PkpdExpertDynIsfTuning,
+                AimiSettingsSectionId.PkpdExpertDynIsfShadow,
+                AimiSettingsSectionId.PkpdExpertDynIsfFraction,
+            ),
+        ),
+        PkpdExpertGroup(
+            title = ApsStrings.aimi_pkpd_expert_smb_tail,
+            sections = listOf(
+                AimiSettingsSectionId.PkpdExpertSmbTailThreshold,
+                AimiSettingsSectionId.PkpdExpertSmbDampings,
+            ),
+        ),
+        PkpdExpertGroup(
+            title = ApsStrings.aimi_pkpd_section_expert,
+            sections = listOf(
+                AimiSettingsSectionId.PkpdExpertReliefEnable,
+                AimiSettingsSectionId.PkpdExpertReliefFactors,
+                AimiSettingsSectionId.PkpdExpertIobSurveillance,
+                AimiSettingsSectionId.PkpdExpertPriorityMaxIob,
+            ),
+        ),
+    )
+
+    /** Sections a PK/PD content draws with [PkpdDeclaredFields] or as reactive sliders. */
+    fun drawnSectionsOf(content: AimiSettingsContentId): List<AimiSettingsSectionId> = when (content) {
+        AimiSettingsContentId.PkpdSimple   -> simpleFieldSections
+        AimiSettingsContentId.PkpdAdvanced -> advancedSliderSections + advancedFieldSections
+        AimiSettingsContentId.PkpdExpert   -> expertGroups.flatMap { it.sections }
+        else                               -> emptyList()
+    }
+
+    /**
+     * Screen titles that replace the key's own title on the PK/PD screens.
+     *
+     * These keep the wording the screens had before the key lists became data. A key with no entry
+     * here keeps its own title.
+     */
+    val titleOverrides: Map<String, TextRef> = mapOf(
+        DoubleKey.OApsAIMIPkpdInitialDiaH.key to ApsStrings.aimi_pkpd_starting_dia_title,
+        DoubleKey.OApsAIMIPkpdInitialPeakMin.key to ApsStrings.aimi_pkpd_starting_peak_title,
+        DoubleKey.OApsAIMIPkpdBoundsDiaMinH.key to ApsStrings.oaps_aimi_pkpd_dia_min_title,
+        DoubleKey.OApsAIMIPkpdBoundsDiaMaxH.key to ApsStrings.oaps_aimi_pkpd_dia_max_title,
+        DoubleKey.OApsAIMIPkpdBoundsPeakMinMin.key to ApsStrings.oaps_aimi_pkpd_peak_min_title,
+        DoubleKey.OApsAIMIPkpdBoundsPeakMinMax.key to ApsStrings.oaps_aimi_pkpd_peak_max_title,
+        DoubleKey.OApsAIMIPkpdAnchorDiaH.key to ApsStrings.oaps_aimi_pkpd_anchor_dia_title,
+        DoubleKey.OApsAIMIPkpdAnchorPeakMin.key to ApsStrings.oaps_aimi_pkpd_anchor_peak_title,
+        BooleanKey.OApsAIMIPkpdStackAwareGuardB.key to ApsStrings.oaps_aimi_pkpd_stack_aware_guardb_title,
+        BooleanKey.OApsAIMIPkpdCurveLearningGate.key to ApsStrings.oaps_aimi_pkpd_curve_learning_gate_title,
+        BooleanKey.OApsAIMIPkpdEnabled.key to ApsStrings.oaps_aimi_pkpd_enabled_title,
+        DoubleKey.OApsAIMIIsfFusionMinFactor.key to ApsStrings.oaps_aimi_isf_fusion_min_title,
+        DoubleKey.OApsAIMIIsfFusionMaxFactor.key to ApsStrings.oaps_aimi_isf_fusion_max_title,
+        DoubleKey.OApsAIMIIsfFusionMaxChangePerTick.key to ApsStrings.oaps_aimi_isf_fusion_slope_title,
+        DoubleKey.OApsAIMISmbTailThreshold.key to ApsStrings.oaps_aimi_smb_tail_threshold_title,
+        DoubleKey.OApsAIMISmbTailDamping.key to ApsStrings.oaps_aimi_smb_tail_damping_title,
+        DoubleKey.OApsAIMISmbExerciseDamping.key to ApsStrings.oaps_aimi_smb_exercise_damping_title,
+        DoubleKey.OApsAIMISmbLateFatDamping.key to ApsStrings.oaps_aimi_smb_late_fat_damping_title,
+        BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled.key to ApsStrings.oaps_aimi_pkpd_relief_enabled_title,
+        DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor.key to ApsStrings.oaps_aimi_pkpd_relief_factor_title,
+        DoubleKey.OApsAIMIRedCarpetRestoreThreshold.key to ApsStrings.oaps_aimi_redcarpet_restore_title,
+        BooleanKey.OApsAIMIIobSurveillanceGuard.key to ApsStrings.aimi_iob_surveillance_guard_title,
+        DoubleKey.OApsAIMIPriorityMaxIobFactor.key to ApsStrings.oaps_aimi_priority_max_iob_factor_title,
+        DoubleKey.OApsAIMIPriorityMaxIobExtraU.key to ApsStrings.oaps_aimi_priority_max_iob_extra_title,
+    )
+
+    /** Screen summaries that replace the key's own summary on the PK/PD screens. */
+    val summaryOverrides: Map<String, TextRef> = mapOf(
+        BooleanKey.OApsAIMIPkpdEnabled.key to ApsStrings.aimi_pkpd_enabled_simple_summary,
+        BooleanKey.OApsAIMIPkpdStackAwareGuardB.key to ApsStrings.oaps_aimi_pkpd_stack_aware_guardb_summary,
+        BooleanKey.OApsAIMIPkpdCurveLearningGate.key to ApsStrings.oaps_aimi_pkpd_curve_learning_gate_summary,
+        BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled.key to ApsStrings.oaps_aimi_pkpd_relief_enabled_summary,
+        BooleanKey.OApsAIMIIobSurveillanceGuard.key to ApsStrings.aimi_iob_surveillance_guard_summary,
+    )
+
+    /**
+     * True when [PkpdDeclaredFields] can draw this key. A key of another type would be skipped
+     * without a sign, so `PkpdScreenLayoutTest` checks every drawn key with this.
+     */
+    fun canDrawAsField(key: PreferenceKey): Boolean =
+        key is BooleanPreferenceKey || key is DoublePreferenceKey || key is IntPreferenceKey
+}
+
+/**
+ * Shows every key of a declared section as one editable item, in declaration order.
+ *
+ * The layout is unchanged: this only moves the key list out of the layout code, so
+ * `AimiSettingsManifestTest` and `PkpdScreenLayoutTest` can prove each of these keys is reachable.
+ */
+@Composable
+private fun PkpdDeclaredFields(sectionId: AimiSettingsSectionId) {
+    AimiSettingsScreens.preferenceKeysOf(sectionId).forEach { preferenceKey ->
+        val title = PkpdScreenLayout.titleOverrides[preferenceKey.key]
+        when (preferenceKey) {
+            is BooleanPreferenceKey -> AdaptiveSwitchPreferenceItem(
+                booleanKey = preferenceKey,
+                title = title,
+                summary = PkpdScreenLayout.summaryOverrides[preferenceKey.key],
+            )
+            is DoublePreferenceKey  -> AdaptiveDoublePreferenceItem(
+                doubleKey = preferenceKey,
+                title = title,
+            )
+            is IntPreferenceKey     -> AdaptiveIntPreferenceItem(
+                intKey = preferenceKey,
+                title = title,
+            )
+            else                    -> Unit
+        }
+    }
+}
+
+/** Shows every double key of a declared section as a reactive slider, in declaration order. */
+@Composable
+private fun PkpdDeclaredReactiveSliders(sectionId: AimiSettingsSectionId, preferenceRevision: Int) {
+    AimiSettingsScreens.keysOf(sectionId).filterIsInstance<DoubleKey>().forEach { doubleKey ->
+        PkpdReactiveDoubleSlider(
+            key = doubleKey,
+            title = PkpdScreenLayout.titleOverrides[doubleKey.key] ?: doubleKey.title,
+            preferenceRevision = preferenceRevision,
         )
     }
 }

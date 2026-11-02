@@ -444,28 +444,29 @@ enum class PresetType {
 
 /**
  * Preset definition for UI buttons.
+ *
+ * [displayName] is only used in logs. The screen shows a translated label per [type].
  */
 data class ContextPreset(
     val type: PresetType,
     val displayName: String,
-    val icon: String,  // Emoji
     val defaultDuration: Duration,
     val defaultIntensity: Intensity
 ) {
     companion object {
         val ALL_PRESETS = listOf(
-            ContextPreset(PresetType.CARDIO, "Cardio", "🏃", 60.minutes, Intensity.HIGH),
-            ContextPreset(PresetType.STRENGTH, "Musculation", "💪", 60.minutes, Intensity.MEDIUM),
-            ContextPreset(PresetType.YOGA, "Yoga", "🧘", 45.minutes, Intensity.LOW),
-            ContextPreset(PresetType.SPORT, "Sport", "⚽", 90.minutes, Intensity.HIGH),
-            ContextPreset(PresetType.WALKING, "Marche", "🚶", 30.minutes, Intensity.LOW),
-            ContextPreset(PresetType.SICK, "Malade", "🤒", 12.hours, Intensity.MEDIUM),
-            ContextPreset(PresetType.STRESS, "Stress", "😰", 8.hours, Intensity.MEDIUM),
-            ContextPreset(PresetType.MEAL_RISK, "Repas non annoncé", "🍕", 6.hours, Intensity.MEDIUM),
-            ContextPreset(PresetType.ALCOHOL, "Alcool", "🍷", 12.hours, Intensity.MEDIUM),
-            ContextPreset(PresetType.TRAVEL, "Voyage", "✈️", 24.hours, Intensity.MEDIUM),
-            ContextPreset(PresetType.SLOW_CARB, "Repas lent (gras)", "🧀", 5.hours, Intensity.MEDIUM),
-            ContextPreset(PresetType.HYPO_RECOVERY, "Hypo / récup", "🍬", 60.minutes, Intensity.MEDIUM)
+            ContextPreset(PresetType.CARDIO, "Cardio", 60.minutes, Intensity.HIGH),
+            ContextPreset(PresetType.STRENGTH, "Musculation", 60.minutes, Intensity.MEDIUM),
+            ContextPreset(PresetType.YOGA, "Yoga", 45.minutes, Intensity.LOW),
+            ContextPreset(PresetType.SPORT, "Sport", 90.minutes, Intensity.HIGH),
+            ContextPreset(PresetType.WALKING, "Marche", 30.minutes, Intensity.LOW),
+            ContextPreset(PresetType.SICK, "Malade", 12.hours, Intensity.MEDIUM),
+            ContextPreset(PresetType.STRESS, "Stress", 8.hours, Intensity.MEDIUM),
+            ContextPreset(PresetType.MEAL_RISK, "Repas non annoncé", 6.hours, Intensity.MEDIUM),
+            ContextPreset(PresetType.ALCOHOL, "Alcool", 12.hours, Intensity.MEDIUM),
+            ContextPreset(PresetType.TRAVEL, "Voyage", 24.hours, Intensity.MEDIUM),
+            ContextPreset(PresetType.SLOW_CARB, "Repas lent (gras)", 5.hours, Intensity.MEDIUM),
+            ContextPreset(PresetType.HYPO_RECOVERY, "Hypo / récup", 60.minutes, Intensity.MEDIUM)
         )
     }
 }

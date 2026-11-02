@@ -51,6 +51,7 @@ import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTopAppBar
@@ -60,6 +61,7 @@ import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextManager
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextPreset
+import app.aaps.plugins.aps.openAPSAIMI.context.PresetType
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStatePresentation
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStatePresentationBuilder
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateRuntimeRepository
@@ -368,10 +370,26 @@ private fun PresetChips(onPreset: (ContextPreset) -> Unit) {
         ContextPreset.ALL_PRESETS.forEach { preset ->
             AssistChip(
                 onClick = { onPreset(preset) },
-                label = { Text("${preset.icon} ${preset.displayName}") },
+                label = { Text(stringResource(presetLabel(preset.type))) },
             )
         }
     }
+}
+
+/** Translated chip label of a quick preset. The emoji is part of the string, as on dev. */
+private fun presetLabel(type: PresetType): TextRef = when (type) {
+    PresetType.CARDIO        -> ApsStrings.context_preset_cardio
+    PresetType.STRENGTH      -> ApsStrings.context_preset_strength
+    PresetType.YOGA          -> ApsStrings.context_preset_yoga
+    PresetType.SPORT         -> ApsStrings.context_preset_sport
+    PresetType.WALKING       -> ApsStrings.context_preset_walking
+    PresetType.SICK          -> ApsStrings.context_preset_sick
+    PresetType.STRESS        -> ApsStrings.context_preset_stress
+    PresetType.MEAL_RISK     -> ApsStrings.context_preset_meal_risk
+    PresetType.ALCOHOL       -> ApsStrings.context_preset_alcohol
+    PresetType.TRAVEL        -> ApsStrings.context_preset_travel
+    PresetType.SLOW_CARB     -> ApsStrings.context_preset_slow_carb
+    PresetType.HYPO_RECOVERY -> ApsStrings.context_preset_hypo_recovery
 }
 
 @Composable
