@@ -42,8 +42,9 @@ class ContributedPluginsTest {
             // sit beside the other Dexcom and Libre entries.
             400, 410, 420, 430, 440, 446, 447, 450, 460, 470, 480, 490, 500, 510, 520, 530, 540, 550,
             // sync - the every-build part of the 300 block. SmsCommunicator 300 and Tidepool 320 are
-            // @NotNSClient; 340 (OpenHumans) comes from its own graph extension.
-            310, 330, 350, 360, 370,
+            // @NotNSClient; 340 (OpenHumans) comes from its own graph extension. 315 is this fork's
+            // AIMI Remote Control, built in every flavour but only listed on a follower.
+            310, 315, 330, 350, 360, 370,
             // smoothing. 615 is this fork's AdaptiveSmoothingPlugin.
             600, 610, 615, 620, 630,
             // calibration

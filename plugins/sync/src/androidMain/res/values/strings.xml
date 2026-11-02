@@ -343,4 +343,100 @@
     <string name="permission_sms_title">SMS</string>
     <string name="permission_sms_description">Application needs SMS permission for remote control via text messages</string>
 
+    <!-- AIMI Remote Control (follower phone) -->
+    <string name="aimi_rc_title">AIMI Remote Control</string>
+    <string name="aimi_rc_description">Remote control for parents: send AIMI modes and contexts to the master phone</string>
+    <string name="aimi_rc_password_setup_title">Set access password</string>
+    <string name="aimi_rc_password_setup_message">Set a password to protect Remote Control. You will share this password with the people who may use it.</string>
+    <string name="aimi_rc_password_label">Access password</string>
+    <string name="aimi_rc_password_confirm_label">Confirm password</string>
+    <string name="aimi_rc_password_required">Password is required</string>
+    <string name="aimi_rc_password_min_length">Password must have at least 6 characters</string>
+    <string name="aimi_rc_passwords_do_not_match">Passwords do not match</string>
+    <string name="aimi_rc_password_configured">Access password saved</string>
+    <string name="aimi_rc_password_share_title">Share this password</string>
+    <string name="aimi_rc_password_share_message" comment="%1$s=the access password the user just set">Access password: %1$s\n\nShare it in a safe way with the people who may use Remote Control.\n\nIt is shown only this one time.</string>
+    <string name="aimi_rc_login_title">Remote Control access</string>
+    <string name="aimi_rc_login_message">Enter the access password to unlock Remote Control</string>
+    <string name="aimi_rc_unlock">Unlock</string>
+    <string name="aimi_rc_lock">Lock</string>
+    <string name="aimi_rc_invalid_password">Wrong password. Please try again.</string>
+    <string name="aimi_rc_pin_setup_title">Set remote PIN</string>
+    <string name="aimi_rc_pin_setup_message">Set a PIN to allow remote commands. Use the same PIN as the AIMI remote control PIN on the master phone.</string>
+    <string name="aimi_rc_new_pin_label">New PIN (4 to 6 digits)</string>
+    <string name="aimi_rc_confirm_pin_label">Confirm PIN</string>
+    <string name="aimi_rc_save_pin">Save PIN</string>
+    <string name="aimi_rc_pin_empty">PIN cannot be empty</string>
+    <string name="aimi_rc_pin_too_short">PIN must have at least 4 digits</string>
+    <string name="aimi_rc_pins_do_not_match">PINs do not match</string>
+    <string name="aimi_rc_pin_saved">PIN saved</string>
+    <string name="aimi_rc_enter_pin">Enter PIN</string>
+    <string name="aimi_rc_pin_instruction">Enter your PIN to send commands</string>
+    <string name="aimi_rc_invalid_pin">Wrong PIN. Please try again.</string>
+    <string name="aimi_rc_tab_modes">Modes</string>
+    <string name="aimi_rc_tab_contexts">Contexts</string>
+    <string name="aimi_rc_tab_active">Active</string>
+    <string name="aimi_rc_tab_llm" comment="Tab where the user describes the situation in free text and an AI model makes the contexts">AI</string>
+    <string name="aimi_rc_duration_label">Duration (min)</string>
+    <string name="aimi_rc_send">Send</string>
+    <string name="aimi_rc_cancel_all_confirm">Cancel all active modes?</string>
+    <string name="aimi_rc_mode_sent" comment="%1$s=mode name, %2$s=duration with unit. Example: Lunch started (60 min)">%1$s started (%2$s)</string>
+    <string name="aimi_rc_send_failed" comment="%1$s=error message">Could not send: %1$s</string>
+    <string name="aimi_rc_context_not_understood">The context was not understood. Nothing was sent.</string>
+    <string name="aimi_rc_no_active_modes">No active mode</string>
+    <string name="aimi_rc_remaining_hours_minutes" comment="%1$d=hours, %2$d=minutes. Example: 1 h 20 min left">%1$d h %2$d min left</string>
+    <string name="aimi_rc_remaining_minutes" comment="%1$d=minutes. Example: 45 min left">%1$d min left</string>
+    <string name="aimi_rc_expired">Expired</string>
+    <string name="aimi_rc_llm_header">Smart context</string>
+    <string name="aimi_rc_llm_description">Describe the situation in your own words. The AI will choose the right contexts.</string>
+    <string name="aimi_rc_llm_examples">Examples:\n• \"Heavy cardio 1h30\"\n• \"Sick with fever\"\n• \"Exam stress tomorrow\"</string>
+    <string name="aimi_rc_llm_hint">Describe the situation…</string>
+    <string name="aimi_rc_llm_send">Create context</string>
+    <string name="aimi_rc_llm_processing">Working…</string>
+    <string name="aimi_rc_llm_success">Context created</string>
+    <string name="aimi_rc_llm_error" comment="%1$s=error message">Error: %1$s</string>
+    <string name="aimi_rc_llm_nothing">No context found. Try a more precise description.</string>
+    <string name="aimi_rc_text_empty">Text cannot be empty</string>
+    <string name="aimi_rc_mode_breakfast">Breakfast</string>
+    <string name="aimi_rc_mode_lunch">Lunch</string>
+    <string name="aimi_rc_mode_dinner">Dinner</string>
+    <string name="aimi_rc_mode_snack">Snack</string>
+    <string name="aimi_rc_mode_meal_desc">Starts prebolus P1 and P2</string>
+    <string name="aimi_rc_mode_highcarb">High carb meal</string>
+    <string name="aimi_rc_mode_highcarb_desc">Starts stronger prebolus P1 and P2</string>
+    <string name="aimi_rc_mode_meal">Meal (general)</string>
+    <string name="aimi_rc_mode_meal_general_desc">General meal mode</string>
+    <string name="aimi_rc_mode_sport">Sport</string>
+    <string name="aimi_rc_mode_sport_desc">Lowers SMB during the activity</string>
+    <string name="aimi_rc_mode_sleep">Sleep</string>
+    <string name="aimi_rc_mode_sleep_desc">Safe night mode</string>
+    <string name="aimi_rc_mode_cardio">Cardio</string>
+    <string name="aimi_rc_mode_cardio_desc">Running, cycling, swimming</string>
+    <string name="aimi_rc_mode_strength">Strength</string>
+    <string name="aimi_rc_mode_strength_desc">Strength training</string>
+    <string name="aimi_rc_mode_yoga">Yoga</string>
+    <string name="aimi_rc_mode_yoga_desc">Yoga, stretching</string>
+    <string name="aimi_rc_mode_walking">Walking</string>
+    <string name="aimi_rc_mode_walking_desc">Light walking</string>
+    <string name="aimi_rc_mode_stress">Stress</string>
+    <string name="aimi_rc_mode_stress_desc">Raises basal (stress hormones)</string>
+    <string name="aimi_rc_mode_illness">Illness</string>
+    <string name="aimi_rc_mode_illness_desc">Higher insulin resistance</string>
+    <string name="aimi_rc_mode_gastro">Gastro</string>
+    <string name="aimi_rc_mode_gastro_desc">Stomach and gut problems</string>
+    <string name="aimi_rc_mode_work_stress">Work stress</string>
+    <string name="aimi_rc_mode_work_stress_desc">Stress at work</string>
+    <string name="aimi_rc_mode_exam_stress">Exam stress</string>
+    <string name="aimi_rc_mode_exam_stress_desc">Stress before an exam</string>
+    <string name="aimi_rc_mode_alcohol">Alcohol</string>
+    <string name="aimi_rc_mode_alcohol_desc">Drinking alcohol</string>
+    <string name="aimi_rc_mode_travel">Travel</string>
+    <string name="aimi_rc_mode_travel_desc">Travel or time zone change</string>
+    <string name="aimi_rc_mode_fasting">Fasting</string>
+    <string name="aimi_rc_mode_fasting_desc">Fasting mode (lowers basal)</string>
+    <string name="aimi_rc_mode_lowcarb">Low carb</string>
+    <string name="aimi_rc_mode_lowcarb_desc">Adapts to a low carb diet</string>
+    <string name="aimi_rc_mode_stop">Cancel all</string>
+    <string name="aimi_rc_mode_stop_desc">Cancels all active modes</string>
+
 </resources>
