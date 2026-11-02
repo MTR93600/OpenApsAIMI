@@ -38,14 +38,12 @@ import kotlinx.coroutines.flow.debounce
 import androidx.compose.ui.Modifier
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
-import app.aaps.core.keys.decimalPlaces
 import app.aaps.core.keys.interfaces.BooleanPreferenceKey
 import app.aaps.core.keys.interfaces.DoublePreferenceKey
 import app.aaps.core.keys.interfaces.IntPreferenceKey
 import app.aaps.core.keys.interfaces.PreferenceKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.TextRef
-import app.aaps.core.keys.step
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.core.ui.compose.stringResourceOrNull
@@ -58,6 +56,7 @@ import app.aaps.core.data.format.NumberFormat
 import app.aaps.core.ui.compose.preference.AdaptiveDoublePreferenceItem
 import app.aaps.core.ui.compose.preference.AdaptiveIntPreferenceItem
 import app.aaps.core.ui.compose.preference.AdaptiveSwitchPreferenceItem
+import app.aaps.core.ui.compose.preference.sliderDecimalsAndStep
 import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiRecommendation
 import app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey
@@ -608,8 +607,8 @@ fun PkpdReactiveDoubleSlider(
     val preferences = LocalPreferences.current
     val summaryRes = stringResourceOrNull(key.summary)
     val unitType = key.unitType
-    val decimalPlaces = unitType.decimalPlaces()
-    val step = unitType.step()
+    // Same step rule as the settings screen, so a factor with no unit does not jump by 1.
+    val (decimalPlaces, step) = sliderDecimalsAndStep(unitType, key.min, key.max)
     val valueFormatRef = unitType.valueFormat()
     val valueFormat = NumberFormat.withDecimals(decimalPlaces)
     val unitLabelRef = unitType.unitLabel()

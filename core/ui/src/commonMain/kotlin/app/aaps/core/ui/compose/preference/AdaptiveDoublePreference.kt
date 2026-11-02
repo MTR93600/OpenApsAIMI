@@ -11,6 +11,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import app.aaps.core.data.format.NumberFormat
+import app.aaps.core.keys.UnitType
 import app.aaps.core.keys.decimalPlaces
 import app.aaps.core.keys.interfaces.DoublePreferenceKey
 import app.aaps.core.keys.interfaces.TextRef
@@ -24,6 +25,26 @@ import app.aaps.core.ui.compose.stringResource
 import app.aaps.core.ui.compose.stringResourceOrNull
 import app.aaps.core.ui.compose.unitLabel
 import app.aaps.core.ui.compose.valueFormat
+import kotlin.math.abs
+
+/**
+ * Decimal places and slider step for a double preference.
+ *
+ * A key with a unit uses the step of that unit. A key with no unit ([UnitType.NONE]) has no step of
+ * its own, and the unit step of 1 would make a slider over 0..1 jump from one end to the other: one
+ * touch would turn a damping of 0.6 into 0 or 1. So the step comes from the size of the range, the
+ * same rule dev_OAPSAIMI uses.
+ */
+fun sliderDecimalsAndStep(unitType: UnitType, min: Double, max: Double): Pair<Int, Double> {
+    if (unitType != UnitType.NONE) return unitType.decimalPlaces() to unitType.step()
+    val span = abs(max - min)
+    return when {
+        span <= 0.15 -> 3 to 0.001
+        span <= 1.5  -> 2 to 0.01
+        span <= 25.0 -> 1 to 0.1
+        else         -> 0 to 1.0
+    }
+}
 
 /**
  * Composable double preference for use inside card sections.
@@ -56,8 +77,7 @@ fun AdaptiveDoublePreferenceItem(
 
     // Get formatting info from UnitType
     val unitType = doubleKey.unitType
-    val decimalPlaces = unitType.decimalPlaces()
-    val step = unitType.step()
+    val (decimalPlaces, step) = sliderDecimalsAndStep(unitType, doubleKey.min, doubleKey.max)
     val valueFormatRef = unitType.valueFormat()
 
     // Get unit label from UnitType (for dialog input suffix)
