@@ -120,7 +120,8 @@ class RawPreferenceStoreScanTest {
      * would delete. **This map may only ever get shorter.**
      */
     private val toDo: Map<String, String> = mapOf(
-        "plugins/aps/src/androidMain/kotlin/app/aaps/plugins/aps/openAPSAIMI/advisor/modesettings/ui/AimiModeSettingsScreen.kt" to
+        // The same debt as before: the screen moved to commonMain, and only this store still opens the file.
+        "plugins/aps/src/androidMain/kotlin/app/aaps/plugins/aps/openAPSAIMI/advisor/modesettings/AndroidAimiModeDurationStore.kt" to
             "AIMI mode settings keep their own preference file. Moving them into registered keys needs a migration, because the values are live user settings that have to be carried across, not abandoned.",
         "plugins/aps/src/androidMain/kotlin/app/aaps/plugins/aps/openAPSAIMI/sos/EmergencySosManager.kt" to
             "Emergency SOS keeps its own preference file. Same migration question as the mode settings above.",
