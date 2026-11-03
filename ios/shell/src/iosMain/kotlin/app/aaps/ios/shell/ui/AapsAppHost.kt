@@ -754,7 +754,7 @@ private fun AapsApp(app: StartedApp, navigationRelay: NavigationRelay, onPending
 /**
  * Registers the AIMI background task handlers (ML training and telemetry retention) and nothing else.
  *
- * Called from the Swift `ClientApp.init`, never from [aapsAppViewController]. iOS requires
+ * Called from the Swift `AapsApp.init`, never from [aapsAppViewController]. iOS requires
  * `BGTaskScheduler` handlers to be registered before the app finishes launching, and the view
  * controller is made later than that: registering there can crash the app. For the same reason this
  * needs no graph - none exists yet. The part that needs the graph is

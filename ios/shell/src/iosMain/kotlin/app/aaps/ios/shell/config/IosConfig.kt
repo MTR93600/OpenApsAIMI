@@ -27,8 +27,8 @@ import platform.UIKit.UIDevice
  * builds one kind only: the **master** phone, the same role as the Android `full` flavour. It runs
  * the loop, talks to the pump and the sensor, and writes and uploads the therapy records.
  *
- * The Xcode targets are still called AAPSClient and AAPSClient2. That name comes from the first
- * iOS port, which was a follower. It does not decide the role any more; this class does.
+ * The bundle ids are still `app.aaps.client` and `app.aaps.client2`, a name from the first iOS port,
+ * which was a follower. They do not decide the role; this class does.
  *
  * This is a real implementation, not a stand-in. Getting [APS] or [PUMPDRIVERS] wrong here would
  * make shared code offer features the app cannot perform.

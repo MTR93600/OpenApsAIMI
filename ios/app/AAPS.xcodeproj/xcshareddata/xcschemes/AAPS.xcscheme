@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "AA2001300000000000000"
-               BuildableName = "AAPSClient.app"
-               BlueprintName = "AAPSClient"
-               ReferencedContainer = "container:AAPSClient.xcodeproj">
+               BuildableName = "AAPS.app"
+               BlueprintName = "AAPS"
+               ReferencedContainer = "container:AAPS.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -44,9 +44,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "AA2001300000000000000"
-            BuildableName = "AAPSClient.app"
-            BlueprintName = "AAPSClient"
-            ReferencedContainer = "container:AAPSClient.xcodeproj">
+            BuildableName = "AAPS.app"
+            BlueprintName = "AAPS"
+            ReferencedContainer = "container:AAPS.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>

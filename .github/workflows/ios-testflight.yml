@@ -49,7 +49,7 @@ jobs:
 
     strategy:
       # Both clients, because a tester running two of them needs both updated together - an old
-      # AAPSClient2 against a new AAPSClient is a combination nobody built or tried.
+      # AAPS2 against a new AAPS is a combination nobody built or tried.
       #
       # `fail-fast: false` so a failure on one still uploads the other: they are separate apps in App
       # Store Connect, and half an upload is better than none when the other half already worked.
@@ -60,9 +60,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - scheme: AAPSClient
+          - scheme: AAPS
             bundle: app.aaps.client
-          - scheme: AAPSClient2
+          - scheme: AAPS2
             bundle: app.aaps.client2
 
     # Holds the four secrets. Give it required reviewers and restrict it to the `ios` branch: in a
@@ -192,7 +192,7 @@ jobs:
           set -o pipefail
           # -allowProvisioningUpdates lets Xcode create the distribution certificate and profile
           # from the API key, so no .p12 or profile has to be stored as a secret.
-          xcodebuild -project ios/app/AAPSClient.xcodeproj \
+          xcodebuild -project ios/app/AAPS.xcodeproj \
             -scheme ${{ matrix.scheme }} \
             -configuration Release \
             -destination 'generic/platform=iOS' \

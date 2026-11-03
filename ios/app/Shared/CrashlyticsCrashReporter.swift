@@ -24,7 +24,7 @@ final class CrashlyticsCrashReporter: NSObject, CrashReporter {
 
     /// Starts Firebase, or decides not to.
     ///
-    /// Called from `ClientApp.init()`. Crashlytics does not need an `AppDelegate`; configuring this
+    /// Called from `AapsApp.init()`. Crashlytics does not need an `AppDelegate`; configuring this
     /// early is what gets its signal handlers in before anything can crash.
     ///
     /// The configuration is validated by hand first. `FirebaseApp.configure()` raises an

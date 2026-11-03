@@ -7,14 +7,14 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		AA2000300000000000000 /* ClientApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000100000000000000 /* ClientApp.swift */; };
+		AA2000300000000000000 /* AapsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000100000000000000 /* AapsApp.swift */; };
 		AA2000400000000000000 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA2000200000000000000 /* Assets.xcassets */; };
 		AA2005000000000000000 /* libre3 in Resources */ = {isa = PBXBuildFile; fileRef = AA1005000000000000000 /* libre3 */; };
 		AA2000500000000000000 /* AapsShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA1000200000000000000 /* AapsShared.framework */; };
 		AA2009800000000000000 /* CrashlyticsCrashReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1009800000000000000 /* CrashlyticsCrashReporter.swift */; };
 		AA2009900000000000000 /* NsSocketBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1009900000000000000 /* NsSocketBridge.swift */; };
 		AA2010000000000000000 /* MealAdvisorCameraBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1010000000000000000000 /* MealAdvisorCameraBridge.swift */; };
-		AA3000300000000000000 /* ClientApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000100000000000000 /* ClientApp.swift */; };
+		AA3000300000000000000 /* AapsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000100000000000000 /* AapsApp.swift */; };
 		AA3000400000000000000 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA3000200000000000000 /* Assets.xcassets */; };
 		AA3005000000000000000 /* libre3 in Resources */ = {isa = PBXBuildFile; fileRef = AA1005000000000000000 /* libre3 */; };
 		AA3000500000000000000 /* AapsShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA1000200000000000000 /* AapsShared.framework */; };
@@ -28,16 +28,16 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		AA1000100000000000000 /* ClientApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClientApp.swift; path = Shared/ClientApp.swift; sourceTree = "<group>"; };
+		AA1000100000000000000 /* AapsApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AapsApp.swift; path = Shared/AapsApp.swift; sourceTree = "<group>"; };
 		AA1000200000000000000 /* AapsShared.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AapsShared.framework; path = ../shell/build/bin/iosSimulatorArm64/debugFramework/AapsShared.framework; sourceTree = "<group>"; };
 		AA1000300000000000000 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 		AA1009800000000000000 /* CrashlyticsCrashReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CrashlyticsCrashReporter.swift; path = Shared/CrashlyticsCrashReporter.swift; sourceTree = "<group>"; };
 		AA1009900000000000000 /* NsSocketBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NsSocketBridge.swift; path = Shared/NsSocketBridge.swift; sourceTree = "<group>"; };
 		AA1010000000000000000000 /* MealAdvisorCameraBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MealAdvisorCameraBridge.swift; path = Shared/MealAdvisorCameraBridge.swift; sourceTree = "<group>"; };
-		AA2000100000000000000 /* AAPSClient.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AAPSClient.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		AA2000200000000000000 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = AAPSClient/Assets.xcassets; sourceTree = "<group>"; };
-		AA3000100000000000000 /* AAPSClient2.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AAPSClient2.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		AA3000200000000000000 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = AAPSClient2/Assets.xcassets; sourceTree = "<group>"; };
+		AA2000100000000000000 /* AAPS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AAPS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA2000200000000000000 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = AAPS/Assets.xcassets; sourceTree = "<group>"; };
+		AA3000100000000000000 /* AAPS2.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AAPS2.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA3000200000000000000 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = AAPS2/Assets.xcassets; sourceTree = "<group>"; };
 		AA1005000000000000000 /* libre3 */ = {isa = PBXFileReference; lastKnownFileType = folder; name = libre3; path = ../../plugins/libre3/src/commonMain/resources/libre3; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -68,12 +68,12 @@
 		AA1001300000000000000 = {
 			isa = PBXGroup;
 			children = (
-				AA1000100000000000000 /* ClientApp.swift */,
+				AA1000100000000000000 /* AapsApp.swift */,
 				AA1009800000000000000 /* CrashlyticsCrashReporter.swift */,
 				AA1009900000000000000 /* NsSocketBridge.swift */,
 				AA1010000000000000000000 /* MealAdvisorCameraBridge.swift */,
-				AA2001200000000000000 /* AAPSClient */,
-				AA3001200000000000000 /* AAPSClient2 */,
+				AA2001200000000000000 /* AAPS */,
+				AA3001200000000000000 /* AAPS2 */,
 				AA1000300000000000000 /* Signing.xcconfig */,
 				AA1005000000000000000 /* libre3 */,
 				AA1000200000000000000 /* AapsShared.framework */,
@@ -84,34 +84,34 @@
 		AA1001400000000000000 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				AA2000100000000000000 /* AAPSClient.app */,
-				AA3000100000000000000 /* AAPSClient2.app */,
+				AA2000100000000000000 /* AAPS.app */,
+				AA3000100000000000000 /* AAPS2.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		AA2001200000000000000 /* AAPSClient */ = {
+		AA2001200000000000000 /* AAPS */ = {
 			isa = PBXGroup;
 			children = (
 				AA2000200000000000000 /* Assets.xcassets */,
 			);
-			name = AAPSClient;
+			name = AAPS;
 			sourceTree = "<group>";
 		};
-		AA3001200000000000000 /* AAPSClient2 */ = {
+		AA3001200000000000000 /* AAPS2 */ = {
 			isa = PBXGroup;
 			children = (
 				AA3000200000000000000 /* Assets.xcassets */,
 			);
-			name = AAPSClient2;
+			name = AAPS2;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		AA2001300000000000000 /* AAPSClient */ = {
+		AA2001300000000000000 /* AAPS */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = AA2001100000000000000 /* Build configuration list for PBXNativeTarget "AAPSClient" */;
+			buildConfigurationList = AA2001100000000000000 /* Build configuration list for PBXNativeTarget "AAPS" */;
 			buildPhases = (
 				AA2000900000000000000 /* Build shared framework */,
 				AA2000600000000000000 /* Sources */,
@@ -122,18 +122,18 @@
 			);
 			dependencies = (
 			);
-			name = AAPSClient;
+			name = AAPS;
 			packageProductDependencies = (
 				AA00SP02000000000000001 /* SocketIO */,
 				AA00SP02000000000000003 /* FirebaseCrashlytics */,
 			);
-			productName = AAPSClient;
-			productReference = AA2000100000000000000 /* AAPSClient.app */;
+			productName = AAPS;
+			productReference = AA2000100000000000000 /* AAPS.app */;
 			productType = "com.apple.product-type.application";
 		};
-		AA3001300000000000000 /* AAPSClient2 */ = {
+		AA3001300000000000000 /* AAPS2 */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = AA3001100000000000000 /* Build configuration list for PBXNativeTarget "AAPSClient2" */;
+			buildConfigurationList = AA3001100000000000000 /* Build configuration list for PBXNativeTarget "AAPS2" */;
 			buildPhases = (
 				AA3000900000000000000 /* Build shared framework */,
 				AA3000600000000000000 /* Sources */,
@@ -144,13 +144,13 @@
 			);
 			dependencies = (
 			);
-			name = AAPSClient2;
+			name = AAPS2;
 			packageProductDependencies = (
 				AA00SP02000000000000002 /* SocketIO */,
 				AA00SP02000000000000004 /* FirebaseCrashlytics */,
 			);
-			productName = AAPSClient2;
-			productReference = AA3000100000000000000 /* AAPSClient2.app */;
+			productName = AAPS2;
+			productReference = AA3000100000000000000 /* AAPS2.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -163,7 +163,7 @@
 				LastSwiftUpdateCheck = 2600;
 				LastUpgradeCheck = 2600;
 			};
-			buildConfigurationList = AA1001200000000000000 /* Build configuration list for PBXProject "AAPSClient" */;
+			buildConfigurationList = AA1001200000000000000 /* Build configuration list for PBXProject "AAPS" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -180,8 +180,8 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				AA2001300000000000000 /* AAPSClient */,
-				AA3001300000000000000 /* AAPSClient2 */,
+				AA2001300000000000000 /* AAPS */,
+				AA3001300000000000000 /* AAPS2 */,
 			);
 		};
 /* End PBXProject section */
@@ -243,7 +243,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA2000300000000000000 /* ClientApp.swift in Sources */,
+				AA2000300000000000000 /* AapsApp.swift in Sources */,
 				AA2009800000000000000 /* CrashlyticsCrashReporter.swift in Sources */,
 				AA2009900000000000000 /* NsSocketBridge.swift in Sources */,
 				AA2010000000000000000 /* MealAdvisorCameraBridge.swift in Sources */,
@@ -254,7 +254,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA3000300000000000000 /* ClientApp.swift in Sources */,
+				AA3000300000000000000 /* AapsApp.swift in Sources */,
 				AA3009800000000000000 /* CrashlyticsCrashReporter.swift in Sources */,
 				AA3009900000000000000 /* NsSocketBridge.swift in Sources */,
 				AA3010000000000000000 /* MealAdvisorCameraBridge.swift in Sources */,
@@ -596,7 +596,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		AA1001200000000000000 /* Build configuration list for PBXProject "AAPSClient" */ = {
+		AA1001200000000000000 /* Build configuration list for PBXProject "AAPS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				AA1001100000000000000 /* Debug */,
@@ -605,7 +605,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
-		AA2001100000000000000 /* Build configuration list for PBXNativeTarget "AAPSClient" */ = {
+		AA2001100000000000000 /* Build configuration list for PBXNativeTarget "AAPS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				AA2001000000000000000 /* Debug */,
@@ -614,7 +614,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
-		AA3001100000000000000 /* Build configuration list for PBXNativeTarget "AAPSClient2" */ = {
+		AA3001100000000000000 /* Build configuration list for PBXNativeTarget "AAPS2" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				AA3001000000000000000 /* Debug */,

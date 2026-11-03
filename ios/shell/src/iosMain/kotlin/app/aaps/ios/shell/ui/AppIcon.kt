@@ -18,7 +18,7 @@ import platform.posix.memcpy
  *
  * Android picks a launcher icon per flavour in `IconsProviderImplementation`, and the desktop copy
  * of that rule reads [app.aaps.core.interfaces.configuration.Config]. iOS needs neither: the two app
- * targets, AAPSClient and AAPSClient2, already carry their own `AppIcon` asset, and one Kotlin
+ * targets, AAPS and AAPS2, already carry their own `AppIcon` asset, and one Kotlin
  * framework is linked into both. Asking the bundle therefore gives the icon of the app that is
  * actually running, and it cannot disagree with the icon on the home screen - which a second copy of
  * the artwork here eventually would.
