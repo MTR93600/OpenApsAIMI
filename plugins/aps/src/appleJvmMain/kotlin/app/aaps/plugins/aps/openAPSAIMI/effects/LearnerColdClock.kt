@@ -28,6 +28,7 @@ internal class LearnerColdClock : DateUtil {
     override fun secondString(mills: Long): String = unused()
     override fun minuteString(): String = unused()
     override fun minuteString(mills: Long): String = unused()
+    override fun hourStringFromSeconds(seconds: Int): String = unused()
     override fun hourString(): String = unused()
     override fun hourString(mills: Long): String = unused()
     override fun amPm(): String = unused()

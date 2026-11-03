@@ -30,6 +30,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.AapsTheme
+import app.aaps.core.ui.compose.LeftToRight
 import app.aaps.core.ui.compose.NumberInputRow
 import app.aaps.core.ui.compose.glass.GlassColors
 import app.aaps.core.ui.compose.glass.isGlassDarkMode
@@ -239,21 +240,23 @@ private fun TddCycleChart(
 
     val axisLabelComponent = rememberTextComponent(style = TextStyle(color = GlassColors.textBright(isDark)))
 
-    CartesianChartHost(
-        chart = rememberCartesianChart(
-            rememberLineCartesianLayer(
-                lineProvider = LineCartesianLayer.LineProvider.series(lines)
+    LeftToRight {
+        CartesianChartHost(
+            chart = rememberCartesianChart(
+                rememberLineCartesianLayer(
+                    lineProvider = LineCartesianLayer.LineProvider.series(lines)
+                ),
+                startAxis = VerticalAxis.rememberStart(
+                    label = axisLabelComponent
+                ),
+                bottomAxis = HorizontalAxis.rememberBottom(
+                    valueFormatter = dayFormatter,
+                    label = axisLabelComponent
+                )
             ),
-            startAxis = VerticalAxis.rememberStart(
-                label = axisLabelComponent
-            ),
-            bottomAxis = HorizontalAxis.rememberBottom(
-                valueFormatter = dayFormatter,
-                label = axisLabelComponent
-            )
-        ),
-        modelProducer = modelProducer,
-        zoomState = rememberVicoZoomState(zoomEnabled = false, initialZoom = Zoom.Content),
-        modifier = modifier
-    )
+            modelProducer = modelProducer,
+            zoomState = rememberVicoZoomState(zoomEnabled = false, initialZoom = Zoom.Content),
+            modifier = modifier
+        )
+    }
 }
