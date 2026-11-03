@@ -8,6 +8,7 @@ import app.aaps.core.keys.BooleanKey
 import app.aaps.core.objects.di.CoreObjectsGraph
 import app.aaps.implementation.logging.AAPSLoggerIos
 import app.aaps.ios.shell.di.IosProbeGraph
+import app.aaps.ios.shell.di.NoCrashReporter
 import app.aaps.ios.shell.prefs.IosStorage
 import app.aaps.shared.clientbindings.ClientGraphBindings
 import dev.zacsweers.metro.createGraphFactory
@@ -64,8 +65,8 @@ object ShellInfo {
      *   caller sees which step broke instead of only a crash.
      */
     fun checkDi(): String = try {
-        val graph = createGraphFactory<IosProbeGraph.Factory>().create(CoreObjectsGraph, ClientGraphBindings)
-        val other = createGraphFactory<IosProbeGraph.Factory>().create(CoreObjectsGraph, ClientGraphBindings)
+        val graph = createGraphFactory<IosProbeGraph.Factory>().create(CoreObjectsGraph, ClientGraphBindings, NoCrashReporter)
+        val other = createGraphFactory<IosProbeGraph.Factory>().create(CoreObjectsGraph, ClientGraphBindings, NoCrashReporter)
 
         val built = listOf(
             graph.noSmoothing, graph.avgSmoothing, graph.exponentialSmoothing, graph.noCalibration
@@ -192,7 +193,7 @@ object ShellInfo {
     fun checkAlarm(): String = try {
         val found = listOf("alarm", "urgentalarm", "error", "boluserror", "eatreminder")
             .count { NSBundle.mainBundle.URLForResource(it, withExtension = "mp3") != null }
-        val graph = createGraphFactory<IosProbeGraph.Factory>().create(CoreObjectsGraph, ClientGraphBindings)
+        val graph = createGraphFactory<IosProbeGraph.Factory>().create(CoreObjectsGraph, ClientGraphBindings, NoCrashReporter)
         val player = graph.alarmSoundPlayer
         // Started and stopped straight away: this is a check that it runs, not a demonstration.
         player.play(AlarmSound.ERROR, AlarmSoundPlayer.OWNER_INTERNAL)

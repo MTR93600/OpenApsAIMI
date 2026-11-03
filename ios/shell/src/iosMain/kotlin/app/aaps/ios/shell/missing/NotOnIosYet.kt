@@ -24,3 +24,7 @@ internal fun AAPSLogger.notOnIosYet(what: String) {
     error(LTag.CORE, "Not implemented on iOS yet: $what")
 }
 
+// There used to be a throwing `failNotOnIosYet` beside this, for a call whose result the caller acts
+// on and where inventing one would be a lie. Its last user was `Maintenance.executeSendLogs`, which
+// is implemented now, so it went with it rather than sitting here unused. `failNotOnDesktopYet` in
+// the desktop shell is the same idea if one is needed again.

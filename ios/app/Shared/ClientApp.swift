@@ -10,7 +10,18 @@ import AapsShared
 @main
 struct ClientApp: App {
 
+    /// Firebase is started here, before SwiftUI builds anything.
+    ///
+    /// Crashlytics does not need an `AppDelegate` - an `init()` on the `App` is early enough, and
+    /// early is the point: its signal handlers have to be installed before there is anything to
+    /// crash. It must also be the first line, before any call into the Kotlin framework below: the
+    /// Kotlin runtime starts with that first call and puts its own terminate handler on top of
+    /// Crashlytics', and that ordering is what keeps a Kotlin crash readable.
+    ///
+    /// `start()` never raises. A missing or broken `GoogleService-Info.plist` means no crash
+    /// reporting, not no app.
     init() {
+        CrashlyticsCrashReporter.start()
         // Install the Swift AVFoundation implementation before the Kotlin graph can construct an
         // iOS Meal Advisor screen.
         IosMealAdvisorCameraBridgeKt.installIosMealAdvisorCameraFactory(
@@ -23,7 +34,7 @@ struct ClientApp: App {
         // Before any window: iOS can start the app in the background for a Bluetooth event, and
         // then SwiftUI may build no window at all. The sensor, the pump and the loop must run then
         // too. The view calls this again, which does nothing the second time.
-        AapsAppHostKt.startAapsApp(nsSocketFactory: SwiftNsSocketFactory())
+        AapsAppHostKt.startAapsApp(nsSocketFactory: SwiftNsSocketFactory(), crashReporter: CrashlyticsCrashReporter.shared)
     }
 
     var body: some SwiftUI.Scene {
@@ -46,7 +57,10 @@ struct AapsAppView: UIViewControllerRepresentable {
         // Swift and cannot carry a Kotlin annotation. Android and desktop contribute their own
         // socket.io client automatically; this is the same project's Swift client, so both platforms
         // speak to Nightscout identically.
-        AapsAppHostKt.aapsAppViewController(nsSocketFactory: SwiftNsSocketFactory())
+        AapsAppHostKt.aapsAppViewController(
+            nsSocketFactory: SwiftNsSocketFactory(),
+            crashReporter: CrashlyticsCrashReporter.shared
+        )
     }
 
     func updateUIViewController(

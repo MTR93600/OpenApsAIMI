@@ -40,6 +40,7 @@ import app.aaps.core.interfaces.ui.UiRestart
 import app.aaps.core.interfaces.ui.UrlOpener
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
+import app.aaps.core.interfaces.utils.fabric.CrashReporter
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.VisibilityContext
@@ -114,6 +115,13 @@ interface IosAppGraph : MetroViewModelMultibindings {
     val config: Config
     val preferences: Preferences
 
+    /**
+     * Exposed so startup can read the reporting opt-out through [FabricPrivacy.fabricEnabled] and
+     * push it into Crashlytics, rather than through [preferences], which answers the shared default
+     * for this Simple-Mode-defaulted key. The AIMI engine graph uses it too.
+     */
+    val fabricPrivacy: FabricPrivacy
+
     /** Collected by the composition root, which rebuilds when it moves. */
     val uiRestart: UiRestart
     val dateUtil: DateUtil
@@ -178,13 +186,6 @@ interface IosAppGraph : MetroViewModelMultibindings {
      */
     val tddCalculator: TddCalculator
     val tirCalculator: TirCalculator
-
-    /**
-     * Analytics/crash-reporting privacy gate. The iOS implementation logs locally
-     * only (no Firebase upload); see `FabricPrivacyImpl` for the rationale.
-     * Exposed for the AIMI engine graph.
-     */
-    val fabricPrivacy: FabricPrivacy
 
     /**
      * The plugin registry itself, not just the [ActivePlugin] view of it.
@@ -315,7 +316,13 @@ interface IosAppGraph : MetroViewModelMultibindings {
              * So it arrives here instead. Until it did, iOS had a placeholder that returned null and
              * the client simply never connected, while desktop worked.
              */
-            @Provides nsSocketFactory: NsSocketFactory
+            @Provides nsSocketFactory: NsSocketFactory,
+            /**
+             * Firebase Crashlytics, handed in for the same reason as the socket: the implementation
+             * is a Swift class on the Firebase Apple SDK, and a Swift class cannot carry a Kotlin
+             * annotation. `FabricPrivacyImpl` takes it and reports through it.
+             */
+            @Provides crashReporter: CrashReporter
         ): IosAppGraph
     }
 }

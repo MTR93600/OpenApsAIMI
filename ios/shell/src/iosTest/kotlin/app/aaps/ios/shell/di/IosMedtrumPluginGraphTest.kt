@@ -29,7 +29,7 @@ import kotlin.test.assertTrue
  */
 class IosMedtrumPluginGraphTest {
 
-    private fun graph() = createGraphFactory<IosProbeGraph.Factory>().create(CoreObjectsGraph, ClientGraphBindings)
+    private fun graph() = createGraphFactory<IosProbeGraph.Factory>().create(CoreObjectsGraph, ClientGraphBindings, NoCrashReporter)
 
     @Test
     fun `the graph builds the Medtrum pump plugin`() {

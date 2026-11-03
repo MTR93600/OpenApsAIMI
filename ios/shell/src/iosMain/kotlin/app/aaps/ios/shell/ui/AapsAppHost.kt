@@ -1,9 +1,15 @@
 package app.aaps.ios.shell.ui
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -16,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.window.ComposeUIViewController
@@ -50,6 +57,7 @@ import app.aaps.core.interfaces.rx.events.EventAppInitialized
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.delayUntilWallClock
 import app.aaps.core.keys.BooleanKey
+import app.aaps.core.interfaces.utils.fabric.CrashReporter
 import app.aaps.core.keys.BooleanNonKey
 import app.aaps.core.keys.StringKey
 import app.aaps.core.objects.di.CoreObjectsGraph
@@ -106,6 +114,9 @@ import app.aaps.ui.search.SearchViewModel
 import dev.zacsweers.metro.createGraphFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlin.experimental.ExperimentalNativeApi
+import kotlin.native.setUnhandledExceptionHook
+import kotlin.native.terminateWithUnhandledException
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -117,6 +128,40 @@ import platform.UIKit.UIApplicationDidBecomeActiveNotification
 import platform.UIKit.UIApplicationDidEnterBackgroundNotification
 import platform.UIKit.UIViewController
 
+/** Set once. [aapsAppViewController] is called once by Swift, but a second call must not add a second hook. */
+private var crashLoggingInstalled = false
+
+/**
+ * Writes the exception that is about to stop the app into `aaps.log`.
+ *
+ * An uncaught Kotlin exception on iOS ends in `abort()`, so the process dies with SIGABRT. The crash
+ * report iOS keeps afterwards holds the whole Kotlin stack, frame by frame - but not the exception
+ * **type or message**. Kotlin prints those to stdout and stderr, and nothing on a phone records
+ * either. A real crash of this app on 2026-10-25 left 49 readable frames in the system report and
+ * not one line in the app's own log, so the only question anybody actually asks - what went wrong -
+ * was the one thing missing.
+ *
+ * This hook writes the type, the message and the stack to the file the "Send logs" button shares,
+ * and then ends the process the way the runtime would have.
+ *
+ * Installed by the two entry points rather than inside [startedOnce], which runs again for
+ * "Try again" and "Start fresh".
+ *
+ * The logger is built here instead of taken from the graph on purpose: when this runs the graph may
+ * be half built, or already gone, and a crash reporter that needs a working app is no use.
+ */
+@OptIn(ExperimentalNativeApi::class)
+private fun installCrashLogging() {
+    if (crashLoggingInstalled) return
+    crashLoggingInstalled = true
+    val logger = AAPSLoggerIos()
+    setUnhandledExceptionHook { throwable ->
+        // Nothing in here may throw. A failure inside the hook replaces a readable crash with a
+        // confusing one, and the process still has to end either way.
+        runCatching { logger.error(LTag.CORE, "Uncaught exception, the app is stopping", throwable) }
+        terminateWithUnhandledException(throwable)
+    }
+}
 
 /** The app, built and started once per process: the graph, and what the composition needs from outside it. */
 private class StartedApp(
@@ -140,8 +185,9 @@ private var startedApp: StartedApp? = null
  * kept after a failure, so the view tries again when the person opens the app, and shows
  * [StartupFailedScreen] if it fails again.
  */
-fun startAapsApp(nsSocketFactory: NsSocketFactory) {
-    runCatching { startedOnce(nsSocketFactory) }
+fun startAapsApp(nsSocketFactory: NsSocketFactory, crashReporter: CrashReporter) {
+    installCrashLogging()
+    runCatching { startedOnce(nsSocketFactory, crashReporter) }
         .onFailure { e -> AAPSLoggerIos().error(LTag.CORE, "The app could not start: ${e.message}", e) }
 }
 
@@ -153,14 +199,24 @@ fun startAapsApp(nsSocketFactory: NsSocketFactory) {
  * message, which the failure screen can act on, instead of failing somewhere inside the first screen.
  * Nothing is kept when it throws, so the failure screen can call this again.
  */
-private fun startedOnce(nsSocketFactory: NsSocketFactory): StartedApp {
+private fun startedOnce(nsSocketFactory: NsSocketFactory, crashReporter: CrashReporter): StartedApp {
     startedApp?.let { return it }
     val store = IosStorage.open()
     // Built once, outside the composition: a graph rebuilt on each recomposition would hand out new
     // singletons every frame - a new database wrapper, a new preference store.
-    val graph = createGraphFactory<IosAppGraph.Factory>().create(CoreObjectsGraph, ClientGraphBindings, nsSocketFactory)
+    val graph = createGraphFactory<IosAppGraph.Factory>().create(CoreObjectsGraph, ClientGraphBindings, nsSocketFactory, crashReporter)
     val viewModelFactory = ClientViewModelFactory(graph)
     val logger = graph.logger
+
+    // Tell Crashlytics the stored answer before anything can crash. Its own signal handler catches a
+    // fatal crash whether or not Kotlin calls it, so gating the call sites alone would cover the
+    // non-fatals and silently miss the crashes. Pushed here rather than from the reporter's own
+    // constructor, which runs whenever something first injects it - possibly never, possibly late.
+    //
+    // Asked through `fabricEnabled()`, not `preferences.get`: this key is `defaultedBySM`, so
+    // `PreferencesImpl` answers the shared default - true - in Simple Mode, which would switch
+    // collection on for precisely the users whose settings screen never shows them the row.
+    crashReporter.setCollectionEnabled(graph.fabricPrivacy.fabricEnabled())
 
     // Before the composition, not beside it: the first view model built reads the active pump, and
     // an empty plugin list there throws from a coroutine and takes the process with it.
@@ -274,8 +330,9 @@ private fun startedOnce(nsSocketFactory: NsSocketFactory): StartedApp {
  * screen and in the log: `reportNotReady` for work still to do (a document picker), and
  * `reportNotAvailable` for what iOS does not allow (opening an Android CGM app, closing the app).
  */
-fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
-    val startup = runCatching { startedOnce(nsSocketFactory) }
+fun aapsAppViewController(nsSocketFactory: NsSocketFactory, crashReporter: CrashReporter): UIViewController {
+    installCrashLogging()
+    val startup = runCatching { startedOnce(nsSocketFactory, crashReporter) }
 
     // Built out here, once, for two reasons: the request it carries has to survive a recomposition,
     // and `AapsAppRoot` collects pending requests in an effect keyed on the lambda, so handing it a
@@ -296,11 +353,11 @@ fun aapsAppViewController(nsSocketFactory: NsSocketFactory): UIViewController {
                         explanation = failureExplanation(error),
                         error = error,
                         // A failure of either one lands on this same screen again.
-                        onRetry = if (error is KeychainUnavailableException) ({ current = runCatching { startedOnce(nsSocketFactory) } }) else null,
+                        onRetry = if (error is KeychainUnavailableException) ({ current = runCatching { startedOnce(nsSocketFactory, crashReporter) } }) else null,
                         onStartFresh = if (error is StoreUnreadableException) ({
                             current = runCatching {
                                 IosStorage.startFresh()
-                                startedOnce(nsSocketFactory)
+                                startedOnce(nsSocketFactory, crashReporter)
                             }
                         }) else null
                     )
@@ -419,7 +476,10 @@ private fun AapsApp(app: StartedApp, navigationRelay: NavigationRelay, onPending
             // Nothing is drawn until it is granted. Showing the app behind the prompt would make
             // the protection cosmetic - the screen it is meant to hide would be readable through
             // the dialog, and on iOS it would also be in the app-switcher snapshot.
-            if (!unlocked) return@AapsAppRoot
+            if (!unlocked) {
+                AppLockedScreen(showRetry = !asking, onRetry = requestUnlock)
+                return@AapsAppRoot
+            }
 
             // Everything the shared screens ask a platform for that iOS cannot answer ends up in
             // one of these two. Until now they only wrote a line in the log, so from the user's
@@ -649,7 +709,6 @@ private fun AapsApp(app: StartedApp, navigationRelay: NavigationRelay, onPending
                             commandQueue = graph.commandQueue,
                             pumpCommunicationStatus = graph.pumpCommunicationStatus,
                             appName = appName,
-                            authorizationFailedMessage = "Authorization failed",
                             onNavigate = handleOnIos,
                             onSearchResultClick = { entry -> navigator.handleSearchResultClick(entry) },
                             onNotificationActionClick = { n -> navigator.handleNotificationAction(n.id) },
@@ -681,7 +740,6 @@ private fun AapsApp(app: StartedApp, navigationRelay: NavigationRelay, onPending
                             onBringToForeground = { graph.authBrowser.dismiss() },
                             // No activity to recreate. A Compose scene is not restarted this way.
                             onRecreateActivity = { logger.debug(LTag.CORE, "Nothing to recreate on iOS after a database reset") },
-                            onAuthorizationFailed = { logger.error(LTag.CORE, "Authorization failed") },
                             autoShowNotificationSheet = false,
                             onAutoShowConsumed = {}
                         )
@@ -770,6 +828,27 @@ private fun AAPSLogger.notWiredYet(what: String) = error(LTag.CORE, "Not wired u
  * A fallback rather than nothing on screen: the About dialog and the drawer both have a place for
  * it, and an empty space there reads as a broken screen.
  */
+/**
+ * What is shown instead of the app while it is locked. An iOS app should not close itself, so after a
+ * refusal the user needs a way to ask again: a blank screen looks like a broken app.
+ */
+@Composable
+private fun AppLockedScreen(showRetry: Boolean, onRetry: () -> Unit) {
+    Surface(Modifier.fillMaxSize()) {
+        // While the prompt is up, it says everything already
+        if (showRetry) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(stringResource(CoreUiStrings.biometric_title), style = MaterialTheme.typography.titleLarge)
+                TextButton(onClick = onRetry) { Text(stringResource(CoreUiStrings.retry)) }
+            }
+        }
+    }
+}
+
 @Composable
 private fun AppIconImage(icon: ImageBitmap?, modifier: Modifier) {
     if (icon != null) Image(bitmap = icon, contentDescription = null, modifier = modifier)
