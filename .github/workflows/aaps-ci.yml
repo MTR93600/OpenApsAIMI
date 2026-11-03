@@ -266,6 +266,10 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build APKs
+        env:
+          # Eversense cloud client secret, read by plugins/eversense at build time. Without it an
+          # Eversense 365 transmitter cannot pair. Set it as a repository secret.
+          EVERSENSE_CLIENT_SECRET: ${{ secrets.EVERSENSE_CLIENT_SECRET }}
         run: |
               ./gradlew :app:assemble${{ env.BUILD_VARIANT }} :wear:assemble${{ env.BUILD_VARIANT }} \
               -Dorg.gradle.jvmargs="-Xmx8g -XX:+UseParallelGC -Xss4m" \
