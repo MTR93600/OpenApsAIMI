@@ -21,7 +21,6 @@ import app.aaps.core.keys.UnitType
 import app.aaps.core.keys.decimalPlaces
 import app.aaps.core.keys.interfaces.DoublePreferenceKey
 import app.aaps.core.keys.interfaces.VisibilityContext
-import app.aaps.core.keys.decimalPlaces
 import app.aaps.core.keys.rangeResId
 import app.aaps.core.keys.step
 import app.aaps.core.keys.unitLabelResId
@@ -29,6 +28,24 @@ import app.aaps.core.keys.valueResId
 import kotlin.math.abs
 import app.aaps.core.ui.R
 import app.aaps.core.ui.compose.LocalPreferences
+
+/**
+ * Decimal places and slider step for a double preference.
+ *
+ * A key with a unit uses the step of that unit. A key with no unit ([UnitType.NONE]) has no step of
+ * its own, and the unit step of 1 would make a slider over 0..1 jump from one end to the other: one
+ * touch would turn a damping of 0.6 into 0 or 1. So the step comes from the size of the range.
+ */
+fun sliderDecimalsAndStep(unitType: UnitType, min: Double, max: Double): Pair<Int, Double> {
+    if (unitType != UnitType.NONE) return unitType.decimalPlaces() to unitType.step()
+    val span = abs(max - min)
+    return when {
+        span <= 0.15 -> 3 to 0.001
+        span <= 1.5  -> 2 to 0.01
+        span <= 25.0 -> 1 to 0.1
+        else         -> 0 to 1.0
+    }
+}
 
 /**
  * Composable double preference for use inside card sections.
@@ -59,18 +76,8 @@ fun AdaptiveDoublePreferenceItem(
     val state = rememberPreferenceDoubleState(doubleKey)
     val theme = LocalPreferenceTheme.current
 
-    val span = (doubleKey.max - doubleKey.min).let { if (abs(it) < 1e-12) 1e-9 else it }
     val unitType = doubleKey.unitType
-    val (decimalPlaces, step) = if (unitType == UnitType.NONE) {
-        when {
-            span <= 0.15  -> 3 to 0.001
-            span <= 1.5   -> 2 to 0.01
-            span <= 25.0  -> 1 to 0.1
-            else          -> 0 to 1.0
-        }
-    } else {
-        unitType.decimalPlaces() to unitType.step()
-    }
+    val (decimalPlaces, step) = sliderDecimalsAndStep(unitType, doubleKey.min, doubleKey.max)
     val valueFormatResId = unitType.valueResId()
 
     LaunchedEffect(doubleKey.key) {
