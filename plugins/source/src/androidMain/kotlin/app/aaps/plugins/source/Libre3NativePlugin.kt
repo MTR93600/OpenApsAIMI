@@ -17,6 +17,8 @@ import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.source.BgSource
+import app.aaps.core.interfaces.source.CgmSensorAlertProvider
+import app.aaps.core.interfaces.source.CgmSensorAlertState
 import app.aaps.core.interfaces.source.CgmSensorLifecycle
 import app.aaps.core.interfaces.source.CgmSensorStatusProvider
 import app.aaps.core.interfaces.source.CgmStagingEvidence
@@ -125,7 +127,7 @@ class Libre3NativePlugin @Inject constructor(
     preferences,
     config,
     notificationManager,
-), BgSource, Libre3GlucoseWatcher, CgmSensorStatusProvider {
+), BgSource, Libre3GlucoseWatcher, CgmSensorStatusProvider, CgmSensorAlertProvider {
 
     /** The constructor argument, kept as [ResourceHelper] so string ids do not need a cast. */
     private val resourceHelper: ResourceHelper = rh
@@ -262,6 +264,17 @@ class Libre3NativePlugin @Inject constructor(
 
     private val _stagingLifecycle = MutableStateFlow<CgmSensorLifecycle?>(null)
     override val stagingLifecycle: StateFlow<CgmSensorLifecycle?> = _stagingLifecycle.asStateFlow()
+
+    /** What the driver said, for the CGM sensor alarms. Guarded by its own monitor. */
+    private val sensorAlerts = Libre3SensorAlerts()
+
+    /** The plugin runs (between [onStart] and [onStop]); a stopped plugin raises no sensor alarm. */
+    @Volatile
+    private var sensorAlertsRunning = false
+
+    /** Activation of the sensor [sensorAlerts] is about, to see a new sensor. */
+    @Volatile
+    private var sensorAlertsActivatedAt = 0L
 
     private val _stagingState = MutableStateFlow(StagingState.ABSENT)
     override val stagingState: StateFlow<StagingState> = _stagingState.asStateFlow()
@@ -547,6 +560,7 @@ class Libre3NativePlugin @Inject constructor(
 
     override suspend fun onStart() {
         super.onStart()
+        sensorAlertsRunning = true
         syncDriverFromPrefs()
         // Rebuild what ingest already knows BEFORE a reconnect can deliver anything. Without this,
         // an app restart would offer readings that are already in the database, and the loop treats
@@ -751,6 +765,7 @@ class Libre3NativePlugin @Inject constructor(
     }
 
     override suspend fun onStop() {
+        sensorAlertsRunning = false
         radioLeaseWatcher?.cancel()
         radioLeaseWatcher = null
         keepAliveWatcher?.cancel()
@@ -796,6 +811,7 @@ class Libre3NativePlugin @Inject constructor(
     private fun handleProductionWarmup(state: Libre3WarmupState) {
         warmupPhase = state.phase
         _warmup.value = state
+        synchronized(sensorAlerts) { sensorAlerts.onWarmup(state, System.currentTimeMillis()) }
         warmupNotification.update(state)
         aapsLogger.info(
             LTag.BGSOURCE,
@@ -845,6 +861,7 @@ class Libre3NativePlugin @Inject constructor(
             owner,
         )
         refreshProductionLifecycle()
+        synchronized(sensorAlerts) { sensorAlerts.onReading(sample.timestampMs) }
         val glucoseValues = listOf(Libre3Ingest.mapToGv(sample))
         ioScope.launch {
             if (owner !== productionWatcher) {
@@ -1221,6 +1238,36 @@ class Libre3NativePlugin @Inject constructor(
             } finally {
                 autoPromoteInFlight.set(false)
             }
+        }
+    }
+
+    /**
+     * The sensor state for the CGM sensor alarms, see [Libre3SensorAlerts]. Read by the central check
+     * on every pass. It only reads what the driver said; it changes nothing in the driver and nothing
+     * in the readings the loop receives.
+     */
+    override fun sensorAlertState(nowMs: Long, expiringLeadMs: Long): CgmSensorAlertState {
+        val identity = runCatching { sensorStore.loadIdentity() }.getOrNull()
+        val activatedAt = identity?.activatedAtMs ?: 0L
+        val lifecycle = Libre3Staging.computeLifecycle(
+            slot = SensorSlot.PRODUCTION,
+            activatedAtMs = activatedAt,
+            wearMinutes = identity?.wearDurationMinutes,
+            nowMs = nowMs,
+        )
+        return synchronized(sensorAlerts) {
+            if (activatedAt != sensorAlertsActivatedAt) {
+                if (sensorAlertsActivatedAt != 0L) sensorAlerts.onNewSensor()
+                sensorAlertsActivatedAt = activatedAt
+            }
+            sensorAlerts.onStaging(_stagingState.value, nowMs)
+            sensorAlerts.state(
+                running = sensorAlertsRunning,
+                sensorStored = identity != null,
+                expiresAtMs = lifecycle?.expiresAtEpochMs,
+                nowMs = nowMs,
+                expiringLeadMs = expiringLeadMs,
+            )
         }
     }
 

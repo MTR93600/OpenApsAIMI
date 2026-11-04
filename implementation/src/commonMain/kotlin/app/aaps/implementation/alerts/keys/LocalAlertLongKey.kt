@@ -13,8 +13,8 @@ import app.aaps.core.keys.interfaces.LongNonPreferenceKey
  * They were missed by the 2026-09-22 sweep that made pump identity and the sync cursors
  * non-exportable; same category, found later by review.
  *
- * The glucose alarm keys (low, high, rapid fall) are the same kind of deadline: they hold back a
- * repeat of the same alarm, and 0 means "may fire now".
+ * [CgmAlarmsMutedUntil] is the same kind of deadline: the end of the mute of the CGM alarms, 0 when
+ * they are not muted. Another phone's mute must not silence this one.
  */
 enum class LocalAlertLongKey(
     override val key: String,
@@ -24,7 +24,5 @@ enum class LocalAlertLongKey(
 
     NextPumpDisconnectedAlarm("nextPumpDisconnectedAlarm", 0L),
     NextMissedReadingsAlarm("nextMissedReadingsAlarm", 0L),
-    NextHypoAlarm("nextHypoAlarm", 0L),
-    NextHyperAlarm("nextHyperAlarm", 0L),
-    NextRapidFallAlarm("nextRapidFallAlarm", 0L)
+    CgmAlarmsMutedUntil("cgmAlarmsMutedUntil", 0L)
 }

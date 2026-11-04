@@ -13,5 +13,12 @@ package app.aaps.core.interfaces.notifications
 enum class AlarmAction {
 
     /** "Hypo treated": the user took carbs, so hold the low-glucose alarm while they work. */
-    HYPO_TREATED
+    HYPO_TREATED,
+
+    /**
+     * "Acknowledge" on a CGM alarm: every CGM alarm that is going off stops and stays quiet for its
+     * repeat time. It is not a mute: when the repeat time is over and the condition is still there,
+     * the alarm goes off again.
+     */
+    CGM_ACKNOWLEDGE
 }

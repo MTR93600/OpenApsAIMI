@@ -21,6 +21,8 @@ import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventRefreshOverview
 import app.aaps.core.interfaces.source.BgSource
+import app.aaps.core.interfaces.source.CgmSensorAlertProvider
+import app.aaps.core.interfaces.source.CgmSensorAlertState
 import app.aaps.core.interfaces.source.CgmSensorLifecycle
 import app.aaps.core.interfaces.source.CgmSensorStatusProvider
 import app.aaps.core.interfaces.source.CgmStagingEvidence
@@ -141,7 +143,7 @@ class DexcomOnePlusPlugin @Inject constructor(
     preferences,
     config,
     notificationManager,
-), BgSource, OnePlusGlucoseWatcher, CgmSensorStatusProvider {
+), BgSource, OnePlusGlucoseWatcher, CgmSensorStatusProvider, CgmSensorAlertProvider {
 
     private val resources: TextResolver = rh
 
@@ -169,6 +171,18 @@ class DexcomOnePlusPlugin @Inject constructor(
 
     @Volatile
     private var warmupPhase: OnePlusWarmupState.Phase = OnePlusWarmupState.Phase.IDLE
+
+    /** What the driver said, for the CGM sensor alarms. Guarded by [sensorAlertsLock]. */
+    private val sensorAlerts = DexcomOnePlusSensorAlerts()
+    private val sensorAlertsLock = AapsLock()
+
+    /** The plugin runs (between [onStart] and [onStop]); a stopped plugin raises no sensor alarm. */
+    @Volatile
+    private var sensorAlertsRunning = false
+
+    /** Session start of the sensor [sensorAlerts] is about, to see a new sensor. */
+    @Volatile
+    private var sensorAlertsSessionStart = 0L
 
     /** The newest reading of the production sensor, for the calibration checks. */
     @Volatile
@@ -286,6 +300,26 @@ class DexcomOnePlusPlugin @Inject constructor(
         }
     }
 
+    /**
+     * The sensor state for the CGM sensor alarms, see [DexcomOnePlusSensorAlerts]. Read by the central
+     * check on every pass. It only reads what the driver said; it changes nothing in the driver and
+     * nothing in the readings the loop receives.
+     */
+    override fun sensorAlertState(nowMs: Long, expiringLeadMs: Long): CgmSensorAlertState = sensorAlertsLock.withLock {
+        val sessionStart = runCatching { sensorStore.loadSessionStart() }.getOrDefault(0L)
+        if (sessionStart != sensorAlertsSessionStart) {
+            if (sensorAlertsSessionStart != 0L) sensorAlerts.onNewSensor()
+            sensorAlertsSessionStart = sessionStart
+        }
+        sensorAlerts.onStaging(_stagingState.value, nowMs)
+        sensorAlerts.state(
+            running = sensorAlertsRunning,
+            sensorStored = runCatching { sensorStore.load() != null }.getOrDefault(false),
+            expiresAtMs = DexcomOnePlusStaging.computeLifecycle(SensorSlot.PRODUCTION, sessionStart, nowMs)?.expiresAtEpochMs,
+            nowMs = nowMs,
+            expiringLeadMs = expiringLeadMs,
+        )
+    }
 
     /**
      * A fingerstick goes to the sensor while [DexcomOnePlusBooleanKey.SendCalibrationToSensor] is on,
@@ -350,6 +384,7 @@ class DexcomOnePlusPlugin @Inject constructor(
 
     override suspend fun onStart() {
         super.onStart()
+        sensorAlertsRunning = true
         syncDriverFromPrefs()
         // Rehydrate the ingest dedup BEFORE any reconnect can deliver glucose, so an app update /
         // restart cannot re-insert already-stored readings (duplicates halt the loop). Sequence floor
@@ -422,6 +457,7 @@ class DexcomOnePlusPlugin @Inject constructor(
     }
 
     override suspend fun onStop() {
+        sensorAlertsRunning = false
         cancelReconnectWatchdog()
         radioLeaseWatcher?.cancel()
         radioLeaseWatcher = null
@@ -450,6 +486,7 @@ class DexcomOnePlusPlugin @Inject constructor(
     override fun onWarmup(state: OnePlusWarmupState) {
         warmupPhase = state.phase
         _warmup.value = state
+        sensorAlertsLock.withLock { sensorAlerts.onWarmup(state, nowMs()) }
         host.showWarmup(state)
         aapsLogger.info(
             LTag.BGSOURCE,
@@ -479,6 +516,7 @@ class DexcomOnePlusPlugin @Inject constructor(
             onWarmup(OnePlusWarmupState(phase = OnePlusWarmupState.Phase.READY))
         }
         if (sample.timestampMs > (lastProductionReading?.timestampMs ?: Long.MIN_VALUE)) lastProductionReading = sample
+        sensorAlertsLock.withLock { sensorAlerts.onReading(sample.timestampMs) }
         ingestToLoop(sample, sensorStore)
     }
 

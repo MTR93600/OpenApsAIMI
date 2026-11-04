@@ -305,10 +305,14 @@ class IosSystemNotificationPlatformTest {
     @Test
     fun `the low glucose alarm is posted with the hypo treated button`() {
         val hypo = platformWithActions.categoryFor(NotificationId.BG_HYPO)
-        val plain = platformWithActions.categoryFor(NotificationId.BG_HYPER)
+        val plain = platformWithActions.categoryFor(NotificationId.PUMP_UNREACHABLE)
 
         assertTrue(hypo != plain)
-        assertEquals(plain, platformWithActions.categoryFor(NotificationId.PUMP_UNREACHABLE))
+        // The other CGM alarms get the Acknowledge button, a category of its own.
+        val acknowledge = platformWithActions.categoryFor(NotificationId.BG_HYPER)
+        assertTrue(acknowledge != plain)
+        assertTrue(acknowledge != hypo)
+        assertEquals(acknowledge, platformWithActions.categoryFor(NotificationId.CGM_URGENT_LOW))
     }
 
     /** A button that does nothing would make the user think the alarm was handled, so none is shown. */

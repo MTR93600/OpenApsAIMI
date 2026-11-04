@@ -1,5 +1,6 @@
 package app.aaps.implementation.notifications
 
+import app.aaps.core.interfaces.alerts.CgmAlarmType
 import app.aaps.core.interfaces.concurrent.AapsLock
 import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -263,8 +264,10 @@ class CommonNotificationManager(
 
             top.instanceKey != soundingKey -> {
                 soundingKey = top.instanceKey
-                platform.setAudibleAlarm(top.instanceKey, top.sound, AlarmAudioPolicy.categoryOf(top.id))
-                rxBus.send(
+                platform.setAudibleAlarm(top.instanceKey, top.sound, AlarmAudioPolicy.categoryOf(top.id, top.sound))
+                // A CGM alarm tells the watch by itself (EventData.CgmAlarm), with an Acknowledge button
+                // the watch can send back. Without this check the watch showed it twice.
+                if (CgmAlarmType.byNotificationId(top.id) == null) rxBus.send(
                     EventMobileToWear(
                         EventData.AlarmRinging(now(), title = rh.gs(CoreUiStrings.urgent_alarm), status = top.text, canMute = false)
                     )

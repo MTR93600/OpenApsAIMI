@@ -136,13 +136,15 @@ object IosPlatformBindings {
             chosenMelody = { category -> AlarmAudioPolicy.chosenMelody(preferences, category) },
             alarmActionLabel = { action ->
                 when (action) {
-                    AlarmAction.HYPO_TREATED -> rh.gs(CoreUiStrings.alert_hypo_treated)
+                    AlarmAction.HYPO_TREATED    -> rh.gs(CoreUiStrings.alert_hypo_treated)
+                    AlarmAction.CGM_ACKNOWLEDGE -> rh.gs(CoreUiStrings.cgm_alarm_acknowledge)
                 }
             },
-            // "Hypo treated" on the lock screen, same as the Android notification button.
+            // "Hypo treated" and "Acknowledge" on the lock screen, same as the Android notification buttons.
             onAlarmAction = { action ->
                 when (action) {
-                    AlarmAction.HYPO_TREATED -> localAlertUtils().snoozeHypoAfterTreatment()
+                    AlarmAction.HYPO_TREATED    -> localAlertUtils().snoozeHypoAfterTreatment()
+                    AlarmAction.CGM_ACKNOWLEDGE -> localAlertUtils().acknowledgeCgmAlarms()
                 }
             }
         ) { preferences.get(BooleanKey.AlertOverrideDoNotDisturb) }

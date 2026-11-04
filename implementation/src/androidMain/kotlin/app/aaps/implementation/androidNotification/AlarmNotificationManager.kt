@@ -346,7 +346,9 @@ class AlarmNotificationManager(
     }
 
     private fun channelIdForSound(sound: AlarmSound, overrideDnd: Boolean): String {
-        val name = SOUND_NAMES[sound] ?: "error"
+        // A Trio sound has no channel of its own (the player plays it, see AlarmAudioPolicy.soundNeedsPlayer).
+        // When the OS must ring through Do Not Disturb, the standard alarm channel is the closest one.
+        val name = SOUND_NAMES[sound] ?: if (sound.isTrio) "alarm" else "error"
         // "alarm_bypass" (was "alarm") is a new id because the override channels needed
         // setBypassDnd(true). When an app creates a channel that already exists, Android applies the
         // bypass only while the app holds Do Not Disturb access and only when the user has not edited
@@ -380,7 +382,7 @@ class AlarmNotificationManager(
         val dndBlocks = overrideDnd && dndBlocksAlarms()
         val owns = AlarmAudioPolicy.playerOwnsSound(
             increaseVolume = preferences.get(BooleanKey.AlertIncreaseVolume),
-            customMelody = AlarmAudioPolicy.chosenMelody(preferences, category) != null,
+            customMelody = AlarmAudioPolicy.soundNeedsPlayer(category) || AlarmAudioPolicy.chosenMelody(preferences, category) != null,
             overrideDnd = overrideDnd,
             dndBlocksAlarms = dndBlocks,
         )
@@ -721,7 +723,8 @@ class AlarmNotificationManager(
     private fun addAlarmAction(builder: NotificationCompat.Builder, action: AlarmAction?) {
         if (action == null) return
         val (labelRes, receiver) = when (action) {
-            AlarmAction.HYPO_TREATED -> CoreUiR.string.alert_hypo_treated to HypoTreatedReceiver::class.java
+            AlarmAction.HYPO_TREATED    -> CoreUiR.string.alert_hypo_treated to HypoTreatedReceiver::class.java
+            AlarmAction.CGM_ACKNOWLEDGE -> CoreUiR.string.cgm_alarm_acknowledge to CgmAlarmAcknowledgeReceiver::class.java
         }
         val pendingIntent = PendingIntent.getBroadcast(
             context, ALARM_ACTION_REQUEST_CODE,
