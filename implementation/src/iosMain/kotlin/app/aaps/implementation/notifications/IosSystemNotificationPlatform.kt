@@ -151,9 +151,13 @@ class IosSystemNotificationPlatform(
      * The sound of an urgent notification: the soft melody the user chose for its category, as on
      * Android, or the iOS default sound. If the melody file cannot be written, the default sound is
      * used, so the notification is never silent because of a melody.
+     *
+     * A Trio sound chosen for one CGM alarm is not used here: iOS plays notification sounds only from
+     * AIFF, WAV or CAF files, and the Trio files are AAC (`m4a`). While the app runs, the alarm player
+     * plays the chosen Trio sound; while iOS has suspended the app, this default sound is heard.
      */
     private fun urgentSound(notification: AapsNotification): UNNotificationSound =
-        chosenMelody(AlarmAudioPolicy.categoryOf(notification.id))?.let { IosMelodyAudio.notificationSound(it) }
+        chosenMelody(AlarmAudioPolicy.categoryOf(notification.id, notification.sound))?.let { IosMelodyAudio.notificationSound(it) }
             ?: UNNotificationSound.defaultSound
 
     /**

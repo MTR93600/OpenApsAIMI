@@ -1,5 +1,6 @@
 package app.aaps.implementation.notifications
 
+import app.aaps.core.interfaces.notifications.AlarmSound
 import app.aaps.core.interfaces.notifications.AlarmSoundCategory
 import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.keys.StringKey
@@ -24,10 +25,11 @@ object AlarmAudioPolicy {
 
     /**
      * Alarms that use the low-glucose sound choice: the low glucose alarm and the rapid fall alarm,
-     * both from the glucose alarms the user sets up. The high glucose alarm and the predicted hypo
+     * both from the glucose alarms the user sets up, and the urgent low alarms of the CGM alarms. The high glucose alarm and the predicted hypo
      * alarm (`HYPO_RISK_ALARM`) use the "other urgent alarms" choice, as on `dev_OAPSAIMI`.
      */
-    private val LOW_GLUCOSE_ALARMS: Set<NotificationId> = setOf(NotificationId.BG_HYPO, NotificationId.BG_RAPID_FALL)
+    private val LOW_GLUCOSE_ALARMS: Set<NotificationId> =
+        setOf(NotificationId.BG_HYPO, NotificationId.BG_RAPID_FALL, NotificationId.CGM_URGENT_LOW, NotificationId.CGM_URGENT_LOW_SOON)
 
     /** The alarm stream volume to set for the alarm, `null` when the current one is loud enough. */
     fun raisedAlarmVolume(current: Int, max: Int): Int? {
@@ -43,15 +45,32 @@ object AlarmAudioPolicy {
     fun playerOwnsSound(increaseVolume: Boolean, customMelody: Boolean, overrideDnd: Boolean, dndBlocksAlarms: Boolean): Boolean =
         (increaseVolume || customMelody) && !(overrideDnd && dndBlocksAlarms)
 
-    /** Low-glucose alarms get their own sound choice; every other urgent alarm shares the second one. */
-    fun categoryOf(id: NotificationId): AlarmSoundCategory =
-        if (id in LOW_GLUCOSE_ALARMS) AlarmSoundCategory.LOW_GLUCOSE else AlarmSoundCategory.OTHER
+    /**
+     * Low-glucose alarms get their own sound choice; every other urgent alarm shares the second one.
+     * A Trio [sound] is one the user chose for a single CGM alarm: it is [AlarmSoundCategory.CHOSEN],
+     * so no melody replaces it.
+     */
+    fun categoryOf(id: NotificationId, sound: AlarmSound? = null): AlarmSoundCategory = when {
+        sound?.isTrio == true     -> AlarmSoundCategory.CHOSEN
+        id in LOW_GLUCOSE_ALARMS  -> AlarmSoundCategory.LOW_GLUCOSE
+        else                      -> AlarmSoundCategory.OTHER
+    }
 
-    /** The preference that holds the sound choice of [category]. */
-    fun soundKeyOf(category: AlarmSoundCategory): StringKey =
-        if (category == AlarmSoundCategory.LOW_GLUCOSE) StringKey.AlertSoundLowGlucose else StringKey.AlertSoundOtherAlarms
+    /** The preference that holds the sound choice of [category], `null` for [AlarmSoundCategory.CHOSEN]. */
+    fun soundKeyOf(category: AlarmSoundCategory): StringKey? = when (category) {
+        AlarmSoundCategory.LOW_GLUCOSE -> StringKey.AlertSoundLowGlucose
+        AlarmSoundCategory.OTHER       -> StringKey.AlertSoundOtherAlarms
+        AlarmSoundCategory.CHOSEN      -> null
+    }
 
-    /** The melody the user chose for [category], `null` for the AAPS sound. */
+    /** The melody the user chose for [category], `null` for the AAPS sound or a sound chosen for the alarm. */
     fun chosenMelody(preferences: Preferences, category: AlarmSoundCategory): AlarmMelody? =
-        AlarmMelody.fromChoice(preferences.get(soundKeyOf(category)))
+        soundKeyOf(category)?.let { AlarmMelody.fromChoice(preferences.get(it)) }
+
+    /**
+     * True when the looping player must own the sound of [category] whatever else is set: a sound
+     * chosen for one alarm cannot be played by a notification channel, which holds only the AAPS
+     * sounds.
+     */
+    fun soundNeedsPlayer(category: AlarmSoundCategory): Boolean = category == AlarmSoundCategory.CHOSEN
 }

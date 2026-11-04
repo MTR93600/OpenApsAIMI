@@ -310,8 +310,8 @@ enum class NotificationId(
     // CGM - glucose alarms the user sets up (low, high, rapid fall). They work for any CGM source.
     // They only notify; they never change dosing. Appended last on purpose, see the comment above.
     BG_HYPO(URGENT, CGM, alarmAction = AlarmAction.HYPO_TREATED),
-    BG_HYPER(IMPORTANT, CGM),
-    BG_RAPID_FALL(URGENT, CGM),
+    BG_HYPER(IMPORTANT, CGM, alarmAction = AlarmAction.CGM_ACKNOWLEDGE),
+    BG_RAPID_FALL(URGENT, CGM, alarmAction = AlarmAction.CGM_ACKNOWLEDGE),
 
     /** A bolus asked for by the Garmin watch was refused or limited; the watch cannot show why. Appended last on purpose. */
     GARMIN_BOLUS(IMPORTANT, SYNC),
@@ -323,7 +323,26 @@ enum class NotificationId(
     APEX_SERVICE_MSG(INFO, PUMP),
 
     /** Fork driver :pump:apex: the Apex pump is locked and will not take commands. Appended last on purpose. */
-    PUMP_IS_LOCKED(URGENT, PUMP);
+    PUMP_IS_LOCKED(URGENT, PUMP),
+
+    // CGM alarms (`CgmAlarmType` in :implementation). With BG_HYPO, BG_HYPER and BG_RAPID_FALL above
+    // they are the one CGM alarm layer, for every BG source. The sensor ones are raised only for a
+    // source that reports its sensor state ([app.aaps.core.interfaces.source.CgmSensorAlertProvider]).
+    // They only notify; they never change dosing. An alarm the user gave a sound is posted URGENT,
+    // whatever its level here. Appended last on purpose, see the comment above.
+    CGM_URGENT_LOW(URGENT, CGM, alarmAction = AlarmAction.CGM_ACKNOWLEDGE),
+    CGM_URGENT_LOW_SOON(URGENT, CGM, alarmAction = AlarmAction.CGM_ACKNOWLEDGE),
+    CGM_RAPID_RISE(IMPORTANT, CGM, alarmAction = AlarmAction.CGM_ACKNOWLEDGE),
+    CGM_SENSOR_FAILED(URGENT, CGM, alarmAction = AlarmAction.CGM_ACKNOWLEDGE),
+    CGM_SENSOR_EXPIRED(URGENT, CGM, alarmAction = AlarmAction.CGM_ACKNOWLEDGE),
+    CGM_SENSOR_EXPIRING(IMPORTANT, CGM),
+    CGM_SIGNAL_LOST(IMPORTANT, CGM, alarmAction = AlarmAction.CGM_ACKNOWLEDGE),
+    CGM_SENSOR_ISSUE(IMPORTANT, CGM, alarmAction = AlarmAction.CGM_ACKNOWLEDGE),
+    CGM_WARMUP_DONE(NORMAL, CGM),
+    CGM_SECOND_SENSOR_READY(NORMAL, CGM),
+
+    /** The test button of a CGM alarm: its sound and text, once, until the user dismisses it. */
+    CGM_ALARM_TEST(URGENT, CGM);
 
     companion object {
 

@@ -112,7 +112,7 @@ class AndroidSystemNotificationPlatform(
         val channel = if (!overrideDnd) InternalAlarmChannel.SILENT
         else AlarmChannelPolicy.forInternalAlarm(
             overrideDnd = true,
-            playerOwnsSound = manager.playerOwnsSound(AlarmAudioPolicy.categoryOf(notification.id)),
+            playerOwnsSound = manager.playerOwnsSound(AlarmAudioPolicy.categoryOf(notification.id, sound)),
             dndBlocksAlarms = manager.dndBlocksAlarms(),
             // Any alarm, not only this one: the newest alarm takes the player over at once, so a clip
             // for it would play over the loop of the alarm before.

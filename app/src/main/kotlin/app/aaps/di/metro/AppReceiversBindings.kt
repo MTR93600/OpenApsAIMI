@@ -3,6 +3,7 @@ package app.aaps.di.metro
 import app.aaps.core.interfaces.di.FeatureMemberInjectors
 import app.aaps.implementation.alerts.EatReminderReceiver
 import app.aaps.implementation.androidNotification.AlarmMuteReceiver
+import app.aaps.implementation.androidNotification.CgmAlarmAcknowledgeReceiver
 import app.aaps.implementation.androidNotification.HypoTreatedReceiver
 import app.aaps.implementation.receivers.BTReceiver
 import app.aaps.implementation.receivers.ChargingStateReceiver
@@ -52,6 +53,13 @@ object AppReceiversBindings {
     @IntoMap
     @ClassKey(HypoTreatedReceiver::class)
     fun bindHypoTreatedReceiver(injector: MembersInjector<HypoTreatedReceiver>): MembersInjector<*> = injector
+
+    // "Acknowledge" action on a CGM alarm notification. Same reason as AlarmMuteReceiver.
+    @Provides
+    @FeatureMemberInjectors
+    @IntoMap
+    @ClassKey(CgmAlarmAcknowledgeReceiver::class)
+    fun bindCgmAlarmAcknowledgeReceiver(injector: MembersInjector<CgmAlarmAcknowledgeReceiver>): MembersInjector<*> = injector
 
     // The "time to eat" alarm and its notification buttons - same story as AlarmMuteReceiver above.
     @Provides
