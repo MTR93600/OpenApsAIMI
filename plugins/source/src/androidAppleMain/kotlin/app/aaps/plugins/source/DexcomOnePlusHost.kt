@@ -2,6 +2,7 @@ package app.aaps.plugins.source
 
 import app.aaps.core.keys.interfaces.PreferenceItem
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.core.ui.compose.navigation.NavigationRequest
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriver
 import app.aaps.plugins.dexcomoneplus.OnePlusCompetingApps
 import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseWatcher
@@ -15,9 +16,9 @@ import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScanner
  *
  * The plugin itself is shared code: the sensor slots, the pre-soak rules, the promotion gates and
  * the ingest path read the same on both platforms. What is not shared is the host around it - the
- * driver registry, how the three setup screens are opened (the screens themselves are shared), the
- * foreground service and the status-bar notification - and an iPhone has no equivalent of some of
- * them.
+ * driver registry, how the start and warm-up screens are opened (the screens themselves are
+ * shared), where the driver log is read from, the foreground service and the status-bar
+ * notification - and an iPhone has no equivalent of some of them.
  *
  * Each of those favours is named here one by one, the same way `OnePlusPlatform` names what the
  * driver needs, so the plugin never has to know what an Android `Context` is.
@@ -152,4 +153,37 @@ interface DexcomOnePlusHost {
      *   the plugin builds the host, so a host that asked for the plugin would be a loop.
      */
     fun screenItems(plugin: DexcomOnePlusPlugin): List<PreferenceItem>
+
+    /**
+     * True when this phone runs the second, pre-soak sensor slot.
+     *
+     * False hides the pre-soak card and the end-of-life prompt of the status screen, so a phone
+     * that cannot have a second slot does not show one that never fills.
+     */
+    val supportsStaging: Boolean
+
+    /** The screens of this plugin that the status screen opens through the host. */
+    enum class Screen { START, WARMUP }
+
+    /**
+     * Opens [screen].
+     *
+     * @param navigate the navigation of the plugin tab, for a host whose screens live in the
+     *   settings tree. A host that opens its own windows does not need it.
+     */
+    fun openScreen(screen: Screen, navigate: (NavigationRequest) -> Unit)
+
+    /**
+     * What the log screen shows.
+     *
+     * @param lines the driver lines, oldest first.
+     * @param note one sentence that says where the lines come from and how long they are kept.
+     */
+    data class DriverLog(val lines: List<String>, val note: TextRef)
+
+    /** Reads the newest driver lines. A host that reads a file does so off the main thread itself. */
+    suspend fun driverLog(): DriverLog
+
+    /** Hands the log text to another app, or null on a phone where the log screen offers no share. */
+    val logSharer: ((String) -> Unit)?
 }
