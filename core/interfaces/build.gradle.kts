@@ -92,6 +92,7 @@ kotlin {
         getByName("commonTest") {
             dependencies {
                 implementation(kotlin("test"))
+                // StartPluginsTest waits on plugin start jobs, so it needs the test scheduler.
                 implementation(libs.kotlinx.coroutines.test)
             }
         }

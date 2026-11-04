@@ -72,6 +72,7 @@ import app.aaps.core.ui.compose.rememberOwnViewModelStoreOwner
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.core.utils.gitRemoteShort
 import app.aaps.implementation.lifecycle.IosProtectionLifecycle
+import app.aaps.implementation.receivers.IosTimeDateOrTZChangeWatcher
 import app.aaps.implementation.logging.AAPSLoggerIos
 import app.aaps.implementation.maintenance.KeepAliveChecks
 import app.aaps.implementation.notifications.requestIosNotificationPermission
@@ -318,6 +319,11 @@ private fun startedOnce(nsSocketFactory: NsSocketFactory, crashReporter: CrashRe
     // Rebuilds the Nightscout socket when the app comes back after iOS suspended it. Same placement
     // and the same UIKit reason as the two above.
     graph.nsAppLifecycle.start()
+
+    // Sends EventTimeZoneChanged and tells the pump driver, which is what Android gets from
+    // `TimeDateOrTZChangeReceiver`. Without it a flight left the IOB of the last hours calculated in
+    // the old zone. Same placement: it attaches to the notification centre.
+    IosTimeDateOrTZChangeWatcher(logger, graph.activePlugin, graph.appScope, graph.rxBus).start()
 
     // A change made just before the app went to the background may still wait for its background save,
     // and iOS can end a suspended app without a word. Same placement and the same UIKit reason as above.

@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI
 
+import app.aaps.core.data.time.SystemTimeZone
+import app.aaps.core.interfaces.utils.MidnightTime
 import app.aaps.plugins.aps.openAPSAIMI.llm.claude.ClaudeModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiKeyValueCache
@@ -106,7 +108,6 @@ import app.aaps.core.objects.extensions.put
 import app.aaps.core.objects.extensions.store
 import app.aaps.core.objects.extensions.target
 import app.aaps.core.objects.profile.ProfileSealed
-import app.aaps.core.utils.MidnightUtils
 import app.aaps.core.ui.compose.icons.IcPluginOpenAPS
 import app.aaps.plugins.aps.events.EventOpenAPSUpdateGui
 import app.aaps.plugins.aps.events.EventResetOpenAPSGui
@@ -1131,7 +1132,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         val eff = profile as EffectiveProfile
         if (!hardLimits.checkHardLimits(eff.iCfg.dia, InterfacesStrings.profile_dia, hardLimits.diaRange())) return@withContext
         if (!hardLimits.checkHardLimits(
-                profile.getIcTimeFromMidnight(MidnightUtils.secondsFromMidnight()),
+                profile.getIcTimeFromMidnight(MidnightTime.secondsFromMidnight(SystemTimeZone.current())),
                 InterfacesStrings.profile_carbs_ratio_value,
                 hardLimits.icRange()
             )

@@ -10,6 +10,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import app.aaps.core.data.model.TE
 import app.aaps.core.data.model.UE
+import app.aaps.core.data.time.SystemTimeZone
 import app.aaps.core.data.time.T
 import app.aaps.core.data.ue.Action
 import app.aaps.core.data.ue.Sources
@@ -686,7 +687,7 @@ class ImportExportPrefsImpl(
     override suspend fun executeCsvExport(): ExportResult {
         aapsLogger.info(LTag.CORE, "${CloudConstants.LOG_PREFIX} CSV_EXPORT executeCsvExport started")
 
-        val entries = persistenceLayer.getUserEntryFilteredDataFromTime(MidnightTime.calc() - T.days(90).msecs())
+        val entries = persistenceLayer.getUserEntryFilteredDataFromTime(MidnightTime.last(SystemTimeZone.current()) - T.days(90).msecs())
         aapsLogger.info(LTag.CORE, "${CloudConstants.LOG_PREFIX} CSV_EXPORT entries count=${entries.size}")
 
         val csvLocal = preferences.get(BooleanNonKey.ExportCsvLocalEnabled)
@@ -773,7 +774,7 @@ class ImportExportPrefsImpl(
         override suspend fun doWorkAndLog(): Result {
             aapsLogger.info(LTag.CORE, "${CloudConstants.LOG_PREFIX} CSV_EXPORT doWorkAndLog started")
 
-            val entries = persistenceLayer.getUserEntryFilteredDataFromTime(MidnightTime.calc() - T.days(90).msecs())
+            val entries = persistenceLayer.getUserEntryFilteredDataFromTime(MidnightTime.last(SystemTimeZone.current()) - T.days(90).msecs())
 
             aapsLogger.info(LTag.CORE, "${CloudConstants.LOG_PREFIX} CSV_EXPORT entries count=${entries.size}")
 
