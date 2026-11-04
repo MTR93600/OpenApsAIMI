@@ -45,7 +45,7 @@ import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseWatcher
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
 import app.aaps.plugins.dexcomoneplus.session.OnePlusCalibrationGate
-import app.aaps.plugins.source.compose.BgSourceComposeContent
+import app.aaps.plugins.source.compose.DexcomOnePlusComposeContent
 import app.aaps.plugins.source.keys.DexcomOnePlusBooleanKey
 import app.aaps.plugins.source.keys.DexcomOnePlusIntKey
 import app.aaps.plugins.source.keys.DexcomOnePlusIntentKey
@@ -85,8 +85,9 @@ import kotlin.time.Clock
  *
  * The slots, the pre-soak rules, the promotion gates and the ingest path are the same on Android
  * and on iPhone, so they live in one file. Everything that is not the same is asked of
- * [DexcomOnePlusHost]: the driver registry, how the three setup screens are opened, the foreground
- * service, the warm-up notification and the missed-reading alarm of a phone that suspends apps.
+ * [DexcomOnePlusHost]: the driver registry, how the start and warm-up screens are opened, where the
+ * driver log is read, the foreground service, the warm-up notification and the missed-reading alarm
+ * of a phone that suspends apps. The plugin tab itself (readings, status, driver log) is shared.
  *
  * **On iPhone this plugin can be switched on, and its description says what is different.**
  * `DexcomOnePlusIosHost` returns no [DexcomOnePlusHost.notUsableReason] and a
@@ -122,8 +123,10 @@ class DexcomOnePlusPlugin @Inject constructor(
         // which iOS never honoured, so the same plugin was listed on one phone and not the other.
         // PluginDescription.showInList already defaults to `{ true }`, so the missing call is the
         // gate being gone, not an oversight.
-        .composeContent { plugin ->
-            BgSourceComposeContent(
+        // The readings list every BG source shows, with a sensor button in its toolbar that opens the
+        // status screen and from there the driver log. The same on Android and iPhone.
+        .composeContent { _ ->
+            DexcomOnePlusComposeContent(
                 title = rh.gs(SourceStrings.dexcom_oneplus_native),
             )
         }
@@ -332,9 +335,9 @@ class DexcomOnePlusPlugin @Inject constructor(
         key = "dexcom_oneplus_settings",
         title = SourceStrings.dexcom_oneplus_native,
         summary = SourceStrings.dexcom_oneplus_plugin_summary,
-        // The three screen buttons come from the host, because the screens themselves are a host
-        // thing. A host that has none contributes none, so the settings screen does not offer a
-        // button that would do nothing.
+        // The start and warm-up buttons come from the host, because the screens themselves are a
+        // host thing. A host that has none contributes none, so the settings screen does not offer
+        // a button that would do nothing. Status is the sensor button of the plugin tab instead.
         items = host.screenItems(this) + listOf(
             DexcomOnePlusBooleanKey.SendCalibrationToSensor,
             DexcomOnePlusBooleanKey.AutoPromote,

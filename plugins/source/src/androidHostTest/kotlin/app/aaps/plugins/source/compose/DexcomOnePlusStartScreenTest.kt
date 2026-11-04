@@ -8,6 +8,7 @@ import androidx.compose.ui.test.performScrollToKey
 import app.aaps.core.interfaces.resources.TextRefIdRegistry
 import app.aaps.core.keys.interfaces.PreferenceItem
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.core.ui.compose.navigation.NavigationRequest
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriver
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriverReal
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriverStub
@@ -20,6 +21,7 @@ import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScannerStub
 import app.aaps.plugins.source.DexcomOnePlusHost
 import app.aaps.plugins.source.DexcomOnePlusPlugin
 import app.aaps.plugins.source.SourceStringIds
+import app.aaps.plugins.source.SourceStrings
 import app.aaps.plugins.source.SourceStringsValues
 import org.junit.Rule
 import org.junit.Test
@@ -66,6 +68,7 @@ class DexcomOnePlusStartScreenTest {
                 onOpenPromote = {},
                 onStagingDriver = if (twoSlots) ({ error("not reached in this test") }) else null,
                 onSensorSessionStarted = { _, _ -> },
+                applicatorScanner = null,
             )
         }
     }
@@ -129,6 +132,12 @@ class DexcomOnePlusStartScreenTest {
         override fun alert(message: String) = Unit
         override fun screenScanner(): OnePlusBleScanner = OnePlusBleScannerStub()
         override fun screenItems(plugin: DexcomOnePlusPlugin): List<PreferenceItem> = emptyList()
+        override val supportsStaging: Boolean = false
+        override fun openScreen(screen: DexcomOnePlusHost.Screen, navigate: (NavigationRequest) -> Unit) = Unit
+        override suspend fun driverLog(): DexcomOnePlusHost.DriverLog =
+            DexcomOnePlusHost.DriverLog(emptyList(), SourceStrings.dexcom_oneplus_log_note_memory)
+
+        override val logSharer: ((String) -> Unit)? = null
     }
 
     /** An empty slot store in memory, so the screen starts with no sensor remembered. */

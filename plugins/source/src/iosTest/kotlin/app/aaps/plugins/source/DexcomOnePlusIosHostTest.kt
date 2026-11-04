@@ -2,9 +2,12 @@ package app.aaps.plugins.source
 
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.ui.compose.navigation.NavigationRequest
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriverStub
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers
+import app.aaps.plugins.source.keys.DexcomOnePlusIntentKey
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
@@ -33,8 +36,6 @@ class DexcomOnePlusIosHostTest {
         rh = { error("the text resolver is not used here") },
         dateUtil = { error("the date util is not used here") },
         preferences = { error("the preferences are not used here") },
-        persistenceLayer = { error("the database is not used here") },
-        profileUtil = { error("the profile util is not used here") },
     )
 
     @Test
@@ -65,6 +66,26 @@ class DexcomOnePlusIosHostTest {
     @Test
     fun `there is no pre-soak driver to promote`() {
         assertNull(host.promoteStagingInstance())
+    }
+
+    @Test
+    fun `the status screen shows no pre-soak card and no share button here`() {
+        assertTrue(!host.supportsStaging)
+        assertNull(host.logSharer)
+    }
+
+    @Test
+    fun `the start screen opens inside the plugin settings`() {
+        val asked = mutableListOf<NavigationRequest>()
+        host.openScreen(DexcomOnePlusHost.Screen.START) { asked += it }
+        host.openScreen(DexcomOnePlusHost.Screen.WARMUP) { asked += it }
+        assertEquals(
+            listOf<NavigationRequest>(
+                NavigationRequest.PluginPreferences("DexcomOnePlusPlugin", DexcomOnePlusIntentKey.Start.key),
+                NavigationRequest.PluginPreferences("DexcomOnePlusPlugin", DexcomOnePlusIntentKey.Warmup.key),
+            ),
+            asked,
+        )
     }
 
     // The screen entry itself is not asserted here. `screenItems` wires the shared start screen to

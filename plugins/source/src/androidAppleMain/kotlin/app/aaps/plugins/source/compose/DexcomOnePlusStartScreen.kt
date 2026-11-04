@@ -101,6 +101,11 @@ fun DexcomOnePlusStartScreen(
      * Called with (MAC of the started sensor, MAC stored before this start).
      */
     onSensorSessionStarted: (String, String?) -> Unit,
+    /**
+     * Reads the applicator barcode with the camera, or null on a phone where the app cannot. Null
+     * leaves the scan button out, so the code is typed.
+     */
+    applicatorScanner: OnePlusApplicatorScanner?,
 ) {
     val window = rememberCgmWindow()
     val scope = rememberCoroutineScope()
@@ -401,6 +406,7 @@ fun DexcomOnePlusStartScreen(
                         errorText = errorText,
                         serialNone = serialNone,
                         storedMac = storedSession?.lastMac,
+                        applicatorScanner = applicatorScanner,
                         onApplicatorChange = { text ->
                             applicatorInput = text
                             parsedIdentity = OnePlusGs1ApplicatorParser.parse(text)
@@ -459,6 +465,7 @@ fun DexcomOnePlusStartScreen(
                             errorText = errorText,
                             serialNone = serialNone,
                             storedMac = storedSession?.lastMac,
+                            applicatorScanner = applicatorScanner,
                             onApplicatorChange = { text ->
                                 applicatorInput = text
                                 parsedIdentity = OnePlusGs1ApplicatorParser.parse(text)
@@ -560,8 +567,10 @@ private fun ColumnScope.FormPane(
     errorText: String?,
     serialNone: String,
     storedMac: String?,
+    applicatorScanner: OnePlusApplicatorScanner?,
     onApplicatorChange: (String) -> Unit,
 ) {
+    var scanning by remember { mutableStateOf(false) }
     CgmStepper(
         currentStep = currentStep,
         labels = listOf(
@@ -632,6 +641,21 @@ private fun ColumnScope.FormPane(
             minLines = 2,
             isError = errorText != null && parsedIdentity == null,
         )
+        applicatorScanner?.let { scanner ->
+            OutlinedButton(onClick = { scanning = true }, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(SourceStrings.dexcom_oneplus_applicator_scan))
+            }
+            if (scanning) {
+                OnePlusApplicatorScanDialog(
+                    scanner = scanner,
+                    onCode = { code ->
+                        scanning = false
+                        onApplicatorChange(code)
+                    },
+                    onDismiss = { scanning = false },
+                )
+            }
+        }
         storedMac?.let { mac ->
             Text(
                 text = stringResource(SourceStrings.dexcom_oneplus_last_mac_hint, mac),
