@@ -63,6 +63,9 @@ class OnePlusBleScannerIos(
     private var pending: TargetWait? = null
     private val seen = mutableMapOf<String, OnePlusScanResult>()
 
+    /** Stelo transmitters already logged as refused. Guarded by [lock]. */
+    private val refusedStelo = mutableSetOf<String>()
+
     override fun startScan(listener: OnePlusScanListener) {
         val state = central.adapterState()
         if (state != BleAdapterState.PoweredOn) {
@@ -210,6 +213,11 @@ class OnePlusBleScannerIos(
     private fun handle(event: BleCentralEvent.ScanResult) {
         val address = event.id
         val name = event.name
+        // Before every other rule: a Stelo advertises the same FEBC service as a G7.
+        if (OnePlusAdvCandidate.isUnsupportedStelo(name)) {
+            noteRefusedStelo(address)
+            return
+        }
         val result = OnePlusScanResult(address = address, name = name, rssi = event.rssi ?: RSSI_UNKNOWN)
             .apply { seenElapsedMs = nowMs() }
         offerToPendingWait(address, name, result)
@@ -223,6 +231,16 @@ class OnePlusBleScannerIos(
      * by its identifier, and any other G7-family transmitter heard here is the evidence that makes
      * a stale stored identifier recognisable.
      */
+    /** Logs a refused Stelo once per transmitter, so the scan log does not fill up with it. */
+    private fun noteRefusedStelo(address: String) {
+        if (lock.withLock { refusedStelo.add(address.uppercase()) }) {
+            OnePlusLog.i(
+                "${OnePlusLogMarkers.SCAN}: [$slot] Dexcom Stelo ***${address.takeLast(5)} refused: it reads only " +
+                    "every 15 minutes and is not made for insulin dosing",
+            )
+        }
+    }
+
     private fun offerToPendingWait(address: String, name: String?, result: OnePlusScanResult) {
         val wait = lock.withLock { pending } ?: return
         if (address.uppercase() == wait.target) {
