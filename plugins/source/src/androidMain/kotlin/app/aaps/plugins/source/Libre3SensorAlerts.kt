@@ -5,6 +5,8 @@ import app.aaps.core.interfaces.source.CgmSensorAlertState
 import app.aaps.core.interfaces.source.CgmSensorFailure
 import app.aaps.core.interfaces.source.StagingState
 import app.aaps.plugins.libre3.Libre3WarmupState
+import app.aaps.plugins.libre3.parse.Libre3PatchStatus
+import app.aaps.plugins.libre3.parse.Libre3SensorError
 
 /**
  * What the Libre 3 driver says, turned into the generic sensor alarm state
@@ -18,9 +20,10 @@ import app.aaps.plugins.libre3.Libre3WarmupState
  * - `READY` after `WARMING`: warm-up done.
  * - The end is the end of the life read by the NFC scan. A Libre 3 has no grace period.
  *
- * Not here yet: the health messages of the sensor (a sensor error, an end the sensor reports by
- * itself). The driver on this branch does not hand them to its watchers. Until it does, such an end
- * shows as "ended" when the life is over, and a sensor error only when the driver fails.
+ * - The health messages of the sensor ([onStatus]): a fault code is a sensor error, and an end the
+ *   sensor reports by itself is "expired" when the life is over, else "ended early". A code this
+ *   driver does not know counts only after [UNKNOWN_ERRORS_TO_FAIL] messages in a row, so one odd
+ *   message does not sound the urgent alarm. A sending problem often passes by itself and is no fault.
  *
  * Not thread safe on its own: the plugin calls it under one lock.
  */
@@ -31,6 +34,11 @@ internal class Libre3SensorAlerts {
     private var warmupDoneAtMs: Long? = null
     private var lastReadingAtMs: Long? = null
     private var secondSensorReadyAtMs: Long? = null
+    private var fault: Fault? = null
+    private var unknownInARow = 0
+
+    /** What a health message of the sensor says for the alarms. */
+    private enum class Fault { ERROR, ENDED }
 
     fun onWarmup(state: Libre3WarmupState, nowMs: Long) {
         val previous = phase
@@ -48,11 +56,37 @@ internal class Libre3SensorAlerts {
         secondSensorReadyAtMs = if (state == StagingState.READY) secondSensorReadyAtMs ?: nowMs else null
     }
 
+    /** One health message of the sensor that feeds the loop. */
+    fun onStatus(status: Libre3PatchStatus) {
+        val raw = faultOf(status)
+        if (raw == Fault.ERROR && status.sensorError == Libre3SensorError.UNKNOWN) {
+            unknownInARow++
+            if (unknownInARow >= UNKNOWN_ERRORS_TO_FAIL) fault = Fault.ERROR
+        } else {
+            unknownInARow = 0
+            fault = raw
+        }
+    }
+
     /** A new sensor in the production slot: what was known of the old one is forgotten. */
     fun onNewSensor() {
         linkLostSinceMs = null
         warmupDoneAtMs = null
         lastReadingAtMs = null
+        fault = null
+        unknownInARow = 0
+    }
+
+    private fun faultOf(status: Libre3PatchStatus): Fault? = when {
+        status.sensorError == Libre3SensorError.INSERTION_FAILURE -> Fault.ERROR
+
+        status.sensorError == Libre3SensorError.EXPIRED ||
+            status.sensorError == Libre3SensorError.TERMINATED ||
+            status.patchState.isTerminated ||
+            status.patchState.isExpiredOrError                    -> Fault.ENDED
+
+        status.sensorError == Libre3SensorError.UNKNOWN           -> Fault.ERROR
+        else                                                      -> null
     }
 
     fun state(running: Boolean, sensorStored: Boolean, expiresAtMs: Long?, nowMs: Long, expiringLeadMs: Long): CgmSensorAlertState =
@@ -60,8 +94,12 @@ internal class Libre3SensorAlerts {
             CgmSensorAlertRules.Input(
                 stopped = !running,
                 sensorStored = sensorStored,
-                failure = if (phase == Libre3WarmupState.Phase.FAILED) CgmSensorFailure.OTHER else null,
-                endedBySensor = false,
+                failure = when {
+                    phase == Libre3WarmupState.Phase.FAILED -> CgmSensorFailure.OTHER
+                    fault == Fault.ERROR                    -> CgmSensorFailure.SENSOR_ERROR
+                    else                                    -> null
+                },
+                endedBySensor = fault == Fault.ENDED,
                 expiresAtMs = expiresAtMs,
                 linkLostSinceMs = linkLostSinceMs,
                 lastReadingAtMs = lastReadingAtMs,
@@ -73,4 +111,10 @@ internal class Libre3SensorAlerts {
                 nowMs = nowMs,
             )
         )
+
+    companion object {
+
+        /** Health messages with an unknown error code in a row before they count as a fault. */
+        const val UNKNOWN_ERRORS_TO_FAIL = 2
+    }
 }

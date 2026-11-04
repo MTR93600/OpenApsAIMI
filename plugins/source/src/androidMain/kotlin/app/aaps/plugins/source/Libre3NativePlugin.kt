@@ -44,6 +44,7 @@ import app.aaps.plugins.libre3.Libre3WarmupState
 import app.aaps.plugins.libre3.identity.Libre3SensorIdentity
 import app.aaps.plugins.libre3.identity.Libre3SensorStore
 import app.aaps.plugins.libre3.nfc.Libre3NfcSession
+import app.aaps.plugins.libre3.parse.Libre3PatchStatus
 import app.aaps.plugins.libre3.session.Libre3DisconnectPolicy
 import app.aaps.plugins.libre3.setContext
 import app.aaps.plugins.libre3.warmup.Libre3WarmupClock
@@ -179,6 +180,7 @@ class Libre3NativePlugin @Inject constructor(
         override fun onGlucose(sample: Libre3GlucoseSample) = handleProductionGlucose(sample, this)
         override fun onSession(up: Boolean, reason: String?) = handleProductionSession(up, reason)
         override fun onError(message: String, fatal: Boolean) = handleProductionError(message, fatal)
+        override fun onPatchStatus(status: Libre3PatchStatus) = handleProductionPatchStatus(status, this)
     }
 
     /**
@@ -807,6 +809,14 @@ class Libre3NativePlugin @Inject constructor(
     override fun onSession(up: Boolean, reason: String?) = handleProductionSession(up, reason)
 
     override fun onError(message: String, fatal: Boolean) = handleProductionError(message, fatal)
+
+    override fun onPatchStatus(status: Libre3PatchStatus) = handleProductionPatchStatus(status, productionWatcher)
+
+    /** A health message for the sensor alarms. One from a retired watcher (an old sensor) is ignored. */
+    private fun handleProductionPatchStatus(status: Libre3PatchStatus, owner: Libre3GlucoseWatcher) {
+        if (owner !== productionWatcher) return
+        synchronized(sensorAlerts) { sensorAlerts.onStatus(status) }
+    }
 
     private fun handleProductionWarmup(state: Libre3WarmupState) {
         warmupPhase = state.phase

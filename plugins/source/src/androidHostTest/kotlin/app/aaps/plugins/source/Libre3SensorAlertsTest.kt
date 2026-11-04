@@ -4,6 +4,8 @@ import app.aaps.core.interfaces.source.CgmSensorAlertState
 import app.aaps.core.interfaces.source.CgmSensorFailure
 import app.aaps.core.interfaces.source.StagingState
 import app.aaps.plugins.libre3.Libre3WarmupState
+import app.aaps.plugins.libre3.parse.Libre3PatchState
+import app.aaps.plugins.libre3.parse.Libre3PatchStatus
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
@@ -56,5 +58,58 @@ class Libre3SensorAlertsTest {
         alerts.onReading(now)
         alerts.onStaging(StagingState.READY, now)
         assertEquals(CgmSensorAlertState.SecondSensorReady(now), alerts.at(now + 1_000L))
+    }
+
+    private fun status(errorData: Int = 0, patchState: Int = 4) = Libre3PatchStatus(
+        lifeCount = 100, errorData = errorData, eventData = 0, index = 0, patchState = Libre3PatchState(patchState),
+        currentLifeCount = 100, stackDisconnectReason = 0, appDisconnectReason = 0,
+    )
+
+    @Test
+    fun aKnownSensorFaultIsASensorErrorAtOnce() {
+        val alerts = Libre3SensorAlerts()
+        alerts.onStatus(status(errorData = 3))
+        assertEquals(CgmSensorAlertState.Failed(CgmSensorFailure.SENSOR_ERROR), alerts.at(now))
+    }
+
+    @Test
+    fun anEndReportedBeforeTheEndOfLifeIsEndedEarly() {
+        val alerts = Libre3SensorAlerts()
+        alerts.onStatus(status(patchState = 6))
+        assertEquals(CgmSensorAlertState.Failed(CgmSensorFailure.ENDED_EARLY), alerts.at(now))
+    }
+
+    @Test
+    fun anEndReportedAfterTheEndOfLifeIsExpired() {
+        val alerts = Libre3SensorAlerts()
+        alerts.onStatus(status(errorData = 5))
+        assertEquals(CgmSensorAlertState.Expired(now - hour), alerts.at(now, expiresAtMs = now - hour))
+    }
+
+    @Test
+    fun anUnknownCodeCountsOnlyTheSecondTimeInARow() {
+        val alerts = Libre3SensorAlerts()
+        alerts.onStatus(status(errorData = 42))
+        assertEquals(CgmSensorAlertState.Ok, alerts.at(now))
+        alerts.onStatus(status(errorData = 42))
+        assertEquals(CgmSensorAlertState.Failed(CgmSensorFailure.SENSOR_ERROR), alerts.at(now))
+    }
+
+    @Test
+    fun aGoodMessageClearsTheFaultAndAResendingProblemIsNoFault() {
+        val alerts = Libre3SensorAlerts()
+        alerts.onStatus(status(errorData = 3))
+        alerts.onStatus(status())
+        assertEquals(CgmSensorAlertState.Ok, alerts.at(now))
+        alerts.onStatus(status(errorData = 7))
+        assertEquals(CgmSensorAlertState.Ok, alerts.at(now))
+    }
+
+    @Test
+    fun aNewSensorForgetsTheFaultOfTheOldOne() {
+        val alerts = Libre3SensorAlerts()
+        alerts.onStatus(status(errorData = 3))
+        alerts.onNewSensor()
+        assertEquals(CgmSensorAlertState.Ok, alerts.at(now))
     }
 }
