@@ -2,6 +2,8 @@ package app.aaps.plugins.source
 
 import android.content.Context
 import android.content.Intent
+import app.aaps.core.interfaces.rx.bus.RxBus
+import app.aaps.core.interfaces.rx.events.EventMobileToWear
 import app.aaps.core.keys.interfaces.PreferenceItem
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.keys.interfaces.withClick
@@ -90,6 +92,14 @@ class DexcomOnePlusAndroidHost(
      */
     override fun screenScanner(): OnePlusBleScanner =
         OnePlusBleScannerAndroid(appContext, sessionHint = null)
+
+    /**
+     * The Wear OS data layer. `EventMobileToWear` is picked up by the wear plugin, which sends it to
+     * the connected watch; with no watch or the wear plugin off, the message simply goes nowhere,
+     * and the Status screen says the watch has not answered.
+     */
+    override fun watchTransport(rxBus: RxBus): DexcomOnePlusWatchTransport =
+        DexcomOnePlusWatchTransport { message -> rxBus.send(EventMobileToWear(message)) }
 
     override fun screenItems(plugin: DexcomOnePlusPlugin): List<PreferenceItem> = listOf(
         DexcomOnePlusIntentKey.Status.withClick { open(DexcomOnePlusStatusActivity::class.java) },

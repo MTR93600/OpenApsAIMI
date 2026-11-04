@@ -59,9 +59,21 @@ internal object OnePlusCgmDriverResumePolicy {
  *   concurrently without sharing identity / MAC / KEKS key / ingest markers. **A second instance
  *   is Android only today**: an iPhone gets one Bluetooth scan for the whole app, so two slots
  *   would take the radio from each other. See `OnePlusIosPlatform`.
+ * @param displaySlot the sensor slot this driver asks for. [OnePlusDisplaySlot.PHONE] is the phone
+ *   and every existing caller. [OnePlusDisplaySlot.WATCH] is the light watch mode of
+ *   direct-to-watch on Wear OS: it reads in the sensor's watch slot with its own key, uses the
+ *   generic radio profile instead of the phone maker's one, never starts a sensor session and never
+ *   calibrates. The phone stays the master of the sensor. Its readings are tagged with this slot, so
+ *   the ingest can refuse them, see [OnePlusDisplaySlot.mayFeedLoop].
  */
 @OptIn(ExperimentalAtomicApi::class)
-class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
+class OnePlusCgmDriverReal(
+    storeNamespace: String? = null,
+    val displaySlot: OnePlusDisplaySlot = OnePlusDisplaySlot.PHONE,
+) : OnePlusCgmDriver {
+
+    /** True for the light watch mode, see [displaySlot]. */
+    private val watchMode: Boolean get() = displaySlot != OnePlusDisplaySlot.PHONE
 
     /**
      * Which preferences file this instance's sessions read and write.
@@ -168,6 +180,10 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
     private var lastCalibrationResult: OnePlusCalibrationOutcome? = null
 
     override fun offerCalibration(glucoseMgdl: Int, bloodAtMs: Long): Boolean {
+        if (watchMode) {
+            OnePlusLog.w("${OnePlusLogMarkers.SESSION}: [$slot] calibration refused — the watch never calibrates")
+            return false
+        }
         if (storeNamespace != null) {
             OnePlusLog.w(
                 "${OnePlusLogMarkers.SESSION}: [$slot] calibration refused — a pre-soak sensor is never calibrated",
@@ -239,7 +255,8 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
         val store = storeFor(platform, storeNamespace)
         sensorStore = store
         scanner = platform.scanner(hint = store.load(), slot = slot)
-        profile = DeviceProfileRegistry.resolve()
+        // The OEM profiles are tuned for phones. A watch takes the generic one.
+        profile = if (watchMode) DeviceProfileRegistry.GenericFallback else DeviceProfileRegistry.resolve()
     }
 
     private fun storeFor(platform: OnePlusPlatform, namespace: String?): OnePlusSensorStore =
@@ -600,7 +617,7 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
         currentGatt = gatt
         // The lease may have been taken while this session was being built.
         if (radioBackOff) gatt.setLowPower(true)
-        val auth = OnePlusSessionAuthKeks(gatt)
+        val auth = OnePlusSessionAuthKeks(gatt, displaySlot = displaySlot)
         val created = OnePlusBleSessionSkeleton(
             gatt = gatt,
             auth = auth,
@@ -622,11 +639,13 @@ class OnePlusCgmDriverReal(storeNamespace: String? = null) : OnePlusCgmDriver {
             },
             onGlucose = { sample ->
                 ifCurrentOperation(generation) {
-                    watchersSnapshot().forEach { it.onGlucose(sample) }
+                    val tagged = sample.copy(displaySlot = displaySlot)
+                    watchersSnapshot().forEach { it.onGlucose(tagged) }
                 }
             },
-            // Auto-resume always passes false; only an explicit new-sensor connect may start.
-            requestNewSensorStart = requestNewSensorStart,
+            // Auto-resume always passes false; only an explicit new-sensor connect may start. The
+            // watch never starts a sensor: the phone is the master of the sensor's session.
+            requestNewSensorStart = requestNewSensorStart && !watchMode,
             beforeConnect = { address, attempt, scanMs -> prepareConnect(address, attempt, scanMs) },
             // Read `sensorStore` on every call, never through a captured local: a promotion calls
             // [rebindStore] under a LIVE link, and that link then runs for the rest of the session.

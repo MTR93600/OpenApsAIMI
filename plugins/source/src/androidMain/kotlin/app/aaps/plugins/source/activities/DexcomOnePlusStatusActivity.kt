@@ -53,6 +53,7 @@ import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrationState
 import app.aaps.plugins.source.DexcomOnePlusPlugin
 import app.aaps.plugins.source.DexcomOnePlusSensorStartCorrection
 import app.aaps.plugins.source.DexcomOnePlusStaging
+import app.aaps.plugins.source.DexcomOnePlusWatchHandover
 import app.aaps.plugins.source.R
 import app.aaps.plugins.source.keys.DexcomOnePlusBooleanKey
 import app.aaps.plugins.source.compose.CgmCard
@@ -66,6 +67,7 @@ import app.aaps.plugins.source.compose.CgmStepTimeline
 import app.aaps.plugins.source.compose.CgmUiState
 import app.aaps.plugins.source.compose.DexcomOnePlusProductionCard
 import app.aaps.plugins.source.compose.DexcomOnePlusUiLabels
+import app.aaps.plugins.source.compose.DexcomOnePlusWatchDirectCard
 import app.aaps.plugins.source.compose.formatSensorAge
 import app.aaps.plugins.source.compose.toUiState
 import app.aaps.plugins.source.logs.DriverLogFilter
@@ -127,6 +129,7 @@ class DexcomOnePlusStatusActivity : MetroAppCompatActivity() {
                         onCancelStaging = { dexcomOnePlusPlugin.cancelStaging() },
                         onPromote = { allowEarly -> dexcomOnePlusPlugin.promoteStagingToProduction(allowEarly) },
                         onCorrectSensorStart = { startMs -> dexcomOnePlusPlugin.correctProductionSensorStart(startMs) },
+                        watchHandover = dexcomOnePlusPlugin.watchHandover,
                     )
                 }
             }
@@ -184,6 +187,7 @@ private fun DexcomOnePlusStatusScreen(
     onCancelStaging: () -> Unit,
     onPromote: suspend (Boolean) -> PromotionResult,
     onCorrectSensorStart: suspend (Long) -> DexcomOnePlusSensorStartCorrection.Verdict,
+    watchHandover: DexcomOnePlusWatchHandover,
 ) {
     // Not `remember`-ed: a promotion swaps which driver instance `default()` hands out (see
     // OnePlusCgmDrivers.promoteStagingInstance), and a `remember`-ed reference kept polling the
@@ -317,6 +321,20 @@ private fun DexcomOnePlusStatusScreen(
                     },
                     onOpenStart = onOpenStart,
                 )
+            }
+            // Direct-to-watch, only where a watch link exists.
+            if (watchHandover.isSupported) {
+                item(key = "watchDirect") {
+                    val watchDirectOn by preferences.observe(DexcomOnePlusBooleanKey.WatchDirect).collectAsState()
+                    val watchReport by watchHandover.report.collectAsState()
+                    DexcomOnePlusWatchDirectCard(
+                        enabled = watchDirectOn,
+                        // Read again on every second of the poll above, so a pairing shows at once.
+                        available = remember(now, sessionUp) { watchHandover.isAvailable() },
+                        report = watchReport,
+                        onEnabledChange = { watchHandover.setEnabled(it) },
+                    )
+                }
             }
             promoteResultText?.let { message ->
                 item(key = "promoteResult") {

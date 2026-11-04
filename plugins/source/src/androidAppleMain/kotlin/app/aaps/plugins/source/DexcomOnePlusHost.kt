@@ -1,5 +1,6 @@
 package app.aaps.plugins.source
 
+import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.keys.interfaces.PreferenceItem
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriver
@@ -117,6 +118,15 @@ interface DexcomOnePlusHost {
 
     /** Take down what [onReadingStored] armed, because the plugin stops. Nothing by default. */
     fun cancelMissedReadingAlarm() = Unit
+
+    /**
+     * How direct-to-watch messages reach a watch, or null when this phone has no watch link.
+     *
+     * Null by default, and on iPhone: an Apple Watch would need its own watchOS app, so the feature
+     * is not offered there at all rather than offered and dead. Android answers with the Wear OS
+     * data layer.
+     */
+    fun watchTransport(rxBus: RxBus): DexcomOnePlusWatchTransport? = null
 
     /**
      * A scanner for the setup screens to drive themselves, separate from the driver's own.
