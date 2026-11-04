@@ -9,6 +9,7 @@ import app.aaps.plugins.dexcomoneplus.OnePlusLog
 import app.aaps.plugins.dexcomoneplus.OnePlusLogMarkers
 import app.aaps.plugins.dexcomoneplus.gatt.OnePlusBluetoothUuids
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusAdvCandidate
+import app.aaps.plugins.dexcomoneplus.identity.OnePlusAdvSlot
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusStoredSession
 import app.aaps.plugins.dexcomoneplus.onePlusIosElapsedMs
 import app.aaps.plugins.dexcomoneplus.onePlusSleep
@@ -218,8 +219,13 @@ class OnePlusBleScannerIos(
             noteRefusedStelo(address)
             return
         }
-        val result = OnePlusScanResult(address = address, name = name, rssi = event.rssi ?: RSSI_UNKNOWN)
-            .apply { seenElapsedMs = nowMs() }
+        // CoreBluetooth hands the manufacturer data over with the company id in front.
+        val result = OnePlusScanResult(
+            address = address,
+            name = name,
+            rssi = event.rssi ?: RSSI_UNKNOWN,
+            phoneSlotHeld = OnePlusAdvSlot.phoneSlotHeldWithCompanyId(event.advertisementBytes),
+        ).apply { seenElapsedMs = nowMs() }
         offerToPendingWait(address, name, result)
         offerToScreen(address, name, event, result)
     }
@@ -274,13 +280,14 @@ class OnePlusBleScannerIos(
             val previous = seen.put(address, result)
             // The signal counts too, as on Android: the list is sorted by it, so a sensor that
             // came closer has to move up.
-            previous == null || previous.name != result.name || previous.rssi != result.rssi
+            previous == null || previous.name != result.name || previous.rssi != result.rssi ||
+                previous.phoneSlotHeld != result.phoneSlotHeld
         }
         if (!changed) return
-        val score = OnePlusAdvCandidate.rankScore(name, address, result.rssi, currentHint)
+        val score = OnePlusAdvCandidate.rankScore(name, address, result.rssi, currentHint, result.phoneSlotHeld)
         OnePlusLog.d(
             "${OnePlusLogMarkers.SCAN}: [$slot] device name=${name ?: "?"} rssi=${result.rssi} " +
-                "score=$score id=***${address.takeLast(5)}",
+                "slotHeld=${result.phoneSlotHeld ?: "?"} score=$score id=***${address.takeLast(5)}",
         )
         listener.onDevice(result)
     }

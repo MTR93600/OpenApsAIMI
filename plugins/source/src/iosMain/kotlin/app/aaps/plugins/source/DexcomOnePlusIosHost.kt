@@ -26,6 +26,7 @@ import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriver
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriverStub
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers
 import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseWatcher
+import app.aaps.plugins.dexcomoneplus.OnePlusInstalledApps
 import app.aaps.plugins.dexcomoneplus.OnePlusIosPlatform
 import app.aaps.plugins.dexcomoneplus.OnePlusLogMarkers
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
@@ -262,6 +263,12 @@ class DexcomOnePlusIosHost(
      */
     override fun screenScanner(): OnePlusBleScanner =
         platform.scanner(hint = null, slot = OnePlusLogMarkers.SLOT_PRODUCTION)
+
+    /**
+     * None. An iPhone app cannot list the other apps on the phone, so the start screen leaves the
+     * warning about the Dexcom app, xDrip+ and Juggluco out here rather than say "none found".
+     */
+    override val installedApps: OnePlusInstalledApps? = null
 
     /**
      * The three screens, in the Android order: Status, Start, Warm-up.

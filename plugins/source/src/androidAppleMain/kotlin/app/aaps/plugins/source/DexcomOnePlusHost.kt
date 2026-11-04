@@ -3,7 +3,9 @@ package app.aaps.plugins.source
 import app.aaps.core.keys.interfaces.PreferenceItem
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriver
+import app.aaps.plugins.dexcomoneplus.OnePlusCompetingApps
 import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseWatcher
+import app.aaps.plugins.dexcomoneplus.OnePlusInstalledApps
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScanner
@@ -130,6 +132,15 @@ interface DexcomOnePlusHost {
      * purpose is to find a sensor, and it is the same limitation that leaves the pre-soak slot out.
      */
     fun screenScanner(): OnePlusBleScanner
+
+    /**
+     * Tells which other apps are installed, for the start screen's warning about apps that fight
+     * with us for the sensor (see [OnePlusCompetingApps]).
+     *
+     * Null on a phone that cannot tell. An iPhone app cannot list the other apps, so there the
+     * warning is absent, never a "none found" it does not know.
+     */
+    val installedApps: OnePlusInstalledApps?
 
     /**
      * The entries that open this plugin's own screens, for the settings screen.

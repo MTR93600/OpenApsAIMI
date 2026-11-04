@@ -133,8 +133,16 @@ class OnePlusSessionAuthKeks(
                     OnePlusKeksNotifySource.EXTRA_DATA -> plugin.receivedData(notify.payload)
                 }
             } catch (se: KeksSecurityException) {
+                // libkeks throws this only for "Mismatch": the sensor's answer to our challenge does
+                // not match our key, so the code (or the saved key) is not this sensor's. That is a
+                // refusal for the lockout count.
                 return finalizeAuthResult(
-                    AuthResult(ok = false, message = "ONEPLUS_AUTH: ${se.message}"),
+                    AuthResult(
+                        ok = false,
+                        message = "ONEPLUS_AUTH: ${se.message}",
+                        refusedBySensor = true,
+                        refusedSavedKey = usedShortAuthPreload,
+                    ),
                     plugin,
                 )
             } catch (ipe: KeksInvalidParameterException) {
@@ -286,6 +294,8 @@ class OnePlusSessionAuthKeks(
                     "ONEPLUS_AUTH: KEKS AuthStatus rejected auth=${status.authenticated}"
                 },
                 invalidateSharedKey = true,
+                refusedBySensor = true,
+                refusedSavedKey = viaShort,
             )
         }
 

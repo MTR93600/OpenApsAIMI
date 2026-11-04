@@ -65,6 +65,29 @@ class OnePlusBleScannerIosTest {
     // -- screen scan ------------------------------------------------------------------------
 
     @Test
+    fun scanReadsThePhoneSlotBitAfterTheCompanyId() {
+        val central = FakeBleCentral()
+        val scanner = scanner(central)
+        val found = mutableListOf<OnePlusScanResult>()
+        scanner.startScan { found += it }
+
+        // Company id 0x00D0 little endian, then CRC, then "types in use" with the phone bit set.
+        val held = byteArrayOf(0xD0.toByte(), 0x00, 0x34, 0x12, 0x02, 0x04)
+        scanner.onEvent(
+            BleCentralEvent.ScanResult(name = "DX02aS", id = "PERIPHERAL-1", advertisementBytes = held, rssi = -50),
+        )
+        // The slot became free: the change reaches the screen again.
+        val free = byteArrayOf(0xD0.toByte(), 0x00, 0x34, 0x12, 0x00, 0x04)
+        scanner.onEvent(
+            BleCentralEvent.ScanResult(name = "DX02aS", id = "PERIPHERAL-1", advertisementBytes = free, rssi = -50),
+        )
+        // No manufacturer data says nothing.
+        scanner.onEvent(advertisement(name = "DX02bb", id = "PERIPHERAL-2"))
+
+        assertEquals(listOf(true, false, null), found.map { it.phoneSlotHeld })
+    }
+
+    @Test
     fun scanReportsAG7FamilyName() {
         val central = FakeBleCentral()
         val scanner = scanner(central)

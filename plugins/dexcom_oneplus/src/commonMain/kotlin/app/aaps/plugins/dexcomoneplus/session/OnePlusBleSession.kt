@@ -335,6 +335,12 @@ class OnePlusBleSessionSkeleton(
     private val onCalibrationResult: (OnePlusCalibrateRx?) -> Unit = {},
     /** The sensor's calibration state read after a calibration, and whether it holds the value sent. */
     private val onCalibrationState: (OnePlusCalibrationBoundsRx, Boolean) -> Unit = { _, _ -> },
+    /**
+     * Where the refusals in a row of this slot's sensor are kept. The driver backs it with the slot
+     * store, so the count outlives this session and an app restart. See [OnePlusAuthRefusals].
+     */
+    private val refusalLedger: OnePlusAuthRefusalLedger = OnePlusAuthRefusalLedgerInMemory(),
+    private val refusalPolicy: OnePlusAuthRefusalPolicy = OnePlusAuthRefusalPolicy(),
 ) : OnePlusBleSession {
 
     @Volatile
@@ -606,7 +612,33 @@ class OnePlusBleSessionSkeleton(
             if (attempt == 0) OnePlusWarmupState.Phase.CONNECTING else OnePlusWarmupState.Phase.RECONNECTING
         setWarmup(OnePlusWarmupState(phase = connectingPhase, message = "connect_attempt_$attempt"))
 
-        val prep = preparedConnect ?: try {
+        // Before anything else, even the scan: a sensor that refused us must not be asked again too
+        // soon, nor at all once it refused enough times to lock itself. Normal link losses never
+        // reach this, they are not refusals.
+        var usablePrep = preparedConnect
+        when (val decision = refusalPolicy.decide(refusalLedger.load(), deviceAddress, nowMs())) {
+            OnePlusAuthRefusalPolicy.Decision.Locked  -> {
+                failRefusedTooOften(refusalLedger.load().count)
+                return CycleOutcome.Fatal
+            }
+
+            is OnePlusAuthRefusalPolicy.Decision.Wait -> {
+                val waitMs = decision.untilMs - nowMs()
+                OnePlusLog.w(
+                    "${OnePlusLogMarkers.SESSION}: [$slot] the sensor refused us " +
+                        "${refusalLedger.load().count} time(s) in a row, waiting ${waitMs / 1000}s before asking again " +
+                        "(${OnePlusAuthRefusalPolicy.MAX_REFUSALS_IN_A_ROW + 1} in a row lock it)",
+                )
+                enterReconnecting(OnePlusAuthRefusalPolicy.MESSAGE_PAUSED)
+                if (!sleepWhileRunning(waitMs)) return CycleOutcome.Stopped
+                // A sighting from before the pause is long out of date.
+                usablePrep = null
+            }
+
+            OnePlusAuthRefusalPolicy.Decision.Allowed -> Unit
+        }
+
+        val prep = usablePrep ?: try {
             beforeConnect(deviceAddress, attempt, null)
         } catch (t: Throwable) {
             val msg = t.message ?: "ONEPLUS_BEFORE_CONNECT_FAILED"
@@ -686,6 +718,9 @@ class OnePlusBleSessionSkeleton(
                     } catch (_: Throwable) {
                     }
                 }
+                if (authResult.refusedBySensor && recordRefusal(deviceAddress, authResult.refusedSavedKey)) {
+                    return CycleOutcome.Fatal
+                }
                 onError(msg, false)
                 // Retryable: the loop will re-attempt (short-auth reject wipes the key → full J-PAKE
                 // next). Show RECONNECTING, NOT FAILED — the old FAILED flash made the user abandon
@@ -694,6 +729,10 @@ class OnePlusBleSessionSkeleton(
                 return if (running) CycleOutcome.RetryableFailure else CycleOutcome.Stopped
             }
 
+            if (refusalLedger.load().count > 0) {
+                OnePlusLog.i("${OnePlusLogMarkers.SESSION}: [$slot] the sensor accepted us, refusal count cleared")
+                refusalLedger.save(refusalPolicy.afterSuccess())
+            }
             authResult.sharedKey?.let { key ->
                 try {
                     onAuthSuccess(deviceAddress, key)
@@ -976,6 +1015,35 @@ class OnePlusBleSessionSkeleton(
         }
         return null
     }
+
+    /**
+     * Counts one refusal from [deviceAddress].
+     *
+     * @return true when that was the last refusal we allow: the session has then failed for good and
+     *   the caller must stop.
+     */
+    private fun recordRefusal(deviceAddress: String, withSavedKey: Boolean): Boolean {
+        val updated = refusalPolicy.afterRefusal(refusalLedger.load(), deviceAddress, nowMs(), withSavedKey)
+        refusalLedger.save(updated)
+        OnePlusLog.w(
+            "${OnePlusLogMarkers.SESSION}: [$slot] the sensor refused authentication " +
+                "${updated.count} time(s) in a row savedKey=$withSavedKey",
+        )
+        if (refusalPolicy.decide(updated, deviceAddress, nowMs()) != OnePlusAuthRefusalPolicy.Decision.Locked) return false
+        failRefusedTooOften(updated.count)
+        return true
+    }
+
+    /** Stops for good, before the refusal that would lock the sensor. Only the user starts again. */
+    private fun failRefusedTooOften(count: Int) {
+        fail(
+            "${OnePlusAuthRefusalPolicy.MESSAGE_LOCKED}: the sensor refused us $count times in a row, " +
+                "stopped before it locks itself; check the code, close other apps that use the sensor, then start it again",
+            fatal = false,
+        )
+    }
+
+    private fun nowMs(): Long = Clock.System.now().toEpochMilliseconds()
 
     private fun fail(message: String, fatal: Boolean) {
         running = false

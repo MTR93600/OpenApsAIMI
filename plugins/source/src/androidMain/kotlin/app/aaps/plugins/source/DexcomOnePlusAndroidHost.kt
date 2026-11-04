@@ -9,6 +9,8 @@ import app.aaps.plugins.dexcomoneplus.OnePlusAndroidPlatform
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriver
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers
 import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseWatcher
+import app.aaps.plugins.dexcomoneplus.OnePlusInstalledApps
+import app.aaps.plugins.dexcomoneplus.OnePlusInstalledAppsAndroid
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScanner
@@ -90,6 +92,9 @@ class DexcomOnePlusAndroidHost(
      */
     override fun screenScanner(): OnePlusBleScanner =
         OnePlusBleScannerAndroid(appContext, sessionHint = null)
+
+    /** Android can list the installed apps it declares in its manifest `<queries>`. */
+    override val installedApps: OnePlusInstalledApps by lazy { OnePlusInstalledAppsAndroid(appContext) }
 
     override fun screenItems(plugin: DexcomOnePlusPlugin): List<PreferenceItem> = listOf(
         DexcomOnePlusIntentKey.Status.withClick { open(DexcomOnePlusStatusActivity::class.java) },
