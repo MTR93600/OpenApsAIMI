@@ -469,7 +469,6 @@
     <string name="watch_direct_title">Direct to watch</string>
     <string name="watch_direct_channel">Direct to watch</string>
     <string name="watch_direct_service_channel">Direct to watch link</string>
-    <string name="watch_direct_alarm_channel">Low alarm of the watch</string>
     <string name="watch_direct_state_off">Off. Turn it on in AAPS on the phone, on the Dexcom ONE+ status screen.</string>
     <string name="watch_direct_state_not_supported">Not possible on this watch. It needs Wear OS 3 or newer.</string>
     <string name="watch_direct_state_bluetooth_off">Bluetooth is off on the watch.</string>

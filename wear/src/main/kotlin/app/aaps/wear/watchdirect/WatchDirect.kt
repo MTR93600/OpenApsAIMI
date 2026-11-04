@@ -19,6 +19,7 @@ import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventWearToMobile
 import app.aaps.core.interfaces.rx.weardata.EventData
 import app.aaps.wear.R
+import app.aaps.wear.alarm.CgmAlarmWatch
 import app.aaps.wear.comm.DataHandlerWear
 import app.aaps.wear.data.ComplicationDataRepository
 import dev.zacsweers.metro.AppScope
@@ -44,7 +45,9 @@ import kotlinx.coroutines.launch
  * can never get a watch reading.
  *
  * The phone owns the glucose alarms. The watch raises only a low or urgent low of its own, and only
- * while the phone has sent nothing for [WatchDirectReadings.PHONE_SILENT_MS].
+ * while the phone has sent nothing for [WatchDirectReadings.PHONE_SILENT_MS]. It goes through
+ * [CgmAlarmWatch], the same notification, vibration and Acknowledge as the alarms the phone sends,
+ * and with the same alarm ids, so a later alarm or cancel from the phone replaces it.
  *
  * The link needs Android 12 (the Bluetooth permissions it uses); an older watch reports
  * [EventData.CgmWatchState.NOT_SUPPORTED], so the phone shows it as not possible.
@@ -60,7 +63,8 @@ class WatchDirect(
     private val rxBus: RxBus,
     private val aapsLogger: AAPSLogger,
     private val repository: ComplicationDataRepository,
-    private val dataHandler: DataHandlerWear
+    private val dataHandler: DataHandlerWear,
+    private val cgmAlarmWatch: CgmAlarmWatch
 ) {
 
     /** One at a time: the link's callbacks and the phone's messages are handled in order. */
@@ -70,7 +74,6 @@ class WatchDirect(
     val isSupported: Boolean get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
     private val link: WatchSensorLink? by lazy { if (isSupported) OnePlusWatchSensorLink(context) else null }
-    private val lowAlarm by lazy { WatchDirectLowAlarm(context, aapsLogger) }
 
     /** Start time counts as "phone heard": the phone gets its quiet minutes after a restart of the watch app. */
     private var lastPhoneReadingAt = System.currentTimeMillis()
@@ -257,14 +260,27 @@ class WatchDirect(
         raisedLow = level
         raisedLowAt = now
         aapsLogger.info(LTag.WEAR, "Direct to watch: ${level.name.lowercase()} ${bg.sgvString} and no reading from the phone; alarm on the watch")
-        lowAlarm.raise(urgent = level == WatchDirectReadings.Low.URGENT_LOW, value = bg.sgvString, arrow = bg.slopeArrow)
+        val urgent = level == WatchDirectReadings.Low.URGENT_LOW
+        cgmAlarmWatch.show(
+            EventData.CgmAlarm(
+                id = alarmId(level),
+                title = context.getString(if (urgent) R.string.watch_direct_urgent_low else R.string.watch_direct_low),
+                message = context.getString(R.string.watch_direct_low_message, bg.sgvString, bg.slopeArrow),
+                vibrationSeconds = if (urgent) URGENT_VIBRATION_S else LOW_VIBRATION_S,
+                urgent = urgent
+            )
+        )
     }
 
     private fun clearLowAlarm() {
-        if (raisedLow == null) return
+        val raised = raisedLow ?: return
         raisedLow = null
-        lowAlarm.clear()
+        cgmAlarmWatch.remove(alarmId(raised))
     }
+
+    /** The id the phone uses for the same alarm (`CgmAlarmType.id`). */
+    private fun alarmId(level: WatchDirectReadings.Low): String =
+        if (level == WatchDirectReadings.Low.URGENT_LOW) URGENT_LOW_ALARM_ID else LOW_ALARM_ID
 
     /**
      * A notification only when the wearer has to do something: allow Bluetooth, allow unrestricted
@@ -309,5 +325,13 @@ class WatchDirect(
 
         // Clear of the ids DataLayerListenerServiceWear (1, 2, 556677) and the other watch notifications use.
         const val NOTIFICATION_ID = 7972
+
+        /** The ids of `CgmAlarmType.URGENT_LOW` and `CgmAlarmType.LOW` on the phone. */
+        const val URGENT_LOW_ALARM_ID = "urgent_low"
+        const val LOW_ALARM_ID = "low"
+
+        /** About 10 s for an urgent low and 5 s for a low, as before. */
+        const val URGENT_VIBRATION_S = 10
+        const val LOW_VIBRATION_S = 5
     }
 }
