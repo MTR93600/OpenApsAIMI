@@ -12,6 +12,7 @@ import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriver
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriverReal
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriverStub
 import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseWatcher
+import app.aaps.plugins.dexcomoneplus.OnePlusInstalledApps
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorPrefs
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
@@ -48,13 +49,13 @@ class DexcomOnePlusStartScreenTest {
     private fun text(name: String): String =
         requireNotNull(SourceStringsValues.textOf(name, null)) { "no English text for $name" }
 
-    private fun render(twoSlots: Boolean) {
+    private fun render(twoSlots: Boolean, host: DexcomOnePlusHost = FakeHost()) {
         // MainApp does this in production. Without it every TextRef.Named draws as its raw name and
         // the assertions below read "the node is not displayed" without saying why.
         TextRefIdRegistry.register("source") { name -> SourceStringIds.idOf(name) }
         compose.setContent {
             DexcomOnePlusStartScreen(
-                host = FakeHost,
+                host = host,
                 permissions = OnePlusBlePermissionGate.NoSeparateStep,
                 onBack = {},
                 onEnsureDriver = { OnePlusCgmDriverStub.instance },
@@ -109,8 +110,28 @@ class DexcomOnePlusStartScreenTest {
         compose.onNodeWithText(idle, useUnmergedTree = true).assertExists()
     }
 
+    @Test
+    fun `an installed sensor app is named in a warning`() {
+        render(twoSlots = false, host = FakeHost(installedApps = { it == "com.eveningoutpost.dexdrip" }))
+        compose.onNodeWithText(text("dexcom_oneplus_competing_apps_title")).assertIsDisplayed()
+        compose.onNodeWithText("xDrip+").assertIsDisplayed()
+    }
+
+    @Test
+    fun `no warning when no sensor app is installed`() {
+        render(twoSlots = false, host = FakeHost(installedApps = { false }))
+        compose.onNodeWithText(text("dexcom_oneplus_competing_apps_title")).assertDoesNotExist()
+    }
+
+    @Test
+    fun `no warning at all on a phone that cannot list its apps`() {
+        // The iPhone case: no answer is not the same as "none installed", so nothing is drawn.
+        render(twoSlots = false, host = FakeHost(installedApps = null))
+        compose.onNodeWithText(text("dexcom_oneplus_competing_apps_title")).assertDoesNotExist()
+    }
+
     /** Everything the screen asks of the phone, answered without Bluetooth or a file. */
-    private object FakeHost : DexcomOnePlusHost {
+    private class FakeHost(override val installedApps: OnePlusInstalledApps? = null) : DexcomOnePlusHost {
 
         override fun attachPlatform(driver: OnePlusCgmDriver) = Unit
         override fun slotStore(namespace: String?): OnePlusSensorStore = OnePlusSensorStore(MemoryPrefs())
