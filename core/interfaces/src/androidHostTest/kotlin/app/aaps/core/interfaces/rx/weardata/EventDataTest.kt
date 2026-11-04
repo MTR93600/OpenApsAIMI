@@ -353,6 +353,13 @@ class EventDataTest {
             EventData.CgmAlarm(id = "high", title = "High", message = "", vibrationSeconds = 0, urgent = false),
             EventData.CgmAlarmCancel("urgent_low"),
             EventData.CgmAlarmAcknowledge("signal_loss")
+        ).forEach {
+            assertThat(EventData.deserializeByte(it.serializeByte())).isEqualTo(it)
+            assertThat(EventData.deserialize(it.serialize())).isEqualTo(it)
+        }
+    }
+
+    @Test
     fun directToWatchMessagesSurviveBothWireFormats() {
         listOf(
             EventData.CgmWatchDirect(active = true, pairingCode = "1234", address = "AA:BB:CC:DD:EE:FF", serial = "SN1", sensorName = "DXCM12"),
