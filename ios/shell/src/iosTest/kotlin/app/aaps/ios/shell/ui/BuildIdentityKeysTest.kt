@@ -2,7 +2,7 @@ package app.aaps.ios.shell.ui
 
 import app.aaps.core.interfaces.utils.fabric.CrashReporter
 import app.aaps.core.utils.gitRemoteShort
-import app.aaps.ios.shell.config.IosClientConfig
+import app.aaps.ios.shell.config.IosConfig
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -31,7 +31,7 @@ class BuildIdentityKeysTest {
     fun `it sends the same six keys Android sends`() {
         val reporter = RecordingCrashReporter()
 
-        setBuildIdentityKeys(reporter, IosClientConfig())
+        setBuildIdentityKeys(reporter, IosConfig())
 
         assertEquals(
             setOf("HEAD", "Version", "BuildType", "BuildFlavor", "Remote", "Committed"),
@@ -42,7 +42,7 @@ class BuildIdentityKeysTest {
     @Test
     fun `the commit is a real one and not the old placeholder`() {
         val reporter = RecordingCrashReporter()
-        val config = IosClientConfig()
+        val config = IosConfig()
 
         setBuildIdentityKeys(reporter, config)
 
@@ -56,7 +56,7 @@ class BuildIdentityKeysTest {
     @Test
     fun `the remote is sent in the short form like Android`() {
         val reporter = RecordingCrashReporter()
-        val config = IosClientConfig()
+        val config = IosConfig()
 
         setBuildIdentityKeys(reporter, config)
 
@@ -68,7 +68,7 @@ class BuildIdentityKeysTest {
     @Test
     fun `whether the tree was clean is sent as a plain true or false`() {
         val reporter = RecordingCrashReporter()
-        val config = IosClientConfig()
+        val config = IosConfig()
 
         setBuildIdentityKeys(reporter, config)
 
@@ -79,7 +79,7 @@ class BuildIdentityKeysTest {
     @Test
     fun `the version and build kind describe this build not a fixed one`() {
         val reporter = RecordingCrashReporter()
-        val config = IosClientConfig()
+        val config = IosConfig()
 
         setBuildIdentityKeys(reporter, config)
 
@@ -101,7 +101,7 @@ class BuildIdentityKeysTest {
             override fun recordException(type: String, message: String, stackTrace: List<String>) = Unit
         }
 
-        setBuildIdentityKeys(silent, IosClientConfig())
+        setBuildIdentityKeys(silent, IosConfig())
 
         // The keys are still offered; it is the reporter's job to drop them, which is what keeps a
         // user who turns reporting on mid-session from getting unlabelled reports.
