@@ -380,6 +380,9 @@ class EventDataTest {
         assertThat(EventData.deserializeByte(old.serializeByte())).isEqualTo(old)
         assertThat(EventData.deserialize(old.serialize())).isEqualTo(old)
         assertThat(EventData.CgmAlarmCancel("x").serialize()).contains("CgmAlarmCancel")
+    }
+
+    @Test
     fun directToWatchNeverPrintsThePairingCode() {
         val message = EventData.CgmWatchDirect(active = true, pairingCode = "9876", address = "AA:BB")
         assertThat(message.toString()).doesNotContain("9876")
