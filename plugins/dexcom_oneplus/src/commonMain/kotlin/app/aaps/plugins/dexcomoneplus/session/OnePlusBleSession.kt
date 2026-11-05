@@ -13,6 +13,7 @@ import app.aaps.plugins.dexcomoneplus.oem.OemDeviceProfile
 import app.aaps.plugins.dexcomoneplus.onePlusSleep
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrateRx
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrationBoundsRx
+import app.aaps.plugins.dexcomoneplus.parse.OnePlusExtendedVersionRx
 import app.aaps.plugins.dexcomoneplus.reconnect.OemAwareReconnectPolicy
 import app.aaps.plugins.dexcomoneplus.reconnect.OnePlusReconnectPolicy
 import app.aaps.plugins.dexcomoneplus.warmup.OnePlusWarmupClock
@@ -341,6 +342,12 @@ class OnePlusBleSessionSkeleton(
      */
     private val refusalLedger: OnePlusAuthRefusalLedger = OnePlusAuthRefusalLedgerInMemory(),
     private val refusalPolicy: OnePlusAuthRefusalPolicy = OnePlusAuthRefusalPolicy(),
+    /** Whether the session length of this slot's sensor may still be asked (0x52), see `OnePlusEgvSession`. */
+    private val askSensorInfo: () -> Boolean = { false },
+    private val onSensorInfoAsked: () -> Unit = {},
+    private val onSensorInfo: (OnePlusExtendedVersionRx) -> Unit = {},
+    /** Warm-up length of this slot's sensor. */
+    private val warmupMs: () -> Long = { OnePlusWarmupClock.DEFAULT_WARMUP_MS },
 ) : OnePlusBleSession {
 
     @Volatile
@@ -774,6 +781,10 @@ class OnePlusBleSessionSkeleton(
                 calibrationQueue = calibrationQueue,
                 onCalibrationResult = onCalibrationResult,
                 onCalibrationState = onCalibrationState,
+                askSensorInfo = askSensorInfo,
+                onSensorInfoAsked = onSensorInfoAsked,
+                onSensorInfo = onSensorInfo,
+                warmupMs = warmupMs,
             )
             try {
                 egv.run(shouldContinue = { running && gatt.isConnected() })

@@ -48,6 +48,7 @@ import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
 import app.aaps.plugins.dexcomoneplus.session.OnePlusCalibrationGate
 import app.aaps.plugins.source.compose.DexcomOnePlusComposeContent
+import app.aaps.plugins.source.compose.DexcomOnePlusSensorFacts
 import app.aaps.plugins.source.keys.DexcomOnePlusBooleanKey
 import app.aaps.plugins.source.keys.DexcomOnePlusIntKey
 import app.aaps.plugins.source.keys.DexcomOnePlusIntentKey
@@ -239,6 +240,10 @@ class DexcomOnePlusPlugin @Inject constructor(
     @Volatile
     private var healedSensorChangeStartMs: Long = 0L
 
+    /** Last time a Bluetooth session of the sensor in use opened, in this app run. Shown on the status screen. */
+    @Volatile
+    private var lastSessionUpAtMs: Long = 0L
+
     // ---- Dual-sensor (staging / pre-soak) state — see docs/DEXCOM_ONEPLUS_DUAL_SENSOR_STAGING_PLAN.md ----
 
     private val _lifecycle = MutableStateFlow<CgmSensorLifecycle?>(null)
@@ -333,7 +338,7 @@ class DexcomOnePlusPlugin @Inject constructor(
         sensorAlerts.state(
             running = sensorAlertsRunning,
             sensorStored = runCatching { sensorStore.load() != null }.getOrDefault(false),
-            expiresAtMs = DexcomOnePlusStaging.computeLifecycle(SensorSlot.PRODUCTION, sessionStart, nowMs)?.expiresAtEpochMs,
+            expiresAtMs = DexcomOnePlusStaging.expiresAtMs(sessionStart, sensorSessionLengthMs(sensorStore)),
             nowMs = nowMs,
             expiringLeadMs = expiringLeadMs,
         )
@@ -681,7 +686,10 @@ class DexcomOnePlusPlugin @Inject constructor(
         }
         val currentStartMs = sensorStore.loadSessionStart()
         val now = nowMs()
-        val verdict = DexcomOnePlusSensorStartCorrection.validate(newStartMs, currentStartMs, now)
+        val verdict = DexcomOnePlusSensorStartCorrection.validate(
+            newStartMs, currentStartMs, now,
+            maxAgeMs = DexcomOnePlusStaging.sessionLengthMs(sensorSessionLengthMs(sensorStore)),
+        )
         if (verdict != DexcomOnePlusSensorStartCorrection.Verdict.Accepted) {
             aapsLogger.info(
                 LTag.BGSOURCE,
@@ -727,6 +735,7 @@ class DexcomOnePlusPlugin @Inject constructor(
 
     override fun onSession(up: Boolean, reason: String?) {
         aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_SESSION: up=$up reason=$reason")
+        if (up) lastSessionUpAtMs = nowMs()
         // A session that ended because someone asked for it must stay ended. Everything else — a
         // lost link, an error, the EGV loop falling out — is a candidate for the watchdog.
         when {
@@ -1059,7 +1068,7 @@ class DexcomOnePlusPlugin @Inject constructor(
         DexcomOnePlusIngest.reset()
         // 3) Durability: migrate the staging identity into the production store so a later restart
         //    resumes the promoted sensor on the production driver.
-        stagingStore.load()?.let { sensorStore.adopt(it, startMs) }
+        stagingStore.load()?.let { sensorStore.adopt(it, startMs, runCatching { stagingStore.loadSensorInfo() }.getOrNull()) }
         // 4) Close the pre-soak slot BEFORE its file is wiped (same order as Libre 3): the staging
         // callbacks are guarded on [stagingPresent], so a reading still in flight can no longer
         // write `slot_warmup_done` / `slot_present` back into the file that is about to be cleared.
@@ -1285,10 +1294,27 @@ class DexcomOnePlusPlugin @Inject constructor(
         }
     }
 
+    /** What the status screen shows about the sensor in use. Only reads. */
+    fun sensorFacts(): DexcomOnePlusSensorFacts {
+        val stored = runCatching { sensorStore.load() }.getOrNull()
+        return DexcomOnePlusSensorFacts(
+            deviceName = stored?.lastDeviceName,
+            serial = stored?.identity?.serial,
+            pairingCode = stored?.identity?.pin,
+            startedAtMs = runCatching { sensorStore.loadSessionStart() }.getOrDefault(0L).takeIf { it > 0L },
+            sessionLengthMs = sensorSessionLengthMs(sensorStore),
+            lastConnectAtMs = lastSessionUpAtMs.takeIf { it > 0L },
+        )
+    }
+
+    /** Session length the sensor of [store] reported (0x52, grace included), or null while unknown. */
+    private fun sensorSessionLengthMs(store: OnePlusSensorStore): Long? =
+        runCatching { store.loadSensorInfo()?.sessionLengthMs }.getOrNull()
+
     private fun refreshProductionLifecycle() {
         val startMs = sensorStore.loadSessionStart()
         _lifecycle.value =
-            DexcomOnePlusStaging.computeLifecycle(SensorSlot.PRODUCTION, startMs, nowMs())
+            DexcomOnePlusStaging.computeLifecycle(SensorSlot.PRODUCTION, startMs, nowMs(), sensorSessionLengthMs(sensorStore))
         if (startMs > 0L) ioScope.launch { healMissingSensorChange(startMs) }
     }
 
@@ -1349,7 +1375,7 @@ class DexcomOnePlusPlugin @Inject constructor(
 
     private fun refreshStagingLifecycle() {
         _stagingLifecycle.value =
-            if (stagingPresent) DexcomOnePlusStaging.computeLifecycle(SensorSlot.STAGING, stagingStore.loadSessionStart(), nowMs())
+            if (stagingPresent) DexcomOnePlusStaging.computeLifecycle(SensorSlot.STAGING, stagingStore.loadSessionStart(), nowMs(), sensorSessionLengthMs(stagingStore))
             else null
     }
 

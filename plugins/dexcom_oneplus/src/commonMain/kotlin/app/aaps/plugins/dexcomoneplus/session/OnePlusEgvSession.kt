@@ -12,6 +12,7 @@ import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrationBoundsRx
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrationMapper
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrationState
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusEGlucoseTx
+import app.aaps.plugins.dexcomoneplus.parse.OnePlusExtendedVersionRx
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusGlucoseParser
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusSessionStartRx
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusSessionStartTx
@@ -62,6 +63,17 @@ class OnePlusEgvSession(
      * sent. That is how a lost answer is resolved without sending the value a second time.
      */
     private val onCalibrationState: (OnePlusCalibrationBoundsRx, Boolean) -> Unit = { _, _ -> },
+    /**
+     * True when the session length of this sensor is still unknown and may be asked (0x52). The
+     * driver answers from the slot store, which also caps the number of tries per sensor.
+     */
+    private val askSensorInfo: () -> Boolean = { false },
+    /** Called right before 0x52 is written, so the driver can count the try. */
+    private val onSensorInfoAsked: () -> Unit = {},
+    /** The sensor's own session and warm-up length (0x52 answer). */
+    private val onSensorInfo: (OnePlusExtendedVersionRx) -> Unit = {},
+    /** Warm-up length of this sensor: from its 0x52 answer once known, else the default. */
+    private val warmupMs: () -> Long = { OnePlusWarmupClock.DEFAULT_WARMUP_MS },
 ) {
 
     @Volatile
@@ -81,6 +93,10 @@ class OnePlusEgvSession(
 
     @Volatile
     private var backfillAttempted = false
+
+    /** 0x52 is asked at most once per connection. */
+    @Volatile
+    private var sensorInfoAsked = false
 
     /** Fingerstick already reported as "waiting for the transmitter clock", so it is said once. */
     @Volatile
@@ -208,6 +224,7 @@ class OnePlusEgvSession(
             val warmup = OnePlusCalibrationMapper.toWarmupState(
                 state = parsed.calibration,
                 sessionAgeSeconds = parsed.sessionAgeSeconds,
+                warmupMs = warmupMs(),
             )
             onWarmup(warmup)
             val sample = parsed.sample
@@ -352,6 +369,7 @@ class OnePlusEgvSession(
             if (startMs != null) {
                 val warmup = OnePlusWarmupClock.warmingFromStart(
                     startEpochMs = startMs,
+                    durationMs = warmupMs(),
                     nowMs = Clock.System.now().toEpochMilliseconds(),
                     message = "tx_time_session",
                 )
@@ -469,6 +487,12 @@ class OnePlusEgvSession(
             return
         }
 
+        // A late answer to 0x52 is still good.
+        OnePlusExtendedVersionRx.parse(packet)?.let { info ->
+            reportSensorInfo(info)
+            return
+        }
+
         OnePlusSessionStopRx.parse(packet)?.let { rx ->
             OnePlusLog.d(
                 "${OnePlusLogMarkers.SESSION}: late SessionStopRx status=${rx.status} ok=${rx.isOkay()}",
@@ -520,6 +544,7 @@ class OnePlusEgvSession(
             state = parsed.calibration,
             nowMs = Clock.System.now().toEpochMilliseconds(),
             sessionAgeSeconds = parsed.sessionAgeSeconds,
+            warmupMs = warmupMs(),
         )
         onWarmup(warmup)
 
@@ -531,6 +556,7 @@ class OnePlusEgvSession(
             )
             onGlucose(sample)
             maybeBackfillAfterEgv(shouldContinue)
+            maybeAskSensorInfo(shouldContinue)
         } else {
             OnePlusLog.i(
                 "${OnePlusLogMarkers.WARMUP}: egv cal=${parsed.calibration.name} usable=false " +
@@ -549,6 +575,50 @@ class OnePlusEgvSession(
         if (lastDexTimeSeconds < 1) return
         backfillAttempted = true
         performBackfill(shouldContinue)
+    }
+
+    /**
+     * Ask the sensor how long its session and its warm-up last (0x52), once per connection, after a
+     * good reading and after the backfill: then the link is known to work and the reading is safe.
+     *
+     * A G7 15-day sensor lasts 15 days, not 10, so without this its end and its expiry alarm come
+     * 5 days early. A sensor that does not answer changes nothing; the driver caps the tries per
+     * sensor, so a sensor that does not like the request is not asked on every connection.
+     * Every other packet that arrives meanwhile keeps going through the normal handling.
+     */
+    private fun maybeAskSensorInfo(shouldContinue: () -> Boolean) {
+        if (sensorInfoAsked) return
+        if (!askSensorInfo()) return
+        sensorInfoAsked = true
+        if (!shouldContinue() || !gatt.isConnected()) return
+        onSensorInfoAsked()
+        try {
+            gatt.writeControl(OnePlusExtendedVersionRx.request())
+            OnePlusLog.i("${OnePlusLogMarkers.SESSION}: wrote ExtendedVersionTx opcode=0x52")
+        } catch (t: Throwable) {
+            OnePlusLog.w("${OnePlusLogMarkers.SESSION}: sensor info request failed: ${t.message}")
+            return
+        }
+        for (attempt in 0 until CALIBRATION_REPLY_ROUNDS) {
+            if (!shouldContinue() || !gatt.isConnected()) return
+            val packet = gatt.awaitControlNotify(CALIBRATION_REPLY_TIMEOUT_MS) ?: break
+            val info = OnePlusExtendedVersionRx.parse(packet)
+            if (info == null) {
+                handleControlPacket(packet, shouldContinue)
+                continue
+            }
+            reportSensorInfo(info)
+            return
+        }
+        OnePlusLog.i("${OnePlusLogMarkers.SESSION}: no sensor info answer")
+    }
+
+    private fun reportSensorInfo(info: OnePlusExtendedVersionRx) {
+        OnePlusLog.i(
+            "${OnePlusLogMarkers.SESSION}: sensor info sessionLength=${info.sessionLengthSeconds}s " +
+                "warmup=${info.warmupSeconds}s",
+        )
+        onSensorInfo(info)
     }
 
     companion object {
