@@ -1,5 +1,6 @@
 package app.aaps.plugins.dexcomoneplus.session
 
+import app.aaps.plugins.dexcomoneplus.OnePlusCalibrationOutcome
 import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseSample
 import app.aaps.plugins.dexcomoneplus.OnePlusLog
 import app.aaps.plugins.dexcomoneplus.OnePlusLogMarkers
@@ -63,6 +64,18 @@ class OnePlusEgvSession(
      * sent. That is how a lost answer is resolved without sending the value a second time.
      */
     private val onCalibrationState: (OnePlusCalibrationBoundsRx, Boolean) -> Unit = { _, _ -> },
+    /**
+     * The checks of [OnePlusCalibrationGate], run again right before a waiting value is written:
+     * minutes or hours may have passed since the user confirmed it. Gets the value, its time and
+     * now; returns why it must not go out, or null. The driver answers from its own warm-up phase
+     * and last reading. The default refuses, so a session that was given a queue but no check
+     * never writes.
+     */
+    private val calibrationSendCheck: (Int, Long, Long) -> OnePlusCalibrationGate.Refusal? = { _, _, _ ->
+        OnePlusCalibrationGate.Refusal.NOT_READY
+    },
+    /** A waiting value was dropped before anything was written, and why. The sensor never saw it. */
+    private val onCalibrationNotSent: (OnePlusCalibrationOutcome.NotSent.Reason) -> Unit = {},
     /**
      * True when the session length of this sensor is still unknown and may be asked (0x52). The
      * driver answers from the slot store, which also caps the number of tries per sensor.
@@ -245,38 +258,37 @@ class OnePlusEgvSession(
      * Returns true when a calibration was actually written, so the caller re-arms its own EGV
      * request: the exchange has used the Control characteristic in the middle of the cycle.
      *
-     * Everything that can go wrong before the write is reported as a refusal the user can read, and
-     * the fingerstick is dropped rather than kept for later — an old value sent to a sensor that
-     * lines it up with its own history is worse than no calibration.
+     * The checks of [OnePlusCalibrationGate] run again here ([calibrationSendCheck]): the sensor may
+     * have gone back to warm-up, the last reading may be old, or glucose may now change fast. A
+     * value that fails them, or is too old or out of range, is dropped before any write and
+     * reported as [OnePlusCalibrationOutcome.NotSent]: it is never kept for later, because an old
+     * value sent to a sensor that lines it up with its own history is worse than no calibration.
+     * Only a value that was written can end as "unknown".
      */
     private fun sendPendingCalibration(shouldContinue: () -> Boolean): Boolean {
         val queue = calibrationQueue ?: return false
-        if (queue.peek() == null) return false
+        val waiting = queue.peek() ?: return false
         val now = Clock.System.now().toEpochMilliseconds()
+        if (dropIfNotAllowed(queue, waiting, now)) return false
         val dexTime = OnePlusCalibrationQueue.dexTimeForBlood(
-            bloodAtMs = queue.peek()?.bloodAtMs ?: return false,
+            bloodAtMs = waiting.bloodAtMs,
             nowMs = now,
             lastDexTimeSeconds = lastDexTimeSeconds,
             lastDexTimeAtMs = lastDexTimeAtMs,
         )
         if (dexTime == null) {
-            val waiting = queue.peek()?.bloodAtMs
-            if (waiting != null && waiting != waitingForDexTimeAtMs) {
-                waitingForDexTimeAtMs = waiting
+            if (waiting.bloodAtMs != waitingForDexTimeAtMs) {
+                waitingForDexTimeAtMs = waiting.bloodAtMs
                 OnePlusLog.i("${OnePlusLogMarkers.SESSION}: calibration waiting — transmitter time unknown")
             }
             return false
         }
-        val pending = queue.take() ?: return false
-        if (OnePlusCalibrationQueue.isTooOld(pending.bloodAtMs, now)) {
-            OnePlusLog.w("${OnePlusLogMarkers.SESSION}: calibration dropped — fingerstick older than one hour")
-            onCalibrationResult(null)
-            return false
-        }
+        // Taken only if it is still the value that was checked: a sensor change may have cleared it.
+        if (!queue.take(waiting)) return false
+        val pending = waiting
         val packet = OnePlusCalibrateTx.build(pending.glucoseMgdl, dexTime)
         if (packet == null) {
-            OnePlusLog.w("${OnePlusLogMarkers.SESSION}: calibration dropped — ${pending.glucoseMgdl} mg/dL out of range")
-            onCalibrationResult(null)
+            reportNotSent(OnePlusCalibrationOutcome.NotSent.Reason.OUT_OF_RANGE)
             return false
         }
         try {
@@ -286,6 +298,7 @@ class OnePlusEgvSession(
                     "glucose=${pending.glucoseMgdl} dexTime=$dexTime",
             )
         } catch (t: Throwable) {
+            // The write may have reached the sensor before it failed, so this is "unknown", not "not sent".
             OnePlusLog.e("${OnePlusLogMarkers.ERROR}: calibration write failed: ${t.message}", t)
             onCalibrationResult(null)
             return false
@@ -293,6 +306,25 @@ class OnePlusEgvSession(
         awaitCalibrationReply(shouldContinue)
         readCalibrationState(pending.glucoseMgdl, dexTime, shouldContinue)
         return true
+    }
+
+    /** Why [pending] must not be written now, or null when it may. */
+    private fun notAllowed(pending: OnePlusCalibrationQueue.Pending, nowMs: Long): OnePlusCalibrationOutcome.NotSent.Reason? {
+        if (OnePlusCalibrationQueue.isTooOld(pending.bloodAtMs, nowMs)) return OnePlusCalibrationOutcome.NotSent.Reason.TOO_OLD
+        val refusal = calibrationSendCheck(pending.glucoseMgdl, pending.bloodAtMs, nowMs) ?: return null
+        return OnePlusCalibrationOutcome.NotSent.Reason.of(refusal)
+    }
+
+    /** Takes [waiting] out of the queue and reports it as not sent when it must not go out now. */
+    private fun dropIfNotAllowed(queue: OnePlusCalibrationQueue, waiting: OnePlusCalibrationQueue.Pending, nowMs: Long): Boolean {
+        val reason = notAllowed(waiting, nowMs) ?: return false
+        if (queue.take(waiting)) reportNotSent(reason)
+        return true
+    }
+
+    private fun reportNotSent(reason: OnePlusCalibrationOutcome.NotSent.Reason) {
+        OnePlusLog.w("${OnePlusLogMarkers.SESSION}: calibration dropped before the write — $reason")
+        onCalibrationNotSent(reason)
     }
 
     /**
@@ -382,6 +414,8 @@ class OnePlusEgvSession(
         if (sessionStartAttempted) return
         sessionStartAttempted = true
         if (!gatt.isConnected() || !shouldContinue()) return
+        // A new sensor session starts with a warm-up: a value confirmed before it does not belong to it.
+        if (calibrationQueue?.take() != null) reportNotSent(OnePlusCalibrationOutcome.NotSent.Reason.SENSOR_CHANGED)
 
         val payload = OnePlusSessionStartTx.build(
             dexTimeSeconds = lastDexTimeSeconds,

@@ -9,8 +9,9 @@ import kotlin.math.abs
  * Whether a fingerstick may go to the sensor now.
  *
  * A sensor keeps a calibration it takes for good, so these checks run before the user confirms and
- * again when the value is handed over. They are limits for software behaviour, set with the
- * project owner, and still to be reviewed by a clinician.
+ * again when the value is handed over. The limits are software choices, not clinical advice:
+ * range 40..400 mg/dL as the sensor accepts, blood at most one hour old, sensor past warm-up with a
+ * recent reading, and glucose not changing faster than [MAX_RATE_MGDL_PER_MIN].
  */
 object OnePlusCalibrationGate {
 

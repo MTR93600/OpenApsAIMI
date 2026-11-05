@@ -2,6 +2,7 @@ package app.aaps.plugins.dexcomoneplus.session
 
 import app.aaps.core.interfaces.concurrent.AapsLock
 import app.aaps.core.interfaces.concurrent.withLock
+import app.aaps.plugins.dexcomoneplus.OnePlusCalibrationOutcome
 import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseSample
 import app.aaps.plugins.dexcomoneplus.OnePlusLog
 import app.aaps.plugins.dexcomoneplus.OnePlusLogMarkers
@@ -336,6 +337,12 @@ class OnePlusBleSessionSkeleton(
     private val onCalibrationResult: (OnePlusCalibrateRx?) -> Unit = {},
     /** The sensor's calibration state read after a calibration, and whether it holds the value sent. */
     private val onCalibrationState: (OnePlusCalibrationBoundsRx, Boolean) -> Unit = { _, _ -> },
+    /** Checks run again right before a waiting value is written, see `OnePlusEgvSession`. Default: refuse. */
+    private val calibrationSendCheck: (Int, Long, Long) -> OnePlusCalibrationGate.Refusal? = { _, _, _ ->
+        OnePlusCalibrationGate.Refusal.NOT_READY
+    },
+    /** A waiting value was dropped before any write, and why. */
+    private val onCalibrationNotSent: (OnePlusCalibrationOutcome.NotSent.Reason) -> Unit = {},
     /**
      * Where the refusals in a row of this slot's sensor are kept. The driver backs it with the slot
      * store, so the count outlives this session and an app restart. See [OnePlusAuthRefusals].
@@ -781,6 +788,8 @@ class OnePlusBleSessionSkeleton(
                 calibrationQueue = calibrationQueue,
                 onCalibrationResult = onCalibrationResult,
                 onCalibrationState = onCalibrationState,
+                calibrationSendCheck = calibrationSendCheck,
+                onCalibrationNotSent = onCalibrationNotSent,
                 askSensorInfo = askSensorInfo,
                 onSensorInfoAsked = onSensorInfoAsked,
                 onSensorInfo = onSensorInfo,

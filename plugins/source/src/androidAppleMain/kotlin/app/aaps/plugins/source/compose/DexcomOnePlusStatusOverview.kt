@@ -250,6 +250,13 @@ private fun SensorCalibrationCard(card: DexcomOnePlusCalibrationCard) {
             Text(text = stringResource(request), style = MaterialTheme.typography.bodyMedium)
         }
         Text(text = stringResource(card.outcome), style = MaterialTheme.typography.bodyMedium)
+        card.notSentReason?.let { reason ->
+            Text(
+                text = stringResource(reason),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         card.detail?.let { detail ->
             Text(
                 text = stringResource(SourceStrings.dexcom_oneplus_calibration_detail, detail),

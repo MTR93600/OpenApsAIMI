@@ -362,16 +362,7 @@ class DexcomOnePlusPlugin @Inject constructor(
         val refusal = OnePlusCalibrationGate.check(glucoseMgdl, bloodAtMs, nowMs(), warmupPhase, lastProductionReading)
             ?: return null
         aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_CALIBRATION: refused $refusal")
-        return resources.gs(
-            when (refusal) {
-                OnePlusCalibrationGate.Refusal.OUT_OF_RANGE      -> SourceStrings.dexcom_oneplus_calibration_refused_range
-                OnePlusCalibrationGate.Refusal.TOO_OLD           -> SourceStrings.dexcom_oneplus_calibration_refused_too_old
-                OnePlusCalibrationGate.Refusal.NOT_READY         -> SourceStrings.dexcom_oneplus_calibration_refused_not_ready
-                OnePlusCalibrationGate.Refusal.NO_RECENT_READING -> SourceStrings.dexcom_oneplus_calibration_refused_no_reading
-                OnePlusCalibrationGate.Refusal.RATE_UNKNOWN      -> SourceStrings.dexcom_oneplus_calibration_refused_rate_unknown
-                OnePlusCalibrationGate.Refusal.CHANGING_TOO_FAST -> SourceStrings.dexcom_oneplus_calibration_refused_too_fast
-            }
-        )
+        return resources.gs(DexcomOnePlusCalibrationText.refusal(refusal))
     }
 
     override fun calibrateSensor(glucoseMgdl: Int, bloodAtMs: Long): SensorCalibrationResult {

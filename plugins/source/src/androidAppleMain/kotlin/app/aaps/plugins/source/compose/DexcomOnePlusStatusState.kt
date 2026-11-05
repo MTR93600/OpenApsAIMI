@@ -20,6 +20,7 @@ import app.aaps.core.ui.extensions.directionToDescription
 import app.aaps.plugins.dexcomoneplus.OnePlusCalibrationOutcome
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrationState
+import app.aaps.plugins.source.DexcomOnePlusCalibrationText
 import app.aaps.plugins.source.DexcomOnePlusStaging
 import app.aaps.plugins.source.SourceStrings
 
@@ -102,6 +103,8 @@ data class DexcomOnePlusCalibrationCard(
     /** What the sensor itself asks for, or null. */
     val request: TextRef?,
     val outcome: TextRef,
+    /** Why a value was dropped before it was written, or null when none was dropped. */
+    val notSentReason: TextRef?,
     /** The raw answer of the sensor, or null. */
     val detail: String?,
     val warning: Boolean,
@@ -423,29 +426,30 @@ object DexcomOnePlusStatusState {
     }
 
     /**
-     * [OnePlusCalibrationOutcome.Unknown] is not softened: the answer was lost or unreadable, so it
-     * is neither a failure of the app nor a success.
+     * The texts come from [DexcomOnePlusCalibrationText], as for the plugin.
+     *
+     * [OnePlusCalibrationOutcome.Unknown] is not softened: the value was written and the answer was
+     * lost or unreadable, so it is neither a failure of the app nor a success.
+     * [OnePlusCalibrationOutcome.NotSent] says the opposite: nothing reached the sensor, and the
+     * value may be entered again.
      */
     private fun calibrationCard(input: DexcomOnePlusStatusInput): DexcomOnePlusCalibrationCard {
         val outcome = input.calibrationOutcome
-        val text = when {
-            input.calibrationWaiting || outcome is OnePlusCalibrationOutcome.Pending -> SourceStrings.dexcom_oneplus_calibration_waiting
-            outcome is OnePlusCalibrationOutcome.Accepted                            -> SourceStrings.dexcom_oneplus_calibration_accepted
-            outcome is OnePlusCalibrationOutcome.Refused                             -> SourceStrings.dexcom_oneplus_calibration_refused
-            outcome is OnePlusCalibrationOutcome.Unknown                             -> SourceStrings.dexcom_oneplus_calibration_unknown
-            else                                                                     -> SourceStrings.dexcom_oneplus_calibration_none
-        }
         val detail = when (outcome) {
             is OnePlusCalibrationOutcome.Accepted -> outcome.detail
             is OnePlusCalibrationOutcome.Refused  -> outcome.detail
             is OnePlusCalibrationOutcome.Unknown  -> outcome.detail
             else                                  -> null
         }
+        val notSentReason = (outcome as? OnePlusCalibrationOutcome.NotSent)
+            ?.takeIf { !input.calibrationWaiting }
+            ?.let { DexcomOnePlusCalibrationText.notSentReason(it.reason) }
         return DexcomOnePlusCalibrationCard(
             request = calibrationRequest(input.driverMessage),
-            outcome = text,
+            outcome = DexcomOnePlusCalibrationText.status(outcome, input.calibrationWaiting),
+            notSentReason = notSentReason,
             detail = detail?.takeIf { it.isNotBlank() },
-            warning = outcome is OnePlusCalibrationOutcome.Refused,
+            warning = outcome is OnePlusCalibrationOutcome.Refused || outcome is OnePlusCalibrationOutcome.NotSent,
         )
     }
 

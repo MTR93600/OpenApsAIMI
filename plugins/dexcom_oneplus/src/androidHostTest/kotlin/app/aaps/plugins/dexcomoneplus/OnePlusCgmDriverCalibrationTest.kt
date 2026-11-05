@@ -1,7 +1,15 @@
 package app.aaps.plugins.dexcomoneplus
 
+import app.aaps.plugins.dexcomoneplus.gatt.OnePlusGattClient
+import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorIdentity
+import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorPrefs
+import app.aaps.plugins.dexcomoneplus.identity.OnePlusStoredSession
+import app.aaps.plugins.dexcomoneplus.oem.OemDeviceProfile
+import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScanner
+import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScannerStub
 import app.aaps.plugins.dexcomoneplus.session.OnePlusBleSession
 import app.aaps.plugins.dexcomoneplus.session.OnePlusCalibrationQueue
+import app.aaps.plugins.dexcomoneplus.session.OnePlusCpuLease
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 
@@ -12,8 +20,8 @@ import org.junit.jupiter.api.Test
  * good. Each refusal asserts the queue is still empty, or still holding the value that was already
  * waiting — nothing new was accepted.
  *
- * Provenance: ref `OnePlusCgmDriverCalibrationTest` at `3dd0ca64772`. The session-up cases are the
- * plan's range and occupied-queue refusals, which the driver only reaches once a session is up.
+ * The session-up cases are the range and occupied-queue refusals, which the driver only reaches
+ * once a session is up.
  */
 class OnePlusCgmDriverCalibrationTest {
 
@@ -110,9 +118,92 @@ class OnePlusCgmDriverCalibrationTest {
         assertThat(stub.calibrationPending()).isFalse()
     }
 
+    // A value confirmed for one sensor or session must never reach the next one. Each event below
+    // empties the queue, so the next session has nothing to write, and says "not sent".
+
+    @Test
+    fun `a disconnect drops the waiting value as not sent`() {
+        val production = productionWithWaitingValue()
+
+        production.disconnect()
+
+        assertDroppedForSensorChange(production)
+    }
+
+    @Test
+    fun `a shutdown drops the waiting value as not sent`() {
+        val production = productionWithWaitingValue()
+
+        production.shutdown()
+
+        assertDroppedForSensorChange(production)
+    }
+
+    @Test
+    fun `a promotion drops a value waiting on the instance`() {
+        val production = productionWithWaitingValue()
+
+        production.rebindStore(null)
+
+        assertDroppedForSensorChange(production)
+    }
+
+    @Test
+    fun `a new sensor identity drops the waiting value`() {
+        val production = productionWithWaitingValue()
+
+        production.saveIdentity(OnePlusSensorIdentity(pin = "5678"))
+
+        assertDroppedForSensorChange(production)
+    }
+
+    @Test
+    fun `a new pairing drops the waiting value before the new session starts`() {
+        val production = productionWithWaitingValue()
+        production.attach(NoRadioPlatform())
+
+        production.connect(deviceAddress = "AA:BB:CC:DD:EE:01", pairingCode = "5678")
+
+        assertDroppedForSensorChange(production)
+        production.shutdown()
+    }
+
+    @Test
+    fun `a session restart drops the value waiting for the session that ended`() {
+        val production = OnePlusCgmDriverReal()
+        production.attach(NoRadioPlatform())
+        production.saveIdentity(OnePlusSensorIdentity(pin = "1234"))
+        production.sensorStore()?.saveLastMac("AA:BB:CC:DD:EE:02")
+        production.sensorStore()?.saveSharedKey(ByteArray(16) { 1 })
+        setSession(production, DownSession)
+        assertThat(production.offerCalibration(glucoseMgdl = 150, bloodAtMs = now)).isTrue()
+        // The session ends on its own (released), and the watchdog resumes a new one.
+        setSession(production, null)
+
+        assertThat(production.resumeStoredSession()).isTrue()
+
+        assertDroppedForSensorChange(production)
+        production.shutdown()
+    }
+
+    private fun productionWithWaitingValue(): OnePlusCgmDriverReal {
+        val production = OnePlusCgmDriverReal()
+        setSession(production, DownSession)
+        assertThat(production.offerCalibration(glucoseMgdl = 150, bloodAtMs = now)).isTrue()
+        assertThat(production.calibrationPending()).isTrue()
+        return production
+    }
+
+    private fun assertDroppedForSensorChange(driver: OnePlusCgmDriverReal) {
+        assertThat(driver.calibrationPending()).isFalse()
+        assertThat(queueOf(driver).peek()).isNull()
+        assertThat(driver.lastCalibrationOutcome())
+            .isEqualTo(OnePlusCalibrationOutcome.NotSent(OnePlusCalibrationOutcome.NotSent.Reason.SENSOR_CHANGED))
+    }
+
     private fun markSessionUp(driver: OnePlusCgmDriverReal) = setSession(driver, UpSession)
 
-    private fun setSession(driver: OnePlusCgmDriverReal, session: OnePlusBleSession) {
+    private fun setSession(driver: OnePlusCgmDriverReal, session: OnePlusBleSession?) {
         val field = OnePlusCgmDriverReal::class.java.getDeclaredField("session")
         field.isAccessible = true
         field.set(driver, session)
@@ -134,5 +225,62 @@ class OnePlusCgmDriverCalibrationTest {
         override fun isUp(): Boolean = up
         override fun warmupState(): OnePlusWarmupState =
             OnePlusWarmupState(phase = OnePlusWarmupState.Phase.READY)
+    }
+
+    /**
+     * A host with stores and a scanner but no radio. A session that a test starts fails at once on
+     * the BLE thread when it asks for a GATT client, so nothing is ever written to a sensor.
+     */
+    private class NoRadioPlatform : OnePlusPlatform {
+
+        private val files = mutableMapOf<String, MemoryPrefs>()
+
+        override fun sensorPrefs(fileName: String): OnePlusSensorPrefs = files.getOrPut(fileName) { MemoryPrefs() }
+        override fun scanner(hint: OnePlusStoredSession?, slot: String): OnePlusBleScanner = OnePlusBleScannerStub()
+        override fun gattClient(profile: OemDeviceProfile): OnePlusGattClient =
+            throw IllegalStateException("no radio in this test")
+
+        override fun cpuLease(slot: String): OnePlusCpuLease = object : OnePlusCpuLease {
+            override fun hold(maxMillis: Long): OnePlusCpuLease.Hold? = null
+        }
+    }
+
+    private class MemoryPrefs : OnePlusSensorPrefs {
+
+        private val values = mutableMapOf<String, Any>()
+
+        override fun getString(key: String): String? = values[key] as? String
+        override fun getLong(key: String, defaultValue: Long): Long = values[key] as? Long ?: defaultValue
+        override fun getInt(key: String, defaultValue: Int): Int = values[key] as? Int ?: defaultValue
+        override fun getBoolean(key: String, defaultValue: Boolean): Boolean = values[key] as? Boolean ?: defaultValue
+        override fun contains(key: String): Boolean = values.containsKey(key)
+
+        override fun edit(block: OnePlusSensorPrefs.Editor.() -> Unit) {
+            object : OnePlusSensorPrefs.Editor {
+                override fun putString(key: String, value: String?) {
+                    if (value == null) values.remove(key) else values[key] = value
+                }
+
+                override fun putLong(key: String, value: Long) {
+                    values[key] = value
+                }
+
+                override fun putInt(key: String, value: Int) {
+                    values[key] = value
+                }
+
+                override fun putBoolean(key: String, value: Boolean) {
+                    values[key] = value
+                }
+
+                override fun remove(key: String) {
+                    values.remove(key)
+                }
+
+                override fun clear() {
+                    values.clear()
+                }
+            }.block()
+        }
     }
 }

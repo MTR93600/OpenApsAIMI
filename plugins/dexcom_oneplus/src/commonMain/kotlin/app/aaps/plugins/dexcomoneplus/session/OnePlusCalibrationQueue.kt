@@ -1,7 +1,8 @@
 package app.aaps.plugins.dexcomoneplus.session
 
+import app.aaps.core.interfaces.concurrent.AapsLock
+import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.plugins.dexcomoneplus.parse.OnePlusCalibrateTx
-import kotlin.concurrent.Volatile
 
 /**
  * The one command a caller outside the BLE thread may ask a running session to send.
@@ -15,9 +16,6 @@ import kotlin.concurrent.Volatile
  * often than an intention, and a sensor keeps every calibration it accepts for good.
  *
  * Nothing in this file sends anything. What may be offered is decided by `OnePlusCalibrationGate`.
- *
- * Provenance: ref `OnePlusCalibrationQueue.kt` at `3dd0ca64772` (`f61474bb73`). Android library.
- * Opened: no `android.*` import.
  */
 class OnePlusCalibrationQueue {
 
@@ -25,11 +23,16 @@ class OnePlusCalibrationQueue {
     data class Pending(
         /** Blood value in mg/dL. */
         val glucoseMgdl: Int,
-        /** Wall clock (epoch ms) of the BLOOD measurement, never of the moment it was typed in. */
+        /**
+         * Wall clock (epoch ms) given as the time of the blood. The calibration dialog passes the
+         * moment the user confirmed the value, not the moment of the finger prick, so it is a few
+         * seconds to minutes after the real blood time.
+         */
         val bloodAtMs: Long,
     )
 
-    @Volatile
+    private val lock = AapsLock()
+
     private var pending: Pending? = null
 
     /**
@@ -43,24 +46,30 @@ class OnePlusCalibrationQueue {
     fun offer(glucoseMgdl: Int, bloodAtMs: Long, nowMs: Long): Boolean {
         if (glucoseMgdl < OnePlusCalibrateTx.MIN_GLUCOSE_MGDL || glucoseMgdl > OnePlusCalibrateTx.MAX_GLUCOSE_MGDL) return false
         if (isTooOld(bloodAtMs, nowMs) || bloodAtMs > nowMs) return false
-        val waiting = pending
-        if (waiting != null && !isTooOld(waiting.bloodAtMs, nowMs)) return false
-        pending = Pending(glucoseMgdl, bloodAtMs)
-        return true
+        return lock.withLock {
+            val waiting = pending
+            if (waiting != null && !isTooOld(waiting.bloodAtMs, nowMs)) return@withLock false
+            pending = Pending(glucoseMgdl, bloodAtMs)
+            true
+        }
     }
 
-    /** What is waiting, without taking it — for a status screen. */
-    fun peek(): Pending? = pending
+    /** What is waiting, without taking it. */
+    fun peek(): Pending? = lock.withLock { pending }
 
     /** Take the waiting fingerstick, if any. The slot is free again from here on. */
-    fun take(): Pending? {
-        val taken = pending
-        pending = null
-        return taken
-    }
+    fun take(): Pending? = lock.withLock { pending.also { pending = null } }
 
-    fun clear() {
+    /**
+     * Take [expected] out of the slot, only when it is still the value waiting there.
+     *
+     * @return false when the slot is empty or holds another value (it was replaced or cleared
+     *   since [expected] was read); the slot is then left as it is
+     */
+    fun take(expected: Pending): Boolean = lock.withLock {
+        if (pending !== expected) return@withLock false
         pending = null
+        true
     }
 
     companion object {
@@ -75,9 +84,10 @@ class OnePlusCalibrationQueue {
         fun isTooOld(bloodAtMs: Long, nowMs: Long): Boolean = nowMs - bloodAtMs > MAX_AGE_MS
 
         /**
-         * Transmitter time of the BLOOD measurement.
+         * Transmitter time for the time given for the blood ([Pending.bloodAtMs], which is the
+         * moment the user confirmed the value).
          *
-         * The sensor is told when the blood was measured, not when the packet is written, so the
+         * The sensor is told when the blood was taken, not when the packet is written, so the
          * wall-clock age of the fingerstick is taken off the transmitter clock. The transmitter
          * clock itself is only known as "this value, read at that moment", so its own age counts too.
          *

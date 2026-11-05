@@ -23,6 +23,22 @@ class OnePlusCalibrationQueueTest {
     }
 
     @Test
+    fun `take of an expected value leaves a value that replaced it`() {
+        // The send path checks a value, then takes it. If the slot changed in between, the new value
+        // was not checked, so it must stay where it is.
+        val queue = OnePlusCalibrationQueue()
+        assertThat(queue.offer(glucoseMgdl = 150, bloodAtMs = now, nowMs = now)).isTrue()
+        val checked = queue.peek()!!
+        val muchLater = now + 61 * minute
+        assertThat(queue.offer(glucoseMgdl = 94, bloodAtMs = muchLater, nowMs = muchLater)).isTrue()
+
+        assertThat(queue.take(checked)).isFalse()
+        assertThat(queue.peek()?.glucoseMgdl).isEqualTo(94)
+        assertThat(queue.take(queue.peek()!!)).isTrue()
+        assertThat(queue.peek()).isNull()
+    }
+
+    @Test
     fun `a value left waiting for more than an hour does not block the next one`() {
         // The sensor stayed out of reach, so nothing took the first value. It would be dropped at
         // sending anyway, and it must not refuse every new fingerstick until an app restart.
