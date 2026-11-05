@@ -57,7 +57,7 @@ class OnePlusCgmDriverStub : OnePlusCgmDriver {
     }
 
     override fun connect(deviceAddress: String, pairingCode: String) {
-        val msg = "${OnePlusLogMarkers.STUB}: BLE session not ported yet (agent A6; A3 device GO required)"
+        val msg = "${OnePlusLogMarkers.STUB}: stub driver, no BLE"
         warmup = OnePlusWarmupState(
             phase = OnePlusWarmupState.Phase.FAILED,
             message = msg,

@@ -109,10 +109,10 @@ class Libre3SessionService : Service() {
          * Ask the platform for a `connectedDevice` foreground service.
          *
          * Safe to call repeatedly: a second start on a running service only re-posts the same
-         * notification. Failures are swallowed on purpose — a sensor session that cannot get a
-         * service is worse off, but it must still run. Same as the reference companion `start`.
+         * notification. A failure does not throw — a sensor session that cannot get a service is
+         * worse off, but it must still run — it is returned so the caller can log it.
          */
-        fun start(context: Context) {
+        fun start(context: Context): Throwable? =
             runCatching {
                 val intent = Intent(context, Libre3SessionService::class.java)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -120,8 +120,7 @@ class Libre3SessionService : Service() {
                 } else {
                     context.startService(intent)
                 }
-            }
-        }
+            }.exceptionOrNull()
 
         /** Give the privilege back. Safe when the service is not running. */
         fun stop(context: Context) {

@@ -117,6 +117,18 @@ internal object DexcomOnePlusStaging {
         else StagingState.SETTLING
     }
 
+    /**
+     * Milliseconds left before the staging sensor has soaked [STAGING_MIN_SETTLE_MS].
+     *
+     * Null when there is no staging sensor, when its start is unknown, or when the wait is over, so
+     * a caller cannot show a stale "ready in". It says nothing about the valid-reading count:
+     * [computeStagingState] still decides when promotion is allowed.
+     */
+    fun settleRemainingMs(present: Boolean, sessionStartMs: Long, nowMs: Long): Long? {
+        if (!present || sessionStartMs <= 0L) return null
+        return (STAGING_MIN_SETTLE_MS - (nowMs - sessionStartMs)).takeIf { it > 0L }
+    }
+
     /** What the staging slot knows about its warm-up after one driver phase — see [applyWarmupPhase]. */
     data class StagingWarmupDecision(val warmupDone: Boolean, val warming: Boolean)
 

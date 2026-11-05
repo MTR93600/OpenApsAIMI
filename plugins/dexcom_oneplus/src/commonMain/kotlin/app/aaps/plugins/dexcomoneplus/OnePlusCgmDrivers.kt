@@ -66,6 +66,12 @@ object OnePlusCgmDrivers {
     /** The driver feeding the loop. */
     fun default(): OnePlusCgmDriver = realProduction()
 
+    /** The production instance if it was already built, else null. Never builds one. */
+    fun existingProduction(): OnePlusCgmDriverReal? = lock.withLock { productionReal }
+
+    /** The pre-soak instance if it was already built, else null. Never builds one. */
+    fun existingStaging(): OnePlusCgmDriverReal? = lock.withLock { stagingReal }
+
     /** The production driver, with [watcher] attached. Adding the same watcher twice is harmless. */
     fun production(watcher: OnePlusGlucoseWatcher): OnePlusCgmDriver =
         realProduction().also { it.addWatcher(watcher) }

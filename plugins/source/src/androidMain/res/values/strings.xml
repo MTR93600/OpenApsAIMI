@@ -100,7 +100,7 @@
     <string name="dexcom_oneplus_scan_device_line" comment="%1$s=Bluetooth MAC, %2$d=RSSI. Example: AA:BB:CC:DD:EE:FF · −67 dBm">%1$s · %2$d dBm</string>
     <string name="dexcom_oneplus_device_required">Select a sensor from the scan list</string>
     <string name="dexcom_oneplus_new_sensor_code_warning">This is a different sensor from the paired one, but the pairing code has not changed. Paste the new applicator code — or press Connect again to keep the current one.</string>
-    <string name="dexcom_oneplus_dexcom_recovery_warning">Stop the Dexcom app and xDrip first (one Bluetooth master). This build attaches to an existing sensor session and does not stop it. Returning to the Dexcom app afterward is not guaranteed — prefer a spare sensor for testing.</string>
+    <string name="dexcom_oneplus_dexcom_recovery_warning">Stop the Dexcom app and xDrip first, because only one app can use the sensor over Bluetooth. This source attaches to a running sensor session and does not end it. It is not certain that the Dexcom app can use the sensor again afterwards.</string>
     <string name="dexcom_oneplus_connect_follow">Connect / follow sensor</string>
     <string name="dexcom_oneplus_pairing_code_label">Sensor pairing code</string>
     <string name="dexcom_oneplus_pairing_code_required">Enter the sensor pairing code</string>
@@ -116,21 +116,25 @@
     <string name="dexcom_oneplus_calibration_refused_rate_unknown">The sensor did not give a trend with its last reading. Wait for the next reading, then try again.</string>
     <string name="dexcom_oneplus_calibration_refused_too_fast">Glucose is changing too fast. Calibrate when it is stable.</string>
     <string name="dexcom_oneplus_repair_missing_sensor_change">Repair a missing sensor change (engineering)</string>
-    <string name="dexcom_oneplus_repair_missing_sensor_change_summary">Off by default. When on, and when "Create sensor change" is on, a missing SENSOR_CHANGE for the running ONE+ session is written once. It does not replace an event you deleted after that write.</string>
+    <string name="dexcom_oneplus_repair_missing_sensor_change_summary">On by default. When "Create sensor change" is also on, a missing sensor change for the running sensor is written once, so the sensor age is right. An event you delete after that write is not written again.</string>
     <string name="dexcom_oneplus_anchor_session_to_manual_sensor_change">Anchor the session to a manual sensor change (engineering)</string>
     <string name="dexcom_oneplus_anchor_session_to_manual_sensor_change_summary">On by default. When off, a new ONE+ session keeps the time of the start or of the first reading, and a sensor change logged earlier is not used to move that time back. When on, a sensor change from the last 24 hours that is earlier than that automatic time becomes the session start.</string>
     <string name="dexcom_oneplus_correct_sensor_start">Correct the insertion date (engineering)</string>
-    <string name="dexcom_oneplus_correct_sensor_start_summary">Off by default. When on, the Status screen can move the insertion time of this sensor. That invalidates SENSOR_CHANGE events in the window. It does not delete calibration entries.</string>
+    <string name="dexcom_oneplus_correct_sensor_start_summary">On by default. When on, the Status screen can move the insertion time of the sensor in use. Sensor change events between the old and the new time are invalidated. Calibration entries are not deleted.</string>
     <string name="dexcom_oneplus_correct_insertion_date">Correct insertion date</string>
     <string name="dexcom_oneplus_insertion_date_future" comment="%1$s=current start time of the sensor. Example: 14:05">A sensor cannot be inserted in the future. The sensor still starts at %1$s.</string>
     <string name="dexcom_oneplus_insertion_date_too_old" comment="%1$s=current start time of the sensor. Example: 14:05">That date is older than a full sensor life, so it belongs to another sensor. The sensor still starts at %1$s.</string>
-    <string name="dexcom_oneplus_insertion_date_no_session" comment="%1$s=current start time of the sensor. Example: 14:05">No sensor session is running, so there is no date to correct.</string>
+    <string name="dexcom_oneplus_insertion_date_no_session">No sensor session is running, so there is no date to correct.</string>
     <string name="dexcom_oneplus_calibration_not_sent">The value could not be sent to the sensor. The sensor may be out of range, still warming up, or another value may still be on its way.</string>
     <string name="dexcom_oneplus_calibration_heading">Sensor calibration</string>
     <string name="dexcom_oneplus_calibration_none">No finger prick value has been sent to this sensor yet.</string>
     <string name="dexcom_oneplus_calibration_waiting">Your value is waiting to be sent to the sensor. It goes out the next time the app and the sensor talk, which is usually within a few minutes.</string>
     <string name="dexcom_oneplus_calibration_accepted">The sensor says it took your value.</string>
     <string name="dexcom_oneplus_calibration_refused">The sensor says it did not take your value. Your reading was not changed.</string>
+    <string name="libre3_plugin_stopped">Libre 3 is switched off. Select it as BG source in Config Builder first, then try again.</string>
+    <string name="libre3_plugin_stopped_sensor_saved">Libre 3 is switched off. The sensor is saved and connects when you select Libre 3 as BG source in Config Builder.</string>
+    <string name="libre3_warmup_failed_detail">The sensor session stopped. Open the driver log to see why, then scan the sensor again.</string>
+    <string name="dexcom_oneplus_plugin_stopped">Dexcom ONE+ / G7 is switched off. Select it as BG source in Config Builder first, then try again.</string>
     <string name="dexcom_oneplus_calibration_dropped">Your value was not sent to the sensor. Nothing reached the sensor, so you can enter the value again.</string>
     <string name="dexcom_oneplus_calibration_dropped_sensor_changed">The sensor or its connection changed before the value went out.</string>
     <string name="dexcom_oneplus_calibration_unknown">The sensor did not give a clear answer, so it is not possible to say whether your value was used. It is not an app error and it is not a success. Do not send the value again. Compare the sensor with a finger prick within the next hour before you rely on its readings, and ask your care team if you are unsure.</string>
@@ -199,8 +203,8 @@
     <string name="dexcom_oneplus_error_auth_bond">Authentication or Bluetooth pairing failed. Accept the system pairing prompt and retry.</string>
     <string name="dexcom_oneplus_error_refused_stopped" comment="%1$d=how many refusals in a row, for example 3">The sensor refused this phone %1$d times in a row. AAPS stopped trying, because one more refusal locks the sensor for a while. Check the pairing code, close the Dexcom app, xDrip+ or Juggluco if one of them uses the sensor, then start the sensor again.</string>
     <string name="dexcom_oneplus_msg_refused_pause">The sensor refused this phone. AAPS waits 15 minutes before it asks again, because refusals in a row lock the sensor. Check the pairing code and close other apps that use the sensor.</string>
-    <string name="dexcom_oneplus_error_connection">Connection or sensor session error. Check logcat (DEXCOM_ONEPLUS) and retry.</string>
-    <string name="dexcom_oneplus_status_message_generic">See status details in logcat if problems persist.</string>
+    <string name="dexcom_oneplus_error_connection">Connection or sensor session error. Check the Bluetooth connection and try again.</string>
+    <string name="dexcom_oneplus_status_message_generic">If the problem continues, open the driver log on this screen.</string>
     <string name="dexcom_oneplus_warmup_done">Warm-up complete — source active</string>
     <string name="dexcom_oneplus_warmup_failed" comment="%1$s=error detail. Example: BLE session not ported">Warm-up failed: %1$s</string>
     <string name="dexcom_oneplus_notif_title">Dexcom ONE+ / G7</string>
@@ -308,8 +312,8 @@
     <string name="dexcom_oneplus_end_of_life_text">Starting a pre-soak sensor now means the next one is already warm when this one stops.</string>
     <string name="dexcom_oneplus_start_presoak">Start a pre-soak sensor</string>
     <string name="dexcom_oneplus_staging_none_short">A pre-soak sensor collects readings alongside the one in use. It never feeds the loop until you promote it here.</string>
-    <string name="libre3_native">Libre 3 / Libre 3 Plus</string>
-    <string name="description_source_libre3_native">Native Libre 3 and Libre 3 Plus Bluetooth in AAPS. Scan the sensor once with NFC, then wait about 60 minutes of warm-up before loop glucose.</string>
+    <string name="libre3_native">Libre 3 / Libre 3 Plus / Libre Select</string>
+    <string name="description_source_libre3_native">Native Libre 3, Libre 3 Plus and Libre Select Bluetooth in AAPS. Scan the sensor once with NFC, then wait about 60 minutes of warm-up before loop glucose.</string>
     <string name="libre3_plugin_summary">Status, sensor start by NFC, and warm-up</string>
     <string name="libre3_status_title">Libre 3 status</string>
     <string name="libre3_status_summary">Sensor, session phase and connection status</string>
@@ -317,12 +321,6 @@
     <string name="libre3_start_summary">Apply sensor, hold the phone on it to scan, then about 60 min warm-up</string>
     <string name="libre3_warmup_title">Sensor warm-up</string>
     <string name="libre3_warmup_summary">About 60 minute warm-up countdown</string>
-    <string name="libre3_use_real_skeleton">Use real Bluetooth driver (engineering)</string>
-    <string name="libre3_use_real_skeleton_summary">Routes to the real Libre 3 driver. Off by default. Turning it on is not a claim that the driver works.</string>
-    <string name="libre3_presoak_enabled">Pre-soak a second sensor (engineering)</string>
-    <string name="libre3_presoak_enabled_summary">Lets you start a new sensor while the current one keeps feeding the loop. The new sensor uses real wear time, because a Libre 3 starts its 14 day clock at the scan.</string>
-    <string name="libre3_keep_session_alive">Keep the Libre 3 session alive (engineering)</string>
-    <string name="libre3_keep_session_alive_summary">Keeps the phone from closing the Bluetooth link while the screen is off. AAPS shows a small ongoing notification for as long as a Libre 3 session is wanted.</string>
     <string name="libre3_nav_back">Back</string>
     <string name="libre3_family_three">Libre 3</string>
     <string name="libre3_family_plus">Libre 3 Plus</string>
@@ -359,7 +357,6 @@
     <string name="libre3_status_no_sensor">No sensor has been scanned on this phone yet.</string>
     <string name="libre3_status_connect">Connect to the sensor</string>
     <string name="libre3_status_disconnect">Disconnect</string>
-    <string name="libre3_status_driver_blocked" comment="%1$s=short reason from the driver. Example: Real driver not in use: the engineering switch is off">Real driver not in use: %1$s</string>
     <string name="libre3_forget_sensor">Forget this sensor</string>
     <string name="libre3_forget_sensor_title">Forget this sensor?</string>
     <string name="libre3_forget_sensor_explain">AAPS will drop the link and throw away everything it knows about this sensor: the address, the PIN and the pairing key. The sensor itself is not stopped and keeps running. To use it again, scan it with NFC from the Start sensor screen.\n\nUse this when the sensor is stored but every connection keeps failing.</string>
@@ -385,7 +382,6 @@
     <string name="libre3_label_serial">Serial</string>
     <string name="libre3_label_family">Family</string>
     <string name="libre3_status_open_start">Scan a sensor</string>
-    <string name="libre3_status_driver_blocked_heading">Real driver is not in use</string>
     <string name="libre3_notif_title">Libre 3</string>
     <string name="libre3_notif_channel_name">Libre 3 sensor status</string>
     <string name="libre3_notif_channel_desc">Shows the connection and the warm-up of the sensor.</string>
@@ -428,7 +424,7 @@
     <string name="libre3_presoak_promote_follow_up_no_identity">A step after the exchange failed, and the production sensor identity is missing. This is not a complete success. Open the Libre 3 status and check which sensor is in use.</string>
     <string name="libre3_presoak_promote_rejected_absent">There is no pre-soak sensor to promote.</string>
     <string name="libre3_presoak_promote_rejected_other">The pre-soak sensor could not be promoted. Nothing was changed.</string>
-    <string name="libre3_presoak_promote_threw">The promotion failed before it returned a result. Production sensor read from the store: %1$s.</string>
+    <string name="libre3_presoak_promote_threw" comment="%1$s=serial of the sensor that feeds the loop, or the word for none. Example: Production sensor read from the store: 0RRC989AQ.">The promotion failed before it returned a result. Production sensor read from the store: %1$s.</string>
     <string name="libre3_presoak_promote_threw_none">none</string>
     <string name="libre3_presoak_promote_threw_unreadable">The promotion failed before it returned a result. The production sensor store could not be read.</string>
     <string name="libre3_presoak_cancel">Cancel pre-soak</string>

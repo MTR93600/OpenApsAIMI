@@ -1,10 +1,10 @@
 package app.aaps.plugins.source
 
+import app.aaps.core.interfaces.ble.BleRadioPriority
 import android.content.Context
 import android.content.SharedPreferences
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.interfaces.notifications.NotificationManager
-import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.core.interfaces.calibration.Calibration
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
@@ -19,7 +19,6 @@ import app.aaps.plugins.libre3.Libre3GlucoseWatcher
 import app.aaps.plugins.libre3.identity.Libre3SensorIdentity
 import app.aaps.plugins.libre3.identity.Libre3SensorStore
 import app.aaps.plugins.libre3.session.Libre3MacArbiter
-import app.aaps.plugins.source.keys.Libre3BooleanKey
 import app.aaps.shared.tests.SharedPreferencesMock
 import app.aaps.shared.tests.TestBase
 import com.google.common.truth.Truth.assertThat
@@ -49,8 +48,6 @@ import org.mockito.kotlin.whenever
  *   counter starts at zero on a new sensor;
  * - a promotion cut off between the production write and the pre-soak wipe, which leaves one sensor
  *   in both slot files, so the next launch is a race for one sensor.
- *
- * See `docs/LIBRE3_PRESOAK_PLAN.md` §10 and §15.
  */
 class Libre3PromotionHandoverTest : TestBase() {
 
@@ -60,7 +57,6 @@ class Libre3PromotionHandoverTest : TestBase() {
     @Mock lateinit var context: Context
     @Mock lateinit var persistenceLayer: PersistenceLayer
 
-    private val bleRadioPriority: BleRadioPriority = mock()
 
     private val notificationManager: NotificationManager = mock()
 
@@ -81,7 +77,6 @@ class Libre3PromotionHandoverTest : TestBase() {
         whenever(context.applicationContext).thenReturn(context)
         whenever(context.getSharedPreferences(PRODUCTION_PREFS_NAME, Context.MODE_PRIVATE)).thenReturn(productionPrefs)
         whenever(context.getSharedPreferences(STAGING_PREFS_NAME, Context.MODE_PRIVATE)).thenReturn(stagingPrefs)
-        whenever(preferences.get(Libre3BooleanKey.PresoakEnabled)).thenReturn(true)
         runTest {
             whenever(persistenceLayer.insertCgmSourceData(anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
                 .thenReturn(PersistenceLayer.TransactionResult())
@@ -90,7 +85,7 @@ class Libre3PromotionHandoverTest : TestBase() {
         Libre3MacArbiter.reset()
         Libre3CgmDrivers.releaseStagingInstance()?.let { runCatching { it.shutdown() } }
         plugin = Libre3NativePlugin(
-            rh, aapsLogger, preferences, config, notificationManager, context, persistenceLayer, bleRadioPriority, activePlugin,
+            rh, aapsLogger, preferences, config, notificationManager, context, persistenceLayer, mock<BleRadioPriority>(), activePlugin,
         )
     }
 
@@ -99,7 +94,7 @@ class Libre3PromotionHandoverTest : TestBase() {
         // The driver choice, the pre-soak instance and the sensor claims are process wide, so none
         // of them may travel to the next test.
         Libre3CgmDrivers.releaseStagingInstance()?.let { runCatching { it.shutdown() } }
-        runCatching { Libre3CgmDrivers.select(useReal = false) }
+        runCatching { Libre3CgmDrivers.default().shutdown() }
         Libre3MacArbiter.reset()
     }
 

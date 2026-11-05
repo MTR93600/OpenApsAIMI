@@ -35,6 +35,9 @@ import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
+import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.calibration.CalibrationEntriesForFit
+import app.aaps.plugins.calibration.keys.CalibrationLongKey
 
 private val WARM_UP_DURATION_MS = T.hours(2).msecs()
 
@@ -52,7 +55,8 @@ class CalibrationViewModel(
     rh: TextResolver,
     rxBus: RxBus,
     config: Config,
-    batchExecutor: BatchExecutor
+    batchExecutor: BatchExecutor,
+    private val preferences: Preferences
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CalibrationUiState())
@@ -80,7 +84,12 @@ class CalibrationViewModel(
     private suspend fun recomputeSuspend() {
         val now = dateUtil.now()
         val sessionStart = persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)?.timestamp
-        val entries = if (sessionStart != null) persistenceLayer.getValidCalibrationEntriesSince(sessionStart) else emptyList()
+        // Same entries as the fit in LinearCalibrationPlugin, so the screen shows the fit that is applied.
+        val entries = if (sessionStart != null) {
+            persistenceLayer.getValidCalibrationEntriesSince(
+                CalibrationEntriesForFit.fitCutoff(sessionStart, preferences.get(CalibrationLongKey.EntriesValidFrom))
+            )
+        } else emptyList()
         val warmUpEndsAt = sessionStart?.plus(WARM_UP_DURATION_MS)
         val isInWarmUp = warmUpEndsAt != null && now < warmUpEndsAt
         _uiState.update { previous ->

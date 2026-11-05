@@ -807,4 +807,26 @@
     <string name="manual_section_20_title">20. 🔑 API Keys Configuration (GPT / Gemini / Claude / DeepSeek)</string>
     <string name="manual_section_20_content">**Complete Setup Guide for All AI Modules**\n\n**4 Supported Providers:**\n\n1. **GPT-4o** (OpenAI):\n   - Get key: https://platform.openai.com/api-keys\n   - Cost: ~$0.02/photo, ~$3-5/month\n   - Quality: ⭐⭐⭐⭐⭐\n\n2. **Gemini 2.5 Flash** (Google): ✅ **RECOMMENDED**\n   - Get key: https://makersuite.google.com/app/apikey\n   - Cost: **FREE** (up to 1500 req/day)\n   - Quality: ⭐⭐⭐⭐\n\n3. **Claude 3.5 Sonnet** (Anthropic):\n   - Get key: https://console.anthropic.com\n   - Cost: ~$0.03/photo, ~$8-20/month\n   - Quality: ⭐⭐⭐⭐\n\n4. **DeepSeek Chat**:\n   - Get key: https://platform.deepseek.com\n   - Cost: ~$0.005/photo, ~$1-3/month (cheapest)\n   - Quality: ⭐⭐⭐ (lower for French NLP)\n\n**Configuration in AIMI:**\n\n*Method 1: Via Meal Advisor*\n1. Open AIMI Meal Advisor\n2. Select provider (dropdown)\n3. Tap ⚙️ settings\n4. Paste API key\n5. Save\n\n*Method 2: Via Preferences*\n1. OpenAPS AIMI Preferences\n2. Section: 🤖 AI Assistant\n3. API Provider: Select\n4. API Key: Paste\n5. Save\n\n**Note:** Key is shared across all modules (Meal Advisor, Profile Advisor, Context NLP, Auditor)\n\n**Monthly Cost Comparison:**\n\n| Provider | Total/Month |\n|----------|-------------|\n| Gemini | **€0** ✅ |\n| DeepSeek | €1.05 |\n| GPT-4o | €3.30 |\n| Claude | €4.85 |\n\n**Quick Start:**\n1. Create Gemini account (free): https://makersuite.google.com/app/apikey\n2. Copy API key (starts with AIza...)\n3. In AIMI: Preferences → AI Assistant → Paste → Save\n4. Test: Meal Advisor → Take photo\n\n**All AI modules now active:**\n✅ Meal Advisor (photo recognition)\n✅ Profile Advisor (recommendations)\n✅ Context NLP (natural language)\n✅ Auditor (AI safety)\n\n**Cost: €0/month with Gemini!**</string>
 
+    <!-- CGM warm-up and second sensor rows in the Overview status card -->
+    <string name="overview_cgm_warmup_label">Warm-up</string>
+    <string name="overview_cgm_warmup_waiting" comment="Shown in the warm-up row when the time left is not known yet">Waiting</string>
+    <string name="overview_second_sensor_label" comment="A second CGM sensor that warms up next to the one in use, before the loop switches to it">New sensor</string>
+    <string name="overview_second_sensor_warmup">Warming up</string>
+    <string name="overview_second_sensor_ready_in" comment="%1$s=whole hours before the new sensor may be used by the loop, with its unit. Example: Ready in 8 h">Ready in %1$s</string>
+    <string name="overview_second_sensor_waiting_readings">Waiting for readings</string>
+    <string name="overview_second_sensor_ready">Ready to switch</string>
+    <string name="overview_second_sensor_readings" comment="%1$d=number of valid glucose readings the new sensor has sent so far. Example: Readings: 12">Readings: %1$d</string>
+    <string name="overview_second_sensor_switch" comment="Button: the loop uses the new sensor from now on">Switch</string>
+    <string name="overview_second_sensor_switch_confirm">Use the new sensor for the loop from now on? The loop stops using the sensor it uses now.</string>
+    <string name="overview_second_sensor_switch_ok">The loop now uses the new sensor.</string>
+    <string name="overview_second_sensor_switch_ok_calibration_failed">Calibrations you entered for the old sensor could not be removed, so they may still be used for the new sensor. Check your calibrations.</string>
+    <string name="overview_second_sensor_switch_ok_connect_failed">The loop now uses the new sensor, but the connection to it could not be started. Keep the phone near the sensor and open the sensor status screen to check that readings come in.</string>
+    <string name="overview_second_sensor_switch_ok_sensor_unknown">The switch was made, but a step after it failed and the sensor in use could not be read back. Open the sensor status screen and check which sensor is in use.</string>
+    <string name="overview_second_sensor_switch_refused_absent">There is no new sensor to switch to. Nothing was changed.</string>
+    <string name="overview_second_sensor_switch_refused_not_settled">The new sensor has not settled long enough yet. Nothing was changed.</string>
+    <string name="overview_second_sensor_switch_refused_no_readings">The new sensor has not sent enough valid readings yet. Nothing was changed.</string>
+    <string name="overview_second_sensor_switch_refused_loop_busy">The loop is busy right now. Nothing was changed. Try again in a moment.</string>
+    <string name="overview_second_sensor_switch_refused_no_recent_reading">The new sensor has not sent a reading in the last minutes. Nothing was changed. Wait for its next reading and try again.</string>
+    <string name="overview_second_sensor_switch_error">Something went wrong during the switch. Open the sensor status screen and check which sensor is in use.</string>
+
 </resources>

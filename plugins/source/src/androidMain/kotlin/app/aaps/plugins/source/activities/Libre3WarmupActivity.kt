@@ -244,7 +244,7 @@ private fun ColumnScope.WarmupDetails(state: Libre3WarmupState, finished: Boolea
             CgmCard(tone = CgmCardTone.Warning) {
                 CgmCardHeader(stringResource(R.string.cgm_warmup_what_happened))
                 Text(
-                    text = state.message ?: stringResource(R.string.libre3_phase_failed),
+                    text = stringResource(R.string.libre3_warmup_failed_detail),
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }

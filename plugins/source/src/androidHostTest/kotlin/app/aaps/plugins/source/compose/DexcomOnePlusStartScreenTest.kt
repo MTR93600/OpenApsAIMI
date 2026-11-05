@@ -62,6 +62,7 @@ class DexcomOnePlusStartScreenTest {
                 onBack = {},
                 onEnsureDriver = { OnePlusCgmDriverStub.instance },
                 onActivatePlugin = {},
+                isPluginStopped = { false },
                 onStarted = {},
                 onBeginStaging = { true },
                 onIsStagingSensor = { false },
@@ -143,6 +144,8 @@ class DexcomOnePlusStartScreenTest {
         override val platformNote: TextRef? = null
         override fun productionDriver(): OnePlusCgmDriver = OnePlusCgmDriverStub.instance
         override fun stagingDriver(): OnePlusCgmDriver = OnePlusCgmDriverStub.instance
+        override fun existingProductionDriver(): OnePlusCgmDriver? = OnePlusCgmDriverStub.instance
+        override fun existingStagingDriver(): OnePlusCgmDriver? = OnePlusCgmDriverStub.instance
         override fun attachProductionDriver(watcher: OnePlusGlucoseWatcher): OnePlusCgmDriver =
             OnePlusCgmDriverStub.instance
 

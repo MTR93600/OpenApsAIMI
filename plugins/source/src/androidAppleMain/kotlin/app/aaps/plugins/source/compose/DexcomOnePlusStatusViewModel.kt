@@ -18,6 +18,7 @@ import app.aaps.plugins.source.DexcomOnePlusPlugin
 import app.aaps.plugins.source.DexcomOnePlusSensorStartCorrection
 import app.aaps.plugins.source.DexcomOnePlusWatchHandover
 import app.aaps.plugins.source.keys.DexcomOnePlusBooleanKey
+import app.aaps.plugins.source.SourceStrings
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
@@ -149,6 +150,10 @@ class DexcomOnePlusStatusViewModel(
 
     /** Promotes the pre-soak sensor. [allowEarly] is the early way out, after its own warning. */
     fun promote(allowEarly: Boolean) {
+        if (plugin.isStopped()) {
+            _promoteResult.value = SourceStrings.dexcom_oneplus_plugin_stopped
+            return
+        }
         viewModelScope.launch {
             _promoteResult.value = DexcomOnePlusStatusState.promotionMessage(plugin.promoteStagingToProduction(allowEarly))
         }

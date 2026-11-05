@@ -27,6 +27,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import app.aaps.core.keys.interfaces.Preferences
 
 /**
  * Default-state unit test for [CalibrationViewModel].
@@ -50,6 +51,7 @@ internal class CalibrationViewModelTest {
     @Mock private lateinit var rxBus: RxBus
     @Mock private lateinit var config: Config
     @Mock private lateinit var batchExecutor: BatchExecutor
+    @Mock private lateinit var preferences: Preferences
 
     @BeforeEach
     fun setUp() {
@@ -68,7 +70,7 @@ internal class CalibrationViewModelTest {
     }
 
     private fun viewModel() =
-        CalibrationViewModel(persistenceLayer, profileUtil, dateUtil, rh, rxBus, config, batchExecutor)
+        CalibrationViewModel(persistenceLayer, profileUtil, dateUtil, rh, rxBus, config, batchExecutor, preferences)
 
     @Test
     fun uiState_hasEmptySessionDefaults() {

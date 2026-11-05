@@ -8,7 +8,6 @@ import app.aaps.plugins.dexcomoneplus.OnePlusLog
 import app.aaps.plugins.dexcomoneplus.OnePlusLogMarkers
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.dexcomoneplus.gatt.OnePlusGattClient
-import app.aaps.plugins.dexcomoneplus.gatt.OnePlusGattClientUnimplemented
 import app.aaps.plugins.dexcomoneplus.oem.DeviceProfileRegistry
 import app.aaps.plugins.dexcomoneplus.oem.OemDeviceProfile
 import app.aaps.plugins.dexcomoneplus.onePlusSleep
@@ -286,8 +285,8 @@ internal object OnePlusBleSessionCyclePolicy {
  * Does **not** claim production BLE. Stub driver remains the default façade.
  */
 class OnePlusBleSessionSkeleton(
-    private val gatt: OnePlusGattClient = OnePlusGattClientUnimplemented(),
-    private val auth: OnePlusSessionAuth = OnePlusSessionAuthUnimplemented(),
+    private val gatt: OnePlusGattClient,
+    private val auth: OnePlusSessionAuth,
     private val reconnectPolicy: OnePlusReconnectPolicy = OemAwareReconnectPolicy(),
     private val profile: OemDeviceProfile = DeviceProfileRegistry.resolve(),
     private val onWarmup: (OnePlusWarmupState) -> Unit = {},

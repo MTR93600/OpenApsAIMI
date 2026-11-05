@@ -1,7 +1,7 @@
 package app.aaps.plugins.source
 
-import android.content.Context
 import app.aaps.core.interfaces.ble.BleRadioPriority
+import android.content.Context
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.notifications.NotificationManager
@@ -19,14 +19,11 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 
 /**
- * Libre 3 native is listed in every build, with nothing to set up first.
+ * Libre 3 native is listed in every build, with nothing to set up first, so the plugin shows up
+ * wherever `ActivePlugin.getSpecificPluginsVisibleInList` is read - Config Builder, the Setup
+ * Wizard, search and Quick Launch.
  *
- * It used to be hidden unless the marker file `AAPS/extra/engineering_libre3` was present. That
- * gate is gone, together with the provider that read the file, so the plugin shows up wherever
- * `ActivePlugin.getSpecificPluginsVisibleInList` is read - Config Builder, the Setup Wizard,
- * search and Quick Launch.
- *
- * These tests exist so the gate cannot come back by accident.
+ * These tests exist so a visibility gate cannot be added by accident.
  */
 class Libre3NativePluginVisibilityTest : TestBase() {
 
@@ -37,19 +34,18 @@ class Libre3NativePluginVisibilityTest : TestBase() {
     @Mock lateinit var persistenceLayer: PersistenceLayer
     @Mock lateinit var notificationManager: NotificationManager
 
-    private val bleRadioPriority: BleRadioPriority = mock()
 
     private lateinit var plugin: Libre3NativePlugin
 
     @BeforeEach
     fun setup() {
         plugin = Libre3NativePlugin(
-            rh, aapsLogger, preferences, config, notificationManager, context, persistenceLayer, bleRadioPriority, mock<ActivePlugin>(),
+            rh, aapsLogger, preferences, config, notificationManager, context, persistenceLayer, mock<BleRadioPriority>(), mock<ActivePlugin>(),
         )
     }
 
     @Test
-    fun `1 - Libre 3 native is visible with no marker file and no set-up at all`() {
+    fun `1 - Libre 3 native is visible with no set-up at all`() {
         assertThat(plugin.showInList()).isTrue()
     }
 

@@ -6,6 +6,9 @@ import app.aaps.core.data.model.SourceSensor
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.interfaces.ble.BleRadioPriority
+import app.aaps.core.interfaces.concurrent.AapsLock
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
+import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -62,34 +65,33 @@ import dev.zacsweers.metro.IntKey
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.binding
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * Native Libre 3 and Libre 3 Plus BG source, driven by an in process BLE driver.
+ * Native Libre 3, Libre 3 Plus and Libre Select BG source: the BLE and NFC driver of `:plugins:libre3` runs
+ * inside AAPS, no Abbott app, Juggluco or xDrip is needed.
  *
- * The stub driver is the default. The real driver is only reached when the engineering switch
- * [Libre3BooleanKey.UseRealSkeleton] is on, and that switch is off by default. Until the user
- * confirms the native driver on a real sensor, Libre 3 through Juggluco or xDrip stays the
- * production path.
+ * The real driver runs as soon as the plugin is enabled. There is no stub and no engineering
+ * switch. When this build does not ship the files the pairing needs, Bluetooth is not started and
+ * the reason is written to the log.
  *
- * See docs/LIBRE3_NATIVE_AGENT_PLAN.md.
+ * Two sensor slots. The production slot feeds the loop. The pre-soak slot can start the next
+ * sensor while the old one still works; its readings are only collected and shown, never given to
+ * the loop, until the user (or the optional automatic switch) promotes it.
  *
- * Registers itself into the plugin list. Scoped with Metro's own [SingleIn], not javax `@Singleton`.
+ * Registers itself into the plugin list. Scoped with Metro's own [SingleIn].
  */
 @ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
 @IntKey(447)
@@ -109,10 +111,7 @@ class Libre3NativePlugin @Inject constructor(
 ) : AbstractBgSourcePlugin(
     pluginDescription = PluginDescription()
         .mainType(PluginType.BGSOURCE)
-        // No `showInList` call on purpose: Libre 3 native is offered in every build. It used to
-        // be hidden unless the marker file `AAPS/extra/engineering_libre3` was there.
-        // PluginDescription.showInList already defaults to `{ true }`, so the missing call is the
-        // gate being gone, not an oversight.
+        // No `showInList` call: the plugin is listed in every build, like the other BG sources.
         .composeContent { plugin ->
             BgSourceComposeContent(
                 title = rh.gs(R.string.libre3_native),
@@ -134,19 +133,71 @@ class Libre3NativePlugin @Inject constructor(
     private val resourceHelper: ResourceHelper = rh
 
     /**
-     * Where every database write and every wait of this plugin runs.
+     * Scope of the work this plugin starts: database writes of readings, the sensor change, the
+     * reconnect watchdog and the automatic promotion.
      *
-     * The handler is not decoration. Without one, anything thrown inside an `ioScope.launch` walks
-     * up to the default handler of the process and takes the whole app down. The promotion is the
-     * worst moment for that: it would leave one sensor written into both slot files and the loop
-     * with no sensor at all on the next launch. A Bluetooth or database failure has to cost a log
-     * line, never the app.
+     * Made when work is first needed (normally by [onStart]) and cancelled in [onStop], so nothing
+     * runs for a user who never enables the plugin, and nothing keeps running after it is stopped.
+     * After [onStop] no new one is made until the next [onStart], see [stopped].
+     *
+     * The handler is not decoration. Without one, anything thrown inside a `launch` walks up to the
+     * default handler of the process and takes the whole app down. The promotion is the worst
+     * moment for that: it would leave one sensor written into both slot files and the loop with no
+     * sensor at all on the next launch. A Bluetooth or database failure has to cost a log line,
+     * never the app.
      */
-    private val ioScope = CoroutineScope(
-        SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, t ->
-            aapsLogger.error(LTag.BGSOURCE, "${Libre3LogMarkers.ERROR}: background work failed, ${t.message}", t)
-        },
-    )
+    private var workScope: CoroutineScope? = null
+
+    /** Guards [workScope] and [stopped]. */
+    private val workScopeLock = AapsLock()
+
+    /**
+     * True from [onStop] until the next [onStart].
+     *
+     * While it is true [ioScope] gives no scope, so a late driver callback, the reconnect watchdog or
+     * the automatic promotion cannot start work that nothing would ever cancel, for example a
+     * Bluetooth reconnect while the plugin is switched off. The user actions [connectStoredSensor],
+     * [beginStaging], [connectStagingSensor] and [promoteStagingToProduction] refuse, and the
+     * screens ask [isStopped] to say why.
+     */
+    @Volatile
+    private var stopped = false
+
+    /** True after [onStop] until the next [onStart]. The screens refuse their actions then. */
+    fun isStopped(): Boolean = stopped
+
+    /** The work scope, or null while the plugin is [stopped]. */
+    private fun ioScope(): CoroutineScope? = workScopeLock.withLock {
+        if (stopped) {
+            aapsLogger.debug(LTag.BGSOURCE, "${Libre3LogMarkers.SESSION}: plugin is stopped, no new work started")
+            null
+        } else {
+            workScope ?: CoroutineScope(
+                SupervisorJob() + aapsIoDispatcher + CoroutineExceptionHandler { _, t ->
+                    aapsLogger.error(LTag.BGSOURCE, "${Libre3LogMarkers.ERROR}: background work failed, ${t.message}", t)
+                },
+            ).also { workScope = it }
+        }
+    }
+
+    /** Cancels everything started on [ioScope]. */
+    private fun cancelWork() {
+        workScopeLock.withLock {
+            workScope?.cancel()
+            workScope = null
+        }
+    }
+
+    /** True while a job started by this plugin is still running. For tests. */
+    internal fun hasRunningWork(): Boolean = workScopeLock.withLock {
+        workScope?.coroutineContext?.get(Job)?.children?.any { it.isActive } == true
+    }
+
+    /** True while a work scope exists, even an idle one. For tests. */
+    internal fun hasWorkScope(): Boolean = workScopeLock.withLock { workScope != null }
+
+    /** True while the reconnect watchdog waits. For tests. */
+    internal fun isReconnectWatchdogArmed(): Boolean = reconnectWatchdog?.isActive == true
 
     /**
      * Ties "this sample was accepted" to "this is still the sensor that feeds the loop".
@@ -199,16 +250,19 @@ class Libre3NativePlugin @Inject constructor(
      * The driver has its own ladder of retries and it is the one that should do the work. This is
      * the safety net for the case where that ladder itself stops, whatever the reason: as long as a
      * sensor is stored and the session is down, the plugin asks for a connection again. Without it
-     * the only way back is a hand held over the sensor, which is what the log of 2026-08-22 shows.
+     * the only way back is a hand held over the sensor, which is what a field log showed.
      */
     private var reconnectWatchdog: Job? = null
 
-    /** Watches who owns the radio, so the driver backs off while a pump setup runs. */
+    /** Watches who owns the radio, so both slots back off while a pump setup runs. */
     private var radioLeaseWatcher: Job? = null
 
-    /** Watches the keep-alive switch, so flipping it takes effect at once. */
-    private var keepAliveWatcher: Job? = null
-
+    /**
+     * The production driver, asked of the registry on every use and never kept in a field.
+     *
+     * A driver that was shut down (for example by [onStop]) is replaced by a new instance on the
+     * next call, and that new instance has no watcher yet. [attachProductionDriver] gives it one.
+     */
     private val driver
         get() = Libre3CgmDrivers.default()
 
@@ -229,8 +283,8 @@ class Libre3NativePlugin @Inject constructor(
     /**
      * The same message for the pre-soak slot, with its own id and its own title.
      *
-     * `by lazy`, so with the pre-soak switched off no second message and no second channel
-     * registration is ever made.
+     * `by lazy`, so without a pre-soak no second message and no second channel registration is
+     * ever made.
      */
     private val stagingWarmupNotification by lazy { Libre3WarmupNotification(context, SensorSlot.STAGING) }
 
@@ -243,46 +297,48 @@ class Libre3NativePlugin @Inject constructor(
     val warmup: StateFlow<Libre3WarmupState> = _warmup.asStateFlow()
 
     /**
-     * Warm-up view for the dashboard, built from the one source of truth [_warmup].
+     * The generic warm-up view, for the Overview. Set together with [_warmup], with no collector,
+     * so it needs no running scope.
      *
-     * It is null while there is nothing to show, which is what the dashboard expects.
+     * It is null while there is nothing to show, which is what the readers expect.
      */
-    override val warmupStatus: StateFlow<CgmWarmupStatus?> =
-        _warmup
-            .map { Libre3WarmupMapper.toCgmWarmupStatus(it) }
-            .stateIn(ioScope, SharingStarted.Eagerly, Libre3WarmupMapper.toCgmWarmupStatus(_warmup.value))
+    private val _warmupStatus = MutableStateFlow(Libre3WarmupMapper.toCgmWarmupStatus(_warmup.value))
+    override val warmupStatus: StateFlow<CgmWarmupStatus?> = _warmupStatus.asStateFlow()
 
     private val _lifecycle = MutableStateFlow<CgmSensorLifecycle?>(null)
     override val lifecycle: StateFlow<CgmSensorLifecycle?> = _lifecycle.asStateFlow()
 
+    /**
+     * What the driver said about the production sensor, for the CGM sensor alarms, see
+     * [Libre3SensorAlerts]. Written from the driver's BLE thread, read by the alarm check, so it is
+     * guarded by its own monitor.
+     */
+    private val sensorAlerts = Libre3SensorAlerts()
+
     // ---- The pre-soak slot ----
     //
-    // Everything below is collect-only. It is switched off by default, and with the switch off none
-    // of it is reachable: no second driver instance, no second preferences file, and the plugin
-    // behaves exactly as it did before.
+    // Everything below is collect-only. Without a pre-soak sensor none of it is reached: no second
+    // driver instance and no second preferences file.
 
+    /** Warm-up of the pre-soak sensor, for the AIMI dashboard. Null while it is not warming up. */
     private val _stagingWarmup = MutableStateFlow<CgmWarmupStatus?>(null)
     override val stagingWarmupStatus: StateFlow<CgmWarmupStatus?> = _stagingWarmup.asStateFlow()
 
     private val _stagingLifecycle = MutableStateFlow<CgmSensorLifecycle?>(null)
     override val stagingLifecycle: StateFlow<CgmSensorLifecycle?> = _stagingLifecycle.asStateFlow()
 
-    /** What the driver said, for the CGM sensor alarms. Guarded by its own monitor. */
-    private val sensorAlerts = Libre3SensorAlerts()
-
-    /** The plugin runs (between [onStart] and [onStop]); a stopped plugin raises no sensor alarm. */
-    @Volatile
-    private var sensorAlertsRunning = false
-
-    /** Activation of the sensor [sensorAlerts] is about, to see a new sensor. */
-    @Volatile
-    private var sensorAlertsActivatedAt = 0L
-
     private val _stagingState = MutableStateFlow(StagingState.ABSENT)
     override val stagingState: StateFlow<StagingState> = _stagingState.asStateFlow()
 
     private val _stagingEvidence = MutableStateFlow<CgmStagingEvidence?>(null)
     override val stagingEvidence: StateFlow<CgmStagingEvidence?> = _stagingEvidence.asStateFlow()
+
+    /**
+     * Always null: a Libre 3 pre-soak has no settle wait. The user already pays real sensor wear
+     * time for the soak, so the slot is ready to promote after [Libre3Staging.STAGING_MIN_VALID_READINGS]
+     * readings, and there is nothing to count down.
+     */
+    override val stagingSettleRemainingMs: StateFlow<Long?> = MutableStateFlow<Long?>(null).asStateFlow()
 
     private val _stagingCurve = MutableStateFlow<List<Libre3PresoakPoint>>(emptyList())
 
@@ -298,11 +354,7 @@ class Libre3NativePlugin @Inject constructor(
     private val stagingDriver: Libre3CgmDriverReal
         get() = Libre3CgmDrivers.staging()
 
-    /**
-     * The pre-soak slot's own preferences file.
-     *
-     * `by lazy`, so with the pre-soak switched off this file is never even opened.
-     */
+    /** The pre-soak slot's own preferences file. */
     private val stagingStore by lazy { Libre3SensorStore(context, Libre3CgmDrivers.STAGING_NAMESPACE) }
 
     /** A pre-soak sensor is running. */
@@ -352,7 +404,7 @@ class Libre3NativePlugin @Inject constructor(
      * Every path here is collect-only. It never touches [persistenceLayer] and it never calls
      * [Libre3Ingest].
      *
-     * It is `internal` so the invariant test in this module can drive it directly.
+     * It is `internal` so the tests in this module can drive it directly.
      */
     internal val stagingWatcher: Libre3GlucoseWatcher = object : Libre3GlucoseWatcher {
         override fun onWarmup(state: Libre3WarmupState) = handleStagingWarmup(state)
@@ -371,14 +423,12 @@ class Libre3NativePlugin @Inject constructor(
      *
      * This is the only action that changes which sensor feeds the loop. It is a user action, or the
      * automatic switch the user turned on with [Libre3BooleanKey.AutoPromote] (see
-     * `maybeAutoPromote`, which adds its own checks before calling this). The order of the steps is chosen so that every step that can fail comes before the
-     * first step that cannot be undone: the store write of the new sensor is the last reversible
-     * one. See `docs/LIBRE3_PRESOAK_PLAN.md` §10.
+     * `maybeAutoPromote`, which adds its own checks before calling this). The order of the steps
+     * is chosen so that every step that can fail comes before the first step that cannot be undone:
+     * the store write of the new sensor is the last reversible one.
      *
      * The calibration cutoff is written only after that store write, the driver swap and
-     * [logSensorChangeOnce]. Reference `Libre3NativePlugin.promoteStagingToProduction` on
-     * `dev_OAPSAIMI` @ `3dd0ca64772`, L980–1078. Reference L1055 swallows a throw and still returns
-     * [PromotionResult.Ok]. This copy does not: a throw leaves the swap in place and returns
+     * [logSensorChangeOnce]. A throw there leaves the swap in place and returns
      * [PromotionResult.OkBoundFailed]. A throw from a later step returns
      * [PromotionResult.OkFollowUpFailed], unless the bound also failed.
      *
@@ -386,8 +436,15 @@ class Libre3NativePlugin @Inject constructor(
      *   already pays real sensor wear time for the soak, so there is nothing here to relax. Please
      *   do not turn this into a gate.
      */
-    override suspend fun promoteStagingToProduction(allowEarly: Boolean): PromotionResult =
-        promoteMutex.withLock { promoteLocked(byAuto = false) }
+    override suspend fun promoteStagingToProduction(allowEarly: Boolean): PromotionResult {
+        // The screen asks isStopped first and says why. This is the check for every other caller:
+        // onStop has shut the pre-soak link down, so there is no running pre-soak to switch to.
+        if (stopped) {
+            aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.PRESOAK}: switch refused, the plugin is stopped")
+            return PromotionResult.Rejected(PromotionRejectReason.STAGING_ABSENT)
+        }
+        return promoteMutex.withLock { promoteLocked(byAuto = false) }
+    }
 
     /** The promotion itself. Call it only while holding [promoteMutex]. */
     private suspend fun promoteLocked(byAuto: Boolean): PromotionResult {
@@ -419,9 +476,6 @@ class Libre3NativePlugin @Inject constructor(
             )
             return PromotionResult.Rejected(PromotionRejectReason.STAGING_ABSENT)
         }
-        // The promoted sensor is a real sensor. Without this a restart would send production to the
-        // stub. It is idempotent, and a failure must not stop a swap that is already half done.
-        runCatching { preferences.put(Libre3BooleanKey.UseRealSkeleton, true) }
         // The net must not ask for a link while the two instances are being swapped: it would ask
         // the instance that is about to be retired. It arms itself again on the next lost link.
         cancelReconnectWatchdog()
@@ -433,6 +487,9 @@ class Libre3NativePlugin @Inject constructor(
         // its way harmless: the repeat guard forgets the old counter, the stored mark goes back to
         // "nothing accepted yet", and anything late carries the retired watcher and is refused.
         newProductionEpoch()
+        // The epoch put the phase back to "nothing running". The promoted sensor has a phase of its
+        // own, and a sensor that is still warming must keep blocking the glucose path.
+        warmupPhase = runCatching { promoted.warmupState().phase }.getOrDefault(Libre3WarmupState.Phase.IDLE)
         // Held in a local, because after the swap below `driver` is the promoted instance.
         val outgoing = driver
         runCatching { outgoing.disconnect() }
@@ -456,7 +513,8 @@ class Libre3NativePlugin @Inject constructor(
         // is already dead, and anything that asked it for a link in that window would throw.
         val retired = Libre3CgmDrivers.promoteStagingInstance()
         runCatching { retired?.shutdown() }
-        // The stub is not `retired`, so it needs stopping of its own when it was the one in use.
+        // Normally the outgoing instance is `retired`. It is stopped on its own only when the registry
+        // had already replaced it, so no instance is left running with nobody to stop it.
         runCatching { if (outgoing !== promoted && outgoing !== retired) outgoing.shutdown() }
         // After the adopt, so the new serial is already the stored one while the "already written"
         // mark is gone. Dated on the real activation of the pre-soak sensor, so the sensor age and
@@ -465,8 +523,7 @@ class Libre3NativePlugin @Inject constructor(
         // The session is dated at the pre-soak activation, hours before this swap. Without this,
         // every fingerstick taken during the pre-soak — all paired against the OLD sensor — would
         // be fitted onto the new one, and applied from its first minute with no warm-up left.
-        // Reference L1055 wraps this call in `runCatching` and still returns Ok. Deliberate
-        // deviation, same types as P5.4: a throw does not undo the swap, and it is not a full success.
+        // A throw does not undo the swap, and it is not a full success either.
         val boundFailure: Throwable? = try {
             activePlugin.activeCalibration.ignoreEntriesBefore(System.currentTimeMillis())
             null
@@ -476,13 +533,11 @@ class Libre3NativePlugin @Inject constructor(
         }
         // Steps after the bound. A throw here is [PromotionResult.OkFollowUpFailed], with the
         // production identity read from the store after the throw. The bound failure wins if both
-        // happened, same priority as Dexcom ONE+.
+        // happened.
         val followUpFailure: Throwable? = try {
-            // Make the promoted instance the driver the plugin really talks to from now on. `true` is
-            // written here and not read back from the preference on purpose: a promoted sensor IS a
-            // real sensor, and a `select(false)` at this point would stop the instance that has just
-            // taken the loop over.
-            runCatching { Libre3CgmDrivers.select(useReal = true, watcher = productionWatcher) }
+            // The promoted instance is the production driver from now on. It already has the
+            // production watcher (added above); this makes sure it also has its platform.
+            attachProductionDriver()
             refreshProductionLifecycle()
             // One sensor moved from the pre-soak slot into production, so the service is still wanted,
             // but the reason for it has changed. Asked again so the two slots are counted as they are.
@@ -548,12 +603,9 @@ class Libre3NativePlugin @Inject constructor(
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 )
             },
-            Libre3BooleanKey.UseRealSkeleton,
-            Libre3BooleanKey.PresoakEnabled,
-            Libre3BooleanKey.KeepSessionAlive,
             Libre3BooleanKey.AutoPromote,
             Libre3IntKey.AutoPromoteHours,
-            // The sensor age on the dashboard and the calibration session both come from the
+            // The sensor age on the Overview and the calibration session both come from the
             // SENSOR_CHANGE therapy event written by `logSensorChangeOnce`.
             BooleanKey.BgSourceCreateSensorChange,
         ),
@@ -562,8 +614,11 @@ class Libre3NativePlugin @Inject constructor(
 
     override suspend fun onStart() {
         super.onStart()
-        sensorAlertsRunning = true
-        syncDriverFromPrefs()
+        workScopeLock.withLock { stopped = false }
+        ioScope()
+        // Every start, because the driver may be a new instance with no watcher: onStop shuts the
+        // old one down and the registry builds a fresh one on the next call.
+        attachProductionDriver()
         // Rebuild what ingest already knows BEFORE a reconnect can deliver anything. Without this,
         // an app restart would offer readings that are already in the database, and the loop treats
         // a repeated reading as an error.
@@ -577,13 +632,15 @@ class Libre3NativePlugin @Inject constructor(
             emptyList()
         }
         Libre3Ingest.seed(sensorStore.loadLastLifeCount(), recentTimestamps)
+        // So that a sensor that stays silent after a restart is still seen as silent.
+        synchronized(sensorAlerts) { sensorAlerts.restoreLastReading(recentTimestamps.maxOrNull()) }
         warmupPhase = driver.warmupState().phase
         // A message that survived a restart is brought back in line with what the driver really
         // says, otherwise a stale countdown could sit in the status bar for ever.
         warmupNotification.update(driver.warmupState())
         aapsLogger.info(
             LTag.BGSOURCE,
-            "${Libre3LogMarkers.SESSION}: plugin start realDriver=${Libre3CgmDrivers.useRealSkeleton} " +
+            "${Libre3LogMarkers.SESSION}: plugin start " +
                 "lastLifeCount=${sensorStore.loadLastLifeCount()} storedReadings=${recentTimestamps.size}",
         )
         watchRadioLease()
@@ -595,50 +652,39 @@ class Libre3NativePlugin @Inject constructor(
         // that is not picked up again would soak on invisibly.
         resumeStagingSessionIfStored()
         refreshSessionService()
-        watchKeepSessionAlivePreference()
     }
 
     /**
-     * Makes the keep-alive switch take effect the moment the user flips it.
+     * Keep the `connectedDevice` service alive while either slot holds a sensor, and give the
+     * privilege back when neither does.
      *
-     * `drop(1)` because [Preferences.observe] starts with the value as it already is, and [onStart]
-     * has just acted on that one.
-     */
-    private fun watchKeepSessionAlivePreference() {
-        keepAliveWatcher?.cancel()
-        keepAliveWatcher = ioScope.launch {
-            preferences.observe(Libre3BooleanKey.KeepSessionAlive).drop(1).collect { wanted ->
-                aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.SESSION}: keep session alive switched to $wanted")
-                refreshSessionService()
-            }
-        }
-    }
-
-    /**
-     * Keep the `connectedDevice` service alive while either slot wants a Bluetooth session, and give
-     * the privilege back when neither does.
-     *
-     * It never throws, because it is called from production paths as well as from pre-soak ones.
-     * The `runCatching` is the reference `refreshSessionService` (`dev_OAPSAIMI` @ `3dd0ca64772`):
+     * It never throws, because it is called from production paths as well as from pre-soak ones:
      * a failure is logged and the caller continues.
      *
      * `internal` so the status screen can call it after the user forgets a sensor.
      */
     internal fun refreshSessionService() {
         runCatching {
-            if (!preferences.get(Libre3BooleanKey.KeepSessionAlive)) {
+            val wanted = sensorStore.isReadyForBle() || stagingStore.isReadyForBle()
+            if (wanted) {
+                Libre3SessionService.start(context.applicationContext)?.let { t ->
+                    aapsLogger.warn(LTag.BGSOURCE, "${Libre3LogMarkers.SESSION}: foreground service not started, ${t.message}")
+                }
+            } else {
                 Libre3SessionService.stop(context.applicationContext)
-                return@runCatching
             }
-            val wanted = sensorStore.isReadyForBle() ||
-                (preferences.get(Libre3BooleanKey.PresoakEnabled) && stagingStore.isReadyForBle())
-            if (wanted) Libre3SessionService.start(context.applicationContext)
-            else Libre3SessionService.stop(context.applicationContext)
         }.onFailure { t ->
             aapsLogger.error(LTag.BGSOURCE, "${Libre3LogMarkers.SESSION}: session service refresh failed, ${t.message}", t)
         }
     }
 
+    /**
+     * Called when the user starts a different sensor.
+     *
+     * A new sensor counts its own minutes from zero. The mark left by the old sensor is much
+     * higher, so without this every reading of the new sensor would be refused as "already seen"
+     * for its whole life, and the loop would quietly get nothing at all.
+     */
     /**
      * Gives the radio up while a pump setup holds it, and comes back when it is free.
      *
@@ -649,7 +695,7 @@ class Libre3NativePlugin @Inject constructor(
      */
     private fun watchRadioLease() {
         radioLeaseWatcher?.cancel()
-        radioLeaseWatcher = ioScope.launch {
+        radioLeaseWatcher = ioScope()?.launch {
             var wasLentOut = false
             bleRadioPriority.owner.collect { owner ->
                 val lentOut = owner != null
@@ -672,18 +718,18 @@ class Libre3NativePlugin @Inject constructor(
         }
     }
 
-    /**
-     * Called when the user starts a different sensor.
-     *
-     * A new sensor counts its own minutes from zero. The mark left by the old sensor is much
-     * higher, so without this every reading of the new sensor would be refused as "already seen"
-     * for its whole life, and the loop would quietly get nothing at all.
-     */
     fun onSensorChanged() {
         // Also swaps the production watcher, so a reading of the sensor that was just replaced
         // cannot raise the mark again after this point — the same hole the promotion had.
+        // Also while stopped: the next start must accept the readings of the new sensor.
         newProductionEpoch()
-        driver.addWatcher(productionWatcher)
+        if (stopped) {
+            // The scan has stored the sensor. onStart connects it, so nothing more is done now:
+            // no driver, no service, no database work while the plugin is switched off.
+            aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.SESSION}: new sensor stored, the plugin is stopped, it connects at the next start")
+            return
+        }
+        attachProductionDriver()
         // The scan has already stored when this sensor was started, so the sensor change can be
         // written now instead of waiting for the first reading an hour later. That matters for the
         // calibration plugin: its own warm-up window is counted from this event, so anchoring it on
@@ -697,8 +743,7 @@ class Libre3NativePlugin @Inject constructor(
     /**
      * Writes the `SENSOR_CHANGE` therapy event of the running sensor, once per sensor.
      *
-     * Two things read that event, and both were left empty by this source until now: the sensor age
-     * on the dashboard, and the calibration plugin, which refuses to fit anything without a session
+     * Two things read that event: the sensor age on the Overview, and the calibration plugin, which refuses to fit anything without a session
      * to fit it in. [Libre3SensorChange] holds the rule and keeps it unique per sensor; this method
      * only carries it out. It follows [BooleanKey.BgSourceCreateSensorChange], like every other
      * source, and the check comes first so switching the setting on later still writes the event.
@@ -717,7 +762,7 @@ class Libre3NativePlugin @Inject constructor(
     private fun logSensorChangeOnce(activatedAtMs: Long, owner: Libre3GlucoseWatcher = productionWatcher) {
         if (activatedAtMs <= Libre3NfcSession.UNKNOWN_ACTIVATION_TIME) return
         if (!preferences.get(BooleanKey.BgSourceCreateSensorChange)) return
-        ioScope.launch {
+        ioScope()?.launch {
             if (owner !== productionWatcher) {
                 aapsLogger.info(
                     LTag.BGSOURCE,
@@ -752,11 +797,16 @@ class Libre3NativePlugin @Inject constructor(
      * Starts Bluetooth after the NFC step has stored the sensor, or when the plugin comes back
      * with a sensor that is already stored.
      *
-     * Nothing is sent when the real driver is not selected. The stub would only report a fake
-     * failure and hide the fact that the engineering switch is still off.
+     * Nothing is started when this build does not ship the files the pairing needs: the driver
+     * could not pair, and the log says why. Nothing is started while the plugin is [stopped]
+     * either: [onStart] connects the stored sensor.
      */
     fun connectStoredSensor(deviceAddress: String) {
-        syncDriverFromPrefs()
+        if (stopped) {
+            aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.SESSION}: BLE not started, the plugin is stopped")
+            return
+        }
+        attachProductionDriver()
         val blocked = Libre3CgmDrivers.realDriverBlockedReason()
         if (blocked != null) {
             aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.SESSION}: BLE not started, $blocked")
@@ -767,35 +817,57 @@ class Libre3NativePlugin @Inject constructor(
     }
 
     override suspend fun onStop() {
-        sensorAlertsRunning = false
-        radioLeaseWatcher?.cancel()
+        // First: from here on no new work may start, also not from a callback that arrives while
+        // the drivers below are shutting down.
+        workScopeLock.withLock { stopped = true }
+        // Each step on its own: a driver that throws must not skip the steps after it. The work
+        // cancel and the session service stop must always run.
+        stopStep("watchdog cancel") { cancelReconnectWatchdog() }
+        stopStep("radio lease watcher cancel") { radioLeaseWatcher?.cancel() }
         radioLeaseWatcher = null
-        keepAliveWatcher?.cancel()
-        keepAliveWatcher = null
-        cancelReconnectWatchdog()
         // The pre-soak link goes down with the plugin, but the pre-soak file is kept on purpose:
         // the plugin being switched off must not throw a soak of many hours away.
         Libre3CgmDrivers.releaseStagingInstance()?.let { presoak ->
-            runCatching { presoak.removeWatcher(stagingWatcher) }
-            runCatching { presoak.shutdown() }
+            stopStep("pre-soak removeWatcher") { presoak.removeWatcher(stagingWatcher) }
+            stopStep("pre-soak shutdown") { presoak.shutdown() }
         }
-        driver.removeWatcher(productionWatcher)
-        driver.shutdown()
-        warmupNotification.cancel()
-        runCatching { stagingWarmupNotification.cancel() }
-        Libre3SessionService.stop(context.applicationContext)
+        // Only an instance that exists. [driver] would build a new one just to shut it down.
+        Libre3CgmDrivers.productionOrNull()?.let { production ->
+            stopStep("production removeWatcher") { production.removeWatcher(productionWatcher) }
+            stopStep("production shutdown") { production.shutdown() }
+        }
+        stopStep("warm-up notification cancel") { warmupNotification.cancel() }
+        stopStep("pre-soak warm-up notification cancel") { stagingWarmupNotification.cancel() }
+        stopStep("session service stop") { Libre3SessionService.stop(context.applicationContext) }
+        // Last, after the drivers are stopped. [stopped] already keeps late callbacks from making
+        // a new scope.
+        cancelWork()
         aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.SESSION}: plugin stop")
         super.onStop()
     }
 
+    /** One step of [onStop]. A throw is logged and does not stop the next steps. */
+    private inline fun stopStep(name: String, step: () -> Unit) {
+        try {
+            step()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            aapsLogger.error(LTag.BGSOURCE, "${Libre3LogMarkers.SESSION}: plugin stop, $name failed: ${t.message}", t)
+        }
+    }
+
     /**
-     * Keep the stub or real choice in step with the engineering switch, and make sure this plugin
-     * watches the driver that is really active. Safe to call from the Start screen before connect.
+     * Makes sure the production driver has its platform and that this plugin watches it.
+     *
+     * Asked again on every start and before every connect, because the registry builds a new
+     * instance, with no watcher, after the old one was shut down. Adding the same watcher twice
+     * does nothing. Safe to call from the Start screen before connect.
      */
-    fun syncDriverFromPrefs() {
-        val wantReal = preferences.get(Libre3BooleanKey.UseRealSkeleton)
-        val selected = Libre3CgmDrivers.select(useReal = wantReal, watcher = productionWatcher)
-        selected.setContext(context)
+    fun attachProductionDriver() {
+        val current = driver
+        current.setContext(context)
+        current.addWatcher(productionWatcher)
     }
 
     // The four calls below are the plugin's own view of the production path. They always mean "the
@@ -810,19 +882,12 @@ class Libre3NativePlugin @Inject constructor(
 
     override fun onError(message: String, fatal: Boolean) = handleProductionError(message, fatal)
 
-    override fun onPatchStatus(status: Libre3PatchStatus) = handleProductionPatchStatus(status, productionWatcher)
-
-    /** A health message for the sensor alarms. One from a retired watcher (an old sensor) is ignored. */
-    private fun handleProductionPatchStatus(status: Libre3PatchStatus, owner: Libre3GlucoseWatcher) {
-        if (owner !== productionWatcher) return
-        synchronized(sensorAlerts) { sensorAlerts.onStatus(status) }
-    }
-
     private fun handleProductionWarmup(state: Libre3WarmupState) {
         warmupPhase = state.phase
         _warmup.value = state
-        synchronized(sensorAlerts) { sensorAlerts.onWarmup(state, System.currentTimeMillis()) }
+        _warmupStatus.value = Libre3WarmupMapper.toCgmWarmupStatus(state)
         warmupNotification.update(state)
+        synchronized(sensorAlerts) { sensorAlerts.onWarmup(state.phase, System.currentTimeMillis()) }
         aapsLogger.info(
             LTag.BGSOURCE,
             "${Libre3LogMarkers.WARMUP}: phase=${state.phase} remainingMs=${state.remainingMs} msg=${state.message}",
@@ -871,9 +936,9 @@ class Libre3NativePlugin @Inject constructor(
             owner,
         )
         refreshProductionLifecycle()
-        synchronized(sensorAlerts) { sensorAlerts.onReading(sample.timestampMs) }
+        synchronized(sensorAlerts) { sensorAlerts.onReading(System.currentTimeMillis()) }
         val glucoseValues = listOf(Libre3Ingest.mapToGv(sample))
-        ioScope.launch {
+        ioScope()?.launch {
             if (owner !== productionWatcher) {
                 aapsLogger.info(
                     LTag.BGSOURCE,
@@ -907,12 +972,14 @@ class Libre3NativePlugin @Inject constructor(
         aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.SESSION}: up=$up reason=$reason")
         // Only a link that died on its own deserves the net. Every other reason is somebody asking
         // for the session to end, and asking for it again a few minutes later is not a safety net,
-        // it is a bug: it would undo a plugin switch, and it would take the radio back from a pump
-        // setup in the middle of the setup.
+        // it is a bug: it would undo a plugin switch or a user's disconnect.
         when {
             up                                                     -> cancelReconnectWatchdog()
             reason == Libre3DisconnectPolicy.Reason.LINK_LOST.name -> armReconnectWatchdog()
             else                                                  -> cancelReconnectWatchdog()
+        }
+        synchronized(sensorAlerts) {
+            sensorAlerts.onSession(up, linkLost = reason == Libre3DisconnectPolicy.Reason.LINK_LOST.name, nowMs = System.currentTimeMillis())
         }
     }
 
@@ -925,7 +992,7 @@ class Libre3NativePlugin @Inject constructor(
      */
     private fun armReconnectWatchdog() {
         reconnectWatchdog?.cancel()
-        reconnectWatchdog = ioScope.launch {
+        reconnectWatchdog = ioScope()?.launch {
             delay(RECONNECT_WATCHDOG_MS)
             if (driver.isSessionUp()) return@launch
             val identity = sensorStore.loadIdentity() ?: return@launch
@@ -944,6 +1011,35 @@ class Libre3NativePlugin @Inject constructor(
 
     private fun handleProductionError(message: String, fatal: Boolean) {
         aapsLogger.error(LTag.BGSOURCE, "${Libre3LogMarkers.ERROR}: fatal=$fatal $message")
+    }
+
+    /** Takes the health message into account for the sensor alarms. A retired sensor is ignored. */
+    private fun handleProductionPatchStatus(status: Libre3PatchStatus, owner: Libre3GlucoseWatcher) {
+        if (owner !== productionWatcher) return
+        synchronized(sensorAlerts) { sensorAlerts.onStatus(status) }
+    }
+
+    /**
+     * The sensor state for the CGM sensor alarms, see [Libre3SensorAlerts]. Read by the central check
+     * on every pass, so the states that only depend on the clock (ending soon, ended, no reading for
+     * a while) are current without a timer of their own. Cheap, never throws.
+     *
+     * It only reads what the driver said; it changes nothing in the driver and nothing in the
+     * readings the loop receives.
+     */
+    override fun sensorAlertState(nowMs: Long, expiringLeadMs: Long): CgmSensorAlertState {
+        val identity = runCatching { sensorStore.loadIdentity() }.getOrNull()
+        val expiresAtMs = identity?.let { Libre3Staging.endOfLifeMs(it.activatedAtMs, it.wearDurationMinutes) }
+        return synchronized(sensorAlerts) {
+            sensorAlerts.state(
+                stopped = stopped,
+                sensorStored = identity != null,
+                phase = warmupPhase,
+                expiresAtMs = expiresAtMs,
+                nowMs = nowMs,
+                expiringLeadMs = expiringLeadMs,
+            )
+        }
     }
 
     /**
@@ -973,25 +1069,23 @@ class Libre3NativePlugin @Inject constructor(
             previous
         }
         // A driver that outlives the swap must not keep the retired watcher as a second listener.
-        runCatching { driver.removeWatcher(retiredWatcher) }
+        // Only one that exists: a new instance has no watcher to drop.
+        runCatching { Libre3CgmDrivers.productionOrNull()?.removeWatcher(retiredWatcher) }
         runCatching { Libre3CgmDrivers.stagingOrNull()?.removeWatcher(retiredWatcher) }
+        // What the sensor alarms knew belongs to the retired sensor. Its phase too: a retired
+        // sensor that had failed must not make the new one look failed until its first event.
+        synchronized(sensorAlerts) { sensorAlerts.onNewSensor() }
+        warmupPhase = Libre3WarmupState.Phase.IDLE
     }
 
     // ---------------- The pre-soak slot ----------------
 
-    /**
-     * Whether that sensor is the one the pre-soak slot holds. Serial or MAC is enough.
-     *
-     * With the pre-soak switched off there is no pre-soak sensor, so the answer is always no and
-     * the pre-soak file is not even opened.
-     */
-    fun isStagingSensor(serial: String?, mac: String?): Boolean {
-        if (!preferences.get(Libre3BooleanKey.PresoakEnabled)) return false
-        return runCatching {
+    /** Whether that sensor is the one the pre-soak slot holds. Serial or MAC is enough. */
+    fun isStagingSensor(serial: String?, mac: String?): Boolean =
+        runCatching {
             val identity = stagingStore.loadIdentity() ?: return@runCatching false
             Libre3Staging.isSameSensor(identity.serialNumber, identity.bleAddress, serial, mac)
         }.getOrDefault(false)
-    }
 
     /** Whether that sensor is the one that feeds the loop right now — see [isStagingSensor]. */
     fun isProductionSensor(serial: String?, mac: String?): Boolean =
@@ -1003,13 +1097,12 @@ class Libre3NativePlugin @Inject constructor(
     /**
      * Starts a pre-soak on the sensor the NFC scan has just written into the pre-soak slot.
      *
-     * @return false when the request was refused, because the pre-soak is switched off or because
-     *   that sensor already feeds the loop. A throw inside the slot write is also false: the
-     *   `runCatching` / `getOrElse` is the reference `beginStaging` (`dev_OAPSAIMI` @ `3dd0ca64772`).
+     * @return false when the request was refused because that sensor already feeds the loop. A
+     *   throw inside the slot write is also false.
      */
     fun beginStaging(identity: Libre3SensorIdentity): Boolean {
-        if (!preferences.get(Libre3BooleanKey.PresoakEnabled)) {
-            aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.PRESOAK}: refused, the pre-soak is switched off")
+        if (stopped) {
+            aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.PRESOAK}: refused, the plugin is stopped")
             return false
         }
         if (isProductionSensor(identity.serialNumber, identity.bleAddress)) {
@@ -1060,7 +1153,10 @@ class Libre3NativePlugin @Inject constructor(
 
     /** Starts Bluetooth for the pre-soak slot. It never touches the production driver. */
     fun connectStagingSensor(deviceAddress: String) {
-        if (!preferences.get(Libre3BooleanKey.PresoakEnabled)) return
+        if (stopped) {
+            aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.PRESOAK}: BLE not started, the plugin is stopped")
+            return
+        }
         val blocked = Libre3CgmDrivers.stagingBlockedReason()
         if (blocked != null) {
             aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.PRESOAK}: BLE not started, $blocked")
@@ -1097,13 +1193,11 @@ class Libre3NativePlugin @Inject constructor(
      * Picks a pre-soak up again after a restart.
      *
      * The two refusals below come before a driver instance is built, so a slot that must not be
-     * picked up never even opens a thread. A throw is a missed resume (`getOrElse` returns false),
-     * the same shape as the reference `resumeStagingSessionIfStored`.
+     * picked up never even opens a thread. A throw is a missed resume (`getOrElse` returns false).
      *
      * @return true when a pre-soak was picked up again.
      */
     internal fun resumeStagingSessionIfStored(): Boolean {
-        if (!preferences.get(Libre3BooleanKey.PresoakEnabled)) return false
         return runCatching {
             if (!stagingStore.loadSlotPresent()) return@runCatching false
             val identity = stagingStore.loadIdentity()
@@ -1208,7 +1302,7 @@ class Libre3NativePlugin @Inject constructor(
      *
      * Called on every pre-soak reading, so it needs no timer and survives a restart. Only reads the
      * pre-soak store here; the switch itself writes the database, so it runs on [ioScope] and never
-     * on this BLE thread (invariant I1). The promotion of a Libre 3 checks almost nothing by itself,
+     * on this BLE thread. The promotion of a Libre 3 checks almost nothing by itself,
      * so the checks on recent, real readings in [StagingAutoPromotion] are the ones that count here.
      */
     private fun maybeAutoPromote() {
@@ -1227,8 +1321,10 @@ class Libre3NativePlugin @Inject constructor(
             nowMs = nowMs,
         )
         if (decision != StagingAutoPromotion.Decision.PROMOTE) return
+        // Before the claim: a stopped plugin switches nothing, and must not keep the claim.
+        val scope = ioScope() ?: return
         if (!autoPromoteInFlight.compareAndSet(false, true)) return
-        ioScope.launch {
+        scope.launch {
             try {
                 aapsLogger.info(
                     LTag.BGSOURCE,
@@ -1251,37 +1347,7 @@ class Libre3NativePlugin @Inject constructor(
         }
     }
 
-    /**
-     * The sensor state for the CGM sensor alarms, see [Libre3SensorAlerts]. Read by the central check
-     * on every pass. It only reads what the driver said; it changes nothing in the driver and nothing
-     * in the readings the loop receives.
-     */
-    override fun sensorAlertState(nowMs: Long, expiringLeadMs: Long): CgmSensorAlertState {
-        val identity = runCatching { sensorStore.loadIdentity() }.getOrNull()
-        val activatedAt = identity?.activatedAtMs ?: 0L
-        val lifecycle = Libre3Staging.computeLifecycle(
-            slot = SensorSlot.PRODUCTION,
-            activatedAtMs = activatedAt,
-            wearMinutes = identity?.wearDurationMinutes,
-            nowMs = nowMs,
-        )
-        return synchronized(sensorAlerts) {
-            if (activatedAt != sensorAlertsActivatedAt) {
-                if (sensorAlertsActivatedAt != 0L) sensorAlerts.onNewSensor()
-                sensorAlertsActivatedAt = activatedAt
-            }
-            sensorAlerts.onStaging(_stagingState.value, nowMs)
-            sensorAlerts.state(
-                running = sensorAlertsRunning,
-                sensorStored = identity != null,
-                expiresAtMs = lifecycle?.expiresAtEpochMs,
-                nowMs = nowMs,
-                expiringLeadMs = expiringLeadMs,
-            )
-        }
-    }
-
-    /** The early life and end of life hint of the sensor that feeds the loop. */
+    /** The age and end of life hint of the sensor that feeds the loop. */
     private fun refreshProductionLifecycle() {
         val identity = runCatching { sensorStore.loadIdentity() }.getOrNull()
         _lifecycle.value = Libre3Staging.computeLifecycle(
@@ -1307,6 +1373,7 @@ class Libre3NativePlugin @Inject constructor(
         _stagingLifecycle.value = null
         _stagingEvidence.value = null
         _stagingState.value = StagingState.ABSENT
+        synchronized(sensorAlerts) { sensorAlerts.onStaging(StagingState.ABSENT, System.currentTimeMillis()) }
     }
 
     private fun refreshStagingLifecycle() {
@@ -1336,11 +1403,13 @@ class Libre3NativePlugin @Inject constructor(
     }
 
     private fun refreshStagingState() {
-        _stagingState.value = Libre3Staging.computeStagingState(
+        val state = Libre3Staging.computeStagingState(
             present = stagingPresent,
             warming = stagingWarming,
             validReadingCount = stagingValidReadingCount,
         )
+        _stagingState.value = state
+        synchronized(sensorAlerts) { sensorAlerts.onStaging(state, System.currentTimeMillis()) }
     }
 
     companion object {

@@ -1,5 +1,9 @@
 package app.aaps.plugins.source.activities
 
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.Icons
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
@@ -56,6 +60,15 @@ class DexcomOnePlusStatusActivity : MetroAppCompatActivity() {
                     CgmScaffold(
                         title = stringResource(R.string.dexcom_oneplus_status_title),
                         onNavigate = { finish() },
+                        // The driver log one tap away, as in the plugin tab.
+                        actions = {
+                            IconButton(onClick = actions.onOpenLog) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.List,
+                                    contentDescription = stringResource(R.string.cgm_driver_log_open),
+                                )
+                            }
+                        },
                     ) {
                         DexcomOnePlusStatusOverview(viewModel = viewModel, actions = actions)
                     }

@@ -131,6 +131,8 @@ class LinearCalibrationPlugin(
         // change-tracking flow above — observe the dedicated cleared signal so the graph recomputes.
         scope?.launch {
             persistenceLayer.databaseClearedFlow.collect {
+                // The cut belongs to the data that was just wiped. Kept, it would hide new entries.
+                preferences.remove(CalibrationLongKey.EntriesValidFrom)
                 rxBus.send(EventCalibrationChanged())
             }
         }

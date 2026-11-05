@@ -1,15 +1,15 @@
 package app.aaps.plugins.source
 
+import app.aaps.core.interfaces.ble.BleRadioPriority
 import android.content.Context
 import android.content.SharedPreferences
 import app.aaps.core.data.iob.InMemoryGlucoseValue
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.interfaces.notifications.NotificationManager
-import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.core.interfaces.calibration.AddEntryResult
 import app.aaps.core.interfaces.calibration.Calibration
-import app.aaps.core.interfaces.calibration.CalibrationContext
 import app.aaps.core.interfaces.calibration.CalibrationStatus
+import app.aaps.core.interfaces.calibration.CalibrationContext
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -21,14 +21,14 @@ import app.aaps.core.interfaces.source.PromotionResult
 import app.aaps.core.interfaces.source.StagingState
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.plugins.libre3.Libre3CgmDriverStub
+import app.aaps.plugins.libre3.Libre3CgmDriver
+import app.aaps.plugins.libre3.Libre3CgmDriverReal
 import app.aaps.plugins.libre3.Libre3CgmDrivers
 import app.aaps.plugins.libre3.Libre3LogMarkers
 import app.aaps.plugins.libre3.Libre3GlucoseSample
 import app.aaps.plugins.libre3.identity.Libre3SensorIdentity
 import app.aaps.plugins.libre3.identity.Libre3SensorStore
 import app.aaps.plugins.libre3.session.Libre3MacArbiter
-import app.aaps.plugins.source.keys.Libre3BooleanKey
 import app.aaps.shared.tests.AAPSLoggerTest
 import app.aaps.shared.tests.SharedPreferencesMock
 import app.aaps.shared.tests.TestBase
@@ -52,8 +52,8 @@ import org.mockito.kotlin.whenever
  * Promotion of a Libre 3 pre-soak, including every refusal that must leave the loop's sensor
  * untouched.
  *
- * The success cases are the reference tests `Libre3StagingIngestTest` left out of P5.2. The
- * refusal cases are the guards in front of `ignoreEntriesBefore` on `dev_OAPSAIMI` @ `3dd0ca64772`.
+ * The success cases check that the promoted sensor feeds the loop. The refusal cases check every
+ * guard in front of `ignoreEntriesBefore`.
  */
 class Libre3PromotionTest : TestBase() {
 
@@ -63,7 +63,6 @@ class Libre3PromotionTest : TestBase() {
     @Mock lateinit var context: Context
     @Mock lateinit var persistenceLayer: PersistenceLayer
 
-    private val bleRadioPriority: BleRadioPriority = mock()
 
     private val notificationManager: NotificationManager = mock()
     private val activeCalibration: Calibration = mock()
@@ -72,6 +71,9 @@ class Libre3PromotionTest : TestBase() {
     private val stagingGate = GatedPreferences(SharedPreferencesMock())
 
     private lateinit var plugin: Libre3NativePlugin
+
+    /** The production driver when the test started. A refused promotion must leave it in place. */
+    private lateinit var productionDriverAtStart: Libre3CgmDriver
 
     private val stagedActivatedAtMs = 1_777_216_508_000L
     private val staged = Libre3SensorIdentity(
@@ -107,8 +109,6 @@ class Libre3PromotionTest : TestBase() {
         whenever(context.applicationContext).thenReturn(context)
         whenever(context.getSharedPreferences(PRODUCTION_PREFS_NAME, Context.MODE_PRIVATE)).thenReturn(productionPrefs)
         whenever(context.getSharedPreferences(STAGING_PREFS_NAME, Context.MODE_PRIVATE)).thenReturn(stagingGate)
-        whenever(preferences.get(Libre3BooleanKey.PresoakEnabled)).thenReturn(true)
-        whenever(preferences.get(Libre3BooleanKey.KeepSessionAlive)).thenReturn(false)
         runTest {
             whenever(persistenceLayer.insertCgmSourceData(anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
                 .thenReturn(PersistenceLayer.TransactionResult())
@@ -116,12 +116,13 @@ class Libre3PromotionTest : TestBase() {
         Libre3Ingest.reset()
         Libre3MacArbiter.reset()
         plugin = newPlugin()
+        productionDriverAtStart = Libre3CgmDrivers.default()
     }
 
     @AfterEach
     fun tearDownDrivers() {
         Libre3CgmDrivers.releaseStagingInstance()?.let { runCatching { it.shutdown() } }
-        runCatching { Libre3CgmDrivers.select(useReal = false) }
+        runCatching { Libre3CgmDrivers.default().shutdown() }
         Libre3MacArbiter.reset()
         stagingGate.throwOnSerial = false
         stagingGate.throwOnSessionKeys = false
@@ -134,7 +135,7 @@ class Libre3PromotionTest : TestBase() {
         val plugins = mock<ActivePlugin>()
         whenever(plugins.activeCalibration).thenReturn(calibration)
         return Libre3NativePlugin(
-            rh, logger, preferences, config, notificationManager, context, persistenceLayer, bleRadioPriority, plugins,
+            rh, logger, preferences, config, notificationManager, context, persistenceLayer, mock<BleRadioPriority>(), plugins,
         )
     }
 
@@ -162,11 +163,11 @@ class Libre3PromotionTest : TestBase() {
         runBlocking {
             verify(activeCalibration, never()).ignoreEntriesBefore(any())
             verify(persistenceLayer, never()).insertCgmSourceData(any(), any(), any(), anyOrNull())
-            verify(preferences, never()).put(Libre3BooleanKey.UseRealSkeleton, true)
         }
         assertThat(productionPrefs.all).isEqualTo(productionBefore)
-        assertThat(Libre3CgmDrivers.useRealSkeleton).isFalse()
-        assertThat(Libre3CgmDrivers.default()).isSameInstanceAs(Libre3CgmDriverStub.instance)
+        // The driver that feeds the loop is the same instance, and it is still alive.
+        assertThat(Libre3CgmDrivers.default()).isSameInstanceAs(productionDriverAtStart)
+        assertThat((productionDriverAtStart as Libre3CgmDriverReal).isShutDown()).isFalse()
     }
 
     @Test
@@ -186,7 +187,7 @@ class Libre3PromotionTest : TestBase() {
 
     @Test
     fun `promotion has no soak gate`() = runTest {
-        // A missing pairing key is a log, not a refusal. Reference L987–991.
+        // A missing pairing key is a log, not a refusal.
         startPresoak()
         assertThat(Libre3SensorStore(context, Libre3CgmDrivers.STAGING_NAMESPACE).loadSessionKeys().phase5RawKey).isNull()
 
@@ -320,6 +321,7 @@ class Libre3PromotionTest : TestBase() {
         plugin = newPlugin(logger = logger, calibration = cutoff)
         plugin.promotionAlerter = { alerts += it }
         startPresoak()
+        val presoakDriver = Libre3CgmDrivers.stagingOrNull()
 
         assertThat(plugin.promoteStagingToProduction()).isEqualTo(PromotionResult.OkBoundFailed)
 
@@ -330,7 +332,8 @@ class Libre3PromotionTest : TestBase() {
         assertThat(Libre3SensorStore(context, null).loadIdentity()!!.serialNumber).isEqualTo(staged.serialNumber)
         assertThat(Libre3SensorStore(context, Libre3CgmDrivers.STAGING_NAMESPACE).loadIdentity()).isNull()
         assertThat(plugin.stagingState.value).isEqualTo(StagingState.ABSENT)
-        assertThat(Libre3CgmDrivers.useRealSkeleton).isTrue()
+        // The pre-soak instance is the production driver now.
+        assertThat(Libre3CgmDrivers.default()).isSameInstanceAs(presoakDriver)
         verify(persistenceLayer, timeout(SLOW_INSERT_MS)).insertCgmSourceData(
             eq(Sources.Libre3Native), eq(emptyList()), eq(emptyList()), eq(stagedActivatedAtMs),
         )
@@ -344,6 +347,7 @@ class Libre3PromotionTest : TestBase() {
         plugin = newPlugin(logger = PromoteDoneFailsLogger(), calibration = cutoff)
         plugin.promotionAlerter = {}
         startPresoak()
+        val presoakDriver = Libre3CgmDrivers.stagingOrNull()
 
         val result = plugin.promoteStagingToProduction()
 
@@ -354,7 +358,8 @@ class Libre3PromotionTest : TestBase() {
         assertThat(Libre3SensorStore(context, Libre3CgmDrivers.STAGING_NAMESPACE).loadIdentity()).isNull()
         assertThat(plugin.stagingState.value).isEqualTo(StagingState.ABSENT)
         assertThat(Libre3CgmDrivers.stagingOrNull()).isNull()
-        assertThat(Libre3CgmDrivers.useRealSkeleton).isTrue()
+        // The pre-soak instance is the production driver now.
+        assertThat(Libre3CgmDrivers.default()).isSameInstanceAs(presoakDriver)
         verify(persistenceLayer, timeout(SLOW_INSERT_MS)).insertCgmSourceData(
             eq(Sources.Libre3Native), eq(emptyList()), eq(emptyList()), eq(stagedActivatedAtMs),
         )
@@ -478,6 +483,7 @@ class Libre3PromotionTest : TestBase() {
         override suspend fun checkPreconditions(): AddEntryResult = AddEntryResult.Accepted
 
         override suspend fun status(): CalibrationStatus = CalibrationStatus.Applied
+
     }
 
     private class StoringCutoff : Calibration {
@@ -497,6 +503,7 @@ class Libre3PromotionTest : TestBase() {
         override suspend fun checkPreconditions(): AddEntryResult = AddEntryResult.Accepted
 
         override suspend fun status(): CalibrationStatus = CalibrationStatus.Applied
+
     }
 
     private class RecordingLogger(

@@ -2,6 +2,7 @@ package app.aaps.plugins.source
 
 import android.content.Context
 import app.aaps.shared.tests.TestBase
+import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
 import org.mockito.kotlin.any
@@ -10,8 +11,8 @@ import org.mockito.kotlin.whenever
 /**
  * Starting the keep-alive service must not crash the sensor session when the platform refuses it.
  *
- * Reference `Libre3SessionService.start` on `dev_OAPSAIMI` @ `3dd0ca64772` wraps
- * `startForegroundService` / `startService` in `runCatching` and does not rethrow.
+ * `Libre3SessionService.start` wraps `startForegroundService` in `runCatching` and does not
+ * rethrow. It hands the failure back, so the plugin can log it.
  */
 class Libre3SessionServiceStartTest : TestBase() {
 
@@ -22,6 +23,8 @@ class Libre3SessionServiceStartTest : TestBase() {
         whenever(context.startService(any())).thenThrow(SecurityException("blocked"))
         whenever(context.startForegroundService(any())).thenThrow(SecurityException("blocked"))
 
-        Libre3SessionService.start(context)
+        val failure = Libre3SessionService.start(context)
+
+        assertThat(failure).isInstanceOf(SecurityException::class.java)
     }
 }

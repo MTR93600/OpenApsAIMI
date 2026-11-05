@@ -1,10 +1,10 @@
 package app.aaps.plugins.source
 
+import app.aaps.core.interfaces.ble.BleRadioPriority
 import android.content.Context
 import android.content.SharedPreferences
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.interfaces.notifications.NotificationManager
-import app.aaps.core.interfaces.ble.BleRadioPriority
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -22,12 +22,12 @@ import app.aaps.plugins.libre3.Libre3LogMarkers
 import app.aaps.shared.tests.AAPSLoggerTest
 import app.aaps.plugins.libre3.identity.Libre3SensorIdentity
 import app.aaps.plugins.libre3.identity.Libre3SensorStore
-import app.aaps.plugins.source.keys.Libre3BooleanKey
 import app.aaps.shared.tests.SharedPreferencesMock
 import app.aaps.shared.tests.TestBase
 import com.google.common.truth.Truth.assertThat
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
@@ -61,7 +61,6 @@ class Libre3PresoakPluginTest : TestBase() {
     @Mock lateinit var context: Context
     @Mock lateinit var persistenceLayer: PersistenceLayer
 
-    private val bleRadioPriority: BleRadioPriority = mock()
 
     private val notificationManager: NotificationManager = mock()
     private val activePlugin: ActivePlugin = mock()
@@ -94,8 +93,6 @@ class Libre3PresoakPluginTest : TestBase() {
         whenever(context.applicationContext).thenReturn(context)
         whenever(context.getSharedPreferences(PRODUCTION_PREFS_NAME, Context.MODE_PRIVATE)).thenReturn(productionPrefs)
         whenever(context.getSharedPreferences(STAGING_PREFS_NAME, Context.MODE_PRIVATE)).thenReturn(stagingPrefs)
-        whenever(preferences.get(Libre3BooleanKey.PresoakEnabled)).thenReturn(true)
-        whenever(preferences.get(Libre3BooleanKey.KeepSessionAlive)).thenReturn(false)
         runTest {
             whenever(persistenceLayer.insertCgmSourceData(anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
                 .thenReturn(PersistenceLayer.TransactionResult())
@@ -107,11 +104,11 @@ class Libre3PresoakPluginTest : TestBase() {
     @AfterEach
     fun tearDownDrivers() {
         Libre3CgmDrivers.releaseStagingInstance()?.let { runCatching { it.shutdown() } }
-        runCatching { Libre3CgmDrivers.select(useReal = false) }
+        runCatching { Libre3CgmDrivers.default().shutdown() }
     }
 
     private fun newPlugin() = Libre3NativePlugin(
-        rh, aapsLogger, preferences, config, notificationManager, context, persistenceLayer, bleRadioPriority, activePlugin,
+        rh, aapsLogger, preferences, config, notificationManager, context, persistenceLayer, mock<BleRadioPriority>(), activePlugin,
     )
 
     private fun storeStagedSensor() {
@@ -147,21 +144,20 @@ class Libre3PresoakPluginTest : TestBase() {
     }
 
     @Test
-    fun `nothing starts while the pre-soak is switched off`() {
-        whenever(preferences.get(Libre3BooleanKey.PresoakEnabled)).thenReturn(false)
-        storeStagedSensor()
-
-        assertThat(plugin.beginStaging(staged)).isFalse()
+    fun `the pre-soak needs no setting and knows its own sensor`() {
         assertThat(plugin.isStagingSensor(staged.serialNumber, staged.bleAddress)).isFalse()
-        assertThat(plugin.stagingState.value).isEqualTo(StagingState.ABSENT)
+
+        startPresoak()
+
+        assertThat(plugin.isStagingSensor(staged.serialNumber, null)).isTrue()
+        assertThat(plugin.isStagingSensor(null, staged.bleAddress)).isTrue()
+        assertThat(plugin.isProductionSensor(staged.serialNumber, staged.bleAddress)).isFalse()
     }
 
     @Test
     fun `beginStaging returns false when the pre-soak file cannot be opened`() {
-        // Reference `beginStaging` wraps the slot write and returns false from `getOrElse`
-        // (`Libre3NativePlugin.kt` on `dev_OAPSAIMI` @ `3dd0ca64772`, the `getOrElse` after the
-        // `runCatching` that starts at the staging driver). A throw must not be reported as a
-        // started slot.
+        // `beginStaging` wraps the slot write and returns false from `getOrElse`. A throw must not
+        // be reported as a started slot.
         whenever(context.getSharedPreferences(STAGING_PREFS_NAME, Context.MODE_PRIVATE))
             .thenThrow(IllegalStateException("disk"))
 
@@ -171,8 +167,8 @@ class Libre3PresoakPluginTest : TestBase() {
 
     @Test
     fun `cancelling a pre-soak still clears the slot when shutdown throws`() {
-        // Reference `cancelStaging` wraps `shutdown` in `runCatching` (`Libre3NativePlugin.kt` on
-        // `dev_OAPSAIMI` @ `3dd0ca64772`). A throw must not skip the wipe, and it must not escape.
+        // `cancelStaging` wraps `shutdown` in `runCatching`. A throw must not skip the wipe, and it
+        // must not escape.
         assertThat(Libre3SensorStore(context, null).saveIdentityAndWait(PRODUCTION_SENSOR)).isTrue()
         val before = HashMap(productionPrefs.all)
         val failing = mock<Libre3CgmDriverReal>()
@@ -255,7 +251,6 @@ class Libre3PresoakPluginTest : TestBase() {
     @Test
     fun `resume returns false when the pre-soak file cannot be read`() {
         // Same `getOrElse` as `beginStaging`: a throw is a missed resume, not a started slot.
-        // Reference `resumeStagingSessionIfStored` on `dev_OAPSAIMI` @ `3dd0ca64772`.
         whenever(context.getSharedPreferences(STAGING_PREFS_NAME, Context.MODE_PRIVATE))
             .thenThrow(IllegalStateException("disk"))
 
@@ -332,23 +327,23 @@ class Libre3PresoakPluginTest : TestBase() {
     }
 
     @Test
-    fun `refreshing the session service does not throw when the switch cannot be read`() {
-        // Reference `refreshSessionService` wraps the whole body in `runCatching` and logs the
-        // failure (`Libre3NativePlugin.kt` on `dev_OAPSAIMI` @ `3dd0ca64772`). The call returns
-        // normally. This test fails if that failure leaves the function.
-        whenever(preferences.get(Libre3BooleanKey.KeepSessionAlive)).thenThrow(IllegalStateException("prefs"))
+    fun `refreshing the session service does not throw when the sensor store cannot be read`() {
+        // `refreshSessionService` wraps the whole body in `runCatching` and logs the failure. The
+        // call returns normally. This test fails if that failure leaves the function.
+        whenever(context.getSharedPreferences(PRODUCTION_PREFS_NAME, Context.MODE_PRIVATE))
+            .thenThrow(IllegalStateException("prefs"))
 
         plugin.refreshSessionService()
     }
 
     @Test
     fun `an exception launched on ioScope is logged and does not escape`() = runBlocking {
-        // Reference ioScope (Libre3NativePlugin.kt L116–120 @ 3dd0ca64772) carries a
-        // CoroutineExceptionHandler. Without it a throw inside launch reaches the process handler.
+        // The work scope carries a CoroutineExceptionHandler. Without it a throw inside launch
+        // reaches the process handler and takes the app down.
         val logger = RecordingLogger()
         val watched = newPlugin(logger)
-        val scope = watched.javaClass.getDeclaredField("ioScope").apply { isAccessible = true }
-            .get(watched) as CoroutineScope
+        val scope = watched.javaClass.getDeclaredMethod("ioScope").apply { isAccessible = true }
+            .invoke(watched) as CoroutineScope
         val escaped = AtomicReference<Throwable?>(null)
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { _, thrown -> escaped.set(thrown) }
@@ -360,12 +355,12 @@ class Libre3PresoakPluginTest : TestBase() {
             assertThat(logger.throwables.single()).isInstanceOf(IllegalStateException::class.java)
         } finally {
             Thread.setDefaultUncaughtExceptionHandler(previous)
-            scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
+            scope.coroutineContext[Job]?.cancel()
         }
     }
 
     private fun newPlugin(logger: AAPSLogger) = Libre3NativePlugin(
-        rh, logger, preferences, config, notificationManager, context, persistenceLayer, bleRadioPriority, activePlugin,
+        rh, logger, preferences, config, notificationManager, context, persistenceLayer, mock<BleRadioPriority>(), activePlugin,
     )
 
     private class RecordingLogger : AAPSLogger by AAPSLoggerTest() {

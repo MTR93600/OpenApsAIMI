@@ -52,9 +52,9 @@ import app.aaps.plugins.source.Libre3Ingest
 import app.aaps.plugins.source.Libre3NativePlugin
 import app.aaps.plugins.source.Libre3PresoakPoint
 import app.aaps.plugins.source.R
+import app.aaps.plugins.source.logs.DriverLogFilter
 import app.aaps.plugins.source.compose.CgmCard
 import app.aaps.plugins.source.compose.CgmCardHeader
-import app.aaps.plugins.source.compose.CgmCardTone
 import app.aaps.plugins.source.compose.CgmKeyValueRow
 import app.aaps.plugins.source.compose.CgmLazyColumn
 import app.aaps.plugins.source.compose.CgmScaffold
@@ -66,9 +66,7 @@ import app.aaps.plugins.source.compose.Libre3WarmupCountdown
 import app.aaps.plugins.source.compose.formatSensorAge
 import app.aaps.plugins.source.compose.toCgmWarmupInfo
 import app.aaps.plugins.source.compose.toUiState
-import app.aaps.plugins.source.keys.Libre3BooleanKey
-import app.aaps.plugins.source.logs.DriverLogFilter
-import javax.inject.Inject
+import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -81,10 +79,9 @@ import kotlinx.coroutines.launch
 /**
  * Shows which sensor is stored and what the session is doing.
  *
- * One card for the sensor, one for the actions. The screen scrolls, which the previous plain
- * `Column` did not: with a stored sensor and a blocked driver there were enough stacked buttons to
- * push "Forget this sensor" — the only escape from a sensor that can never connect — off the bottom
- * of a short screen.
+ * One card for the sensor, one for the actions. The screen scrolls, so "Forget this sensor", the
+ * only escape from a sensor that can never connect, is never pushed off the bottom of a short
+ * screen.
  *
  * It is also the detail view of a pre-soak: the pre-soak warm-up notification opens this screen.
  */
@@ -100,14 +97,6 @@ class Libre3StatusActivity : MetroAppCompatActivity() {
 
     @Inject lateinit var rh: ResourceHelper
 
-    /**
-     * Whether the pre-soak preference is on, read again on every [onResume].
-     *
-     * Read once it could be stale: the user can switch the preference while this screen waits in
-     * the back stack, and the pre-soak section would then be shown or hidden against the setting.
-     */
-    private var presoakEnabled by mutableStateOf(false)
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Other apps may not draw over this screen: an overlay could hide what a tap really does, here on a
@@ -116,7 +105,6 @@ class Libre3StatusActivity : MetroAppCompatActivity() {
         // Only on a fresh visit, never on a rebuild: the message has to survive a rotation, but an
         // answer from an hour ago must not greet the user when the screen is opened again.
         if (savedInstanceState == null) Libre3PresoakAction.clear()
-        presoakEnabled = preferences.get(Libre3BooleanKey.PresoakEnabled)
         setContent {
             CompositionLocalProvider(LocalPreferences provides preferences) {
                 AapsTheme {
@@ -131,7 +119,8 @@ class Libre3StatusActivity : MetroAppCompatActivity() {
                         onOpenStart = {
                             startActivity(Intent(this, Libre3StartActivity::class.java))
                         },
-                        presoakEnabled = presoakEnabled,
+                        onConnect = { address -> plugin.connectStoredSensor(address) },
+                        isPluginStopped = { plugin.isStopped() },
                         stagingStateFlow = plugin.stagingState,
                         stagingEvidenceFlow = plugin.stagingEvidence,
                         stagingLifecycleFlow = plugin.stagingLifecycle,
@@ -139,8 +128,8 @@ class Libre3StatusActivity : MetroAppCompatActivity() {
                         formatGlucose = { mgdl -> profileUtil.fromMgdlToStringWithUnits(mgdl) },
                         formatTime = { epochMs -> dateUtil.timeString(epochMs) },
                         formatAge = { millis -> formatSensorAge(millis, rh) },
-                        // A pre-soak failure must never take production with it (invariant I9), so
-                        // every staging call from this screen is wrapped here.
+                        // A pre-soak failure must never take production with it, so every staging
+                        // call from this screen is wrapped here.
                         onPromote = { plugin.promoteStagingToProduction(allowEarly = true) },
                         onCancelStaging = { runCatching { plugin.cancelStaging() } },
                         onSensorForgotten = { plugin.refreshSessionService() },
@@ -151,15 +140,10 @@ class Libre3StatusActivity : MetroAppCompatActivity() {
             }
         }
     }
-
-    override fun onResume() {
-        super.onResume()
-        presoakEnabled = preferences.get(Libre3BooleanKey.PresoakEnabled)
-    }
 }
 
 /**
- * What the screen says when [onPromote] throws before any [PromotionResult].
+ * What the screen says when `onPromote` throws before any [PromotionResult].
  *
  * The identity is read from the production store after the throw. A failure of that read is its
  * own sentence: the screen does not invent a serial, and it does not keep the previous message.
@@ -189,8 +173,7 @@ private fun promotionThrew(context: Context, store: Libre3SensorStore): String {
  * Process wide on purpose: anything owned by the activity dies with the activity, which is exactly
  * the problem. `Libre3StatusActivity.onCreate` empties it when the screen is opened fresh.
  *
- * A throw leaves the message untouched. The `runCatching` is the reference `Libre3PresoakAction.run`
- * (`dev_OAPSAIMI` @ `3dd0ca64772`).
+ * A throw leaves the message untouched.
  */
 internal object Libre3PresoakAction {
 
@@ -210,8 +193,7 @@ internal object Libre3PresoakAction {
      *
      * @param work does the work and returns the sentence to show. A throw leaves the message
      *   untouched instead of reaching the default handler: this scope outlives every screen, so an
-     *   escaping error here would take the whole app down, and a pre-soak must never do that
-     *   (invariant I9).
+     *   escaping error here would take the whole app down, and a pre-soak must never do that.
      */
     fun run(work: suspend () -> String) {
         scope.launch {
@@ -225,7 +207,9 @@ internal fun Libre3StatusScreen(
     onBack: () -> Unit,
     onOpenLog: () -> Unit,
     onOpenStart: () -> Unit,
-    presoakEnabled: Boolean,
+    onConnect: (String) -> Unit,
+    /** True while the plugin is switched off: Connect and Promote are then refused with a message. */
+    isPluginStopped: () -> Boolean,
     stagingStateFlow: StateFlow<StagingState>,
     stagingEvidenceFlow: StateFlow<CgmStagingEvidence?>,
     stagingLifecycleFlow: StateFlow<CgmSensorLifecycle?>,
@@ -239,14 +223,18 @@ internal fun Libre3StatusScreen(
     presoakMessageFlow: StateFlow<String?>,
     runPresoakAction: (suspend () -> String) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * The production driver, asked again at every use. A promotion or a plugin restart replaces
+     * the instance, so one kept from the first composition would be a retired driver.
+     */
+    currentDriver: () -> Libre3CgmDriver = { Libre3CgmDrivers.default() },
 ) {
     val context = LocalContext.current
     val store = remember { Libre3SensorStore(context) }
-    val driver = remember { Libre3CgmDrivers.default() }
     var identity by remember { mutableStateOf(store.loadIdentity()) }
-    var phase by remember { mutableStateOf(driver.warmupState().phase) }
-    var sessionUp by remember { mutableStateOf(driver.isSessionUp()) }
-    var blockedReason by remember { mutableStateOf(Libre3CgmDrivers.realDriverBlockedReason()) }
+    var phase by remember { mutableStateOf(currentDriver().warmupState().phase) }
+    var sessionUp by remember { mutableStateOf(currentDriver().isSessionUp()) }
+    var connectRefused by rememberSaveable { mutableStateOf(false) }
     var askingToForget by rememberSaveable { mutableStateOf(false) }
     var forgotten by rememberSaveable { mutableStateOf(false) }
     var askingToPromote by rememberSaveable { mutableStateOf(false) }
@@ -267,6 +255,7 @@ internal fun Libre3StatusScreen(
     val promoteRejectedAbsent = stringResource(R.string.libre3_presoak_promote_rejected_absent)
     val promoteRejectedOther = stringResource(R.string.libre3_presoak_promote_rejected_other)
     val presoakCancelled = stringResource(R.string.libre3_presoak_cancel_done)
+    val promotePluginStopped = stringResource(R.string.libre3_plugin_stopped)
 
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -274,16 +263,16 @@ internal fun Libre3StatusScreen(
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (true) {
                 identity = store.loadIdentity()
-                phase = driver.warmupState().phase
-                sessionUp = driver.isSessionUp()
-                blockedReason = Libre3CgmDrivers.realDriverBlockedReason()
+                val current = currentDriver()
+                phase = current.warmupState().phase
+                sessionUp = current.isSessionUp()
                 delay(2_000L)
             }
         }
     }
 
-    LaunchedEffect(lifecycleOwner, presoakEnabled, stagingState) {
-        if (!presoakEnabled || stagingState == StagingState.ABSENT) return@LaunchedEffect
+    LaunchedEffect(lifecycleOwner, stagingState) {
+        if (stagingState == StagingState.ABSENT) return@LaunchedEffect
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (true) {
                 nowMs = System.currentTimeMillis()
@@ -341,19 +330,32 @@ internal fun Libre3StatusScreen(
                                 if (sessionUp) R.string.libre3_status_session_up else R.string.libre3_status_session_down,
                             ),
                         )
-                        if (blockedReason == null) {
-                            Button(
-                                onClick = {
-                                    if (sessionUp) driver.disconnect() else driver.connect(stored.bleAddress)
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Text(
-                                    stringResource(
-                                        if (sessionUp) R.string.libre3_status_disconnect else R.string.libre3_status_connect
-                                    )
+                        Button(
+                            onClick = {
+                                // Connect goes through the plugin, which refuses and logs it when this
+                                // build cannot pair.
+                                val action = libre3SessionButtonClick(
+                                    sessionUp = sessionUp,
+                                    pluginStopped = isPluginStopped(),
+                                    currentDriver = currentDriver,
+                                    connect = { onConnect(stored.bleAddress) },
                                 )
-                            }
+                                connectRefused = action == Libre3SessionButtonAction.REFUSED_PLUGIN_STOPPED
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                stringResource(
+                                    if (sessionUp) R.string.libre3_status_disconnect else R.string.libre3_status_connect
+                                )
+                            )
+                        }
+                        if (connectRefused && !sessionUp) {
+                            Text(
+                                text = stringResource(R.string.libre3_plugin_stopped),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error,
+                            )
                         }
                         TextButton(
                             onClick = { askingToForget = true },
@@ -365,19 +367,7 @@ internal fun Libre3StatusScreen(
                 }
             }
 
-            blockedReason?.let { reason ->
-                item(key = "blocked") {
-                    CgmCard(tone = CgmCardTone.Warning) {
-                        CgmCardHeader(stringResource(R.string.libre3_status_driver_blocked_heading))
-                        Text(
-                            text = stringResource(R.string.libre3_status_driver_blocked, reason),
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
-                }
-            }
-
-            if (presoakEnabled && stagingState != StagingState.ABSENT) {
+            if (stagingState != StagingState.ABSENT) {
                 item(key = "presoak") {
                     PresoakCard(
                         stagingState = stagingState,
@@ -438,7 +428,7 @@ internal fun Libre3StatusScreen(
                 TextButton(
                     onClick = {
                         askingToForget = false
-                        forgetSensor(driver, store)
+                        forgetSensor(currentDriver(), store)
                         identity = null
                         sessionUp = false
                         forgotten = true
@@ -469,6 +459,7 @@ internal fun Libre3StatusScreen(
                         // Run outside the composition, so turning the phone during the swap
                         // neither cuts it in half nor swallows the answer.
                         runPresoakAction {
+                            if (isPluginStopped()) return@runPresoakAction promotePluginStopped
                             // A throw before any PromotionResult must not keep the previous message.
                             // The sentence is the failure, then the production identity read afterwards.
                             when (val result = runCatching { onPromote() }.getOrNull()) {
@@ -611,6 +602,35 @@ private fun PresoakCard(
     }
 }
 
+/** What a tap on the Connect / Disconnect button of the status screen did. */
+internal enum class Libre3SessionButtonAction { DISCONNECTED, CONNECT_ASKED, REFUSED_PLUGIN_STOPPED }
+
+/**
+ * The Connect / Disconnect button of the status screen.
+ *
+ * The driver is asked for at the tap, never kept: after a promotion or a plugin restart the
+ * instance from the first composition is retired, and a disconnect sent to it would leave the
+ * real session running.
+ */
+internal fun libre3SessionButtonClick(
+    sessionUp: Boolean,
+    pluginStopped: Boolean,
+    currentDriver: () -> Libre3CgmDriver,
+    connect: () -> Unit,
+): Libre3SessionButtonAction = when {
+    sessionUp     -> {
+        currentDriver().disconnect()
+        Libre3SessionButtonAction.DISCONNECTED
+    }
+
+    pluginStopped -> Libre3SessionButtonAction.REFUSED_PLUGIN_STOPPED
+
+    else          -> {
+        connect()
+        Libre3SessionButtonAction.CONNECT_ASKED
+    }
+}
+
 private fun forgetSensor(driver: Libre3CgmDriver, store: Libre3SensorStore) {
     driver.disconnect()
     store.clear()
@@ -625,7 +645,8 @@ private fun Libre3StatusScreenPreview() {
             onBack = {},
             onOpenLog = {},
             onOpenStart = {},
-            presoakEnabled = false,
+            onConnect = {},
+            isPluginStopped = { false },
             stagingStateFlow = MutableStateFlow(StagingState.ABSENT),
             stagingEvidenceFlow = MutableStateFlow(null),
             stagingLifecycleFlow = MutableStateFlow(null),

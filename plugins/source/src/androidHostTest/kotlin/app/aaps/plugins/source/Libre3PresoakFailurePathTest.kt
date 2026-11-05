@@ -37,7 +37,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Failure paths of the three `runCatching` sites P5.2 could not execute.
+ * Failure paths of the three `runCatching` sites of the pre-soak screen and service.
  *
  * `cancelStaging` when `shutdown` throws is in [Libre3PresoakPluginTest].
  */
@@ -92,7 +92,7 @@ class Libre3PresoakFailurePathTest {
     @Test
     @Config(sdk = [35], qualifiers = "h2000dp")
     fun `a refusal before the swap says that nothing was changed`() {
-        val shown = confirmPromote { PromotionResult.Rejected(PromotionRejectReason.LOOP_BUSY) }
+        val shown = confirmPromote { PromotionResult.Rejected(PromotionRejectReason.STAGING_NOT_SETTLED) }
 
         assertThat(shown).isEqualTo("The pre-soak sensor could not be promoted. Nothing was changed.")
         assertThat(shown).isNotEqualTo(BOUND_FAILED_TEXT)
@@ -145,7 +145,8 @@ class Libre3PresoakFailurePathTest {
                     onBack = {},
                     onOpenLog = {},
                     onOpenStart = {},
-                    presoakEnabled = true,
+                    onConnect = {},
+                    isPluginStopped = { false },
                     stagingStateFlow = MutableStateFlow(StagingState.READY),
                     stagingEvidenceFlow = MutableStateFlow(null),
                     stagingLifecycleFlow = MutableStateFlow(null),
@@ -179,7 +180,8 @@ class Libre3PresoakFailurePathTest {
                     onBack = {},
                     onOpenLog = {},
                     onOpenStart = {},
-                    presoakEnabled = true,
+                    onConnect = {},
+                    isPluginStopped = { false },
                     stagingStateFlow = MutableStateFlow(StagingState.READY),
                     stagingEvidenceFlow = MutableStateFlow(null),
                     stagingLifecycleFlow = MutableStateFlow(null),

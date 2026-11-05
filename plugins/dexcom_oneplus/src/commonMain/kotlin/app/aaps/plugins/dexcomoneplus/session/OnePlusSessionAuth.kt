@@ -62,16 +62,3 @@ data class AuthResult(
         return result
     }
 }
-
-/**
- * Always fails — used in unit tests without Bluetooth / libkeks.
- */
-class OnePlusSessionAuthUnimplemented : OnePlusSessionAuth {
-    override fun authenticate(pairingCode: String, savedSharedKey: ByteArray?): AuthResult {
-        val redactedLen = pairingCode.length
-        return AuthResult(
-            ok = false,
-            message = "ONEPLUS_AUTH_UNIMPLEMENTED: J-PAKE not wired (codeLen=$redactedLen)",
-        )
-    }
-}

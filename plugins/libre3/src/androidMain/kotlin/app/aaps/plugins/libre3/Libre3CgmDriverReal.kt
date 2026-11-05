@@ -153,6 +153,9 @@ class Libre3CgmDriverReal(
     /** True when a sensor with a PIN is stored for this instance's slot. */
     fun hasStoredSensor(): Boolean = store?.isReadyForBle() == true
 
+    /** True after [shutdown]: this instance can never run again, the registry builds a new one. */
+    fun isShutDown(): Boolean = bleExecutor.isShutdown
+
     override fun addWatcher(watcher: Libre3GlucoseWatcher) {
         if (!watchers.contains(watcher)) watchers.add(watcher)
     }

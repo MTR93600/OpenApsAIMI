@@ -31,9 +31,6 @@ class Libre3CgmDriversStagingTest {
             } catch (_: Throwable) {
             }
         }
-        if (Libre3CgmDrivers.useRealSkeleton) {
-            Libre3CgmDrivers.select(useReal = false)
-        }
         Libre3MacArbiter.reset()
     }
 
@@ -43,6 +40,20 @@ class Libre3CgmDriversStagingTest {
         assertThat(Libre3CgmDrivers.storeNamespace(SensorSlot.STAGING))
             .isEqualTo(Libre3CgmDrivers.STAGING_NAMESPACE)
         assertThat(Libre3CgmDrivers.STAGING_NAMESPACE).isEqualTo("staging")
+    }
+
+    @Test // A stop must be able to reach the instance that runs without building one
+    fun `productionOrNull builds nothing and hides a stopped instance`() {
+        dropInstances()
+        assertThat(Libre3CgmDrivers.productionOrNull()).isNull()
+        // Asking did not build one: still nothing there.
+        assertThat(Libre3CgmDrivers.productionOrNull()).isNull()
+
+        val built = Libre3CgmDrivers.realProduction()
+        assertThat(Libre3CgmDrivers.productionOrNull()).isSameInstanceAs(built)
+
+        built.shutdown()
+        assertThat(Libre3CgmDrivers.productionOrNull()).isNull()
     }
 
     @Test
@@ -59,6 +70,24 @@ class Libre3CgmDriversStagingTest {
         val second = Libre3CgmDrivers.staging()
         assertThat(second).isNotSameInstanceAs(first)
         assertThat(second.currentRole).isEqualTo(SensorSlot.STAGING)
+    }
+
+    @Test
+    fun `the plugin always gets the real production driver`() {
+        assertThat(Libre3CgmDrivers.default()).isSameInstanceAs(Libre3CgmDrivers.realProduction())
+    }
+
+    @Test
+    fun `a production driver that was shut down is replaced by a new one`() {
+        val first = Libre3CgmDrivers.realProduction()
+        first.shutdown()
+        assertThat(first.isShutDown()).isTrue()
+
+        val second = Libre3CgmDrivers.realProduction()
+
+        assertThat(second).isNotSameInstanceAs(first)
+        assertThat(second.isShutDown()).isFalse()
+        assertThat(Libre3CgmDrivers.default()).isSameInstanceAs(second)
     }
 
     @Test

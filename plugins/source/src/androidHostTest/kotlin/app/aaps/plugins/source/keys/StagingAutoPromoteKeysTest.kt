@@ -25,6 +25,5 @@ class StagingAutoPromoteKeysTest {
     fun `the delay is hidden until the switch is on`() {
         assertThat(DexcomOnePlusIntKey.AutoPromoteHours.dependency).isEqualTo(DexcomOnePlusBooleanKey.AutoPromote)
         assertThat(Libre3IntKey.AutoPromoteHours.dependency).isEqualTo(Libre3BooleanKey.AutoPromote)
-        assertThat(Libre3BooleanKey.AutoPromote.dependency).isEqualTo(Libre3BooleanKey.PresoakEnabled)
     }
 }

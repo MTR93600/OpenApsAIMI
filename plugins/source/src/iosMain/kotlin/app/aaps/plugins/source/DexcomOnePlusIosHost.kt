@@ -156,6 +156,11 @@ class DexcomOnePlusIosHost(
     /** The stub, always. A second slot cannot have its own scan on this phone - see the class doc. */
     override fun stagingDriver(): OnePlusCgmDriver = OnePlusCgmDriverStub.instance
 
+    override fun existingProductionDriver(): OnePlusCgmDriver? = OnePlusCgmDrivers.existingProduction()
+
+    /** No second slot on this phone, so nothing to stop. */
+    override fun existingStagingDriver(): OnePlusCgmDriver? = null
+
     override fun attachProductionDriver(watcher: OnePlusGlucoseWatcher): OnePlusCgmDriver =
         OnePlusCgmDrivers.production(watcher)
 
@@ -311,6 +316,7 @@ class DexcomOnePlusIosHost(
                             type = PluginType.BGSOURCE,
                         )
                     },
+                    isPluginStopped = { plugin.isStopped() },
                     onStarted = { onBack() },
                     onBeginStaging = { plugin.beginStaging(it) },
                     onIsStagingSensor = { plugin.isStagingSensor(it) },

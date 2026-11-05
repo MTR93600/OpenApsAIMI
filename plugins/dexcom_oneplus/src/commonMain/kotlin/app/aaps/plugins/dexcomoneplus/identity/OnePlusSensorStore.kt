@@ -57,7 +57,7 @@ class OnePlusSensorStore(private val prefs: OnePlusSensorPrefs) {
         // moment the sensor was applied.
         if (serialChanged) clearLastIngest()
         OnePlusLog.i(
-            "${OnePlusLogMarkers.SESSION}: sensor identity saved serial=${identity.serial ?: "-"} serialChanged=$serialChanged",
+            "${OnePlusLogMarkers.SESSION}: sensor identity saved serial=${maskSerial(identity.serial)} serialChanged=$serialChanged",
         )
     }
 
@@ -319,10 +319,21 @@ class OnePlusSensorStore(private val prefs: OnePlusSensorPrefs) {
                 remove(KEY_WARMUP_S)
             }
         }
-        OnePlusLog.i("${OnePlusLogMarkers.SESSION}: adopted promoted sensor serial=${session.identity.serial ?: "-"}")
+        OnePlusLog.i("${OnePlusLogMarkers.SESSION}: adopted promoted sensor serial=${maskSerial(session.identity.serial)}")
     }
 
     companion object {
+
+        /**
+         * The sensor serial for a log line: only its last three characters, enough to tell two
+         * sensors apart in a log without writing the whole serial into it.
+         */
+        fun maskSerial(serial: String?): String =
+            when {
+                serial.isNullOrBlank() -> "-"
+                serial.length <= 3     -> "***"
+                else                   -> "***" + serial.takeLast(3)
+            }
 
         /**
          * Pure decision behind [startSessionForSensor]: does an explicit start of [deviceAddress]

@@ -5,27 +5,21 @@ import app.aaps.plugins.libre3.crypto.Libre3RuntimeTables
 import app.aaps.plugins.libre3.session.Libre3PairingBlocks
 
 /**
- * Driver selection for the native Libre 3 plugin.
+ * The driver instances of the native Libre 3 plugin.
  *
- * The stub is the default. The real driver is only used when the engineering switch
- * `Libre3BooleanKey.UseRealSkeleton` is on, and that switch is off by default.
+ * The plugin always uses the real driver. When this build does not ship the files the pairing
+ * needs, [realDriverBlockedReason] says so and the plugin does not start Bluetooth at all. There is
+ * no stub that pretends to be a sensor.
  *
- * Use [select] instead of writing the flag by hand, so watchers move to the driver that is really
- * active and the driver that is left behind is stopped.
- *
- * There can be a second real driver, for the pre-soak slot. It is built only when the user turns
- * the pre-soak on, it reads and writes its own preferences file, and it never feeds the loop until
- * [promoteStagingInstance] gives it the production role. With the pre-soak off, [staging] is never
- * called and this object hands out the same single real instance it always did.
+ * There can be a second real driver, for the pre-soak slot. It is built only when a pre-soak
+ * sensor is used, it reads and writes its own preferences file, and it never feeds the loop until
+ * [promoteStagingInstance] gives it the production role. Without a pre-soak sensor, [staging] is
+ * never called and this object hands out the single production instance.
  */
 object Libre3CgmDrivers {
 
     /** Preferences namespace of the pre-soak slot. */
     const val STAGING_NAMESPACE = "staging"
-
-    @Volatile
-    var useRealSkeleton: Boolean = false
-        private set
 
     private val lock = Any()
 
@@ -49,9 +43,25 @@ object Libre3CgmDrivers {
         SensorSlot.STAGING    -> STAGING_NAMESPACE
     }
 
-    /** The real instance that feeds the loop. Built on first use. */
+    /**
+     * The real instance that feeds the loop. Built on first use.
+     *
+     * An instance that was shut down, for example when the plugin was switched off, is replaced by
+     * a new one. Its executor is stopped for good, so handing it out again would leave the plugin
+     * with a driver that can never connect after it is switched on again.
+     */
     fun realProduction(): Libre3CgmDriverReal = synchronized(lock) {
-        productionReal ?: Libre3CgmDriverReal(Libre3PairingBlocks.factory()).also { productionReal = it }
+        productionReal?.takeUnless { it.isShutDown() }
+            ?: Libre3CgmDriverReal(Libre3PairingBlocks.factory()).also { productionReal = it }
+    }
+
+    /**
+     * The production instance if one was built and is not shut down, without building one.
+     *
+     * For a stop: shutting down an instance that does not exist yet must not build one first.
+     */
+    fun productionOrNull(): Libre3CgmDriverReal? = synchronized(lock) {
+        productionReal?.takeUnless { it.isShutDown() }
     }
 
     /** The pre-soak instance. Built on first use, and always the real driver. */
@@ -64,7 +74,7 @@ object Libre3CgmDrivers {
      * The pre-soak instance if one was already built, without building one.
      *
      * Used by everything that only has to reach a pre-soak that is really running, for example the
-     * radio lease. With the pre-soak switched off this stays null, so no second instance and no
+     * status screen. Without a pre-soak sensor this stays null, so no second instance and no
      * second thread is ever created.
      */
     fun stagingOrNull(): Libre3CgmDriverReal? = stagingReal
@@ -112,29 +122,18 @@ object Libre3CgmDrivers {
         return true
     }
 
-    /**
-     * The driver the plugin should use.
-     *
-     * The real one is reached only when the engineering switch is on **and** the files the pairing
-     * needs really ship with this build. Without those files the real driver could not pair
-     * anything, so handing it out would only turn a clear refusal into a confusing failure.
-     */
-    fun default(): Libre3CgmDriver =
-        if (useRealSkeleton && Libre3RuntimeTables.pairingTablesPresent()) realProduction()
-        else Libre3CgmDriverStub.instance
-
-    /** Why the real driver is not in use, or null when it is. */
-    fun realDriverBlockedReason(): String? = when {
-        !useRealSkeleton -> "the engineering switch is off"
-        else             -> missingTablesReason()
-    }
+    /** The driver the plugin should use: the real production instance. */
+    fun default(): Libre3CgmDriver = realProduction()
 
     /**
-     * Why the pre-soak cannot run, or null when it can.
+     * Why the production driver must not start Bluetooth, or null when it may.
      *
-     * The pre-soak is always the real driver, so the engineering switch does not come into it and
-     * only the pairing files matter.
+     * Without the files the pairing needs the driver could not pair anything, so starting it would
+     * only turn a clear refusal into a confusing failure. The text is for the log only.
      */
+    fun realDriverBlockedReason(): String? = missingTablesReason()
+
+    /** Why the pre-soak cannot run, or null when it can. Only the pairing files matter. */
     fun stagingBlockedReason(): String? = missingTablesReason()
 
     /**
@@ -158,44 +157,6 @@ object Libre3CgmDrivers {
             productionReal = promoted
             stagingReal = null
             return retired
-        }
-    }
-
-    /**
-     * Switch between stub and real driver in one step, moving an optional [watcher] over and
-     * stopping the driver that is no longer used.
-     *
-     * This only ever swaps stub and real for the **production** slot. It must never touch the
-     * pre-soak instance: turning the engineering switch off does not end a pre-soak, it only stops
-     * production from using the real driver.
-     *
-     * ⚠️ ASYNC IMPACT: this may call [Libre3CgmDriver.shutdown], which drops the GATT link.
-     */
-    fun select(useReal: Boolean, watcher: Libre3GlucoseWatcher? = null): Libre3CgmDriver {
-        synchronized(lock) {
-            if (useRealSkeleton == useReal) {
-                val current = default()
-                if (watcher != null) current.addWatcher(watcher)
-                return current
-            }
-            val previous = default()
-            if (watcher != null) {
-                try {
-                    previous.removeWatcher(watcher)
-                } catch (_: Throwable) {
-                }
-            }
-            try {
-                previous.shutdown()
-            } catch (_: Throwable) {
-            }
-            // A driver that was shut down cannot open a session again, so it is dropped here and
-            // the next call builds a fresh one.
-            if (previous === productionReal) productionReal = null
-            useRealSkeleton = useReal
-            val next = default()
-            if (watcher != null) next.addWatcher(watcher)
-            return next
         }
     }
 

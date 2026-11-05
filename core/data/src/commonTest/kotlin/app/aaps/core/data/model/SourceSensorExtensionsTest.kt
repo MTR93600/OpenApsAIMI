@@ -23,6 +23,12 @@ class SourceSensorExtensionsTest {
     }
 
     @Test
+    fun `dexcom one plus native is found by its text`() {
+        assertEquals(SourceSensor.DEXCOM_ONEPLUS_NATIVE, SourceSensor.fromString("AAPS-DexcomOnePlus"))
+        assertEquals("AAPS-DexcomOnePlus", SourceSensor.DEXCOM_ONEPLUS_NATIVE.text)
+    }
+
+    @Test
     fun `libre 2 and 3 support advanced filtering`() {
         assertTrue(SourceSensor.LIBRE_2.advancedFilteringSupported())
         assertTrue(SourceSensor.LIBRE_2.advancedFilteringSupported())
