@@ -224,7 +224,7 @@ val generateIosVersionXcconfig = tasks.register<GenerateVersionXcconfigTask>("ge
     buildNumber.set(GenerateVersionXcconfigTask.buildNumberFor(System.currentTimeMillis()))
     // Read, not written: the task checks that the version typed into the targets as the fallback
     // still matches this one, because nothing else would notice when they drift apart.
-    projectFile.set(layout.projectDirectory.file("../app/AAPSClient.xcodeproj/project.pbxproj"))
+    projectFile.set(layout.projectDirectory.file("../app/AAPS.xcodeproj/project.pbxproj"))
     // Hard failure on CI, a warning on a developer's machine. Every CI provider sets this.
     strict.set(providers.environmentVariable("CI").map { it.isNotBlank() }.orElse(false))
     outputFile.set(layout.projectDirectory.file("../app/Version.xcconfig"))
