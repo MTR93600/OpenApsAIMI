@@ -74,6 +74,13 @@ interface DexcomOnePlusHost {
     val platformNote: TextRef?
 
     /** The driver feeding the loop. */
+    /**
+     * True where this source is the BG source a fresh install starts with. Every phone needs one
+     * BG source marked default, or start-up fails ("Default plugin not found"). On Android that is
+     * the Dexcom (BYODA) source; on an iPhone, which has no BYODA, it is this one.
+     */
+    val isDefaultBgSource: Boolean get() = false
+
     fun productionDriver(): OnePlusCgmDriver
 
     /** The second, independent driver for a pre-soak sensor. */

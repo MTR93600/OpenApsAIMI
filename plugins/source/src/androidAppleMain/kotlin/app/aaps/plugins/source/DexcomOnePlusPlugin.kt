@@ -137,6 +137,8 @@ class DexcomOnePlusPlugin @Inject constructor(
         .icon(IcPluginByoda)
         .pluginName(SourceStrings.dexcom_oneplus_native)
         .preferencesVisibleInSimpleMode(false)
+        // The default BG source only where the platform has no other one, see the host.
+        .setDefault(host.isDefaultBgSource)
         // One description, three answers. The usual one on a phone with nothing to add; the host
         // note on a phone that works with limits; the refusal on a phone that cannot run the
         // driver at all. Either way the text is read exactly where someone switches the plugin on.

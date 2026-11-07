@@ -143,6 +143,14 @@ class DexcomOnePlusIosHost(
     /** Nothing stops the plugin here any more - the limits are in [platformNote]. */
     override val notUsableReason: TextRef? = null
 
+    /**
+     * The BG source a fresh install starts with on an iPhone. Android has the Dexcom (BYODA) source
+     * for that, which does not exist here, and the Nightscout source is the default only for a
+     * follower phone: without this, start-up stopped with "Default plugin not found". With no
+     * sensor stored, this source starts nothing.
+     */
+    override val isDefaultBgSource: Boolean = true
+
     override val platformNote: TextRef = SourceStrings.dexcom_oneplus_ios_caution
 
     override fun attachPlatform(driver: OnePlusCgmDriver) {

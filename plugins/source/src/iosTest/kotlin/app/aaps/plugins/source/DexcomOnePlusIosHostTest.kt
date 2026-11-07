@@ -44,6 +44,13 @@ class DexcomOnePlusIosHostTest {
     }
 
     @Test
+    fun `on iPhone this is the default BG source`() {
+        // Without a default BG source the app stopped at start-up with "Default plugin not found":
+        // the Dexcom (BYODA) default exists only on Android.
+        assertTrue(host.isDefaultBgSource)
+    }
+
+    @Test
     fun `the host still says what is different on iPhone`() {
         assertNotNull(host.platformNote)
     }
