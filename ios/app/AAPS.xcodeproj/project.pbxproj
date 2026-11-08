@@ -335,7 +335,7 @@
 				// the two targets would get two copies that drift apart. Automatic signing adds
 				// HealthKit to the App ID by itself. Shared/Info.plist must carry
 				// NSHealthShareUsageDescription as well, or iOS terminates the app on first use.
-				CODE_SIGN_ENTITLEMENTS = Device.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "$(AAPS_ENTITLEMENTS)";
 				// The simulator keeps its own file, which REPLACES the one above rather than
 				// adding to it, so that file repeats the HealthKit keys. Simulator.entitlements
 				// says why a simulator build needs a file of its own at all.
@@ -389,7 +389,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
-				PRODUCT_BUNDLE_IDENTIFIER = app.aaps.client;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(AAPS_BUNDLE_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -407,7 +407,7 @@
 				// the two targets would get two copies that drift apart. Automatic signing adds
 				// HealthKit to the App ID by itself. Shared/Info.plist must carry
 				// NSHealthShareUsageDescription as well, or iOS terminates the app on first use.
-				CODE_SIGN_ENTITLEMENTS = Device.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "$(AAPS_ENTITLEMENTS)";
 				// The simulator keeps its own file, which REPLACES the one above rather than
 				// adding to it, so that file repeats the HealthKit keys. Simulator.entitlements
 				// says why a simulator build needs a file of its own at all.
@@ -461,7 +461,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
-				PRODUCT_BUNDLE_IDENTIFIER = app.aaps.client2;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(AAPS_BUNDLE_ID)2";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -500,7 +500,7 @@
 				// the two targets would get two copies that drift apart. Automatic signing adds
 				// HealthKit to the App ID by itself. Shared/Info.plist must carry
 				// NSHealthShareUsageDescription as well, or iOS terminates the app on first use.
-				CODE_SIGN_ENTITLEMENTS = Device.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "$(AAPS_ENTITLEMENTS)";
 				// The simulator keeps its own file, which REPLACES the one above rather than
 				// adding to it, so that file repeats the HealthKit keys. Simulator.entitlements
 				// says why a simulator build needs a file of its own at all.
@@ -554,7 +554,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
-				PRODUCT_BUNDLE_IDENTIFIER = app.aaps.client;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(AAPS_BUNDLE_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -572,7 +572,7 @@
 				// the two targets would get two copies that drift apart. Automatic signing adds
 				// HealthKit to the App ID by itself. Shared/Info.plist must carry
 				// NSHealthShareUsageDescription as well, or iOS terminates the app on first use.
-				CODE_SIGN_ENTITLEMENTS = Device.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "$(AAPS_ENTITLEMENTS)";
 				// The simulator keeps its own file, which REPLACES the one above rather than
 				// adding to it, so that file repeats the HealthKit keys. Simulator.entitlements
 				// says why a simulator build needs a file of its own at all.
@@ -626,7 +626,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
-				PRODUCT_BUNDLE_IDENTIFIER = app.aaps.client2;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(AAPS_BUNDLE_ID)2";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";

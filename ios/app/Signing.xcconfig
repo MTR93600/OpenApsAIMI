@@ -23,6 +23,21 @@
 // This file itself must stay committed. Xcode treats a missing base configuration
 // as an error, not a warning, so pointing the project straight at an ignored file
 // would break every fresh clone.
+//
+// A free Apple account (a "Personal Team") cannot sign the app as it is: Apple refuses
+// the Time Sensitive Notifications capability for it, and the bundle ids below are
+// already registered to another team. Such an account can override both in
+// Signing.local.xcconfig:
+//
+//     AAPS_ENTITLEMENTS = Personal.entitlements
+//     AAPS_BUNDLE_ID = com.yourname.aaps
+//
+// The second target gets the same id with "2" added. With another bundle id Firebase
+// does not match the app, so Crashlytics sends no reports. The app itself works.
+// Personal.entitlements says what is lost without the Time Sensitive capability.
+AAPS_ENTITLEMENTS = Device.entitlements
+AAPS_BUNDLE_ID = app.aaps.client
+
 #include? "Signing.local.xcconfig"
 
 // The generated version numbers, from :ios:shell:generateIosVersionXcconfig. Optional for the same

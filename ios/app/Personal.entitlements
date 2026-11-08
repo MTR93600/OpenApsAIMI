@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Device builds signed with a free Apple account (a "Personal Team") only. Selected with
+	     AAPS_ENTITLEMENTS in Signing.local.xcconfig; see Signing.xcconfig.
+
+	     This is Device.entitlements without com.apple.developer.usernotifications.time-sensitive,
+	     because Apple does not give that capability to a Personal Team and Xcode then cannot
+	     create a profile at all.
+
+	     What is lost: urgent alarms are still posted, but iOS treats them as ordinary
+	     notifications, so a Focus mode (Do Not Disturb, Sleep) can hide them. Keep that in mind
+	     when testing at night. Keep HealthKit in step with Device.entitlements. -->
+	<key>com.apple.developer.healthkit</key>
+	<true/>
+	<key>com.apple.developer.healthkit.access</key>
+	<array/>
+</dict>
+</plist>
