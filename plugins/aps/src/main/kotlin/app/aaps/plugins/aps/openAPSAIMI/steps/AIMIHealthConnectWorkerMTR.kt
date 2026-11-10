@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.steps
 
+import app.aaps.plugins.aps.openAPSAIMI.energy.EnergyMeter
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -19,6 +20,11 @@ class AIMIHealthConnectWorkerMTR(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
+        EnergyMeter.attach(applicationContext)
+        return EnergyMeter.measureSuspend(EnergyMeter.WORKER_STEPS) { doWorkMeasured() }
+    }
+
+    private suspend fun doWorkMeasured(): Result {
         return try {
             val service = AIMIHealthConnectSyncServiceMTR.instance
             

@@ -319,6 +319,17 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         }
         aimiPluginIoScope.launch {
             try {
+                val report = persistenceLayer.logDatabaseSizeReport()
+                if (report.isNotEmpty()) {
+                    aapsLogger.info(LTag.APS, "DB size report: $report")
+                    storageHelper.getAimiFile("AIMI_db_size_report.txt").writeText(report)
+                }
+            } catch (e: Exception) {
+                aapsLogger.error(LTag.APS, "Database size report failed", e)
+            }
+        }
+        aimiPluginIoScope.launch {
+            try {
                 var count = 0
                 val apsResults =
                     persistenceLayer.getApsResults(dateUtil.now() - T.days(1).msecs(), dateUtil.now())
@@ -1682,6 +1693,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 effective_peak_minutes = kineticsView.effective.peakMinutes,
                 extraDebug = physioMults.detailedReason
             ).also {
+                // Eating mode: the start dose goes out as one dose, independent of the Autodrive branch.
+                determineBasalaimiSMB2.applyEatingStartDose(it)
                 it.aimiAdaptationStatus = it.aimiAdaptationStatus?.let { status ->
                     AimiAdaptationStatusBuilder.enrichGovernors(
                         status = status,
@@ -2062,6 +2075,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             )
         )
         add(aimiComposeLabSubScreen())
+        add(ApsIntentKey.AimiAssistant)
     }
 
     private fun aimiComposeHormonitorViewerItem(): PreferenceItem =

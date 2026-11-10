@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.loop.runningMode
 
+import app.aaps.plugins.aps.openAPSAIMI.energy.EnergyMeter
 import android.content.Context
 import androidx.hilt.work.HiltWorker
 import androidx.work.WorkerParameters
@@ -44,6 +45,11 @@ class RunningModeExpiryWorker @AssistedInject constructor(
 ) : LoggingWorker(context, params, Dispatchers.Default, aapsLogger, fabricPrivacy) {
 
     override suspend fun doWorkAndLog(): Result {
+        EnergyMeter.attach(applicationContext)
+        return EnergyMeter.measureSuspend(EnergyMeter.WORKER_RUNMODE) { doWorkMeasured() }
+    }
+
+    private suspend fun doWorkMeasured(): Result {
         if (!config.APS) {
             aapsLogger.debug(LTag.APS, "RunningModeExpiryWorker: config.APS=false, skipping")
             return Result.success()

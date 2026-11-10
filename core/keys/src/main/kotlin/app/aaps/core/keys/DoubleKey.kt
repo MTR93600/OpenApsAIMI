@@ -309,6 +309,19 @@ enum class DoubleKey(
 
     OApsAIMIMaxSMB("key_openapsaimi_max_smb", 1.0, 0.05, 15.0),
     OApsAIMIHighBGMaxSMB("key_openapsaimi_high_bg_max_smb", 1.0, 0.05, 15.0),
+    /** Rise per 5 minutes (mg/dL) at or below which the minimum front dose of a meal rise is off (noise). */
+    OApsAIMIFrontDoseRiseLow("key_openapsaimi_front_dose_rise_low", 3.0, 1.0, 10.0),
+    /** Rise per 5 minutes (mg/dL) at or above which the minimum front dose of a meal rise is the full share. */
+    OApsAIMIFrontDoseRiseFull("key_openapsaimi_front_dose_rise_full", 8.0, 2.0, 25.0),
+
+    /** Eating mode: units of insulin for one bread unit (10 g of carbohydrate). Used only by the eating mode estimate. */
+    OApsAIMIEatingUPerXe("key_openapsaimi_eating_u_per_xe", 1.5, 0.5, 4.0),
+    /** Eating mode: the first dose (U) given after the button is pressed, before the rise shows how much was eaten. */
+    OApsAIMIEatingStartDoseU("key_openapsaimi_eating_start_dose_u", 1.0, 0.0, 5.0),
+    /** Eating mode: hard limit (U) of all insulin given in one eating window at the size "large". */
+    OApsAIMIEatingMaxWindowU("key_openapsaimi_eating_max_window_u", 8.0, 1.0, 20.0),
+    /** Eating mode: when the rise slows down and the forecast (mg/dL) is below this value, no more SMB is given. */
+    OApsAIMIEatingStopForecastMgdl("key_openapsaimi_eating_stop_forecast_mgdl", 108.0, 72.0, 180.0),
 
     OApsAIMIweight("key_aimiweight", 50.0, 1.0, 200.0),
     /** MPC: max insulin (U) per kg body weight per 5-minute dose search; combined with Max SMB / High BG SMB caps. */
@@ -380,6 +393,8 @@ enum class DoubleKey(
     OApsAIMIPriorityMaxIobFactor("aimi_priority_max_iob_factor", 1.20, 1.0, 1.6),
     OApsAIMIPriorityMaxIobExtraU("aimi_priority_max_iob_extra_u", 2.0, 0.0, 5.0),
     OApsAIMISmbTrainingMinQuality("aimi_smb_training_min_quality", 0.40, 0.0, 1.0),
+    OApsAIMIPostHypoReleaseMarginMgdl("aimi_post_hypo_release_margin_mgdl", 20.0, 5.0, 60.0),
+    OApsAIMIPostHypoReleaseDeltaMgdl("aimi_post_hypo_release_delta_mgdl", 5.0, 1.0, 30.0),
     // ❌ TIME-BASED REACTIVITY REMOVED - replaced by UnifiedReactivityLearner.globalFactor
     // Previously: OApsAIMIMorningFactor, OApsAIMIAfternoonFactor, OApsAIMIEveningFactor
 

@@ -6,19 +6,20 @@ import org.junit.jupiter.api.Test
 class PostHypoAggressiveRiseExitTest {
 
     @Test
-    fun `exits when bg at or above target plus 30 and delta above 15`() {
-        assertThat(PostHypoAggressiveRiseExit.shouldExit(130.0, 100.0, 15.1)).isTrue()
+    fun `exits when bg at or above target plus 20 and delta above 5`() {
+        assertThat(PostHypoAggressiveRiseExit.shouldExit(120.0, 100.0, 5.1)).isTrue()
         assertThat(PostHypoAggressiveRiseExit.shouldExit(160.0, 100.0, 20.0)).isTrue()
     }
 
     @Test
-    fun `stays guarded when delta is not aggressive`() {
-        assertThat(PostHypoAggressiveRiseExit.shouldExit(160.0, 100.0, 15.0)).isFalse()
-        assertThat(PostHypoAggressiveRiseExit.shouldExit(160.0, 100.0, 8.0)).isFalse()
+    fun `stays guarded when delta is not a real rise`() {
+        assertThat(PostHypoAggressiveRiseExit.shouldExit(160.0, 100.0, 5.0)).isFalse()
+        assertThat(PostHypoAggressiveRiseExit.shouldExit(160.0, 100.0, 0.0)).isFalse()
+        assertThat(PostHypoAggressiveRiseExit.shouldExit(160.0, 100.0, -3.0)).isFalse()
     }
 
     @Test
-    fun `stays guarded when bg still inside target plus 30`() {
-        assertThat(PostHypoAggressiveRiseExit.shouldExit(129.0, 100.0, 20.0)).isFalse()
+    fun `stays guarded when bg still inside target plus 20`() {
+        assertThat(PostHypoAggressiveRiseExit.shouldExit(119.0, 100.0, 20.0)).isFalse()
     }
 }

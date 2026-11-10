@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.autodrive.learning
 
+import app.aaps.plugins.aps.openAPSAIMI.energy.EnergyMeter
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -18,6 +19,11 @@ class AutodriveNeuralTrainerWorker(
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
+        EnergyMeter.attach(applicationContext)
+        return EnergyMeter.measureSuspend(EnergyMeter.WORKER_NEURAL) { doWorkMeasured() }
+    }
+
+    private suspend fun doWorkMeasured(): Result {
         return try {
             val backfiller = AutodriveDataBackfiller.instance
             val trainer = AutodriveNeuralTrainer.instance

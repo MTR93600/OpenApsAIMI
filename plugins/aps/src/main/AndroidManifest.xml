@@ -15,6 +15,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
 
     <application>
+        <receiver
+            android:name=".openAPSAIMI.meal.AimiEatingWearReceiver"
+            android:exported="false" />
         <!-- ... existing activities ... -->
         <activity
             android:name=".openAPSAIMI.advisor.auditor.ui.AuditorReportActivity"
@@ -23,9 +26,17 @@
             android:label="@string/aimi_auditor_report_dialog_title" />
 
         <activity
+            android:name=".openAPSAIMI.advisor.assistant.AimiInsightActivity"
+            android:theme="@style/AppTheme.NoActionBar"
+            android:label="AIMI Insight" />
+        <activity
             android:name=".openAPSAIMI.advisor.assistant.AimiAssistantActivity"
             android:theme="@style/AppTheme.NoActionBar"
             android:label="@string/aimi_as_title" />
+        <activity
+            android:name=".openAPSAIMI.advisor.assistant.AimiEatingActivity"
+            android:theme="@style/AppTheme.NoActionBar"
+            android:label="Я ем" />
         <activity
             android:name=".openAPSAIMI.advisor.AimiProfileAdvisorActivity"
             android:theme="@style/AppTheme.NoActionBar"

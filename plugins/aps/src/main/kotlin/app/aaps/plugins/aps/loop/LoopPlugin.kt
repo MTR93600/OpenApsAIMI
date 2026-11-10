@@ -87,6 +87,7 @@ import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
 import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.loop.events.EventLoopSetLastRunGui
 import app.aaps.plugins.aps.loop.extensions.json
+import app.aaps.plugins.aps.openAPSAIMI.energy.EnergyMeter
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -185,6 +186,7 @@ class LoopPlugin @Inject constructor(
 
     @OptIn(FlowPreview::class)
     override suspend fun onStart() {
+        EnergyMeter.attach(context)
         createNotificationChannel()
         super.onStart()
         handler = Handler(HandlerThread(this::class.simpleName + "Handler").also { it.start() }.looper)
@@ -669,11 +671,19 @@ class LoopPlugin @Inject constructor(
                             "Loop invoke queued for ${queuedForMs}ms initiator=${next.initiator}"
                         )
                     }
-                    executeInvokeInternal(
-                        initiator = next.initiator,
-                        allowNotification = next.allowNotification,
-                        tempBasalFallback = next.tempBasalFallback
-                    )
+                    // Energy meter: the loop run is counted under the reason that started it.
+                    val energyTag = when {
+                        next.initiator == "PeriodicApsMaxSmbFrequency" -> EnergyMeter.LOOP_PERIODIC
+                        isGlucoseWorkerInitiator(next.initiator)       -> EnergyMeter.LOOP_GLUCOSE
+                        else                                           -> EnergyMeter.LOOP_OTHER
+                    }
+                    EnergyMeter.measureSuspend(energyTag) {
+                        executeInvokeInternal(
+                            initiator = next.initiator,
+                            allowNotification = next.allowNotification,
+                            tempBasalFallback = next.tempBasalFallback
+                        )
+                    }
                 }
             } catch (e: CancellationException) {
                 synchronized(invokeCoalescingLock) {
@@ -868,7 +878,11 @@ class LoopPlugin @Inject constructor(
                         fabricPrivacy.logCustom("APSRequest")
                         // TBR request must be applied first to prevent situation where
                         // SMB was executed and zero TBR afterward failed
-                        val tbrResult = applyTBRRequest(resultAfterConstraints, profile)
+                        val bolusTiming = resultAfterConstraints.isBolusRequested
+                        val tbrStartedMs = SystemClock.elapsedRealtime()
+                        if (bolusTiming) aapsLogger.warn(LTag.APS, "BOLUS_TIMING tbr_start requested=%.2fU wall=%d".format(resultAfterConstraints.smb, dateUtil.now()))
+                        val tbrResult = EnergyMeter.measureSuspend(EnergyMeter.PUMP_TBR) { applyTBRRequest(resultAfterConstraints, profile) }
+                        if (bolusTiming) aapsLogger.warn(LTag.APS, "BOLUS_TIMING tbr_end elapsed=%dms success=%s enacted=%s wall=%d".format(SystemClock.elapsedRealtime() - tbrStartedMs, tbrResult.success, tbrResult.enacted, dateUtil.now()))
                         lastRun.tbrSetByPump = tbrResult
                         lastRun.lastTBRRequest = lastRun.lastAPSRun
                         if (tbrResult.enacted || tbrResult.success) {
@@ -878,7 +892,10 @@ class LoopPlugin @Inject constructor(
                             resultAfterConstraints.deliverAt = lastRun.lastTBREnact
                             rxBus.send(EventLoopUpdateGui())
                             if (resultAfterConstraints.isBolusRequested) {
-                                val smbResult = applySMBRequest(resultAfterConstraints)
+                                val smbStartedMs = SystemClock.elapsedRealtime()
+                                aapsLogger.warn(LTag.APS, "BOLUS_TIMING smb_start requested=%.2fU wall=%d".format(resultAfterConstraints.smb, dateUtil.now()))
+                                val smbResult = EnergyMeter.measureSuspend(EnergyMeter.PUMP_SMB) { applySMBRequest(resultAfterConstraints) }
+                                aapsLogger.warn(LTag.APS, "BOLUS_TIMING smb_end elapsed=%dms success=%s enacted=%s comment=%s wall=%d".format(SystemClock.elapsedRealtime() - smbStartedMs, smbResult.success, smbResult.enacted, smbResult.comment ?: "", dateUtil.now()))
                                 aapsLogger.debug(
                                     LTag.APS,
                                     "SMB enact result: requested=%.2fU enacted=%s success=%s comment=%s".format(
@@ -995,7 +1012,7 @@ class LoopPlugin @Inject constructor(
         val profile = profileFunction.getProfile() ?: return
         lastRun?.let { lastRun ->
             lastRun.constraintsProcessed?.let { constraintsProcessed ->
-                val result = applyTBRRequest(constraintsProcessed, profile)
+                val result = EnergyMeter.measureSuspend(EnergyMeter.PUMP_TBR) { applyTBRRequest(constraintsProcessed, profile) }
                 if (result.enacted) {
                     lastRun.tbrSetByPump = result
                     lastRun.lastTBRRequest = lastRun.lastAPSRun
@@ -1164,7 +1181,11 @@ class LoopPlugin @Inject constructor(
         aapsLogger.debug(LTag.APS, "applyAPSRequest: bolus()")
         if (request.smb > 0.0)
             uel.log(action = Action.SMB, source = Sources.Loop, value = ValueWithUnit.Insulin(detailedBolusInfo.insulin))
-        return commandQueue.bolus(detailedBolusInfo)
+        val queueStartedMs = SystemClock.elapsedRealtime()
+        aapsLogger.warn(LTag.APS, "BOLUS_TIMING queue_start requested=%.2fU wall=%d".format(request.smb, dateUtil.now()))
+        val result = commandQueue.bolus(detailedBolusInfo)
+        aapsLogger.warn(LTag.APS, "BOLUS_TIMING queue_end elapsed=%dms success=%s enacted=%s comment=%s wall=%d".format(SystemClock.elapsedRealtime() - queueStartedMs, result.success, result.enacted, result.comment ?: "", dateUtil.now()))
+        return result
     }
 
     private fun allowPercentage(): Boolean = activePlugin.activePump.selectedActivePump() is VirtualPump

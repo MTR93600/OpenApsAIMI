@@ -61,6 +61,7 @@ import app.aaps.plugins.aps.openAPSAIMI.autodrive.models.AutoDriveState
 import app.aaps.plugins.aps.openAPSAIMI.carbs.CarbsAdvisor
 import app.aaps.plugins.aps.openAPSAIMI.ISF.HeartRateTrendIsf
 import app.aaps.plugins.aps.openAPSAIMI.ISF.CommandedIsf
+import app.aaps.plugins.aps.openAPSAIMI.ISF.ObservedIsfStore
 import app.aaps.plugins.aps.openAPSAIMI.ISF.ObservedSensitivityMeter
 import app.aaps.plugins.aps.openAPSAIMI.ISF.SensitivityRatioEstimator
 import app.aaps.plugins.aps.openAPSAIMI.ISF.WorkingIsf
@@ -69,12 +70,15 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaSafetyVerdict
 import app.aaps.plugins.aps.openAPSAIMI.quality.InsulinOriginMeter
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.energy.EnergyMeter
+import app.aaps.plugins.aps.openAPSAIMI.meal.EatingEngine
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorageHelper
 import app.aaps.plugins.aps.openAPSAIMI.model.Constants
 import app.aaps.core.data.model.HR
 import app.aaps.plugins.aps.openAPSAIMI.model.DecisionResult
 import app.aaps.plugins.aps.openAPSAIMI.ml.AimiCorpusPruner
 import app.aaps.plugins.aps.openAPSAIMI.safety.BioSyncDiaRule
+import app.aaps.plugins.aps.openAPSAIMI.safety.AutoMealPlateauBrake
 import app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer
 import app.aaps.plugins.aps.openAPSAIMI.ml.SmbRefinementFeatureSchema
 import app.aaps.plugins.aps.openAPSAIMI.ml.SmbTrainingRowBuffer
@@ -91,6 +95,7 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorTickRing
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.TickSafety
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdict
 import app.aaps.plugins.aps.openAPSAIMI.smb.SmbIntervalPolicy
+import app.aaps.plugins.aps.openAPSAIMI.smb.MealRiseRefractoryPolicy
 import app.aaps.plugins.aps.openAPSAIMI.smb.RiseCeilingGuard
 import app.aaps.plugins.aps.openAPSAIMI.advisor.oref.OrefPredictionReasonSuffix
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryType
@@ -2547,6 +2552,10 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         lastCoffeeBasalChange = null
         lastPostHypoSmbBeforeCapU = null
         lastPostHypoSmbAfterCapU = null
+        PostHypoAggressiveRiseExit.configure(
+            preferences.get(DoubleKey.OApsAIMIPostHypoReleaseMarginMgdl),
+            preferences.get(DoubleKey.OApsAIMIPostHypoReleaseDeltaMgdl),
+        )
         // Cross-tick hysteresis (InsulinSlope / Endogenous) must NOT reset here — that zeroed
         // holdTicks every loop and made 15–20 min holds dead on arrival. reset() belongs in
         // tests / plugin restart only.
@@ -3241,6 +3250,100 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                  else                                    -> MaxSmbLadder.LADDER_STANDARD
              }
              consoleLog.add("🔒 STRICT CLAMP: BG<120 -> Forced Standard MaxSMB (${String.format("%.2f", stdMaxSMB)}U)")
+        }
+        // EARLY RISE EXCEPTION: below 120 mg/dL the ceiling is the small standard Max SMB, so the first SMB of a meal
+        // rise (it starts at 90..110 mg/dL) can not be larger than that, and the big doses come 30-45 minutes late
+        // (measured on 34 rises in 8 days of the log; on 2026-11-01 ten minutes of 0.3 U proposals were cut to 0).
+        // Two cases give the ceiling of half of High BG Max SMB:
+        //  - early: little insulin on board (IOB up to 3.5 U), glucose from 95 mg/dL, rise confirmed by acceleration (see below).
+        //    The rule switches itself off when IOB grows, so later doses stay small.
+        //  - fast: rising 5 mg/dL in 5 minutes or faster, and IOB at least 1.5 U below Max IOB.
+        // Everything after this point (safety steps, interval, Max IOB) still applies.
+        val fastRiseShortAvg = glucoseStatus.shortAvgDelta
+        // The early case needs a rise that is confirmed by acceleration: the last 5 minutes rise at least 3 mg/dL and are
+        // not slower than the average of the last 15 minutes, for 3 ticks in a row (one tick is one minute). A slow
+        // climb (a sandwich) or one noisy reading does not pass; a sharp rise does within about 3 minutes.
+        val deltaNowEarly = glucoseStatus.delta
+        val accelerating = deltaNowEarly.isFinite() && fastRiseShortAvg.isFinite() &&
+            deltaNowEarly >= 3.0 && fastRiseShortAvg >= 2.0 && deltaNowEarly >= fastRiseShortAvg
+        earlyRiseStreak = if (bg >= 95.0 && accelerating && this.iob <= EARLY_RISE_MAX_IOB_U) earlyRiseStreak + 1 else 0
+        val earlyRise = earlyRiseStreak >= 3
+        // The start of a confirmed meal rise: the hypo guard does not zero the SMB and the first doses are not small.
+        // Needs an eventual glucose above 100 mg/dL, so a rise that is only a bump does not qualify.
+        earlyRiseActiveThisTick = earlyRise && this.eventualBG.isFinite() && this.eventualBG > EARLY_RISE_MIN_EVENTUAL_MGDL
+        if (earlyRiseActiveThisTick || eatingEngine.isActive()) lastMealSignalMs = dateUtil.now()
+        // Eating mode (button "I eat"): the engine estimates the meal, keeps one insulin budget for the window and brakes
+        // the dose when the rise slows down. While it is active, the start of the meal is treated as a confirmed rise.
+        // The learned-kinetics array is null when that option is off, so fall back to the normal IOB array. Its activity
+        // includes the insulin of temp basals and SMB, so a temp basal that holds the rise down is counted too.
+        val eatingIobActivity = (ctx.pkpdIobDataArray ?: ctx.iobDataArray).firstOrNull()?.activity ?: 0.0
+        lastIobActivityUPerMin = if (eatingIobActivity.isFinite()) eatingIobActivity else 0.0
+        // Auto start: the mode starts by itself on a meal rise. The automatic start is the main way; the button is the
+        // reserve. On 9 Nov it did not start on a steady rise to 8 mmol/L: it needed acceleration, 3 hours after the last
+        // window and no zero basal in the last 90 minutes. Now:
+        //  - the rise: the accelerating start (earlyRise) or a steady rise of "Fast rise (meal)" (Assistant, default
+        //    5 mg/dL per 5 min) on three readings; the 5-min delta must be at least that value minus 1;
+        //  - glucose from 99 mg/dL (5.5 mmol/L), IOB up to 3 U, forecast above 110 mg/dL;
+        //  - right after a hypo or a zero basal (60 min) it starts too, when "glucose minus insulin on board" is at least
+        //    90 mg/dL: then the start dose is half and the first 15 g are counted as rescue carbs (no insulin for them);
+        //  - a fast rise ("Fast rise (meal)" + 2, default 7 mg/dL = 0.4 mmol/L per 5 min) gets the whole start dose,
+        //    a slower one half.
+        // A new start within 30 minutes of the last one is the same meal (EatingEngine.start). A new rise while the window
+        // runs makes the window longer, without a new start dose.
+        run {
+            val nowAuto = dateUtil.now()
+            val fastRiseSetting = eatingEngine.fastRiseMgdl5()
+            val steadyRise = riseConfirmedOnLastReadings()
+            val mealRise = (earlyRise || steadyRise) && this.delta >= (fastRiseSetting - 1.0).coerceAtLeast(2.0)
+            val isfAuto = (lastProfile?.sens ?: 0.0).takeIf { it > 1.0 } ?: variableSensitivity.toDouble()
+            if (eatingEngine.isActive()) {
+                if (mealRise && bg >= 99.0 && eatingEngine.extendForNewRise(nowAuto)) {
+                    consoleLog.add("EATING_EXTEND: new rise BG=${bg.roundToInt()} Δ=${"%.1f".format(Locale.US, this.delta)}, window longer")
+                }
+            } else if (eatingEngine.autoStartEnabled() && mealRise && bg >= 99.0 && this.iob <= 3.0 && !sportTime &&
+                this.eventualBG.isFinite() && this.eventualBG > 110.0
+            ) {
+                val zeroBasalAgo = BasalHistoryUtils.historyProvider.minutesSinceZeroBasalEnded(2)
+                val afterHypo = lastPostHypoDeliveryAuthority.active || (zeroBasalAgo != null && zeroBasalAgo <= 60)
+                val noRise = noRiseBg(bg, this.iob.toDouble(), isfAuto)
+                val safeAfterHypo = !afterHypo || (noRise != null && noRise >= 90.0 && steadyRise)
+                val fullDose = this.delta >= fastRiseSetting + 2.0 && !afterHypo
+                if (safeAfterHypo && eatingEngine.autoStart(nowAuto, bg, fullStartDose = fullDose, afterHypo = afterHypo)) {
+                    consoleLog.add(
+                        "EATING_AUTO_START: BG=${bg.roundToInt()} Δ=${"%.1f".format(Locale.US, this.delta)} IOB=${"%.2f".format(Locale.US, this.iob)}" +
+                            " full=$fullDose afterHypo=$afterHypo",
+                    )
+                    rT.reason.append("🍽autoStart ")
+                }
+            }
+        }
+        updateEatingMode(eatingIobActivity, fastRiseShortAvg, ctx.profile.current_basal, ctx.profile.carb_ratio)
+        val eatingActive = eatingOut != null
+        if (eatingActive && bg >= 95.0 && this.eventualBG > 80.0 && this.iob <= EARLY_RISE_MAX_IOB_U) {
+            earlyRiseActiveThisTick = true
+        }
+        val fastRise = bg >= 100.0 && fastRiseShortAvg.isFinite() && fastRiseShortAvg >= 5.0 && (this.maxIob - maxOf(this.iob.toDouble(), 0.0)) >= 1.5
+        // Eating mode and a fast rise ("Fast rise (meal)", default 5 mg/dL = 0.28 mmol/L per 5 min, also on average): one SMB may reach the full
+        // High BG Max SMB at any glucose. On 9 Nov after porridge SMB stayed at 0.6 U while the glucose rose 0.7 mmol/L
+        // per 5 minutes. The faded forecast and the stop rules do not touch eating mode; the eating brake still works.
+        // Only while the meal still needs insulin: on 9 Nov at 23:27-23:34 the mode gave 4.8 U in 7 minutes and went
+        // over its own estimate.
+        val eatingNeedLeftU = eatingOut?.let { it.mealU - it.deliveredU } ?: 0.0
+        val fastRiseMeal = eatingEngine.fastRiseMgdl5()
+        if (eatingActive && this.delta >= fastRiseMeal && fastRiseShortAvg.isFinite() && fastRiseShortAvg >= fastRiseMeal &&
+            this.maxSMBHB > this.maxSMB && eatingNeedLeftU > 0.3
+        ) {
+            consoleLog.add("EATING_FAST_RISE_MAXSMB: BG=${bg.roundToInt()} Δ=${"%.1f".format(Locale.US, this.delta)} -> Max SMB ${"%.2f".format(Locale.US, this.maxSMBHB)}U")
+            this.maxSMB = this.maxSMBHB
+        }
+        if (bg < 120.0 && (earlyRise || fastRise || (eatingActive && earlyRiseActiveThisTick))) {
+            val relaxed = (this.maxSMBHB * EARLY_RISE_FRONT_DOSE_SHARE).coerceAtLeast(stdMaxSMB).coerceAtMost(this.maxSMBHB)
+            if (relaxed > this.maxSMB) {
+                this.maxSMB = relaxed
+                consoleLog.add(
+                    "EARLY_RISE_MAXSMB: BG=${bg.roundToInt()} shortAvgDelta=${String.format("%.1f", fastRiseShortAvg)} -> Max SMB ${String.format("%.2f", relaxed)}U (half of High BG Max SMB)"
+                )
+            }
         }
         val ngrConfig = buildNightGrowthResistanceConfig(ctx.profile, ctx.autosensData, glucoseStatus, targetBg.toDouble())
         var tir1DAYIR = 0.0
@@ -5254,6 +5357,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             physioCapU?.let { lifted = min(lifted, it) }
             stackingCapU?.let { lifted = min(lifted, it) }
             patternCapU?.let { cap -> lifted = min(lifted, cap) }
+            // The Harmonia lift must not bring back a dose that the weak acceleration has reduced.
+            lifted *= accelerationDoseFactor()
             var traceDraft = lastSmbBindingTraceDraft.copy(
                 htrBeforeU = htr.v3SmbBeforeU,
                 htrAfterU = htr.v3SmbAfterU,
@@ -5856,6 +5961,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         hypoThresholdMgdl: Double,
         pkpdRuntime: PkPdRuntime?,
     ): AutodriveV3BranchResult {
+        postLgsBasalCeilingUph = null
         if (!preferences.get(BooleanKey.OApsAIMIautoDriveActive)) {
             // Autodrive off: without this the meal model would stay frozen for the life of the
             // install, while getLastRa() still feeds the absorption phase, the correction-aggression
@@ -5880,6 +5986,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val hasRecentMealEstimate = recentEstimateCarbs > 10.0 && estimateAgeMinutes in 0.0..45.0
 
         val riseConfirmation = RiseConfirmation.evaluate(recentCleanBgNewestFirst(RiseConfirmation.SLOW_WINDOW_TICKS + 1))
+        val minutesSinceZeroBasalEnded =
+            BasalHistoryUtils.historyProvider.minutesSinceZeroBasalEnded(2)
+        val postLgsRecovery = minutesSinceZeroBasalEnded != null &&
+            minutesSinceZeroBasalEnded <= POST_LGS_RISE_CONFIRMATION_MINUTES
+        val explicitMealIntent = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime ||
+            snackTime || fclDeclaredThisTick(profile)
+        val postLgsFullRelease = riseConfirmation?.level == RiseConfirmation.Level.CONFIRMED &&
+            bg >= RiseConfirmation.FAST_WINDOW_BG_MGDL
+        postLgsBasalCeilingUph = if (postLgsRecovery && !explicitMealIntent && !postLgsFullRelease && !postHypoMealExitActive()) {
+            val configuredMaximum = preferences.get(DoubleKey.autodriveMaxBasal)
+                .takeIf { it > 0.1 } ?: profile.max_basal.toDouble()
+            minOf(POST_LGS_UNDECLARED_BASAL_CEILING_UPH, configuredMaximum)
+        } else {
+            null
+        }
         val gate = autodriveGater.shouldEngageV3(
             riseConfirmation = riseConfirmation,
             bg = ctx.glucoseStatus.glucose,
@@ -5891,13 +6012,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // thresholds — which under 120 mg/dL need delta > 2.0 AND no low in the last 75 min.
             // Eating at ~100 with the target at 80, neither holds. Measured over 1443 ticks of the
             // 2026-09-16/17 export: GateKind.MEAL_AWARE_RISE never fired once.
-            explicitMealMode = mealTime || bfastTime || lunchTime || dinnerTime || highCarbTime ||
-                snackTime || fclDeclaredThisTick(profile),
+            explicitMealMode = explicitMealIntent,
             hasRecentMealEstimate = hasRecentMealEstimate,
             minBgLookback75m = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES),
             estimatedRa = continuousStateEstimator.getLastRa(),
             mealChannelHint = lastRbtAppliedHints?.mealChannel,
+            postLgsRecovery = postLgsRecovery,
         )
+
+        if (postLgsRecovery) {
+            consoleLog.add(
+                "🛡️ POST_LGS_RISE_GATE: zero basal ended ${minutesSinceZeroBasalEnded}m ago, " +
+                    "rise=${riseConfirmation?.level?.name ?: "NO_HISTORY"}, explicitMeal=$explicitMealIntent, " +
+                    "cap=${postLgsBasalCeilingUph?.let { "%.2f".format(it) } ?: "released"}U/h",
+            )
+        }
 
         // Observation only — recorded for both outcomes, before the branch. The engaged path already
         // logged its reason to the console; the disengaged path threw it away, so two thirds of a day
@@ -6104,7 +6233,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                                 "${"%.2f".format(v3AdaptiveMult)}x at BG=${"%.0f".format(bg)}",
                         )
                     }
-                    val cappedV3Tbr = UndeclaredEvidenceCap.capBasal(
+                    val evidenceCappedV3Tbr = UndeclaredEvidenceCap.capBasal(
                         requestedUph = capBasalRateForCorrectionAggression(
                             requestedRateUph = v3TbrRate,
                             profileBasalUph = profile.current_basal,
@@ -6113,6 +6242,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         profileBasalUph = profile.current_basal,
                         limits = evidenceLimits,
                     )
+                    val cappedV3Tbr = postLgsBasalCeilingUph?.let(evidenceCappedV3Tbr::coerceAtMost)
+                        ?: evidenceCappedV3Tbr
                     setTempBasal(
                         cappedV3Tbr,
                         30,
@@ -6125,7 +6256,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     )
                     // setTempBasal applies more multipliers after the cap, so the ceiling is enforced on the final rate.
                     rT.rate?.let { finalRate ->
-                        val limited = UndeclaredEvidenceCap.capBasal(finalRate, profile.current_basal, evidenceLimits)
+                        val evidenceLimited = UndeclaredEvidenceCap.capBasal(finalRate, profile.current_basal, evidenceLimits)
+                        val limited = postLgsBasalCeilingUph?.let(evidenceLimited::coerceAtMost) ?: evidenceLimited
                         if (limited < finalRate - 1e-6) rT.rate = limited
                     }
                 }
@@ -6135,21 +6267,37 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
 
             val v3SmbModel = if (v3CommandSafe) adCommand!!.scheduledMicroBolus ?: 0.0 else 0.0
-            val iobHeadroomForFloor = (maxIob - iob).coerceAtLeast(0.0)
+            val iobHeadroomForFloor = (maxIob - maxOf(iob.toDouble(), 0.0)).coerceAtLeast(0.0)
             // The maxSMB ladder above already decided whether this tick earns the high-BG ceiling.
             // The rise floor must not overrule that decision, so it stops at the ceiling the ladder
             // actually chose. Using `max(maxSMB, maxSMBHB)` here handed the floor the high-BG ceiling
             // even on ticks where the ladder had refused it.
             val smbCeilingForFloor = maxSMB.coerceAtLeast(0.0)
+            // Start of a confirmed meal rise: every dose is at least half of High BG Max SMB (the size the user sets in
+            // the Control Center). It ends by itself when IOB passes the early limit or the acceleration stops.
+            val frontDoseU = if (earlyRiseActiveThisTick) maxSMBHB * EARLY_RISE_FRONT_DOSE_SHARE * earlyRiseFrontStrength() else 0.0
+            // Eating mode: the start dose is a floor too, so it goes out although the glucose is still flat.
+            val eatingFloorU = eatingOut?.startRemainingU ?: 0.0
             val v3SmbFloor = if (v3CommandSafe) {
-                aggressiveRiseSmbFloorU(bg, combinedDelta, shortAvgDeltaAdj)
+                maxOf(aggressiveRiseSmbFloorU(bg, combinedDelta, shortAvgDeltaAdj), frontDoseU, eatingFloorU)
                     .coerceAtMost(minOf(smbCeilingForFloor, iobHeadroomForFloor))
             } else {
                 0.0
             }
-            val v3SmbRaw = UndeclaredEvidenceCap.capSmb(maxOf(v3SmbModel, v3SmbFloor), evidenceLimits)
+            val v3SmbPreSlowdown = UndeclaredEvidenceCap.capSmb(maxOf(v3SmbModel, v3SmbFloor), evidenceLimits)
             // Only what the floor added on top of the model spends its budget.
-            noteRiseFloorContribution(v3SmbRaw - v3SmbModel)
+            noteRiseFloorContribution(v3SmbPreSlowdown - v3SmbModel)
+            val accelFactor = accelerationDoseFactor()
+            // The eating start dose is not reduced by a weak acceleration (the glucose is flat when the button is pressed).
+            val v3SmbRaw = maxOf(v3SmbPreSlowdown * accelFactor, minOf(eatingFloorU, v3SmbFloor))
+            if (accelFactor < 1.0 - 1e-6) {
+                consoleLog.add(
+                    "ACCEL_DOSE: delta=${"%.1f".format(delta)} -> SMB x${"%.2f".format(accelFactor)} (${"%.2f".format(v3SmbPreSlowdown)}U -> ${"%.2f".format(v3SmbRaw)}U)"
+                )
+            }
+            if (frontDoseU > 0.0) {
+                consoleLog.add("EARLY_RISE_FRONT_DOSE: floor ${"%.2f".format(v3SmbFloor)}U, SMB ${"%.2f".format(v3SmbRaw)}U (half of High BG Max SMB)")
+            }
             val smallPrebolusPref = preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus)
             val largePrebolusPref = preferences.get(DoubleKey.OApsAIMIautodrivePrebolus)
             val v3FloorTier = when {
@@ -7314,10 +7462,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val decisionRisk = cachedRiskEnvelopeDecision
         val hypoThresholdForGuard = decisionRisk?.hypoThresholdMgdl ?: threshold
         val hypoCompositeForReason = decisionRisk?.compositeMinMgdl ?: minBgHypoComposite
+        // Eating mode: the forecast has no carbohydrates (COB is zero), so it is too low. Lift it by the effect of the part
+        // of the meal that is not absorbed yet. The lift is 70% of the full effect, so the guard stays careful.
+        val eatingForecastLift = eatingOutFresh()?.let { e ->
+            val isf = profile.sens.toDouble()
+            if (isf.isFinite() && isf > 0.0) e.mealU * isf * e.remainingFrac * 0.7 else 0.0
+        } ?: 0.0
+        if (eatingForecastLift > 1.0) consoleLog.add("🍽 FORECAST_LIFT +${"%.0f".format(Locale.US, eatingForecastLift)} mg/dL for the hypo guard")
         val (hypoPredSanitized, hypoEventualSanitized) = sanitizedHypoGuardPredictedEventual(
             rT = rT,
-            predictedBg = predictedBg.toDouble(),
-            eventualBg = eventualBg,
+            predictedBg = predictedBg.toDouble() + eatingForecastLift,
+            eventualBg = eventualBg + eatingForecastLift,
         )
         var isHypoBlocked = shouldBlockHypoWithHysteresis(
             bg = bg,
@@ -7334,6 +7489,13 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT.reason.append(
                 "🚀 Rocket Override (${CorrectionAggressionGate.LOG_PREFIX} ${aggression.tier.name}): Hypo Block IGNORED. "
             )
+        } else if (isHypoBlocked && postHypoMealExitActive()) {
+            // A meal right after a hypo: the forecast still has the hypo in it, but the glucose rises fast for some minutes
+            // and the insulin on board cannot take it low. See postHypoMealExitActive.
+            isHypoBlocked = false
+            lastHypoBlockAt = 0L
+            consoleLog.add("POST_HYPO_MEAL_EXIT: hypo guard released (BG=${bg.roundToInt()} Δ=${"%.1f".format(Locale.US, delta)})")
+            rT.reason.append("🍽postHypoMealExit ")
         } else if (isHypoBlocked && (delta > 5.0 || bg > targetBg + 40)) {
             consoleLog.add(
                 "${CorrectionAggressionGate.LOG_PREFIX}: hypo rocket override BLOCKED " +
@@ -7557,7 +7719,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 modelOutputU = predictedSMB.toDouble(),
                 maxSmbU = maxSMB,
                 maxSmbHighBgU = maxSMBHB,
-                iobHeadroomU = (maxIob - iob).coerceAtLeast(0.0),
+                iobHeadroomU = (maxIob - maxOf(iob.toDouble(), 0.0)).coerceAtLeast(0.0),
             ).appendStage(
                 "SMB_EXECUTOR",
                 predictedSMB.toDouble(),
@@ -9670,6 +9832,48 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             profileBasalUph = b.profile.current_basal,
             source = "FINAL_BASAL_MERGE",
         )
+        postLgsBasalCeilingUph?.let { ceiling ->
+            if (finalProposedRate > ceiling) {
+                consoleLog.add(
+                    "🛡️ POST_LGS_BASAL_CAP: ${"%.2f".format(finalProposedRate)}→${"%.2f".format(ceiling)}U/h",
+                )
+                finalProposedRate = ceiling
+            }
+        }
+        // Same rule as plain OpenAPS SMB: no high temp when min(lowest forecast, eventual) is under the target (carb and UAM
+        // tails are inside the forecast). Then the rate is not above the profile basal. Not when the rise is fast or in eating mode.
+        run {
+            val envelopeBg = forecastEnvelopeBg()
+            if (envelopeBg != null && envelopeBg < targetBg.toDouble() && this.delta < 8f && eatingOutFresh() == null) {
+                val cap = b.profile.current_basal
+                if (finalProposedRate > cap) {
+                    consoleLog.add("FORECAST_BRAKE_BASAL: ${"%.2f".format(Locale.US, finalProposedRate)}→${"%.2f".format(Locale.US, cap)}U/h, min(minPred,eventual) ${envelopeBg.toInt()} < target ${targetBg.toInt()}")
+                    finalProposedRate = cap
+                }
+            }
+        }
+        // Basal debt: after a long zero or low basal the IOB is negative, and the glucose rises hard later because the basal was
+        // missing. When the glucose is back near the target and is not falling, bring the basal back early, before the rise: up to
+        // twice the profile basal, growing with the size of the deficit (-4 U of IOB gives the full 2x). The hypo guards decide
+        // first: no restore while the glucose is low, falling, or the forecast is low, after a hypo, or during sport.
+        run {
+            val debtU = -this.iob.toDouble()
+            val profileBasal = b.profile.current_basal
+            if (debtU >= 0.8 && profileBasal > 0.0 && bg >= 100.0 && this.delta >= -2f &&
+                this.eventualBG.isFinite() && this.eventualBG > 100.0 &&
+                !lastPostHypoDeliveryAuthority.active && !sportTime
+            ) {
+                val factor = 1.0 + minOf(1.0, debtU / 4.0)
+                val restore = minOf(profileBasal * factor, b.profile.max_basal.toDouble())
+                if (finalProposedRate < restore) {
+                    consoleLog.add(
+                        "BASAL_DEBT_RESTORE: IOB=${"%.2f".format(Locale.US, this.iob)} " +
+                            "${"%.2f".format(Locale.US, finalProposedRate)}→${"%.2f".format(Locale.US, restore)}U/h"
+                    )
+                    finalProposedRate = restore
+                }
+            }
+        }
         var finalDuration = if (b.rT.rate != null) {
             maxOf(b.rT.duration ?: 30, 30)
         } else {
@@ -9841,6 +10045,70 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 // one — up to max_basal. The LGS block, the DynamicBasalController brake and the
                 // max_basal hard cap inside setTempBasal all still apply.
                 finalOverrideSafetyLimits = true
+            }
+        }
+
+        // Terminal reduction-only brake for an automatically detected, undeclared meal. COB is not
+        // used as proof that absorption ended; it only excludes declared/recorded absorption. The
+        // actual end signal is an earlier rise followed by three flat/falling CGM intervals.
+        val explicitMealModeForPlateauBrake = mealTime || bfastTime || lunchTime || dinnerTime ||
+            snackTime || highCarbTime || fclDeclaredThisTick(b.profile)
+        val autoMealPlateauBrake = AutoMealPlateauBrake.evaluate(
+            bgNewestFirst = recentCleanBgNewestFirst(7),
+            requestedBasalUph = finalProposedRate,
+            profileBasalUph = b.profile.current_basal,
+            targetBgMgdl = b.profile.target_bg.toDouble(),
+            isfMgdlPerU = b.profile.sens,
+            iobU = b.ctx.iobDataArray.firstOrNull()?.iob ?: this.iob.toDouble(),
+            cobG = b.ctx.mealData.mealCOB,
+            explicitMealMode = explicitMealModeForPlateauBrake,
+        )
+        if (autoMealPlateauBrake.active) {
+            val previousRate = finalProposedRate
+            finalProposedRate = minOf(finalProposedRate, autoMealPlateauBrake.maxBasalUph ?: finalProposedRate)
+            if (autoMealPlateauBrake.blockSmb) b.rT.units = 0.0
+            b.rT.reason.append("; AUTO_MEAL_PLATEAU_BRAKE")
+            consoleLog.add(
+                "AUTO_MEAL_PLATEAU_BRAKE: %.2f→%.2f U/h; SMB→0 (%s)".format(
+                    Locale.US, previousRate, finalProposedRate, autoMealPlateauBrake.reason,
+                )
+            )
+        }
+
+        // Stop rule for the temp basal: the rise has stopped and the insulin on board alone takes the glucose under the
+        // low line, so no temp basal above the profile basal and no SMB. Not on a fast rise, in eating mode or a meal mode.
+        if (!explicitMealModeForPlateauBrake) {
+            val iobForStop = b.ctx.iobDataArray.firstOrNull()?.iob ?: this.iob.toDouble()
+            val stopBg = riseStopNoRiseBg(iobForStop, b.profile.sens)
+            if (stopBg != null) {
+                val cap = b.profile.current_basal
+                if (finalProposedRate > cap) {
+                    consoleLog.add(
+                        "RISE_STOP_BASAL: ${"%.2f".format(Locale.US, finalProposedRate)}→${"%.2f".format(Locale.US, cap)}U/h, " +
+                            "no-rise BG ${stopBg.roundToInt()} mg/dL",
+                    )
+                    finalProposedRate = cap
+                    finalAdaptiveMultiplier = minOf(finalAdaptiveMultiplier, 1.0)
+                    finalOverrideSafetyLimits = false
+                }
+                if ((b.rT.units ?: 0.0) > 0.0) {
+                    consoleLog.add("RISE_STOP_SMB: ${"%.2f".format(Locale.US, b.rT.units ?: 0.0)}U→0 (basal stage)")
+                    b.rT.units = 0.0
+                }
+            } else if (eatingOutFresh() == null && !riseIsFastNow()) {
+                // Slow or no rise: a high temp basal only for the need of the faded forecast, given over 30 minutes.
+                // A fixed forced rate (4.5 U/h) at 5.7-6.5 mmol/L at night gave swings. A fast rise keeps the full rate.
+                fadedForecastNeed(iobForStop, b.profile.sens)?.let { f ->
+                    val cap = b.profile.current_basal + f.needU * 2.0
+                    if (finalProposedRate > cap + 0.05) {
+                        consoleLog.add(
+                            "FADED_FORECAST_BASAL: ${"%.2f".format(Locale.US, finalProposedRate)}→${"%.2f".format(Locale.US, cap)}U/h, ${f.summary()}",
+                        )
+                        finalProposedRate = cap
+                        finalAdaptiveMultiplier = minOf(finalAdaptiveMultiplier, 1.0)
+                        finalOverrideSafetyLimits = false
+                    }
+                }
             }
         }
 
@@ -10218,7 +10486,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             val tickCalendar = Calendar.getInstance()
             tickCalendar.timeInMillis = decisionCtx.timestamp
             val runningTempForMeter = ctx.currentTemp
-            observedSensitivityMeter.observe(
+            val closedIsfWindow = observedSensitivityMeter.observe(
                 ObservedSensitivityMeter.Sample(
                     timestampMs = decisionCtx.timestamp,
                     localHourOfDay = tickCalendar.get(Calendar.HOUR_OF_DAY),
@@ -10226,7 +10494,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     // Net of the profile basal: it goes negative when the loop cuts the basal for a
                     // long time, which is why the basal integral below is needed.
                     iobU = decisionCtx.baseline_state.iob_u,
-                    cobG = decisionCtx.baseline_state.cob_g,
+                    // Carbs are almost never entered, so COB is 0 after most meals. A meal (eating mode or a confirmed
+                    // meal rise) in the last 4 hours counts as carbs on board: a fall then is the insulin minus the meal
+                    // still going in, and it made the measured ISF too low.
+                    cobG = if (decisionCtx.timestamp - lastMealSignalMs < MEAL_SIGNAL_EXCLUDE_MS) {
+                        maxOf(decisionCtx.baseline_state.cob_g, 1.0)
+                    } else {
+                        decisionCtx.baseline_state.cob_g
+                    },
                     smbU = finalResult.units ?: 0.0,
                     // The basal that ran is the temp in progress, not the rate this tick asks for.
                     deliveredBasalUph =
@@ -10238,8 +10513,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     // and the fail-closed rule would reject every window.
                     raMgdlPerMin = decisionCtx.baseline_state.estimated_ra_mgdl_per_min,
                     lastBolusMs = ctx.iobDataArray.firstOrNull()?.lastBolusTime ?: 0L,
+                    activityUPerMin = ctx.iobDataArray.firstOrNull()?.activity,
                 ),
             )
+            // Only the Assistant screen reads this copy, so the measured value survives a restart.
+            if (closedIsfWindow != null) ObservedIsfStore.add(context, closedIsfWindow)
             val observed = observedSensitivityMeter.read(decisionCtx.timestamp)
             decisionCtx.baseline_state.isf_obs_median_mgdl = observed.medianMgdlPerU
             decisionCtx.baseline_state.isf_obs_night_median_mgdl = observed.nightMedianMgdlPerU
@@ -10503,7 +10781,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         )
 
         if (preferences.get(BooleanKey.OApsAIMIIntelligenceSnapshotExport)) {
-            lastIntelligenceSnapshot = buildIntelligenceSnapshot(ctx, profile, pkpdRuntime)
+            lastIntelligenceSnapshot = EnergyMeter.measure(EnergyMeter.SNAPSHOT) { buildIntelligenceSnapshot(ctx, profile, pkpdRuntime) }
             decisionCtx.adjustments.intelligence_snapshot =
                 lastIntelligenceSnapshot?.let { snap ->
                     IntelligenceSnapshotJson.toJsonObject(snap).apply {
@@ -10758,10 +11036,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private fun aimiDecisionsJsonlFile(): File = File(externalDir, "AIMI_Decisions.jsonl")
 
     private fun appendAimiDecisionsJsonlLine(jsonLine: String) {
-        try {
-            AuditorJsonlExport.appendLine(aimiDecisionsJsonlFile(), jsonLine)
-        } catch (e: Exception) {
-            consoleError.add("Failed to save AIMI Decision JSON: ${e.message}")
+        EnergyMeter.measure(EnergyMeter.LOG_DECISIONS) {
+            try {
+                AuditorJsonlExport.appendLine(aimiDecisionsJsonlFile(), jsonLine)
+            } catch (e: Exception) {
+                consoleError.add("Failed to save AIMI Decision JSON: ${e.message}")
+            }
         }
     }
 
@@ -10978,6 +11258,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val stackingSpiral = !hyperTrajectorySpiral
         val spiralMealAlign = mealPriorityAlign || hyperTrajectorySpiral
 
+        if (stackingSpiral && TrajBridgeSurvival.releaseForDepletedConfirmedRise(
+                bgMgdl = bg.toDouble(),
+                targetMgdl = targetBg.toDouble(),
+                deltaMgdl5m = delta.toDouble(),
+                shortAvgDeltaMgdl5m = shortAvgDelta.toDouble(),
+                iobU = iobNow,
+            )
+        ) {
+            consoleLog.add(
+                "🌀 TRAJ_BRIDGE_RELEASE depleted confirmed rise: " +
+                    "BG=${"%.0f".format(bg)} target=${"%.0f".format(targetBg)} " +
+                    "Δ=${"%.1f".format(delta)} sΔ=${"%.1f".format(shortAvgDelta)} IOB=${"%.2f".format(iobNow)}",
+            )
+            return
+        }
+
         val basalFraction = when {
             spiralMealAlign && energy > 3.5 -> 0.70
             spiralMealAlign && energy > 2.5 -> 0.85
@@ -11172,6 +11468,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         } else 0.0
         val windowSinceDoseInt = windowSinceDoseMin.toInt()
         lastBolusAgeMinutes = windowSinceDoseMin
+        // Refractory clock: use only a DELIVERED bolus. A request (internalLastSmbMillis) that the
+        // interval gate drops must not restart the clock.
+        lastDeliveredBolusAgeMinutes = if (iob_data.lastBolusTime > 0) {
+            ((systemTime - iob_data.lastBolusTime) / 60000.0).coerceAtLeast(0.0)
+        } else Double.NaN
         val carbsActiveG = ctx.mealData.mealCOB.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
         val pkpdMealContext = buildPkpdMealContext(
             mealData = ctx.mealData,
@@ -12526,6 +12827,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var insulinPeakTime = 0.0
     private var iobActivityNow: Double = 0.0
     private var lastBolusAgeMinutes: Double = Double.NaN
+    private var lastDeliveredBolusAgeMinutes: Double = Double.NaN
     /** One PKPD absorption-guard multiply per [determine_basal] tick (see [applyPkpdAbsorptionGuardOncePerTick]). */
     private var pkpdAbsorptionGuardAppliedThisTick: Boolean = false
     private var isConfirmedHighRiseThisTick: Boolean = false
@@ -12830,6 +13132,440 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private var lastContextSnapshot: ContextSnapshot? = null
     private var lastPatientState: PatientStateSnapshot? = null
     private var lastPatientModeDecision: PatientModeOrchestrator.Decision? = null
+
+    /** Number of ticks in a row with an accelerating rise at low IOB; used by the early rise ceiling. */
+    private var earlyRiseStreak = 0
+
+    /**
+     * Insulin on board up to which the first doses of a NEW rise get the early ceiling and the lighter PKPD guard. It is
+     * 3.5 U so a second meal soon after the first still gets early doses. The heavy stack brake in
+     * [InsulinStackingStance] takes over from about 4 U when the insulin-only forecast goes low.
+     */
+    private val EARLY_RISE_MAX_IOB_U = 3.5f
+
+    /** The eating mode ("I eat" button): state in SharedPreferences, shared with the screens. */
+    private val eatingEngine by lazy { EatingEngine(context) }
+
+    /** The answer of the eating engine for this tick, or null when the mode is not active. */
+    private var eatingOut: EatingEngine.Output? = null
+    private var eatingOutAtMs = 0L
+
+    /** The eating answer of this tick; an old answer (the block did not run on this tick) is ignored. */
+    private var hybridMinBgSnapshot = Double.NaN
+    private var hybridMinBgAtMs = 0L
+
+    /** Lowest value of the hybrid forecast and its last value, the smaller one. Null if the forecast is old (over 5 min). */
+    private fun forecastEnvelopeBg(): Double? {
+        if (hybridMinBgSnapshot.isNaN() || dateUtil.now() - hybridMinBgAtMs > 5 * 60_000L) return null
+        val eventual = lastEventualBgSnapshot
+        return if (eventual.isNaN()) hybridMinBgSnapshot else minOf(hybridMinBgSnapshot, eventual)
+    }
+
+    private fun eatingOutFresh(): EatingEngine.Output? = eatingOut?.takeIf { dateUtil.now() - eatingOutAtMs < 90_000L }
+
+    /** End time of the "meal after a hypo" release; 0 when it is not running. */
+    private var postHypoMealExitUntilMs = 0L
+
+    /**
+     * Meal right after a hypo. The post-hypo guards keep the insulin off for some time, because a rebound (liver, rescue
+     * carbs) also rises fast. On 8 Nov at 22:05 a meal after LGS got no insulin for 10 minutes. The guards are released
+     * when all of these are true: glucose at least 90 mg/dL (5.0 mmol/L), the 5-minute rise at least 5 mg/dL
+     * (0.28 mmol/L) on three readings in a row, and "glucose minus what the insulin on board will lower" at least 90 mg/dL.
+     * Once released it stays for 30 minutes, and ends when the glucose falls under 85 mg/dL or drops 3 mg/dL per 5 min.
+     * Not during sport. Same rule day and night: a rebound after LGS stops rising after some minutes, and then the
+     * stop rules (rise stop, faded forecast, SMB interval) take the extra insulin off.
+     */
+    private fun postHypoMealExitActive(): Boolean {
+        val now = dateUtil.now()
+        if (postHypoMealExitUntilMs > now) {
+            if (this.bg < POST_HYPO_MEAL_EXIT_END_MGDL || this.delta <= -3f || sportTime) {
+                postHypoMealExitUntilMs = 0L
+                return false
+            }
+            return true
+        }
+        if (sportTime || this.bg < POST_HYPO_MEAL_EXIT_MIN_MGDL) return false
+        val noRise = noRiseBg(this.bg, this.iob.toDouble(), lastProfile?.sens ?: 0.0) ?: return false
+        if (noRise < POST_HYPO_MEAL_EXIT_MIN_MGDL) return false
+        if (!riseConfirmedOnLastReadings()) return false
+        postHypoMealExitUntilMs = now + 30 * 60_000L
+        return true
+    }
+
+    /**
+     * True when the 5-minute rise is at least "Fast rise (meal)" (`EatingEngine.fastRiseMgdl5`) on the last three readings
+     * (1-minute sensor: the last three minutes; 5-minute sensor: the last two 5-minute steps).
+     */
+    private fun riseConfirmedOnLastReadings(): Boolean {
+        val readings = iobCobCalculator.ads.getBgReadingsDataTableCopy().filter { it.value > 39.0 }
+        if (readings.size < 3) return false
+        val threshold = eatingEngine.fastRiseMgdl5()
+        val newest = readings.first()
+        if (dateUtil.now() - newest.timestamp > 6 * 60_000L) return false
+        fun valueAt(ts: Long): Double? =
+            readings.minByOrNull { abs(it.timestamp - ts) }?.takeIf { abs(it.timestamp - ts) <= 90_000L }?.value
+        val oneMinuteSensor = newest.timestamp - readings[1].timestamp <= 2 * 60_000L
+        val steps = if (oneMinuteSensor) listOf(0L, 60_000L, 120_000L) else listOf(0L, 5 * 60_000L)
+        return steps.all { back ->
+            val t = newest.timestamp - back
+            val nowValue = valueAt(t) ?: return false
+            val before = valueAt(t - 5 * 60_000L) ?: return false
+            nowValue - before >= threshold
+        }
+    }
+
+    /**
+     * Glucose speed now, in mg/dL per 5 min, from the raw CGM readings of the last ~3 minutes.
+     * The 5-minute delta reacts late on a 1-minute sensor: it still shows a rise some minutes after the peak.
+     * Null when there are not enough fresh readings.
+     */
+    private fun riseNowPer5Min(): Double? {
+        val readings = iobCobCalculator.ads.getBgReadingsDataTableCopy()
+        val newest = readings.firstOrNull { it.value > 39.0 } ?: return null
+        if (dateUtil.now() - newest.timestamp > 6 * 60_000L) return null
+        val older = readings.firstOrNull { it.value > 39.0 && newest.timestamp - it.timestamp >= 150_000L } ?: return null
+        val minutes = (newest.timestamp - older.timestamp) / 60_000.0
+        if (minutes <= 0.0 || minutes > 7.0) return null
+        return (newest.value - older.value) / minutes * 5.0
+    }
+
+    /** The rise counts as fast (a real meal is going on) only when both the 3-minute speed and the 5-minute delta are high. */
+    private fun riseIsFastNow(): Boolean {
+        val now = riseNowPer5Min()
+        val deltaFast = this.delta.isFinite() && this.delta >= RISE_STOP_FAST_MGDL_5M
+        return deltaFast && (now == null || now >= RISE_STOP_FAST_MGDL_5M)
+    }
+
+    /**
+     * Glucose (mg/dL) if the rise stopped now: the current value minus what the insulin on board will still lower.
+     * Uses the profile ISF (the one the loop works with), not the learned one, which is often lower and gives too much insulin.
+     */
+    private fun noRiseBg(bgMgdl: Double, iobU: Double, isfMgdl: Double): Double? {
+        if (!bgMgdl.isFinite() || bgMgdl <= 39.0 || !iobU.isFinite() || !isfMgdl.isFinite() || isfMgdl <= 0.0) return null
+        // Plus the push that is still there: the glucose does not fall as the insulin activity says (carbs still go in).
+        // Counted for 30 minutes, as the deviation in plain OpenAPS. Without it a flat 8.5 mmol/L after porridge with
+        // 1.5 U on board looked like "will go to 3 mmol/L", and the temp basal was cut to the profile for 90 minutes (9 Nov).
+        return bgMgdl - iobU * isfMgdl + DEVIATION_STEPS_30_MIN * heldUpDeviationPer5Min(isfMgdl)
+    }
+
+    /** Last time a meal was seen (eating mode on or a confirmed meal rise); the ISF meter skips the next hours. */
+    private var lastMealSignalMs = 0L
+
+    /** Insulin activity (U/min) of this loop run, for the deviation. */
+    private var lastIobActivityUPerMin = 0.0
+
+    /**
+     * How much the glucose is held up, mg/dL per 5 min: the real change minus the change the insulin activity alone
+     * would give. 0 when the glucose falls as fast as the insulin says, or faster.
+     */
+    private fun heldUpDeviationPer5Min(isfMgdl: Double): Double {
+        if (!this.delta.isFinite() || !lastIobActivityUPerMin.isFinite() || isfMgdl <= 0.0) return 0.0
+        val insulinChange = -lastIobActivityUPerMin * isfMgdl * 5.0
+        return (this.delta.toDouble() - insulinChange).coerceAtLeast(0.0)
+    }
+
+    /**
+     * Stop rule: the rise has stopped or is slow, and the insulin on board alone will take the glucose under the low line.
+     * Then no SMB and no temp basal above the profile basal. A fast rise (meal going on), eating mode and user actions are not touched.
+     * Returns the glucose "if the rise stopped now", or null when the rule does not apply.
+     */
+    private fun riseStopNoRiseBg(iobU: Double, isfMgdl: Double): Double? {
+        if (eatingOutFresh() != null || isMealModeCondition()) return null
+        val noRise = noRiseBg(this.bg, iobU, isfMgdl) ?: return null
+        if (noRise >= RISE_STOP_LOW_MGDL) return null
+        if (riseIsFastNow()) return null
+        return noRise
+    }
+
+    /** Insulin need from the faded forecast. [forecastBg] and [noRiseBg] are in mg/dL. */
+    private data class FadedNeed(val needU: Double, val forecastBg: Double, val noRiseBg: Double, val eventualBg: Double, val weight: Double) {
+        fun summary(): String =
+            "forecast ${forecastBg.roundToInt()} (no rise ${noRiseBg.roundToInt()}, eventual ${eventualBg.roundToInt()}, " +
+                "weight ${"%.2f".format(Locale.US, weight)}), need ${"%.2f".format(Locale.US, needU)}U"
+    }
+
+    /**
+     * Faded forecast: the rise part of the forecast (UAM / carb tail) counts only as much as the glucose still rises now.
+     * No rise (under 2 mg/dL per 5 min): the forecast is "glucose minus what the insulin on board will lower".
+     * Rise of 6 mg/dL per 5 min or more: the full forecast. The need is (forecast − target) / ISF, never below 0.
+     * Without a fresh forecast: null, or with [allowNoForecast] "glucose minus insulin on board" alone.
+     */
+    private fun fadedForecastNeed(iobU: Double, isfMgdl: Double, allowNoForecast: Boolean = false): FadedNeed? {
+        val noRise = noRiseBg(this.bg, iobU, isfMgdl) ?: return null
+        // No fresh forecast: use "glucose minus insulin on board" alone, only when the caller allows it (basal cap).
+        val eventual = lastEventualBgSnapshot.takeIf {
+            it.isFinite() && it > 39.0 && dateUtil.now() - hybridMinBgAtMs <= 5 * 60_000L
+        } ?: (if (allowNoForecast) noRise else return null)
+        val speed = minOf(this.delta.toDouble(), riseNowPer5Min() ?: this.delta.toDouble())
+        val weight = ((speed - FORECAST_FADE_LOW_MGDL_5M) / (FORECAST_FADE_FULL_MGDL_5M - FORECAST_FADE_LOW_MGDL_5M)).coerceIn(0.0, 1.0)
+        // Only the rise tail fades: when the forecast is under the glucose now (a fall is expected), it is used as it is.
+        val forecast = when {
+            eventual <= this.bg -> maxOf(eventual, noRise)
+            eventual > noRise -> noRise + weight * (eventual - noRise)
+            else -> eventual
+        }
+        val needU = ((forecast - targetBg.toDouble()) / isfMgdl).coerceAtLeast(0.0)
+        return FadedNeed(needU, forecast, noRise, eventual, weight)
+    }
+
+    private val eatingTbSnapshot = AtomicReference<List<TB>>(emptyList())
+    private val eatingTbRefreshInFlight = AtomicBoolean(false)
+
+    /**
+     * Extra insulin (U) that the temp basals gave above the profile basal since [startMs]. A temp basal below the profile
+     * basal does not reduce the sum. The list is read in the background, so it is one tick old at most.
+     */
+    private fun eatingTempBasalExtraU(startMs: Long, nowMs: Long, profileBasalUph: Double): Double {
+        if (eatingTbRefreshInFlight.compareAndSet(false, true)) {
+            determineIoScope.launch {
+                try {
+                    eatingTbSnapshot.set(persistenceLayer.getTemporaryBasalsStartingFromTime(startMs - 3_600_000L, ascending = true))
+                } catch (_: Exception) {
+                    eatingTbSnapshot.set(emptyList())
+                } finally {
+                    eatingTbRefreshInFlight.set(false)
+                }
+            }
+        }
+        if (profileBasalUph <= 0.0) return 0.0
+        return eatingTbSnapshot.get().filter { it.isValid && it.type == TB.Type.NORMAL }.sumOf { tb ->
+            val from = max(tb.timestamp, startMs)
+            val to = min(tb.end, nowMs)
+            if (to <= from) {
+                0.0
+            } else {
+                val rate = if (tb.isAbsolute) tb.rate else profileBasalUph * tb.rate / 100.0
+                max(0.0, rate - profileBasalUph) * (to - from) / 3_600_000.0
+            }
+        }
+    }
+
+    private val eatingBolusSnapshot = AtomicReference<List<BS>>(emptyList())
+    private val eatingBolusRefreshInFlight = AtomicBoolean(false)
+
+    /**
+     * Insulin (U) of boluses and SMB since the button press ([startMs]). Nothing before the press counts: the window
+     * starts at the press. It has its own list, read in the background (one tick old at most), so no other query can cut it.
+     */
+    private fun eatingBolusU(startMs: Long): Double {
+        val from = startMs
+        if (eatingBolusRefreshInFlight.compareAndSet(false, true)) {
+            determineIoScope.launch {
+                try {
+                    eatingBolusSnapshot.set(persistenceLayer.getBolusesFromTime(from, true))
+                } catch (_: Exception) {
+                    eatingBolusSnapshot.set(emptyList())
+                } finally {
+                    eatingBolusRefreshInFlight.set(false)
+                }
+            }
+        }
+        return eatingBolusSnapshot.get().filter { it.timestamp >= from && it.amount > 0.0 }.sumOf { it.amount }
+    }
+
+    /** The largest single bolus since [startMs], from the same snapshot as `eatingBolusU`. */
+    private fun eatingLargestBolusU(startMs: Long): Double =
+        eatingBolusSnapshot.get().filter { it.timestamp >= startMs && it.amount > 0.0 }.maxOfOrNull { it.amount } ?: 0.0
+
+    private var eatingStartSentMs = 0L
+
+    /** The pause between planned doses: shorter while the glucose rises. */
+    private val EATING_PLAN_GAP_MS = 5L * 60_000L
+    private val EATING_PLAN_GAP_RISING_MS = 3L * 60_000L
+
+    /** The start dose waits this long after the last delivered bolus (minutes): the loop does not give a bolus sooner. */
+    private val EATING_START_MIN_GAP_MIN = 3.0
+
+    /** Lowest share of the asked SMB that the guards may leave on a confirmed meal rise. */
+    private val RISE_FLOOR_SHARE = 0.6
+
+    /** Share of the left eating budget that one SMB may take while the glucose rises. */
+    private val EATING_BOOST_SHARE = 0.25
+
+    /**
+     * The start dose of the eating mode goes out as ONE dose, without the Max SMB ceiling and without the Autodrive V3 branch.
+     * It is called once per tick after the algorithm. The Loop still applies its own limits (Max IOB, the SMB interval, the
+     * SMB switch) on the result. It does nothing when the algorithm already asks for at least that much.
+     */
+    fun applyEatingStartDose(rT: RT) {
+        applyEatingStartDoseInner(rT)
+        roundSmbToPumpStep(rT)
+    }
+
+    /**
+     * Rounds the SMB to the nearest pump step instead of down. The pump layer always rounds down, so with U200 (step
+     * 0.2 U) 0.58 U became 0.4 U and 0.1 U became nothing: about a quarter of every SMB was lost on a rise.
+     * Now 0.1-0.29 → 0.2, 0.3-0.49 → 0.4, 0.5-0.69 → 0.6 and so on; under half a step → 0. Rounding up adds at most
+     * half a step, and never over Max IOB (then it rounds down).
+     */
+    private fun roundSmbToPumpStep(rT: RT) {
+        val units = rT.units ?: return
+        if (units <= 0.0) return
+        val step = try {
+            activePlugin.activePump.pumpDescription.bolusStep
+        } catch (_: Exception) {
+            return
+        }
+        if (!step.isFinite() || step < 0.05) return
+        val steps = units / step
+        val down = Math.floor(steps + 1e-9) * step
+        val nearest = Math.floor(steps + 0.5 + 1e-9) * step
+        val iobNow = maxOf(this.iob.toDouble(), 0.0)
+        val rounded = if (nearest > units && iobNow + nearest > this.maxIob) down else nearest
+        val result = (Math.round(rounded * 1000.0) / 1000.0)
+        if (abs(result - units) < 1e-6) return
+        consoleLog.add("SMB_ROUND_STEP: ${"%.2f".format(Locale.US, units)}U → ${"%.2f".format(Locale.US, result)}U (pump step ${"%.2f".format(Locale.US, step)}U)")
+        rT.units = result
+    }
+
+    private fun applyEatingStartDoseInner(rT: RT) {
+        val eating = eatingOutFresh() ?: return
+        val now = dateUtil.now()
+        val startWant = Math.floor(eating.startRemainingU * 20.0) / 20.0
+        // The planned part (chosen size). No fixed step: the trend decides. A rising glucose takes all that is due now,
+        // a flat one takes half. The Max SMB setting for high glucose stays the only ceiling of one dose.
+        val rising = this.delta.isFinite() && this.delta >= 2f
+        val planShare = if (rising) 1.0 else 0.5
+        val planWant = Math.floor(minOf(eating.planDueU * planShare, maxSMBHB) * 20.0) / 20.0
+        val isPlan = startWant < 0.1
+        val want = if (isPlan) planWant else startWant
+        if (want < 0.1) return
+        if ((rT.units ?: 0.0) >= want - 1e-6) return
+        if (isPlan) {
+            if (now - eatingStartSentMs < (if (rising) EATING_PLAN_GAP_RISING_MS else EATING_PLAN_GAP_MS)) return
+        } else {
+            // The start dose is sent again on every loop run until it is in the database. The Combo needs 40-50 s to set
+            // the temp basal before the bolus, and the loop runs every minute (1-minute sensor): the next run replaced the
+            // request with a small SMB, and the start dose was lost (9 Nov 11:00: 1.5 U asked, 0.2 U given). The loop
+            // gives no bolus within 3 minutes of the last one and none while a bolus is in the queue, so this cannot
+            // double the dose; the delivered insulin is counted from the database on every run.
+            val sinceBolusMin = if (lastDeliveredBolusAgeMinutes.isNaN()) 999.0 else lastDeliveredBolusAgeMinutes
+            if (sinceBolusMin < EATING_START_MIN_GAP_MIN) return
+        }
+        val hypo = lastPostHypoDeliveryAuthority
+        val why = when {
+            !smbSwitchOnThisTick -> "SMB is off"
+            hypo.active && hypo.suppressMealDelivery -> "post-hypo guard"
+            this.delta.isFinite() && this.delta < -2f -> "glucose is falling"
+            isPlan && this.bg < 100.0 -> "glucose is low"
+            isPlan && this.eventualBG.isFinite() && this.eventualBG <= 108.0 -> "forecast is low"
+            !isPlan && this.eventualBG.isFinite() && this.eventualBG <= 80.0 -> "forecast is low"
+            !isPlan && this.iob > EARLY_RISE_MAX_IOB_U -> "IOB is high"
+            isPlan && maxOf(this.iob.toDouble(), 0.0) + want > this.maxIob * 0.9 -> "Max IOB"
+            maxOf(this.iob.toDouble(), 0.0) + want > this.maxIob -> "Max IOB"
+            else -> null
+        }
+        if (why != null) {
+            consoleLog.add("EATING_${if (isPlan) "PLAN" else "START"}_BLOCKED: ${"%.2f".format(Locale.US, want)}U ($why)")
+            return
+        }
+        val asked = rT.units ?: 0.0
+        rT.units = want
+        rT.reason.append(if (isPlan) "🍽plan dose " else "🍽start dose ")
+        consoleLog.add("EATING_${if (isPlan) "PLAN" else "START"}: ${"%.2f".format(Locale.US, want)}U as one dose (algorithm asked ${"%.2f".format(Locale.US, asked)}U)")
+        eatingStartSentMs = now
+        internalLastSmbMillis = now
+    }
+
+    private fun updateEatingMode(iobActivityUPerMin: Double, shortAvgDelta: Double, profileBasalUph: Double, profileCarbRatioGPerU: Double) {
+        EnergyMeter.attach(context)
+        eatingOut = null
+        try {
+            val now = dateUtil.now()
+            val startMs = context.getSharedPreferences(EatingEngine.PREFS, Context.MODE_PRIVATE)
+                .getLong(EatingEngine.START_MS, 0L)
+            // All insulin of the window: boluses and SMB, and the extra insulin of temp basals above the profile basal.
+            val delivered = if (eatingEngine.isActive() && startMs > 0L) {
+                eatingBolusU(startMs) + eatingTempBasalExtraU(startMs, now, profileBasalUph)
+            } else {
+                0.0
+            }
+            val input = EatingEngine.Input(
+                nowMs = now,
+                bgMgdl = bg,
+                deltaMgdl5 = delta.toDouble(),
+                shortAvgMgdl5 = if (shortAvgDelta.isFinite()) shortAvgDelta else delta.toDouble(),
+                // The profile ISF (the one the loop works with). The learned ISF is often much lower (about 40 mg/dL on
+                // 9 Nov, real effect 60-70 mg/dL per U), and then the carbs of a meal eaten on a falling glucose came out too small.
+                isfMgdlPerU = (lastProfile?.sens ?: 0.0).takeIf { it > 1.0 }
+                    ?: variableSensitivity.toDouble().takeIf { it > 1.0 } ?: 50.0,
+                iobActivityUPerMin = iobActivityUPerMin,
+                // The insulin for 1 XE (10 g) comes from the profile carb ratio, so the profile is the only source.
+                uPerXe = if (profileCarbRatioGPerU.isFinite() && profileCarbRatioGPerU > 1.0) {
+                    (10.0 / profileCarbRatioGPerU).coerceIn(0.3, 6.0)
+                } else {
+                    preferences.get(DoubleKey.OApsAIMIEatingUPerXe)
+                },
+                // A third of the typical insulin of the past meals; the setting is used until there is enough history.
+                startDoseU = eatingEngine.startDoseU(
+                    preferences.get(DoubleKey.OApsAIMIEatingStartDoseU),
+                    preferences.get(DoubleKey.OApsAIMIEatingMaxWindowU)
+                ),
+                maxWindowU = preferences.get(DoubleKey.OApsAIMIEatingMaxWindowU),
+                stopForecastMgdl = preferences.get(DoubleKey.OApsAIMIEatingStopForecastMgdl),
+                eventualBgMgdl = if (this.eventualBG.isFinite()) this.eventualBG else Double.NaN,
+                deliveredU = delivered,
+                learningFrozen = preferences.get(BooleanKey.OApsAIMIEatingLearningFrozen),
+                largestBolusU = if (eatingEngine.isActive() && startMs > 0L) eatingLargestBolusU(startMs) else 0.0,
+            )
+            eatingOut = eatingEngine.tick(input)
+            eatingOutAtMs = now
+            eatingEngine.logTick(input, eatingOut)
+            eatingOut?.let {
+                consoleLog.add(
+                    "EATING: age ${"%.0f".format(Locale.US, it.ageMin)}m, estimate ${"%.0f".format(Locale.US, it.estimateG)}g " +
+                        "(${"%.1f".format(Locale.US, it.estimateG / 10.0)} XE), needed ${"%.2f".format(Locale.US, it.neededU)}U, " +
+                        "given ${"%.2f".format(Locale.US, delivered)}U, left ${"%.2f".format(Locale.US, it.budgetRemainingU)}U, brake ${"%.2f".format(Locale.US, it.brake)}"
+                )
+            }
+        } catch (e: Exception) {
+            eatingOut = null
+            consoleLog.add("EATING: engine error ${e.javaClass.simpleName}")
+        }
+    }
+
+    /** True on a tick that is inside the confirmed start of a meal rise (see the early rise block in the SMB ceiling code). */
+    private var earlyRiseActiveThisTick = false
+
+    /** Eventual glucose (mg/dL) above which a confirmed early rise is treated as a real meal rise. */
+    private val EARLY_RISE_MIN_EVENTUAL_MGDL = 100.0
+
+    /** Share of High BG Max SMB that is the lowest dose per tick at the start of a confirmed rise. */
+    private val EARLY_RISE_FRONT_DOSE_SHARE = 0.5
+
+    /**
+     * How strong the rise is, from 0 to 1: the lowest front dose is scaled by it. A 5-minute rise at or below the low
+     * limit (default 3 mg/dL, noise at low glucose) gives no minimum dose at all; at or above the full limit (default
+     * 8 mg/dL, a real meal rise) it gives the full share. Both limits are set in the AIMI Assistant.
+     * Below 0.2 the minimum dose is switched off, so a weak start gets only what the normal model asks for.
+     */
+    private fun earlyRiseFrontStrength(): Double {
+        val strength = riseStrength()
+        return if (strength < 0.2) 0.0 else strength
+    }
+
+    /** Strength of the rise now, from 0 (at or below the low limit) to 1 (at or above the full limit), by the 5-minute rise. */
+    private fun riseStrength(): Double {
+        if (!delta.isFinite()) return 0.0
+        val low = preferences.get(DoubleKey.OApsAIMIFrontDoseRiseLow)
+        val full = preferences.get(DoubleKey.OApsAIMIFrontDoseRiseFull).coerceAtLeast(low + 0.5)
+        return ((delta.toDouble() - low) / (full - low)).coerceIn(0.0, 1.0)
+    }
+
+    /**
+     * The size of the SMB follows the acceleration of the rise, not the glucose level: a sharp rise keeps the full
+     * dose, a weak rise gets a smaller share (30% at the low limit). The level of glucose only protects: from 200 mg/dL
+     * the share is at least 60%, from 250 mg/dL there is no reduction. When glucose is not rising, other guards decide.
+     */
+    private fun accelerationDoseFactor(): Double {
+        if (!delta.isFinite() || delta <= 0f) return 1.0
+        if (bg >= 250.0) return 1.0
+        val factor = ACCELERATION_MIN_SHARE + (1.0 - ACCELERATION_MIN_SHARE) * riseStrength()
+        return if (bg >= 200.0) maxOf(factor, 0.6) else factor
+    }
+
+    private val ACCELERATION_MIN_SHARE = 0.3
+
     private var lastPhysiologicalTreeSnapshot: PhysiologicalTreeSnapshot? = null
 
     /** NGR (Night Growth Resistance) basal multiplier for THIS tick (1.0 unless NGR active in its night window).
@@ -12993,6 +13729,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         /** Fenêtre pour [minBgInLastMinutes] : min BG &lt; 70 dans cette durée → amortissement Ra post-hypo (AutoDrive V3). */
         private const val AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES = 75
 
+        /**
+         * After a zero basal ends, an undeclared meal-like hint must be backed by a sustained CGM rise.
+         * Explicit Eating/FCL modes bypass this guard; the configured meal maximum itself is unchanged.
+         */
+        private const val POST_LGS_RISE_CONFIRMATION_MINUTES = 45
+
+        /** Early undeclared food still receives insulin after LGS, but cannot jump straight to 6 U/h. */
+        private const val POST_LGS_UNDECLARED_BASAL_CEILING_UPH = 3.0
+
         /** Seuil et fenêtre de l'hyperglycémie « persistante » qui entraîne le [BasalLearner] à la hausse. */
         private const val PERSISTENT_HYPER_BG_MGDL = 180.0
         private const val PERSISTENT_HYPER_LOOKBACK_MINUTES = 60
@@ -13079,6 +13824,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val nightGrowthResistanceMode = NightGrowthResistanceMode()
     private val ngrTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     private var zeroBasalAccumulatedMinutes: Int = 0
+    private var postLgsBasalCeilingUph: Double? = null
     private val MAX_ZERO_BASAL_DURATION = 60  // Durée maximale autorisée en minutes à 0 basal
     private val insulinObserver = app.aaps.plugins.aps.openAPSAIMI.pkpd.RealTimeInsulinObserver()  // 🚀 Real-Time Insulin Observer
     private var pkpdThrottleIntervalAdd: Int = 0       // 🚀 PKPD interval boost (0 si normal/modes repas)
@@ -13841,6 +14587,23 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 declaredMealNote = fclTime || anticipTime,
             ),
         )
+        if (lastPostHypoDeliveryAuthority.active && postHypoMealExitActive()) {
+            consoleLog.add("POST_HYPO_MEAL_EXIT: post-hypo limits released (BG=${bg.roundToInt()} Δ=${"%.1f".format(Locale.US, delta)})")
+            lastPostHypoDeliveryAuthority = PostHypoDeliveryAuthority.INACTIVE
+            if (correctionAggressionDecision?.tier == CorrectionAggressionGate.Tier.REBOUND_GUARD) {
+                correctionAggressionDecision = CorrectionAggressionGate.evaluate(
+                    buildCorrectionAggressionInput(
+                        bg = bg,
+                        targetBg = targetBg.toDouble(),
+                        delta = delta,
+                        shortAvgDelta = shortAvgDelta,
+                        combinedDelta = combinedDelta,
+                        cob = cob.toDouble(),
+                        postHypoHint = CorrectionAggressionGate.PostHypoHint.NONE,
+                    ),
+                )
+            }
+        }
         if (lastPostHypoDeliveryAuthority.active) {
             consoleLog.add(PostHypoDeliveryAuthority.formatLogLine(lastPostHypoDeliveryAuthority))
         }
@@ -14353,6 +15116,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 mealContext = effectiveMealContext,
                 ignoreMinPredictedCurve = ignoreMinPredCurve,
             )
+            // Soft LGS: a zero only from the forecast (not the glucose now, not a fast fall) becomes half of the profile
+            // basal when the insulin on board cannot take the glucose low. On 10 Nov night the glucose stood at 5.1-5.2
+            // mmol/L with IOB below 0, a tiny sensor fall made the forecast 4.2-4.7 and the basal was 0 for 40 minutes;
+            // the missing basal then pushed the glucose up (swings 5.0-6.3).
+            val softLgs = lgsReason == HypoLgsBlockReason.PREDICTED_MIN_CURVE || lgsReason == HypoLgsBlockReason.PREDICTED_AND_EVENTUAL
+            val noRiseForLgs = noRiseBg(bg, iob.toDouble(), profile.sens)
+            if (lgsReason != null && softLgs && bg > hypoGuard + SOFT_LGS_BG_MARGIN_MGDL && delta > SOFT_LGS_MIN_DELTA &&
+                noRiseForLgs != null && noRiseForLgs >= hypoGuard && !lastPostHypoDeliveryAuthority.active
+            ) {
+                val half = profile.current_basal * 0.5
+                consoleLog.add(
+                    "LGS_SOFT: forecast zero → ${"%.2f".format(Locale.US, half)}U/h, BG=${bg.roundToInt()} Δ=${"%.1f".format(Locale.US, delta)} " +
+                        "IOB=${"%.2f".format(Locale.US, iob)} no-rise ${noRiseForLgs.roundToInt()} ≥ ${hypoGuard.roundToInt()}",
+                )
+                rT.reason.append(" [LGS_SOFT ${"%.2f".format(Locale.US, half)}U/h]")
+                rT.duration = maxOf(duration, 30)
+                rT.rate = half
+                recordBasalActionType(if (half < currenttemp.rate) "tbr_down" else "tbr_up")
+                return rT
+            }
             if (lgsReason != null) {
                 val lgsLine = when (lgsReason) {
                     HypoLgsBlockReason.BG_NOW ->
@@ -14472,6 +15255,35 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             consoleLog.add("PKPD_TBR_BOOST original=${"%.2f".format(originalRate)} boost=${"%.2f".format(pkpdPreferTbrBoost)} → ${"%.2f".format(rateAdjustment)}U/h")
         }
 
+        // No meal, no fast rise: the dynamic controller works in a narrow band around the profile basal.
+        //  - below 117 mg/dL (6.5 mmol/L) not more than 1.5× the profile basal (it gave 2.5× at 5.4-5.8 at night);
+        //  - not under half of the profile basal when the insulin on board cannot take the glucose low (it gave 0 at
+        //    8.0 mmol/L in the day: "PI-Projected ... Mult=0.00x"). A real low is handled by LGS above and below.
+        // A fast rise ("Fast rise (meal)", default 5 mg/dL per 5 min, also in the last 3 minutes), eating mode and meal
+        // modes keep the full range.
+        val fastRiseCalm = eatingEngine.fastRiseMgdl5()
+        val fastMealRise = this.delta >= fastRiseCalm && (riseNowPer5Min() ?: this.delta.toDouble()) >= fastRiseCalm
+        if (!isMealMode && eatingOutFresh() == null && !fastMealRise) {
+            val profileBasal = profile.current_basal
+            if (bgNow < CALM_BASAL_BG_MGDL && rateAdjustment > profileBasal * CALM_BASAL_MAX_FACTOR) {
+                consoleLog.add(
+                    "CALM_BASAL_CAP: ${"%.2f".format(Locale.US, rateAdjustment)}→${"%.2f".format(Locale.US, profileBasal * CALM_BASAL_MAX_FACTOR)}U/h " +
+                        "BG=${bgNow.roundToInt()} Δ=${"%.1f".format(Locale.US, delta)}",
+                )
+                rateAdjustment = profileBasal * CALM_BASAL_MAX_FACTOR
+            }
+            val noRiseCalm = noRiseBg(bgNow, iob.toDouble(), profile.sens)
+            if (rateAdjustment < profileBasal * 0.5 && bgNow > hypoGuard + SOFT_LGS_BG_MARGIN_MGDL && delta > SOFT_LGS_MIN_DELTA &&
+                noRiseCalm != null && noRiseCalm >= maxOf(hypoGuard, profile.target_bg) && !lastPostHypoDeliveryAuthority.active
+            ) {
+                consoleLog.add(
+                    "CALM_BASAL_FLOOR: ${"%.2f".format(Locale.US, rateAdjustment)}→${"%.2f".format(Locale.US, profileBasal * 0.5)}U/h " +
+                        "BG=${bgNow.roundToInt()} no-rise ${noRiseCalm.roundToInt()}",
+                )
+                rateAdjustment = profileBasal * 0.5
+            }
+        }
+
         // 4) Limites de sécurité
         val maxSafe = min(
             profile.max_basal,
@@ -14527,6 +15339,21 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 }
             rate = (rate * effectiveMultiplier).coerceAtMost(if (bypassSafety) profile.max_basal else maxSafe)
             rT.reason.append(" | 🧬AdaptiveBasal: ${"%.2f".format(effectiveMultiplier)}x (${"%.2f".format(originalBeforeScaling)}->${"%.2f".format(rate)}U/h)")
+        }
+
+        // Faded forecast cap on the final rate. The dynamic basal controller and AdaptiveBasal above can raise the rate
+        // 2-3 times on a flat glucose a bit over target (9 Nov 01:45-02:27: 1.8-2.0 U/h for 40 min at 6.5 mmol/L,
+        // IOB about 0, then a fall and LGS). With a slow or no rise the rate gets only the need of the faded forecast,
+        // given over 30 minutes. A fast rise (meal), meal modes and eating mode keep the full rate.
+        if (rate > profile.current_basal && !isMealMode && eatingOutFresh() == null && !riseIsFastNow()) {
+            fadedForecastNeed(iob.toDouble(), profile.sens, allowNoForecast = true)?.let { f ->
+                val cap = profile.current_basal + f.needU * 2.0
+                if (rate > cap + 0.05) {
+                    consoleLog.add("FADED_FORECAST_BASAL: ${"%.2f".format(Locale.US, rate)}→${"%.2f".format(Locale.US, cap)}U/h, ${f.summary()}")
+                    rT.reason.append(" [FADED_FORECAST_BASAL ${"%.2f".format(Locale.US, rate)}→${"%.2f".format(Locale.US, cap)}U/h]")
+                    rate = cap
+                }
+            }
         }
 
         // 6) Endocrine governor (production) — skip if Harmonia basal-first already embedded amp in rate
@@ -15241,7 +16068,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             }
         }
         
-        val baseLimit = app.aaps.plugins.aps.openAPSAIMI.safety.SafetyNet.calculateSafeSmbLimit(
+        val baseLimitRaw = app.aaps.plugins.aps.openAPSAIMI.safety.SafetyNet.calculateSafeSmbLimit(
             bg = this.bg,
             targetBg = targetBg.toDouble(),
             eventualBg = decisionEventualBgForSmb,
@@ -15254,13 +16081,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             mealPriorityContext = smbDeliveryPriorityContext,
             allowAuditorSoftLanding = allowAuditorSoftLanding,
         )
+        // Same rule as plain OpenAPS SMB: insulin is needed only if min(lowest forecast, eventual) is above the target.
+        // The forecast is the hybrid curve (IOB + carb and UAM tails). Not when the rise is fast, in eating mode or on a user action.
+        val envelopeBg = forecastEnvelopeBg()
+        val forecastBrake = !isExplicitUserAction && envelopeBg != null && envelopeBg < targetBg.toDouble() &&
+            this.delta < 6f && eatingOutFresh() == null
+        val baseLimit = if (forecastBrake) 0.0 else baseLimitRaw
+        if (forecastBrake && baseLimitRaw > 0.0) consoleLog.add("FORECAST_BRAKE_SMB: min(minPred,eventual) ${envelopeBg!!.toInt()} < target ${targetBg.toInt()}")
         chainBaseLimit = baseLimit
         lastSmbBindingTraceDraft = lastSmbBindingTraceDraft.copy(
             originOwner = lastSmbBindingTraceDraft.originOwner.takeUnless { it == "NONE" } ?: decisionSource,
             finalOwner = decisionSource,
             maxSmbU = maxSMB,
             maxSmbHighBgU = maxSMBHB,
-            iobHeadroomU = (maxIob - iob).coerceAtLeast(0.0),
+            iobHeadroomU = (maxIob - maxOf(iob.toDouble(), 0.0)).coerceAtLeast(0.0),
             safetyNetBaseLimitU = baseLimit,
         )
 
@@ -15315,7 +16149,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
              baseRefractoryWindow
          }
          
-         val sinceBolus = if (lastBolusAgeMinutes.isNaN()) 999.0 else lastBolusAgeMinutes
+         val sinceBolus = if (lastDeliveredBolusAgeMinutes.isNaN()) 999.0 else lastDeliveredBolusAgeMinutes
          // Same 6 s tolerance as the loop's SMB interval rule (SmbIntervalGate), so the refractory window
          // does not hold back an SMB the interval check has just allowed.
          val refractoryBlocked = sinceBolus < refractoryWindow - SMB_REFRACTORY_TOLERANCE_MIN && !isExplicitUserAction && !bypassSmbRefractory
@@ -15353,12 +16187,29 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 // - Very early after bolus: keep conservative partial block
                 // - Near end of refractory window: allow stronger release
                 val refractoryProgress = (sinceBolus / refractoryWindow).coerceIn(0.0, 1.0)
-                val relaxFactor = (0.35 + 0.35 * refractoryProgress).coerceIn(0.35, 0.70)
+                val progressiveRelaxFactor = (0.35 + 0.35 * refractoryProgress).coerceIn(0.35, 0.70)
+                val mealRiseRelax = MealRiseRefractoryPolicy.factor(
+                    progressiveFactor = progressiveRelaxFactor,
+                    mealPriority = mealPriorityContext,
+                    phase = mealAbsorption?.phase,
+                    riseLevel = RiseConfirmation.evaluate(
+                        recentCleanBgNewestFirst(RiseConfirmation.SLOW_WINDOW_TICKS + 1),
+                    )?.level,
+                    bgMgdl = this.bg,
+                    targetMgdl = targetBg.toDouble(),
+                    deltaMgdl5m = this.delta.toDouble(),
+                    shortAvgDeltaMgdl5m = this.shortAvgDelta.toDouble(),
+                    minPredMgdl = minPredForStacking,
+                    iobU = this.iob.toDouble(),
+                    maxIobU = this.maxIob,
+                )
+                val relaxFactor = mealRiseRelax.factor
                 gatedUnits = (gatedUnits * relaxFactor.toFloat()).coerceAtLeast(0f)
                 consoleLog.add(
                     "⏸️➡️ REFRACTORY_RELAX_MEAL_PRIORITY sinceBolus=${"%.1f".format(sinceBolus)}m " +
                         "window=${"%.1f".format(refractoryWindow)}m progress=${"%.2f".format(refractoryProgress)} " +
-                        "factor=${"%.2f".format(relaxFactor)} SMB ${"%.2f".format(before)}→${"%.2f".format(gatedUnits)}U"
+                        "factor=${"%.2f".format(relaxFactor)} SMB ${"%.2f".format(before)}→${"%.2f".format(gatedUnits)}U " +
+                        "policy=${mealRiseRelax.reason}"
                 )
             } else {
                 gatedUnits = 0f
@@ -15513,7 +16364,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             // Previous code used max(baseLimit, proposedUnits) which IGNORED user limits
             // This caused hypos for users who set conservative maxSMB
             maxSmbConfig = baseLimit, // ✅ ALWAYS respect user preference
-            iob = this.iob.toDouble(),
+            iob = maxOf(this.iob.toDouble(), 0.0),
             maxIob = this.maxIob
         )
         lastSmbBindingTraceDraft = lastSmbBindingTraceDraft
@@ -15583,7 +16434,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             var mealBolus = min(candidateUnits, maxSmbCap)
 
             // b. Cap MaxIOB (Sécurité Ultime) - On ne s'autorise à remplir QUE l'espace disponible
-            val iobSpace = (this.maxIob - this.iob).coerceAtLeast(0.0)
+            val iobSpace = (this.maxIob - maxOf(this.iob.toDouble(), 0.0)).coerceAtLeast(0.0)
 
             // DEBUG TRACE (MTR Audit)
             consoleLog.add("MEAL_DEBUG Need=${"%.2f".format(candidateUnits)} MaxSMB=${"%.2f".format(baseLimit)} MaxSMBHB=${"%.2f".format(maxSMBHB)} Cap=${"%.2f".format(maxSmbCap)} MaxIOB=${"%.2f".format(this.maxIob)} IOB=${"%.2f".format(this.iob)} Space=${"%.2f".format(iobSpace)}")
@@ -15632,7 +16483,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (hyperReleaseFloorU > 0.0 && !isRedCarpetSituation &&
             !criticalSafetyZeroedThisTick && !iobSurveillanceSuppressRedCarpet
         ) {
-            val iobSpace = (this.maxIob - this.iob).toDouble().coerceAtLeast(0.0)
+            val iobSpace = (this.maxIob - maxOf(this.iob.toDouble(), 0.0)).coerceAtLeast(0.0)
             val floorCap = minOf(hyperReleaseFloorU, iobSpace, baseLimit)
             if (finalUnits + 0.02 < floorCap) {
                 consoleLog.add(
@@ -15816,6 +16667,108 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             finalUnits = 0.0
         }
 
+        // Eating mode: one budget for the whole window (the start dose and all SMB), and the brake when the rise slows down.
+        eatingOutFresh()?.let { eating ->
+            if (finalUnits > 0.0) {
+                val allowed = eating.allowedSmbU(finalUnits)
+                if (allowed < finalUnits - 1e-6) {
+                    consoleLog.add(
+                        "EATING_CAP: ${"%.2f".format(Locale.US, finalUnits)}→${"%.2f".format(Locale.US, allowed)}U " +
+                            "(estimate ${"%.0f".format(Locale.US, eating.estimateG)}g, budget left ${"%.2f".format(Locale.US, eating.budgetRemainingU)}U, brake ${"%.2f".format(Locale.US, eating.brake)})"
+                    )
+                    rT.reason.append("🍽cap ")
+                    finalUnits = allowed
+                }
+            }
+            // The mode only started late before: the chain of guards cut the dose to a few hundredths of a unit and the
+            // budget stayed unused. While the glucose rises and budget is left, give a share of the budget as SMB.
+            val hypoGuard = lastPostHypoDeliveryAuthority
+            val boostTarget = minOf(eating.budgetRemainingU * EATING_BOOST_SHARE, maxSMBHB)
+            if (eating.brake >= 0.5 && eating.budgetRemainingU >= 0.3 && this.delta.isFinite() && this.delta >= 2f &&
+                smbSwitchOnThisTick && !(hypoGuard.active && hypoGuard.suppressMealDelivery) &&
+                this.eventualBG > 80.0 && maxOf(this.iob.toDouble(), 0.0) + boostTarget <= this.maxIob && finalUnits < boostTarget
+            ) {
+                consoleLog.add(
+                    "EATING_BOOST: ${"%.2f".format(Locale.US, finalUnits)}→${"%.2f".format(Locale.US, boostTarget)}U " +
+                        "(budget left ${"%.2f".format(Locale.US, eating.budgetRemainingU)}U)"
+                )
+                rT.reason.append("🍽boost ")
+                finalUnits = boostTarget
+            }
+        }
+        // Rise floor: on a confirmed meal rise the guards together (safety, refractory, throttle) may not cut the dose below
+        // 60% of what the model asked. This works with and without the eating mode. The hypo guards, Max SMB, Max IOB and the
+        // forecast limit stay as they are.
+        // IOB limit for the rise floor. With the eating mode the meal budget decides, so the limit is high. Without it the
+        // limit grows with the glucose level and with the speed of the rise, so a big meal (sushi, pizza) is not stopped.
+        val riseFloorIobCap = when {
+            eatingOutFresh() != null -> this.maxIob * 0.90
+            // A fast rise is a meal by itself: the same limit as with the eating mode, no button needed.
+            this.delta >= 5f -> this.maxIob * 0.90
+            bg < 144.0 -> minOf(7.0, this.maxIob * 0.70)
+            bg < 180.0 -> minOf(8.0, this.maxIob * 0.80)
+            else -> this.maxIob * 0.60
+        }
+        if (mealPriorityContext && finalUnits > 0.0 && this.delta.isFinite() && this.delta >= 3.5f &&
+            bg >= 100.0 && smbSwitchOnThisTick && this.eventualBG > 80.0 &&
+            !(lastPostHypoDeliveryAuthority.active && lastPostHypoDeliveryAuthority.suppressMealDelivery) &&
+            this.iob <= riseFloorIobCap
+        ) {
+            val riseFloor = minOf(proposedFloat.toDouble() * RISE_FLOOR_SHARE, chainBaseLimit.toDouble(), this.maxIob - maxOf(this.iob.toDouble(), 0.0))
+            if (finalUnits < riseFloor) {
+                consoleLog.add("RISE_FLOOR: ${"%.2f".format(Locale.US, finalUnits)}→${"%.2f".format(Locale.US, riseFloor)}U")
+                rT.reason.append("⬆floor ")
+                finalUnits = riseFloor
+            }
+        }
+        // Negative IOB (a long zero basal or low temp basals): the algorithm sees the missing insulin as room for more SMB, and the
+        // glucose swings back and forth later. While IOB is below -0.5 U and the rise is not fast, the SMB shrinks with the
+        // size of the deficit (down to half at -4 U). A fast rise (5 mg/dL per 5 minutes or more) and user actions are not touched.
+        if (finalUnits > 0.0 && this.iob < -0.5f && !isExplicitUserAction && !(this.delta.isFinite() && this.delta >= 5f)) {
+            val negFactor = (1.0 + this.iob / 8.0).coerceIn(0.5, 1.0)
+            if (negFactor < 0.999) {
+                consoleLog.add("NEG_IOB_BRAKE: IOB=${"%.2f".format(Locale.US, this.iob)} SMB ${"%.2f".format(Locale.US, finalUnits)}→${"%.2f".format(Locale.US, finalUnits * negFactor)}U")
+                rT.reason.append("⬇negIOB ")
+                finalUnits *= negFactor
+            }
+        }
+        // Not more often than the SMB interval: the meal "restore" steps must not give a new SMB inside the window.
+        // Two or three SMB in 5 minutes were given before the first one started to work (8 Nov 20:25-20:30).
+        if (finalUnits > 0.0 && refractoryBlocked && eatingOutFresh() == null && !isMealModeCondition()) {
+            consoleLog.add(
+                "SMB_INTERVAL_HOLD: ${"%.2f".format(Locale.US, finalUnits)}U→0, last SMB ${"%.1f".format(Locale.US, sinceBolus)} min ago, " +
+                    "interval ${"%.1f".format(Locale.US, refractoryWindow)} min",
+            )
+            finalUnits = 0.0
+        }
+        if (finalUnits > 0.0 && !isExplicitUserAction) {
+            val isfForStop = lastProfile?.sens ?: 0.0
+            val iobForStop = this.iob.toDouble()
+            val stopBg = riseStopNoRiseBg(iobForStop, isfForStop)
+            if (stopBg != null) {
+                // The rise has stopped: the insulin on board is already enough.
+                consoleLog.add(
+                    "RISE_STOP_SMB: ${"%.2f".format(Locale.US, finalUnits)}U→0, BG ${this.bg.roundToInt()} − IOB " +
+                        "${"%.2f".format(Locale.US, iobForStop)}×ISF ${isfForStop.roundToInt()} = ${stopBg.roundToInt()} mg/dL",
+                )
+                rT.reason.append("⏹riseStop ")
+                finalUnits = 0.0
+            } else if (eatingOutFresh() == null && !isMealModeCondition()) {
+                // One SMB is half of the need from the faded forecast, as in plain OpenAPS SMB; the next cycles check again.
+                fadedForecastNeed(iobForStop, isfForStop)?.let { f ->
+                    val capU = f.needU * SMB_NEED_SHARE
+                    if (finalUnits > capU + 0.02) {
+                        consoleLog.add(
+                            "FADED_FORECAST_SMB: ${"%.2f".format(Locale.US, finalUnits)}→${"%.2f".format(Locale.US, capU)}U, ${f.summary()}",
+                        )
+                        finalUnits = capU
+                    }
+                }
+            }
+        }
+        eatingEngine.flushLog(storageHelper.getAimiFile("AIMI_Eating.jsonl"))
+        eatingEngine.syncMealsFile(storageHelper.getAimiFile("AIMI_Eating_meals.json"))
+
         // Charge the SlowCarbMeal early-window budget with the ACTUAL delivered amount (post-effort).
         if (chargeSlowCarbBudget && finalUnits > 0.0) slowCarbBudgetDeliveredU += finalUnits
         chainFinal = finalUnits
@@ -15976,7 +16929,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         anyMealModeForGuard: Boolean,
         isConfirmedHighRise: Boolean,
         mealAdvisorOneShot: Boolean,
-    ): Boolean = mealAdvisorOneShot || anyMealModeForGuard || isConfirmedHighRise
+    ): Boolean = mealAdvisorOneShot || anyMealModeForGuard || isConfirmedHighRise || isEarlyMealRise()
+
+    /**
+     * The patient mode says fast meal, glucose is rising and there is little insulin on board: the first doses of a meal
+     * rise must not be cut by half by the absorption guard. When IOB grows past 1.5 U this is off again.
+     */
+    private fun isEarlyMealRise(): Boolean {
+        val mode = lastPatientModeDecision?.mode ?: return false
+        return mode == PatientMode.FAST_MEAL && this.iob < EARLY_RISE_MAX_IOB_U && shortAvgDelta >= 2.0f
+    }
 
     private fun effectivePkpdGuardFactor(
         guard: PkpdAbsorptionGuard,
@@ -16120,6 +17082,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 reason?.appendLine(
                     context.getString(R.string.reason_safety_sport_meal_reduction, before, smbToGive)
                 )
+            } else if (isSportSafetyOnlyFromSteps() && smbToGive > 0f && bg >= targetBg + 25.0 && shortAvgDelta >= 3.0f) {
+                // Only the step counter says "sport" (nothing was started by the user) and glucose is clearly rising:
+                // give half of the SMB instead of none. Measured 2026-10-31: 40 minutes at zero while glucose went from 5.5 to 9.2.
+                val before = smbToGive
+                smbToGive = before * 0.5f
+                reason?.appendLine(context.getString(R.string.reason_safety_sport_rise_softened, before, smbToGive))
             } else {
                 // Sport is a vital safety, not a minor one, so Red Carpet must not put this back.
                 // Without this flag the zero below counted as a minor cut: measured 2026-08-18, the
@@ -16713,9 +17681,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val conditions = mutableListOf<String>()
 
         // Fallback condition: intentional temporary bypass for selected blockers in strong-rise context
-        val fallback = (context.bg > context.targetBg + 30.0) &&
+        val fallback = ((context.bg > context.targetBg + 30.0) &&
             (context.delta >= 2.0) &&
-            (context.iob < context.maxIob * 0.8)
+            (context.iob < context.maxIob * 0.8)) ||
+            // Confirmed start of a meal rise: do not wait until glucose is 30 above target (9 minutes were lost on 2026-11-02).
+            (earlyRiseActiveThisTick && context.iob < context.maxIob * 0.8)
 
         // Lever 1: on a hyper-installed plateau (undeclared meal / deep hyper), do not hard-zero SMB
         // solely because the sawtooth redesignation has Δ<0. The classic rise-fallback requires
@@ -16942,6 +17912,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             context.shortAvgDelta < 0 &&
             (context.bg < context.targetBg || context.delta < -2.0)
 
+    /** True when the sport guard is on only because of the step counts: no manual sport and no activity context. */
+    private fun isSportSafetyOnlyFromSteps(): Boolean = !sportTime && !aimiContextActivityActive
+
     private fun isSportSafetyCondition(): Boolean {
         // Unknown steps read as 0 here, as they always did: this check only makes dosing more careful.
         val recentSteps5Minutes = this.recentSteps5Minutes ?: 0
@@ -16975,7 +17948,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return manualSport || recentBurst || sustainedActivity || highTargetExercise
     }
     private fun calculateSMBInterval(): Int {
-        val defaultInterval = 3
+        // The general "SMB interval" setting is the lowest value for every case: the loop does not send an SMB sooner.
+        val defaultInterval = preferences.get(IntKey.ApsMaxSmbFrequency)
 
         // 1) Lecture des préférences
         val intervals = SMBIntervals(
@@ -16991,24 +17965,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // 2) Cas critique : montée très rapide -> SMB toutes les minutes
         if (delta > 15f) {
-            return 1
+            return defaultInterval
         }
 
         // 3) Intervalle de base en fonction du mode actif
         val honeymoon = preferences.get(BooleanKey.OApsAIMIhoneymoon)
 
-        val modeInterval = when {
-            snackTime                -> intervals.snack
-            mealTime                 -> intervals.meal
-            bfastTime                -> intervals.bfast
-            lunchTime                -> intervals.lunch
-            dinnerTime               -> intervals.dinner
-            sleepTime                -> intervals.sleep
-            highCarbTime             -> intervals.hc
-            !honeymoon && bg > 120f  -> intervals.highBG
-            honeymoon && bg > 180f   -> intervals.highBG
-            else                     -> defaultInterval
-        }.coerceAtLeast(1)
+        // One interval for every case: the general "SMB interval" setting. The meal-time and sleep intervals are not used.
+        val modeInterval = defaultInterval.coerceAtLeast(1)
 
         var interval = modeInterval
 
@@ -18944,6 +19908,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 val minPred = intsPredictions.minOrNull()?.toDouble() ?: bg
                 val uamTerminal = uamInts.lastOrNull()?.toDouble()
                 lastEventualBgSnapshot = lastPred
+                hybridMinBgSnapshot = minPred
+                hybridMinBgAtMs = dateUtil.now()
                 rT.eventualBG = lastPred
                 this.predictedBg = lastPred.toFloat()
                 rT.predBGs = Predictions().apply {
@@ -19011,6 +19977,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     rT.trajectoryEnabled = false
                 } else {
                     val analysis = traj
+                    // Observation only: compare against the same window using this tick's profile ISF.
+                    val profileIsf = profile.sens.toDouble()
+                    if (profileIsf.isFinite() && profileIsf > 0 && targetBg.isFinite() &&
+                        trajectoryHistory.size >= 2 && trajectoryHistory.all { it.iob.isFinite() && it.bg.isFinite() } &&
+                        trajectoryHistory.indices.drop(1).all { trajectoryHistory[it].timestamp > trajectoryHistory[it - 1].timestamp }
+                    ) {
+                        var balance = 0.0
+                        for (index in 1 until trajectoryHistory.size) {
+                            val previous = trajectoryHistory[index - 1]
+                            val current = trajectoryHistory[index]
+                            balance += (current.iob - previous.iob).coerceAtLeast(0.0)
+                            if (previous.bg > stableOrbit.targetBg + 10.0)
+                                balance -= (previous.bg - current.bg).coerceAtLeast(0.0) / profileIsf
+                        }
+                        consoleLog.add("EnergyBalance shadow: legacy=${analysis.metrics.energyBalance} profile=${balance.coerceIn(-10.0, 10.0)} isf=$profileIsf")
+                    }
                     val statusEmoji = analysis.classification.emoji()
                     val typeDesc = analysis.classification.description()
                     
@@ -21232,6 +22214,34 @@ internal object BasalFirstPolicyMath {
         )
     }
 }
+
+/** Meal after a hypo: the lowest glucose (and "glucose minus insulin on board") for the release, 90 mg/dL = 5.0 mmol/L. */
+private const val POST_HYPO_MEAL_EXIT_MIN_MGDL = 90.0
+/** Meal after a hypo: the release ends under 85 mg/dL (4.7 mmol/L). */
+private const val POST_HYPO_MEAL_EXIT_END_MGDL = 85.0
+/** Meal after a hypo: the 5-minute rise needed on three readings in a row, 5 mg/dL = 0.28 mmol/L. */
+
+/** Stop rule: the low line for "glucose if the rise stopped now" (80 mg/dL = 4.4 mmol/L, the LGS line). */
+private const val RISE_STOP_LOW_MGDL = 80.0
+/** Stop rule: a rise of 2 mg/dL per 5 min (0.11 mmol/L) or more is a rise that goes on (a meal is going in); under it the rise has stopped. */
+private const val RISE_STOP_FAST_MGDL_5M = 2f
+/** Faded forecast: under this rise speed (mg/dL per 5 min) the rise tail of the forecast is not used at all (the rise has stopped). */
+private const val FORECAST_FADE_LOW_MGDL_5M = 0.5
+/** Faded forecast: from this rise speed (mg/dL per 5 min) the full rise tail is used. On 9 Nov a steady 2-4.5 mg/dL rise from popcorn was faded and the basal was cut. */
+private const val FORECAST_FADE_FULL_MGDL_5M = 2.0
+/** Share of the insulin need given in one SMB, as in plain OpenAPS SMB; the next cycles check again. */
+private const val SMB_NEED_SHARE = 0.5
+/** Soft LGS and calm floor: the glucose must be at least this much over the LGS line (4 mg/dL = 0.2 mmol/L). */
+private const val SOFT_LGS_BG_MARGIN_MGDL = 4.0
+/** Soft LGS and calm floor: only for a slow fall, not faster than 3 mg/dL (0.17 mmol/L) per 5 min. */
+private const val SOFT_LGS_MIN_DELTA = -3f
+/** Calm basal: below this glucose (117 mg/dL = 6.5 mmol/L) and without a meal the basal is at most CALM_BASAL_MAX_FACTOR × profile. */
+private const val CALM_BASAL_BG_MGDL = 117.0
+private const val CALM_BASAL_MAX_FACTOR = 1.5
+/** The ISF meter does not measure for 4 hours after a meal: the meal may still go in (fat food up to 5 hours). */
+private const val MEAL_SIGNAL_EXCLUDE_MS = 4L * 3_600_000L
+/** The deviation (held-up glucose) is counted for 30 minutes ahead: 6 steps of 5 minutes, as in plain OpenAPS. */
+private const val DEVIATION_STEPS_30_MIN = 6.0
 
 /** [SmbIntervalGate.TOLERANCE_MS] in minutes, the unit of the SMB refractory window. */
 private const val SMB_REFRACTORY_TOLERANCE_MIN = SmbIntervalGate.TOLERANCE_MS / 60_000.0

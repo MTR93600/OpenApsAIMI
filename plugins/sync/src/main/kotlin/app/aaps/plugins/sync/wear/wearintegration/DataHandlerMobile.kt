@@ -333,6 +333,26 @@ class DataHandlerMobile @Inject constructor(
             if (!config.appInitialized) return@onEvent
             handleUserActionConfirmed(it)
         }
+        onEvent<EventData.AimiEatingPreCheck> {
+            if (!config.appInitialized) return@onEvent
+            handleAimiEatingPreCheck(it)
+        }
+        onEvent<EventData.AimiEatingConfirmed> {
+            if (!config.appInitialized) return@onEvent
+            handleAimiEatingConfirmed(it)
+        }
+        onEvent<EventData.AimiEatingStateRequest> {
+            if (!config.appInitialized) return@onEvent
+            requestAimiEatingState()
+        }
+        onEvent<EventData.AimiEatingStopPreCheck> {
+            if (!config.appInitialized) return@onEvent
+            handleAimiEatingStopPreCheck()
+        }
+        onEvent<EventData.AimiEatingStopConfirmed> {
+            if (!config.appInitialized) return@onEvent
+            handleAimiEatingStopConfirmed()
+        }
         onEvent<EventData.ActionScenePreCheck> {
             if (!config.appInitialized) return@onEvent
             handleScenePreCheck(it)
@@ -680,6 +700,85 @@ class DataHandlerMobile @Inject constructor(
         } else {
             sendError(rh.gs(app.aaps.core.ui.R.string.wizard_pump_not_available))
         }
+    }
+
+    private fun handleAimiEatingPreCheck(command: EventData.AimiEatingPreCheck) {
+        if (!preferences.get(BooleanKey.WearControl)) {
+            sendError("Управление с часов выключено в настройках AAPS")
+            return
+        }
+        val sizeName = when (command.size.coerceIn(0, 4)) {
+            0 -> "Малый"
+            1 -> "Средний"
+            2 -> "Большой"
+            else -> "Авто"
+        }
+        val details = if (command.fat) "$sizeName + жирная пища" else sizeName
+        sendToWear(
+            EventData.ConfirmAction(
+                "Я ем",
+                "Запустить режим: $details?",
+                returnCommand = EventData.AimiEatingConfirmed(command.size.coerceIn(0, 4), command.fat)
+            )
+        )
+    }
+
+    private fun handleAimiEatingConfirmed(command: EventData.AimiEatingConfirmed) {
+        if (!preferences.get(BooleanKey.WearControl)) {
+            sendError("Управление с часов выключено в настройках AAPS")
+            return
+        }
+        sendAimiEatingCommand("app.aaps.action.AIMI_EATING_START", command.size, command.fat)
+    }
+
+    private fun requestAimiEatingState() = sendAimiEatingCommand("app.aaps.action.AIMI_EATING_STATUS")
+
+    private fun handleAimiEatingStopPreCheck() {
+        if (!preferences.get(BooleanKey.WearControl)) {
+            sendError("Управление с часов выключено в настройках AAPS")
+            return
+        }
+        sendToWear(EventData.ConfirmAction("Я ем", "Завершить активный режим?", returnCommand = EventData.AimiEatingStopConfirmed))
+    }
+
+    private fun handleAimiEatingStopConfirmed() {
+        if (!preferences.get(BooleanKey.WearControl)) {
+            sendError("Управление с часов выключено в настройках AAPS")
+            return
+        }
+        sendAimiEatingCommand("app.aaps.action.AIMI_EATING_STOP")
+    }
+
+    private fun sendAimiEatingCommand(action: String, size: Int? = null, fat: Boolean? = null) {
+        val intent = android.content.Intent(action).apply {
+            setClassName(context.packageName, "app.aaps.plugins.aps.openAPSAIMI.meal.AimiEatingWearReceiver")
+            size?.let { putExtra("size", it.coerceIn(0, 4)) }
+            fat?.let { putExtra("fat", it) }
+        }
+        context.sendOrderedBroadcast(
+            intent,
+            null,
+            object : android.content.BroadcastReceiver() {
+                override fun onReceive(c: Context?, i: android.content.Intent?) {
+                    val b = getResultExtras(false) ?: android.os.Bundle.EMPTY
+                    sendToWear(
+                        EventData.AimiEatingState(
+                            active = b.getBoolean("active", false),
+                            size = b.getInt("result_size", 4),
+                            fat = b.getBoolean("result_fat", false),
+                            estimateG = b.getDouble("estimate_g", 0.0),
+                            neededU = b.getDouble("needed_u", 0.0),
+                            deliveredU = b.getDouble("delivered_u", 0.0),
+                            remainingMin = b.getInt("remaining_min", 0)
+                        )
+                    )
+                }
+            },
+            android.os.Handler(context.mainLooper),
+            0,
+            null,
+            null
+        )
     }
 
     private suspend fun handleScenePreCheck(command: EventData.ActionScenePreCheck) {

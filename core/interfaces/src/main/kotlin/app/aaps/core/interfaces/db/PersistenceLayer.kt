@@ -75,6 +75,12 @@ interface PersistenceLayer {
     suspend fun maintainDatabaseAtStartup()
 
     /**
+     * Builds a short text about where the database space goes, and also writes it to the system log (tag AIMI_DB). Read only. The per-table sizes are
+     * written once per install, so a call at every start is cheap.
+     */
+    suspend fun logDatabaseSizeReport(): String = ""
+
+    /**
      * Full VACUUM of the database: defragments the file and returns free pages to the OS.
      * Heavy and memory intensive — manual maintenance only; not used on automatic app startup.
      * May throw if the DB is busy/locked.
@@ -1646,6 +1652,17 @@ interface PersistenceLayer {
      * @return List of APSResult
      */
     suspend fun getApsResults(start: Long, end: Long): List<APSResult>
+
+    /**
+     * Time and variable sensitivity (mg/dL) of the APSResults in the interval, oldest first. Same data as
+     * [getApsResults], but a result that was read before is not decoded again (the graph asks every minute).
+     *
+     * @param start from
+     * @param end to
+     * @return list of pairs (time in ms, variable sensitivity) for results that have a variable sensitivity
+     */
+    suspend fun getApsVariableSens(start: Long, end: Long): List<Pair<Long, Double>> =
+        getApsResults(start, end).mapNotNull { result -> result.variableSens?.let { result.date to it } }
 
     /**
      * Insert or update ApsResult record

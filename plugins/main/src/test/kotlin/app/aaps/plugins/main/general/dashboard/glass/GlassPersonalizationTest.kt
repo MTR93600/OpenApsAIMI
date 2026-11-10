@@ -48,6 +48,7 @@ class GlassPersonalizationTest {
         val bottomRowIds = GLASS_PILL_CATALOG.filter { it.location == GlassPillLocation.BOTTOM_ROW }.map { it.id }.toSet()
         assertThat(bottomRowIds).containsExactly(
             GlassPillId.IOB, GlassPillId.TARGET, GlassPillId.BASAL_RATE, GlassPillId.LAST_BOLUS, GlassPillId.LAST_CARBS,
+            GlassPillId.RESERVOIR_LEVEL, GlassPillId.AIMI_INSIGHT,
         )
         val topGridIds = GLASS_PILL_CATALOG.filter { it.location == GlassPillLocation.TOP_GRID }.map { it.id }.toSet()
         assertThat(topGridIds).containsExactly(

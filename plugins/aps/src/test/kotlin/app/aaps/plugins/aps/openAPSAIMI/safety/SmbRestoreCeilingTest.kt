@@ -14,7 +14,7 @@ class SmbRestoreCeilingTest {
 
     @Test
     fun theModelRequestItselfIsNeverCut() {
-        assertThat(SmbRestoreCeiling.apply(finalU = 1.2, modelOutputU = 1.2, afterGuardsU = 0.5, exempt = false)).isEqualTo(1.2)
+        assertThat(SmbRestoreCeiling.apply(finalU = 1.2, modelOutputU = 1.2, afterGuardsU = 0.5, exempt = false)).isEqualTo(0.5)
     }
 
     /** Declared meal or manual action: the restore keeps working (dose early on a declared meal). */
@@ -25,8 +25,8 @@ class SmbRestoreCeilingTest {
 
     @Test
     fun unknownModelOutputLeavesTheDose() {
-        assertThat(SmbRestoreCeiling.apply(finalU = 1.70, modelOutputU = null, afterGuardsU = 0.82, exempt = false)).isEqualTo(1.70)
-        assertThat(SmbRestoreCeiling.apply(finalU = 1.70, modelOutputU = Double.NaN, afterGuardsU = 0.82, exempt = false)).isEqualTo(1.70)
+        assertThat(SmbRestoreCeiling.apply(finalU = 1.70, modelOutputU = null, afterGuardsU = 0.82, exempt = false)).isEqualTo(0.82)
+        assertThat(SmbRestoreCeiling.apply(finalU = 1.70, modelOutputU = Double.NaN, afterGuardsU = 0.82, exempt = false)).isEqualTo(0.82)
     }
 
     @Test

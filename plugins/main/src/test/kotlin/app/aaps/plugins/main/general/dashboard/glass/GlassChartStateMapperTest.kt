@@ -33,7 +33,7 @@ class GlassChartStateMapperTest {
         val windowStart = nowEpochMs - rangeHours * 3_600_000L
 
         val result = buildGlassChartState(
-            rangeHours = rangeHours,
+            rangeHours = rangeHours.toFloat(),
             nowEpochMs = nowEpochMs,
             bgReadings = listOf(bg(windowStart - 1L, 120.0)),
             iobPoints = emptyList(),
@@ -55,7 +55,7 @@ class GlassChartStateMapperTest {
         val windowStart = nowEpochMs - rangeHours * 3_600_000L
 
         val result = buildGlassChartState(
-            rangeHours = rangeHours,
+            rangeHours = rangeHours.toFloat(),
             nowEpochMs = nowEpochMs,
             bgReadings = listOf(bg(windowStart, 90.0), bg(nowEpochMs, 150.0)),
             iobPoints = emptyList(),
@@ -79,7 +79,7 @@ class GlassChartStateMapperTest {
         val suspiciousConverter: (Double) -> Double = { it / 18.0 }
 
         val result = buildGlassChartState(
-            rangeHours = 6,
+            rangeHours = 6f,
             nowEpochMs = nowEpochMs,
             bgReadings = emptyList(),
             iobPoints = emptyList(),
@@ -103,7 +103,7 @@ class GlassChartStateMapperTest {
         val mgdlToMmol: (Double) -> Double = { it / 18.0 }
 
         val result = buildGlassChartState(
-            rangeHours = rangeHours,
+            rangeHours = rangeHours.toFloat(),
             nowEpochMs = nowEpochMs,
             bgReadings = listOf(bg(nowEpochMs, 180.0)),
             iobPoints = emptyList(),
@@ -129,7 +129,7 @@ class GlassChartStateMapperTest {
         val carbTime = windowStart + 2_000_000L
 
         val result = buildGlassChartState(
-            rangeHours = rangeHours,
+            rangeHours = rangeHours.toFloat(),
             nowEpochMs = nowEpochMs,
             bgReadings = emptyList(),
             iobPoints = emptyList(),
@@ -155,7 +155,7 @@ class GlassChartStateMapperTest {
     @Test
     fun `empty input lists produce an empty GlassChartState without throwing`() {
         val result = buildGlassChartState(
-            rangeHours = 6,
+            rangeHours = 6f,
             nowEpochMs = 100_000_000L,
             bgReadings = emptyList(),
             iobPoints = emptyList(),
@@ -179,7 +179,7 @@ class GlassChartStateMapperTest {
         val mgdlToMmol: (Double) -> Double = { it / 18.0 }
 
         val result = buildGlassChartState(
-            rangeHours = 6,
+            rangeHours = 6f,
             nowEpochMs = 100_000_000L,
             bgReadings = emptyList(),
             iobPoints = emptyList(),
@@ -202,7 +202,7 @@ class GlassChartStateMapperTest {
         val windowStart = nowEpochMs - rangeHours * 3_600_000L
 
         val result = buildGlassChartState(
-            rangeHours = rangeHours,
+            rangeHours = rangeHours.toFloat(),
             nowEpochMs = nowEpochMs,
             bgReadings = emptyList(),
             iobPoints = listOf(
@@ -226,7 +226,7 @@ class GlassChartStateMapperTest {
         val nowEpochMs = 100_000_000L
 
         val result = buildGlassChartState(
-            rangeHours = 6,
+            rangeHours = 6f,
             nowEpochMs = nowEpochMs,
             bgReadings = emptyList(),
             // The last cached history point is a few minutes stale, same as a real GraphViewModel cache tick.
@@ -260,7 +260,7 @@ class GlassChartStateMapperTest {
         val nowEpochMs = 100_000_000L
 
         val result = buildGlassChartState(
-            rangeHours = 6,
+            rangeHours = 6f,
             nowEpochMs = nowEpochMs,
             bgReadings = emptyList(),
             iobPoints = listOf(GraphDataPoint(timestamp = nowEpochMs - 4 * 60_000L, value = 2.5)),
@@ -282,7 +282,7 @@ class GlassChartStateMapperTest {
         val nowEpochMs = 100_000_000L
 
         val result = buildGlassChartState(
-            rangeHours = 6,
+            rangeHours = 6f,
             nowEpochMs = nowEpochMs,
             bgReadings = emptyList(),
             iobPoints = emptyList(),
@@ -308,7 +308,7 @@ class GlassChartStateMapperTest {
         val rangeHours = 6
 
         val result = buildGlassChartState(
-            rangeHours = rangeHours,
+            rangeHours = rangeHours.toFloat(),
             nowEpochMs = nowEpochMs,
             // A fresh reading is required for predictions to render at all (see the staleness-gating test
             // below) — predictions are otherwise suppressed as untrustworthy.
@@ -338,7 +338,7 @@ class GlassChartStateMapperTest {
         val nowEpochMs = 100_000_000L
 
         val result = buildGlassChartState(
-            rangeHours = 6,
+            rangeHours = 6f,
             nowEpochMs = nowEpochMs,
             bgReadings = listOf(bg(nowEpochMs, 145.0)),
             iobPoints = emptyList(),
@@ -364,7 +364,7 @@ class GlassChartStateMapperTest {
         val nowEpochMs = 100_000_000L
 
         val result = buildGlassChartState(
-            rangeHours = 6,
+            rangeHours = 6f,
             nowEpochMs = nowEpochMs,
             bgReadings = listOf(bg(nowEpochMs, 145.0)),
             iobPoints = emptyList(),
@@ -396,7 +396,7 @@ class GlassChartStateMapperTest {
         val lastReadingTimestamp = nowEpochMs - 4 * 60_000L
 
         val result = buildGlassChartState(
-            rangeHours = 6,
+            rangeHours = 6f,
             nowEpochMs = nowEpochMs,
             bgReadings = listOf(bg(lastReadingTimestamp, 145.0)),
             iobPoints = emptyList(),
@@ -421,7 +421,7 @@ class GlassChartStateMapperTest {
         val lastReadingTimestamp = nowEpochMs - 20 * 60_000L
 
         val result = buildGlassChartState(
-            rangeHours = 6,
+            rangeHours = 6f,
             nowEpochMs = nowEpochMs,
             bgReadings = listOf(bg(lastReadingTimestamp, 145.0)),
             iobPoints = emptyList(),
@@ -446,7 +446,7 @@ class GlassChartStateMapperTest {
         val nowEpochMs = 100_000_000L
 
         val result = buildGlassChartState(
-            rangeHours = 6,
+            rangeHours = 6f,
             nowEpochMs = nowEpochMs,
             bgReadings = listOf(bg(nowEpochMs, 145.0)),
             iobPoints = emptyList(),
@@ -464,7 +464,7 @@ class GlassChartStateMapperTest {
     @Test
     fun `no basal data produces empty basal series and a safe non-zero maxBasalRateUh`() {
         val result = buildGlassChartState(
-            rangeHours = 6,
+            rangeHours = 6f,
             nowEpochMs = 100_000_000L,
             bgReadings = emptyList(),
             iobPoints = emptyList(),
@@ -489,7 +489,7 @@ class GlassChartStateMapperTest {
         val windowStart = nowEpochMs - rangeHours * 3_600_000L
 
         val result = buildGlassChartState(
-            rangeHours = rangeHours,
+            rangeHours = rangeHours.toFloat(),
             nowEpochMs = nowEpochMs,
             bgReadings = emptyList(),
             iobPoints = emptyList(),
@@ -520,7 +520,7 @@ class GlassChartStateMapperTest {
         val tempStart = windowStart + 3_600_000L
 
         val result = buildGlassChartState(
-            rangeHours = rangeHours,
+            rangeHours = rangeHours.toFloat(),
             nowEpochMs = nowEpochMs,
             bgReadings = emptyList(),
             iobPoints = emptyList(),
@@ -558,7 +558,7 @@ class GlassChartStateMapperTest {
         val windowStart = nowEpochMs - rangeHours * 3_600_000L
 
         val result = buildGlassChartState(
-            rangeHours = rangeHours,
+            rangeHours = rangeHours.toFloat(),
             nowEpochMs = nowEpochMs,
             bgReadings = emptyList(),
             iobPoints = emptyList(),
@@ -584,7 +584,7 @@ class GlassChartStateMapperTest {
         val nowEpochMs = 100_000_000L
 
         val result = buildGlassChartState(
-            rangeHours = 6,
+            rangeHours = 6f,
             nowEpochMs = nowEpochMs,
             bgReadings = emptyList(),
             iobPoints = emptyList(),

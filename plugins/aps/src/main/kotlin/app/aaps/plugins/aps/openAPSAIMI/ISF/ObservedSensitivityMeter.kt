@@ -73,6 +73,10 @@ class ObservedSensitivityMeter(
      * @param profileBasalUph profile basal rate for this time of day.
      * @param raMgdlPerMin estimated rate of glucose appearance, or `null` when it is not known.
      * @param lastBolusMs time of the last bolus of any origin.
+     * @param activityUPerMin insulin activity of the tick (U per minute, net of the profile basal), or `null`.
+     *   When every sample of a window has it, the absorbed insulin is the integral of the activity: it counts only
+     *   insulin that was really delivered. The SMB decided at a tick is not always delivered (a dose under the pump
+     *   step is dropped, others are rounded down), and counting the decided SMB made the measured ISF too low.
      */
     data class Sample(
         val timestampMs: Long,
@@ -85,6 +89,7 @@ class ObservedSensitivityMeter(
         val profileBasalUph: Double,
         val raMgdlPerMin: Double?,
         val lastBolusMs: Long,
+        val activityUPerMin: Double? = null,
     )
 
     /** Time of day a window belongs to, chosen from the hour at the middle of the window. */
@@ -250,6 +255,8 @@ class ObservedSensitivityMeter(
         var smbSum = 0.0
         var raSum = 0.0
         var raCount = 0
+        var activityAbsorbed = 0.0
+        var activityKnown = true
 
         for (i in samples.size - 2 downTo 0) {
             val a = samples[i]
@@ -259,6 +266,13 @@ class ObservedSensitivityMeter(
             // a.iobU, which is why it is credited separately.
             absorbedFromBasal += (b.timestampMs - a.timestampMs) / 3_600_000.0 * (b.deliveredBasalUph - b.profileBasalUph)
             smbSum += a.smbU
+            val actA = a.activityUPerMin
+            val actB = b.activityUPerMin
+            if (actA != null && actB != null && actA.isFinite() && actB.isFinite()) {
+                activityAbsorbed += (b.timestampMs - a.timestampMs) / 60_000.0 * (actA + actB) / 2.0
+            } else {
+                activityKnown = false
+            }
             val ra = a.raMgdlPerMin
             if (ra != null) {
                 raSum += ra
@@ -282,7 +296,7 @@ class ObservedSensitivityMeter(
             if (raCount == 0) continue
             if (raSum / raCount >= MAX_RA_MGDL_PER_MIN) continue
 
-            val absorbed = (a.iobU - end.iobU) + absorbedFromBasal + smbSum
+            val absorbed = if (activityKnown) activityAbsorbed else (a.iobU - end.iobU) + absorbedFromBasal + smbSum
             if (absorbed < MIN_ABSORBED_U) continue
 
             val isf = drop / absorbed

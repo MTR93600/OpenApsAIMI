@@ -129,6 +129,33 @@ sealed class EventData : Event() {
     @Serializable
     data class ActionUserActionConfirmed(val id: String, val title: String) : EventData()
 
+    /** Starts AIMI EatingEngine on the phone after the standard Wear confirmation round-trip. */
+    @Serializable
+    data class AimiEatingPreCheck(val size: Int, val fat: Boolean) : EventData()
+
+    @Serializable
+    data class AimiEatingConfirmed(val size: Int, val fat: Boolean) : EventData()
+
+    @Serializable
+    data object AimiEatingStateRequest : EventData()
+
+    @Serializable
+    data object AimiEatingStopPreCheck : EventData()
+
+    @Serializable
+    data object AimiEatingStopConfirmed : EventData()
+
+    @Serializable
+    data class AimiEatingState(
+        val active: Boolean,
+        val size: Int,
+        val fat: Boolean,
+        val estimateG: Double,
+        val neededU: Double,
+        val deliveredU: Double,
+        val remainingMin: Int
+    ) : EventData()
+
     @Serializable
     data class ActionScenePreCheck(val id: String, val title: String) : EventData()
 

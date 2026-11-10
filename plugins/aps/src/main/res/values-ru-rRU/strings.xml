@@ -1210,7 +1210,7 @@
     <string name="aimi_adv_train_q_out_too_few">строк слишком мало</string>
     <string name="aimi_adv_train_q_out_rejected">модель отклонена проверкой качества</string>
     <string name="aimi_adv_train_q_out_other">модель не обучена</string>
-    <string name="aimi_as_title">Помощник AIMI</string>
+    <string name="aimi_as_title">Помощник по настройкам AIMI</string>
     <string name="aimi_as_loading">Читаю журнал AIMI. Подожди немного.</string>
     <string name="aimi_as_overview">Последние 3 дня</string>
     <string name="aimi_as_no_data">В журнале AIMI пока мало данных.</string>
@@ -1259,4 +1259,13 @@
     <string name="aimi_as_reason_late_tail">Первый SMB приходил поздно: %1$d раз, в среднем через %2$d мин. Более слабое урезание в хвосте режет дозу меньше.</string>
     <string name="aimi_as_reason_late_red">Первый SMB приходил поздно: %1$d раз, в среднем через %2$d мин. Более высокий порог чаще возвращает полную дозу после урезания защитой.</string>
     <string name="aimi_as_reason_late_iob">Первый SMB приходил поздно: %1$d раз, в среднем через %2$d мин. Больший запас IOB разрешает больше инсулина в приоритетных ситуациях.</string>
+    <string name="aimi_as_ph_title">Защита после низкого сахара: когда снимать запрет на SMB</string>
+    <string name="aimi_as_ph_desc">После низкого сахара петля на время запрещает SMB, чтобы сахар не упал снова. Запрет снимается, когда сахар выше цели на первое значение и растёт быстрее второго значения. Стандарт: 20 и 5. Раньше было 30 и 15. Чем меньше числа, тем раньше снимается запрет.</string>
+    <string name="aimi_as_ph_margin_label">Сахар выше цели, мг/дл (от 5 до 60)</string>
+    <string name="aimi_as_ph_delta_label">Рост за 5 минут, мг/дл (от 1 до 30)</string>
+    <string name="aimi_as_ph_apply">Применить</string>
+    <string name="aimi_as_ph_saved">Сохранено. Петля возьмёт новые значения со следующего запуска.</string>
+    <string name="aimi_as_ph_invalid">Введите первое значение от 5 до 60, второе от 1 до 30.</string>
+    <string name="aimi_as_entry_title">Помощник по настройкам AIMI</string>
+    <string name="aimi_as_entry_summary">Читает журнал решений AIMI, находит низкие значения и поздний первый SMB, объясняет причину и предлагает менять по одной настройке. Без вашего подтверждения ничего не меняется.</string>
 </resources>

@@ -2,22 +2,8 @@
     <Metadata key="CLOCK_TYPE" value="ANALOG" />
     <Scene backgroundColor="#ff000000">
 
-        <!-- Ambient-only clock, drawn by the runtime rather than by AAPS.
-             It has to exist because in ambient the watch reports DOZE_SUSPEND: the display refreshes
-             itself while the CPU sleeps and our process is frozen, so nothing of ours runs to produce
-             a new picture. The image below would sit frozen for minutes, showing a stale time and a
-             stopped second hand. The runtime keeps drawing regardless, so in ambient the time comes
-             from here.
-             Invisible while active (alpha 0) and revealed only in ambient, so the user's own design
-             owns the clock whenever the watch is awake. -->
-        <DigitalClock alpha="0" height="150" width="450" x="0" y="150">
-            <Variant mode="AMBIENT" target="alpha" value="255" />
-            <TimeText align="CENTER" format="hh:mm" height="150" hourFormat="SYNC_TO_DEVICE"
-                width="450" x="0" y="0">
-                <Font color="#ffe6e6e6" family="SYNC_TO_DEVICE" size="110" slant="NORMAL"
-                    weight="NORMAL" />
-            </TimeText>
-        </DigitalClock>
+        <!-- Time is represented by the analogue hands inside AimiDial.  A separate digital clock
+             duplicated the same information, covered therapy data and made the dial unreadable. -->
 
         <!-- Lower half of the Custom watch face: background, images and the chart.
              Refreshed slowly, because that is what changes slowly.
@@ -25,18 +11,18 @@
              instant the watch dozes - the runtime applies this at the mode switch, without waiting
              for any render of ours to arrive. -->
         <ComplicationSlot
-            name="CwfLower"
-            slotId="0"
-            displayName="Custom Watchface"
+            name="AimiDial"
+            slotId="31"
+            displayName="AIMI 24h"
             isCustomizable="FALSE"
             supportedTypes="SMALL_IMAGE EMPTY"
             alpha="255"
             x="0" y="0" width="450" height="450">
-            <Variant mode="AMBIENT" target="alpha" value="0" />
+            <Variant mode="AMBIENT" target="alpha" value="105" />
             <DefaultProviderPolicy
                 defaultSystemProvider="EMPTY"
                 defaultSystemProviderType="EMPTY"
-                primaryProvider="AAPS_WEAR_APP_ID/app.aaps.wear.complications.CwfLowerComplication"
+                primaryProvider="AAPS_WEAR_APP_ID/app.aaps.wear.complications.AimiDialComplication"
                 primaryProviderType="SMALL_IMAGE" />
             <BoundingBox x="0" y="0" width="450" height="450" />
             <Complication type="SMALL_IMAGE">
@@ -47,27 +33,29 @@
             <Complication type="EMPTY" />
         </ComplicationSlot>
 
-        <!-- Upper half: clock, date fields, cover plate and hands, transparent elsewhere so the
-             lower half shows through. Declared after the lower one, so it paints on top. -->
+        <!-- Only this compact overlay is tappable. The full-screen dial below is display-only, so
+             tapping glucose, hour marks or graph points can no longer open the eating screen. -->
         <ComplicationSlot
-            name="CwfUpper"
-            slotId="1"
-            displayName="Custom Watchface clock"
+            name="AimiEatingButton"
+            slotId="40"
+            displayName="Я ЕМ"
             isCustomizable="FALSE"
-            supportedTypes="SMALL_IMAGE EMPTY"
+            supportedTypes="SHORT_TEXT EMPTY"
             alpha="255"
-            x="0" y="0" width="450" height="450">
+            x="189" y="189" width="72" height="72">
             <Variant mode="AMBIENT" target="alpha" value="0" />
             <DefaultProviderPolicy
                 defaultSystemProvider="EMPTY"
                 defaultSystemProviderType="EMPTY"
-                primaryProvider="AAPS_WEAR_APP_ID/app.aaps.wear.complications.CwfUpperComplication"
-                primaryProviderType="SMALL_IMAGE" />
-            <BoundingBox x="0" y="0" width="450" height="450" />
-            <Complication type="SMALL_IMAGE">
-                <PartImage x="0" y="0" width="450" height="450">
-                    <Image resource="[COMPLICATION.SMALL_IMAGE]" />
-                </PartImage>
+                primaryProvider="AAPS_WEAR_APP_ID/app.aaps.wear.complications.AimiEatingButtonComplication"
+                primaryProviderType="SHORT_TEXT" />
+            <BoundingBox x="0" y="0" width="72" height="72" />
+            <Complication type="SHORT_TEXT">
+                <PartText alpha="0" x="0" y="0" width="72" height="72">
+                    <Text align="CENTER"><Font color="#00000000" family="SYNC_TO_DEVICE" size="1">
+                        <Template>%s<Parameter expression="[COMPLICATION.TEXT]" /></Template>
+                    </Font></Text>
+                </PartText>
             </Complication>
             <Complication type="EMPTY" />
         </ComplicationSlot>
@@ -163,6 +151,105 @@
                         </Font>
                     </Text>
                 </PartText>
+            </Complication>
+            <Complication type="EMPTY" />
+        </ComplicationSlot>
+
+        <!-- User-selectable data sources. EMPTY deliberately has no drawing branch, so unused
+             slots disappear completely. The four compact edge positions avoid the central glucose
+             and graph area while remaining reachable in the system watch-face editor. -->
+        <ComplicationSlot name="AimiTop" slotId="20" displayName="AIMI top"
+            isCustomizable="TRUE" supportedTypes="SHORT_TEXT RANGED_VALUE MONOCHROMATIC_IMAGE EMPTY"
+            x="145" y="8" width="160" height="54">
+            <BoundingBox x="145" y="8" width="160" height="54" />
+            <Complication type="SHORT_TEXT">
+                <PartText x="145" y="8" width="160" height="54">
+                    <Text align="CENTER" ellipsis="TRUE"><Font color="#ff90caf9" family="SYNC_TO_DEVICE" size="28" weight="NORMAL">
+                        <Template>%s<Parameter expression="[COMPLICATION.TEXT]" /></Template>
+                    </Font></Text>
+                </PartText>
+            </Complication>
+            <Complication type="RANGED_VALUE">
+                <PartText x="145" y="8" width="160" height="54">
+                    <Text align="CENTER" ellipsis="TRUE"><Font color="#ff90caf9" family="SYNC_TO_DEVICE" size="28" weight="NORMAL">
+                        <Template>%s<Parameter expression="[COMPLICATION.TEXT]" /></Template>
+                    </Font></Text>
+                </PartText>
+            </Complication>
+            <Complication type="MONOCHROMATIC_IMAGE">
+                <PartImage x="198" y="9" width="52" height="52"><Image resource="[COMPLICATION.MONOCHROMATIC_IMAGE]" /></PartImage>
+            </Complication>
+            <Complication type="EMPTY" />
+        </ComplicationSlot>
+
+        <ComplicationSlot name="AimiLeft" slotId="21" displayName="AIMI left"
+            isCustomizable="TRUE" supportedTypes="SHORT_TEXT RANGED_VALUE MONOCHROMATIC_IMAGE EMPTY"
+            x="8" y="190" width="116" height="62">
+            <BoundingBox x="8" y="190" width="116" height="62" />
+            <Complication type="SHORT_TEXT">
+                <PartText x="8" y="190" width="116" height="62">
+                    <Text align="CENTER" ellipsis="TRUE"><Font color="#ffb0bec5" family="SYNC_TO_DEVICE" size="25" weight="NORMAL">
+                        <Template>%s<Parameter expression="[COMPLICATION.TEXT]" /></Template>
+                    </Font></Text>
+                </PartText>
+            </Complication>
+            <Complication type="RANGED_VALUE">
+                <PartText x="8" y="190" width="116" height="62">
+                    <Text align="CENTER" ellipsis="TRUE"><Font color="#ffb0bec5" family="SYNC_TO_DEVICE" size="25" weight="NORMAL">
+                        <Template>%s<Parameter expression="[COMPLICATION.TEXT]" /></Template>
+                    </Font></Text>
+                </PartText>
+            </Complication>
+            <Complication type="MONOCHROMATIC_IMAGE">
+                <PartImage x="39" y="195" width="52" height="52"><Image resource="[COMPLICATION.MONOCHROMATIC_IMAGE]" /></PartImage>
+            </Complication>
+            <Complication type="EMPTY" />
+        </ComplicationSlot>
+
+        <ComplicationSlot name="AimiRight" slotId="22" displayName="AIMI right"
+            isCustomizable="TRUE" supportedTypes="SHORT_TEXT RANGED_VALUE MONOCHROMATIC_IMAGE EMPTY"
+            x="326" y="190" width="116" height="62">
+            <BoundingBox x="326" y="190" width="116" height="62" />
+            <Complication type="SHORT_TEXT">
+                <PartText x="326" y="190" width="116" height="62">
+                    <Text align="CENTER" ellipsis="TRUE"><Font color="#ffb0bec5" family="SYNC_TO_DEVICE" size="25" weight="NORMAL">
+                        <Template>%s<Parameter expression="[COMPLICATION.TEXT]" /></Template>
+                    </Font></Text>
+                </PartText>
+            </Complication>
+            <Complication type="RANGED_VALUE">
+                <PartText x="326" y="190" width="116" height="62">
+                    <Text align="CENTER" ellipsis="TRUE"><Font color="#ffb0bec5" family="SYNC_TO_DEVICE" size="25" weight="NORMAL">
+                        <Template>%s<Parameter expression="[COMPLICATION.TEXT]" /></Template>
+                    </Font></Text>
+                </PartText>
+            </Complication>
+            <Complication type="MONOCHROMATIC_IMAGE">
+                <PartImage x="357" y="195" width="52" height="52"><Image resource="[COMPLICATION.MONOCHROMATIC_IMAGE]" /></PartImage>
+            </Complication>
+            <Complication type="EMPTY" />
+        </ComplicationSlot>
+
+        <ComplicationSlot name="AimiBottom" slotId="23" displayName="AIMI bottom"
+            isCustomizable="TRUE" supportedTypes="SHORT_TEXT RANGED_VALUE MONOCHROMATIC_IMAGE EMPTY"
+            x="145" y="388" width="160" height="54">
+            <BoundingBox x="145" y="388" width="160" height="54" />
+            <Complication type="SHORT_TEXT">
+                <PartText x="145" y="388" width="160" height="54">
+                    <Text align="CENTER" ellipsis="TRUE"><Font color="#ff90caf9" family="SYNC_TO_DEVICE" size="28" weight="NORMAL">
+                        <Template>%s<Parameter expression="[COMPLICATION.TEXT]" /></Template>
+                    </Font></Text>
+                </PartText>
+            </Complication>
+            <Complication type="RANGED_VALUE">
+                <PartText x="145" y="388" width="160" height="54">
+                    <Text align="CENTER" ellipsis="TRUE"><Font color="#ff90caf9" family="SYNC_TO_DEVICE" size="28" weight="NORMAL">
+                        <Template>%s<Parameter expression="[COMPLICATION.TEXT]" /></Template>
+                    </Font></Text>
+                </PartText>
+            </Complication>
+            <Complication type="MONOCHROMATIC_IMAGE">
+                <PartImage x="198" y="389" width="52" height="52"><Image resource="[COMPLICATION.MONOCHROMATIC_IMAGE]" /></PartImage>
             </Complication>
             <Complication type="EMPTY" />
         </ComplicationSlot>

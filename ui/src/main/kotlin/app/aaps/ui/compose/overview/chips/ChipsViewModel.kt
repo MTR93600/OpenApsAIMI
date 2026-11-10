@@ -98,7 +98,9 @@ class ChipsViewModel @AssistedInject constructor(
     val iobUiState: StateFlow<IobUiState> = iobCobTicker.combine(cache.iobGraphFlow) { _, _ ->
         val bolusIob = iobCobCalculator.calculateIobFromBolus().round()
         val basalIob = iobCobCalculator.calculateIobFromTempBasalsIncludingConvertedExtended().round()
-        val total = bolusIob.iob + basalIob.basaliob
+        // Same IOB as the loop uses (and as Nightscout shows). The loop counts basal IOB with the autosens ratio, the plain sum does not.
+        val loopIob = loop.lastRun?.takeIf { dateUtil.now() - it.lastAPSRun < 10 * 60_000L }?.request?.iob?.iob
+        val total = loopIob ?: (bolusIob.iob + basalIob.basaliob)
         IobUiState(
             text = rh.gs(R.string.format_insulin_units, total),
             iobTotal = total
@@ -220,7 +222,8 @@ class ChipsViewModel @AssistedInject constructor(
         viewModelScope.launch {
             val bolusIob = iobCobCalculator.calculateIobFromBolus().round()
             val basalIob = iobCobCalculator.calculateIobFromTempBasalsIncludingConvertedExtended().round()
-            val total = bolusIob.iob + basalIob.basaliob
+            val loopIob = loop.lastRun?.takeIf { dateUtil.now() - it.lastAPSRun < 10 * 60_000L }?.request?.iob?.iob
+            val total = loopIob ?: (bolusIob.iob + basalIob.basaliob)
             val message =
                 rh.gs(R.string.bolus_iob_label) + ": " + rh.gs(R.string.format_insulin_units, bolusIob.iob) + "\n" +
                     rh.gs(R.string.treatments_wizard_basaliob_label) + ": " + rh.gs(R.string.format_insulin_units, basalIob.basaliob) + "\n" +

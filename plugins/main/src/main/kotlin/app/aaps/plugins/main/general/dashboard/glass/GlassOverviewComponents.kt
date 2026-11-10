@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -21,6 +23,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Arrangement
@@ -102,55 +105,63 @@ internal fun GlassPill(
     modifier: Modifier = Modifier,
     leadingIcon: (@Composable () -> Unit)? = null
 ) {
-    val shape = RoundedCornerShape(13.dp)
+    // A flat outlined info block, not a button: thin outline, a barely visible fill, strong text for contrast.
+    val shape = RoundedCornerShape(12.dp)
     val bgBrush = if (isDark) {
-        Brush.verticalGradient(listOf(Color(0x38FFFFFF), Color(0x18FFFFFF)))
+        Brush.verticalGradient(listOf(Color(0x14FFFFFF), Color(0x08FFFFFF)))
     } else {
-        Brush.verticalGradient(listOf(Color(0xFFFFFFFF), Color(0xE4E8F0FA)))
+        Brush.verticalGradient(listOf(Color(0x99FFFFFF), Color(0x66E8F0FA)))
     }
-    val borderColor = if (isDark) Color(0x38FFFFFF) else Color(0xD0CBD5E1)
+    val borderColor = if (isDark) Color(0x40FFFFFF) else Color(0xB0CBD5E1)
 
     Box(
         modifier = modifier
-            .shadow(
-                elevation = if (isDark) 6.dp else 3.dp,
-                shape = shape,
-                spotColor = if (isDark) Color.Black.copy(alpha = 0.50f) else Color(0x22000000)
-            )
             .clip(shape)
             .background(bgBrush)
             .border(1.dp, borderColor, shape)
-            .padding(horizontal = 7.dp, vertical = 5.dp),
+            .heightIn(min = 38.dp)
+            .padding(horizontal = 8.dp, vertical = 5.dp),
         contentAlignment = Alignment.Center
     ) {
+        // Icon on the left in a fixed slot, text centred in the rest, so all pills line up the same way.
         Row(
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             if (leadingIcon != null) {
-                leadingIcon()
+                Box(modifier = Modifier.width(18.dp), contentAlignment = Alignment.Center) { leadingIcon() }
             }
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
-                modifier = Modifier
+                modifier = Modifier.weight(1f)
             ) {
-                Text(
+                // With an icon the label is not shown: the icon tells what it is, so the value has room.
+                if (leadingIcon == null) Text(
                     text = label,
-                    fontSize = 9.5.sp,
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.Medium,
-                    color = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
-                    lineHeight = 11.sp
-                )
-                Text(
-                    text = value,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = valueColor ?: if (isDark) Color(0xFFE2E8F0) else Color(0xFF1E293B),
-                    lineHeight = 13.sp,
+                    color = if (isDark) Color(0xFFA8B3C7) else Color(0xFF52627A),
+                    lineHeight = 12.sp,
+                    textAlign = TextAlign.Center,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
                 )
+                if (value.isNotEmpty()) {
+                    Text(
+                        text = value,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = valueColor ?: if (isDark) Color(0xFFF1F5F9) else Color(0xFF0F172A),
+                        lineHeight = 14.sp,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         }
     }
@@ -215,6 +226,84 @@ internal fun BottomMetricPill(
                 overflow = TextOverflow.Ellipsis,
                 softWrap = false,
             )
+        }
+    }
+}
+
+/**
+ * The running "I eat" button: green frame, the title with the minutes on the left, and the two live numbers on the
+ * right: carbohydrates counted so far (orange) and insulin given in the window (blue). No units: the colors say which is which.
+ */
+@Composable
+internal fun EatingRunningPill(
+    mode: String,
+    remainingMin: Long,
+    carbs: String,
+    insulin: String,
+    carbsPeak: String,
+    insulinNeed: String,
+    isDark: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val green = Color(0xFF22C55E)
+    val orange = Color(0xFFFB923C)
+    val blue = Color(0xFF38BDF8)
+    val shape = RoundedCornerShape(16.dp)
+    val bgBrush = if (isDark) {
+        Brush.verticalGradient(listOf(Color(0x30FFFFFF), Color(0x14FFFFFF)))
+    } else {
+        Brush.verticalGradient(listOf(Color(0xFFFFFFFF), Color(0xE4EEF2FA)))
+    }
+    val titleColor = if (isDark) Color(0xFFE2E8F0) else Color(0xFF1E293B)
+    val mutedColor = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B)
+    Box(
+        modifier = modifier
+            // No shadow here: the fill is see-through, so a shadow showed as a square plate under the pill.
+            .clip(shape)
+            .background(bgBrush)
+            .background(green.copy(alpha = if (isDark) 0.14f else 0.10f))
+            .border(1.dp, green.copy(alpha = 0.55f), shape)
+            .clickable { onClick() }
+            .padding(vertical = 10.dp, horizontal = 14.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            // The left part takes the free space and wraps the long title (for example "Большой + жирная") to the next line.
+            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                Text(text = mode, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = titleColor)
+                val remaining = if (remainingMin >= 60) "осталось ${remainingMin / 60} ч ${remainingMin % 60} мин" else "осталось $remainingMin мин"
+                Text(text = remaining, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = mutedColor)
+            }
+            // The numbers keep their own width and never wrap. Under each number a short caption says what it is:
+            // the carbs are what has been absorbed so far (not what was eaten), the insulin is what has been given.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = carbs, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = orange, maxLines = 1, softWrap = false)
+                        Text(text = " ($carbsPeak)", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = orange.copy(alpha = 0.8f), maxLines = 1, softWrap = false)
+                    }
+                    Text(text = "ХЕ всосалось", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = mutedColor, maxLines = 1, softWrap = false)
+                }
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 14.dp)
+                        .width(1.dp)
+                        .height(26.dp)
+                        .background(mutedColor.copy(alpha = 0.45f))
+                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = insulin, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = blue, maxLines = 1, softWrap = false)
+                        Text(text = " ($insulinNeed)", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = blue.copy(alpha = 0.8f), maxLines = 1, softWrap = false)
+                    }
+                    Text(text = "ЕД подано (нужно)", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = mutedColor, maxLines = 1, softWrap = false)
+                }
+            }
         }
     }
 }

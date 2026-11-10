@@ -12,6 +12,7 @@ object BasalHistoryUtils {
         fun zeroBasalDurationMinutes(lookBackHours: Int): Int
         fun lastTempIsZero(): Boolean
         fun minutesSinceLastChange(): Int
+        fun minutesSinceZeroBasalEnded(lookBackHours: Int): Int? = null
     }
 
     object EmptyProvider : BasalHistoryProvider {
@@ -86,6 +87,25 @@ object BasalHistoryUtils {
             val start = current.timestamp
             val durMs = now - start
             return max(0, (durMs / 60000L).toInt())
+        }
+
+        override fun minutesSinceZeroBasalEnded(lookBackHours: Int): Int? {
+            val now = nowProvider()
+            val from = now - lookBackHours * 60L * 60L * 1000L
+            val events = safeFetch(from)
+            if (events.isEmpty()) return null
+
+            // An active zero temp is already the protected state. Once a non-zero temp replaces it,
+            // the replacement timestamp is the reliable end of the zero interval (it also handles
+            // an early cancel, where the zero temp's nominal duration is no longer authoritative).
+            if (isZeroBasal(events.first())) return 0
+            for (index in 1 until events.size) {
+                if (isZeroBasal(events[index])) {
+                    val endedAt = events[index - 1].timestamp
+                    return max(0, ((now - endedAt) / 60000L).toInt())
+                }
+            }
+            return null
         }
 
         private fun safeFetch(from: Long): List<TB> = try {

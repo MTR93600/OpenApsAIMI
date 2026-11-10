@@ -232,6 +232,17 @@ class EventDataTest {
             assertThat(EventData.deserializeByte(it.serializeByte())).isEqualTo(it)
             assertThat(EventData.deserialize(it.serialize())).isEqualTo(it)
         }
+        listOf<EventData>(
+            EventData.AimiEatingPreCheck(size = 4, fat = true),
+            EventData.AimiEatingConfirmed(size = 1, fat = false),
+            EventData.AimiEatingStateRequest,
+            EventData.AimiEatingStopPreCheck,
+            EventData.AimiEatingStopConfirmed,
+            EventData.AimiEatingState(true, 2, true, 42.0, 3.2, 1.1, 217)
+        ).forEach {
+            assertThat(EventData.deserializeByte(it.serializeByte())).isEqualTo(it)
+            assertThat(EventData.deserialize(it.serialize())).isEqualTo(it)
+        }
     }
 
     @Test

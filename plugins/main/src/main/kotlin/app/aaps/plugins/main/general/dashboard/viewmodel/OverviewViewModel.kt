@@ -879,6 +879,7 @@ class OverviewViewModel(
                 preferences,
                 resourceHelper
             ),
+            glucoseGradientColor = DashboardCoherentGlucose.gradientBgColor(displayMgdl, profileFunction, preferences),
             trendArrowRes = trendArrow,
             trendDescription = trendDescription,
             deltaText = deltaText,
@@ -887,6 +888,7 @@ class OverviewViewModel(
             cobText = cobText,
             loopStatusText = loopStatusText(loopRunningMode),
             loopIsRunning = !loopRunningMode.pausesLoopExecution(),
+            loopMode = loopRunningMode,
             timeAgo = timeAgo,
             timeAgoDescription = timeAgoLong,
             glucoseTimestampMs = displayTs,
@@ -1531,6 +1533,8 @@ class OverviewViewModel(
 data class StatusCardState(
     val glucoseText: String,
     val glucoseColor: Int,
+    /** Smooth colour for the big digits (green in range, yellow to orange high, pale to deep red low); 0 when not set. */
+    val glucoseGradientColor: Int = 0,
     val trendArrowRes: Int?,
     val trendDescription: String,
     val deltaText: String,
@@ -1546,6 +1550,8 @@ data class StatusCardState(
     val iobTotalU: Double,
     val cobText: String,
     val loopStatusText: String,
+    /** The running mode as an enum, for the icon on the main screen; null when not known. */
+    val loopMode: RM.Mode? = null,
     val loopIsRunning: Boolean,
     val timeAgo: String,
     val timeAgoDescription: String,

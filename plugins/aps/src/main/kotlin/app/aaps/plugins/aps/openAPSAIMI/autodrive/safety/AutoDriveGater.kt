@@ -35,6 +35,7 @@ class AutoDriveGater @Inject constructor(
         estimatedRa: Double = 0.0,
         mealChannelHint: MealChannelHint? = null,
         riseConfirmation: RiseConfirmation.Result? = null,
+        postLgsRecovery: Boolean = false,
     ): GatingResult {
         // 1. Fetch real-time health data
         val health = healthRepo.fetchSnapshotForAutodriveGater()
@@ -73,9 +74,13 @@ class AutoDriveGater @Inject constructor(
         // 4. Refined glycemic entry thresholds
         // A glycemic entry without a declared or implicit meal must come with a confirmed rise in the
         // glucose history. Very high glucose is a correction, not a meal guess, so it needs no proof.
-        val awaitsConfirmation = riseConfirmation != null &&
+        val postLgsNeedsProof = postLgsRecovery &&
+            (riseConfirmation == null || riseConfirmation.level == RiseConfirmation.Level.NONE) &&
+            !explicitMealMode && bg < PLATEAU_NO_CONFIRMATION_BG
+        val ordinaryRiseNeedsProof = riseConfirmation != null &&
             riseConfirmation.level == RiseConfirmation.Level.NONE &&
             !explicitMealMode && !implicitMealContext && bg < PLATEAU_NO_CONFIRMATION_BG
+        val awaitsConfirmation = postLgsNeedsProof || ordinaryRiseNeedsProof
         val isHighPlateau = bg > 150.0 && !awaitsConfirmation
         val isActivelyRising = !awaitsConfirmation && when {
             bg >= 150.0 -> combinedDelta > 0.8
@@ -83,14 +88,15 @@ class AutoDriveGater @Inject constructor(
                 (combinedDelta > 0.8 && (uamConfidence >= 0.5 || estimatedRa >= 0.7))
             else -> combinedDelta > 2.0 && minBgLookback75m >= CorrectionAggressionGate.REBOUND_MIN_BG_LOOKBACK_MGDL
         }
-        val isMealRising = implicitMealContext && combinedDelta > 0.25
+        val isMealRising = !awaitsConfirmation && implicitMealContext && combinedDelta > 0.25
 
         val shouldEngage = isHighPlateau || isActivelyRising || isMealRising
 
         if (!shouldEngage && awaitsConfirmation && (bg > 150.0 || combinedDelta > 0.8)) {
             return GatingResult(
                 engage = false,
-                reason = "⏳ Awaiting rise confirmation (BG=$bg, Trend=$combinedDelta, " +
+                reason = "⏳ Awaiting rise confirmation${if (postLgsRecovery) " after zero basal" else ""} " +
+                    "(BG=$bg, Trend=$combinedDelta, " +
                     "window=${riseConfirmation?.windowTicks} ticks, up=${"%.2f".format(riseConfirmation?.positiveShare ?: 0.0)})",
                 kind = GateKind.AWAITING_CONFIRMATION,
             )

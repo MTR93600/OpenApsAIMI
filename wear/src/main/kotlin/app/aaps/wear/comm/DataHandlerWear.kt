@@ -114,7 +114,40 @@ class DataHandlerWear @Inject constructor(
             }
     }
 
+    private var nextModeCheck = 0L
+
+    private fun refreshDial() {
+        val provider = ComponentName(context, app.aaps.wear.complications.AimiDialComplication::class.java)
+        ComplicationDataSourceUpdateRequester.create(context, provider).requestUpdateAll()
+    }
+
     private fun setupBus() {
+        val displays = context.getSystemService(android.hardware.display.DisplayManager::class.java)
+        val id = android.view.Display.DEFAULT_DISPLAY
+        var lastRotation = displays.getDisplay(id)?.rotation
+        displays.registerDisplayListener(object : android.hardware.display.DisplayManager.DisplayListener {
+            override fun onDisplayAdded(displayId: Int) = Unit
+            override fun onDisplayRemoved(displayId: Int) = Unit
+            override fun onDisplayChanged(displayId: Int) {
+                if (displayId != id) return
+                val rotation = displays.getDisplay(id)?.rotation
+                if (rotation != lastRotation) {
+                    lastRotation = rotation
+                    refreshDial()
+                }
+            }
+        }, android.os.Handler(android.os.Looper.getMainLooper()))
+
+        onEvent<EventData.AimiEatingState> { state ->
+            val now = System.currentTimeMillis()
+            val until = if (state.active) now + state.remainingMin.coerceIn(0, 8) * 60_000L else 0L
+            context.getSharedPreferences("aimi_dial_mode", Context.MODE_PRIVATE).edit()
+                .putLong("until", until)
+                .putInt("size", state.size)
+                .putBoolean("fat", state.fat)
+                .apply()
+            refreshDial()
+        }
         onEvent<EventData.ActionPing> {
             rxBus.send(EventWearToMobile(EventData.ActionPong(System.currentTimeMillis(), Build.VERSION.SDK_INT)))
         }
@@ -188,6 +221,11 @@ class DataHandlerWear @Inject constructor(
         }
         onEvent<EventData.SingleBg>(detail = { " dataset=${it.dataset} sgv=${it.sgvString} arrow=${it.slopeArrow}" }) {
             // Store in DataStore - supports all datasets (0, 1, 2)
+            val elapsed = SystemClock.elapsedRealtime()
+            if (it.dataset == 0 && elapsed >= nextModeCheck) {
+                nextModeCheck = elapsed + 240_000L
+                rxBus.send(EventWearToMobile(EventData.AimiEatingStateRequest))
+            }
             dataStoreScope.launch {
                 complicationDataRepository.updateBgData(it)
 

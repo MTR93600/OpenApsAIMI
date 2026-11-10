@@ -1,11 +1,10 @@
 package app.aaps.plugins.aps.openAPSAIMI.safety
 
-import kotlin.math.max
 import kotlin.math.min
 
 /**
- * One ceiling for every SMB restore: the dose may not end above what the model asked for, or above
- * what the guards let through, whichever is larger.
+ * One ceiling for every automatic SMB restore: the dose may not end above what the guards let
+ * through. A pre-guard model/floor is evidence of demand, not permission to undo PK/PD safety.
  *
  * ## Why this exists
  *
@@ -14,15 +13,14 @@ import kotlin.math.min
  * floor posted 1.70 U, the PKPD guard cut it to 0.82 U, and Red Carpet sent 1.70 U again. Before a low,
  * these restores carry about twice the insulin they carry otherwise (measured 2026-09-02 → 10-20).
  *
- * A declared meal and a manual action are exempt: there the person asked for the insulin, and a declared
- * meal keeps its lead. Reduce-only: it never raises a dose.
+ * A declared meal and a manual action are exempt: there the person asked for the insulin. Reduce-only:
+ * it never raises a dose. [modelOutputU] is kept in the signature for trace compatibility.
  */
 object SmbRestoreCeiling {
 
     fun apply(finalU: Double, modelOutputU: Double?, afterGuardsU: Double, exempt: Boolean): Double {
         if (exempt) return finalU
-        val model = modelOutputU?.takeIf { it.isFinite() } ?: return finalU
-        val ceiling = max(max(model, 0.0), afterGuardsU.coerceAtLeast(0.0))
-        return min(finalU, ceiling)
+        if (!afterGuardsU.isFinite()) return finalU
+        return min(finalU, afterGuardsU.coerceAtLeast(0.0))
     }
 }

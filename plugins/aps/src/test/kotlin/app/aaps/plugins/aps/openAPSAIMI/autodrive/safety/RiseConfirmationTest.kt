@@ -63,6 +63,7 @@ class RiseConfirmationTest {
     }
 
     private val none = RiseConfirmation.Result(Level.NONE, 2, 0.0, 0.0)
+    private val weak = RiseConfirmation.Result(Level.WEAK, 2, 1.0, 4.0)
     private val confirmed = RiseConfirmation.Result(Level.CONFIRMED, 2, 1.0, 10.0)
 
     @Test
@@ -99,6 +100,55 @@ class RiseConfirmationTest {
     @Test
     fun `an implicit meal context is never held back`() {
         val result = gater().shouldEngageV3(bg = 160.0, combinedDelta = 0.1, cob = 12.0, riseConfirmation = none)
+        assertThat(result.engage).isTrue()
+    }
+
+    @Test
+    fun `implicit meal after zero basal waits for sustained rise`() {
+        val result = gater().shouldEngageV3(
+            bg = 110.0,
+            combinedDelta = 4.0,
+            cob = 12.0,
+            riseConfirmation = none,
+            postLgsRecovery = true,
+        )
+        assertThat(result.engage).isFalse()
+        assertThat(result.kind).isEqualTo(GateKind.AWAITING_CONFIRMATION)
+    }
+
+    @Test
+    fun `implicit meal after zero basal opens once rise is confirmed`() {
+        val result = gater().shouldEngageV3(
+            bg = 110.0,
+            combinedDelta = 4.0,
+            cob = 12.0,
+            riseConfirmation = confirmed,
+            postLgsRecovery = true,
+        )
+        assertThat(result.engage).isTrue()
+    }
+
+    @Test
+    fun `early rising meal after zero basal opens without waiting for full confirmation`() {
+        val result = gater().shouldEngageV3(
+            bg = 110.0,
+            combinedDelta = 4.0,
+            cob = 12.0,
+            riseConfirmation = weak,
+            postLgsRecovery = true,
+        )
+        assertThat(result.engage).isTrue()
+    }
+
+    @Test
+    fun `declared meal bypasses post zero basal wait`() {
+        val result = gater().shouldEngageV3(
+            bg = 100.0,
+            combinedDelta = 0.5,
+            explicitMealMode = true,
+            riseConfirmation = none,
+            postLgsRecovery = true,
+        )
         assertThat(result.engage).isTrue()
     }
 }

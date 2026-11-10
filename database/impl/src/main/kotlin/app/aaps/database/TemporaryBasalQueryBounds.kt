@@ -8,11 +8,15 @@ import java.util.concurrent.TimeUnit
  */
 object TemporaryBasalQueryBounds {
 
-    /** How far back to search for an active TBR at [timestamp] (ms). */
-    val MAX_ACTIVE_LOOKBACK_MS: Long = TimeUnit.DAYS.toMillis(7)
+    /**
+     * How far back to search for an active TBR at [timestamp] (ms).
+     * A temp basal never runs longer than 24 hours, so one day is enough. A shorter window means fewer
+     * rows are read for every lookup (this query is called very often by the IOB/COB and AIMI code).
+     */
+    val MAX_ACTIVE_LOOKBACK_MS: Long = TimeUnit.DAYS.toMillis(1)
 
     /** Ignore rows with corrupt/overlong duration (ms). */
-    val MAX_REASONABLE_DURATION_MS: Long = TimeUnit.DAYS.toMillis(7)
+    val MAX_REASONABLE_DURATION_MS: Long = TimeUnit.DAYS.toMillis(1)
 
     fun earliestTimestampForActiveAt(timestamp: Long): Long =
         (timestamp - MAX_ACTIVE_LOOKBACK_MS).coerceAtLeast(0L)

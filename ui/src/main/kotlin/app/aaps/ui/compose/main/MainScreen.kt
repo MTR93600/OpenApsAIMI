@@ -449,7 +449,7 @@ fun MainScreen(
                                 .padding(bottom = scaffoldPadding.calculateBottomPadding())
                         ) {
                             val loopActionState = loopActionViewModel.uiState.collectAsStateWithLifecycle().value
-                            if (isGlassSkin) {
+                            if (ALWAYS_GLASS_NAV_BAR || isGlassSkin) {
                                 GlassNavigationBar(
                                     masterOrPairedClient = masterOrPairedClient,
                                     onTreatmentClick = {
@@ -530,7 +530,8 @@ fun MainScreen(
                                     modifier = Modifier
                                         .align(Alignment.BottomEnd)
                                         .padding(contentPadding)
-                                        .padding(end = 16.dp, bottom = 128.dp + fabBottomOffset)
+                                        // Fixed place: the pump icon must not move when the toolbar shows or hides.
+                                        .padding(end = 16.dp, bottom = 128.dp)
                                 )
                                 NotificationFab(
                                     notificationCount = notifications.size,
@@ -539,7 +540,7 @@ fun MainScreen(
                                     modifier = Modifier
                                         .align(Alignment.BottomEnd)
                                         .padding(contentPadding)
-                                        .padding(end = 16.dp, bottom = 72.dp + fabBottomOffset)
+                                        .padding(end = 16.dp, bottom = 72.dp)
                                 )
                             }
                         }
@@ -662,3 +663,6 @@ fun MainScreen(
 
 private val PREVIEW_MODE_MIN_HEIGHT: Dp = 500.dp
 private const val AUTO_HIDE_DELAY_MS = 3000L
+
+/** The bottom bar looks the same on every screen and skin. */
+private const val ALWAYS_GLASS_NAV_BAR = true

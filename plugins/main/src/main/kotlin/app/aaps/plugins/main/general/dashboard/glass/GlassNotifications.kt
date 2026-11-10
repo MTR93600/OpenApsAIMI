@@ -4,6 +4,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,6 +39,11 @@ import app.aaps.plugins.main.general.overview.notifications.NotificationStore
 // ==========================================
 // NOTIFICATION: PUMP STATUS (SMB, Temp Basal, etc.)
 // ==========================================
+/**
+ * The pump line ("Pump: Reservoir 98 U | Site 4 d | Sensor 9 d") shown as separate chips that wrap to the next
+ * row on a narrow screen, instead of one long text that breaks in the middle of a value.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun PumpStatusNotification(
     status: String,
@@ -48,24 +55,59 @@ internal fun PumpStatusNotification(
     } else {
         Brush.verticalGradient(listOf(Color(0xFFFFFFFF), Color(0xE4EEF2FA)))
     }
+    val parts = status.htmlToAnnotatedString().text
+        .split("|")
+        .map { it.trim().removePrefix("Pump:").trim() }
+        .filter { it.isNotEmpty() }
+    val styled = status.split("|").map { it.trim() }.filter { it.isNotEmpty() }
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(4.dp, shape)
-            .clip(shape)
-            .background(bgBrush)
-            .border(1.dp, if (isDark) Color(0x30FFFFFF) else Color(0xD0CBD5E1), shape)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = status.htmlToAnnotatedString(),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = if (isDark) Color(0xFFE2E8F0) else Color(0xFF1E293B),
-            letterSpacing = 0.3.sp
-        )
+    if (parts.size < 2 || parts.size != styled.size) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .shadow(4.dp, shape)
+                .clip(shape)
+                .background(bgBrush)
+                .border(1.dp, if (isDark) Color(0x30FFFFFF) else Color(0xD0CBD5E1), shape)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = status.htmlToAnnotatedString(),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isDark) Color(0xFFE2E8F0) else Color(0xFF1E293B),
+                letterSpacing = 0.3.sp
+            )
+        }
+    } else {
+        // No big backing panel: every value is its own small glass capsule, like the round floating buttons.
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            styled.forEach { html ->
+                val chipShape = RoundedCornerShape(50)
+                Text(
+                    text = html.replace(Regex("(?i)^\\s*(<[^>]*>)*\\s*Pump:"), "$1").htmlToAnnotatedString(),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isDark) Color(0xFFE2E8F0) else Color(0xFF1E293B),
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = Modifier
+                        .shadow(4.dp, chipShape)
+                        .clip(chipShape)
+                        .background(
+                            if (isDark) Brush.verticalGradient(listOf(Color(0x38FFFFFF), Color(0x14FFFFFF)))
+                            else Brush.verticalGradient(listOf(Color(0xFFFFFFFF), Color(0xE4EEF2FA)))
+                        )
+                        .border(1.dp, if (isDark) Color(0x38FFFFFF) else Color(0xD0CBD5E1), chipShape)
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+            }
+        }
     }
 }
 

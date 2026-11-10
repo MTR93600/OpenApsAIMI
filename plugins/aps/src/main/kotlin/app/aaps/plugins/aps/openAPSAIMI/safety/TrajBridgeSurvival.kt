@@ -24,6 +24,20 @@ package app.aaps.plugins.aps.openAPSAIMI.safety
 object TrajBridgeSurvival {
 
     /**
+     * A stacking reduction has expired once insulin is depleted and both current and short trends
+     * confirm a rise at/above target. Hypoglycaemia protection is evaluated separately before this
+     * bridge and remains sovereign.
+     */
+    fun releaseForDepletedConfirmedRise(
+        bgMgdl: Double,
+        targetMgdl: Double,
+        deltaMgdl5m: Double,
+        shortAvgDeltaMgdl5m: Double,
+        iobU: Double,
+    ): Boolean =
+        iobU <= 0.0 && bgMgdl >= targetMgdl && deltaMgdl5m > 0.0 && shortAvgDeltaMgdl5m > 0.0
+
+    /**
      * @param rateUph what the rest of the tick must use. Equal to `scheduledUph` unless the key was
      *   armed AND the bridge really asked for less.
      * @param wouldReduceToUph the rate an armed key would have produced, or null when the bridge asked

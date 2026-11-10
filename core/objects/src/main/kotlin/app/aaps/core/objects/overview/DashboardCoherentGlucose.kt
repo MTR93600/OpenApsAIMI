@@ -102,6 +102,46 @@ object DashboardCoherentGlucose {
                 resolveDashboardThemeColor(context, rh, app.aaps.core.ui.R.attr.bgInRange)
         }
 
+    /**
+     * Colour for the big glucose digits, smooth along the glucose value. In range: green. Above the high mark: yellow,
+     * turning orange as it gets very high. Below the low mark: pale red, getting stronger the lower it goes.
+     */
+    @ColorInt
+    fun gradientBgColor(displayMgdl: Double?, profileFunction: ProfileFunction, preferences: Preferences): Int {
+        if (displayMgdl == null) return GRADIENT_IN_RANGE
+        val toMgdl = if (profileFunction.getUnits() == GlucoseUnit.MGDL) 1.0 else 1.0 / Constants.MGDL_TO_MMOLL
+        val lowMgdl = preferences.get(UnitDoubleKey.OverviewLowMark) * toMgdl
+        val highMgdl = preferences.get(UnitDoubleKey.OverviewHighMark) * toMgdl
+        return when {
+            displayMgdl < lowMgdl -> {
+                val deepest = 54.0
+                val depth = ((lowMgdl - displayMgdl) / (lowMgdl - deepest).coerceAtLeast(1.0)).coerceIn(0.0, 1.0)
+                blend(GRADIENT_LOW_PALE, GRADIENT_LOW_DEEP, depth)
+            }
+            displayMgdl > highMgdl -> {
+                val veryHighSpan = 80.0
+                val level = ((displayMgdl - highMgdl) / veryHighSpan).coerceIn(0.0, 1.0)
+                blend(GRADIENT_HIGH_YELLOW, GRADIENT_HIGH_ORANGE, level)
+            }
+            else -> GRADIENT_IN_RANGE
+        }
+    }
+
+    private const val GRADIENT_IN_RANGE = 0xFF22C55E.toInt()
+    private const val GRADIENT_HIGH_YELLOW = 0xFFFACC15.toInt()
+    private const val GRADIENT_HIGH_ORANGE = 0xFFF97316.toInt()
+    private const val GRADIENT_LOW_PALE = 0xFFFCA5A5.toInt()
+    private const val GRADIENT_LOW_DEEP = 0xFFE11D2E.toInt()
+
+    private fun blend(from: Int, to: Int, t: Double): Int {
+        fun channel(shift: Int): Int {
+            val a = (from shr shift) and 0xFF
+            val b = (to shr shift) and 0xFF
+            return (a + (b - a) * t).toInt().coerceIn(0, 255)
+        }
+        return (0xFF shl 24) or (channel(16) shl 16) or (channel(8) shl 8) or channel(0)
+    }
+
     fun displayBgDescription(
         displayMgdl: Double?,
         profileFunction: ProfileFunction,

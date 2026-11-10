@@ -42,7 +42,7 @@ internal fun TimeFilterBar(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Stats button (action pill, same visual as the IOB/Target/Basal pills)
@@ -50,7 +50,8 @@ internal fun TimeFilterBar(
             label = statsLabel,
             onClick = onOpenStats,
             isDark = isDark,
-            height = 40.dp
+            height = 40.dp,
+            modifier = Modifier.weight(1f)
         )
 
         // Range selector [ 6h | 12h | 18h | 24h ] inside a glass dock
@@ -65,7 +66,8 @@ internal fun TimeFilterBar(
             label = treatmentLabel,
             onClick = onOpenTreatment,
             isDark = isDark,
-            height = 40.dp
+            height = 40.dp,
+            modifier = Modifier.weight(1f)
         )
     }
 }
@@ -124,7 +126,8 @@ internal fun GlassActionPill(
     isDark: Boolean,
     isSelected: Boolean = false,
     compact: Boolean = false,
-    height: Dp? = null
+    height: Dp? = null,
+    modifier: Modifier = Modifier
 ) {
     val shape = when {
         compact -> RoundedCornerShape(14.dp)
@@ -147,7 +150,7 @@ internal fun GlassActionPill(
         else -> Color(0xFF1E293B)
     }
 
-    val boxModifier = Modifier
+    val boxModifier = modifier
             .shadow(
                 elevation = if (isDark) 7.dp else 5.dp,
                 shape = shape,
@@ -164,8 +167,8 @@ internal fun GlassActionPill(
                 else -> 14.dp
             },
             horizontal = when {
-                compact -> 8.dp
-                else -> 20.dp
+                compact -> 6.dp
+                else -> 8.dp
             }
         )
         .then(if (height != null) Modifier.height(height) else Modifier)
@@ -178,10 +181,12 @@ internal fun GlassActionPill(
             text = label,
             fontSize = when {
                 compact -> 11.sp
-                else -> 14.sp
+                else -> 12.sp
             },
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-            color = textColor
+            color = textColor,
+            maxLines = 1,
+            softWrap = false
         )
     }
 }

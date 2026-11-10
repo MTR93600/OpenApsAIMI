@@ -2,6 +2,8 @@ package app.aaps.wear.di
 
 import app.aaps.wear.comm.DataLayerListenerServiceWear
 import app.aaps.wear.complications.BgGraphComplication
+import app.aaps.wear.complications.AimiDialComplication
+import app.aaps.wear.complications.AimiEatingButtonComplication
 import app.aaps.wear.complications.CwfAmbientBgComplication
 import app.aaps.wear.complications.CwfAmbientStatusComplication
 import app.aaps.wear.complications.CwfImageComplication
@@ -54,6 +56,8 @@ abstract class WearServicesModule {
     @ContributesAndroidInjector abstract fun contributesHeartRateListenerService(): HeartRateListener
     @ContributesAndroidInjector abstract fun contributesStepsCountListenerService(): StepCountListener
     @ContributesAndroidInjector abstract fun contributesBgGraphComplication(): BgGraphComplication
+    @ContributesAndroidInjector abstract fun contributesAimiDialComplication(): AimiDialComplication
+    @ContributesAndroidInjector abstract fun contributesAimiEatingButtonComplication(): AimiEatingButtonComplication
     @ContributesAndroidInjector abstract fun contributesCwfImageComplication(): CwfImageComplication
     @ContributesAndroidInjector abstract fun contributesCwfLowerComplication(): CwfLowerComplication
     @ContributesAndroidInjector abstract fun contributesCwfUpperComplication(): CwfUpperComplication

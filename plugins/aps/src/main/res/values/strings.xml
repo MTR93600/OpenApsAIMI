@@ -1171,6 +1171,7 @@
     <string name="reason_hypo_guard">🛑 Hypo protection + safety margin: minBG=%1$s ≤ Threshold=%2$s (BG=%3$s, predicted=%4$s, eventual=%5$s) → SMB=0</string>
     <string name="reason_tail_damping">Tail-aware damping: %1$.2fU → %2$.2fU (tail %3$.0f%%)</string>
     <string name="reason_meal_aggression_boost">🍽️ Meal weighting: %1$.2fU → %2$.2fU (x%3$.2f)</string>
+    <string name="reason_safety_sport_rise_softened">🏃‍♂️ Sport safety (steps only) softened while glucose rises: %1$.2fU → %2$.2fU</string>
     <string name="reason_safety_sport_meal_reduction">🏃‍♂️ Sport safety softened by meal: %1$.2fU → %2$.2fU</string>
     <string name="reason_meal_tail_bypass">🍽️ Meal context bypassed PK/PD damping (+%1$.0f mg/dL predicted)</string>
     <string name="reason_ai_file">🧠 A.I. file: %1$s Prediction : %2$s U</string>
@@ -1924,7 +1925,7 @@
     <string name="aimi_adv_train_q_out_too_few">too few rows</string>
     <string name="aimi_adv_train_q_out_rejected">model rejected by the quality check</string>
     <string name="aimi_adv_train_q_out_other">model not trained</string>
-    <string name="aimi_as_title">AIMI Assistant</string>
+    <string name="aimi_as_title">Assistant</string>
     <string name="aimi_as_loading">Reading the AIMI log. Please wait.</string>
     <string name="aimi_as_overview">Last 3 days</string>
     <string name="aimi_as_no_data">Not enough data in the AIMI log yet.</string>
@@ -1974,4 +1975,13 @@
     <string name="aimi_as_reason_late_tail" comment="%1$d=number of late episodes, %2$d=average delay minutes">The first SMB came late %1$d times, on average after %2$d min. A weaker tail damping cuts the dose less.</string>
     <string name="aimi_as_reason_late_red" comment="%1$d=number of late episodes, %2$d=average delay minutes">The first SMB came late %1$d times, on average after %2$d min. A higher threshold gives back the full dose more often after a safety cut.</string>
     <string name="aimi_as_reason_late_iob" comment="%1$d=number of late episodes, %2$d=average delay minutes">The first SMB came late %1$d times, on average after %2$d min. A larger extra IOB room allows more insulin in priority situations.</string>
+    <string name="aimi_as_ph_title">Post-low protection: when to let SMB work again</string>
+    <string name="aimi_as_ph_desc">After a low, the loop blocks SMB for a while so the sugar does not fall again. This block ends when the sugar is above the target by the first value and is rising faster than the second value. Standard: 20 and 5. The old values were 30 and 15. Lower values end the block earlier.</string>
+    <string name="aimi_as_ph_margin_label">Sugar above target, mg/dL (5 to 60)</string>
+    <string name="aimi_as_ph_delta_label">Rise in 5 minutes, mg/dL (1 to 30)</string>
+    <string name="aimi_as_ph_apply">Apply</string>
+    <string name="aimi_as_ph_saved">Saved. The loop uses the new values from the next run.</string>
+    <string name="aimi_as_ph_invalid">Enter the first value from 5 to 60 and the second from 1 to 30.</string>
+    <string name="aimi_as_entry_title">AIMI Settings Assistant</string>
+    <string name="aimi_as_entry_summary">Reads your AIMI decision log, finds lows and late first SMB, explains the cause and proposes one setting change at a time. Nothing changes until you confirm.</string>
 </resources>

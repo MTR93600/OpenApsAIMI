@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.physio
 
+import app.aaps.plugins.aps.openAPSAIMI.energy.EnergyMeter
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -16,7 +17,12 @@ class PhysioRealtimeWorker(
     params: WorkerParameters
 ) : CoroutineWorker(context, params) {
 
-    override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+    override suspend fun doWork(): Result {
+        EnergyMeter.attach(applicationContext)
+        return EnergyMeter.measureSuspend(EnergyMeter.WORKER_PHYSIO) { doWorkMeasured() }
+    }
+
+    private suspend fun doWorkMeasured(): Result = withContext(Dispatchers.IO) {
         try {
             val manager = AIMIPhysioManagerMTR.instance
             if (manager == null) return@withContext Result.retry()
@@ -41,7 +47,12 @@ class PhysioMetabolicWorker(
     params: WorkerParameters
 ) : CoroutineWorker(context, params) {
 
-    override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+    override suspend fun doWork(): Result {
+        EnergyMeter.attach(applicationContext)
+        return EnergyMeter.measureSuspend(EnergyMeter.WORKER_PHYSIO) { doWorkMeasured() }
+    }
+
+    private suspend fun doWorkMeasured(): Result = withContext(Dispatchers.IO) {
         try {
             val manager = AIMIPhysioManagerMTR.instance
             if (manager == null) return@withContext Result.retry()
@@ -64,7 +75,12 @@ class PhysioDailyWorker(
     params: WorkerParameters
 ) : CoroutineWorker(context, params) {
 
-    override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+    override suspend fun doWork(): Result {
+        EnergyMeter.attach(applicationContext)
+        return EnergyMeter.measureSuspend(EnergyMeter.WORKER_PHYSIO) { doWorkMeasured() }
+    }
+
+    private suspend fun doWorkMeasured(): Result = withContext(Dispatchers.IO) {
         try {
             val manager = AIMIPhysioManagerMTR.instance
             if (manager == null) return@withContext Result.retry()
@@ -88,7 +104,12 @@ class PhysioPipelineWatchdogWorker(
     params: WorkerParameters
 ) : CoroutineWorker(context, params) {
 
-    override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+    override suspend fun doWork(): Result {
+        EnergyMeter.attach(applicationContext)
+        return EnergyMeter.measureSuspend(EnergyMeter.WORKER_PHYSIO) { doWorkMeasured() }
+    }
+
+    private suspend fun doWorkMeasured(): Result = withContext(Dispatchers.IO) {
         try {
             val manager = AIMIPhysioManagerMTR.instance
             if (manager == null) return@withContext Result.retry()

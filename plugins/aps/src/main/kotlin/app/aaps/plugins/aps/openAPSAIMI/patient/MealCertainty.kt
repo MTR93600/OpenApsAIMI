@@ -321,7 +321,7 @@ object MealCertaintyBuilder {
             target != null &&
                 target.isFinite() &&
                 input.bgMgdl.isFinite() &&
-                input.bgMgdl > target + PostHypoAggressiveRiseExit.TARGET_MARGIN_MGDL
+                input.bgMgdl > target + PostHypoAggressiveRiseExit.targetMarginMgdl
 
         val digestionRiseCore =
             treeState == MealCertaintyTreeState.DIGESTION_ACTIVE &&

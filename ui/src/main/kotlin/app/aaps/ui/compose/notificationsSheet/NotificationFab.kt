@@ -5,6 +5,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Badge
@@ -15,6 +17,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import app.aaps.core.interfaces.notifications.NotificationLevel
 import app.aaps.core.ui.compose.AapsTheme
@@ -37,6 +41,8 @@ fun NotificationFab(
 
         FloatingActionButton(
             onClick = onClick,
+            modifier = Modifier.border(1.dp, Brush.verticalGradient(listOf(Color(0x66FFFFFF), Color(0x1AFFFFFF))), CircleShape),
+            shape = CircleShape,
             containerColor = containerColor,
             contentColor = contentColor,
             elevation = FloatingActionButtonDefaults.elevation(

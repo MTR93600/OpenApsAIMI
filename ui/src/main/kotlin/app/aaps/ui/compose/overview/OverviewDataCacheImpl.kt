@@ -313,12 +313,25 @@ class OverviewDataCacheImpl @AssistedInject constructor(
             // Align with classic overview / hybrid dashboard: refresh BgInfo on the same bus events
             // so Compose home matches after cold start, loop GUI updates, and IOB recalculation.
             scope.launch {
+                // At a cold start the plugin list may not be ready yet; asking for it too early crashed the app
+                // ("lateinit property plugins has not been initialized"). Wait for it, for up to 30 seconds.
+                var overviewBus: RxBus? = null
+                repeat(100) {
+                    if (overviewBus == null) {
+                        try {
+                            overviewBus = activePlugin.activeOverview.overviewBus
+                        } catch (_: UninitializedPropertyAccessException) {
+                            delay(300)
+                        }
+                    }
+                }
+                val readyOverviewBus = overviewBus ?: return@launch
                 merge(
                     rxBus.toFlow(EventBucketedDataCreated::class.java),
                     rxBus.toFlow(EventRefreshOverview::class.java),
                     rxBus.toFlow(EventLoopUpdateGui::class.java),
                     rxBus.toFlow(EventInitializationChanged::class.java),
-                    activePlugin.activeOverview.overviewBus.toFlow(EventUpdateOverviewIobCob::class.java),
+                    readyOverviewBus.toFlow(EventUpdateOverviewIobCob::class.java),
                 ).collect {
                     aapsLogger.debug(LTag.UI, "OverviewDataCache: BgInfo refresh (${it.javaClass.simpleName})")
                     updateBgInfoFromDatabase()

@@ -288,6 +288,44 @@
                 android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS"
                 android:value="60" />
         </service>
+        <service
+            android:name=".complications.AimiDialComplication"
+            android:exported="true"
+            android:icon="@drawable/watchface_custom"
+            android:label="AIMI 24h"
+            android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
+            <intent-filter>
+                <action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST" />
+            </intent-filter>
+            <meta-data
+                android:name="android.support.wearable.complications.SAFE_WATCH_FACES"
+                android:value="${applicationId}.watchfacepush.aapsv4" />
+            <meta-data
+                android:name="android.support.wearable.complications.SUPPORTED_TYPES"
+                android:value="SMALL_IMAGE" />
+            <meta-data
+                android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS"
+                android:value="60" />
+        </service>
+        <service
+            android:name=".complications.AimiEatingButtonComplication"
+            android:exported="true"
+            android:icon="@drawable/watchface_custom"
+            android:label="Я ЕМ"
+            android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
+            <intent-filter>
+                <action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST" />
+            </intent-filter>
+            <meta-data
+                android:name="android.support.wearable.complications.SAFE_WATCH_FACES"
+                android:value="${applicationId}.watchfacepush.aapsv4" />
+            <meta-data
+                android:name="android.support.wearable.complications.SUPPORTED_TYPES"
+                android:value="SHORT_TEXT" />
+            <meta-data
+                android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS"
+                android:value="300" />
+        </service>
         <!-- The two halves of the Custom watch face, used by the pushed WFF document: the lower one
              refreshes at data rate, the upper one keeps up with the clock. -->
         <service
@@ -977,6 +1015,10 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".interaction.actions.AimiEatingActivity"
+            android:exported="false"
+            android:theme="@style/WearAppCompatDark" />
 
         <activity
             android:name=".tile.ActionsTileSettingsActivity"

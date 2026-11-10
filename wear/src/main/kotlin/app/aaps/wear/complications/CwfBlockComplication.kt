@@ -295,5 +295,5 @@ abstract class CwfBlockComplication : ModernBaseComplicationProviderService() {
     }
 
     /** A tap lands anywhere on a full-screen picture, so it opens the menu rather than one detail screen. */
-    override fun getComplicationAction(): ComplicationAction = ComplicationAction.MENU
+    override fun getComplicationAction(): ComplicationAction = ComplicationAction.AIMI_EATING
 }

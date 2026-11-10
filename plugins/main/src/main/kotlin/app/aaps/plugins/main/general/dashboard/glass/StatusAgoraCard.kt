@@ -1,10 +1,12 @@
 package app.aaps.plugins.main.general.dashboard.glass
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import android.content.Context
+import android.content.Intent
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,7 +14,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -34,11 +35,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -48,14 +46,27 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.aaps.core.interfaces.source.CgmWarmupStatus
+import app.aaps.core.ui.compose.icons.IcLoopSuperbolus
+import app.aaps.core.ui.compose.icons.IcLoopPausedPump
+import app.aaps.core.ui.compose.icons.IcLoopPausedDst
+import app.aaps.core.ui.compose.icons.IcLoopPaused
+import app.aaps.core.ui.compose.icons.IcLoopOpen
+import app.aaps.core.ui.compose.icons.IcLoopLgs
+import app.aaps.core.ui.compose.icons.IcLoopDisconnected
+import app.aaps.core.ui.compose.icons.IcLoopDisabled
+import app.aaps.core.ui.compose.icons.IcLoopClosed
+import app.aaps.core.ui.compose.loopColor
+import app.aaps.core.ui.compose.AapsTheme
+import app.aaps.core.data.model.RM
+import androidx.compose.ui.graphics.vector.ImageVector
 import app.aaps.core.ui.compose.StatusLevel
 import app.aaps.core.ui.compose.glass.GlassColors
 import app.aaps.core.ui.compose.statusLevelToColor
 import app.aaps.plugins.main.R
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
-import app.aaps.core.ui.R as CoreUiR
 
 // Only ever called for GlassPillLocation.BOTTOM_ROW entries (see the bottom-row filter below), but the
 // `when` must still cover every GlassPillId since top-grid IDs share the same enum.
@@ -65,6 +76,8 @@ private fun glassPillValue(id: GlassPillId, state: GlassUiState): String = when 
     GlassPillId.BASAL_RATE -> state.basalPercentText
     GlassPillId.LAST_BOLUS -> state.lastBolusText
     GlassPillId.LAST_CARBS -> state.lastCarbsText
+    GlassPillId.RESERVOIR_LEVEL -> state.reservoirText
+    GlassPillId.AIMI_INSIGHT -> "\u25B8"
     GlassPillId.PUMP_RESERVOIR, GlassPillId.CANNULA, GlassPillId.BATTERY,
     GlassPillId.SENSOR, GlassPillId.LOOP_STATUS, GlassPillId.ACTIVITY -> ""
 }
@@ -87,6 +100,7 @@ internal fun StatusAgoraCard(
     onOpenTools: () -> Unit,
     selectedPills: List<GlassPillId>,
 ) {
+    val context = LocalContext.current
     // Minute clock: keeps "last value N min ago" and the stale grey moving between view-model refreshes.
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
@@ -106,110 +120,160 @@ internal fun StatusAgoraCard(
         ) {
             Spacer(modifier = Modifier.height(2.dp))
 
+            // The enabled blocks fill the left and the right column in turn, half and half.
+                val sidePills = buildList<@Composable () -> Unit> {
+                    if (GlassPillId.PUMP_RESERVOIR in selectedPills) add {
+                            GlassPill(
+                                label = state.insulinLabel,
+                                value = state.insulinAge,
+                                isDark = isDark,
+                                valueColor = statusLevelToColor(state.insulinAgeStatus),
+                                modifier = Modifier.width(84.dp).clickable { onOpenPump() },
+                                leadingIcon = {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.ic_glyco_insulin),
+                                        contentDescription = null,
+                                        tint = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            )
+                    }
+                    if (GlassPillId.CANNULA in selectedPills) add {
+                            GlassPill(
+                                label = state.cannulaLabel,
+                                value = state.cannulaAge,
+                                isDark = isDark,
+                                valueColor = statusLevelToColor(state.cannulaAgeStatus),
+                                modifier = Modifier.width(84.dp).clickable { onOpenCannula() },
+                                leadingIcon = {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.ic_glyco_cannula),
+                                        contentDescription = null,
+                                        tint = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            )
+                    }
+                    if (GlassPillId.BATTERY in selectedPills) add {
+                            GlassPill(
+                                label = state.batteryLabel,
+                                value = state.batteryAge,
+                                isDark = isDark,
+                                valueColor = statusLevelToColor(state.batteryAgeStatus),
+                                modifier = Modifier.width(84.dp).clickable { onOpenBattery() },
+                                leadingIcon = {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.ic_glyco_battery),
+                                        contentDescription = null,
+                                        tint = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            )
+                    }
+                    if (GlassPillId.SENSOR in selectedPills) add {
+                            GlassPill(
+                                label = state.sensorLabel,
+                                value = state.sensorAge,
+                                isDark = isDark,
+                                valueColor = statusLevelToColor(state.sensorAgeStatus),
+                                modifier = Modifier.width(84.dp).combinedClickable(
+                                    onClick = onOpenSensorQuality,
+                                    onLongClick = onOpenSensorInsert
+                                ),
+                                leadingIcon = {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.ic_glyco_sensor),
+                                        contentDescription = null,
+                                        tint = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            )
+                    }
+                    if (GlassPillId.ACTIVITY in selectedPills) add {
+                            GlassPill(
+                                label = stringResource(R.string.dashboard_glass_activity_label),
+                                value = stringResource(R.string.dashboard_glass_activity_value, state.stepsText, state.hrText),
+                                isDark = isDark,
+                                modifier = Modifier.width(84.dp),
+                                leadingIcon = {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.ic_glyco_settings),
+                                        contentDescription = null,
+                                        tint = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            )
+                    }
+                    add {
+                        GlassPill(
+                            label = stringResource(R.string.dashboard_glass_tools_label),
+                            value = "",
+                            isDark = isDark,
+                            modifier = Modifier.width(84.dp).clickable { onOpenTools() },
+                            leadingIcon = {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_glyco_settings),
+                                    contentDescription = null,
+                                    tint = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        )
+                    }
+                }
+                val leftCount = (sidePills.size + 1) / 2
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.Top,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // LEFT: pump status
+                // LEFT
                 Column(
                     modifier = Modifier.weight(1f),
                     horizontalAlignment = Alignment.Start,
                     verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    if (GlassPillId.PUMP_RESERVOIR in selectedPills) {
-                        GlassPill(
-                            label = state.insulinLabel,
-                            value = state.insulinAge,
-                            isDark = isDark,
-                            valueColor = statusLevelToColor(state.insulinAgeStatus),
-                            modifier = Modifier.width(100.dp).clickable { onOpenPump() },
-                            leadingIcon = {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_glyco_insulin),
-                                    contentDescription = null,
-                                    tint = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
-                        )
-                    }
-                    if (GlassPillId.CANNULA in selectedPills) {
-                        GlassPill(
-                            label = state.cannulaLabel,
-                            value = state.cannulaAge,
-                            isDark = isDark,
-                            valueColor = statusLevelToColor(state.cannulaAgeStatus),
-                            modifier = Modifier.width(100.dp).clickable { onOpenCannula() },
-                            leadingIcon = {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_glyco_cannula),
-                                    contentDescription = null,
-                                    tint = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
-                        )
-                    }
-                    if (GlassPillId.BATTERY in selectedPills) {
-                        GlassPill(
-                            label = state.batteryLabel,
-                            value = state.batteryAge,
-                            isDark = isDark,
-                            valueColor = statusLevelToColor(state.batteryAgeStatus),
-                            modifier = Modifier.width(100.dp).clickable { onOpenBattery() },
-                            leadingIcon = {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_glyco_battery),
-                                    contentDescription = null,
-                                    tint = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
-                        )
-                    }
-                    GlassPill(
-                        label = stringResource(R.string.dashboard_glass_tools_label),
-                        value = "",
-                        isDark = isDark,
-                        modifier = Modifier.width(100.dp).clickable { onOpenTools() },
-                        leadingIcon = {
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_glyco_settings),
-                                contentDescription = null,
-                                tint = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
-                                modifier = Modifier.size(14.dp)
-                            )
-                        }
-                    )
-                }
+                ) { sidePills.take(leftCount).forEach { it() } }
 
-                // CENTER: glucose, inside today's TIR ring
+                // CENTER: big glucose value (the daily numbers are in the dashboard row below)
                 Box(
-                    modifier = Modifier
-                        .weight(1.3f)
-                        .offset(y = TIR_RING_LIFT)
-                        .size(TIR_RING_SIZE),
+                    modifier = Modifier.weight(1.3f),
                     contentAlignment = Alignment.Center
                 ) {
-                    TirRing(
-                        tir = state.tir,
-                        trackColor = (if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B)).copy(alpha = 0.18f),
-                        modifier = Modifier.matchParentSize()
-                    )
+                    // A value with four characters (10.2) is smaller, so it always fits between the side blocks.
+                    val glucoseFontSize = if (state.currentBg.length >= 4) GLUCOSE_FONT_SIZE_LONG else GLUCOSE_FONT_SIZE
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Top
                     ) {
+                        // The running mode: a small, half transparent icon above the glucose (tap: loop screen, hold: mode list).
+                        state.loopMode?.let { mode ->
+                            Icon(
+                                imageVector = loopModeIcon(mode),
+                                contentDescription = state.loopStatusText,
+                                tint = mode.loopColor(AapsTheme.generalColors).copy(alpha = 0.5f),
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .clip(CircleShape)
+                                    .combinedClickable(onClick = onOpenLoopDashboard, onLongClick = onOpenLoop)
+                            )
+                        }
                         // An old value stays visible, greyed and struck through, like the classic overview.
                         Text(
                             text = state.currentBg,
-                            fontSize = 34.sp,
+                            fontSize = glucoseFontSize,
                             fontWeight = FontWeight.ExtraBold,
-                            color = if (glucoseStale) neutralColor else Color(state.glucoseColor),
+                            color = if (glucoseStale) neutralColor else Color(if (state.glucoseDigitsColor != 0) state.glucoseDigitsColor else state.glucoseColor),
                             textDecoration = if (glucoseStale) TextDecoration.LineThrough else null,
-                            letterSpacing = (-1.2).sp,
-                            lineHeight = 34.sp,
+                            letterSpacing = (-2).sp,
+                            lineHeight = glucoseFontSize,
+                            maxLines = 1,
+                            softWrap = false,
                             modifier = Modifier.clickable { onOpenLoop() }
                         )
                         Text(
@@ -247,108 +311,15 @@ internal fun StatusAgoraCard(
                             fontWeight = FontWeight.Medium,
                             color = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B)
                         )
-                        TirTrendText(
-                            tir = state.tir,
-                            neutralColor = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
-                            modifier = Modifier.padding(top = 1.dp)
-                        )
                     }
                 }
 
-                // RIGHT: CGM & loop
+                // RIGHT
                 Column(
                     modifier = Modifier.weight(1f),
                     horizontalAlignment = Alignment.End,
                     verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    if (GlassPillId.SENSOR in selectedPills) {
-                        GlassPill(
-                            label = state.sensorLabel,
-                            value = state.sensorAge,
-                            isDark = isDark,
-                            valueColor = statusLevelToColor(state.sensorAgeStatus),
-                            modifier = Modifier.width(100.dp).combinedClickable(
-                                onClick = onOpenSensorQuality,
-                                onLongClick = onOpenSensorInsert
-                            ),
-                            leadingIcon = {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_glyco_sensor),
-                                    contentDescription = null,
-                                    tint = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
-                        )
-                    }
-                    if (GlassPillId.LOOP_STATUS in selectedPills) {
-                        GlassPill(
-                            label = stringResource(R.string.dashboard_glass_loop_label),
-                            value = state.loopStatusText,
-                            isDark = isDark,
-                            modifier = Modifier.width(100.dp).combinedClickable(
-                                onClick = onOpenLoopDashboard,
-                                onLongClick = onOpenLoop
-                            ),
-                            leadingIcon = {
-                                if (state.loopIsRunning) {
-                                    val infiniteTransition = rememberInfiniteTransition()
-                                    val pulseAlpha by infiniteTransition.animateFloat(
-                                        initialValue = 0f,
-                                        targetValue = 0.8f,
-                                        animationSpec = infiniteRepeatable(
-                                            animation = tween(1000, easing = LinearEasing),
-                                            repeatMode = RepeatMode.Reverse
-                                        )
-                                    )
-                                    Box(
-                                        modifier = Modifier
-                                            .size(10.dp)
-                                            .clip(CircleShape)
-                                            .background(Color(0xFF22C55E).copy(alpha = pulseAlpha), CircleShape),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(5.dp)
-                                                .background(Color(0xFF10B981), CircleShape)
-                                        )
-                                    }
-                                } else {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(10.dp)
-                                            .clip(CircleShape)
-                                            .background(Color(0xFF94A3B8), CircleShape),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(5.dp)
-                                                .background(Color(0xFF94A3B8), CircleShape)
-                                        )
-                                    }
-                                }
-                            }
-                        )
-                    }
-                    if (GlassPillId.ACTIVITY in selectedPills) {
-                        GlassPill(
-                            label = stringResource(R.string.dashboard_glass_activity_label),
-                            value = stringResource(R.string.dashboard_glass_activity_value, state.stepsText, state.hrText),
-                            isDark = isDark,
-                            modifier = Modifier.width(100.dp),
-                            leadingIcon = {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_glyco_settings),
-                                    contentDescription = null,
-                                    tint = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
-                        )
-                    }
-                }
+                ) { sidePills.drop(leftCount).forEach { it() } }
             }
 
             linkBanner?.let { banner ->
@@ -356,7 +327,15 @@ internal fun StatusAgoraCard(
                 CgmLinkBannerText(banner)
             }
 
+            DailyDashboard(state = state, isDark = isDark)
+
             val bottomRowPills = GLASS_PILL_CATALOG.filter { it.location == GlassPillLocation.BOTTOM_ROW && it.id in selectedPills }
+            // The "I eat" button sits above the Assistant button and opens the eating screen of the Assistant.
+            if (GlassPillId.AIMI_INSIGHT in selectedPills) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+                EatingButton(isDark = isDark)
+            }
             if (bottomRowPills.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -376,6 +355,18 @@ internal fun StatusAgoraCard(
                                 GlassPillId.BASAL_RATE -> onOpenBasal
                                 GlassPillId.LAST_BOLUS -> onOpenInsulin
                                 GlassPillId.LAST_CARBS -> onOpenInsulin
+                                GlassPillId.RESERVOIR_LEVEL -> onOpenPump
+                                GlassPillId.AIMI_INSIGHT -> {
+                                    {
+                                        // Same app: an explicit intent works although the activity is not exported.
+                                        context.startActivity(
+                                            Intent().setClassName(
+                                                context,
+                                                "app.aaps.plugins.aps.openAPSAIMI.advisor.assistant.AimiAssistantActivity"
+                                            )
+                                        )
+                                    }
+                                }
                                 GlassPillId.PUMP_RESERVOIR, GlassPillId.CANNULA, GlassPillId.BATTERY,
                                 GlassPillId.SENSOR, GlassPillId.LOOP_STATUS, GlassPillId.ACTIVITY -> null
                             },
@@ -390,86 +381,121 @@ internal fun StatusAgoraCard(
 }
 
 /**
- * Thin ring with today's time-in-range split: in range (green) from 12 o'clock, then high (amber),
- * then low (red), clockwise. A small gap separates the parts. Without data ([tir] null) only the empty
- * track is drawn.
+ * Button "Я ем" (I eat): opens the eating screen. While the eating mode runs it is green and shows the minutes.
+ * It reads the state that the eating engine of the AIMI plugin keeps in its preferences file.
  */
 @Composable
-private fun TirRing(tir: GlassTir?, trackColor: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier) {
-        val strokePx = TIR_RING_STROKE.toPx()
-        val diameter = size.minDimension - strokePx
-        if (diameter <= 0f) return@Canvas
-        val topLeft = Offset((size.width - diameter) / 2f, (size.height - diameter) / 2f)
-        val arcSize = Size(diameter, diameter)
-        drawArc(
-            color = trackColor,
-            startAngle = 0f,
-            sweepAngle = 360f,
-            useCenter = false,
-            topLeft = topLeft,
-            size = arcSize,
-            style = Stroke(width = strokePx)
-        )
-        if (tir == null) return@Canvas
-        val parts = listOf(
-            tir.inRangePct to GlassColors.emerald,
-            tir.abovePct to GlassColors.amber,
-            tir.belowPct to GlassColors.red,
-        ).filter { it.first > 0f }
-        val total = parts.sumOf { it.first.toDouble() }.toFloat()
-        if (total <= 0f) return@Canvas
-        val gap = if (parts.size > 1) TIR_RING_GAP_DEG else 0f
-        var start = -90f
-        for ((pct, color) in parts) {
-            val sweep = pct / total * 360f
-            // A few minutes low must stay visible: never draw a part thinner than the minimum.
-            drawArc(
-                color = color,
-                startAngle = start + gap / 2f,
-                sweepAngle = (sweep - gap).coerceAtLeast(TIR_RING_MIN_PART_DEG),
-                useCenter = false,
-                topLeft = topLeft,
-                size = arcSize,
-                style = Stroke(width = strokePx, cap = StrokeCap.Butt)
-            )
-            start += sweep
+private fun EatingButton(isDark: Boolean) {
+    val context = LocalContext.current
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(15_000L)
+            now = System.currentTimeMillis()
         }
     }
+    val prefs = context.getSharedPreferences("aimi_eating", Context.MODE_PRIVATE)
+    // Read the tick always, so the button redraws also when the mode is off and then starts.
+    val tick = now
+    val active = tick > 0L && prefs.getBoolean("active", false)
+    val openScreen = {
+        context.startActivity(
+            Intent().setClassName(
+                context,
+                "app.aaps.plugins.aps.openAPSAIMI.advisor.assistant.AimiEatingActivity"
+            )
+        )
+    }
+    if (active) {
+        val startMs = prefs.getLong("start_ms", now)
+        val size = prefs.getInt("size", 4).let { if (it == 3) 4 else it }
+        val fat = prefs.getBoolean("fat", false) || prefs.getInt("size", 4) == 3
+        val mode = listOf("Малый", "Средний", "Большой", "Авто", "Авто")[size.coerceIn(0, 4)] + if (fat) " + жирная" else ""
+        val windowMin = if (fat) 300L else 180L
+        // The engine writes the end of the window ("end_ms"); a new rise can make it longer than the normal length.
+        val endMs = prefs.getLong("end_ms", 0L).takeIf { it > startMs } ?: (startMs + windowMin * 60_000L)
+        val remainingMin = ((endMs - now + 59_999L) / 60_000L).coerceAtLeast(0L)
+        // Carbohydrates counted so far in bread units (the engine keeps grams) and insulin given in the window.
+        val carbs = String.format(Locale.getDefault(), "%.1f", prefs.getFloat("est_g", 0f) / 10f)
+        val insulin = String.format(Locale.getDefault(), "%.1f", prefs.getFloat("deliv_u", 0f))
+        // In brackets: the most that the system counted in this meal (carbs) and the most insulin it found needed.
+        val carbsPeakG = prefs.getFloat("counted_g", 0f)
+        val carbsPeak = String.format(Locale.getDefault(), "%.1f", carbsPeakG / 10f)
+        val insulinNeed = String.format(Locale.getDefault(), "%.1f", prefs.getFloat("need_max_u", 0f))
+        EatingRunningPill(
+            mode = mode,
+            remainingMin = remainingMin,
+            carbs = carbs,
+            insulin = insulin,
+            carbsPeak = carbsPeak,
+            insulinNeed = insulinNeed,
+            isDark = isDark,
+            onClick = openScreen,
+            modifier = Modifier.fillMaxWidth()
+        )
+    } else {
+        BottomMetricPill(
+            title = "Я ем",
+            value = "",
+            isDark = isDark,
+            onClick = openScreen,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
 }
 
-/** "TIR 78% ↑6" under the glucose: green when better than yesterday, amber when worse. */
+/**
+ * Row of the daily numbers that matter: time in range today (with the change against yesterday), time low and
+ * high, average glucose, variability (CV) and the estimated A1c. All values come from the dashboard state.
+ */
 @Composable
-private fun TirTrendText(tir: GlassTir?, neutralColor: Color, modifier: Modifier = Modifier) {
+private fun DailyDashboard(state: GlassUiState, isDark: Boolean) {
+    val neutral = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B)
+    val tir = state.tir
     val delta = tir?.deltaVsYesterday
-    val percent = tir?.let { stringResource(CoreUiR.string.format_percent, it.inRangePct.roundToInt()) }
-    val text = when {
-        percent == null             -> stringResource(R.string.dashboard_glass_tir_empty)
-        delta == null || delta == 0 -> stringResource(R.string.dashboard_glass_tir_value, percent)
-        delta > 0                   -> stringResource(R.string.dashboard_glass_tir_up, percent, delta)
-        else                        -> stringResource(R.string.dashboard_glass_tir_down, percent, abs(delta))
+    val tirSub = when {
+        delta == null || delta == 0 -> ""
+        delta > 0                   -> "↑$delta"
+        else                        -> "↓${abs(delta)}"
     }
-    val color = when {
-        delta == null || delta == 0 -> neutralColor
-        delta > 0                   -> GlassColors.emerald
-        else                        -> GlassColors.amber
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly
+    ) {
+        DashboardTile("TIR", tir?.let { "${it.inRangePct.roundToInt()}%" } ?: "--", tirSub, GlassColors.emerald, neutral, Modifier.weight(1f))
+        DashboardTile("Low", tir?.let { "${it.belowPct.roundToInt()}%" } ?: "--", "", GlassColors.red, neutral, Modifier.weight(1f))
+        DashboardTile("High", tir?.let { "${it.abovePct.roundToInt()}%" } ?: "--", "", GlassColors.amber, neutral, Modifier.weight(1f))
+        DashboardTile("Avg", state.avgBgText, "", if (isDark) Color.White else Color(0xFF0F172A), neutral, Modifier.weight(1f))
+        DashboardTile("CV", state.cvText, "", if (isDark) Color.White else Color(0xFF0F172A), neutral, Modifier.weight(1f))
+        DashboardTile("eA1c", state.gmiText, "", if (isDark) Color.White else Color(0xFF0F172A), neutral, Modifier.weight(1f))
     }
-    Text(
-        text = text,
-        fontSize = 8.5.sp,
-        fontWeight = FontWeight.SemiBold,
-        color = color,
-        modifier = modifier
-    )
 }
 
-/** Fixed ring size: the glucose block is laid out to fit inside it, so the card height stays small. */
-private val TIR_RING_SIZE = 130.dp
-/** Moves the ring a little up, into the card top padding, without making the card taller. */
-private val TIR_RING_LIFT = (-6).dp
-private val TIR_RING_STROKE = 5.dp
-private const val TIR_RING_GAP_DEG = 3f
-private const val TIR_RING_MIN_PART_DEG = 2f
+@Composable
+private fun DashboardTile(label: String, value: String, sub: String, valueColor: Color, labelColor: Color, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = value,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            color = valueColor,
+            maxLines = 1,
+            softWrap = false
+        )
+        Text(
+            text = if (sub.isEmpty()) label else "$label $sub",
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Medium,
+            color = labelColor,
+            maxLines = 1,
+            softWrap = false
+        )
+    }
+}
+
+/** Size of the main glucose number. */
+private val GLUCOSE_FONT_SIZE = 76.sp
+private val GLUCOSE_FONT_SIZE_LONG = 60.sp
 
 /** "Reconnecting… · last value 14 min ago", in the attention colour of the other dashboard skins. */
 @Composable
@@ -491,4 +517,18 @@ private fun CgmLinkBannerText(banner: GlassCgmLinkStatus.Banner) {
         textAlign = TextAlign.Center,
         modifier = Modifier.fillMaxWidth()
     )
+}
+
+/** Icon of the running mode, the same set as in the mode list. */
+private fun loopModeIcon(mode: RM.Mode): ImageVector = when (mode) {
+    RM.Mode.CLOSED_LOOP       -> IcLoopClosed
+    RM.Mode.CLOSED_LOOP_LGS   -> IcLoopLgs
+    RM.Mode.OPEN_LOOP         -> IcLoopOpen
+    RM.Mode.DISABLED_LOOP     -> IcLoopDisabled
+    RM.Mode.SUPER_BOLUS       -> IcLoopSuperbolus
+    RM.Mode.DISCONNECTED_PUMP -> IcLoopDisconnected
+    RM.Mode.SUSPENDED_BY_PUMP -> IcLoopPausedPump
+    RM.Mode.SUSPENDED_BY_DST  -> IcLoopPausedDst
+    RM.Mode.SUSPENDED_BY_USER -> IcLoopPaused
+    RM.Mode.RESUME            -> IcLoopClosed
 }

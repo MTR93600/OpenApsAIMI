@@ -86,7 +86,9 @@ class WidgetStateLoader @Inject constructor(
 
         val bolusIob = iobCobCalculator.calculateIobFromBolus().round()
         val basalIob = iobCobCalculator.calculateIobFromTempBasalsIncludingConvertedExtended().round()
-        val iobTotal = bolusIob.iob + basalIob.basaliob
+        // Same IOB as the loop uses (and as Nightscout shows). The loop counts basal IOB with the autosens ratio, the plain sum does not.
+        val loopIob = loop.lastRun?.takeIf { dateUtil.now() - it.lastAPSRun < 10 * 60_000L }?.request?.iob?.iob
+        val iobTotal = loopIob ?: (bolusIob.iob + basalIob.basaliob)
         val iobText = rh.gs(app.aaps.core.ui.R.string.format_insulin_units, iobTotal)
         val iobActive = abs(iobTotal) > 0.001
 

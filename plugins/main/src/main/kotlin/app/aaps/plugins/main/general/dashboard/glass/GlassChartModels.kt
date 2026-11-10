@@ -2,7 +2,18 @@ package app.aaps.plugins.main.general.dashboard.glass
 
 data class BgReadingPoint(val progress: Float, val value: Float)
 data class IobReadingPoint(val progress: Float, val iob: Float)
-data class TreatmentPoint(val progress: Float, val isCarb: Boolean, val label: String, val timestamp: Long = 0L)
+data class TreatmentPoint(
+    val progress: Float,
+    val isCarb: Boolean,
+    val label: String,
+    val timestamp: Long = 0L,
+    /** Insulin in units or carbs in grams: the height of the stick on the chart. */
+    val amount: Float = 0f,
+    val isSmb: Boolean = false,
+)
+
+/** One bar of the insulin balance strip. [excess] true: too much insulin, false: too little. */
+data class DeviationBar(val progress: Float, val size: Float, val excess: Boolean)
 
 /** One basal step: `rateUh` holds from this point's `progress` until the next point (or "now" for the
  *  last one) — a step series, not a smooth curve. Same window-relative `progress` scale as [BgReadingPoint]. */
@@ -46,6 +57,6 @@ data class GlassChartState(
     val highLine: Float = 180f,
     val axisMinValue: Float = 30f,
     val axisHeadroom: Float = 40f,
-    val rangeHours: Int = 6,
+    val rangeHours: Float = 6f,
     val pumpStatusText: String = "",
 )

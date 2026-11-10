@@ -4,6 +4,7 @@ import app.aaps.core.keys.PreferenceType
 import app.aaps.core.keys.interfaces.BooleanPreferenceKey
 import app.aaps.core.keys.interfaces.IntentPreferenceKey
 import app.aaps.plugins.aps.R
+import app.aaps.plugins.aps.openAPSAIMI.advisor.assistant.AimiAssistantActivity
 import app.aaps.plugins.aps.openAPSAIMI.physio.AIMIHealthConnectPermissionActivityMTR
 import app.aaps.plugins.aps.openAPSAIMI.sos.AIMIEmergencySosPermissionActivityMTR
 
@@ -57,6 +58,14 @@ enum class ApsIntentKey(
         titleResId = R.string.aimi_hormonitor_viewer_title,
         summaryResId = R.string.aimi_hormonitor_viewer_summary,
         preferenceType = PreferenceType.ACTIVITY,
+    ),
+
+    AimiAssistant(
+        key = "aimi_settings_assistant",
+        titleResId = R.string.aimi_as_entry_title,
+        summaryResId = R.string.aimi_as_entry_summary,
+        preferenceType = PreferenceType.ACTIVITY,
+        activityClass = AimiAssistantActivity::class.java,
     ),
 
     AimiSosPermissions(

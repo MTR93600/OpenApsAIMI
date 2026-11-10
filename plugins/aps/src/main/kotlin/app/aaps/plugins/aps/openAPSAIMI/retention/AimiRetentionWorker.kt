@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.retention
 
+import app.aaps.plugins.aps.openAPSAIMI.energy.EnergyMeter
 import android.content.Context
 import android.os.Environment
 import androidx.hilt.work.HiltWorker
@@ -108,6 +109,11 @@ class AimiRetentionWorker @AssistedInject constructor(
 ) : LoggingWorker(appContext, workerParams, Dispatchers.IO, aapsLogger, fabricPrivacy) {
 
     override suspend fun doWorkAndLog(): Result {
+        EnergyMeter.attach(applicationContext)
+        return EnergyMeter.measureSuspend(EnergyMeter.WORKER_RETENTION) { doWorkMeasured() }
+    }
+
+    private suspend fun doWorkMeasured(): Result {
         try {
             val candidates = listOfNotNull(
                 storageHelper.getAimiDirectory(),

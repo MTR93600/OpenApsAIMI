@@ -8,7 +8,7 @@ import app.aaps.plugins.main.general.dashboard.DashboardV2ToolAction
 /** One selectable compact pill for the Glass main screen — either a top-grid pill or a bottom-row pill. */
 enum class GlassPillId {
     IOB, TARGET, BASAL_RATE, LAST_BOLUS, LAST_CARBS,
-    PUMP_RESERVOIR, CANNULA, BATTERY, SENSOR, LOOP_STATUS, ACTIVITY,
+    PUMP_RESERVOIR, CANNULA, BATTERY, SENSOR, LOOP_STATUS, ACTIVITY, RESERVOIR_LEVEL, AIMI_INSIGHT,
 }
 
 /** Where a pill renders: the always-shown top grid, or the optional bottom row. */
@@ -33,6 +33,8 @@ val GLASS_PILL_CATALOG: List<GlassPillCatalogEntry> = listOf(
     GlassPillCatalogEntry(GlassPillId.BASAL_RATE, R.string.dashboard_glass_basal_t_label, GlassPillLocation.BOTTOM_ROW),
     GlassPillCatalogEntry(GlassPillId.LAST_BOLUS, R.string.dashboard_glass_last_bolus_label, GlassPillLocation.BOTTOM_ROW),
     GlassPillCatalogEntry(GlassPillId.LAST_CARBS, R.string.dashboard_glass_last_carbs_label, GlassPillLocation.BOTTOM_ROW),
+    GlassPillCatalogEntry(GlassPillId.AIMI_INSIGHT, R.string.dashboard_glass_aimi_insight_label, GlassPillLocation.BOTTOM_ROW),
+    GlassPillCatalogEntry(GlassPillId.RESERVOIR_LEVEL, R.string.dashboard_glass_reservoir_label, GlassPillLocation.BOTTOM_ROW),
     GlassPillCatalogEntry(GlassPillId.PUMP_RESERVOIR, R.string.dashboard_glass_personalize_pump_label, GlassPillLocation.TOP_GRID, defaultSelected = true),
     GlassPillCatalogEntry(GlassPillId.CANNULA, R.string.dashboard_glass_personalize_cannula_label, GlassPillLocation.TOP_GRID, defaultSelected = true),
     GlassPillCatalogEntry(GlassPillId.BATTERY, R.string.dashboard_glass_personalize_battery_label, GlassPillLocation.TOP_GRID, defaultSelected = true),

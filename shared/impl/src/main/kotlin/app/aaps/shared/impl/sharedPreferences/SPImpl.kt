@@ -6,6 +6,7 @@ import android.content.SharedPreferences
 import androidx.annotation.StringRes
 import app.aaps.core.interfaces.sharedPreferences.SP
 import app.aaps.core.interfaces.utils.SafeParse
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -14,6 +15,39 @@ class SPImpl @Inject constructor(
     private val sharedPreferences: SharedPreferences,
     private val context: Context
 ) : SP {
+
+    /**
+     * Doubles are saved as text. Reading one used to throw and catch a ClassCastException first (the float
+     * read fails) and then parse the text again, on every read. The loop reads hundreds of doubles per
+     * cycle, so this was a large part of the CPU use. Here the parsed value is kept in memory and dropped
+     * when the stored value changes.
+     */
+    private val storedDoubles = ConcurrentHashMap<String, Double>()
+
+    // A strong reference is needed: SharedPreferences keeps its listeners in a weak set.
+    private val changeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, changedKey ->
+        if (changedKey == null) storedDoubles.clear() else storedDoubles.remove(changedKey)
+    }
+
+    init {
+        sharedPreferences.registerOnSharedPreferenceChangeListener(changeListener)
+    }
+
+    private fun readDouble(key: String, defaultValue: Double): Double {
+        storedDoubles[key]?.let { return it }
+        return try {
+            sharedPreferences.getFloat(key, defaultValue.toFloat()).toDouble()
+        } catch (_: Exception) {
+            val text = sharedPreferences.getString(key, null)
+            val parsed = SafeParse.stringToDouble(text, Double.NaN)
+            if (parsed.isNaN()) {
+                SafeParse.stringToDouble(text ?: defaultValue.toString(), defaultValue)
+            } else {
+                storedDoubles[key] = parsed
+                parsed
+            }
+        }
+    }
 
     @SuppressLint("ApplySharedPref")
     override fun edit(commit: Boolean, block: SP.Editor.() -> Unit) {
@@ -79,21 +113,30 @@ class SPImpl @Inject constructor(
             spEdit.commit()
         else
             spEdit.apply()
+        // The change listener runs later on the main thread; drop the cache here too, so nobody reads an old value.
+        storedDoubles.clear()
     }
 
     override fun getAll(): Map<String, *> = sharedPreferences.all
 
-    override fun clear() = sharedPreferences.edit().clear().apply()
+    override fun clear() {
+        sharedPreferences.edit().clear().apply()
+        storedDoubles.clear()
+    }
 
     override fun contains(key: String): Boolean = sharedPreferences.contains(key)
 
     override fun contains(resourceId: Int): Boolean = sharedPreferences.contains(context.getString(resourceId))
 
-    override fun remove(resourceID: Int) =
+    override fun remove(resourceID: Int) {
         sharedPreferences.edit().remove(context.getString(resourceID)).apply()
+        storedDoubles.clear()
+    }
 
-    override fun remove(key: String) =
+    override fun remove(key: String) {
         sharedPreferences.edit().remove(key).apply()
+        storedDoubles.remove(key)
+    }
 
     override fun getString(resourceID: Int, defaultValue: String): String =
         sharedPreferences.getString(context.getString(resourceID), defaultValue) ?: defaultValue
@@ -118,18 +161,10 @@ class SPImpl @Inject constructor(
         }
 
     override fun getDouble(resourceID: Int, defaultValue: Double): Double =
-        try {
-            sharedPreferences.getFloat(context.getString(resourceID), defaultValue.toFloat()).toDouble()
-        } catch (_: Exception) {
-            SafeParse.stringToDouble(sharedPreferences.getString(context.getString(resourceID), defaultValue.toString()), defaultValue)
-        }
+        readDouble(context.getString(resourceID), defaultValue)
 
     override fun getDouble(key: String, defaultValue: Double): Double =
-        try {
-            sharedPreferences.getFloat(key, defaultValue.toFloat()).toDouble()
-        } catch (_: Exception) {
-            SafeParse.stringToDouble(sharedPreferences.getString(key, defaultValue.toString()), defaultValue)
-        }
+        readDouble(key, defaultValue)
 
     override fun getInt(resourceID: Int, defaultValue: Int): Int =
         try {

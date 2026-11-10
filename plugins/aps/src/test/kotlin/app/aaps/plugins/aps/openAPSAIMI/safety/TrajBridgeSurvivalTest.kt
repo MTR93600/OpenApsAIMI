@@ -10,6 +10,14 @@ import org.junit.jupiter.api.Test
  */
 class TrajBridgeSurvivalTest {
 
+    @Test
+    fun `depleted confirmed rise releases stacking reduction`() {
+        assertThat(TrajBridgeSurvival.releaseForDepletedConfirmedRise(112.9, 99.1, 3.38, 2.7, -0.61)).isTrue()
+        assertThat(TrajBridgeSurvival.releaseForDepletedConfirmedRise(90.0, 99.1, 1.0, 1.0, -0.61)).isFalse()
+        assertThat(TrajBridgeSurvival.releaseForDepletedConfirmedRise(112.9, 99.1, -0.1, 1.0, -0.61)).isFalse()
+        assertThat(TrajBridgeSurvival.releaseForDepletedConfirmedRise(112.9, 99.1, 1.0, 1.0, 0.2)).isFalse()
+    }
+
     private val scheduled = 4.84
     private val requested = 0.13
 

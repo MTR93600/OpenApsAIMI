@@ -39,6 +39,27 @@ class BasalHistoryUtilsTest {
     }
 
     @Test
+    fun `minutes since zero basal ended uses replacement timestamp`() {
+        val now = 10_000_000L
+        val fetcher = mockk<(Long) -> List<TB>>()
+        val provider = BasalHistoryUtils.FetcherProvider(fetcher) { now }
+
+        val currentNonZero = mockk<TB>(relaxed = true)
+        every { currentNonZero.timestamp } returns now - 8 * 60_000L
+        every { currentNonZero.isAbsolute } returns true
+        every { currentNonZero.rate } returns 0.66
+
+        val previousZero = mockk<TB>(relaxed = true)
+        every { previousZero.timestamp } returns now - 38 * 60_000L
+        every { previousZero.isAbsolute } returns true
+        every { previousZero.rate } returns 0.0
+
+        every { fetcher(any()) } returns listOf(currentNonZero, previousZero)
+
+        assertEquals(8, provider.minutesSinceZeroBasalEnded(2))
+    }
+
+    @Test
     @Disabled("Dormant JUnit4 test: failing on first real run after JUnit5 reactivation - needs triage (audit 2026-06-10)")
     fun `test FetcherProvider lastTempIsZero`() {
         val now = 1000000L

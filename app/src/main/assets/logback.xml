@@ -13,8 +13,10 @@
                 class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
                 <maxFileSize>5MB</maxFileSize>
             </timeBasedFileNamingAndTriggeringPolicy>
-            <!-- keep 30 days' worth of history -->
-            <maxHistory>120</maxHistory>
+            <!-- Keep 7 days of history, at most 1 GB in total. Old files are also cleaned at app start. -->
+            <maxHistory>7</maxHistory>
+            <totalSizeCap>1GB</totalSizeCap>
+            <cleanHistoryOnStart>true</cleanHistoryOnStart>
         </rollingPolicy>
         <encoder>
             <pattern>%d{HH:mm:ss.SSS} [%thread] %.-1level/%logger: %msg%n</pattern>

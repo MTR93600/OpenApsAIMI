@@ -286,6 +286,8 @@ enum class BooleanKey(
 
     OApsAIMIMLtraining("key_enable_ML_training", false),
     OApsAIMISmbTrainingRelaxedFilter("aimi_smb_training_relaxed_filter", true),
+    /** Eating mode: when on, the learned correction of the carbohydrate estimate is not changed. */
+    OApsAIMIEatingLearningFrozen("key_openapsaimi_eating_learning_frozen", false),
     OApsAIMIEnableBasal("key_enable_basal", false),
     OApsAIMIEnableStepsFromWatch("count_steps_watch", false),
     OApsAIMIpregnancy("key_use_AimiPregnancy",false),

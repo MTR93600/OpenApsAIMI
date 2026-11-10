@@ -2,7 +2,37 @@
 
 package app.aaps.ui.compose.main
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import app.aaps.core.ui.compose.htmlToAnnotatedString
+import app.aaps.core.ui.compose.PumpInfoState
+import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.Alignment
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.ui.input.pointer.PointerEventPass
+import kotlinx.coroutines.withTimeoutOrNull
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Fastfood
@@ -19,10 +49,16 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import app.aaps.core.interfaces.navigation.ElementType
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.icons.IcAutomation
@@ -49,7 +85,8 @@ internal val MASTER_ONLY_TABS = setOf(GlassNavigationTab.TREATMENTS, GlassNaviga
 // Smaller than NavigationBarItem's 24dp default — 6 fixed tabs (7 when the loop-accept item shows) is above
 // Material's recommended max of 5, so a slightly smaller icon (paired with labelSmall text below) keeps the
 // bar from feeling cramped.
-private val NAV_ICON_SIZE = 20.dp
+private val NAV_ICON_SIZE = 22.dp
+private val NAV_BAR_HEIGHT = 72.dp
 
 @Composable
 fun GlassNavigationBar(
@@ -65,21 +102,37 @@ fun GlassNavigationBar(
     loopActionAvailable: Boolean = false,
     onLoopActionClick: () -> Unit = {},
 ) {
+    // Same look on every screen: a dark (or light) glass strip with a thin top edge, all items the same height,
+    // labels on one line.
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val muted = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B)
     val colors = NavigationBarItemDefaults.colors(
-        selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        selectedTextColor = MaterialTheme.colorScheme.onSurface,
-        indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
-        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        disabledIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
-        disabledTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+        selectedIconColor = Color(0xFF38BDF8),
+        selectedTextColor = Color(0xFF38BDF8),
+        indicatorColor = Color.Transparent,
+        unselectedIconColor = muted,
+        unselectedTextColor = muted,
+        disabledIconColor = muted.copy(alpha = 0.38f),
+        disabledTextColor = muted.copy(alpha = 0.38f),
     )
+    val stripBrush = Brush.verticalGradient(
+        if (isDark) listOf(Color(0xFF0E1A2E), Color(0xFF070E1B)) else listOf(Color(0xFFF8FAFC), Color(0xFFE8EEF8))
+    )
+    val edgeColor = if (isDark) Color(0x33FFFFFF) else Color(0x33000000)
+
+    val pumpInfo by PumpInfoState.html.collectAsState()
+    var showPumpInfo by remember { mutableStateOf(false) }
+    // A long press on the Pump button shows the pump line; the release must not also open the pump screen.
+    var longPressHandled by remember { mutableStateOf(false) }
 
     NavigationBar(
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
         windowInsets = WindowInsets(0),
-        modifier = modifier,
+        modifier = modifier
+            .background(stripBrush)
+            .drawBehind { drawLine(edgeColor, Offset(0f, 0f), Offset(size.width, 0f), strokeWidth = 2f) }
+            .height(NAV_BAR_HEIGHT),
     ) {
         GlassNavigationTab.fixedOrder.forEach { tab ->
             val enabled = masterOrPairedClient || tab !in MASTER_ONLY_TABS
@@ -95,9 +148,27 @@ fun GlassNavigationBar(
                         GlassNavigationTab.BOLUS        -> onNavigate(NavigationRequest.Element(ElementType.BOLUS_WIZARD))
                         // Opens the active pump plugin's own status screen (same path as the Manage sheet's
                         // Pump entry) — not GlassPumpDetailScreen's reservoir/battery summary.
-                        GlassNavigationTab.PUMP         -> onNavigate(NavigationRequest.Element(ElementType.PUMP))
+                        GlassNavigationTab.PUMP         -> {
+                            if (longPressHandled) longPressHandled = false
+                            else onNavigate(NavigationRequest.Element(ElementType.PUMP))
+                        }
                     }
                 },
+                modifier = if (tab == GlassNavigationTab.PUMP) {
+                    // Initial pass: the tab's own click handling must not hide the long press.
+                    Modifier.pointerInput(pumpInfo) {
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                            val up = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                                waitForUpOrCancellation(pass = PointerEventPass.Initial)
+                            }
+                            if (up == null && pumpInfo.isNotBlank()) {
+                                longPressHandled = true
+                                showPumpInfo = true
+                            }
+                        }
+                    }
+                } else Modifier,
                 icon = {
                     Icon(
                         imageVector = tab.icon(),
@@ -105,7 +176,17 @@ fun GlassNavigationBar(
                         modifier = Modifier.size(NAV_ICON_SIZE),
                     )
                 },
-                label = { Text(text = stringResource(tab.labelRes()), style = MaterialTheme.typography.labelSmall) },
+                label = {
+                    Text(
+                        text = stringResource(tab.labelRes()),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 9.sp,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Clip,
+                    )
+                },
+                alwaysShowLabel = true,
                 colors = colors,
             )
         }
@@ -137,6 +218,10 @@ fun GlassNavigationBar(
             )
         }
     }
+
+    if (showPumpInfo && pumpInfo.isNotBlank()) {
+        PumpInfoPopup(html = pumpInfo, isDark = isDark, onDismiss = { showPumpInfo = false })
+    }
 }
 
 private fun GlassNavigationTab.icon(): ImageVector =
@@ -158,3 +243,46 @@ private fun GlassNavigationTab.labelRes(): Int =
         GlassNavigationTab.SCENARIOS  -> CoreUiR.string.scenes
         GlassNavigationTab.MANAGEMENT -> CoreUiR.string.manage
     }
+
+/** The pump line as glass capsules above the bottom bar. Tap anywhere to close. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PumpInfoPopup(html: String, isDark: Boolean, onDismiss: () -> Unit) {
+    val density = LocalDensity.current
+    val lift = with(density) { (NAV_BAR_HEIGHT + 10.dp).roundToPx() }
+    val parts = html.split("|").map { it.trim() }.filter { it.isNotEmpty() }
+    Popup(
+        alignment = Alignment.BottomCenter,
+        offset = IntOffset(0, -lift),
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true)
+    ) {
+        FlowRow(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            parts.forEach { part ->
+                val shape = RoundedCornerShape(50)
+                Text(
+                    text = part.replace(Regex("(?i)^\\s*(<[^>]*>)*\\s*Pump:"), "$1").htmlToAnnotatedString(),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isDark) Color(0xFFE2E8F0) else Color(0xFF1E293B),
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = Modifier
+                        .shadow(6.dp, shape)
+                        .clip(shape)
+                        .background(
+                            if (isDark) Brush.verticalGradient(listOf(Color(0xFF1B2A4A), Color(0xFF0E1A2E)))
+                            else Brush.verticalGradient(listOf(Color(0xFFFFFFFF), Color(0xFFE8EEF8)))
+                        )
+                        .border(1.dp, if (isDark) Color(0x55FFFFFF) else Color(0xCCCBD5E1), shape)
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                        .clickable { onDismiss() }
+                )
+            }
+        }
+    }
+}

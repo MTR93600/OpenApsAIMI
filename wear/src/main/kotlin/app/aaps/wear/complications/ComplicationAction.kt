@@ -63,6 +63,9 @@ enum class ComplicationAction {
      */
     BG_GRAPH,
 
+    /** Opens AIMI meal-mode selection. Dosing remains on the paired phone. */
+    AIMI_EATING,
+
     /**
      * Opens warning dialog about watch-phone sync issues.
      * Displayed when data hasn't updated from phone recently.

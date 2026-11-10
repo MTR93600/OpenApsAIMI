@@ -120,6 +120,7 @@ class CwfComplicationUpdater @Inject constructor(
     private val lower by lazy { requester(CwfLowerComplication::class.java) }
     private val upper by lazy { requester(CwfUpperComplication::class.java) }
     private val whole by lazy { requester(CwfImageComplication::class.java) }
+    private val aimiDial by lazy { requester(AimiDialComplication::class.java) }
 
     /** When the clock half was last asked for, by any path, so a tick can skip a fresh redraw. */
     private val lastUpperRequest = AtomicLong(0)
@@ -127,6 +128,7 @@ class CwfComplicationUpdater @Inject constructor(
     private fun requestUpper() {
         lastUpperRequest.set(System.currentTimeMillis())
         upper.requestUpdateAll()
+        aimiDial.requestUpdateAll()
         whole.requestUpdateAll()
     }
 
@@ -140,6 +142,7 @@ class CwfComplicationUpdater @Inject constructor(
     private fun refreshAll(reason: String) {
         aapsLogger.debug(LTag.WEAR, "CwfComplicationUpdater: refresh all ($reason)")
         lower.requestUpdateAll()
+        aimiDial.requestUpdateAll()
         requestUpper()
     }
 
