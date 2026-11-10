@@ -160,7 +160,19 @@ object CorrectionAggressionGate {
     }
 
     /**
+     * How long ago the last Meal Advisor estimate was made, for [isMealLikelyPostHypoStrict].
+     *
+     * The preference holds the TIME of the estimate, not its age. Two callers passed the time itself, so
+     * a real estimate never counted as recent while "no estimate" (0) always did.
+     * No estimate gives [Long.MAX_VALUE], which is never recent.
+     */
+    fun estimatedCarbsAgeMs(estimatedCarbsTimeMs: Long, nowMs: Long): Long =
+        if (estimatedCarbsTimeMs > 0L) nowMs - estimatedCarbsTimeMs else Long.MAX_VALUE
+
+    /**
      * Stricter unannounced-meal detection inside post-hypo recovery window (replaces score≥2 heuristic).
+     *
+     * [recentBGs] is newest first, like `getRecentBGs`: a rise means each value is above the one after it.
      */
     fun isMealLikelyPostHypoStrict(
         cob: Double,
@@ -176,7 +188,7 @@ object CorrectionAggressionGate {
         if (estimatedCarbs > 15.0 && estimatedCarbsAgeMs in 0..(90 * 60_000L)) return true
         if (uamConfidence >= 0.65) return true
         val sustainedRise = shortAvgDelta >= 3.0f && delta >= 2.0f &&
-            recentBGs.take(3).zipWithNext().all { (prev, curr) -> curr > prev }
+            recentBGs.take(3).zipWithNext().all { (newer, older) -> newer > older }
         return bg > 125.0 && sustainedRise
     }
 

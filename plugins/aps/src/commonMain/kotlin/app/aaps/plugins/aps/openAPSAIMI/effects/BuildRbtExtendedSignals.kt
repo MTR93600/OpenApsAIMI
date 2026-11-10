@@ -39,6 +39,7 @@ import app.aaps.plugins.aps.openAPSAIMI.recursive.RbtExtendedSignals
 import app.aaps.plugins.aps.openAPSAIMI.release.HyperTrajectoryReleaseResult
 import app.aaps.plugins.aps.openAPSAIMI.risk.IobConsensus
 import app.aaps.plugins.aps.openAPSAIMI.safety.CompressionReboundGuard
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
 import app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoAggressiveRiseExit
 import app.aaps.plugins.aps.openAPSAIMI.safety.PostHypoDeliveryAuthority
@@ -152,7 +153,9 @@ internal fun buildRbtExtendedSignals(
         delta = state.delta,
         slopeFromMinDeviation = 0.0,
         estimatedCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs),
-        estimatedCarbsAgeMs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong(),
+        estimatedCarbsAgeMs = CorrectionAggressionGate.estimatedCarbsAgeMs(
+            preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong(), aimiWallClockMs()
+        ),
         localHour = state.hourOfDay,
         reason = StringBuilder(),
     )

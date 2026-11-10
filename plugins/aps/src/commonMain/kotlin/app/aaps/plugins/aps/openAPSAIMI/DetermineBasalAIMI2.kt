@@ -387,6 +387,7 @@ import app.aaps.plugins.aps.openAPSAIMI.model.PumpCaps
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdCsvLogger
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.MealAggressionContext
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdIntegration
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.TrajectoryRuntimeRepository
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLearnedState
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdBolusSample
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLogRow
@@ -10009,7 +10010,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             delta = delta,
             slopeFromMinDeviation = slopeFromMinDeviation,
             estimatedCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs),
-            estimatedCarbsAgeMs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong(),
+            estimatedCarbsAgeMs = CorrectionAggressionGate.estimatedCarbsAgeMs(
+                preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime).toLong(), aimiWallClockMs()
+            ),
             localHour = work.hourOfDay,
             reason = reason,
         )
@@ -11689,8 +11692,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val estimatedCarbs = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbs)
         val estimatedCarbsTimeDouble = preferences.get(DoubleKey.OApsAIMILastEstimatedCarbTime)
         val estimatedCarbsTime = estimatedCarbsTimeDouble.toLong()
-        val estimatedCarbsAgeMs =
-            if (estimatedCarbsTime > 0L) aimiWallClockMs() - estimatedCarbsTime else Long.MAX_VALUE
+        val estimatedCarbsAgeMs = CorrectionAggressionGate.estimatedCarbsAgeMs(estimatedCarbsTime, aimiWallClockMs())
         val explicitMealMode =
             mealTime || lunchTime || dinnerTime || bfastTime || highCarbTime || snackTime
         val postHypoState = classifyPostHypoState(
@@ -14014,6 +14016,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         targetBg = targetBg,
                         maxBg = maxBg,
                     )
+                    // The Glass dashboard's Trajectory card reads the curves from here, and only from here.
+                    // Same place as on dev (after the PKPD targets stage). Display only: nothing that doses reads it.
+                    work.lastAdvancedPredictionCurves?.let { TrajectoryRuntimeRepository.publish(it) }
                     return AimiSchedulePkpdTargets(stage.bgi, stage.deviation, stage.minBg, stage.targetBg, stage.maxBg)
                 }
 

@@ -190,4 +190,63 @@ class CorrectionAggressionGateTest {
             )
         )
     }
+
+    // The BG list is newest first, as getRecentBGs builds it. The rise check used to compare the
+    // other way round, so it was true only while BG was falling - never during the rise it is for.
+
+    private fun strictMeal(bg: Double, recentBGs: List<Float>) =
+        CorrectionAggressionGate.isMealLikelyPostHypoStrict(
+            cob = 0.0,
+            estimatedCarbs = 0.0,
+            estimatedCarbsAgeMs = Long.MAX_VALUE,
+            uamConfidence = 0.2,
+            bg = bg,
+            shortAvgDelta = 4f,
+            delta = 3f,
+            recentBGs = recentBGs,
+        )
+
+    @Test
+    fun postHypoStrictMeal_sustainedRiseNewestFirst_isMeal() {
+        assertTrue(strictMeal(bg = 138.0, recentBGs = listOf(128f, 126f, 123f, 111f)))
+    }
+
+    @Test
+    fun postHypoStrictMeal_fallingNewestFirst_isNotMeal() {
+        assertFalse(strictMeal(bg = 138.0, recentBGs = listOf(123f, 126f, 128f)))
+    }
+
+    @Test
+    fun postHypoStrictMeal_flatStep_isNotMeal() {
+        assertFalse(strictMeal(bg = 138.0, recentBGs = listOf(128f, 128f, 123f)))
+    }
+
+    // The preference holds the time of the Meal Advisor estimate. Its age is now minus that time.
+
+    @Test
+    fun estimatedCarbsAge_isNowMinusTheTime() {
+        assertEquals(20 * 60_000L, CorrectionAggressionGate.estimatedCarbsAgeMs(1_700_000_000_000L, 1_700_000_000_000L + 20 * 60_000L))
+    }
+
+    @Test
+    fun estimatedCarbsAge_noEstimate_isNeverRecent() {
+        assertEquals(Long.MAX_VALUE, CorrectionAggressionGate.estimatedCarbsAgeMs(0L, 1_700_000_000_000L))
+    }
+
+    @Test
+    fun postHypoStrictMeal_recentEstimateCounts_oldOrMissingDoesNot() {
+        fun withEstimate(ageMs: Long) = CorrectionAggressionGate.isMealLikelyPostHypoStrict(
+            cob = 0.0,
+            estimatedCarbs = 30.0,
+            estimatedCarbsAgeMs = ageMs,
+            uamConfidence = 0.2,
+            bg = 100.0,
+            shortAvgDelta = 0f,
+            delta = 0f,
+            recentBGs = emptyList(),
+        )
+        assertTrue(withEstimate(CorrectionAggressionGate.estimatedCarbsAgeMs(1_000L, 1_000L + 30 * 60_000L)))
+        assertFalse(withEstimate(CorrectionAggressionGate.estimatedCarbsAgeMs(1_000L, 1_000L + 120 * 60_000L)))
+        assertFalse(withEstimate(CorrectionAggressionGate.estimatedCarbsAgeMs(0L, 1_000L)))
+    }
 }
