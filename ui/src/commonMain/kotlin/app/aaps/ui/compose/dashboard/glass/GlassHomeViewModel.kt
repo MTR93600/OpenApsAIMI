@@ -211,7 +211,8 @@ class GlassHomeViewModel(
     /** Same sources and rules as DEV `OverviewViewModel.buildPumpAdjustmentDisplay`. */
     private suspend fun buildPumpStatus(now: Long): GlassPumpStatusLine {
         val pump = activePlugin.activePump
-        val reservoirUnits = pump.reservoirLevel.value.cU
+        // Null when the pump does not know its reservoir; shown as unavailable, like an empty reading.
+        val reservoirUnits = pump.reservoirLevel.value?.cU ?: 0.0
         val reservoirText =
             if (reservoirUnits > 0) rh.gs(InterfacesStrings.format_insulin_units, reservoirUnits)
             else rh.gs(CoreUiStrings.value_unavailable_short)

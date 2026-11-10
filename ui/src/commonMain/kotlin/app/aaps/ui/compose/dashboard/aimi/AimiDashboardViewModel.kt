@@ -277,7 +277,7 @@ class AimiDashboardViewModel(
             decisionLine = decisionLine(request),
             modeLine = modeLine(now),
             safetyLine = safetyLine(bgMgdl, glucoseStatus?.shortAvgDelta, request?.isHypoRisk == true),
-            pumpReservoirText = activePlugin.activePump.reservoirLevel.value.cU.takeIf { it > 0 }
+            pumpReservoirText = activePlugin.activePump.reservoirLevel.value?.cU?.takeIf { it > 0 }
                 ?.let { rh.gs(InterfacesStrings.format_insulin_units, it) } ?: dash,
             pumpSiteText = formatDeviceAge(rh, persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.CANNULA_CHANGE)?.let { now - it.timestamp }),
             pumpSensorText = formatDeviceAge(rh, persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)?.let { now - it.timestamp }),

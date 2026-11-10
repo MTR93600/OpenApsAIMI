@@ -59,7 +59,7 @@ class GlassDeviceDetailViewModel(
         smoothingQuality,
     ) { reservoir, battery, quality ->
         GlassDeviceDetailState(
-            reservoirText = reservoir.cU.takeIf { it > 0 }?.let { rh.gs(InterfacesStrings.format_insulin_units, it) },
+            reservoirText = reservoir?.cU?.takeIf { it > 0 }?.let { rh.gs(InterfacesStrings.format_insulin_units, it) },
             batteryText = battery?.let { rh.gs(CoreUiStrings.units_format_percent, it) },
             sensorQuality = quality,
         )
