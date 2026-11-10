@@ -35,6 +35,7 @@ import app.aaps.core.interfaces.source.StagingState
 import app.aaps.core.interfaces.concurrent.AapsLock
 import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.core.keys.BooleanKey
+import app.aaps.core.keys.BooleanNonKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.ui.CoreUiStrings
@@ -59,6 +60,12 @@ import dev.zacsweers.metro.IntKey
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.binding
 import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
+import app.aaps.core.interfaces.maintenance.DeviceHandover
+import app.aaps.core.interfaces.maintenance.HandoverFields
+import app.aaps.core.interfaces.maintenance.StopsWithAaps
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.cancel
@@ -150,7 +157,7 @@ class DexcomOnePlusPlugin @Inject constructor(
     preferences,
     config,
     notificationManager,
-), BgSource, OnePlusGlucoseWatcher, CgmSensorStatusProvider, CgmSensorAlertProvider {
+), BgSource, OnePlusGlucoseWatcher, CgmSensorStatusProvider, CgmSensorAlertProvider, StopsWithAaps, DeviceHandover {
 
     private val resources: TextResolver = rh
 
@@ -444,6 +451,12 @@ class DexcomOnePlusPlugin @Inject constructor(
 
     override suspend fun onStart() {
         super.onStart()
+        // Stopped by the user (`AapsStop`): stay off, so the sensor is not taken back from the phone that
+        // may hold it now. [onAapsResume] starts again from here.
+        if (preferences.get(BooleanNonKey.AapsStoppedByUser)) {
+            aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_SESSION: plugin start skipped, AAPS is stopped by the user")
+            return
+        }
         sensorAlertsRunning = true
         workScopeLock.withLock { stopped = false }
         ioScope()
@@ -519,6 +532,77 @@ class DexcomOnePlusPlugin @Inject constructor(
             }
         }
     }
+
+    // Transfer to another phone, see [DexcomOnePlusHandover].
+
+    override val handoverId: String = DexcomOnePlusHandover.ID
+
+    override suspend fun exportHandover(): HandoverFields? {
+        val session = sensorStore.load() ?: return null
+        return DexcomOnePlusHandover.export(
+            session = session,
+            sessionStartMs = sensorStore.loadSessionStart(),
+            sensorInfo = runCatching { sensorStore.loadSensorInfo() }.getOrNull(),
+            platform = config.platform,
+        )
+    }
+
+    override suspend fun importHandover(fields: HandoverFields): Boolean {
+        val taken = DexcomOnePlusHandover.parse(fields, config.platform) ?: return false
+        // The driver must not hold a sensor while its store changes under it.
+        if (!isStopped()) onStop()
+        sensorStore.adopt(taken.session, taken.sessionStartMs, taken.sensorInfo)
+        aapsLogger.info(
+            LTag.BGSOURCE,
+            "DEXCOM_ONEPLUS_SESSION: sensor taken over from another phone " +
+                "serial=${OnePlusSensorStore.maskSerial(taken.session.identity.serial)} addressKnown=${taken.session.lastMac != null}",
+        )
+        // Stopped by the user, or not the BG source: kept, and used when the plugin starts again.
+        if (preferences.get(BooleanNonKey.AapsStoppedByUser) || !isEnabled()) return true
+        // Resumes the session straight away when the address came with it (Android to Android).
+        onStart()
+        if (taken.session.lastMac == null) ioScope()?.launch { findTransferredSensor(taken) }
+        return true
+    }
+
+    /**
+     * Finds the sensor of a transfer whose address could not come along (from or to an iPhone), by
+     * the name it advertises, and connects to it.
+     *
+     * A ONE+ / G7 advertises only when it wants to connect, about every five minutes, hence the long
+     * wait. The pairing code is already stored, so nothing has to be typed. Without a name, or when
+     * the sensor is not heard, the user starts it from the Start screen, where the code is filled in.
+     */
+    private suspend fun findTransferredSensor(taken: DexcomOnePlusHandover.Taken) {
+        val name = taken.session.lastDeviceName
+        if (name == null) {
+            aapsLogger.warn(LTag.BGSOURCE, "DEXCOM_ONEPLUS_SESSION: transferred sensor has no name, start it from the Start screen")
+            return
+        }
+        val scanner = host.screenScanner()
+        val heard = CompletableDeferred<String>()
+        val address = try {
+            scanner.startScan { result -> if (result.name.equals(name, ignoreCase = true)) heard.complete(result.address) }
+            withTimeoutOrNull(TRANSFER_FIND_TIMEOUT) { heard.await() }
+        } finally {
+            scanner.stopScan()
+        }
+        if (address == null) {
+            aapsLogger.warn(LTag.BGSOURCE, "DEXCOM_ONEPLUS_SESSION: transferred sensor not heard in $TRANSFER_FIND_TIMEOUT, start it from the Start screen")
+            return
+        }
+        // The user may have connected it by hand in the meantime.
+        if (sensorStore.load()?.lastMac != null) return
+        sensorStore.adopt(taken.session.copy(lastMac = address), taken.sessionStartMs, taken.sensorInfo)
+        aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_SESSION: transferred sensor found by its name, connecting")
+        driver.resumeStoredSession()
+    }
+
+    /** AAPS was stopped by the user: let the sensor go, as when the plugin is switched off. */
+    override suspend fun onAapsStop() = onStop()
+
+    /** AAPS was started again: take the sensor back, as when the plugin is switched on. */
+    override suspend fun onAapsResume() = onStart()
 
     override suspend fun onStop() {
         sensorAlertsRunning = false
@@ -1517,6 +1601,9 @@ class DexcomOnePlusPlugin @Inject constructor(
 
         /** How long the session may stay down before the plugin asks for a connection again. */
         private const val RECONNECT_WATCHDOG_MS = 5L * 60L * 1000L
+
+        /** Two of the sensor's five minute connect windows, and a little more. */
+        private val TRANSFER_FIND_TIMEOUT = 11.minutes
 
         /**
          * Session-end reasons the user or the app asked for. The watchdog must not undo those; every

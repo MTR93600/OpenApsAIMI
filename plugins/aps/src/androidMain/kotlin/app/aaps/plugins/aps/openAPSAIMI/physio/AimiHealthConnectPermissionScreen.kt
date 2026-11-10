@@ -47,10 +47,11 @@ import kotlinx.coroutines.launch
 /**
  * Compose port of the parked `AIMIHealthConnectPermissionActivityMTR`.
  *
- * The old Activity also handled Health Connect's system-triggered
- * `ACTION_SHOW_PERMISSIONS_RATIONALE` intent, but that only reaches an Activity declared for it in
- * the manifest, and this module has none - that path never actually ran. This screen only covers the
- * case a user reaches on purpose, by tapping the preference.
+ * Two ways in: the preference in the AIMI settings, and [AimiHealthConnectPermissionActivity], which
+ * the app manifest declares for Health Connect's `ACTION_SHOW_PERMISSIONS_RATIONALE` intent. That
+ * declaration is not optional: without it Health Connect refuses the request at once and shows no
+ * dialog. The old Activity was declared in the app manifest, and removing it is what broke
+ * "Grant access".
  *
  * Not built on the app-wide [app.aaps.ui.compose.permissionsSheet.PermissionsSheet]: that sheet's
  * "is it granted" check is synchronous ([android.content.pm.PackageManager]-style), while Health

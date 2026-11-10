@@ -78,6 +78,7 @@ QuickWizard|StringNonKey|true
 TBB|StringNonKey|true
 UITask_%s|ObjectivesBooleanComposedKey|true
 aaps_directory|StringKey|true
+aaps_stopped_by_user|BooleanNonKey|false
 absorption_cutoff|DoubleKey|true
 absorption_maxtime|DoubleKey|true
 active_alarms|MedtrumStringNonKey|true

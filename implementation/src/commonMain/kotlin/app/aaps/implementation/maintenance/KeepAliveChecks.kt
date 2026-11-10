@@ -16,6 +16,8 @@ import app.aaps.core.interfaces.queue.CommandQueue
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventProfileChangeRequested
 import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.core.keys.BooleanNonKey
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.objects.profile.ProfileSealed
 import kotlin.math.abs
 
@@ -44,6 +46,7 @@ class KeepAliveChecks(
     private val rxBus: RxBus,
     private val commandQueue: CommandQueue,
     private val ch: ConcentrationHelper,
+    private val preferences: Preferences,
     private val statusOutdatedLabel: () -> String,
     private val basalOutdatedLabel: () -> String
 ) {
@@ -60,6 +63,12 @@ class KeepAliveChecks(
 
     /** One pass, in the order the Android worker always ran them. */
     suspend fun run() {
+        // Stopped by the user (`AapsStop`): no status read, no profile push, no zero temp basal and no
+        // device status. Each of them would reach for a pump that may be on another phone now.
+        if (preferences.get(BooleanNonKey.AapsStoppedByUser)) {
+            aapsLogger.debug(LTag.CORE, "KeepAlive: AAPS stopped by the user, nothing to check")
+            return
+        }
         checkPump()
         // Retries a missing zero TBR while the pump is disconnected - nothing else does, as the loop is paused
         loop.verifyZeroDelivery()

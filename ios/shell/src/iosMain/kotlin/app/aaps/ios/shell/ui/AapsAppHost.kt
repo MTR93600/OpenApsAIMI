@@ -125,8 +125,11 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import platform.Foundation.NSBundle
+import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSNotificationCenter
 import platform.Foundation.NSOperationQueue
+import platform.Foundation.NSSearchPathForDirectoriesInDomains
+import platform.Foundation.NSUserDomainMask
 import platform.UIKit.UIApplicationDidBecomeActiveNotification
 import platform.UIKit.UIApplicationDidEnterBackgroundNotification
 import platform.UIKit.UIViewController
@@ -751,8 +754,14 @@ private fun AapsApp(app: StartedApp, navigationRelay: NavigationRelay, onPending
                             // already handed to it above, so this is the same call the other two
                             // shells make. It was a placeholder only while iOS had no importer.
                             onImportSettingsNavigate = { source -> navController.navigate(AppRoute.ImportSettings.createRoute(source.name)) },
-                            // Needs a UIDocumentPicker, which nothing on iOS has yet.
-                            onDirectoryClick = { reportNotReady("directory picker") },
+                            // Nothing to choose on iOS: the app's Documents folder is the AAPS
+                            // folder. This opens it in the Files app instead, where the user puts
+                            // exports and the `extra` files. `shareddocuments://` is the link the
+                            // Files app answers to.
+                            onDirectoryClick = {
+                                documentsDirectory()?.let { graph.urlOpener.open("shareddocuments://$it") }
+                                    ?: reportNotAvailable("no Documents directory")
+                            },
                             // The Google sign in, and the only thing that reaches this callback.
                             // Shown *over* AAPS rather than handed to Safari: switching to Safari
                             // lets iOS suspend this app within seconds, and the loopback listener
@@ -927,3 +936,7 @@ private fun failureExplanation(error: Throwable): List<String> = when (error) {
 
     else                            -> emptyList()
 }
+
+/** The app's Documents folder, shown as "On My iPhone › AAPS" in the Files app. Null only if iOS gives none. */
+private fun documentsDirectory(): String? =
+    NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true).firstOrNull() as? String

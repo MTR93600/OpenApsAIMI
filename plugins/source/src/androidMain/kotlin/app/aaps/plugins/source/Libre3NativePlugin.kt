@@ -30,7 +30,11 @@ import app.aaps.core.interfaces.source.PromotionRejectReason
 import app.aaps.core.interfaces.source.PromotionResult
 import app.aaps.core.interfaces.source.SensorSlot
 import app.aaps.core.interfaces.source.StagingState
+import app.aaps.core.interfaces.maintenance.DeviceHandover
+import app.aaps.core.interfaces.maintenance.HandoverFields
+import app.aaps.core.interfaces.maintenance.StopsWithAaps
 import app.aaps.core.keys.BooleanKey
+import app.aaps.core.keys.BooleanNonKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.keys.interfaces.withClick
@@ -127,7 +131,7 @@ class Libre3NativePlugin @Inject constructor(
     preferences,
     config,
     notificationManager,
-), BgSource, Libre3GlucoseWatcher, CgmSensorStatusProvider, CgmSensorAlertProvider {
+), BgSource, Libre3GlucoseWatcher, CgmSensorStatusProvider, CgmSensorAlertProvider, StopsWithAaps, DeviceHandover {
 
     /** The constructor argument, kept as [ResourceHelper] so string ids do not need a cast. */
     private val resourceHelper: ResourceHelper = rh
@@ -614,6 +618,12 @@ class Libre3NativePlugin @Inject constructor(
 
     override suspend fun onStart() {
         super.onStart()
+        // Stopped by the user (`AapsStop`): stay off, so the sensor is not taken back from the phone that
+        // may hold it now. [onAapsResume] starts again from here.
+        if (preferences.get(BooleanNonKey.AapsStoppedByUser)) {
+            aapsLogger.info(LTag.BGSOURCE, "LIBRE3_SESSION: plugin start skipped, AAPS is stopped by the user")
+            return
+        }
         workScopeLock.withLock { stopped = false }
         ioScope()
         // Every start, because the driver may be a new instance with no watcher: onStop shuts the
@@ -815,6 +825,34 @@ class Libre3NativePlugin @Inject constructor(
         aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.SESSION}: BLE connect requested")
         driver.connect(deviceAddress)
     }
+
+    // Transfer to another phone, see [Libre3Handover]. Android to Android only.
+
+    override val handoverId: String = Libre3Handover.ID
+
+    override suspend fun exportHandover(): HandoverFields? {
+        val identity = sensorStore.loadIdentity() ?: return null
+        return Libre3Handover.export(identity, sensorStore.loadSessionKeys())
+    }
+
+    override suspend fun importHandover(fields: HandoverFields): Boolean {
+        val (identity, keys) = Libre3Handover.parse(fields) ?: return false
+        // The driver must not hold a sensor while its store changes under it.
+        if (!isStopped()) onStop()
+        if (!sensorStore.adoptTransferred(identity, keys)) return false
+        aapsLogger.info(LTag.BGSOURCE, "${Libre3LogMarkers.SESSION}: sensor taken over from another phone serial=${Libre3LogMask.serial(identity.serialNumber)}")
+        // Stopped by the user, or not the BG source: kept, and used when the plugin starts again.
+        if (preferences.get(BooleanNonKey.AapsStoppedByUser) || !isEnabled()) return true
+        // Connects to the stored sensor: its address is the same on every Android phone.
+        onStart()
+        return true
+    }
+
+    /** AAPS was stopped by the user: let the sensor go, as when the plugin is switched off. */
+    override suspend fun onAapsStop() = onStop()
+
+    /** AAPS was started again: take the sensor back, as when the plugin is switched on. */
+    override suspend fun onAapsResume() = onStart()
 
     override suspend fun onStop() {
         // First: from here on no new work may start, also not from a callback that arrives while

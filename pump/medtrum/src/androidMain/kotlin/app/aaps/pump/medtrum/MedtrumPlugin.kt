@@ -39,6 +39,8 @@ import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.collectResilient
 import app.aaps.core.interfaces.rx.events.EventAppExit
 import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.core.interfaces.maintenance.DeviceHandover
+import app.aaps.core.interfaces.maintenance.HandoverFields
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.TextRef
@@ -106,7 +108,7 @@ class MedtrumPlugin(
     ownPreferences = MedtrumStringKey.entries + MedtrumIntKey.entries + MedtrumBooleanKey.entries + MedtrumIntNonKey.entries +
         MedtrumLongNonKey.entries + MedtrumStringNonKey.entries + MedtrumDoubleNonKey.entries + MedtrumBooleanNonKey.entries,
     aapsLogger, rh, preferences, commandQueue, notificationManager
-), Pump, Medtrum {
+), Pump, Medtrum, DeviceHandover {
 
     private var scope: CoroutineScope? = null
     private var medtrumService: MedtrumService? = null
@@ -131,6 +133,21 @@ class MedtrumPlugin(
 
         // Force enable pump unreachable alert due to some failure modes of Medtrum pump
         preferences.put(BooleanKey.AlertPumpUnreachable, true)
+    }
+
+    // Transfer to another phone, see [MedtrumHandover]. The same id as the iPhone driver, so a patch
+    // started here can go on there and the other way round.
+
+    override val handoverId: String = MedtrumHandover.ID
+
+    override suspend fun exportHandover(): HandoverFields? = MedtrumHandover.export(medtrumPump)
+
+    override suspend fun importHandover(fields: HandoverFields): Boolean {
+        val serialHex = MedtrumHandover.import(fields, medtrumPump) ?: return false
+        // The serial this driver connects to. The other values were stored by the setters of MedtrumPump.
+        preferences.put(MedtrumStringNonKey.SnInput, serialHex)
+        aapsLogger.info(LTag.PUMP, "Medtrum: pairing taken over from another phone, patch ${medtrumPump.patchId}, state ${medtrumPump.pumpState}")
+        return true
     }
 
     override suspend fun onStop() {

@@ -24,6 +24,7 @@ import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.core.interfaces.utils.HardLimits
 import app.aaps.core.interfaces.utils.Round
+import app.aaps.core.keys.BooleanNonKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.StringKey
@@ -71,6 +72,8 @@ class SafetyPlugin(
      * Constraints interface
      */
     override fun isLoopInvocationAllowed(value: Constraint<Boolean>): Constraint<Boolean> {
+        // Stopped by the user (`AapsStop`): the pump may be in the hands of another phone now.
+        if (preferences.get(BooleanNonKey.AapsStoppedByUser)) value.set(false, rh.gs(CoreUiStrings.aaps_stopped_short), this)
         if (!activePlugin.activePump.pumpDescription.isTempBasalCapable) value.set(false, rh.gs(ConstraintsStrings.pumpisnottempbasalcapable), this)
         return value
     }

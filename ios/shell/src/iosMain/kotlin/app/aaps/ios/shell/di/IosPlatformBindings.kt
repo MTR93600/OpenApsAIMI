@@ -106,9 +106,10 @@ object IosPlatformBindings {
         rxBus: RxBus,
         commandQueue: CommandQueue,
         ch: ConcentrationHelper,
+        preferences: Preferences,
         rh: TextResolver
     ): KeepAliveChecks = KeepAliveChecks(
-        aapsLogger, localAlertUtils, config, iobCobCalculator, loop, dateUtil, activePlugin, profileFunction, rxBus, commandQueue, ch,
+        aapsLogger, localAlertUtils, config, iobCobCalculator, loop, dateUtil, activePlugin, profileFunction, rxBus, commandQueue, ch, preferences,
         statusOutdatedLabel = { rh.gs(CoreUiStrings.keepalive_status_outdated) },
         basalOutdatedLabel = { rh.gs(CoreUiStrings.keepalive_basal_outdated) }
     )

@@ -37,7 +37,10 @@ class ManifestComponentsTest {
             val nodes = document.getElementsByTagName(tag)
             for (i in 0 until nodes.length) {
                 val element = nodes.item(i) as? Element ?: continue
-                val name = element.getAttribute("android:name").takeIf { it.isNotBlank() } ?: continue
+                // An alias's own name is only a label. The class it opens is its target activity, and
+                // that is the one that must exist.
+                val attribute = if (tag == "activity-alias") "android:targetActivity" else "android:name"
+                val name = element.getAttribute(attribute).takeIf { it.isNotBlank() } ?: continue
                 // A leading dot is relative to the manifest package; the merger resolves it. Nothing in
                 // this manifest uses that form, and resolving it here would just duplicate the merger.
                 if (name.startsWith(".")) continue

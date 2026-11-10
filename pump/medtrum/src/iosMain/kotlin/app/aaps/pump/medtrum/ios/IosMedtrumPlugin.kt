@@ -41,6 +41,7 @@ import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.pump.medtrum.compose.patch.MedtrumPatchWizardModel
 import app.aaps.pump.medtrum.compose.patch.MedtrumPatchWizardScreen
+import app.aaps.pump.medtrum.MedtrumHandover
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.CoroutineScope
@@ -49,6 +50,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import app.aaps.core.interfaces.pump.Medtrum
 import app.aaps.core.interfaces.pump.PumpEnactResult
+import app.aaps.core.interfaces.maintenance.DeviceHandover
+import app.aaps.core.interfaces.maintenance.HandoverFields
 import kotlinx.coroutines.runBlocking
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
@@ -113,7 +116,7 @@ class IosMedtrumPlugin(
     preferences = preferences,
     commandQueue = commandQueue,
     notificationManager = notificationManager
-), Pump by host.driver, Medtrum {
+), Pump by host.driver, Medtrum, DeviceHandover {
 
     // The queue's Medtrum commands (clear alarms, update time, load events, user settings). They are
     // blocking calls in the shared interface and run on the queue's own thread, never on the main one.
@@ -278,6 +281,22 @@ class IosMedtrumPlugin(
             reload = ::loadUserSettings,
             sendToPatch = ::sendUserSettingsToPatch
         )
+    }
+
+    // Transfer to another phone, see [MedtrumHandover]. The same id as the Android driver, so a patch
+    // started there can go on here and the other way round.
+
+    override val handoverId: String = MedtrumHandover.ID
+
+    override suspend fun exportHandover(): HandoverFields? = MedtrumHandover.export(host.state)
+
+    override suspend fun importHandover(fields: HandoverFields): Boolean {
+        val serialHex = MedtrumHandover.import(fields, host.state) ?: return false
+        // Kept the way the scan step keeps them, so a restart finds the same patch.
+        host.store.save(host.state)
+        host.store.savePumpSerial(serialHex)
+        aapsLogger.info(LTag.PUMP, "Medtrum: pairing taken over from another phone, patch ${host.state.patchId}, state ${host.state.pumpState}")
+        return true
     }
 
     override suspend fun onStop() {

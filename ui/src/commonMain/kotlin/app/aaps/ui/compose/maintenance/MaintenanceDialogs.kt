@@ -49,6 +49,8 @@ fun MaintenanceDialogs(
     var showConfirmCleanupDb by remember { mutableStateOf(false) }
     var showConfirmExportCsv by remember { mutableStateOf(false) }
     var showConfirmSendLogs by remember { mutableStateOf(false) }
+    var showConfirmStopAaps by remember { mutableStateOf(false) }
+    var showConfirmResumeAaps by remember { mutableStateOf(false) }
     var cleanupResultText by remember { mutableStateOf<String?>(null) }
 
     // ViewModel state
@@ -57,6 +59,7 @@ fun MaintenanceDialogs(
     val exportConfig by maintenanceViewModel.exportConfig.collectAsStateWithLifecycle()
     val isDirectoryAccessGranted by maintenanceViewModel.isDirectoryAccessGranted.collectAsStateWithLifecycle()
     val directoryPath by maintenanceViewModel.directoryPath.collectAsStateWithLifecycle()
+    val isAapsStopped by maintenanceViewModel.isAapsStopped.collectAsStateWithLifecycle()
 
     // Collect maintenance events
     LaunchedEffect(Unit) {
@@ -101,6 +104,10 @@ fun MaintenanceDialogs(
             exportConfig = exportConfig,
             isDirectoryAccessGranted = isDirectoryAccessGranted,
             directoryPath = directoryPath,
+            isAapsStopped = isAapsStopped,
+            onStopAapsClick = { showConfirmStopAaps = true },
+            onResumeAapsClick = { showConfirmResumeAaps = true },
+            onTransferClick = { maintenanceViewModel.startTransfer() },
             onToggleSettingsLocal = { maintenanceViewModel.toggleSettingsLocal(it) },
             onToggleSettingsCloud = { maintenanceViewModel.toggleSettingsCloud(it) },
             onToggleLogEmail = { maintenanceViewModel.toggleLogEmail(it) },
@@ -140,6 +147,30 @@ fun MaintenanceDialogs(
                 maintenanceViewModel.resetApsResults()
             },
             onDismiss = { showConfirmResetAps = false }
+        )
+    }
+
+    if (showConfirmStopAaps) {
+        OkCancelDialog(
+            title = stringResource(CoreUiStrings.confirmation),
+            message = stringResource(CoreUiStrings.confirm_stop_aaps),
+            onConfirm = {
+                showConfirmStopAaps = false
+                maintenanceViewModel.stopAaps()
+            },
+            onDismiss = { showConfirmStopAaps = false }
+        )
+    }
+
+    if (showConfirmResumeAaps) {
+        OkCancelDialog(
+            title = stringResource(CoreUiStrings.confirmation),
+            message = stringResource(CoreUiStrings.confirm_resume_aaps),
+            onConfirm = {
+                showConfirmResumeAaps = false
+                maintenanceViewModel.resumeAaps()
+            },
+            onDismiss = { showConfirmResumeAaps = false }
         )
     }
 
@@ -208,6 +239,16 @@ fun MaintenanceDialogs(
                 message = stringResource(CoreUiStrings.value_question, confirmState.fileName) + "\n\n" +
                     stringResource(CoreUiStrings.password_preferences_encrypt_prompt),
                 onConfirm = { maintenanceViewModel.onExportConfirmed() },
+                onDismiss = { maintenanceViewModel.cancelExport() }
+            )
+        }
+
+        is ExportState.ConfirmTransfer       -> {
+            val transferState = exportState as ExportState.ConfirmTransfer
+            OkCancelDialog(
+                title = stringResource(CoreUiStrings.maintenance_transfer),
+                message = stringResource(CoreUiStrings.confirm_transfer, transferState.fileName),
+                onConfirm = { maintenanceViewModel.onTransferConfirmed() },
                 onDismiss = { maintenanceViewModel.cancelExport() }
             )
         }

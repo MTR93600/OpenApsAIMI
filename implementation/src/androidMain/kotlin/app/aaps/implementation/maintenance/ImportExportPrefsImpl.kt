@@ -238,7 +238,7 @@ class ImportExportPrefsImpl(
         )
     }
 
-    override suspend fun executeExport(password: String): ExportResult {
+    override suspend fun executeExport(password: String, extraValues: Map<String, String>): ExportResult {
         val config = getExportConfig()
         val localEnabled = config.settingsLocal
         val cloudEnabled = config.settingsCloud && config.isCloudActive
@@ -257,7 +257,7 @@ class ImportExportPrefsImpl(
             val file = pendingExportFile
             if (file != null) {
                 pendingExportFile = null
-                localSuccess = savePreferences(file, password)
+                localSuccess = savePreferences(file, password, extraValues)
                 val resultMessage = if (localSuccess) rh.gs(R.string.exported) else rh.gs(R.string.exported_failed)
                 persistenceLayer.insertPumpTherapyEventIfNewByTimestamp(
                     therapyEvent = TE.asSettingsExport(error = resultMessage),
@@ -274,7 +274,7 @@ class ImportExportPrefsImpl(
 
         // Cloud export
         if (destination == ExportDestination.CLOUD || destination == ExportDestination.BOTH) {
-            cloudSuccess = performCloudExport(password)
+            cloudSuccess = performCloudExport(password, extraValues)
             val resultMessage = if (cloudSuccess) rh.gs(R.string.exported_to_cloud) else rh.gs(R.string.export_to_cloud_failed)
             persistenceLayer.insertPumpTherapyEventIfNewByTimestamp(
                 therapyEvent = TE.asSettingsExport(error = resultMessage),
@@ -293,7 +293,7 @@ class ImportExportPrefsImpl(
      * Perform cloud export without UI interaction.
      * Works without an Activity.
      */
-    private suspend fun performCloudExport(password: String): Boolean {
+    private suspend fun performCloudExport(password: String, extraValues: Map<String, String> = emptyMap()): Boolean {
         try {
             val provider = cloudStorageManager.getActiveProvider()
             if (provider == null) {
@@ -316,7 +316,7 @@ class ImportExportPrefsImpl(
                 aapsLogger.error(LTag.CORE, "${CloudConstants.LOG_PREFIX} COMPOSE_EXPORT_CREATE_TEMP_FAIL")
                 return false
             }
-            val saved = savePreferences(tempDoc, password)
+            val saved = savePreferences(tempDoc, password, extraValues)
             if (!saved) {
                 aapsLogger.error(LTag.CORE, "${CloudConstants.LOG_PREFIX} COMPOSE_EXPORT_SAVE_FAIL")
                 tempDoc.delete()
@@ -384,7 +384,7 @@ class ImportExportPrefsImpl(
     /**
      * Save preferences to file
      */
-    private fun savePreferences(newFile: DocumentFile, password: String): Boolean {
+    private fun savePreferences(newFile: DocumentFile, password: String, extraValues: Map<String, String> = emptyMap()): Boolean {
         var resultOk = false // Assume result was not OK unless acknowledged
 
         try {
@@ -395,6 +395,8 @@ class ImportExportPrefsImpl(
                 else
                     aapsLogger.warn(LTag.CORE, "Not exportable key: $key $value")
             }
+            // The pump and sensor pairing of a transfer to another phone, if asked for. Not preferences.
+            entries.putAll(extraValues)
             val prefs = Prefs(entries, prepareMetadata(context))
             encryptedPrefsFormat.savePreferences(newFile, prefs, password)
             resultOk = true // Assuming export was executed successfully (or it would have thrown an exception)

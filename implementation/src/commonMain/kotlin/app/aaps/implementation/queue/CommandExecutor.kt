@@ -20,6 +20,7 @@ import app.aaps.core.interfaces.rx.events.EventPumpStatusChanged
 import app.aaps.core.interfaces.rx.events.EventQueueChanged
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.keys.BooleanKey
+import app.aaps.core.keys.BooleanNonKey
 import app.aaps.core.keys.LongNonKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.CoreUiStrings
@@ -168,6 +169,22 @@ class CommandExecutor(
                     connectionStartTime += holdDuration
                     lastCommandTime += holdDuration
                     heldSince = null
+                }
+                // The user stopped AAPS on this phone (`AapsStop`), maybe to give the pump to another
+                // phone. Nothing may reach the pump, so the queue fails, as it does without the Bluetooth
+                // permission below. Checked here, at the top of a pass, because no command is running
+                // at this point: one that already runs, maybe a bolus, is allowed to end first.
+                if (preferences.get(BooleanNonKey.AapsStoppedByUser)) {
+                    aapsLogger.debug(LTag.PUMPQUEUE, "AAPS stopped by the user - failing the queue")
+                    queue.clear(CoreUiStrings.aaps_stopped_short)
+                    val pump = activePlugin.activePump
+                    if (pump.isConnected() || pump.isConnecting()) {
+                        rxBus.send(EventPumpStatusChanged(EventPumpStatusChanged.Status.DISCONNECTING))
+                        pump.stopConnecting()
+                        pump.disconnect("AAPS stopped")
+                    }
+                    rxBus.send(EventPumpStatusChanged(EventPumpStatusChanged.Status.DISCONNECTED))
+                    return
                 }
                 val secondsElapsed = (Clock.System.now().toEpochMilliseconds() - connectionStartTime) / 1000
                 val pump = activePlugin.activePump

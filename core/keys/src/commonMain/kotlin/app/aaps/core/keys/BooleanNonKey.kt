@@ -54,4 +54,12 @@ enum class BooleanNonKey(
      * class default). The Glass home runs this migration with `withTopGridDefaultsMerged`.
      */
     GlassTopGridPillsMigrated("glass_top_grid_pills_migrated", false, exportable = false),
+
+    /**
+     * The user stopped AAPS on this phone (Maintenance → Stop AAPS), for example to hand the pump and
+     * the sensor to another phone. While set, no pump command is sent, the loop does not run and the
+     * sensor drivers are stopped. Kept across restarts until the user resumes. Device state, so never
+     * exported: a stopped phone must not stop the phone that imports its settings.
+     */
+    AapsStoppedByUser("aaps_stopped_by_user", false, exportable = false),
 }

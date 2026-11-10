@@ -17,6 +17,9 @@ import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.PhonelinkSetup
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material3.Badge
@@ -68,7 +71,11 @@ fun MaintenanceBottomSheet(
     onToggleCsvLocal: (Boolean) -> Unit = {},
     onToggleCsvCloud: (Boolean) -> Unit = {},
     isDirectoryAccessGranted: Boolean = false,
-    directoryPath: String? = null
+    directoryPath: String? = null,
+    isAapsStopped: Boolean = false,
+    onStopAapsClick: () -> Unit = {},
+    onResumeAapsClick: () -> Unit = {},
+    onTransferClick: () -> Unit = {}
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -99,7 +106,11 @@ fun MaintenanceBottomSheet(
             onToggleCsvLocal = onToggleCsvLocal,
             onToggleCsvCloud = onToggleCsvCloud,
             isDirectoryAccessGranted = isDirectoryAccessGranted,
-            directoryPath = directoryPath
+            directoryPath = directoryPath,
+            isAapsStopped = isAapsStopped,
+            onStopAapsClick = onStopAapsClick,
+            onResumeAapsClick = onResumeAapsClick,
+            onTransferClick = onTransferClick
         )
     }
 }
@@ -130,7 +141,11 @@ internal fun MaintenanceBottomSheetContent(
     onToggleCsvLocal: (Boolean) -> Unit = {},
     onToggleCsvCloud: (Boolean) -> Unit = {},
     isDirectoryAccessGranted: Boolean = false,
-    directoryPath: String? = null
+    directoryPath: String? = null,
+    isAapsStopped: Boolean = false,
+    onStopAapsClick: () -> Unit = {},
+    onResumeAapsClick: () -> Unit = {},
+    onTransferClick: () -> Unit = {}
 ) {
     val primaryColor = MaterialTheme.colorScheme.primary
     val isCloudActive = exportConfig?.isCloudActive == true
@@ -143,6 +158,38 @@ internal fun MaintenanceBottomSheetContent(
             .verticalScroll(rememberScrollState())
             .padding(bottom = 24.dp)
     ) {
+        // Stop AAPS on this phone, or start it again. First, so it is found when it is needed: to hand
+        // the pump and the sensor to another phone, or to get them back.
+        if (isAapsStopped) {
+            MaintenanceItem(
+                text = stringResource(CoreUiStrings.maintenance_resume_aaps),
+                description = stringResource(CoreUiStrings.maintenance_resume_aaps_desc),
+                icon = Icons.Default.PlayArrow,
+                color = primaryColor,
+                onDismiss = onDismiss,
+                onClick = onResumeAapsClick,
+                danger = true
+            )
+        } else {
+            MaintenanceItem(
+                text = stringResource(CoreUiStrings.maintenance_stop_aaps),
+                description = stringResource(CoreUiStrings.maintenance_stop_aaps_desc),
+                icon = Icons.Default.PowerSettingsNew,
+                color = primaryColor,
+                onDismiss = onDismiss,
+                onClick = onStopAapsClick
+            )
+        }
+        MaintenanceItem(
+            text = stringResource(CoreUiStrings.maintenance_transfer),
+            description = stringResource(CoreUiStrings.maintenance_transfer_desc),
+            icon = Icons.Default.PhonelinkSetup,
+            color = primaryColor,
+            onDismiss = onDismiss,
+            onClick = onTransferClick
+        )
+        HorizontalDivider(modifier = Modifier.padding(start = 56.dp))
+
         // Section: Log Files
         SectionHeader(stringResource(CoreUiStrings.log_files))
 

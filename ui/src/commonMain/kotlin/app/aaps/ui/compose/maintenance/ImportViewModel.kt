@@ -14,6 +14,7 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.logging.UserEntryLogger
 import app.aaps.core.interfaces.maintenance.ImportDecryptResult
+import app.aaps.core.interfaces.maintenance.DeviceHandovers
 import app.aaps.core.interfaces.maintenance.ImportExportPrefs
 import app.aaps.core.interfaces.maintenance.Prefs
 import app.aaps.core.interfaces.maintenance.PrefsFile
@@ -76,7 +77,14 @@ sealed interface ImportStep {
          * Phrased as the destructive action for the same reason - a checkbox meaning "do NOT do
          * something" is hard to read in a hurry.
          */
-        val replacePumpSettings: Boolean = false
+        val replacePumpSettings: Boolean = false,
+        /**
+         * The devices whose pairing the file carries, by id: it was made with "Transfer to another
+         * phone". Empty for a normal export, and then the question below is not asked.
+         */
+        val transferDevices: List<String> = emptyList(),
+        /** The user's answer to "take over the pump and the sensor". Off until they tick it. */
+        val takeOverDevices: Boolean = false
     ) : ImportStep {
 
         /** What the applier takes. The screen asks the question the other way round. */
@@ -98,7 +106,9 @@ sealed interface ImportStep {
     data class ApplyConfirm(
         val prefs: Prefs,
         val keepPumpSettings: Boolean,
-        val preview: ImportExportPrefs.ImportOutcome
+        val preview: ImportExportPrefs.ImportOutcome,
+        /** Take over the pump and sensor pairing the file carries, see [DeviceHandovers]. */
+        val takeOverDevices: Boolean = false
     ) : ImportStep
 
     /**
@@ -164,7 +174,8 @@ class ImportViewModel(
     private val iobCobCalculator: IobCobCalculator,
     private val uiRestart: UiRestart,
     private val notificationManager: NotificationManager,
-    private val profileRepository: ProfileRepository
+    private val profileRepository: ProfileRepository,
+    private val deviceHandovers: DeviceHandovers
 ) : ViewModel() {
 
     private companion object {
@@ -398,7 +409,14 @@ class ImportViewModel(
                     }
                 }
 
-                is ImportDecryptResult.Success,
+                is ImportDecryptResult.Success       -> {
+                    _importStep.value = prev.copy(
+                        isProcessing = false,
+                        decryptResult = result,
+                        transferDevices = deviceHandovers.idsIn(result.prefs.values)
+                    )
+                }
+
                 is ImportDecryptResult.Error         -> {
                     _importStep.value = prev.copy(
                         isProcessing = false,
@@ -459,6 +477,12 @@ class ImportViewModel(
         if (current is ImportStep.Review) _importStep.value = current.copy(replacePumpSettings = replace)
     }
 
+    /** "Take over the pump and the sensor", asked only for a file made by "Transfer to another phone". */
+    fun onTakeOverDevicesChanged(takeOver: Boolean) {
+        val current = importStep.value
+        if (current is ImportStep.Review && current.transferDevices.isNotEmpty()) _importStep.value = current.copy(takeOverDevices = takeOver)
+    }
+
     fun confirmImport() {
         val current = importStep.value
         if (current !is ImportStep.Review) return
@@ -490,7 +514,8 @@ class ImportViewModel(
             val confirm = ImportStep.ApplyConfirm(
                 prefs = result.prefs,
                 keepPumpSettings = current.keepPumpSettings,
-                preview = preview
+                preview = preview,
+                takeOverDevices = current.takeOverDevices && current.transferDevices.isNotEmpty()
             )
             pending = confirm
             _importStep.value = confirm
@@ -531,6 +556,8 @@ class ImportViewModel(
             // of viewModelScope would take the app down at the one moment the user cannot afford it:
             // the settings are already written, so the app would come back with them half applied and
             // no screen left to finish the job. Offer the retry instead.
+            // The devices taken over from the other phone, so the pump can be reached once the hold ends.
+            var takenOver = emptyList<String>()
             val applied = try {
                 commandQueue.withHold(HOLD_REASON, PUMP_WAIT) {
                     withContext(applyDispatcher) {
@@ -545,6 +572,9 @@ class ImportViewModel(
                             importExportPrefs.executeImport(confirmed.prefs, confirmed.keepPumpSettings)
                                 .also { importExportPrefs.prepareImportedSettings() }
                         }
+                        // Before applySettings: the pump identification below must see the pump that
+                        // was taken over, so the history of the old one is closed (connectNewPump).
+                        if (confirmed.takeOverDevices) takenOver = deviceHandovers.apply(confirmed.prefs.values)
                         applySettings()
                         notifyIfPumpFellBackToVirtual(pumpBefore)
                         notifyImportedInsulin(outcome.importedInsulins)
@@ -564,6 +594,12 @@ class ImportViewModel(
             }
             if (applied) {
                 uel.log(Action.IMPORT_SETTINGS, Sources.Maintenance)
+                // Reach the pump now that the hold is over, rather than at the next loop. Not inside the
+                // hold: a status read waits for the queue, which the hold keeps closed.
+                if (takenOver.isNotEmpty()) {
+                    aapsLogger.info(LTag.CORE, "Import: taken over from another phone: $takenOver")
+                    viewModelScope.launch { commandQueue.readStatus(rh.gs(CoreUiStrings.import_take_over_devices)) }
+                }
                 // Done with, so a stray retry cannot apply the same file twice. A FAILED apply
                 // deliberately keeps it - that is what the retry is for.
                 pending = null

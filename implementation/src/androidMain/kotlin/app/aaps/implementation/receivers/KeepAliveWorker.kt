@@ -114,6 +114,7 @@ class KeepAliveWorker(
         rxBus = rxBus,
         commandQueue = commandQueue,
         ch = ch,
+        preferences = preferences,
         statusOutdatedLabel = { rh.gs(app.aaps.core.ui.R.string.keepalive_status_outdated) },
         basalOutdatedLabel = { rh.gs(app.aaps.core.ui.R.string.keepalive_basal_outdated) }
     )

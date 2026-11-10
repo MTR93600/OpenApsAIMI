@@ -391,6 +391,37 @@ class Libre3SensorStore(
         return written
     }
 
+    /**
+     * Takes over a sensor that another phone activated ("Transfer to another phone").
+     *
+     * Unlike [adopt] it keeps the receiver id of [identity]: the sensor was activated for the other
+     * phone's receiver and only answers that one, and this phone's own id is a different number. The
+     * sensor change is marked as already logged, because the other phone logged it when the sensor
+     * started; logging it again here would date the sensor from the transfer.
+     */
+    fun adoptTransferred(identity: Libre3SensorIdentity, keys: Libre3SessionKeys): Boolean = lock.withLock {
+        val written = prefs.editAndWait {
+            putString(KEY_SERIAL, identity.serialNumber)
+            putString(KEY_MAC, identity.bleAddress)
+            putString(KEY_PIN, encode(identity.blePin))
+            putInt(KEY_RECEIVER_ID, identity.receiverId)
+            putInt(KEY_GENERATION, identity.generation)
+            putInt(KEY_WARMUP_MINUTES, identity.warmupMinutes)
+            putInt(KEY_WEAR_MINUTES, identity.wearDurationMinutes)
+            putLong(KEY_ACTIVATED_AT, identity.activatedAtMs)
+            remove(KEY_LAST_LIFE_COUNT)
+            putString(KEY_SENSOR_CHANGE_SERIAL, identity.serialNumber)
+            keys.phase5RawKey?.let { putString(KEY_PHASE5_RAW_KEY, encode(it)) } ?: remove(KEY_PHASE5_RAW_KEY)
+            keys.kEnc?.let { putString(KEY_K_ENC, encode(it)) } ?: remove(KEY_K_ENC)
+            keys.ivEnc?.let { putString(KEY_IV_ENC, encode(it)) } ?: remove(KEY_IV_ENC)
+        }
+        Libre3Log.i(
+            "${Libre3LogMarkers.SESSION}: sensor taken over from another phone into $prefsName, " +
+                "pairingKey=${keys.phase5RawKey != null} written=$written",
+        )
+        return written
+    }
+
     // The shared Base64: the same alphabet, padded, with no line breaks, so the text already on
     // the disk reads back byte for byte.
     private fun encode(value: ByteArray): String = Base64.encode(value)

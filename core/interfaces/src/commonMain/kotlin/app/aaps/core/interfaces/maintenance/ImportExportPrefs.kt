@@ -70,8 +70,14 @@ interface ImportExportPrefs {
     /** Prepare export file and check for cached password. Returns null if file creation fails. */
     fun prepareExport(): ExportPreparation?
 
-    /** Execute the actual export with the given password. Returns per-destination results. */
-    suspend fun executeExport(password: String): ExportResult
+    /**
+     * Execute the actual export with the given password. Returns per-destination results.
+     *
+     * [extraValues] go into the file next to the settings, under their own names. They carry the
+     * pump and sensor pairing for a transfer to another phone ([DeviceHandovers]), which is not a
+     * preference and is never in a normal export.
+     */
+    suspend fun executeExport(password: String, extraValues: Map<String, String> = emptyMap()): ExportResult
 
     /** Cache the password for future exports. Returns the (possibly transformed) password to use. */
     fun cacheExportPassword(password: String): String

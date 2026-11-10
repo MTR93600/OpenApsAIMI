@@ -4,10 +4,13 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.maintenance.PrefsFile
 import app.aaps.core.interfaces.maintenance.PrefsFileInfo
+import app.aaps.core.interfaces.resources.TextResolver
+import app.aaps.core.ui.CoreUiStrings
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import platform.Foundation.NSBundle
 import platform.Foundation.NSDate
 import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSFileManager
@@ -48,6 +51,10 @@ import kotlin.time.Instant
  * is persisted, and it can be revoked later. iOS has no such grant. Every app owns its Documents
  * directory and can always read and write it, so the only thing that can go wrong is the directory
  * not being there, which is what is actually checked.
+ *
+ * [directoryPath] is what the user sees, not the real path. The real one is
+ * `/var/mobile/Containers/Data/Application/<id>/Documents`, which the user never sees anywhere. The
+ * Files app shows the same folder as "On My iPhone › AAPS", so that is what the screen says.
  */
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
@@ -55,7 +62,9 @@ import kotlin.time.Instant
 class IosPrefsFileInfo(
     private val aapsLogger: AAPSLogger,
     private val lister: PrefsFileLister,
-    private val exportDirectory: String? = defaultDocumentsDirectory()
+    private val rh: TextResolver,
+    private val exportDirectory: String? = defaultDocumentsDirectory(),
+    private val appName: String = bundleAppName()
 ) : PrefsFileInfo {
 
     // Built once. The formatter is not cheap to create and the screen asks per listed file.
@@ -83,8 +92,18 @@ class IosPrefsFileInfo(
         return NSFileManager.defaultManager.isWritableFileAtPath(directory)
     }
 
-    override fun directoryPath(): String? = exportDirectory
+    override fun directoryPath(): String? =
+        exportDirectory?.let { rh.gs(CoreUiStrings.maintenance_aaps_directory_ios, appName) }
 }
+
+/**
+ * The name the Files app gives the app's folder: the name under the icon. The same lookup as
+ * `IosConfig.appName`, which this module cannot reach. Each Xcode target sets its own name.
+ */
+private fun bundleAppName(): String =
+    NSBundle.mainBundle.objectForInfoDictionaryKey("CFBundleDisplayName") as? String
+        ?: NSBundle.mainBundle.objectForInfoDictionaryKey("CFBundleName") as? String
+        ?: "AAPS"
 
 private fun Instant.toNSDate(): NSDate = NSDate.dateWithTimeIntervalSince1970(toEpochMilliseconds() / 1000.0)
 

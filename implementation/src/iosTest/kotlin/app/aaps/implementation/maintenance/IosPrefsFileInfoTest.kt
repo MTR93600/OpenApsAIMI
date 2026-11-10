@@ -14,6 +14,7 @@ import platform.Foundation.NSTemporaryDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -74,7 +75,7 @@ class IosPrefsFileInfoTest {
     private val lister = PrefsFileLister(files, plainKeychain, text)
     private val codec = PrefsFormatCodec(platformCryptoPrimitives(), text, plainKeychain)
 
-    private fun sut(directory: String? = temporaryDirectory) = IosPrefsFileInfo(logger, lister, directory)
+    private fun sut(directory: String? = temporaryDirectory) = IosPrefsFileInfo(logger, lister, text, directory, appName = "AAPS")
 
     @Test
     fun `an old export is named by its date`() {
@@ -99,6 +100,22 @@ class IosPrefsFileInfoTest {
 
         assertTrue(text.isNotEmpty())
         assertFalse(text == ExportedAgo.datePart(today))
+    }
+
+    @Test
+    fun `the folder is named the way the Files app shows it and not by its real path`() {
+        val filesAppText = object : TextResolver {
+            override fun gs(ref: TextRef): String = "?"
+            override fun gs(ref: TextRef, vararg args: Any?): String = "On My iPhone › ${args.single()}"
+            override fun gsNotLocalised(ref: TextRef): String = "?"
+        }
+        val info = IosPrefsFileInfo(logger, lister, filesAppText, temporaryDirectory, appName = "AAPS 2")
+        assertEquals("On My iPhone › AAPS 2", info.directoryPath())
+    }
+
+    @Test
+    fun `no directory has no name to show`() {
+        assertNull(sut(directory = null).directoryPath())
     }
 
     @Test

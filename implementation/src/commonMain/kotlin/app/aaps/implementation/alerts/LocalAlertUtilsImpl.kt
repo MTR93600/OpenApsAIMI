@@ -21,6 +21,7 @@ import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.smsCommunicator.SmsCommunicator
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.BooleanKey
+import app.aaps.core.keys.BooleanNonKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.objects.extensions.asAnnouncement
@@ -71,6 +72,8 @@ class LocalAlertUtilsImpl(
     }
 
     override fun checkPumpUnreachableAlarm(lastConnection: Long, isStatusOutdated: Boolean, isDisconnected: Boolean) {
+        // Stopped by the user (`AapsStop`): the pump is not reached on purpose, maybe it is on another phone.
+        if (preferences.get(BooleanNonKey.AapsStoppedByUser)) return
         val alarmTimeoutExpired = isAlarmTimeoutExpired(lastConnection, pumpUnreachableThreshold())
         val nextAlarmOccurrenceReached = preferences.get(LocalAlertLongKey.NextPumpDisconnectedAlarm) < dateUtil.now()
         if (config.APS && isStatusOutdated && alarmTimeoutExpired && nextAlarmOccurrenceReached && !isDisconnected) {
@@ -150,6 +153,8 @@ class LocalAlertUtilsImpl(
             }
 
     override suspend fun checkStaleBGAlert() {
+        // Stopped by the user (`AapsStop`): the sensor was let go on purpose.
+        if (preferences.get(BooleanNonKey.AapsStoppedByUser)) return
         val bgReading = persistenceLayer.getLastGlucoseValue() ?: return
         if (missedReadingsAlarmWanted()
             && bgReading.timestamp + missedReadingsThreshold() < dateUtil.now()

@@ -125,6 +125,7 @@ fun ImportSettingsScreen(
                 onDecrypt = { viewModel.decrypt() },
                 onImport = { viewModel.confirmImport() },
                 onReplacePumpSettingsChanged = { viewModel.onReplacePumpSettingsChanged(it) },
+                onTakeOverDevicesChanged = { viewModel.onTakeOverDevicesChanged(it) },
                 onBack = { viewModel.goBackToFilePicker() }
             )
         }
@@ -479,6 +480,7 @@ internal fun ImportReviewContent(
     onDecrypt: () -> Unit,
     onImport: () -> Unit,
     onReplacePumpSettingsChanged: (Boolean) -> Unit,
+    onTakeOverDevicesChanged: (Boolean) -> Unit = {},
     onBack: () -> Unit
 ) {
     val focusManager = LocalFocusManager.current
@@ -657,6 +659,35 @@ internal fun ImportReviewContent(
                         Text(stringResource(CoreUiStrings.import_replace_pump_settings))
                         Text(
                             text = stringResource(CoreUiStrings.import_replace_pump_settings_summary),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            // Only for a file made by "Transfer to another phone", which carries the pump and sensor
+            // pairing. Off by default: taking over a pump is a decision, not a default.
+            AnimatedVisibility(
+                visible = canImport && state.transferDevices.isNotEmpty(),
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = !state.isProcessing) { onTakeOverDevicesChanged(!state.takeOverDevices) }
+                ) {
+                    Checkbox(
+                        checked = state.takeOverDevices,
+                        onCheckedChange = { onTakeOverDevicesChanged(it) },
+                        enabled = !state.isProcessing
+                    )
+                    Column {
+                        Text(stringResource(CoreUiStrings.import_take_over_devices))
+                        Text(
+                            text = stringResource(CoreUiStrings.import_take_over_devices_summary),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

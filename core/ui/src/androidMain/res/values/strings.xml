@@ -1008,8 +1008,21 @@
     <string name="maintenance_send_logs_desc">Share log files for troubleshooting</string>
     <string name="maintenance_delete_logs_desc">Remove old log files</string>
     <string name="maintenance_aaps_directory_desc">Select local storage folder</string>
+    <string name="maintenance_aaps_directory_ios" comment="iPhone only. Where the app folder is in the iOS Files app. %1$s=app name, e.g. AAPS. Use the words the Files app shows in your language, e.g. French: Sur mon iPhone › %1$s">On My iPhone › %1$s</string>
     <string name="maintenance_cloud_directory_desc">Set up cloud storage (Google Drive)</string>
     <string name="maintenance_export_desc">Save encrypted settings backup</string>
+    <string name="maintenance_stop_aaps">Stop AAPS</string>
+    <string name="maintenance_stop_aaps_desc">No pump commands, no loop, sensor released. Stays stopped after a restart.</string>
+    <string name="maintenance_resume_aaps">Start AAPS again</string>
+    <string name="maintenance_resume_aaps_desc">AAPS is stopped on this phone</string>
+    <string name="confirm_stop_aaps">Stop AAPS on this phone? The pump gets no more commands, the loop stops and the sensor is released. It stays like this, also after a restart, until you start AAPS again. A temporary basal that runs now goes on until it ends.</string>
+    <string name="confirm_resume_aaps">Start AAPS again on this phone? It connects to the pump and the sensor again. Do not do this while another phone controls them.</string>
+    <string name="aaps_stopped_short">AAPS is stopped</string>
+    <string name="maintenance_transfer">Transfer to another phone</string>
+    <string name="maintenance_transfer_desc">Stops AAPS here and exports the settings with the pump and sensor pairing</string>
+    <string name="confirm_transfer" comment="%1$s=name of the export file, e.g. 2026-11-10_120000_full.json">AAPS will be stopped on this phone, and the export will also hold the pairing of the pump and the sensor. On the other phone, import it with \"Take over the pump and the sensor\". Do not start AAPS again here while the other phone uses them.\n\nFile: %1$s</string>
+    <string name="transfer_no_device">No pump or sensor pairing was found. Only the settings were exported.</string>
+    <string name="aaps_stopped_notification">AAPS is stopped on this phone: no pump commands, no loop, no sensor. Start it again in Maintenance.</string>
     <string name="maintenance_import_desc">Restore settings from backup</string>
     <string name="maintenance_export_csv_desc">Export treatment history as spreadsheet</string>
     <string name="maintenance_cleanup_db_desc">Remove old entries from database</string>
@@ -1229,6 +1242,8 @@
     <string name="import_insulin_added" comment="%1$s=insulin name(s) from the old backup, e.g. Free-Peak Oref 38m 6h U100. Shown after importing a backup from AAPS 3.x.">Added to your insulin list from the backup: %1$s. Not in use yet: select the right one when you activate your profile, and do this before Nightscout downloads your older treatments.</string>
     <string name="import_applying">Applying settings…</string>
     <string name="import_replace_pump_settings">Also replace pump settings</string>
+    <string name="import_take_over_devices">Take over the pump and the sensor</string>
+    <string name="import_take_over_devices_summary">This file was made with \"Transfer to another phone\". This phone connects to the same pump patch and sensor, with no new pairing. Only do this when AAPS is stopped on the other phone.</string>
     <string name="import_replace_pump_settings_summary">Leave this off to keep the pump this phone is paired with. Turn it on when restoring onto a new phone with the same pump.</string>
     <string name="import_apply_waiting">Waiting for pump…</string>
     <string name="import_apply_pump_busy">The pump is still busy, so the settings were not applied.</string>

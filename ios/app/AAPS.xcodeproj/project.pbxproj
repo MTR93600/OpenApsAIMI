@@ -224,6 +224,7 @@
 			);
 			name = "Build shared framework";
 			outputPaths = (
+				"$(SRCROOT)/../../plugins/aps/build/tflite-24-$(AAPS_TFLITE_KIND)-arm64/libtensorflow-lite.a",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -239,6 +240,7 @@
 			);
 			name = "Build shared framework";
 			outputPaths = (
+				"$(SRCROOT)/../../plugins/aps/build/tflite-24-$(AAPS_TFLITE_KIND)-arm64/libtensorflow-lite.a",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -360,6 +362,11 @@
 				// framework, so its TfLite symbols are resolved here, with the same flags as the
 				// Kotlin test link in plugins/aps/build.gradle.kts. The Kotlin build phase builds the
 				// archive with plugins/aps/src/tfliteParity/build-uam24-*.sh when it is missing.
+				// Which TensorFlow Lite archive this SDK links. The "Build shared framework" phase lists
+				// it as an output, so Xcode knows the phase makes it. Without that, the first device
+				// build fails with "Build input file cannot be found", although the phase built it.
+				"AAPS_TFLITE_KIND[sdk=iphoneos*]" = device;
+				"AAPS_TFLITE_KIND[sdk=iphonesimulator*]" = sim;
 				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
 					"$(inherited)",
 					"-force_load",
@@ -432,6 +439,11 @@
 				// framework, so its TfLite symbols are resolved here, with the same flags as the
 				// Kotlin test link in plugins/aps/build.gradle.kts. The Kotlin build phase builds the
 				// archive with plugins/aps/src/tfliteParity/build-uam24-*.sh when it is missing.
+				// Which TensorFlow Lite archive this SDK links. The "Build shared framework" phase lists
+				// it as an output, so Xcode knows the phase makes it. Without that, the first device
+				// build fails with "Build input file cannot be found", although the phase built it.
+				"AAPS_TFLITE_KIND[sdk=iphoneos*]" = device;
+				"AAPS_TFLITE_KIND[sdk=iphonesimulator*]" = sim;
 				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
 					"$(inherited)",
 					"-force_load",
@@ -525,6 +537,11 @@
 				// framework, so its TfLite symbols are resolved here, with the same flags as the
 				// Kotlin test link in plugins/aps/build.gradle.kts. The Kotlin build phase builds the
 				// archive with plugins/aps/src/tfliteParity/build-uam24-*.sh when it is missing.
+				// Which TensorFlow Lite archive this SDK links. The "Build shared framework" phase lists
+				// it as an output, so Xcode knows the phase makes it. Without that, the first device
+				// build fails with "Build input file cannot be found", although the phase built it.
+				"AAPS_TFLITE_KIND[sdk=iphoneos*]" = device;
+				"AAPS_TFLITE_KIND[sdk=iphonesimulator*]" = sim;
 				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
 					"$(inherited)",
 					"-force_load",
@@ -597,6 +614,11 @@
 				// framework, so its TfLite symbols are resolved here, with the same flags as the
 				// Kotlin test link in plugins/aps/build.gradle.kts. The Kotlin build phase builds the
 				// archive with plugins/aps/src/tfliteParity/build-uam24-*.sh when it is missing.
+				// Which TensorFlow Lite archive this SDK links. The "Build shared framework" phase lists
+				// it as an output, so Xcode knows the phase makes it. Without that, the first device
+				// build fails with "Build input file cannot be found", although the phase built it.
+				"AAPS_TFLITE_KIND[sdk=iphoneos*]" = device;
+				"AAPS_TFLITE_KIND[sdk=iphonesimulator*]" = sim;
 				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
 					"$(inherited)",
 					"-force_load",

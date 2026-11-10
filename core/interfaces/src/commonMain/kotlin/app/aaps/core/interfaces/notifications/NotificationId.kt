@@ -342,7 +342,10 @@ enum class NotificationId(
     CGM_SECOND_SENSOR_READY(NORMAL, CGM),
 
     /** The test button of a CGM alarm: its sound and text, once, until the user dismisses it. */
-    CGM_ALARM_TEST(URGENT, CGM);
+    CGM_ALARM_TEST(URGENT, CGM),
+
+    /** The user stopped AAPS on this phone (`AapsStop`). Shown until it is started again. Appended last on purpose. */
+    AAPS_STOPPED(IMPORTANT, SYSTEM);
 
     companion object {
 

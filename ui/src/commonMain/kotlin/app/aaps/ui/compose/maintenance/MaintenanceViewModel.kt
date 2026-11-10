@@ -14,8 +14,10 @@ import app.aaps.core.interfaces.logging.L
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.logging.LogElement
 import app.aaps.core.interfaces.logging.UserEntryLogger
+import app.aaps.core.interfaces.maintenance.AapsStop
 import app.aaps.core.interfaces.maintenance.CloudDirectoryInfo
 import app.aaps.core.interfaces.maintenance.CloudDirectoryManager
+import app.aaps.core.interfaces.maintenance.DeviceHandovers
 import app.aaps.core.interfaces.maintenance.ExportConfig
 import app.aaps.core.interfaces.maintenance.ExportDestination
 import app.aaps.core.interfaces.maintenance.ExportResult
@@ -81,8 +83,13 @@ class MaintenanceViewModel(
     private val overviewData: OverviewData,
     private val overviewDataCache: OverviewDataCache,
     private val nsClient: NsClient,
-    private val dateUtil: DateUtil
+    private val dateUtil: DateUtil,
+    private val aapsStop: AapsStop,
+    private val deviceHandovers: DeviceHandovers
 ) : ViewModel() {
+
+    /** True while the user has stopped AAPS on this phone, see [AapsStop]. */
+    val isAapsStopped: StateFlow<Boolean> = aapsStop.isStopped
 
     private val _events = MutableSharedFlow<MaintenanceEvent>()
     val events: SharedFlow<MaintenanceEvent> = _events
@@ -262,6 +269,16 @@ class MaintenanceViewModel(
         uel.log(Action.RESET_DATABASES, Sources.Maintenance)
     }
 
+    // Stop and start AAPS on this phone
+
+    fun stopAaps() {
+        viewModelScope.launch { aapsStop.stop(Sources.Maintenance) }
+    }
+
+    fun resumeAaps() {
+        viewModelScope.launch { aapsStop.resume(Sources.Maintenance) }
+    }
+
     // Export/Import
 
     fun logSelectDirectory() {
@@ -424,7 +441,19 @@ class MaintenanceViewModel(
         ) : ExportState
 
         data class AskPassword(val wrongPassword: Boolean = false) : ExportState
+
+        /** "Transfer to another phone": says that AAPS stops here and the pairing goes into the file. */
+        data class ConfirmTransfer(val fileName: String) : ExportState
     }
+
+    /**
+     * True between the confirm of a transfer and its export, so the password step that both share
+     * knows which one to finish. A plain export must never carry the pairing.
+     */
+    private var transferPending = false
+
+    /** The cached export password, held between [startTransfer] and [onTransferConfirmed]. */
+    private var transferCachedPassword: String? = null
 
     private val _exportState = MutableStateFlow<ExportState>(ExportState.Idle)
     val exportState: StateFlow<ExportState> = _exportState.asStateFlow()
@@ -461,6 +490,51 @@ class MaintenanceViewModel(
         _exportState.value = ExportState.AskPassword()
     }
 
+    /**
+     * "Transfer to another phone": the settings export with the pump and sensor pairing in it, made
+     * after AAPS is stopped here, so this phone does not talk to them again. Always asks first, even
+     * when the password is cached, because it stops AAPS.
+     */
+    fun startTransfer() {
+        uel.log(Action.EXPORT_SETTINGS, Sources.Maintenance)
+        if (!importExportPrefs.isMasterPasswordSet()) {
+            _exportState.value = ExportState.MasterPasswordMissing
+            return
+        }
+        val preparation = importExportPrefs.prepareExport()
+        if (preparation == null) {
+            viewModelScope.launch { _events.emit(MaintenanceEvent.Error(rh.gs(CoreUiStrings.error))) }
+            return
+        }
+        transferCachedPassword = preparation.cachedPassword
+        _exportState.value = ExportState.ConfirmTransfer(preparation.fileName)
+    }
+
+    fun onTransferConfirmed() {
+        transferPending = true
+        val cached = transferCachedPassword
+        if (cached != null) {
+            _exportState.value = ExportState.Idle
+            doTransfer(cached)
+        } else _exportState.value = ExportState.AskPassword()
+    }
+
+    private fun doTransfer(password: String) {
+        transferPending = false
+        transferCachedPassword = null
+        viewModelScope.launch {
+            // Stop first: from here on this phone sends nothing to the pump or the sensor.
+            aapsStop.stop(Sources.Maintenance)
+            val (result, devices) = withContext(aapsIoDispatcher) {
+                val devices = deviceHandovers.collect()
+                importExportPrefs.executeExport(password, devices) to devices
+            }
+            val message = buildExportResultMessage(result)
+            _events.emit(MaintenanceEvent.Snackbar(message))
+            if (devices.isEmpty()) _events.emit(MaintenanceEvent.Snackbar(rh.gs(CoreUiStrings.transfer_no_device)))
+        }
+    }
+
     fun onExportPasswordEntered(password: String) {
         // Settings are encrypted with the master password: reject anything that doesn't match it, otherwise
         // the export (and any cached unattended-export password) would be encrypted with an arbitrary secret.
@@ -471,10 +545,12 @@ class MaintenanceViewModel(
         }
         _exportState.value = ExportState.Idle
         val cached = importExportPrefs.cacheExportPassword(password)
-        doExport(cached)
+        if (transferPending) doTransfer(cached) else doExport(cached)
     }
 
     fun cancelExport() {
+        transferPending = false
+        transferCachedPassword = null
         _exportState.value = ExportState.Idle
     }
 

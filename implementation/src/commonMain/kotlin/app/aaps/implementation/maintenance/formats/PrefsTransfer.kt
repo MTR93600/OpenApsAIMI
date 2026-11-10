@@ -32,8 +32,8 @@ class PrefsTransfer(
      * device rather than the user's therapy - a paired pump's address, a cached token - and carrying
      * them to another phone would move a fact that is not true there.
      */
-    fun exportContents(metadata: Map<PrefsMetadataKey, PrefMetadata>, password: String): String =
-        codec.encode(Prefs(exportableValues(), metadata), password)
+    fun exportContents(metadata: Map<PrefsMetadataKey, PrefMetadata>, password: String, extraValues: Map<String, String> = emptyMap()): String =
+        codec.encode(Prefs(exportableValues() + extraValues, metadata), password)
 
     private fun exportableValues(): Map<String, String> =
         store.getAll()

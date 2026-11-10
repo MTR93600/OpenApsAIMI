@@ -1,11 +1,14 @@
 package app.aaps.ui.compose.maintenance
 
+import app.aaps.core.data.ue.Sources
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.L
 import app.aaps.core.interfaces.logging.UserEntryLogger
+import app.aaps.core.interfaces.maintenance.AapsStop
 import app.aaps.core.interfaces.maintenance.CloudDirectoryManager
+import app.aaps.core.interfaces.maintenance.DeviceHandovers
 import app.aaps.core.interfaces.maintenance.FileListProvider
 import app.aaps.core.interfaces.maintenance.ImportExportPrefs
 import app.aaps.core.interfaces.maintenance.Maintenance
@@ -25,6 +28,8 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.runBlocking
@@ -64,9 +69,30 @@ internal class MaintenanceViewModelTest {
     @Mock private lateinit var overviewDataCache: OverviewDataCache
     @Mock private lateinit var nsClient: NsClient
     @Mock private lateinit var dateUtil: DateUtil
+    @Mock private lateinit var deviceHandovers: DeviceHandovers
+
+    private val aapsStop = FakeAapsStop()
 
     private lateinit var sut: MaintenanceViewModel
     private lateinit var testDispatcher: TestDispatcher
+
+    /** Records what the screen asked for, and follows it the way the real one does. */
+    private class FakeAapsStop : AapsStop {
+
+        val calls = mutableListOf<String>()
+        private val state = MutableStateFlow(false)
+        override val isStopped: StateFlow<Boolean> = state
+
+        override suspend fun stop(source: Sources) {
+            calls += "stop $source"
+            state.value = true
+        }
+
+        override suspend fun resume(source: Sources) {
+            calls += "resume $source"
+            state.value = false
+        }
+    }
 
     @BeforeEach
     fun setUp() {
@@ -79,12 +105,25 @@ internal class MaintenanceViewModelTest {
         sut = MaintenanceViewModel(
             aapsLogger, generatedTextResolver(), l, maintenance, importExportPrefs, fileListProvider, cloudDirectoryManager,
             activePlugin, persistenceLayer, fabricPrivacy, uel, dataSyncSelectorXdrip, pumpSync,
-            iobCobCalculator, overviewData, overviewDataCache, nsClient, dateUtil
+            iobCobCalculator, overviewData, overviewDataCache, nsClient, dateUtil, aapsStop, deviceHandovers
         )
     }
 
     @AfterEach
     fun tearDown() = Dispatchers.resetMain()
+
+    @Test
+    fun `stop and start again go to AapsStop from the maintenance screen`() {
+        assertThat(sut.isAapsStopped.value).isFalse()
+        runEagerly()
+
+        sut.stopAaps()
+        assertThat(sut.isAapsStopped.value).isTrue()
+
+        sut.resumeAaps()
+        assertThat(sut.isAapsStopped.value).isFalse()
+        assertThat(aapsStop.calls).containsExactly("stop Maintenance", "resume Maintenance").inOrder()
+    }
 
     @Test
     fun `default state is idle export, hidden cloud directory, no config`() {
