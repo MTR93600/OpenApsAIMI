@@ -76,7 +76,9 @@ import app.aaps.implementation.receivers.IosTimeDateOrTZChangeWatcher
 import app.aaps.implementation.logging.AAPSLoggerIos
 import app.aaps.implementation.maintenance.KeepAliveChecks
 import app.aaps.implementation.notifications.requestIosNotificationPermission
+import app.aaps.implementation.protection.IosBiometricPrompt
 import app.aaps.implementation.protection.KeychainUnavailableException
+import app.aaps.implementation.protection.LocalAuthenticationEvaluator
 import app.aaps.ios.shell.IosAppStartup
 import app.aaps.ios.shell.PluginStoreRegistry
 import app.aaps.ios.shell.di.IosAppGraph
@@ -131,6 +133,7 @@ import platform.Foundation.NSOperationQueue
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
 import platform.Foundation.NSUserDomainMask
 import platform.UIKit.UIApplicationDidBecomeActiveNotification
+import platform.UIKit.UIApplicationWillEnterForegroundNotification
 import platform.UIKit.UIApplicationDidEnterBackgroundNotification
 import platform.UIKit.UIViewController
 
@@ -258,7 +261,13 @@ private fun startedOnce(nsSocketFactory: NsSocketFactory, crashReporter: CrashRe
         contributedPlugins = graph.contributedPlugins,
         apsPlugins = graph.contributedApsPlugins,
         mergeApsPlugins = graph.config.APS,
-        startPeriodicWork = { graph.periodicMaintenance.start(graph.appScope) },
+        startPeriodicWork = {
+            // As Android's `MainApp` does next to scheduling `KeepAliveWorker`: the first maintenance
+            // pass runs at once and would call a cold start's old database "BG readings missed".
+            // The pre-snooze holds that alarm back for five minutes (nightscout/AndroidAPS#5495).
+            graph.localAlertUtils.preSnoozeAlarms()
+            graph.periodicMaintenance.start(graph.appScope)
+        },
         startMasterServices = {
             graph.runningModeReconciler.start()
             graph.runningModeExpiryScheduler.start()
@@ -430,6 +439,10 @@ private fun AapsApp(app: StartedApp, navigationRelay: NavigationRelay, onPending
     // beside the language effect because both are app wide settings applied while it runs.
     KeepScreenOnEffect(graph.preferences)
 
+    // One prompt for the whole app, like the single `BiometricCheck` call Android makes. Held across
+    // recompositions because `LAContext` is built per evaluation inside it, not here.
+    val biometricPrompt = remember { IosBiometricPrompt(LocalAuthenticationEvaluator(), logger) }
+
     val restart by graph.uiRestart.signal.collectAsState()
     key(restart) {
     // iOS has no ambient application object, so the factory is provided here rather than found.
@@ -447,6 +460,19 @@ private fun AapsApp(app: StartedApp, navigationRelay: NavigationRelay, onPending
             passwordHasher = graph.passwordHasher,
             passwordCheck = graph.passwordCheck,
             protectionCheck = graph.protectionCheck,
+            // The one platform-specific part of protection, exactly as `ComposeMainActivity` passes
+            // its `BiometricCheck` one. Without it the host falls back to its own default, which
+            // answers "use the password" at once, so Face ID was never shown and application
+            // protection could not be satisfied (nightscout/AndroidAPS#5520).
+            showBiometricSimple = { title, onSuccess, onFallback, onCancel ->
+                biometricPrompt.show(
+                    title = title,
+                    fallbackTitle = graph.textResolver.gs(CoreUiStrings.use_pin_password),
+                    onSuccess = onSuccess,
+                    onFallback = onFallback,
+                    onCancel = onCancel
+                )
+            },
             exportPasswordDataStore = graph.exportPasswordDataStore,
             visibilityContext = graph.visibilityContext,
             nsClient = graph.nsClient,
@@ -473,11 +499,21 @@ private fun AapsApp(app: StartedApp, navigationRelay: NavigationRelay, onPending
             // has no request to render and a configured app-launch password never appears - the
             // setting looked saved and did nothing, which is how it was found.
             //
-            // Asked at launch **and every time the app comes back to the foreground**, which is
+            // Asked at launch **and every time the app comes back from the background**, which is
             // the case that matters: a phone handed to someone else while AAPS is backgrounded.
             // Android does the same from `onResume`. When protection is set to "No protection"
             // this costs nothing - `requestProtection` grants straight away without a dialog, so
             // the gate only appears for someone who asked for it.
+            //
+            // `WillEnterForeground` and **not** `DidBecomeActive`, which this used to listen to.
+            // `DidBecomeActive` also fires when a system sheet closes, and the Face ID sheet is a
+            // system sheet - so asking for Face ID re-locked the app the moment the scan succeeded
+            // and the sheet went away, for ever (nightscout/AndroidAPS#5520). Control centre and
+            // the notification shade did the same. Android does not see this because
+            // `BiometricPrompt` is an overlay that never pauses the activity, so `onResume` does
+            // not fire when it closes. `WillEnterForeground` fires only on a real return from the
+            // background, which is what `onResume` means here, and it pairs with
+            // `IosProtectionLifecycle`, which clears the authorization on `DidEnterBackground`.
             var unlocked by remember { mutableStateOf(false) }
             var asking by remember { mutableStateOf(false) }
             val requestUnlock = remember {
@@ -502,7 +538,7 @@ private fun AapsApp(app: StartedApp, navigationRelay: NavigationRelay, onPending
             DisposableEffect(Unit) {
                 requestUnlock()
                 val observer = NSNotificationCenter.defaultCenter.addObserverForName(
-                    name = UIApplicationDidBecomeActiveNotification,
+                    name = UIApplicationWillEnterForegroundNotification,
                     `object` = null,
                     queue = NSOperationQueue.mainQueue,
                     usingBlock = { requestUnlock() }

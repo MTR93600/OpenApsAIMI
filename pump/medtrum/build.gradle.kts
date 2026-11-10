@@ -122,6 +122,10 @@ kotlin {
                 // The real org.json: isReturnDefaultValues makes the platform stub answer null
                 // rather than throwing, which NPEs the shared profile fixtures in TestBaseWithProfile.
                 implementation(libs.org.json.android)
+                // The shared Bluetooth transport contract (MedtrumBleTransportContractTest) runs on
+                // Robolectric, a JUnit 4 runner.
+                implementation(libs.org.robolectric)
+                runtimeOnly(libs.org.junit.vintage.engine)
                 runtimeOnly(libs.org.junit.platform.launcher)
             }
         }

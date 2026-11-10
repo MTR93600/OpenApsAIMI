@@ -420,10 +420,7 @@ fun NavGraphBuilder.appNavGraph(
     ) {
         WizardDialogScreen(
             wizardSettingsDef = builtInSearchables.wizardSettings,
-            onNavigateBack = { navController.safePopBackStack() },
-            onShowDeliveryError = { comment ->
-                onShowDeliveryError(comment, CoreUiStrings.treatmentdeliveryerror)
-            }
+            onNavigateBack = { navController.safePopBackStack() }
         )
     }
 
