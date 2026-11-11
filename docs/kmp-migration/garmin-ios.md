@@ -46,6 +46,11 @@ glucose value, sent while the CGM has AAPS awake, so the watch stays up to date 
       glucose wait were rewritten). `GarminRequestsCommonTest` runs on the iOS simulator;
       `GarminOneDecimalTest` checks the TBR text against `String.format("%.1f")` for every rate.
 - [x] The `glucose` push message: `GarminRequests.getGlucoseMessage`.
+- [x] Watch faces that send only the day total (`steps=`): the steps since the last total are
+      spread over the real time between the two totals, one row per 5 minutes, and the newest row
+      gets the 10 to 180 minute windows. Before, the whole gap went into `steps5min` of one row with
+      the other windows at 0, so the loop saw a burst of walking after every gap and never saw a
+      long walk. On the iPhone the gaps are longer (suspension), so it mattered more there.
 
 ### 2. iPhone, pull channel
 

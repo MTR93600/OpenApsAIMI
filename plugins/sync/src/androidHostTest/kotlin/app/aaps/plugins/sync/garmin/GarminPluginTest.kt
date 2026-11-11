@@ -2,6 +2,7 @@ package app.aaps.plugins.sync.garmin
 
 import app.aaps.core.data.model.GV
 import app.aaps.core.data.model.GlucoseUnit
+import app.aaps.core.data.model.SC
 import app.aaps.core.data.model.SourceSensor
 import app.aaps.core.data.model.TrendArrow
 import app.aaps.core.interfaces.db.PersistenceLayer
@@ -182,20 +183,73 @@ class GarminPluginTest : TestBaseWithProfile() {
 
     @Test
     fun testReceiveStepsUri_TotalStoresTheDelta() {
+        storedSteps()
         whenever(preferences.get(GarminIntNonKey.LastTotalSteps)).thenReturn(1000)
         gp.receiveSteps(URI("http://foo?steps=1250&device=Watch"))
         verify(preferences).put(GarminIntNonKey.LastTotalSteps, 1250)
+        // No time of the last total: the steps are the last 5 minutes, and every window holds them.
         val now = clock.instant().epochSecond
-        verify(loopHub).storeStepsCount(Instant.ofEpochSecond(now - 300).toKotlinInstant(), Instant.ofEpochSecond(now).toKotlinInstant(), 250, 0, 0, 0, 0, 0, "Watch")
+        verify(loopHub).storeStepsCount(Instant.ofEpochSecond(now - 300).toKotlinInstant(), Instant.ofEpochSecond(now).toKotlinInstant(), 250, 250, 250, 250, 250, 250, "Watch")
     }
 
     @Test
     fun testReceiveStepsUri_LowerTotalIsANewDay() {
+        storedSteps()
         whenever(preferences.get(GarminIntNonKey.LastTotalSteps)).thenReturn(17506)
         gp.receiveSteps(URI("http://foo?steps=165&device=Watch"))
         verify(preferences).put(GarminIntNonKey.LastTotalSteps, 165)
         val now = clock.instant().epochSecond
-        verify(loopHub).storeStepsCount(Instant.ofEpochSecond(now - 300).toKotlinInstant(), Instant.ofEpochSecond(now).toKotlinInstant(), 165, 0, 0, 0, 0, 0, "Watch")
+        verify(loopHub).storeStepsCount(Instant.ofEpochSecond(now - 300).toKotlinInstant(), Instant.ofEpochSecond(now).toKotlinInstant(), 165, 165, 165, 165, 165, 165, "Watch")
+    }
+
+    @Test
+    fun testReceiveStepsUri_TotalIsSpreadOverTheTimeSinceTheLastTotal() {
+        val now = 1_000_000_000_000L
+        gp.clock = Clock.fixed(Instant.ofEpochMilli(now), ZoneId.of("UTC"))
+        val minute = 60_000L
+        storedSteps(
+            stepsRow(now - 20 * minute, 30, "Watch"),
+            stepsRow(now - 20 * minute, 999, "Other watch"),
+        )
+        whenever(preferences.get(GarminIntNonKey.LastTotalSteps)).thenReturn(1000)
+        whenever(preferences.get(GarminLongNonKey.LastTotalStepsTime)).thenReturn(now - 12 * minute)
+
+        gp.receiveSteps(URI("http://foo?steps=1120&device=Watch"))
+
+        // 120 steps in 12 minutes: 20 in the first 2 minutes, then 50 in each 5 minutes.
+        verify(loopHub).storeStepsCount(at(now - 12 * minute), at(now - 10 * minute), 20, 0, 0, 0, 0, 0, "Watch")
+        verify(loopHub).storeStepsCount(at(now - 10 * minute), at(now - 5 * minute), 50, 0, 0, 0, 0, 0, "Watch")
+        // The newest row has the windows: 10 min = 100, 15 min = 120, from 30 min on also the 30 stored
+        // 20 minutes ago by the same watch. The other watch is not counted.
+        verify(loopHub).storeStepsCount(at(now - 5 * minute), at(now), 50, 100, 120, 150, 150, 150, "Watch")
+    }
+
+    @Test
+    fun testReceiveStepsUri_StepsOlderThan3HoursGoInOneRow() {
+        val now = 1_000_000_000_000L
+        gp.clock = Clock.fixed(Instant.ofEpochMilli(now), ZoneId.of("UTC"))
+        val minute = 60_000L
+        storedSteps()
+        whenever(preferences.get(GarminIntNonKey.LastTotalSteps)).thenReturn(1000)
+        whenever(preferences.get(GarminLongNonKey.LastTotalStepsTime)).thenReturn(now - 300 * minute)
+
+        gp.receiveSteps(URI("http://foo?steps=4000&device=Watch"))
+
+        // 3000 steps in 5 hours: 1200 in the 2 hours before the last 3, then 50 in each 5 minutes.
+        verify(loopHub).storeStepsCount(at(now - 300 * minute), at(now - 180 * minute), 1200, 0, 0, 0, 0, 0, "Watch")
+        verify(loopHub, times(35)).storeStepsCount(any(), any(), eq(50), eq(0), eq(0), eq(0), eq(0), eq(0), eq("Watch"))
+        verify(loopHub).storeStepsCount(at(now - 5 * minute), at(now), 50, 100, 150, 300, 600, 1800, "Watch")
+    }
+
+    private fun at(ms: Long) = Instant.ofEpochMilli(ms).toKotlinInstant()
+
+    private fun stepsRow(timestamp: Long, steps5: Int, device: String) = SC(
+        timestamp = timestamp, duration = 300_000L, steps5min = steps5, steps10min = 0, steps15min = 0,
+        steps30min = 0, steps60min = 0, steps180min = 0, device = device,
+    )
+
+    private fun storedSteps(vararg rows: SC) = runBlocking {
+        whenever(persistenceLayer.getStepsCountFromTimeToTime(any(), any())).thenReturn(rows.toList())
     }
 
     @Test

@@ -344,7 +344,7 @@ class GarminRequests(
             // Some watch faces (for example Swissalpine) send only the day total as "steps=".
             val totalSteps = query["steps"]?.toIntOrNull() ?: -1
             if (totalSteps >= 0) {
-                ingestHttpTotalSteps(device, totalSteps, samplingStart, samplingEnd)
+                ingestHttpTotalSteps(device, totalSteps)
             } else {
                 aapsLogger.debug(LTag.GARMIN, "HTTP steps: all buckets are 0, not stored")
             }
@@ -358,39 +358,41 @@ class GarminRequests(
 
     /**
      * Turns a day total of steps into the steps since the last total. The first total ever is only
-     * kept as the starting point. A total that went down means a new day on the watch: it is stored as
-     * it is, because it already holds only today's steps.
+     * kept as the starting point. A total that went down means a new day on the watch: the total is
+     * then the steps since midnight.
+     *
+     * The steps are spread evenly over the real time since the last total, one row per 5 minutes,
+     * see [storeSpreadSteps]. One row with all of them as `steps5min` would read, for the loop, as a
+     * burst of walking in the last 5 minutes after every gap between two requests.
      */
-    private fun ingestHttpTotalSteps(device: String?, totalSteps: Int, samplingStart: Long, samplingEnd: Long) {
+    private fun ingestHttpTotalSteps(device: String?, totalSteps: Int) {
         val now = nowMs()
         val lastTotal = preferences.get(GarminIntNonKey.LastTotalSteps)
+        val lastTime = preferences.get(GarminLongNonKey.LastTotalStepsTime)
         if (lastTotal < 0) {
             storeLastTotalSteps(totalSteps, now)
             aapsLogger.info(LTag.GARMIN, "HTTP steps: first total $totalSteps kept as the starting point")
             return
         }
         val delta = totalSteps - lastTotal
-        val start = Instant.fromEpochSeconds(samplingStart)
-        val end = Instant.fromEpochSeconds(samplingEnd)
         // No upper limit: after a long run without a sync the delta can be well above 3000 steps.
         if (delta > 0) {
-            aapsLogger.info(LTag.GARMIN, "HTTP steps: delta $delta ($start to $end), total $totalSteps")
+            aapsLogger.info(LTag.GARMIN, "HTTP steps: delta $delta since $lastTime, total $totalSteps")
             storeLastTotalSteps(totalSteps, now)
-            loopHub.storeStepsCount(start, end, delta, 0, 0, 0, 0, 0, device)
+            storeSpreadSteps(lastTime, now, delta, device)
             return
         }
         aapsLogger.warn(LTag.GARMIN, "HTTP steps: delta $delta is not positive (total $totalSteps, last $lastTotal)")
+        val midnight = startOfDay(now)
         if (totalSteps > 0 && delta == 0) {
             storeLastTotalSteps(totalSteps, now)
-            val zone = timeZone()
-            val midnight = Instant.fromEpochMilliseconds(now).toLocalDateTime(zone).date.atStartOfDayIn(zone).toEpochMilliseconds()
             val todayCount = runBlocking {
                 // The device name differs ("Garmin", "Garmin Connect", ...), so match the start.
                 persistenceLayer.getStepsCountFromTimeToTime(midnight, now).count { it.device.startsWith("Garmin") }
             }
             if (todayCount == 0) {
                 aapsLogger.info(LTag.GARMIN, "HTTP steps: nothing stored today yet, storing the total $totalSteps")
-                loopHub.storeStepsCount(start, end, totalSteps, 0, 0, 0, 0, 0, device)
+                storeSpreadSteps(midnight, now, totalSteps, device)
             } else {
                 aapsLogger.info(LTag.GARMIN, "HTTP steps: delta 0 and $todayCount records today, not stored")
             }
@@ -398,7 +400,63 @@ class GarminRequests(
             // The total went down (or is 0): a new day started on the watch.
             aapsLogger.warn(LTag.GARMIN, "HTTP steps: new day, total $totalSteps taken as it is")
             storeLastTotalSteps(totalSteps, now)
-            loopHub.storeStepsCount(start, end, totalSteps, 0, 0, 0, 0, 0, device)
+            storeSpreadSteps(maxOf(midnight, lastTime), now, totalSteps, device)
+        }
+    }
+
+    private fun startOfDay(timeMs: Long): Long {
+        val zone = timeZone()
+        return Instant.fromEpochMilliseconds(timeMs).toLocalDateTime(zone).date.atStartOfDayIn(zone).toEpochMilliseconds()
+    }
+
+    /**
+     * Stores [steps] made between [fromMs] and [toMs] as the watch apps that send real windows do.
+     *
+     * - One row per 5 minutes, back from [toMs], each with its even share in `steps5min`. A [fromMs]
+     *   that is unknown (0) or not before [toMs] means the last 5 minutes.
+     * - The part older than 3 h goes in one row that ends 3 h ago: no loop window reaches it, and the
+     *   steps of the day stay right.
+     * - The newest row also gets `steps10min` to `steps180min`: its own rows plus the rows of the
+     *   same device already stored in each window. The loop reads these windows from the newest row.
+     */
+    private fun storeSpreadSteps(fromMs: Long, toMs: Long, steps: Int, device: String?) {
+        val start = if (fromMs in 1 until toMs) fromMs else toMs - STEP_ROW_MS
+        val oldestRowStart = maxOf(start, toMs - STEP_WINDOW_180_MS)
+        // Built newest first, then turned round: the newest row is the last one stored.
+        val rows = ArrayList<LongRange>()
+        var rowEnd = toMs
+        while (rowEnd > oldestRowStart) {
+            val rowStart = maxOf(oldestRowStart, rowEnd - STEP_ROW_MS)
+            rows.add(rowStart..rowEnd)
+            rowEnd = rowStart
+        }
+        if (start < oldestRowStart) rows.add(start..oldestRowStart)
+        rows.reverse()
+        // Even share by time, rounded on the running sum so the rows add up to exactly [steps].
+        val span = (toMs - start).toDouble()
+        fun stepsBefore(timeMs: Long): Int = round(steps * (timeMs - start) / span).toInt()
+        val shares = rows.map { stepsBefore(it.last) - stepsBefore(it.first) }
+
+        val deviceName = device ?: "Garmin"
+        val stored = runBlocking { persistenceLayer.getStepsCountFromTimeToTime(toMs - STEP_WINDOW_180_MS, start) }
+            .filter { it.device == deviceName && it.timestamp <= start }
+        fun window(lengthMs: Long): Int {
+            val from = toMs - lengthMs
+            return stored.filter { it.timestamp > from }.sumOf { it.steps5min.coerceAtLeast(0) } +
+                rows.indices.filter { rows[it].last > from }.sumOf { shares[it] }
+        }
+        rows.forEachIndexed { i, row ->
+            val newest = i == rows.lastIndex
+            loopHub.storeStepsCount(
+                Instant.fromEpochMilliseconds(row.first), Instant.fromEpochMilliseconds(row.last),
+                shares[i],
+                if (newest) window(10 * 60_000L) else 0,
+                if (newest) window(15 * 60_000L) else 0,
+                if (newest) window(30 * 60_000L) else 0,
+                if (newest) window(60 * 60_000L) else 0,
+                if (newest) window(STEP_WINDOW_180_MS) else 0,
+                device,
+            )
         }
     }
 
@@ -671,6 +729,12 @@ class GarminRequests(
         const val GLUCOSE_HISTORY_MS = (2L * 60L + 9L) * 60_000L
 
         const val GLUCOSE_FREQUENCY_MS = 5L * 60_000L
+
+        /** The length of one steps row made from a day total. */
+        const val STEP_ROW_MS = 5L * 60_000L
+
+        /** The longest steps window the loop reads. */
+        const val STEP_WINDOW_180_MS = 180L * 60_000L
 
         /**
          * One decimal, with a dot and rounded half up, as the Android plugin wrote it with
