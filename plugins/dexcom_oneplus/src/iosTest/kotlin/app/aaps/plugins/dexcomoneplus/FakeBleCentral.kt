@@ -61,10 +61,18 @@ class FakeBleCentral : BleCentral {
 
     override fun startScan() {
         lastScanFilter = emptyList()
-        scanning = true
         scanStarts++
+        // The effect is applied after this hook, so a test can run the competing call while this
+        // one is still inside the central.
+        beforeScanTakesEffect?.invoke()
+        scanning = true
         onStartScan?.invoke()
     }
+
+    /**
+     * Runs inside [startScan] before the scan is recorded as on. Null for every existing caller.
+     */
+    var beforeScanTakesEffect: (() -> Unit)? = null
 
     /** The service filter of the last scan; empty for a scan with no filter. */
     var lastScanFilter: List<String> = emptyList()

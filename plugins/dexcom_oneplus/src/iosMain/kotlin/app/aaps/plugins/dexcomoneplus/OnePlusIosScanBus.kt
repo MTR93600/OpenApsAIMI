@@ -32,7 +32,9 @@ import app.aaps.plugins.dexcomoneplus.gatt.OnePlusBluetoothUuids
  * sensor the first slot had already seen.
  *
  * ⚠️ ASYNC IMPACT: [request] and [release] may be called from a driver thread or the main thread.
- * The demand map is guarded; the central call happens after the lock is released.
+ * The demand map and the central call share one lock. A `stopScan` decided earlier cannot land
+ * after a `startScan` decided later: the central call runs before the lock is released, so the
+ * calls stay in the order the decisions were made.
  */
 class OnePlusIosScanBus(private val central: BleCentral) {
 
@@ -52,20 +54,18 @@ class OnePlusIosScanBus(private val central: BleCentral) {
             release(owner)
             return
         }
-        val apply = lock.withLock {
+        lock.withLock {
             demands[owner] = mode
-            reconcile(forceRestart = true)
+            applyLocked(forceRestart = true)
         }
-        apply()
     }
 
     /** [owner] no longer wants a scan. The radio stays on while someone else does. */
     fun release(owner: Any) {
-        val apply = lock.withLock {
-            if (demands.remove(owner) == null && applied == effective()) return@withLock null
-            reconcile(forceRestart = false)
+        lock.withLock {
+            if (demands.remove(owner) == null && applied == effective()) return@withLock
+            applyLocked(forceRestart = false)
         }
-        apply?.invoke()
     }
 
     /** What the central is doing right now. Tests read it; the scanners do not need to. */
@@ -77,23 +77,22 @@ class OnePlusIosScanBus(private val central: BleCentral) {
         else                                         -> Mode.OFF
     }
 
-    /** Decides the next central call. Returns the call, so it runs outside [lock]. */
-    private fun reconcile(forceRestart: Boolean): () -> Unit {
+    /** Applies the current demands. Caller holds [lock], and the central call does too. */
+    private fun applyLocked(forceRestart: Boolean) {
         val next = effective()
         if (next == Mode.OFF) {
             val stop = applied != Mode.OFF
             applied = Mode.OFF
-            return { if (stop) central.stopScan() }
+            if (stop) central.stopScan()
+            return
         }
         val changed = next != applied
         applied = next
-        if (!changed && !forceRestart) return {}
-        return {
-            when (next) {
-                Mode.FILTERED   -> central.startScan(listOf(OnePlusBluetoothUuids.Advertisement))
-                Mode.UNFILTERED -> central.startScan()
-                Mode.OFF        -> central.stopScan()
-            }
+        if (!changed && !forceRestart) return
+        when (next) {
+            Mode.FILTERED   -> central.startScan(listOf(OnePlusBluetoothUuids.Advertisement))
+            Mode.UNFILTERED -> central.startScan()
+            Mode.OFF        -> central.stopScan()
         }
     }
 }

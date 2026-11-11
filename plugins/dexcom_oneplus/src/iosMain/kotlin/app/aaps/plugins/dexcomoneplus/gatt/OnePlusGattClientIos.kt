@@ -67,6 +67,14 @@ class OnePlusGattClientIos(
     private val profile: OemDeviceProfile = DeviceProfileRegistry.resolve(),
     private val nowMs: () -> Long = ::onePlusIosElapsedMs,
     private val sleep: (Long) -> Boolean = ::onePlusSleep,
+    /**
+     * Puts this client back on the shared radio.
+     *
+     * A cycle ends with [disconnect], which marks the client retired. The other slot can then
+     * build a client of its own and drop every retired one. The session reconnects *this* object,
+     * so the next [connect] has to register it again or the link waits for events that never come.
+     */
+    private val onConnectAttempt: (() -> Unit)? = null,
 ) : OnePlusGattClient {
 
     /** Serializes one outstanding write or subscription, exactly as the Android client does. */
@@ -126,8 +134,10 @@ class OnePlusGattClientIos(
 
     override fun connect(deviceAddress: String, autoConnect: Boolean) {
         // Before the prelude disconnect, so a client that is about to connect is not dropped as
-        // finished while the other slot attaches its own client.
+        // finished while the other slot attaches its own client. Re-register as well: the pause
+        // between [disconnect] and this call is long enough for the other slot to have pruned us.
         retired = false
+        onConnectAttempt?.invoke()
         disconnectInternal(poisonQueues = false, retire = false)
         awaitPostCloseSettle()
         drainQueues()

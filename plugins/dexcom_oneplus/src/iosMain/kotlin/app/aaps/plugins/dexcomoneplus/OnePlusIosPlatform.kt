@@ -92,7 +92,7 @@ class OnePlusIosPlatform : OnePlusPlatform {
             sessionHint = hint,
             slot = slot,
             scanBus = scanBus,
-            ephemeral = ephemeral,
+            isEphemeral = ephemeral,
             onRetired = { radio.detachScanner(created) },
         )
         radio.attachScanner(created)
@@ -105,8 +105,12 @@ class OnePlusIosPlatform : OnePlusPlatform {
      * The production connection and the pre-soak connection are both live. The client a finished
      * attempt left behind is dropped here, once it has disconnected.
      */
-    override fun gattClient(profile: OemDeviceProfile): OnePlusGattClient =
-        OnePlusGattClientIos(central, profile).also { radio.attachGatt(it) }
+    override fun gattClient(profile: OemDeviceProfile): OnePlusGattClient {
+        lateinit var created: OnePlusGattClientIos
+        created = OnePlusGattClientIos(central, profile, onConnectAttempt = { radio.attachGatt(created) })
+        radio.attachGatt(created)
+        return created
+    }
 
     override fun cpuLease(slot: String): OnePlusCpuLease = OnePlusIosCpuLease(slot)
 }

@@ -51,7 +51,7 @@ class OnePlusBleScannerIos(
     private val central: BleCentral,
     sessionHint: OnePlusStoredSession? = null,
     /** Sensor slot owning this scanner (`prod` / `staging`) - logged so field traces are attributable. */
-    private val slot: String = OnePlusLogMarkers.SLOT_PRODUCTION,
+    internal val slot: String = OnePlusLogMarkers.SLOT_PRODUCTION,
     private val nowMs: () -> Long = ::onePlusIosElapsedMs,
     private val sleep: (Long) -> Boolean = ::onePlusSleep,
     /**
@@ -63,7 +63,7 @@ class OnePlusBleScannerIos(
      * A screen scanner is thrown away when it stops. A driver's scanner is not: the next
      * pre-connect wait uses the same object.
      */
-    private val ephemeral: Boolean = false,
+    internal val isEphemeral: Boolean = false,
     /** Called once an [ephemeral] scanner has stopped and holds no pre-connect wait. */
     private val onRetired: (() -> Unit)? = null,
 ) : OnePlusBleScanner {
@@ -114,7 +114,7 @@ class OnePlusBleScannerIos(
         lock.withLock { radioOn = false }
         demand(OnePlusIosScanBus.Mode.OFF)
         OnePlusLog.i("${OnePlusLogMarkers.SCAN}: [$slot] stopped")
-        if (ephemeral) onRetired?.invoke()
+        if (isEphemeral) onRetired?.invoke()
     }
 
     override fun isScanning(): Boolean = lock.withLock { uiScanning }
@@ -157,7 +157,7 @@ class OnePlusBleScannerIos(
             if (!keepRadio) {
                 lock.withLock { radioOn = false }
                 demand(OnePlusIosScanBus.Mode.OFF)
-                if (ephemeral) onRetired?.invoke()
+                if (isEphemeral) onRetired?.invoke()
             } else {
                 // The screen is still scanning: give it back its scan without a filter, unless
                 // another slot is waiting on the filtered scan. The bus makes that choice.
@@ -308,6 +308,9 @@ class OnePlusBleScannerIos(
         )
         listener.onDevice(result)
     }
+
+    /** Drops this scanner's demand on the shared scan. The radio calls it when a newer scanner takes the slot. */
+    internal fun releaseScanDemand() = demand(OnePlusIosScanBus.Mode.OFF)
 
     /**
      * Asks for [mode] on the shared bus when this scanner has one, and on [central] directly when

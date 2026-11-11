@@ -124,11 +124,23 @@ class OnePlusIosRadio(private val central: BleCentral) {
             }
         }
 
-    /** Adds [scanner] if it is not already receiving events. Does not remove the others. */
+    /**
+     * Adds [scanner]. A driver scanner replaces the previous driver scanner of the same slot.
+     *
+     * `attach` and the reconnect watchdogs ask for a scanner again. Appending those left the old
+     * ones registered, still holding a scan demand. A screen scanner is ephemeral and is left
+     * alone: it shares the slot name with the driver and goes away on its own when the screen stops.
+     */
     fun attachScanner(scanner: OnePlusBleScannerIos) {
-        lock.withLock {
+        val replaced = lock.withLock {
+            val previous = scanners.filter {
+                it !== scanner && !it.isEphemeral && it.slot == scanner.slot
+            }
+            scanners.removeAll(previous)
             if (scanner !in scanners) scanners.add(scanner)
+            previous
         }
+        replaced.forEach { it.releaseScanDemand() }
     }
 
     /** Stops delivering events to [scanner]. The scan it asked for is the bus's to release. */

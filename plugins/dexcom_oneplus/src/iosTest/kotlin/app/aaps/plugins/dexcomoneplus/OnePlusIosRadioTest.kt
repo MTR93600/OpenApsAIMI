@@ -6,9 +6,17 @@ import app.aaps.core.interfaces.pump.ble.session.BleGattCharacteristic
 import app.aaps.core.interfaces.pump.ble.session.BleGattService
 import app.aaps.plugins.dexcomoneplus.gatt.OnePlusBluetoothUuids
 import app.aaps.plugins.dexcomoneplus.gatt.OnePlusGattClientIos
+import app.aaps.plugins.dexcomoneplus.oem.OemDeviceProfile
+import app.aaps.plugins.dexcomoneplus.oem.OemProfileId
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScannerIos
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusScanBudget
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusScanResult
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -210,6 +218,109 @@ class OnePlusIosRadioTest {
         assertFalse(central.cancels.drop(cancelsBefore.size).contains(deviceId))
         assertTrue(central.cancels.contains("PERIPHERAL-2"))
     }
+
+    @Test
+    fun aClientDroppedWhileRetiredIsBackOnTheRadioWhenItConnectsAgain() {
+        val central = FakeBleCentral()
+        val radio = OnePlusIosRadio(central)
+        answerHandshake(central, radio)
+        lateinit var production: OnePlusGattClientIos
+        production = OnePlusGattClientIos(
+            central = central,
+            profile = quickProfile(),
+            nowMs = { 0L },
+            sleep = { true },
+            onConnectAttempt = { radio.attachGatt(production) },
+        )
+        radio.attachGatt(production)
+        production.connect(deviceId, autoConnect = false)
+        production.disconnect()
+
+        val staging = OnePlusGattClientIos(
+            central = central,
+            profile = quickProfile(),
+            nowMs = { 0L },
+            sleep = { true },
+        )
+        radio.attachGatt(staging)
+
+        production.connect(deviceId, autoConnect = false)
+        radio.onEvent(
+            BleCentralEvent.Value(deviceId, OnePlusBluetoothUuids.Control.lowercase(), byteArrayOf(9)),
+        )
+
+        assertTrue(production.isConnected())
+        assertContentEquals(byteArrayOf(9), production.awaitControlNotify(500L))
+    }
+
+    @Test
+    fun aNewDriverScannerReplacesThePreviousOneOfThatSlot() {
+        val central = FakeBleCentral()
+        val bus = OnePlusIosScanBus(central)
+        val radio = OnePlusIosRadio(central)
+        val first = scanner(central, bus, "prod")
+        val second = scanner(central, bus, "prod")
+        val screen = OnePlusBleScannerIos(
+            central = central,
+            slot = "prod",
+            nowMs = { 0L },
+            sleep = { true },
+            scanBus = bus,
+            isEphemeral = true,
+        )
+        val firstHits = mutableListOf<OnePlusScanResult>()
+        val secondHits = mutableListOf<OnePlusScanResult>()
+        val screenHits = mutableListOf<OnePlusScanResult>()
+        radio.attachScanner(screen)
+        screen.startScan { screenHits += it }
+        radio.attachScanner(first)
+        first.startScan { firstHits += it }
+        radio.attachScanner(second)
+        second.startScan { secondHits += it }
+
+        radio.onEvent(BleCentralEvent.ScanResult(name = "DX02aS", id = deviceId, advertisementBytes = null))
+
+        assertEquals(0, firstHits.size)
+        assertEquals(1, secondHits.size)
+        assertEquals(1, screenHits.size)
+    }
+
+    @Test
+    fun aStopDecidedDuringStartCannotBeOverwrittenByThatStart() = runBlocking {
+        val entered = CompletableDeferred<Unit>()
+        val gate = CompletableDeferred<Unit>()
+        val central = FakeBleCentral()
+        central.beforeScanTakesEffect = {
+            if (!entered.isCompleted) entered.complete(Unit)
+            runBlocking { withTimeout(5_000) { gate.await() } }
+        }
+        val bus = OnePlusIosScanBus(central)
+        val starter = launch(Dispatchers.Default) {
+            bus.request("prod", OnePlusIosScanBus.Mode.UNFILTERED)
+        }
+        withTimeout(5_000) { entered.await() }
+        val stopper = launch(Dispatchers.Default) { bus.release("prod") }
+        delay(50)
+        gate.complete(Unit)
+        withTimeout(5_000) {
+            starter.join()
+            stopper.join()
+        }
+        assertFalse(central.scanning)
+        assertEquals(OnePlusIosScanBus.Mode.OFF, bus.appliedMode())
+    }
+
+    private fun quickProfile() = OemDeviceProfile(
+        id = OemProfileId.GENERIC_FALLBACK,
+        connectTimeoutMs = 500L,
+        connectRetryCount = 1,
+        connectRetryDelayMs = 0L,
+        preferredMtu = 23,
+        useForegroundService = false,
+        aggressiveReconnect = false,
+        postCloseSettleMs = 0L,
+        scanHandoffMs = 0L,
+    )
 
     private fun scanner(central: FakeBleCentral, bus: OnePlusIosScanBus, slot: String) =
         OnePlusBleScannerIos(
