@@ -2,10 +2,15 @@ package app.aaps.ui.compose.dashboard.glass
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import app.aaps.core.interfaces.resources.TextRefIdRegistry
 import app.aaps.ui.UiStringIds
 import org.junit.Assert.assertEquals
@@ -48,6 +53,8 @@ class GlassOverviewContentTest {
 
     private val commands = RecordingCommands()
     private val toolActions = mutableListOf<DashboardV2ToolAction>()
+    private var showIobChart by mutableStateOf(true)
+    private val iobChartChanges = mutableListOf<Boolean>()
 
     @Before
     fun setUp() {
@@ -67,6 +74,8 @@ class GlassOverviewContentTest {
                         onSelectRange = {},
                         selectedPills = GLASS_PILL_CATALOG.filter { it.defaultSelected }.map { it.id },
                         onTogglePill = { _, _ -> },
+                        showIobChart = showIobChart,
+                        onShowIobChartChange = { iobChartChanges += it; showIobChart = it },
                         selectedTools = DashboardV2ToolAction.entries.toSet(),
                         onToggleTool = { _, _ -> },
                         availablePluginClassNames = emptySet(),
@@ -109,5 +118,26 @@ class GlassOverviewContentTest {
         compose.onNodeWithText("OK").performClick()
         compose.onNodeWithText("Main screen").assertDoesNotExist()
         compose.onNodeWithText("Personalize").assertIsDisplayed()
+    }
+
+    @Test
+    fun personalizeIobChartBoxTurnsTheChartOff() {
+        setContent()
+        compose.onNodeWithText("Tools").performClick()
+        compose.onNodeWithText("Personalize").performClick()
+        // The section is below the pills, so it is scrolled to first.
+        compose.onNodeWithText("Charts").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("IOB chart").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(listOf(false), iobChartChanges) }
+    }
+
+    @Test
+    fun iobChartIsLeftOutWhenTurnedOff() {
+        setContent()
+        val withChart = compose.onAllNodesWithText("IOB").fetchSemanticsNodes().size
+        showIobChart = false
+        compose.waitForIdle()
+        val withoutChart = compose.onAllNodesWithText("IOB").fetchSemanticsNodes().size
+        assertEquals(withChart - 1, withoutChart)
     }
 }

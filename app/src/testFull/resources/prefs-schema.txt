@@ -408,6 +408,7 @@ garmin_http_last_steps|GarminIntNonKey|false
 general_low_end_stability_mode|BooleanKey|true
 glass_selected_pills|StringNonKey|false
 glass_selected_tools|StringNonKey|false
+glass_show_iob_chart|BooleanNonKey|false
 glass_top_grid_pills_migrated|BooleanNonKey|false
 google_drive_folder_id|StringNonKey|true
 google_drive_refresh_token|StringNonKey|true

@@ -116,6 +116,7 @@ fun GlassDashboardHome(
     val selectedPillsRaw by preferences.observe(StringNonKey.GlassSelectedPills).collectAsStateWithLifecycle()
     val selectedPills = remember(selectedPillsRaw) { parseSelectedGlassPills(selectedPillsRaw) }
     val selectedToolsRaw by preferences.observe(StringNonKey.GlassSelectedTools).collectAsStateWithLifecycle()
+    val showIobChart by preferences.observe(BooleanNonKey.GlassShowIobChart).collectAsStateWithLifecycle()
     val selectedTools = remember(selectedToolsRaw) { parseSelectedGlassTools(selectedToolsRaw).toSet() }
 
     val bgInfoState by graphViewModel.bgInfoState.collectAsStateWithLifecycle()
@@ -198,6 +199,8 @@ fun GlassDashboardHome(
                 if (checked) next.add(id) else next.remove(id)
                 preferences.put(StringNonKey.GlassSelectedPills, serializeSelectedGlassPills(next))
             },
+            showIobChart = showIobChart,
+            onShowIobChartChange = { preferences.put(BooleanNonKey.GlassShowIobChart, it) },
             selectedTools = selectedTools,
             onToggleTool = { action, checked ->
                 val next = selectedTools.toMutableSet()
@@ -232,6 +235,8 @@ internal fun GlassOverviewContent(
     onSelectRange: (Int) -> Unit,
     selectedPills: List<GlassPillId>,
     onTogglePill: (GlassPillId, Boolean) -> Unit,
+    showIobChart: Boolean,
+    onShowIobChartChange: (Boolean) -> Unit,
     selectedTools: Set<DashboardV2ToolAction>,
     onToggleTool: (DashboardV2ToolAction, Boolean) -> Unit,
     availablePluginClassNames: Set<String>,
@@ -288,14 +293,17 @@ internal fun GlassOverviewContent(
                 formatValue = formatBgValue,
                 isDark = isDark,
             )
-            IobChartCard(
-                iobReadings = chartState.iobReadings,
-                predictions = chartState.iobPredictions,
-                currentIob = chartState.currentIob,
-                timeRangeHours = chartState.rangeHours,
-                historyFraction = chartState.historyFraction,
-                isDark = isDark,
-            )
+            // Can be turned off in Personalize, so the home fits on a small phone without scrolling.
+            if (showIobChart) {
+                IobChartCard(
+                    iobReadings = chartState.iobReadings,
+                    predictions = chartState.iobPredictions,
+                    currentIob = chartState.currentIob,
+                    timeRangeHours = chartState.rangeHours,
+                    historyFraction = chartState.historyFraction,
+                    isDark = isDark,
+                )
+            }
             TimeFilterBar(
                 selectedHours = chartState.rangeHours,
                 onSelectHours = onSelectRange,
@@ -322,6 +330,8 @@ internal fun GlassOverviewContent(
                 onShowPersonalize = { showPersonalize = it },
                 selectedPills = selectedPills,
                 onTogglePill = onTogglePill,
+                showIobChart = showIobChart,
+                onShowIobChartChange = onShowIobChartChange,
                 selectedTools = selectedTools,
                 onToggleTool = onToggleTool,
                 availablePluginClassNames = availablePluginClassNames,
@@ -342,6 +352,8 @@ private fun GlassToolsOverlay(
     onShowPersonalize: (Boolean) -> Unit,
     selectedPills: List<GlassPillId>,
     onTogglePill: (GlassPillId, Boolean) -> Unit,
+    showIobChart: Boolean,
+    onShowIobChartChange: (Boolean) -> Unit,
     selectedTools: Set<DashboardV2ToolAction>,
     onToggleTool: (DashboardV2ToolAction, Boolean) -> Unit,
     availablePluginClassNames: Set<String>,
@@ -381,6 +393,8 @@ private fun GlassToolsOverlay(
                 GlassPersonalizeScreen(
                     selectedPills = selectedPills.toSet(),
                     onToggle = onTogglePill,
+                    showIobChart = showIobChart,
+                    onShowIobChartChange = onShowIobChartChange,
                     selectedTools = selectedTools,
                     onToolToggle = onToggleTool,
                     isDark = isDark,

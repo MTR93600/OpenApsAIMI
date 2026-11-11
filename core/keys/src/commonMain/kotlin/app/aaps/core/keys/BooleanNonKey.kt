@@ -56,6 +56,12 @@ enum class BooleanNonKey(
     GlassTopGridPillsMigrated("glass_top_grid_pills_migrated", false, exportable = false),
 
     /**
+     * Shows the IOB chart under the glucose chart on the Glass home (Tools → Personalize). A small phone
+     * can turn it off so the home fits on the screen without scrolling. The IOB stays in the status card.
+     */
+    GlassShowIobChart("glass_show_iob_chart", true, exportable = false),
+
+    /**
      * The user stopped AAPS on this phone (Maintenance → Stop AAPS), for example to hand the pump and
      * the sensor to another phone. While set, no pump command is sent, the loop does not run and the
      * sensor drivers are stopped. Kept across restarts until the user resumes. Device state, so never

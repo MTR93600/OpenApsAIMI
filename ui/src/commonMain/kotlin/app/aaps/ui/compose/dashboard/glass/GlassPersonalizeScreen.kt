@@ -39,11 +39,13 @@ private val DarkMuted = Color(0xFF778598)
 /** Accent of the Personalize and Tools overlays: the checkboxes and the text buttons. */
 internal fun glassOverlayAccent(isDark: Boolean): Color = if (isDark) Color(0xFF6DFAD2) else Color(0xFF00B894)
 
-/** Choice of the pills shown on the Glass home and of the tiles shown on its Tools screen. */
+/** Choice of the pills and charts shown on the Glass home and of the tiles shown on its Tools screen. */
 @Composable
 internal fun GlassPersonalizeScreen(
     selectedPills: Set<GlassPillId>,
     onToggle: (GlassPillId, Boolean) -> Unit,
+    showIobChart: Boolean,
+    onShowIobChartChange: (Boolean) -> Unit,
     selectedTools: Set<DashboardV2ToolAction>,
     onToolToggle: (DashboardV2ToolAction, Boolean) -> Unit,
     isDark: Boolean,
@@ -72,6 +74,8 @@ internal fun GlassPersonalizeScreen(
             val checked = entry.id in selectedPills
             CheckRow(label = entry.label, checked = checked, isDark = isDark, onCheckedChange = { onToggle(entry.id, it) })
         }
+        SectionTitle(UiStrings.dashboard_glass_personalize_section_charts, muted)
+        CheckRow(label = UiStrings.dashboard_glass_personalize_iob_chart, checked = showIobChart, isDark = isDark, onCheckedChange = onShowIobChartChange)
         SectionTitle(UiStrings.dashboard_glass_personalize_section_tools, muted)
         DashboardV2ToolAction.entries.forEach { action ->
             val checked = action in selectedTools

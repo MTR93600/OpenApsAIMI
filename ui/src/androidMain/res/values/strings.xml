@@ -114,6 +114,8 @@
     <string name="dashboard_glass_personalize_empty_hint">Nothing selected. These items stay hidden on the main screen until you pick at least one below.</string>
     <string name="dashboard_glass_personalize_section_main_screen">Main screen</string>
     <string name="dashboard_glass_personalize_section_tools">Tools screen</string>
+    <string name="dashboard_glass_personalize_section_charts">Charts</string>
+    <string name="dashboard_glass_personalize_iob_chart">IOB chart</string>
     <string name="dashboard_glass_notification_alert" comment="Short level label on a notification card, upper case">ALERT</string>
     <string name="dashboard_glass_notification_notice" comment="Short level label on a notification card, upper case">NOTICE</string>
     <string name="dashboard_glass_notification_info" comment="Short level label on a notification card, upper case">INFO</string>
