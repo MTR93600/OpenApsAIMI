@@ -6,6 +6,14 @@ import org.junit.jupiter.api.Test
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
+/** The list now takes bytes; these tests build them in a [ByteBuffer], up to its limit. */
+private fun DeltaVarEncodedList(lastValues: IntArray, buffer: ByteBuffer): DeltaVarEncodedList {
+    val bytes = ByteArray(buffer.limit())
+    buffer.position(0)
+    buffer.get(bytes)
+    return DeltaVarEncodedList(lastValues, bytes)
+}
+
 internal class DeltaVarEncodedListTest {
 
     @Test fun empty() {

@@ -3,7 +3,7 @@ package app.aaps.plugins.sync.garmin
 import app.aaps.core.data.model.GV
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.interfaces.profile.Profile
-import java.time.Instant
+import kotlin.time.Instant
 
 /** One step of temporary basal for the Millimétré staircase (`t` = start in ms, `p` = percent). */
 data class BasalHistoryStep(val t: Long, val p: Int)

@@ -62,8 +62,9 @@ import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.verifyNoMoreInteractions
 import org.mockito.kotlin.whenever
 import java.time.Clock
-import java.time.Instant
+import java.time.Instant as JavaInstant
 import java.time.ZoneId
+import kotlin.time.Instant
 import kotlin.time.Duration.Companion.milliseconds
 
 class LoopHubTest : TestBase() {
@@ -81,7 +82,7 @@ class LoopHubTest : TestBase() {
     @Mock lateinit var userEntryLogger: UserEntryLogger
 
     private lateinit var loopHub: LoopHubImpl
-    private val clock = Clock.fixed(Instant.ofEpochMilli(10_000), ZoneId.of("UTC"))
+    private val clock = Clock.fixed(JavaInstant.ofEpochMilli(10_000), ZoneId.of("UTC"))
     private val testScope = CoroutineScope(Dispatchers.Unconfined)
 
     @BeforeEach
@@ -96,7 +97,7 @@ class LoopHubTest : TestBase() {
             profileFunction, profileUtil, persistenceLayer, preferences, processedTbrEbData,
             masterActionExecutor, userEntryLogger, testScope
         )
-        loopHub.clock = clock
+        loopHub.nowMs = { clock.millis() }
     }
 
     @AfterEach
@@ -293,7 +294,7 @@ class LoopHubTest : TestBase() {
         whenever(iobCobCalculator.ads).thenReturn(ads)
         assertArrayEquals(
             glucoseValues.toTypedArray(),
-            loopHub.getGlucoseValues(Instant.ofEpochMilli(1001_000), false).toTypedArray()
+            loopHub.getGlucoseValues(Instant.fromEpochMilliseconds(1001_000), false).toTypedArray()
         )
         verify(persistenceLayer).getBgReadingsDataFromTime(1001_000, false)
         verify(iobCobCalculator).ads
@@ -322,7 +323,7 @@ class LoopHubTest : TestBase() {
             InMemoryGlucoseValue(timestamp = 720_000L, value = 110.0, smoothed = 107.0),
             InMemoryGlucoseValue(timestamp = 900_000L, value = 120.0, smoothed = 118.0, filledGap = true),
         )
-        val values = loopHub.getGlucoseValues(Instant.ofEpochMilli(0), true).map { it.value }
+        val values = loopHub.getGlucoseValues(Instant.fromEpochMilliseconds(0), true).map { it.value }
         assertEquals(listOf(98.0, 107.0, 130.0), values)
         verify(persistenceLayer).getBgReadingsDataFromTime(0, true)
         verify(iobCobCalculator).ads
@@ -335,7 +336,7 @@ class LoopHubTest : TestBase() {
             (0..4).map { rawReading(240_000L + it * 60_000L, 100.0 + it) }
         )
         stubOverlay(InMemoryGlucoseValue(timestamp = 300_000L, value = 101.0, smoothed = 101.5))
-        val values = loopHub.getGlucoseValues(Instant.ofEpochMilli(0), true)
+        val values = loopHub.getGlucoseValues(Instant.fromEpochMilliseconds(0), true)
         // 240..420 s fall on the entry at 300 s; 480 s is 3 min away and keeps its raw value.
         assertEquals(listOf(300_000L to 101.5, 480_000L to 104.0), values.map { it.timestamp to it.value })
         verify(persistenceLayer).getBgReadingsDataFromTime(0, true)
@@ -379,11 +380,11 @@ class LoopHubTest : TestBase() {
 
     @Test
     fun testStoreStepsCount() = runTest {
-        val samplingStart = Instant.ofEpochMilli(1_001_000)
-        val samplingEnd = Instant.ofEpochMilli(1_301_000)
+        val samplingStart = Instant.fromEpochMilliseconds(1_001_000)
+        val samplingEnd = Instant.fromEpochMilliseconds(1_301_000)
         val sc = SC(
             duration = 300_000,
-            timestamp = samplingEnd.toEpochMilli(),
+            timestamp = samplingEnd.toEpochMilliseconds(),
             steps5min = 12,
             steps10min = 18,
             steps15min = 24,
@@ -414,11 +415,11 @@ class LoopHubTest : TestBase() {
 
     @Test
     fun testStoreHeartRate() = runTest {
-        val samplingStart = Instant.ofEpochMilli(1_001_000)
-        val samplingEnd = Instant.ofEpochMilli(1_101_000)
+        val samplingStart = Instant.fromEpochMilliseconds(1_001_000)
+        val samplingEnd = Instant.fromEpochMilliseconds(1_101_000)
         val hr = HR(
-            timestamp = samplingStart.toEpochMilli(),
-            duration = samplingEnd.toEpochMilli() - samplingStart.toEpochMilli(),
+            timestamp = samplingStart.toEpochMilliseconds(),
+            duration = samplingEnd.toEpochMilliseconds() - samplingStart.toEpochMilliseconds(),
             dateCreated = clock.millis(),
             beatsPerMinute = 101.0,
             device = "Test Device"

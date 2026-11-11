@@ -38,13 +38,11 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
-import io.reactivex.rxjava3.disposables.CompositeDisposable
-import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import java.time.Clock
-import java.time.Instant
+import kotlin.time.Clock
+import kotlin.time.Instant
 import kotlin.math.abs
 
 /**
@@ -69,10 +67,9 @@ class LoopHubImpl(
     @ApplicationScope private val appScope: CoroutineScope
 ) : LoopHub {
 
-    val disposable = CompositeDisposable()
-
+    /** The current time in ms. A test sets its own. */
     @VisibleForTesting
-    var clock: Clock = Clock.systemUTC()
+    var nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() }
 
     // The same half bucket that AutosensDataStoreObject.isAbout5minData() uses to decide that readings
     // are "about" 5 minutes apart. See getGlucoseValues for why an exact time match cannot be used.
@@ -107,7 +104,7 @@ class LoopHubImpl(
     /** Returns true if the current profile is set of a limited amount of time. */
     override val isTemporaryProfile: Boolean
         get() {
-            val ps = runBlocking { persistenceLayer.getEffectiveProfileSwitchActiveAt(clock.millis()) }
+            val ps = runBlocking { persistenceLayer.getEffectiveProfileSwitchActiveAt(nowMs()) }
             return ps != null && ps.originalDuration > 0
         }
 
@@ -115,14 +112,14 @@ class LoopHubImpl(
     override val temporaryBasal: Double
         get() {
             return currentProfile?.let {
-                val tb = runBlocking { processedTbrEbData.getTempBasalIncludingConvertedExtended(clock.millis()) }
-                tb?.convertedToPercent(clock.millis(), it)?.div(100.0)
+                val tb = runBlocking { processedTbrEbData.getTempBasalIncludingConvertedExtended(nowMs()) }
+                tb?.convertedToPercent(nowMs(), it)?.div(100.0)
             } ?: Double.NaN
         }
 
     override val temporaryBasalRemainingMinutes: Int?
         get() = runBlocking {
-            val now = clock.millis()
+            val now = nowMs()
             val tb = processedTbrEbData.getTempBasalIncludingConvertedExtended(now) ?: return@runBlocking null
             val remainingMs = tb.end - now
             if (remainingMs <= 0L) null else (remainingMs / 60_000L).toInt().coerceAtLeast(1)
@@ -136,7 +133,7 @@ class LoopHubImpl(
             if (apsTarget != null && apsTarget.isFinite() && apsTarget > 0.0) {
                 return@runBlocking apsTarget
             }
-            val now = clock.millis()
+            val now = nowMs()
             val tt = persistenceLayer.getTemporaryTargetActiveAt(now)
             when {
                 tt != null -> (tt.lowTarget + tt.highTarget) / 2.0
@@ -146,9 +143,9 @@ class LoopHubImpl(
 
     override val activeTherapyMode: String?
         get() = runBlocking {
-            val now = clock.millis()
+            val now = nowMs()
             // Look back far enough for long modes (sport / highcarb up to several hours).
-            val from = now - TimeUnit.HOURS.toMillis(12)
+            val from = now - T.hours(12).msecs()
             val notes = persistenceLayer.getTherapyEventDataFromTime(from, TE.Type.NOTE, ascending = false)
             GarminActiveTherapyMode.detect(notes, now)
         }
@@ -159,10 +156,10 @@ class LoopHubImpl(
      * ⚠️ ASYNC IMPACT: runBlocking on processedTbrEbData + profile.
      */
     override fun temporaryBasalHistory(windowMs: Long): List<BasalHistoryStep> = runBlocking {
-        val now = clock.millis()
-        val from = now - windowMs.coerceAtLeast(TimeUnit.MINUTES.toMillis(5))
+        val now = nowMs()
+        val from = now - windowMs.coerceAtLeast(T.mins(5).msecs())
         val profile = currentProfile
-        val stepMs = TimeUnit.MINUTES.toMillis(5)
+        val stepMs = T.mins(5).msecs()
         val out = ArrayList<BasalHistoryStep>()
         var t = from
         var lastPct = Int.MIN_VALUE
@@ -188,7 +185,7 @@ class LoopHubImpl(
      * ⚠️ ASYNC IMPACT: runBlocking on persistenceLayer.getBolusesFromTime.
      */
     override fun smbHistory(windowMs: Long): List<SmbHistoryStep> = runBlocking {
-        val from = clock.millis() - windowMs.coerceAtLeast(0L)
+        val from = nowMs() - windowMs.coerceAtLeast(0L)
         persistenceLayer.getBolusesFromTime(from, ascending = true)
             .asSequence()
             .filter { it.isValid && it.type == BS.Type.SMB }
@@ -209,7 +206,7 @@ class LoopHubImpl(
     /** Tells the loop algorithm that the pump is physically connected. */
     override fun connectPump() {
         appScope.launch {
-            persistenceLayer.cancelCurrentRunningMode(clock.millis(), Action.RECONNECT, Sources.Garmin)
+            persistenceLayer.cancelCurrentRunningMode(nowMs(), Action.RECONNECT, Sources.Garmin)
             commandQueue.cancelTempBasal(enforceNew = true)
         }
     }
@@ -251,7 +248,7 @@ class LoopHubImpl(
      * time of that entry.
      */
     override fun getGlucoseValues(from: Instant, ascending: Boolean): List<GV> = runBlocking {
-        val raw = persistenceLayer.getBgReadingsDataFromTime(from.toEpochMilli(), ascending)
+        val raw = persistenceLayer.getBgReadingsDataFromTime(from.toEpochMilliseconds(), ascending)
         // Copied under the data lock: the store is rebuilt by another thread while we read it.
         val ads = iobCobCalculator.ads
         val overlay = ads.dataLock.withLock {
@@ -337,7 +334,7 @@ class LoopHubImpl(
         if (target == 0.0 || duration == 0) {
             appScope.launch {
                 persistenceLayer.cancelCurrentTemporaryTargetIfAny(
-                    timestamp = clock.millis(),
+                    timestamp = nowMs(),
                     action = Action.TT,
                     source = Sources.TTDialog,
                     note = null,
@@ -348,8 +345,8 @@ class LoopHubImpl(
             appScope.launch {
                 persistenceLayer.insertAndCancelCurrentTemporaryTarget(
                     temporaryTarget = TT(
-                        timestamp = clock.millis(),
-                        duration = TimeUnit.MINUTES.toMillis(duration.toLong()),
+                        timestamp = nowMs(),
+                        duration = T.mins(duration.toLong()).msecs(),
                         reason = TT.Reason.WEAR,
                         lowTarget = profileUtil.convertToMgdl(target, profileUtil.units),
                         highTarget = profileUtil.convertToMgdl(target, profileUtil.units)
@@ -380,7 +377,7 @@ class LoopHubImpl(
         }
         val safeDurationMin = GarminTherapyMode.storedDurationMin(normalized, durationMin)
         val note = normalized
-        val durationMs = TimeUnit.MINUTES.toMillis(safeDurationMin.toLong())
+        val durationMs = T.mins(safeDurationMin.toLong()).msecs()
         aapsLogger.info(LTag.GARMIN, "postTherapyMode note='$note' durationMin=$safeDurationMin")
         userEntryLogger.log(
             action = Action.CAREPORTAL,
@@ -388,7 +385,7 @@ class LoopHubImpl(
             note = note,
         )
         val te = TE(
-            timestamp = clock.millis(),
+            timestamp = nowMs(),
             type = TE.Type.NOTE,
             glucoseUnit = GlucoseUnit.MGDL,
             note = note,
@@ -412,9 +409,9 @@ class LoopHubImpl(
         device: String?
     ) {
         val hr = HR(
-            timestamp = samplingStart.toEpochMilli(),
-            duration = samplingEnd.toEpochMilli() - samplingStart.toEpochMilli(),
-            dateCreated = clock.millis(),
+            timestamp = samplingStart.toEpochMilliseconds(),
+            duration = samplingEnd.toEpochMilliseconds() - samplingStart.toEpochMilliseconds(),
+            dateCreated = nowMs(),
             beatsPerMinute = avgHeartRate.toDouble(),
             device = device ?: "Garmin",
         )
@@ -435,8 +432,8 @@ class LoopHubImpl(
         device: String?,
     ) {
         val sc = SC(
-            duration = samplingEnd.toEpochMilli() - samplingStart.toEpochMilli(),
-            timestamp = samplingEnd.toEpochMilli(),
+            duration = samplingEnd.toEpochMilliseconds() - samplingStart.toEpochMilliseconds(),
+            timestamp = samplingEnd.toEpochMilliseconds(),
             steps5min = steps5min,
             steps10min = steps10min,
             steps15min = steps15min,
@@ -444,13 +441,13 @@ class LoopHubImpl(
             steps60min = steps60min,
             steps180min = steps180min,
             device = device ?: "Garmin",
-            dateCreated = clock.millis(),
+            dateCreated = nowMs(),
         )
         appScope.launch {
             try {
                 val result = persistenceLayer.insertOrUpdateStepsCount(sc)
                 val id = result.inserted.firstOrNull()?.id ?: result.updated.firstOrNull()?.id
-                aapsLogger.info(LTag.GARMIN, "steps stored: id=$id 5min=$steps5min at ${samplingEnd.toEpochMilli()}")
+                aapsLogger.info(LTag.GARMIN, "steps stored: id=$id 5min=$steps5min at ${samplingEnd.toEpochMilliseconds()}")
             } catch (error: Exception) {
                 aapsLogger.error(LTag.GARMIN, "failed to store steps", error)
             }

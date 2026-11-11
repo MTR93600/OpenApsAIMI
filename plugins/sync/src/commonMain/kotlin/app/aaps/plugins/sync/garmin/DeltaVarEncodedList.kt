@@ -1,10 +1,6 @@
 package app.aaps.plugins.sync.garmin
 
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-import java.nio.IntBuffer
-import java.nio.LongBuffer
-import java.util.Base64
+import kotlin.io.encoding.Base64
 
 /** Efficient encoding for glucose/timestamp pairs.
  *
@@ -14,6 +10,9 @@ import java.util.Base64
  * We use [var encoding](https://en.wikipedia.org/wiki/Variable-width_encoding). In order to
  * keep timestamps small, we encode the difference to the previous pair and to encode negative values
  * efficiently, we use [zig-zag encoding](https://en.wikipedia.org/wiki/Variable-length_quantity).
+ *
+ * Shared code: the iPhone sends the watch the same bytes as Android. The bytes are little endian,
+ * which is what the watch app reads.
  */
 class DeltaVarEncodedList {
     private var lastValues: IntArray
@@ -40,13 +39,11 @@ class DeltaVarEncodedList {
     /** Creates a list from encoded values.
      *
      * @param lastValues the last values of the list. Needs to be entrySize long.
-     * @param byteBuffer the encoded data
+     * @param encoded the encoded data
      */
-    constructor(lastValues: IntArray, byteBuffer: ByteBuffer) {
+    constructor(lastValues: IntArray, encoded: ByteArray) {
         this.lastValues = lastValues
-        data = ByteArray(byteBuffer.limit())
-        byteBuffer.position(0)
-        byteBuffer.get(data)
+        data = encoded.copyOf()
         end = data.size
         val it = DeltaIterator()
         while (it.next()) {
@@ -54,33 +51,24 @@ class DeltaVarEncodedList {
         }
     }
 
-    /** Gets the encoded data. */
+    /** Gets the encoded data, as little endian 64 bit words. */
     fun encodedData(): List<Long> {
-        val byteBuffer: ByteBuffer = ByteBuffer.wrap(data)
-        byteBuffer.order(ByteOrder.LITTLE_ENDIAN)
-        byteBuffer.limit(toLongBoundary(end))
-        val buffer: LongBuffer = byteBuffer.asLongBuffer()
-        val encodedData: MutableList<Long> = ArrayList(buffer.limit())
-        while (buffer.position() < buffer.limit()) {
-            encodedData.add(buffer.get())
+        val padded = data.copyOf(toLongBoundary(end))
+        return List(padded.size / 8) { word ->
+            var value = 0L
+            for (b in 7 downTo 0) value = (value shl 8) or (padded[word * 8 + b].toLong() and 0xff)
+            value
         }
-        return encodedData
     }
 
-    fun encodedBase64(): String {
-        val byteBuffer: ByteBuffer = ByteBuffer.wrap(data, start, end)
-        byteBuffer.order(ByteOrder.LITTLE_ENDIAN)
-        return String(Base64.getEncoder().encode(byteBuffer).array())
-    }
+    fun encodedBase64(): String = Base64.Default.encode(data, start, end)
 
     private fun addVarEncoded(value: Int) {
         var remaining: Int = value
         do {
             // Grow data if needed (double size).
             if (end == data.size) {
-                val newData = ByteArray(2 * end)
-                System.arraycopy(data, 0, newData, 0, end)
-                data = newData
+                data = data.copyOf(maxOf(2 * end, 8))
             }
             if ((remaining and 0x7f.inv()) != 0) {
                 data[end++] = ((remaining and 0x7f) or 0x80).toByte()
@@ -111,25 +99,27 @@ class DeltaVarEncodedList {
     }
 
     fun toArray(): IntArray {
-        val values: IntBuffer = IntBuffer.allocate(lastValues.size * size)
+        val values = IntArray(lastValues.size * size)
+        var count = 0
         val it = DeltaIterator()
         while (it.next()) {
-            values.put(it.current())
+            for (v in it.current()) values[count++] = v
         }
         val next: IntArray = lastValues.copyOf(lastValues.size)
         var nextIdx: Int = next.size - 1
-        for (valueIdx in values.position() - 1 downTo 0) {
-            val value: Int = values.get(valueIdx)
-            values.put(valueIdx, next[nextIdx])
+        for (valueIdx in count - 1 downTo 0) {
+            val value: Int = values[valueIdx]
+            values[valueIdx] = next[nextIdx]
             next[nextIdx] -= value
             nextIdx = (nextIdx + 1) % next.size
         }
-        return values.array()
+        return values
     }
 
     private inner class DeltaIterator {
 
-        private val buffer: ByteBuffer = ByteBuffer.wrap(data)
+        /** Read position in [data], from [start] to [end]. */
+        private var position = start
         private val currentValues: IntArray = IntArray(lastValues.size)
         private var more: Boolean = false
         fun current(): IntArray {
@@ -141,11 +131,11 @@ class DeltaVarEncodedList {
             var offset = 0
             var b: Int
             do {
-                if (!buffer.hasRemaining()) {
+                if (position >= end) {
                     more = false
                     return 0
                 }
-                b = buffer.get().toInt()
+                b = data[position++].toInt()
                 v = v or ((b and 0x7f) shl offset)
                 offset += 7
             } while ((b and 0x80) != 0)
@@ -153,7 +143,7 @@ class DeltaVarEncodedList {
         }
 
         operator fun next(): Boolean {
-            if (!buffer.hasRemaining()) return false
+            if (position >= end) return false
             more = true
             var i = 0
             while (i < currentValues.size && more) {
@@ -161,12 +151,6 @@ class DeltaVarEncodedList {
                 i++
             }
             return more
-        }
-
-        init {
-            buffer.position(start)
-            buffer.limit(end)
-            buffer.order(ByteOrder.LITTLE_ENDIAN)
         }
     }
 
