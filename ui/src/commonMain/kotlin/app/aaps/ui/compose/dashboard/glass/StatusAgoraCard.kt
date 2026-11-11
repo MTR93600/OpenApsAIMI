@@ -215,17 +215,23 @@ internal fun StatusAgoraCard(
                             )
                         }
                         Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = state.timeAgo,
-                            fontSize = 8.5.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = neutralColor
-                        )
-                        TirTrendText(
-                            tir = state.tir,
-                            neutralColor = neutralColor,
-                            modifier = Modifier.padding(top = 1.dp)
-                        )
+                        // The age and the TIR share one row: as a fifth line the TIR sat at the bottom of
+                        // the ring, where the circle is narrowest, and the ring stroke hid it.
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = state.timeAgo,
+                                fontSize = 8.5.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = neutralColor
+                            )
+                            TirTrendText(
+                                tir = state.tir,
+                                neutralColor = neutralColor
+                            )
+                        }
                     }
                 }
 

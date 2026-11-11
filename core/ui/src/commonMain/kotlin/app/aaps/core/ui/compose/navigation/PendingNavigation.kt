@@ -47,7 +47,7 @@ object PendingNavigation {
     fun consume(): NavigationRequest? = _pending.getAndUpdate { null }
 
     /**
-     * Reads a route string of the form `plugin_preferences/<pluginKey>` as a request.
+     * Reads a route string as a request: `plugin_preferences/<pluginKey>`, or [AUDITOR_REPORT_ROUTE].
      *
      * Android carries the wanted screen through an intent extra, which is a string, so the string
      * has to become a request again on this side. `AppRoute.PluginPreferences.createRoute` builds
@@ -56,6 +56,7 @@ object PendingNavigation {
      */
     fun parseRoute(route: String?): NavigationRequest? {
         val value = route ?: return null
+        if (value == AUDITOR_REPORT_ROUTE) return NavigationRequest.AuditorReport
         val key = value.substringAfter(PLUGIN_PREFERENCES_PREFIX, missingDelimiterValue = "")
         return if (value.startsWith(PLUGIN_PREFERENCES_PREFIX) && key.isNotEmpty()) {
             NavigationRequest.PluginPreferences(key)
@@ -75,6 +76,15 @@ object PendingNavigation {
      * `plugin_preferences/{pluginKey}` destination matches on.
      */
     fun pluginPreferencesRoute(pluginKey: String): String = PLUGIN_PREFERENCES_PREFIX + pluginKey
+
+    /**
+     * The route a notification carries so a tap opens the AIMI auditor report.
+     *
+     * The report is a dialog and has no screen of its own, so this is not a nav graph route. It only
+     * travels from the notification to [parseRoute], which turns it into [NavigationRequest.AuditorReport];
+     * the navigator then opens the report.
+     */
+    const val AUDITOR_REPORT_ROUTE: String = "aimi_auditor_report"
 
     /** The intent extra Android carries the route in. */
     const val EXTRA_NAVIGATE_ROUTE: String = "extra_navigate_route"

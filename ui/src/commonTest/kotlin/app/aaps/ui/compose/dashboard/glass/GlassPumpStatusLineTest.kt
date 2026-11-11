@@ -48,10 +48,10 @@ class GlassPumpStatusLineTest {
     fun formatKeepsTheTemplateAndStylesOnlyTheParts() {
         val red = SpanStyle(color = Color.Red)
         val result = formatAnnotated(
-            "Pump: Reservoir %1\$s | Site %2\$s | Sensor %3\$s",
+            "Pump: %1\$s | Site %2\$s | Sensor %3\$s",
             listOf(AnnotatedString("120.00 U"), AnnotatedString("4d1h", red), AnnotatedString("n/a")),
         )
-        assertEquals("Pump: Reservoir 120.00 U | Site 4d1h | Sensor n/a", result.text)
+        assertEquals("Pump: 120.00 U | Site 4d1h | Sensor n/a", result.text)
         val styles = result.spanStyles
         assertEquals(1, styles.size)
         assertEquals(red, styles[0].item)

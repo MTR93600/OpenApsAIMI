@@ -35,7 +35,11 @@ internal actual class AimiExclusiveLock actual constructor() {
     }
 
     actual fun unlockIfHeld() {
-        if (owner !== NSThread.currentThread) return
+        // `==`, not `===`: Kotlin/Native gives a new Kotlin object for every read of
+        // `NSThread.currentThread`, so `===` was never true, nothing was ever released, and every tick
+        // after the first waited out the 45 s gate on another thread. `==` is `isEqual:`, which for an
+        // `NSThread` is the same thread.
+        if (owner != NSThread.currentThread) return
         val left = heldLevels - 1
         heldLevels = left
         if (left <= 0) {

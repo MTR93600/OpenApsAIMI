@@ -3,12 +3,12 @@ package app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.ui
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.resources.TextResolver
+import app.aaps.core.ui.compose.navigation.PendingNavigation
 import app.aaps.core.ui.compose.navigation.setNavigationRoute
 import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorVerdictCache
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.model.AuditorUIState
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiAuditorNotifier
-import app.aaps.plugins.aps.openAPSAIMI.tpo.OPENAPS_AIMI_PLUGIN_ROUTE
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
@@ -68,8 +68,8 @@ internal class AuditorAnnouncer(private val post: (AuditorUIState) -> Boolean) {
  * auditor has a new verdict.
  *
  * The shape follows `IosTpoNotifications`: permission is asked once and lazily, the notification
- * goes through `UNUserNotificationCenter.addNotificationRequest`, and a tap opens the AIMI
- * settings screen through `setNavigationRoute`. The words come from the shared
+ * goes through `UNUserNotificationCenter.addNotificationRequest`, and a tap opens the report
+ * through `setNavigationRoute` ([PendingNavigation.AUDITOR_REPORT_ROUTE]). The words come from the shared
  * `AuditorReportFormatter`, so both phones say the same thing.
  *
  * ## The return value
@@ -84,12 +84,11 @@ internal class AuditorAnnouncer(private val post: (AuditorUIState) -> Boolean) {
  *
  * ## What is different from Android
  *
- * Android also has an in-app notification with a "view" button that opens a report dialog. iOS
- * has only the system notification. A tap opens the AIMI settings screen, not the report: the
- * notification tap goes through a route, and the report is a dialog, not a route. The full report
- * text is in the notification body, so the content is still there. The report dialog itself is
- * opened by the shared `AuditorReportOpener` (the Glass Tools tile), which calls
- * [cancelNotification] to take this notification away.
+ * Android also has an in-app notification with a "view" button that opens a report dialog, and
+ * its system notification unfolds to the whole text. iOS shows only a few lines of the body, so a
+ * tap opens the report itself: the route becomes `NavigationRequest.AuditorReport`, and the
+ * navigator calls the shared `AuditorReportOpener` (also used by the Glass Tools tile), which shows
+ * the report and calls [cancelNotification] to take this notification away.
  */
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
@@ -134,7 +133,7 @@ class IosAuditorNotifier @Inject constructor(
             setTitle(title)
             setBody(body)
             setInterruptionLevel(UNNotificationInterruptionLevelActive)
-            setNavigationRoute(OPENAPS_AIMI_PLUGIN_ROUTE)
+            setNavigationRoute(PendingNavigation.AUDITOR_REPORT_ROUTE)
         }
         val request = UNNotificationRequest.requestWithIdentifier(
             identifier = IDENTIFIER,

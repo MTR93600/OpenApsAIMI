@@ -2,8 +2,8 @@
 <resources>
     <string name="dashboard_glass_nav_profiles">Profiles</string>
     <string name="dashboard_v2_nav_bolus">Bolus</string>
-    <string name="dashboard_glass_pump_status_line" comment="Pump line of the Glass home. %1$s=reservoir (example: 120.00 U, may be followed by Pump unreachable), %2$s=age of the cannula (example: 2d5h), %3$s=age of the sensor (example: 6d3h)">Pump: Reservoir %1$s | Site %2$s | Sensor %3$s</string>
-    <string name="dashboard_glass_pump_reservoir_unreachable" comment="%1$s=reservoir level (example: 120.00 U), %2$s=the text Pump unreachable">%1$s %2$s</string>
+    <string name="dashboard_glass_pump_status_line" comment="Pump line of the Glass home, kept short to fit one row on a small phone. %1$s=insulin left in the pump (example: 120.00 U; read aloud it may be followed by Pump unreachable), %2$s=age of the cannula (example: 2d5h), %3$s=age of the sensor (example: 6d3h)">Pump: %1$s | Site %2$s | Sensor %3$s</string>
+    <string name="dashboard_glass_pump_reservoir_unreachable" comment="Read aloud by a screen reader only. %1$s=reservoir level (example: 120.00 U), %2$s=the text Pump unreachable">%1$s %2$s</string>
     <string name="dashboard_glass_loop_dashboard_title">Loop Dashboard</string>
     <string name="dashboard_glass_sensor_quality_title">Sensor Quality</string>
     <string name="dashboard_glass_sensor_quality_empty">No smoothing quality data available. This screen shows data only when the active smoothing plugin reports it.</string>

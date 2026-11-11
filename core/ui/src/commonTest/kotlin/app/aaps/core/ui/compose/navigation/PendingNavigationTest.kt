@@ -47,6 +47,16 @@ class PendingNavigationTest {
     }
 
     @Test
+    fun theAuditorReportRouteOpensTheReport() {
+        assertEquals(NavigationRequest.AuditorReport, PendingNavigation.parseRoute(PendingNavigation.AUDITOR_REPORT_ROUTE))
+    }
+
+    @Test
+    fun aRouteThatOnlyStartsLikeTheAuditorReportIsNotIt() {
+        assertNull(PendingNavigation.parseRoute(PendingNavigation.AUDITOR_REPORT_ROUTE + "/x"))
+    }
+
+    @Test
     fun answersNullForNoRouteAtAll() {
         assertNull(PendingNavigation.parseRoute(null))
     }

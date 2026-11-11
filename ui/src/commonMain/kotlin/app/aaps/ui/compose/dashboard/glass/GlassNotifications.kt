@@ -27,6 +27,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -49,29 +51,35 @@ private val ANNOUNCEMENT_VIOLET = Color(0xFF8B5CF6)
 // ==========================================
 
 /**
- * The pump line under the charts: "Pump: Reservoir … | Site … | Sensor …". As on DEV, "pump
- * unreachable" is red, a site older than 3 days yellow and a sensor older than 8 days orange.
+ * The pump line under the charts: "Pump: … | Site … | Sensor …". The reservoir is red while the pump
+ * is unreachable, a site older than 3 days yellow and a sensor older than 8 days orange.
+ *
+ * The words "pump unreachable" are not shown, so the line stays on one row on a small phone; only
+ * the color says it. A screen reader still hears them, through the content description.
  */
 @Composable
 internal fun PumpStatusNotification(
     status: GlassPumpStatusLine,
     isDark: Boolean
 ) {
-    val reservoir = AnnotatedString(status.reservoirText)
-    val reservoirPart = status.unreachableText?.let { unreachable ->
-        formatAnnotated(
-            stringResource(UiStrings.dashboard_glass_pump_reservoir_unreachable),
-            listOf(reservoir, AnnotatedString(unreachable, SpanStyle(color = GlassColors.red))),
-        )
-    } ?: reservoir
+    val siteAge = status.siteAgeText.colored(GlassColors.metricAttention.takeIf { status.siteAgeWarning })
+    val sensorAge = status.sensorAgeText.colored(GlassColors.amber.takeIf { status.sensorAgeWarning })
     val text = formatAnnotated(
         stringResource(UiStrings.dashboard_glass_pump_status_line),
         listOf(
-            reservoirPart,
-            status.siteAgeText.colored(GlassColors.metricAttention.takeIf { status.siteAgeWarning }),
-            status.sensorAgeText.colored(GlassColors.amber.takeIf { status.sensorAgeWarning }),
+            status.reservoirText.colored(GlassColors.red.takeIf { status.unreachableText != null }),
+            siteAge,
+            sensorAge,
         ),
     )
+    val spoken = status.unreachableText?.let { unreachable ->
+        stringResource(
+            UiStrings.dashboard_glass_pump_status_line,
+            stringResource(UiStrings.dashboard_glass_pump_reservoir_unreachable, status.reservoirText, unreachable),
+            status.siteAgeText,
+            status.sensorAgeText,
+        )
+    }
 
     val shape = RoundedCornerShape(14.dp)
     val bgBrush = if (isDark) {
@@ -95,7 +103,8 @@ internal fun PumpStatusNotification(
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
             color = if (isDark) Color(0xFFE2E8F0) else Color(0xFF1E293B),
-            letterSpacing = 0.3.sp
+            letterSpacing = 0.3.sp,
+            modifier = if (spoken != null) Modifier.semantics { contentDescription = spoken } else Modifier
         )
     }
 }
