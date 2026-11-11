@@ -6,6 +6,7 @@ Start here. Older studies live under `_docs/kmp/` and are history (except the pe
 |---|---|
 | [STATUS.md](STATUS.md) | Live snapshot + lot ledger P0→P3.8 (date-stamped) |
 | [DELTA-remaining.md](DELTA-remaining.md) | Remaining work after P3 vs today’s ref tip (P4.x, drivers, Trio, product choices) |
+| [ios-presoak.md](ios-presoak.md) | iPhone ONE+/G7 pre-soak: shared scan, the switch, what a real phone must still prove |
 | [`_docs/kmp/AGENT_OPS.md`](../../_docs/kmp/AGENT_OPS.md) | Orchestrator + specialists + triple feu |
 
 Last verification: **2026-09-24** (`git fetch` + `gh`). Clinical content inventoried is `ce1384814e` (parent of this docs commit).

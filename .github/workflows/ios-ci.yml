@@ -288,6 +288,9 @@ jobs:
             :plugins:aps:iosSimulatorArm64Test \
             :plugins:sync:iosSimulatorArm64Test \
             :plugins:automation:iosSimulatorArm64Test \
+            :plugins:source:iosSimulatorArm64Test \
+            :plugins:dexcom_oneplus:iosSimulatorArm64Test \
+            :pump:medtrum:iosSimulatorArm64Test \
             | tee test.log
 
       # Every module that HAS iOS tests is checked by name. A module added to the run above but not
@@ -326,6 +329,9 @@ jobs:
           check ":plugins:aps" plugins/aps
           check ":plugins:sync" plugins/sync
           check ":plugins:automation" plugins/automation
+          check ":plugins:source" plugins/source
+          check ":plugins:dexcom_oneplus" plugins/dexcom_oneplus
+          check ":pump:medtrum" pump/medtrum
           exit $fail
 
       # The list above is written by hand, which is how three modules came to be missed: a module
@@ -362,4 +368,8 @@ jobs:
             ios/shell/build/test-results/iosSimulatorArm64Test/**
             plugins/aps/build/test-results/iosSimulatorArm64Test/**
             plugins/sync/build/test-results/iosSimulatorArm64Test/**
+            plugins/automation/build/test-results/iosSimulatorArm64Test/**
+            plugins/source/build/test-results/iosSimulatorArm64Test/**
+            plugins/dexcom_oneplus/build/test-results/iosSimulatorArm64Test/**
+            pump/medtrum/build/test-results/iosSimulatorArm64Test/**
           if-no-files-found: warn
