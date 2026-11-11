@@ -454,6 +454,7 @@
     <!-- iPhone only. Android always has the pre-soak slot and does not show this. -->
     <string name="dexcom_oneplus_ios_presoak">Pre-soak sensor on this iPhone</string>
     <string name="dexcom_oneplus_ios_presoak_summary">A second sensor can warm up beside the one that feeds the loop. Its readings stay off the loop until you promote it. Turn this off to use a single sensor again. The sensor already soaking is kept, and comes back if you turn this on.</string>
+    <string name="dexcom_oneplus_staging_needs_reconnect">No recent reading. This sensor has to connect again before it can replace the one in use. The time of the last reading is shown above.</string>
 
     <!-- Direct-to-watch: a Wear OS watch also reads the ONE+ / G7 sensor itself (Android only) -->
     <string name="dexcom_oneplus_watch_direct">Direct to watch</string>

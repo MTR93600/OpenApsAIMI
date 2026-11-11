@@ -181,9 +181,7 @@ class DexcomOnePlusIosHost(
     override fun attachProductionDriver(watcher: OnePlusGlucoseWatcher): OnePlusCgmDriver =
         OnePlusCgmDrivers.production(watcher)
 
-    /** No pre-soak driver to promote while the switch is off. */
-    override fun promoteStagingInstance(): OnePlusCgmDriver? =
-        if (iosPreSoakEnabled()) OnePlusCgmDrivers.promoteStagingInstance() else null
+    override fun promoteStagingInstance(): OnePlusCgmDriver? = OnePlusCgmDrivers.promoteStagingInstance()
 
     /**
      * Reads [DexcomOnePlusBooleanKey.IosPreSoak]. Tests replace it so they do not need a

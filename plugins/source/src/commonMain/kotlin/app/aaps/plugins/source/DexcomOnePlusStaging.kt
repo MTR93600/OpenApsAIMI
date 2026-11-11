@@ -155,6 +155,19 @@ internal object DexcomOnePlusStaging {
         return age in 0L..STAGING_MAX_EGV_AGE_MS
     }
 
+    /** How recent the newest staging reading must be before any promotion, manual or automatic. */
+    const val PROMOTION_MAX_READING_AGE_MS = 30L * 60L * 1000L
+
+    /**
+     * A promotion disconnects the sensor that feeds the loop. A staging reading older than
+     * [PROMOTION_MAX_READING_AGE_MS] is a sensor that is not talking, so it must not take over.
+     */
+    fun readingFreshForPromotion(lastValueAtEpochMs: Long?, nowMs: Long): Boolean {
+        if (lastValueAtEpochMs == null || lastValueAtEpochMs <= 0L) return false
+        val age = nowMs - lastValueAtEpochMs
+        return age in 0L until PROMOTION_MAX_READING_AGE_MS
+    }
+
     /**
      * Feed one driver warm-up phase into the staging warm-up latch.
      *

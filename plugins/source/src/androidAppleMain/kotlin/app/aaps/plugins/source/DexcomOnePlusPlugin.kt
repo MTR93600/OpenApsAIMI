@@ -218,6 +218,9 @@ class DexcomOnePlusPlugin @Inject constructor(
     /** The same net for the pre-soak slot. The production watchdog never asks for that sensor. */
     private var stagingReconnectWatchdog: Job? = null
 
+    /** Guards [stagingReconnectWatchdog]. The session thread and the UI both arm and cancel it. */
+    private val stagingWatchdogLock = AapsLock()
+
     /**
      * Recomputes the pre-soak card as time passes. The state used to be written only when a reading
      * arrived, so a sensor that went quiet before the twelve hours were up stayed on "Settling"
@@ -949,8 +952,7 @@ class DexcomOnePlusPlugin @Inject constructor(
      * same net, aimed at the other driver, and it never touches the sensor that feeds the loop.
      */
     private fun armStagingReconnectWatchdog() {
-        stagingReconnectWatchdog?.cancel()
-        stagingReconnectWatchdog = ioScope()?.launch {
+        val next = ioScope()?.launch {
             delay(RECONNECT_WATCHDOG_MS)
             if (!host.supportsStaging) return@launch
             if (stagingDriver.isSessionUp()) return@launch
@@ -963,12 +965,22 @@ class DexcomOnePlusPlugin @Inject constructor(
             host.attachPlatform(real)
             real.addWatcher(stagingWatcher)
             real.resumeStoredSession()
+        } ?: return
+        val previous = stagingWatchdogLock.withLock {
+            val old = stagingReconnectWatchdog
+            stagingReconnectWatchdog = next
+            old
         }
+        previous?.cancel()
     }
 
     private fun cancelStagingReconnectWatchdog() {
-        stagingReconnectWatchdog?.cancel()
-        stagingReconnectWatchdog = null
+        val previous = stagingWatchdogLock.withLock {
+            val old = stagingReconnectWatchdog
+            stagingReconnectWatchdog = null
+            old
+        }
+        previous?.cancel()
     }
 
     /** Re-reads the soak clock while a pre-soak sensor is present. See [stagingClock]. */
@@ -1349,6 +1361,11 @@ class DexcomOnePlusPlugin @Inject constructor(
             if (_stagingState.value != StagingState.READY)
                 return rejectPromotion(PromotionRejectReason.STAGING_NOT_SETTLED, allowEarly)
         }
+        // A silent pre-soak must not replace the sensor that feeds the loop. The card is recomputed
+        // from the clock, so READY can be true with no recent reading. Thirty minutes is the gate
+        // for every promotion, the button and the automatic switch alike.
+        if (!DexcomOnePlusStaging.readingFreshForPromotion(stagingLastValueAtMs, nowMs()))
+            return rejectPromotion(PromotionRejectReason.STAGING_NO_RECENT_GLUCOSE, allowEarly)
 
         aapsLogger.info(
             LTag.BGSOURCE,

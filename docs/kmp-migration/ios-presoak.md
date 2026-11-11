@@ -60,10 +60,11 @@ Checked in the shared state machine, which Android and iPhone both use.
   driver. If the pre-soak session thread exited, nothing asked again until the next plugin
   start. The pre-soak slot now has the same watchdog, and it never touches the production driver.
 
-Ready still does not require a fresh reading. After this fix a soaked sensor whose last reading
-is old shows Promote. The card still shows that time. Promoting a silent sensor is the same
-decision the normal button already allowed; the early button stays hidden while the last reading
-is older than 20 minutes.
+Ready does not look at the last reading when it chooses the label. Promotion does. Any
+promotion, the button and the automatic switch, needs a staging reading younger than 30 minutes.
+A card whose last reading is older hides Promote and says the sensor has to connect again. The
+time of that reading stays on the card. The early button stays hidden while the last reading is
+older than 20 minutes.
 
 ## Still to validate on a real iPhone with two sensors
 

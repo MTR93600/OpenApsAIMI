@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -109,30 +110,43 @@ class DexcomOnePlusStatusViewModel(
         }
     }
 
+    /**
+     * Whether the pre-soak card is shown. On iPhone this follows the switch as it changes.
+     * Android always has the slot, so the flow emits once.
+     */
+    private val stagingSupportedTicks: Flow<Boolean> =
+        if (host.offersIosPreSoakSwitch) preferences.observe(DexcomOnePlusBooleanKey.IosPreSoak)
+        else flowOf(host.supportsStaging)
+
     val input: StateFlow<DexcomOnePlusStatusInput?> = combine(
-        driverTicks,
-        glucoseTicks,
-        plugin.stagingState,
-        plugin.stagingEvidence,
-        plugin.lifecycle,
-    ) { driver, glucose, stagingState, stagingEvidence, lifecycle ->
-        DexcomOnePlusStatusInput(
-            phase = driver.state.phase,
-            driverMessage = driver.state.message,
-            sessionUp = driver.sessionUp,
-            lifecycle = lifecycle,
-            newestGlucose = glucose,
-            calibrationOutcome = driver.calibrationOutcome,
-            calibrationWaiting = driver.calibrationWaiting,
-            sendCalibrationToSensor = driver.sendCalibrationToSensor,
-            correctSensorStartEnabled = driver.correctSensorStartEnabled,
-            stagingSupported = host.supportsStaging,
-            stagingState = stagingState,
-            stagingEvidence = stagingEvidence,
-            nowMs = driver.nowMs,
-            sensor = driver.sensor,
-            warmupEndsAtMs = driver.state.endsAtEpochMs,
-        )
+        combine(
+            driverTicks,
+            glucoseTicks,
+            plugin.stagingState,
+            plugin.stagingEvidence,
+            plugin.lifecycle,
+        ) { driver, glucose, stagingState, stagingEvidence, lifecycle ->
+            DexcomOnePlusStatusInput(
+                phase = driver.state.phase,
+                driverMessage = driver.state.message,
+                sessionUp = driver.sessionUp,
+                lifecycle = lifecycle,
+                newestGlucose = glucose,
+                calibrationOutcome = driver.calibrationOutcome,
+                calibrationWaiting = driver.calibrationWaiting,
+                sendCalibrationToSensor = driver.sendCalibrationToSensor,
+                correctSensorStartEnabled = driver.correctSensorStartEnabled,
+                stagingSupported = false,
+                stagingState = stagingState,
+                stagingEvidence = stagingEvidence,
+                nowMs = driver.nowMs,
+                sensor = driver.sensor,
+                warmupEndsAtMs = driver.state.endsAtEpochMs,
+            )
+        },
+        stagingSupportedTicks,
+    ) { draft, stagingSupported ->
+        draft.copy(stagingSupported = stagingSupported)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000L), null)
 
     private val _promoteResult = MutableStateFlow<TextRef?>(null)

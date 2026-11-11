@@ -117,6 +117,11 @@ data class DexcomOnePlusStagingCard(
     val lastValueMgdl: Double?,
     val lastValueAtMs: Long?,
     val promote: DexcomOnePlusPromoteOffer,
+    /**
+     * The last reading is too old to promote. The card says the sensor has to connect again.
+     * The time of that reading is [lastValueAtMs].
+     */
+    val needsReconnect: Boolean = false,
 )
 
 /**
@@ -467,23 +472,29 @@ object DexcomOnePlusStatusState {
 
     private fun stagingCard(input: DexcomOnePlusStatusInput): DexcomOnePlusStagingCard {
         val evidence = input.stagingEvidence
+        val fresh = DexcomOnePlusStaging.readingFreshForPromotion(evidence?.lastValueAtEpochMs, input.nowMs)
         val promote = when {
             input.stagingState == StagingState.ABSENT -> DexcomOnePlusPromoteOffer.NONE
-            input.stagingState == StagingState.READY  -> DexcomOnePlusPromoteOffer.NORMAL
+            // A silent sensor must not be offered: promoting it would drop the one that feeds the loop.
+            input.stagingState == StagingState.READY && fresh -> DexcomOnePlusPromoteOffer.NORMAL
             // The way out when the production sensor stops before the soak ends - see canPromoteEarly.
-            DexcomOnePlusStaging.canPromoteEarly(
+            input.stagingState != StagingState.READY && DexcomOnePlusStaging.canPromoteEarly(
                 validEgvCount = evidence?.validCount ?: 0,
                 lastValueAtEpochMs = evidence?.lastValueAtEpochMs,
                 nowMs = input.nowMs,
             )                                         -> DexcomOnePlusPromoteOffer.EARLY
             else                                      -> DexcomOnePlusPromoteOffer.NONE
         }
+        val needsReconnect = input.stagingState != StagingState.ABSENT &&
+            input.stagingState != StagingState.WARMUP &&
+            !fresh
         return DexcomOnePlusStagingCard(
             state = input.stagingState,
             validCount = evidence?.validCount ?: 0,
             lastValueMgdl = evidence?.lastValueMgdl,
             lastValueAtMs = evidence?.lastValueAtEpochMs,
             promote = promote,
+            needsReconnect = needsReconnect,
         )
     }
 

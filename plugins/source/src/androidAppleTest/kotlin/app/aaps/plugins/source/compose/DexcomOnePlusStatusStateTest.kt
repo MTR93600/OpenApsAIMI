@@ -382,15 +382,23 @@ class DexcomOnePlusStatusStateTest {
     @Test
     fun promoteOfferFollowsTheSlotState() {
         fun offer(state: StagingState, evidence: CgmStagingEvidence? = null) =
-            DexcomOnePlusStatusState.build(input(stagingState = state, stagingEvidence = evidence), format, actions).staging?.promote
+            DexcomOnePlusStatusState.build(input(stagingState = state, stagingEvidence = evidence), format, actions).staging
 
-        assertEquals(DexcomOnePlusPromoteOffer.NONE, offer(StagingState.ABSENT))
-        assertEquals(DexcomOnePlusPromoteOffer.NORMAL, offer(StagingState.READY))
-        assertEquals(DexcomOnePlusPromoteOffer.NONE, offer(StagingState.SETTLING))
-        val alive = CgmStagingEvidence(validCount = 100, lastValueMgdl = 110.0, lastValueAtEpochMs = NOW - 60_000L)
-        assertEquals(DexcomOnePlusPromoteOffer.EARLY, offer(StagingState.SETTLING, alive))
-        val silent = alive.copy(lastValueAtEpochMs = NOW - 2 * HOUR)
-        assertEquals(DexcomOnePlusPromoteOffer.NONE, offer(StagingState.SETTLING, silent))
+        val absent = offer(StagingState.ABSENT)
+        assertEquals(DexcomOnePlusPromoteOffer.NONE, absent?.promote)
+        val fresh = CgmStagingEvidence(validCount = 100, lastValueMgdl = 110.0, lastValueAtEpochMs = NOW - 60_000L)
+        val ready = offer(StagingState.READY, fresh)
+        assertEquals(DexcomOnePlusPromoteOffer.NORMAL, ready?.promote)
+        assertEquals(false, ready?.needsReconnect)
+        assertEquals(DexcomOnePlusPromoteOffer.NONE, offer(StagingState.SETTLING)?.promote)
+        assertEquals(DexcomOnePlusPromoteOffer.EARLY, offer(StagingState.SETTLING, fresh)?.promote)
+        val silent = fresh.copy(lastValueAtEpochMs = NOW - 2 * HOUR)
+        val settlingSilent = offer(StagingState.SETTLING, silent)
+        assertEquals(DexcomOnePlusPromoteOffer.NONE, settlingSilent?.promote)
+        assertEquals(true, settlingSilent?.needsReconnect)
+        val readySilent = offer(StagingState.READY, silent)
+        assertEquals(DexcomOnePlusPromoteOffer.NONE, readySilent?.promote)
+        assertEquals(true, readySilent?.needsReconnect)
     }
 
     @Test

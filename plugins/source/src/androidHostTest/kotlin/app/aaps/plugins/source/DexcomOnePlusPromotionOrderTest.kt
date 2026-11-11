@@ -167,6 +167,19 @@ class DexcomOnePlusPromotionOrderTest : TestBase() {
     }
 
     @Test
+    fun `a long soak with a stale reading writes nothing irreversible`() = runTest {
+        readyStaging(mac = "AA:BB:CC:DD:EE:29", ageMs = 13L * 60L * 60L * 1000L)
+        setPrivate("stagingLastValueAtMs", System.currentTimeMillis() - 31L * 60L * 1000L)
+        setStagingState(StagingState.READY)
+        val stagingBefore = stagingPrefs.all.toMap()
+
+        val result = plugin.promoteStagingToProduction(allowEarly = false)
+
+        assertThat(result).isEqualTo(PromotionResult.Rejected(PromotionRejectReason.STAGING_NO_RECENT_GLUCOSE))
+        assertNothingIrreversible(stagingBefore)
+    }
+
+    @Test
     fun `the bound runs after the exchange and before select`() = runTest {
         whenever(preferences.get(BooleanKey.BgSourceCreateSensorChange)).thenReturn(true)
         val startMs = System.currentTimeMillis() - 60_000L

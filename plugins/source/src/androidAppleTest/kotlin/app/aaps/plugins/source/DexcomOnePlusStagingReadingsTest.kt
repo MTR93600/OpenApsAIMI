@@ -165,6 +165,14 @@ class DexcomOnePlusStagingReadingsTest {
     }
 
     @Test
+    fun aReadingThirtyMinutesOldCannotBePromoted() {
+        val limit = DexcomOnePlusStaging.PROMOTION_MAX_READING_AGE_MS
+        assertTrue(DexcomOnePlusStaging.readingFreshForPromotion(now - limit + 1L, now))
+        assertFalse(DexcomOnePlusStaging.readingFreshForPromotion(now - limit, now))
+        assertFalse(DexcomOnePlusStaging.readingFreshForPromotion(null, now))
+    }
+
+    @Test
     fun theIphonePreSoakSwitchIsOnByDefault() {
         assertTrue(DexcomOnePlusBooleanKey.IosPreSoak.defaultValue)
         assertEquals("dexcom_oneplus_ios_presoak", DexcomOnePlusBooleanKey.IosPreSoak.key)
