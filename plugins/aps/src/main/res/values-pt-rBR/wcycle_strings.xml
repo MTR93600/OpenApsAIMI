@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Switch title & summary -->
+    <string name="wcycle_preferences" formatted="false">Women Cycle</string>
+    <string name="wcycle_preferences_title_menu" formatted="false">Ciclo feminino</string>
+    <string name="wcycle_enable_title" formatted="false">Ativar ajuste de ciclo</string>
+    <string name="wcycle_enable_summary" formatted="false">Aplicar multiplicadores de basal/SMB de acordo com a fase</string>
+
+    <!-- Tracking mode -->
+    <string name="wcycle_tracking_mode_title" formatted="false">Modo de acompanhamento</string>
+    <string-array name="wcycle_tracking_entries">
+        <item>Fixo de 28 dias</item>
+        <item>Calendário variável</item>
+        <item>Sem menstruação (LARC)</item>
+        <item>Perimenopausa</item>
+        <item>Menopausa</item>
+    </string-array>
+    <string-array name="wcycle_tracking_values">
+        <item>FIXED_28</item>
+        <item>CALENDAR_VARIABLE</item>
+        <item>NO_MENSES_LARC</item>
+        <item>PERIMENOPAUSE</item>
+        <item>MENOPAUSE</item>
+    </string-array>
+
+    <!-- Contraceptive -->
+    <string name="wcycle_contraceptive_title" formatted="false">Contracepção</string>
+    <string-array name="wcycle_contraceptive_entries">
+        <item>Nenhuma</item>
+        <item>Pílula combinada (COC)</item>
+        <item>Pílula de progestagénio (POP)</item>
+        <item>DIU hormonal</item>
+        <item>DIU de cobre</item>
+        <item>Implante</item>
+        <item>Injeção</item>
+        <item>Anel</item>
+        <item>Adesivo</item>
+    </string-array>
+    <string-array name="wcycle_contraceptive_values">
+        <item>NONE</item>
+        <item>COC_PILL</item>
+        <item>POP_PILL</item>
+        <item>HORMONAL_IUD</item>
+        <item>COPPER_IUD</item>
+        <item>IMPLANT</item>
+        <item>INJECTION</item>
+        <item>RING</item>
+        <item>PATCH</item>
+    </string-array>
+
+    <!-- Thyroid -->
+    <string name="wcycle_thyroid_title" formatted="false">Tireoide</string>
+    <string-array name="wcycle_thyroid_entries">
+        <item>Eutireóide</item>
+        <item>Hipotireoidismo tratado</item>
+        <item>Hashimoto</item>
+        <item>Tireoidectomia</item>
+    </string-array>
+    <string-array name="wcycle_thyroid_values">
+        <item>EUTHYROID</item>
+        <item>HYPOTHYROID_TREATED</item>
+        <item>HASHIMOTO</item>
+        <item>THYROIDECTOMY</item>
+    </string-array>
+
+    <!-- Verneuil -->
+    <string name="wcycle_verneuil_title" formatted="false">Hidradenite supurativa (Verneuil)</string>
+    <string-array name="wcycle_verneuil_entries">
+        <item>Nenhuma</item>
+        <item>Inativa</item>
+        <item>Ativa</item>
+        <item>Crise</item>
+    </string-array>
+    <string-array name="wcycle_verneuil_values">
+        <item>NONE</item>
+        <item>QUIESCENT</item>
+        <item>ACTIVE</item>
+        <item>FLARE</item>
+    </string-array>
+
+    <!-- Inputs -->
+    <string name="wcycle_start_dom_title" formatted="false">Dia de início (1–31)</string>
+    <string name="wcycle_avg_len_title" formatted="false">Duração média do ciclo</string>
+    <string name="wcycle_shadow_title" formatted="false">Modo shadow (não aplica)</string>
+    <string name="wcycle_confirm_title" formatted="false">Pedir confirmação</string>
+    <string name="wcycle_clamp_min_title" formatted="false">Limite mín. (≤ 1.0)</string>
+    <string name="wcycle_clamp_max_title" formatted="false">Limite máx. (≥ 1.0)</string>
+</resources>
