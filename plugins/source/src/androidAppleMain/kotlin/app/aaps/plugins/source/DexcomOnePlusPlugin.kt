@@ -215,6 +215,19 @@ class DexcomOnePlusPlugin @Inject constructor(
      */
     private var reconnectWatchdog: Job? = null
 
+    /** The same net for the pre-soak slot. The production watchdog never asks for that sensor. */
+    private var stagingReconnectWatchdog: Job? = null
+
+    /**
+     * Recomputes the pre-soak card as time passes. The state used to be written only when a reading
+     * arrived, so a sensor that went quiet before the twelve hours were up stayed on "Settling"
+     * with no promote button after the soak had in fact ended.
+     */
+    private var stagingClock: Job? = null
+
+    /** Collects [DexcomOnePlusBooleanKey.IosPreSoak] on iPhone. Null on Android. */
+    private var iosPreSoakWatcher: Job? = null
+
     private val driver: OnePlusCgmDriver
         get() = host.productionDriver()
 
@@ -320,8 +333,11 @@ class DexcomOnePlusPlugin @Inject constructor(
     /** Latched once the staging sensor has left warm-up; survives restarts through the slot store. */
     @Volatile private var stagingWarmupDone = false
 
-    /** Count of valid staging EGVs collected (promotion gate). */
+    /** Count of valid staging EGVs collected (promotion gate). Distinct moments, not backfill replays. */
     @Volatile private var stagingValidEgvCount = 0
+
+    /** Timestamp of the newest staging reading already included in [stagingValidEgvCount]. 0 = none. */
+    @Volatile private var stagingNewestCountedMs = 0L
 
     /** Last reading collected from the staging sensor (mg/dL), for the evidence surface. */
     @Volatile private var stagingLastValueMgdl: Double? = null
@@ -366,6 +382,8 @@ class DexcomOnePlusPlugin @Inject constructor(
         override fun onGlucose(sample: OnePlusGlucoseSample) = handleStagingGlucose(sample)
         override fun onSession(up: Boolean, reason: String?) {
             aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_STAGING: session up=$up reason=$reason")
+            if (DexcomOnePlusStaging.slotShouldBeAskedAgain(up, reason)) armStagingReconnectWatchdog()
+            else cancelStagingReconnectWatchdog()
         }
 
         override fun onError(message: String, fatal: Boolean) {
@@ -443,6 +461,8 @@ class DexcomOnePlusPlugin @Inject constructor(
             // Sensor age on the dashboard comes from the SENSOR_CHANGE therapy event this writes.
             BooleanKey.BgSourceCreateSensorChange,
         ) + listOfNotNull(
+            // iPhone only. Android does not offer it and does not read it.
+            DexcomOnePlusBooleanKey.IosPreSoak.takeIf { host.offersIosPreSoakSwitch },
             // Only where a watch link exists. An iPhone does not offer it; its description says why.
             DexcomOnePlusBooleanKey.WatchDirect.takeIf { watchHandover.isSupported },
         ),
@@ -498,6 +518,8 @@ class DexcomOnePlusPlugin @Inject constructor(
         // Driven by the warm-up state on ioScope so it works in standby without any Activity; stops
         // forcing the moment warm-up ends (status → null), letting the normal loop reclaim dosing.
         watchRadioLease()
+        watchStagingClock()
+        watchIosPreSoakSwitch()
         ioScope()?.let { watchHandover.start(it) }
         warmupGuardJob?.cancel()
         warmupGuardJob = ioScope()?.launch {
@@ -613,6 +635,9 @@ class DexcomOnePlusPlugin @Inject constructor(
         // Before the drivers go: the watch lets the sensor go too.
         stopStep("watch handover stop") { watchHandover.stop() }
         stopStep("watchdog cancel") { cancelReconnectWatchdog() }
+        stopStep("staging watchdog cancel") { cancelStagingReconnectWatchdog() }
+        stopStep("staging clock cancel") { stagingClock?.cancel(); stagingClock = null }
+        stopStep("ios pre-soak switch cancel") { iosPreSoakWatcher?.cancel(); iosPreSoakWatcher = null }
         stopStep("radio lease watcher cancel") { radioLeaseWatcher?.cancel() }
         radioLeaseWatcher = null
         stopStep("warm-up guard cancel") { warmupGuardJob?.cancel() }
@@ -882,9 +907,8 @@ class DexcomOnePlusPlugin @Inject constructor(
         // A session that ended because someone asked for it must stay ended. Everything else — a
         // lost link, an error, the EGV loop falling out — is a candidate for the watchdog.
         when {
-            up                            -> cancelReconnectWatchdog()
-            reason in DELIBERATE_STOPS    -> cancelReconnectWatchdog()
-            else                          -> armReconnectWatchdog()
+            DexcomOnePlusStaging.slotShouldBeAskedAgain(up, reason) -> armReconnectWatchdog()
+            else                                                    -> cancelReconnectWatchdog()
         }
         // A new sensor, or a new key after a re-pairing: the watch must follow. Sends only on a change.
         ioScope()?.launch { watchHandover.refresh(if (up) "session up" else "session down") }
@@ -915,6 +939,125 @@ class DexcomOnePlusPlugin @Inject constructor(
     private fun cancelReconnectWatchdog() {
         reconnectWatchdog?.cancel()
         reconnectWatchdog = null
+    }
+
+    /**
+     * Asks for the pre-soak link again when that slot's own session has been down for a while.
+     *
+     * The production watchdog only calls [DexcomOnePlusHost.productionDriver]. A pre-soak whose
+     * session thread had exited stayed down until the next time the plugin started. This is the
+     * same net, aimed at the other driver, and it never touches the sensor that feeds the loop.
+     */
+    private fun armStagingReconnectWatchdog() {
+        stagingReconnectWatchdog?.cancel()
+        stagingReconnectWatchdog = ioScope()?.launch {
+            delay(RECONNECT_WATCHDOG_MS)
+            if (!host.supportsStaging) return@launch
+            if (stagingDriver.isSessionUp()) return@launch
+            if (!stagingStore.loadSlotPresent()) return@launch
+            aapsLogger.info(
+                LTag.BGSOURCE,
+                "DEXCOM_ONEPLUS_STAGING: session still down after ${RECONNECT_WATCHDOG_MS / 60_000} min, asking again",
+            )
+            val real = stagingDriver
+            host.attachPlatform(real)
+            real.addWatcher(stagingWatcher)
+            real.resumeStoredSession()
+        }
+    }
+
+    private fun cancelStagingReconnectWatchdog() {
+        stagingReconnectWatchdog?.cancel()
+        stagingReconnectWatchdog = null
+    }
+
+    /** Re-reads the soak clock while a pre-soak sensor is present. See [stagingClock]. */
+    private fun watchStagingClock() {
+        stagingClock?.cancel()
+        stagingClock = ioScope()?.launch {
+            while (true) {
+                delay(STAGING_CLOCK_MS)
+                if (!stagingPresent) continue
+                refreshStagingLifecycle()
+                refreshStagingState()
+            }
+        }
+    }
+
+    /**
+     * Follows the iPhone pre-soak switch. Android does not offer it ([DexcomOnePlusHost.offersIosPreSoakSwitch]
+     * is false) and this does nothing there.
+     *
+     * Off stops the second driver and hides the slot, and leaves the stored soak alone so turning
+     * the switch back on resumes the same sensor. On resumes a stored pre-soak that is not already running.
+     */
+    private fun watchIosPreSoakSwitch() {
+        if (!host.offersIosPreSoakSwitch) return
+        iosPreSoakWatcher?.cancel()
+        iosPreSoakWatcher = ioScope()?.launch {
+            preferences.observe(DexcomOnePlusBooleanKey.IosPreSoak).collect { enabled ->
+                if (enabled) {
+                    if (!stagingPresent) resumeStagingSessionIfStored()
+                } else {
+                    pauseStagingSlot()
+                }
+            }
+        }
+    }
+
+    /**
+     * Stops the pre-soak driver without forgetting the sensor.
+     *
+     * This is the switch, not [cancelStaging]: cancel wipes the soak clock, and a switch the user
+     * turns off because of a radio problem must not throw that clock away.
+     */
+    private fun pauseStagingSlot() {
+        cancelStagingReconnectWatchdog()
+        host.existingStagingDriver()?.let { staging ->
+            runCatching { staging.removeWatcher(stagingWatcher) }
+            runCatching { staging.disconnect() }
+            runCatching { staging.shutdown() }
+        }
+        stagingPresent = false
+        stagingWarming = false
+        _stagingWarmup.value = null
+        _stagingLifecycle.value = null
+        _stagingEvidence.value = null
+        _stagingState.value = StagingState.ABSENT
+        _stagingSettleRemainingMs.value = null
+        refreshSessionService()
+        aapsLogger.info(
+            LTag.BGSOURCE,
+            "DEXCOM_ONEPLUS_STAGING: paused, the stored pre-soak sensor was kept",
+        )
+    }
+
+    /**
+     * Loads the pre-soak total and its high-water mark, repairing a total that backfill replays
+     * inflated before the mark existed.
+     */
+    private fun restoreStagingProgress() {
+        val storedCount = stagingStore.loadSlotValidEgvCount()
+        val storedNewest = stagingStore.loadSlotNewestEgvMs()
+        val repaired = DexcomOnePlusStaging.repairCollectedCount(
+            storedCount = storedCount,
+            newestCountedMs = storedNewest,
+            sessionStartMs = stagingStore.loadSessionStart(),
+            nowMs = nowMs(),
+        )
+        stagingValidEgvCount = repaired.count
+        stagingNewestCountedMs = repaired.newestCountedMs
+        if (repaired.count != storedCount || repaired.newestCountedMs != storedNewest) {
+            stagingStore.saveSlotProgress(
+                present = true,
+                validEgvCount = repaired.count,
+                newestEgvMs = repaired.newestCountedMs,
+            )
+            aapsLogger.info(
+                LTag.BGSOURCE,
+                "DEXCOM_ONEPLUS_STAGING: reading count repaired from $storedCount to ${repaired.count}",
+            )
+        }
     }
 
     /**
@@ -984,6 +1127,7 @@ class DexcomOnePlusPlugin @Inject constructor(
         stagingPresent = false
         stagingWarmupDone = false
         stagingValidEgvCount = 0
+        stagingNewestCountedMs = 0L
         stagingLastValueMgdl = null
         stagingLastValueAtMs = null
         stagingBufferLock.withLock { stagingBuffer.clear() }
@@ -1022,6 +1166,10 @@ class DexcomOnePlusPlugin @Inject constructor(
             aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_STAGING: refused, the plugin is stopped")
             return false
         }
+        if (!host.supportsStaging) {
+            aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_STAGING: refused, pre-soak is off on this phone")
+            return false
+        }
         // Like onSensorSessionStarted, and before the early return: a pre-soak started while
         // production is stopped is still a Bluetooth session, and without this it would run its GATT
         // link with no foreground service at all.
@@ -1049,12 +1197,13 @@ class DexcomOnePlusPlugin @Inject constructor(
             // Another sensor: everything the previous soak collected is void.
             stagingWarmupDone = false
             stagingValidEgvCount = 0
+            stagingNewestCountedMs = 0L
             stagingLastValueMgdl = null
             stagingLastValueAtMs = null
             stagingBufferLock.withLock { stagingBuffer.clear() }
             // Durability: a restart must be able to tell "a staging sensor is warming" from "no
             // staging sensor" — see resumeStagingSessionIfStored.
-            stagingStore.saveSlotProgress(present = true, validEgvCount = 0)
+            stagingStore.saveSlotProgress(present = true, validEgvCount = 0, newestEgvMs = 0L)
             stagingStore.saveSlotWarmupDone(false)
             _stagingWarmup.value = null
         } else {
@@ -1062,8 +1211,7 @@ class DexcomOnePlusPlugin @Inject constructor(
             // its soak clock, so its progress must be kept too: resetting it sent a settled slot back
             // to warm-up and hid the promote button for another ~30 min for nothing.
             stagingWarmupDone = stagingStore.loadSlotWarmupDone()
-            stagingValidEgvCount = stagingStore.loadSlotValidEgvCount()
-            stagingStore.saveSlotProgress(present = true, validEgvCount = stagingValidEgvCount)
+            restoreStagingProgress()
         }
         stagingWarming = !stagingWarmupDone
         refreshStagingLifecycle()
@@ -1083,6 +1231,7 @@ class DexcomOnePlusPlugin @Inject constructor(
      * ABSENT. Never publishes to the loop: promotion stays an explicit user action.
      */
     private fun resumeStagingSessionIfStored(): Boolean {
+        if (!host.supportsStaging) return false
         if (!stagingStore.loadSlotPresent()) return false
         host.attachPlatform(stagingDriver)
         stagingDriver.addWatcher(stagingWatcher)
@@ -1110,7 +1259,7 @@ class DexcomOnePlusPlugin @Inject constructor(
             return false
         }
         stagingPresent = true
-        stagingValidEgvCount = stagingStore.loadSlotValidEgvCount()
+        restoreStagingProgress()
         // A settled sensor must not be shown as warming again after a restart — the latch is durable.
         stagingWarmupDone = stagingStore.loadSlotWarmupDone()
         stagingWarming = !stagingWarmupDone
@@ -1133,6 +1282,7 @@ class DexcomOnePlusPlugin @Inject constructor(
      * now), so there is nothing here to tear down.
      */
     fun cancelStaging() {
+        cancelStagingReconnectWatchdog()
         runCatching { stagingDriver.removeWatcher(stagingWatcher) }
         runCatching { stagingDriver.disconnect() }
         runCatching { stagingDriver.shutdown() }
@@ -1144,6 +1294,7 @@ class DexcomOnePlusPlugin @Inject constructor(
         stagingWarming = false
         stagingWarmupDone = false
         stagingValidEgvCount = 0
+        stagingNewestCountedMs = 0L
         stagingLastValueMgdl = null
         stagingLastValueAtMs = null
         stagingBufferLock.withLock { stagingBuffer.clear() }
@@ -1178,6 +1329,7 @@ class DexcomOnePlusPlugin @Inject constructor(
 
     /** The promotion itself. Call it only while holding [promoteMutex]. */
     private suspend fun promoteLocked(allowEarly: Boolean, byAuto: Boolean): PromotionResult {
+        cancelStagingReconnectWatchdog()
         if (!stagingPresent) return rejectPromotion(PromotionRejectReason.STAGING_ABSENT, allowEarly)
         if (stagingValidEgvCount < DexcomOnePlusStaging.STAGING_MIN_VALID_EGV)
             return rejectPromotion(PromotionRejectReason.STAGING_NO_VALID_GLUCOSE, allowEarly)
@@ -1230,6 +1382,7 @@ class DexcomOnePlusPlugin @Inject constructor(
         stagingWarming = false
         stagingWarmupDone = false
         stagingValidEgvCount = 0
+        stagingNewestCountedMs = 0L
         stagingLastValueMgdl = null
         stagingLastValueAtMs = null
         stagingBufferLock.withLock { stagingBuffer.clear() }
@@ -1373,6 +1526,15 @@ class DexcomOnePlusPlugin @Inject constructor(
         // promoteStagingToProduction), so from that moment this is only ever called for a genuinely
         // new pre-soak.
         if (!stagingPresent) return
+        val decision = DexcomOnePlusStaging.acceptCollectedReading(stagingNewestCountedMs, sample.timestampMs)
+        if (!decision.accepted) {
+            aapsLogger.debug(
+                LTag.BGSOURCE,
+                "DEXCOM_ONEPLUS_STAGING: duplicate ${sample.mgdl.toInt()} @${sample.timestampMs} ignored " +
+                    "(count=$stagingValidEgvCount stays, not published)",
+            )
+            return
+        }
         // Collect-only: buffer for QA / dashboard, NEVER insertCgmSourceData (invariant I2).
         stagingBufferLock.withLock {
             stagingBuffer.addLast(sample.timestampMs to sample.mgdl)
@@ -1380,11 +1542,16 @@ class DexcomOnePlusPlugin @Inject constructor(
         }
         // A collected reading is proof warm-up is over, even if no READY phase was ever emitted.
         markStagingWarmupDone()
+        stagingNewestCountedMs = decision.newestCountedMs
         stagingValidEgvCount++
         stagingLastValueMgdl = sample.mgdl
         stagingLastValueAtMs = sample.timestampMs
         // Survive a restart with the promotion gate intact (the count is the gate, plan §8).
-        stagingStore.saveSlotProgress(present = true, validEgvCount = stagingValidEgvCount)
+        stagingStore.saveSlotProgress(
+            present = true,
+            validEgvCount = stagingValidEgvCount,
+            newestEgvMs = stagingNewestCountedMs,
+        )
         refreshStagingLifecycle()
         refreshStagingState()
         refreshStagingEvidence()
@@ -1602,13 +1769,10 @@ class DexcomOnePlusPlugin @Inject constructor(
         /** How long the session may stay down before the plugin asks for a connection again. */
         private const val RECONNECT_WATCHDOG_MS = 5L * 60L * 1000L
 
+        /** How often the pre-soak card is recomputed from the clock while a sensor is soaking. */
+        private const val STAGING_CLOCK_MS = 60L * 1000L
+
         /** Two of the sensor's five minute connect windows, and a little more. */
         private val TRANSFER_FIND_TIMEOUT = 11.minutes
-
-        /**
-         * Session-end reasons the user or the app asked for. The watchdog must not undo those; every
-         * other reason is a link that went away on its own and is worth chasing.
-         */
-        private val DELIBERATE_STOPS = setOf("disconnect", "shutdown", "cancelled")
     }
 }
