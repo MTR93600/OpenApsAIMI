@@ -123,4 +123,70 @@ class UserDefaultsMigrationTest {
     fun `nothing in NSUserDefaults opens an empty store`() {
         assertEquals(emptyMap<String, Any>(), open().getAll())
     }
+
+    @Test
+    fun `the Medtrum driver keys stay in NSUserDefaults`() {
+        defaults.setObject("mmol", forKey = "units")
+        defaults.setInteger(136, forKey = "medtrum.patchId")
+        defaults.setObject("abc123", forKey = "medtrum.actualBasalProfile")
+
+        val store = open()
+
+        assertEquals("mmol", store.getString("units", ""))
+        assertEquals(136L, defaults.integerForKey("medtrum.patchId"))
+        assertEquals("abc123", defaults.stringForKey("medtrum.actualBasalProfile"))
+        assertFalse(store.contains("medtrum.patchId"))
+    }
+
+    @Test
+    fun `after one move nothing written later moves`() {
+        defaults.setObject("mmol", forKey = "units")
+        open()
+        // Written after the move by code that is not the settings, on a later run.
+        defaults.setObject("kept", forKey = "written_later")
+
+        val store = open()
+
+        assertEquals("kept", defaults.stringForKey("written_later"))
+        assertFalse(store.contains("written_later"))
+    }
+
+    @Test
+    fun `Medtrum keys an older build moved are given back and leave the store`() {
+        open().apply {
+            putString("units", "mmol")
+            putLong("medtrum.pumpSN", 571_231_972L)
+            putLong("medtrum.pumpState", 32L)
+            putDouble("medtrum.reservoir", 173.95)
+            putBoolean("medtrum.desiredPatchExpiration", true)
+            putString("medtrum.actualBasalProfile", "abc123")
+            flush()
+        }
+
+        val store = open()
+
+        assertEquals(571_231_972L, defaults.integerForKey("medtrum.pumpSN"))
+        assertEquals(32L, defaults.integerForKey("medtrum.pumpState"))
+        assertEquals(173.95, defaults.doubleForKey("medtrum.reservoir"))
+        assertTrue(defaults.boolForKey("medtrum.desiredPatchExpiration"))
+        assertEquals("abc123", defaults.stringForKey("medtrum.actualBasalProfile"))
+        assertFalse(store.contains("medtrum.pumpSN"))
+        assertFalse(store.contains("medtrum.actualBasalProfile"))
+        assertEquals("mmol", store.getString("units", ""))
+    }
+
+    @Test
+    fun `a newer value the driver wrote is not replaced by the old copy`() {
+        open().apply {
+            putLong("medtrum.patchId", 135L)
+            flush()
+        }
+        // The driver saved a new patch after the old build had moved its keys.
+        defaults.setInteger(136, forKey = "medtrum.patchId")
+
+        val store = open()
+
+        assertEquals(136L, defaults.integerForKey("medtrum.patchId"))
+        assertFalse(store.contains("medtrum.patchId"))
+    }
 }

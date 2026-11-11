@@ -24,6 +24,16 @@ import platform.Foundation.NSUserDefaults
  * the app's defaults - a date, data, a list - was not written by AAPS and stays where it is. A whole
  * number moves as a Long, because `NSUserDefaults` keeps Int and Long the same way; the store reads a
  * Long back as an Int when asked for one.
+ *
+ * Only once. Other code still writes to the same `NSUserDefaults`: the Medtrum driver keeps the patch
+ * there (`IosMedtrumStateStore`, keys starting with `medtrum.`). A move on every start took those keys
+ * too, so after each restart the driver knew no patch, said the pump was stopped, and the loop
+ * suspended itself. So:
+ *
+ * - keys of such a driver ([DRIVER_KEY_PREFIXES]) never move;
+ * - after the first move that worked, [MOVE_DONE_KEY] is set and nothing moves again;
+ * - driver keys that an older build already moved into the store are given back to `NSUserDefaults`
+ *   (only where `NSUserDefaults` has no value of its own, which is always newer) and leave the store.
  */
 class UserDefaultsMigration(
     private val defaults: NSUserDefaults,
@@ -36,15 +46,19 @@ class UserDefaultsMigration(
 
     private var movedKeys: Set<String> = emptySet()
 
-    override suspend fun shouldMigrate(currentData: Map<String, Any>): Boolean = values().isNotEmpty()
+    override suspend fun shouldMigrate(currentData: Map<String, Any>): Boolean =
+        driverValues(currentData).isNotEmpty() || (!moveDone() && values().isNotEmpty())
 
     override suspend fun migrate(currentData: Map<String, Any>): Map<String, Any> {
-        val values = values()
+        val takenBack = driverValues(currentData)
+        if (takenBack.isNotEmpty()) giveBack(takenBack)
+        val values = if (moveDone()) emptyMap() else values()
         movedKeys = values.keys
-        return values + currentData
+        return values + (currentData - takenBack.keys)
     }
 
     override suspend fun cleanUp() {
+        if (movedKeys.isEmpty()) return
         // Never throws: DataStore would fail the whole start for it, while the next start simply tries again.
         try {
             val missing = movedKeys - StoreCodec.decode(readStoreFile(), cipher).keys
@@ -53,18 +67,44 @@ class UserDefaultsMigration(
                 return
             }
             movedKeys.forEach { defaults.removeObjectForKey(it) }
+            defaults.setBool(true, forKey = MOVE_DONE_KEY)
             log.info(LTag.CORE, "Moved ${movedKeys.size} settings from NSUserDefaults into the encrypted store")
         } catch (e: Exception) {
             log.error(LTag.CORE, "Could not check the moved settings; they stay in NSUserDefaults: ${e.message}")
         }
     }
 
-    /** The values of the app's domain that the store can hold. */
+    /** The values of the app's domain that the store can hold and that are not a driver's. */
     internal fun values(): Map<String, Any> =
         defaults.persistentDomainForName(domain).orEmpty().entries.mapNotNull { (key, value) ->
             val name = key as? String ?: return@mapNotNull null
+            if (name == MOVE_DONE_KEY || isDriverKey(name)) return@mapNotNull null
             storable(value)?.let { name to it }
         }.toMap()
+
+    private fun moveDone(): Boolean = defaults.boolForKey(MOVE_DONE_KEY)
+
+    /** Driver keys that an older build moved into the store by mistake. */
+    private fun driverValues(currentData: Map<String, Any>): Map<String, Any> = currentData.filterKeys(::isDriverKey)
+
+    /** Puts driver values back where the driver reads them. A value the driver wrote since is newer and stays. */
+    private fun giveBack(values: Map<String, Any>) {
+        var given = 0
+        values.forEach { (key, value) ->
+            if (defaults.objectForKey(key) != null) return@forEach
+            when (value) {
+                is String  -> defaults.setObject(value, forKey = key)
+                is Boolean -> defaults.setBool(value, forKey = key)
+                is Long    -> defaults.setInteger(value, forKey = key)
+                is Int     -> defaults.setInteger(value.toLong(), forKey = key)
+                is Double  -> defaults.setDouble(value, forKey = key)
+                else       -> return@forEach
+            }
+            given++
+        }
+        defaults.synchronize()
+        log.info(LTag.CORE, "Gave $given of ${values.size} pump driver values back to NSUserDefaults and removed them from the settings store")
+    }
 
     @OptIn(ExperimentalForeignApi::class)
     private fun readStoreFile(): ByteArray {
@@ -73,6 +113,18 @@ class UserDefaultsMigration(
     }
 
     companion object {
+
+        /** Set in `NSUserDefaults` after the one move that worked. */
+        internal const val MOVE_DONE_KEY = "aaps.settings_moved_to_store"
+
+        /**
+         * Keys that other code keeps in the same `NSUserDefaults` and that are not settings. The Medtrum
+         * driver's prefix is the default of `IosMedtrumStateStore`; a driver that stores its state here
+         * must be added to this list.
+         */
+        internal val DRIVER_KEY_PREFIXES = listOf("medtrum.")
+
+        internal fun isDriverKey(name: String): Boolean = DRIVER_KEY_PREFIXES.any { name.startsWith(it) }
 
         /**
          * A value of `NSUserDefaults` as the store holds it, or null when the store cannot hold it.
