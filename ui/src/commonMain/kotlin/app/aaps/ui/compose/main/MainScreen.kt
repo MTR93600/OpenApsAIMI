@@ -56,6 +56,8 @@ import app.aaps.core.ui.compose.dialogs.OkCancelDialog
 import app.aaps.core.ui.compose.dialogs.ThreeButtonDialog
 import app.aaps.core.ui.compose.navigation.NavigationRequest
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
+import app.aaps.core.ui.compose.pump.PumpActivityDialog
+import app.aaps.core.ui.compose.pump.PumpActivityFab
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.ui.UiStrings
 import app.aaps.ui.compose.aboutDialog.AboutAlertDialog
@@ -550,6 +552,34 @@ fun MainScreen(
                         )
                     }
 
+                    // A dashboard home (Glass, AIMI, Dashboard V2) has no pump button of its own, so the SMB
+                    // and the pump link are shown here, as on dev_OAPSAIMI. The Overview draws its own.
+                    if (dashboardV2Content != null) {
+                        val showDashboardPumpFab = isPumpCommunicating || (bolusState != null && bolusState.isSMB)
+                        var dashboardPumpDialog by remember { mutableStateOf(false) }
+                        LaunchedEffect(showDashboardPumpFab) {
+                            if (!showDashboardPumpFab) dashboardPumpDialog = false
+                        }
+                        PumpActivityFab(
+                            visible = showDashboardPumpFab && showChrome,
+                            bolusState = bolusState,
+                            onClick = { dashboardPumpDialog = true },
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(contentPadding)
+                                .padding(end = 16.dp, bottom = 16.dp)
+                        )
+                        if (dashboardPumpDialog) {
+                            PumpActivityDialog(
+                                bolusState = bolusState,
+                                pumpStatus = pumpStatusText,
+                                queueStatus = queueStatusText,
+                                isModal = false,
+                                onStop = onStopBolus,
+                                onDismiss = { dashboardPumpDialog = false }
+                            )
+                        }
+                    }
                 }
             }
         }

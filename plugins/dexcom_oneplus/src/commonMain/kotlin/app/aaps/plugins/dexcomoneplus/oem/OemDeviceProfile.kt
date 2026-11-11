@@ -63,6 +63,17 @@ data class OemDeviceProfile(
      * dislikes. Default off. [requestMtuOnConnect] only chooses *when* to request, if this is on.
      */
     val requestMtu: Boolean = false,
+    /**
+     * The platform keeps a connection request open by itself while the app sleeps: iOS holds a
+     * `connectPeripheral` with no time limit and starts the app when the sensor comes in range.
+     *
+     * When true the session does not wait for an advertisement with scan windows. Those windows
+     * stop when iOS suspends the app, and nothing then wakes it, so the glucose stopped with the
+     * screen off. It asks the GATT client for such a held connection after every cycle instead,
+     * as `G7BluetoothManager` in LoopKit G7SensorKit (used by Trio) does. Only [DeviceProfileRegistry.AppleDefault]
+     * sets it; every Android profile keeps the scan wait.
+     */
+    val holdsPendingConnect: Boolean = false,
 )
 
 enum class OemProfileId {
@@ -70,4 +81,5 @@ enum class OemProfileId {
     SAMSUNG,
     MOTOROLA,
     GENERIC_FALLBACK,
+    APPLE,
 }

@@ -145,8 +145,12 @@ class OnePlusGattClientIos(
         linkId = deviceAddress
         // There is no autoConnect on CoreBluetooth: connectPeripheral simply never gives up by
         // itself. The flag therefore only widens our own patience, as it does on Android.
-        OnePlusLog.i("${OnePlusLogMarkers.SESSION}: connect autoConnect=$autoConnect (iOS waits either way)")
-        if (!central.connect(deviceAddress)) {
+        val startDelaySeconds = if (profile.holdsPendingConnect) advertisingTailDelaySeconds() else 0
+        OnePlusLog.i(
+            "${OnePlusLogMarkers.SESSION}: connect autoConnect=$autoConnect held=${profile.holdsPendingConnect} " +
+                "startDelay=${startDelaySeconds}s (iOS waits either way)",
+        )
+        if (!central.connect(deviceAddress, startDelaySeconds)) {
             linkId = null
             ready = null
             error("ONEPLUS_GATT: central refused the connection")
@@ -156,7 +160,10 @@ class OnePlusGattClientIos(
         } else {
             profile.connectTimeoutMs
         }
+        // The ready answer can land in the same moment as the time limit when iOS wakes the app after
+        // a long sleep; a link that is ready is used, not cancelled.
         val outcome = runBlocking { withTimeoutOrNull(timeout) { latch.await() } }
+            ?: if (latch.isCompleted) runBlocking { latch.await() } else null
         if (outcome == null) {
             disconnectInternal(poisonQueues = true)
             error("ONEPLUS_GATT: connect/discover timeout ${timeout}ms")
@@ -612,6 +619,22 @@ class OnePlusGattClientIos(
     }
 
     /**
+     * What is left of the sensor's advertising tail after the last link closed, in whole seconds.
+     *
+     * After it closes a link the sensor still advertises for other displays for about 20 to 24 s. A
+     * connect in that tail fails, and repeated failures make CoreBluetooth ask for a very strong
+     * signal. LoopKit G7SensorKit (Trio) therefore asks iOS for a 30 s start delay on every
+     * reconnect (`G7BluetoothManager.reconnectStartDelay`); the same is done here. iOS counts the
+     * delay, so it still runs while the app sleeps.
+     */
+    private fun advertisingTailDelaySeconds(): Int {
+        if (lastCloseMs <= 0L) return 0
+        val remainingMs = ADVERTISING_TAIL_MS - (nowMs() - lastCloseMs)
+        if (remainingMs <= 0L) return 0
+        return ((remainingMs + 999L) / 1000L).toInt()
+    }
+
+    /**
      * Give the stack the pause the profile asks for after a link was closed.
      *
      * Same reason as on Android: a reconnect issued immediately after a cancel lands while the old
@@ -688,6 +711,9 @@ class OnePlusGattClientIos(
         private const val EXTRA_DATA_AFTER_MS = 500L
 
         private const val AUTO_CONNECT_MIN_TIMEOUT_MS = 60_000L
+
+        /** The sensor's advertising tail after a link closes, see [advertisingTailDelaySeconds]. */
+        internal const val ADVERTISING_TAIL_MS = 30_000L
 
         /** Stands in for the Android `BluetoothGatt.GATT_FAILURE`, which has no iOS equivalent. */
         private const val GATT_FAILURE = 257

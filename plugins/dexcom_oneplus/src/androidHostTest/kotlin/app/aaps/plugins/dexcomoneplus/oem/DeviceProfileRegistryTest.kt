@@ -83,4 +83,13 @@ class DeviceProfileRegistryTest {
         assertThat(resolved.id).isEqualTo(OemProfileId.GENERIC_FALLBACK)
         assertThat(resolved.requireAdvBeforeConnect).isTrue()
     }
+
+    @Test
+    fun onlyAnIphoneGetsTheHeldConnectProfile() {
+        assertThat(DeviceProfileRegistry.resolve(manufacturer = "Apple", model = "iPhone").id).isEqualTo(OemProfileId.APPLE)
+        assertThat(DeviceProfileRegistry.AppleDefault.holdsPendingConnect).isTrue()
+        OemProfileId.entries.filter { it != OemProfileId.APPLE }.forEach { id ->
+            assertThat(DeviceProfileRegistry.byId(id).holdsPendingConnect).isFalse()
+        }
+    }
 }

@@ -400,4 +400,16 @@ class OnePlusBleSessionCyclePolicyTest {
         // far below both so it can never swallow a genuine window or delay the escape.
         assertThat(guard).isLessThan(OnePlusBleSessionCyclePolicy.BLIND_CONNECT_AFTER_ADV_SILENCE_MS / 10)
     }
+
+    @Test
+    fun `a held connect may go ahead without a sighting while a blind one may not`() {
+        assertThat(OnePlusBleSessionCyclePolicy.allowConnection(restoredSessionMode = true, advertisementFresh = false)).isFalse()
+        assertThat(
+            OnePlusBleSessionCyclePolicy.allowConnection(
+                restoredSessionMode = true,
+                advertisementFresh = false,
+                pendingConnectAuthorized = true,
+            )
+        ).isTrue()
+    }
 }

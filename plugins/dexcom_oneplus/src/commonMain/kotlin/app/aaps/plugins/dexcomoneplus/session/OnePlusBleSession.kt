@@ -45,11 +45,14 @@ interface OnePlusBleSession {
  *   2026-08-03: 18 min of `target ADV absent — remain waiting`, no glucose, no error, no retry).
  * @param foreignAdv redacted label of the strongest *other* ONE+ heard while the target stayed
  *   silent — the stale-stored-MAC signature.
+ * @param pendingConnect no sighting, and none is needed: the platform holds the connect open until
+ *   the sensor comes back ([OemDeviceProfile.holdsPendingConnect], iPhone only).
  */
 data class OnePlusConnectPrep(
     val advFresh: Boolean = false,
     val blindFallback: Boolean = false,
     val foreignAdv: String? = null,
+    val pendingConnect: Boolean = false,
 )
 
 /** Next persistent-ADV retry: raised strategy index plus the connect prep to use. */
@@ -110,6 +113,13 @@ internal object OnePlusBleSessionCyclePolicy {
      * legitimately still be advertising and that sighting is worth catching.
      */
     const val POST_CYCLE_ADV_GUARD_MS = 10_000L
+
+    /**
+     * Pause before a held connect is asked again after a failed one (iPhone only). Short, because the
+     * app may be suspended soon after the link closed and only an armed connect wakes it again; not
+     * zero, so a connect that fails at once (Bluetooth off) does not spin.
+     */
+    const val PENDING_CONNECT_RETRY_PAUSE_MS = 2_000L
 
     /**
      * Length of one filtered ADV window during the persistent wait.
@@ -194,7 +204,9 @@ internal object OnePlusBleSessionCyclePolicy {
         restoredSessionMode: Boolean,
         advertisementFresh: Boolean,
         blindFallbackAuthorized: Boolean = false,
-    ): Boolean = !restoredSessionMode || advertisementFresh || blindFallbackAuthorized
+        /** A connect the platform holds until the sensor advertises is never a blind one. */
+        pendingConnectAuthorized: Boolean = false,
+    ): Boolean = !restoredSessionMode || advertisementFresh || blindFallbackAuthorized || pendingConnectAuthorized
 
     /**
      * Long enough silence on the stored MAC to suspect it is stale.
@@ -488,6 +500,7 @@ class OnePlusBleSessionSkeleton(
                     }
                 } else {
                     val bypassReason = when {
+                        preparedConnect?.pendingConnect == true -> "held_connect"
                         preparedConnect?.advFresh == true -> "fresh_adv"
                         preparedConnect?.blindFallback == true -> "blind_escape"
                         else -> "prepared_connect"
@@ -667,6 +680,7 @@ class OnePlusBleSessionSkeleton(
                 restoredSessionMode = !this.requestNewSensorStart,
                 advertisementFresh = prep.advFresh,
                 blindFallbackAuthorized = prep.blindFallback,
+                pendingConnectAuthorized = prep.pendingConnect,
             )
         ) {
             OnePlusLog.i(
@@ -848,6 +862,17 @@ class OnePlusBleSessionSkeleton(
         reason: String,
     ): PersistentRetry {
         val nextAttempt = OnePlusBleSessionCyclePolicy.nextPersistentAttempt(currentAttempt)
+        if (profile.holdsPendingConnect) {
+            // iPhone: no scan wait. Ask iOS to hold the connect again; it wakes the app for it.
+            reportStaleSensorIfSilent(deviceAddress)
+            if (!sleepWhileRunning(OnePlusBleSessionCyclePolicy.PENDING_CONNECT_RETRY_PAUSE_MS)) {
+                return PersistentRetry(attempt = nextAttempt, prep = null)
+            }
+            OnePlusLog.i(
+                "${OnePlusLogMarkers.RECONNECT}: [$slot] held connect asked again after $reason attempt=$nextAttempt",
+            )
+            return PersistentRetry(attempt = nextAttempt, prep = OnePlusConnectPrep(pendingConnect = true))
+        }
         if (OnePlusBleSessionCyclePolicy.skipAdvWaitAfterFailedConnect(
                 lastConnectUsedAutoConnect = lastConnectUsedAutoConnect,
                 nextAttempt = nextAttempt,
@@ -867,6 +892,32 @@ class OnePlusBleSessionSkeleton(
         return PersistentRetry(
             attempt = nextAttempt,
             prep = preparePostCollectionReconnect(deviceAddress, reason),
+        )
+    }
+
+    /**
+     * The held-connect side of the stale-MAC check in [awaitFreshAdvertisement]: there is no scan on
+     * iPhone, so the silence is counted from the first failed held connect after a good cycle, and
+     * reported once per episode after [OnePlusBleSessionCyclePolicy.STALE_MAC_SUSPICION_AFTER_MS].
+     */
+    private fun reportStaleSensorIfSilent(deviceAddress: String) {
+        val nowMs = Clock.System.now().toEpochMilliseconds()
+        if (advSilenceStartedMs == 0L) advSilenceStartedMs = nowMs
+        val silenceMs = nowMs - advSilenceStartedMs
+        if (staleMacReportedThisSilence || !OnePlusBleSessionCyclePolicy.suspectStaleMac(silenceMs, 0)) return
+        staleMacReportedThisSilence = true
+        val message = "ONEPLUS_ADV_STALE_MAC: target ${redactAddress(deviceAddress)} not reached for " +
+            "${OnePlusBleSessionCyclePolicy.advSilenceMinutes(silenceMs)}min through the held connect — " +
+            "sensor replaced or out of range?"
+        OnePlusLog.e("${OnePlusLogMarkers.ERROR}: [$slot] $message")
+        try {
+            onError(message, false)
+        } catch (_: Throwable) {
+        }
+        enterReconnecting(
+            message = "waiting_for_adv",
+            advSilenceMinutes = OnePlusBleSessionCyclePolicy.advSilenceMinutes(silenceMs),
+            staleMacSuspected = true,
         )
     }
 
@@ -914,6 +965,14 @@ class OnePlusBleSessionSkeleton(
             )
         }
         if (!running) return null
+        if (profile.holdsPendingConnect) {
+            // No quiet period and no scan: the GATT client asks iOS for a start delay that covers the
+            // sensor's advertising tail, and iOS keeps that held connect while the app is suspended.
+            OnePlusLog.i(
+                "${OnePlusLogMarkers.SESSION}: [$slot] cycle down reason=$reason — held connect for the next radio window",
+            )
+            return OnePlusConnectPrep(pendingConnect = true)
+        }
         OnePlusLog.i(
             "${OnePlusLogMarkers.SESSION}: [$slot] cycle down reason=$reason — wait persistently for next ADV",
         )

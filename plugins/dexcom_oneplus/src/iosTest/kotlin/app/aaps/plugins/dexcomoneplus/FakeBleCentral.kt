@@ -78,6 +78,14 @@ class FakeBleCentral : BleCentral {
         scanning = false
     }
 
+    /** The start delay of every connect, in seconds; 0 for a plain connect. */
+    val startDelays = mutableListOf<Int>()
+
+    override fun connect(id: String, startDelaySeconds: Int): Boolean {
+        startDelays += startDelaySeconds
+        return connect(id)
+    }
+
     override fun connect(id: String): Boolean {
         if (!connectAccepted) return false
         connects += id

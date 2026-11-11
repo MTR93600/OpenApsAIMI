@@ -21,7 +21,11 @@ internal class FakeOnePlusGatt(
     private var backfillReads = 0
     val controlWrites = mutableListOf<ByteArray>()
 
+    /** The `autoConnect` flag of every connect, in order. */
+    val autoConnects = mutableListOf<Boolean>()
+
     override fun connect(deviceAddress: String, autoConnect: Boolean) {
+        autoConnects += autoConnect
         connects++
         connected = true
     }

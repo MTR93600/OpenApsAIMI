@@ -110,11 +110,43 @@ object DeviceProfileRegistry {
         requireAdvBeforeConnect = true,
     )
 
+    /**
+     * iPhone. CoreBluetooth has none of the Android stack quirks the other profiles work around, and
+     * one thing they cannot use: a connection request that iOS itself keeps open while the app is
+     * suspended ([OemDeviceProfile.holdsPendingConnect]).
+     *
+     * - No scan before a connect: the sensor is found again by its iOS identifier.
+     * - A held connect from the first attempt, and a long wait for it. The sensor only comes back
+     *   every 5 min, and iOS wakes the app when it does. [connectTimeoutMs] only bounds how long one
+     *   held connect may stay open before the session asks again, so a sensor that is gone is noticed.
+     * - No settle or handoff pause: the GATT client asks iOS for a start delay instead, which still
+     *   runs while the app sleeps (a thread sleep does not).
+     */
+    val AppleDefault: OemDeviceProfile = OemDeviceProfile(
+        id = OemProfileId.APPLE,
+        connectTimeoutMs = 15L * 60_000L,
+        connectRetryCount = 5,
+        connectRetryDelayMs = 8_000L,
+        preferredMtu = 185,
+        useForegroundService = false,
+        aggressiveReconnect = false,
+        postCloseSettleMs = 0L,
+        scanHandoffMs = 0L,
+        preConnectScanMs = 0L,
+        requestMtuOnConnect = false,
+        useGattRefresh = false,
+        autoConnectFromAttempt = 0,
+        postDiscoverDelayMs = 0L,
+        requireAdvBeforeConnect = false,
+        holdsPendingConnect = true,
+    )
+
     fun byId(id: OemProfileId): OemDeviceProfile = when (id) {
         OemProfileId.PIXEL -> PixelDefault
         OemProfileId.SAMSUNG -> SamsungDefault
         OemProfileId.MOTOROLA -> MotorolaDefault
         OemProfileId.GENERIC_FALLBACK -> GenericFallback
+        OemProfileId.APPLE -> AppleDefault
     }
 
     /**
@@ -131,6 +163,7 @@ object DeviceProfileRegistry {
             isPixel(manufacturer) -> PixelDefault
             isSamsung(manufacturer) -> SamsungDefault
             isMotorola(manufacturer) -> MotorolaDefault
+            isApple(manufacturer) -> AppleDefault
             else -> GenericFallback
         }
         OnePlusLog.i(
@@ -154,6 +187,9 @@ object DeviceProfileRegistry {
         val m = manufacturer.lowercase()
         return m.contains("samsung")
     }
+
+    /** Only the iOS build reports "Apple" (`OnePlusDeviceInfoIos`). */
+    private fun isApple(manufacturer: String): Boolean = manufacturer.equals("Apple", ignoreCase = true)
 
     /** The reported manufacturer stays "motorola" on these phones, whoever owns the brand. */
     private fun isMotorola(manufacturer: String): Boolean {

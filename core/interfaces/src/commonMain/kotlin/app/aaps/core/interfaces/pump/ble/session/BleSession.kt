@@ -194,6 +194,13 @@ interface BleCentral {
     fun startScan(serviceUuids: List<String>) = startScan()
     fun stopScan()
     fun connect(id: String): Boolean
+
+    /**
+     * A connect that the platform starts only after [startDelaySeconds]. iOS counts the delay
+     * itself, so it still runs while the app is suspended, where a thread sleep does not. A central
+     * with no such option connects at once.
+     */
+    fun connect(id: String, startDelaySeconds: Int): Boolean = connect(id)
     fun cancel(id: String)
     fun release(id: String)
     fun discoverServices(id: String)

@@ -6,6 +6,8 @@ import app.aaps.core.interfaces.pump.ble.session.BleCharProperty
 import app.aaps.core.interfaces.pump.ble.session.BleGattCharacteristic
 import app.aaps.core.interfaces.pump.ble.session.BleGattService
 import app.aaps.plugins.dexcomoneplus.FakeBleCentral
+import app.aaps.plugins.dexcomoneplus.oem.DeviceProfileRegistry
+import app.aaps.plugins.dexcomoneplus.oem.OemDeviceProfile
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -55,8 +57,9 @@ class OnePlusGattClientIosTest {
 
     private var clock = 0L
 
-    private fun client(central: FakeBleCentral) = OnePlusGattClientIos(
+    private fun client(central: FakeBleCentral, profile: OemDeviceProfile = DeviceProfileRegistry.AppleDefault) = OnePlusGattClientIos(
         central = central,
+        profile = profile,
         nowMs = { clock },
         sleep = { millis ->
             clock += millis
@@ -95,6 +98,46 @@ class OnePlusGattClientIosTest {
     }
 
     // -- connect ------------------------------------------------------------------------------
+
+    @Test
+    fun aConnectRightAfterALinkClosedWaitsOutTheAdvertisingTail() {
+        // A close time of 0 reads as "never closed", as for the settle pause, so the clock starts later.
+        clock = 100_000L
+        val (central, gatt) = connected()
+        gatt.disconnect()
+        clock += 5_000L
+
+        gatt.connect(deviceId, autoConnect = true)
+
+        // 30 s tail, 5 s of it gone: iOS is asked to start the connect 25 s later.
+        assertEquals(listOf(0, 25), central.startDelays)
+        assertTrue(gatt.isConnected())
+    }
+
+    @Test
+    fun aConnectLongAfterTheLastLinkStartsAtOnce() {
+        clock = 100_000L
+        val (central, gatt) = connected()
+        gatt.disconnect()
+        clock += 60_000L
+
+        gatt.connect(deviceId, autoConnect = true)
+
+        assertEquals(listOf(0, 0), central.startDelays)
+    }
+
+    @Test
+    fun anAndroidProfileNeverAsksForAStartDelay() {
+        val central = FakeBleCentral()
+        val gatt = client(central, DeviceProfileRegistry.GenericFallback)
+        scriptHealthySensor(central, gatt)
+        gatt.connect(deviceId, autoConnect = false)
+        gatt.disconnect()
+
+        gatt.connect(deviceId, autoConnect = true)
+
+        assertEquals(listOf(0, 0), central.startDelays)
+    }
 
     @Test
     fun connectSubscribesToExtraDataThenAuthentication() {

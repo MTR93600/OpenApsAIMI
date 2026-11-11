@@ -847,6 +847,10 @@ class OnePlusCgmDriverReal(
             return OnePlusConnectPrep(advFresh = true)
         }
 
+        // iPhone: no scan before a connect. A scan window ends when iOS suspends the app; the GATT
+        // client asks iOS to hold the connect instead, and iOS keeps that one while the app sleeps.
+        if (profile.holdsPendingConnect) return OnePlusConnectPrep(pendingConnect = true)
+
         // A long window costs the same single scan registration as a short one but hears the ADV the
         // moment it arrives, so the persistent wait overrides the profile value here.
         val scanMs = scanMsOverride ?: profile.preConnectScanMs
