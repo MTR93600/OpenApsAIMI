@@ -34,20 +34,29 @@ import app.aaps.plugins.dexcomoneplus.session.OnePlusIosCpuLease
  * permission prompt. So it is built when the plugin starts, never while the dependency graph is
  * being assembled.
  *
- * ## One slot only
+ * ## One central, two slots
  *
- * Android runs a second driver for a pre-soak sensor, with its own scanner and its own GATT client.
- * That cannot be copied here as it stands: an app gets **one** scan from CoreBluetooth, so a second
- * slot's `stopScan` would end the first slot's scan, and the radio holds one scanner and one client
- * at a time. A second slot would therefore work sometimes and stop working silently, which is the
- * one shape this driver must not take. The pre-soak slot stays on the stub driver on iPhone, and
- * `DexcomOnePlusIosHost` says so where a reader will look for it.
+ * Android runs a second driver for a pre-soak sensor, with its own scanner and its own GATT
+ * client. CoreBluetooth still gives the app **one** scan, so the two scanners do not each call
+ * `scanForPeripherals`. [OnePlusIosScanBus] is the only owner of that scan and hands every
+ * advertisement to both slots. A `stopScan` from the pre-soak slot does not stop a scan the
+ * production slot still needs, and a filtered wait (the one that works with the phone locked) is
+ * not replaced by the start screen's unfiltered scan.
+ *
+ * Two peripheral connections are a different thing, and iOS allows them. Each slot gets its own
+ * GATT client, both stay registered on [OnePlusIosRadio], and each client ignores events for the
+ * other slot's identifier. The sensor that feeds the loop is never disconnected because the
+ * pre-soak slot connected, scanned, or stopped scanning. Between readings both slots use the held
+ * connect (`OemDeviceProfile.holdsPendingConnect`), which does not scan at all and is kept by iOS
+ * while the app is suspended.
  */
 class OnePlusIosPlatform : OnePlusPlatform {
 
     private val central = CoreBluetoothCentral(BleRestoreIdentifier.DEXCOM_ONE_PLUS)
 
     private val radio = OnePlusIosRadio(central)
+
+    private val scanBus = OnePlusIosScanBus(central)
 
     init {
         central.events = radio::onEvent
@@ -57,23 +66,47 @@ class OnePlusIosPlatform : OnePlusPlatform {
     override fun sensorPrefs(fileName: String): OnePlusSensorPrefs = OnePlusSensorPrefsIos(fileName)
 
     /**
-     * The scanner, which is also registered with the radio so advertisements reach it.
+     * The scanner for one driver slot, registered with the radio so advertisements reach it.
      *
-     * A driver asks for this once per `attach`, so the registration replaces the previous scanner
-     * rather than adding to it - the same single-scanner rule the radio is written for.
+     * A second call adds another scanner. It does not replace the first: the production driver and
+     * the pre-soak driver each keep the one they were given.
      */
     override fun scanner(hint: OnePlusStoredSession?, slot: String): OnePlusBleScanner =
-        OnePlusBleScannerIos(central, sessionHint = hint, slot = slot).also { radio.scanner = it }
+        openScanner(hint = hint, slot = slot, ephemeral = false)
 
     /**
-     * A fresh client for one connection attempt, registered with the radio in its place.
+     * The start screen's scanner. It is dropped when the screen stops scanning, so a closed screen
+     * cannot keep a demand on the shared scan.
+     */
+    fun screenScanner(): OnePlusBleScanner =
+        openScanner(hint = null, slot = OnePlusLogMarkers.SLOT_PRODUCTION, ephemeral = true)
+
+    private fun openScanner(
+        hint: OnePlusStoredSession?,
+        slot: String,
+        ephemeral: Boolean,
+    ): OnePlusBleScanner {
+        lateinit var created: OnePlusBleScannerIos
+        created = OnePlusBleScannerIos(
+            central = central,
+            sessionHint = hint,
+            slot = slot,
+            scanBus = scanBus,
+            ephemeral = ephemeral,
+            onRetired = { radio.detachScanner(created) },
+        )
+        radio.attachScanner(created)
+        return created
+    }
+
+    /**
+     * A fresh client for one connection attempt, registered beside any client that still has a link.
      *
-     * The client the attempt before used is dropped here. It has already given up its link by the
-     * time a new one is asked for, and every one of its handlers ignores an event for an id that is
-     * not its own, so nothing it still held could act on what follows.
+     * The production connection and the pre-soak connection are both live. The client a finished
+     * attempt left behind is dropped here, once it has disconnected.
      */
     override fun gattClient(profile: OemDeviceProfile): OnePlusGattClient =
-        OnePlusGattClientIos(central, profile).also { radio.gatt = it }
+        OnePlusGattClientIos(central, profile).also { radio.attachGatt(it) }
 
     override fun cpuLease(slot: String): OnePlusCpuLease = OnePlusIosCpuLease(slot)
 }

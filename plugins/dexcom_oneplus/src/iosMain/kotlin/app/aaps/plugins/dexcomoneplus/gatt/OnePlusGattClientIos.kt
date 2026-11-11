@@ -82,6 +82,13 @@ class OnePlusGattClientIos(
     @Volatile
     private var connected = false
 
+    /** Set once [disconnect] has run, so the radio can drop this client without dropping a live link. */
+    @Volatile
+    private var retired = false
+
+    /** True after [disconnect]. A client that is connecting or connected is not retired. */
+    fun isRetired(): Boolean = retired
+
     /**
      * Completed once per [connect]: `READY_OK` when the sensor is ready, otherwise the reason it
      * is not. A plain null for success could not be told apart from a timeout.
@@ -118,7 +125,10 @@ class OnePlusGattClientIos(
     // -- lifecycle -------------------------------------------------------------------------------
 
     override fun connect(deviceAddress: String, autoConnect: Boolean) {
-        disconnectInternal(poisonQueues = false)
+        // Before the prelude disconnect, so a client that is about to connect is not dropped as
+        // finished while the other slot attaches its own client.
+        retired = false
+        disconnectInternal(poisonQueues = false, retire = false)
         awaitPostCloseSettle()
         drainQueues()
         if (deviceAddress.isBlank()) {
@@ -165,11 +175,11 @@ class OnePlusGattClientIos(
         val outcome = runBlocking { withTimeoutOrNull(timeout) { latch.await() } }
             ?: if (latch.isCompleted) runBlocking { latch.await() } else null
         if (outcome == null) {
-            disconnectInternal(poisonQueues = true)
+            disconnectInternal(poisonQueues = true, retire = true)
             error("ONEPLUS_GATT: connect/discover timeout ${timeout}ms")
         }
         if (outcome != READY_OK) {
-            disconnectInternal(poisonQueues = true)
+            disconnectInternal(poisonQueues = true, retire = true)
             error("ONEPLUS_GATT: $outcome")
         }
         // Drop subscription noise and late disconnect sentinels before KEKS waits for Auth frames.
@@ -177,7 +187,7 @@ class OnePlusGattClientIos(
     }
 
     override fun disconnect() {
-        disconnectInternal(poisonQueues = true)
+        disconnectInternal(poisonQueues = true, retire = true)
     }
 
     override fun isConnected(): Boolean = connected && linkId != null
@@ -416,7 +426,7 @@ class OnePlusGattClientIos(
                 "dropping it instead of carrying on, because a restored link can still deliver " +
                 "frames from before the app was ended and they would be read as current glucose",
         )
-        disconnectInternal(poisonQueues = true)
+        disconnectInternal(poisonQueues = true, retire = true)
     }
 
     private fun onLink(event: BleCentralEvent.Link) {
@@ -604,7 +614,7 @@ class OnePlusGattClientIos(
         ready?.complete(reason)
     }
 
-    private fun disconnectInternal(poisonQueues: Boolean) {
+    private fun disconnectInternal(poisonQueues: Boolean, retire: Boolean) {
         connected = false
         cccdPhase = CccdPhase.NONE
         completePendingOp(GATT_FAILURE)
@@ -616,6 +626,7 @@ class OnePlusGattClientIos(
             central.cancel(id)
             lastCloseMs = nowMs()
         }
+        if (retire) retired = true
     }
 
     /**
