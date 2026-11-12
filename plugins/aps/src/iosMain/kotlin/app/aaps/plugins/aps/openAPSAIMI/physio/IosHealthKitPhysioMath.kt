@@ -44,16 +44,6 @@ internal object IosHealthKitPhysioMath {
         SLEEP_ASLEEP_REM,
     )
 
-    /**
-     * Two sleep samples closer than this belong to the same night.
-     *
-     * Health Connect gives one `SleepSessionRecord` per night, and the Android code uses its whole
-     * span, brief wakings included. HealthKit has no session: it gives one sample per stage. So the
-     * samples are glued back into nights here, and an hour is the bridge. A nap after a one hour
-     * break is a second night here and a second session on Health Connect, so the two agree.
-     */
-    const val SESSION_BRIDGE_MS = 60L * 60L * 1000L
-
     /** The same flat estimate the Android side writes; see [sleepFrom]. */
     const val SLEEP_EFFICIENCY = 0.85
 
@@ -64,19 +54,14 @@ internal object IosHealthKitPhysioMath {
         val categoryValue: Long,
     )
 
-    /** One night, after the samples have been glued back together. */
-    data class SleepSession(
-        val startMs: Long,
-        val endMs: Long,
-    )
-
     /**
      * Builds the shared [SleepDataMTR] from HealthKit sleep samples.
      *
      * Follows `AIMIPhysioDataRepositoryMTR.fetchSleepData` field by field:
      *
-     * - `durationHours` is the sum of the night spans, so a broken night counts its interior
-     *   waking, exactly as a Health Connect session span does.
+     * - `durationHours`, `startTime` and `endTime` are last night, picked by [SleepNights] - the
+     *   same rule Android uses. A waking under an hour counts as sleep, as a Health Connect
+     *   session span keeps it; a longer one does not.
      * - `efficiency` is the same flat [SLEEP_EFFICIENCY] guess. Neither phone measures it.
      * - **The stage minutes stay at zero, even though HealthKit knows them.** This looks like
      *   throwing data away and it is deliberate: `AIMIPhysioFeatureExtractorMTR` branches on
@@ -95,15 +80,13 @@ internal object IosHealthKitPhysioMath {
     fun sleepFrom(segments: List<SleepSegment>, nowMs: Long): SleepDataMTR? {
         val asleep = segments.filter { it.categoryValue in ASLEEP_VALUES }
         val usable = asleep.ifEmpty { segments.filter { it.categoryValue == SLEEP_IN_BED } }
-        val sessions = mergeSessions(usable)
-        if (sessions.isEmpty()) return null
-
-        val totalHours = sessions.sumOf { (it.endMs - it.startMs) / 3_600_000.0 }
-        val ongoing = sessions.firstOrNull { nowMs >= it.startMs && nowMs <= it.endMs }
+        val spans = usable.map { SleepNights.Span(it.startMs, it.endMs) }
+        val night = SleepNights.lastNight(spans, nowMs) ?: return null
+        val ongoing = SleepNights.mergeSessions(spans).firstOrNull { nowMs >= it.startMs && nowMs <= it.endMs }
         return SleepDataMTR(
-            startTime = sessions.first().startMs,
-            endTime = sessions.last().endMs,
-            durationHours = totalHours,
+            startTime = night.startMs,
+            endTime = night.endMs,
+            durationHours = night.durationHours,
             efficiency = SLEEP_EFFICIENCY,
             deepSleepMinutes = 0,
             remSleepMinutes = 0,
@@ -113,35 +96,6 @@ internal object IosHealthKitPhysioMath {
             ongoingStartMs = ongoing?.startMs,
             ongoingEndMs = ongoing?.endMs,
         )
-    }
-
-    /**
-     * Glues overlapping and nearly touching samples into nights.
-     *
-     * Overlap matters: an Apple Watch and a third party sleep app can both write the same night,
-     * and summing both would report twice the sleep.
-     */
-    fun mergeSessions(segments: List<SleepSegment>): List<SleepSession> {
-        val ordered = segments
-            .filter { it.endMs > it.startMs }
-            .sortedBy { it.startMs }
-        if (ordered.isEmpty()) return emptyList()
-
-        val sessions = mutableListOf<SleepSession>()
-        var start = ordered.first().startMs
-        var end = ordered.first().endMs
-        for (index in 1 until ordered.size) {
-            val segment = ordered[index]
-            if (segment.startMs <= end + SESSION_BRIDGE_MS) {
-                if (segment.endMs > end) end = segment.endMs
-            } else {
-                sessions += SleepSession(start, end)
-                start = segment.startMs
-                end = segment.endMs
-            }
-        }
-        sessions += SleepSession(start, end)
-        return sessions
     }
 
     // ═══════════════════════════════════════════════════════════════════════

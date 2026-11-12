@@ -288,7 +288,8 @@ data class PhysioBaselineMTR(
         
         // Serialize History (Compact format)
         put("history", buildJsonObject {
-            put("sleep", buildJsonObject { sleepHistory.forEach { (k, v) -> put(k.toString(), v) } })
+            // "sleepNight", not "sleep": see SLEEP_HISTORY_KEY.
+            put(SLEEP_HISTORY_KEY, buildJsonObject { sleepHistory.forEach { (k, v) -> put(k.toString(), v) } })
             put("hrv", buildJsonObject { hrvHistory.forEach { (k, v) -> put(k.toString(), v) } })
             put("rhr", buildJsonObject { rhrHistory.forEach { (k, v) -> put(k.toString(), v) } })
             put("steps", buildJsonObject { stepsHistory.forEach { (k, v) -> put(k.toString(), v) } })
@@ -298,6 +299,16 @@ data class PhysioBaselineMTR(
     
     companion object {
         val EMPTY = PhysioBaselineMTR()
+
+        /**
+         * The sleep history is kept under this key since a value means "last night".
+         *
+         * Before, a value was the sum of all sleep in 48 hours - about two nights - and it was kept
+         * under "sleep". Those sums must not be mixed with single nights: a normal night would then
+         * look several hours short of the baseline. So a file without this key gives no sleep
+         * history and no sleep baseline, and the baseline learns again from the next runs.
+         */
+        const val SLEEP_HISTORY_KEY = "sleepNight"
         
         fun fromJSON(json: JsonObject): PhysioBaselineMTR = try {
             fun parseMetric(name: String, obj: JsonObject?): MetricBaselineMTR {
@@ -314,7 +325,11 @@ data class PhysioBaselineMTR(
             }
             
             PhysioBaselineMTR(
-                sleepDuration = parseMetric("sleepDuration", json.optJsonObjectCompat("sleepDuration")),
+                sleepDuration = if (json.optJsonObjectCompat("history")?.optJsonObjectCompat(SLEEP_HISTORY_KEY) != null) {
+                    parseMetric("sleepDuration", json.optJsonObjectCompat("sleepDuration"))
+                } else {
+                    MetricBaselineMTR("sleepDuration")
+                },
                 hrvRMSSD = parseMetric("hrvRMSSD", json.optJsonObjectCompat("hrvRMSSD")),
                 morningRHR = parseMetric("morningRHR", json.optJsonObjectCompat("morningRHR")),
                 dailySteps = parseMetric("dailySteps", json.optJsonObjectCompat("dailySteps")),
@@ -322,7 +337,7 @@ data class PhysioBaselineMTR(
                 validDaysCount = json.optIntCompat("validDays", 0),
                 
                 // Restore History
-                sleepHistory = json.optJsonObjectCompat("history")?.optJsonObjectCompat("sleep")?.let { obj ->
+                sleepHistory = json.optJsonObjectCompat("history")?.optJsonObjectCompat(SLEEP_HISTORY_KEY)?.let { obj ->
                     obj.keys.asSequence().associate { it.toLong() to obj.optDoubleCompat(it, 0.0) }
                 } ?: emptyMap(),
                 

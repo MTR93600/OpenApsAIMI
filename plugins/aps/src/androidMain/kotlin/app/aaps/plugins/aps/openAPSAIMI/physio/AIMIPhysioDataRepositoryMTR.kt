@@ -255,37 +255,24 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
                         
                         val response = client.readRecords(request)
                         
-                        // 🚀 FILTER & AGGREGATE Sleep Sessions
-                        // Health Connect can return multiple segments (Naps, fragmented night)
-                        // We sum up all sleep within the 'Last Night' window (e.g. last 16h to be safe, or just use the response window)
-                        // The response window is 'yesterday' to 'now' (48h). 
-                        // To get "Last Night" specifically, we should look for the most recent generic block.
-                        
-                        // Inclure les nuits qui se terminent dans la même fenêtre que la lecture (48h).
-                        // Un filtre 24h seulement excluait des sessions Garmin valides (décalage fuseau / fin de nuit).
-                        val windowCutoff = now.minusSeconds(48 * 60 * 60)
-                        val recentSessions = response.records.filter { it.endTime.isAfter(windowCutoff) }
+                        // Two nights and maybe a nap come back from 48 h. Only last night counts,
+                        // picked by the rule iOS uses too, see SleepNights.
                         val nowMs = now.toEpochMilli()
+                        val spans = response.records.map {
+                            SleepNights.Span(it.startTime.toEpochMilli(), it.endTime.toEpochMilli())
+                        }
+                        val night = SleepNights.lastNight(spans, nowMs)
                         val ongoingRecord = response.records.firstOrNull { record ->
                             val startMs = record.startTime.toEpochMilli()
                             val endMs = record.endTime.toEpochMilli()
                             nowMs in startMs..endMs
                         }
 
-                        if (recentSessions.isNotEmpty()) {
-                            // Sum durations
-                            val totalDurationHours = recentSessions.sumOf { 
-                                (it.endTime.epochSecond - it.startTime.epochSecond) / 3600.0 
-                            }
-                            
-                            // Use the latest end time as the session "end"
-                            val latestEnd = recentSessions.maxOf { it.endTime }
-                            val earliestStart = recentSessions.minOf { it.startTime }
-
+                        if (night != null) {
                             val sleepData = SleepDataMTR(
-                                startTime = earliestStart.toEpochMilli(),
-                                endTime = latestEnd.toEpochMilli(),
-                                durationHours = totalDurationHours,
+                                startTime = night.startMs,
+                                endTime = night.endMs,
+                                durationHours = night.durationHours,
                                 efficiency = 0.85, // Conservative estimate
                                 deepSleepMinutes = 0,
                                 remSleepMinutes = 0,
@@ -300,7 +287,7 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
                             
                             aapsLogger.info(
                                 LTag.APS,
-                                "[$TAG] ✅ Sleep (Aggregated): ${totalDurationHours.format(1)}h from ${recentSessions.size} segments"
+                                "[$TAG] ✅ Sleep (last night): ${night.durationHours.format(1)}h from ${response.records.size} records"
                             )
                             
                             sleepData

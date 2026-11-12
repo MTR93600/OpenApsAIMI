@@ -61,8 +61,9 @@ class IosHealthKitPhysioMathTest {
         assertEquals(7.0, sleep.durationHours)
     }
 
+    /** Only last night counts; it used to be the night plus the nap. See `SleepNights`. */
     @Test
-    fun `a nap after a long break is a second session`() {
+    fun `a nap after a long break is not added to the night`() {
         val nightAndNap = listOf(
             stage(0, 6 * hour),
             stage(12 * hour, 13 * hour),
@@ -70,9 +71,9 @@ class IosHealthKitPhysioMathTest {
 
         val sleep = assertNotNull(IosHealthKitPhysioMath.sleepFrom(nightAndNap, nowMs = 20 * hour))
 
-        assertEquals(7.0, sleep.durationHours)
+        assertEquals(6.0, sleep.durationHours)
         assertEquals(0L, sleep.startTime)
-        assertEquals(13 * hour, sleep.endTime)
+        assertEquals(6 * hour, sleep.endTime)
     }
 
     /**
