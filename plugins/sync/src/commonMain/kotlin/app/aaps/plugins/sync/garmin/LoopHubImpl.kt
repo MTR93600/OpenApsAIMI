@@ -39,6 +39,7 @@ import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlin.time.Clock
@@ -71,9 +72,20 @@ class LoopHubImpl(
     @VisibleForTesting
     var nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() }
 
+    /** How long a watch request waits for the newest reading to be smoothed. A test sets its own. */
+    @VisibleForTesting
+    var smoothingWaitMs: Long = 5_000L
+
+    /** How often the smoothed data is read again during that wait. */
+    @VisibleForTesting
+    var smoothingPollMs: Long = 250L
+
     // The same half bucket that AutosensDataStoreObject.isAbout5minData() uses to decide that readings
     // are "about" 5 minutes apart. See getGlucoseValues for why an exact time match cannot be used.
     private val overlayToleranceMs = T.mins(2).plus(T.secs(30)).msecs()
+
+    /** A reading younger than this may still be waiting for its smoothing. See [getGlucoseValues]. */
+    private val freshReadingMs = T.mins(1).msecs()
 
     /** Returns the active insulin profile. */
     override val currentProfile: Profile? get() = runBlocking { profileFunction.getProfile() }
@@ -246,13 +258,29 @@ class LoopHubImpl(
      * from rows next to each other would then be about 0, with the whole change in one jump at the
      * next entry. So rows that share one grid entry are reduced to one row: the one nearest to the
      * time of that entry.
+     *
+     * A new reading is stored a few seconds before the smoothing has run on it. A watch that asked in
+     * that moment got the raw value of the newest reading next to smoothed older ones, and showed a
+     * different number from the phone (96 on the watch, 99 on the phone, three seconds apart). So when
+     * the newest reading is fresh and has no smoothed entry yet, while other readings do, this waits
+     * up to [smoothingWaitMs] for it. If the smoothing does not come, that reading is left out: the
+     * watch keeps the previous one and gets the new one at its next request. A raw value is never
+     * mixed with smoothed ones there.
      */
     override fun getGlucoseValues(from: Instant, ascending: Boolean): List<GV> = runBlocking {
-        val raw = persistenceLayer.getBgReadingsDataFromTime(from.toEpochMilliseconds(), ascending)
-        // Copied under the data lock: the store is rebuilt by another thread while we read it.
-        val ads = iobCobCalculator.ads
-        val overlay = ads.dataLock.withLock {
-            ads.bucketedData.orEmpty().filterNot { it.filledGap }.sortedBy { it.timestamp }
+        var raw = persistenceLayer.getBgReadingsDataFromTime(from.toEpochMilliseconds(), ascending)
+        var overlay = readOverlay()
+        val newest = raw.maxByOrNull { it.timestamp }
+        if (newest != null && waitsForSmoothing(newest, overlay)) {
+            var polls = smoothingWaitMs / smoothingPollMs
+            while (polls-- > 0 && waitsForSmoothing(newest, overlay)) {
+                delay(smoothingPollMs)
+                overlay = readOverlay()
+            }
+            if (waitsForSmoothing(newest, overlay)) {
+                aapsLogger.debug(LTag.GARMIN, "newest glucose at ${newest.timestamp} not smoothed yet, left out")
+                raw = raw.filterNot { it === newest }
+            }
         }
         val result = mutableListOf<GV>()
         var lastSlot: InMemoryGlucoseValue? = null
@@ -270,6 +298,23 @@ class LoopHubImpl(
         }
         result
     }
+
+    /** The smoothed entries, copied under the data lock: the store is rebuilt by another thread. */
+    private fun readOverlay(): List<InMemoryGlucoseValue> {
+        val ads = iobCobCalculator.ads
+        return ads.dataLock.withLock {
+            ads.bucketedData.orEmpty().filterNot { it.filledGap }.sortedBy { it.timestamp }
+        }
+    }
+
+    /**
+     * True when [newest] is fresh, has no smoothed entry yet, and other readings do. Without any
+     * smoothed entry (smoothing off, or not run yet after a start) the raw value is all there is.
+     */
+    private fun waitsForSmoothing(newest: GV, overlay: List<InMemoryGlucoseValue>): Boolean =
+        overlay.isNotEmpty() &&
+            (nowMs() - newest.timestamp) in 0..freshReadingMs &&
+            nearestOverlay(overlay, newest.timestamp) == null
 
     private fun nearestOverlay(overlay: List<InMemoryGlucoseValue>, timestamp: Long): InMemoryGlucoseValue? {
         if (overlay.isEmpty()) return null

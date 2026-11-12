@@ -117,11 +117,17 @@
 	  Two limits stay. iOS does not restore after the person force-quits the app from the app
 	  switcher, and it does not restore while Bluetooth is off in Settings. In both cases the loop
 	  only runs again once somebody opens the app.
+
+	  `audio` is for the Garmin "keep AAPS awake" setting only (`IosSilentAudioKeepAwake`, off by
+	  default). While it is on, a loop of silence keeps the app running in the background, as Spike
+	  did, so a watch face always gets an answer from the local HTTP server. With the setting off,
+	  nothing plays and the mode is unused. Apple may question it in an App Store review.
 	-->
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>processing</string>
 		<string>bluetooth-central</string>
+		<string>audio</string>
 	</array>
 	<!--
 	  Connect IQ device selection. Garmin Connect opens this scheme to hand back the watches the

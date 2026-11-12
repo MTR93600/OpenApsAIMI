@@ -165,6 +165,8 @@
     <string name="garmin_local_http_server">Local HTTP server</string>
     <string name="garmin_connectiq_push_ios">Connect IQ push (iOS)</string>
     <string name="garmin_connectiq_push_ios_summary">Sends each new glucose value and each loop result to the watch through Garmin Connect. The local HTTP server still answers the watch.</string>
+    <string name="garmin_keep_awake_ios">Keep AAPS awake for the watch (iOS)</string>
+    <string name="garmin_keep_awake_ios_summary">iOS stops AAPS in the background, so the watch face often gets no answer and its steps and heart rate are lost. This keeps AAPS running, like Spike did. It uses more battery. Needs the local HTTP server.</string>
     <string name="garmin_select_devices">Select Garmin devices</string>
     <string name="garmin_select_devices_summary">Opens Garmin Connect so you can choose which watches this iPhone may send data to.</string>
     <string name="garmin_connect_install_title">Garmin Connect</string>

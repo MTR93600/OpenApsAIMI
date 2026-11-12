@@ -67,7 +67,9 @@ import platform.Foundation.NSURL
 @Inject
 class IosAlarmSoundPlayer(
     private val aapsLogger: AAPSLogger,
-    private val preferences: Preferences
+    private val preferences: Preferences,
+    // Told when an alarm starts and stops, so it does not change the audio category under the alarm.
+    private val keepAwake: IosSilentAudioKeepAwake
 ) : AlarmSoundPlayer {
 
     private val scope = CoroutineScope(Dispatchers.Main)
@@ -97,6 +99,7 @@ class IosAlarmSoundPlayer(
 
     private fun doPlay(sound: AlarmSound, ownerTag: String, category: AlarmSoundCategory) {
         doStop()
+        keepAwake.onAlarmStarted()
         activateSession()
 
         val melody = AlarmAudioPolicy.chosenMelody(preferences, category)
@@ -107,10 +110,15 @@ class IosAlarmSoundPlayer(
         val created = melodyPlayer ?: run {
             val url = urlFor(sound) ?: run {
                 aapsLogger.error(LTag.NOTIFICATION, "Alarm sound ${fileName(sound)} is not in the app bundle, cannot alarm")
+                keepAwake.onAlarmStopped()
                 return
             }
             startLooping(openFile(url, sound), fileName(sound))
-        } ?: return
+        } ?: run {
+            // Nothing plays, so the keep-awake gets its audio category back.
+            keepAwake.onAlarmStopped()
+            return
+        }
 
         // Volume is set after the start, not before it: AVAudioPlayer will not begin at volume 0,
         // where Android's MediaPlayer happily does. Starting silent and turning it up immediately is
@@ -165,9 +173,11 @@ class IosAlarmSoundPlayer(
     private fun doStop() {
         rampJob?.cancel()
         rampJob = null
+        val wasPlaying = player != null
         player?.stop()
         player = null
         currentOwner = null
+        if (wasPlaying) keepAwake.onAlarmStopped()
         // The session is left active on purpose: deactivating it on every alarm would interrupt
         // whatever else the phone is playing twice per alarm instead of once.
     }

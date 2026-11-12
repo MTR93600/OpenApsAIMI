@@ -54,6 +54,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.atLeast
+import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.times
@@ -340,6 +341,55 @@ class LoopHubTest : TestBase() {
         // 240..420 s fall on the entry at 300 s; 480 s is 3 min away and keeps its raw value.
         assertEquals(listOf(300_000L to 101.5, 480_000L to 104.0), values.map { it.timestamp to it.value })
         verify(persistenceLayer).getBgReadingsDataFromTime(0, true)
+        verify(iobCobCalculator).ads
+    }
+
+    /** The clock of these tests is at 10 s: a reading at 0 s is 10 s old, so it is fresh. */
+    private suspend fun freshNewestCase(vararg overlays: List<InMemoryGlucoseValue>) {
+        loopHub.smoothingWaitMs = 5L
+        loopHub.smoothingPollMs = 1L
+        whenever(persistenceLayer.getBgReadingsDataFromTime(-600_000L, true)).thenReturn(
+            listOf(rawReading(-300_000L, 107.0), rawReading(0L, 96.0))
+        )
+        val ads = mock<AutosensDataStore>()
+        whenever(ads.dataLock).thenReturn(AapsLock())
+        val lists = overlays.map { it.toMutableList() }
+        whenever(ads.bucketedData).thenReturn(lists.first(), *lists.drop(1).toTypedArray())
+        whenever(iobCobCalculator.ads).thenReturn(ads)
+    }
+
+    /** The watch asked 3 s before the smoothing ran on the new reading: it waits and gets 99, like the phone. */
+    @Test
+    fun testGetGlucoseValues_WaitsForTheNewestReadingToBeSmoothed() = runTest {
+        val older = InMemoryGlucoseValue(timestamp = -300_000L, value = 107.0, smoothed = 107.0)
+        freshNewestCase(
+            listOf(older),
+            listOf(older, InMemoryGlucoseValue(timestamp = 0L, value = 96.0, smoothed = 99.0)),
+        )
+        val values = loopHub.getGlucoseValues(Instant.fromEpochMilliseconds(-600_000L), true).map { it.value }
+        assertEquals(listOf(107.0, 99.0), values)
+        verify(persistenceLayer).getBgReadingsDataFromTime(-600_000L, true)
+        verify(iobCobCalculator, atLeastOnce()).ads
+    }
+
+    /** No smoothing in time: the raw 96 is not sent next to smoothed values; the watch keeps 107. */
+    @Test
+    fun testGetGlucoseValues_LeavesOutTheNewestReadingWhenNotSmoothedInTime() = runTest {
+        val older = InMemoryGlucoseValue(timestamp = -300_000L, value = 107.0, smoothed = 107.0)
+        freshNewestCase(listOf(older))
+        val values = loopHub.getGlucoseValues(Instant.fromEpochMilliseconds(-600_000L), true).map { it.value }
+        assertEquals(listOf(107.0), values)
+        verify(persistenceLayer).getBgReadingsDataFromTime(-600_000L, true)
+        verify(iobCobCalculator, atLeastOnce()).ads
+    }
+
+    /** Without any smoothed data the raw values are all there is, so nothing waits and nothing is left out. */
+    @Test
+    fun testGetGlucoseValues_WithoutSmoothingSendsTheRawNewestReading() = runTest {
+        freshNewestCase(emptyList())
+        val values = loopHub.getGlucoseValues(Instant.fromEpochMilliseconds(-600_000L), true).map { it.value }
+        assertEquals(listOf(107.0, 96.0), values)
+        verify(persistenceLayer).getBgReadingsDataFromTime(-600_000L, true)
         verify(iobCobCalculator).ads
     }
 

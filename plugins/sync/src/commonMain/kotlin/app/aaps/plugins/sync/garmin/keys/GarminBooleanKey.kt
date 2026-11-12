@@ -30,6 +30,21 @@ enum class GarminBooleanKey(
         summary = SyncStrings.garmin_connectiq_push_ios_summary,
         exportable = false,
     ),
+
+    /**
+     * iPhone only: keep AAPS awake in the background so a watch face always gets an answer from the
+     * local HTTP server, and its steps and heart rate reach AAPS. See `IosKeepAwake`.
+     *
+     * Off by default, because it costs battery. Android registers the key and never reads it. Not
+     * exported: it describes this phone, not the therapy.
+     */
+    KeepAwakeIos(
+        key = "garmin_keep_awake_ios",
+        defaultValue = false,
+        title = SyncStrings.garmin_keep_awake_ios,
+        summary = SyncStrings.garmin_keep_awake_ios_summary,
+        exportable = false,
+    ),
     ;
 
 }

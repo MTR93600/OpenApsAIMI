@@ -2,6 +2,7 @@ package app.aaps.plugins.sync.garmin
 
 import app.aaps.core.data.model.GV
 import app.aaps.core.data.plugin.PluginType
+import app.aaps.core.interfaces.ios.IosKeepAwake
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -78,6 +79,7 @@ class GarminPlugin(
     config: Config,
     notificationManager: NotificationManager,
     private val rxBus: RxBus,
+    private val keepAwake: IosKeepAwake,
 ) : PluginBaseWithPreferences(
     pluginDescription = PluginDescription()
         .mainType(PluginType.SYNC)
@@ -154,7 +156,13 @@ class GarminPlugin(
         scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
         preferences.observe(GarminBooleanKey.LocalHttpServer)
             .drop(1)
-            .collectResilient(scope, aapsLogger, LTag.GARMIN) { setupHttpServer() }
+            .collectResilient(scope, aapsLogger, LTag.GARMIN) {
+                setupHttpServer()
+                applyKeepAwake()
+            }
+        preferences.observe(GarminBooleanKey.KeepAwakeIos)
+            .drop(1)
+            .collectResilient(scope, aapsLogger, LTag.GARMIN) { applyKeepAwake() }
         preferences.observe(GarminIntKey.LocalHttpPort)
             .drop(1)
             .collectResilient(scope, aapsLogger, LTag.GARMIN) { setupHttpServer() }
@@ -176,11 +184,13 @@ class GarminPlugin(
                 pushGlucose("aps")
             }
         setupHttpServer()
+        applyKeepAwake()
         IosRadioWake.listener = ::onRadioWake
         startConnectIq()
     }
 
     override suspend fun onStop() {
+        keepAwake.setWanted(KEEP_AWAKE_OWNER, false)
         IosRadioWake.listener = null
         pushCover.end()
         ConnectIqRegistry.companion?.stop()
@@ -191,6 +201,12 @@ class GarminPlugin(
             server = null
         }
         super.onStop()
+    }
+
+    /** Awake only while the switch is on and the server is there to answer the watch. */
+    private fun applyKeepAwake() {
+        val wanted = preferences.get(GarminBooleanKey.KeepAwakeIos) && preferences.get(GarminBooleanKey.LocalHttpServer)
+        keepAwake.setWanted(KEEP_AWAKE_OWNER, wanted)
     }
 
     /**
@@ -385,6 +401,7 @@ class GarminPlugin(
         title = SyncStrings.garmin,
         items = listOf(
             GarminBooleanKey.LocalHttpServer,
+            GarminBooleanKey.KeepAwakeIos,
             GarminIntKey.LocalHttpPort,
             GarminStringKey.RequestKey,
             GarminBooleanKey.ConnectIqPush,
@@ -406,5 +423,6 @@ class GarminPlugin(
         const val HTTP_UNAUTHORIZED = 401
         const val HTTP_NOT_FOUND = 404
         const val WRONG_KEY_DELAY_US = 1_000_000u
+        const val KEEP_AWAKE_OWNER = "garmin"
     }
 }

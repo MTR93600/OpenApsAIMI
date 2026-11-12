@@ -407,6 +407,7 @@ garmin_aaps_key|GarminStringKey|true
 garmin_connectiq_push_ios|GarminBooleanKey|false
 garmin_http_last_steps_ts|GarminLongNonKey|false
 garmin_http_last_steps|GarminIntNonKey|false
+garmin_keep_awake_ios|GarminBooleanKey|false
 general_low_end_stability_mode|BooleanKey|true
 glass_selected_pills|StringNonKey|false
 glass_selected_tools|StringNonKey|false
