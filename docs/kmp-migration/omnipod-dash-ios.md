@@ -50,24 +50,29 @@ version 1 still read) and `IosDashPumpAndroidParityTest.aSecondBolusIsRefusedWhi
 Until phase 2 reads the answers, a command stays open after its write, so every later delivery
 command is refused: fail closed.
 
-### 2. The manager
+### 2. The link to the pod, then the manager
 
-First the bytes. `IosDashPumpAndroidParityTest` pins 10 places where dashctl does not send what
-Android sends, each one an `@Ignore // PIN, EXPECTED TO FAIL`. A real pod would not understand the
-commands until they are fixed:
+dashctl had no layer between the commands and Bluetooth: no `MessagePacket`, no splitting of a
+message into BLE packets, no RTS/CTS flow. `IosDashMessageTransport` wrote each message raw, so a real
+pod would get nothing it understands. The 10 byte differences pinned in `IosDashPumpAndroidParityTest`
+(envelope `S0.0=`, flag byte, the two sequence counters, nonce, pulse rate, pod id) are mostly in that
+missing layer. So the layer is ported first, as is, and the rest is rebuilt on it.
 
-- [ ] the `S0.0=` / `,G0.0` envelope around each command;
-- [ ] header flag byte `0x11` (eqos 1), not `0x10`;
-- [ ] two counters, as on Android: the outer packet sequence (a full byte, seeded from the pair
-      result, 7 after pairing and session set up) and the inner 4-bit command sequence. The active
-      command follows the inner one, the one the pod reports back;
-- [ ] the fixed nonce Android uses;
-- [ ] the pod's own pulse rate in the bolus, not 2;
-- [ ] the pod unique id and address kept at pairing, so the packet destination is the pod.
-
-Then:
-
-- [ ] Reading the answer of each command and the status, ACK included, into
+- [x] Step 1: port Android `comm/message`, `comm/packet`, `comm/command` and the io interfaces to
+      `dashctl/comm` (commonMain), with `MessageIO` (RTS/CTS, NACK, SUCCESS) and a common CRC32. The
+      Android tests came along byte for byte; 39 tests, green on the JVM and on the iOS simulator. Two
+      adversarial reviews found no difference with Android.
+      Android bugs found and ported as they are (the bytes must stay the same): `MessagePacket.parse`
+      reads the message type from the first flag byte, size bytes are read signed in
+      `MessagePacket.parse` and `BlePacket.parse`, `StringLengthPrefixEncoding.parseKeys` reads the
+      length as `(b0 shl 1) or b1`. None of them changes real traffic; each is commented in the code.
+- [ ] Step 2: the iOS implementation of the two characteristics (CMD and DATA) on CoreBluetooth,
+      against the contract written in the io interfaces.
+- [ ] Step 3: pairing, session and commands rebuilt on `MessageIO`, with Android's two counters
+      (packet sequence per session, seeded from the pair result; 4-bit command sequence, stored, the
+      one the pod reports back and the active command follows), the fixed nonce, the pod's pulse
+      rate and its id. The pinned parity tests then pass and lose their `@Ignore`.
+- [ ] Step 4: reading the answer of each command and the status, ACK included, into
       `DashPodStateManager.updateFromStatus`, then `resolveActiveCommand`.
 - [ ] Activation in two parts (unique id, alerts, prime, basal program, cannula), deactivation,
       suspend and resume, alerts and their silencing, beeps.
