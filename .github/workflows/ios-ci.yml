@@ -358,6 +358,22 @@ jobs:
       - name: Prove the simulator test binary links only the source TFLite archive
         run: plugins/aps/src/tfliteParity/check-uam24-linked.sh simulator
 
+      # The steps above compile only Kotlin. The Swift app files (AapsApp.swift, the Connect IQ
+      # bridge) were compiled only by ios-testflight.yml, so a broken Swift commit stayed green here
+      # until someone tried to ship. Build the app itself, unsigned. Use the device destination: the
+      # generic simulator one also builds x86_64, and the TFLite archive here is arm64 only, so it
+      # fails at the link for a reason that is not in the code. AAPS2 shares every source file.
+      - name: Build the iOS app (Swift)
+        run: |
+          set -o pipefail
+          xcodebuild -project ios/app/AAPS.xcodeproj \
+            -scheme AAPS \
+            -configuration Debug \
+            -destination 'generic/platform=iOS' \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/spm" \
+            CODE_SIGNING_ALLOWED=NO \
+            build | tee xcodebuild.log
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
