@@ -61,17 +61,70 @@ glucose value, sent while the CGM has AAPS awake, so the watch stays up to date 
 - [x] An iOS Garmin plugin in the iOS graph, with the same preferences, answering through the
       shared rules: `GarminPlugin` in `iosMain`. Same class name as on Android on purpose, so the
       imported `ConfigBuilder_Enabled_SYNC_GarminPlugin` turns it on. The key check and the path table
-      are shared (`GarminRequests.keyAccepted`, `GarminRequests.answer`). Not yet: sending the key
-      to the watch after a wrong key (needs phase 3).
+      are shared (`GarminRequests.keyAccepted`, `GarminRequests.answer`). A wrong key is answered
+      401, and, when Connect IQ push is on, the phone also pushes the current key the way Android
+      does (phase 3).
 - [ ] Check on the device with the watch: `/get` answered while AAPS is in front, then in the
       background.
 
 ### 3. iPhone, push channel
 
-- [ ] Add the ConnectIQ Swift package to `ios/app`, a URL scheme for AAPS and
-      `LSApplicationQueriesSchemes` for Garmin Connect.
-- [ ] A Swift bridge behind a Kotlin interface: pick the watch, send a message to the app ids.
-- [ ] Push the shared `glucose` message on every new glucose value, and at connect.
+- [x] Connect IQ iOS SDK 1.8.0 (`github.com/garmin/connectiq-companion-app-sdk-ios`) on both app
+      targets. `SwiftConnectIqCompanion` calls
+      `ConnectIQ.sharedInstance().initialize(withUrlScheme:uiOverrideDelegate:)`. Info.plist has
+      `CFBundleURLTypes` (`aaps-ciq` / `aaps2-ciq`, build setting `AAPS_CIQ_URL_SCHEME`) and
+      `LSApplicationQueriesSchemes` = `gcm-ciq`. SwiftUI `onOpenURL` passes the callback to
+      `parseDeviceSelectionResponseFromURL`. The SDK does not keep the chosen watches: they are
+      stored under `garmin_connectiq_devices` (this phone only) and registered again at the next
+      start. Garmin settings has **Select Garmin devices**, which calls `showConnectIQDeviceSelection`.
+- [x] Kotlin decides; Swift only carries bytes. `ConnectIqCompanion` is the interface, installed
+      from `AapsApp` the same way the Nightscout socket and the meal-advisor camera are. The watch
+      app ids are `GarminWatchApps`, the same six as Android `GarminPlugin.glucoseAppIds`, in the
+      same order. Device status and app-installed status are tracked. The message is
+      `GarminRequests.getGlucoseMessage` (same keys and types Android serializes). The iPhone SDK
+      encodes the dictionary itself; `GarminCiqBytes` is the Android encoding, and
+      `GarminCiqBytesParityTest` checks the two are the same bytes for the same map.
+- [x] Push that message on every new glucose value, on every `EventAPSCalculationFinished`, when a
+      watch becomes ready (`deviceCharacteristicsDiscovered` — connected is not enough), when the
+      request key changes, and when a watch sends the wrong HTTP key (that last one is what
+      Android's messenger does, so the watch learns the key). Failures (`IQSendMessageResult`)
+      wait: 2s, 4s, 8s … up to 60s, one line in the log, and a newer value replaces the one in
+      flight instead of queueing. If the SDK never calls back, the attempt is dropped after 20s
+      and that newer value is sent; the log line is written once. An app the watch does not have
+      waits 30 minutes. Each in-flight push holds one background task on the main queue, ended
+      when the send finishes or when iOS expires it. The preference **Connect IQ push (iOS)**
+      (`garmin_connectiq_push_ios`) defaults to on. Android registers the key and never reads it,
+      and it is not exported, so Android's messenger and its exports stay as they were. The local
+      HTTP server is unchanged and stays up.
+- [x] Incoming Connect IQ messages are logged and not acted on. Android's `GarminMessenger`
+      callback is empty (`{ _, _ -> }`): heart rate, steps, carbs, bolus, temp target, mode and
+      pump connect still arrive as HTTP, and the iPhone server still answers those.
+- [x] On each Bluetooth wake (state restoration, connect, or a notification — the held-connect
+      case), `IosRadioWake.ping` only enqueues work on the main queue (throttled, no
+      `dispatch_sync`). There the plugin makes sure the HTTP server is listening and, when that
+      server is enabled, takes an 8-second `beginBackgroundTask` so a pull that arrives with the
+      wake can be served. A burst of radio callbacks takes one hop, not one per packet. Stop
+      unregisters every Connect IQ listener and drops the Kotlin callback. If Garmin Connect is
+      missing, the SDK's prompt is an alert; the App Store opens only when the user accepts.
+
+### Manual test (a real iPhone and watch)
+
+The simulator cannot open Garmin Connect or talk to a watch. On a phone that already shows the
+watch face while AAPS is in front:
+
+1. **Pairing.** Garmin settings → Select Garmin devices. Garmin Connect opens, the watch is chosen,
+   AAPS comes back. Force-quit AAPS, open it again: the watch is still selected (no second picker).
+   A new glucose in AAPS shows on the watch within a few seconds, with the phone unlocked.
+2. **Locked screen, overnight.** Lock the phone. In the morning the watch face should still have
+   moved every few minutes, not sit on Connect IQ error -300. The local pull may still time out
+   between CGM wakes; the push during each wake is what should keep the face current.
+3. **Garmin Connect killed.** Swipe Garmin Connect away. The next push should fail once in the log
+   (`FAILURE_DEVICE_NOT_AVAILABLE` or similar) and not keep retrying in a tight loop. Open Garmin
+   Connect again and confirm the following glucose arrives.
+4. **Bluetooth off, then on.** Turn Bluetooth off: no storm of errors, the face goes stale. Turn
+   it on: the next CGM wake (or bringing AAPS to the front) pushes again.
+5. **Switch off.** Turn off "Connect IQ push (iOS)". New glucose does not push (log stays quiet).
+   With AAPS in front, the HTTP pull still answers, as in phase 2.
 
 ### 4. Device test
 

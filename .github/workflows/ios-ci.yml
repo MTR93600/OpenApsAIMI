@@ -224,6 +224,7 @@ jobs:
             :core:data:compileKotlinIosArm64 :core:data:compileKotlinIosSimulatorArm64 \
             :core:nssdk:compileKotlinIosArm64 :core:nssdk:compileKotlinIosSimulatorArm64 \
             :core:keys:compileKotlinIosArm64 :core:keys:compileKotlinIosSimulatorArm64 \
+            :core:interfaces:compileKotlinIosArm64 :core:interfaces:compileKotlinIosSimulatorArm64 \
             :plugins:aps:linkDebugTestIosArm64 \
             :plugins:sync:compileKotlinIosArm64 :plugins:sync:compileKotlinIosSimulatorArm64 \
             | tee compile.log
@@ -234,7 +235,7 @@ jobs:
       # into no-ops. Assert the work happened rather than that nothing complained.
       - name: Assert the Apple compiles really ran
         run: |
-          if grep -E "Task :core:(data|nssdk|keys):compileKotlinIos(Arm64|SimulatorArm64) (SKIPPED|NO-SOURCE)" compile.log; then
+          if grep -E "Task :core:(data|nssdk|keys|interfaces):compileKotlinIos(Arm64|SimulatorArm64) (SKIPPED|NO-SOURCE)" compile.log; then
             echo "::error::An iOS compile task was skipped instead of executed."
             exit 1
           fi
