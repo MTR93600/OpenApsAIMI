@@ -11,7 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -19,7 +20,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -167,7 +170,9 @@ internal fun GlassActionPill(
             },
             horizontal = when {
                 compact -> 8.dp
-                else -> 20.dp
+                // 12, not 20: the Stats and Treatment pills share one row with the hour dock, and
+                // on a 375 pt wide iPhone the wider padding pushed "Traitement" onto two lines.
+                else -> 12.dp
             }
         )
         .then(if (height != null) Modifier.height(height) else Modifier)
@@ -176,14 +181,20 @@ internal fun GlassActionPill(
         modifier = boxModifier,
         contentAlignment = Alignment.Center
     ) {
-        Text(
+        // Always one line. A label that is still too long shrinks, down to 10 sp, before it is cut.
+        BasicText(
             text = label,
-            fontSize = when {
-                compact -> 11.sp
-                else -> 14.sp
+            style = TextStyle(
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                color = textColor
+            ),
+            autoSize = if (compact) {
+                TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = 11.sp, stepSize = 1.sp)
+            } else {
+                TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = 13.sp, stepSize = 1.sp)
             },
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-            color = textColor
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }

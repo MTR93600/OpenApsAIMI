@@ -19,11 +19,14 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Text
 
 @Composable
@@ -142,12 +145,16 @@ internal fun GlassPill(
                     color = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
                     lineHeight = 11.sp
                 )
-                Text(
+                // The top pills have a fixed width beside the glucose ring. A long value
+                // ("1253 · 67 bpm", "Boucle Fermée") shrinks from 11 sp down to 8 sp before it is cut.
+                BasicText(
                     text = value,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = valueColor ?: if (isDark) Color(0xFFE2E8F0) else Color(0xFF1E293B),
-                    lineHeight = 13.sp,
+                    style = TextStyle(
+                        fontWeight = FontWeight.Bold,
+                        color = valueColor ?: if (isDark) Color(0xFFE2E8F0) else Color(0xFF1E293B),
+                        lineHeight = 13.sp
+                    ),
+                    autoSize = TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = 11.sp, stepSize = 0.5.sp),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )

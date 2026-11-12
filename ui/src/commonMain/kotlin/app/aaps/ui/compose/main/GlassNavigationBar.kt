@@ -4,6 +4,8 @@ package app.aaps.ui.compose.main
 
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Fastfood
 import androidx.compose.material.icons.filled.ManageAccounts
@@ -12,6 +14,7 @@ import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -21,7 +24,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import app.aaps.core.interfaces.navigation.ElementType
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.ui.CoreUiStrings
@@ -108,7 +113,7 @@ fun GlassNavigationBar(
                         modifier = Modifier.size(NAV_ICON_SIZE),
                     )
                 },
-                label = { Text(text = label, style = MaterialTheme.typography.labelSmall) },
+                label = { NavLabel(label) },
                 colors = colors,
             )
         }
@@ -134,11 +139,28 @@ fun GlassNavigationBar(
                         )
                     }
                 },
-                label = { Text(text = stringResource(UiStrings.loop_accept_nav_label), style = MaterialTheme.typography.labelSmall) },
+                label = { NavLabel(stringResource(UiStrings.loop_accept_nav_label)) },
                 colors = colors,
             )
         }
     }
+}
+
+/**
+ * One line, never two. Six or seven items share the width, so a long label ("Traitements" on a
+ * 375 pt wide iPhone) used to break in the middle of the word. It now shrinks from the theme's
+ * `labelSmall` down to 8 sp, and is cut only when even that does not fit.
+ */
+@Composable
+private fun NavLabel(text: String) {
+    val style = MaterialTheme.typography.labelSmall
+    BasicText(
+        text = text,
+        style = style.copy(color = LocalContentColor.current),
+        autoSize = TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = style.fontSize, stepSize = 0.5.sp),
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 private fun GlassNavigationTab.icon(): ImageVector =
