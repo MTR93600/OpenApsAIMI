@@ -343,6 +343,9 @@ class CoreBluetoothCentral(
          * peripherals are offered.
          */
         override fun centralManager(central: CBCentralManager, willRestoreState: Map<Any?, *>) {
+            // The process was started for a radio event. Tell whoever needs a few seconds of it
+            // (the Garmin HTTP server) before the restore work, and ignore a failure there.
+            IosRadioWake.ping()
             restore(central, willRestoreState)
         }
 
@@ -373,6 +376,7 @@ class CoreBluetoothCentral(
         }
 
         override fun centralManager(central: CBCentralManager, didConnectPeripheral: CBPeripheral) {
+            IosRadioWake.ping()
             val id = didConnectPeripheral.identifier.UUIDString
             peripherals[id] = didConnectPeripheral
             didConnectPeripheral.delegate = this
@@ -453,6 +457,8 @@ class CoreBluetoothCentral(
             didUpdateValueForCharacteristic: CBCharacteristic,
             error: NSError?
         ) {
+            // A notification is the usual wake of a suspended app that is holding a connect.
+            IosRadioWake.ping()
             val failure = statusOf(error)
             if (failure != 0) {
                 emit(BleCentralEvent.OperationFailed("notify", "${didUpdateValueForCharacteristic.UUID.UUIDString} status $failure"))

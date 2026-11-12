@@ -123,5 +123,28 @@
 		<string>processing</string>
 		<string>bluetooth-central</string>
 	</array>
+	<!--
+	  Connect IQ device selection. Garmin Connect opens this scheme to hand back the watches the
+	  user allowed. AAPS and AAPS2 substitute different schemes (aaps-ciq, aaps2-ciq) so one does
+	  not open the other. The Swift bridge reads AAPSConnectIqUrlScheme back at launch.
+	-->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER).connectiq</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>$(AAPS_CIQ_URL_SCHEME)</string>
+			</array>
+		</dict>
+	</array>
+	<key>AAPSConnectIqUrlScheme</key>
+	<string>$(AAPS_CIQ_URL_SCHEME)</string>
+	<!-- Garmin Connect Mobile's scheme. Without this, canOpenURL and the SDK's hand-off fail. -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>gcm-ciq</string>
+	</array>
 </dict>
 </plist>

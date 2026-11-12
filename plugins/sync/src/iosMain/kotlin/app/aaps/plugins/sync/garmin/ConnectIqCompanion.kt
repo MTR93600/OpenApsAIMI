@@ -1,0 +1,62 @@
+package app.aaps.plugins.sync.garmin
+
+/**
+ * The Connect IQ iPhone SDK, as the Kotlin plugin is allowed to see it.
+ *
+ * Swift owns the SDK (`SwiftConnectIqCompanion`). Payloads cross as text: a JSON object for a
+ * glucose message, a JSON array for the device list. The plugin decides when to send; this only
+ * moves the bytes.
+ */
+interface ConnectIqCompanion {
+
+    /**
+     * [appIdsCsv] is the watch app ids, comma separated, 32 hex characters each, the same ids
+     * Android pushes to.
+     */
+    fun start(callback: ConnectIqCallback, appIdsCsv: String)
+
+    fun showDeviceSelection()
+
+    /**
+     * The URL Garmin Connect opened to return the chosen watches. True when the scheme is ours.
+     */
+    fun handleOpenUrl(url: String): Boolean
+
+    /** Puts the saved watches back into the SDK after a restart and listens to them again. */
+    fun restoreDevices(encoded: String)
+
+    fun send(
+        deviceUuid: String,
+        modelName: String,
+        friendlyName: String,
+        partNumber: String,
+        appId: String,
+        payloadJson: String,
+    )
+}
+
+/** What the SDK tells the plugin. Called on whatever thread the SDK uses. */
+interface ConnectIqCallback {
+
+    fun devicesReplaced(encoded: String)
+
+    fun deviceStatus(deviceUuid: String, status: String)
+
+    fun appStatus(deviceUuid: String, appId: String, installed: Boolean, version: Int)
+
+    fun messageReceived(deviceUuid: String, appId: String, payloadJson: String)
+
+    fun sendFinished(deviceUuid: String, appId: String, result: String)
+}
+
+/**
+ * Set from the Swift app entry, before the graph starts the plugin. The same shape as the meal
+ * advisor camera factory: Swift builds it, Kotlin cannot.
+ */
+object ConnectIqRegistry {
+    var companion: ConnectIqCompanion? = null
+}
+
+fun installConnectIqCompanion(companion: ConnectIqCompanion) {
+    ConnectIqRegistry.companion = companion
+}

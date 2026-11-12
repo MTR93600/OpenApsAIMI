@@ -22,6 +22,12 @@ struct AapsApp: App {
     ///
     /// `start()` never raises. A missing or broken `GoogleService-Info.plist` means no crash
     /// reporting, not no app.
+
+    /// One Connect IQ instance for the life of the process. It is created on first use, which is
+    /// the line below that installs it, after Crashlytics. That initializes the SDK with this
+    /// target's URL scheme before `startAapsApp` builds the Garmin plugin.
+    private static let connectIqCompanion = SwiftConnectIqCompanion()
+
     init() {
         CrashlyticsCrashReporter.start()
         // Install the Swift AVFoundation implementation before the Kotlin graph can construct an
@@ -29,6 +35,7 @@ struct AapsApp: App {
         IosMealAdvisorCameraBridgeKt.installIosMealAdvisorCameraFactory(
             factory: SwiftMealAdvisorCameraFactory()
         )
+        ConnectIqCompanionKt.installConnectIqCompanion(companion: AapsApp.connectIqCompanion)
         // Must happen here. iOS only lets background task handlers be registered before the app
         // finishes launching, and `makeUIViewController` below runs later. This call needs no
         // graph; the Kotlin side queues the tasks once its graph is built.
@@ -42,6 +49,10 @@ struct AapsApp: App {
     var body: some SwiftUI.Scene {
         WindowGroup {
             ShellView()
+        }
+        .onOpenURL { url in
+            // Garmin Connect returns the chosen watches by opening our URL scheme.
+            _ = AapsApp.connectIqCompanion.handleOpenUrl(url: url.absoluteString)
         }
     }
 }

@@ -14,6 +14,7 @@
 		AA2009800000000000000 /* CrashlyticsCrashReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1009800000000000000 /* CrashlyticsCrashReporter.swift */; };
 		AA2009900000000000000 /* NsSocketBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1009900000000000000 /* NsSocketBridge.swift */; };
 		AA2010000000000000000 /* MealAdvisorCameraBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1010000000000000000000 /* MealAdvisorCameraBridge.swift */; };
+		C10000050000000000000001 /* ConnectIqBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000040000000000000001 /* ConnectIqBridge.swift */; };
 		AA3000300000000000000 /* AapsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000100000000000000 /* AapsApp.swift */; };
 		AA3000400000000000000 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA3000200000000000000 /* Assets.xcassets */; };
 		AA3005000000000000000 /* libre3 in Resources */ = {isa = PBXBuildFile; fileRef = AA1005000000000000000 /* libre3 */; };
@@ -21,10 +22,13 @@
 		AA3009800000000000000 /* CrashlyticsCrashReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1009800000000000000 /* CrashlyticsCrashReporter.swift */; };
 		AA3009900000000000000 /* NsSocketBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1009900000000000000 /* NsSocketBridge.swift */; };
 		AA3010000000000000000 /* MealAdvisorCameraBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1010000000000000000000 /* MealAdvisorCameraBridge.swift */; };
+		C10000050000000000000002 /* ConnectIqBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000040000000000000001 /* ConnectIqBridge.swift */; };
 		D32B0F773048851500FAFE85 /* SocketIO in Frameworks */ = {isa = PBXBuildFile; productRef = AA00SP02000000000000001 /* SocketIO */; };
 		D32B0F783048851500FAFE85 /* SocketIO in Frameworks */ = {isa = PBXBuildFile; productRef = AA00SP02000000000000002 /* SocketIO */; };
 		D32B0F793048851500FAFE85 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = AA00SP02000000000000003 /* FirebaseCrashlytics */; };
 		D32B0F7A3048851500FAFE85 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = AA00SP02000000000000004 /* FirebaseCrashlytics */; };
+		C10000030000000000000001 /* ConnectIQ in Frameworks */ = {isa = PBXBuildFile; productRef = C10000020000000000000001 /* ConnectIQ */; };
+		C10000030000000000000002 /* ConnectIQ in Frameworks */ = {isa = PBXBuildFile; productRef = C10000020000000000000002 /* ConnectIQ */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -36,6 +40,7 @@
 		AA1009800000000000000 /* CrashlyticsCrashReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CrashlyticsCrashReporter.swift; path = Shared/CrashlyticsCrashReporter.swift; sourceTree = "<group>"; };
 		AA1009900000000000000 /* NsSocketBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NsSocketBridge.swift; path = Shared/NsSocketBridge.swift; sourceTree = "<group>"; };
 		AA1010000000000000000000 /* MealAdvisorCameraBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MealAdvisorCameraBridge.swift; path = Shared/MealAdvisorCameraBridge.swift; sourceTree = "<group>"; };
+		C10000040000000000000001 /* ConnectIqBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ConnectIqBridge.swift; path = Shared/ConnectIqBridge.swift; sourceTree = "<group>"; };
 		AA2000100000000000000 /* AAPS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AAPS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA2000200000000000000 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = AAPS/Assets.xcassets; sourceTree = "<group>"; };
 		AA3000100000000000000 /* AAPS2.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AAPS2.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -50,6 +55,7 @@
 			files = (
 				D32B0F773048851500FAFE85 /* SocketIO in Frameworks */,
 				D32B0F793048851500FAFE85 /* FirebaseCrashlytics in Frameworks */,
+				C10000030000000000000001 /* ConnectIQ in Frameworks */,
 				AA2000500000000000000 /* AapsShared.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -60,6 +66,7 @@
 			files = (
 				D32B0F783048851500FAFE85 /* SocketIO in Frameworks */,
 				D32B0F7A3048851500FAFE85 /* FirebaseCrashlytics in Frameworks */,
+				C10000030000000000000002 /* ConnectIQ in Frameworks */,
 				AA3000500000000000000 /* AapsShared.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -76,6 +83,7 @@
 				AA1009800000000000000 /* CrashlyticsCrashReporter.swift */,
 				AA1009900000000000000 /* NsSocketBridge.swift */,
 				AA1010000000000000000000 /* MealAdvisorCameraBridge.swift */,
+				C10000040000000000000001 /* ConnectIqBridge.swift */,
 				AA2001200000000000000 /* AAPS */,
 				AA3001200000000000000 /* AAPS2 */,
 				AA1000300000000000000 /* Signing.xcconfig */,
@@ -131,6 +139,7 @@
 			packageProductDependencies = (
 				AA00SP02000000000000001 /* SocketIO */,
 				AA00SP02000000000000003 /* FirebaseCrashlytics */,
+				C10000020000000000000001 /* ConnectIQ */,
 			);
 			productName = AAPS;
 			productReference = AA2000100000000000000 /* AAPS.app */;
@@ -154,6 +163,7 @@
 			packageProductDependencies = (
 				AA00SP02000000000000002 /* SocketIO */,
 				AA00SP02000000000000004 /* FirebaseCrashlytics */,
+				C10000020000000000000002 /* ConnectIQ */,
 			);
 			productName = AAPS2;
 			productReference = AA3000100000000000000 /* AAPS2.app */;
@@ -181,6 +191,7 @@
 			packageReferences = (
 				AA00SP01000000000000001 /* XCRemoteSwiftPackageReference "socket" */,
 				AA00SP01000000000000002 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				C10000010000000000000001 /* XCRemoteSwiftPackageReference "connectiq-companion-app-sdk-ios" */,
 			);
 			productRefGroup = AA1001400000000000000 /* Products */;
 			projectDirPath = "";
@@ -289,6 +300,7 @@
 				AA2009800000000000000 /* CrashlyticsCrashReporter.swift in Sources */,
 				AA2009900000000000000 /* NsSocketBridge.swift in Sources */,
 				AA2010000000000000000 /* MealAdvisorCameraBridge.swift in Sources */,
+				C10000050000000000000001 /* ConnectIqBridge.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -300,6 +312,7 @@
 				AA3009800000000000000 /* CrashlyticsCrashReporter.swift in Sources */,
 				AA3009900000000000000 /* NsSocketBridge.swift in Sources */,
 				AA3010000000000000000 /* MealAdvisorCameraBridge.swift in Sources */,
+				C10000050000000000000002 /* ConnectIqBridge.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -396,6 +409,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
+				AAPS_CIQ_URL_SCHEME = "aaps-ciq";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(AAPS_BUNDLE_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -473,6 +487,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
+				AAPS_CIQ_URL_SCHEME = "aaps2-ciq";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(AAPS_BUNDLE_ID)2";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -571,6 +586,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
+				AAPS_CIQ_URL_SCHEME = "aaps-ciq";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(AAPS_BUNDLE_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -648,6 +664,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
+				AAPS_CIQ_URL_SCHEME = "aaps2-ciq";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(AAPS_BUNDLE_ID)2";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -704,6 +721,14 @@
 				version = 12.19.3;
 			};
 		};
+		C10000010000000000000001 /* XCRemoteSwiftPackageReference "connectiq-companion-app-sdk-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/garmin/connectiq-companion-app-sdk-ios";
+			requirement = {
+				kind = exactVersion;
+				version = 1.8.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -726,6 +751,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = AA00SP01000000000000002 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseCrashlytics;
+		};
+		C10000020000000000000001 /* ConnectIQ */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C10000010000000000000001 /* XCRemoteSwiftPackageReference "connectiq-companion-app-sdk-ios" */;
+			productName = ConnectIQ;
+		};
+		C10000020000000000000002 /* ConnectIQ */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C10000010000000000000001 /* XCRemoteSwiftPackageReference "connectiq-companion-app-sdk-ios" */;
+			productName = ConnectIQ;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
