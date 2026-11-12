@@ -410,6 +410,12 @@
 				// multitasking, and a multitasking app has to survive being any shape.
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				// ConnectIQ is a dynamic framework, the first one in the app. Without this path dyld
+				// cannot find it in AAPS.app/Frameworks and stops the app before it starts.
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
 				AAPS_CIQ_URL_SCHEME = "aaps-ciq";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(AAPS_BUNDLE_ID)";
@@ -490,6 +496,12 @@
 				// multitasking, and a multitasking app has to survive being any shape.
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				// ConnectIQ is a dynamic framework, the first one in the app. Without this path dyld
+				// cannot find it in AAPS.app/Frameworks and stops the app before it starts.
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
 				AAPS_CIQ_URL_SCHEME = "aaps2-ciq";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(AAPS_BUNDLE_ID)2";
@@ -591,6 +603,12 @@
 				// multitasking, and a multitasking app has to survive being any shape.
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				// ConnectIQ is a dynamic framework, the first one in the app. Without this path dyld
+				// cannot find it in AAPS.app/Frameworks and stops the app before it starts.
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
 				AAPS_CIQ_URL_SCHEME = "aaps-ciq";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(AAPS_BUNDLE_ID)";
@@ -671,6 +689,12 @@
 				// multitasking, and a multitasking app has to survive being any shape.
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				// ConnectIQ is a dynamic framework, the first one in the app. Without this path dyld
+				// cannot find it in AAPS.app/Frameworks and stops the app before it starts.
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
 				AAPS_CIQ_URL_SCHEME = "aaps2-ciq";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(AAPS_BUNDLE_ID)2";
