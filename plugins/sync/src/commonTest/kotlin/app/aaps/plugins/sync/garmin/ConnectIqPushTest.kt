@@ -33,7 +33,7 @@ class ConnectIqPushTest {
         now = 1_999
         assertTrue(push.request(watch, apps).send.isEmpty())
         now = 2_000
-        assertEquals(listOf(ConnectIqTarget("WATCH", "APP")), push.request(watch, apps).send)
+        assertEquals(listOf("WATCH" to "APP"), push.request(watch, apps).send.ids())
     }
 
     @Test
@@ -62,7 +62,7 @@ class ConnectIqPushTest {
         assertEquals(1, push.request(watch, apps).send.size)
         assertTrue(push.request(watch, apps).send.isEmpty())
         val follow = push.onResult("WATCH", "APP", ConnectIqSendResult.SUCCESS)
-        assertEquals(listOf(ConnectIqTarget("WATCH", "APP")), follow.send)
+        assertEquals(listOf("WATCH" to "APP"), follow.send.ids())
         assertTrue(push.onResult("WATCH", "APP", ConnectIqSendResult.SUCCESS).send.isEmpty())
     }
 
@@ -80,7 +80,7 @@ class ConnectIqPushTest {
     @Test
     fun anAppKnownMissingIsNotSent() {
         val plan = push.request(watch, listOf("MISSING", "THERE")) { _, app -> app != "MISSING" }
-        assertEquals(listOf(ConnectIqTarget("WATCH", "THERE")), plan.send)
+        assertEquals(listOf("WATCH" to "THERE"), plan.send.ids())
     }
 
     @Test
@@ -96,7 +96,48 @@ class ConnectIqPushTest {
     fun anUnknownResultNameIsAFailure() {
         assertEquals(ConnectIqSendResult.FAILURE_UNKNOWN, ConnectIqSendResult.fromWire("NOPE"))
         assertEquals(ConnectIqSendResult.FAILURE_TIMEOUT, ConnectIqSendResult.fromWire("FAILURE_TIMEOUT"))
+        assertEquals(0, ConnectIqSendResult.SUCCESS.ordinal)
+        assertEquals(8, ConnectIqSendResult.FAILURE_TIMEOUT.ordinal)
+        assertEquals(11, ConnectIqSendResult.FAILURE_APP_ALREADY_RUNNING.ordinal)
     }
+
+    @Test
+    fun aSendWithNoCompletionIsResetOnce() {
+        val watched = ConnectIqPush(nowMs = { now }, enabled = { on }, inFlightTimeoutMs = 5_000L)
+        assertEquals(1, watched.request(watch, apps).send.size)
+        now = 4_999
+        val waiting = watched.reapStuck()
+        assertNull(waiting.log)
+        assertEquals(0, waiting.released)
+        now = 5_000
+        val reset = watched.reapStuck()
+        assertTrue(reset.send.isEmpty())
+        assertEquals("Connect IQ watchdog reset device=WATCH app=APP", reset.log)
+        assertEquals(1, reset.released)
+        assertNull(watched.reapStuck().log)
+        assertEquals(listOf("WATCH" to "APP"), watched.request(watch, apps).send.ids())
+    }
+
+    @Test
+    fun aNewerValueStuckInFlightIsSentAfterTheWatchdog() {
+        val watched = ConnectIqPush(nowMs = { now }, enabled = { on }, inFlightTimeoutMs = 5_000L)
+        val first = watched.request(watch, apps).send.single()
+        assertTrue(watched.request(watch, apps).send.isEmpty())
+        now = 5_000
+        val reset = watched.reapStuck()
+        assertEquals(listOf("WATCH" to "APP"), reset.send.ids())
+        assertTrue(reset.log!!.contains("watchdog reset"))
+        assertEquals(1, reset.released)
+        val late = watched.onResult("WATCH", "APP", ConnectIqSendResult.SUCCESS, first.token)
+        assertTrue(late.stale)
+        assertTrue(late.send.isEmpty())
+        assertTrue(watched.request(watch, apps).send.isEmpty())
+        val done = watched.onResult("WATCH", "APP", ConnectIqSendResult.SUCCESS, reset.send.single().token)
+        assertEquals(listOf("WATCH" to "APP"), done.send.ids())
+        assertEquals(false, done.stale)
+    }
+
+    private fun List<ConnectIqTarget>.ids() = map { it.deviceUuid to it.appId }
 
     private fun waitAfter(result: ConnectIqSendResult): Long {
         val before = now

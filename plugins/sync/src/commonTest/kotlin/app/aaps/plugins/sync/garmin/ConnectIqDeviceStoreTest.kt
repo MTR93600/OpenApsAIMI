@@ -43,13 +43,28 @@ class ConnectIqDeviceStoreTest {
     }
 
     @Test
-    fun onlyAConnectedWatchIsPushedTo() {
-        assertTrue(ConnectIqDeviceStatus.UNKNOWN.canPush)
-        assertTrue(ConnectIqDeviceStatus.CONNECTED.canPush)
+    fun onlyAReadyWatchIsPushedTo() {
+        assertFalse(ConnectIqDeviceStatus.UNKNOWN.canPush)
+        assertFalse(ConnectIqDeviceStatus.CONNECTED.canPush)
         assertTrue(ConnectIqDeviceStatus.READY.canPush)
         assertFalse(ConnectIqDeviceStatus.NOT_CONNECTED.canPush)
         assertFalse(ConnectIqDeviceStatus.BLUETOOTH_NOT_READY.canPush)
         assertEquals(ConnectIqDeviceStatus.NOT_CONNECTED, ConnectIqDeviceStatus.fromWire("NOT_CONNECTED"))
         assertEquals(ConnectIqDeviceStatus.UNKNOWN, ConnectIqDeviceStatus.fromWire("later"))
+    }
+
+    @Test
+    fun aPushStartsOnlyWhenTheWatchBecomesReady() {
+        assertTrue(shouldPushOnStatus(ConnectIqDeviceStatus.CONNECTED, ConnectIqDeviceStatus.READY))
+        assertTrue(shouldPushOnStatus(ConnectIqDeviceStatus.UNKNOWN, ConnectIqDeviceStatus.READY))
+        assertFalse(shouldPushOnStatus(ConnectIqDeviceStatus.UNKNOWN, ConnectIqDeviceStatus.CONNECTED))
+        assertFalse(shouldPushOnStatus(ConnectIqDeviceStatus.READY, ConnectIqDeviceStatus.READY))
+        assertFalse(shouldPushOnStatus(ConnectIqDeviceStatus.READY, ConnectIqDeviceStatus.NOT_CONNECTED))
+    }
+
+    @Test
+    fun theJsonSwiftWritesIsAcceptedWhateverTheKeyOrder() {
+        val raw = """[{"partNumber":"006-B","friendlyName":"Left","modelName":"fenix 7","uuid":"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"}]"""
+        assertEquals(listOf(watch.copy(uuid = watch.uuid.uppercase())), ConnectIqDeviceStore.decode(raw))
     }
 }

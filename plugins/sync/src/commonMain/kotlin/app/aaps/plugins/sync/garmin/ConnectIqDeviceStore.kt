@@ -26,9 +26,9 @@ internal data class ConnectIqDevice(
 /**
  * Whether a push to this watch can be attempted.
  *
- * `UNKNOWN` is a watch we restored and have not heard from yet: try once. `CONNECTED` and `READY`
- * are the SDK saying the link is up. Anything else is skipped, so a watch that is off does not get
- * a message every five minutes.
+ * The Connect IQ header says a device whose status is connected has not had its services discovered
+ * yet. Communication waits for `deviceCharacteristicsDiscovered`, which this code reports as [READY].
+ * Anything else, including connected-but-not-ready, is skipped.
  */
 internal enum class ConnectIqDeviceStatus {
     UNKNOWN,
@@ -41,7 +41,7 @@ internal enum class ConnectIqDeviceStatus {
     ;
 
     val canPush: Boolean
-        get() = this == UNKNOWN || this == CONNECTED || this == READY
+        get() = this == READY
 
     companion object {
         fun fromWire(status: String): ConnectIqDeviceStatus = when (status) {
@@ -55,6 +55,10 @@ internal enum class ConnectIqDeviceStatus {
         }
     }
 }
+
+/** True only on the transition into [ConnectIqDeviceStatus.READY], which is when a push may start. */
+internal fun shouldPushOnStatus(previous: ConnectIqDeviceStatus, next: ConnectIqDeviceStatus): Boolean =
+    !previous.canPush && next.canPush
 
 /**
  * The device list as stored text. A broken value becomes an empty list: a bad save must not stop
