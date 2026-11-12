@@ -403,6 +403,7 @@ fill_button2|DoubleKey|true
 fill_button3|DoubleKey|true
 g8_bolusspeed|DiaconnIntKey|true
 garmin_aaps_key|GarminStringKey|true
+garmin_connectiq_push_ios|GarminBooleanKey|false
 garmin_http_last_steps_ts|GarminLongNonKey|false
 garmin_http_last_steps|GarminIntNonKey|false
 general_low_end_stability_mode|BooleanKey|true

@@ -10,9 +10,26 @@ enum class GarminBooleanKey(
     override val title: TextRef,
     override val defaultedBySM: Boolean = false,
     override val hideParentScreenIfHidden: Boolean = false,
+    override val summary: TextRef? = null,
+    override val exportable: Boolean = true,
 ) : BooleanPreferenceKey {
 
     LocalHttpServer("communication_http", false, title = SyncStrings.garmin_local_http_server, defaultedBySM = true, hideParentScreenIfHidden = true),
+
+    /**
+     * iPhone only: push the glucose message through the Connect IQ companion SDK.
+     *
+     * On by default there. Android registers the key (it lives with the other Garmin keys) and never
+     * reads it, so the Connect IQ messenger on Android is unchanged. Not exported: it describes this
+     * phone's channel, not the therapy.
+     */
+    ConnectIqPush(
+        key = "garmin_connectiq_push_ios",
+        defaultValue = true,
+        title = SyncStrings.garmin_connectiq_push_ios,
+        summary = SyncStrings.garmin_connectiq_push_ios_summary,
+        exportable = false,
+    ),
     ;
 
 }
