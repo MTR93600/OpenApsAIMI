@@ -14,6 +14,8 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import platform.Foundation.NSNotificationCenter
+import platform.UIKit.UIApplicationProtectedDataDidBecomeAvailable
 
 /**
  * How far back one physio run reads, and whether it may ask the language model.
@@ -87,6 +89,39 @@ internal class PhysioFeedCadence(startedAtMs: Long) {
 }
 
 /**
+ * Holds the runs back while the phone is locked.
+ *
+ * A run that finds the health data locked is not counted as run, so its window stays due. Trying
+ * again on every tick would read HealthKit every five minutes for nothing while the phone is in a
+ * pocket, so after a lock the ticks wait. The unlock notice ends the wait at once; if it never
+ * comes (iOS did not deliver it to a suspended app), the wait ends after [LOCK_RETRY_MS].
+ */
+@OptIn(ExperimentalAtomicApi::class)
+internal class PhysioLockPause {
+
+    companion object {
+
+        const val LOCK_RETRY_MS = 15L * 60L * 1000L
+    }
+
+    private val lockedAtMs = AtomicLong(0L)
+
+    /** A run found the data locked at [nowMs]. */
+    fun locked(nowMs: Long) = lockedAtMs.store(nowMs)
+
+    /** True while ticks must not start a run. A clock that went back ends the wait. */
+    fun paused(nowMs: Long): Boolean {
+        val at = lockedAtMs.load()
+        if (at == 0L) return false
+        val elapsed = nowMs - at
+        return elapsed in 0 until LOCK_RETRY_MS
+    }
+
+    /** The phone was unlocked. True when a run was waiting for it. */
+    fun unlocked(): Boolean = lockedAtMs.exchange(0L) != 0L
+}
+
+/**
  * The iOS half of [PhysioPipelineFeed]: it runs [PhysioPipeline], and it is the only thing that
  * does so on this platform.
  *
@@ -103,6 +138,12 @@ internal class PhysioFeedCadence(startedAtMs: Long) {
  *
  * Nothing runs until `IosPhysioLifecycle.start()` has opened its gate, and nothing new runs after
  * `stop()`. This is the iOS form of Android cancelling its WorkManager jobs.
+ *
+ * ### Locked phone
+ *
+ * HealthKit cannot be read while the phone is locked. A run that meets that throws
+ * [PhysioDataLockedException] and stores nothing; see [PhysioLockPause] for when it is tried again.
+ * The unlock is the iOS notice `UIApplicationProtectedDataDidBecomeAvailable`.
  */
 @OptIn(ExperimentalAtomicApi::class)
 @SingleIn(AppScope::class)
@@ -121,22 +162,43 @@ class IosPhysioPipelineFeed @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + aapsIoDispatcher)
     private val running = AtomicBoolean(false)
     private val cadence = PhysioFeedCadence(aimiWallClockMs())
+    private val lockPause = PhysioLockPause()
+
+    init {
+        // The feed lives as long as the app, so the observer is never removed.
+        NSNotificationCenter.defaultCenter.addObserverForName(
+            name = UIApplicationProtectedDataDidBecomeAvailable,
+            `object` = null,
+            queue = null,
+        ) { _ ->
+            if (lockPause.unlocked()) {
+                aapsLogger.info(LTag.APS, "[$TAG] phone unlocked, running the physio window that waited")
+                onHealthContextRefresh()
+            }
+        }
+    }
 
     override fun onHealthContextRefresh() {
         if (!lifecycle.isRunning) return
         if (!pipeline.isPhysioAssistantEnabled()) return
         if (running.load()) return
+        if (lockPause.paused(aimiWallClockMs())) return
 
         val window = cadence.due(aimiWallClockMs()) ?: return
         if (!running.compareAndSet(false, true)) return
 
         scope.launch {
+            var counted = true
             try {
                 pipeline.run(daysBack = window.daysBack, runLLM = window.runLLM)
+            } catch (e: PhysioDataLockedException) {
+                // Not run: the window stays due and waits for the unlock.
+                counted = false
+                lockPause.locked(aimiWallClockMs())
             } catch (e: Exception) {
                 aapsLogger.error(LTag.APS, "[$TAG] Physio run failed: ${e.message}", e)
             } finally {
-                cadence.markRan(window, aimiWallClockMs())
+                if (counted) cadence.markRan(window, aimiWallClockMs())
                 running.store(false)
             }
         }

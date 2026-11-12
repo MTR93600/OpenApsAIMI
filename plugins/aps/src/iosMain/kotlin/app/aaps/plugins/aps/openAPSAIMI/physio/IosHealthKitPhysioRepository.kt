@@ -25,6 +25,7 @@ import app.aaps.plugins.aps.openAPSAIMI.steps.UnifiedActivityProviderMTR
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.coroutines.resume
@@ -37,12 +38,15 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.TimeZone
 import platform.Foundation.NSDate
 import platform.Foundation.NSDateComponents
+import platform.Foundation.NSError
 import platform.Foundation.NSPredicate
 import platform.Foundation.NSSortDescriptor
 import platform.Foundation.dateWithTimeIntervalSince1970
 import platform.Foundation.timeIntervalSince1970
 import platform.HealthKit.HKCategorySample
 import platform.HealthKit.HKCategoryTypeIdentifierSleepAnalysis
+import platform.HealthKit.HKErrorDatabaseInaccessible
+import platform.HealthKit.HKErrorDomain
 import platform.HealthKit.HKHealthStore
 import platform.HealthKit.HKMetricPrefixMilli
 import platform.HealthKit.HKObjectQueryNoLimit
@@ -261,6 +265,18 @@ class IosHealthKitPhysioRepository @Inject constructor(
     private val stepsCache = AtomicReference<CachedData<Int>?>(null)
     private val thermalCache = AtomicReference<CachedData<ThermalDataWindowMTR>?>(null)
 
+    /**
+     * When HealthKit last refused a read because the phone was locked, 0 for never.
+     *
+     * While the phone is locked, HealthKit data is encrypted and every read fails. [fetchAllData]
+     * checks this so a locked read is not taken for "no data", see [PhysioDataLockedException].
+     */
+    private val lockedErrorAtMs = AtomicLong(0L)
+
+    private fun noteReadError(error: NSError?) {
+        if (error != null && isHealthDataLockedError(error.domain, error.code)) lockedErrorAtMs.store(aimiWallClockMs())
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // AimiPhysioSource
     // ═══════════════════════════════════════════════════════════════════════
@@ -353,6 +369,7 @@ class IosHealthKitPhysioRepository @Inject constructor(
             )
             query.initialResultsHandler = { _, results, error ->
                 if (error != null || results == null) {
+                    noteReadError(error)
                     aapsLogger.warn(
                         LTag.APS,
                         "[$TAG] step buckets failed: ${error?.localizedDescription ?: "no result"}",
@@ -452,6 +469,13 @@ class IosHealthKitPhysioRepository @Inject constructor(
                 "[$TAG] FETCH RESULT - Steps: $steps avg/day ${if (steps == 0) "(no steps data)" else ""}",
             )
 
+            if (lockedErrorAtMs.load() >= startMs) {
+                // The empty answers are not real: drop what this fetch cached, so the run after
+                // the unlock reads HealthKit again instead of serving them for half an hour.
+                clearCache()
+                throw PhysioDataLockedException("HealthKit refused reads while the phone was locked")
+            }
+
             val elapsedMs = aimiWallClockMs() - startMs
             val hasAnyData = sleep != null || hrv.isNotEmpty() || rhr.isNotEmpty() || steps > 0
             if (!hasAnyData) {
@@ -474,6 +498,8 @@ class IosHealthKitPhysioRepository @Inject constructor(
                 steps = steps,
                 fetchTimestamp = aimiWallClockMs(),
             )
+        } catch (e: PhysioDataLockedException) {
+            throw e
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "[$TAG] Fetch failed: ${e.message}", e)
             RawPhysioDataMTR.EMPTY
@@ -892,6 +918,7 @@ class IosHealthKitPhysioRepository @Inject constructor(
             sortDescriptors,
         ) { _, raw, error ->
             if (error != null) {
+                noteReadError(error)
                 aapsLogger.warn(
                     LTag.APS,
                     "[$TAG] ${sampleType.identifier} read failed: ${error.localizedDescription}",
@@ -927,6 +954,7 @@ class IosHealthKitPhysioRepository @Inject constructor(
             option,
         ) { _, statistics, error ->
             if (error != null) {
+                noteReadError(error)
                 aapsLogger.warn(
                     LTag.APS,
                     "[$TAG] ${quantityType.identifier} statistic failed: ${error.localizedDescription}",
@@ -940,3 +968,12 @@ class IosHealthKitPhysioRepository @Inject constructor(
         }
     }
 }
+
+/**
+ * True for the error HealthKit gives while the phone is locked: "Protected health data is
+ * inaccessible" (`HKError.errorDatabaseInaccessible`). Every other error, and a refused read, is not
+ * this one.
+ */
+@OptIn(ExperimentalForeignApi::class)
+internal fun isHealthDataLockedError(domain: String?, code: Long): Boolean =
+    domain == HKErrorDomain && code == HKErrorDatabaseInaccessible

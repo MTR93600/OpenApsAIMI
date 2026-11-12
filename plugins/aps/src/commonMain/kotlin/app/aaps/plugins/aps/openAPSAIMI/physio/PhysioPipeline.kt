@@ -171,6 +171,9 @@ class PhysioPipeline @Inject constructor(
      *
      * A skipped call answers `false`. The caller's next scheduled run comes round soon, and a
      * skipped duplicate is strictly better than a double-counted sample.
+     *
+     * Throws [PhysioDataLockedException] when the data source says the health data is locked. Then
+     * nothing was stored. Only iOS throws it.
      */
     suspend fun run(daysBack: Int, runLLM: Boolean): Boolean {
         if (!running.tryEnter()) {
@@ -202,6 +205,11 @@ class PhysioPipeline @Inject constructor(
             val t0 = aimiWallClockMs()
             val rawData = try {
                 enrichRawFromUnifiedIfNeeded(dataSource.fetchAllData(daysBack = daysBack))
+            } catch (e: PhysioDataLockedException) {
+                // Not "no data": nothing is stored, so the last context and the baseline stay as
+                // they were. The caller decides when to try again.
+                aapsLogger.info(LTag.APS, "[$TAG] ⏸️ Health data locked (${e.message}) - run skipped, last context kept")
+                throw e
             } catch (e: Exception) {
                 aapsLogger.error(LTag.APS, "[$TAG] ❌ Fetch error", e)
                 return false
@@ -261,6 +269,8 @@ class PhysioPipeline @Inject constructor(
             )
 
             return true
+        } catch (e: PhysioDataLockedException) {
+            throw e
         } catch (e: Exception) {
             aapsLogger.error(LTag.APS, "[$TAG] ❌ Pipeline CRASH", e)
             return false
