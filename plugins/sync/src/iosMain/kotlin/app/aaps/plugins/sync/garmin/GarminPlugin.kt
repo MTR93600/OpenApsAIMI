@@ -98,6 +98,7 @@ class GarminPlugin(
     private val push = ConnectIqPush(nowMs = { requests.nowMs() }, enabled = { pushEnabled() })
     private val radioWake = GarminRadioWake(nowMs = { requests.nowMs() })
     private val pushCover = GarminPushCover()
+    private val readyNudge = ConnectIqReadyNudge(nowMs = { requests.nowMs() })
     private val devices = LinkedHashMap<String, ConnectIqDevice>()
     private val appInstalled = HashMap<Pair<String, String>, Boolean>()
     private val state = GarminLock()
@@ -181,6 +182,7 @@ class GarminPlugin(
 
     override suspend fun onStop() {
         IosRadioWake.listener = null
+        pushCover.end()
         ConnectIqRegistry.companion?.stop()
         scope.cancel()
         aapsLogger.info(LTag.GARMIN, "Stop")
@@ -215,6 +217,12 @@ class GarminPlugin(
             devices.clear()
             stored.forEach { devices[it.uuid] = it }
         }
+        companion.setInstallPrompt(
+            title = rh.gs(SyncStrings.garmin_connect_install_title),
+            message = rh.gs(SyncStrings.garmin_connect_install_message),
+            accept = rh.gs(SyncStrings.garmin_connect_install_accept),
+            decline = rh.gs(SyncStrings.garmin_connect_install_decline),
+        )
         companion.start(callback, GarminWatchApps.byId.keys.joinToString(","))
         if (stored.isNotEmpty()) companion.restoreDevices(ConnectIqDeviceStore.encode(stored))
     }
@@ -243,7 +251,18 @@ class GarminPlugin(
             shouldPushOnStatus(previous, parsed)
         }
         aapsLogger.info(LTag.GARMIN, "Connect IQ $uuid $parsed")
+        if (readyNudge.onStatus(uuid, parsed)) armReadyNudge(uuid)
         if (becameReachable) pushGlucose("connect")
+    }
+
+    /** One re-register if the SDK reports connected and then never says the watch is ready. */
+    private fun armReadyNudge(uuid: String) {
+        scope.launch {
+            delay(ConnectIqReadyNudge.WAIT_MS)
+            if (!readyNudge.shouldReregister(uuid)) return@launch
+            aapsLogger.info(LTag.GARMIN, "Connect IQ $uuid still connected without READY, registering again")
+            ConnectIqRegistry.companion?.reregisterDevice(uuid)
+        }
     }
 
     private fun pushEnabled(): Boolean = preferences.get(GarminBooleanKey.ConnectIqPush)

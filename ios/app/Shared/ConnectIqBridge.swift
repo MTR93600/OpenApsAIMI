@@ -36,6 +36,10 @@ final class SwiftConnectIqCompanion: NSObject, ConnectIqCompanion, IQUIOverrideD
     private var pendingDevices: String?
     private var appIds: [String] = []
     private var knownDevices: [IQDevice] = []
+    private var installTitle = "Garmin Connect"
+    private var installMessage = "AAPS needs Garmin Connect to send glucose to the watch. Open the App Store to install it?"
+    private var installAccept = "Install"
+    private var installDecline = "Not now"
 
     /// SDK 1.8.0 `IQSendMessageResult`, in header order. Names are the ones the Kotlin side matches.
     private static let sendResults = [
@@ -75,6 +79,29 @@ final class SwiftConnectIqCompanion: NSObject, ConnectIqCompanion, IQUIOverrideD
     func needsToInstallConnectMobile() {
         // The SDK asks us to decide. Opening the store here would leave the phone without a choice.
         onMain { self.presentInstallPrompt() }
+    }
+
+    func setInstallPrompt(title: String, message: String, accept: String, decline: String) {
+        lock.lock()
+        installTitle = title
+        installMessage = message
+        installAccept = accept
+        installDecline = decline
+        lock.unlock()
+    }
+
+    func reregisterDevice(deviceUuid: String) {
+        lock.lock()
+        let device = knownDevices.first {
+            $0.uuid.uuidString.caseInsensitiveCompare(deviceUuid) == .orderedSame
+        }
+        lock.unlock()
+        guard let device else { return }
+        onMain {
+            let connectIq = ConnectIQ.sharedInstance()
+            connectIq.unregister(forDeviceEvents: device, delegate: self)
+            connectIq.register(forDeviceEvents: device, delegate: self)
+        }
     }
 
     func start(callback: ConnectIqCallback, appIdsCsv: String) {
@@ -180,7 +207,10 @@ final class SwiftConnectIqCompanion: NSObject, ConnectIqCompanion, IQUIOverrideD
 
     func deviceCharacteristicsDiscovered(_ device: IQDevice) {
         callback?.deviceStatus(deviceUuid: device.uuid.uuidString, status: "READY")
-        registerApps(on: device)
+        lock.lock()
+        let ids = appIds
+        lock.unlock()
+        registerApps(on: device, appIds: ids)
     }
 
     func receivedMessage(_ message: Any, from app: IQApp) {
@@ -199,16 +229,27 @@ final class SwiftConnectIqCompanion: NSObject, ConnectIqCompanion, IQUIOverrideD
     /// Unregisters anything that is no longer selected, then registers the new list. Registering
     /// without the unregister stacks a second delegate on the next start.
     private func register(_ devices: [IQDevice]) {
-        let removed = knownDevices.filter { old in !devices.contains { $0.uuid == old.uuid } }
-        drop(removed, appIds: appIds)
+        lock.lock()
+        let previous = knownDevices
+        let ids = appIds
+        let alive = callback != nil
+        lock.unlock()
+        guard alive else { return }
+        let removed = previous.filter { old in !devices.contains { $0.uuid == old.uuid } }
+        drop(removed, appIds: ids)
         let connectIq = ConnectIQ.sharedInstance()
         for device in devices {
             connectIq.unregister(forDeviceEvents: device, delegate: self)
-            unregisterApps(on: device, appIds: appIds)
+            unregisterApps(on: device, appIds: ids)
             connectIq.register(forDeviceEvents: device, delegate: self)
-            registerApps(on: device)
+            registerApps(on: device, appIds: ids)
         }
-        knownDevices = devices
+        // Same lock as stop(). A stop that landed during the SDK calls wins: the list stays empty.
+        lock.lock()
+        if callback != nil {
+            knownDevices = devices
+        }
+        lock.unlock()
     }
 
     private func drop(_ devices: [IQDevice], appIds: [String]) {
@@ -230,7 +271,7 @@ final class SwiftConnectIqCompanion: NSObject, ConnectIqCompanion, IQUIOverrideD
 
     /// Listens to each watch app and asks whether it is installed. Sending waits on that for apps
     /// we already know are missing; an unknown app is still tried once.
-    private func registerApps(on device: IQDevice) {
+    private func registerApps(on device: IQDevice, appIds: [String]) {
         let connectIq = ConnectIQ.sharedInstance()
         for appId in appIds {
             guard let appUuid = Self.uuid(fromHex: appId) else { continue }
@@ -251,13 +292,15 @@ final class SwiftConnectIqCompanion: NSObject, ConnectIqCompanion, IQUIOverrideD
     }
 
     private func presentInstallPrompt() {
-        let alert = UIAlertController(
-            title: "Garmin Connect",
-            message: "AAPS needs Garmin Connect to send glucose to the watch. Open the App Store to install it?",
-            preferredStyle: .alert
-        )
-        alert.addAction(UIAlertAction(title: "Not now", style: .cancel))
-        alert.addAction(UIAlertAction(title: "Install", style: .default) { _ in
+        lock.lock()
+        let title = installTitle
+        let message = installMessage
+        let accept = installAccept
+        let decline = installDecline
+        lock.unlock()
+        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: decline, style: .cancel))
+        alert.addAction(UIAlertAction(title: accept, style: .default) { _ in
             ConnectIQ.sharedInstance().showAppStoreForConnectMobile()
         })
         guard let presenter = Self.topController() else { return }

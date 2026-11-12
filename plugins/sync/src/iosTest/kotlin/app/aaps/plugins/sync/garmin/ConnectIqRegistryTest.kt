@@ -28,6 +28,10 @@ class ConnectIqRegistryTest {
 
         override fun start(callback: ConnectIqCallback, appIdsCsv: String) = Unit
 
+        override fun setInstallPrompt(title: String, message: String, accept: String, decline: String) = Unit
+
+        override fun reregisterDevice(deviceUuid: String) = Unit
+
         override fun showDeviceSelection() = Unit
 
         override fun handleOpenUrl(url: String): Boolean {

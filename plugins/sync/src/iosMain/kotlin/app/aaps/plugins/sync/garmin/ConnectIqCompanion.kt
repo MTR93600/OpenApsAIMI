@@ -15,6 +15,15 @@ interface ConnectIqCompanion {
      */
     fun start(callback: ConnectIqCallback, appIdsCsv: String)
 
+    /** The alert shown when Garmin Connect is not installed, in the phone's language. */
+    fun setInstallPrompt(title: String, message: String, accept: String, decline: String)
+
+    /**
+     * Unregisters then registers device events for one watch. Used once when a restored watch stays
+     * connected without `deviceCharacteristicsDiscovered`.
+     */
+    fun reregisterDevice(deviceUuid: String)
+
     fun showDeviceSelection()
 
     /**

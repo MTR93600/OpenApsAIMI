@@ -90,6 +90,15 @@ internal class GarminPushCover {
         runOnMain { drop(count) }
     }
 
+    /** Ends the task now. Called when the plugin stops, so iOS does not have to expire it. */
+    fun end() {
+        runOnMain {
+            outstanding = 0
+            box?.end()
+            box = null
+        }
+    }
+
     private fun add(count: Int) {
         outstanding += count
         val current = box
