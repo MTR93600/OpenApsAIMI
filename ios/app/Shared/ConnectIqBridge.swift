@@ -66,6 +66,10 @@ final class SwiftConnectIqCompanion: NSObject, ConnectIqCompanion, IQUIOverrideD
         "CONNECTED",
     ]
 
+    /// The SDK headers carry no nullability, so Swift sees `ConnectIQ!`. The shared instance always
+    /// exists; this unwraps it once instead of at every call.
+    private static var sdk: ConnectIQ { ConnectIQ.sharedInstance() }
+
     override init() {
         let fromPlist = Bundle.main.object(forInfoDictionaryKey: "AAPSConnectIqUrlScheme") as? String
         urlScheme = (fromPlist?.isEmpty == false) ? fromPlist! : "aaps-ciq"
@@ -73,7 +77,7 @@ final class SwiftConnectIqCompanion: NSObject, ConnectIqCompanion, IQUIOverrideD
         // The two-argument form. A restore identifier would give the SDK its own CoreBluetooth
         // central; this app already restores the sensor and the pump, and the push goes out while
         // those wakes have the process up.
-        ConnectIQ.sharedInstance().initialize(withUrlScheme: urlScheme, uiOverrideDelegate: self)
+        Self.sdk.initialize(withUrlScheme: urlScheme, uiOverrideDelegate: self)
     }
 
     func needsToInstallConnectMobile() {
@@ -98,7 +102,7 @@ final class SwiftConnectIqCompanion: NSObject, ConnectIqCompanion, IQUIOverrideD
         lock.unlock()
         guard let device else { return }
         onMain {
-            let connectIq = ConnectIQ.sharedInstance()
+            let connectIq = Self.sdk
             connectIq.unregister(forDeviceEvents: device, delegate: self)
             connectIq.register(forDeviceEvents: device, delegate: self)
         }
@@ -118,7 +122,7 @@ final class SwiftConnectIqCompanion: NSObject, ConnectIqCompanion, IQUIOverrideD
 
     func showDeviceSelection() {
         onMain {
-            ConnectIQ.sharedInstance().showConnectIQDeviceSelection()
+            Self.sdk.showDeviceSelection()
         }
     }
 
@@ -128,7 +132,7 @@ final class SwiftConnectIqCompanion: NSObject, ConnectIqCompanion, IQUIOverrideD
             return false
         }
         onMain {
-            let raw = ConnectIQ.sharedInstance().parseDeviceSelectionResponse(from: parsed) as? [Any] ?? []
+            let raw: [Any] = Self.sdk.parseDeviceSelectionResponse(from: parsed) ?? []
             let parsedDevices = raw.compactMap { $0 as? IQDevice }
             let encoded = Self.encode(parsedDevices)
             self.register(parsedDevices)
@@ -165,16 +169,16 @@ final class SwiftConnectIqCompanion: NSObject, ConnectIqCompanion, IQUIOverrideD
                 self.finish(deviceUuid: deviceUuid, appId: appId, result: "FAILURE_UNSUPPORTED_TYPE", token: token)
                 return
             }
-            let device = IQDevice.device(
-                withId: deviceId,
+            let device = IQDevice(
+                id: deviceId,
                 modelName: modelName,
                 friendlyName: friendlyName,
                 partNumber: partNumber
             )
             // The store id is not in the Android map. The application id is what the watch matches;
             // the same value is passed as the store id so the SDK has the UUID it requires.
-            let app = IQApp.app(withUUID: appUuid, storeUuid: appUuid, device: device)
-            ConnectIQ.sharedInstance().sendMessage(payload, to: app, progress: { _, _ in }, completion: { result in
+            let app = IQApp(uuid: appUuid, store: appUuid, device: device)
+            Self.sdk.sendMessage(payload, to: app, progress: { _, _ in }, completion: { result in
                 let index = Int(result.rawValue)
                 let name = (index >= 0 && index < Self.sendResults.count) ? Self.sendResults[index] : "FAILURE_UNKNOWN"
                 self.finish(deviceUuid: deviceUuid, appId: appId, result: name, token: token)
@@ -193,7 +197,7 @@ final class SwiftConnectIqCompanion: NSObject, ConnectIqCompanion, IQUIOverrideD
         lock.unlock()
         onMain {
             self.drop(devices, appIds: ids)
-            let connectIq = ConnectIQ.sharedInstance()
+            let connectIq = Self.sdk
             connectIq.unregister(forAllDeviceEvents: self)
             connectIq.unregister(forAllAppMessages: self)
         }
@@ -237,7 +241,7 @@ final class SwiftConnectIqCompanion: NSObject, ConnectIqCompanion, IQUIOverrideD
         guard alive else { return }
         let removed = previous.filter { old in !devices.contains { $0.uuid == old.uuid } }
         drop(removed, appIds: ids)
-        let connectIq = ConnectIQ.sharedInstance()
+        let connectIq = Self.sdk
         for device in devices {
             connectIq.unregister(forDeviceEvents: device, delegate: self)
             unregisterApps(on: device, appIds: ids)
@@ -253,7 +257,7 @@ final class SwiftConnectIqCompanion: NSObject, ConnectIqCompanion, IQUIOverrideD
     }
 
     private func drop(_ devices: [IQDevice], appIds: [String]) {
-        let connectIq = ConnectIQ.sharedInstance()
+        let connectIq = Self.sdk
         for device in devices {
             connectIq.unregister(forDeviceEvents: device, delegate: self)
             unregisterApps(on: device, appIds: appIds)
@@ -261,10 +265,10 @@ final class SwiftConnectIqCompanion: NSObject, ConnectIqCompanion, IQUIOverrideD
     }
 
     private func unregisterApps(on device: IQDevice, appIds: [String]) {
-        let connectIq = ConnectIQ.sharedInstance()
+        let connectIq = Self.sdk
         for appId in appIds {
             guard let appUuid = Self.uuid(fromHex: appId) else { continue }
-            let app = IQApp.app(withUUID: appUuid, storeUuid: appUuid, device: device)
+            let app = IQApp(uuid: appUuid, store: appUuid, device: device)
             connectIq.unregister(forAppMessages: app, delegate: self)
         }
     }
@@ -272,10 +276,10 @@ final class SwiftConnectIqCompanion: NSObject, ConnectIqCompanion, IQUIOverrideD
     /// Listens to each watch app and asks whether it is installed. Sending waits on that for apps
     /// we already know are missing; an unknown app is still tried once.
     private func registerApps(on device: IQDevice, appIds: [String]) {
-        let connectIq = ConnectIQ.sharedInstance()
+        let connectIq = Self.sdk
         for appId in appIds {
             guard let appUuid = Self.uuid(fromHex: appId) else { continue }
-            let app = IQApp.app(withUUID: appUuid, storeUuid: appUuid, device: device)
+            let app = IQApp(uuid: appUuid, store: appUuid, device: device)
             connectIq.register(forAppMessages: app, delegate: self)
             let echoedAppId = appId
             let deviceUuid = device.uuid.uuidString
@@ -301,7 +305,7 @@ final class SwiftConnectIqCompanion: NSObject, ConnectIqCompanion, IQUIOverrideD
         let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: decline, style: .cancel))
         alert.addAction(UIAlertAction(title: accept, style: .default) { _ in
-            ConnectIQ.sharedInstance().showAppStoreForConnectMobile()
+            Self.sdk.showAppStoreForConnectMobile()
         })
         guard let presenter = Self.topController() else { return }
         presenter.present(alert, animated: true)
@@ -347,10 +351,10 @@ final class SwiftConnectIqCompanion: NSObject, ConnectIqCompanion, IQUIOverrideD
               let rows = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
             return []
         }
-        return rows.compactMap { row in
+        return rows.compactMap { row -> IQDevice? in
             guard let uuidText = row["uuid"] as? String, let uuid = UUID(uuidString: uuidText) else { return nil }
-            return IQDevice.device(
-                withId: uuid,
+            return IQDevice(
+                id: uuid,
                 modelName: row["modelName"] as? String ?? "",
                 friendlyName: row["friendlyName"] as? String ?? "",
                 partNumber: row["partNumber"] as? String ?? ""

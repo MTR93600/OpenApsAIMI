@@ -48,11 +48,12 @@ struct AapsApp: App {
 
     var body: some SwiftUI.Scene {
         WindowGroup {
+            // onOpenURL is a View modifier, not a Scene one, so it sits on the window's view.
             ShellView()
-        }
-        .onOpenURL { url in
-            // Garmin Connect returns the chosen watches by opening our URL scheme.
-            _ = AapsApp.connectIqCompanion.handleOpenUrl(url: url.absoluteString)
+                .onOpenURL { url in
+                    // Garmin Connect returns the chosen watches by opening our URL scheme.
+                    _ = AapsApp.connectIqCompanion.handleOpenUrl(url: url.absoluteString)
+                }
         }
     }
 }
