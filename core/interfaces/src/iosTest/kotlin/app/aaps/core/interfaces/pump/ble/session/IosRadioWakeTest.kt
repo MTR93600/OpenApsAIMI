@@ -36,4 +36,29 @@ class IosRadioWakeTest {
         IosRadioWake.ping()
         assertEquals(1, scheduled)
     }
+
+    @Test
+    fun aPingAfterTheWindowIsQueued() {
+        var scheduled = 0
+        IosRadioWake.enqueue = { scheduled += 1 }
+        IosRadioWake.listener = { }
+        IosRadioWake.nowMs = { 10_000L }
+        IosRadioWake.ping()
+        IosRadioWake.nowMs = { 10_000L + IosRadioWake.minGapMs }
+        IosRadioWake.ping()
+        assertEquals(2, scheduled)
+    }
+
+    @Test
+    fun theQueuedBlockRunsTheListener() {
+        var ran = 0
+        var queued: (() -> Unit)? = null
+        IosRadioWake.enqueue = { block -> queued = block }
+        IosRadioWake.listener = { ran += 1 }
+        IosRadioWake.nowMs = { 10_000L }
+        IosRadioWake.ping()
+        assertEquals(0, ran)
+        queued?.invoke()
+        assertEquals(1, ran)
+    }
 }
