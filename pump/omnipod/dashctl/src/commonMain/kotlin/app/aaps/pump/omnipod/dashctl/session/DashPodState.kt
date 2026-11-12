@@ -22,7 +22,16 @@ data class DashPodState(
     /** Pod unique id, set once the pod is paired. */
     val uniqueId: Long? = null,
     val activationProgress: ActivationProgress = ActivationProgress.NOT_STARTED,
-    val bluetoothAddress: String? = null
+    val bluetoothAddress: String? = null,
+    /** The last status the pod reported, null before the first one. */
+    val podStatus: DashPodStatus? = null,
+    /**
+     * How many status answers arrived since this state exists. It orders the events of an active
+     * command: see [DashActiveCommand].
+     */
+    val statusResponseCount: Long = 0L,
+    /** The delivery command not yet confirmed by a status, null when none is open. */
+    val activeCommand: DashActiveCommand? = null,
 ) {
 
     init {
@@ -42,7 +51,10 @@ data class DashPodState(
             messageSequenceNumber == other.messageSequenceNumber &&
             uniqueId == other.uniqueId &&
             activationProgress == other.activationProgress &&
-            bluetoothAddress == other.bluetoothAddress
+            bluetoothAddress == other.bluetoothAddress &&
+            podStatus == other.podStatus &&
+            statusResponseCount == other.statusResponseCount &&
+            activeCommand == other.activeCommand
     }
 
     override fun hashCode(): Int {
@@ -52,6 +64,9 @@ data class DashPodState(
         result = 31 * result + (uniqueId?.hashCode() ?: 0)
         result = 31 * result + activationProgress.hashCode()
         result = 31 * result + (bluetoothAddress?.hashCode() ?: 0)
+        result = 31 * result + (podStatus?.hashCode() ?: 0)
+        result = 31 * result + statusResponseCount.hashCode()
+        result = 31 * result + (activeCommand?.hashCode() ?: 0)
         return result
     }
 

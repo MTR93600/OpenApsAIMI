@@ -38,6 +38,10 @@ class DashPodStateManager(private val store: DashPodStateStore) {
         get() = state.activationProgress
     val bluetoothAddress: String?
         get() = state.bluetoothAddress
+    val podStatus: DashPodStatus?
+        get() = state.podStatus
+    val activeCommand: DashActiveCommand?
+        get() = state.activeCommand
 
     /** Full state snapshot; the LTK is defensively copied. */
     fun currentState(): DashPodState = state.copy(ltk = state.ltk?.copyOf())
@@ -96,6 +100,80 @@ class DashPodStateManager(private val store: DashPodStateStore) {
             ltk = ltk.copyOf(),
             eapAkaSequenceNumber = 1L
         )
+        persist()
+    }
+
+    // -- Active command (ported from OmnipodDashPodStateManagerImpl) -------------
+
+    /**
+     * Opens the active command for a delivery command about to be built with the current message
+     * sequence number. Stored before any byte goes, so a crash cannot lose it.
+     *
+     * @throws DashCommandNotConfirmedException while another command is open: the pod may have taken
+     *   it, and sending a new one (a retried bolus) could deliver twice. Ask for a status first.
+     */
+    fun createActiveCommand(
+        kind: DashCommandKind,
+        historyId: Long,
+        requestedBolusUnits: Double? = null,
+        tempBasalRate: Double? = null,
+        tempBasalMinutes: Int? = null,
+    ): DashActiveCommand {
+        state.activeCommand?.let {
+            throw DashCommandNotConfirmedException("Trying to send a command and the last command was not confirmed: $it")
+        }
+        val command = DashActiveCommand(
+            sequence = state.messageSequenceNumber,
+            kind = kind,
+            historyId = historyId,
+            statusCountAtCreation = state.statusResponseCount,
+            requestedBolusUnits = requestedBolusUnits,
+            tempBasalRate = tempBasalRate,
+            tempBasalMinutes = tempBasalMinutes,
+        )
+        state = state.copy(activeCommand = command)
+        persist()
+        return command
+    }
+
+    /**
+     * The bytes of the active command are about to go. Called before the write: a crash in the middle
+     * then leaves "maybe sent", which needs a status, and never "not sent", which would allow a resend.
+     */
+    fun markActiveCommandSent() {
+        val command = state.activeCommand ?: return
+        state = state.copy(activeCommand = command.copy(sent = true))
+        persist()
+    }
+
+    /** The write failed before any byte left: the pod cannot have the command. */
+    fun markActiveCommandNotSent() {
+        val command = state.activeCommand ?: return
+        state = state.copy(activeCommand = command.copy(sent = false))
+        persist()
+    }
+
+    /** What is known now about the active command. */
+    fun commandConfirmation(): DashCommandConfirmation =
+        DashCommandConfirmation.of(state.activeCommand, state.statusResponseCount, state.podStatus?.lastProgrammingCommandSequence)
+
+    /**
+     * Closes the active command when its outcome is known ([DashCommandConfirmation.isFinal]), and
+     * keeps it open otherwise. The command is returned either way, for the history.
+     */
+    fun resolveActiveCommand(): Pair<DashCommandConfirmation, DashActiveCommand?> {
+        val command = state.activeCommand
+        val confirmation = commandConfirmation()
+        if (confirmation.isFinal) {
+            state = state.copy(activeCommand = null)
+            persist()
+        }
+        return confirmation to command
+    }
+
+    /** A default or alarm status arrived: store it, and count it, which orders the active command. */
+    fun updateFromStatus(status: DashPodStatus) {
+        state = state.copy(podStatus = status, statusResponseCount = state.statusResponseCount + 1)
         persist()
     }
 

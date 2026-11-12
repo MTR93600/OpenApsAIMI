@@ -26,6 +26,9 @@ import app.aaps.pump.omnipod.dashctl.pod.definition.BeepType
 import app.aaps.pump.omnipod.dashctl.pod.definition.ProgramReminder
 import app.aaps.pump.omnipod.dashctl.crypto.DashEnDecrypt
 import app.aaps.pump.omnipod.dashctl.crypto.DashKeyExchange
+import app.aaps.pump.omnipod.dashctl.session.DashCommandNotConfirmedException
+import app.aaps.pump.omnipod.dashctl.session.DashCommandKind
+import app.aaps.pump.omnipod.dashctl.session.DashCommandConfirmation
 import app.aaps.pump.omnipod.dashctl.session.DashCommandSession
 import app.aaps.pump.omnipod.dashctl.session.DashMessageTransport
 import app.aaps.pump.omnipod.dashctl.session.DashPairing
@@ -199,30 +202,31 @@ class IosDashPump(
     override suspend fun deliverTreatment(detailedBolusInfo: app.aaps.core.interfaces.pump.DetailedBolusInfo): PumpEnactResult =
         commandMutex.withLock {
             try {
-                val s = requireSession()
                 busy = true
-                val (uid, seq, nonce) = commandHeaders()
-                val command = ProgramBolusCommand.Builder()
-                    .setNumberOfUnits(detailedBolusInfo.insulin)
-                    .setDelayBetweenPulsesInEighthSeconds(2)
-                    .setProgramReminder(ProgramReminder(false, false, 0))
-                    .setUniqueId(uid)
-                    .setSequenceNumber(seq)
-                    .setNonce(nonce)
-                    .build()
-                val payload = command.encoded
-                when (val result = s.sendCommand(header(payload.size), payload)) {
+                val result = sendDeliveryCommand(DashCommandKind.BOLUS, requestedBolusUnits = detailedBolusInfo.insulin) { uid, seq, nonce ->
+                    ProgramBolusCommand.Builder()
+                        .setNumberOfUnits(detailedBolusInfo.insulin)
+                        .setDelayBetweenPulsesInEighthSeconds(2)
+                        .setProgramReminder(ProgramReminder(false, false, 0))
+                        .setUniqueId(uid)
+                        .setSequenceNumber(seq)
+                        .setNonce(nonce)
+                        .build()
+                        .encoded
+                }
+                when (result) {
+                    // Written is not delivered: no insulin is reported until a pod status confirms it.
                     is DashSendResult.Success -> DashPumpEnactResult(
-                        success = true,
-                        enacted = true,
-                        comment = "Bolus ${detailedBolusInfo.insulin} U sent",
-                        bolusDelivered = detailedBolusInfo.insulin
+                        success = false, enacted = false,
+                        comment = "Bolus ${detailedBolusInfo.insulin} U sent, not confirmed by the pod yet"
                     )
                     is DashSendResult.Error -> DashPumpEnactResult(
                         success = false, enacted = false,
                         comment = "Bolus failed: ${result.msg}"
                     )
                 }
+            } catch (e: DashCommandNotConfirmedException) {
+                DashPumpEnactResult(success = false, enacted = false, comment = e.message ?: "Last command not confirmed")
             } catch (e: DashPumpNotPairedException) {
                 DashPumpEnactResult(success = false, enacted = false, comment = e.message ?: "Not paired")
             } finally {
@@ -234,17 +238,12 @@ class IosDashPump(
         runBlocking {
         commandMutex.withLock {
             try {
-                val s = requireSession()
-                val (uid, seq, nonce) = commandHeaders()
-                val command = StopDeliveryCommand.Builder()
-                    .setDeliveryType(DeliveryType.BOLUS)
-                    .setBeepType(BeepType.SILENT)
-                    .setUniqueId(uid)
-                    .setSequenceNumber(seq)
-                    .setNonce(nonce)
-                    .build()
-                val payload = command.encoded
-                s.sendCommand(header(payload.size), payload)
+                sendDeliveryCommand(DashCommandKind.STOP_BOLUS) { uid, seq, nonce ->
+                    stopCommand(DeliveryType.BOLUS, uid, seq, nonce)
+                }
+            } catch (e: DashCommandNotConfirmedException) {
+                // Fail closed: a stop sent now would become the last programming command, and the
+                // open one could no longer be told apart. Nothing sent.
             } catch (e: DashPumpNotPairedException) {
                 // Fail closed: nothing sent.
             }
@@ -259,29 +258,32 @@ class IosDashPump(
         tbrType: PumpSync.TemporaryBasalType
     ): PumpEnactResult = commandMutex.withLock {
         try {
-            val s = requireSession()
             busy = true
-            val (uid, seq, nonce) = commandHeaders()
-            val command = ProgramTempBasalCommand.Builder()
-                .setProgramReminder(ProgramReminder(false, false, 0))
-                .setRateInUnitsPerHour(absoluteRate)
-                .setDurationInMinutes(durationInMinutes.toShort())
-                .setUniqueId(uid)
-                .setSequenceNumber(seq)
-                .setNonce(nonce)
-                .build()
-            val payload = command.encoded
-                when (val result = s.sendCommand(header(payload.size), payload)) {
+            val result = sendDeliveryCommand(
+                DashCommandKind.TEMP_BASAL, tempBasalRate = absoluteRate, tempBasalMinutes = durationInMinutes
+            ) { uid, seq, nonce ->
+                ProgramTempBasalCommand.Builder()
+                    .setProgramReminder(ProgramReminder(false, false, 0))
+                    .setRateInUnitsPerHour(absoluteRate)
+                    .setDurationInMinutes(durationInMinutes.toShort())
+                    .setUniqueId(uid)
+                    .setSequenceNumber(seq)
+                    .setNonce(nonce)
+                    .build()
+                    .encoded
+            }
+            when (result) {
                 is DashSendResult.Success -> DashPumpEnactResult(
-                    success = true, enacted = true,
-                    comment = "TBR $absoluteRate U/h for $durationInMinutes min",
-                    duration = durationInMinutes, absolute = absoluteRate
+                    success = false, enacted = false,
+                    comment = "TBR $absoluteRate U/h for $durationInMinutes min sent, not confirmed by the pod yet"
                 )
                 is DashSendResult.Error -> DashPumpEnactResult(
                     success = false, enacted = false,
                     comment = "TBR failed: ${result.msg}"
                 )
             }
+        } catch (e: DashCommandNotConfirmedException) {
+            DashPumpEnactResult(success = false, enacted = false, comment = e.message ?: "Last command not confirmed")
         } catch (e: DashPumpNotPairedException) {
             DashPumpEnactResult(success = false, enacted = false, comment = e.message ?: "Not paired")
         } finally {
@@ -301,27 +303,22 @@ class IosDashPump(
     override suspend fun cancelTempBasal(enforceNew: Boolean): PumpEnactResult =
         commandMutex.withLock {
             try {
-                val s = requireSession()
                 busy = true
-                val (uid, seq, nonce) = commandHeaders()
-                val command = StopDeliveryCommand.Builder()
-                    .setDeliveryType(DeliveryType.TEMP_BASAL)
-                    .setBeepType(BeepType.SILENT)
-                    .setUniqueId(uid)
-                    .setSequenceNumber(seq)
-                    .setNonce(nonce)
-                    .build()
-                val payload = command.encoded
-                when (val result = s.sendCommand(header(payload.size), payload)) {
+                val result = sendDeliveryCommand(DashCommandKind.STOP_TEMP_BASAL) { uid, seq, nonce ->
+                    stopCommand(DeliveryType.TEMP_BASAL, uid, seq, nonce)
+                }
+                when (result) {
                     is DashSendResult.Success -> DashPumpEnactResult(
-                        success = true, enacted = true,
-                        comment = "TBR cancelled", isTempCancel = true
+                        success = false, enacted = false,
+                        comment = "TBR cancel sent, not confirmed by the pod yet"
                     )
                     is DashSendResult.Error -> DashPumpEnactResult(
                         success = false, enacted = false,
                         comment = "Cancel TBR failed: ${result.msg}"
                     )
                 }
+            } catch (e: DashCommandNotConfirmedException) {
+                DashPumpEnactResult(success = false, enacted = false, comment = e.message ?: "Last command not confirmed")
             } catch (e: DashPumpNotPairedException) {
                 DashPumpEnactResult(success = false, enacted = false, comment = e.message ?: "Not paired")
             } finally {
@@ -346,24 +343,19 @@ class IosDashPump(
     fun stopDelivery(): PumpEnactResult = runBlocking {
         commandMutex.withLock {
             try {
-                val s = requireSession()
-                val (uid, seq, nonce) = commandHeaders()
-                val command = StopDeliveryCommand.Builder()
-                    .setDeliveryType(DeliveryType.ALL)
-                    .setBeepType(BeepType.SILENT)
-                    .setUniqueId(uid)
-                    .setSequenceNumber(seq)
-                    .setNonce(nonce)
-                    .build()
-                val payload = command.encoded
-                when (val result = s.sendCommand(header(payload.size), payload)) {
+                val result = sendDeliveryCommand(DashCommandKind.STOP_ALL) { uid, seq, nonce ->
+                    stopCommand(DeliveryType.ALL, uid, seq, nonce)
+                }
+                when (result) {
                     is DashSendResult.Success -> DashPumpEnactResult(
-                        success = true, enacted = true, comment = "All delivery stopped"
+                        success = false, enacted = false, comment = "Stop sent, not confirmed by the pod yet"
                     )
                     is DashSendResult.Error -> DashPumpEnactResult(
                         success = false, enacted = false, comment = "Stop failed: ${result.msg}"
                     )
                 }
+            } catch (e: DashCommandNotConfirmedException) {
+                DashPumpEnactResult(success = false, enacted = false, comment = e.message ?: "Last command not confirmed")
             } catch (e: DashPumpNotPairedException) {
                 DashPumpEnactResult(success = false, enacted = false, comment = e.message ?: "Not paired")
             }
@@ -372,6 +364,62 @@ class IosDashPump(
 
     /** Suspend: halts delivery until resumed. Guarded like everything else. */
     fun suspendDelivery(): PumpEnactResult = stopDelivery()
+
+    // -- Unconfirmed commands -------------------------------------------------
+
+    /**
+     * Sends one command that changes delivery, through the active command
+     * ([DashPodStateManager.createActiveCommand]), as `OmnipodDashPumpPlugin.executeProgrammingCommand`
+     * does on Android, stops included.
+     *
+     * An open command whose outcome a status already decided is closed first. One still not confirmed
+     * refuses the new command ([DashCommandNotConfirmedException]): the pod may have taken it, so a
+     * retried bolus could be delivered twice, and a stop sent now would become the last programming
+     * command and hide what happened to it. The pod has to be asked for its status first.
+     *
+     * The command is opened before its bytes are built and marked sent before the write, so a crash
+     * at any point leaves a command that needs a status, never one that may be sent again.
+     *
+     * The answer of the pod is not read here yet (plan, phase 2): the command stays open after a
+     * successful write, and every later delivery command is refused until a status closes it.
+     */
+    private fun sendDeliveryCommand(
+        kind: DashCommandKind,
+        requestedBolusUnits: Double? = null,
+        tempBasalRate: Double? = null,
+        tempBasalMinutes: Int? = null,
+        build: (uniqueId: Int, sequence: Short, nonce: Int) -> ByteArray,
+    ): DashSendResult {
+        val s = requireSession()
+        val (confirmation, _) = stateManager.resolveActiveCommand()
+        if (confirmation == DashCommandConfirmation.NOT_CONFIRMED) {
+            throw DashCommandNotConfirmedException("Refusing command: the last command is not confirmed by the pod. Read the pod status first.")
+        }
+        val (uid, seq, nonce) = commandHeaders()
+        stateManager.createActiveCommand(
+            kind = kind,
+            // No pod history on iOS yet (plan, phase 2).
+            historyId = 0L,
+            requestedBolusUnits = requestedBolusUnits,
+            tempBasalRate = tempBasalRate,
+            tempBasalMinutes = tempBasalMinutes,
+        )
+        val payload = build(uid, seq, nonce)
+        stateManager.markActiveCommandSent()
+        val result = s.sendCommand(header(payload.size), payload)
+        if (result is DashSendResult.Error) stateManager.markActiveCommandNotSent()
+        return result
+    }
+
+    private fun stopCommand(type: DeliveryType, uid: Int, seq: Short, nonce: Int): ByteArray =
+        StopDeliveryCommand.Builder()
+            .setDeliveryType(type)
+            .setBeepType(BeepType.SILENT)
+            .setUniqueId(uid)
+            .setSequenceNumber(seq)
+            .setNonce(nonce)
+            .build()
+            .encoded
 
     // -- Plumbing -----------------------------------------------------------
 

@@ -11,6 +11,7 @@ import app.aaps.pump.omnipod.dashctl.ios.crypto.IosX25519Dh
 import app.aaps.pump.omnipod.dashctl.ios.pump.IosDashPump
 import app.aaps.pump.omnipod.dashctl.parity.AndroidRecordedVectors.BolusCommand
 import app.aaps.pump.omnipod.dashctl.session.DashEapCodec
+import app.aaps.pump.omnipod.dashctl.session.DashCommandKind
 import app.aaps.pump.omnipod.dashctl.session.DashKeyValueCodec
 import app.aaps.pump.omnipod.dashctl.session.DashMessageTransport
 import app.aaps.pump.omnipod.dashctl.session.DashPodState
@@ -19,6 +20,7 @@ import app.aaps.pump.omnipod.dashctl.session.DashPodStateStore
 import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 
@@ -81,7 +83,10 @@ class IosDashPumpAndroidParityTest {
     private class BolusOnTheWire(
         val header: ByteArray,
         val plaintext: ByteArray,
-        val stateManager: DashPodStateManager
+        val stateManager: DashPodStateManager,
+        /** A second bolus asked for right after, while the first is not confirmed. */
+        val secondBolusSuccess: Boolean,
+        val messagesSentBySecondBolus: Int,
     )
 
     private val podAddress = parityHex("02420001")
@@ -118,12 +123,18 @@ class IosDashPumpAndroidParityTest {
         pump.establishSession()
         pump.connect("parity")
         var wire: ByteArray? = null
+        var secondSuccess = true
+        var secondMessages = -1
         runTest {
             val before = pod.sent.size
             val result = pump.deliverTreatment(DetailedBolusInfo().apply { insulin = 5.0 })
-            assertTrue(result.success, "fixture: the bolus must be sent")
+            // Written is not delivered: the bolus stays unconfirmed until a pod status (phase 1).
+            assertFalse(result.success, "fixture: a written bolus is not reported as delivered")
             assertEquals(before + 1, pod.sent.size, "fixture: exactly one message")
             wire = pod.sent.last()
+            val beforeSecond = pod.sent.size
+            secondSuccess = pump.deliverTreatment(DetailedBolusInfo().apply { insulin = 5.0 }).success
+            secondMessages = pod.sent.size - beforeSecond
         }
 
         val sent = wire!!
@@ -137,7 +148,24 @@ class IosDashPumpAndroidParityTest {
             ciphertextWithMac = sent.copyOfRange(16, sent.size),
             macSizeBytes = 8
         )
-        return BolusOnTheWire(header, plaintext, stateManager)
+        return BolusOnTheWire(header, plaintext, stateManager, secondSuccess, secondMessages)
+    }
+
+    /**
+     * The bolus went out but no answer was read: it stays open, and a retried bolus sends nothing.
+     * Android refuses it the same way (`observeNoActiveCommand`). Without this a retry could deliver
+     * twice.
+     */
+    @Test
+    fun aSecondBolusIsRefusedWhileTheFirstIsNotConfirmed() {
+        val wire = pairEstablishAndBolus()
+
+        val open = wire.stateManager.activeCommand
+        assertEquals(DashCommandKind.BOLUS, open?.kind)
+        assertEquals(5.0, open?.requestedBolusUnits)
+        assertTrue(open?.sent == true, "the first bolus is marked sent before its write")
+        assertFalse(wire.secondBolusSuccess, "the second bolus must be refused")
+        assertEquals(0, wire.messagesSentBySecondBolus, "the second bolus must send nothing")
     }
 
     /**
