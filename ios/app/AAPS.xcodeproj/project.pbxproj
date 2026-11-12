@@ -382,6 +382,7 @@
 				"AAPS_TFLITE_KIND[sdk=iphonesimulator*]" = sim;
 				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
 					"$(inherited)",
+					"-ObjC",
 					"-force_load",
 					"$(SRCROOT)/../../plugins/aps/build/tflite-24-device-arm64/libtensorflow-lite.a",
 					"-lc++",
@@ -390,6 +391,7 @@
 				);
 				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = (
 					"$(inherited)",
+					"-ObjC",
 					"-force_load",
 					"$(SRCROOT)/../../plugins/aps/build/tflite-24-sim-arm64/libtensorflow-lite.a",
 					"-lc++",
@@ -460,6 +462,7 @@
 				"AAPS_TFLITE_KIND[sdk=iphonesimulator*]" = sim;
 				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
 					"$(inherited)",
+					"-ObjC",
 					"-force_load",
 					"$(SRCROOT)/../../plugins/aps/build/tflite-24-device-arm64/libtensorflow-lite.a",
 					"-lc++",
@@ -468,6 +471,7 @@
 				);
 				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = (
 					"$(inherited)",
+					"-ObjC",
 					"-force_load",
 					"$(SRCROOT)/../../plugins/aps/build/tflite-24-sim-arm64/libtensorflow-lite.a",
 					"-lc++",
@@ -559,6 +563,7 @@
 				"AAPS_TFLITE_KIND[sdk=iphonesimulator*]" = sim;
 				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
 					"$(inherited)",
+					"-ObjC",
 					"-force_load",
 					"$(SRCROOT)/../../plugins/aps/build/tflite-24-device-arm64/libtensorflow-lite.a",
 					"-lc++",
@@ -567,6 +572,7 @@
 				);
 				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = (
 					"$(inherited)",
+					"-ObjC",
 					"-force_load",
 					"$(SRCROOT)/../../plugins/aps/build/tflite-24-sim-arm64/libtensorflow-lite.a",
 					"-lc++",
@@ -637,6 +643,7 @@
 				"AAPS_TFLITE_KIND[sdk=iphonesimulator*]" = sim;
 				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
 					"$(inherited)",
+					"-ObjC",
 					"-force_load",
 					"$(SRCROOT)/../../plugins/aps/build/tflite-24-device-arm64/libtensorflow-lite.a",
 					"-lc++",
@@ -645,6 +652,7 @@
 				);
 				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = (
 					"$(inherited)",
+					"-ObjC",
 					"-force_load",
 					"$(SRCROOT)/../../plugins/aps/build/tflite-24-sim-arm64/libtensorflow-lite.a",
 					"-lc++",

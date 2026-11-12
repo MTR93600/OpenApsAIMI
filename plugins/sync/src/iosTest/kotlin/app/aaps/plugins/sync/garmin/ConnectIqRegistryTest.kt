@@ -45,6 +45,13 @@ class ConnectIqRegistryTest {
             partNumber: String,
             appId: String,
             payloadJson: String,
+            token: String,
         ) = Unit
+
+        override fun stop() {
+            stopped = true
+        }
+
+        var stopped = false
     }
 }

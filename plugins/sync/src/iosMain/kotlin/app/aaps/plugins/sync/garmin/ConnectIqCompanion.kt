@@ -32,7 +32,14 @@ interface ConnectIqCompanion {
         partNumber: String,
         appId: String,
         payloadJson: String,
+        token: String,
     )
+
+    /**
+     * Drops every SDK listener and the Kotlin callback. A later completion must not reach the plugin.
+     * Safe to call more than once.
+     */
+    fun stop()
 }
 
 /** What the SDK tells the plugin. Called on whatever thread the SDK uses. */
@@ -46,7 +53,7 @@ interface ConnectIqCallback {
 
     fun messageReceived(deviceUuid: String, appId: String, payloadJson: String)
 
-    fun sendFinished(deviceUuid: String, appId: String, result: String)
+    fun sendFinished(deviceUuid: String, appId: String, result: String, token: String)
 }
 
 /**

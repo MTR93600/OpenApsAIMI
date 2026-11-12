@@ -36,6 +36,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import platform.posix.usleep
@@ -61,8 +62,8 @@ import platform.posix.usleep
  * Garmin on here too.
  *
  * ⚠️ ASYNC IMPACT: the collectors run on [scope]. The SDK calls [callback] on its own thread; the
- * work is handed to [scope]. [onRadioWake] runs on the CoreBluetooth queue and only starts the
- * server and a short background task.
+ * work is handed to [scope]. [onRadioWake] runs on the main queue: [IosRadioWake.ping] only enqueues
+ * it there, so the CoreBluetooth queue never opens the socket and never calls UIKit.
  */
 @ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
 @IntKey(370)
@@ -96,6 +97,7 @@ class GarminPlugin(
     private var server: IosGarminHttpServer? = null
     private val push = ConnectIqPush(nowMs = { requests.nowMs() }, enabled = { pushEnabled() })
     private val radioWake = GarminRadioWake(nowMs = { requests.nowMs() })
+    private val pushCover = GarminPushCover()
     private val devices = LinkedHashMap<String, ConnectIqDevice>()
     private val appInstalled = HashMap<Pair<String, String>, Boolean>()
     private val state = GarminLock()
@@ -126,9 +128,15 @@ class GarminPlugin(
             aapsLogger.info(LTag.GARMIN, "Connect IQ message from $deviceUuid $appId $payloadJson")
         }
 
-        override fun sendFinished(deviceUuid: String, appId: String, result: String) {
+        override fun sendFinished(deviceUuid: String, appId: String, result: String, token: String) {
             scope.launch {
-                val plan = push.onResult(deviceUuid, appId, ConnectIqSendResult.fromWire(result))
+                val plan = push.onResult(
+                    deviceUuid,
+                    appId,
+                    ConnectIqSendResult.fromWire(result),
+                    token.toLongOrNull() ?: 0L,
+                )
+                if (!plan.stale) pushCover.release(1)
                 if (result == "FAILURE_APP_NOT_FOUND") {
                     state.withLock {
                         appInstalled[deviceUuid.uppercase() to appId.uppercase()] = false
@@ -172,20 +180,26 @@ class GarminPlugin(
     }
 
     override suspend fun onStop() {
-        if (IosRadioWake.listener != null) IosRadioWake.listener = null
+        IosRadioWake.listener = null
+        ConnectIqRegistry.companion?.stop()
         scope.cancel()
         aapsLogger.info(LTag.GARMIN, "Stop")
-        server?.close()
-        server = null
+        serverGate.withLock {
+            server?.close()
+            server = null
+        }
         super.onStop()
     }
 
-    /** Bluetooth woke the process. Make sure a pull can be served for a few seconds. */
+    /**
+     * A radio wake, already on the main queue. The server is checked here, never on `app.aaps.ble`.
+     * The short task is only for an HTTP pull; every Connect IQ send takes its own task in [deliver].
+     */
     private fun onRadioWake() {
         radioWake.onRadio(
             ensureServer = { setupHttpServer() },
             beginTask = {
-                if (preferences.get(GarminBooleanKey.LocalHttpServer)) beginGarminBackgroundTask()
+                if (preferences.get(GarminBooleanKey.LocalHttpServer)) beginGarminHttpBackgroundTask()
             },
         )
     }
@@ -223,10 +237,10 @@ class GarminPlugin(
         val parsed = ConnectIqDeviceStatus.fromWire(status)
         val uuid = deviceUuid.uppercase()
         val becameReachable = state.withLock {
-            val current = devices[uuid] ?: return
-            val was = current.status.canPush
+            val current = devices[uuid] ?: return@withLock false
+            val previous = current.status
             devices[uuid] = current.copy(status = parsed)
-            !was && parsed.canPush
+            shouldPushOnStatus(previous, parsed)
         }
         aapsLogger.info(LTag.GARMIN, "Connect IQ $uuid $parsed")
         if (becameReachable) pushGlucose("connect")
@@ -248,7 +262,10 @@ class GarminPlugin(
 
     private fun deliver(plan: ConnectIqPlan, reason: String) {
         plan.log?.let { aapsLogger.warn(LTag.GARMIN, it) }
-        if (plan.send.isEmpty()) return
+        if (plan.send.isEmpty()) {
+            if (plan.released > 0) pushCover.release(plan.released)
+            return
+        }
         val companion = ConnectIqRegistry.companion
         if (companion == null) {
             if (!reportedMissingBridge) {
@@ -256,18 +273,38 @@ class GarminPlugin(
                 aapsLogger.warn(LTag.GARMIN, "Connect IQ bridge is not installed, push skipped ($reason)")
             }
             plan.send.forEach { target ->
-                push.onResult(target.deviceUuid, target.appId, ConnectIqSendResult.FAILURE_UNKNOWN)
+                push.onResult(target.deviceUuid, target.appId, ConnectIqSendResult.FAILURE_UNKNOWN, target.token)
             }
+            if (plan.released > 0) pushCover.release(plan.released)
             return
         }
         val payload = GarminCiqJson.of(requests.getGlucoseMessage())
-        aapsLogger.info(LTag.GARMIN, "Connect IQ push ${plan.send.size} ($reason)")
+        val outgoing = ArrayList<Pair<ConnectIqDevice, ConnectIqTarget>>()
         for (target in plan.send) {
             val device = state.withLock { devices[target.deviceUuid] }
             if (device == null) {
-                push.onResult(target.deviceUuid, target.appId, ConnectIqSendResult.FAILURE_DEVICE_NOT_AVAILABLE)
+                push.onResult(
+                    target.deviceUuid,
+                    target.appId,
+                    ConnectIqSendResult.FAILURE_DEVICE_NOT_AVAILABLE,
+                    target.token,
+                )
                 continue
             }
+            outgoing.add(device to target)
+        }
+        if (plan.released > 0 || outgoing.isNotEmpty()) {
+            val released = plan.released
+            val sending = outgoing.size
+            runOnMain {
+                if (released > 0) pushCover.release(released)
+                if (sending > 0) pushCover.cover(sending)
+            }
+        }
+        if (outgoing.isEmpty()) return
+        armWatchdog()
+        aapsLogger.info(LTag.GARMIN, "Connect IQ push ${outgoing.size} ($reason)")
+        for ((device, target) in outgoing) {
             companion.send(
                 deviceUuid = device.uuid,
                 modelName = device.modelName,
@@ -275,23 +312,33 @@ class GarminPlugin(
                 partNumber = device.partNumber,
                 appId = target.appId,
                 payloadJson = payload,
+                token = target.token.toString(),
             )
         }
     }
 
+    private fun armWatchdog() {
+        scope.launch {
+            delay(ConnectIqPush.IN_FLIGHT_TIMEOUT_MS)
+            deliver(push.reapStuck(), "watchdog")
+        }
+    }
+
     private fun setupHttpServer() {
-        serverGate.withLock {
-            if (preferences.get(GarminBooleanKey.LocalHttpServer)) {
-                val port = preferences.get(GarminIntKey.LocalHttpPort)
-                if (server?.port == port) return
-                aapsLogger.info(LTag.GARMIN, "starting HTTP server on $port")
-                server?.close()
-                server = IosGarminHttpServer(aapsLogger, port, scope, ::answer).also { it.start() }
-            } else if (server != null) {
-                aapsLogger.info(LTag.GARMIN, "stopping HTTP server")
-                server?.close()
-                server = null
-            }
+        serverGate.withLock { setupHttpServerLocked() }
+    }
+
+    private fun setupHttpServerLocked() {
+        if (preferences.get(GarminBooleanKey.LocalHttpServer)) {
+            val port = preferences.get(GarminIntKey.LocalHttpPort)
+            if (server?.port == port) return
+            aapsLogger.info(LTag.GARMIN, "starting HTTP server on $port")
+            server?.close()
+            server = IosGarminHttpServer(aapsLogger, port, scope, ::answer).also { it.start() }
+        } else if (server != null) {
+            aapsLogger.info(LTag.GARMIN, "stopping HTTP server")
+            server?.close()
+            server = null
         }
     }
 

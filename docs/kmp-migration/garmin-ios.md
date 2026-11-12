@@ -85,20 +85,27 @@ glucose value, sent while the CGM has AAPS awake, so the watch stays up to date 
       encodes the dictionary itself; `GarminCiqBytes` is the Android encoding, and
       `GarminCiqBytesParityTest` checks the two are the same bytes for the same map.
 - [x] Push that message on every new glucose value, on every `EventAPSCalculationFinished`, when a
-      watch becomes reachable, when the request key changes, and when a watch sends the wrong HTTP
-      key (that last one is what Android's messenger does, so the watch learns the key). Failures
-      (`IQSendMessageResult`) wait: 2s, 4s, 8s … up to 60s, one line in the log, and a newer value
-      replaces the one in flight instead of queueing. An app the watch does not have waits 30
-      minutes. The preference **Connect IQ push (iOS)** (`garmin_connectiq_push_ios`) defaults to
-      on. Android registers the key and never reads it, and it is not exported, so Android's
-      messenger and its exports stay as they were. The local HTTP server is unchanged and stays up.
+      watch becomes ready (`deviceCharacteristicsDiscovered` — connected is not enough), when the
+      request key changes, and when a watch sends the wrong HTTP key (that last one is what
+      Android's messenger does, so the watch learns the key). Failures (`IQSendMessageResult`)
+      wait: 2s, 4s, 8s … up to 60s, one line in the log, and a newer value replaces the one in
+      flight instead of queueing. If the SDK never calls back, the attempt is dropped after 20s
+      and that newer value is sent; the log line is written once. An app the watch does not have
+      waits 30 minutes. Each in-flight push holds one background task on the main queue, ended
+      when the send finishes or when iOS expires it. The preference **Connect IQ push (iOS)**
+      (`garmin_connectiq_push_ios`) defaults to on. Android registers the key and never reads it,
+      and it is not exported, so Android's messenger and its exports stay as they were. The local
+      HTTP server is unchanged and stays up.
 - [x] Incoming Connect IQ messages are logged and not acted on. Android's `GarminMessenger`
       callback is empty (`{ _, _ -> }`): heart rate, steps, carbs, bolus, temp target, mode and
       pump connect still arrive as HTTP, and the iPhone server still answers those.
 - [x] On each Bluetooth wake (state restoration, connect, or a notification — the held-connect
-      case), `GarminPlugin` makes sure the HTTP server is listening and, when that server is
-      enabled, takes an 8-second `beginBackgroundTask` so a pull that arrives with the wake can
-      be served. A burst of radio callbacks takes one task, not one per packet.
+      case), `IosRadioWake.ping` only enqueues work on the main queue (throttled, no
+      `dispatch_sync`). There the plugin makes sure the HTTP server is listening and, when that
+      server is enabled, takes an 8-second `beginBackgroundTask` so a pull that arrives with the
+      wake can be served. A burst of radio callbacks takes one hop, not one per packet. Stop
+      unregisters every Connect IQ listener and drops the Kotlin callback. If Garmin Connect is
+      missing, the SDK's prompt is an alert; the App Store opens only when the user accepts.
 
 ### Manual test (a real iPhone and watch)
 
