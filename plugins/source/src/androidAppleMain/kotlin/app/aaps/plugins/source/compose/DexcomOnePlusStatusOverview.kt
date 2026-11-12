@@ -353,6 +353,13 @@ private fun ColumnScope.StagingDetails(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+    if (card.needsReconnect) {
+        Text(
+            text = stringResource(SourceStrings.dexcom_oneplus_staging_needs_reconnect),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
     when (card.promote) {
         DexcomOnePlusPromoteOffer.NORMAL -> Button(
             onClick = { onPromoteClick(false) },

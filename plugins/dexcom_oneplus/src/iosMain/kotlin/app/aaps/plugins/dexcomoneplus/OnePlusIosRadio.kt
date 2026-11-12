@@ -1,23 +1,32 @@
 package app.aaps.plugins.dexcomoneplus
 
+import app.aaps.core.interfaces.concurrent.AapsLock
+import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.core.interfaces.pump.ble.session.BleCentral
 import app.aaps.core.interfaces.pump.ble.session.BleCentralEvent
 import app.aaps.core.interfaces.pump.ble.session.BleRestoreIdentifier
 import app.aaps.plugins.dexcomoneplus.gatt.OnePlusGattClientIos
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScannerIos
-import kotlin.concurrent.Volatile
 
 /**
- * Sends one central's events to the scanner and to the GATT client.
+ * Sends one central's events to every scanner and every GATT client.
  *
- * `CoreBluetoothCentral` has a single `events` slot, and the ONE+ driver has two listeners for it:
- * the scanner needs the advertisements and the client needs everything else. Wiring only one of
- * them costs nothing at compile time and shows up much later as a sensor that is never found, or a
- * connection that never becomes ready, so the wiring lives here once rather than in every caller.
+ * `CoreBluetoothCentral` has a single `events` slot. The ONE+ driver has two kinds of listener
+ * for it, and with a pre-soak sensor it has two of each: the production slot and the staging
+ * slot each have a scanner and a client, and both have to hear the same central. Wiring only
+ * one of them compiles and then shows up later as a sensor that is never found, or a connection
+ * that never becomes ready. A second client that *replaced* the first would take the production
+ * link's events away, which is the one thing the pre-soak slot must not do.
+ *
+ * Scans are not fanned out here. There is still only one scan, owned by [OnePlusIosScanBus]:
+ * each scanner tells the bus what it needs, and the bus is the only caller of `startScan` /
+ * `stopScan`. This object only delivers the advertisements that scan produces.
  *
  * The owner builds the central, points it here with `central.events = radio::onEvent` **before**
- * calling `open()`, and then hands the same central to the scanner and to each GATT client. A
- * client is rebuilt for every connection attempt, which is why [gatt] is a `var`.
+ * calling `open()`, and then hands the same central to the scanners and to each GATT client. A
+ * client is rebuilt for every connection attempt. [attachGatt] keeps every client that still has
+ * a link, so the production connection and the pre-soak connection run at the same time, and
+ * drops clients that have already disconnected.
  *
  * The owner must build that central with [BleRestoreIdentifier.DEXCOM_ONE_PLUS], never with the
  * default: the default belongs to the shared pump transport, and two centrals on one identifier
@@ -75,27 +84,87 @@ import kotlin.concurrent.Volatile
  * released connect was the last thing that could wake the app, and nothing wakes it again. That
  * is why the start path, not this class, is where the next step belongs.
  *
- * ⚠️ ASYNC IMPACT: [onEvent] runs on the central's serial queue. Both listeners only record what
- * they heard and wake whoever is waiting, and [BleCentral.release] does not block, so nothing here
- * holds that queue up.
+ * ⚠️ ASYNC IMPACT: [onEvent] runs on the central's serial queue. Listeners only record what they
+ * heard and wake whoever is waiting, and [BleCentral.release] does not block, so nothing here
+ * holds that queue up. The listener lists are copied under [lock] and walked outside it, so a
+ * listener that attaches another one cannot deadlock this call.
  */
 class OnePlusIosRadio(private val central: BleCentral) {
 
-    /**
-     * Volatile because it is written by whoever builds the driver's scanner and read on the
-     * central's own queue. A new GATT client is built for every connection attempt and has to be
-     * seen by the very next event, so a stale read would send that event to the client of the
-     * attempt before.
-     */
-    @Volatile
-    var scanner: OnePlusBleScannerIos? = null
+    private val lock = AapsLock()
+    private val scanners = mutableListOf<OnePlusBleScannerIos>()
+    private val gatts = mutableListOf<OnePlusGattClientIos>()
 
-    @Volatile
-    var gatt: OnePlusGattClientIos? = null
+    /**
+     * The single scanner, for the tests and callers that still have exactly one.
+     *
+     * Setting it replaces the list. [attachScanner] adds one without dropping the others, which
+     * is what the two slots need.
+     */
+    var scanner: OnePlusBleScannerIos?
+        get() = lock.withLock { scanners.lastOrNull() }
+        set(value) {
+            lock.withLock {
+                scanners.clear()
+                if (value != null) scanners.add(value)
+            }
+        }
+
+    /**
+     * The single GATT client, for the tests and callers that still have exactly one.
+     *
+     * Setting it replaces the list. [attachGatt] keeps every client that still has a link.
+     */
+    var gatt: OnePlusGattClientIos?
+        get() = lock.withLock { gatts.lastOrNull() }
+        set(value) {
+            lock.withLock {
+                gatts.clear()
+                if (value != null) gatts.add(value)
+            }
+        }
+
+    /**
+     * Adds [scanner]. A driver scanner replaces the previous driver scanner of the same slot.
+     *
+     * `attach` and the reconnect watchdogs ask for a scanner again. Appending those left the old
+     * ones registered, still holding a scan demand. A screen scanner is ephemeral and is left
+     * alone: it shares the slot name with the driver and goes away on its own when the screen stops.
+     */
+    fun attachScanner(scanner: OnePlusBleScannerIos) {
+        val replaced = lock.withLock {
+            val previous = scanners.filter {
+                it !== scanner && !it.isEphemeral && it.slot == scanner.slot
+            }
+            scanners.removeAll(previous)
+            if (scanner !in scanners) scanners.add(scanner)
+            previous
+        }
+        replaced.forEach { it.releaseScanDemand() }
+    }
+
+    /** Stops delivering events to [scanner]. The scan it asked for is the bus's to release. */
+    fun detachScanner(scanner: OnePlusBleScannerIos) {
+        lock.withLock { scanners.remove(scanner) }
+    }
+
+    /**
+     * Adds [client] and drops clients that have already finished their link.
+     *
+     * A client that is connecting or connected is kept. That is what lets the production sensor
+     * and the pre-soak sensor hold two peripheral connections on the one central.
+     */
+    fun attachGatt(client: OnePlusGattClientIos) {
+        lock.withLock {
+            gatts.removeAll { it !== client && it.isRetired() }
+            if (client !in gatts) gatts.add(client)
+        }
+    }
 
     fun onEvent(event: BleCentralEvent) {
-        scanner?.onEvent(event)
-        gatt?.onEvent(event)
+        val (scanTargets, gattTargets) = lock.withLock { scanners.toList() to gatts.toList() }
+        scanTargets.forEach { it.onEvent(event) }
+        gattTargets.forEach { it.onEvent(event) }
         // After both listeners, so a client that recognised one of these ids as its own link has
         // already given it up and woken its waiting threads before the peripheral goes away.
         if (event is BleCentralEvent.Restored) releaseRestored(event.ids)

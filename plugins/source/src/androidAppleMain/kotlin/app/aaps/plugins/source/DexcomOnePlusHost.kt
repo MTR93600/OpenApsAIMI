@@ -181,6 +181,14 @@ interface DexcomOnePlusHost {
     fun screenItems(plugin: DexcomOnePlusPlugin): List<PreferenceItem>
 
     /**
+     * True on iPhone, where [DexcomOnePlusBooleanKey.IosPreSoak] can turn the pre-soak slot off.
+     *
+     * Android always runs the slot and does not show the switch. Default false, so a host that
+     * does not override it changes nothing.
+     */
+    val offersIosPreSoakSwitch: Boolean get() = false
+
+    /**
      * True when this phone runs the second, pre-soak sensor slot.
      *
      * False hides the pre-soak card and the end-of-life prompt of the status screen, so a phone

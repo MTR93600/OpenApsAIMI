@@ -117,4 +117,21 @@ enum class DexcomOnePlusBooleanKey(
         title = SourceStrings.dexcom_oneplus_watch_direct,
         summary = SourceStrings.dexcom_oneplus_watch_direct_summary,
     ),
+
+    /**
+     * Pre-soak (a second ONE+ / G7 warming up beside the one that feeds the loop) on iPhone.
+     *
+     * On by default: that is the behaviour the iPhone build is meant to have. Off falls back to a
+     * single sensor and does not start the second driver. Android does not show this switch and
+     * does not read it; the pre-soak slot there is always available.
+     *
+     * Key: `dexcom_oneplus_ios_presoak`.
+     */
+    IosPreSoak(
+        key = "dexcom_oneplus_ios_presoak",
+        defaultValue = true,
+        title = SourceStrings.dexcom_oneplus_ios_presoak,
+        summary = SourceStrings.dexcom_oneplus_ios_presoak_summary,
+        exportable = false,
+    ),
 }

@@ -5,6 +5,7 @@ import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.core.interfaces.pump.ble.session.BleAdapterState
 import app.aaps.core.interfaces.pump.ble.session.BleCentral
 import app.aaps.core.interfaces.pump.ble.session.BleCentralEvent
+import app.aaps.plugins.dexcomoneplus.OnePlusIosScanBus
 import app.aaps.plugins.dexcomoneplus.OnePlusLog
 import app.aaps.plugins.dexcomoneplus.OnePlusLogMarkers
 import app.aaps.plugins.dexcomoneplus.gatt.OnePlusBluetoothUuids
@@ -50,9 +51,21 @@ class OnePlusBleScannerIos(
     private val central: BleCentral,
     sessionHint: OnePlusStoredSession? = null,
     /** Sensor slot owning this scanner (`prod` / `staging`) - logged so field traces are attributable. */
-    private val slot: String = OnePlusLogMarkers.SLOT_PRODUCTION,
+    internal val slot: String = OnePlusLogMarkers.SLOT_PRODUCTION,
     private val nowMs: () -> Long = ::onePlusIosElapsedMs,
     private val sleep: (Long) -> Boolean = ::onePlusSleep,
+    /**
+     * The shared scan, when this phone has more than one slot. Null keeps the old behaviour of
+     * talking to [central] directly, which is what the single-slot tests do.
+     */
+    private val scanBus: OnePlusIosScanBus? = null,
+    /**
+     * A screen scanner is thrown away when it stops. A driver's scanner is not: the next
+     * pre-connect wait uses the same object.
+     */
+    internal val isEphemeral: Boolean = false,
+    /** Called once an [ephemeral] scanner has stopped and holds no pre-connect wait. */
+    private val onRetired: (() -> Unit)? = null,
 ) : OnePlusBleScanner {
 
     private val lock = AapsLock()
@@ -82,7 +95,7 @@ class OnePlusBleScannerIos(
         // The screen scans on the main thread: book the quota slot but never wait for one. The
         // reserve OnePlusScanBudget keeps is what makes that always affordable.
         OnePlusScanBudget.record(nowMs())
-        central.startScan()
+        demand(OnePlusIosScanBus.Mode.UNFILTERED)
         OnePlusLog.i("${OnePlusLogMarkers.SCAN}: [$slot] started")
     }
 
@@ -99,8 +112,9 @@ class OnePlusBleScannerIos(
             return
         }
         lock.withLock { radioOn = false }
-        central.stopScan()
+        demand(OnePlusIosScanBus.Mode.OFF)
         OnePlusLog.i("${OnePlusLogMarkers.SCAN}: [$slot] stopped")
+        if (isEphemeral) onRetired?.invoke()
     }
 
     override fun isScanning(): Boolean = lock.withLock { uiScanning }
@@ -124,8 +138,9 @@ class OnePlusBleScannerIos(
             // sensor already heard in the screen's scan would never be reported into this window.
             // Filtered by the Dexcom advertisement service: with the phone locked, iOS reports
             // nothing to a scan without a service filter, and this wait is what every reading
-            // after the first one goes through.
-            central.startScan(listOf(OnePlusBluetoothUuids.Advertisement))
+            // after the first one goes through on a stack that scans. The shared bus keeps this
+            // filter while any slot is waiting, so the other slot's screen cannot drop it.
+            demand(OnePlusIosScanBus.Mode.FILTERED)
             OnePlusLog.i(
                 "${OnePlusLogMarkers.SCAN}: [$slot] awaitTarget started " +
                     "id=***${wait.target.takeLast(5)} timeoutMs=$timeoutMs",
@@ -141,10 +156,12 @@ class OnePlusBleScannerIos(
             }
             if (!keepRadio) {
                 lock.withLock { radioOn = false }
-                central.stopScan()
+                demand(OnePlusIosScanBus.Mode.OFF)
+                if (isEphemeral) onRetired?.invoke()
             } else {
-                // The screen is still scanning: give it back its scan without a filter.
-                central.startScan()
+                // The screen is still scanning: give it back its scan without a filter, unless
+                // another slot is waiting on the filtered scan. The bus makes that choice.
+                demand(OnePlusIosScanBus.Mode.UNFILTERED)
             }
             OnePlusLog.i("${OnePlusLogMarkers.SCAN}: [$slot] awaitTarget stopped")
         }
@@ -290,6 +307,26 @@ class OnePlusBleScannerIos(
                 "slotHeld=${result.phoneSlotHeld ?: "?"} score=$score id=***${address.takeLast(5)}",
         )
         listener.onDevice(result)
+    }
+
+    /** Drops this scanner's demand on the shared scan. The radio calls it when a newer scanner takes the slot. */
+    internal fun releaseScanDemand() = demand(OnePlusIosScanBus.Mode.OFF)
+
+    /**
+     * Asks for [mode] on the shared bus when this scanner has one, and on [central] directly when
+     * it does not. [OnePlusIosScanBus.Mode.OFF] stops only this scanner's demand.
+     */
+    private fun demand(mode: OnePlusIosScanBus.Mode) {
+        val bus = scanBus
+        if (bus != null) {
+            if (mode == OnePlusIosScanBus.Mode.OFF) bus.release(this) else bus.request(this, mode)
+            return
+        }
+        when (mode) {
+            OnePlusIosScanBus.Mode.OFF        -> central.stopScan()
+            OnePlusIosScanBus.Mode.UNFILTERED -> central.startScan()
+            OnePlusIosScanBus.Mode.FILTERED   -> central.startScan(listOf(OnePlusBluetoothUuids.Advertisement))
+        }
     }
 
     /**

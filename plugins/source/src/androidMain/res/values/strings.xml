@@ -451,6 +451,11 @@
     <string name="staging_auto_promote_hours_title">Hours before the automatic switch</string>
     <string name="staging_auto_promote_done" comment="%1$s=hours since the pre-soak start, with unit. Example: The pre-soak sensor now feeds the loop. Automatic switch after 10 h.">The pre-soak sensor now feeds the loop. Automatic switch after %1$s.</string>
 
+    <!-- iPhone only. Android always has the pre-soak slot and does not show this. -->
+    <string name="dexcom_oneplus_ios_presoak">Pre-soak sensor on this iPhone</string>
+    <string name="dexcom_oneplus_ios_presoak_summary">A second sensor can warm up beside the one that feeds the loop. Its readings stay off the loop until you promote it. Turn this off to use a single sensor again. The sensor already soaking is kept, and comes back if you turn this on.</string>
+    <string name="dexcom_oneplus_staging_needs_reconnect">No recent reading. This sensor has to connect again before it can replace the one in use. The time of the last reading is shown above.</string>
+
     <!-- Direct-to-watch: a Wear OS watch also reads the ONE+ / G7 sensor itself (Android only) -->
     <string name="dexcom_oneplus_watch_direct">Direct to watch</string>
     <string name="dexcom_oneplus_watch_direct_summary">Your Wear OS watch also reads the sensor itself, next to the phone. The watch face keeps showing values when the phone is away. Watch readings stay on the watch and never reach the loop.</string>
