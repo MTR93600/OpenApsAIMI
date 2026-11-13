@@ -66,8 +66,17 @@ missing layer. So the layer is ported first, as is, and the rest is rebuilt on i
       reads the message type from the first flag byte, size bytes are read signed in
       `MessagePacket.parse` and `BlePacket.parse`, `StringLengthPrefixEncoding.parseKeys` reads the
       length as `(b0 shl 1) or b1`. None of them changes real traffic; each is commented in the code.
-- [ ] Step 2: the iOS implementation of the two characteristics (CMD and DATA) on CoreBluetooth,
-      against the contract written in the io interfaces.
+- [x] Step 2: `DashBleLink` (commonMain) implements the two characteristics (CMD and DATA) on the
+      events of `BleCentral`, and prepares a connected pod in Android's order (services,
+      characteristics, HELLO, CMD indications, then DATA indications: one at a time, because on iOS
+      the completion does not say which characteristic it is for). `BleSession` does not fit Dash: it
+      has one notify and one write characteristic and drops the uuid of a value. On iOS,
+      `QueuedBleCentral` runs each call on the radio queue of `CoreBluetoothCentral`, which is not
+      safe to call from another thread. A write confirmation on iOS carries no bytes, so confirmations
+      are paired with writes by their order (CoreBluetooth answers writes in order). Tested against a
+      simulated pod that plays the pod side of `MessageIO`, at the level of BLE events: 108 tests on
+      the JVM, 112 on the iOS simulator, after two adversarial reviews (7 findings, all fixed).
+      Open for phase 3: who owns the `CoreBluetoothCentral` for Dash and its restore identifier.
 - [ ] Step 3: pairing, session and commands rebuilt on `MessageIO`, with Android's two counters
       (packet sequence per session, seeded from the pair result; 4-bit command sequence, stored, the
       one the pod reports back and the active command follows), the fixed nonce, the pod's pulse
