@@ -11,7 +11,7 @@ import app.aaps.pump.omnipod.dashctl.pod.util.byValue
  *
  * Common code so it is tested on the JVM and on iOS. Binary, big-endian, versioned:
  *
- * Version 1 (the first iOS store) and version 2 start the same:
+ * Versions 1 (the first iOS store), 2 and 3 start the same:
  * - u8 version
  * - u8 flags: bit0 = ltk present, bit1 = uniqueId present, bit2 = bluetoothAddress present
  * - [16] ltk if present
@@ -29,13 +29,18 @@ import app.aaps.pump.omnipod.dashctl.pod.util.byValue
  *   u64 statusCountAtCreation, u8 sent, u8 flags (bit0 bolus, bit1 rate, bit2 minutes), then the
  *   present ones: u64 bolus (double bits), u64 rate (double bits), u32 minutes
  *
- * Version 1 is still read, so a pod paired before this keeps its key. Anything malformed throws: the
+ * Version 3 adds, after the version 2 part:
+ * - u8 pulse rate present; if so: u16 pulse rate
+ *
+ * Versions 1 and 2 are still read (with no pulse rate), so a pod paired before keeps its key and
+ * its open command. Anything malformed throws: the
  * store then gives no state, and with no key every command is refused.
  */
 object DashPodStateCodec {
 
     private const val VERSION_1: Byte = 1
     private const val VERSION_2: Byte = 2
+    private const val VERSION_3: Byte = 3
 
     private const val FLAG_LTK = 0x01
     private const val FLAG_UNIQUE_ID = 0x02
@@ -47,7 +52,7 @@ object DashPodStateCodec {
 
     fun encode(state: DashPodState): ByteArray {
         val out = Writer()
-        out.u8(VERSION_2.toInt())
+        out.u8(VERSION_3.toInt())
         val addressBytes = state.bluetoothAddress?.encodeToByteArray()
         var flags = 0
         if (state.ltk != null) flags = flags or FLAG_LTK
@@ -95,13 +100,16 @@ object DashPodStateCodec {
             command.tempBasalRate?.let { out.u64(it.toRawBits()) }
             command.tempBasalMinutes?.let { out.u32(it) }
         }
+        val pulseRate = state.pulseRate
+        out.u8(if (pulseRate != null) 1 else 0)
+        if (pulseRate != null) out.u16(pulseRate.toInt())
         return out.toByteArray()
     }
 
     fun decode(bytes: ByteArray): DashPodState {
         val inp = Reader(bytes)
         val version = inp.u8().toByte()
-        require(version == VERSION_1 || version == VERSION_2) { "unsupported version $version" }
+        require(version == VERSION_1 || version == VERSION_2 || version == VERSION_3) { "unsupported version $version" }
         val flags = inp.u8()
         val ltk = if (flags and FLAG_LTK != 0) inp.bytes(DashPodState.LTK_SIZE) else null
         val eapSqn = inp.u64()
@@ -120,7 +128,8 @@ object DashPodStateCodec {
         var statusCount = 0L
         var status: DashPodStatus? = null
         var command: DashActiveCommand? = null
-        if (version == VERSION_2) {
+        var pulseRate: Short? = null
+        if (version == VERSION_2 || version == VERSION_3) {
             statusCount = inp.u64()
             if (inp.u8() == 1) {
                 status = DashPodStatus(
@@ -155,6 +164,7 @@ object DashPodStateCodec {
                 )
             }
         }
+        if (version == VERSION_3 && inp.u8() == 1) pulseRate = inp.u16().toShort()
         require(inp.atEnd()) { "trailing bytes" }
         return DashPodState(
             ltk = ltk,
@@ -166,6 +176,7 @@ object DashPodStateCodec {
             podStatus = status,
             statusResponseCount = statusCount,
             activeCommand = command,
+            pulseRate = pulseRate,
         )
     }
 
@@ -174,6 +185,11 @@ object DashPodStateCodec {
         private val out = ArrayList<Byte>()
 
         fun u8(v: Int) {
+            out.add(v.toByte())
+        }
+
+        fun u16(v: Int) {
+            out.add((v shr 8).toByte())
             out.add(v.toByte())
         }
 
@@ -203,6 +219,12 @@ object DashPodStateCodec {
         fun u8(): Int {
             need(1)
             return b[p++].toInt() and 0xff
+        }
+
+        fun u16(): Int {
+            need(2)
+            val high = b[p++].toInt() and 0xff
+            return (high shl 8) or (b[p++].toInt() and 0xff)
         }
 
         fun u32(): Int {

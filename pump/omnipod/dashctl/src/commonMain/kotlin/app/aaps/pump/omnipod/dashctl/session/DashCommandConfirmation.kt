@@ -29,6 +29,12 @@ enum class DashCommandConfirmation {
         /**
          * The same order of checks as Android: a status after the command decides first, then whether
          * the bytes went out.
+         *
+         * Android bug, kept as is: only the 4-bit sequences are compared. When the last programming
+         * command the pod took was built with the same sequence (8 answered exchanges earlier), a
+         * status says SUCCESS for a command the pod never got. The caller must not build a delivery
+         * command with the sequence the pod reports as its last one; `IosDashPump` reads a status
+         * first in that case.
          */
         fun of(command: DashActiveCommand?, statusResponseCount: Long, lastProgrammingSequence: Int?): DashCommandConfirmation = when {
             command == null                                                     -> NO_ACTIVE_COMMAND

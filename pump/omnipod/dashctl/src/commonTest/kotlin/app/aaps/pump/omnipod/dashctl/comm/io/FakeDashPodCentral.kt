@@ -77,6 +77,12 @@ class FakeDashPodCentral(
     var finalAnswer = FinalAnswer.SUCCESS
 
     /**
+     * The final answer for one whole message from the phone, so a test can choose it per message.
+     * It is called after the message was added to [messagesFromPhone]. By default: [finalAnswer].
+     */
+    var finalAnswerFor: (message: ByteArray) -> FinalAnswer = { finalAnswer }
+
+    /**
      * When the final answer is sent, compared to the write confirmation of the last DATA packet.
      * [AnswerTiming.AFTER_CONFIRM_LATE] needs [otherThread].
      */
@@ -99,6 +105,13 @@ class FakeDashPodCentral(
 
     /** When true for a write, the pod drops the link instead of answering it. */
     var disconnectOnWrite: (characteristicUuid: String, data: ByteArray) -> Boolean = { _, _ -> false }
+
+    /**
+     * The pod's answer to a whole message from the phone (after the CRC check, with SUCCESS), as a
+     * whole `MessagePacket.asByteArray()`, or null for no answer. The pod sends it right after its
+     * SUCCESS, as [podSendsMessage] does. Used by the session tests to play the pod protocol.
+     */
+    var replyTo: (message: ByteArray) -> ByteArray? = { null }
 
     /** Phone writes and pod values, in order: "phone CMD 00", "pod DATA 0002...", "link lost". */
     val log = mutableListOf<String>()
@@ -269,6 +282,7 @@ class FakeDashPodCentral(
             emit(listOfNotNull(podValue(CMD, BleCommandNack(index.toByte()).data), confirm))
             return
         }
+        var reply: ByteArray? = null
         val answer: ByteArray? = try {
             if (index == 0) {
                 // Mirror of Android lines 127 and 132: the first packet starts the joiner.
@@ -283,7 +297,9 @@ class FakeDashPodCentral(
                 val message = joiner!!.finalize()
                 messagesFromPhone += message
                 joiner = null
-                when (finalAnswer) {
+                val final = finalAnswerFor(message)
+                if (final == FinalAnswer.SUCCESS) reply = replyTo(message)
+                when (final) {
                     FinalAnswer.SUCCESS -> BleCommandSuccess.data
                     FinalAnswer.FAIL    -> BleCommandFail.data
                     FinalAnswer.NONE    -> null
@@ -310,6 +326,8 @@ class FakeDashPodCentral(
                 emit(listOfNotNull(value), LATE_ANSWER_MS)
             }
         }
+        // The pod answers a whole message with a message of its own, after its SUCCESS.
+        reply?.let { podSendsMessage(it) }
     }
 
     /**

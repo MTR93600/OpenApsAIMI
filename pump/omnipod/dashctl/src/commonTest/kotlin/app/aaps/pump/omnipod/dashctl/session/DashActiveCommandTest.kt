@@ -79,6 +79,20 @@ class DashActiveCommandTest {
         assertEquals(DashCommandConfirmation.SENDING_FAILURE, DashCommandConfirmation.of(command, 3, 5))
     }
 
+    /**
+     * Android bug, ported as is: only the 4-bit sequences are compared. Each answered exchange moves
+     * the sequence by 2, so after 8 of them a new command gets the same sequence as the last
+     * programming command the pod took. A status after it then shows that sequence and the rule says
+     * SUCCESS, even when the pod never got the new command. `IosDashPump` does not build a delivery
+     * command with that sequence (it reads a status first), so the rule is never asked this question.
+     */
+    @Test
+    fun `the rule cannot tell a new command from an old one with the same sequence`() {
+        // The pod never took this bolus; its last programming command is a TBR, also built with 4.
+        val bolus = DashActiveCommand(sequence = 4, kind = DashCommandKind.BOLUS, historyId = 1, statusCountAtCreation = 3, sent = true)
+        assertEquals(DashCommandConfirmation.SUCCESS, DashCommandConfirmation.of(bolus, 4, 4))
+    }
+
     /** The status before the command shows the same sequence by chance: it says nothing about this command. */
     @Test
     fun `a status from before the command does not confirm it`() {
@@ -99,14 +113,14 @@ class DashActiveCommandTest {
     @Test
     fun `the command takes the sequence number it is built with`() {
         val m = manager()
-        m.seedMessageSequenceNumber(9)
+        repeat(9) { m.increaseMessageSequenceNumber() }
         assertEquals(9, m.createActiveCommand(DashCommandKind.TEMP_BASAL, historyId = 1).sequence)
     }
 
     @Test
     fun `a confirming status closes the command as success`() {
         val m = manager()
-        m.seedMessageSequenceNumber(9)
+        repeat(9) { m.increaseMessageSequenceNumber() }
         m.createActiveCommand(DashCommandKind.BOLUS, historyId = 7, requestedBolusUnits = 5.0)
         m.markActiveCommandSent()
         m.updateFromStatus(status(lastSequence = 9))

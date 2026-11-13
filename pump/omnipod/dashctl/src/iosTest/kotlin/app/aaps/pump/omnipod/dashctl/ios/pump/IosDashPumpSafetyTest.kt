@@ -2,10 +2,7 @@ package app.aaps.pump.omnipod.dashctl.ios.pump
 
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.PumpSync
-import app.aaps.pump.omnipod.dashctl.session.DashMessageTransport
-import app.aaps.pump.omnipod.dashctl.session.DashPodStateManager
-import app.aaps.pump.omnipod.dashctl.session.DashPodStateStore
-import app.aaps.pump.omnipod.dashctl.session.DashPodState
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -15,32 +12,23 @@ import kotlinx.coroutines.test.runTest
  * Safety guard: the pump must NEVER send bytes without a paired pod
  * AND an established session.
  *
- * Uses a recording transport; any send attempt without pairing+session
- * is a failure. Runs on device/simulator.
+ * The pump runs on the real `MessageIO` and `DashBleLink` against a simulated pod; any write to
+ * the radio after the link was prepared is a failure. Runs on the iOS simulator.
  */
 class IosDashPumpSafetyTest {
 
-    private class RecordingTransport : DashMessageTransport {
-        val sent = mutableListOf<ByteArray>()
-        override fun send(data: ByteArray): Boolean {
-            sent += data
-            return true
-        }
-        override fun receive(): ByteArray? = null
+    private val fixture = DashPumpOnFakePod()
+    private val pump get() = fixture.pump
+    private val stateManager get() = fixture.stateManager
+
+    @AfterTest
+    fun closePod() {
+        fixture.pod.close()
+        fixture.pod.assertNoProblems()
     }
 
-    private class MemoryStore : DashPodStateStore {
-        var state: DashPodState? = null
-        override fun load(): DashPodState? = state
-        override fun save(state: DashPodState) { this.state = state }
-        override fun clear() { state = null }
-    }
-
-    private fun freshPump(): Triple<IosDashPump, RecordingTransport, DashPodStateManager> {
-        val transport = RecordingTransport()
-        val stateManager = DashPodStateManager(MemoryStore())
-        val pump = IosDashPump(transport = transport, stateManager = stateManager)
-        return Triple(pump, transport, stateManager)
+    private fun assertNothingSent() {
+        assertTrue(fixture.writesFromPump().isEmpty(), "no bytes may go to the radio: ${fixture.writesFromPump()}")
     }
 
     private fun fakeBolus(insulin: Double): DetailedBolusInfo =
@@ -48,68 +36,78 @@ class IosDashPumpSafetyTest {
 
     @Test
     fun `unpaired pump refuses bolus and sends nothing`() = runTest {
-        val (pump, transport, _) = freshPump()
         val result = pump.deliverTreatment(fakeBolus(1.0))
         assertFalse(result.success, "bolus must fail when unpaired")
-        assertTrue(transport.sent.isEmpty(), "no bytes may go to the radio when unpaired")
+        assertNothingSent()
     }
 
     @Test
     fun `unpaired pump refuses temp basal and sends nothing`() = runTest {
-        val (pump, transport, _) = freshPump()
         val result = pump.setTempBasalAbsolute(
             1.0, 30, false, PumpSync.TemporaryBasalType.NORMAL
         )
         assertFalse(result.success)
-        assertTrue(transport.sent.isEmpty())
+        assertNothingSent()
     }
 
     @Test
     fun `unpaired pump refuses cancel temp basal`() = runTest {
-        val (pump, transport, _) = freshPump()
         val result = pump.cancelTempBasal(false)
         assertFalse(result.success)
-        assertTrue(transport.sent.isEmpty())
+        assertNothingSent()
+    }
+
+    @Test
+    fun `unpaired pump does not ask for a status`() = runTest {
+        pump.getPumpStatus("test")
+        assertNothingSent()
     }
 
     @Test
     fun `paired without session refuses commands`() = runTest {
-        val (pump, transport, stateManager) = freshPump()
         stateManager.updateFromPairing(12345L, ByteArray(16) { it.toByte() })
         pump.connect("test")
         // No establishSession(): guard must fail closed.
         val result = pump.deliverTreatment(fakeBolus(1.0))
         assertFalse(result.success)
-        assertTrue(transport.sent.isEmpty())
+        assertNothingSent()
     }
 
     @Test
     fun `paired with session but disconnected refuses commands`() = runTest {
-        val (pump, transport, stateManager) = freshPump()
         stateManager.updateFromPairing(12345L, ByteArray(16) { it.toByte() })
         // Connected then disconnected; no session ever established.
         pump.connect("test")
         pump.disconnect("test")
         val result = pump.deliverTreatment(fakeBolus(1.0))
         assertFalse(result.success)
-        assertTrue(transport.sent.isEmpty())
+        assertNothingSent()
     }
 
     @Test
     fun `stopDelivery refuses when unpaired`() {
-        val (pump, transport, _) = freshPump()
         val result = pump.stopDelivery()
         assertFalse(result.success)
-        assertTrue(transport.sent.isEmpty())
+        assertNothingSent()
     }
 
     @Test
     fun `isConfigured reflects pairing state`() {
-        val (unpaired, _, _) = freshPump()
-        assertFalse(unpaired.isConfigured())
-        val (paired, _, stateManager) = freshPump()
+        assertFalse(pump.isConfigured())
         stateManager.updateFromPairing(12345L, ByteArray(16))
-        assertTrue(paired.isConfigured())
-        assertFalse(paired.isInitialized(), "no session yet")
+        assertTrue(pump.isConfigured())
+        assertFalse(pump.isInitialized(), "no session yet")
+    }
+
+    @Test
+    fun `a session that is set up and then disconnected refuses commands`() = runTest {
+        fixture.pairAndConnect()
+        pump.disconnect("test")
+        val before = fixture.writesFromPump().size
+
+        val result = pump.deliverTreatment(fakeBolus(1.0))
+
+        assertFalse(result.success)
+        assertTrue(fixture.writesFromPump().size == before, "nothing may be sent after a disconnect")
     }
 }

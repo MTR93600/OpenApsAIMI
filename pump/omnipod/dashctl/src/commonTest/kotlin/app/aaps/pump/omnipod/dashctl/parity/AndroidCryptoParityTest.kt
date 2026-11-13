@@ -1,6 +1,14 @@
 package app.aaps.pump.omnipod.dashctl.parity
 
-import app.aaps.pump.omnipod.dashctl.crypto.DashEnDecrypt
+import app.aaps.pump.omnipod.dashctl.comm.endecrypt.EnDecrypt
+import app.aaps.pump.omnipod.dashctl.comm.io.SilentPodLogger
+import app.aaps.pump.omnipod.dashctl.comm.message.MessagePacket
+import app.aaps.pump.omnipod.dashctl.comm.message.StringLengthPrefixEncoding
+import app.aaps.pump.omnipod.dashctl.comm.session.EapAkaAttributeAutn
+import app.aaps.pump.omnipod.dashctl.comm.session.EapAkaAttributeCustomIV
+import app.aaps.pump.omnipod.dashctl.comm.session.EapAkaAttributeRand
+import app.aaps.pump.omnipod.dashctl.comm.session.EapCode
+import app.aaps.pump.omnipod.dashctl.comm.session.EapMessage
 import app.aaps.pump.omnipod.dashctl.crypto.DashKeyExchange
 import app.aaps.pump.omnipod.dashctl.crypto.DashMilenage
 import app.aaps.pump.omnipod.dashctl.crypto.DashNonce
@@ -13,8 +21,6 @@ import app.aaps.pump.omnipod.dashctl.parity.AndroidRecordedVectors.Milenage1
 import app.aaps.pump.omnipod.dashctl.parity.AndroidRecordedVectors.Milenage2
 import app.aaps.pump.omnipod.dashctl.parity.AndroidRecordedVectors.Milenage3
 import app.aaps.pump.omnipod.dashctl.parity.AndroidRecordedVectors.MilenageResync
-import app.aaps.pump.omnipod.dashctl.session.DashEapCodec
-import app.aaps.pump.omnipod.dashctl.session.DashKeyValueCodec
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -32,35 +38,38 @@ class AndroidCryptoParityTest {
     /** Android source: `EnDecryptTest.encrypt`. */
     @Test
     fun encryptMatchesAndroidRealCapture() {
-        val enDecrypt = DashEnDecrypt(
-            aesCcm = parityAesCcm(),
+        val enDecrypt = EnDecrypt(
+            aapsLogger = SilentPodLogger,
             nonce = DashNonce(parityHex(EncryptCommand.NONCE_PREFIX), EncryptCommand.NONCE_SQN),
-            ck = parityHex(EncryptCommand.CK)
+            ck = parityHex(EncryptCommand.CK),
+            aesCcm = parityAesCcm()
         )
+        // The header fields of the capture, with the wrapped command as payload (as EnDecryptTest).
+        val message = MessagePacket.parse(parityHex(EncryptCommand.WIRE_HEX))
+            .copy(payload = parityHex(EncryptCommand.WRAPPED_COMMAND_HEX))
+        assertEquals(EncryptCommand.HEADER_HEX, message.asByteArray(forEncryption = true).copyOfRange(0, 16).toParityHex())
 
-        val encrypted = enDecrypt.encrypt(
-            header = parityHex(EncryptCommand.HEADER_HEX),
-            payload = parityHex(EncryptCommand.WRAPPED_COMMAND_HEX)
-        )
+        val encrypted = enDecrypt.encrypt(message)
 
-        assertEquals(EncryptCommand.CIPHERTEXT_AND_MAC_HEX, encrypted.toParityHex())
+        assertEquals(EncryptCommand.CIPHERTEXT_AND_MAC_HEX, encrypted.payload.toParityHex())
     }
 
     /** Android source: `EnDecryptTest.decrypt`. The nonce counter starts at 22, so the nonce is for 23. */
     @Test
     fun decryptMatchesAndroidRealCapture() {
-        val enDecrypt = DashEnDecrypt(
-            aesCcm = parityAesCcm(),
+        val enDecrypt = EnDecrypt(
+            aapsLogger = SilentPodLogger,
             nonce = DashNonce(parityHex(DecryptResponse.NONCE_PREFIX), DecryptResponse.NONCE_SQN),
-            ck = parityHex(DecryptResponse.CK)
+            ck = parityHex(DecryptResponse.CK),
+            aesCcm = parityAesCcm()
         )
+        val message = MessagePacket.parse(parityHex(DecryptResponse.WIRE_HEX))
+        assertEquals(DecryptResponse.HEADER_HEX, message.asByteArray().copyOfRange(0, 16).toParityHex())
+        assertEquals(DecryptResponse.CIPHERTEXT_AND_MAC_HEX, message.payload.toParityHex())
 
-        val plaintext = enDecrypt.decrypt(
-            header = parityHex(DecryptResponse.HEADER_HEX),
-            payloadWithMac = parityHex(DecryptResponse.CIPHERTEXT_AND_MAC_HEX)
-        )
+        val plaintext = enDecrypt.decrypt(message)
 
-        assertEquals(DecryptResponse.PLAINTEXT_HEX, plaintext.toParityHex())
+        assertEquals(DecryptResponse.PLAINTEXT_HEX, plaintext.payload.toParityHex())
     }
 
     // -- Milenage (MilenageTest) ----------------------------------------------------------------
@@ -135,7 +144,7 @@ class AndroidCryptoParityTest {
     /** Android source: `StringLengthPrefixEncodingTest.testFormatKeysP0`. */
     @Test
     fun keyValueFormatP0MatchesAndroid() {
-        val encoded = DashKeyValueCodec.formatKeys(
+        val encoded = StringLengthPrefixEncoding.formatKeys(
             arrayOf(KeyValueP0.KEY),
             arrayOf(parityHex(KeyValueP0.VALUE_HEX))
         )
@@ -145,19 +154,19 @@ class AndroidCryptoParityTest {
     /** Android source: `StringLengthPrefixEncodingTest.testParseKeysP0`. */
     @Test
     fun keyValueParseP0MatchesAndroid() {
-        val parsed = DashKeyValueCodec.parseKeys(arrayOf(KeyValueP0.KEY), parityHex(KeyValueP0.ENCODED_HEX))
+        val parsed = StringLengthPrefixEncoding.parseKeys(arrayOf(KeyValueP0.KEY), parityHex(KeyValueP0.ENCODED_HEX))
         assertEquals(1, parsed.size)
         assertEquals(KeyValueP0.VALUE_HEX, parsed[0].toParityHex())
     }
 
     /**
      * Android source: `EnDecryptTest.encrypt` (its wrapped command).
-     * The codec CAN build the `S0.0=..,G0.0` wrapper. The divergence is that the pump path
-     * does not call it, see `IosDashPumpAndroidParityTest.commandPayloadIsWrappedInS00`.
+     * The codec builds the `S0.0=..,G0.0` wrapper; `Session.getCmdMessage` calls it, see
+     * `IosDashPumpAndroidParityTest.commandPayloadIsWrappedInS00`.
      */
     @Test
     fun keyValueCodecBuildsTheCommandWrapperLikeAndroid() {
-        val wrapped = DashKeyValueCodec.formatKeys(
+        val wrapped = StringLengthPrefixEncoding.formatKeys(
             arrayOf("S0.0=", ",G0.0"),
             arrayOf(parityHex(EncryptCommand.INNER_COMMAND_HEX), ByteArray(0))
         )
@@ -167,22 +176,26 @@ class AndroidCryptoParityTest {
     /** Android source: `EapMessageTest.testParseAndBack` (it only parses and re-serialises). */
     @Test
     fun eapChallengeParsesLikeAndroid() {
-        val challenge = DashEapCodec.parseChallenge(parityHex(EapChallenge.PACKET_HEX))
+        val challenge = EapMessage.parse(SilentPodLogger, parityHex(EapChallenge.PACKET_HEX))
         assertEquals(EapChallenge.IDENTIFIER.toByte(), challenge.identifier)
-        assertEquals(EapChallenge.AUTN, challenge.autn.toParityHex())
-        assertEquals(EapChallenge.RAND, challenge.rand.toParityHex())
-        assertEquals(EapChallenge.IV, challenge.controllerIv.toParityHex())
+        assertEquals(EapChallenge.AUTN, challenge.attributes.filterIsInstance<EapAkaAttributeAutn>().single().payload.toParityHex())
+        assertEquals(EapChallenge.RAND, challenge.attributes.filterIsInstance<EapAkaAttributeRand>().single().payload.toParityHex())
+        assertEquals(EapChallenge.IV, challenge.attributes.filterIsInstance<EapAkaAttributeCustomIV>().single().payload.toParityHex())
     }
 
     /** Android source: `EapMessageTest.testParseAndBack`: parse, then back to the same bytes. */
     @Test
     fun eapChallengeSerialisesBackToTheAndroidBytes() {
-        val back = DashEapCodec.challenge(
+        // Built the way SessionEstablisher.eapAkaChallenge builds it: AUTN, RAND, then our IV.
+        val back = EapMessage(
+            code = EapCode.REQUEST,
             identifier = EapChallenge.IDENTIFIER.toByte(),
-            autn = parityHex(EapChallenge.AUTN),
-            rand = parityHex(EapChallenge.RAND),
-            controllerIv = parityHex(EapChallenge.IV)
-        )
+            attributes = arrayOf(
+                EapAkaAttributeAutn(parityHex(EapChallenge.AUTN)),
+                EapAkaAttributeRand(parityHex(EapChallenge.RAND)),
+                EapAkaAttributeCustomIV(parityHex(EapChallenge.IV))
+            )
+        ).toByteArray()
         assertEquals(EapChallenge.PACKET_HEX, back.toParityHex())
     }
 }

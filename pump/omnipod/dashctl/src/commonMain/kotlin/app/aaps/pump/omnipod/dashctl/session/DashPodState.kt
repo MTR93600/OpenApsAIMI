@@ -17,7 +17,13 @@ data class DashPodState(
     val ltk: ByteArray? = null,
     /** EAP-AKA sequence number, starts at 1 after pairing. */
     val eapAkaSequenceNumber: Long = 1L,
-    /** BLE message sequence number, 4-bit (0-15). */
+    /**
+     * The 4-bit command sequence number (0-15), Android `PodState.messageSequenceNumber`. Each pod
+     * command is built with it, and the pod reports it back for the last programming command it
+     * took. It goes up by one when a command is sent and by one when an answer is read. It is not
+     * the outer packet counter: that one lives in the session (`SessionKeys.msgSequenceNumber`)
+     * and is not stored.
+     */
     val messageSequenceNumber: Int = 0,
     /** Pod unique id, set once the pod is paired. */
     val uniqueId: Long? = null,
@@ -32,6 +38,12 @@ data class DashPodState(
     val statusResponseCount: Long = 0L,
     /** The delivery command not yet confirmed by a status, null when none is open. */
     val activeCommand: DashActiveCommand? = null,
+    /**
+     * The pulse rate of the pod, from its answer to SetUniqueId during activation (Android
+     * `PodState.pulseRate`). Null until then. A bolus is built with it, so no bolus is sent while
+     * it is null.
+     */
+    val pulseRate: Short? = null,
 ) {
 
     init {
@@ -54,7 +66,8 @@ data class DashPodState(
             bluetoothAddress == other.bluetoothAddress &&
             podStatus == other.podStatus &&
             statusResponseCount == other.statusResponseCount &&
-            activeCommand == other.activeCommand
+            activeCommand == other.activeCommand &&
+            pulseRate == other.pulseRate
     }
 
     override fun hashCode(): Int {
@@ -67,6 +80,7 @@ data class DashPodState(
         result = 31 * result + (podStatus?.hashCode() ?: 0)
         result = 31 * result + statusResponseCount.hashCode()
         result = 31 * result + (activeCommand?.hashCode() ?: 0)
+        result = 31 * result + (pulseRate?.hashCode() ?: 0)
         return result
     }
 

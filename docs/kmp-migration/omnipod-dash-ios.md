@@ -77,12 +77,26 @@ missing layer. So the layer is ported first, as is, and the rest is rebuilt on i
       simulated pod that plays the pod side of `MessageIO`, at the level of BLE events: 108 tests on
       the JVM, 112 on the iOS simulator, after two adversarial reviews (7 findings, all fixed).
       Open for phase 3: who owns the `CoreBluetoothCentral` for Dash and its restore identifier.
-- [ ] Step 3: pairing, session and commands rebuilt on `MessageIO`, with Android's two counters
-      (packet sequence per session, seeded from the pair result; 4-bit command sequence, stored, the
-      one the pod reports back and the active command follows), the fixed nonce, the pod's pulse
-      rate and its id. The pinned parity tests then pass and lose their `@Ignore`.
-- [ ] Step 4: reading the answer of each command and the status, ACK included, into
-      `DashPodStateManager.updateFromStatus`, then `resolveActiveCommand`.
+- [x] Step 3 (done and tested off line, not on a pod): Android `pair`, `session` and `endecrypt`
+      ported to `dashctl/comm` (LTKExchanger, SessionEstablisher with the full EAP message, Session
+      with the `S0.0=` envelope and the ACK, EnDecrypt on MessagePacket). `IosDashPump` runs on them
+      with Android's two counters (packet sequence per session, seeded from the pair result; 4-bit
+      command sequence, stored, +1 on send and +1 on answer), the fixed nonce, the pod's pulse rate
+      (a bolus is refused until it is known) and the pod id. The old classes without MessagePacket
+      are deleted. All pinned parity tests pass with their original expected values, except
+      `pairingSeedsTheSequenceCounterFromThePairResult`, whose premise was wrong (it checks the
+      stored command counter, which pairing must not touch).
+- [x] Step 4 (same): each answer is read and acknowledged, a status goes into
+      `DashPodStateManager.updateFromStatus`, then the open command is decided. A bolus is reported
+      delivered only on SUCCESS. A late decision (found by a later status read) reaches
+      `onCommandDecided`, so a bolus the pod took after a lost answer is still recorded. Deliberate
+      difference from Android: before a delivery command whose 4-bit sequence equals the last one the
+      pod reports, a status is read first (Android can take an old command for the new one there).
+- Still to do before a pod: a link owner per BLE connection (today a new `IosDashPump` per
+  connection), cancel a running temp basal before a new one, follow a bolus to its end (progress and
+  cancel), call `getPumpStatus` from the queue/plugin, beeps from the user settings, and the
+  activation fields (prime rates and volumes) in the stored state.
+
 - [ ] Activation in two parts (unique id, alerts, prime, basal program, cannula), deactivation,
       suspend and resume, alerts and their silencing, beeps.
 - [ ] Time and time zone: the basal program runs on pod time.

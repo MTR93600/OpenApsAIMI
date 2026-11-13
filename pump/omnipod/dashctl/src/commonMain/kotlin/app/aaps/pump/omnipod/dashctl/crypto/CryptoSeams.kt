@@ -11,7 +11,7 @@ package app.aaps.pump.omnipod.dashctl.crypto
 
 /**
  * AES-CCM authenticated encryption, as used by the pod message layer.
- * The MAC size is fixed by the protocol ([DashEnDecrypt.MAC_SIZE_BYTES]).
+ * The MAC size is fixed by the protocol: 8 bytes (`EnDecrypt` in `comm.endecrypt`).
  */
 interface AesCcmCipher {
 

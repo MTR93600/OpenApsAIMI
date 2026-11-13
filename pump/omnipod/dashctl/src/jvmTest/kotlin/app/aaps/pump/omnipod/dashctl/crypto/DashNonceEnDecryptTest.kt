@@ -5,8 +5,8 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 
 /**
- * Tests for [DashNonce] (pure-Kotlin port of the Android `Nonce`) and
- * [DashEnDecrypt] (message authenticated encryption orchestration).
+ * Tests for [DashNonce] (pure-Kotlin port of the Android `Nonce`) and the AES-CCM seam with it,
+ * in both directions. The message level is checked in `comm.endecrypt.EnDecryptTest`.
  */
 class DashNonceEnDecryptTest {
 
@@ -54,7 +54,7 @@ class DashNonceEnDecryptTest {
 
     @Test
     fun enDecryptRoundtrip() {
-        // The DashEnDecrypt.encrypt/decrypt hardcode opposite directions (as the Android
+        // EnDecrypt.encrypt/decrypt hardcode opposite directions (as the Android
         // EnDecrypt does): encrypt is PDM->pod (MSB clear), decrypt is pod->PDM (MSB set).
         // A roundtrip requires simulating both sides with matching nonces.
         val ccm = SpongyCastleAesCcm()

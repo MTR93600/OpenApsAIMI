@@ -1,18 +1,21 @@
 package app.aaps.pump.omnipod.dashctl.session
 
+import app.aaps.pump.omnipod.dashctl.comm.session.EapSqn
 import app.aaps.pump.omnipod.dashctl.pod.definition.ActivationProgress
+import app.aaps.pump.omnipod.dashctl.pod.response.SetUniqueIdResponse
 
 /**
  * Owns the [DashPodState] and persists it through [DashPodStateStore].
  *
- * Ported from the Android `OmnipodDashPodStateManagerImpl` (sequence-number parts):
- * - [increaseMessageSequenceNumber] wraps the 4-bit counter and persists.
- * - [seedMessageSequenceNumber] sets the 4-bit counter (D4 seeds it from
- *   `pairResult.msgSeq` after a fresh pairing, like the original) and persists.
- * - [increaseEapAkaSequenceNumber] increments the EAP-AKA SQN and returns it as
- *   6 big-endian bytes, without persisting (same as the original).
- * - [commitEapAkaSequenceNumber] persists after a successful session establishment.
- * - [updateFromPairing] resets the EAP-AKA SQN to 1 and stores the LTK.
+ * Ported from the Android `OmnipodDashPodStateManagerImpl` (the parts the iOS driver uses):
+ * - [increaseMessageSequenceNumber] moves the 4-bit command sequence number on ((n + 1) and 0x0f)
+ *   and persists. The outer packet counter is not here: as on Android it lives in the session
+ *   (`SessionKeys.msgSequenceNumber`), starts from the pair result or from 1, and is not stored.
+ * - [increaseEapAkaSequenceNumber] increments the EAP-AKA SQN and returns it as 6 big-endian bytes,
+ *   without persisting (same as the original). [commitEapAkaSequenceNumber] persists it after a
+ *   session set up, [updateEapAkaSequenceNumber] takes the SQN of the pod after a resynchronization.
+ * - [updateFromPairing] resets the EAP-AKA SQN to 1 and stores the LTK and the pod id.
+ * - [updateFromSetUniqueIdResponse] stores the pulse rate of the pod and its id.
  *
  * Deviation from the original, deliberate: [updateFromPairing] persists
  * immediately. The original only persisted on the next state change; losing the
@@ -42,33 +45,21 @@ class DashPodStateManager(private val store: DashPodStateStore) {
         get() = state.podStatus
     val activeCommand: DashActiveCommand?
         get() = state.activeCommand
+    val pulseRate: Short?
+        get() = state.pulseRate
 
     /** Full state snapshot; the LTK is defensively copied. */
     fun currentState(): DashPodState = state.copy(ltk = state.ltk?.copyOf())
 
     /**
-     * Advances the 4-bit BLE message sequence number ((n + 1) and 0x0f)
-     * and persists the state.
+     * Moves the 4-bit command sequence number on ((n + 1) and 0x0f) and persists the state.
+     * Called as the Android `PodEventInterceptor` does: once when a command was sent (also when the
+     * pod did not confirm it), and once when an answer was read.
      */
     fun increaseMessageSequenceNumber() {
         state = state.copy(
             messageSequenceNumber = (state.messageSequenceNumber + 1) and DashPodState.MESSAGE_SEQ_MAX
         )
-        persist()
-    }
-
-    /**
-     * Seeds the 4-bit BLE message sequence number and persists the state.
-     * The value is masked to the counter range (0..15).
-     *
-     * D4 must call this with `pairResult.msgSeq` after a fresh pairing, before
-     * the first [DashSessionEstablisher.negotiateSessionKeys] call — mirroring
-     * the original, which seeded the establishment's `msgSeq` from
-     * `pairResult.msgSeq` in `OmnipodDashBleManagerImpl`. For a reconnect (no
-     * fresh pairing), the persisted counter is used as-is.
-     */
-    fun seedMessageSequenceNumber(value: Int) {
-        state = state.copy(messageSequenceNumber = value and DashPodState.MESSAGE_SEQ_MAX)
         persist()
     }
 
@@ -79,7 +70,17 @@ class DashPodStateManager(private val store: DashPodStateStore) {
      */
     fun increaseEapAkaSequenceNumber(): ByteArray {
         state = state.copy(eapAkaSequenceNumber = state.eapAkaSequenceNumber + 1)
-        return eapSqnBytes(state.eapAkaSequenceNumber)
+        return EapSqn(state.eapAkaSequenceNumber).value
+    }
+
+    /**
+     * The pod asked for a resynchronization and gave its own SQN: take it and persist, as the
+     * Android setter `eapAkaSequenceNumber` does. The next [increaseEapAkaSequenceNumber] goes
+     * one above it.
+     */
+    fun updateEapAkaSequenceNumber(sequenceNumber: Long) {
+        state = state.copy(eapAkaSequenceNumber = sequenceNumber)
+        persist()
     }
 
     /** Persists the (previously increased) EAP-AKA sequence number. */
@@ -99,6 +100,21 @@ class DashPodStateManager(private val store: DashPodStateStore) {
             uniqueId = uniqueId,
             ltk = ltk.copyOf(),
             eapAkaSequenceNumber = 1L
+        )
+        persist()
+    }
+
+    /**
+     * The pod answered SetUniqueId during activation. Port of the Android
+     * `updateFromSetUniqueIdResponse`, reduced to what the iOS driver uses today: the pulse rate (a
+     * bolus is built with it) and the unique id the pod took. Android also stores the prime pulse
+     * rate, the prime volumes, the pod life, the versions, the lot and the pod sequence number; they
+     * come with the activation (plan, phase 2).
+     */
+    fun updateFromSetUniqueIdResponse(response: SetUniqueIdResponse) {
+        state = state.copy(
+            pulseRate = response.pumpRate,
+            uniqueId = response.uniqueIdReceivedInCommand,
         )
         persist()
     }
@@ -187,17 +203,4 @@ class DashPodStateManager(private val store: DashPodStateStore) {
         store.save(state)
     }
 
-    companion object {
-
-        const val EAP_SQN_SIZE = 6
-
-        /**
-         * 6-byte big-endian encoding of an EAP-AKA sequence number,
-         * matching the Android `EapSqn.fromLong` (low 6 bytes of the BE long).
-         */
-        fun eapSqnBytes(value: Long): ByteArray =
-            ByteArray(EAP_SQN_SIZE) { i ->
-                ((value ushr (8 * (EAP_SQN_SIZE - 1 - i))) and 0xff).toByte()
-            }
-    }
 }
