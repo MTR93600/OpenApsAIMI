@@ -101,6 +101,22 @@ data class DashPodState(
      * (`DashActivation`). Android has no such field: it sends the bolus again.
      */
     val activationStepInFlight: ActivationProgress? = null,
+    /**
+     * Android `PodState.suspendAlertsEnabled`: set when the answer to a suspend of delivery was read
+     * (the suspend also programs the "suspend in progress" alert of the pod), cleared when that alert
+     * was turned off again (`disableSuspendAlerts`). Android only stores it; nothing reads it.
+     */
+    val suspendAlertsEnabled: Boolean = false,
+    /**
+     * The expiration alert settings the pod was last programmed with (Android
+     * `updateExpirationAlertSettings`). Null until the first time. See [DashExpirationAlertSettings].
+     */
+    val expirationAlertSettings: DashExpirationAlertSettings? = null,
+    /**
+     * The low reservoir alert settings the pod was last programmed with (Android
+     * `updateLowReservoirAlertSettings`). Null until the first time. See [DashLowReservoirAlertSettings].
+     */
+    val lowReservoirAlertSettings: DashLowReservoirAlertSettings? = null,
 ) {
 
     init {
@@ -141,7 +157,10 @@ data class DashPodState(
             lastUpdatedSystemMs == other.lastUpdatedSystemMs &&
             lastBolus == other.lastBolus &&
             basalProgram == other.basalProgram &&
-            activationStepInFlight == other.activationStepInFlight
+            activationStepInFlight == other.activationStepInFlight &&
+            suspendAlertsEnabled == other.suspendAlertsEnabled &&
+            expirationAlertSettings == other.expirationAlertSettings &&
+            lowReservoirAlertSettings == other.lowReservoirAlertSettings
     }
 
     override fun hashCode(): Int {
@@ -169,6 +188,9 @@ data class DashPodState(
         result = 31 * result + (lastBolus?.hashCode() ?: 0)
         result = 31 * result + (basalProgram?.hashCode() ?: 0)
         result = 31 * result + (activationStepInFlight?.hashCode() ?: 0)
+        result = 31 * result + suspendAlertsEnabled.hashCode()
+        result = 31 * result + (expirationAlertSettings?.hashCode() ?: 0)
+        result = 31 * result + (lowReservoirAlertSettings?.hashCode() ?: 0)
         return result
     }
 

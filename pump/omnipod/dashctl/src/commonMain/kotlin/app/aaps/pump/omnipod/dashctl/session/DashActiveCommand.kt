@@ -22,6 +22,24 @@ enum class DashCommandKind {
      * ended" alert), sent before a new basal program when delivery is not suspended yet.
      */
     SUSPEND_DELIVERY,
+
+    /**
+     * Android `resumeDelivery` (RESUME_DELIVERY): the basal program sent to a suspended pod. When the
+     * pod takes it, it becomes the running program, as [BASAL_PROGRAM].
+     */
+    RESUME_DELIVERY,
+
+    /** Android `silenceAlerts` (ACKNOWLEDGE_ALERTS, `SilenceAlertsCommand`). */
+    SILENCE_ALERTS,
+
+    /** Android `programAlerts` (CONFIGURE_ALERTS, `ProgramAlertsCommand`). */
+    PROGRAM_ALERTS,
+
+    /** Android `playBeep` (PLAY_TEST_BEEP, `ProgramBeepsCommand`). */
+    PROGRAM_BEEPS,
+
+    /** Android `deactivatePod` (DEACTIVATE_POD, `DeactivateCommand`): the pod stops all delivery for good. */
+    DEACTIVATE,
 }
 
 /**
@@ -46,7 +64,7 @@ enum class DashCommandKind {
  *   must still be recorded at this time, or a stopped zero temp basal is counted as running for those
  *   hours and the insulin on board is wrong. Stored (`DashPodStateCodec` version 4), so it survives a
  *   restart. Null only for a command stored by an older version: the time is then unknown.
- * @property basalProgram for [DashCommandKind.BASAL_PROGRAM]: the program sent, Android
+ * @property basalProgram for [DashCommandKind.BASAL_PROGRAM] and [DashCommandKind.RESUME_DELIVERY]: the program sent, Android
  *   `ActiveCommand.basalProgram`. When the pod takes it, it becomes the running program
  *   ([DashPodState.basalProgram]). Stored (`DashPodStateCodec` version 4), so a program confirmed after
  *   a restart is still known. Null for every other kind.

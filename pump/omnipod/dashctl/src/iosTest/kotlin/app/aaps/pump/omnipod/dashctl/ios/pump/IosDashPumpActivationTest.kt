@@ -27,6 +27,9 @@ import app.aaps.pump.omnipod.dashctl.pod.definition.BeepType
 import app.aaps.pump.omnipod.dashctl.pod.definition.PodStatus
 import app.aaps.pump.omnipod.dashctl.pod.definition.ProgramReminder
 import app.aaps.pump.omnipod.dashctl.pod.response.ResponseType
+import app.aaps.pump.omnipod.dashctl.session.DashAlertSettings
+import app.aaps.pump.omnipod.dashctl.session.DashExpirationAlertSettings
+import app.aaps.pump.omnipod.dashctl.session.DashLowReservoirAlertSettings
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -359,6 +362,43 @@ class IosDashPumpActivationTest {
         assertEquals(ActivationProgress.GOT_POD_VERSION, f.stateManager.activationProgress)
         assertTrue(f.pump.activatePodPart1(lowReservoir).success)
         assertEquals(1, model.primes)
+    }
+
+    // ---------------------------------------------------------------- alert settings (step 7)
+
+    /**
+     * The Android wizard stores the low reservoir settings after part 1 and the expiration settings
+     * after part 2 (`updateLowReservoirAlertSettings`, `updateExpirationAlertSettings`), so the alert
+     * configuration with the same settings sends nothing afterwards.
+     */
+    @Test
+    fun `the alert settings are stored after each part and the same settings send nothing later`() = runTest {
+        newPod()
+        val lowSettings = DashLowReservoirAlertSettings(enabled = true, units = 20)
+        val expirationSettings = DashExpirationAlertSettings(reminderEnabled = true, reminderHours = 4, alarmEnabled = true, alarmHours = 7)
+
+        assertTrue(f.pump.activatePodPart1(lowReservoir, lowSettings).success)
+        assertEquals(lowSettings, f.stateManager.lowReservoirAlertSettings)
+        assertEquals(null, f.stateManager.expirationAlertSettings)
+        assertTrue(f.pump.activatePodPart2(program, 4, 7, expirationSettings).success)
+        assertEquals(expirationSettings, f.stateManager.expirationAlertSettings)
+        val before = f.pod.commands.size
+
+        val update = f.pump.updateAlertConfiguration(DashAlertSettings(expirationSettings, lowSettings))
+
+        assertTrue(update.success)
+        assertFalse(update.enacted)
+        assertEquals(before, f.pod.commands.size)
+    }
+
+    @Test
+    fun `the low reservoir settings are not stored when part 1 fails`() = runTest {
+        newPod()
+        f.pod.dropLinkWhileAnswering = 7 to 0 // the answer to GetVersion is lost: part 1 stops
+
+        assertFalse(f.pump.activatePodPart1(lowReservoir, DashLowReservoirAlertSettings(enabled = true, units = 20)).success)
+
+        assertEquals(null, f.stateManager.lowReservoirAlertSettings)
     }
 
     private fun status(sequence: Int) = GetStatusCommand.Builder()

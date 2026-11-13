@@ -164,8 +164,8 @@ commonMain (`dashctl`), so the JVM tests run them; only CoreBluetooth glue goes 
    left) counts the whole bolus. A bolus that already ended is not changed or given again. Tests: 3
    more in `IosDashPumpBasalProgramTest`, 4 more in `DashLastBolusTest`. 410 tests on the JVM, 451 on
    the iOS simulator (1 skipped, the known pin), 0 failures.
-   Still open: `observePodRunning` before the commands (step 6); the connect before them (step 9);
-   `suspendAlertsEnabled` after the suspend (step 7); for the plugin (phase 4): `PumpSync` (the
+   Still open: `observePodRunning` before the commands (step 6, done); the connect before them (step 9);
+   `suspendAlertsEnabled` after the suspend (step 7, done); for the plugin (phase 4): `PumpSync` (the
    PUMP_SUSPEND temp basal when the suspend is sent, its stop at the `createdAtMs` of a confirmed
    program, its invalidation on a refused suspend), `EventProfileChangeRequested` on a late SUCCESS,
    `CommandDisableSuspendAlerts`, `baseBasalRate` and `deliveredBasal` from the program (still 0 and
@@ -238,12 +238,75 @@ commonMain (`dashctl`), so the JVM tests run them; only CoreBluetooth glue goes 
    simulator (1 skipped, the known pin), 0 failures.
    Still open: the connect before each step (`observeConnectToPod`, step 9: the activation needs a
    session today and fails closed without one); for the plugin (phase 4): the low reservoir and
-   expiration alert settings stored after each part (`updateLowReservoirAlertSettings`,
-   `updateExpirationAlertSettings`, step 7 stores the alert settings), the history records, the
+   expiration alert settings stored after each part (done in step 7: `activatePodPart1/2` store them
+   when the caller gives them), the history records, the
    `PumpSync` records after part 2 and the status read after it; the reservoir check of a bolus
    (`reservoirLevel` is still a placeholder); deactivation and a reset of the state for the next pod
-   (step 7).
-7. **Deactivation**, **suspend** and **resume**, **alerts** and **silence alerts**, **beeps**.
+   (done in step 7).
+7. [x] **Deactivation**, **suspend** and **resume**, **alerts** and **silence alerts**, **beeps**.
+   Done (not committed). Every one goes through the open command rule as Android
+   `executeProgrammingCommand` (own active command, refused while one is open, outcome to
+   `onCommandDecided`, success only on SUCCESS), with new kinds at the end of `DashCommandKind`
+   (RESUME_DELIVERY, SILENCE_ALERTS, PROGRAM_ALERTS, PROGRAM_BEEPS, DEACTIVATE).
+   - `IosDashPump.suspendDelivery()` is now the Android manager `suspendDelivery`
+     (`SuspendDeliveryCommand`; before it sent STOP_ALL); `suspendDeliveryIfActive` uses the same
+     path. `suspendAlertsEnabled` is set once the answer is read (Android `doOnComplete`), stored.
+     A confirmed suspend ends a running bolus with what the answer left (step 5 rule).
+   - `resumeDelivery(profile)`: Android `resumeDelivery` (map the profile, "Expected suspended
+     delivery" unless the last status shows SUSPENDED, then the basal program, no suspend first).
+   - `silenceAlerts()` (the alerts of the last status, all of them; "No active alerts" with no
+     status), `programAlerts(list)`, `disableSuspendAlerts()` (clears `suspendAlertsEnabled` on
+     SUCCESS, DENIED and NOT_CONFIRMED, as Android; kept after a send failure), `updateAlertConfiguration(DashAlertSettings)` (`sameAlertSettings` and "no running
+     pod" send nothing; the four alerts of `DashAlerts.updateAlertConfigurations`, commonMain),
+     `playTestBeep()`. The alert settings are stored (`DashExpirationAlertSettings`,
+     `DashLowReservoirAlertSettings`), and `activatePodPart1/2` store them after the part when
+     given (Android wizard).
+   - Beeps: `IosDashPump(beeps = { DashBeepSettings() })`, all off by default, read when each command
+     is built; bolus / SMB reminders, temp basal reminders and its stops, basal program `atStart`, the
+     suspend and the stop of the bolus take the Android settings. The test beep always beeps.
+   - `deactivatePod()`: `DeactivateCommand`, not held back by `observePodRunning` (a pod in alarm or
+     half activated is deactivated); on SUCCESS the outcome is given, then `DashPodStateManager.reset()`
+     clears everything (Android `PodState()`) and the link is closed (Android removes the bond).
+     `discardPod()` is the Android "Discard pod" (reset, nothing sent). A command still open is
+     given to `onCommandDecided` first: its real outcome when a status decided it, otherwise
+     NOT_CONFIRMED with `podDiscarded = true` (see (f) below).
+   Stored format: version 4 extended in place (suspend alerts flag, the two alert settings), v4 pin
+   updated, v3 pin unchanged.
+   Deliberate differences, each with a test: (a) a refused deactivation (DENIED) clears the state only
+   when the pod reports ALARM or DEACTIVATED (`isPodKaput`); Android clears it after any refusal, so a
+   pod still running its basal would be forgotten and a new pod would deliver next to it. (b) A
+   confirmed resume makes its program the running one (Android keeps the old program: a later profile
+   equal to it would count as set while the pod runs another). (c) A confirmed deactivation ends a
+   running bolus with what the answer left (as step 5 for a suspend; Android resets and keeps the whole
+   bolus). (d) Alert settings are stored only when the pod confirmed the alerts (Android stores them
+   also after a refused or not confirmed command, then never sends them again). (e) No pod expiry
+   known: the alert configuration fails with nothing sent (Android throws). (f) Discarding the pod
+   with a command still not confirmed gives it to `onCommandDecided` with `podDiscarded = true`: Android
+   records a bolus and a temp basal when they are sent, so its reset keeps them; here a not confirmed
+   bolus is counted only from an outcome, and the reset would lose it from insulin on board. The
+   plugin (phase 4) must count such a BOLUS at the asked amount and such a TEMP_BASAL as started. Plus the rule of every
+   command here: success only on SUCCESS (Android: success after DENIED and NOT_CONFIRMED too).
+   Ported as Android (reported): a negative alert delay in `updateAlertConfiguration` is only logged
+   and the negative minutes are sent (Android builds a failure and drops it); silence alerts with an
+   empty set of alerts is sent; a deactivation decided SUCCESS only later by a status does not clear
+   the state (the user deactivates again or discards); the Android plugin has no suspend of its own
+   (`CommandSuspendDelivery` is not handled, the button is hidden): `suspendDelivery()` is the manager
+   call for the plugin.
+   Tests: `IosDashPumpSuspendResumeTest` (14), `IosDashPumpAlertsTest` (13),
+   `IosDashPumpDeactivationTest` (12), `IosDashPumpBeepsTest` (7), 2 more in
+   `IosDashPumpActivationTest` (iosTest); `DashAlertsTest` (5), `DashAlertAndResetStateTest` (8), codec
+   tests in `DashPodStateCodecVersionsTest` (26 in all, commonTest). The fake pod now reports
+   DEACTIVATED after a deactivation, can report active alerts and clears the silenced ones
+   (`podDefaultStatus(activeAlerts)`). 439 tests on the JVM, 543 on the iOS simulator (1 skipped, the
+   known pin), 0 failures.
+   Still open, for the plugin (phase 4): the custom commands of the queue (`CommandSilenceAlerts`,
+   `CommandResumeDelivery`, `CommandDeactivatePod`, `CommandUpdateAlertConfiguration`,
+   `CommandPlayTestBeep`, `CommandDisableSuspendAlerts`) mapped to these calls; queuing
+   `disableSuspendAlerts()` after a confirmed RESUME_DELIVERY or BASAL_PROGRAM outcome (Android does
+   it in `handleCommandConfirmation`); the beep and alert user settings; an outcome with `podDiscarded` counted as Android (BOLUS at
+   the asked amount, TEMP_BASAL as started); `PumpSync` (the stop of the
+   PUMP_SUSPEND temp basal on a confirmed resume) and the history records; dismissing the fault
+   notification after a deactivation. The connect before each command (step 9).
 8. **Status**: `getPumpStatus` reads the default status; the alarm status when the pod reports an
    alarm; `checkPodKaput` as Android. Its bolus part (`lastBolus.markComplete` and
    `syncBolusWithPumpId` with the delivered units at the bolus `createdAt`) must reach

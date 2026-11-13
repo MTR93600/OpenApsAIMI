@@ -54,9 +54,14 @@ import app.aaps.pump.omnipod.dashctl.pod.util.byValue
  *   `mapProfileToBasalProgram`, which gives 1 to 48 segments with slots 0..48.
  * - the activation step in flight ([DashPodState.activationStepInFlight]): u8 present (0 or 1); if
  *   so: u8 activation progress ordinal, which must be PRIMING or INSERTING_CANNULA.
+ * - the alerts: u8 [DashPodState.suspendAlertsEnabled] (0 or 1); u8 present (0 or 1) and, if so, the
+ *   expiration alert settings ([DashExpirationAlertSettings]): u8 reminder enabled (0 or 1), u32
+ *   reminder hours, u8 alarm enabled (0 or 1), u32 alarm hours; u8 present (0 or 1) and, if so, the
+ *   low reservoir alert settings ([DashLowReservoirAlertSettings]): u8 enabled (0 or 1), u32 units.
  *
  * Versions 1 to 3 are still read, so a pod paired before keeps its key and its open command. They
- * have none of the version 4 fields: the activation fields and the activation step in flight stay
+ * have none of the version 4 fields: the alert settings stay null and
+ * [DashPodState.suspendAlertsEnabled] false, the activation fields and the activation step in flight stay
  * null (and [DashPodState.lastUpdatedSystemMs] 0) until the next answer sets them, the command time stays
  * null (unknown), the last bolus stays null until the next bolus, and both basal programs stay null
  * (Android parity for a pod with no confirmed program: `isThisProfileSet` is then false, and the
@@ -191,6 +196,22 @@ object DashPodStateCodec {
         val inFlight = state.activationStepInFlight
         out.u8(if (inFlight != null) 1 else 0)
         if (inFlight != null) out.u8(inFlight.ordinal)
+
+        out.u8(if (state.suspendAlertsEnabled) 1 else 0)
+        val expiration = state.expirationAlertSettings
+        out.u8(if (expiration != null) 1 else 0)
+        if (expiration != null) {
+            out.u8(if (expiration.reminderEnabled) 1 else 0)
+            out.u32(expiration.reminderHours)
+            out.u8(if (expiration.alarmEnabled) 1 else 0)
+            out.u32(expiration.alarmHours)
+        }
+        val lowReservoir = state.lowReservoirAlertSettings
+        out.u8(if (lowReservoir != null) 1 else 0)
+        if (lowReservoir != null) {
+            out.u8(if (lowReservoir.enabled) 1 else 0)
+            out.u32(lowReservoir.units)
+        }
         return out.toByteArray()
     }
 
@@ -280,6 +301,23 @@ object DashPodStateCodec {
                 ?.takeIf { it in DashPodState.STEPS_WITH_A_BOLUS }
                 ?: throw IllegalArgumentException("bad activation step in flight $ordinal")
         }
+        var suspendAlertsEnabled = false
+        var expiration: DashExpirationAlertSettings? = null
+        var lowReservoir: DashLowReservoirAlertSettings? = null
+        if (version >= VERSION_4) {
+            suspendAlertsEnabled = inp.flag("suspend alerts")
+            if (inp.flag("expiration alert settings")) {
+                expiration = DashExpirationAlertSettings(
+                    reminderEnabled = inp.flag("expiration reminder"),
+                    reminderHours = inp.u32(),
+                    alarmEnabled = inp.flag("expiration alarm"),
+                    alarmHours = inp.u32(),
+                )
+            }
+            if (inp.flag("low reservoir alert settings")) {
+                lowReservoir = DashLowReservoirAlertSettings(enabled = inp.flag("low reservoir alert"), units = inp.u32())
+            }
+        }
         require(inp.atEnd()) { "trailing bytes" }
         return DashPodState(
             ltk = ltk,
@@ -306,6 +344,9 @@ object DashPodStateCodec {
             lastBolus = lastBolus,
             basalProgram = basalProgram,
             activationStepInFlight = inFlight,
+            suspendAlertsEnabled = suspendAlertsEnabled,
+            expirationAlertSettings = expiration,
+            lowReservoirAlertSettings = lowReservoir,
         )
     }
 

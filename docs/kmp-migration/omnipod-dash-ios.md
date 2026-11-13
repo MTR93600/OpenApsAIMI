@@ -192,10 +192,29 @@ missing layer. So the layer is ported first, as is, and the rest is rebuilt on i
       (only a real status decides, a NAK stops it), so neither goes twice (Android sends them again); the program the pod took is the running program
       from PROGRAMMED_BASAL on. Open: connect before each step (phase 3), alert settings stored
       (next step), history and `PumpSync` after part 2 (phase 4), the reservoir check of a bolus.
-- Still to do before a pod: call `getPumpStatus` from the queue/plugin, beeps from the user
-  settings.
+- [x] Step 11 (same, 2026-11-13): deactivation, suspend and resume, alerts, beeps.
+      `deactivatePod` sends `DeactivateCommand` (also to a pod in alarm or half activated, as
+      Android) and, when the pod took it, clears the whole pod state as Android `reset()` and closes
+      the link; `discardPod` clears it without asking the pod, after giving a command still open to
+      `onCommandDecided` (NOT_CONFIRMED with `podDiscarded`, to be counted as Android counts it). `suspendDelivery` is the Android
+      `SuspendDeliveryCommand` (it sent a stop of all delivery before) and sets
+      `suspendAlertsEnabled`; `resumeDelivery` sends the basal program to a suspended pod.
+      `silenceAlerts`, `programAlerts`, `disableSuspendAlerts`, `updateAlertConfiguration` (the four
+      Android alerts, the user settings stored and compared) and `playTestBeep`. Each goes through the
+      active command, so a lost answer blocks every delivery command until a status. Beeps are a
+      parameter (`DashBeepSettings`), all off by default, and fill the same fields as Android. Tests:
+      `IosDashPumpSuspendResumeTest`, `IosDashPumpAlertsTest`, `IosDashPumpDeactivationTest`,
+      `IosDashPumpBeepsTest`, `DashAlertsTest`, `DashAlertAndResetStateTest`. Deliberate differences:
+      a refused deactivation forgets the pod only when the pod reports it delivers nothing (ALARM or
+      DEACTIVATED), so a running pod is never forgotten next to a new one; a confirmed resume becomes
+      the running program; a confirmed deactivation ends a running bolus with what was left; alert
+      settings are stored only when the pod confirmed them. Open (phase 4): the queue commands, the
+      user settings for beeps and alerts, `disableSuspendAlerts` after a confirmed resume or basal
+      program, `PumpSync` and history.
+- Still to do before a pod: call `getPumpStatus` from the queue/plugin, beeps and alert settings
+  from the user settings.
 
-- [ ] Deactivation, suspend and resume, alerts and their silencing, beeps.
+- [x] Deactivation, suspend and resume, alerts and their silencing, beeps (step 11 above).
 - [ ] Time and time zone: the basal program runs on pod time.
 - [ ] Pod history, used to record what was confirmed in `PumpSync`.
 

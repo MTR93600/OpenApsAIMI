@@ -118,19 +118,22 @@ class ActivatingPodModel {
         /**
          * A default status (the layout of `DefaultStatusResponse`): the Android capture
          * `1d050016b00000000bff` (2 minutes since activation, reservoir above 50 U) with the pod
-         * status, the last programming sequence, the bolus pulses left and the delivery status set.
+         * status, the last programming sequence, the bolus pulses left and the delivery status set, and
+         * the active alerts ([activeAlerts], the `AlertUtil.encodeAlertSet` byte, none by default).
          */
         fun podDefaultStatus(
             podStatus: Int,
             lastProgrammingSequence: Int,
             bolusPulsesRemaining: Int = 0,
             deliveryStatus: Int = CAPTURE_DELIVERY,
+            activeAlerts: Int = 0,
         ): ByteArray {
             val totalPulses = 0x2d
             val first = (totalPulses shl 15) or ((lastProgrammingSequence and 0x0f) shl 11) or (bolusPulsesRemaining and 0x7ff)
+            val last = ((activeAlerts and 0xff) shl 23) or 0x00000bff
             return byteArrayOf(0x1d, ((deliveryStatus and 0x0f) shl 4 or (podStatus and 0x0f)).toByte()) +
                 ByteArray(4) { (first shr (8 * (3 - it))).toByte() } +
-                parityHex("00000bff")
+                ByteArray(4) { (last shr (8 * (3 - it))).toByte() }
         }
     }
 }

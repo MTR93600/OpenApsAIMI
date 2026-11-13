@@ -42,6 +42,8 @@ import app.aaps.pump.omnipod.dashctl.crypto.SecureRandomBytes
 import app.aaps.pump.omnipod.dashctl.driver.DashActivation
 import app.aaps.pump.omnipod.dashctl.driver.DashActivationException
 import app.aaps.pump.omnipod.dashctl.driver.DashActivationPod
+import app.aaps.pump.omnipod.dashctl.driver.DashAlerts
+import app.aaps.pump.omnipod.dashctl.driver.DashBeepSettings
 import app.aaps.pump.omnipod.dashctl.driver.DashBolusProgress
 import app.aaps.pump.omnipod.dashctl.driver.DashBolusWait
 import app.aaps.pump.omnipod.dashctl.driver.DashBolusWaitPod
@@ -52,14 +54,19 @@ import app.aaps.pump.omnipod.dashctl.ios.crypto.IosAesEcbBlockCipher
 import app.aaps.pump.omnipod.dashctl.ios.crypto.IosSecureRandomBytes
 import app.aaps.pump.omnipod.dashctl.ios.crypto.IosX25519Dh
 import app.aaps.pump.omnipod.dashctl.ios.store.DashKeychainStateStore
+import app.aaps.pump.omnipod.dashctl.pod.command.DeactivateCommand
+import app.aaps.pump.omnipod.dashctl.pod.command.ProgramAlertsCommand
 import app.aaps.pump.omnipod.dashctl.pod.command.ProgramBasalCommand
+import app.aaps.pump.omnipod.dashctl.pod.command.ProgramBeepsCommand
 import app.aaps.pump.omnipod.dashctl.pod.command.ProgramBolusCommand
 import app.aaps.pump.omnipod.dashctl.pod.command.ProgramTempBasalCommand
+import app.aaps.pump.omnipod.dashctl.pod.command.SilenceAlertsCommand
 import app.aaps.pump.omnipod.dashctl.pod.command.StopDeliveryCommand
 import app.aaps.pump.omnipod.dashctl.pod.command.StopDeliveryCommand.DeliveryType
 import app.aaps.pump.omnipod.dashctl.pod.command.SuspendDeliveryCommand
 import app.aaps.pump.omnipod.dashctl.pod.command.base.Command
 import app.aaps.pump.omnipod.dashctl.pod.definition.ActivationProgress
+import app.aaps.pump.omnipod.dashctl.pod.definition.AlertConfiguration
 import app.aaps.pump.omnipod.dashctl.pod.definition.AlertTrigger
 import app.aaps.pump.omnipod.dashctl.pod.definition.BasalProgram
 import app.aaps.pump.omnipod.dashctl.pod.definition.BeepType
@@ -67,10 +74,13 @@ import app.aaps.pump.omnipod.dashctl.pod.definition.DeliveryStatus
 import app.aaps.pump.omnipod.dashctl.pod.definition.ProgramReminder
 import app.aaps.pump.omnipod.dashctl.pod.response.Response
 import app.aaps.pump.omnipod.dashctl.session.DashActiveCommand
+import app.aaps.pump.omnipod.dashctl.session.DashAlertSettings
 import app.aaps.pump.omnipod.dashctl.session.DashCommandConfirmation
 import app.aaps.pump.omnipod.dashctl.session.DashCommandKind
 import app.aaps.pump.omnipod.dashctl.session.DashCommandNotConfirmedException
+import app.aaps.pump.omnipod.dashctl.session.DashExpirationAlertSettings
 import app.aaps.pump.omnipod.dashctl.session.DashLastBolus
+import app.aaps.pump.omnipod.dashctl.session.DashLowReservoirAlertSettings
 import app.aaps.pump.omnipod.dashctl.session.DashPodStateManager
 import app.aaps.pump.omnipod.dashctl.session.DashResolvedCommand
 import app.aaps.pump.omnipod.dashctl.util.mapProfileToBasalProgram
@@ -97,6 +107,7 @@ class DashPumpNotPairedException(message: String) : Exception(message)
  * `PumpSync`).
  *
  * @property confirmation SUCCESS (the pod took it), DENIED or SENDING_FAILURE (it did not).
+ *   NOT_CONFIRMED only together with [podDiscarded].
  * @property decidedLate true when a later status decided it, after the call that sent the command
  *   had already returned a failure. A late SUCCESS bolus is insulin the caller was told was not
  *   delivered: it must be recorded, or a retry delivers it a second time.
@@ -108,6 +119,13 @@ class DashPumpNotPairedException(message: String) : Exception(message)
  *   with [DashLastBolus.deliveredUnits] the amount that went in. The receiver records the bolus again
  *   with that amount, at [DashLastBolus.createdAtMs], as Android `handleCommandConfirmation` on
  *   CANCEL_BOLUS (`syncBolusWithPumpId` with the delivered units). Null otherwise.
+ * @property podDiscarded true when the pod was discarded (`IosDashPump.discardPod`) while [command]
+ *   was still not confirmed. [confirmation] is then NOT_CONFIRMED, and nobody will ever know whether
+ *   the pod took it. Android records a bolus and a temp basal as soon as they were sent, so its
+ *   "Discard pod" keeps them. The receiver must do the same: count a BOLUS at
+ *   [DashActiveCommand.requestedBolusUnits] and a TEMP_BASAL as started, both at
+ *   [DashActiveCommand.createdAtMs]. Counting nothing could leave insulin the pod gave out of insulin
+ *   on board, and the loop could then dose again on top of it.
  */
 data class DashCommandOutcome(
     val confirmation: DashCommandConfirmation,
@@ -115,6 +133,7 @@ data class DashCommandOutcome(
     val decidedLate: Boolean,
     val decidedAtMs: Long,
     val endedBolus: DashLastBolus? = null,
+    val podDiscarded: Boolean = false,
 )
 
 /**
@@ -170,6 +189,10 @@ data class DashCommandOutcome(
  * refused the same way. [disconnect] closes the link too, except while an activation runs
  * ([runActivation]), as Android.
  *
+ * **Beeps** come from [beeps] (all off until the plugin gives the user settings), and go into the
+ * same fields as on Android: the reminders of a bolus, a temp basal and a basal program, and the beep
+ * of a stop and of a suspend. The activation commands never beep, as on Android.
+ *
  * Threading: commands, [pair], [establishSession] and `DashPodConnection.connect` are serialized by
  * [commandMutex], as Android serializes `sendCommand`, `connect` and `pairNewPod` with its busy flag.
  * Commands and pairing wait for it; `DashPodConnection.connect` does not wait
@@ -203,6 +226,12 @@ class IosDashPump(
      * `delay` does that inside `runTest`).
      */
     private val sleep: suspend (Long) -> Unit = { delay(it) },
+    /**
+     * The beep settings of the user, read each time a command is built (Android reads its
+     * preferences there). All off by default: beeps stay off until the plugin (phase 4) gives the user
+     * settings here.
+     */
+    private val beeps: () -> DashBeepSettings = { DashBeepSettings() },
 ) : Pump, DashLinkClient {
 
     private var session: Session? = null
@@ -444,10 +473,16 @@ class IosDashPump(
      * and holds the command lock, the waits too. A failure is a result, not an exception: the stored
      * progress says where to go on, and calling again resumes there.
      *
-     * Not here yet: Android `updateLowReservoirAlertSettings` after part 1 (the alert settings come
-     * with the alerts, plan step 7), the history record (phase 4).
+     * [lowReservoirAlertSettings]: the user settings the trigger was made from. When part 1 is done
+     * they are stored, as the Android wizard calls `updateLowReservoirAlertSettings` after part 1, so
+     * a later [updateAlertConfiguration] with the same settings sends nothing. Null stores nothing.
+     *
+     * Not here yet: the history record (phase 4).
      */
-    suspend fun activatePodPart1(lowReservoirAlertTrigger: AlertTrigger.ReservoirVolumeTrigger?): PumpEnactResult =
+    suspend fun activatePodPart1(
+        lowReservoirAlertTrigger: AlertTrigger.ReservoirVolumeTrigger?,
+        lowReservoirAlertSettings: DashLowReservoirAlertSettings? = null,
+    ): PumpEnactResult =
         activationCall("Pod activation part 1") {
             if (!stateManager.activationProgress.isBefore(ActivationProgress.PHASE_1_COMPLETED)) {
                 throw DashActivationException("Pod is in an incorrect state")
@@ -457,6 +492,7 @@ class IosDashPump(
                 establishSessionWithLock()
             }
             activation().activatePart1(lowReservoirAlertTrigger)
+            lowReservoirAlertSettings?.let { stateManager.updateLowReservoirAlertSettings(it) }
         }
 
     /**
@@ -465,17 +501,23 @@ class IosDashPump(
      * [DashActivation.activatePart2]. The program the pod took is the running one from
      * PROGRAMMED_BASAL on (see [DashActivation]). Same rules as [activatePodPart1].
      *
-     * Not here yet (phase 4, the plugin): Android `updateExpirationAlertSettings`, the history record,
-     * and the `PumpSync` records after part 2 (the end of the fake TBR, `connectNewPump`, the cannula
-     * and insulin change events), and a status read once it is done.
+     * [expirationAlertSettings]: the user settings the hours were made from. When part 2 is done they
+     * are stored, as the Android wizard calls `updateExpirationAlertSettings` after part 2. Null
+     * stores nothing.
+     *
+     * Not here yet (phase 4, the plugin): the history record, and the `PumpSync` records after part 2
+     * (the end of the fake TBR, `connectNewPump`, the cannula and insulin change events), and a status
+     * read once it is done.
      */
     suspend fun activatePodPart2(
         basalProgram: BasalProgram,
         userConfiguredExpirationReminderHours: Long?,
         userConfiguredExpirationAlarmHours: Long?,
+        expirationAlertSettings: DashExpirationAlertSettings? = null,
     ): PumpEnactResult =
         activationCall("Pod activation part 2") {
             activation().activatePart2(basalProgram, userConfiguredExpirationReminderHours, userConfiguredExpirationAlarmHours)
+            expirationAlertSettings?.let { stateManager.updateExpirationAlertSettings(it) }
         }
 
     /** One activation call: [activationRunning] and [commandMutex] for the whole [block]; errors are a failure result. */
@@ -637,6 +679,8 @@ class IosDashPump(
             aapsLogger.info(LTag.PUMP, "Bolus canceled before it was sent")
             return DashPumpEnactResult(success = true, enacted = false, comment = "Bolus canceled, nothing sent")
         }
+        // Android: the SMB beep setting for an SMB, the bolus beep setting for any other bolus.
+        val bolusBeeps = beeps().let { if (detailedBolusInfo.bolusType == BS.Type.SMB) it.smbBeeps else it.bolusBeeps }
         val outcome = sendDeliveryCommand(DashCommandKind.BOLUS, requestedBolusUnits = units) { uid, seq ->
             ProgramBolusCommand.Builder()
                 .setUniqueId(uid)
@@ -644,7 +688,7 @@ class IosDashPump(
                 .setNonce(NONCE)
                 .setNumberOfUnits(units)
                 .setDelayBetweenPulsesInEighthSeconds(pulseRate.toByte())
-                .setProgramReminder(ProgramReminder(atStart = false, atEnd = false, atInterval = 0))
+                .setProgramReminder(ProgramReminder(atStart = bolusBeeps, atEnd = bolusBeeps, atInterval = 0))
                 .build()
         }
         var confirmation = outcome.confirmation
@@ -703,8 +747,10 @@ class IosDashPump(
         override fun cancelBolus(): Boolean {
             if (stateManager.activeCommand != null) return readStatusWithLock()
             return try {
+                // Android `cancelBolus` takes the bolus beep setting, also for an SMB.
+                val beep = beeps().bolusBeeps
                 val stop = sendDeliveryCommand(DashCommandKind.STOP_BOLUS) { uid, seq ->
-                    stopCommand(DeliveryType.BOLUS, uid, seq)
+                    stopCommand(DeliveryType.BOLUS, uid, seq, beep)
                 }
                 stop.confirmation == DashCommandConfirmation.SUCCESS || stop.confirmation == DashCommandConfirmation.DENIED
             } catch (e: DashCommandNotConfirmedException) {
@@ -753,6 +799,7 @@ class IosDashPump(
         try {
             requireSession()
             cancelRunningTempBasalFirst()?.let { return@withLock it }
+            val tempBasalBeeps = beeps().tempBasalBeeps
             val outcome = sendDeliveryCommand(
                 DashCommandKind.TEMP_BASAL, tempBasalRate = absoluteRate, tempBasalMinutes = durationInMinutes
             ) { uid, seq ->
@@ -760,7 +807,7 @@ class IosDashPump(
                     .setUniqueId(uid)
                     .setSequenceNumber(seq)
                     .setNonce(NONCE)
-                    .setProgramReminder(ProgramReminder(atStart = false, atEnd = false, atInterval = 0))
+                    .setProgramReminder(ProgramReminder(atStart = tempBasalBeeps, atEnd = tempBasalBeeps, atInterval = 0))
                     .setRateInUnitsPerHour(absoluteRate)
                     .setDurationInMinutes(durationInMinutes.toShort())
                     .build()
@@ -806,8 +853,9 @@ class IosDashPump(
             return null
         }
         aapsLogger.info(LTag.PUMP, "Canceling existing temp basal")
+        val beep = beeps().tempBasalBeeps
         val cancel = sendDeliveryCommand(DashCommandKind.STOP_TEMP_BASAL) { uid, seq ->
-            stopCommand(DeliveryType.TEMP_BASAL, uid, seq)
+            stopCommand(DeliveryType.TEMP_BASAL, uid, seq, beep)
         }
         return when (cancel.confirmation) {
             DashCommandConfirmation.SUCCESS,
@@ -830,8 +878,9 @@ class IosDashPump(
         commandMutex.withLock {
             busy = true
             try {
+                val beep = beeps().tempBasalBeeps
                 val outcome = sendDeliveryCommand(DashCommandKind.STOP_TEMP_BASAL) { uid, seq ->
-                    stopCommand(DeliveryType.TEMP_BASAL, uid, seq)
+                    stopCommand(DeliveryType.TEMP_BASAL, uid, seq, beep)
                 }
                 if (outcome.confirmation == DashCommandConfirmation.SUCCESS) {
                     DashPumpEnactResult(success = true, enacted = true, isTempCancel = true, comment = "TBR cancel confirmed by the pod")
@@ -855,7 +904,7 @@ class IosDashPump(
      * - delivery is suspended first when the last status does not show it suspended
      *   ([suspendDeliveryIfActive], Android `suspendDeliveryIfActive`), with its own active command;
      * - then the program goes with its own active command (BASAL_PROGRAM, Android SET_BASAL_PROFILE),
-     *   built at the time it is sent, beeps off (Android `hasBasalBeepEnabled` false). When the pod
+     *   built at the time it is sent, beep from [beeps] (Android `hasBasalBeepEnabled`). When the pod
      *   takes it, it becomes the running program ([DashPodStateManager.basalProgram]) in the same write
      *   that closes the command. Each outcome goes to [onCommandDecided] on its own.
      *
@@ -891,8 +940,9 @@ class IosDashPump(
             try {
                 requireSession()
                 suspendDeliveryIfActive()?.let { return@withLock it }
+                val beep = beeps().basalBeeps
                 val outcome = sendDeliveryCommand(DashCommandKind.BASAL_PROGRAM, basalProgram = basalProgram) { uid, seq ->
-                    basalProgramCommand(basalProgram, uid, seq)
+                    basalProgramCommand(basalProgram, uid, seq, beep)
                 }
                 if (outcome.confirmation == DashCommandConfirmation.SUCCESS) {
                     DashPumpEnactResult(success = true, enacted = true, comment = "Basal program confirmed by the pod")
@@ -914,15 +964,13 @@ class IosDashPump(
      *
      * - Nothing is sent when the last status shows delivery suspended. When no status is known yet,
      *   the suspend is sent, as Android (`deliveryStatus == SUSPENDED` is false for null).
-     * - The suspend (Android `observeSuspendDeliveryCommand`, beeps off) goes through
+     * - The suspend ([sendSuspendDelivery], Android `omnipodManager.suspendDelivery`) goes through
      *   [sendDeliveryCommand] with its own active command (SUSPEND_DELIVERY).
      * - SUCCESS and DENIED: the program goes next (null is returned). Android goes on after a denied
      *   suspend: `updateActiveCommand` emits `CommandConfirmed(success = false)`.
      * - NOT_CONFIRMED: the suspend stays open and the program is not sent (Android: the
      *   `observeNoActiveCommand` of the program fails).
      * - SENDING_FAILURE: the program is not sent (Android: `updateActiveCommand` raises the send error).
-     *
-     * Not kept yet: Android sets `suspendAlertsEnabled` after the suspend (step 7 of the plan).
      *
      * Returns the failure to give back, or null when the program may be sent. Throws
      * [DashCommandNotConfirmedException] while another command is open: nothing is sent.
@@ -933,14 +981,7 @@ class IosDashPump(
             return null
         }
         aapsLogger.info(LTag.PUMP, "Suspending delivery before the new basal program")
-        val suspend = sendDeliveryCommand(DashCommandKind.SUSPEND_DELIVERY) { uid, seq ->
-            SuspendDeliveryCommand.Builder()
-                .setSequenceNumber(seq)
-                .setUniqueId(uid)
-                .setNonce(NONCE)
-                .setBeepType(BeepType.SILENT)
-                .build()
-        }
+        val suspend = sendSuspendDelivery()
         return when (suspend.confirmation) {
             DashCommandConfirmation.SUCCESS,
             DashCommandConfirmation.DENIED -> null
@@ -950,16 +991,16 @@ class IosDashPump(
     }
 
     /**
-     * Android `OmnipodDashManagerImpl.observeSendProgramBasalCommand` with `hasBasalBeepEnabled` false.
-     * The current time is read when the command is built, as Android reads `Date()` there: the pod
-     * starts the program at the slot of that time.
+     * Android `OmnipodDashManagerImpl.observeSendProgramBasalCommand`, `hasBasalBeepEnabled` from
+     * [beeps]. The current time is read when the command is built, as Android reads `Date()` there:
+     * the pod starts the program at the slot of that time.
      */
-    private fun basalProgramCommand(basalProgram: BasalProgram, uid: Int, seq: Short): Command =
+    private fun basalProgramCommand(basalProgram: BasalProgram, uid: Int, seq: Short, beep: Boolean): Command =
         ProgramBasalCommand.Builder()
             .setUniqueId(uid)
             .setSequenceNumber(seq)
             .setNonce(NONCE)
-            .setProgramReminder(ProgramReminder(atStart = false, atEnd = false, atInterval = 0))
+            .setProgramReminder(ProgramReminder(atStart = beep, atEnd = false, atInterval = 0))
             .setBasalProgram(basalProgram)
             .setCurrentTime(now())
             .build()
@@ -977,8 +1018,9 @@ class IosDashPump(
     fun stopDelivery(): PumpEnactResult = runBlocking {
         commandMutex.withLock {
             try {
+                // No Android counterpart (the Dash plugin has no stop of all delivery): silent.
                 val outcome = sendDeliveryCommand(DashCommandKind.STOP_ALL) { uid, seq ->
-                    stopCommand(DeliveryType.ALL, uid, seq)
+                    stopCommand(DeliveryType.ALL, uid, seq, beep = false)
                 }
                 if (outcome.confirmation == DashCommandConfirmation.SUCCESS) {
                     DashPumpEnactResult(success = true, enacted = true, comment = "Stop confirmed by the pod")
@@ -993,8 +1035,308 @@ class IosDashPump(
         }
     }
 
-    /** Suspend: halts delivery until resumed. Guarded like everything else. */
-    fun suspendDelivery(): PumpEnactResult = stopDelivery()
+    /**
+     * Android `OmnipodDashManagerImpl.suspendDelivery`: `SuspendDeliveryCommand` (the stop of all
+     * delivery and the "suspend in progress" alert of the pod), long single beep when the basal beep
+     * setting is on ([beeps]). It goes through the active command (SUSPEND_DELIVERY) and is held back
+     * unless the pod is activated and runs (`observePodRunning`).
+     *
+     * A confirmed suspend ends a bolus that is still running, with what the answer left, and gives it
+     * to [onCommandDecided] as [DashCommandOutcome.endedBolus] (see
+     * [DashPodStateManager.resolveActiveCommand]).
+     *
+     * The Android Dash plugin has no suspend of its own (the button is hidden, `CommandSuspendDelivery`
+     * is not handled): it only suspends before a new basal program. This is the manager call, for the
+     * plugin. Deliberate difference, as for every delivery command here: success only when the pod
+     * confirmed it (Android also returns success after a refused or a not confirmed command).
+     */
+    suspend fun suspendDelivery(): PumpEnactResult = lockedCommand {
+        val outcome = sendSuspendDelivery()
+        if (outcome.confirmation == DashCommandConfirmation.SUCCESS) {
+            DashPumpEnactResult(success = true, enacted = true, comment = "Suspend confirmed by the pod")
+        } else {
+            failure("Suspend: ${outcome.describe()}")
+        }
+    }
+
+    /**
+     * The suspend itself, called with [commandMutex] held. As Android (`doOnComplete` of
+     * `suspendDelivery`), [DashPodStateManager.suspendAlertsEnabled] is set once the answer of the pod
+     * was read, whatever the answer says.
+     */
+    private fun sendSuspendDelivery(): DeliveryOutcome {
+        val beep = beeps().basalBeeps
+        val outcome = sendDeliveryCommand(DashCommandKind.SUSPEND_DELIVERY) { uid, seq ->
+            SuspendDeliveryCommand.Builder()
+                .setSequenceNumber(seq)
+                .setUniqueId(uid)
+                .setNonce(NONCE)
+                .setBeepType(DashBeepSettings.stopBeep(beep))
+                .build()
+        }
+        if (outcome.error == null) stateManager.updateSuspendAlertsEnabled(true)
+        return outcome
+    }
+
+    /**
+     * Android `OmnipodDashPumpPlugin.resumeDelivery`: the basal program of [profile] (Android: the
+     * profile AAPS expects to run) sent to a suspended pod, with its own active command
+     * (RESUME_DELIVERY), basal beep from [beeps]. No suspend first.
+     * - a profile that cannot be mapped ([mapProfileToBasalProgram]): failure, nothing sent;
+     * - the last status does not show delivery suspended: failure "Expected suspended delivery",
+     *   nothing sent (Android `observeDeliverySuspended`);
+     * - held back unless the pod is activated and runs (`observePodRunning`).
+     *
+     * Deliberate differences from Android:
+     * - success only when the pod confirmed it (Android also returns success after a refused or a not
+     *   confirmed resume). A not confirmed resume stays open and blocks the next delivery command.
+     * - a confirmed resume makes the program the running one ([DashPodStateManager.basalProgram]), as a
+     *   confirmed basal program. Android keeps the program from before, so `isThisProfileSet` could say
+     *   yes for a profile the pod does not run.
+     *
+     * Android then turns the "suspend ended" alert off (`CommandDisableSuspendAlerts` on a confirmed
+     * RESUME_DELIVERY or SET_BASAL_PROFILE). That is the plugin's job here (phase 4): on such an
+     * outcome it calls [disableSuspendAlerts].
+     */
+    suspend fun resumeDelivery(profile: PumpProfile): PumpEnactResult {
+        val basalProgram = try {
+            mapProfileToBasalProgram(profile, PumpType.OMNIPOD_DASH)
+        } catch (e: IllegalArgumentException) {
+            return failure("Resume refused: ${e.message}")
+        }
+        return lockedCommand {
+            if (!stateManager.isSuspended) return@lockedCommand failure("Expected suspended delivery")
+            val beep = beeps().basalBeeps
+            val outcome = sendDeliveryCommand(DashCommandKind.RESUME_DELIVERY, basalProgram = basalProgram) { uid, seq ->
+                basalProgramCommand(basalProgram, uid, seq, beep)
+            }
+            if (outcome.confirmation == DashCommandConfirmation.SUCCESS) {
+                DashPumpEnactResult(success = true, enacted = true, comment = "Resume confirmed by the pod")
+            } else {
+                failure("Resume: ${outcome.describe()}")
+            }
+        }
+    }
+
+    // -- Alerts and beeps -----------------------------------------------------
+
+    /**
+     * Android `OmnipodDashPumpPlugin.silenceAlerts`: silences the alerts of the last status
+     * ([DashPodStateManager.activeAlerts]), all of them as Android (its "TODO filter alert types"),
+     * with its own active command (SILENCE_ALERTS). No status known yet: failure "No active alerts",
+     * nothing sent. An empty set is sent as Android does. Held back unless the pod is activated and
+     * runs (`observePodRunning`). Success only when the pod confirmed it.
+     */
+    suspend fun silenceAlerts(): PumpEnactResult = lockedCommand {
+        val alerts = stateManager.activeAlerts ?: return@lockedCommand failure("No active alerts")
+        val outcome = sendDeliveryCommand(DashCommandKind.SILENCE_ALERTS) { uid, seq ->
+            SilenceAlertsCommand.Builder()
+                .setSequenceNumber(seq)
+                .setUniqueId(uid)
+                .setNonce(NONCE)
+                .setAlertTypes(alerts)
+                .build()
+        }
+        resultOf(outcome, "Silence alerts")
+    }
+
+    /**
+     * Android `OmnipodDashManagerImpl.programAlerts`: one `ProgramAlertsCommand` with [alerts], with its
+     * own active command (PROGRAM_ALERTS). Held back unless the pod is activated and runs. Success
+     * only when the pod confirmed it.
+     */
+    suspend fun programAlerts(alerts: List<AlertConfiguration>): PumpEnactResult = lockedCommand {
+        resultOf(sendAlerts(alerts), "Program alerts")
+    }
+
+    /**
+     * Android `OmnipodDashPumpPlugin.disableSuspendAlerts`: the "suspend ended" alert turned off
+     * ([DashAlerts.disableSuspendAlerts]).
+     *
+     * As Android, [DashPodStateManager.suspendAlertsEnabled] is cleared whenever the command did not
+     * fail to send: after SUCCESS, DENIED and NOT_CONFIRMED. Android clears it on `success && enacted`,
+     * and `executeProgrammingCommand` completes (success, enacted) in those three cases; only a send
+     * failure makes it fail. Nothing reads the flag today, so this has no effect on delivery. The
+     * result stays a success only on SUCCESS (fail closed, see the class comment).
+     */
+    suspend fun disableSuspendAlerts(): PumpEnactResult = lockedCommand {
+        val outcome = sendAlerts(DashAlerts.disableSuspendAlerts())
+        if (outcome.confirmation != DashCommandConfirmation.SENDING_FAILURE) stateManager.updateSuspendAlertsEnabled(false)
+        resultOf(outcome, "Disable suspend alerts")
+    }
+
+    /**
+     * Android `OmnipodDashPumpPlugin.updateAlertConfiguration`, with the user settings [settings]:
+     * - the pod was last programmed with the same settings ([DashPodStateManager.sameAlertSettings]):
+     *   success, not enacted, nothing sent;
+     * - no running pod ([DashPodStateManager.isPodRunning]): success, not enacted, nothing sent;
+     * - otherwise the four alerts of [DashAlerts.updateAlertConfigurations], computed from the pod life
+     *   left now ([DashPodStateManager.expiryMs]), in one `ProgramAlertsCommand`.
+     *
+     * Deliberate differences from Android:
+     * - the settings are stored only when the pod confirmed the alerts. Android stores them whenever
+     *   the command did not fail to send, also after a refused or a not confirmed one, and then skips
+     *   the next update as "the settings did not change": the low reservoir and expiration alerts the
+     *   user set would never reach the pod.
+     * - no pod expiry known: failure, nothing sent (Android throws).
+     */
+    suspend fun updateAlertConfiguration(settings: DashAlertSettings): PumpEnactResult = lockedCommand {
+        if (stateManager.sameAlertSettings(settings)) {
+            aapsLogger.debug(LTag.PUMP, "Ignoring updateAlertConfiguration because the settings did not change")
+            return@lockedCommand DashPumpEnactResult(success = true, enacted = false, comment = "Alert settings did not change")
+        }
+        if (!stateManager.isPodRunning) {
+            aapsLogger.debug(LTag.PUMP, "Ignoring updateAlertConfiguration because there is no active pod")
+            return@lockedCommand DashPumpEnactResult(success = true, enacted = false, comment = "No active pod")
+        }
+        val expiry = stateManager.expiryMs ?: return@lockedCommand failure("Alert configuration: pod expiry not known, nothing sent")
+        val outcome = sendAlerts(DashAlerts.updateAlertConfigurations(settings, expiry - now(), aapsLogger))
+        if (outcome.confirmation == DashCommandConfirmation.SUCCESS) {
+            stateManager.updateExpirationAlertSettings(settings.expiration)
+            stateManager.updateLowReservoirAlertSettings(settings.lowReservoir)
+        }
+        resultOf(outcome, "Alert configuration")
+    }
+
+    /** One `ProgramAlertsCommand` (Android `observeSendProgramAlertsCommand`, no multi command flag). Called with [commandMutex] held. */
+    private fun sendAlerts(alerts: List<AlertConfiguration>): DeliveryOutcome =
+        sendDeliveryCommand(DashCommandKind.PROGRAM_ALERTS) { uid, seq ->
+            ProgramAlertsCommand.Builder()
+                .setUniqueId(uid)
+                .setSequenceNumber(seq)
+                .setNonce(NONCE)
+                .setAlertConfigurations(alerts)
+                .setMultiCommandFlag(false)
+                .build()
+        }
+
+    /**
+     * Android `OmnipodDashPumpPlugin.playTestBeep`: `ProgramBeepsCommand` with a long single beep now
+     * and every reminder off (Android `playBeep(LONG_SINGLE_BEEP)`), with its own active command
+     * (PROGRAM_BEEPS). The user asks for this beep, so it does not depend on [beeps]. Held back unless
+     * the pod is activated and runs. Success only when the pod confirmed it.
+     */
+    suspend fun playTestBeep(): PumpEnactResult = lockedCommand {
+        val outcome = sendDeliveryCommand(DashCommandKind.PROGRAM_BEEPS) { uid, seq ->
+            ProgramBeepsCommand.Builder()
+                .setSequenceNumber(seq)
+                .setUniqueId(uid)
+                .setBasalReminder(ProgramReminder(atStart = false, atEnd = false, atInterval = 0))
+                .setTempBasalReminder(ProgramReminder(atStart = false, atEnd = false, atInterval = 0))
+                .setBolusReminder(ProgramReminder(atStart = false, atEnd = false, atInterval = 0))
+                .setImmediateBeepType(BeepType.LONG_SINGLE_BEEP)
+                .build()
+        }
+        resultOf(outcome, "Test beep")
+    }
+
+    // -- Deactivation -----------------------------------------------------------
+
+    /**
+     * Android `OmnipodDashPumpPlugin.deactivatePod`: `DeactivateCommand`, with its own active command
+     * (DEACTIVATE). Not held back on a pod that does not run (Android `deactivatePod` has no
+     * `observePodRunning`): a pod in alarm, or one whose activation failed half way, is deactivated
+     * too. As on Android, an open command still blocks it (Android `createActiveCommand` fails) until a
+     * status decides it; a pod that does not answer at all is discarded instead ([discardPod]).
+     *
+     * When the pod took it, the whole pod state is cleared, as Android `podStateManager.reset()`
+     * ([DashPodStateManager.reset]: key, unique id, counters, last bolus, basal program, alert settings),
+     * and the link is closed (Android removes the bond). The outcome reaches [onCommandDecided] first;
+     * a bolus that was still running is given as [DashCommandOutcome.endedBolus] with what the answer
+     * left (see [DashPodStateManager.resolveActiveCommand]). Not confirmed: failure, the command stays
+     * open and the state stays, as Android. Never sent (SENDING_FAILURE): failure, the state stays, as
+     * Android (its `updateActiveCommand` fails on a send failure, so the `doOnComplete` that resets is
+     * not reached).
+     *
+     * Deliberate difference from Android (two pods delivering): a refused deactivation (DENIED)
+     * clears the state only when the pod reports that it delivers nothing
+     * ([DashPodStateManager.isPodKaput]: ALARM or DEACTIVATED). Android clears it after any refusal,
+     * so a pod that still runs its basal would be forgotten, and a new pod would deliver basal next to
+     * it. Otherwise: failure, the state stays.
+     *
+     * Not done here, as Android does not do it either: a deactivation found SUCCESS only later by a
+     * status does not clear the state (Android: "Will not sync confirmed command"). The user then
+     * deactivates again or discards the pod.
+     */
+    suspend fun deactivatePod(): PumpEnactResult = lockedCommand {
+        val outcome = sendDeliveryCommand(DashCommandKind.DEACTIVATE) { uid, seq ->
+            DeactivateCommand.Builder()
+                .setSequenceNumber(seq)
+                .setUniqueId(uid)
+                .setNonce(NONCE)
+                .build()
+        }
+        val podGone = outcome.confirmation == DashCommandConfirmation.SUCCESS ||
+            (outcome.confirmation == DashCommandConfirmation.DENIED && stateManager.isPodKaput)
+        if (podGone) {
+            resetPodState("pod deactivated (${outcome.confirmation})")
+            DashPumpEnactResult(success = true, enacted = true, comment = "Pod deactivated")
+        } else {
+            failure("Deactivate: ${outcome.describe()}")
+        }
+    }
+
+    /**
+     * Android "Discard pod" (`podStateManager.reset()` from the overview or the wizard): the pod state
+     * is cleared without asking the pod, for a pod that cannot be deactivated (no answer, out of
+     * range, dead). The link is closed. Waits for a running command, as it holds [commandMutex].
+     *
+     * An open command is given to [onCommandDecided] before the state is cleared. One that the last
+     * status already decided gets its real outcome. One still not confirmed gets NOT_CONFIRMED with
+     * [DashCommandOutcome.podDiscarded], so the receiver counts it as Android does: Android records a
+     * bolus and a temp basal as soon as they were sent, so its reset keeps them. Without this, a bolus
+     * the pod may have given would be lost from insulin on board (deliberate difference from the
+     * Android code, needed because here a not confirmed bolus is only counted when an outcome comes).
+     *
+     * A bolus that was confirmed and still runs ([DashPodStateManager.lastBolus] not complete) is not
+     * given again: it was already counted at the asked amount when it was confirmed, and the reset
+     * keeps that amount, as Android (which corrects it only in `checkPodKaput`, step 8).
+     */
+    suspend fun discardPod() {
+        commandMutex.withLock {
+            val resolved = resolveAndHandle(decidedLate = true)
+            val open = resolved.command
+            if (resolved.confirmation == DashCommandConfirmation.NOT_CONFIRMED && open != null) {
+                aapsLogger.warn(LTag.PUMP, "Pod discarded with a command not confirmed, outcome unknown: $open")
+                onCommandDecided(
+                    DashCommandOutcome(DashCommandConfirmation.NOT_CONFIRMED, open, decidedLate = true, decidedAtMs = now(), podDiscarded = true)
+                )
+            }
+            resetPodState("pod discarded")
+        }
+    }
+
+    /** Android `podStateManager.reset()`, and the link of the old pod is not used again. */
+    private fun resetPodState(reason: String) {
+        aapsLogger.info(LTag.PUMP, "Pod state cleared: $reason")
+        stateManager.reset()
+        closeLink(reason)
+    }
+
+    /**
+     * One command call: [commandMutex] and [isBusy] for the whole [block]; an open command or a missing
+     * session is a failure result.
+     */
+    private suspend fun lockedCommand(block: () -> PumpEnactResult): PumpEnactResult = commandMutex.withLock {
+        busy = true
+        try {
+            block()
+        } catch (e: DashCommandNotConfirmedException) {
+            failure(e.message ?: "Last command not confirmed")
+        } catch (e: DashPumpNotPairedException) {
+            failure(e.message ?: "Not paired")
+        } finally {
+            busy = false
+        }
+    }
+
+    /** Success only when the pod confirmed the command (fail closed, see the class comment). */
+    private fun resultOf(outcome: DeliveryOutcome, name: String): PumpEnactResult =
+        if (outcome.confirmation == DashCommandConfirmation.SUCCESS) {
+            DashPumpEnactResult(success = true, enacted = true, comment = "$name confirmed by the pod")
+        } else {
+            failure("$name: ${outcome.describe()}")
+        }
 
     /**
      * Asks the pod for its default status (Android `getPumpStatus`). The answer goes into
@@ -1098,8 +1440,9 @@ class IosDashPump(
      *
      * As Android `observePodRunning`, nothing is sent unless the activation is completed and the pod
      * reports that it runs ([DashPodStateManager.isActivatedAndRunning]); the result is then
-     * SENDING_FAILURE with no active command. The stop of all delivery ([stopDelivery]) is not held
-     * back: Android has no such check on a stop of everything, and a stop never adds insulin.
+     * SENDING_FAILURE with no active command. The stop of all delivery ([stopDelivery]) and the
+     * deactivation ([deactivatePod]) are not held back: Android has no such check on them (a pod in
+     * alarm must still be deactivated), and they never add insulin.
      *
      * Deliberate difference from Android: when the last status reports the sequence this command
      * would be built with as the last programming command, a status is read first, which moves the
@@ -1118,7 +1461,7 @@ class IosDashPump(
         if (resolveAndHandle(decidedLate = true).confirmation == DashCommandConfirmation.NOT_CONFIRMED) {
             throw DashCommandNotConfirmedException("Refusing command: the last command is not confirmed by the pod. Read the pod status first.")
         }
-        if (kind != DashCommandKind.STOP_ALL && !stateManager.isActivatedAndRunning) {
+        if (kind != DashCommandKind.STOP_ALL && kind != DashCommandKind.DEACTIVATE && !stateManager.isActivatedAndRunning) {
             return DeliveryOutcome(
                 DashCommandConfirmation.SENDING_FAILURE,
                 "the pod is not activated and running (activation ${stateManager.activationProgress}, " +
@@ -1280,13 +1623,14 @@ class IosDashPump(
 
     private fun statusCommand(uid: Int, seq: Short): Command = DashActivation.statusCommand(uid, seq)
 
-    private fun stopCommand(type: DeliveryType, uid: Int, seq: Short): Command =
+    /** Android `observeSendStopDeliveryCommand`: a long single beep when [beep], silent otherwise. */
+    private fun stopCommand(type: DeliveryType, uid: Int, seq: Short, beep: Boolean): Command =
         StopDeliveryCommand.Builder()
             .setUniqueId(uid)
             .setSequenceNumber(seq)
             .setNonce(NONCE)
             .setDeliveryType(type)
-            .setBeepType(BeepType.SILENT)
+            .setBeepType(DashBeepSettings.stopBeep(beep))
             .build()
 
     private fun failure(comment: String) = DashPumpEnactResult(success = false, enacted = false, comment = comment)

@@ -3,6 +3,7 @@ package app.aaps.pump.omnipod.dashctl.session
 import app.aaps.core.interfaces.utils.Round
 import app.aaps.pump.omnipod.dashctl.comm.session.EapSqn
 import app.aaps.pump.omnipod.dashctl.pod.definition.ActivationProgress
+import app.aaps.pump.omnipod.dashctl.pod.definition.AlertType
 import app.aaps.pump.omnipod.dashctl.pod.definition.BasalProgram
 import app.aaps.pump.omnipod.dashctl.pod.definition.DeliveryStatus
 import app.aaps.pump.omnipod.dashctl.pod.definition.PodConstants
@@ -107,6 +108,32 @@ class DashPodStateManager(private val store: DashPodStateStore) {
     /** Android `isActivationCompleted`: the activation reached [ActivationProgress.COMPLETED]. */
     val isActivationCompleted: Boolean
         get() = state.activationProgress == ActivationProgress.COMPLETED
+
+    /** Android `suspendAlertsEnabled`: see [DashPodState.suspendAlertsEnabled]. */
+    val suspendAlertsEnabled: Boolean
+        get() = state.suspendAlertsEnabled
+
+    /** See [DashPodState.expirationAlertSettings]. */
+    val expirationAlertSettings: DashExpirationAlertSettings?
+        get() = state.expirationAlertSettings
+
+    /** See [DashPodState.lowReservoirAlertSettings]. */
+    val lowReservoirAlertSettings: DashLowReservoirAlertSettings?
+        get() = state.lowReservoirAlertSettings
+
+    /**
+     * Android `activeAlerts`: the alerts of the last status, null before the first status. Silencing
+     * them (`silenceAlerts`) sends this set.
+     */
+    val activeAlerts: Set<AlertType>?
+        get() = state.podStatus?.activeAlerts
+
+    /**
+     * Android `isPodKaput`: the pod status of the last answer is ALARM or DEACTIVATED. Such a pod
+     * delivers nothing.
+     */
+    val isPodKaput: Boolean
+        get() = state.reportedPodStatus == PodStatus.ALARM || state.reportedPodStatus == PodStatus.DEACTIVATED
 
     /** See [DashPodState.activationStepInFlight]. */
     val activationStepInFlight: ActivationProgress?
@@ -265,6 +292,34 @@ class DashPodStateManager(private val store: DashPodStateStore) {
         return true
     }
 
+    // -- Alerts (ported from OmnipodDashPodStateManagerImpl) ----------------------
+
+    /** Android setter `suspendAlertsEnabled`. Persists. */
+    fun updateSuspendAlertsEnabled(enabled: Boolean) {
+        if (state.suspendAlertsEnabled == enabled) return
+        state = state.copy(suspendAlertsEnabled = enabled)
+        persist()
+    }
+
+    /** Android `updateExpirationAlertSettings`. Persists. */
+    fun updateExpirationAlertSettings(settings: DashExpirationAlertSettings) {
+        state = state.copy(expirationAlertSettings = settings)
+        persist()
+    }
+
+    /** Android `updateLowReservoirAlertSettings`. Persists. */
+    fun updateLowReservoirAlertSettings(settings: DashLowReservoirAlertSettings) {
+        state = state.copy(lowReservoirAlertSettings = settings)
+        persist()
+    }
+
+    /**
+     * Android `sameAlertSettings`: the pod was last programmed with exactly these settings. False when
+     * either part was never stored.
+     */
+    fun sameAlertSettings(settings: DashAlertSettings): Boolean =
+        state.expirationAlertSettings == settings.expiration && state.lowReservoirAlertSettings == settings.lowReservoir
+
     // -- Activation (ported from OmnipodDashPodStateManagerImpl) ------------------
 
     /**
@@ -399,14 +454,19 @@ class DashPodStateManager(private val store: DashPodStateStore) {
      * - BOLUS, SUCCESS: the bolus becomes the [lastBolus] (Android `createLastBolus`), at [nowMs].
      * - STOP_BOLUS, SUCCESS: the [lastBolus] ends (Android CANCEL_BOLUS, `markComplete`). What was left
      *   at the last status, which is the answer to the stop when it was read, is not counted.
-     * - SUSPEND_DELIVERY or STOP_ALL, SUCCESS: a [lastBolus] that has not ended ends the same way, and
-     *   is given back as [DashResolvedCommand.endedBolus]. Deliberate difference from Android, which
-     *   does not end the bolus there: the pod stops all delivery, so a running bolus stops too, and
-     *   the next status (0 left) would then count all of it. A bolus that already ended is not
-     *   changed and not given back.
+     * - SUSPEND_DELIVERY, STOP_ALL or DEACTIVATE, SUCCESS: a [lastBolus] that has not ended ends the
+     *   same way, and is given back as [DashResolvedCommand.endedBolus]. Deliberate difference from
+     *   Android, which does not end the bolus there: the pod stops all delivery, so a running bolus
+     *   stops too, and the next status (0 left) would then count all of it. After a deactivation
+     *   Android resets the state and keeps the whole bolus as it was recorded when it started. A
+     *   bolus that already ended is not changed and not given back.
      * - BASAL_PROGRAM, SUCCESS: the program of the command becomes the running [basalProgram] (Android
      *   SET_BASAL_PROFILE, `podStateManager.basalProgram = command.basalProgram`). Any other outcome
      *   keeps the program before.
+     * - RESUME_DELIVERY, SUCCESS: the same. Deliberate difference from Android, which does not change
+     *   `basalProgram` on a resume: when the resumed profile is not the program stored before, a
+     *   later profile equal to the old program would count as set ("isThisProfileSet") while the pod
+     *   runs another one, so the basal would be wrong.
      *
      * Closing the command and changing the last bolus or the basal program are one write: with two
      * writes, a crash between them would lose a program the pod runs, and `isThisProfileSet` would then
@@ -440,12 +500,14 @@ class DashPodStateManager(private val store: DashPodStateStore) {
                 }
 
                 DashCommandKind.SUSPEND_DELIVERY,
-                DashCommandKind.STOP_ALL   -> lastBolus?.takeIf { !it.deliveryComplete }?.let {
+                DashCommandKind.STOP_ALL,
+                DashCommandKind.DEACTIVATE -> lastBolus?.takeIf { !it.deliveryComplete }?.let {
                     endedBolus = it.copy(deliveryComplete = true)
                     lastBolus = endedBolus
                 }
 
-                DashCommandKind.BASAL_PROGRAM -> basalProgram = command.basalProgram
+                DashCommandKind.BASAL_PROGRAM,
+                DashCommandKind.RESUME_DELIVERY -> basalProgram = command.basalProgram
 
                 else                       -> Unit
             }
@@ -521,7 +583,12 @@ class DashPodStateManager(private val store: DashPodStateStore) {
         persist()
     }
 
-    /** Clears all state back to defaults and persists. */
+    /**
+     * Android `reset()`: clears all state back to defaults and persists, as after a deactivation or
+     * when the user discards the pod. Nothing is kept: the key, the unique id, both sequence counters,
+     * an open command, the last bolus, the basal program and the alert settings are all gone, so the
+     * next pod starts from a fresh state.
+     */
     fun reset() {
         state = DashPodState()
         persist()
@@ -570,7 +637,7 @@ class DashPodStateManager(private val store: DashPodStateStore) {
  *
  * @property confirmation what is known about the command. Not final: the command stays open.
  * @property command the command, open or closed now; null when none was open.
- * @property endedBolus the bolus a confirmed stop of the bolus, suspend or stop of all delivery ended;
+ * @property endedBolus the bolus a confirmed stop of the bolus, suspend, stop of all delivery or deactivation ended;
  *   null otherwise.
  */
 data class DashResolvedCommand(

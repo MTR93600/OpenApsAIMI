@@ -12,6 +12,7 @@ import app.aaps.pump.omnipod.dashctl.comm.session.FakeDashPod.PodKeys
 import app.aaps.pump.omnipod.dashctl.crypto.DashKeyExchange
 import app.aaps.pump.omnipod.dashctl.driver.ActivatingPodModel
 import app.aaps.pump.omnipod.dashctl.driver.ActivatingPodModel.Companion.podDefaultStatus
+import app.aaps.pump.omnipod.dashctl.driver.DashBeepSettings
 import app.aaps.pump.omnipod.dashctl.driver.SimulatedCrash
 import app.aaps.pump.omnipod.dashctl.ios.crypto.IosAesCmac
 import app.aaps.pump.omnipod.dashctl.ios.crypto.IosX25519Dh
@@ -68,6 +69,8 @@ internal class DashPumpOnFakePod(
     val pod: FakeDashPod = FakeDashPod(PodKeys.Generated()),
     /** The bolus progress the pump updates; null when a test does not look at it. */
     bolusProgressData: BolusProgressData? = null,
+    /** The beep settings the pump reads; all off by default, as the pump. */
+    beeps: DashBeepSettings = DashBeepSettings(),
 ) {
 
     /** Every final outcome the pump gave to `onCommandDecided`, on every link, in order. */
@@ -92,6 +95,7 @@ internal class DashPumpOnFakePod(
         randomBytes = CountingRandomBytes(),
         now = { nowMs },
         bolusProgressData = bolusProgressData,
+        beeps = { beeps },
     )
 
     /** The one central of the phone, in front of the fake central of the current link. */
@@ -145,6 +149,18 @@ internal class DashPumpOnFakePod(
      */
     var basalRunning = false
 
+    /**
+     * The pod status the default status reports (`PodStatus` value): RUNNING_ABOVE_MIN_VOLUME by
+     * default. A deactivation the pod takes sets DEACTIVATED (0x0f).
+     */
+    var podStatusCode = ActivatingPodModel.RUNNING
+
+    /**
+     * The alerts the status reports (the `AlertUtil.encodeAlertSet` byte). A silence of alerts the
+     * pod takes clears the alerts it names.
+     */
+    var activeAlerts = 0
+
     init {
         answerWithStatus()
     }
@@ -167,13 +183,19 @@ internal class DashPumpOnFakePod(
                 bolusRunning = true
                 bolusPulsesRemaining = it
             }
-            val stopsBolus = isStopOf(command, BOLUS_BIT)
+            val stopsBolus = isStopOf(command, BOLUS_BIT) || command[6] == CommandType.DEACTIVATE.value
             if (stopsBolus) {
                 bolusRunning = false
                 bolusStops += bolusPulsesRemaining
             }
+            if (command[6] == CommandType.DEACTIVATE.value) {
+                tempBasalRunning = false
+                basalRunning = false
+                podStatusCode = DEACTIVATED
+            }
+            if (command[6] == CommandType.SILENCE_ALERTS.value) activeAlerts = activeAlerts and (command[12].toInt() and 0xff).inv()
             // The answer to the stop reports the pulses that were not delivered; after it, none are left.
-            val answer = defaultStatus(lastProgrammingSequence, bolusPulsesRemaining, deliveryStatus())
+            val answer = podDefaultStatus(podStatusCode, lastProgrammingSequence, bolusPulsesRemaining, deliveryStatus(), activeAlerts)
             if (stopsBolus) bolusPulsesRemaining = 0
             answer
         }
@@ -270,6 +292,12 @@ internal class DashPumpOnFakePod(
 
         /** The delivery status of the Android capture (0, `SUSPENDED`): no temp basal. */
         const val CAPTURE_DELIVERY = ActivatingPodModel.CAPTURE_DELIVERY
+
+        /** `PodStatus.DEACTIVATED`. */
+        const val DEACTIVATED = 0x0f
+
+        /** `PodStatus.ALARM`. */
+        const val ALARM = 0x0d
 
         /** `DeliveryStatus.BASAL_ACTIVE`. */
         const val BASAL_ACTIVE = 0x1
