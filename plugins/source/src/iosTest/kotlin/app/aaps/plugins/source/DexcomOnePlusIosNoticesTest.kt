@@ -22,8 +22,10 @@ class DexcomOnePlusIosNoticesTest {
         endsAtEpochMs: Long? = null,
         advSilenceMinutes: Long? = null,
         staleMacSuspected: Boolean = false,
+        message: String? = null,
     ) = OnePlusWarmupState(
         phase = phase,
+        message = message,
         remainingMs = remainingMs,
         endsAtEpochMs = endsAtEpochMs,
         advSilenceMinutes = advSilenceMinutes,
@@ -47,6 +49,43 @@ class DexcomOnePlusIosNoticesTest {
         assertEquals(DexcomOnePlusIosNotices.Decision.Keep, decide(state(OnePlusWarmupState.Phase.RECONNECTING)))
         assertEquals(DexcomOnePlusIosNotices.Decision.Dismiss, decide(state(OnePlusWarmupState.Phase.READY)))
         assertEquals(DexcomOnePlusIosNotices.Decision.Keep, decide(state(OnePlusWarmupState.Phase.CONNECTING)))
+    }
+
+    /** The real reconnect: the session passes PAIRING with "auth_ok" before READY, every cycle. */
+    @Test
+    fun aReconnectWithTheStoredKeyPostsNothingCycleAfterCycle() {
+        repeat(3) {
+            assertEquals(DexcomOnePlusIosNotices.Decision.Keep, decide(state(OnePlusWarmupState.Phase.CONNECTING)))
+            assertEquals(
+                DexcomOnePlusIosNotices.Decision.Keep,
+                decide(state(OnePlusWarmupState.Phase.PAIRING, message = DexcomOnePlusIosNotices.AUTH_OK_MESSAGE)),
+            )
+            assertEquals(DexcomOnePlusIosNotices.Decision.Dismiss, decide(state(OnePlusWarmupState.Phase.READY)))
+            assertEquals(DexcomOnePlusIosNotices.Decision.Keep, decide(state(OnePlusWarmupState.Phase.RECONNECTING)))
+        }
+    }
+
+    @Test
+    fun aReconnectDuringWarmUpLeavesTheWarmUpCardAlone() {
+        val warming = state(OnePlusWarmupState.Phase.WARMING, endsAtEpochMs = now + 600_000L)
+        assertIs<DexcomOnePlusIosNotices.Decision.Post>(decide(warming))
+
+        assertEquals(DexcomOnePlusIosNotices.Decision.Keep, decide(state(OnePlusWarmupState.Phase.CONNECTING)))
+        assertEquals(
+            DexcomOnePlusIosNotices.Decision.Keep,
+            decide(state(OnePlusWarmupState.Phase.PAIRING, message = DexcomOnePlusIosNotices.AUTH_OK_MESSAGE)),
+        )
+        assertEquals(DexcomOnePlusIosNotices.Decision.Keep, decide(warming))
+    }
+
+    @Test
+    fun aRealPairingIsStillToldAndItsAuthOkAddsNothing() {
+        val pairing = decide(state(OnePlusWarmupState.Phase.PAIRING, message = "pairing"))
+        val authOk = decide(state(OnePlusWarmupState.Phase.PAIRING, message = DexcomOnePlusIosNotices.AUTH_OK_MESSAGE))
+
+        assertEquals(SourceStrings.dexcom_oneplus_ios_notice_pairing, assertIs<DexcomOnePlusIosNotices.Decision.Post>(pairing).text)
+        assertEquals(DexcomOnePlusIosNotices.Decision.Keep, authOk)
+        assertEquals(DexcomOnePlusIosNotices.Decision.Dismiss, decide(state(OnePlusWarmupState.Phase.READY)))
     }
 
     @Test

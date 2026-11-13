@@ -19,7 +19,8 @@ import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
  * - RECONNECTING with a long silence: once at [SILENCE_NOTICE_MINUTES], then again every
  *   [SILENCE_REPEAT_MINUTES] while it goes on, so the minutes in the text do not get too old.
  * - FAILED: once.
- * - CONNECTING and a plain RECONNECTING change nothing: they are the normal duty cycle, and a
+ * - CONNECTING, a plain RECONNECTING and PAIRING with "auth_ok" (sent at every reconnect, after the
+ *   sensor accepted the stored key) change nothing: they are the normal duty cycle, and a
  *   warm-up card that is up stays up through them, as the Android notification keeps its countdown.
  * - READY and IDLE take the card down.
  *
@@ -58,8 +59,11 @@ internal class DexcomOnePlusIosNotices {
             Decision.Dismiss
         }
 
+        // Every reconnect passes PAIRING with "auth_ok" for a moment before READY. That is the
+        // normal duty cycle, not a pairing: a banner here woke the locked screen every five minutes.
         OnePlusWarmupState.Phase.PAIRING      ->
-            postOnce(Kind.PAIRING, Decision.Post(SourceStrings.dexcom_oneplus_ios_notice_pairing))
+            if (state.message == AUTH_OK_MESSAGE) Decision.Keep
+            else postOnce(Kind.PAIRING, Decision.Post(SourceStrings.dexcom_oneplus_ios_notice_pairing))
 
         OnePlusWarmupState.Phase.WARMING      -> {
             val endsAtMs = state.endsAtEpochMs ?: state.remainingMs?.let { nowMs + it }
@@ -119,5 +123,8 @@ internal class DexcomOnePlusIosNotices {
 
         /** How much longer the silence has to get before the card is posted again. */
         const val SILENCE_REPEAT_MINUTES = 15L
+
+        /** The message `OnePlusBleSession` sends with PAIRING once the sensor accepted the key. */
+        const val AUTH_OK_MESSAGE = "auth_ok"
     }
 }
