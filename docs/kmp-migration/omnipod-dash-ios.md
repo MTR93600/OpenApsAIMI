@@ -155,10 +155,9 @@ missing layer. So the layer is ported first, as is, and the rest is rebuilt on i
       the whole bolus, a bolus the pod stopped itself is ended and counted. Review fixes: closing a
       command and changing the last bolus are one write (`resolveActiveCommand(nowMs)`), so a crash
       between them cannot lose the bolus.
-      Open: reservoir check (activation), reconnect inside the wait (phase 3), a stop whose answer
-      is lost counts the whole bolus as Android (live or after a crash; never less than went in,
-      pinned), a bolus the pod ended itself with units left (fault) is corrected only in the result,
-      not in an outcome (`checkPodKaput`, step 8 of the next run), `PumpSync` (phase 4).
+      Open: reconnect inside the wait (phase 3), a stop whose answer is lost counts the whole bolus
+      as Android (live or after a crash; never less than went in, pinned), `PumpSync` (phase 4). The
+      reservoir check and the correction of a bolus a fault stopped came with step 12.
 - [x] Step 9 (same, 2026-11-13): the basal program. `setNewBasalProfile` as Android: nothing
       before the activation is completed, a suspend first unless the last status shows delivery
       suspended (own active command, `SUSPEND_DELIVERY`), then `ProgramBasalCommand` built from
@@ -211,6 +210,26 @@ missing layer. So the layer is ported first, as is, and the rest is rebuilt on i
       settings are stored only when the pod confirmed them. Open (phase 4): the queue commands, the
       user settings for beeps and alerts, `disableSuspendAlerts` after a confirmed resume or basal
       program, `PumpSync` and history.
+- [x] Step 12 (same, 2026-11-13): the status. `getPumpStatus` reads the status, decides an open
+      command, runs `checkPodKaput` and takes the flows from the state (`lastDataTime`, last bolus,
+      `reservoirLevel`), as Android. A faulted pod answers with an alarm status: it is stored as a
+      status and its alarm type is kept (the first one, as Android). A pod in ALARM or DEACTIVATED ends
+      the last bolus with what it had left and gives it to `onCommandDecided` as
+      `DashBolusEndedByFault` (asked - left, at the time of the bolus command), once, also when the
+      fault is first seen after a crash. `onCommandDecided` now takes the sealed `DashPumpOutcome`.
+      A bolus larger than the reservoir is refused (Android). The temp basal the pod confirmed is
+      stored (`DashTempBasal`, Android `tempBasal`), with `tempBasalActive()` and the "nothing to
+      cancel" shortcut of `cancelTempBasal` (its `PumpSync` half is the `expectedTempBasalRunning`
+      parameter, true until the plugin wires it). Codec version 4 extended in place. Tests:
+      `DashPodFaultAndTempBasalStateTest`, `IosDashPumpStatusTest`, codec tests. Deliberate difference:
+      a bolus decided SUCCESS by the status of a kaput pod takes the pulses left from it (Android
+      records 0 U for a bolus the pod partly gave). Review fixes: the reservoir keeps the last reading
+      below 1023 (`DashPodState.pulsesRemaining`, stored, Android `pulsesRemaining`), so a later 1023
+      or an alarm status no longer shows 75 U and lets through a bolus Android refuses; the receiver
+      contract of `DashBolusEndedByFault` and `endedBolus` says one record is corrected (key: the
+      command time of the SUCCESS outcome), never a second bolus. Open (phase 4): the PUMP_SUSPEND temp basal for a
+      kaput pod, the fault notification (`alarmSynced`), `pdmRef`, `verifyPumpState`, the history,
+      `baseBasalRate`.
 - Still to do before a pod: call `getPumpStatus` from the queue/plugin, beeps and alert settings
   from the user settings.
 

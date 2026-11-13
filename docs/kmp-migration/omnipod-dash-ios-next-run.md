@@ -77,7 +77,7 @@ commonMain (`dashctl`), so the JVM tests run them; only CoreBluetooth glue goes 
    (`pumpSyncTempBasal` on `isCommandSent`) and invalidates it when denied; here only final
    outcomes are given. Whoever records them must use `command.createdAtMs`, not `decidedAtMs`. Android `podStateManager.tempBasal`
    (set on a confirmed TBR, cleared on a confirmed cancel; `tempBasalActive`, the "nothing to
-   cancel" shortcut of `cancelTempBasal`, basal correction) is not kept. `observePodRunning` (pod
+   cancel" shortcut of `cancelTempBasal`) is kept since step 8; the basal correction is not ported. `observePodRunning` (pod
    activated and running) is not checked before a delivery command: it comes with the activation
    (step 6). `verifyPumpState` and `checkPodKaput` after each command come with steps 8 and phase 4.
 4. [x] **Bolus to its end.** Done (not committed): after a SUCCESS bolus, `deliverTreatment` keeps
@@ -123,12 +123,12 @@ commonMain (`dashctl`), so the JVM tests run them; only CoreBluetooth glue goes 
    no longer changes (Android writes later statuses into it, so a stopped bolus would count all of
    it); units left out of range count the whole bolus; a bolus the pod stopped itself with units left
    is ended and counted (Android throws on `deliveredUnits()!!` and reports 0).
-   Still open: the reservoir check of Android (needs the activation, step 6); a reconnect inside the
+   Still open: the reservoir check of Android (done in step 8); a reconnect inside the
    wait (`observeConnectToPod`, step 9: today a lost link makes the tries fail fast and the asked
    amount is reported); a stop whose answer is lost (live or after a crash) is decided by a status
    that shows 0 left, so the whole bolus is counted (more than went in, never less; Android parity,
    pinned); a bolus the pod ended itself with units left (fault) is only in the result, not in an
-   outcome, and a fault seen after a crash is not corrected: comes with `checkPodKaput` (step 8);
+   outcome, and a fault seen after a crash is not corrected: done in step 8 (`DashBolusEndedByFault`);
    a stop asked after a not confirmed bolus already returned its failure does nothing (Android is
    still in its wait then); the "Checking delivery status"
    text is a literal until the plugin brings strings (phase 4); `PumpSync` recording (phase 4).
@@ -307,11 +307,78 @@ commonMain (`dashctl`), so the JVM tests run them; only CoreBluetooth glue goes 
    the asked amount, TEMP_BASAL as started); `PumpSync` (the stop of the
    PUMP_SUSPEND temp basal on a confirmed resume) and the history records; dismissing the fault
    notification after a deactivation. The connect before each command (step 9).
-8. **Status**: `getPumpStatus` reads the default status; the alarm status when the pod reports an
-   alarm; `checkPodKaput` as Android. Its bolus part (`lastBolus.markComplete` and
-   `syncBolusWithPumpId` with the delivered units at the bolus `createdAt`) must reach
-   `onCommandDecided` (or a new outcome) with asked - left, also for a fault first seen after a
-   crash; today a fault in the wait is corrected only in the result (review of step 4). Test it.
+8. [x] **Status**. Done (not committed). `getPumpStatus` is Android `getPumpStatus` / `getPodStatus`:
+   one status read, the open command decided, `checkPodKaput`, then `syncPumpFlows`.
+   - The alarm status: a faulted pod answers the default status request with an `AlarmStatusResponse`
+     (Android never asks for it, it comes in place of the default one). It is stored as a status
+     (counted, so it decides an open command) and `DashPodStateManager.updateFromAlarmStatus` keeps the
+     alarm type of the first one, as Android (`alarmType`, latched). `alarmSynced` is stored for the
+     plugin.
+   - `checkPodKaput` (`IosDashPump.checkPodKaput`, state part `DashPodStateManager.completeBolusOnPodKaput`):
+     a pod in ALARM or DEACTIVATED ends a last bolus that has not ended, with what the last status
+     left, in one write, and gives it to `onCommandDecided` as a new outcome, `DashBolusEndedByFault`
+     (bolus with delivered = asked - left, `createdAtMs` of the bolus, alarm type). `onCommandDecided`
+     now takes `DashPumpOutcome`, a sealed type over `DashCommandOutcome` and `DashBolusEndedByFault`.
+     It runs after every `resolveAndHandle` (each status read, before and after each delivery command,
+     before a discard), as Android runs it after each status read and each programming command. The
+     bolus is stored, so a fault first seen after a crash is corrected by the first status read after
+     it. Given once: the bolus is ended before the outcome is given (a crash between the two loses the
+     correction and keeps the whole bolus counted, the over-count side, as Android).
+   - `syncPumpFlows` (Android): `lastDataTime`, `lastBolusTime` / `lastBolusAmount` from the stored
+     last bolus, `reservoirLevel` (0 before the activation is completed, pulses x 0.05 U, 75 U for the
+     reading 1023 or no status). With it, Android's reservoir check of a bolus: a bolus larger than
+     the reservoir is refused with nothing sent.
+   - Android `podStateManager.tempBasal` (step 3 open item): `DashTempBasal` in the stored state, set
+     by a confirmed TEMP_BASAL (start = `createdAtMs` of the command), cleared by a confirmed
+     STOP_TEMP_BASAL, SUSPEND_DELIVERY, RESUME_DELIVERY (Android), STOP_ALL and DEACTIVATE (the pod
+     stops all delivery). `IosDashPump.tempBasalActive()` as Android (not suspended, not run out).
+     `cancelTempBasal` has the Android "nothing to cancel" shortcut; the `PumpSync` half of it is a new
+     parameter, `IosDashPump(expectedTempBasalRunning = ...)`, true by default, so every cancel is
+     sent until the plugin gives the real answer.
+   - Android `podStateManager.pulsesRemaining`: `DashPodState.pulsesRemaining`, the last reservoir
+     reading below 1023, set by each status (default or alarm) that reads below 1023 and kept by one
+     that reads 1023 or more (Android `updatePodState`). `reservoirLevel` and the reservoir check of a
+     bolus read it. A state from codec version 3 has none and takes its stored status when it reads
+     below 1023 (`DashPodStateManager.pulsesRemaining`).
+   Stored format: version 4 extended in place (temp basal, alarm type, alarm synced, reservoir
+   reading), v4 pin updated, v3 pin unchanged.
+   Deliberate difference (it counts insulin wrong), with tests: a BOLUS decided SUCCESS by the status
+   of a kaput pod (answer lost, then the pod faults) takes the pulses left from that status. Android
+   creates the last bolus with all of it left and `checkPodKaput` then records 0 U for a bolus the pod
+   partly gave. Only for a kaput pod: a bolus decided by a running pod still starts with all of it
+   left (Android).
+   Small differences, not about dosing: the reservoir check comes after the pulse rate check (Android:
+   before; both refuse with nothing sent); `syncPumpFlows` also runs when the
+   status read is refused before SET_UNIQUE_ID (Android: its `getStatus` fails inside the `try`, then
+   syncs too).
+   Tests: `DashPodFaultAndTempBasalStateTest` (commonTest, 18), 4 more codec tests in
+   `DashPodStateCodecVersionsTest`, `IosDashPumpStatusTest` (iosTest, 16: a status read updates the
+   state and the flows, the reservoir, the reservoir check, a status from `getPumpStatus` decides a lost
+   temp basal, a faulted pod reports kaput and takes no delivery command, the bolus correction after a
+   fault in the wait, given once, after a crash, for a bolus decided late by the alarm status, after a
+   discard, the cancel shortcut). The fake pod can fault (`faultAlarmType`, alarm status built from the
+   Android vector) and report its reservoir (`reservoirPulses`). No pinned expected value changed.
+   461 tests on the JVM, 581 on the iOS simulator (1 skipped, the known pin), 0 failures.
+   Review fixes: (a) the reservoir reading of 1023 after a lower one showed 75 U (the alarm status of
+   a faulted pod always reads 1023 here), so the reservoir check let through a bolus Android refuses:
+   now the last reading below 1023 is kept and stored, as Android (tests: 3 in `IosDashPumpStatusTest`,
+   1 in `DashPodFaultAndTempBasalStateTest`, codec pins). (b) The receiver contract of
+   `DashBolusEndedByFault` and `DashCommandOutcome.endedBolus` said "records again": it now says the
+   receiver corrects the one record made from the SUCCESS outcome of the bolus (key: the command time,
+   `DashLastBolus.createdAtMs` = `DashActiveCommand.createdAtMs`), never adds a second bolus, also when
+   the correction comes while `deliverTreatment` runs, and that `bolusDelivered` of the result is not a
+   record (no queue records from it; on Android only the pump records). Code unchanged: Android also
+   runs `checkPodKaput` in the status reads of the bolus wait (`getPodStatus`). Pinned by `a fault in
+   the bolus wait corrects the record of the same bolus`. 462 tests on the JVM, 586 on the iOS
+   simulator (1 skipped, the known pin), 0 failures.
+   Still open, for the plugin (phase 4): the PUMP_SUSPEND temp basal Android records for a kaput pod
+   (`checkPodKaput`, `createFakeTBRWhenNoActivePod`), the fault notification and announcement
+   (`alarmSynced`), the Android `pdmRef` (not ported: `AlarmType.pdmFaultCategory` is newer than the
+   dashctl port), `verifyPumpState` (needs `PumpSync`), the history, `baseBasalRate` from the program,
+   `isInitialized` as Android `isPodRunning`; the basal correction of Android (`needsBasalCorrection`).
+   The receiver of `DashBolusEndedByFault` corrects the record of that bolus (made from its SUCCESS
+   outcome, key `bolus.createdAtMs`) to the delivered units, the same way as
+   `DashCommandOutcome.endedBolus`; never a second record, and nothing is recorded from `bolusDelivered`.
 
 ### C. Bluetooth on the iPhone (code and fakes only; the device test comes later)
 

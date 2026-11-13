@@ -1,6 +1,7 @@
 package app.aaps.pump.omnipod.dashctl.session
 
 import app.aaps.pump.omnipod.dashctl.pod.definition.ActivationProgress
+import app.aaps.pump.omnipod.dashctl.pod.definition.AlarmType
 import app.aaps.pump.omnipod.dashctl.pod.definition.BasalProgram
 import app.aaps.pump.omnipod.dashctl.pod.definition.DeliveryStatus
 import app.aaps.pump.omnipod.dashctl.pod.definition.PodStatus
@@ -58,9 +59,15 @@ import app.aaps.pump.omnipod.dashctl.pod.util.byValue
  *   expiration alert settings ([DashExpirationAlertSettings]): u8 reminder enabled (0 or 1), u32
  *   reminder hours, u8 alarm enabled (0 or 1), u32 alarm hours; u8 present (0 or 1) and, if so, the
  *   low reservoir alert settings ([DashLowReservoirAlertSettings]): u8 enabled (0 or 1), u32 units.
+ * - the temp basal ([DashPodState.tempBasal]): u8 present (0 or 1); if so: u64 startTimeMs, u64 rate
+ *   (double bits), u32 duration in minutes.
+ * - the alarm: u8 present (0 or 1); if so: u8 [DashPodState.alarmType] value (an unknown value reads
+ *   as `AlarmType.UNKNOWN`, as a response does). Then u8 [DashPodState.alarmSynced] (0 or 1).
+ * - the last reservoir reading below 1023 ([DashPodState.pulsesRemaining]): u8 present (0 or 1); if
+ *   so: u32 pulses (signed: an alarm status reads the field as a 16-bit short).
  *
  * Versions 1 to 3 are still read, so a pod paired before keeps its key and its open command. They
- * have none of the version 4 fields: the alert settings stay null and
+ * have none of the version 4 fields: the temp basal, the alarm type and the reservoir reading stay null, the alert settings stay null and
  * [DashPodState.suspendAlertsEnabled] false, the activation fields and the activation step in flight stay
  * null (and [DashPodState.lastUpdatedSystemMs] 0) until the next answer sets them, the command time stays
  * null (unknown), the last bolus stays null until the next bolus, and both basal programs stay null
@@ -212,6 +219,20 @@ object DashPodStateCodec {
             out.u8(if (lowReservoir.enabled) 1 else 0)
             out.u32(lowReservoir.units)
         }
+        val tempBasal = state.tempBasal
+        out.u8(if (tempBasal != null) 1 else 0)
+        if (tempBasal != null) {
+            out.u64(tempBasal.startTimeMs)
+            out.u64(tempBasal.rate.toRawBits())
+            out.u32(tempBasal.durationInMinutes)
+        }
+        val alarmType = state.alarmType
+        out.u8(if (alarmType != null) 1 else 0)
+        if (alarmType != null) out.u8(alarmType.value.toInt() and 0xff)
+        out.u8(if (state.alarmSynced) 1 else 0)
+        val pulsesRemaining = state.pulsesRemaining
+        out.u8(if (pulsesRemaining != null) 1 else 0)
+        if (pulsesRemaining != null) out.u32(pulsesRemaining)
         return out.toByteArray()
     }
 
@@ -318,6 +339,18 @@ object DashPodStateCodec {
                 lowReservoir = DashLowReservoirAlertSettings(enabled = inp.flag("low reservoir alert"), units = inp.u32())
             }
         }
+        var tempBasal: DashTempBasal? = null
+        var alarmType: AlarmType? = null
+        var alarmSynced = false
+        var pulsesRemaining: Int? = null
+        if (version >= VERSION_4) {
+            if (inp.flag("temp basal")) {
+                tempBasal = DashTempBasal(startTimeMs = inp.u64(), rate = Double.fromBits(inp.u64()), durationInMinutes = inp.u32())
+            }
+            if (inp.flag("alarm type")) alarmType = byValue(inp.u8().toByte(), AlarmType.UNKNOWN)
+            alarmSynced = inp.flag("alarm synced")
+            if (inp.flag("reservoir reading")) pulsesRemaining = inp.u32()
+        }
         require(inp.atEnd()) { "trailing bytes" }
         return DashPodState(
             ltk = ltk,
@@ -347,6 +380,10 @@ object DashPodStateCodec {
             suspendAlertsEnabled = suspendAlertsEnabled,
             expirationAlertSettings = expiration,
             lowReservoirAlertSettings = lowReservoir,
+            tempBasal = tempBasal,
+            alarmType = alarmType,
+            alarmSynced = alarmSynced,
+            pulsesRemaining = pulsesRemaining,
         )
     }
 

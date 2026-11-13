@@ -1,6 +1,7 @@
 package app.aaps.pump.omnipod.dashctl.session
 
 import app.aaps.pump.omnipod.dashctl.pod.definition.ActivationProgress
+import app.aaps.pump.omnipod.dashctl.pod.definition.AlarmType
 import app.aaps.pump.omnipod.dashctl.pod.definition.BasalProgram
 import app.aaps.pump.omnipod.dashctl.pod.definition.PodStatus
 import app.aaps.pump.omnipod.dashctl.pod.definition.SoftwareVersion
@@ -117,6 +118,30 @@ data class DashPodState(
      * `updateLowReservoirAlertSettings`). Null until the first time. See [DashLowReservoirAlertSettings].
      */
     val lowReservoirAlertSettings: DashLowReservoirAlertSettings? = null,
+    /**
+     * Android `PodState.tempBasal`: the temp basal the pod confirmed last, null when none or when a
+     * cancel, a suspend or a resume was confirmed after it. See [DashTempBasal].
+     */
+    val tempBasal: DashTempBasal? = null,
+    /**
+     * Android `PodState.alarmType`: the alarm of the first alarm status the pod sent, null before
+     * one. A faulted pod answers every later command with the same alarm status, so only the first
+     * one is kept (Android latches it too).
+     */
+    val alarmType: AlarmType? = null,
+    /**
+     * Android `PodState.alarmSynced`: the plugin already showed and recorded the fault of [alarmType].
+     * Only stored here; the plugin (phase 4) sets it.
+     */
+    val alarmSynced: Boolean = false,
+    /**
+     * Android `PodState.pulsesRemaining`: the reservoir pulses of the last status that reported less
+     * than [RESERVOIR_READING_OVER_50_UNITS]. A later status with 1023 or more (more than 50 U, or the
+     * unmasked 16-bit reservoir field of an alarm status) does not replace it, as Android
+     * `updatePodState`. Null before such a reading. The reservoir shown and the reservoir check of a
+     * bolus read it, so it must not jump back up to the 75 U default.
+     */
+    val pulsesRemaining: Int? = null,
 ) {
 
     init {
@@ -160,7 +185,11 @@ data class DashPodState(
             activationStepInFlight == other.activationStepInFlight &&
             suspendAlertsEnabled == other.suspendAlertsEnabled &&
             expirationAlertSettings == other.expirationAlertSettings &&
-            lowReservoirAlertSettings == other.lowReservoirAlertSettings
+            lowReservoirAlertSettings == other.lowReservoirAlertSettings &&
+            tempBasal == other.tempBasal &&
+            alarmType == other.alarmType &&
+            alarmSynced == other.alarmSynced &&
+            pulsesRemaining == other.pulsesRemaining
     }
 
     override fun hashCode(): Int {
@@ -191,12 +220,19 @@ data class DashPodState(
         result = 31 * result + suspendAlertsEnabled.hashCode()
         result = 31 * result + (expirationAlertSettings?.hashCode() ?: 0)
         result = 31 * result + (lowReservoirAlertSettings?.hashCode() ?: 0)
+        result = 31 * result + (tempBasal?.hashCode() ?: 0)
+        result = 31 * result + (alarmType?.hashCode() ?: 0)
+        result = 31 * result + (pulsesRemaining ?: 0)
+        result = 31 * result + alarmSynced.hashCode()
         return result
     }
 
     companion object {
         const val LTK_SIZE = 16
         const val MESSAGE_SEQ_MAX = 15
+
+        /** The reservoir reading of a pod with more than 50 U (Android `updatePodState` keeps readings below it). */
+        const val RESERVOIR_READING_OVER_50_UNITS = 1023
 
         /** The activation steps that send a bolus: see [activationStepInFlight]. */
         val STEPS_WITH_A_BOLUS: Set<ActivationProgress> = setOf(ActivationProgress.PRIMING, ActivationProgress.INSERTING_CANNULA)

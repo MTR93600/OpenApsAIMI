@@ -2,6 +2,7 @@ package app.aaps.pump.omnipod.dashctl.session
 
 import app.aaps.pump.omnipod.dashctl.parity.parityHex
 import app.aaps.pump.omnipod.dashctl.pod.definition.ActivationProgress
+import app.aaps.pump.omnipod.dashctl.pod.definition.AlarmType
 import app.aaps.pump.omnipod.dashctl.pod.definition.BasalProgram
 import app.aaps.pump.omnipod.dashctl.pod.definition.DeliveryStatus
 import app.aaps.pump.omnipod.dashctl.pod.definition.PodStatus
@@ -82,15 +83,19 @@ class DashPodStateCodecVersionsTest {
         suspendAlertsEnabled = true,
         expirationAlertSettings = DashExpirationAlertSettings(reminderEnabled = true, reminderHours = 9, alarmEnabled = false, alarmHours = 7),
         lowReservoirAlertSettings = DashLowReservoirAlertSettings(enabled = true, units = 20),
+        tempBasal = DashTempBasal(startTimeMs = 0x0000018000003000L, rate = 1.5, durationInMinutes = 30),
+        alarmType = AlarmType.ALARM_OCCLUDED,
+        alarmSynced = true,
+        pulsesRemaining = 200,
     )
 
-    private val v4Bytes = parityHex("04" + V3_BODY + ACTIVATION_PART + COMMAND_TIME_AND_BOLUS_PART + PROGRAMS_PART + IN_FLIGHT_PART + ALERTS_PART)
+    private val v4Bytes = parityHex("04" + V3_BODY + ACTIVATION_PART + COMMAND_TIME_AND_BOLUS_PART + PROGRAMS_PART + IN_FLIGHT_PART + ALERTS_PART + POD_PART)
 
     /**
-     * A full version 4 state with no basal program, no step in flight and no alert part: the last
-     * bolus part ends 3 + [EMPTY_ALERTS] bytes before the end.
+     * A full version 4 state with no basal program, no step in flight, no alert part and no pod part:
+     * the last bolus part ends 3 + [EMPTY_TAIL] bytes before the end.
      */
-    private val v4BytesWithoutPrograms = parityHex("04" + V3_BODY + ACTIVATION_PART + COMMAND_TIME_AND_BOLUS_PART + "00" + "00" + "00" + "000000")
+    private val v4BytesWithoutPrograms = parityHex("04" + V3_BODY + ACTIVATION_PART + COMMAND_TIME_AND_BOLUS_PART + "00" + "00" + "00" + "000000" + "00000000")
 
     @Test
     fun `the version 3 bytes of 2026-11-13 still decode`() {
@@ -154,7 +159,7 @@ class DashPodStateCodecVersionsTest {
         val bytes = DashPodStateCodec.encode(DashPodState())
         // Empty state: before the alert part, the command program flag, the running program flag
         // and the step in flight flag.
-        val withProgram = bytes.copyOf(bytes.size - 3 - EMPTY_ALERTS) + parityHex("01" + "0001" + "00" + "30" + "00000064" + "00" + "00" + "000000")
+        val withProgram = bytes.copyOf(bytes.size - 3 - EMPTY_TAIL) + parityHex("01" + "0001" + "00" + "30" + "00000064" + "00" + "00" + "000000" + "00000000")
         assertFailsWith<IllegalArgumentException> { DashPodStateCodec.decode(withProgram) }
     }
 
@@ -162,10 +167,10 @@ class DashPodStateCodecVersionsTest {
     fun `an unknown basal program flag fails closed`() {
         val bytes = DashPodStateCodec.encode(DashPodState())
         // Empty state: the two program flags, then the step in flight flag and the alert part.
-        bytes[bytes.size - 2 - EMPTY_ALERTS] = 2
+        bytes[bytes.size - 2 - EMPTY_TAIL] = 2
         assertFailsWith<IllegalArgumentException> { DashPodStateCodec.decode(bytes) }
         val command = DashPodStateCodec.encode(DashPodState())
-        command[command.size - 3 - EMPTY_ALERTS] = 2
+        command[command.size - 3 - EMPTY_TAIL] = 2
         assertFailsWith<IllegalArgumentException> { DashPodStateCodec.decode(command) }
     }
 
@@ -188,7 +193,7 @@ class DashPodStateCodecVersionsTest {
         val bytes = DashPodStateCodec.encode(DashPodState())
         // Empty state: the last bolus flag, then the two basal program flags, the step in flight flag
         // and the alert part.
-        bytes[bytes.size - 4 - EMPTY_ALERTS] = 2
+        bytes[bytes.size - 4 - EMPTY_TAIL] = 2
         assertFailsWith<IllegalArgumentException> { DashPodStateCodec.decode(bytes) }
     }
 
@@ -197,7 +202,7 @@ class DashPodStateCodecVersionsTest {
         val bytes = v4BytesWithoutPrograms.copyOf()
         // From the end: the alert part, the step in flight flag (1), the two program flags (2), the bolus
         // time (8), its flag (1), historyId (8).
-        bytes[bytes.size - EMPTY_ALERTS - 1 - 2 - 8 - 1 - 8 - 1] = 2
+        bytes[bytes.size - EMPTY_TAIL - 1 - 2 - 8 - 1 - 8 - 1] = 2
         assertFailsWith<IllegalArgumentException> { DashPodStateCodec.decode(bytes) }
     }
 
@@ -206,18 +211,18 @@ class DashPodStateCodecVersionsTest {
         val bytes = DashPodStateCodec.encode(DashPodState())
         // Empty state: the command time flag (0), the last bolus flag (0), the two basal program
         // flags (0), the step in flight flag (0), the alert part. Say a time follows.
-        val withTime = bytes.copyOf(bytes.size - 4 - EMPTY_ALERTS) + parityHex("0000000000000001" + "00000000" + "000000")
-        withTime[bytes.size - 5 - EMPTY_ALERTS] = 1
+        val withTime = bytes.copyOf(bytes.size - 4 - EMPTY_TAIL) + parityHex("0000000000000001" + "00000000" + "000000" + "00000000")
+        withTime[bytes.size - 5 - EMPTY_TAIL] = 1
         assertFailsWith<IllegalArgumentException> { DashPodStateCodec.decode(withTime) }
     }
 
     @Test
     fun `an unknown command time flag fails closed`() {
-        val bytes = parityHex("04" + V3_BODY + ACTIVATION_PART + "01" + "0000018000001000" + "00" + "00" + "00" + "00" + "000000")
+        val bytes = parityHex("04" + V3_BODY + ACTIVATION_PART + "01" + "0000018000001000" + "00" + "00" + "00" + "00" + "000000" + "00000000")
         assertEquals(v3State.activeCommand?.copy(createdAtMs = 0x0000018000001000L), DashPodStateCodec.decode(bytes).activeCommand)
         // From the end: the alert part, the step in flight flag, the two program flags and the last
         // bolus flag (4), the time (8), then the flag.
-        bytes[bytes.size - EMPTY_ALERTS - 4 - 8 - 1] = 2
+        bytes[bytes.size - EMPTY_TAIL - 4 - 8 - 1] = 2
         assertFailsWith<IllegalArgumentException> { DashPodStateCodec.decode(bytes) }
     }
 
@@ -244,7 +249,7 @@ class DashPodStateCodecVersionsTest {
         val bytes = DashPodStateCodec.encode(DashPodState())
         // Empty state: the activation flags are the u16 before the last u64, the command time flag,
         // the last bolus flag, the two basal program flags, the step in flight flag and the alert part.
-        val flagsAt = bytes.size - EMPTY_ALERTS - 1 - 2 - 1 - 1 - 8 - 2
+        val flagsAt = bytes.size - EMPTY_TAIL - 1 - 2 - 1 - 1 - 8 - 2
         bytes[flagsAt] = 0x04
         assertFailsWith<IllegalArgumentException> { DashPodStateCodec.decode(bytes) }
     }
@@ -264,7 +269,7 @@ class DashPodStateCodecVersionsTest {
         // bolus; 13 is no step.
         listOf(1, 13).forEach { ordinal ->
             val bad = bytes.copyOf()
-            bad[bad.size - 1 - EMPTY_ALERTS] = ordinal.toByte()
+            bad[bad.size - 1 - EMPTY_TAIL] = ordinal.toByte()
             assertFailsWith<IllegalArgumentException>("ordinal $ordinal") { DashPodStateCodec.decode(bad) }
         }
     }
@@ -272,7 +277,7 @@ class DashPodStateCodecVersionsTest {
     @Test
     fun `an unknown step in flight flag fails closed`() {
         val bytes = DashPodStateCodec.encode(DashPodState())
-        bytes[bytes.size - 1 - EMPTY_ALERTS] = 2
+        bytes[bytes.size - 1 - EMPTY_TAIL] = 2
         assertFailsWith<IllegalArgumentException> { DashPodStateCodec.decode(bytes) }
     }
 
@@ -300,9 +305,10 @@ class DashPodStateCodecVersionsTest {
     }
 
     @Test
-    fun `an empty state ends with the empty alert part`() {
+    fun `an empty state ends with the empty alert part and the empty pod part`() {
         val bytes = DashPodStateCodec.encode(DashPodState())
-        assertEquals(listOf<Byte>(0, 0, 0), bytes.copyOfRange(bytes.size - EMPTY_ALERTS, bytes.size).toList())
+        assertEquals(listOf<Byte>(0, 0, 0), bytes.copyOfRange(bytes.size - EMPTY_TAIL, bytes.size - EMPTY_POD_PART).toList())
+        assertEquals(listOf<Byte>(0, 0, 0, 0), bytes.copyOfRange(bytes.size - EMPTY_POD_PART, bytes.size).toList())
     }
 
     @Test
@@ -310,24 +316,72 @@ class DashPodStateCodecVersionsTest {
         // Empty state: suspend alerts, expiration present, low reservoir present.
         for (index in 1..EMPTY_ALERTS) {
             val bytes = DashPodStateCodec.encode(DashPodState())
-            bytes[bytes.size - index] = 2
+            bytes[bytes.size - EMPTY_POD_PART - index] = 2
             assertFailsWith<IllegalArgumentException>("index $index from the end") { DashPodStateCodec.decode(bytes) }
         }
         // The enabled flags inside the settings of [v4State], from the end: low reservoir enabled (after
         // it the units, 4), expiration alarm enabled (then its hours, the low reservoir part 1 + 1 + 4),
-        // expiration reminder enabled (then its hours and the alarm part).
+        // expiration reminder enabled (then its hours and the alarm part). The pod part comes after them.
         val full = DashPodStateCodec.encode(v4State)
+        val podPart = parityHex(POD_PART).size
         listOf(4 + 1, 4 + 1 + 1 + 4 + 1, 4 + 1 + 1 + 4 + 1 + 4 + 1).forEach { fromEnd ->
             val bad = full.copyOf()
-            bad[bad.size - fromEnd] = 2
+            bad[bad.size - podPart - fromEnd] = 2
             assertFailsWith<IllegalArgumentException>("$fromEnd from the end") { DashPodStateCodec.decode(bad) }
         }
+    }
+
+    @Test
+    fun `a version 3 state has no temp basal and no alarm`() {
+        val state = DashPodStateCodec.decode(v3Bytes)
+        assertNull(state.tempBasal)
+        assertNull(state.alarmType)
+        assertFalse(state.alarmSynced)
+        assertNull(state.pulsesRemaining, "nothing guessed from the stored status")
+    }
+
+    @Test
+    fun `each pod part field roundtrips alone`() {
+        val states = listOf(
+            DashPodState(tempBasal = DashTempBasal(startTimeMs = 1L, rate = 0.0, durationInMinutes = 720)),
+            DashPodState(alarmType = AlarmType.NONE),
+            DashPodState(alarmType = AlarmType.UNKNOWN),
+            DashPodState(alarmSynced = true),
+            DashPodState(pulsesRemaining = 0),
+            DashPodState(pulsesRemaining = 1022),
+            DashPodState(pulsesRemaining = -1),
+        )
+        states.forEach { assertEquals(it, DashPodStateCodec.decode(DashPodStateCodec.encode(it))) }
+    }
+
+    @Test
+    fun `an unknown pod part flag fails closed`() {
+        // Empty state, from the end: reservoir reading present, alarm synced, alarm type present, temp basal present.
+        for (index in 1..EMPTY_POD_PART) {
+            val bytes = DashPodStateCodec.encode(DashPodState())
+            bytes[bytes.size - index] = 2
+            assertFailsWith<IllegalArgumentException>("index $index from the end") { DashPodStateCodec.decode(bytes) }
+        }
+    }
+
+    @Test
+    fun `an alarm type the codec does not know reads as unknown`() {
+        val bytes = DashPodStateCodec.encode(DashPodState(alarmType = AlarmType.NONE))
+        // From the end: reservoir reading present (1), alarm synced (1), then the alarm type value.
+        bytes[bytes.size - 3] = 0xfe.toByte()
+        assertEquals(AlarmType.UNKNOWN, DashPodStateCodec.decode(bytes).alarmType)
     }
 
     private companion object {
 
         /** The alert part of an empty state: suspend alerts off, no expiration and no low reservoir settings. */
         const val EMPTY_ALERTS = 3
+
+        /** The pod part of an empty state: no temp basal, no alarm type, alarm not synced, no reservoir reading. */
+        const val EMPTY_POD_PART = 4
+
+        /** What follows the step in flight in an empty state: the alert part, then the pod part. */
+        const val EMPTY_TAIL = EMPTY_ALERTS + EMPTY_POD_PART
 
         /** Everything of [v3State] after the version byte, as the version 3 codec wrote it. */
         const val V3_BODY =
@@ -387,5 +441,12 @@ class DashPodStateCodecVersionsTest {
             "01" + // suspend alerts enabled
                 "01" + "01" + "00000009" + "00" + "00000007" + // expiration: reminder on 9 h, alarm off 7 h
                 "01" + "01" + "00000014" // low reservoir: on, 20 U
+
+        /** The temp basal and the alarm of [v4State], after [ALERTS_PART]. */
+        const val POD_PART =
+            "01" + "0000018000003000" + "3ff8000000000000" + "0000001e" + // temp basal: start, 1.5 U/h, 30 min
+                "01" + "14" + // alarm type present, ALARM_OCCLUDED
+                "01" + // alarm synced
+                "01" + "000000c8" // last reservoir reading below 1023 present, 200 pulses
     }
 }

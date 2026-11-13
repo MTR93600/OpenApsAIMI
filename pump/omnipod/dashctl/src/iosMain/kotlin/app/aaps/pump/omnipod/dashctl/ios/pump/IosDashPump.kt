@@ -66,11 +66,13 @@ import app.aaps.pump.omnipod.dashctl.pod.command.StopDeliveryCommand.DeliveryTyp
 import app.aaps.pump.omnipod.dashctl.pod.command.SuspendDeliveryCommand
 import app.aaps.pump.omnipod.dashctl.pod.command.base.Command
 import app.aaps.pump.omnipod.dashctl.pod.definition.ActivationProgress
+import app.aaps.pump.omnipod.dashctl.pod.definition.AlarmType
 import app.aaps.pump.omnipod.dashctl.pod.definition.AlertConfiguration
 import app.aaps.pump.omnipod.dashctl.pod.definition.AlertTrigger
 import app.aaps.pump.omnipod.dashctl.pod.definition.BasalProgram
 import app.aaps.pump.omnipod.dashctl.pod.definition.BeepType
 import app.aaps.pump.omnipod.dashctl.pod.definition.DeliveryStatus
+import app.aaps.pump.omnipod.dashctl.pod.definition.PodConstants
 import app.aaps.pump.omnipod.dashctl.pod.definition.ProgramReminder
 import app.aaps.pump.omnipod.dashctl.pod.response.Response
 import app.aaps.pump.omnipod.dashctl.session.DashActiveCommand
@@ -102,6 +104,51 @@ import kotlinx.coroutines.sync.withLock
 class DashPumpNotPairedException(message: String) : Exception(message)
 
 /**
+ * What `IosDashPump.onCommandDecided` gets: the final outcome of a delivery command
+ * ([DashCommandOutcome]), or a bolus a pod fault ended ([DashBolusEndedByFault]). The receiver records
+ * each one (pump history, `PumpSync`).
+ */
+sealed interface DashPumpOutcome {
+
+    /** When the outcome became known. Not the delivery time: see each outcome. */
+    val decidedAtMs: Long
+}
+
+/**
+ * The pod is kaput (ALARM or DEACTIVATED) and the last bolus had not ended: it ended with what the pod
+ * still had to give at its last status. Port of the bolus part of Android
+ * `OmnipodDashPumpPlugin.checkPodKaput` (`markComplete`, then `syncBolusWithPumpId` with the delivered
+ * units at the `createdAt` of the bolus history record).
+ *
+ * The receiver corrects the record of this bolus to [DashLastBolus.deliveredUnits] (asked - left),
+ * the same way as [DashCommandOutcome.endedBolus]. It updates one record, it never adds a second
+ * bolus. That record was made from the SUCCESS [DashCommandOutcome] of the bolus, at the asked units
+ * (Android `pumpSyncBolusStart`), and that outcome comes first, also when it was decided inside the call
+ * and a fault in the bolus wait gives this correction while [IosDashPump.deliverTreatment] still runs.
+ * The key of the record is the command time: [DashLastBolus.createdAtMs] is
+ * [DashActiveCommand.createdAtMs] of that outcome (Android updates the record by its `pumpId`; here
+ * [DashLastBolus.historyId] is 0, there is no pod history yet). Null only for a bolus whose command was
+ * stored by codec version 3 or before; the receiver then takes the last SUCCESS bolus it recorded.
+ * Without the correction the part the pod never gave would stay in insulin on board.
+ *
+ * The `bolusDelivered` of the result of [IosDashPump.deliverTreatment] carries the same amount for the
+ * caller only. It is not a record: no queue records a bolus from it (on Android too, only the pump
+ * records boluses, through `PumpSync`). A receiver that recorded the bolus from it as well would count
+ * it twice.
+ *
+ * Given once per bolus: the bolus is marked ended in the stored state before this is given. It also
+ * comes when the fault is first seen after a crash or a restart (the next status read).
+ *
+ * @property alarmType the alarm of the pod ([DashPodStateManager.alarmType]), null when the pod only
+ *   reported DEACTIVATED or the alarm status was not read.
+ */
+data class DashBolusEndedByFault(
+    val bolus: DashLastBolus,
+    val alarmType: AlarmType?,
+    override val decidedAtMs: Long,
+) : DashPumpOutcome
+
+/**
  * The final outcome of one delivery command, given to `IosDashPump.onCommandDecided`, as Android
  * `OmnipodDashPumpPlugin.handleCommandConfirmation` gets it. The receiver records it (pump history,
  * `PumpSync`).
@@ -116,9 +163,11 @@ class DashPumpNotPairedException(message: String) : Exception(message)
  *   records it at the `createdAt` of its history record.
  * @property endedBolus for a confirmed stop of the bolus (STOP_BOLUS, SUCCESS), or a confirmed
  *   SUSPEND_DELIVERY or STOP_ALL that stopped a bolus still running: the bolus it ended,
- *   with [DashLastBolus.deliveredUnits] the amount that went in. The receiver records the bolus again
- *   with that amount, at [DashLastBolus.createdAtMs], as Android `handleCommandConfirmation` on
- *   CANCEL_BOLUS (`syncBolusWithPumpId` with the delivered units). Null otherwise.
+ *   with [DashLastBolus.deliveredUnits] the amount that went in. The receiver corrects the record of
+ *   that bolus to that amount (one record, keyed by [DashLastBolus.createdAtMs], which is the command
+ *   time of the SUCCESS outcome of the bolus; never a second bolus), as Android
+ *   `handleCommandConfirmation` on CANCEL_BOLUS (`syncBolusWithPumpId` with the delivered units, same
+ *   `pumpId`). Also for a stop decided inside the call: see [DashBolusEndedByFault]. Null otherwise.
  * @property podDiscarded true when the pod was discarded (`IosDashPump.discardPod`) while [command]
  *   was still not confirmed. [confirmation] is then NOT_CONFIRMED, and nobody will ever know whether
  *   the pod took it. Android records a bolus and a temp basal as soon as they were sent, so its
@@ -131,10 +180,10 @@ data class DashCommandOutcome(
     val confirmation: DashCommandConfirmation,
     val command: DashActiveCommand,
     val decidedLate: Boolean,
-    val decidedAtMs: Long,
+    override val decidedAtMs: Long,
     val endedBolus: DashLastBolus? = null,
     val podDiscarded: Boolean = false,
-)
+) : DashPumpOutcome
 
 /**
  * Omnipod Dash [Pump] for iOS, on the stack ported from Android: [LTKExchanger] (pairing),
@@ -203,10 +252,11 @@ data class DashCommandOutcome(
 class IosDashPump(
     private val aapsLogger: AAPSLogger,
     /**
-     * Gets every final outcome of a delivery command. No default on purpose: whoever builds the
-     * pump has to decide where a late bolus is recorded.
+     * Gets every final outcome of a delivery command ([DashCommandOutcome]) and every bolus a pod
+     * fault ended ([DashBolusEndedByFault]). No default on purpose: whoever builds the pump has to
+     * decide where a late bolus and a bolus correction are recorded.
      */
-    private val onCommandDecided: (DashCommandOutcome) -> Unit,
+    private val onCommandDecided: (DashPumpOutcome) -> Unit,
     private val stateManager: DashPodStateManager = DashPodStateManager(DashKeychainStateStore()),
     /** A new key pair for each pairing, as Android `LTKExchanger` builds a new `KeyExchange`. */
     private val newKeyExchange: () -> DashKeyExchange = {
@@ -232,6 +282,13 @@ class IosDashPump(
      * settings here.
      */
     private val beeps: () -> DashBeepSettings = { DashBeepSettings() },
+    /**
+     * True when AAPS expects a temp basal to run (Android `pumpSync.expectedPumpState().temporaryBasal
+     * != null`). [cancelTempBasal] sends nothing only when this is false and the pod has no confirmed
+     * temp basal running, as Android. True by default, so until the plugin (phase 4) gives the real
+     * answer every cancel is sent (fail closed).
+     */
+    private val expectedTempBasalRunning: () -> Boolean = { true },
 ) : Pump, DashLinkClient {
 
     private var session: Session? = null
@@ -568,17 +625,54 @@ class IosDashPump(
     private val lastBolusAmountFlow = MutableStateFlow<PumpInsulin?>(null)
 
     /**
-     * The last bolus the pod took, set when its SUCCESS is known (at once or late). The time is when
-     * SUCCESS became known, not when the pod delivered it. Not stored: lost at restart.
+     * The last bolus the pod took, set when its SUCCESS is known (at once or late), and by
+     * [syncPumpFlows] from the stored [DashPodStateManager.lastBolus] (Android: its `startTime` and
+     * `requestedUnits`). The time is when SUCCESS became known, not when the pod delivered it.
      */
     override val lastBolusTime: StateFlow<Long?> = lastBolusTimeFlow
     override val lastBolusAmount: StateFlow<PumpInsulin?> = lastBolusAmountFlow
 
-    // Not tracked yet on iOS: these are placeholders, the same as in the iOS Medtrum driver.
-    override val lastDataTime: StateFlow<Long> = MutableStateFlow(0L)
+    /** Android `lastDataTime`: when the last answer with a pod status arrived, set by [syncPumpFlows]. */
+    private val lastDataTimeFlow = MutableStateFlow(0L)
+    override val lastDataTime: StateFlow<Long> = lastDataTimeFlow
+
+    // Not tracked yet on iOS (needs `BasalProgram.rateAt`, phase 4): a placeholder, as in the iOS Medtrum driver.
     override val baseBasalRate: PumpRate = PumpRate(0.0)
-    override val reservoirLevel: StateFlow<PumpInsulin> = MutableStateFlow(PumpInsulin(0.0))
+
+    /** Android `reservoirLevel`, set by [syncPumpFlows]. */
+    private val reservoirLevelFlow = MutableStateFlow(PumpInsulin(0.0))
+    override val reservoirLevel: StateFlow<PumpInsulin> = reservoirLevelFlow
     override val batteryLevel: StateFlow<Int?> = MutableStateFlow(null)
+
+    /**
+     * Android `syncPumpFlows`, after a status read and before a bolus: the flows the overview and the
+     * queue read are taken from the stored state.
+     * - [lastDataTime]: [DashPodStateManager.lastUpdatedSystemMs];
+     * - [lastBolusTime] and [lastBolusAmount]: the start time and the asked units of the stored last
+     *   bolus, null when there is none;
+     * - [reservoirLevel]: 0 before the activation is completed; then the last reservoir reading below
+     *   1023 ([DashPodStateManager.pulsesRemaining]) x 0.05 U, or [RESERVOIR_OVER_50_UNITS_DEFAULT] when
+     *   there was none yet (the pod has more than 50 U, its reading is then 1023). As Android, a later
+     *   status with 1023 or more (an alarm status reads the field as an unmasked 16-bit short) keeps the
+     *   last lower reading, so the reservoir check of a bolus never sees 75 U after a low reading.
+     */
+    private fun syncPumpFlows() {
+        lastDataTimeFlow.value = stateManager.lastUpdatedSystemMs
+        val bolus = stateManager.lastBolus
+        lastBolusTimeFlow.value = bolus?.startTimeMs
+        lastBolusAmountFlow.value = bolus?.requestedUnits?.let { PumpInsulin(it) }
+        reservoirLevelFlow.value = if (stateManager.activationProgress.isBefore(ActivationProgress.COMPLETED)) {
+            PumpInsulin(0.0)
+        } else {
+            PumpInsulin(stateManager.pulsesRemaining?.let { it * PodConstants.POD_PULSE_BOLUS_UNITS } ?: RESERVOIR_OVER_50_UNITS_DEFAULT)
+        }
+    }
+
+    /**
+     * Android `podStateManager.tempBasalActive`: delivery is not suspended and the temp basal the pod
+     * confirmed last ([DashPodStateManager.tempBasal]) has not run out.
+     */
+    fun tempBasalActive(): Boolean = stateManager.tempBasalActive(now())
 
     override fun isConfigured(): Boolean = isPaired()
     override fun isInitialized(): Boolean = isPaired() && hasSession()
@@ -642,8 +736,10 @@ class IosDashPump(
      *   bolus that a later status confirms reaches [onCommandDecided]. Still open: a stop asked after
      *   this failure returned does nothing (the bolus dialog is closed); Android would still be in its
      *   wait and send it.
-     * - the reservoir check of Android (`requestedBolusAmount > reservoirLevel`) is not here yet: the
-     *   reservoir level ([reservoirLevel]) is still a placeholder (plugin, phase 4).
+     *
+     * As Android, a bolus larger than the reservoir ([syncPumpFlows], [reservoirLevel]) is refused with
+     * nothing sent. Android checks it before the pulse rate (which it reads with `!!`); here the pulse
+     * rate comes first, both refuse with nothing sent.
      */
     override suspend fun deliverTreatment(detailedBolusInfo: DetailedBolusInfo): PumpEnactResult {
         bolusDeliveryInProgress = true
@@ -672,6 +768,11 @@ class IosDashPump(
         // Without it the bolus bytes would be wrong, so refuse before anything is opened or sent.
         val pulseRate = stateManager.pulseRate
             ?: return failure("Bolus refused: the pulse rate of the pod is not known (activation not finished)")
+        // Android: the flows are taken from the pod state first, so the reservoir is the stored one.
+        syncPumpFlows()
+        if (units > reservoirLevel.value.cU) {
+            return failure("Bolus refused: not enough insulin in the reservoir (${reservoirLevel.value.cU} U)")
+        }
         if (stateManager.podStatus?.deliveryStatus?.bolusDeliveringActive() == true) {
             return failure("Bolus refused: a bolus is already in progress")
         }
@@ -874,10 +975,20 @@ class IosDashPump(
         // Dash does not support percent TBR; fail closed rather than approximate.
         failure("Percent TBR not supported on Dash")
 
+    /**
+     * Android `OmnipodDashPumpPlugin.cancelTempBasal`: nothing to cancel when the pod has no confirmed
+     * temp basal running ([tempBasalActive]) and AAPS expects none ([expectedTempBasalRunning]): success,
+     * not enacted, nothing sent. Otherwise the cancel goes with its own active command (STOP_TEMP_BASAL).
+     * Success only when the pod confirmed it (fail closed, see the class comment).
+     */
     override suspend fun cancelTempBasal(enforceNew: Boolean): PumpEnactResult =
         commandMutex.withLock {
             busy = true
             try {
+                if (!tempBasalActive() && !expectedTempBasalRunning()) {
+                    aapsLogger.info(LTag.PUMP, "cancelTempBasal: no temp basal to cancel, nothing sent")
+                    return@withLock DashPumpEnactResult(success = true, enacted = false, comment = "No temp basal to cancel")
+                }
                 val beep = beeps().tempBasalBeeps
                 val outcome = sendDeliveryCommand(DashCommandKind.STOP_TEMP_BASAL) { uid, seq ->
                     stopCommand(DeliveryType.TEMP_BASAL, uid, seq, beep)
@@ -1290,7 +1401,8 @@ class IosDashPump(
      *
      * A bolus that was confirmed and still runs ([DashPodStateManager.lastBolus] not complete) is not
      * given again: it was already counted at the asked amount when it was confirmed, and the reset
-     * keeps that amount, as Android (which corrects it only in `checkPodKaput`, step 8).
+     * keeps that amount, as Android. When the pod is kaput, [checkPodKaput] (run by the resolve first)
+     * ends it with what the last status left and gives it as [DashBolusEndedByFault] before the reset.
      */
     suspend fun discardPod() {
         commandMutex.withLock {
@@ -1339,10 +1451,16 @@ class IosDashPump(
         }
 
     /**
-     * Asks the pod for its default status (Android `getPumpStatus`). The answer goes into
-     * [DashPodStateManager.updateFromStatus], and an open command is then decided. This is the way
-     * out of NOT_CONFIRMED. Not a programming command, so no active command is opened. Fails closed
-     * like everything else; errors are logged.
+     * Asks the pod for its default status (Android `getPumpStatus`, `getPodStatus`). The answer goes
+     * into the state ([DashPodStateManager.updateFromResponse]): a default status, or the alarm status a
+     * faulted pod sends in its place, which also keeps the alarm type. Then, as Android: an open command
+     * is decided (the way out of NOT_CONFIRMED), `checkPodKaput` runs ([checkPodKaput]: a bolus the
+     * fault stopped is ended and given to [onCommandDecided]), and the flows are taken from the state
+     * ([syncPumpFlows]), also when nothing could be read. Not a programming command, so no active
+     * command is opened. Fails closed like everything else; errors are logged.
+     *
+     * Not here, for the plugin (phase 4): Android `verifyPumpState` (it compares the temp basal of the
+     * pod with the one `PumpSync` expects) and the history.
      *
      * As Android: before the activation is completed, nothing is read unless [reason] is
      * [REQUESTED_BY_USER] (no race on BLE with the activation), and after a status read on a pod whose
@@ -1363,20 +1481,21 @@ class IosDashPump(
             aapsLogger.info(LTag.PUMP, "getPumpStatus ($reason): pod activation not completed, nothing read")
             return
         }
-        if (!stateManager.activationProgress.isAtLeast(ActivationProgress.SET_UNIQUE_ID)) {
-            aapsLogger.error(LTag.PUMP, "getPumpStatus ($reason): Pod is in an incorrect state (activation ${stateManager.activationProgress}), nothing read")
-            return
-        }
         commandMutex.withLock {
             busy = true
             try {
-                val statusesBefore = stateManager.statusResponseCount
-                val read = readStatusWithLock()
-                if (read && stateManager.statusResponseCount > statusesBefore && !stateManager.isActivationCompleted) {
-                    stateManager.recoverActivationFromPodStatus()?.let {
-                        aapsLogger.info(LTag.PUMP, "recoverActivationFromPodStatus msg=$it")
+                if (!stateManager.activationProgress.isAtLeast(ActivationProgress.SET_UNIQUE_ID)) {
+                    aapsLogger.error(LTag.PUMP, "getPumpStatus ($reason): Pod is in an incorrect state (activation ${stateManager.activationProgress}), nothing read")
+                } else {
+                    val statusesBefore = stateManager.statusResponseCount
+                    val read = readStatusWithLock()
+                    if (read && stateManager.statusResponseCount > statusesBefore && !stateManager.isActivationCompleted) {
+                        stateManager.recoverActivationFromPodStatus()?.let {
+                            aapsLogger.info(LTag.PUMP, "recoverActivationFromPodStatus msg=$it")
+                        }
                     }
                 }
+                syncPumpFlows()
             } finally {
                 busy = false
             }
@@ -1516,7 +1635,30 @@ class IosDashPump(
         val at = now()
         val resolved = stateManager.resolveActiveCommand(at)
         handleCommandConfirmation(resolved, decidedLate, at)
+        checkPodKaput(at)
         return resolved
+    }
+
+    /**
+     * Android `OmnipodDashPumpPlugin.checkPodKaput`, which Android runs after every status read and
+     * every programming command; here after every [resolveAndHandle], so after each status read, each
+     * delivery command, before each delivery command and before a pod is discarded.
+     *
+     * The bolus part: a pod in ALARM or DEACTIVATED ends a last bolus that has not ended, with what its
+     * last status left ([DashPodStateManager.completeBolusOnPodKaput]), and gives it to
+     * [onCommandDecided] as [DashBolusEndedByFault]. The bolus is stored, so a fault first seen after a
+     * crash is corrected by the first status read after it. The bolus is ended in the stored state
+     * before the outcome is given: a crash between the two loses the correction, and the bolus then
+     * stays counted at the asked amount (more than went in, never less), as on Android.
+     *
+     * Not here, for the plugin (phase 4): the PUMP_SUSPEND temp basal Android records for a kaput pod,
+     * the fault notification and announcement (with [DashPodStateManager.alarmType] and
+     * [DashPodStateManager.alarmSynced]).
+     */
+    private fun checkPodKaput(at: Long) {
+        val ended = stateManager.completeBolusOnPodKaput() ?: return
+        aapsLogger.warn(LTag.PUMP, "Pod kaput (${stateManager.reportedPodStatus}, ${stateManager.alarmType}): bolus ended, ${ended.deliveredUnits()} U of ${ended.requestedUnits} U")
+        onCommandDecided(DashBolusEndedByFault(ended, stateManager.alarmType, at))
     }
 
     /**
@@ -1668,6 +1810,9 @@ class IosDashPump(
         /** `OmnipodDashManagerImpl.NONCE`: the Omnipod Dash seems to use a fixed nonce. */
         const val NONCE = DashActivation.NONCE
 
+        /** Android `RESERVOIR_OVER_50_UNITS_DEFAULT`: the reservoir shown when the pod reports more than 50 U. */
+        const val RESERVOIR_OVER_50_UNITS_DEFAULT = 75.0
+
         /** Android `getPumpStatus`: the only reason that reads a status before the activation is completed. */
         const val REQUESTED_BY_USER = "REQUESTED BY USER"
 
@@ -1677,7 +1822,7 @@ class IosDashPump(
          */
         fun create(
             aapsLogger: AAPSLogger,
-            onCommandDecided: (DashCommandOutcome) -> Unit,
+            onCommandDecided: (DashPumpOutcome) -> Unit,
             bolusProgressData: BolusProgressData? = null,
         ): IosDashPump =
             IosDashPump(aapsLogger = aapsLogger, onCommandDecided = onCommandDecided, bolusProgressData = bolusProgressData)

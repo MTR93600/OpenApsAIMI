@@ -3,6 +3,7 @@ package app.aaps.pump.omnipod.dashctl.session
 import app.aaps.core.interfaces.utils.Round
 import app.aaps.pump.omnipod.dashctl.comm.session.EapSqn
 import app.aaps.pump.omnipod.dashctl.pod.definition.ActivationProgress
+import app.aaps.pump.omnipod.dashctl.pod.definition.AlarmType
 import app.aaps.pump.omnipod.dashctl.pod.definition.AlertType
 import app.aaps.pump.omnipod.dashctl.pod.definition.BasalProgram
 import app.aaps.pump.omnipod.dashctl.pod.definition.DeliveryStatus
@@ -32,7 +33,10 @@ import app.aaps.pump.omnipod.dashctl.pod.response.VersionResponse
  *   sets the activation time. Both update the [lastBolus] from the bolus pulses left.
  * - [resolveActiveCommand] also does what Android `handleCommandConfirmation` does to the pod state,
  *   in the same write: a confirmed bolus becomes the [lastBolus], a confirmed stop of the bolus ends it,
- *   a confirmed basal program becomes the running [basalProgram].
+ *   a confirmed basal program becomes the running [basalProgram], a confirmed temp basal becomes the
+ *   [tempBasal] and a confirmed cancel, suspend or resume clears it.
+ * - [completeBolusOnPodKaput] is the pod state part of Android `checkPodKaput`: a faulted pod ends the
+ *   last bolus with what it had left.
  *
  * Deviation from the original, deliberate: [updateFromPairing] persists
  * immediately. The original only persisted on the next state change; losing the
@@ -134,6 +138,33 @@ class DashPodStateManager(private val store: DashPodStateStore) {
      */
     val isPodKaput: Boolean
         get() = state.reportedPodStatus == PodStatus.ALARM || state.reportedPodStatus == PodStatus.DEACTIVATED
+
+    /** Android `tempBasal`: see [DashPodState.tempBasal]. */
+    val tempBasal: DashTempBasal?
+        get() = state.tempBasal
+
+    /** Android `alarmType`: see [DashPodState.alarmType]. */
+    val alarmType: AlarmType?
+        get() = state.alarmType
+
+    /**
+     * Android `pulsesRemaining`: see [DashPodState.pulsesRemaining]. A state stored by version 3 or
+     * before has no such field; it then takes the stored status when that reads below 1023, which is
+     * what Android would have kept from that status.
+     */
+    val pulsesRemaining: Int?
+        get() = state.pulsesRemaining
+            ?: state.podStatus?.reservoirPulsesRemaining?.takeIf { it < DashPodState.RESERVOIR_READING_OVER_50_UNITS }
+
+    /** Android `alarmSynced`: see [DashPodState.alarmSynced]. */
+    val alarmSynced: Boolean
+        get() = state.alarmSynced
+
+    /**
+     * Android `tempBasalActive`: delivery is not suspended and the confirmed [tempBasal] has not run out
+     * at [nowMs]. False when no temp basal was confirmed.
+     */
+    fun tempBasalActive(nowMs: Long): Boolean = !isSuspended && state.tempBasal?.runsAt(nowMs) == true
 
     /** See [DashPodState.activationStepInFlight]. */
     val activationStepInFlight: ActivationProgress?
@@ -284,12 +315,51 @@ class DashPodStateManager(private val store: DashPodStateStore) {
     fun updateFromResponse(response: Response, nowMs: Long): Boolean {
         when (response) {
             is DefaultStatusResponse -> updateFromDefaultStatus(DashPodStatus.of(response, nowMs))
-            is AlarmStatusResponse   -> updateFromStatus(DashPodStatus.of(response, nowMs))
+            is AlarmStatusResponse   -> updateFromAlarmStatus(response, nowMs)
             is VersionResponse       -> updateFromVersionResponse(response, nowMs)
             is SetUniqueIdResponse   -> updateFromSetUniqueIdResponse(response, nowMs)
             else                     -> return false
         }
         return true
+    }
+
+    /**
+     * The pod answered with an alarm status: what a faulted pod sends in place of a default status.
+     * Android `updateFromAlarmStatusResponse`: stored as any status ([updateFromStatus]), and the alarm
+     * type of the first one is kept in the same write ([alarmType]); a later alarm status does not
+     * change it. An alarm status does not set the activation time, as Android.
+     */
+    fun updateFromAlarmStatus(response: AlarmStatusResponse, nowMs: Long) {
+        val updated = statusApplied(DashPodStatus.of(response, nowMs))
+        state = if (updated.alarmType == null) updated.copy(alarmType = response.alarmType) else updated
+        persist()
+    }
+
+    /** Android setter `alarmSynced`: the plugin showed and recorded the fault. Persists. */
+    fun updateAlarmSynced(synced: Boolean) {
+        if (state.alarmSynced == synced) return
+        state = state.copy(alarmSynced = synced)
+        persist()
+    }
+
+    /**
+     * The pod state part of Android `OmnipodDashPumpPlugin.checkPodKaput`: when the pod is kaput
+     * ([isPodKaput]: ALARM or DEACTIVATED) and the [lastBolus] has not ended, it ends now with what
+     * the last status left (Android `markComplete`), in one write. Returns that bolus, whose
+     * [DashLastBolus.deliveredUnits] is asked - left; the caller records it again with that amount at
+     * its [DashLastBolus.createdAtMs] (Android `syncBolusWithPumpId`). Returns null otherwise, also
+     * for a bolus that already ended, so the same bolus is never given twice.
+     *
+     * The bolus is stored, so a fault seen first after a crash or a restart still ends it: the next
+     * status read finds the pod kaput and the bolus not ended.
+     */
+    fun completeBolusOnPodKaput(): DashLastBolus? {
+        if (!isPodKaput) return null
+        val bolus = state.lastBolus?.takeIf { !it.deliveryComplete } ?: return null
+        val ended = bolus.copy(deliveryComplete = true)
+        state = state.copy(lastBolus = ended)
+        persist()
+        return ended
     }
 
     // -- Alerts (ported from OmnipodDashPodStateManagerImpl) ----------------------
@@ -467,6 +537,18 @@ class DashPodStateManager(private val store: DashPodStateStore) {
      *   `basalProgram` on a resume: when the resumed profile is not the program stored before, a
      *   later profile equal to the old program would count as set ("isThisProfileSet") while the pod
      *   runs another one, so the basal would be wrong.
+     * - TEMP_BASAL, SUCCESS: the temp basal of the command becomes the [tempBasal], started at the
+     *   [DashActiveCommand.createdAtMs] of the command (Android SET_TEMPORARY_BASAL,
+     *   `podStateManager.tempBasal = command.tempBasal`, whose start is the time the command was made).
+     * - STOP_TEMP_BASAL, SUSPEND_DELIVERY or RESUME_DELIVERY, SUCCESS: the [tempBasal] is cleared
+     *   (Android CANCEL_TEMPORARY_BASAL, SUSPEND_DELIVERY, RESUME_DELIVERY). STOP_ALL and DEACTIVATE
+     *   clear it too (the pod stops every delivery, the temp basal with it; Android has no STOP_ALL and
+     *   resets the whole state after a deactivation).
+     *
+     * Deliberate difference from Android (it counts insulin wrong): a BOLUS decided SUCCESS by the
+     * status of a pod that is kaput takes the bolus pulses left from that status at once. Android
+     * creates the last bolus with all of it left, and its `checkPodKaput` then ends it with all of it
+     * left, so a bolus the pod took and partly gave before the fault is recorded as 0 U.
      *
      * Closing the command and changing the last bolus or the basal program are one write: with two
      * writes, a crash between them would lose a program the pod runs, and `isThisProfileSet` would then
@@ -488,11 +570,24 @@ class DashPodStateManager(private val store: DashPodStateStore) {
         var lastBolus = state.lastBolus
         var endedBolus: DashLastBolus? = null
         var basalProgram = state.basalProgram
+        var tempBasal = state.tempBasal
         if (command != null && confirmation == DashCommandConfirmation.SUCCESS) {
             when (command.kind) {
                 DashCommandKind.BOLUS      -> command.requestedBolusUnits?.let {
-                    lastBolus = newLastBolus(it, nowMs, historyId = command.historyId, createdAtMs = command.createdAtMs)
+                    val created = newLastBolus(it, nowMs, historyId = command.historyId, createdAtMs = command.createdAtMs)
+                    val faultStatus = state.podStatus?.takeIf { isPodKaput }
+                    lastBolus = if (faultStatus != null) updateLastBolusFromStatus(created, faultStatus.bolusPulsesRemaining) else created
                 }
+
+                DashCommandKind.TEMP_BASAL -> {
+                    val rate = command.tempBasalRate
+                    val minutes = command.tempBasalMinutes
+                    if (rate != null && minutes != null) {
+                        tempBasal = DashTempBasal(startTimeMs = command.createdAtMs ?: nowMs, rate = rate, durationInMinutes = minutes)
+                    }
+                }
+
+                DashCommandKind.STOP_TEMP_BASAL -> tempBasal = null
 
                 DashCommandKind.STOP_BOLUS -> lastBolus?.let {
                     endedBolus = if (it.deliveryComplete) it else it.copy(deliveryComplete = true)
@@ -501,18 +596,25 @@ class DashPodStateManager(private val store: DashPodStateStore) {
 
                 DashCommandKind.SUSPEND_DELIVERY,
                 DashCommandKind.STOP_ALL,
-                DashCommandKind.DEACTIVATE -> lastBolus?.takeIf { !it.deliveryComplete }?.let {
-                    endedBolus = it.copy(deliveryComplete = true)
-                    lastBolus = endedBolus
+                DashCommandKind.DEACTIVATE -> {
+                    lastBolus?.takeIf { !it.deliveryComplete }?.let {
+                        endedBolus = it.copy(deliveryComplete = true)
+                        lastBolus = endedBolus
+                    }
+                    tempBasal = null
                 }
 
-                DashCommandKind.BASAL_PROGRAM,
-                DashCommandKind.RESUME_DELIVERY -> basalProgram = command.basalProgram
+                DashCommandKind.BASAL_PROGRAM -> basalProgram = command.basalProgram
+
+                DashCommandKind.RESUME_DELIVERY -> {
+                    basalProgram = command.basalProgram
+                    tempBasal = null
+                }
 
                 else                       -> Unit
             }
         }
-        state = state.copy(activeCommand = null, lastBolus = lastBolus, basalProgram = basalProgram)
+        state = state.copy(activeCommand = null, lastBolus = lastBolus, basalProgram = basalProgram, tempBasal = tempBasal)
         persist()
         return DashResolvedCommand(confirmation, command, endedBolus)
     }
@@ -548,6 +650,8 @@ class DashPodStateManager(private val store: DashPodStateStore) {
         reportedPodStatus = status.podStatus,
         lastUpdatedSystemMs = status.receivedAtMs,
         lastBolus = updateLastBolusFromStatus(state.lastBolus, status.bolusPulsesRemaining),
+        pulsesRemaining = status.reservoirPulsesRemaining
+            .takeIf { it < DashPodState.RESERVOIR_READING_OVER_50_UNITS } ?: state.pulsesRemaining,
     )
 
     // -- Last bolus (ported from OmnipodDashPodStateManagerImpl) ------------------

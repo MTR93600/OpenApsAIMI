@@ -79,14 +79,30 @@ internal class DashPumpOnFakePod(
     /** Runs inside `onCommandDecided`, so inside the command that decided it. For tests of nested calls. */
     var onDecided: (DashCommandOutcome) -> Unit = {}
 
+    /** Every bolus a pod fault ended, as the pump gave it to `onCommandDecided`, in order. */
+    val endedByFault = mutableListOf<DashBolusEndedByFault>()
+
+    /** Every outcome the pump gave to `onCommandDecided`, of both kinds, in order. */
+    val outcomes = mutableListOf<DashPumpOutcome>()
+
+    /** A pump that expects AAPS to run a temp basal or not (Android `PumpSync`), read by `cancelTempBasal`. */
+    var expectedTempBasalRunning = true
+
     /** The wall clock the pump reads (epoch ms). Tests move it to tell the send time from the decision time. */
     var nowMs = 1_000L
 
     val pump: IosDashPump = IosDashPump(
         aapsLogger = SilentPodLogger,
         onCommandDecided = {
-            decided += it
-            onDecided(it)
+            outcomes += it
+            when (it) {
+                is DashCommandOutcome    -> {
+                    decided += it
+                    onDecided(it)
+                }
+
+                is DashBolusEndedByFault -> endedByFault += it
+            }
         },
         stateManager = stateManager,
         newKeyExchange = {
@@ -96,6 +112,7 @@ internal class DashPumpOnFakePod(
         now = { nowMs },
         bolusProgressData = bolusProgressData,
         beeps = { beeps },
+        expectedTempBasalRunning = { expectedTempBasalRunning },
     )
 
     /** The one central of the phone, in front of the fake central of the current link. */
@@ -161,6 +178,16 @@ internal class DashPumpOnFakePod(
      */
     var activeAlerts = 0
 
+    /**
+     * When set (an `AlarmType` value), the pod has a fault: it takes no command and answers every
+     * command with an alarm status ([podAlarmStatus]) that reports this alarm, pod status ALARM,
+     * delivery suspended, the last programming command it took and the bolus pulses it had left.
+     */
+    var faultAlarmType: Int? = null
+
+    /** The reservoir pulses the default status reports: 1023 (more than 50 U) by default, as the capture. */
+    var reservoirPulses = 0x3ff
+
     init {
         answerWithStatus()
     }
@@ -172,7 +199,8 @@ internal class DashPumpOnFakePod(
 
     /** The pod answers each command with a default status (Android `DefaultStatusResponse`). */
     fun answerWithStatus() {
-        pod.answerFor = { command ->
+        pod.answerFor = answer@{ command ->
+            faultAlarmType?.let { return@answer podAlarmStatus(it, lastProgrammingSequence, bolusPulsesRemaining) }
             val sequence = (command[4].toInt() and 0xff shr 2) and 0x0f
             if (command[6] != CommandType.GET_STATUS.value) lastProgrammingSequence = sequence
             if (isTempBasal(command)) tempBasalRunning = true
@@ -195,7 +223,7 @@ internal class DashPumpOnFakePod(
             }
             if (command[6] == CommandType.SILENCE_ALERTS.value) activeAlerts = activeAlerts and (command[12].toInt() and 0xff).inv()
             // The answer to the stop reports the pulses that were not delivered; after it, none are left.
-            val answer = podDefaultStatus(podStatusCode, lastProgrammingSequence, bolusPulsesRemaining, deliveryStatus(), activeAlerts)
+            val answer = podDefaultStatus(podStatusCode, lastProgrammingSequence, bolusPulsesRemaining, deliveryStatus(), activeAlerts, reservoirPulses)
             if (stopsBolus) bolusPulsesRemaining = 0
             answer
         }
@@ -319,6 +347,24 @@ internal class DashPumpOnFakePod(
 
         /** The bolus bit of `StopDeliveryCommand.DeliveryType`. */
         const val BOLUS_BIT = 0x04
+
+        /** `AlarmType.ALARM_OCCLUDED`. */
+        const val OCCLUDED = 0x14
+
+        /**
+         * An alarm status (the layout of `AlarmStatusResponse`): the Android vector of
+         * `AlarmStatusResponseTest` (`021602080100000501BD00000003FF01950000000000670A`) with pod status
+         * ALARM (0x0d), delivery SUSPENDED (0), the bolus pulses left, the last programming sequence and
+         * the alarm type set.
+         */
+        fun podAlarmStatus(alarmType: Int, lastProgrammingSequence: Int, bolusPulsesRemaining: Int): ByteArray =
+            parityHex(
+                "021602" + "0d" + "00" +
+                    (bolusPulsesRemaining and 0x7ff).toString(16).padStart(4, '0') +
+                    (lastProgrammingSequence and 0x0f).toString(16).padStart(2, '0') +
+                    "01bd" + (alarmType and 0xff).toString(16).padStart(2, '0') +
+                    "0000" + "03ff" + "0195" + "00" + "00000000" + "670a"
+            )
 
         /** A bolus command: 0x1a (program insulin), then 0x17 after the 0x1a part. */
         fun isBolus(command: ByteArray): Boolean {
