@@ -3,6 +3,7 @@ package app.aaps.pump.omnipod.dashctl.ios.pump
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.pump.omnipod.dashctl.comm.Id
+import app.aaps.pump.omnipod.dashctl.comm.connection.DashConnectResult
 import app.aaps.pump.omnipod.dashctl.comm.message.MessagePacket
 import app.aaps.pump.omnipod.dashctl.comm.message.MessageType
 import app.aaps.pump.omnipod.dashctl.comm.io.FakeDashPodCentral.FinalAnswer
@@ -18,6 +19,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -63,11 +65,13 @@ class IosDashPumpCommandTest {
         assertEquals(5.0, result.bolusDelivered)
         assertNull(f.stateManager.activeCommand, "the status closed the command")
         assertEquals(0, f.stateManager.podStatus?.lastProgrammingCommandSequence)
-        // Built with 0, +1 when sent, +1 when the answer was read (PodEventInterceptor).
-        assertEquals(2, f.stateManager.messageSequenceNumber)
-        assertEquals(listOf(1, 2, 3, 4, 5, 6, 7, 8), wireSequences())
-        assertEquals(1, f.pod.commands.size)
-        assertEquals(1, f.pod.acks.size)
+        // Built with 0, +1 when sent, +1 when the answer was read (PodEventInterceptor). Then the
+        // bolus wait reads one status (Android `waitForBolusDeliveryToComplete`): +2 again.
+        assertEquals(4, f.stateManager.messageSequenceNumber)
+        // Bolus 7, its ACK 8, the status of the bolus wait 9, its ACK 10.
+        assertEquals(listOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), wireSequences())
+        assertEquals(2, f.pod.commands.size)
+        assertEquals(2, f.pod.acks.size)
     }
 
     @Test
@@ -77,10 +81,11 @@ class IosDashPumpCommandTest {
         assertTrue(f.pump.deliverTreatment(bolus(1.0)).success)
         assertTrue(f.pump.setTempBasalAbsolute(1.5, 30, false, PumpSync.TemporaryBasalType.NORMAL).success)
 
+        // Bolus 0, the status of the bolus wait 2, the temp basal 4.
         val sequences = f.pod.commands.map { (it[4].toInt() and 0xff shr 2) and 0x0f }
-        assertEquals(listOf(0, 2), sequences)
-        assertEquals(4, f.stateManager.messageSequenceNumber)
-        assertEquals(listOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), wireSequences())
+        assertEquals(listOf(0, 2, 4), sequences)
+        assertEquals(6, f.stateManager.messageSequenceNumber)
+        assertEquals(listOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12), wireSequences())
     }
 
     @Test
@@ -99,13 +104,20 @@ class IosDashPumpCommandTest {
     fun `an answer whose ACK the pod does not confirm still decides the command`() = runTest {
         f.pairAndConnect()
         f.pod.finalAnswerFor = { if (it == 8) FinalAnswer.NONE else FinalAnswer.SUCCESS }
+        // The pod did not take the ACK, so it and the phone no longer agree on the nonce, and a
+        // status read of the bolus wait on this session would wait for an answer that never comes.
+        // The link drops at the first status read instead, so the wait ends at once.
+        f.pod.dropLinkOnPhoneMessage = 9 to Packet.FIRST
 
         val result = f.pump.deliverTreatment(bolus(2.0))
 
         // SharedBleManager: CommandAckError is handled like CommandReceiveSuccess.
         assertTrue(result.success, result.comment)
         assertEquals(2.0, result.bolusDelivered)
-        assertEquals(2, f.stateManager.messageSequenceNumber)
+        assertEquals(DashCommandConfirmation.SUCCESS, f.decided.single().confirmation)
+        // The wait reports the asked amount when it cannot read a status (Android "updated later"),
+        // never more, and sends no second bolus.
+        assertEquals(1, f.bolusCommands())
     }
 
     // ---------------------------------------------------------------- not taken, not sent
@@ -185,7 +197,7 @@ class IosDashPumpCommandTest {
         assertEquals(4, f.stateManager.messageSequenceNumber)
         val next = f.pump.deliverTreatment(bolus(1.0))
         assertTrue(next.success, next.comment)
-        assertEquals(4, f.pod.commands.last()[4].toInt() and 0xff shr 2 and 0x0f, "built with the stored sequence")
+        assertEquals(4, f.pod.commands.last { DashPumpOnFakePod.isBolus(it) }[4].toInt() and 0xff shr 2 and 0x0f, "built with the stored sequence")
     }
 
     @Test
@@ -245,14 +257,12 @@ class IosDashPumpCommandTest {
     @Test
     fun `a session after a reconnect starts the outer counter at one`() = runTest {
         f.pairAndConnect()
-        f.reconnect()
-
-        f.pump.establishSession()
-        f.pump.connect("test")
+        assertSame(DashConnectResult.SessionReady, f.reconnect(), "the connection sets up the session")
         assertTrue(f.pump.deliverTreatment(bolus(1.0)).success)
 
-        // SharedBleManager.connect: establishSession(1). Challenge 2, SUCCESS 3, command 4, ACK 5.
-        assertEquals(listOf(2, 3, 4, 5), wireSequences())
+        // SharedBleManager.connect: establishSession(1). Challenge 2, SUCCESS 3, command 4, ACK 5,
+        // then the status of the bolus wait 6 and its ACK 7.
+        assertEquals(listOf(2, 3, 4, 5, 6, 7), wireSequences())
         assertEquals(3L, f.stateManager.eapAkaSequenceNumber)
     }
 
@@ -306,9 +316,7 @@ class IosDashPumpCommandTest {
         assertNull(f.pump.lastBolusAmount.value)
 
         f.pod.dropLinkWhileAnswering = null
-        f.reconnect()
-        f.pump.establishSession()
-        f.pump.connect("test")
+        assertSame(DashConnectResult.SessionReady, f.reconnect())
         f.pump.getPumpStatus("decide the open bolus")
 
         assertNull(f.stateManager.activeCommand, "the status decided the bolus")
@@ -345,10 +353,12 @@ class IosDashPumpCommandTest {
     @Test
     fun `a bolus is never built with the last programming sequence of the pod`() = runTest {
         f.pairAndConnect()
+        // No status is known yet, so the TBR is preceded by a cancel (Android `observeNoActiveTempBasal`):
+        // the cancel is built with 0, the TBR with 2.
         assertTrue(f.pump.setTempBasalAbsolute(1.0, 30, false, PumpSync.TemporaryBasalType.NORMAL).success)
         repeat(7) { f.pump.getPumpStatus("routine") }
-        assertEquals(0, f.stateManager.messageSequenceNumber, "the sequence wrapped")
-        assertEquals(0, f.stateManager.podStatus?.lastProgrammingCommandSequence, "the TBR was built with 0")
+        assertEquals(2, f.stateManager.messageSequenceNumber, "the sequence wrapped")
+        assertEquals(2, f.stateManager.podStatus?.lastProgrammingCommandSequence, "the TBR was built with 2")
         // From now on the pod does not take a bolus: it answers with a NAK (Android NakResponseTest).
         f.pod.answerFor = { command ->
             if (command[6] == CommandType.PROGRAM_INSULIN.value) parityHex("0603070009")
@@ -359,7 +369,7 @@ class IosDashPumpCommandTest {
 
         assertFalse(result.success)
         val open = assertNotNull(f.stateManager.activeCommand)
-        assertTrue(open.sequence != 0, "the bolus must not take the sequence of the TBR")
+        assertTrue(open.sequence != 2, "the bolus must not take the sequence of the TBR")
         f.pump.getPumpStatus("decide the open bolus")
         assertNull(f.stateManager.activeCommand)
         assertEquals(DashCommandConfirmation.DENIED, f.decided.last().confirmation)
@@ -387,9 +397,7 @@ class IosDashPumpCommandTest {
         assertEquals(before, f.writesFromPump().size, "no second challenge on the same link")
 
         // A new connection works.
-        f.reconnect()
-        f.pump.establishSession()
-        f.pump.connect("test")
+        assertSame(DashConnectResult.SessionReady, f.reconnect())
         f.pump.getPumpStatus("new link")
         assertNotNull(f.stateManager.podStatus)
     }

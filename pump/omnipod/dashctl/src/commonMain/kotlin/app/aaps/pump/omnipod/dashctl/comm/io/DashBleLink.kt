@@ -101,8 +101,21 @@ class DashBleLink(
     /** The DATA characteristic. */
     val data: DataBleIO = DashDataBleIO()
 
-    /** True after a disconnect of this peripheral, or after the Bluetooth radio went away. */
+    /**
+     * True after a disconnect of this peripheral, after the Bluetooth radio went away, or after
+     * [retire].
+     */
     val isLinkLost: Boolean get() = linkLost.isCompleted
+
+    /**
+     * This link will not be used again (it was closed, or a newer connection took its place). It
+     * acts as lost from now on: every wait ends at once and no new write is started, so nothing more
+     * of this connection can reach the pod while the next connection is set up. Android gets the
+     * same by setting `msgIO` to null in `SharedBleConnection.disconnect`.
+     */
+    internal fun retire() {
+        linkLost.complete(Unit)
+    }
 
     /**
      * Take one event from the central. Never blocks.

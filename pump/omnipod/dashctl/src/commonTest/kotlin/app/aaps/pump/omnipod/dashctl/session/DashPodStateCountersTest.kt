@@ -39,7 +39,7 @@ class DashPodStateCountersTest {
         val store = MemoryStore()
         val manager = DashPodStateManager(store)
 
-        manager.updateFromSetUniqueIdResponse(setUniqueIdResponse)
+        manager.updateFromSetUniqueIdResponse(setUniqueIdResponse, 0L)
 
         assertEquals(16.toShort(), manager.pulseRate)
         assertEquals(37879809L, manager.uniqueId)

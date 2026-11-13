@@ -1,6 +1,9 @@
 package app.aaps.pump.omnipod.dashctl.session
 
 import app.aaps.pump.omnipod.dashctl.pod.definition.ActivationProgress
+import app.aaps.pump.omnipod.dashctl.pod.definition.BasalProgram
+import app.aaps.pump.omnipod.dashctl.pod.definition.PodStatus
+import app.aaps.pump.omnipod.dashctl.pod.definition.SoftwareVersion
 
 /**
  * Persistent state of a Dash pod pairing/session.
@@ -44,6 +47,52 @@ data class DashPodState(
      * it is null.
      */
     val pulseRate: Short? = null,
+
+    // -- Activation fields (Android `updateFromSetUniqueIdResponse` / `updateFromVersionResponse`) --
+
+    /** Android `PodState.primePulseRate`, from SetUniqueId. */
+    val primePulseRate: Short? = null,
+    /** Android `PodState.firstPrimeBolusVolume`: the clutch drive pulses, from SetUniqueId. */
+    val firstPrimeBolusVolume: Short? = null,
+    /** Android `PodState.secondPrimeBolusVolume`: the prime pulses, from SetUniqueId. */
+    val secondPrimeBolusVolume: Short? = null,
+    /** Android `PodState.podLifeInHours`, from SetUniqueId. The expiry is computed from it. */
+    val podLifeInHours: Short? = null,
+    /** From the Version and the SetUniqueId answers. */
+    val firmwareVersion: SoftwareVersion? = null,
+    /** From the Version and the SetUniqueId answers. */
+    val bleVersion: SoftwareVersion? = null,
+    /** From the Version and the SetUniqueId answers. */
+    val lotNumber: Long? = null,
+    /** From the Version and the SetUniqueId answers. */
+    val podSequenceNumber: Long? = null,
+    /**
+     * Android `PodState.podStatus`: the pod status of the last answer that has one. Unlike
+     * [podStatus], the Version and SetUniqueId answers also set it, as on Android, because they carry
+     * a pod status but not the rest of a status. The activation reads it.
+     */
+    val reportedPodStatus: PodStatus? = null,
+    /**
+     * Android `PodState.activationTime`, epoch ms: set once, by the first default status, to the time
+     * of that status minus its minutes since activation.
+     */
+    val activationTime: Long? = null,
+    /**
+     * Android `PodState.lastUpdatedSystem`, epoch ms: when the last status, Version or SetUniqueId
+     * answer arrived. 0 before the first one. The expiry is computed from it.
+     */
+    val lastUpdatedSystemMs: Long = 0L,
+    /**
+     * Android `PodState.lastBolus`: the last bolus the pod took, kept until the next one. Null before
+     * the first. See [DashLastBolus].
+     */
+    val lastBolus: DashLastBolus? = null,
+    /**
+     * Android `PodState.basalProgram`: the basal program the pod confirmed last (a SUCCESS of a
+     * [DashCommandKind.BASAL_PROGRAM] command). Null before the first one. `isThisProfileSet` compares
+     * a profile with it.
+     */
+    val basalProgram: BasalProgram? = null,
 ) {
 
     init {
@@ -67,7 +116,20 @@ data class DashPodState(
             podStatus == other.podStatus &&
             statusResponseCount == other.statusResponseCount &&
             activeCommand == other.activeCommand &&
-            pulseRate == other.pulseRate
+            pulseRate == other.pulseRate &&
+            primePulseRate == other.primePulseRate &&
+            firstPrimeBolusVolume == other.firstPrimeBolusVolume &&
+            secondPrimeBolusVolume == other.secondPrimeBolusVolume &&
+            podLifeInHours == other.podLifeInHours &&
+            firmwareVersion == other.firmwareVersion &&
+            bleVersion == other.bleVersion &&
+            lotNumber == other.lotNumber &&
+            podSequenceNumber == other.podSequenceNumber &&
+            reportedPodStatus == other.reportedPodStatus &&
+            activationTime == other.activationTime &&
+            lastUpdatedSystemMs == other.lastUpdatedSystemMs &&
+            lastBolus == other.lastBolus &&
+            basalProgram == other.basalProgram
     }
 
     override fun hashCode(): Int {
@@ -81,6 +143,19 @@ data class DashPodState(
         result = 31 * result + statusResponseCount.hashCode()
         result = 31 * result + (activeCommand?.hashCode() ?: 0)
         result = 31 * result + (pulseRate?.hashCode() ?: 0)
+        result = 31 * result + (primePulseRate?.hashCode() ?: 0)
+        result = 31 * result + (firstPrimeBolusVolume?.hashCode() ?: 0)
+        result = 31 * result + (secondPrimeBolusVolume?.hashCode() ?: 0)
+        result = 31 * result + (podLifeInHours?.hashCode() ?: 0)
+        result = 31 * result + (firmwareVersion?.hashCode() ?: 0)
+        result = 31 * result + (bleVersion?.hashCode() ?: 0)
+        result = 31 * result + (lotNumber?.hashCode() ?: 0)
+        result = 31 * result + (podSequenceNumber?.hashCode() ?: 0)
+        result = 31 * result + (reportedPodStatus?.hashCode() ?: 0)
+        result = 31 * result + (activationTime?.hashCode() ?: 0)
+        result = 31 * result + lastUpdatedSystemMs.hashCode()
+        result = 31 * result + (lastBolus?.hashCode() ?: 0)
+        result = 31 * result + (basalProgram?.hashCode() ?: 0)
         return result
     }
 

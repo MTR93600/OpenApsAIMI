@@ -56,6 +56,9 @@ kotlin {
         commonTest {
             dependencies {
                 implementation(kotlin("test"))
+                // Virtual time for the bolus wait (DashBolusWaitTest), on the JVM and on iOS.
+                implementation(project.dependencies.platform(libs.kotlinx.coroutines.bom))
+                implementation(libs.kotlinx.coroutines.test)
             }
         }
 

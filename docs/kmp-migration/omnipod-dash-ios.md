@@ -38,7 +38,7 @@ retried bolus can be delivered twice, or insulin can be counted that never went 
       (`getCommandConfirmationFromState`). Android orders the events with `elapsedRealtime`, which
       starts again at 0 after a reboot while the command is stored; here a stored count of status
       answers does that job.
-- [x] Stored in the Keychain with the key (codec v2, still reads v1), so an open command survives a
+- [x] Stored in the Keychain with the key (codec v7 today, still reads v1 to v6), so an open command survives a
       crash or a restart of the app.
 - [x] `IosDashPump` refuses a delivery command while one is open, stops included as on Android
       (a stop would become the last programming command and hide what happened to the open one),
@@ -92,10 +92,90 @@ missing layer. So the layer is ported first, as is, and the rest is rebuilt on i
       `onCommandDecided`, so a bolus the pod took after a lost answer is still recorded. Deliberate
       difference from Android: before a delivery command whose 4-bit sequence equals the last one the
       pod reports, a status is read first (Android can take an old command for the new one there).
-- Still to do before a pod: a link owner per BLE connection (today a new `IosDashPump` per
-  connection), cancel a running temp basal before a new one, follow a bolus to its end (progress and
-  cancel), call `getPumpStatus` from the queue/plugin, beeps from the user settings, and the
-  activation fields (prime rates and volumes) in the stored state.
+- [x] Step 5 (same, 2026-11-13): one link per BLE connection. `DashPodConnection` (commonMain) owns
+      the link across connections: for each one a new `DashBleLink` and `MessageIO`, `prepare()`, the
+      link given to the pump (`attachLink`), then the session from outer counter 1 when the pod is
+      paired (Android `SharedBleManager.connect`). Events go to the current link only. `IosDashPump`
+      and its `DashPodStateManager` live on: the 4-bit sequence, the EAP SQN and an open command stay,
+      and an open command from before a drop still blocks new delivery commands until a status
+      decides it. A command on a lost, closed or replaced link is refused and sends nothing. A failed
+      link set up or session cancels the BLE connection (`BleCentral.cancel`, Android
+      `disconnect(false)`); closing an old link never cancels a newer one. A replaced or closed link
+      is retired (`DashBleLink.retire`): it writes nothing more, as Android sets `msgIO` to null.
+      One at a time, as Android's busy flag: `connect`, every command, `pair` and `establishSession`
+      hold the `commandMutex` of the pump. `connect` does not wait for it (`tryLockLink`) and returns
+      `Busy`, as Android `BusyException`, so a connect from inside a command is refused, never a
+      dead lock. `IosDashPump.runActivation` is Android `activationRunning`: while it runs, `isBusy()`
+      is true and `disconnect()` is ignored (#5219), so the queue cannot break a pairing.
+      Open: `DashPodConnection.connect` runs on a peripheral that is already connected; making the
+      BLE connection (held connect, restore identifier) is phase 3. `IosDashPump.connect(reason)` does
+      nothing until then, so after a drop every command is refused (fail closed) until the central
+      owner connects again. When the manager is ported, connect before each operation as Android
+      `observeConnectToPod`, outside the command lock, one after the other (also in the 2 s bolus
+      wait loop). Android's `connectionAttempts` / `successfulConnections` counters (UI only)
+      are not kept.
+- [x] Step 6 (same, 2026-11-13): the activation fields in the stored state. `DashPodState` keeps
+      what Android `updateFromVersionResponse` and `updateFromSetUniqueIdResponse` store: prime pulse
+      rate, the two prime volumes, pod life in hours, firmware and BLE versions, lot, pod sequence
+      number, the pod status of the answer (`reportedPodStatus`, Android `podStatus`; `podStatus`
+      stays the full last status), and `lastUpdatedSystemMs` (Android `lastUpdatedSystem`). The first
+      default status sets `activationTime` (an alarm status does not, as Android).
+      `DashPodStateManager.expiryMs` is Android `expiry` (pod life - 8 h from the activation).
+      `IosDashPump` now routes a Version answer to `updateFromVersionResponse` and a default status to
+      `updateFromDefaultStatus`. The codec writes version 4 (v3 + the activation part); v1, v2 and
+      the v3 bytes of 2026-11-13 are still read (pinned by hand), with no activation fields: nothing is
+      guessed from the stored status. Truncated bytes, a trailing byte or an unknown activation flag
+      fail closed. Tests: `DashPodStateCodecVersionsTest` and `DashPodActivationFieldsTest`
+      (commonTest, 10 + 10). Not stored, as decided: time zone fields (Android ignores a time zone or
+      DST change too), the alert settings (they come with the alerts, phase 2 step 7 of the next run).
+- [x] Step 7 (same, 2026-11-13): a temp basal like Android. `setTempBasalAbsolute` cancels a
+      running temp basal first (`observeNoActiveTempBasal`), decided on the last status known; with
+      no status yet the cancel is sent, as Android. Cancel and new temp basal each have their own
+      active command and outcome. The new one goes after a confirmed or a denied cancel, and is not
+      sent when the cancel is not confirmed (it stays open, every delivery command is refused until a
+      status) or never left the phone. Tests: `IosDashPumpTempBasalTest` (iosTest, 9: order and
+      Android bytes, no status, lost answer to either command, NAK, send failure, denied cancel, an
+      open command before). Deliberate difference: a temp basal or cancel sent but not confirmed is
+      a failure (fail closed); Android reports success with a notification.
+      Each active command keeps the time it was made (`createdAtMs`, Android `createdAt`, codec
+      version 4), so an outcome decided late is still recorded at the send time.
+      Open: `PumpSync` recording at send time (Android `pumpSyncTempBasal`) and the stored
+      `tempBasal` of Android (`tempBasalActive`, the "nothing to cancel" shortcut of
+      `cancelTempBasal`) are plugin work (phase 4); `observePodRunning` comes with the activation.
+- [x] Step 8 (same, 2026-11-13): a bolus followed to its end. After a SUCCESS bolus,
+      `DashBolusWait` (commonMain) waits as Android `waitForBolusDeliveryToComplete` (estimate, then
+      up to 5 status reads every 2 s or after the time the rest should take) and shows the progress
+      in `BolusProgressData`. A stop (`stopBolusDelivering`) only sets a flag; the wait sends the stop
+      of the bolus. The last bolus is stored (codec version 4), so a crash during the wait keeps what
+      is needed to count it; delivered = asked - left, as `LastBolus.markComplete`, and a confirmed
+      stop gives `endedBolus` to `onCommandDecided`. Tests: `DashBolusWaitTest`, `DashLastBolusTest`,
+      `IosDashPumpBolusTest`. Deliberate differences: no wait after a bolus that is not SUCCESS
+      (except a stop asked during the send: a status is read first, as Android, and the stop is sent
+      when the pod took the bolus), an ended bolus does not change, units left out of range count
+      the whole bolus, a bolus the pod stopped itself is ended and counted. Review fixes: closing a
+      command and changing the last bolus are one write (`resolveActiveCommand(nowMs)`), so a crash
+      between them cannot lose the bolus.
+      Open: reservoir check (activation), reconnect inside the wait (phase 3), a stop whose answer
+      is lost counts the whole bolus as Android (live or after a crash; never less than went in,
+      pinned), a bolus the pod ended itself with units left (fault) is corrected only in the result,
+      not in an outcome (`checkPodKaput`, step 8 of the next run), `PumpSync` (phase 4).
+- [x] Step 9 (same, 2026-11-13): the basal program. `setNewBasalProfile` as Android: nothing
+      before the activation is completed, a suspend first unless the last status shows delivery
+      suspended (own active command, `SUSPEND_DELIVERY`), then `ProgramBasalCommand` built from
+      `mapProfileToBasalProgram` (the Android mapper) with its own active command that carries the
+      program. A confirmed program becomes the running one in the same write that closes the command,
+      stored (codec version 4). `isThisProfileSet` as Android. Tests: `ProfileToBasalProgramTest`
+      (Android mapper tests and an Android byte vector), `DashBasalProgramStateTest`,
+      `IosDashPumpBasalProgramTest`. Deliberate differences: a refused program is a failure (Android
+      reports success while the pod, just suspended, has no basal); a profile that cannot be mapped is
+      a failure instead of an exception; a confirmed suspend (or stop of all delivery) ends a bolus
+      still running, with what its answer left, and gives it as `endedBolus` (Android leaves it open,
+      so the next status counts all of it). After review, `isSuspended()` reads the last status, as
+      Android (it was always false). Open: `observePodRunning` (activation), `PumpSync` and
+      `EventProfileChangeRequested` on a late success (phase 4), `baseBasalRate` and `deliveredBasal`
+      from the program, time zone and DST changes ignored as Android.
+- Still to do before a pod: call `getPumpStatus` from the queue/plugin, beeps from the user
+  settings.
 
 - [ ] Activation in two parts (unique id, alerts, prime, basal program, cannula), deactivation,
       suspend and resume, alerts and their silencing, beeps.

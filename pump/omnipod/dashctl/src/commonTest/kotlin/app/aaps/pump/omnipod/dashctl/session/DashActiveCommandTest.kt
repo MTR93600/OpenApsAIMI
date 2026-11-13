@@ -105,27 +105,27 @@ class DashActiveCommandTest {
     @Test
     fun `a second command is refused while the first is not confirmed`() {
         val m = manager()
-        m.createActiveCommand(DashCommandKind.BOLUS, historyId = 1, requestedBolusUnits = 5.0)
+        m.createActiveCommand(DashCommandKind.BOLUS, historyId = 1, createdAtMs = 0L, requestedBolusUnits = 5.0)
         m.markActiveCommandSent()
-        assertFailsWith<DashCommandNotConfirmedException> { m.createActiveCommand(DashCommandKind.BOLUS, historyId = 2) }
+        assertFailsWith<DashCommandNotConfirmedException> { m.createActiveCommand(DashCommandKind.BOLUS, historyId = 2, createdAtMs = 0L) }
     }
 
     @Test
     fun `the command takes the sequence number it is built with`() {
         val m = manager()
         repeat(9) { m.increaseMessageSequenceNumber() }
-        assertEquals(9, m.createActiveCommand(DashCommandKind.TEMP_BASAL, historyId = 1).sequence)
+        assertEquals(9, m.createActiveCommand(DashCommandKind.TEMP_BASAL, historyId = 1, createdAtMs = 0L).sequence)
     }
 
     @Test
     fun `a confirming status closes the command as success`() {
         val m = manager()
         repeat(9) { m.increaseMessageSequenceNumber() }
-        m.createActiveCommand(DashCommandKind.BOLUS, historyId = 7, requestedBolusUnits = 5.0)
+        m.createActiveCommand(DashCommandKind.BOLUS, historyId = 7, createdAtMs = 0L, requestedBolusUnits = 5.0)
         m.markActiveCommandSent()
         m.updateFromStatus(status(lastSequence = 9))
 
-        val (confirmation, command) = m.resolveActiveCommand()
+        val (confirmation, command) = m.resolveActiveCommand(nowMs = 0L)
         assertEquals(DashCommandConfirmation.SUCCESS, confirmation)
         assertEquals(7L, command?.historyId)
         assertEquals(5.0, command?.requestedBolusUnits)
@@ -135,21 +135,21 @@ class DashActiveCommandTest {
     @Test
     fun `without a status the command stays open`() {
         val m = manager()
-        m.createActiveCommand(DashCommandKind.BOLUS, historyId = 1)
+        m.createActiveCommand(DashCommandKind.BOLUS, historyId = 1, createdAtMs = 0L)
         m.markActiveCommandSent()
 
-        assertEquals(DashCommandConfirmation.NOT_CONFIRMED, m.resolveActiveCommand().first)
+        assertEquals(DashCommandConfirmation.NOT_CONFIRMED, m.resolveActiveCommand(nowMs = 0L).confirmation)
         assertNotNull(m.activeCommand)
     }
 
     @Test
     fun `a write that failed closes the command as not delivered`() {
         val m = manager()
-        m.createActiveCommand(DashCommandKind.BOLUS, historyId = 1)
+        m.createActiveCommand(DashCommandKind.BOLUS, historyId = 1, createdAtMs = 0L)
         m.markActiveCommandSent()
         m.markActiveCommandNotSent()
 
-        assertEquals(DashCommandConfirmation.SENDING_FAILURE, m.resolveActiveCommand().first)
+        assertEquals(DashCommandConfirmation.SENDING_FAILURE, m.resolveActiveCommand(nowMs = 0L).confirmation)
         assertNull(m.activeCommand)
     }
 
@@ -157,7 +157,7 @@ class DashActiveCommandTest {
     fun `the open command is stored before any byte goes`() {
         val store = MemoryStore()
         val m = manager(store)
-        m.createActiveCommand(DashCommandKind.BOLUS, historyId = 1)
+        m.createActiveCommand(DashCommandKind.BOLUS, historyId = 1, createdAtMs = 0L)
         assertNotNull(store.saved?.activeCommand)
         m.markActiveCommandSent()
         assertTrue(store.saved?.activeCommand?.sent == true)
@@ -168,12 +168,41 @@ class DashActiveCommandTest {
     fun `an open command survives a restart`() {
         val store = MemoryStore()
         manager(store).run {
-            createActiveCommand(DashCommandKind.BOLUS, historyId = 1, requestedBolusUnits = 3.0)
+            createActiveCommand(DashCommandKind.BOLUS, historyId = 1, createdAtMs = 0L, requestedBolusUnits = 3.0)
             markActiveCommandSent()
         }
         val restarted = manager(store)
         assertEquals(DashCommandConfirmation.NOT_CONFIRMED, restarted.commandConfirmation())
-        assertFailsWith<DashCommandNotConfirmedException> { restarted.createActiveCommand(DashCommandKind.BOLUS, historyId = 2) }
+        assertFailsWith<DashCommandNotConfirmedException> { restarted.createActiveCommand(DashCommandKind.BOLUS, historyId = 2, createdAtMs = 0L) }
+    }
+
+    /**
+     * Android records a temp basal start or stop at the `createdAt` of its history record, the time the
+     * command was made. The closed command still carries that time, not the time of the status.
+     */
+    @Test
+    fun `the closed command keeps the time it was made`() {
+        val m = manager()
+        m.createActiveCommand(DashCommandKind.STOP_TEMP_BASAL, historyId = 1, createdAtMs = 36_000_000L)
+        m.markActiveCommandSent()
+        m.updateFromStatus(status(lastSequence = 0))
+
+        val (confirmation, command) = m.resolveActiveCommand(nowMs = 0L)
+        assertEquals(DashCommandConfirmation.SUCCESS, confirmation)
+        assertEquals(36_000_000L, command?.createdAtMs)
+    }
+
+    /** The app is killed with the command open: the time it was made comes back from the stored bytes. */
+    @Test
+    fun `the time a command was made survives a restart through the codec`() {
+        val store = MemoryStore()
+        manager(store).run {
+            createActiveCommand(DashCommandKind.TEMP_BASAL, historyId = 1, createdAtMs = 36_000_000L, tempBasalRate = 0.0, tempBasalMinutes = 60)
+            markActiveCommandSent()
+        }
+        store.saved = DashPodStateCodec.decode(DashPodStateCodec.encode(assertNotNull(store.saved)))
+
+        assertEquals(36_000_000L, manager(store).activeCommand?.createdAtMs)
     }
 
     @Test
