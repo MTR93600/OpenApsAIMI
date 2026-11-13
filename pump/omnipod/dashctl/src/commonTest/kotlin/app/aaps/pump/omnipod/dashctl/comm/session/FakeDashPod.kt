@@ -431,7 +431,10 @@ internal class FakeDashPod(
         val length = (plain[prefix.size].toInt() and 0xff shl 8) or (plain[prefix.size + 1].toInt() and 0xff)
         if (length != plain.size - prefix.size - 2 - suffix.size) return problem("Envelope length $length does not fit ${plain.toParityHex()}")
         val command = plain.copyOfRange(prefix.size + 2, prefix.size + 2 + length)
-        if (!command.copyOfRange(0, 4).contentEquals(podId!!.address)) {
+        // GetVersion (0x07) and SetUniqueId (0x03) go to the unique id ffffffff, as on Android.
+        val toAnyPod = command.size > 6 && (command[6] == 0x07.toByte() || command[6] == 0x03.toByte()) &&
+            command.copyOfRange(0, 4).all { it == 0xff.toByte() }
+        if (!toAnyPod && !command.copyOfRange(0, 4).contentEquals(podId!!.address)) {
             return problem("Command for unique id ${command.copyOfRange(0, 4).toParityHex()}, pod is $podId")
         }
         val crc = MessageUtil.createCrc(command.copyOfRange(0, command.size - 2))

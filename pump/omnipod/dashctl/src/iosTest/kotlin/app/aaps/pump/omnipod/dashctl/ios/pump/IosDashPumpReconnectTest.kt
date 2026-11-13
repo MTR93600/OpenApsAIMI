@@ -151,6 +151,8 @@ class IosDashPumpReconnectTest {
                 f.pod.fromPhone.map { it.sequenceNumber.toInt() },
                 "the session starts from the outer counter of the pair result, as without a disconnect"
             )
+            // The bolus needs an activated pod (Android `observePodRunning`); the activation is not run here.
+            f.markActivated()
             assertTrue(f.pump.deliverTreatment(bolus(1.0)).success)
 
             f.pump.disconnect("idle")

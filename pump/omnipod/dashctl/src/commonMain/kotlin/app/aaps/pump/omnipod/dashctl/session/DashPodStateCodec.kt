@@ -52,10 +52,12 @@ import app.aaps.pump.omnipod.dashctl.pod.util.byValue
  *   unit per hour. The values are not checked when read: whatever the encoder wrote reads back the
  *   same, because a state that does not decode loses the pod key. The program comes from
  *   `mapProfileToBasalProgram`, which gives 1 to 48 segments with slots 0..48.
+ * - the activation step in flight ([DashPodState.activationStepInFlight]): u8 present (0 or 1); if
+ *   so: u8 activation progress ordinal, which must be PRIMING or INSERTING_CANNULA.
  *
  * Versions 1 to 3 are still read, so a pod paired before keeps its key and its open command. They
- * have none of the version 4 fields: the activation fields stay null (and
- * [DashPodState.lastUpdatedSystemMs] 0) until the next answer sets them, the command time stays
+ * have none of the version 4 fields: the activation fields and the activation step in flight stay
+ * null (and [DashPodState.lastUpdatedSystemMs] 0) until the next answer sets them, the command time stays
  * null (unknown), the last bolus stays null until the next bolus, and both basal programs stay null
  * (Android parity for a pod with no confirmed program: `isThisProfileSet` is then false, and the
  * next profile is sent). Nothing is guessed from the stored status. Anything malformed throws: the
@@ -185,6 +187,10 @@ object DashPodStateCodec {
 
         out.basalProgram(command?.basalProgram)
         out.basalProgram(state.basalProgram)
+
+        val inFlight = state.activationStepInFlight
+        out.u8(if (inFlight != null) 1 else 0)
+        if (inFlight != null) out.u8(inFlight.ordinal)
         return out.toByteArray()
     }
 
@@ -267,6 +273,13 @@ object DashPodStateCodec {
             }
             if (inp.flag("basal program")) basalProgram = readBasalProgram(inp)
         }
+        var inFlight: ActivationProgress? = null
+        if (version >= VERSION_4 && inp.flag("activation step in flight")) {
+            val ordinal = inp.u8()
+            inFlight = ActivationProgress.entries.getOrNull(ordinal)
+                ?.takeIf { it in DashPodState.STEPS_WITH_A_BOLUS }
+                ?: throw IllegalArgumentException("bad activation step in flight $ordinal")
+        }
         require(inp.atEnd()) { "trailing bytes" }
         return DashPodState(
             ltk = ltk,
@@ -292,6 +305,7 @@ object DashPodStateCodec {
             lastUpdatedSystemMs = activation.lastUpdatedSystemMs,
             lastBolus = lastBolus,
             basalProgram = basalProgram,
+            activationStepInFlight = inFlight,
         )
     }
 

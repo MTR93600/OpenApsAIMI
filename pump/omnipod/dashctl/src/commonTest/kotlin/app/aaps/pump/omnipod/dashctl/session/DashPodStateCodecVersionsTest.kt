@@ -77,12 +77,16 @@ class DashPodStateCodecVersionsTest {
             createdAtMs = 0x0000018000001000L,
         ),
         basalProgram = BasalProgram(listOf(BasalProgram.Segment(0, 48, 100))),
+        activationStepInFlight = ActivationProgress.INSERTING_CANNULA,
     )
 
-    private val v4Bytes = parityHex("04" + V3_BODY + ACTIVATION_PART + COMMAND_TIME_AND_BOLUS_PART + PROGRAMS_PART)
+    private val v4Bytes = parityHex("04" + V3_BODY + ACTIVATION_PART + COMMAND_TIME_AND_BOLUS_PART + PROGRAMS_PART + IN_FLIGHT_PART)
 
-    /** A full version 4 state with no basal program: the last bolus part ends 2 bytes before the end. */
-    private val v4BytesWithoutPrograms = parityHex("04" + V3_BODY + ACTIVATION_PART + COMMAND_TIME_AND_BOLUS_PART + "00" + "00")
+    /**
+     * A full version 4 state with no basal program and no step in flight: the last bolus part ends 3
+     * bytes before the end.
+     */
+    private val v4BytesWithoutPrograms = parityHex("04" + V3_BODY + ACTIVATION_PART + COMMAND_TIME_AND_BOLUS_PART + "00" + "00" + "00")
 
     @Test
     fun `the version 3 bytes of 2026-11-13 still decode`() {
@@ -144,18 +148,20 @@ class DashPodStateCodecVersionsTest {
     @Test
     fun `a command basal program without a command fails closed`() {
         val bytes = DashPodStateCodec.encode(DashPodState())
-        // Empty state: the last two bytes are the command program flag and the running program flag.
-        val withProgram = bytes.copyOf(bytes.size - 2) + parityHex("01" + "0001" + "00" + "30" + "00000064" + "00")
+        // Empty state: the last three bytes are the command program flag, the running program flag
+        // and the step in flight flag.
+        val withProgram = bytes.copyOf(bytes.size - 3) + parityHex("01" + "0001" + "00" + "30" + "00000064" + "00" + "00")
         assertFailsWith<IllegalArgumentException> { DashPodStateCodec.decode(withProgram) }
     }
 
     @Test
     fun `an unknown basal program flag fails closed`() {
         val bytes = DashPodStateCodec.encode(DashPodState())
-        bytes[bytes.size - 1] = 2
+        // Empty state: the two program flags, then the step in flight flag.
+        bytes[bytes.size - 2] = 2
         assertFailsWith<IllegalArgumentException> { DashPodStateCodec.decode(bytes) }
         val command = DashPodStateCodec.encode(DashPodState())
-        command[command.size - 2] = 2
+        command[command.size - 3] = 2
         assertFailsWith<IllegalArgumentException> { DashPodStateCodec.decode(command) }
     }
 
@@ -176,16 +182,17 @@ class DashPodStateCodecVersionsTest {
     @Test
     fun `an unknown last bolus flag fails closed`() {
         val bytes = DashPodStateCodec.encode(DashPodState())
-        // Empty state: the last bolus flag, then the two basal program flags.
-        bytes[bytes.size - 3] = 2
+        // Empty state: the last bolus flag, then the two basal program flags and the step in flight flag.
+        bytes[bytes.size - 4] = 2
         assertFailsWith<IllegalArgumentException> { DashPodStateCodec.decode(bytes) }
     }
 
     @Test
     fun `an unknown bolus complete flag fails closed`() {
         val bytes = v4BytesWithoutPrograms.copyOf()
-        // From the end: the two program flags (2), the bolus time (8), its flag (1), historyId (8).
-        bytes[bytes.size - 2 - 8 - 1 - 8 - 1] = 2
+        // From the end: the step in flight flag (1), the two program flags (2), the bolus time (8), its
+        // flag (1), historyId (8).
+        bytes[bytes.size - 1 - 2 - 8 - 1 - 8 - 1] = 2
         assertFailsWith<IllegalArgumentException> { DashPodStateCodec.decode(bytes) }
     }
 
@@ -193,18 +200,19 @@ class DashPodStateCodecVersionsTest {
     fun `a command time without a command fails closed`() {
         val bytes = DashPodStateCodec.encode(DashPodState())
         // Empty state: the command time flag (0), the last bolus flag (0), the two basal program
-        // flags (0). Say a time follows.
-        val withTime = bytes.copyOf(bytes.size - 3) + parityHex("0000000000000001" + "000000")
-        withTime[bytes.size - 4] = 1
+        // flags (0), the step in flight flag (0). Say a time follows.
+        val withTime = bytes.copyOf(bytes.size - 4) + parityHex("0000000000000001" + "00000000")
+        withTime[bytes.size - 5] = 1
         assertFailsWith<IllegalArgumentException> { DashPodStateCodec.decode(withTime) }
     }
 
     @Test
     fun `an unknown command time flag fails closed`() {
-        val bytes = parityHex("04" + V3_BODY + ACTIVATION_PART + "01" + "0000018000001000" + "00" + "00" + "00")
+        val bytes = parityHex("04" + V3_BODY + ACTIVATION_PART + "01" + "0000018000001000" + "00" + "00" + "00" + "00")
         assertEquals(v3State.activeCommand?.copy(createdAtMs = 0x0000018000001000L), DashPodStateCodec.decode(bytes).activeCommand)
-        // From the end: the two program flags and the last bolus flag (3), the time (8), then the flag.
-        bytes[bytes.size - 3 - 8 - 1] = 2
+        // From the end: the step in flight flag, the two program flags and the last bolus flag (4),
+        // the time (8), then the flag.
+        bytes[bytes.size - 4 - 8 - 1] = 2
         assertFailsWith<IllegalArgumentException> { DashPodStateCodec.decode(bytes) }
     }
 
@@ -230,10 +238,41 @@ class DashPodStateCodecVersionsTest {
     fun `an unknown activation flag fails closed`() {
         val bytes = DashPodStateCodec.encode(DashPodState())
         // Empty state: the activation flags are the u16 before the last u64, the command time flag,
-        // the last bolus flag and the two basal program flags.
-        val flagsAt = bytes.size - 2 - 1 - 1 - 8 - 2
+        // the last bolus flag, the two basal program flags and the step in flight flag.
+        val flagsAt = bytes.size - 1 - 2 - 1 - 1 - 8 - 2
         bytes[flagsAt] = 0x04
         assertFailsWith<IllegalArgumentException> { DashPodStateCodec.decode(bytes) }
+    }
+
+    @Test
+    fun `each activation step in flight roundtrips`() {
+        listOf(ActivationProgress.PRIMING, ActivationProgress.INSERTING_CANNULA).forEach {
+            val state = DashPodState(activationStepInFlight = it)
+            assertEquals(state, DashPodStateCodec.decode(DashPodStateCodec.encode(state)))
+        }
+    }
+
+    @Test
+    fun `a step in flight that sends no bolus fails closed`() {
+        val bytes = DashPodStateCodec.encode(DashPodState(activationStepInFlight = ActivationProgress.PRIMING))
+        // The last byte is the ordinal of the step. GOT_POD_VERSION (1) sends no bolus; 13 is no step.
+        listOf(1, 13).forEach { ordinal ->
+            val bad = bytes.copyOf()
+            bad[bad.size - 1] = ordinal.toByte()
+            assertFailsWith<IllegalArgumentException>("ordinal $ordinal") { DashPodStateCodec.decode(bad) }
+        }
+    }
+
+    @Test
+    fun `an unknown step in flight flag fails closed`() {
+        val bytes = DashPodStateCodec.encode(DashPodState())
+        bytes[bytes.size - 1] = 2
+        assertFailsWith<IllegalArgumentException> { DashPodStateCodec.decode(bytes) }
+    }
+
+    @Test
+    fun `a version 3 state has no step in flight`() {
+        assertNull(DashPodStateCodec.decode(v3Bytes).activationStepInFlight)
     }
 
     private companion object {
@@ -286,5 +325,9 @@ class DashPodStateCodecVersionsTest {
                 "0a" + "30" + "00000131" + // slots 10..48, 3.05 U/h
                 "01" + "0001" + // running program present, 1 segment
                 "00" + "30" + "00000064" // slots 0..48, 1.00 U/h
+
+        /** The activation step in flight of [v4State], after [PROGRAMS_PART]. */
+        const val IN_FLIGHT_PART =
+            "01" + "0a" // present, INSERTING_CANNULA (ordinal 10)
     }
 }

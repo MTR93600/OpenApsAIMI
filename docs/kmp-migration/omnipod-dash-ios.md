@@ -8,7 +8,7 @@ taking the same dosing decisions.
 Reference for the iPhone side: OmniBLE (`github.com/loopandlearn/OmniBLE`), the Dash driver of Trio
 and Loop.
 
-## Where it stands (2026-11-12)
+## Where it stands (2026-11-13)
 
 `dashctl` (Kotlin Multiplatform, D1–D4, October) holds:
 
@@ -38,7 +38,7 @@ retried bolus can be delivered twice, or insulin can be counted that never went 
       (`getCommandConfirmationFromState`). Android orders the events with `elapsedRealtime`, which
       starts again at 0 after a reboot while the command is stored; here a stored count of status
       answers does that job.
-- [x] Stored in the Keychain with the key (codec v7 today, still reads v1 to v6), so an open command survives a
+- [x] Stored in the Keychain with the key (codec v4 today, still reads v1 to v3), so an open command survives a
       crash or a restart of the app.
 - [x] `IosDashPump` refuses a delivery command while one is open, stops included as on Android
       (a stop would become the last programming command and hide what happened to the open one),
@@ -174,11 +174,28 @@ missing layer. So the layer is ported first, as is, and the rest is rebuilt on i
       Android (it was always false). Open: `observePodRunning` (activation), `PumpSync` and
       `EventProfileChangeRequested` on a late success (phase 4), `baseBasalRate` and `deliveredBasal`
       from the program, time zone and DST changes ignored as Android.
+- [x] Step 10 (same, 2026-11-13): the activation in two parts. `DashActivation` (commonMain) runs
+      Android `activatePodPart1` and `activatePodPart2` in Android order with the Android values
+      (version, unique id, low reservoir and lump of coal alerts, prime and its check, basal program,
+      expiration alerts, cannula and its check), storing the `ActivationProgress` after each step,
+      so a call after a crash or an error resumes there. `IosDashPump.activatePodPart1/2` run it as
+      one activation; part 1 pairs a new pod on the link of the connection first (Android
+      `pairNewPod`). `recoverActivationFromPodStatus` as Android (on `reportedPodStatus`), called by
+      `getPumpStatus` before the activation is completed (which, as Android, reads only when the
+      user asks, and never before SET_UNIQUE_ID), and only on a status that read stored (not after
+      a NAK). Delivery commands are refused until the pod is activated and runs
+      (`observePodRunning`); the stop of all delivery is not held back. Tests:
+      `DashActivationTest` (JVM and iOS, including a crash after every write of a full activation),
+      `IosDashPumpActivationTest` (Android bytes in Android order from `LinkReady`, crashes around the
+      prime and the cannula). Deliberate differences: the prime and the cannula bolus are marked in
+      the stored state before they go, and a later call reads a status before sending them again
+      (only a real status decides, a NAK stops it), so neither goes twice (Android sends them again); the program the pod took is the running program
+      from PROGRAMMED_BASAL on. Open: connect before each step (phase 3), alert settings stored
+      (next step), history and `PumpSync` after part 2 (phase 4), the reservoir check of a bolus.
 - Still to do before a pod: call `getPumpStatus` from the queue/plugin, beeps from the user
   settings.
 
-- [ ] Activation in two parts (unique id, alerts, prime, basal program, cannula), deactivation,
-      suspend and resume, alerts and their silencing, beeps.
+- [ ] Deactivation, suspend and resume, alerts and their silencing, beeps.
 - [ ] Time and time zone: the basal program runs on pod time.
 - [ ] Pod history, used to record what was confirmed in `PumpSync`.
 

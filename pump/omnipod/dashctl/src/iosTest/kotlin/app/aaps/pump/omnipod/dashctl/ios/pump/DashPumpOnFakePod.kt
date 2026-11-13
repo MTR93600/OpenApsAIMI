@@ -10,10 +10,15 @@ import app.aaps.pump.omnipod.dashctl.comm.session.CountingRandomBytes
 import app.aaps.pump.omnipod.dashctl.comm.session.FakeDashPod
 import app.aaps.pump.omnipod.dashctl.comm.session.FakeDashPod.PodKeys
 import app.aaps.pump.omnipod.dashctl.crypto.DashKeyExchange
+import app.aaps.pump.omnipod.dashctl.driver.ActivatingPodModel
+import app.aaps.pump.omnipod.dashctl.driver.ActivatingPodModel.Companion.podDefaultStatus
+import app.aaps.pump.omnipod.dashctl.driver.SimulatedCrash
 import app.aaps.pump.omnipod.dashctl.ios.crypto.IosAesCmac
 import app.aaps.pump.omnipod.dashctl.ios.crypto.IosX25519Dh
 import app.aaps.pump.omnipod.dashctl.parity.parityHex
 import app.aaps.pump.omnipod.dashctl.pod.command.base.CommandType
+import app.aaps.pump.omnipod.dashctl.pod.definition.ActivationProgress
+import app.aaps.pump.omnipod.dashctl.pod.definition.PodStatus
 import app.aaps.pump.omnipod.dashctl.pod.response.SetUniqueIdResponse
 import app.aaps.pump.omnipod.dashctl.session.DashPodState
 import app.aaps.pump.omnipod.dashctl.session.DashPodStateManager
@@ -26,10 +31,17 @@ internal class MemoryDashPodStateStore : DashPodStateStore {
 
     /** Every state written, in order: what a crash between two writes would leave in the store. */
     val history = mutableListOf<DashPodState>()
+
+    /** When it gives true for a state just written, the app stops there ([SimulatedCrash]). */
+    var crashWhen: ((DashPodState) -> Boolean)? = null
     override fun load(): DashPodState? = saved
     override fun save(state: DashPodState) {
         saved = state
         history += state
+        if (crashWhen?.invoke(state) == true) {
+            crashWhen = null
+            throw SimulatedCrash()
+        }
     }
 
     override fun clear() {
@@ -137,6 +149,11 @@ internal class DashPumpOnFakePod(
         answerWithStatus()
     }
 
+    /** The pod answers as a new pod being activated ([ActivatingPodModel]). */
+    fun answerAsActivatingPod(model: ActivatingPodModel) {
+        pod.answerFor = model::answer
+    }
+
     /** The pod answers each command with a default status (Android `DefaultStatusResponse`). */
     fun answerWithStatus() {
         pod.answerFor = { command ->
@@ -198,8 +215,11 @@ internal class DashPumpOnFakePod(
     /**
      * Fresh pairing with [podAddress] (null: the default `pair()`, the Android id), the SetUniqueId
      * answer of the Android test (pulse rate 16, unique id 0x02420001), then a session, then
-     * connected. The activation is not ported yet, so its SetUniqueId answer is given to the state
-     * directly.
+     * connected. The SetUniqueId answer is given to the state directly, without the activation.
+     *
+     * [activated]: the state is then the one of a pod whose activation is completed and that runs
+     * (COMPLETED, pod status RUNNING_ABOVE_MIN_VOLUME), so delivery commands may go
+     * (`observePodRunning`). The activation itself is tested in `IosDashPumpActivationTest`.
      *
      * [pulseRateBeforePairing]: the SetUniqueId answer is given before pairing, so pairing writes
      * the unique id last and the session and the commands use the id pairing stored. For tests that
@@ -209,12 +229,21 @@ internal class DashPumpOnFakePod(
         podAddress: ByteArray? = POD_ADDRESS,
         withPulseRate: Boolean = true,
         pulseRateBeforePairing: Boolean = false,
+        activated: Boolean = true,
     ) {
         val setUniqueId = SetUniqueIdResponse(parityHex(SET_UNIQUE_ID_RESPONSE))
         if (withPulseRate && pulseRateBeforePairing) stateManager.updateFromSetUniqueIdResponse(setUniqueId, 0L)
         if (podAddress == null) pump.pair() else pump.pair(podAddress)
         if (withPulseRate && !pulseRateBeforePairing) stateManager.updateFromSetUniqueIdResponse(setUniqueId, 0L)
         pump.establishSession()
+        if (activated) markActivated()
+    }
+
+    /** The state of a pod whose activation is completed and that runs, without running the activation. */
+    fun markActivated() {
+        stateManager.overwriteForTest {
+            it.copy(activationProgress = ActivationProgress.COMPLETED, reportedPodStatus = PodStatus.RUNNING_ABOVE_MIN_VOLUME)
+        }
     }
 
     /** A new link on the current fake central; the pod log is marked so [writesFromPump] starts after the set up. */
@@ -237,10 +266,10 @@ internal class DashPumpOnFakePod(
         const val PDM_NONCE = "000102030405060708090a0b0c0d0e0f"
 
         /** Android `SetUniqueIdResponseTest`: pulse rate 16, unique id 37879809 (0x02420001). */
-        const val SET_UNIQUE_ID_RESPONSE = "011B13881008340A50040A00010300040308146CC1000954D402420001"
+        const val SET_UNIQUE_ID_RESPONSE = ActivatingPodModel.SET_UNIQUE_ID_RESPONSE
 
         /** The delivery status of the Android capture (0, `SUSPENDED`): no temp basal. */
-        const val CAPTURE_DELIVERY = 0x0
+        const val CAPTURE_DELIVERY = ActivatingPodModel.CAPTURE_DELIVERY
 
         /** `DeliveryStatus.BASAL_ACTIVE`. */
         const val BASAL_ACTIVE = 0x1
@@ -289,16 +318,13 @@ internal class DashPumpOnFakePod(
             command.size > 12 && command[6] == CommandType.STOP_DELIVERY.value && (command[12].toInt() and bit) != 0
 
         /**
-         * A default status (the layout of `DefaultStatusResponse`): the Android capture
-         * `1d050016b00000000bff` with the last programming sequence, the bolus pulses left and the
-         * delivery status (high nibble of byte 1) set.
+         * A default status of a running pod ([podDefaultStatus] with RUNNING_ABOVE_MIN_VOLUME): the
+         * Android capture `1d050016b00000000bff` with the last programming sequence, the bolus pulses
+         * left and the delivery status (high nibble of byte 1) set. The capture itself says
+         * CLUTCH_DRIVE_ENGAGED, a pod in the middle of its activation, to which no delivery command
+         * may go (`observePodRunning`).
          */
-        fun defaultStatus(lastProgrammingSequence: Int, bolusPulsesRemaining: Int = 0, deliveryStatus: Int = CAPTURE_DELIVERY): ByteArray {
-            val totalPulses = 0x2d
-            val first = (totalPulses shl 15) or ((lastProgrammingSequence and 0x0f) shl 11) or (bolusPulsesRemaining and 0x7ff)
-            return byteArrayOf(0x1d, ((deliveryStatus and 0x0f) shl 4 or 0x05).toByte()) +
-                ByteArray(4) { (first shr (8 * (3 - it))).toByte() } +
-                parityHex("00000bff")
-        }
+        fun defaultStatus(lastProgrammingSequence: Int, bolusPulsesRemaining: Int = 0, deliveryStatus: Int = CAPTURE_DELIVERY): ByteArray =
+            podDefaultStatus(ActivatingPodModel.RUNNING, lastProgrammingSequence, bolusPulsesRemaining, deliveryStatus)
     }
 }

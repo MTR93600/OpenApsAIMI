@@ -174,10 +174,75 @@ commonMain (`dashctl`), so the JVM tests run them; only CoreBluetooth glue goes 
 
 ### B. The manager
 
-6. **Activation** part 1 and part 2 (`activatePodPart1`, `activatePodPart2`): version, unique id,
-   low reservoir and lump of coal alerts, prime, basal program, expiration alerts, cannula, with the
-   activation progress stored after each step so a crash resumes where it stopped
-   (`recoverActivationFromPodStatus`).
+6. [x] **Activation** part 1 and part 2. Done (not committed): `DashActivation` (commonMain,
+   `driver`) is Android `activatePodPart1` / `activatePodPart2` step by step, in Android order and with
+   the Android values: GetVersion (unique id ffffffff), SetUniqueId (lot and pod sequence of the
+   Version answer, time now), the low reservoir alert when asked, the lump of coal alert, the prime
+   (first prime volume x 0.05 U at the prime pulse rate), a wait of 1 s per pulse, a status that must
+   show CLUTCH_DRIVE_ENGAGED, then part 2: the basal program, the three expiration alerts (multi
+   command flag, same minutes as Android, `Duration.toMinutes` rounding), the cannula bolus, a wait,
+   a status that must show RUNNING_ABOVE_MIN_VOLUME. Each step stores its `ActivationProgress` once
+   its answer is read; a call skips the steps already stored, so a crash or an error resumes there.
+   `IosDashPump.activatePodPart1(trigger)` / `activatePodPart2(program, reminderHours, alarmHours)`
+   run it inside one activation (`activationRunning`, command lock, failure as a result). Part 1 pairs
+   a pod with no LTK on the link of the connection and sets up the session (Android `pairNewPod`), so
+   the caller connects first (`LinkReady`). `DashPodStateManager.recoverActivationFromPodStatus` is the
+   Android table on `reportedPodStatus`; `getPumpStatus` calls it after a status read on a pod not
+   activated, and, as Android, reads nothing before the activation is completed unless the reason is
+   `REQUESTED_BY_USER`, and nothing at all before SET_UNIQUE_ID (Android `getStatus` starts with
+   `observeUniqueIdSet`). Note: the Android Dash overview passes `rh.gs(refresh)`, never the literal
+   "REQUESTED BY USER", so on Android this recover is close to unreachable; the queue/plugin caller
+   (phase 4) must decide which reason it passes. The recover runs only when this read stored a
+   status (`statusResponseCount` went up): after a NAK the stored pod status is the one from before. `isBusy()` is also true from the first step to COMPLETED (Android). The
+   answers go into the state through one place, `DashPodStateManager.updateFromResponse`.
+   `observePodRunning`: every delivery command except the stop of all delivery is refused (nothing
+   sent, no active command, SENDING_FAILURE) unless the activation is COMPLETED and the reported pod
+   status is running (`isActivatedAndRunning`).
+   Deliberate differences, each with tests: (a) the prime and the cannula bolus are marked in the
+   stored state before their bytes go (`activationStepInFlight`, codec version 4 extended in place,
+   v4 pin updated, v3 pin unchanged); a call that finds a mark reads a status first and lets the pod
+   status decide (UID_SET / BASAL_PROGRAM_SET: not taken, sent; ENGAGING_CLUTCH_DRIVE /
+   CLUTCH_DRIVE_ENGAGED, PRIMING / running: taken, not sent again; anything else or no status: stop,
+   mark kept). Only a status that this read stored decides: an answer with no status (a NAK) leaves
+   the status from before the bolus, which says "not taken", so it counts as no status (review fix,
+   2026-11-13). Android sends the bolus again, and the cannula bolus goes under the skin.
+   `recoverActivationFromPodStatus` clears the mark when it sets a progress. (b) The program the pod
+   took becomes the running program in the write that stores PROGRAMMED_BASAL; Android stores the
+   program of the last part 2 call at its end, which after a resume with another profile is a
+   program the pod does not run.
+   Ported as Android (reported): the answer type is not checked (a NAK to a step counts as an
+   answer; the status check after the prime or the cannula then stops the activation); a lost answer
+   to SetUniqueId sends it again on the next call (a real pod may refuse it; as Android, any answer,
+   a NAK too, then stores SET_UNIQUE_ID; a status the user asks for is no way out, it is refused
+   before SET_UNIQUE_ID as on Android). The status check after the prime or the cannula bolus takes
+   the pod status stored last, also when its own answer was a NAK (Android; nothing is sent twice).
+   Test harness: the fake pod's default status now says RUNNING_ABOVE_MIN_VOLUME (the Android
+   capture says CLUTCH_DRIVE_ENGAGED, a pod in the middle of its activation), `pairAndConnect` marks
+   the pod activated unless `activated = false`, and `FakeDashPod` takes GetVersion and SetUniqueId to
+   unique id ffffffff. No pinned expected value changed; three tests that read a status or sent a bolus
+   on a pod that was never activated now ask for the status as the user (`REQUESTED_BY_USER`) or mark
+   the pod activated first.
+   Tests: `DashActivationTest` (commonTest, 19: Android order, every progress stored in order, the
+   prime bytes, the expiration alert values with and without the user alerts, `toMinutes`, the
+   gates, lost answers, a send that never left, a pod not taking the prime, no status, an unexpected
+   status, a pod still priming, the program the pod took, a crash after every single write of a full
+   activation, the recover table, the running gate; +2 after review: a NAK to the status read of a
+   prime or a cannula bolus in flight sends nothing more and keeps the mark), codec tests in `DashPodStateCodecVersionsTest`
+   (4 more), `IosDashPumpActivationTest` (iosTest, 13: full activation bytes in Android order from
+   `LinkReady`, busy, part 2 first, a stop before and after the prime and the cannula bytes, delivery
+   refused before and during the activation and on a pod in alarm, a bolus after it, the stop of all
+   delivery not held back, `getPumpStatus` before the activation; +2 after review: a NAK to a status
+   the user asks for keeps the cannula mark, no status read before SET_UNIQUE_ID). Two
+   `IosDashPumpCommandTest` SQN tests that read a status on a pod never activated now mark it
+   activated first (their asserted values did not change). 422 tests on the JVM, 478 on the iOS
+   simulator (1 skipped, the known pin), 0 failures.
+   Still open: the connect before each step (`observeConnectToPod`, step 9: the activation needs a
+   session today and fails closed without one); for the plugin (phase 4): the low reservoir and
+   expiration alert settings stored after each part (`updateLowReservoirAlertSettings`,
+   `updateExpirationAlertSettings`, step 7 stores the alert settings), the history records, the
+   `PumpSync` records after part 2 and the status read after it; the reservoir check of a bolus
+   (`reservoirLevel` is still a placeholder); deactivation and a reset of the state for the next pod
+   (step 7).
 7. **Deactivation**, **suspend** and **resume**, **alerts** and **silence alerts**, **beeps**.
 8. **Status**: `getPumpStatus` reads the default status; the alarm status when the pod reports an
    alarm; `checkPodKaput` as Android. Its bolus part (`lastBolus.markComplete` and

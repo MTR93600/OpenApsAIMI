@@ -39,16 +39,19 @@ import app.aaps.pump.omnipod.dashctl.crypto.AesCcmCipher
 import app.aaps.pump.omnipod.dashctl.crypto.AesEcbBlockCipher
 import app.aaps.pump.omnipod.dashctl.crypto.DashKeyExchange
 import app.aaps.pump.omnipod.dashctl.crypto.SecureRandomBytes
+import app.aaps.pump.omnipod.dashctl.driver.DashActivation
+import app.aaps.pump.omnipod.dashctl.driver.DashActivationException
+import app.aaps.pump.omnipod.dashctl.driver.DashActivationPod
 import app.aaps.pump.omnipod.dashctl.driver.DashBolusProgress
 import app.aaps.pump.omnipod.dashctl.driver.DashBolusWait
 import app.aaps.pump.omnipod.dashctl.driver.DashBolusWaitPod
+import app.aaps.pump.omnipod.dashctl.driver.DashExchange
 import app.aaps.pump.omnipod.dashctl.ios.crypto.IosAesCcmCipher
 import app.aaps.pump.omnipod.dashctl.ios.crypto.IosAesCmac
 import app.aaps.pump.omnipod.dashctl.ios.crypto.IosAesEcbBlockCipher
 import app.aaps.pump.omnipod.dashctl.ios.crypto.IosSecureRandomBytes
 import app.aaps.pump.omnipod.dashctl.ios.crypto.IosX25519Dh
 import app.aaps.pump.omnipod.dashctl.ios.store.DashKeychainStateStore
-import app.aaps.pump.omnipod.dashctl.pod.command.GetStatusCommand
 import app.aaps.pump.omnipod.dashctl.pod.command.ProgramBasalCommand
 import app.aaps.pump.omnipod.dashctl.pod.command.ProgramBolusCommand
 import app.aaps.pump.omnipod.dashctl.pod.command.ProgramTempBasalCommand
@@ -56,16 +59,13 @@ import app.aaps.pump.omnipod.dashctl.pod.command.StopDeliveryCommand
 import app.aaps.pump.omnipod.dashctl.pod.command.StopDeliveryCommand.DeliveryType
 import app.aaps.pump.omnipod.dashctl.pod.command.SuspendDeliveryCommand
 import app.aaps.pump.omnipod.dashctl.pod.command.base.Command
+import app.aaps.pump.omnipod.dashctl.pod.definition.ActivationProgress
+import app.aaps.pump.omnipod.dashctl.pod.definition.AlertTrigger
 import app.aaps.pump.omnipod.dashctl.pod.definition.BasalProgram
 import app.aaps.pump.omnipod.dashctl.pod.definition.BeepType
 import app.aaps.pump.omnipod.dashctl.pod.definition.DeliveryStatus
 import app.aaps.pump.omnipod.dashctl.pod.definition.ProgramReminder
-import app.aaps.pump.omnipod.dashctl.pod.response.AlarmStatusResponse
-import app.aaps.pump.omnipod.dashctl.pod.response.DefaultStatusResponse
 import app.aaps.pump.omnipod.dashctl.pod.response.Response
-import app.aaps.pump.omnipod.dashctl.pod.response.ResponseType
-import app.aaps.pump.omnipod.dashctl.pod.response.SetUniqueIdResponse
-import app.aaps.pump.omnipod.dashctl.pod.response.VersionResponse
 import app.aaps.pump.omnipod.dashctl.session.DashActiveCommand
 import app.aaps.pump.omnipod.dashctl.session.DashCommandConfirmation
 import app.aaps.pump.omnipod.dashctl.session.DashCommandKind
@@ -73,9 +73,9 @@ import app.aaps.pump.omnipod.dashctl.session.DashCommandNotConfirmedException
 import app.aaps.pump.omnipod.dashctl.session.DashLastBolus
 import app.aaps.pump.omnipod.dashctl.session.DashPodStateManager
 import app.aaps.pump.omnipod.dashctl.session.DashResolvedCommand
-import app.aaps.pump.omnipod.dashctl.session.DashPodStatus
 import app.aaps.pump.omnipod.dashctl.util.mapProfileToBasalProgram
 import kotlin.concurrent.Volatile
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -418,6 +418,91 @@ class IosDashPump(
         pairMsgSeq = null
     }
 
+    // -- Activation -----------------------------------------------------------
+
+    /** The exchanges of the activation. Called with [commandMutex] held. */
+    private val activationPod = object : DashActivationPod {
+        override fun send(build: (uniqueId: Int, sequence: Short) -> Command, beforeSend: () -> Unit): DashExchange {
+            val sent = sendCommand(build) { beforeSend() }
+            return DashExchange(sent.reachedRadio, sent.error)
+        }
+    }
+
+    private fun activation() = DashActivation(stateManager, activationPod, aapsLogger, now, sleep)
+
+    /**
+     * Android `OmnipodDashManagerImpl.activatePodPart1`, as the wizard calls it (`doInitializePod`):
+     * - refused unless the activation progress is before PHASE_1_COMPLETED (Android
+     *   `observePodReadyForActivationPart1`), before anything is sent;
+     * - a pod not paired yet is paired on the link of the connection ([pair], with the id Android
+     *   gives) and the session is set up on it ([establishSession]), as Android `pairNewPod`. The
+     *   caller connects first (`DashPodConnection.connect` gives `LinkReady`). A pod already paired
+     *   needs a session, as after a reconnect;
+     * - then the steps of [DashActivation.activatePart1], each stored as it is done.
+     *
+     * The whole call is one activation ([isActivationRunning], [isBusy], a [disconnect] is ignored)
+     * and holds the command lock, the waits too. A failure is a result, not an exception: the stored
+     * progress says where to go on, and calling again resumes there.
+     *
+     * Not here yet: Android `updateLowReservoirAlertSettings` after part 1 (the alert settings come
+     * with the alerts, plan step 7), the history record (phase 4).
+     */
+    suspend fun activatePodPart1(lowReservoirAlertTrigger: AlertTrigger.ReservoirVolumeTrigger?): PumpEnactResult =
+        activationCall("Pod activation part 1") {
+            if (!stateManager.activationProgress.isBefore(ActivationProgress.PHASE_1_COMPLETED)) {
+                throw DashActivationException("Pod is in an incorrect state")
+            }
+            if (stateManager.ltk == null) {
+                pairWithLock(Ids(null).podId.address)
+                establishSessionWithLock()
+            }
+            activation().activatePart1(lowReservoirAlertTrigger)
+        }
+
+    /**
+     * Android `OmnipodDashManagerImpl.activatePodPart2`, as the wizard calls it (`doInsertCannula`):
+     * refused unless the progress is from PHASE_1_COMPLETED and before COMPLETED, then the steps of
+     * [DashActivation.activatePart2]. The program the pod took is the running one from
+     * PROGRAMMED_BASAL on (see [DashActivation]). Same rules as [activatePodPart1].
+     *
+     * Not here yet (phase 4, the plugin): Android `updateExpirationAlertSettings`, the history record,
+     * and the `PumpSync` records after part 2 (the end of the fake TBR, `connectNewPump`, the cannula
+     * and insulin change events), and a status read once it is done.
+     */
+    suspend fun activatePodPart2(
+        basalProgram: BasalProgram,
+        userConfiguredExpirationReminderHours: Long?,
+        userConfiguredExpirationAlarmHours: Long?,
+    ): PumpEnactResult =
+        activationCall("Pod activation part 2") {
+            activation().activatePart2(basalProgram, userConfiguredExpirationReminderHours, userConfiguredExpirationAlarmHours)
+        }
+
+    /** One activation call: [activationRunning] and [commandMutex] for the whole [block]; errors are a failure result. */
+    private suspend fun activationCall(name: String, block: suspend () -> Unit): PumpEnactResult {
+        val before = activationRunning
+        activationRunning = true
+        try {
+            return commandMutex.withLock {
+                busy = true
+                try {
+                    block()
+                    aapsLogger.info(LTag.PUMP, "$name completed")
+                    DashPumpEnactResult(success = true, enacted = true, comment = "$name completed")
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    aapsLogger.error(LTag.PUMP, "Error in $name", e)
+                    failure("$name: ${e.message}")
+                } finally {
+                    busy = false
+                }
+            }
+        } finally {
+            activationRunning = before
+        }
+    }
+
     // -- Pump identity ------------------------------------------------------
 
     override fun manufacturer(): ManufacturerType = ManufacturerType.Insulet
@@ -457,8 +542,16 @@ class IosDashPump(
     override fun isInitialized(): Boolean = isPaired() && hasSession()
     /** Android `isSuspended()`: the last status shows delivery suspended ([DashPodStateManager.isSuspended]). */
     override fun isSuspended(): Boolean = stateManager.isSuspended
-    /** A command runs, or an activation runs ([runActivation]), as Android `isBusy`. */
-    override fun isBusy(): Boolean = busy || activationRunning
+    /**
+     * Android `isBusy`: a command runs, an activation runs ([runActivation], [activatePodPart1],
+     * [activatePodPart2]), or an activation was started and is not completed. The queue then sends
+     * nothing (#5219).
+     */
+    override fun isBusy(): Boolean {
+        val progress = stateManager.activationProgress
+        return busy || activationRunning ||
+            (progress != ActivationProgress.NOT_STARTED && progress.isBefore(ActivationProgress.COMPLETED))
+    }
 
     /** True while the link of the current connection is usable and has a session. */
     override fun isConnected(): Boolean = hasSession()
@@ -508,7 +601,7 @@ class IosDashPump(
      *   this failure returned does nothing (the bolus dialog is closed); Android would still be in its
      *   wait and send it.
      * - the reservoir check of Android (`requestedBolusAmount > reservoirLevel`) is not here yet: the
-     *   reservoir level needs the activation (plan, step 6).
+     *   reservoir level ([reservoirLevel]) is still a placeholder (plugin, phase 4).
      */
     override suspend fun deliverTreatment(detailedBolusInfo: DetailedBolusInfo): PumpEnactResult {
         bolusDeliveryInProgress = true
@@ -778,9 +871,9 @@ class IosDashPump(
      * - a profile that cannot be mapped is a failure with nothing sent. Android throws out of
      *   `setNewBasalProfile`; nothing is sent there either.
      *
-     * Not here yet: `observePodRunning` (pod activated and running) before the commands, which comes
-     * with the activation (plan, step 6), and the connect before the commands (`observeConnectToPod`,
-     * step 9). The time zone is the one of the phone when the program is built, as Android; a change of
+     * The suspend and the program are held back unless the pod is activated and runs, as Android
+     * `observePodRunning` (see [sendDeliveryCommand]). Not here yet: the connect before the commands
+     * (`observeConnectToPod`, step 9). The time zone is the one of the phone when the program is built, as Android; a change of
      * time zone or DST is ignored, as Android (`timezoneOrDSTChanged`).
      */
     override suspend fun setNewBasalProfile(profile: PumpProfile): PumpEnactResult {
@@ -904,16 +997,44 @@ class IosDashPump(
     fun suspendDelivery(): PumpEnactResult = stopDelivery()
 
     /**
-     * Asks the pod for its default status (Android `getStatus`). The answer goes into
+     * Asks the pod for its default status (Android `getPumpStatus`). The answer goes into
      * [DashPodStateManager.updateFromStatus], and an open command is then decided. This is the way
      * out of NOT_CONFIRMED. Not a programming command, so no active command is opened. Fails closed
      * like everything else; errors are logged.
+     *
+     * As Android: before the activation is completed, nothing is read unless [reason] is
+     * [REQUESTED_BY_USER] (no race on BLE with the activation), and after a status read on a pod whose
+     * activation is not completed, the progress is taken from the pod status
+     * ([DashPodStateManager.recoverActivationFromPodStatus]).
+     *
+     * As Android `getStatus` (`observeUniqueIdSet`): nothing is sent before the activation reached
+     * SET_UNIQUE_ID ("Pod is in an incorrect state", logged).
+     *
+     * The recover runs only when this read stored a status. A NAK is an answer but no status: the
+     * stored pod status is then the one from before, which after a lost answer to the prime or the
+     * cannula bolus says "not taken", and the recover would clear the mark of that bolus
+     * (`DashPodStateManager.activationStepInFlight`), so the next activation would send it again.
+     * Android has no mark, and its `podStatus` is also stale after a NAK.
      */
     override suspend fun getPumpStatus(reason: String) {
+        if (reason != REQUESTED_BY_USER && !stateManager.isActivationCompleted) {
+            aapsLogger.info(LTag.PUMP, "getPumpStatus ($reason): pod activation not completed, nothing read")
+            return
+        }
+        if (!stateManager.activationProgress.isAtLeast(ActivationProgress.SET_UNIQUE_ID)) {
+            aapsLogger.error(LTag.PUMP, "getPumpStatus ($reason): Pod is in an incorrect state (activation ${stateManager.activationProgress}), nothing read")
+            return
+        }
         commandMutex.withLock {
             busy = true
             try {
-                readStatusWithLock()
+                val statusesBefore = stateManager.statusResponseCount
+                val read = readStatusWithLock()
+                if (read && stateManager.statusResponseCount > statusesBefore && !stateManager.isActivationCompleted) {
+                    stateManager.recoverActivationFromPodStatus()?.let {
+                        aapsLogger.info(LTag.PUMP, "recoverActivationFromPodStatus msg=$it")
+                    }
+                }
             } finally {
                 busy = false
             }
@@ -975,6 +1096,11 @@ class IosDashPump(
      * (`CommandSendErrorSending`) marks it not sent.
      * After the answer is read, the active command is resolved from the status in it.
      *
+     * As Android `observePodRunning`, nothing is sent unless the activation is completed and the pod
+     * reports that it runs ([DashPodStateManager.isActivatedAndRunning]); the result is then
+     * SENDING_FAILURE with no active command. The stop of all delivery ([stopDelivery]) is not held
+     * back: Android has no such check on a stop of everything, and a stop never adds insulin.
+     *
      * Deliberate difference from Android: when the last status reports the sequence this command
      * would be built with as the last programming command, a status is read first, which moves the
      * sequence on. Otherwise a later status could not tell this command from the old one, and would
@@ -991,6 +1117,13 @@ class IosDashPump(
         requireSession()
         if (resolveAndHandle(decidedLate = true).confirmation == DashCommandConfirmation.NOT_CONFIRMED) {
             throw DashCommandNotConfirmedException("Refusing command: the last command is not confirmed by the pod. Read the pod status first.")
+        }
+        if (kind != DashCommandKind.STOP_ALL && !stateManager.isActivatedAndRunning) {
+            return DeliveryOutcome(
+                DashCommandConfirmation.SENDING_FAILURE,
+                "the pod is not activated and running (activation ${stateManager.activationProgress}, " +
+                    "pod status ${stateManager.reportedPodStatus}), nothing sent"
+            )
         }
         if (sequenceSameAsLastProgramming()) {
             aapsLogger.info(LTag.PUMPBTCOMM, "Next sequence is the last programming sequence of the pod: reading a status first")
@@ -1137,24 +1270,15 @@ class IosDashPump(
         return SentCommand(reachedRadio = true, error = error)
     }
 
-    /** `PodEventInterceptor.handleResponse` for what the iOS state keeps today. */
+    /** `PodEventInterceptor`: the sequence goes up, then `handleResponse` ([DashPodStateManager.updateFromResponse]). */
     private fun onResponse(response: Response) {
         stateManager.increaseMessageSequenceNumber()
-        when (response) {
-            is DefaultStatusResponse -> stateManager.updateFromDefaultStatus(DashPodStatus.of(response, now()))
-            is AlarmStatusResponse   -> stateManager.updateFromStatus(DashPodStatus.of(response, now()))
-            is VersionResponse       -> stateManager.updateFromVersionResponse(response, now())
-            is SetUniqueIdResponse   -> stateManager.updateFromSetUniqueIdResponse(response, now())
-            else                     -> aapsLogger.info(LTag.PUMPBTCOMM, "Answer not used yet: $response")
+        if (!stateManager.updateFromResponse(response, now())) {
+            aapsLogger.info(LTag.PUMPBTCOMM, "Answer not used: $response")
         }
     }
 
-    private fun statusCommand(uid: Int, seq: Short): Command =
-        GetStatusCommand.Builder()
-            .setUniqueId(uid)
-            .setSequenceNumber(seq)
-            .setStatusResponseType(ResponseType.StatusResponseType.DEFAULT_STATUS_RESPONSE)
-            .build()
+    private fun statusCommand(uid: Int, seq: Short): Command = DashActivation.statusCommand(uid, seq)
 
     private fun stopCommand(type: DeliveryType, uid: Int, seq: Short): Command =
         StopDeliveryCommand.Builder()
@@ -1198,7 +1322,10 @@ class IosDashPump(
     companion object {
 
         /** `OmnipodDashManagerImpl.NONCE`: the Omnipod Dash seems to use a fixed nonce. */
-        const val NONCE = 1229869870
+        const val NONCE = DashActivation.NONCE
+
+        /** Android `getPumpStatus`: the only reason that reads a status before the activation is completed. */
+        const val REQUESTED_BY_USER = "REQUESTED BY USER"
 
         /**
          * Creates a fully-wired driver: iOS crypto seams + Keychain store. Give it to a

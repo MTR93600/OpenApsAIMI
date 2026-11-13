@@ -93,6 +93,14 @@ data class DashPodState(
      * a profile with it.
      */
     val basalProgram: BasalProgram? = null,
+    /**
+     * The activation step whose bolus may have reached the pod while its answer was not read:
+     * [ActivationProgress.PRIMING] (the prime) or [ActivationProgress.INSERTING_CANNULA] (the cannula
+     * insertion). Null when none. Set before the bytes go and cleared in the same write that stores
+     * the step, so after a crash the activation reads a status before it sends that bolus again
+     * (`DashActivation`). Android has no such field: it sends the bolus again.
+     */
+    val activationStepInFlight: ActivationProgress? = null,
 ) {
 
     init {
@@ -101,6 +109,9 @@ data class DashPodState(
         }
         require(ltk == null || ltk.size == LTK_SIZE) {
             "LTK has to be $LTK_SIZE bytes long"
+        }
+        require(activationStepInFlight == null || activationStepInFlight in STEPS_WITH_A_BOLUS) {
+            "Only the prime and the cannula insertion can be in flight"
         }
     }
 
@@ -129,7 +140,8 @@ data class DashPodState(
             activationTime == other.activationTime &&
             lastUpdatedSystemMs == other.lastUpdatedSystemMs &&
             lastBolus == other.lastBolus &&
-            basalProgram == other.basalProgram
+            basalProgram == other.basalProgram &&
+            activationStepInFlight == other.activationStepInFlight
     }
 
     override fun hashCode(): Int {
@@ -156,11 +168,15 @@ data class DashPodState(
         result = 31 * result + lastUpdatedSystemMs.hashCode()
         result = 31 * result + (lastBolus?.hashCode() ?: 0)
         result = 31 * result + (basalProgram?.hashCode() ?: 0)
+        result = 31 * result + (activationStepInFlight?.hashCode() ?: 0)
         return result
     }
 
     companion object {
         const val LTK_SIZE = 16
         const val MESSAGE_SEQ_MAX = 15
+
+        /** The activation steps that send a bolus: see [activationStepInFlight]. */
+        val STEPS_WITH_A_BOLUS: Set<ActivationProgress> = setOf(ActivationProgress.PRIMING, ActivationProgress.INSERTING_CANNULA)
     }
 }

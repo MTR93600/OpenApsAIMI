@@ -8,6 +8,9 @@ import app.aaps.pump.omnipod.dashctl.pod.definition.DeliveryStatus
 import app.aaps.pump.omnipod.dashctl.pod.definition.PodConstants
 import app.aaps.pump.omnipod.dashctl.pod.definition.PodStatus
 import app.aaps.pump.omnipod.dashctl.pod.definition.SoftwareVersion
+import app.aaps.pump.omnipod.dashctl.pod.response.AlarmStatusResponse
+import app.aaps.pump.omnipod.dashctl.pod.response.DefaultStatusResponse
+import app.aaps.pump.omnipod.dashctl.pod.response.Response
 import app.aaps.pump.omnipod.dashctl.pod.response.SetUniqueIdResponse
 import app.aaps.pump.omnipod.dashctl.pod.response.VersionResponse
 
@@ -85,6 +88,14 @@ class DashPodStateManager(private val store: DashPodStateStore) {
     val lastUpdatedSystemMs: Long
         get() = state.lastUpdatedSystemMs
 
+    /**
+     * How many statuses (default or alarm) were stored, see [DashPodState.statusResponseCount]. A
+     * caller compares it before and after a read to know whether that read gave a status. A NAK is
+     * an answer but no status, and leaves [reportedPodStatus] as it was.
+     */
+    val statusResponseCount: Long
+        get() = state.statusResponseCount
+
     /** Android `lastBolus`: see [DashLastBolus]. */
     val lastBolus: DashLastBolus?
         get() = state.lastBolus
@@ -96,6 +107,24 @@ class DashPodStateManager(private val store: DashPodStateStore) {
     /** Android `isActivationCompleted`: the activation reached [ActivationProgress.COMPLETED]. */
     val isActivationCompleted: Boolean
         get() = state.activationProgress == ActivationProgress.COMPLETED
+
+    /** See [DashPodState.activationStepInFlight]. */
+    val activationStepInFlight: ActivationProgress?
+        get() = state.activationStepInFlight
+
+    /**
+     * Android `isPodRunning`: the pod status of the last answer ([reportedPodStatus]) is one of the
+     * two running ones. False before the first answer.
+     */
+    val isPodRunning: Boolean
+        get() = state.reportedPodStatus?.isRunning() == true
+
+    /**
+     * Android `observePodRunning`, checked before every delivery command: the activation is completed
+     * and the pod reports that it runs. False on a pod in alarm, deactivated, or half activated.
+     */
+    val isActivatedAndRunning: Boolean
+        get() = isActivationCompleted && isPodRunning
 
     /**
      * Android `isSuspended`: the last status shows delivery suspended. False before the first status,
@@ -216,6 +245,88 @@ class DashPodStateManager(private val store: DashPodStateStore) {
             lastUpdatedSystemMs = nowMs,
         )
         persist()
+    }
+
+    /**
+     * An answer was read (Android `PodEventInterceptor.handleResponse`): a Version or SetUniqueId
+     * answer and a status go into the state. Other answers (a NAK) change nothing. Returns false for
+     * them, so the caller can log them.
+     *
+     * @param nowMs the wall clock now (Android `System.currentTimeMillis()`).
+     */
+    fun updateFromResponse(response: Response, nowMs: Long): Boolean {
+        when (response) {
+            is DefaultStatusResponse -> updateFromDefaultStatus(DashPodStatus.of(response, nowMs))
+            is AlarmStatusResponse   -> updateFromStatus(DashPodStatus.of(response, nowMs))
+            is VersionResponse       -> updateFromVersionResponse(response, nowMs)
+            is SetUniqueIdResponse   -> updateFromSetUniqueIdResponse(response, nowMs)
+            else                     -> return false
+        }
+        return true
+    }
+
+    // -- Activation (ported from OmnipodDashPodStateManagerImpl) ------------------
+
+    /**
+     * Android setter `activationProgress`: one activation step is done. In the same write the step in
+     * flight is cleared and, when given, [basalProgram] becomes the running program (the program the
+     * activation sent, see `DashActivation`). Persists.
+     */
+    fun updateActivationProgress(progress: ActivationProgress, basalProgram: BasalProgram? = null) {
+        state = state.copy(
+            activationProgress = progress,
+            activationStepInFlight = null,
+            basalProgram = basalProgram?.let { BasalProgram(it.segments) } ?: state.basalProgram,
+        )
+        persist()
+    }
+
+    /**
+     * The bolus of [step] (the prime or the cannula insertion) is about to go. Stored before the
+     * write, as [markActiveCommandSent]: after a crash at any later point the activation reads a
+     * status before it sends this bolus again. See [DashPodState.activationStepInFlight].
+     */
+    fun markActivationStepSent(step: ActivationProgress) {
+        require(step in DashPodState.STEPS_WITH_A_BOLUS) { "Only the prime and the cannula insertion are marked" }
+        state = state.copy(activationStepInFlight = step)
+        persist()
+    }
+
+    /** The write failed before any byte left: the pod cannot have the bolus of the step in flight. */
+    fun clearActivationStepInFlight() {
+        if (state.activationStepInFlight == null) return
+        state = state.copy(activationStepInFlight = null)
+        persist()
+    }
+
+    /**
+     * Android `recoverActivationFromPodStatus`, the same table, on the pod status of the last answer
+     * ([reportedPodStatus], Android `podState.podStatus`):
+     * FILLED gives NOT_STARTED, UID_SET gives SET_UNIQUE_ID, CLUTCH_DRIVE_ENGAGED gives PRIME_COMPLETED,
+     * BASAL_PROGRAM_SET gives PROGRAMMED_BASAL, the two running ones give CANNULA_INSERTED.
+     * ENGAGING_CLUTCH_DRIVE and PRIMING return "Busy" and change nothing; any other status changes
+     * nothing. As Android, the progress can go back.
+     *
+     * When a progress is set, the step in flight is cleared in the same write: the progress now comes
+     * from the pod itself, which is what the step in flight waits for. Each status of the table says
+     * whether the pod took the prime or the cannula bolus. So the caller must run this only on a
+     * status the read it just did stored (`statusResponseCount` went up): after a NAK the stored
+     * status is the one from before the bolus, and it would clear the mark on a wrong "not taken".
+     *
+     * @return "Busy" when the pod is still priming, null otherwise.
+     */
+    fun recoverActivationFromPodStatus(): String? {
+        val progress = when (state.reportedPodStatus) {
+            PodStatus.FILLED                                                       -> ActivationProgress.NOT_STARTED
+            PodStatus.UID_SET                                                      -> ActivationProgress.SET_UNIQUE_ID
+            PodStatus.ENGAGING_CLUTCH_DRIVE, PodStatus.PRIMING                     -> return "Busy"
+            PodStatus.CLUTCH_DRIVE_ENGAGED                                         -> ActivationProgress.PRIME_COMPLETED
+            PodStatus.BASAL_PROGRAM_SET                                            -> ActivationProgress.PROGRAMMED_BASAL
+            PodStatus.RUNNING_ABOVE_MIN_VOLUME, PodStatus.RUNNING_BELOW_MIN_VOLUME -> ActivationProgress.CANNULA_INSERTED
+            else                                                                   -> null
+        }
+        progress?.let { updateActivationProgress(it) }
+        return null
     }
 
     // -- Active command (ported from OmnipodDashPodStateManagerImpl) -------------
@@ -402,6 +513,12 @@ class DashPodStateManager(private val store: DashPodStateStore) {
         state = state.copy(lastBolus = ended)
         persist()
         return ended
+    }
+
+    /** Tests only: puts the state of a later point (an activated pod) in place without running it. */
+    internal fun overwriteForTest(transform: (DashPodState) -> DashPodState) {
+        state = transform(state)
+        persist()
     }
 
     /** Clears all state back to defaults and persists. */

@@ -317,7 +317,7 @@ class IosDashPumpBasalProgramTest {
     fun `before the activation is completed nothing is sent and the profile counts as set`() = runTest {
         val notActivated = DashPumpOnFakePod()
         try {
-            notActivated.pairAndConnect()
+            notActivated.pairAndConnect(activated = false)
 
             val result = notActivated.pump.setNewBasalProfile(PROFILE)
 

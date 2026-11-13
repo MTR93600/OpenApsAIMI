@@ -278,7 +278,10 @@ class IosDashPumpCommandTest {
         assertEquals(listOf(1, 2, 3, 4, 5, 5, 6), wireSequences())
         assertEquals(0x15fL, f.stateManager.eapAkaSequenceNumber)
         assertEquals(0x15fL, f.pod.lastSqn)
-        f.pump.getPumpStatus("session works")
+        // The session works: a status can be read. Android reads one only on a pod with its unique
+        // id set (`observeUniqueIdSet`), so the pod is marked activated first.
+        f.markActivated()
+        f.pump.getPumpStatus("check the session")
         assertNotNull(f.stateManager.podStatus)
     }
 
@@ -398,7 +401,10 @@ class IosDashPumpCommandTest {
 
         // A new connection works.
         assertSame(DashConnectResult.SessionReady, f.reconnect())
-        f.pump.getPumpStatus("new link")
+        // The session works: a status can be read. Android reads one only on a pod with its unique
+        // id set (`observeUniqueIdSet`), so the pod is marked activated first.
+        f.markActivated()
+        f.pump.getPumpStatus("check the session")
         assertNotNull(f.stateManager.podStatus)
     }
 
