@@ -328,7 +328,7 @@ class IosDashPumpStatusTest {
         f.pairAndConnect()
         f.pod.dropLinkWhileAnswering = 7 to 0
 
-        assertFalse(f.pump.deliverTreatment(bolus(1.0)).success)
+        assertTrue(f.pump.deliverTreatment(bolus(1.0)).success, "not decided: counted as asked, as Android")
 
         f.pod.dropLinkWhileAnswering = null
         assertSame(DashConnectResult.SessionReady, f.reconnect())

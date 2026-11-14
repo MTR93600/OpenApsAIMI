@@ -47,6 +47,14 @@ interface DashActivationPod {
      * Android `bleManager.sendCommand` with the `PodEventInterceptor`.
      */
     fun send(build: (uniqueId: Int, sequence: Short) -> Command, beforeSend: () -> Unit = {}): DashExchange
+
+    /**
+     * Android `observeConnectToPod` after the prime and the cannula waits ("connection can time out
+     * while waiting"): when the link dropped during the wait, connect again before the status check.
+     * Called with the command lock held, so the pump connects with that lock. Nothing to do by default
+     * (the tests that connect by hand).
+     */
+    fun connectAfterWait() {}
 }
 
 /**
@@ -158,6 +166,7 @@ class DashActivation(
             bolusStep(ActivationProgress.PRIMING, "prime", pulses, pulseRate)
             // Android: the connection can time out while the pod primes; it connects again after it.
             sleep(pulses * ONE_SECOND_MS)
+            pod.connectAfterWait()
         }
         if (isBefore(ActivationProgress.PRIME_COMPLETED)) {
             verifyPodStatus(PodStatus.CLUTCH_DRIVE_ENGAGED)
@@ -206,6 +215,8 @@ class DashActivation(
             val pulseRate = state.primePulseRate ?: throw DashActivationException("Prime pulse rate of the pod not known")
             bolusStep(ActivationProgress.INSERTING_CANNULA, "cannula insertion", pulses, pulseRate)
             sleep(pulses * ONE_SECOND_MS)
+            // Android `observeConnectToPod` after the wait, as after the prime.
+            pod.connectAfterWait()
         }
         if (isBefore(ActivationProgress.CANNULA_INSERTED)) {
             verifyPodStatus(PodStatus.RUNNING_ABOVE_MIN_VOLUME)

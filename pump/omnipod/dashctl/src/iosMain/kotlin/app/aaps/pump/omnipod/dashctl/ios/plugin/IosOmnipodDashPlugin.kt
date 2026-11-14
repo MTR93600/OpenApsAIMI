@@ -57,6 +57,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import platform.Foundation.NSNotificationCenter
+import platform.UIKit.UIApplicationProtectedDataDidBecomeAvailable
+import platform.darwin.NSObjectProtocol
 import dev.zacsweers.metro.IntKey as MetroIntKey
 
 /**
@@ -138,7 +141,7 @@ class IosOmnipodDashPlugin(
         title = OMNIPOD_DASH_IOS_PLUGIN_NAME,
         now = { Clock.System.now().toEpochMilliseconds() },
         wizard = { request, setToolbarConfig, onClose -> PodWizard(request, setToolbarConfig, onClose) },
-        discardPod = { host.rules.discardPod() },
+        discardPod = { host.discardPodFromScreen() },
         history = { host.history.recentRecords() }
     )
 
@@ -183,6 +186,9 @@ class IosOmnipodDashPlugin(
     /** The status checker of Android, while the plugin runs. */
     private var statusScope: CoroutineScope? = null
 
+    /** See [onStart]: iOS tells when the Keychain can be read again after a restart. */
+    private var protectedDataObserver: NSObjectProtocol? = null
+
     /**
      * Opens the radio once the plugin really runs, as `IosMedtrumPlugin`, and as Android `onStart`:
      * the status checker every minute, first after one minute ([DashPluginRules.statusCheck]), and a
@@ -195,6 +201,12 @@ class IosOmnipodDashPlugin(
         host.openRadio()
         val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
         statusScope = scope
+        // When iOS started the app before the first unlock, the Keychain could not be read and every
+        // pod command is refused. Read it again as soon as iOS says it can be read (the status checker
+        // and every command also try again).
+        protectedDataObserver = NSNotificationCenter.defaultCenter.addObserverForName(
+            name = UIApplicationProtectedDataDidBecomeAvailable, `object` = null, queue = null
+        ) { _ -> scope.launch { host.rules.podStateKnown() } }
         scope.launch {
             while (isActive) {
                 delay(STATUS_CHECK_INTERVAL_MS)
@@ -222,6 +234,8 @@ class IosOmnipodDashPlugin(
         aapsLogger.debug(LTag.PUMP, "IosOmnipodDashPlugin onStop()")
         statusScope?.cancel()
         statusScope = null
+        protectedDataObserver?.let { NSNotificationCenter.defaultCenter.removeObserver(it) }
+        protectedDataObserver = null
         host.shutdown()
         super.onStop()
     }

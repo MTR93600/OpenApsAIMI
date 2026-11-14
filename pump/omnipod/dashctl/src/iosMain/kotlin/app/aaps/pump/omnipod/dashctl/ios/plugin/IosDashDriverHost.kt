@@ -29,6 +29,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
@@ -95,9 +96,15 @@ class IosDashDriverHost(
     )
 
     /**
-     * The scope of the activation and deactivation wizard (`DashPodWizardModel`). Process lifetime and
-     * on the main thread, as Android runs the wizard on `viewModelScope`: a part that runs, and the
-     * PumpSync records written after it, must not stop because the person left the screen.
+     * The scope of the activation and deactivation wizard (`DashPodWizardModel`) and of the discard
+     * from the pump screen. Process lifetime: a part that runs, and the PumpSync records written after
+     * it, must not stop because the person left the screen.
+     *
+     * The model updates its screen state here, on the main thread, as Android collects on
+     * `viewModelScope`. The pod work itself (scan, connect, pairing, every activation command, all of
+     * them blocking) does not run here: [IosDashWizardPod] moves it to the IO dispatcher, as Android
+     * subscribes the wizard actions on `aapsSchedulers.io`. On the main thread it would freeze the app
+     * for up to the connect timeout, and iOS stops an app whose main thread does not answer.
      */
     val wizardScope: CoroutineScope = CoroutineScope(
         Dispatchers.Main + SupervisorJob() +
@@ -105,7 +112,11 @@ class IosDashDriverHost(
     )
 
     /** The pod state, loaded from the Keychain now. */
-    val stateManager = DashPodStateManager(platform.podStateStore())
+    val stateManager = DashPodStateManager(platform.podStateStore()).also {
+        if (!it.isStateKnown) {
+            aapsLogger.error(LTag.PUMP, "Dash: the stored pod state cannot be read at start (${it.stateUnreadableReason}). Every pod command is refused until it is read.")
+        }
+    }
 
     val recorder = DashPumpSyncRecorder(
         pumpSync = pumpSync,
@@ -156,6 +167,16 @@ class IosDashDriverHost(
 
     /** The pod as the activation and deactivation wizard sees it. */
     val wizardPod = IosDashWizardPod(rules = rules, stateManager = stateManager, commandQueue = commandQueue, openRadio = ::openRadio)
+
+    /**
+     * The "Discard Pod" of the pump screen (Android `DashOverviewViewModel.confirmDiscardPod`). It runs
+     * on [wizardScope], not on the scope of the screen: it waits for the command lock, and a discard the
+     * user confirmed must not be dropped because the screen closed meanwhile. The caller waits for it
+     * and gets its error (a refused discard), but leaving the screen does not cancel it.
+     */
+    suspend fun discardPodFromScreen() {
+        wizardScope.async { wizardPod.discard() }.await()
+    }
 
     /** What the plugin delegates `Pump` to. */
     val pump = IosDashPluginPump(driver = driver, stateManager = stateManager, recorder = recorder, rules = rules, aapsLogger = aapsLogger, history = history)

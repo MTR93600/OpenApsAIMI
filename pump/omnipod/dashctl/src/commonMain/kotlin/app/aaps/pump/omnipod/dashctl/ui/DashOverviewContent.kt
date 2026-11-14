@@ -40,6 +40,7 @@ import app.aaps.pump.omnipod.dashctl.queue.command.CommandSilenceAlerts
 import app.aaps.pump.omnipod.dashctl.session.DashPodStateManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
 
 /** Which wizard the pod screen opens. */
 sealed interface DashWizardRequest {
@@ -74,7 +75,11 @@ class DashOverviewContent(
      * person cannot leave in the middle of a part.
      */
     private val wizard: @Composable (request: DashWizardRequest, setToolbarConfig: (ToolbarConfig) -> Unit, onClose: () -> Unit) -> Unit,
-    /** Android overview "Discard Pod" after the confirmation: the pod state is cleared, nothing is sent. */
+    /**
+     * Android overview "Discard Pod" after the confirmation: the pod state is cleared, nothing is sent.
+     * It must not stop when the screen closes (the plugin runs it on a process scope); when it is
+     * refused it throws, and the reason is shown.
+     */
     private val discardPod: suspend () -> Unit,
     /** The pod history of the last 5 days, newest first, for "Pod History" (Android `DashPodHistoryViewModel`). */
     private val history: () -> List<DashHistoryRecord> = { emptyList() },
@@ -184,7 +189,15 @@ class DashOverviewContent(
                 message = stringResource(DashStrings.dash_discard_pod_confirmation),
                 onConfirm = {
                     confirmDiscard = false
-                    scope.launch { discardPod() }
+                    scope.launch {
+                        try {
+                            discardPod()
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            error = e.message ?: rh.gs(DashStrings.dash_wizard_unexpected_error)
+                        }
+                    }
                 },
                 onDismiss = { confirmDiscard = false }
             )

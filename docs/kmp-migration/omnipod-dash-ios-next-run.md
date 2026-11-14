@@ -103,10 +103,13 @@ commonMain (`dashctl`), so the JVM tests run them; only CoreBluetooth glue goes 
    on the 4-bit sequence). 382 tests on the JVM, 403 on the iOS simulator (1 skipped, the known pin),
    0 failures.
    Review fixes: (a) a bolus not confirmed while the user asked to stop it: a status is read first,
-   up to 5 times 2 s apart (`IosDashPump.decideBolusBeforeStop`, Android's first block of
-   `waitForBolusDeliveryToComplete`); when the pod took it, the wait follows it and sends the stop,
-   and the outcome goes to `onCommandDecided` as not late (the result reports it). Before, the stop
-   was dropped and the pod gave the whole bolus. No status read: failure, the bolus stays open.
+   up to 5 times 2 s apart (`IosDashPump.decideOpenBolus`, then named `decideBolusBeforeStop`,
+   Android's first block of `waitForBolusDeliveryToComplete`); when the pod took it, the wait follows
+   it and sends the stop, and the outcome goes to `onCommandDecided` as not late (the result reports
+   it). Before, the stop was dropped and the pod gave the whole bolus. No status read: failure, the
+   bolus stays open. (Changed in the parity audit of 2026-11-14, see omnipod-dash-ios.md: a lost
+   answer is now decided by a status with or without a stop, and with no status read the result is
+   Android's success with the asked amount, so the queue keeps the carbs.)
    (b) `DashPodStateManager.resolveActiveCommand(nowMs)` closes the command and creates or ends the
    last bolus in one write (`recordOutcome` is gone): two writes left a window where a crash lost a
    bolus the pod took, or left a closed stop with a bolus not ended. (c) Pinned: a stop whose answer

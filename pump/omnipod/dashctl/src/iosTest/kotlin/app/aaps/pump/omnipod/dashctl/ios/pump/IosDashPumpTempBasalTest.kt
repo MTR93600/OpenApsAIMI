@@ -370,10 +370,12 @@ class IosDashPumpTempBasalTest {
     fun `an open command blocks the cancel too and nothing is sent`() = runTest {
         runningTempBasal()
         f.pod.answerFor = { command ->
+            // The bolus and the status reads that try to decide it get a NAK: the bolus stays open.
             if (command[6] == CommandType.PROGRAM_INSULIN.value && !isTempBasal(command)) parityHex(NAK)
+            else if (command[6] == CommandType.GET_STATUS.value) parityHex(NAK)
             else defaultStatus(f.lastProgrammingSequence, 0, TEMP_BASAL_ACTIVE)
         }
-        assertFalse(f.pump.deliverTreatment(bolus(1.0)).success)
+        assertTrue(f.pump.deliverTreatment(bolus(1.0)).success, "not decided: counted as asked, as Android")
         assertEquals(DashCommandKind.BOLUS, f.stateManager.activeCommand?.kind)
         val before = f.writesFromPump().size
 

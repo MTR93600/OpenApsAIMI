@@ -159,9 +159,10 @@ class IosDashPumpCommandTest {
 
         val result = f.pump.deliverTreatment(bolus(5.0))
 
-        // CommandSendErrorConfirming: the pod may have it. Android moves the sequence on as for a sent command.
-        assertFalse(result.success)
-        assertEquals(0.0, result.bolusDelivered)
+        // CommandSendErrorConfirming: the pod may have it. Android moves the sequence on as for a sent
+        // command, and reports the asked amount when no status can be read (it is in PumpSync from the send).
+        assertTrue(result.success, result.comment)
+        assertEquals(5.0, result.bolusDelivered)
         val open = assertNotNull(f.stateManager.activeCommand, "the command must stay open")
         assertEquals(DashCommandKind.BOLUS, open.kind)
         assertTrue(open.sent)
@@ -181,10 +182,12 @@ class IosDashPumpCommandTest {
 
         val result = f.pump.deliverTreatment(bolus(5.0))
 
-        assertFalse(result.success)
-        assertEquals(0.0, result.bolusDelivered)
+        // The call reads a status to decide the bolus, as Android's wait; the pod answers that with a
+        // NAK too, so nothing is known: Android's success with the asked amount, the bolus stays open.
+        assertTrue(result.success, result.comment)
+        assertEquals(5.0, result.bolusDelivered)
         assertNotNull(f.stateManager.activeCommand, "a NAK is not a status: the command stays open")
-        assertEquals(2, f.stateManager.messageSequenceNumber, "sent and answered")
+        assertEquals(4, f.stateManager.messageSequenceNumber, "sent and answered, then one status read and its NAK")
         val before = f.writesFromPump().size
         assertFalse(f.pump.deliverTreatment(bolus(5.0)).success)
         assertEquals(before, f.writesFromPump().size, "the open bolus blocks a new one")
@@ -194,10 +197,10 @@ class IosDashPumpCommandTest {
         f.pump.getPumpStatus("check the open bolus")
 
         assertNull(f.stateManager.activeCommand, "the status decided the command (DENIED)")
-        assertEquals(4, f.stateManager.messageSequenceNumber)
+        assertEquals(6, f.stateManager.messageSequenceNumber)
         val next = f.pump.deliverTreatment(bolus(1.0))
         assertTrue(next.success, next.comment)
-        assertEquals(4, f.pod.commands.last { DashPumpOnFakePod.isBolus(it) }[4].toInt() and 0xff shr 2 and 0x0f, "built with the stored sequence")
+        assertEquals(6, f.pod.commands.last { DashPumpOnFakePod.isBolus(it) }[4].toInt() and 0xff shr 2 and 0x0f, "built with the stored sequence")
     }
 
     @Test
@@ -313,8 +316,8 @@ class IosDashPumpCommandTest {
 
         val result = f.pump.deliverTreatment(bolus(5.0))
 
-        assertFalse(result.success)
-        assertEquals(0.0, result.bolusDelivered)
+        assertTrue(result.success, "not decided, counted as asked, as Android: ${result.comment}")
+        assertEquals(5.0, result.bolusDelivered)
         assertTrue(f.decided.isEmpty(), "nothing decided yet")
         assertNull(f.pump.lastBolusAmount.value)
 
@@ -370,12 +373,13 @@ class IosDashPumpCommandTest {
 
         val result = f.pump.deliverTreatment(bolus(5.0))
 
+        // The call reads a status to decide the bolus (as Android's wait): the pod did not take it.
         assertFalse(result.success)
-        val open = assertNotNull(f.stateManager.activeCommand)
-        assertTrue(open.sequence != 2, "the bolus must not take the sequence of the TBR")
-        f.pump.getPumpStatus("decide the open bolus")
+        val decided = f.decided.last()
+        assertEquals(DashCommandKind.BOLUS, decided.command.kind)
+        assertTrue(decided.command.sequence != 2, "the bolus must not take the sequence of the TBR")
         assertNull(f.stateManager.activeCommand)
-        assertEquals(DashCommandConfirmation.DENIED, f.decided.last().confirmation)
+        assertEquals(DashCommandConfirmation.DENIED, decided.confirmation)
         assertNull(f.pump.lastBolusAmount.value, "the pod never took the bolus")
     }
 

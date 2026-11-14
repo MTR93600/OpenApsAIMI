@@ -126,6 +126,12 @@ interface DashOverviewFormat {
 
     /** The time left until something, [durationMs] from now. */
     fun timeRemaining(durationMs: Long): String
+
+    /**
+     * Pod units as insulin units (Android `ConcentrationHelper.fromPump`): with U200 insulin one pod
+     * unit is two insulin units.
+     */
+    fun fromPump(units: Double): Double
 }
 
 private const val PLACEHOLDER = "-"
@@ -332,7 +338,8 @@ private fun reservoirRow(state: DashPodStateManager, rh: TextResolver, format: D
     val pulses = state.pulsesRemaining
         ?: return PumpInfoRow(label = label, value = rh.gs(CoreUiStrings.overview_reservoir_concentration_value_over, format.insulin(50.0)), level = StatusLevel.NORMAL)
     val units = pulses * PodConstants.POD_PULSE_BOLUS_UNITS
-    val low = units < PodConstants.DEFAULT_MAX_RESERVOIR_ALERT_THRESHOLD.toDouble()
+    // Android `buildReservoir`: the threshold is in insulin units, so the concentration comes first.
+    val low = format.fromPump(units) < PodConstants.DEFAULT_MAX_RESERVOIR_ALERT_THRESHOLD.toDouble()
     return PumpInfoRow(label = label, value = format.insulin(units), level = if (low) StatusLevel.CRITICAL else StatusLevel.NORMAL)
 }
 

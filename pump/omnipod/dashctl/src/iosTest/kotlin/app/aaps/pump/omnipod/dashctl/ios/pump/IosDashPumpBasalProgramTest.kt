@@ -15,6 +15,7 @@ import app.aaps.pump.omnipod.dashctl.parity.parityHex
 import app.aaps.pump.omnipod.dashctl.parity.toParityHex
 import app.aaps.pump.omnipod.dashctl.pod.command.ProgramBasalCommand
 import app.aaps.pump.omnipod.dashctl.pod.command.SuspendDeliveryCommand
+import app.aaps.pump.omnipod.dashctl.pod.command.base.CommandType
 import app.aaps.pump.omnipod.dashctl.pod.definition.ActivationProgress
 import app.aaps.pump.omnipod.dashctl.pod.definition.BasalProgram
 import app.aaps.pump.omnipod.dashctl.pod.definition.BeepType
@@ -298,8 +299,9 @@ class IosDashPumpBasalProgramTest {
     fun `an open command blocks the suspend and nothing is sent`() = runTest {
         runningPod()
         val normal = f.pod.answerFor
-        f.pod.answerFor = { command -> if (isBolus(command)) parityHex(NAK) else normal(command) }
-        assertFalse(f.pump.deliverTreatment(bolus(1.0)).success)
+        // The bolus and the status reads that try to decide it get a NAK: the bolus stays open.
+        f.pod.answerFor = { command -> if (isBolus(command) || command[6] == CommandType.GET_STATUS.value) parityHex(NAK) else normal(command) }
+        assertTrue(f.pump.deliverTreatment(bolus(1.0)).success, "not decided: counted as asked, as Android")
         assertEquals(DashCommandKind.BOLUS, f.stateManager.activeCommand?.kind)
         val before = f.writesFromPump().size
 

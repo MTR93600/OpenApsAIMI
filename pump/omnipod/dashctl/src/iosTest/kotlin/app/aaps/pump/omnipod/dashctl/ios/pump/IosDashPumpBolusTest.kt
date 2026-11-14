@@ -291,11 +291,13 @@ class IosDashPumpBolusTest {
     }
 
     /**
-     * The same, but no status can be read (the link is gone). Nothing is known, so nothing is reported
-     * delivered and the bolus stays open until a status decides it (fail closed). No stop goes blind.
+     * The same, but no status can be read (the link is gone). As Android (`waitForBolusDeliveryToComplete`
+     * returns `requestedBolusAmount`, "will be updated later, via pumpSync"): a success with the asked
+     * amount, which `PumpSync` already counts from the send. The bolus stays open until a status
+     * decides it, so the next delivery command is refused until then. No stop goes blind.
      */
     @Test
-    fun `a stop asked while the bolus is not confirmed and no status can be read reports nothing`() = runTest {
+    fun `a stop asked while the bolus is not confirmed and no status can be read counts the asked amount as Android`() = runTest {
         val f = newFixture()
         f.pairAndConnect()
         f.bolusPulsesOnNextBolus = 30
@@ -314,11 +316,79 @@ class IosDashPumpBolusTest {
 
         val result = f.pump.deliverTreatment(bolus(2.0))
 
-        assertFalse(result.success, result.comment)
-        assertEquals(0.0, result.bolusDelivered)
+        assertTrue(result.success, result.comment)
+        assertTrue(result.enacted)
+        assertEquals(2.0, result.bolusDelivered)
         assertTrue(f.bolusStops.isEmpty())
         assertTrue(f.decided.isEmpty(), "nothing decided")
         assertEquals(DashCommandKind.BOLUS, f.stateManager.activeCommand?.kind, "the bolus stays open")
+        assertEquals(1, f.bolusCommands())
+    }
+
+    /**
+     * A meal bolus whose answer is lost (no stop asked). Android does not stop there: its wait reads
+     * the status, which decides the bolus, and follows it to its end. The call is then a success, so
+     * the queue saves the carbs of the meal, which it saves only on success.
+     */
+    @Test
+    fun `a bolus whose answer is lost is decided by a status and followed as Android`() = runTest {
+        val f = newFixture()
+        f.pairAndConnect()
+        val normal = f.pod.answerFor
+        // The pod takes the bolus; its answer is a NAK, so the bolus is not confirmed by it.
+        f.pod.answerFor = { command ->
+            val answer = normal(command)
+            if (DashPumpOnFakePod.isBolus(command)) parityHex(NAK) else answer
+        }
+
+        val result = f.pump.deliverTreatment(bolus(1.0))
+
+        assertTrue(result.success, result.comment)
+        assertTrue(result.enacted)
+        assertEquals(1.0, result.bolusDelivered, 1e-9)
+        assertEquals(DashCommandKind.BOLUS to DashCommandConfirmation.SUCCESS, f.decided.first().command.kind to f.decided.first().confirmation)
+        assertNull(f.stateManager.activeCommand, "decided inside the call")
+        assertEquals(1, f.bolusCommands(), "the bolus went once")
+    }
+
+    /** As above, but the pod did not take the bolus: the status says so, and the call is a failure with nothing delivered. */
+    @Test
+    fun `a bolus whose answer is lost and that the pod did not take is a failure`() = runTest {
+        val f = newFixture()
+        f.pairAndConnect()
+        val normal = f.pod.answerFor
+        f.pod.answerFor = { command -> if (DashPumpOnFakePod.isBolus(command)) parityHex(NAK) else normal(command) }
+
+        val result = f.pump.deliverTreatment(bolus(1.0))
+
+        assertFalse(result.success, result.comment)
+        assertEquals(0.0, result.bolusDelivered)
+        assertEquals(DashCommandConfirmation.DENIED, f.decided.single().confirmation)
+        assertNull(f.stateManager.activeCommand)
+    }
+
+    /**
+     * The pod takes the bolus and the link drops before its answer, and no status can be read after
+     * it. As Android: a success with the asked amount (already counted in `PumpSync` from the send),
+     * so the carbs of the meal are saved and the user is not told to give it again. The bolus stays
+     * open, so nothing more is sent until a status decides it.
+     */
+    @Test
+    fun `a bolus whose answer is lost with no status read counts the asked amount as Android`() = runTest {
+        val f = newFixture()
+        f.pairAndConnect()
+        f.pod.dropLinkWhileAnswering = 7 to 0
+
+        val result = f.pump.deliverTreatment(bolus(1.5))
+
+        assertTrue(result.success, result.comment)
+        assertTrue(result.enacted)
+        assertEquals(1.5, result.bolusDelivered)
+        assertEquals(DashCommandKind.BOLUS, f.stateManager.activeCommand?.kind, "the bolus stays open")
+        assertTrue(f.decided.isEmpty())
+        f.pod.dropLinkWhileAnswering = null
+        assertSame(DashConnectResult.SessionReady, f.reconnect())
+        assertFalse(f.pump.deliverTreatment(bolus(1.0)).success, "the next bolus is refused while the first is open")
         assertEquals(1, f.bolusCommands())
     }
 

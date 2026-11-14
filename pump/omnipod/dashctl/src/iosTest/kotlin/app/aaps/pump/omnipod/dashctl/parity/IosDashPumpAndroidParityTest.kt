@@ -69,8 +69,9 @@ class IosDashPumpAndroidParityTest {
         runTest {
             val before = f.pod.fromPhone.size
             val result = f.pump.deliverTreatment(DetailedBolusInfo().apply { insulin = 5.0 })
-            // No answer from the pod: the bolus is not reported as delivered.
-            assertFalse(result.success, "fixture: a bolus with no answer is not reported as delivered")
+            // No answer from the pod and no status: Android reports the asked amount (it is in PumpSync
+            // from the send) and the bolus stays open (`waitForBolusDeliveryToComplete`).
+            assertTrue(result.success, "fixture: a bolus with no answer is counted as asked, as Android")
             assertEquals(before + 1, f.pod.fromPhone.size, "fixture: exactly one message")
             val beforeSecond = f.pod.fromPhone.size
             secondSuccess = f.pump.deliverTreatment(DetailedBolusInfo().apply { insulin = 5.0 }).success

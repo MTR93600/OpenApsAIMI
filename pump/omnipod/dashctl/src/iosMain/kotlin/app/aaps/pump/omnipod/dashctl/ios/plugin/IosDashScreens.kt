@@ -1,5 +1,6 @@
 package app.aaps.pump.omnipod.dashctl.ios.plugin
 
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.pump.PumpEnactResult
 import app.aaps.core.interfaces.pump.PumpInsulin
@@ -13,6 +14,8 @@ import app.aaps.pump.omnipod.dashctl.session.DashPodStateManager
 import app.aaps.pump.omnipod.dashctl.ui.DashOverviewFormat
 import app.aaps.pump.omnipod.dashctl.ui.DashWizardPod
 import app.aaps.pump.omnipod.dashctl.ui.DashWizardResult
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.withContext
 
 /**
  * The pod as the wizard sees it, the calls of Android `DashOmnipodWizardViewModel`:
@@ -25,32 +28,41 @@ import app.aaps.pump.omnipod.dashctl.ui.DashWizardResult
  *
  * [openRadio] runs before every pod call: it starts CoreBluetooth once (the plugin also does it in
  * `onStart`), so the wizard works even when it is the first thing that needs the radio.
+ *
+ * Every pod call runs on [podContext], the IO dispatcher, as Android subscribes the wizard actions on
+ * `aapsSchedulers.io` (`OmnipodWizardViewModel.executeAction`) and runs `doInsertCannula` with
+ * `rxSingle(Dispatchers.IO)`. The scan, the connect, the pairing and every activation command block
+ * their thread for seconds (up to the connect timeout). The wizard model calls these from the main
+ * thread and keeps its screen state there; only the pod work moves.
  */
 class IosDashWizardPod(
     private val rules: DashPluginRules,
     private val stateManager: DashPodStateManager,
     private val commandQueue: () -> CommandQueue,
     private val openRadio: () -> Unit,
+    /** Where the pod work runs. The IO dispatcher; a test on virtual time gives its own. */
+    private val podContext: CoroutineContext = aapsIoDispatcher,
 ) : DashWizardPod {
 
     override val activationProgress: ActivationProgress get() = stateManager.activationProgress
 
     override suspend fun activatePart1(): DashWizardResult {
         openRadio()
-        return rules.activatePodPart1().toWizardResult()
+        return withContext(podContext) { rules.activatePodPart1() }.toWizardResult()
     }
 
     override suspend fun activatePart2(): DashWizardResult {
         openRadio()
-        return rules.activatePodPart2().toWizardResult()
+        return withContext(podContext) { rules.activatePodPart2() }.toWizardResult()
     }
 
     override suspend fun deactivate(): DashWizardResult {
         openRadio()
-        return commandQueue().customCommand(CommandDeactivatePod()).toWizardResult()
+        return withContext(podContext) { commandQueue().customCommand(CommandDeactivatePod()) }.toWizardResult()
     }
 
-    override suspend fun discard() = rules.discardPod()
+    /** The discard waits for the command lock and writes `PumpSync`, so it runs on [podContext] too. */
+    override suspend fun discard() = withContext(podContext) { rules.discardPod() }
 }
 
 private fun PumpEnactResult.toWizardResult() = DashWizardResult(success = success, comment = comment)
@@ -75,4 +87,6 @@ class IosDashOverviewFormat(
     override fun ago(ms: Long): String = dateUtil.minAgo(rh, ms)
 
     override fun timeRemaining(durationMs: Long): String = dateUtil.timeRemainingString(durationMs, rh)
+
+    override fun fromPump(units: Double): Double = ch.fromPump(PumpInsulin(units))
 }

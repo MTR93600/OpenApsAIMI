@@ -360,6 +360,83 @@ class IosDashPumpHeldConnectionTest {
     }
 
     /**
+     * Android `deliverTreatment` sets `bolusDeliveryInProgress` first and connects later, inside the
+     * bolus command (`observeConnectToPod`). A stop pressed while the connection is made is kept, and
+     * `observeDeliveryNotCanceled` then sends nothing. Before the fix the flag was set after the
+     * connect, the stop was dropped and the whole bolus went in.
+     */
+    @Test
+    fun `a stop pressed while the bolus call connects sends no bolus as Android`() = runTest {
+        activate()
+        val boluses = pod.commands.count { isBolus(it) }
+        central.podGoesAway()
+        var stopped = false
+        onSleep = {
+            if (!stopped) {
+                stopped = true
+                pump.stopBolusDelivering()
+            }
+            central.podComesInRange()
+        }
+
+        val result = pump.deliverTreatment(DetailedBolusInfo().apply { insulin = 1.0 })
+
+        assertTrue(stopped, "the stop was pressed during the connect")
+        assertTrue(result.success, result.comment)
+        assertFalse(result.enacted)
+        assertEquals(boluses, pod.commands.count { isBolus(it) }, "no bolus reached the pod")
+        pod.assertNoProblems()
+    }
+
+    /**
+     * Android adds `observeConnectToPod` after the prime wait ("connection can time out while
+     * waiting"). The link drops during the wait: the status check must connect again first.
+     */
+    @Test
+    fun `a drop during the prime wait connects again before the status check as Android`() = runTest {
+        central.advertisements += advertisement(POD_ID)
+        var dropped = false
+        onPumpSleep = {
+            if (!dropped) {
+                dropped = true
+                central.podGoesAway()
+                onSleep = { central.podComesInRange() }
+            }
+        }
+
+        val part1 = pump.activatePodPart1(AlertTrigger.ReservoirVolumeTrigger(200))
+
+        assertTrue(dropped, "the link dropped during the prime wait")
+        assertTrue(part1.success, part1.comment)
+        assertEquals(ActivationProgress.PHASE_1_COMPLETED, stateManager.activationProgress)
+        assertEquals(1, pod.commands.count { isBolus(it) }, "the prime went once")
+        pod.assertNoProblems()
+    }
+
+    /** The same after the cannula wait of part 2. */
+    @Test
+    fun `a drop during the cannula wait connects again before the status check as Android`() = runTest {
+        central.advertisements += advertisement(POD_ID)
+        assertTrue(pump.activatePodPart1(AlertTrigger.ReservoirVolumeTrigger(200)).success)
+        var dropped = false
+        onPumpSleep = {
+            if (!dropped) {
+                dropped = true
+                central.podGoesAway()
+                onSleep = { central.podComesInRange() }
+            }
+        }
+
+        val part2 = pump.activatePodPart2(program, userConfiguredExpirationReminderHours = 4, userConfiguredExpirationAlarmHours = 7)
+
+        assertTrue(dropped, "the link dropped during the cannula wait")
+        assertTrue(part2.success, part2.comment)
+        assertEquals(ActivationProgress.COMPLETED, stateManager.activationProgress)
+        assertEquals(2, pod.commands.count { isBolus(it) }, "the prime and the cannula went once each")
+        pod.assertNoProblems()
+    }
+
+    /**
      * The connector is made in the constructor and may call back into the pump at once (a state
      * restore can start a link set up while the central opens). The pump must be fully built then.
      */

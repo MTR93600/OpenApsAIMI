@@ -88,6 +88,7 @@ import app.aaps.pump.omnipod.dashctl.session.DashExpirationAlertSettings
 import app.aaps.pump.omnipod.dashctl.session.DashLastBolus
 import app.aaps.pump.omnipod.dashctl.session.DashLowReservoirAlertSettings
 import app.aaps.pump.omnipod.dashctl.session.DashPodStateManager
+import app.aaps.pump.omnipod.dashctl.session.DashPodStateUnknownException
 import app.aaps.pump.omnipod.dashctl.session.DashResolvedCommand
 import app.aaps.pump.omnipod.dashctl.util.mapProfileToBasalProgram
 import kotlin.concurrent.Volatile
@@ -467,6 +468,26 @@ class IosDashPump(
 
     override fun isPaired(): Boolean = stateManager.ltk != null
 
+    /**
+     * True when the stored pod state is known (see `DashPodStateManager.isStateKnown`). While it is
+     * not, the store is read again first, so this is also the retry of that read.
+     */
+    fun isPodStateKnown(): Boolean = stateManager.reloadIfUnknown()
+
+    /**
+     * Null when the stored pod state is known ([isPodStateKnown], which reads it again first). Else
+     * the failure of [name], with nothing sent: the pod on the body may still run with the key this
+     * phone cannot read now, so no command, no pairing and no discard may go until it is read.
+     * Deliberate difference from Android, which has no such read failure (see
+     * `DashPodStateManager.isStateKnown`).
+     */
+    private fun refusedStateUnknown(name: String): PumpEnactResult? {
+        if (isPodStateKnown()) return null
+        val reason = stateManager.stateUnreadableReason
+        aapsLogger.error(LTag.PUMP, "$name refused: the stored pod state cannot be read ($reason). Nothing is sent.")
+        return failure("$name refused: the stored pod state cannot be read now ($reason). Nothing was sent. Unlock the phone, then try again.")
+    }
+
     // -- Pairing & session ----------------------------------------------------
 
     /**
@@ -575,6 +596,9 @@ class IosDashPump(
             val sent = sendCommand(build) { beforeSend() }
             return DashExchange(sent.reachedRadio, sent.error)
         }
+
+        /** The link may have dropped during the prime or the cannula wait; the activation holds the command lock. */
+        override fun connectAfterWait() = reconnectInsideBolus("status after the activation wait")
     }
 
     private fun activation() = DashActivation(stateManager, activationPod, aapsLogger, now, sleep)
@@ -718,6 +742,7 @@ class IosDashPump(
         connectFirst: () -> String?,
         block: suspend () -> Unit,
     ): PumpEnactResult {
+        refusedStateUnknown(name)?.let { return it }
         val before = activationRunning
         activationRunning = true
         try {
@@ -864,6 +889,10 @@ class IosDashPump(
      * ([flushConnectionCountsWithLock]), so it shows after the next session or command.
      */
     override fun connect(reason: String) {
+        if (!isPodStateKnown()) {
+            aapsLogger.error(LTag.PUMP, "Dash connect ($reason): the stored pod state cannot be read (${stateManager.stateUnreadableReason}), nothing to connect to")
+            return
+        }
         val address = stateManager.bluetoothAddress
         if (address == null) {
             aapsLogger.info(LTag.PUMP, "Dash connect ($reason): no pod address stored, nothing to connect to")
@@ -931,8 +960,17 @@ class IosDashPump(
         aapsLogger.info(LTag.PUMPBTCOMM, "Connect before $name: $result")
     }
 
-    /** [connectBeforeCommand], then [action] with [commandMutex] held. */
-    private suspend inline fun <T> connectThenLock(name: String, stateReady: Boolean, action: () -> T): T {
+    /**
+     * [connectBeforeCommand], then [action] with [commandMutex] held. Refused with nothing sent while
+     * the stored pod state is not known ([refusedStateUnknown]).
+     */
+    private suspend inline fun connectThenLock(name: String, stateReady: Boolean, action: () -> PumpEnactResult): PumpEnactResult {
+        refusedStateUnknown(name)?.let { return it }
+        return connectThenLockKnownState(name, stateReady, action)
+    }
+
+    /** [connectThenLock] for a caller that checked [isPodStateKnown] itself. */
+    private suspend inline fun <T> connectThenLockKnownState(name: String, stateReady: Boolean, action: () -> T): T {
         connectBeforeCommand(name, stateReady)
         return commandMutex.withLock {
             flushConnectionCountsWithLock()
@@ -968,26 +1006,34 @@ class IosDashPump(
      * - the bolus goes through its active command. Only after its SUCCESS the bolus is followed to its
      *   end ([DashBolusWait]): the result is a success with what went in.
      *
-     * - a bolus that is not confirmed while the user asked to stop it: a status is read first to decide
-     *   it ([decideBolusBeforeStop], Android's first block of `waitForBolusDeliveryToComplete`); when
-     *   the pod took it, it is followed and the wait sends the stop.
+     * - a bolus whose answer was lost (NOT_CONFIRMED): a status is read to decide it ([decideOpenBolus],
+     *   as Android's wait reads the status after a lost answer; with a stop asked this is Android's first
+     *   block of `waitForBolusDeliveryToComplete`). When the pod took it, it is followed as any bolus
+     *   and the wait sends a stop that was asked. When no status can be read, the result is a success
+     *   with the asked amount, as Android (`success(true).enacted(true)`, its wait returns
+     *   `requestedBolusAmount`): the bolus was recorded in `PumpSync` when it was sent, so the queue
+     *   must also save its carbs (it saves them only on success), and the user must not be told to give
+     *   it again. The command stays open: every later delivery command is refused until a status
+     *   decides it, and the plugin raises the "bolus uncertain" alarm (`afterBolus`), as Android.
+     *   Only when the write gave a `CommandSent` (so the bolus is in `PumpSync`): when the write threw,
+     *   Android fails the call and records nothing, and so does this (the command stays open here).
      *
      * Deliberate differences from Android, all fail closed:
-     * - a bolus that is DENIED, never sent or not confirmed (no stop asked) is a failure with nothing
-     *   delivered, and is not followed. Android runs the wait after a DENIED and after a not confirmed
-     *   bolus too, and after a DENIED it reports the amount of the bolus before (its `lastBolus`). A
-     *   bolus that a later status confirms reaches [onCommandDecided]. Still open: a stop asked after
-     *   this failure returned does nothing (the bolus dialog is closed); Android would still be in its
-     *   wait and send it.
+     * - a bolus that is DENIED or never sent, or that a status decides as not taken, is a failure with
+     *   nothing delivered, and is not followed. Android runs the wait after a DENIED too, and then
+     *   reports the amount of the bolus before (its `lastBolus`).
      *
      * As Android, a bolus larger than the reservoir ([syncPumpFlows], [reservoirLevel]) is refused with
      * nothing sent. Android checks it before the pulse rate (which it reads with `!!`); here the pulse
      * rate comes first, both refuse with nothing sent.
      */
     override suspend fun deliverTreatment(detailedBolusInfo: DetailedBolusInfo): PumpEnactResult {
-        connectBeforeCommand("bolus", stateReady = stateManager.isActivatedAndRunning)
+        refusedStateUnknown("Bolus")?.let { return it }
+        // Android sets the flag first: a stop pressed while the connection is made is kept, and the
+        // bolus is then not sent ([sendBolusAndWait]).
         bolusDeliveryInProgress = true
         try {
+            connectBeforeCommand("bolus", stateReady = stateManager.isActivatedAndRunning)
             return commandMutex.withLock {
                 busy = true
                 try {
@@ -1031,6 +1077,7 @@ class IosDashPump(
      *   ([DashPodStateManager.basalCorrectionInProgress]).
      */
     suspend fun deliverBasalCorrection(): PumpEnactResult {
+        refusedStateUnknown("Basal correction")?.let { return it }
         val needed = commandMutex.withLock {
             flushConnectionCountsWithLock()
             stateManager.needsBasalCorrection(now()).also { if (it) stateManager.updateLastBasalCorrectionTime(now()) }
@@ -1050,11 +1097,12 @@ class IosDashPump(
             aapsLogger.info(LTag.PUMP, "Basal correction skipped: bolus already in progress")
             return failure("Bolus already in progress")
         }
-        connectBeforeCommand("basal correction", stateReady = stateManager.isActivatedAndRunning)
+        // As the bolus: the flag first, so a stop pressed while the connection is made is kept.
         bolusDeliveryInProgress = true
         stateManager.basalCorrectionInProgress = true
         aapsLogger.info(LTag.PUMP, "Delivering basal correction")
         try {
+            connectBeforeCommand("basal correction", stateReady = stateManager.isActivatedAndRunning)
             return commandMutex.withLock {
                 busy = true
                 try {
@@ -1103,8 +1151,15 @@ class IosDashPump(
                 .build()
         }
         var confirmation = outcome.confirmation
-        if (confirmation == DashCommandConfirmation.NOT_CONFIRMED && bolusCanceled) {
-            confirmation = decideBolusBeforeStop()
+        if (confirmation == DashCommandConfirmation.NOT_CONFIRMED) {
+            confirmation = decideOpenBolus()
+        }
+        if (confirmation == DashCommandConfirmation.NOT_CONFIRMED && outcome.sentEvent) {
+            aapsLogger.warn(LTag.PUMP, "Bolus $units U not confirmed and no status read: counted as given, as Android, until a status decides it")
+            return DashPumpEnactResult(
+                success = true, enacted = true, bolusDelivered = units,
+                comment = "Bolus $units U: the pod did not confirm it. It is counted as given until a status decides it."
+            )
         }
         if (confirmation != DashCommandConfirmation.SUCCESS) {
             return failure("Bolus $units U: ${DeliveryOutcome(confirmation, outcome.error).describe()}")
@@ -1116,18 +1171,19 @@ class IosDashPump(
     }
 
     /**
+     * A bolus whose answer was lost. A status is read, up to [DashBolusWait.BOLUS_RETRIES] times
+     * [DashBolusWait.BOLUS_RETRY_INTERVAL_MS] apart, to decide the bolus. With a stop asked this is
      * Android `waitForBolusDeliveryToComplete`, first block (`bolusCanceled && activeCommand != null`):
-     * the user asked to stop a bolus that is not confirmed. A status is read, up to
-     * [DashBolusWait.BOLUS_RETRIES] times [DashBolusWait.BOLUS_RETRY_INTERVAL_MS] apart, to decide
-     * the bolus. When the pod took it, the wait then sends the stop. Without this the stop would be
-     * dropped and the pod would deliver all of it, while every other delivery command, a stop of all
-     * delivery too, is refused until a status is read.
+     * when the pod took it, the wait then sends the stop. Without this the stop would be dropped and
+     * the pod would deliver all of it, while every other delivery command, a stop of all delivery too,
+     * is refused until a status is read. Without a stop it is the status read of Android's wait, which
+     * runs after a lost answer too.
      *
      * The outcome is decided inside the call, so it goes to [onCommandDecided] as not late and the
      * result of [deliverTreatment] reports what went in. Nothing read: the bolus stays open and
      * nothing is reported delivered (fail closed).
      */
-    private suspend fun decideBolusBeforeStop(): DashCommandConfirmation {
+    private suspend fun decideOpenBolus(): DashCommandConfirmation {
         repeat(DashBolusWait.BOLUS_RETRIES) {
             reconnectInsideBolus("status")
             val read = readStatusDeciding(decidedLate = false)
@@ -1363,6 +1419,8 @@ class IosDashPump(
      * time zone or DST is ignored, as Android (`timezoneOrDSTChanged`).
      */
     override suspend fun setNewBasalProfile(profile: PumpProfile): PumpEnactResult {
+        // First: an unknown state shows as "not activated", which would answer success.
+        refusedStateUnknown("Basal program")?.let { return it }
         if (!stateManager.isActivationCompleted) {
             aapsLogger.info(LTag.PUMP, "setNewBasalProfile: pod activation not completed, nothing sent")
             return DashPumpEnactResult(success = true, enacted = false, comment = "Pod not activated, basal program not sent")
@@ -1676,8 +1734,15 @@ class IosDashPump(
      * Android `OmnipodDashPumpPlugin.deactivatePod`: `DeactivateCommand`, with its own active command
      * (DEACTIVATE). Not held back on a pod that does not run (Android `deactivatePod` has no
      * `observePodRunning`): a pod in alarm, or one whose activation failed half way, is deactivated
-     * too. As on Android, an open command still blocks it (Android `createActiveCommand` fails) until a
-     * status decides it; a pod that does not answer at all is discarded instead ([discardPod]).
+     * too.
+     *
+     * An open command (an earlier answer was lost): Android sends the deactivation anyway
+     * (`checkNoActiveCommand = false`). Here a status is read first, in the same call, which decides
+     * the open command (its outcome reaches [onCommandDecided], so it is counted), and then the
+     * deactivation goes. Only when the pod gives no status at all the deactivation is refused, with
+     * the open command kept; the pod would not get the deactivation then either. A pod that does not
+     * answer at all is discarded instead ([discardPod]). Deliberate difference, kept for safety: the
+     * outcome of the open command (a bolus, a temp basal) is never lost behind the deactivation.
      *
      * When the pod took it, the whole pod state is cleared, as Android `podStateManager.reset()`
      * ([DashPodStateManager.reset]: key, unique id, counters, last bolus, basal program, alert settings),
@@ -1699,6 +1764,10 @@ class IosDashPump(
      * deactivates again or discards the pod.
      */
     suspend fun deactivatePod(): PumpEnactResult = lockedCommand(needsRunningPod = false) {
+        if (stateManager.activeCommand != null && stateManager.commandConfirmation() == DashCommandConfirmation.NOT_CONFIRMED) {
+            aapsLogger.info(LTag.PUMP, "Deactivation: the last command is not confirmed, reading a status first")
+            readStatusWithLock()
+        }
         val outcome = sendDeliveryCommand(DashCommandKind.DEACTIVATE) { uid, seq ->
             DeactivateCommand.Builder()
                 .setSequenceNumber(seq)
@@ -1732,8 +1801,13 @@ class IosDashPump(
      * given again: it was already counted at the asked amount when it was confirmed, and the reset
      * keeps that amount, as Android. When the pod is kaput, [checkPodKaput] (run by the resolve first)
      * ends it with what the last status left and gives it as [DashBolusEndedByFault] before the reset.
+     *
+     * Throws [DashPodStateUnknownException], with nothing changed, while the stored pod state is not
+     * known ([isPodStateKnown]): the discard would delete a key this phone cannot read now.
      */
     suspend fun discardPod() {
+        // Throws: nothing may clear the stored item before it was read (it may hold the key of the pod on the body).
+        if (!isPodStateKnown()) throw DashPodStateUnknownException(stateManager.stateUnreadableReason ?: "not read")
         commandMutex.withLock {
             val resolved = resolveAndHandle(decidedLate = true)
             val open = resolved.command
@@ -1812,11 +1886,12 @@ class IosDashPump(
      * Android has no mark, and its `podStatus` is also stale after a NAK.
      */
     override suspend fun getPumpStatus(reason: String) {
+        if (refusedStateUnknown("Status read ($reason)") != null) return
         if (reason != REQUESTED_BY_USER && !stateManager.isActivationCompleted) {
             aapsLogger.info(LTag.PUMP, "getPumpStatus ($reason): pod activation not completed, nothing read")
             return
         }
-        connectThenLock("status", stateReady = stateManager.activationProgress.isAtLeast(ActivationProgress.SET_UNIQUE_ID)) {
+        connectThenLockKnownState("status", stateReady = stateManager.activationProgress.isAtLeast(ActivationProgress.SET_UNIQUE_ID)) {
             busy = true
             try {
                 if (!stateManager.activationProgress.isAtLeast(ActivationProgress.SET_UNIQUE_ID)) {
@@ -1871,6 +1946,12 @@ class IosDashPump(
          * completion of a basal program send, which needs that answer (`DefaultStatusResponse::class`).
          */
         val answeredWithStatus: Boolean = false,
+        /**
+         * The write was taken or may have been (Android `CommandSent`), so [onCommandSent] ran and the
+         * command is recorded in `PumpSync` from its send. False when nothing left, and when the write
+         * threw (Android has no `CommandSent` then).
+         */
+        val sentEvent: Boolean = false,
     ) {
 
         fun describe(): String = when (confirmation) {
@@ -1963,7 +2044,7 @@ class IosDashPump(
         // Only here, never for a status read: a status that could not be sent must not close an
         // open delivery command as "not sent".
         if (!sent.reachedRadio) stateManager.markActiveCommandNotSent()
-        return DeliveryOutcome(resolveAndHandle(decidedLate = false).confirmation, sent.error, sent.response is DefaultStatusResponse)
+        return DeliveryOutcome(resolveAndHandle(decidedLate = false).confirmation, sent.error, sent.response is DefaultStatusResponse, sent.sentEvent)
     }
 
     /**
@@ -2030,7 +2111,7 @@ class IosDashPump(
      * The result of [sendCommand]. [reachedRadio] is false only for `CommandSendErrorSending`: the
      * pod cannot have the command. [error] is null when an answer was read.
      */
-    private class SentCommand(val reachedRadio: Boolean, val error: String?, val response: Response? = null)
+    private class SentCommand(val reachedRadio: Boolean, val error: String?, val response: Response? = null, val sentEvent: Boolean = false)
 
     /**
      * One command and its answer: port of `SharedBleManager.sendCommand` with the counter updates of
@@ -2083,12 +2164,13 @@ class IosDashPump(
                 afterSent()
             }
         }
+        // From here on the command reached the radio with a CommandSent event.
         val readResult = try {
             s.readAndAckResponse()
         } catch (e: Exception) {
             aapsLogger.error(LTag.PUMPBTCOMM, "Could not read the answer of the pod", e)
             closeLink("read failed: ${e.message}")
-            return SentCommand(reachedRadio = true, error = "could not read the answer: ${e.message}")
+            return SentCommand(reachedRadio = true, error = "could not read the answer: ${e.message}", sentEvent = true)
         }
         val response = when (readResult) {
             is CommandReceiveSuccess -> readResult.result
@@ -2097,7 +2179,7 @@ class IosDashPump(
         }
         response?.let(::onResponse)
         val error = if (readResult is CommandReceiveError) "could not read the answer: ${readResult.msg}" else null
-        return SentCommand(reachedRadio = true, error = error, response = response)
+        return SentCommand(reachedRadio = true, error = error, response = response, sentEvent = true)
     }
 
     /** `PodEventInterceptor`: the sequence goes up, then `handleResponse` ([DashPodStateManager.updateFromResponse]). */

@@ -236,6 +236,14 @@ class DashPodWizardModel(
         scope.launch {
             try {
                 pod.discard()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Refused (the stored pod state cannot be read now): nothing was cleared, so the pod
+                // is not shown as discarded, and the reason is shown on the page.
+                aapsLogger.error(LTag.PUMP, "Discard of the pod refused", e)
+                _actionState.value = DashWizardActionState.Error(e.message ?: rh.gs(DashStrings.dash_wizard_unexpected_error))
+                return@launch
             } finally {
                 actionRunning = false
             }

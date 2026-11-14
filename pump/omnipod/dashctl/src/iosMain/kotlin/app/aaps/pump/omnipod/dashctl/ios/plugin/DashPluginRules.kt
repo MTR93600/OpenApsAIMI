@@ -114,6 +114,16 @@ class DashPluginRules(
     @Volatile
     private var timeChangeRunning = false
 
+    /**
+     * The basal program of a [handleTimeChange] that its call left not confirmed. Android stores such
+     * a program as SET_TIME in its history and, when a status confirms it later, asks for no profile
+     * change; the iOS driver stores no such kind, so it is kept here, in memory only. After an app
+     * restart it is gone, and a late SUCCESS then asks for the profile once more (the queue finds the
+     * profile set and sends nothing).
+     */
+    @Volatile
+    private var openTimeChangeProgram: DashActiveCommand? = null
+
     // ------------------------------------------------------------------ outcomes
 
     /**
@@ -150,6 +160,8 @@ class DashPluginRules(
             }
         }
         if (outcome !is DashCommandOutcome) return
+        // The time change program its call left open is decided now (it is not open any more after this).
+        val lateTimeChange = outcome.confirmation.isFinal && isOpenTimeChangeProgram(outcome.command)
         val confirmed = outcome.confirmation == DashCommandConfirmation.SUCCESS
         if (!confirmed && outcome.confirmation != DashCommandConfirmation.DENIED) return
         when (outcome.command.kind) {
@@ -177,6 +189,7 @@ class DashPluginRules(
             DashCommandKind.RESUME_DELIVERY,
             DashCommandKind.BASAL_PROGRAM   -> if (confirmed) {
                 if (outcome.command.kind == DashCommandKind.BASAL_PROGRAM && !timeChangeRunning &&
+                    !lateTimeChange &&
                     !commandQueue().isRunning(Command.CommandType.BASAL_PROFILE)
                 ) {
                     // We are late-confirming this command. Before that, we answered with success false.
@@ -293,6 +306,22 @@ class DashPluginRules(
         }
     }
 
+    /**
+     * [afterBasalProgram], then the result of a basal program call ([before] is the open command before
+     * the call). When the program itself stays not confirmed, the comment is Android's
+     * (`failWhenUnconfirmed`): the queue shows it in the FAILED_UPDATE_PROFILE notice. Android picks
+     * "Failed to set the new basal profile. Delivery suspended" when the suspend before was confirmed,
+     * but it reads that flag when the command chain is built, before the suspend ran, so it always
+     * shows "Setting basal profile might have failed"; the same text is given here.
+     */
+    fun basalProgramResult(before: DashActiveCommand?, result: PumpEnactResult): PumpEnactResult {
+        afterBasalProgram(before)
+        if (!result.success && commandMadeSince(stateManager, before)?.kind == DashCommandKind.BASAL_PROGRAM) {
+            result.comment(rh.gs(DashStrings.omnipod_dash_ios_basal_profile_might_have_failed))
+        }
+        return result
+    }
+
     /** Android `notifyOnUnconfirmed`: the notice only while a command is still not confirmed. */
     fun notifyOnUnconfirmed(id: NotificationId, text: TextRef, sound: AlarmSound?, level: NotificationLevel = NotificationLevel.IMPORTANT) {
         if (stateManager.activeCommand == null) return
@@ -345,6 +374,7 @@ class DashPluginRules(
      * confirmed and the queue is idle, the pod warnings, and the zero temp basal while no pod runs.
      */
     suspend fun statusCheck() {
+        if (!podStateKnown()) return
         refreshStatusOnUnacknowledgedCommands()
         updatePodWarnings()
         aapsLogger.info(LTag.PUMP, "statusChecker")
@@ -356,6 +386,31 @@ class DashPluginRules(
             aapsLogger.warn(LTag.PUMP, "Error on createFakeTBRWhenNoActivePod=$e")
         }
     }
+
+    /**
+     * True when the stored pod state is known ([IosDashPump.isPodStateKnown], which also reads it
+     * again). While it is not, a pod may run on the body with a key this phone cannot read now: the
+     * status checker then does nothing (no "no pod" temp basal, no "no active pod" notice), an urgent
+     * notice says why, and the error is logged. The notice goes once the state is read. Deliberate
+     * difference from Android, which has no such read failure (see `DashPodStateManager.isStateKnown`).
+     */
+    fun podStateKnown(): Boolean {
+        if (driver.isPodStateKnown()) {
+            if (stateUnreadableNoticeShown) {
+                stateUnreadableNoticeShown = false
+                notificationManager.dismiss(NotificationId.PUMP_ERROR)
+            }
+            return true
+        }
+        aapsLogger.error(LTag.PUMP, "Dash status check skipped: the stored pod state cannot be read (${stateManager.stateUnreadableReason})")
+        stateUnreadableNoticeShown = true
+        notificationManager.post(NotificationId.PUMP_ERROR, DashStrings.omnipod_dash_ios_pod_state_unreadable)
+        return false
+    }
+
+    /** The notice of [podStateKnown] is shown, so it is dismissed once the state is read. */
+    @Volatile
+    private var stateUnreadableNoticeShown = false
 
     /** Android `refreshStatusOnUnacknowledgedCommands`. */
     fun refreshStatusOnUnacknowledgedCommands() {
@@ -451,10 +506,21 @@ class DashPluginRules(
         val result = try {
             driver.setNewBasalProfile(profile)
         } finally {
+            commandMadeSince(stateManager, before)?.takeIf { it.kind == DashCommandKind.BASAL_PROGRAM }?.let { openTimeChangeProgram = it }
             timeChangeRunning = false
         }
-        afterBasalProgram(before)
-        return result
+        return basalProgramResult(before, result)
+    }
+
+    /**
+     * True when [command] is the program of a time change that its call left open
+     * ([openTimeChangeProgram]); it is then forgotten, as it is decided now.
+     */
+    private fun isOpenTimeChangeProgram(command: DashActiveCommand): Boolean {
+        val open = openTimeChangeProgram ?: return false
+        val same = open.kind == command.kind && open.sequence == command.sequence && open.createdAtMs == command.createdAtMs
+        if (same) openTimeChangeProgram = null
+        return same
     }
 
     // ------------------------------------------------------------------ activation (for the wizard)
@@ -511,7 +577,11 @@ class DashPluginRules(
         return result
     }
 
-    /** The Android wizard and overview "Discard pod": the pod state is cleared and the fault notice goes. */
+    /**
+     * The Android wizard and overview "Discard pod": the pod state is cleared and the fault notice goes.
+     * Throws [app.aaps.pump.omnipod.dashctl.session.DashPodStateUnknownException], with nothing
+     * changed and nothing recorded, while the stored pod state cannot be read ([IosDashPump.discardPod]).
+     */
     suspend fun discardPod() {
         driver.discardPod()
         history?.addActivationStep(DashHistoryType.DISCARD_POD, success = true)

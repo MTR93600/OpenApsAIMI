@@ -439,7 +439,8 @@ phone, never AAPSClient. Android keeps `:pump:omnipod:dash` unchanged.
       and the zero temp basal), `IosOmnipodDashPluginGraphTest` (description, icon, pump screen,
       texts resolve).
       Review fixes (2026-11-14): the wizard work runs on `IosDashDriverHost.wizardScope` (process
-      lifetime, main thread, as Android `viewModelScope`), so leaving the screen cannot stop a part or
+      lifetime; the model state on the main thread, the pod work on the IO dispatcher since the parity
+      audit below, as Android subscribes it on `aapsSchedulers.io`), so leaving the screen cannot stop a part or
       skip the PumpSync records after it; the wizard gets the toolbar (`setToolbarConfig`, no back
       arrow while it runs, as Android) and the pump screen sets its toolbar again after it; Finish on
       "Pod Activated" closes only after the insulin switch and the site save are done; the profile
@@ -523,6 +524,73 @@ phone, never AAPSClient. Android keeps `:pump:omnipod:dash` unchanged.
       of the test has no other radio: Nightscout is the BG source (the ONE+ source opens CoreBluetooth
       with state restoration, which a test binary may not do) and Medtrum is left out.
       Still open: a real pod.
+
+- [x] **Parity audit fixes (2026-11-14, second round).** Five auditors compared the iOS plugin with
+      Android; the fixer checked each finding against both sides. Not committed, not on a device,
+      xcodebuild not run.
+      - **Unreadable Keychain is "state unknown", not "no pod"** (blocker, dosing). iOS can start the
+        app for a BLE event before the first unlock after a reboot; the Keychain read then fails
+        (`errSecInteractionNotAllowed`). Before, that looked exactly like "no pod": the status checker
+        wrote the 80 h zero PUMP_SUSPEND temp basal while the pod gave its basal (insulin on board too
+        low), and a new activation or a discard deleted the key of the pod on the body. Now:
+        `DashPodStateStore.read()` gives `Loaded`, `Empty` (only `errSecItemNotFound`) or `Unreadable`
+        (any other status, no data, bytes that do not decode; logged, the item is not touched);
+        `DashPodStateManager.isStateKnown` is false for `Unreadable` and every write is refused
+        (`DashPodStateUnknownException`), so nothing can replace the stored item; `IosDashPump` refuses
+        every pod command, the activation, the status read and the discard with nothing sent
+        (`refusedStateUnknown`), reading the store again first; `DashPluginRules.statusCheck` does
+        nothing then (no "no pod" temp basal, no "no active pod" notice), posts an urgent PUMP_ERROR
+        notice (`omnipod_dash_ios_pod_state_unreadable`) and logs; the read is tried again by every
+        command, every status check (1 min) and when iOS posts
+        `UIApplicationProtectedDataDidBecomeAvailable` (observer in `IosOmnipodDashPlugin.onStart`).
+        A save no longer deletes first: `SecItemUpdate`, then `SecItemAdd` only for "not found", both
+        results checked and logged. A discard that is refused shows its reason (wizard and pump
+        screen). Tests: `DashPodStateUnknownTest` (commonTest), `DashKeychainCodecTest` (+4, the status
+        table), `DashPodStateUnknownPluginTest` (iosTest, 4: no temp basal, every command refused, no
+        activation or discard writes, back to normal after the unlock). Left: the pump screen still
+        shows "No active pod" and the Activate button while the state is unknown (the activation is
+        refused with the reason when pressed); a write of the state that some path makes in memory
+        before its refused save stays in memory until the next successful read replaces it.
+      - **Wizard pod work off the main thread** (parity). `IosDashWizardPod` runs part 1, part 2,
+        the deactivation and the discard on the IO dispatcher (`podContext`), as Android
+        `subscribeOn(aapsSchedulers.io)` and `rxSingle(Dispatchers.IO)`; the model and its screen
+        state stay on the main thread. Before, the 5 s scan, the connect (up to 30 s), the pairing and
+        every activation command blocked the main thread. Test: `DashWizardPodThreadTest`.
+      - **Lost bolus answer** (dosing). A bolus whose answer is lost is now decided by a status read
+        with or without a stop (`decideOpenBolus`), as Android's wait reads the status; when the pod
+        took it, it is followed to its end; when no status can be read, the result is Android's
+        success with the asked amount (it is already in `PumpSync` from the send), so the queue saves
+        the carbs of a meal bolus and the user is not told to bolus again; the command stays open, so
+        nothing more is sent until a status decides it. Before, the result was a failure: the carbs
+        were dropped while the insulin was counted. Tests: 3 new and 1 changed in
+        `IosDashPumpBolusTest`; the discard test now opens its bolus with a lost link.
+      - **Stop during the connect of a bolus** (parity). `bolusDeliveryInProgress` is set before the
+        connect, in `deliverTreatment` and `deliverBasalCorrection`, as Android; a stop pressed while
+        the link comes back is kept and no bolus is sent. Test in `IosDashPumpHeldConnectionTest`.
+      - **Deactivation with an open command** (parity, with a safety part kept). Android sends it
+        anyway (`checkNoActiveCommand = false`). Here a status is read first in the same call; it
+        decides the open command (so its outcome is counted), then the deactivation goes. When no
+        status can be read, it stays refused (the pod would not get it either). Tests: 2 in
+        `IosDashPumpDeactivationTest` (one replaces "an open command blocks the deactivation").
+      - **Connect again after the prime and cannula waits** (parity, Android `observeConnectToPod`).
+        `DashActivationPod.connectAfterWait`, which the pump does with the lock held
+        (`awaitConnectionHoldingLock`). Tests: 2 in `IosDashPumpHeldConnectionTest`.
+      - **Late "Set time" program asks for no profile change** (parity). The program of a time change
+        its call left open is kept in memory (`DashPluginRules.openTimeChangeProgram`) and its late
+        SUCCESS sends no `EventProfileChangeRequested`, as Android SET_TIME. After an app restart the
+        memory is gone and a late SUCCESS asks for the profile once (the queue finds it set). Test in
+        `IosDashPluginPumpTest`. (Two auditors found the same thing.)
+      - **Basal program failure text** (minor). A program that stays open gives Android's
+        `setting_basal_profile_might_have_failed` text (`omnipod_dash_ios_basal_profile_might_have_failed`).
+        Android's other text ("Delivery suspended") is never shown by Android: its flag is read when
+        the chain is built, before the suspend runs, so it is always false. Test in
+        `IosDashPluginPumpTest`.
+      - **Overview discard on the process scope** (minor). `IosDashDriverHost.discardPodFromScreen`
+        runs it on `wizardScope`; closing the screen no longer drops it.
+      - **Reservoir colour on insulin units** (minor). `DashOverviewFormat.fromPump` (iOS:
+        `ConcentrationHelper.fromPump`), as Android `buildReservoir`. Test in `DashOverviewTest`.
+      - **Pod history lock** (minor). `DashPodHistory` holds an `AapsLock` around each change and its
+        save. Test in `DashPodHistoryTest` (4 threads at once).
 
 ### 5. Screens
 

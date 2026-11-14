@@ -9,6 +9,11 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 
 /** [DashPodHistory] and [DashPodHistoryCodec]: the records Android `DashHistory` keeps, at the same points. */
 class DashPodHistoryTest {
@@ -30,6 +35,27 @@ class DashPodHistoryTest {
             sequence = 1, kind = kind, historyId = 0L, statusCountAtCreation = 0L, sent = true,
             requestedBolusUnits = units, tempBasalRate = rate, tempBasalMinutes = minutes, createdAtMs = at, basalCorrection = basalCorrection
         )
+
+    /**
+     * The queue thread and the wizard write at the same time. Each write reads the list, changes it
+     * and writes it back: without a lock one of two writes at once is lost.
+     */
+    @Test
+    fun `two threads writing at once lose no record`() = runTest {
+        val perThread = 250
+        withContext(Dispatchers.Default) {
+            (0 until 4).map { thread ->
+                async {
+                    repeat(perThread) { i ->
+                        history.onCommandSent(command(DashCommandKind.BOLUS, at = NOW + thread * 10_000L + i, units = 0.05))
+                    }
+                }
+            }.awaitAll()
+        }
+
+        assertEquals(4 * perThread, history.recentRecords().size)
+        assertEquals(4 * perThread, DashPodHistoryCodec.decode(store.bytes!!).size, "the saved list has every record too")
+    }
 
     @Test
     fun `a command is written when sent and decided by the pod`() {

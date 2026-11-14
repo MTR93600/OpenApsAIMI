@@ -102,6 +102,8 @@
 
     <!-- Notices of the driver (moved from :core:interfaces) -->
     <string name="omnipod_dash_ios_no_active_pod">No active pod</string>
+    <string name="omnipod_dash_ios_basal_profile_might_have_failed">Setting basal profile might have failed. Delivery might be suspended! Please manually refresh the Pod status on the pump screen and resume delivery if needed.</string>
+    <string name="omnipod_dash_ios_pod_state_unreadable">The stored pod state cannot be read now. This can happen after a restart, before the phone was unlocked. No command is sent to the pod until it is read. Unlock the phone.</string>
     <string name="omnipod_dash_ios_delivery_suspended">Insulin delivery suspended</string>
     <string name="omnipod_dash_ios_pod_fault" comment="%1$s=fault code of the pod, three digits, %2$s=fault name. Example: Pod fault: 020 ALARM_OCCLUDED">Pod fault: %1$s %2$s</string>
     <string name="omnipod_dash_ios_pod_fault_with_ref" comment="%1$s=fault code of the pod, three digits, %2$s=fault name, %3$s=PDM-style reference code. Example: Pod fault: 020 ALARM_OCCLUDED (new line) Ref: 17-00003-02251-020">Pod fault: %1$s %2$s\nRef: %3$s</string>

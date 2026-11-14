@@ -86,8 +86,8 @@ class IosDashPumpReconnectTest {
         // The pod takes the bolus, then the link drops before its answer reaches the phone.
         f.pod.dropLinkWhileAnswering = 7 to 0
         val first = f.pump.deliverTreatment(bolus(5.0))
-        assertFalse(first.success)
-        assertEquals(0.0, first.bolusDelivered)
+        assertTrue(first.success, "not decided: counted as asked, as Android (${first.comment})")
+        assertEquals(5.0, first.bolusDelivered)
         val open = assertNotNull(f.stateManager.activeCommand)
         assertEquals(DashCommandKind.BOLUS, open.kind)
         f.pod.dropLinkWhileAnswering = null

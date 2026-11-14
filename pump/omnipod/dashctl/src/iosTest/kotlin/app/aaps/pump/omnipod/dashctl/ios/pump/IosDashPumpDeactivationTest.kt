@@ -1,13 +1,12 @@
 package app.aaps.pump.omnipod.dashctl.ios.pump
 
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
+import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.pump.omnipod.dashctl.comm.connection.DashConnectResult
 import app.aaps.pump.omnipod.dashctl.comm.session.FakeDashPod.Packet
 import app.aaps.pump.omnipod.dashctl.driver.ActivatingPodModel
 import app.aaps.pump.omnipod.dashctl.driver.ActivatingPodModel.Companion.podDefaultStatus
 import app.aaps.pump.omnipod.dashctl.ios.pump.DashPumpOnFakePod.Companion.ALARM
-import app.aaps.pump.omnipod.dashctl.ios.pump.DashPumpOnFakePod.Companion.isBolus
-import app.aaps.pump.omnipod.dashctl.parity.parityHex
 import app.aaps.pump.omnipod.dashctl.parity.toParityHex
 import app.aaps.pump.omnipod.dashctl.pod.command.DeactivateCommand
 import app.aaps.pump.omnipod.dashctl.pod.command.base.CommandType
@@ -150,8 +149,7 @@ class IosDashPumpDeactivationTest {
         assertSame(DashConnectResult.SessionReady, f.reconnect())
         val before = f.writesFromPump().size
         assertFalse(f.pump.deliverTreatment(bolus(1.0)).success)
-        assertFalse(f.pump.deactivatePod().success)
-        assertEquals(before, f.writesFromPump().size, "nothing may be sent while the deactivation is open")
+        assertEquals(before, f.writesFromPump().size, "no bolus may be sent while the deactivation is open")
 
         f.pump.getPumpStatus("decide the open deactivation")
 
@@ -215,18 +213,48 @@ class IosDashPumpDeactivationTest {
         assertEquals(DashPodState(), f.stateManager.currentState())
     }
 
+    /**
+     * Android `deactivatePod` sends the deactivation with `checkNoActiveCommand = false`: an earlier
+     * command whose answer was lost does not block it. Here a status is read first in the same call:
+     * it decides the open temp basal (so its outcome is counted), and then the pod is deactivated.
+     */
     @Test
-    fun `an open command blocks the deactivation until a status decides it`() = runTest {
+    fun `an open command is decided by a status first and the pod is then deactivated as Android`() = runTest {
         f.pairAndConnect()
-        val normal = f.pod.answerFor
-        f.pod.answerFor = { command -> if (isBolus(command)) parityHex(NAK) else normal(command) }
-        assertFalse(f.pump.deliverTreatment(bolus(1.0)).success)
-        assertEquals(DashCommandKind.BOLUS, f.stateManager.activeCommand?.kind)
-        val before = f.writesFromPump().size
+        // No status yet, so a cancel goes first (message 7); the temp basal is message 9.
+        f.pod.dropLinkWhileAnswering = 9 to 0
+        assertFalse(f.pump.setTempBasalAbsolute(0.5, 30, enforceNew = false, tbrType = PumpSync.TemporaryBasalType.NORMAL).success)
+        assertEquals(DashCommandKind.TEMP_BASAL, f.stateManager.activeCommand?.kind)
+        f.pod.dropLinkWhileAnswering = null
+        assertSame(DashConnectResult.SessionReady, f.reconnect())
 
-        assertFalse(f.pump.deactivatePod().success)
+        val result = f.pump.deactivatePod()
 
-        assertEquals(before, f.writesFromPump().size)
+        assertTrue(result.success, result.comment)
+        assertEquals(
+            listOf(DashCommandKind.TEMP_BASAL to DashCommandConfirmation.SUCCESS, DashCommandKind.DEACTIVATE to DashCommandConfirmation.SUCCESS),
+            f.decided.takeLast(2).map { it.command.kind to it.confirmation },
+            "the temp basal the pod took is decided before the deactivation"
+        )
+        assertTrue(f.decided.takeLast(2).first().decidedLate)
+        assertEquals(1, f.pod.commands.count { it[6] == CommandType.DEACTIVATE.value }, "the deactivation went once")
+        assertEquals(DashPodState(), f.stateManager.currentState())
+    }
+
+    /** The open command is kept when the pod gives no status at all: the deactivation would not reach it either. */
+    @Test
+    fun `an open command still blocks the deactivation when no status can be read`() = runTest {
+        f.pairAndConnect()
+        // No status yet, so a cancel goes first (message 7); the temp basal is message 9.
+        f.pod.dropLinkWhileAnswering = 9 to 0
+        assertFalse(f.pump.setTempBasalAbsolute(0.5, 30, enforceNew = false, tbrType = PumpSync.TemporaryBasalType.NORMAL).success)
+        f.pod.dropLinkWhileAnswering = null
+        val before = f.pod.commands.size
+
+        assertFalse(f.pump.deactivatePod().success, "the link is gone: no status, no deactivation")
+
+        assertEquals(before, f.pod.commands.size, "nothing reached the pod")
+        assertEquals(DashCommandKind.TEMP_BASAL, f.stateManager.activeCommand?.kind, "the open temp basal stays open")
         assertNotNull(f.stateManager.ltk)
     }
 
@@ -253,9 +281,10 @@ class IosDashPumpDeactivationTest {
     @Test
     fun `discarding the pod gives an open bolus to the receiver as outcome unknown`() = runTest {
         f.pairAndConnect()
-        val normal = f.pod.answerFor
-        f.pod.answerFor = { command -> if (isBolus(command)) parityHex(NAK) else normal(command) }
-        assertFalse(f.pump.deliverTreatment(bolus(2.0)).success)
+        // The pod takes the bolus, its answer is lost with the link: no status can decide it.
+        f.pod.dropLinkWhileAnswering = 7 to 0
+        val result = f.pump.deliverTreatment(bolus(2.0))
+        assertTrue(result.success, "not decided: counted as given, as Android (${result.comment})")
         assertEquals(DashCommandKind.BOLUS, f.stateManager.activeCommand?.kind)
         f.decided.clear()
         val before = f.writesFromPump().size
@@ -275,8 +304,5 @@ class IosDashPumpDeactivationTest {
 
         /** The pod id the tests pair with, 0x02420001. */
         const val UNIQUE_ID = 37879809
-
-        /** Android `NakResponseTest`: ILLEGAL_PARAM. */
-        const val NAK = "0603070009"
     }
 }

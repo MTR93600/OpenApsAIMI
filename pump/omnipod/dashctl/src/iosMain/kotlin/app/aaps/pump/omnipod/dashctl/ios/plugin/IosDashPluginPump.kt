@@ -142,11 +142,13 @@ class IosDashPluginPump(
         return result
     }
 
-    /** Android `setNewBasalProfile`: a notice when the suspend before the program stays open. */
+    /**
+     * Android `setNewBasalProfile`: a notice when the suspend before the program stays open, and
+     * Android's text when the program stays open ([DashPluginRules.basalProgramResult]).
+     */
     override suspend fun setNewBasalProfile(profile: PumpProfile): PumpEnactResult {
         val before = stateManager.activeCommand
-        val result = driver.setNewBasalProfile(profile)
-        rules.afterBasalProgram(before)
+        val result = rules.basalProgramResult(before, driver.setNewBasalProfile(profile))
         rules.afterCommand()
         return result
     }

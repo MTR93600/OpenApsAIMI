@@ -1,5 +1,7 @@
 package app.aaps.pump.omnipod.dashctl.session
 
+import app.aaps.core.interfaces.concurrent.AapsLock
+import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.core.interfaces.utils.Round
 import app.aaps.pump.omnipod.dashctl.comm.session.EapSqn
 import app.aaps.pump.omnipod.dashctl.pod.definition.ActivationProgress
@@ -59,7 +61,67 @@ class DashPodStateManager(
     private val deviceTimeZone: () -> TimeZone = { TimeZone.currentSystemDefault() },
 ) {
 
-    private var state: DashPodState = store.load() ?: DashPodState()
+    /** Serializes [reloadIfUnknown]: the status checker and the queue may both try at once. */
+    private val readLock = AapsLock()
+
+    /** Why the stored state could not be read, or null when it is known. See [isStateKnown]. */
+    @Volatile
+    private var unreadableReason: String? = null
+
+    private var state: DashPodState = readStored() ?: DashPodState()
+
+    /**
+     * False when the store could not read what it holds ([DashPodStateRead.Unreadable]): on the
+     * iPhone the Keychain before the first unlock after a reboot, or bytes that do not decode. The
+     * state then shows as "no pod", but a pod may run on the body. While it is false:
+     * - every write is refused ([DashPodStateUnknownException]), so the stored item, maybe with the key
+     *   of that pod, is never replaced (a new activation or a discard would delete it for good);
+     * - the driver refuses every pod command and the plugin writes no "no pod" temp basal;
+     * - [reloadIfUnknown] reads the store again (the next command, the status checker, or iOS saying
+     *   the protected data is there).
+     *
+     * Deliberate difference from Android, which starts from an empty `PodState` when its stored JSON
+     * does not decode (and logs it). SharedPreferences has no "locked" read failure, the Keychain has.
+     */
+    val isStateKnown: Boolean
+        get() = unreadableReason == null
+
+    /** Why the stored state could not be read, null when [isStateKnown]. */
+    val stateUnreadableReason: String?
+        get() = unreadableReason
+
+    /**
+     * Reads the store again while the state is not known ([isStateKnown]). A state read now replaces
+     * the empty one; "nothing stored" makes the empty one the known state. Returns [isStateKnown].
+     * Does nothing when the state is known.
+     */
+    fun reloadIfUnknown(): Boolean {
+        if (unreadableReason == null) return true
+        return readLock.withLock {
+            if (unreadableReason == null) return@withLock true
+            val stored = readStored()
+            if (unreadableReason == null) state = stored ?: DashPodState()
+            unreadableReason == null
+        }
+    }
+
+    /** The stored state, null when none; sets [unreadableReason] for an unreadable one. */
+    private fun readStored(): DashPodState? = when (val read = store.read()) {
+        is DashPodStateRead.Loaded     -> {
+            unreadableReason = null
+            read.state
+        }
+
+        DashPodStateRead.Empty         -> {
+            unreadableReason = null
+            null
+        }
+
+        is DashPodStateRead.Unreadable -> {
+            unreadableReason = read.reason
+            null
+        }
+    }
 
     /**
      * Android `basalCorrectionInProgress` (transient there too, never stored): true while a basal
@@ -933,7 +995,9 @@ class DashPodStateManager(
         persist()
     }
 
+    /** Writes the state. Refused while the stored state is not known ([isStateKnown]). */
     private fun persist() {
+        unreadableReason?.let { throw DashPodStateUnknownException(it) }
         store.save(state)
     }
 

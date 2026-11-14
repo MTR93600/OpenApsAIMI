@@ -2,7 +2,12 @@ package app.aaps.pump.omnipod.dashctl.ios.store
 
 import app.aaps.pump.omnipod.dashctl.pod.definition.ActivationProgress
 import app.aaps.pump.omnipod.dashctl.session.DashPodState
+import app.aaps.pump.omnipod.dashctl.session.DashPodStateRead
+import platform.Security.errSecInteractionNotAllowed
+import platform.Security.errSecItemNotFound
+import platform.Security.errSecSuccess
 import kotlin.test.Test
+import kotlin.test.assertIs
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -74,5 +79,35 @@ class DashKeychainCodecTest {
         } catch (e: IllegalArgumentException) {
             // expected
         }
+    }
+
+    /** Only "no item" is "no pod". A locked Keychain after a reboot must not look like it. */
+    @Test
+    fun `only item not found is an empty store`() {
+        assertEquals(DashPodStateRead.Empty, DashKeychainStateStore.readResult(errSecItemNotFound, null))
+    }
+
+    @Test
+    fun `a Keychain read refused before the first unlock is unreadable and not empty`() {
+        val read = DashKeychainStateStore.readResult(errSecInteractionNotAllowed, null)
+
+        assertIs<DashPodStateRead.Unreadable>(read)
+        assertEquals("Keychain read status $errSecInteractionNotAllowed", read.reason)
+    }
+
+    @Test
+    fun `stored bytes that do not decode are unreadable and not empty`() {
+        assertIs<DashPodStateRead.Unreadable>(DashKeychainStateStore.readResult(errSecSuccess, byteArrayOf(99, 1, 2)))
+        assertIs<DashPodStateRead.Unreadable>(DashKeychainStateStore.readResult(errSecSuccess, null))
+    }
+
+    @Test
+    fun `stored bytes that decode are loaded`() {
+        val state = DashPodState(ltk = ByteArray(16) { 3 }, uniqueId = 5L)
+
+        val read = DashKeychainStateStore.readResult(errSecSuccess, DashKeychainStateStore.encode(state))
+
+        assertIs<DashPodStateRead.Loaded>(read)
+        assertEquals(state, read.state)
     }
 }

@@ -51,11 +51,11 @@ interface IosDashPlatform {
 @ContributesBinding(AppScope::class)
 @SingleIn(AppScope::class)
 @Inject
-class CoreBluetoothDashPlatform(aapsLogger: AAPSLogger) : IosDashPlatform {
+class CoreBluetoothDashPlatform(private val aapsLogger: AAPSLogger) : IosDashPlatform {
 
     private val bleHost = IosDashBleHost(aapsLogger)
 
-    override fun podStateStore(): DashPodStateStore = DashKeychainStateStore()
+    override fun podStateStore(): DashPodStateStore = DashKeychainStateStore(aapsLogger = aapsLogger)
 
     override fun historyStore(): DashPodHistoryStore = IosDashHistoryStore()
 

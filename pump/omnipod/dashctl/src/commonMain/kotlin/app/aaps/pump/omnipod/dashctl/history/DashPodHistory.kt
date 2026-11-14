@@ -1,5 +1,7 @@
 package app.aaps.pump.omnipod.dashctl.history
 
+import app.aaps.core.interfaces.concurrent.AapsLock
+import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.pump.omnipod.dashctl.session.DashActiveCommand
 import app.aaps.pump.omnipod.dashctl.session.DashCommandConfirmation
 import app.aaps.pump.omnipod.dashctl.session.DashCommandKind
@@ -107,11 +109,19 @@ interface DashPodHistoryStore {
  *
  * Errors of the store never reach the caller: the history is for the user to read, the dosing does not
  * depend on it.
+ *
+ * Thread safe: the queue thread writes the command records and the wizard and the discard write the
+ * activation records, at the same time. Each change of [records] (read, change, write back and save)
+ * holds [lock], so two writes at once cannot lose one record. Android keeps its rows in Room, which
+ * does not lose them either.
  */
 class DashPodHistory(
     private val store: DashPodHistoryStore,
     private val now: () -> Long,
 ) {
+
+    /** Guards [records] and the save of it (see the class comment). */
+    private val lock = AapsLock()
 
     private var records: List<DashHistoryRecord> = try {
         store.load()?.let { DashPodHistoryCodec.decode(it) } ?: emptyList()
@@ -124,12 +134,12 @@ class DashPodHistory(
 
     /** Android `getRecordsAfter`: the records made after [sinceMs], newest first. */
     fun recordsAfter(sinceMs: Long): List<DashHistoryRecord> =
-        records.filter { it.createdAtMs > sinceMs }.sortedByDescending { it.createdAtMs }
+        lock.withLock { records }.filter { it.createdAtMs > sinceMs }.sortedByDescending { it.createdAtMs }
 
     /** The records of the last 5 days, newest first, as the Android history screen shows them. */
     fun recentRecords(): List<DashHistoryRecord> = recordsAfter(now() - KEEP_MS)
 
-    fun onCommandSent(command: DashActiveCommand) {
+    fun onCommandSent(command: DashActiveCommand): Unit = lock.withLock {
         val at = command.createdAtMs ?: return
         val type = DashHistoryType.of(command.kind) ?: return
         if (records.any { it.createdAtMs == at }) return
@@ -149,7 +159,7 @@ class DashPodHistory(
         )
     }
 
-    fun onCommandDecided(command: DashActiveCommand, confirmation: DashCommandConfirmation, decidedAtMs: Long) {
+    fun onCommandDecided(command: DashActiveCommand, confirmation: DashCommandConfirmation, decidedAtMs: Long): Unit = lock.withLock {
         val at = command.createdAtMs ?: return
         val type = DashHistoryType.of(command.kind) ?: return
         val existing = records.firstOrNull { it.createdAtMs == at }
@@ -169,7 +179,7 @@ class DashPodHistory(
     }
 
     /** A bolus that ended early (a stop, a fault): what went in is kept on its record. */
-    fun onBolusEnded(bolus: DashLastBolus) {
+    fun onBolusEnded(bolus: DashLastBolus): Unit = lock.withLock {
         val at = bolus.createdAtMs ?: return
         val delivered = bolus.deliveredUnits() ?: return
         val existing = records.firstOrNull { it.createdAtMs == at } ?: return
@@ -177,7 +187,7 @@ class DashPodHistory(
     }
 
     /** An activation part or a discard, from the wizard: one record, decided at once. */
-    fun addActivationStep(type: DashHistoryType, success: Boolean) {
+    fun addActivationStep(type: DashHistoryType, success: Boolean): Unit = lock.withLock {
         var at = now()
         while (records.any { it.createdAtMs == at }) at++
         put(
@@ -203,6 +213,7 @@ class DashPodHistory(
         tempBasalMinutes = command.tempBasalMinutes,
     )
 
+    /** Call it with [lock] held. */
     private fun put(record: DashHistoryRecord) {
         val oldest = now() - KEEP_MS
         records = (records.filter { it.createdAtMs != record.createdAtMs && it.createdAtMs > oldest } + record)

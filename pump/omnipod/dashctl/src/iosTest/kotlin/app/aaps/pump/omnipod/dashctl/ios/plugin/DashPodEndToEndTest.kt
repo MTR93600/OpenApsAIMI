@@ -22,6 +22,7 @@ import app.aaps.pump.omnipod.dashctl.ui.FakeWizardHost
 import app.aaps.pump.omnipod.dashctl.ui.NameResolver
 import app.aaps.pump.omnipod.dashctl.ui.dashOverviewButtons
 import app.aaps.pump.omnipod.dashctl.util.BasalOnlyProfile
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -91,7 +92,8 @@ class DashPodEndToEndTest {
     /** The `Pump` of the plugin, the active pump of this test. */
     private val activePump: Pump = IosDashPluginPump(f.pump, f.stateManager, recorder, rules, SilentPodLogger, now = { f.nowMs })
 
-    private val wizardPod = IosDashWizardPod(rules = rules, stateManager = f.stateManager, commandQueue = { queue }, openRadio = {})
+    /** The pod work on the test thread, so it runs on the virtual time of the test (the app uses the IO dispatcher). */
+    private val wizardPod = IosDashWizardPod(rules = rules, stateManager = f.stateManager, commandQueue = { queue }, openRadio = {}, podContext = EmptyCoroutineContext)
 
     init {
         f.onOutcome = {

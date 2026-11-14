@@ -225,6 +225,24 @@ class DashOverviewTest {
         override fun tempBasal(rate: Double, startMs: Long, minutes: Int): String = "${rate}U/h@$startMs/$minutes"
         override fun ago(ms: Long): String = "ago$ms"
         override fun timeRemaining(durationMs: Long): String = "left$durationMs"
+        override fun fromPump(units: Double): Double = units
+    }
+
+    /** U200 insulin: one pod unit is two insulin units. */
+    private object U200Format : DashOverviewFormat by PlainFormat {
+
+        override fun fromPump(units: Double): Double = units * 2
+    }
+
+    /** Android `buildReservoir`: the low threshold (20 U) is compared with insulin units, `ch.fromPump`. */
+    @Test
+    fun `the reservoir turns red on insulin units and not on pod units`() {
+        // 300 pulses = 15 pod units.
+        val state = stateManagerWith(running.copy(pulsesRemaining = 300))
+        fun reservoir(format: DashOverviewFormat) = dashOverviewRows(state, NameResolver, format, NOW).single { it.label == "reservoir_label" }
+
+        assertEquals(StatusLevel.CRITICAL, reservoir(PlainFormat).level, "U100: 15 U is below 20 U")
+        assertEquals(StatusLevel.NORMAL, reservoir(U200Format).level, "U200: 15 pod units are 30 U")
     }
 
     private companion object {

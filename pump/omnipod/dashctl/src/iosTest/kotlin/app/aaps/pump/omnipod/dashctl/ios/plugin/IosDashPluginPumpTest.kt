@@ -251,7 +251,7 @@ class IosDashPluginPumpTest {
         f.pairAndConnect()
         f.pod.dropLinkWhileAnswering = 7 to 0
 
-        assertFalse(pump.deliverTreatment(bolus(1.5, BS.Type.SMB)).success)
+        assertTrue(pump.deliverTreatment(bolus(1.5, BS.Type.SMB)).success)
         assertEquals(listOf(bolusLine(SENT_AT, 1.5, BS.Type.SMB)), pumpSync.calls, "Android: written when sent")
 
         f.nowMs = SENT_AT + ONE_HOUR
@@ -266,7 +266,7 @@ class IosDashPluginPumpTest {
     fun `a late SUCCESS after a crash is recorded once`() = runTest {
         f.pairAndConnect()
         f.pod.dropLinkWhileAnswering = 7 to 0
-        assertFalse(pump.deliverTreatment(bolus(1.5, BS.Type.SMB)).success)
+        assertTrue(pump.deliverTreatment(bolus(1.5, BS.Type.SMB)).success)
 
         // The app stops: a new recorder knows nothing of the send. The bolus is decided late after it.
         val afterRestart = DashPumpSyncRecorder(pumpSync, SilentPodLogger, serialNumber = { SERIAL })
@@ -283,7 +283,7 @@ class IosDashPluginPumpTest {
     fun `a refused bolus call does not change the type of the open bolus`() = runTest {
         f.pairAndConnect()
         f.pod.dropLinkWhileAnswering = 7 to 0
-        assertFalse(pump.deliverTreatment(bolus(3.0, BS.Type.NORMAL)).success)
+        assertTrue(pump.deliverTreatment(bolus(3.0, BS.Type.NORMAL)).success)
 
         // The open bolus cannot be decided with the link down, so the SMB is refused.
         assertFalse(pump.deliverTreatment(bolus(0.4, BS.Type.SMB)).success)
@@ -312,7 +312,7 @@ class IosDashPluginPumpTest {
     fun `a pod discarded with an open bolus keeps it counted at the asked amount`() = runTest {
         f.pairAndConnect()
         f.pod.dropLinkWhileAnswering = 7 to 0
-        assertFalse(pump.deliverTreatment(bolus(3.0, BS.Type.SMB)).success)
+        assertTrue(pump.deliverTreatment(bolus(3.0, BS.Type.SMB)).success)
 
         rules.discardPod()
 
@@ -327,7 +327,7 @@ class IosDashPluginPumpTest {
         f.pod.dropLinkWhileAnswering = 7 to 0
         settings[DashSoundKey.SoundUncertainSmbNotification.key] = false
 
-        assertFalse(pump.deliverTreatment(bolus(0.35, BS.Type.SMB)).success)
+        assertTrue(pump.deliverTreatment(bolus(0.35, BS.Type.SMB)).success)
 
         assertEquals(listOf("post(OMNIPOD_UNCERTAIN_SMB, omnipod_dash_ios_smb_uncertain[format_insulin_units[0.35]], sound=null)"), notices.posts())
         assertTrue(ui.alarms.isEmpty())
@@ -338,7 +338,7 @@ class IosDashPluginPumpTest {
         f.pairAndConnect()
         f.pod.dropLinkWhileAnswering = 7 to 0
 
-        assertFalse(pump.deliverTreatment(bolus(1.0)).success)
+        assertTrue(pump.deliverTreatment(bolus(1.0)).success)
 
         assertEquals(listOf("alarm(omnipod_dash_ios_bolus_uncertain, omnipod_dash_ios_error, sound=BOLUS_ERROR)"), ui.alarms)
     }
@@ -432,6 +432,47 @@ class IosDashPluginPumpTest {
         pump.getPumpStatus("decide the open program")
 
         assertTrue(bus.events.any { it is EventProfileChangeRequested }, "Android: we are late-confirming this command")
+    }
+
+    /**
+     * Android `failWhenUnconfirmed`: a program that stays open gives Android's text as the comment, and
+     * the queue shows it in the FAILED_UPDATE_PROFILE notice.
+     */
+    @Test
+    fun `a basal program not confirmed gives the text of Android`() = runTest {
+        f.pairAndConnect()
+        f.basalRunning = true
+        pump.getPumpStatus("first status")
+        // Status 7-8, suspend 9-10, the program is message 11.
+        f.pod.dropLinkWhileAnswering = 11 to 0
+
+        val result = pump.setNewBasalProfile(PROFILE)
+
+        assertFalse(result.success)
+        assertEquals("omnipod_dash_ios_basal_profile_might_have_failed", result.comment)
+    }
+
+    /**
+     * Android stores the program of a time change as SET_TIME and never asks for a profile change when
+     * a status confirms it later (`handleCommandConfirmation` checks the history type).
+     */
+    @Test
+    fun `a time change program confirmed late asks for no profile change as Android`() = runTest {
+        f.pairAndConnect()
+        f.basalRunning = true
+        pump.getPumpStatus("status")
+        pumpSync.expectedProfile = PROFILE
+        // Status 7-8, suspend 9-10, the program is message 11: its answer is lost.
+        f.pod.dropLinkWhileAnswering = 11 to 0
+        assertFalse(pump.executeCustomCommand(CommandHandleTimeChange(requestedByUser = true))!!.success)
+        assertEquals(DashCommandKind.BASAL_PROGRAM, f.stateManager.activeCommand?.kind)
+
+        f.pod.dropLinkWhileAnswering = null
+        assertSame(DashConnectResult.SessionReady, f.reconnect())
+        pump.getPumpStatus("decide the open program")
+
+        assertNull(f.stateManager.activeCommand, "the program is decided")
+        assertTrue(bus.events.none { it is EventProfileChangeRequested }, "Android SET_TIME, also when confirmed late")
     }
 
     @Test
@@ -849,7 +890,7 @@ class IosDashPluginPumpTest {
     fun `an open command with an idle queue gets a status read`() = runTest {
         f.pairAndConnect()
         f.pod.dropLinkWhileAnswering = 7 to 0
-        assertFalse(pump.deliverTreatment(bolus(1.0)).success)
+        assertTrue(pump.deliverTreatment(bolus(1.0)).success)
 
         rules.statusCheck()
         runLaunched()
@@ -862,7 +903,7 @@ class IosDashPluginPumpTest {
         f.pairAndConnect()
         rules.refreshStatusOnUnacknowledgedCommands()
         f.pod.dropLinkWhileAnswering = 7 to 0
-        assertFalse(pump.deliverTreatment(bolus(1.0)).success)
+        assertTrue(pump.deliverTreatment(bolus(1.0)).success)
         queue.size = 1
         rules.refreshStatusOnUnacknowledgedCommands()
         runLaunched()
