@@ -13,6 +13,7 @@ import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.pump.omnipod.dashctl.ios.ble.IosDashBleHost
+import app.aaps.pump.omnipod.dashctl.registerDashStrings
 import app.aaps.pump.omnipod.dashctl.ios.pump.IosDashPump
 import app.aaps.pump.omnipod.dashctl.ios.store.DashKeychainStateStore
 import app.aaps.pump.omnipod.dashctl.keys.DashBeepKey
@@ -66,10 +67,15 @@ class IosDashDriverHost(
     rh: TextResolver,
     // Providers: the queue, the bus and the alarm window are only needed once a command runs, and
     // the queue reaches the active pump, which would be a cycle back to this plugin.
-    commandQueue: () -> CommandQueue,
+    private val commandQueue: () -> CommandQueue,
     rxBus: () -> RxBus,
     uiInteraction: () -> UiInteraction,
 ) {
+
+    init {
+        // The texts of the Dash screens and notices (see `registerDashStrings` for why here).
+        registerDashStrings()
+    }
 
     /**
      * Queue work started from inside a command (Android `pluginScope.launch`). Process lifetime, never
@@ -78,6 +84,16 @@ class IosDashDriverHost(
     private val workScope = CoroutineScope(
         Dispatchers.Default + SupervisorJob() +
             CoroutineExceptionHandler { _, e -> aapsLogger.error(LTag.PUMP, "Dash: queue work failed", e) }
+    )
+
+    /**
+     * The scope of the activation and deactivation wizard (`DashPodWizardModel`). Process lifetime and
+     * on the main thread, as Android runs the wizard on `viewModelScope`: a part that runs, and the
+     * PumpSync records written after it, must not stop because the person left the screen.
+     */
+    val wizardScope: CoroutineScope = CoroutineScope(
+        Dispatchers.Main + SupervisorJob() +
+            CoroutineExceptionHandler { _, e -> aapsLogger.error(LTag.PUMP, "Dash: wizard work failed", e) }
     )
 
     /** The pod state, loaded from the Keychain now. */
@@ -122,6 +138,9 @@ class IosDashDriverHost(
         launch = { block -> workScope.launch { block() } },
         now = { Clock.System.now().toEpochMilliseconds() },
     )
+
+    /** The pod as the activation and deactivation wizard sees it. */
+    val wizardPod = IosDashWizardPod(rules = rules, stateManager = stateManager, commandQueue = commandQueue, openRadio = ::openRadio)
 
     /** What the plugin delegates `Pump` to. */
     val pump = IosDashPluginPump(driver = driver, stateManager = stateManager, recorder = recorder, rules = rules, aapsLogger = aapsLogger)

@@ -1,6 +1,10 @@
 package app.aaps.pump.omnipod.dashctl.keys
 
+import app.aaps.core.keys.PreferenceType
 import app.aaps.core.keys.interfaces.BooleanNonPreferenceKey
+import app.aaps.core.keys.interfaces.BooleanPreferenceKey
+import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.pump.omnipod.dashctl.DashStrings
 import app.aaps.pump.omnipod.dashctl.driver.DashBeepSettings
 
 /**
@@ -9,19 +13,22 @@ import app.aaps.pump.omnipod.dashctl.driver.DashBeepSettings
  * settings from Android to an iPhone keeps them, and an iPhone with no saved value beeps as Android
  * does.
  *
- * Non-preference keys for now: the iPhone has no settings screen for Dash yet (phase 5). When the
- * screen comes, these become preference keys with a title, with the same key and default.
+ * Preference keys with the titles of the Android settings screen, shown by the iPhone settings screen
+ * (`dashSettingsScreen`).
  */
 enum class DashBeepKey(
     override val key: String,
     override val defaultValue: Boolean,
-) : BooleanNonPreferenceKey {
+    override val title: TextRef,
+) : BooleanPreferenceKey {
 
-    BolusBeepsEnabled("AAPS.Omnipod.bolus_beeps_enabled", true),
-    SmbBeepsEnabled("AAPS.Omnipod.smb_beeps_enabled", true),
-    BasalBeepsEnabled("AAPS.Omnipod.basal_beeps_enabled", false),
-    TbrBeepsEnabled("AAPS.Omnipod.tbr_beeps_enabled", false),
+    BolusBeepsEnabled("AAPS.Omnipod.bolus_beeps_enabled", true, DashStrings.dash_pref_bolus_beeps_enabled),
+    SmbBeepsEnabled("AAPS.Omnipod.smb_beeps_enabled", true, DashStrings.dash_pref_smb_beeps_enabled),
+    BasalBeepsEnabled("AAPS.Omnipod.basal_beeps_enabled", false, DashStrings.dash_pref_basal_beeps_enabled),
+    TbrBeepsEnabled("AAPS.Omnipod.tbr_beeps_enabled", false, DashStrings.dash_pref_tbr_beeps_enabled),
     ;
+
+    override val preferenceType: PreferenceType = PreferenceType.SWITCH
 
     companion object {
 

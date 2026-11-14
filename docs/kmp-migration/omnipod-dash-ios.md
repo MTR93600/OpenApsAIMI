@@ -405,16 +405,68 @@ phone, never AAPSClient. Android keeps `:pump:omnipod:dash` unchanged.
       the pod time zone differs from the phone. The pin tests `a confirmed temp basal or cancel queues
       no basal correction because it is not ported yet` and `a running pod gets no time zone notice
       because the pod time zone is not stored yet` must change with the port.
-- [ ] **P3 (phase 5). Screens.** Activation and deactivation wizards in Compose Multiplatform, with
-      what Android does after part 2 (`connectNewPump`, stop of the fake PUMP_SUSPEND temp basal,
-      CANNULA_CHANGE and INSULIN_CHANGE therapy events, status read) and after a discard; the
-      overview; the settings screen (beeps, alerts, notifications) with English strings in a string
-      table of the module, and the config builder caution moved there from `:core:interfaces` with a
-      text that fits once a pod can be activated.
+- [x] **P3 (phase 5). Screens.** Done 2026-11-14 (not committed, not on a device, xcodebuild not run
+      by the builder). Compose Multiplatform in `dashctl` commonMain (`ui/`), the way the Medtrum patch
+      wizard is in `:pump:medtrum`:
+      - `DashOverviewContent` (`ComposablePluginContent`, the plugin entry opens it through
+        `PluginDescription.composeContent`, as Medtrum): the rows of Android `DashOverviewViewModel`
+        (`dashOverviewRows`: address, id, LOT, sequence, firmware, expiry and hard end with the #5365
+        colours, pod status and its level, last connection, last bolus (an open one "uncertain", red),
+        base basal, temp basal, reservoir, total delivered, alerts, fault), the buttons with the
+        Android rules (`dashOverviewButtons`: refresh, silence alerts, resume delivery, activate,
+        deactivate, test beep, discard), the communication banner and queue status of the shared
+        `PumpCommunicationStatus`, the discard confirmation and the error window of a failed command.
+        While no command runs, the banner shows the iPhone caution.
+      - The wizard: `DashPodWizardModel` (state, commonMain, the counterpart of
+        `OmnipodWizardViewModel` + `DashOmnipodWizardViewModel`) and `DashPodWizardScreen` (the
+        counterpart of `OmnipodWizardScreen` and its steps). Same pages and order
+        (`dashActivationSteps`: profile gate, fill, insulin, part 1, site, attach, part 2, activated;
+        deactivation: start with confirmation, deactivate, deactivated or discarded). SHORT from
+        PRIME_COMPLETED on (`dashActivationType`), so an activation stopped by a crash goes on from the
+        stored progress. One action at a time; Next only after a success; Retry and Cancel with the
+        driver's reason after a failure; a failed deactivation offers the discard.
+      - The pod side of the wizard is `IosDashWizardPod` (iosMain): part 1 and part 2 straight to
+        `DashPluginRules` (as Android calls the manager), the deactivation through the queue
+        (`CommandDeactivatePod`, as Android), the discard. The app side is `DashWizardAppHost`
+        (profile gate, insulin switch, site location, the Android calls).
+      - Strings: `dashctl` now has its own table (`src/androidMain/res/values/strings.xml`, generated
+        to `DashStrings` by `generateDashStrings`). It is not in `StringOwnerModules` (every shell would
+        then have to link dashctl); `IosDashDriverHost` registers the owner at run time
+        (`registerDashStrings`). The P1/P2 texts moved there from `:core:interfaces` (same names); the
+        config builder description is now the Android one, with the Android icon (`IcPluginOmnipod`),
+        and the caution text (rewritten: a pod can be activated now, but it is not tested on a real
+        pod) is the banner of the pump screen.
+      Deliberate differences from Android: no pod history, no "Set time" (P2b), no connection quality
+      row (counters not kept), no time on pod row, no PDM fault text, no "Bluetooth bonding" switch
+      (iOS decides bonding, the app cannot); after the profile gate the wizard waits (at most 1 min) until the queue has set the profile, as
+      `MedtrumPatchWizardModel`, so part 2 finds a basal program. Tests: `DashWizardStepTest`,
+      `DashPodWizardModelTest`, `DashOverviewTest` (commonTest, JVM and iOS), `DashPodEndToEndTest`
+      (iosTest: no pod and the "4241" temp basal, the activation through the wizard model on the
+      simulated pod, then a bolus, a temp basal, a cancel and a profile through the pump calls of the
+      queue commands, each once in `PumpSync`, then the deactivation through the wizard and the queue
+      and the zero temp basal), `IosOmnipodDashPluginGraphTest` (description, icon, pump screen,
+      texts resolve).
+      Review fixes (2026-11-14): the wizard work runs on `IosDashDriverHost.wizardScope` (process
+      lifetime, main thread, as Android `viewModelScope`), so leaving the screen cannot stop a part or
+      skip the PumpSync records after it; the wizard gets the toolbar (`setToolbarConfig`, no back
+      arrow while it runs, as Android) and the pump screen sets its toolbar again after it; Finish on
+      "Pod Activated" closes only after the insulin switch and the site save are done; the profile
+      gate Activate runs once at a time; the iPhone does not lock during the wizard
+      (`DashKeepScreenOn`, `idleTimerDisabled`, the value from before put back); the settings screen
+      (`dashSettingsScreen`: beeps, alerts, notification sounds; the keys are now preference keys with
+      the same keys, defaults, limits and switches as Android). Tests: `DashSettingsTest`,
+      `DashScreenAwakeTest`, three more in `DashPodWizardModelTest`, the settings check in
+      `IosOmnipodDashPluginGraphTest`.
+      Still open: the e2e test on the real `CommandQueueImplementation` and its queue thread (connect,
+      wait for `isConnected`, timeouts, the `setProfile` and `customCommand` gates). The simulated pod
+      lives in dashctl iosTest and `CommandQueueImplementation` in `:implementation`; dashctl does not
+      depend on it, so this needs the simulated pod moved to a test fixture that ios/shell can use.
+      Then a real pod.
 
 ### 5. Screens
 
-- [ ] Activation and deactivation wizard, overview, in Compose Multiplatform.
+- [x] Activation and deactivation wizard, overview, in Compose Multiplatform (P3 above).
+- [x] Settings screen (beeps, alerts, notification sounds), `dashSettingsScreen`.
 
 ### 6. On a real pod
 

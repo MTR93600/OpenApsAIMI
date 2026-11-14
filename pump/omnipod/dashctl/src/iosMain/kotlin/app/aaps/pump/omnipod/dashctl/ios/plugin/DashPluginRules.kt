@@ -3,6 +3,7 @@ package app.aaps.pump.omnipod.dashctl.ios.plugin
 import app.aaps.core.data.model.TE
 import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.interfaces.InterfacesStrings
+import app.aaps.pump.omnipod.dashctl.DashStrings
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.AlarmSound
@@ -58,8 +59,7 @@ import kotlinx.coroutines.runBlocking
  * the plugin and its graph.
  *
  * Notices go to the [NotificationManager] and alarms to [UiInteraction.runAlarm], as the iOS Medtrum
- * plugin and the shared code do. The texts are in `:core:interfaces` until this module has its own
- * string table (phase 5), the same place as the config builder caution.
+ * plugin and the shared code do. The texts are in the string table of this module ([DashStrings]).
  *
  * Queue work started from inside a command (Android `pluginScope.launch { commandQueue... }`) goes
  * through [launch], so the command that decided it never waits for the queue it runs in.
@@ -205,17 +205,17 @@ class DashPluginRules(
         aapsLogger.debug(LTag.PUMP, "verifyPumpState, AAPS: $tbr Pump: $delivery")
         if (tbr != null && delivery?.basalActive() == true) {
             aapsLogger.error(LTag.PUMP, "AAPS expected a TBR running but pump has no TBR running! AAPS: $tbr Pump: $delivery")
-            showErrorDialog(InterfacesStrings.omnipod_dash_ios_tbr_out_of_sync, bolusErrorSound())
+            showErrorDialog(DashStrings.omnipod_dash_ios_tbr_out_of_sync, bolusErrorSound())
             val ret = pumpSync.syncStopTemporaryBasalWithPumpId(now(), tbr.id, PumpType.OMNIPOD_DASH, serialNumber())
             aapsLogger.info(LTag.PUMP, "syncStopTemporaryBasalWithPumpId ret=$ret pumpId=${tbr.id}")
             stateManager.clearTempBasal()
         } else if (tbr == null && delivery?.tempBasalActive() == true) {
             aapsLogger.error(LTag.PUMP, "AAPS expected no TBR running but pump has a TBR running! AAPS: null Pump: $delivery")
-            showErrorDialog(InterfacesStrings.omnipod_dash_ios_tbr_out_of_sync, bolusErrorSound())
+            showErrorDialog(DashStrings.omnipod_dash_ios_tbr_out_of_sync, bolusErrorSound())
             val ret = driver.cancelTempBasalNotExpected()
             aapsLogger.info(LTag.PUMP, "verifyPumpState: cancel of the TBR not expected: $ret")
             // Android `observeNoActiveTempBasal`, doOnComplete.
-            notifyOnUnconfirmed(NotificationId.OMNIPOD_TBR_ALERTS, InterfacesStrings.omnipod_dash_ios_cancel_tbr_before_unconfirmed, AlarmSound.BOLUS_ERROR)
+            notifyOnUnconfirmed(NotificationId.OMNIPOD_TBR_ALERTS, DashStrings.omnipod_dash_ios_cancel_tbr_before_unconfirmed, AlarmSound.BOLUS_ERROR)
         }
     }
 
@@ -249,7 +249,7 @@ class DashPluginRules(
         if (stateManager.alarmSynced) return
         val alarm = stateManager.alarmType ?: return
         val code = (alarm.value.toInt() and 0xff).toString().padStart(3, '0')
-        val faultText = InterfacesStrings.omnipod_dash_ios_pod_fault.withArgs(code, alarm.toString())
+        val faultText = DashStrings.omnipod_dash_ios_pod_fault.withArgs(code, alarm.toString())
         if (!commandQueue().isCustomCommandInQueue(CommandDeactivatePod::class)) {
             showNotification(NotificationId.OMNIPOD_POD_FAULT, faultText, AlarmSound.BOLUS_ERROR)
         }
@@ -266,7 +266,7 @@ class DashPluginRules(
      */
     fun afterBasalProgram(before: DashActiveCommand?) {
         if (commandMadeSince(stateManager, before)?.kind == DashCommandKind.SUSPEND_DELIVERY) {
-            notifyOnUnconfirmed(NotificationId.FAILED_UPDATE_PROFILE, InterfacesStrings.omnipod_dash_ios_suspend_unconfirmed, AlarmSound.BOLUS_ERROR, NotificationLevel.IMPORTANT)
+            notifyOnUnconfirmed(NotificationId.FAILED_UPDATE_PROFILE, DashStrings.omnipod_dash_ios_suspend_unconfirmed, AlarmSound.BOLUS_ERROR, NotificationLevel.IMPORTANT)
         }
     }
 
@@ -286,11 +286,11 @@ class DashPluginRules(
             val amount = rh.gs(InterfacesStrings.format_insulin_units, units)
             notifyOnUnconfirmed(
                 NotificationId.OMNIPOD_UNCERTAIN_SMB,
-                InterfacesStrings.omnipod_dash_ios_smb_uncertain.withArgs(amount),
+                DashStrings.omnipod_dash_ios_smb_uncertain.withArgs(amount),
                 AlarmSound.BOLUS_ERROR
             )
         } else if (stateManager.activeCommand != null) {
-            showErrorDialog(InterfacesStrings.omnipod_dash_ios_bolus_uncertain, bolusErrorSound())
+            showErrorDialog(DashStrings.omnipod_dash_ios_bolus_uncertain, bolusErrorSound())
         }
     }
 
@@ -301,7 +301,7 @@ class DashPluginRules(
 
     /** Android `showErrorDialog`: `uiInteraction.runAlarm` with the "Error" title. */
     private fun showErrorDialog(text: TextRef, sound: AlarmSound?) {
-        uiInteraction().runAlarm(rh.gs(text), rh.gs(InterfacesStrings.omnipod_dash_ios_error), sound)
+        uiInteraction().runAlarm(rh.gs(text), rh.gs(DashStrings.omnipod_dash_ios_error), sound)
     }
 
     /** Android `hasBolusErrorBeepEnabled`. */
@@ -338,7 +338,7 @@ class DashPluginRules(
     fun refreshStatusOnUnacknowledgedCommands() {
         val queue = commandQueue()
         if (stateManager.isPodRunning && stateManager.activeCommand != null && queue.size() == 0 && queue.performing() == null) {
-            launch { commandQueue().readStatus(rh.gs(InterfacesStrings.omnipod_dash_ios_unconfirmed_command)) }
+            launch { commandQueue().readStatus(rh.gs(DashStrings.omnipod_dash_ios_unconfirmed_command)) }
         }
     }
 
@@ -351,11 +351,11 @@ class DashPluginRules(
         val t = now()
         if (t <= nextPodWarningCheck) return
         if (!stateManager.isPodRunning) {
-            notificationManager.post(NotificationId.OMNIPOD_POD_NOT_ATTACHED, InterfacesStrings.omnipod_dash_ios_no_active_pod)
+            notificationManager.post(NotificationId.OMNIPOD_POD_NOT_ATTACHED, DashStrings.omnipod_dash_ios_no_active_pod)
         } else {
             notificationManager.dismiss(NotificationId.OMNIPOD_POD_NOT_ATTACHED)
             if (stateManager.isSuspended) {
-                showNotification(NotificationId.OMNIPOD_POD_SUSPENDED, InterfacesStrings.omnipod_dash_ios_delivery_suspended, AlarmSound.BOLUS_ERROR)
+                showNotification(NotificationId.OMNIPOD_POD_SUSPENDED, DashStrings.omnipod_dash_ios_delivery_suspended, AlarmSound.BOLUS_ERROR)
             } else {
                 notificationManager.dismiss(NotificationId.OMNIPOD_POD_SUSPENDED)
             }
@@ -399,7 +399,7 @@ class DashPluginRules(
         val profile = pumpSync.expectedPumpState().profile
             ?: return DashPumpEnactResult(success = false, enacted = false, comment = "No profile active")
         val result = driver.resumeDelivery(profile)
-        notifyOnUnconfirmed(NotificationId.FAILED_UPDATE_PROFILE, InterfacesStrings.omnipod_dash_ios_resume_unconfirmed, AlarmSound.BOLUS_ERROR)
+        notifyOnUnconfirmed(NotificationId.FAILED_UPDATE_PROFILE, DashStrings.omnipod_dash_ios_resume_unconfirmed, AlarmSound.BOLUS_ERROR)
         return result
     }
 
@@ -475,7 +475,7 @@ class DashPluginRules(
         pumpSync.insertTherapyEventIfNewWithTimestamp(timestamp = at, type = TE.Type.CANNULA_CHANGE, pumpType = PumpType.OMNIPOD_DASH, pumpSerial = podSerial)
         pumpSync.insertTherapyEventIfNewWithTimestamp(timestamp = at, type = TE.Type.INSULIN_CHANGE, pumpType = PumpType.OMNIPOD_DASH, pumpSerial = podSerial)
         notificationManager.dismiss(NotificationId.OMNIPOD_POD_NOT_ATTACHED)
-        launch { commandQueue().readStatus(rh.gs(InterfacesStrings.omnipod_dash_ios_pod_activated)) }
+        launch { commandQueue().readStatus(rh.gs(DashStrings.omnipod_dash_ios_pod_activated)) }
         return result
     }
 

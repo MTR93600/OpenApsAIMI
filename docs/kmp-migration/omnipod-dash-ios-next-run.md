@@ -478,8 +478,10 @@ The owner asked for it (selectable and usable). Plan and steps P1-P3 in
   time zone notice: step P2b (new stored fields, new codec version, pin tests in
   `IosDashPluginPumpTest`). Also open: the PDM reference in the fault text, and `verifyPumpState` at
   each status read inside the bolus wait (the fault part already runs at once).
-- Activation and deactivation screens, `connectNewPump` and the therapy events after part 2: P3
-  (phase 5).
+- Activation and deactivation screens, the pump screen, the strings table of dashctl: P3, done
+  (`ui/` in commonMain, `IosDashWizardPod`, `DashPodEndToEndTest`), with the settings screen
+  (`dashSettingsScreen`). Open: the end-to-end test on the real `CommandQueueImplementation` (needs the
+  simulated pod in a test fixture ios/shell can use).
 
 ## Decisions already taken (do not stop to ask)
 
@@ -491,7 +493,7 @@ The owner asked for it (selectable and usable). Plan and steps P1-P3 in
   nothing is reported delivered until a status decides.
 - **Late outcomes** go to `onCommandDecided`. Who records them in `PumpSync` is the plugin's job
   (phase 4); until then tests are the only consumer.
-- **Beeps** stay off until the plugin brings the user settings (phase 4).
+- **Beeps** come from the user settings (`DashBeepKey`, Android keys and defaults), which the settings screen changes.
 - **Time zone and DST**: Android ignores them (`timezoneOrDSTChanged` logs and does nothing). Do the
   same; note it in the plan as a known gap.
 - **HELLO** stays in `DashBleLink.prepare()`, as Android `SharedBleConnection.connect`.

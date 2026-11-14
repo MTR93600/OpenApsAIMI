@@ -3,7 +3,10 @@ package app.aaps.ios.shell.di
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.pump.defs.ManufacturerType
 import app.aaps.core.data.pump.defs.PumpType
-import app.aaps.core.interfaces.InterfacesStrings
+import app.aaps.core.interfaces.resources.TextRefValueRegistry
+import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.core.ui.compose.icons.IcPluginOmnipod
+import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
 import app.aaps.core.interfaces.plugin.EnforcedState
 import app.aaps.core.interfaces.pump.OmnipodDash
 import app.aaps.core.objects.di.CoreObjectsGraph
@@ -11,10 +14,13 @@ import app.aaps.ios.shell.prefs.TestStorage
 import app.aaps.plugins.sync.nsclientV3.ws.NsSocket
 import app.aaps.plugins.sync.nsclientV3.ws.NsSocketFactory
 import app.aaps.pump.medtrum.ios.IosMedtrumPlugin
+import app.aaps.pump.omnipod.dashctl.DashStrings
 import app.aaps.pump.omnipod.dashctl.ios.plugin.IosOmnipodDashPlugin
 import app.aaps.pump.omnipod.dashctl.ios.plugin.OMNIPOD_DASH_IOS_PLUGIN_NAME
 import app.aaps.pump.omnipod.dashctl.ios.plugin.omnipodDashIosPluginDescription
 import app.aaps.pump.omnipod.dashctl.ios.store.DashKeychainStateStore
+import app.aaps.pump.omnipod.dashctl.keys.DashBeepKey
+import app.aaps.pump.omnipod.dashctl.ui.DashOverviewContent
 import app.aaps.shared.clientbindings.ClientGraphBindings
 import dev.zacsweers.metro.createGraphFactory
 import kotlin.test.BeforeTest
@@ -119,7 +125,42 @@ class IosOmnipodDashPluginGraphTest {
     }
 
     @Test
-    fun `the config builder says what works on iPhone`() {
-        assertEquals(InterfacesStrings.omnipod_dash_ios_caution, omnipodDashIosPluginDescription().description)
+    fun `the config builder shows the description and icon of Android Dash`() {
+        val description = omnipodDashIosPluginDescription()
+
+        assertEquals(DashStrings.omnipod_dash_pump_description, description.description)
+        assertSame(IcPluginOmnipod, description.icon)
+    }
+
+    @Test
+    fun `the plugin has a pump screen`() {
+        val plugin = graph().omnipodDashPump
+
+        // The plugin entry opens this screen (pod state, buttons, activation and deactivation wizards),
+        // the way the Medtrum entry opens its own.
+        assertIs<DashOverviewContent>(plugin.pluginDescription.composeContentProvider?.invoke(plugin))
+    }
+
+    @Test
+    fun `the texts of the Dash screens resolve once the plugin is built`() {
+        graph().omnipodDashPump
+
+        // dashctl registers its own string owner (it is not in StringOwnerModules), so building the
+        // plugin must be enough for its texts to show as text and not as names.
+        assertEquals("Activate Pod", TextRefValueRegistry.textOf(DashStrings.dash_button_activate_pod as TextRef.Named))
+    }
+
+    @Test
+    fun `the plugin has the settings screen of Android Dash`() {
+        val plugin = graph().omnipodDashPump
+
+        // Beeps, pod alerts and notification sounds, so a user can change them on the iPhone.
+        assertTrue(plugin.hasPreferences(), "the config builder must show a settings button")
+        val screen = assertIs<PreferenceSubScreenDef>(plugin.getPreferenceScreenContent())
+        assertEquals(
+            listOf("omnipod_dash_beeps", "omnipod_dash_alerts", "omnipod_dash_notifications"),
+            screen.items.map { assertIs<PreferenceSubScreenDef>(it).key }
+        )
+        assertEquals("Bolus beeps enabled", TextRefValueRegistry.textOf(DashBeepKey.BolusBeepsEnabled.title as TextRef.Named))
     }
 }

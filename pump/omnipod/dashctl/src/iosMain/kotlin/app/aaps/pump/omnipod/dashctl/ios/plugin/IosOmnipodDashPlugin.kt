@@ -1,7 +1,28 @@
 package app.aaps.pump.omnipod.dashctl.ios.plugin
 
 import app.aaps.core.data.plugin.PluginType
-import app.aaps.core.interfaces.InterfacesStrings
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import app.aaps.core.interfaces.db.PersistenceLayer
+import app.aaps.core.interfaces.insulin.ConcentrationHelper
+import app.aaps.core.interfaces.insulin.InsulinManager
+import app.aaps.core.interfaces.profile.ProfileFunction
+import app.aaps.core.interfaces.profile.ProfileRepository
+import app.aaps.core.interfaces.pump.PumpSync
+import app.aaps.core.interfaces.rx.bus.RxBus
+import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.core.ui.compose.ToolbarConfig
+import app.aaps.core.ui.compose.icons.IcPluginOmnipod
+import app.aaps.pump.omnipod.dashctl.DashStrings
+import app.aaps.pump.omnipod.dashctl.ui.DashOverviewContent
+import app.aaps.pump.omnipod.dashctl.ui.DashPodWizardModel
+import app.aaps.pump.omnipod.dashctl.ui.DashPodWizardScreen
+import app.aaps.pump.omnipod.dashctl.ui.DashWizardAppHost
+import app.aaps.pump.omnipod.dashctl.ui.DashWizardRequest
+import app.aaps.pump.omnipod.dashctl.ui.dashSettingsScreen
+import app.aaps.core.keys.interfaces.PreferenceItem
+import kotlin.time.Clock
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.NotificationManager
@@ -44,18 +65,19 @@ import dev.zacsweers.metro.IntKey as MetroIntKey
  * builder. All of [Pump] goes to [IosDashDriverHost.pump] (the driver plus the answers Android gives
  * from its plugin), so this file holds the plugin lifecycle and nothing about therapy.
  *
- * ## What works and what does not yet (phase 4 step P2)
+ * ## What it offers (phase 5, P3)
  *
- * The queue can drive a running pod: bolus, temp basal, basal program, status, and the queue
- * commands of Android (silence alerts, resume, deactivate, alert settings, test beep, disable suspend
- * alerts, time change). `PumpSync` is written as Android writes it ([DashPumpSyncRecorder]), and the
- * notices, the status checker and the checks after each command are Android's ([DashPluginRules]).
- * What is missing is how a pod gets running on an iPhone: the activation and deactivation screens
- * come with phase 5 (P3); they call [IosDashDriverHost.rules] (`activatePodPart1`, `activatePodPart2`,
- * `discardPod`). Until then [isInitialized] is false (no running pod), so the loop does not run on
- * this pump, and the status checker writes the zero temp basal of Android, so no basal is counted
- * while no pod gives it. It is [OmnipodDash], as Android, so the shared setup wizard lets the user
- * pass its pump screen with no pod yet.
+ * The queue drives a running pod: bolus, temp basal, basal program, status, and the queue commands of
+ * Android (silence alerts, resume, deactivate, alert settings, test beep, disable suspend alerts, time
+ * change). `PumpSync` is written as Android writes it ([DashPumpSyncRecorder]), and the notices, the
+ * status checker and the checks after each command are Android's ([DashPluginRules]).
+ *
+ * The pump screen ([DashOverviewContent], built when it is opened) shows the pod and has the buttons
+ * of Android Dash; "Activate Pod" and "Deactivate Pod" open the wizard ([DashPodWizardScreen] over
+ * [DashPodWizardModel]), which calls the pod through [IosDashDriverHost.wizardPod]. With no running
+ * pod [isInitialized] is false, so the loop does not run on this pump, and the status checker writes
+ * the zero temp basal of Android, so no basal is counted while no pod gives it. It is [OmnipodDash],
+ * as Android, so the shared setup wizard lets the user pass its pump screen with no pod yet.
  *
  * ## Keys and buckets
  *
@@ -77,8 +99,18 @@ class IosOmnipodDashPlugin(
     commandQueue: CommandQueue,
     notificationManager: NotificationManager,
     private val host: IosDashDriverHost,
+    // Providers: only the pump screen and the wizard need these, and only when they are opened.
+    private val profileFunction: () -> ProfileFunction,
+    private val profileRepository: () -> ProfileRepository,
+    private val insulinManager: () -> InsulinManager,
+    private val persistenceLayer: () -> PersistenceLayer,
+    private val pumpSync: () -> PumpSync,
+    private val rxBus: () -> RxBus,
+    private val dateUtil: () -> DateUtil,
+    private val concentrationHelper: () -> ConcentrationHelper,
 ) : PumpPluginBase(
-    pluginDescription = omnipodDashIosPluginDescription(),
+    // The pump screen. Built when it is opened, so building the plugin builds no UI.
+    pluginDescription = omnipodDashIosPluginDescription().composeContent { plugin -> (plugin as IosOmnipodDashPlugin).overviewContent() },
     ownPreferences = DashBeepKey.entries + DashAlertBooleanKey.entries + DashAlertIntKey.entries + DashSoundKey.entries,
     aapsLogger = aapsLogger,
     rh = rh,
@@ -86,6 +118,66 @@ class IosOmnipodDashPlugin(
     commandQueue = commandQueue,
     notificationManager = notificationManager
 ), Pump by host.pump, OmnipodDash {
+
+    /**
+     * The settings screen of Android Dash: beeps, pod alerts and notification sounds, with the same
+     * keys and defaults ([dashSettingsScreen]). A changed alert setting goes to the pod through the
+     * queue ([onStart]); the beeps and sounds are read again for each command and notice.
+     */
+    override fun getPreferenceScreenContent(): PreferenceItem =
+        dashSettingsScreen(title = TextRef.Literal(OMNIPOD_DASH_IOS_PLUGIN_NAME), icon = pluginDescription.icon)
+
+    /** The pump screen: the pod, its buttons, and the wizards. */
+    private fun overviewContent() = DashOverviewContent(
+        stateManager = host.stateManager,
+        commandQueue = commandQueue,
+        rxBus = rxBus(),
+        rh = rh,
+        format = IosDashOverviewFormat(dateUtil(), concentrationHelper(), rh),
+        caution = DashStrings.omnipod_dash_ios_caution,
+        title = OMNIPOD_DASH_IOS_PLUGIN_NAME,
+        now = { Clock.System.now().toEpochMilliseconds() },
+        wizard = { request, setToolbarConfig, onClose -> PodWizard(request, setToolbarConfig, onClose) },
+        discardPod = { host.rules.discardPod() }
+    )
+
+    /**
+     * One wizard per opened screen. Its work runs on [IosDashDriverHost.wizardScope], not on the scope
+     * of the screen, so leaving the screen cannot stop a part in the middle or skip the records after
+     * it. The toolbar is the wizard's while it shows (no back arrow), and the iPhone does not lock
+     * during the wizard ([DashKeepScreenOn]), as Android `KeepScreenOnEffect`.
+     */
+    @Composable
+    private fun PodWizard(request: DashWizardRequest, setToolbarConfig: (ToolbarConfig) -> Unit, onClose: () -> Unit) {
+        DashKeepScreenOn()
+        val model = remember(request) {
+            DashPodWizardModel(
+                pod = host.wizardPod,
+                host = DashWizardAppHost(
+                    profileFunction = profileFunction(),
+                    profileRepository = profileRepository(),
+                    insulinManager = insulinManager(),
+                    persistenceLayer = persistenceLayer(),
+                    pumpSync = pumpSync(),
+                    preferences = preferences,
+                    rh = rh,
+                    rxBus = rxBus(),
+                    dateUtil = dateUtil()
+                ),
+                rh = rh,
+                aapsLogger = aapsLogger,
+                scope = host.wizardScope
+            )
+        }
+        LaunchedEffect(model) {
+            model.prepare()
+            when (request) {
+                is DashWizardRequest.Activation -> model.startActivation(request.type)
+                DashWizardRequest.Deactivation  -> model.startDeactivation()
+            }
+        }
+        DashPodWizardScreen(model = model, onClose = onClose, setToolbarConfig = setToolbarConfig)
+    }
 
     /** The status checker of Android, while the plugin runs. */
     private var statusScope: CoroutineScope? = null
@@ -144,14 +236,14 @@ class IosOmnipodDashPlugin(
 const val OMNIPOD_DASH_IOS_PLUGIN_NAME: String = "Omnipod Dash"
 
 /**
- * What the plugin tells the rest of the app about itself: a pump named "Omnipod Dash", and a caution
- * in the config builder that says what does not work on iPhone yet, as `IosMedtrumPlugin` does. The
- * caution is in `:core:interfaces` until this module has its own string table (phase 5, P3), which
- * must also change its text once a pod can be activated here.
+ * What the plugin tells the rest of the app about itself: a pump named "Omnipod Dash", with the icon
+ * and the description of Android Dash. The caution that the driver is new on the iPhone is on the
+ * pump screen ([DashStrings.omnipod_dash_ios_caution]).
  *
  * A function, so a test can read it without building the plugin and the radio behind it.
  */
 fun omnipodDashIosPluginDescription(): PluginDescription = PluginDescription()
     .mainType(PluginType.PUMP)
+    .icon(IcPluginOmnipod)
     .pluginName(TextRef.Literal(OMNIPOD_DASH_IOS_PLUGIN_NAME))
-    .description(InterfacesStrings.omnipod_dash_ios_caution)
+    .description(DashStrings.omnipod_dash_pump_description)

@@ -124,7 +124,7 @@ internal class RecordingRxBus : RxBus {
  * kept as one line, and [running], [size], [inQueue] say what the queue is doing. Any other call fails
  * the test.
  */
-internal class RecordingCommandQueue : CommandQueue {
+internal open class RecordingCommandQueue : CommandQueue {
 
     val queued = mutableListOf<String>()
 

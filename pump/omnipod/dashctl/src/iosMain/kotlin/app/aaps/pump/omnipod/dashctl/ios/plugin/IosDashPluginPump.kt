@@ -4,7 +4,7 @@ import app.aaps.core.data.model.BS
 import app.aaps.core.data.pump.defs.PumpDescription
 import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.data.pump.defs.TimeChangeType
-import app.aaps.core.interfaces.InterfacesStrings
+import app.aaps.pump.omnipod.dashctl.DashStrings
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.AlarmSound
@@ -113,11 +113,11 @@ class IosDashPluginPump(
         // Android: a notice after the cancel before it, or after the temp basal itself, when it stays open.
         when (commandMadeSince(before)?.kind) {
             DashCommandKind.STOP_TEMP_BASAL -> rules.notifyOnUnconfirmed(
-                NotificationId.OMNIPOD_TBR_ALERTS, InterfacesStrings.omnipod_dash_ios_cancel_tbr_before_unconfirmed, AlarmSound.BOLUS_ERROR
+                NotificationId.OMNIPOD_TBR_ALERTS, DashStrings.omnipod_dash_ios_cancel_tbr_before_unconfirmed, AlarmSound.BOLUS_ERROR
             )
 
             DashCommandKind.TEMP_BASAL      -> rules.notifyOnUnconfirmed(
-                NotificationId.OMNIPOD_TBR_ALERTS, InterfacesStrings.omnipod_dash_ios_tbr_unconfirmed, AlarmSound.BOLUS_ERROR
+                NotificationId.OMNIPOD_TBR_ALERTS, DashStrings.omnipod_dash_ios_tbr_unconfirmed, AlarmSound.BOLUS_ERROR
             )
 
             else                            -> Unit
@@ -131,7 +131,7 @@ class IosDashPluginPump(
         val before = stateManager.activeCommand
         val result = driver.cancelTempBasal(enforceNew)
         if (commandMadeSince(before)?.kind == DashCommandKind.STOP_TEMP_BASAL) {
-            rules.notifyOnUnconfirmed(NotificationId.OMNIPOD_TBR_ALERTS, InterfacesStrings.omnipod_dash_ios_cancel_tbr_unconfirmed, AlarmSound.BOLUS_ERROR)
+            rules.notifyOnUnconfirmed(NotificationId.OMNIPOD_TBR_ALERTS, DashStrings.omnipod_dash_ios_cancel_tbr_unconfirmed, AlarmSound.BOLUS_ERROR)
         }
         rules.afterCommand()
         return result

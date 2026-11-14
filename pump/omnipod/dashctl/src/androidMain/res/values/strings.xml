@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The English texts of Omnipod Dash on iPhone (:pump:omnipod:dashctl). The Android app does not use
+    this module; Android Dash keeps its own strings in :pump:omnipod:dash and :pump:omnipod:common.
+    Most texts follow those Android strings, in simpler English.
+-->
+<resources>
+    <!-- Plugin -->
+    <string name="omnipod_dash_pump_description">Pump integration for Omnipod Dash (the Bluetooth model with a blue needle cap).</string>
+    <string name="omnipod_dash_ios_caution">Omnipod Dash on iPhone is new and has not been tested with a real pod yet. Check every pod activation, bolus and temp basal on the pod screen. While no pod runs, AAPS counts no basal insulin. This is software behaviour, not medical advice. Talk to your care team before you change how your pump is driven.</string>
+
+    <!-- Overview: buttons -->
+    <string name="dash_button_activate_pod">Activate Pod</string>
+    <string name="dash_button_deactivate_pod">Deactivate Pod</string>
+    <string name="dash_button_discard_pod">Discard Pod</string>
+    <string name="dash_button_play_test_beep">Play Test Beep</string>
+    <string name="dash_button_silence_alerts">Silence Alerts</string>
+    <string name="dash_button_resume_delivery">Resume Delivery</string>
+    <string name="dash_discard_pod_confirmation">If you discard the Pod, AAPS cannot talk to it anymore. Do this only when all communication with the Pod keeps failing. If AAPS can still talk to the Pod, use Deactivate Pod instead.\n\nIf you go on, remove the Pod from your body.</string>
+    <string name="dash_error_failed_to_silence_alerts">Failed to silence alerts</string>
+    <string name="dash_error_failed_to_resume_delivery">Failed to resume delivery</string>
+    <string name="dash_error_failed_to_play_test_beep">Failed to play test beep</string>
+    <string name="dash_error_with_reason" comment="%1$s=what failed, %2$s=the reason the driver gave. Example: Failed to resume delivery: No profile active">%1$s: %2$s</string>
+
+    <!-- Overview: rows -->
+    <string name="dash_overview_bluetooth_address">Bluetooth Address</string>
+    <string name="dash_overview_unique_id">Unique ID</string>
+    <string name="dash_overview_lot_number">LOT Number</string>
+    <string name="dash_overview_sequence_number">Sequence Number</string>
+    <string name="dash_overview_firmware_version">Firmware Version</string>
+    <string name="dash_overview_firmware_version_value" comment="%1$s=pod firmware version, %2$s=pod Bluetooth version. Example: Firmware 4.10.0 / Bluetooth 1.3.0">Firmware %1$s / Bluetooth %2$s</string>
+    <string name="dash_overview_pod_expires">Pod Expires</string>
+    <string name="dash_overview_pod_hard_end">Pod Hard End</string>
+    <string name="dash_overview_pod_hard_end_value" comment="%1$s=date and time when the pod stops delivering insulin, %2$s=time left until then. Example: 21.10.2026 18:34 (17m remaining)">%1$s (%2$s)</string>
+    <string name="dash_overview_pod_status">Pod Status</string>
+    <string name="dash_overview_last_connection">Last Connection</string>
+    <string name="dash_overview_base_basal_rate">Base Basal Rate</string>
+    <string name="dash_overview_temp_basal_rate">Temp Basal Rate</string>
+    <string name="dash_overview_total_delivered">Total Delivered</string>
+    <string name="dash_overview_active_alerts">Active Pod Alerts</string>
+    <string name="dash_overview_uncertain" comment="Shown next to a bolus the pod did not confirm yet. Example: 0.50 U (uncertain)">uncertain</string>
+
+    <!-- Overview: pod status -->
+    <string name="dash_pod_status_waiting_for_activation">Setup in progress (waiting for Pod activation)</string>
+    <string name="dash_pod_status_waiting_for_cannula_insertion">Setup in progress (waiting for cannula insertion)</string>
+    <string name="dash_pod_status_running">Running</string>
+    <string name="dash_pod_status_suspended">Suspended</string>
+
+    <!-- Overview: pod alerts -->
+    <string name="dash_alert_low_reservoir">Low Reservoir</string>
+    <string name="dash_alert_expiration">Pod will expire soon</string>
+    <string name="dash_alert_shutdown_imminent">Shutdown is imminent</string>
+    <string name="dash_alert_delivery_suspended">Insulin delivery is suspended</string>
+    <string name="dash_alert_unknown">Unknown Alert</string>
+
+    <!-- Activation and deactivation wizard -->
+    <string name="dash_wizard_exit_title">Exit</string>
+    <string name="dash_wizard_exit_text">You have not done all steps yet. Do you really want to exit?</string>
+    <string name="dash_wizard_unexpected_error">Unexpected error</string>
+    <string name="dash_wizard_start_activation_title">Fill Pod</string>
+    <string name="dash_wizard_start_activation_text">Fill a new Pod with enough insulin for 3 days.\n\nListen for two beeps from the Pod while you fill it. They mean that the minimum of 80 U is in. Empty the fill syringe completely, also after the two beeps.\n\nAfter filling the Pod, press Next.\n\nNote: do not remove the needle cap of the Pod yet.</string>
+    <string name="dash_wizard_initialize_pod_title">Initialize Pod</string>
+    <string name="dash_wizard_initialize_pod_text">Pairing with the new Pod and priming it.\n\nWhen this is done, you can press Next.</string>
+    <string name="dash_wizard_attach_pod_title">Attach Pod</string>
+    <string name="dash_wizard_attach_pod_text">Prepare the infusion site. Remove the needle cap and the adhesive backing of the Pod and attach the Pod to the infusion site.\n\nIf the cannula sticks out, press Cancel and discard the Pod.\n\nPress Next to insert the cannula and start basal delivery.</string>
+    <string name="dash_wizard_attach_pod_confirm_text">When you press OK, the cannula will be inserted. Make sure that the Pod is attached to the infusion site.</string>
+    <string name="dash_wizard_insert_cannula_title">Insert Cannula</string>
+    <string name="dash_wizard_insert_cannula_text">Setting the first basal program and inserting the cannula.\n\nWhen the cannula is inserted, you can press Next.</string>
+    <string name="dash_wizard_pod_activated_title">Pod Activated</string>
+    <string name="dash_wizard_pod_activated_text">The new Pod is now active.\n\nYour basal program is set and the cannula is inserted.\n\nCheck that the cannula is inserted correctly. Change the Pod if you think it is not.</string>
+    <string name="dash_wizard_start_deactivation_title">Deactivate Pod</string>
+    <string name="dash_wizard_start_deactivation_text">Press Next to deactivate the Pod.\n\nNote: this stops all insulin delivery and deactivates the Pod.</string>
+    <string name="dash_wizard_start_deactivation_confirmation">A deactivated Pod cannot be used again. Deactivate this Pod now?</string>
+    <string name="dash_wizard_deactivating_pod_title">Deactivating Pod</string>
+    <string name="dash_wizard_deactivating_pod_text">Deactivating the Pod.\n\nWhen this is done, you can press Next.</string>
+    <string name="dash_wizard_pod_deactivated_title">Pod Deactivated</string>
+    <string name="dash_wizard_pod_deactivated_text">The Pod is deactivated.\n\nRemove the Pod from your body and recycle it.</string>
+    <string name="dash_wizard_pod_discarded_title">Pod Discarded</string>
+    <string name="dash_wizard_pod_discarded_text">The Pod state is discarded. Insulin delivery has NOT been stopped, because the Pod was not deactivated.\n\nRemove the Pod from your body and recycle it.</string>
+    <string name="dash_wizard_discard_pod">Discard Pod</string>
+    <string name="dash_wizard_discard_pod_confirmation">If you discard the Pod, AAPS cannot talk to it anymore. Do this only when all communication with the Pod keeps failing. Do you really want to discard the Pod?</string>
+
+    <!-- Notices of the driver (moved from :core:interfaces) -->
+    <string name="omnipod_dash_ios_no_active_pod">No active pod</string>
+    <string name="omnipod_dash_ios_delivery_suspended">Insulin delivery suspended</string>
+    <string name="omnipod_dash_ios_pod_fault" comment="%1$s=fault code of the pod, three digits, %2$s=fault name. Example: Pod fault: 020 ALARM_OCCLUDED">Pod fault: %1$s %2$s</string>
+    <string name="omnipod_dash_ios_suspend_unconfirmed">The pod did not confirm the suspend of insulin delivery. Refresh the pod status on the pump screen, and resume delivery if needed.</string>
+    <string name="omnipod_dash_ios_smb_uncertain" comment="%1$s=insulin amount with unit. Example: 0.35 U">The pod did not confirm the SMB (%1$s). Refresh the pod status to confirm or deny it.</string>
+    <string name="omnipod_dash_ios_bolus_uncertain">The pod did not confirm the bolus. Refresh the pod status to confirm or deny it.</string>
+    <string name="omnipod_dash_ios_tbr_unconfirmed">Setting the temp basal might have failed. If a temp basal was running before, it has been cancelled. Refresh the pod status on the pump screen.</string>
+    <string name="omnipod_dash_ios_cancel_tbr_before_unconfirmed">Cancelling the temp basal might have failed. If a temp basal was running before, it might have been cancelled. Refresh the pod status on the pump screen.</string>
+    <string name="omnipod_dash_ios_cancel_tbr_unconfirmed">The pod did not confirm the cancel of the temp basal</string>
+    <string name="omnipod_dash_ios_resume_unconfirmed">The pod did not confirm the resume of insulin delivery. Refresh the pod status.</string>
+    <string name="omnipod_dash_ios_tbr_out_of_sync">Temp basal status is not as expected. If a temp basal was running before, it has been cancelled. Check the insulin delivered and the pod history.</string>
+    <string name="omnipod_dash_ios_unconfirmed_command" comment="26 characters max for translation">Unconfirmed command</string>
+    <string name="omnipod_dash_ios_pod_activated" comment="Reason of a status read, 26 characters max for translation">Pod activated</string>
+    <string name="omnipod_dash_ios_error" comment="Title of an alarm window from the Omnipod Dash driver">Error</string>
+
+    <!-- Settings (the texts of the Android Omnipod settings screen) -->
+    <string name="dash_pref_category_confirmation_beeps">Confirmation beeps</string>
+    <string name="dash_pref_category_alerts">Alerts</string>
+    <string name="dash_pref_category_notifications">Notifications</string>
+    <string name="dash_pref_bolus_beeps_enabled">Bolus beeps enabled</string>
+    <string name="dash_pref_basal_beeps_enabled">Basal beeps enabled</string>
+    <string name="dash_pref_smb_beeps_enabled">SMB beeps enabled</string>
+    <string name="dash_pref_tbr_beeps_enabled">TBR beeps enabled</string>
+    <string name="dash_pref_expiration_reminder_enabled">Expiration reminder enabled</string>
+    <string name="dash_pref_expiration_reminder_enabled_summary">When on, the pod beeps when the time you set is reached</string>
+    <string name="dash_pref_expiration_reminder_hours_before_expiry">Reminder at hours before expiry (72 hours)</string>
+    <string name="dash_pref_expiration_alarm_enabled">Expiration alert enabled</string>
+    <string name="dash_pref_expiration_alarm_enabled_summary">When on, the pod beeps when the time you set is reached, and 1 hour before it shuts down</string>
+    <string name="dash_pref_expiration_alarm_hours_before_shutdown">Alert at hours before shutdown (80 hours)</string>
+    <string name="dash_pref_low_reservoir_alert_enabled">Low reservoir alert enabled</string>
+    <string name="dash_pref_low_reservoir_alert_units">Number of units</string>
+    <string name="dash_pref_notification_uncertain_tbr_sound_enabled">Sound for uncertain TBR notifications enabled</string>
+    <string name="dash_pref_notification_uncertain_smb_sound_enabled">Sound for uncertain SMB notifications enabled</string>
+    <string name="dash_pref_notification_uncertain_bolus_sound_enabled">Sound for uncertain bolus notifications enabled</string>
+    <string name="dash_pref_notification_delivery_suspended_sound_enabled">Sound when delivery suspended notification enabled</string>
+</resources>
