@@ -10,10 +10,10 @@ import app.aaps.pump.omnipod.dashctl.crypto.X25519Dh
  * SpongyCastle, Tink and javax on the JVM, the pure Kotlin and CommonCrypto classes on iOS.
  * This is what lets one parity test run against both implementations.
  */
-internal expect fun parityAesCcm(): AesCcmCipher
+expect fun parityAesCcm(): AesCcmCipher
 
-internal expect fun parityAesCmac(): AesCmac
+expect fun parityAesCmac(): AesCmac
 
-internal expect fun parityAesEcb(): AesEcbBlockCipher
+expect fun parityAesEcb(): AesEcbBlockCipher
 
-internal expect fun parityX25519(): X25519Dh
+expect fun parityX25519(): X25519Dh

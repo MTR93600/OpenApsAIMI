@@ -489,8 +489,9 @@ sealed class DashLinkSetupResult {
 /**
  * True when [a] and [b] name the same BLE uuid. Case does not matter, and a 16 or 32 bit short
  * form is expanded to the full 128 bit form first, like `expandUuid` in `CoreBluetoothCentral`.
+ * Public so the simulated pod (`:pump:omnipod:dashctl:emulator`) compares uuids the same way.
  */
-internal fun sameUuid(a: String, b: String): Boolean = expandBleUuid(a) == expandBleUuid(b)
+fun sameUuid(a: String, b: String): Boolean = expandBleUuid(a) == expandBleUuid(b)
 
 internal fun expandBleUuid(raw: String): String {
     val hex = raw.lowercase()

@@ -50,8 +50,9 @@ import kotlinx.coroutines.test.runTest
  * 4. the deactivation through the wizard (queued, as Android): the pod is gone, the zero temp basal
  *    of a pod that delivers nothing runs, and the status checker adds nothing more.
  *
- * The real `CommandQueueImplementation` is not used: it needs some twenty app services and the
- * simulated pod lives in this module's tests. The pump calls are the same ones.
+ * The real `CommandQueueImplementation` is not used here, on virtual time; the same life through the
+ * real queue, the real `PumpSync` and the plugin of the app graph is `DashCommandQueueEndToEndTest` in
+ * `:ios:shell`. The pump calls are the same ones.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class DashPodEndToEndTest {

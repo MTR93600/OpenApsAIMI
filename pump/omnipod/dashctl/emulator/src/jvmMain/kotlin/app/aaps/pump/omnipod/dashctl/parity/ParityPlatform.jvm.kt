@@ -9,10 +9,10 @@ import app.aaps.pump.omnipod.dashctl.crypto.SpongyCastleAesCmac
 import app.aaps.pump.omnipod.dashctl.crypto.TinkX25519Dh
 import app.aaps.pump.omnipod.dashctl.crypto.X25519Dh
 
-internal actual fun parityAesCcm(): AesCcmCipher = SpongyCastleAesCcm()
+actual fun parityAesCcm(): AesCcmCipher = SpongyCastleAesCcm()
 
-internal actual fun parityAesCmac(): AesCmac = SpongyCastleAesCmac()
+actual fun parityAesCmac(): AesCmac = SpongyCastleAesCmac()
 
-internal actual fun parityAesEcb(): AesEcbBlockCipher = JavaxAesEcbBlockCipher()
+actual fun parityAesEcb(): AesEcbBlockCipher = JavaxAesEcbBlockCipher()
 
-internal actual fun parityX25519(): X25519Dh = TinkX25519Dh()
+actual fun parityX25519(): X25519Dh = TinkX25519Dh()

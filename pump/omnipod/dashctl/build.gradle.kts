@@ -94,6 +94,9 @@ kotlin {
         commonTest {
             dependencies {
                 implementation(kotlin("test"))
+                // The simulated pod (FakeDashPod and the centrals in front of it). A module of its own
+                // so the end-to-end test of :ios:shell can use it too.
+                implementation(project(":pump:omnipod:dashctl:emulator"))
                 // Virtual time for the bolus wait (DashBolusWaitTest), on the JVM and on iOS.
                 implementation(project.dependencies.platform(libs.kotlinx.coroutines.bom))
                 implementation(libs.kotlinx.coroutines.test)

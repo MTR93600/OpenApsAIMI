@@ -449,11 +449,8 @@ phone, never AAPSClient. Android keeps `:pump:omnipod:dash` unchanged.
       the same keys, defaults, limits and switches as Android). Tests: `DashSettingsTest`,
       `DashScreenAwakeTest`, three more in `DashPodWizardModelTest`, the settings check in
       `IosOmnipodDashPluginGraphTest`.
-      Still open: the e2e test on the real `CommandQueueImplementation` and its queue thread (connect,
-      wait for `isConnected`, timeouts, the `setProfile` and `customCommand` gates). The simulated pod
-      lives in dashctl iosTest and `CommandQueueImplementation` in `:implementation`; dashctl does not
-      depend on it, so this needs the simulated pod moved to a test fixture that ios/shell can use.
-      Then a real pod.
+      The e2e test on the real `CommandQueueImplementation` is written (P4, item 6, below). Still open:
+      a real pod.
 - [x] **P4. The parity gaps P1-P3 left.** Done 2026-11-14 (not committed, not on a device, xcodebuild
       not run by the builder).
       - Basal drift correction (this fork): `DashBasalDrift` (commonMain) is Android
@@ -503,14 +500,29 @@ phone, never AAPSClient. Android keeps `:pump:omnipod:dash` unchanged.
       (+5), `IosDashPluginPumpTest` (the two pin tests replaced by 10 real ones),
       `DashPumpSyncRecorderTest` (+1). JVM 626, iOS simulator 845 (1 skipped), ios/shell 114, 0
       failures.
-      **Still open: the end-to-end test on the real `CommandQueueImplementation`** (item 6 of P4). It
-      needs: the simulated pod (`FakeDashPod`, `FakeDashPodCentral`, `ActivatingPodModel`,
-      `DashPumpOnFakePod`, the `parity*` crypto helpers with their JVM and iOS actuals) moved to a
-      test-fixture module that ios/shell can use; `DashPodStateManager.overwriteForTest` and the
-      `internal` fakes made public for it; a transport seam so the Dash plugin of the app graph talks to
-      a fake `BleCentral` instead of CoreBluetooth (a graph binding, since the host is built by
-      Metro); and the activation and bolus waits run in real time there (about 70 s). Not started in
-      this run.
+      **The end-to-end test on the real `CommandQueueImplementation`** (item 6 of P4): written
+      2026-11-14 (not committed, not on a device). `DashCommandQueueEndToEndTest` in `:ios:shell`
+      runs a pod's whole life through the real app: the plugin list started as `IosAppStartup` starts
+      it, Dash selected with `confirmPumpPluginSwitch`, a profile switch set by the queue with no pod,
+      the "no pod" temp basal, activation part 1 and 2 as the wizard calls them, then through the real
+      queue and its queue thread an SMB, a bolus, a temp basal, its cancel, a profile change and the
+      deactivation. The records are read back from a real database (`PumpSyncImplementation`): one per
+      command, the time the command was made as pump id, Dash and the pod serial; the no-pod temp
+      basal after the deactivation. The queue also disconnects after its 5 s wait and connects again
+      for the SMB. About 13 s real time.
+      How it is built: the simulated pod is a module of its own, `:pump:omnipod:dashctl:emulator`
+      (`FakeDashPod`, `FakeDashPodCentral`, `HeldPodCentral`, `ActivatingPodModel`, the new
+      `RunningPodModel` and `SimulatedDashPod`, the `parity*` crypto with its JVM and iOS actuals;
+      public now). dashctl's tests use it too; `DashPumpOnFakePod` keeps its knobs, delegated to
+      `RunningPodModel`. Not linked into the framework (`checkMigratedModules` leaves it out). The
+      host takes `IosDashPlatform` (radio, pod state store, history store, timer of the driver
+      waits); the app binds `CoreBluetoothDashPlatform` (CoreBluetooth, Keychain, user defaults,
+      `delay`: what the host built itself before, unchanged). The test graph `DashQueueTestGraph`
+      excludes it and `IosPlatformBindings` (only for `UNUserNotificationCenter`, which stops a test
+      binary; its other bindings are given by the same functions) and gives its own. The plugin list
+      of the test has no other radio: Nightscout is the BG source (the ONE+ source opens CoreBluetooth
+      with state restoration, which a test binary may not do) and Medtrum is left out.
+      Still open: a real pod.
 
 ### 5. Screens
 

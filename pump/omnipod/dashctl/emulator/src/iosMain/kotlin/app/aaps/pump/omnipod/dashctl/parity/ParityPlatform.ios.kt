@@ -9,10 +9,10 @@ import app.aaps.pump.omnipod.dashctl.ios.crypto.IosAesCmac
 import app.aaps.pump.omnipod.dashctl.ios.crypto.IosAesEcbBlockCipher
 import app.aaps.pump.omnipod.dashctl.ios.crypto.IosX25519Dh
 
-internal actual fun parityAesCcm(): AesCcmCipher = IosAesCcmCipher()
+actual fun parityAesCcm(): AesCcmCipher = IosAesCcmCipher()
 
-internal actual fun parityAesCmac(): AesCmac = IosAesCmac()
+actual fun parityAesCmac(): AesCmac = IosAesCmac()
 
-internal actual fun parityAesEcb(): AesEcbBlockCipher = IosAesEcbBlockCipher()
+actual fun parityAesEcb(): AesEcbBlockCipher = IosAesEcbBlockCipher()
 
-internal actual fun parityX25519(): X25519Dh = IosX25519Dh()
+actual fun parityX25519(): X25519Dh = IosX25519Dh()

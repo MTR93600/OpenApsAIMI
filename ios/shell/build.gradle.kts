@@ -119,8 +119,9 @@ val checkMigratedModules = tasks.register("checkMigratedModules") {
             .map { ":" + it.parentFile.relativeTo(rootDir).invariantSeparatorsPath.replace('/', ':') }
             // :ios:shell is this module. :shared:tests builds for iOS so that shared test fixtures
             // are available to common tests, but it is fixtures, not product - linking it would put
-            // test helpers into the framework header Swift sees.
-            .filterNot { it == ":ios:shell" || it == ":shared:tests" }
+            // test helpers into the framework header Swift sees. :pump:omnipod:dashctl:emulator is the
+            // simulated Dash pod, for the same reason: only the tests of this module use it.
+            .filterNot { it == ":ios:shell" || it == ":shared:tests" || it == ":pump:omnipod:dashctl:emulator" }
             .toSet()
 
         val missing = withIosTargets - listed
@@ -287,6 +288,8 @@ kotlin {
                 implementation(kotlin("test"))
                 // runTest, because everything the repository exposes is a suspend function.
                 implementation(libs.kotlinx.coroutines.test)
+                // The simulated Omnipod Dash pod, for the end-to-end test through the real command queue.
+                implementation(project(":pump:omnipod:dashctl:emulator"))
             }
         }
     }

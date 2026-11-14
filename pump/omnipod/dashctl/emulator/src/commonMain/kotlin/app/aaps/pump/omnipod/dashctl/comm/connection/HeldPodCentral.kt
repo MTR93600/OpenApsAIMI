@@ -22,7 +22,7 @@ import app.aaps.pump.omnipod.dashctl.comm.session.FakeDashPod
  * Every event goes to [listener] (set it to `DashHeldConnection.onEvent`), the GATT events of the
  * pod too: [rewire] sets the listener of the pod link, call it after [FakeDashPod.reconnect].
  */
-internal class HeldPodCentral(private val pod: FakeDashPod) : BleCentral {
+class HeldPodCentral(private val pod: FakeDashPod) : BleCentral {
 
     var listener: (BleCentralEvent) -> Unit = {}
         set(value) {

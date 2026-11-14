@@ -390,7 +390,7 @@ class FakeDashPodCentral(
 }
 
 /** A logger that drops everything. */
-internal object SilentPodLogger : AAPSLogger {
+object SilentPodLogger : AAPSLogger {
 
     override fun debug(message: String) {}
     override fun debug(enable: Boolean, tag: LTag, message: String) {}

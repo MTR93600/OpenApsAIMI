@@ -55,7 +55,7 @@ import kotlin.test.assertTrue
  * link, counted from 1 (resent messages count again). After a fresh pairing on one link, with no
  * message sent twice, it is the same as the outer sequence number of the message.
  */
-internal class FakeDashPod(
+class FakeDashPod(
     private val keys: PodKeys = PodKeys.AndroidVector,
     private val nodeIv: ByteArray = parityHex("b0b1b2b3"),
     private val otherThread: Boolean = false
@@ -505,7 +505,7 @@ internal class FakeDashPod(
 }
 
 /** Random bytes 1, 2, 3, ... so a test can know them. */
-internal class CountingRandomBytes(private var next: Int = 1) : SecureRandomBytes {
+class CountingRandomBytes(private var next: Int = 1) : SecureRandomBytes {
 
     val drawn = mutableListOf<ByteArray>()
 

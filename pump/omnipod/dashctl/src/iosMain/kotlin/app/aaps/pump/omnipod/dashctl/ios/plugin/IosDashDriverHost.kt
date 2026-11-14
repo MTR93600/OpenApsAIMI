@@ -13,14 +13,11 @@ import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.pump.omnipod.dashctl.history.DashPodHistory
-import app.aaps.pump.omnipod.dashctl.ios.ble.IosDashBleHost
 import app.aaps.pump.omnipod.dashctl.ios.pump.DashBolusEndedByFault
 import app.aaps.pump.omnipod.dashctl.ios.pump.DashCommandOutcome
 import app.aaps.pump.omnipod.dashctl.ios.pump.DashPumpOutcome
-import app.aaps.pump.omnipod.dashctl.ios.store.IosDashHistoryStore
 import app.aaps.pump.omnipod.dashctl.registerDashStrings
 import app.aaps.pump.omnipod.dashctl.ios.pump.IosDashPump
-import app.aaps.pump.omnipod.dashctl.ios.store.DashKeychainStateStore
 import app.aaps.pump.omnipod.dashctl.keys.DashBeepKey
 import app.aaps.pump.omnipod.dashctl.pod.definition.PodConstants
 import app.aaps.pump.omnipod.dashctl.session.DashPodStateManager
@@ -37,13 +34,17 @@ import kotlinx.coroutines.runBlocking
 
 /**
  * Builds the iOS Dash driver and owns the parts it needs, the counterpart of `IosMedtrumDriverHost`:
- * the pod state in the Keychain ([DashPodStateManager] over [DashKeychainStateStore]), the
- * CoreBluetooth side ([IosDashBleHost]), the driver ([IosDashPump]), the `PumpSync` recorder
+ * the pod state in the Keychain ([DashPodStateManager] over `DashKeychainStateStore`), the
+ * CoreBluetooth side (`IosDashBleHost`), the driver ([IosDashPump]), the `PumpSync` recorder
  * ([DashPumpSyncRecorder]) and the [Pump][app.aaps.core.interfaces.pump.Pump] the plugin gives to
  * the app ([pump]).
  *
  * It exists so that `IosOmnipodDashPlugin` can delegate the whole `Pump` interface with one `by`
  * clause: a delegation target has to be ready when the plugin constructor runs.
+ *
+ * The radio, the two stores and the timer of the driver waits come from [IosDashPlatform]
+ * ([CoreBluetoothDashPlatform] on the iPhone), so a test graph can run this same host on a simulated
+ * pod.
  *
  * ## Nothing here touches the radio
  *
@@ -75,6 +76,8 @@ class IosDashDriverHost(
     private val commandQueue: () -> CommandQueue,
     rxBus: () -> RxBus,
     uiInteraction: () -> UiInteraction,
+    /** The radio, the stores and the timer: CoreBluetooth, Keychain and real time on the iPhone. */
+    private val platform: IosDashPlatform,
 ) {
 
     init {
@@ -102,9 +105,7 @@ class IosDashDriverHost(
     )
 
     /** The pod state, loaded from the Keychain now. */
-    val stateManager = DashPodStateManager(DashKeychainStateStore())
-
-    private val bleHost = IosDashBleHost(aapsLogger)
+    val stateManager = DashPodStateManager(platform.podStateStore())
 
     val recorder = DashPumpSyncRecorder(
         pumpSync = pumpSync,
@@ -113,7 +114,7 @@ class IosDashDriverHost(
     )
 
     /** The pod history the pump screen shows (Android `DashHistory`), kept in the user defaults. */
-    val history = DashPodHistory(IosDashHistoryStore(), now = { Clock.System.now().toEpochMilliseconds() })
+    val history = DashPodHistory(platform.historyStore(), now = { Clock.System.now().toEpochMilliseconds() })
 
     val driver: IosDashPump = IosDashPump(
         aapsLogger = aapsLogger,
@@ -130,7 +131,8 @@ class IosDashDriverHost(
         bolusProgressData = bolusProgressData,
         beeps = { DashBeepKey.beepSettings { key -> preferences.get(key) } },
         expectedTempBasalRunning = { expectedTempBasalRunning(pumpSync, aapsLogger) },
-        connectorFactory = bleHost.connectorFactory(stateManager.bluetoothAddress),
+        sleep = platform::sleep,
+        connectorFactory = platform.connectorFactory(stateManager.bluetoothAddress),
     )
 
     /** The queue commands, notices, status checker and checks of Android, around the driver. */
@@ -161,7 +163,7 @@ class IosDashDriverHost(
     /** Starts CoreBluetooth. The first call makes iOS ask for the Bluetooth permission. */
     fun openRadio() {
         aapsLogger.debug(LTag.PUMP, "IosDashDriverHost: opening the radio")
-        bleHost.open()
+        platform.openRadio()
     }
 
     /**
