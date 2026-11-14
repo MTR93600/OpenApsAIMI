@@ -17,8 +17,14 @@ class BasalProgram(
 
     fun hasZeroUnitSegments() = segments.any { it.basalRateInHundredthUnitsPerHour == 0 }
 
-    fun rateAt(date: Long): Double {
-        val ldt = Instant.fromEpochMilliseconds(date).toLocalDateTime(TimeZone.currentSystemDefault())
+    fun rateAt(date: Long): Double = rateAt(date, TimeZone.currentSystemDefault())
+
+    /**
+     * [rateAt] read in [timeZone]. Android `rateAt` always reads the default time zone; the basal drift
+     * (`DashBasalDrift.integrateExpectedDelivery`) passes the phone time zone, so its tests can set it.
+     */
+    fun rateAt(date: Long, timeZone: TimeZone): Double {
+        val ldt = Instant.fromEpochMilliseconds(date).toLocalDateTime(timeZone)
         val hourOfDay = ldt.hour
         val minuteOfHour = ldt.minute
         val slotIndex = hourOfDay * 2 + minuteOfHour.div(30)

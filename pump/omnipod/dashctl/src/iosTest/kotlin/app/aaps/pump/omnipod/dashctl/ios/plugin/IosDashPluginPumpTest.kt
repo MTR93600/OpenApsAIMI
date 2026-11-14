@@ -22,6 +22,7 @@ import app.aaps.pump.omnipod.dashctl.pod.definition.ActivationProgress
 import app.aaps.pump.omnipod.dashctl.pod.definition.AlarmType
 import app.aaps.pump.omnipod.dashctl.pod.definition.PodStatus
 import app.aaps.pump.omnipod.dashctl.queue.command.CommandDeactivatePod
+import app.aaps.pump.omnipod.dashctl.queue.command.CommandDeliverBasalCorrection
 import app.aaps.pump.omnipod.dashctl.queue.command.CommandHandleTimeChange
 import app.aaps.pump.omnipod.dashctl.queue.command.CommandPlayTestBeep
 import app.aaps.pump.omnipod.dashctl.queue.command.CommandResumeDelivery
@@ -40,6 +41,7 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
@@ -497,12 +499,12 @@ class IosDashPluginPumpTest {
         assertEquals(
             listOf(
                 "tempBasal(timestamp=$SENT_AT, rate=0.0, duration=288000000, isAbsolute=true, type=PUMP_SUSPEND, pumpId=$SENT_AT, pumpType=OMNIPOD_DASH, serial=$SERIAL)",
-                "announcement(omnipod_dash_ios_pod_fault[020, ALARM_OCCLUDED])"
+                "announcement(omnipod_dash_ios_pod_fault_with_ref[020, ALARM_OCCLUDED, $OCCLUDED_REF])"
             ),
             pumpSync.calls,
             "once: the zero temp basal runs, and the fault is synced"
         )
-        assertEquals(listOf("post(OMNIPOD_POD_FAULT, omnipod_dash_ios_pod_fault[020, ALARM_OCCLUDED], sound=BOLUS_ERROR)"), notices.posts())
+        assertEquals(listOf("post(OMNIPOD_POD_FAULT, omnipod_dash_ios_pod_fault_with_ref[020, ALARM_OCCLUDED, $OCCLUDED_REF], sound=BOLUS_ERROR)"), notices.posts())
         assertTrue(f.stateManager.alarmSynced)
     }
 
@@ -572,27 +574,160 @@ class IosDashPluginPumpTest {
         assertEquals(listOf("post(OMNIPOD_POD_FAULT, omnipod_dash_ios_pod_fault[020, ALARM_OCCLUDED], sound=BOLUS_ERROR)"), notices.posts())
     }
 
-    @Test
-    fun `a confirmed temp basal or cancel queues no basal correction because it is not ported yet`() = runTest {
+    /** A running pod with its time zone stored, a first status read, then one pulse less basal than expected. */
+    private suspend fun podThatGaveTooLittleBasal() {
         f.pairAndConnect()
+        f.basalRunning = true
+        f.expectedTempBasalRunning = false
+        f.stateManager.updateTimeZone(f.nowMs)
         pump.getPumpStatus("status")
-
-        assertTrue(pump.setTempBasalAbsolute(1.0, 30, true, PumpSync.TemporaryBasalType.NORMAL).success)
-        assertTrue(pump.cancelTempBasal(true).success)
-        runLaunched()
-
-        assertTrue(queue.queued.isEmpty(), "known gap: Android CommandDeliverBasalCorrection, see DashPluginRules")
+        f.stateManager.overwriteForTest { it.copy(basalExpected = it.basalExpected!! + 0.05) }
     }
 
     @Test
-    fun `a running pod gets no time zone notice because the pod time zone is not stored yet`() = runTest {
+    fun `a confirmed temp basal queues a basal correction when the pod gave too little basal`() = runTest {
+        podThatGaveTooLittleBasal()
+
+        assertTrue(pump.setTempBasalAbsolute(1.0, 30, true, PumpSync.TemporaryBasalType.NORMAL).success)
+        runLaunched()
+
+        assertEquals(listOf("customCommand(BASAL CORRECTION)"), queue.queued, "Android SET_TEMPORARY_BASAL confirmation")
+    }
+
+    @Test
+    fun `a confirmed temp basal queues no second basal correction while one waits in the queue`() = runTest {
+        podThatGaveTooLittleBasal()
+        queue.inQueue += CommandDeliverBasalCorrection::class
+
+        assertTrue(pump.setTempBasalAbsolute(1.0, 30, true, PumpSync.TemporaryBasalType.NORMAL).success)
+        runLaunched()
+
+        assertTrue(queue.queued.isEmpty())
+    }
+
+    @Test
+    fun `a confirmed cancel queues a basal correction when the pod gave too little basal`() = runTest {
+        podThatGaveTooLittleBasal()
+        f.tempBasalRunning = true
+        f.expectedTempBasalRunning = true
+
+        assertTrue(pump.cancelTempBasal(true).success)
+        runLaunched()
+
+        assertEquals(listOf("customCommand(BASAL CORRECTION)"), queue.queued, "Android CANCEL_TEMPORARY_BASAL confirmation")
+    }
+
+    @Test
+    fun `no basal correction is queued when the basal given is as expected`() = runTest {
+        podThatGaveTooLittleBasal()
+        f.stateManager.overwriteForTest { it.copy(basalExpected = it.basalExpected!! - 0.05) }
+
+        assertTrue(pump.setTempBasalAbsolute(1.0, 30, true, PumpSync.TemporaryBasalType.NORMAL).success)
+        runLaunched()
+
+        assertTrue(queue.queued.isEmpty())
+    }
+
+    @Test
+    fun `the basal correction is one 0_05 U bolus that is never written to PumpSync`() = runTest {
+        podThatGaveTooLittleBasal()
+        val commands = f.pod.commands.size
+
+        val result = rules.executeCustomCommand(CommandDeliverBasalCorrection())
+
+        assertTrue(result.success, result.comment)
+        assertEquals(0.05, result.bolusDelivered)
+        assertTrue(f.pod.commands.drop(commands).any { DashPumpOnFakePod.isBolus(it) }, "the pulse went to the pod")
+        assertTrue(pumpSync.calls.none { it.startsWith("bolus") }, "Android never syncs a BASAL_CORRECTION: ${pumpSync.calls}")
+        assertEquals(SENT_AT, f.stateManager.lastBasalCorrectionTime, "the cooldown starts before the send, as Android")
+        assertTrue(f.stateManager.lastBolus?.basalCorrection == true)
+        assertFalse(f.stateManager.basalCorrectionInProgress)
+    }
+
+    /**
+     * The check and the cooldown of the basal correction write the state. A session that the held
+     * connection sets up writes it too, with the command lock held. So the correction waits for the
+     * lock before it checks: nothing is written while another holds it.
+     */
+    @Test
+    fun `the basal correction check and cooldown wait for the command lock`() = runTest {
+        podThatGaveTooLittleBasal()
+        assertTrue(f.pump.tryLockLink())
+
+        val correction = async { f.pump.deliverBasalCorrection() }
+        runCurrent()
+        assertNull(f.stateManager.lastBasalCorrectionTime, "no cooldown written while another holds the lock")
+        assertFalse(correction.isCompleted)
+
+        f.pump.unlockLink()
+        val result = correction.await()
+
+        assertTrue(result.enacted, result.comment)
+        assertEquals(SENT_AT, f.stateManager.lastBasalCorrectionTime)
+    }
+
+    @Test
+    fun `a basal correction no longer needed sends nothing`() = runTest {
+        podThatGaveTooLittleBasal()
+        f.stateManager.overwriteForTest { it.copy(basalExpected = it.basalExpected!! - 0.05) }
+        val commands = f.pod.commands.size
+
+        val result = rules.executeCustomCommand(CommandDeliverBasalCorrection())
+
+        assertTrue(result.success)
+        assertFalse(result.enacted, "Android: basal correction no longer appropriate")
+        assertEquals(commands, f.pod.commands.size)
+    }
+
+    @Test
+    fun `a second basal correction within 2 minutes sends nothing`() = runTest {
+        podThatGaveTooLittleBasal()
+        assertTrue(rules.executeCustomCommand(CommandDeliverBasalCorrection()).enacted)
+        f.stateManager.overwriteForTest { it.copy(basalExpected = it.basalExpected!! + 0.05) }
+        f.nowMs = SENT_AT + 60_000L
+        val commands = f.pod.commands.size
+
+        val result = rules.executeCustomCommand(CommandDeliverBasalCorrection())
+
+        assertFalse(result.enacted, "Android: 2 minutes cooldown")
+        assertEquals(commands, f.pod.commands.size)
+    }
+
+    @Test
+    fun `a running pod in another time zone gets the time zone notice as Android`() = runTest {
         f.pairAndConnect()
         f.basalRunning = true
         pump.getPumpStatus("status")
+        f.stateManager.updateTimeZone(f.nowMs)
+        f.stateManager.overwriteForTest { it.copy(timeZoneOffsetMs = it.timeZoneOffsetMs!! + 3_600_000) }
 
         rules.updatePodWarnings()
 
-        assertTrue(notices.posts().isEmpty(), "known gap: Android OMNIPOD_TIME_OUT_OF_SYNC, see DashPluginRules")
+        assertEquals(listOf("post(OMNIPOD_TIME_OUT_OF_SYNC, omnipod_dash_ios_time_zone_different, sound=null)"), notices.posts())
+    }
+
+    @Test
+    fun `a running pod in the time zone of the phone gets no time zone notice`() = runTest {
+        f.pairAndConnect()
+        f.basalRunning = true
+        pump.getPumpStatus("status")
+        f.stateManager.updateTimeZone(f.nowMs)
+
+        rules.updatePodWarnings()
+
+        assertTrue(notices.posts().isEmpty(), "${notices.posts()}")
+    }
+
+    @Test
+    fun `a basal program the pod took stores the time zone of the phone`() = runTest {
+        f.pairAndConnect()
+        pumpSync.expectedProfile = PROFILE
+        assertNull(f.stateManager.timeZoneOffsetMs)
+
+        assertTrue(pump.setNewBasalProfile(PROFILE).success)
+
+        assertEquals(SENT_AT, f.stateManager.timeZoneUpdatedMs)
+        assertTrue(f.stateManager.sameTimeZone(SENT_AT))
     }
 
     // ---------------------------------------------------------------- queue commands
@@ -769,5 +904,11 @@ class IosDashPluginPumpTest {
         const val SERIAL = "37879809"
 
         val PROFILE = BasalOnlyProfile(0 to 0.5, 43200 to 1.0)
+
+        /**
+         * The PDM reference of the alarm status of the fixture with ALARM_OCCLUDED: category 17, byte 19 0,
+         * alarm time 0 so 405 min / 60 = 6 h, 445 pulses = 22 U, 1023 pulses = 51 U, fault 020.
+         */
+        const val OCCLUDED_REF = "17-00006-02251-020"
     }
 }

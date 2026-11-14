@@ -77,6 +77,7 @@ import app.aaps.pump.omnipod.dashctl.pod.definition.BeepType
 import app.aaps.pump.omnipod.dashctl.pod.definition.DeliveryStatus
 import app.aaps.pump.omnipod.dashctl.pod.definition.PodConstants
 import app.aaps.pump.omnipod.dashctl.pod.definition.ProgramReminder
+import app.aaps.pump.omnipod.dashctl.pod.response.DefaultStatusResponse
 import app.aaps.pump.omnipod.dashctl.pod.response.Response
 import app.aaps.pump.omnipod.dashctl.session.DashActiveCommand
 import app.aaps.pump.omnipod.dashctl.session.DashAlertSettings
@@ -90,6 +91,9 @@ import app.aaps.pump.omnipod.dashctl.session.DashPodStateManager
 import app.aaps.pump.omnipod.dashctl.session.DashResolvedCommand
 import app.aaps.pump.omnipod.dashctl.util.mapProfileToBasalProgram
 import kotlin.concurrent.Volatile
+import kotlin.concurrent.atomics.AtomicInt
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.concurrent.atomics.incrementAndFetch
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
 import kotlinx.coroutines.delay
@@ -261,6 +265,7 @@ data class DashCommandOutcome(
  * `MessageIO` blocks the calling thread; the BLE calls themselves run on the CoreBluetooth queue
  * (`QueuedBleCentral`).
  */
+@OptIn(ExperimentalAtomicApi::class)
 class IosDashPump(
     private val aapsLogger: AAPSLogger,
     /**
@@ -339,6 +344,23 @@ class IosDashPump(
     private var link: DashPodLink? = null
 
     /**
+     * 1 from a queue [connect] until the session it waits for is made ([startSession]), else 0.
+     * Android counts one success per `connect` that completed, not one per session: a link the held
+     * connection makes again by itself, or the reconnect inside the bolus wait, is not counted.
+     */
+    private val queueConnectWaiting = AtomicInt(0)
+
+    /**
+     * Connection counts not yet written to the state. [DashPodStateManager] is not thread-safe and
+     * [stopConnecting] (and a [connect] that finds a session) run on the queue thread, outside
+     * [commandMutex], while the held connection may be setting up a session with the lock held. A
+     * write from there could undo the EAP SQN that the session set up writes at the same time, so
+     * the counts wait here and [flushConnectionCountsWithLock] writes them with the lock held.
+     */
+    private val pendingSuccessfulConnections = AtomicInt(0)
+    private val pendingFailedConnections = AtomicInt(0)
+
+    /**
      * The outer counter after a fresh pairing on this connection: the next [establishSession]
      * starts from it, as `pairNewPod` passes `pairResult.msgSeq` to `establishSession`. Null
      * otherwise, and the session then starts from 1.
@@ -386,9 +408,22 @@ class IosDashPump(
         aapsLogger.info(LTag.PUMPBTCOMM, "Dash link ${link.number} attached")
     }
 
-    /** Called by `DashPodConnection` with [commandMutex] held: [establishSession] without the lock. */
+    /**
+     * Called by `DashPodConnection` with [commandMutex] held: [establishSession] without the lock. The
+     * first session made after a queue [connect] counts as one connection that worked, as Android
+     * counts each `connect` that completed (`incrementSuccessfulConnectionAttemptsAfterRetries`), for
+     * the connection quality row. Later sessions of the same held connect are not counted.
+     */
     override fun startSession() {
         establishSessionWithLock()
+        if (queueConnectWaiting.exchange(0) == 1) pendingSuccessfulConnections.incrementAndFetch()
+        flushConnectionCountsWithLock()
+    }
+
+    /** Writes the counts of [pendingSuccessfulConnections] and [pendingFailedConnections]. Call it with [commandMutex] held. */
+    private fun flushConnectionCountsWithLock() {
+        repeat(pendingSuccessfulConnections.exchange(0)) { stateManager.incrementSuccessfulConnectionAttemptsAfterRetries() }
+        repeat(pendingFailedConnections.exchange(0)) { stateManager.incrementFailedConnectionsAfterRetries() }
     }
 
     /**
@@ -821,6 +856,12 @@ class IosDashPump(
      *
      * Does nothing when no pod address is stored (no pod paired: the activation scans for the pod
      * and connects itself, see [activatePodPart1]) or when there is no connector.
+     *
+     * Connection quality, as Android: a connect that finds a session already up counts as one success
+     * at once (Android `connect` completes with `AlreadyConnected`); otherwise the next session made
+     * counts as one ([startSession]). A second connect while the first still waits counts nothing more
+     * (Android returns "Already connecting"). The count is written with the command lock held
+     * ([flushConnectionCountsWithLock]), so it shows after the next session or command.
      */
     override fun connect(reason: String) {
         val address = stateManager.bluetoothAddress
@@ -828,7 +869,13 @@ class IosDashPump(
             aapsLogger.info(LTag.PUMP, "Dash connect ($reason): no pod address stored, nothing to connect to")
             return
         }
-        connector?.hold(address, reason)
+        val c = connector ?: return
+        if (hasSession()) {
+            if (queueConnectWaiting.load() == 0) pendingSuccessfulConnections.incrementAndFetch()
+        } else {
+            queueConnectWaiting.store(1)
+        }
+        c.hold(address, reason)
     }
 
     /**
@@ -851,6 +898,10 @@ class IosDashPump(
      * (`disconnect(true)`). As Android, not held back by a running activation.
      */
     override fun stopConnecting() {
+        // Android: the queue gave up waiting, so this connection failed. Written later, with the lock
+        // held: the held connection may be setting up a session now (see pendingFailedConnections).
+        queueConnectWaiting.store(0)
+        pendingFailedConnections.incrementAndFetch()
         connector?.stopHolding("stop connecting")
         closeLink("stop connecting")
     }
@@ -883,7 +934,10 @@ class IosDashPump(
     /** [connectBeforeCommand], then [action] with [commandMutex] held. */
     private suspend inline fun <T> connectThenLock(name: String, stateReady: Boolean, action: () -> T): T {
         connectBeforeCommand(name, stateReady)
-        return commandMutex.withLock(action = action)
+        return commandMutex.withLock {
+            flushConnectionCountsWithLock()
+            action()
+        }
     }
 
     /**
@@ -953,7 +1007,75 @@ class IosDashPump(
     }
 
     private suspend fun deliverBolusWithLock(detailedBolusInfo: DetailedBolusInfo): PumpEnactResult {
-        val units = detailedBolusInfo.insulin
+        // Android: the SMB beep setting for an SMB, the bolus beep setting for any other bolus.
+        val isSmb = detailedBolusInfo.bolusType == BS.Type.SMB
+        val bolusBeeps = beeps().let { if (isSmb) it.smbBeeps else it.bolusBeeps }
+        return sendBolusAndWait(detailedBolusInfo.insulin, bolusBeeps, isSmb, basalCorrection = false)
+    }
+
+    /**
+     * Android `deliverBasalCorrection` (this fork), from the queue command `CommandDeliverBasalCorrection`:
+     * one 0.05 U pulse that makes up basal the pod gave too little.
+     * - [DashPodStateManager.needsBasalCorrection] false now: success, nothing sent ("no longer
+     *   appropriate");
+     * - otherwise the 2 minutes cooldown starts now ([DashPodStateManager.updateLastBasalCorrectionTime]),
+     *   before anything is sent, as Android;
+     * - that check and the cooldown are done with [commandMutex] held: both can write the state (the
+     *   check resets `basalExpected` after a large drift), and a session the held
+     *   connection sets up at the same time writes it too. The lock is given back before the
+     *   reservoir checks and the connect, as Android checks before it connects;
+     * - not enough insulin, or a bolus running: failure, nothing sent;
+     * - the pulse is a bolus with no beeps, through its own active command marked as a basal correction
+     *   (the plugin never writes it to `PumpSync`, as Android never syncs a BASAL_CORRECTION), followed to
+     *   its end as a bolus. While it runs its pulses count as basal
+     *   ([DashPodStateManager.basalCorrectionInProgress]).
+     */
+    suspend fun deliverBasalCorrection(): PumpEnactResult {
+        val needed = commandMutex.withLock {
+            flushConnectionCountsWithLock()
+            stateManager.needsBasalCorrection(now()).also { if (it) stateManager.updateLastBasalCorrectionTime(now()) }
+        }
+        if (!needed) {
+            aapsLogger.info(LTag.PUMP, "Basal correction no longer appropriate")
+            return DashPumpEnactResult(success = true, enacted = false, comment = "Basal correction no longer appropriate")
+        }
+        val units = PodConstants.POD_PULSE_BOLUS_UNITS
+        // Same staleness guard as the bolus: the reservoir is taken from the pod state first.
+        syncPumpFlows()
+        if (units > reservoirLevel.value.cU) {
+            aapsLogger.info(LTag.PUMP, "Basal correction skipped: not enough insulin in reservoir ($units > ${reservoirLevel.value.cU})")
+            return failure("Not enough insulin in reservoir")
+        }
+        if (stateManager.podStatus?.deliveryStatus?.bolusDeliveringActive() == true) {
+            aapsLogger.info(LTag.PUMP, "Basal correction skipped: bolus already in progress")
+            return failure("Bolus already in progress")
+        }
+        connectBeforeCommand("basal correction", stateReady = stateManager.isActivatedAndRunning)
+        bolusDeliveryInProgress = true
+        stateManager.basalCorrectionInProgress = true
+        aapsLogger.info(LTag.PUMP, "Delivering basal correction")
+        try {
+            return commandMutex.withLock {
+                busy = true
+                try {
+                    sendBolusAndWait(units, bolusBeeps = false, isSmb = false, basalCorrection = true)
+                } catch (e: DashCommandNotConfirmedException) {
+                    failure(e.message ?: "Last command not confirmed")
+                } catch (e: DashPumpNotPairedException) {
+                    failure(e.message ?: "Not paired")
+                } finally {
+                    busy = false
+                }
+            }
+        } finally {
+            bolusCanceled = false
+            bolusDeliveryInProgress = false
+            stateManager.basalCorrectionInProgress = false
+        }
+    }
+
+    /** The bolus of [deliverTreatment] and of [deliverBasalCorrection], with [commandMutex] held. */
+    private suspend fun sendBolusAndWait(units: Double, bolusBeeps: Boolean, isSmb: Boolean, basalCorrection: Boolean): PumpEnactResult {
         // Android passes podStateManager.pulseRate!!; it is only known after activation.
         // Without it the bolus bytes would be wrong, so refuse before anything is opened or sent.
         val pulseRate = stateManager.pulseRate
@@ -970,9 +1092,7 @@ class IosDashPump(
             aapsLogger.info(LTag.PUMP, "Bolus canceled before it was sent")
             return DashPumpEnactResult(success = true, enacted = false, comment = "Bolus canceled, nothing sent")
         }
-        // Android: the SMB beep setting for an SMB, the bolus beep setting for any other bolus.
-        val bolusBeeps = beeps().let { if (detailedBolusInfo.bolusType == BS.Type.SMB) it.smbBeeps else it.bolusBeeps }
-        val outcome = sendDeliveryCommand(DashCommandKind.BOLUS, requestedBolusUnits = units) { uid, seq ->
+        val outcome = sendDeliveryCommand(DashCommandKind.BOLUS, requestedBolusUnits = units, basalCorrection = basalCorrection) { uid, seq ->
             ProgramBolusCommand.Builder()
                 .setUniqueId(uid)
                 .setSequenceNumber(seq)
@@ -990,7 +1110,7 @@ class IosDashPump(
             return failure("Bolus $units U: ${DeliveryOutcome(confirmation, outcome.error).describe()}")
         }
         val delivered = DashBolusWait(bolusWaitPod, bolusProgress, sleep)
-            .waitForBolusDeliveryToComplete(units, isSmb = detailedBolusInfo.bolusType == BS.Type.SMB)
+            .waitForBolusDeliveryToComplete(units, isSmb = isSmb)
         aapsLogger.info(LTag.PUMP, "deliverTreatment: deliveredBolusAmount=$delivered")
         return DashPumpEnactResult(success = true, enacted = true, bolusDelivered = delivered, comment = "Bolus $delivered U of $units U delivered")
     }
@@ -1261,6 +1381,7 @@ class IosDashPump(
                 val outcome = sendDeliveryCommand(DashCommandKind.BASAL_PROGRAM, basalProgram = basalProgram) { uid, seq ->
                     basalProgramCommand(basalProgram, uid, seq, beep)
                 }
+                if (outcome.answeredWithStatus) stateManager.updateTimeZone(now())
                 if (outcome.confirmation == DashCommandConfirmation.SUCCESS) {
                     DashPumpEnactResult(success = true, enacted = true, comment = "Basal program confirmed by the pod")
                 } else {
@@ -1428,6 +1549,7 @@ class IosDashPump(
             val outcome = sendDeliveryCommand(DashCommandKind.RESUME_DELIVERY, basalProgram = basalProgram) { uid, seq ->
                 basalProgramCommand(basalProgram, uid, seq, beep)
             }
+            if (outcome.answeredWithStatus) stateManager.updateTimeZone(now())
             if (outcome.confirmation == DashCommandConfirmation.SUCCESS) {
                 DashPumpEnactResult(success = true, enacted = true, comment = "Resume confirmed by the pod")
             } else {
@@ -1741,7 +1863,15 @@ class IosDashPump(
     // -- Unconfirmed commands -------------------------------------------------
 
     /** What happened to one delivery command. */
-    private class DeliveryOutcome(val confirmation: DashCommandConfirmation, val error: String?) {
+    private class DeliveryOutcome(
+        val confirmation: DashCommandConfirmation,
+        val error: String?,
+        /**
+         * The pod answered the command with a default status. Android `updateTimeZone` runs on the
+         * completion of a basal program send, which needs that answer (`DefaultStatusResponse::class`).
+         */
+        val answeredWithStatus: Boolean = false,
+    ) {
 
         fun describe(): String = when (confirmation) {
             DashCommandConfirmation.SUCCESS           -> "confirmed by the pod"
@@ -1787,6 +1917,7 @@ class IosDashPump(
         tempBasalRate: Double? = null,
         tempBasalMinutes: Int? = null,
         basalProgram: BasalProgram? = null,
+        basalCorrection: Boolean = false,
         build: (uniqueId: Int, sequence: Short) -> Command,
     ): DeliveryOutcome {
         requireSession()
@@ -1820,6 +1951,7 @@ class IosDashPump(
                 tempBasalRate = tempBasalRate,
                 tempBasalMinutes = tempBasalMinutes,
                 basalProgram = basalProgram,
+                basalCorrection = basalCorrection,
             )
             check(stateManager.activeCommand?.sequence == command.sequenceNumber.toInt()) {
                 "The active command must take the sequence the command is built with"
@@ -1831,7 +1963,7 @@ class IosDashPump(
         // Only here, never for a status read: a status that could not be sent must not close an
         // open delivery command as "not sent".
         if (!sent.reachedRadio) stateManager.markActiveCommandNotSent()
-        return DeliveryOutcome(resolveAndHandle(decidedLate = false).confirmation, sent.error)
+        return DeliveryOutcome(resolveAndHandle(decidedLate = false).confirmation, sent.error, sent.response is DefaultStatusResponse)
     }
 
     /**
@@ -1898,7 +2030,7 @@ class IosDashPump(
      * The result of [sendCommand]. [reachedRadio] is false only for `CommandSendErrorSending`: the
      * pod cannot have the command. [error] is null when an answer was read.
      */
-    private class SentCommand(val reachedRadio: Boolean, val error: String?)
+    private class SentCommand(val reachedRadio: Boolean, val error: String?, val response: Response? = null)
 
     /**
      * One command and its answer: port of `SharedBleManager.sendCommand` with the counter updates of
@@ -1958,20 +2090,14 @@ class IosDashPump(
             closeLink("read failed: ${e.message}")
             return SentCommand(reachedRadio = true, error = "could not read the answer: ${e.message}")
         }
-        val error = when (readResult) {
-            is CommandReceiveSuccess -> {
-                onResponse(readResult.result)
-                null
-            }
-
-            is CommandAckError       -> {
-                onResponse(readResult.result)
-                null
-            }
-
-            is CommandReceiveError   -> "could not read the answer: ${readResult.msg}"
+        val response = when (readResult) {
+            is CommandReceiveSuccess -> readResult.result
+            is CommandAckError       -> readResult.result
+            is CommandReceiveError   -> null
         }
-        return SentCommand(reachedRadio = true, error = error)
+        response?.let(::onResponse)
+        val error = if (readResult is CommandReceiveError) "could not read the answer: ${readResult.msg}" else null
+        return SentCommand(reachedRadio = true, error = error, response = response)
     }
 
     /** `PodEventInterceptor`: the sequence goes up, then `handleResponse` ([DashPodStateManager.updateFromResponse]). */

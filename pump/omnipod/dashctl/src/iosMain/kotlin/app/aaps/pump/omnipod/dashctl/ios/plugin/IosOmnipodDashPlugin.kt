@@ -138,7 +138,8 @@ class IosOmnipodDashPlugin(
         title = OMNIPOD_DASH_IOS_PLUGIN_NAME,
         now = { Clock.System.now().toEpochMilliseconds() },
         wizard = { request, setToolbarConfig, onClose -> PodWizard(request, setToolbarConfig, onClose) },
-        discardPod = { host.rules.discardPod() }
+        discardPod = { host.rules.discardPod() },
+        history = { host.history.recentRecords() }
     )
 
     /**

@@ -13,19 +13,20 @@ import app.aaps.core.ui.compose.pump.PumpInfoRow
 import app.aaps.pump.omnipod.dashctl.DashStrings
 import app.aaps.pump.omnipod.dashctl.pod.definition.ActivationProgress
 import app.aaps.pump.omnipod.dashctl.pod.definition.AlertType
+import app.aaps.pump.omnipod.dashctl.pod.definition.PdmFaultCategory
 import app.aaps.pump.omnipod.dashctl.pod.definition.PodConstants
 import app.aaps.pump.omnipod.dashctl.queue.command.CommandPlayTestBeep
 import app.aaps.pump.omnipod.dashctl.queue.command.CommandResumeDelivery
 import app.aaps.pump.omnipod.dashctl.queue.command.CommandSilenceAlerts
 import app.aaps.pump.omnipod.dashctl.session.DashPodStateManager
+import kotlin.math.abs
 import kotlin.reflect.KClass
 
 /**
  * The buttons of the pod screen, the ones Android `DashOverviewViewModel` shows for Dash. Not here:
- * "Suspend" (always hidden for Dash on Android too), "Set time" (the iPhone does not store the pod
- * time zone yet, see P2b of the plan), "Pod history" (no pod history on the iPhone).
+ * "Suspend" (always hidden for Dash on Android too).
  */
-enum class DashOverviewAction { REFRESH, SILENCE_ALERTS, RESUME_DELIVERY, ACTIVATE_POD, DEACTIVATE_POD, PLAY_TEST_BEEP, DISCARD_POD }
+enum class DashOverviewAction { REFRESH, SILENCE_ALERTS, RESUME_DELIVERY, SET_TIME, ACTIVATE_POD, DEACTIVATE_POD, PLAY_TEST_BEEP, POD_HISTORY, DISCARD_POD }
 
 /** One button: shown or not, and whether it can be pressed. */
 data class DashOverviewButton(val action: DashOverviewAction, val visible: Boolean, val enabled: Boolean = true)
@@ -35,18 +36,23 @@ data class DashOverviewButton(val action: DashOverviewAction, val visible: Boole
  * - Refresh: from SET_UNIQUE_ID on, with an empty queue;
  * - Silence alerts: a running pod with alerts (or a silence waiting in the queue), empty queue;
  * - Resume delivery: a running pod that is suspended (or a resume waiting in the queue), empty queue;
+ * - Set time: the activation is completed and the pod time zone is not the phone time zone
+ *   ([DashPodStateManager.sameTimeZone]), not suspended, empty queue;
  * - Activate pod: the activation is not completed;
  * - Deactivate pod: as soon as a pod is paired (an address or a key is stored), not only after the
  *   activation, so a pod that faults during the activation can be removed (#1217);
  * - Play test beep: from PHASE_1_COMPLETED on, not while one waits in the queue;
+ * - Pod history: always;
  * - Discard pod: a pod id is stored but SET_UNIQUE_ID was not reached.
  *
  * @param queueEmpty Android `commandQueue.size() == 0 && commandQueue.performing() == null`
  * @param inQueue Android `commandQueue.isCustomCommandInQueue`
+ * @param nowMs the wall clock now, for the time zone of the phone
  */
 fun dashOverviewButtons(
     state: DashPodStateManager,
     queueEmpty: Boolean,
+    nowMs: Long,
     inQueue: (KClass<out CustomCommand>) -> Boolean
 ): List<DashOverviewButton> {
     val progress = state.activationProgress
@@ -63,16 +69,23 @@ fun dashOverviewButtons(
             visible = state.isPodRunning && (state.isSuspended || inQueue(CommandResumeDelivery::class)),
             enabled = queueEmpty
         ),
+        DashOverviewButton(
+            DashOverviewAction.SET_TIME,
+            visible = state.isActivationCompleted && !state.sameTimeZone(nowMs),
+            enabled = !state.isSuspended && queueEmpty
+        ),
         DashOverviewButton(DashOverviewAction.ACTIVATE_POD, visible = !state.isActivationCompleted),
         DashOverviewButton(DashOverviewAction.DEACTIVATE_POD, visible = state.bluetoothAddress != null || state.ltk != null),
         DashOverviewButton(DashOverviewAction.PLAY_TEST_BEEP, visible = phase1Done, enabled = phase1Done && !inQueue(CommandPlayTestBeep::class)),
+        DashOverviewButton(DashOverviewAction.POD_HISTORY, visible = true),
         DashOverviewButton(DashOverviewAction.DISCARD_POD, visible = state.uniqueId != null && progress.isBefore(ActivationProgress.SET_UNIQUE_ID))
     )
 }
 
 /** The buttons of the first row (pod commands), the rest are pod management, as Android. */
 val DashOverviewAction.isPrimary: Boolean
-    get() = this == DashOverviewAction.REFRESH || this == DashOverviewAction.SILENCE_ALERTS || this == DashOverviewAction.RESUME_DELIVERY
+    get() = this == DashOverviewAction.REFRESH || this == DashOverviewAction.SILENCE_ALERTS ||
+        this == DashOverviewAction.RESUME_DELIVERY || this == DashOverviewAction.SET_TIME
 
 /** The label of each button. */
 val DashOverviewAction.label: TextRef
@@ -80,6 +93,8 @@ val DashOverviewAction.label: TextRef
         DashOverviewAction.REFRESH         -> CoreUiStrings.refresh
         DashOverviewAction.SILENCE_ALERTS  -> DashStrings.dash_button_silence_alerts
         DashOverviewAction.RESUME_DELIVERY -> DashStrings.dash_button_resume_delivery
+        DashOverviewAction.SET_TIME        -> DashStrings.dash_button_set_time
+        DashOverviewAction.POD_HISTORY     -> DashStrings.dash_button_pod_history
         DashOverviewAction.ACTIVATE_POD    -> DashStrings.dash_button_activate_pod
         DashOverviewAction.DEACTIVATE_POD  -> DashStrings.dash_button_deactivate_pod
         DashOverviewAction.PLAY_TEST_BEEP  -> DashStrings.dash_button_play_test_beep
@@ -121,13 +136,17 @@ private const val POD_GRACE_PERIOD_MS = 8 * 60 * 60_000L
 /** Android `PodExpiryRows.WARNING_TIME`. */
 private const val EXPIRY_WARNING_MS = 4 * 60 * 60_000L
 
+/** Android `MAX_TIME_DEVIATION_MINUTES`: a pod clock more than 10 minutes off is shown as a warning. */
+private const val MAX_TIME_DEVIATION_MS = 10 * 60_000L
+
 /**
- * The rows of the pod screen, Android `DashOverviewViewModel.buildInfoRows` for what the iPhone
- * stores. Not here, because the iPhone does not keep it yet: the connection quality (connection
- * counters), the time on the pod and its time zone (P2b), the PDM style fault text (no PDM reference).
+ * The rows of the pod screen, Android `DashOverviewViewModel.buildInfoRows`. The engineering mode
+ * "delivery status" row of Android is not here (no engineering mode on the iPhone). The time zone of
+ * the pod is shown by its id (Android shows the short display name, which common code cannot make).
  */
 fun dashOverviewRows(state: DashPodStateManager, rh: TextResolver, format: DashOverviewFormat, nowMs: Long): List<PumpInfoRow> = buildList {
     add(PumpInfoRow(label = rh.gs(DashStrings.dash_overview_bluetooth_address), value = state.bluetoothAddress ?: PLACEHOLDER))
+    add(connectionQualityRow(state, rh))
     val initialized = state.activationProgress.isAtLeast(ActivationProgress.SET_UNIQUE_ID)
     val statusRow = PumpInfoRow(label = rh.gs(DashStrings.dash_overview_pod_status), value = dashPodStatusText(state, rh), level = dashPodStatusLevel(state))
     if (!initialized) {
@@ -143,6 +162,7 @@ fun dashOverviewRows(state: DashPodStateManager, rh: TextResolver, format: DashO
             value = rh.gs(DashStrings.dash_overview_firmware_version_value, state.firmwareVersion.toString(), state.bleVersion.toString())
         )
     )
+    add(timeOnPodRow(state, rh, format, nowMs))
     // Pod expiry and hard end, with the colours of Android `podExpiryRows` (#5365).
     val expiresAt = state.expiryMs
     val hardEndAt = expiresAt?.let { it + POD_GRACE_PERIOD_MS }
@@ -202,6 +222,64 @@ fun dashOverviewRows(state: DashPodStateManager, rh: TextResolver, format: DashO
             value = alarm?.let { rh.gs(DashStrings.omnipod_dash_ios_pod_fault, (it.value.toInt() and 0xff).toString().padStart(3, '0'), it.toString()) } ?: PLACEHOLDER,
             level = if (alarm != null) StatusLevel.CRITICAL else StatusLevel.NORMAL
         )
+    )
+    pdmNotificationRow(state, rh)?.let { add(it) }
+}
+
+/**
+ * Android connection quality row: worked/attempts :: per cent; red below 70 % and orange below 90 %,
+ * both only after more than 50 connections that worked.
+ */
+private fun connectionQualityRow(state: DashPodStateManager, rh: TextResolver): PumpInfoRow {
+    val worked = state.successfulConnectionAttemptsAfterRetries
+    val attempts = state.failedConnectionsAfterRetries + worked
+    val percent = state.connectionSuccessRatio() * 100
+    val level = when {
+        percent < 70 && worked > 50 -> StatusLevel.CRITICAL
+        percent < 90 && worked > 50 -> StatusLevel.WARNING
+        else                        -> StatusLevel.NORMAL
+    }
+    return PumpInfoRow(
+        label = rh.gs(DashStrings.dash_overview_connection_quality),
+        value = rh.gs(DashStrings.dash_overview_connection_quality_value, worked, attempts, percent.toDouble()),
+        level = level
+    )
+}
+
+/**
+ * Android time on pod row: the pod time ([DashPodStateManager.podTimeMs]) with the pod time zone;
+ * red (Android magenta) when the pod time zone is not the phone time zone, orange when the pod clock
+ * is more than 10 minutes off.
+ */
+private fun timeOnPodRow(state: DashPodStateManager, rh: TextResolver, format: DashOverviewFormat, nowMs: Long): PumpInfoRow {
+    val zone = state.timeZoneId?.takeIf { state.timeZoneUpdatedMs != null } ?: PLACEHOLDER
+    val value = state.podTimeMs(nowMs)?.let { rh.gs(DashStrings.dash_overview_time_with_time_zone, format.dateAndTime(it), zone) } ?: PLACEHOLDER
+    val drift = state.timeDriftMs(nowMs)
+    val level = when {
+        !state.sameTimeZone(nowMs)                               -> StatusLevel.CRITICAL
+        drift != null && abs(drift) > MAX_TIME_DEVIATION_MS        -> StatusLevel.WARNING
+        else                                                     -> StatusLevel.NORMAL
+    }
+    return PumpInfoRow(label = rh.gs(DashStrings.dash_overview_time_on_pod), value = value, level = level)
+}
+
+/**
+ * Android PDM notification row: the fault as the PDM would have shown it (title, text, Ref), for a
+ * fault with a PDM category and a stored reference ([DashPodStateManager.pdmRef]).
+ */
+private fun pdmNotificationRow(state: DashPodStateManager, rh: TextResolver): PumpInfoRow? {
+    val category = state.alarmType?.pdmFaultCategory ?: return null
+    val ref = state.pdmRef ?: return null
+    val (header, text) = when (category) {
+        PdmFaultCategory.RESERVOIR_EMPTY -> DashStrings.dash_pdm_header_reservoir_empty to DashStrings.dash_pdm_text_reservoir_empty
+        PdmFaultCategory.AUTO_OFF        -> DashStrings.dash_pdm_header_auto_off to DashStrings.dash_pdm_text_auto_off
+        PdmFaultCategory.POD_EXPIRED     -> DashStrings.dash_pdm_header_pod_expired to DashStrings.dash_pdm_text_pod_expired
+        PdmFaultCategory.OCCLUDED        -> DashStrings.dash_pdm_header_occluded to DashStrings.dash_pdm_text_occluded
+        PdmFaultCategory.POD_ERROR       -> DashStrings.dash_pdm_header_pod_error to DashStrings.dash_pdm_text_pod_error
+    }
+    return PumpInfoRow(
+        label = rh.gs(DashStrings.dash_overview_pdm_notification),
+        value = rh.gs(DashStrings.dash_overview_pdm_notification_value, rh.gs(header), rh.gs(text), rh.gs(DashStrings.dash_pdm_ref, ref))
     )
 }
 

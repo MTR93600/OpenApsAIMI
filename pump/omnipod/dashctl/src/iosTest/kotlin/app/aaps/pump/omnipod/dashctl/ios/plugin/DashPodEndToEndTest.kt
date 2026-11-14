@@ -183,7 +183,7 @@ class DashPodEndToEndTest {
             pumpSync.calls,
             "the no-pod zero temp basal of Android"
         )
-        val noPod = dashOverviewButtons(f.stateManager, queueEmpty = true) { false }.associateBy { it.action }
+        val noPod = dashOverviewButtons(f.stateManager, queueEmpty = true, nowMs = f.nowMs) { false }.associateBy { it.action }
         assertTrue(noPod.getValue(DashOverviewAction.ACTIVATE_POD).visible)
 
         // 2. The activation, as the screen drives the wizard.
@@ -286,7 +286,7 @@ class DashPodEndToEndTest {
         )
 
         // 4. The deactivation, through the wizard and the queue.
-        val running = dashOverviewButtons(f.stateManager, queueEmpty = true) { false }.associateBy { it.action }
+        val running = dashOverviewButtons(f.stateManager, queueEmpty = true, nowMs = f.nowMs) { false }.associateBy { it.action }
         assertTrue(running.getValue(DashOverviewAction.DEACTIVATE_POD).visible)
         pumpSync.calls.clear()
         f.nowMs = START + 420_000

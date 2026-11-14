@@ -396,15 +396,7 @@ phone, never AAPSClient. Android keeps `:pump:omnipod:dash` unchanged.
       (it may stop a temp basal on the pod, not possible while the bolus call holds the lock); the PDM
       reference in the fault text (no `pdmRef` in the iOS state). Moved to P2b below: basal drift
       correction and the time zone notice.
-- [ ] **P2b. Basal drift correction and pod time zone.** Both need new stored fields and a new codec
-      version. Port Android `needsBasalCorrection`, `basalExpected`, `bolusPulsesDelivered`,
-      `integrateExpectedDelivery`, `lastBasalCorrectionTime` and `deliverBasalCorrection`
-      (`CommandDeliverBasalCorrection`, queued after a confirmed temp basal or cancel), and the pod
-      time zone offset with the OMNIPOD_TIME_OUT_OF_SYNC notice of `updatePodWarnings`. Until then the
-      iOS loop does not make up basal drift (Android does, in 0.05 U pulses) and gives no notice when
-      the pod time zone differs from the phone. The pin tests `a confirmed temp basal or cancel queues
-      no basal correction because it is not ported yet` and `a running pod gets no time zone notice
-      because the pod time zone is not stored yet` must change with the port.
+- [x] **P2b. Basal drift correction and pod time zone.** Done in P4 below.
 - [x] **P3 (phase 5). Screens.** Done 2026-11-14 (not committed, not on a device, xcodebuild not run
       by the builder). Compose Multiplatform in `dashctl` commonMain (`ui/`), the way the Medtrum patch
       wizard is in `:pump:medtrum`:
@@ -436,8 +428,8 @@ phone, never AAPSClient. Android keeps `:pump:omnipod:dash` unchanged.
         config builder description is now the Android one, with the Android icon (`IcPluginOmnipod`),
         and the caution text (rewritten: a pod can be activated now, but it is not tested on a real
         pod) is the banner of the pump screen.
-      Deliberate differences from Android: no pod history, no "Set time" (P2b), no connection quality
-      row (counters not kept), no time on pod row, no PDM fault text, no "Bluetooth bonding" switch
+      Deliberate differences from Android: ~~no pod history, no "Set time", no connection quality
+      row, no time on pod row, no PDM fault text~~ (all added in P4), no "Bluetooth bonding" switch
       (iOS decides bonding, the app cannot); after the profile gate the wizard waits (at most 1 min) until the queue has set the profile, as
       `MedtrumPatchWizardModel`, so part 2 finds a basal program. Tests: `DashWizardStepTest`,
       `DashPodWizardModelTest`, `DashOverviewTest` (commonTest, JVM and iOS), `DashPodEndToEndTest`
@@ -462,6 +454,63 @@ phone, never AAPSClient. Android keeps `:pump:omnipod:dash` unchanged.
       lives in dashctl iosTest and `CommandQueueImplementation` in `:implementation`; dashctl does not
       depend on it, so this needs the simulated pod moved to a test fixture that ios/shell can use.
       Then a real pod.
+- [x] **P4. The parity gaps P1-P3 left.** Done 2026-11-14 (not committed, not on a device, xcodebuild
+      not run by the builder).
+      - Basal drift correction (this fork): `DashBasalDrift` (commonMain) is Android
+        `integrateExpectedDelivery` and `calculateBolusPulseIncrease` as they are; the state keeps
+        `bolusPulsesDelivered`, `basalExpected`, `lastBasalCorrectionTime` and updates them at each
+        status in the order of Android `updatePodState` (`DashPodStateManager.statusApplied`), with
+        the transient `basalCorrectionInProgress`. `needsBasalCorrection(now)` has the same rules and
+        limits (-0.025 U, reset at +-0.1 U, 2 min cooldown, zero temp basal unless a bolus < 5 min).
+        `CommandDeliverBasalCorrection` is queued after a confirmed temp basal (unless one waits) or
+        cancel (`DashPluginRules.onOutcome`) and runs `IosDashPump.deliverBasalCorrection`: one silent
+        0.05 U bolus through the open command rule, marked `basalCorrection` on the active command and
+        the last bolus, never written to `PumpSync` (send, refusal, stop and fault), as Android.
+      - Pod time zone: `timeZoneId`, `timeZoneOffsetMs`, `timeZoneUpdatedMs` stored when the pod
+        answers a basal program with a status (activation part 2, profile, time change, resume), as
+        Android `updateTimeZone`; `sameTimeZone`, `podTimeMs`, `timeDriftMs`; the
+        OMNIPOD_TIME_OUT_OF_SYNC notice in `updatePodWarnings`. Time zone and DST changes are still
+        ignored, as Android (`timezoneOrDSTChanged`); "Set time" is the user's way to fix it.
+      - PDM reference: `AlarmType` is now a full copy of the Android enum (names, values, `code`,
+        `pdmFaultCategory`, `PdmFaultCategory`); `AlarmStatusResponse.pdmRef` as Android; stored with
+        the first alarm (`pdmRef`); in the fault notice and announcement
+        (`omnipod_dash_ios_pod_fault_with_ref`) and in the "PDM Notification" row. Android
+        `AlarmStatusResponseTest` vectors unchanged (`AlarmStatusResponsePdmRefTest`).
+      - `verifyPumpState` inside the bolus wait: not done, on purpose. Its second branch stops a temp
+        basal on the pod, which needs the command lock the bolus call holds for the whole wait. The
+        reason is in the KDoc of `DashPluginRules`. The fault part already runs at once.
+      - Screens: connection quality row (counters as Android: one success per queue `connect` that
+        ends with a session, or that finds one already up (`AlreadyConnected`); a new session the held
+        connection makes by itself inside the same connect, or the reconnect inside the bolus wait, is
+        not counted; one failure per `stopConnecting`. The counts are written with the command lock
+        held, at the next session or command, never from the queue thread: `DashPodStateManager` is
+        not thread-safe and a session set up writes the EAP SQN at the same time. The basal correction
+        check and cooldown are also done with the lock held, for the same reason), time on pod row (the zone shown by its
+        id, Android shows a short display name), "Set time" button (`CommandHandleTimeChange(true)`),
+        PDM notification row, "Pod History" (`DashPodHistory` + `DashPodHistoryScreen`, kept in the
+        user defaults by `IosDashHistoryStore`: one record per delivery command when sent, decided by
+        the pod, what an early-ended bolus gave, and the activation parts and discard; status reads
+        and SET_TIME are not kept, at most 5 days and 2000 records; no filter chips).
+      - Codec: the new fields are a step P4 part at the end of version 4. Test phones on the P3 build
+        (aa241bd32e) had stored version 4 without it, so a version 4 state that ends right after the
+        reservoir reading reads with every P4 field empty (the pod key is kept); a P4 part cut short
+        still fails. The v3 pin is unchanged; the v4 pin has the new part, and the P3 bytes are pinned
+        too.
+      Tests: `DashBasalDriftTest` (Android `IntegrateExpectedDeliveryTest` and
+      `CalculateBolusPulseIncreaseTest`), `DashPodStateDriftTest` (Android `NeedsBasalCorrectionTest`,
+      `UpdatePodStateBolusTrackingTest`, time zone, PDM reference, counters),
+      `AlarmStatusResponsePdmRefTest`, `DashPodHistoryTest`, codec tests, `DashOverviewTest`
+      (+5), `IosDashPluginPumpTest` (the two pin tests replaced by 10 real ones),
+      `DashPumpSyncRecorderTest` (+1). JVM 626, iOS simulator 845 (1 skipped), ios/shell 114, 0
+      failures.
+      **Still open: the end-to-end test on the real `CommandQueueImplementation`** (item 6 of P4). It
+      needs: the simulated pod (`FakeDashPod`, `FakeDashPodCentral`, `ActivatingPodModel`,
+      `DashPumpOnFakePod`, the `parity*` crypto helpers with their JVM and iOS actuals) moved to a
+      test-fixture module that ios/shell can use; `DashPodStateManager.overwriteForTest` and the
+      `internal` fakes made public for it; a transport seam so the Dash plugin of the app graph talks to
+      a fake `BleCentral` instead of CoreBluetooth (a graph binding, since the host is built by
+      Metro); and the activation and bolus waits run in real time there (about 70 s). Not started in
+      this run.
 
 ### 5. Screens
 

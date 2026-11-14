@@ -53,7 +53,7 @@ class DashOverviewTest {
     )
 
     private fun buttons(state: DashPodState, queueEmpty: Boolean = true, inQueue: Set<KClass<out CustomCommand>> = emptySet()) =
-        dashOverviewButtons(stateManagerWith(state), queueEmpty) { it in inQueue }.associateBy { it.action }
+        dashOverviewButtons(stateManagerWith(state), queueEmpty, NOW) { it in inQueue }.associateBy { it.action }
 
     @Test
     fun `with no pod only Activate shows and Refresh cannot be pressed`() {
@@ -150,7 +150,69 @@ class DashOverviewTest {
     fun `with no pod the screen shows the address and the status only`() {
         val rows = dashOverviewRows(stateManagerWith(DashPodState()), NameResolver, PlainFormat, NOW)
 
-        assertEquals(listOf("dash_overview_bluetooth_address", "dash_overview_pod_status"), rows.map { it.label })
+        assertEquals(listOf("dash_overview_bluetooth_address", "dash_overview_connection_quality", "dash_overview_pod_status"), rows.map { it.label })
+    }
+
+    @Test
+    fun `Set time shows for an activated pod that is not in the phone time zone as Android`() {
+        val other = buttons(running).getValue(DashOverviewAction.SET_TIME)
+        assertTrue(other.visible, "no pod time zone stored: not the same zone")
+        assertTrue(other.enabled)
+
+        val same = stateManagerWith(running).also { it.updateTimeZone(NOW) }
+        assertFalse(dashOverviewButtons(same, true, NOW) { false }.single { it.action == DashOverviewAction.SET_TIME }.visible)
+
+        val suspended = buttons(running.copy(podStatus = status(delivery = DeliveryStatus.SUSPENDED))).getValue(DashOverviewAction.SET_TIME)
+        assertFalse(suspended.enabled, "Android: not while suspended")
+        assertFalse(buttons(DashPodState()).getValue(DashOverviewAction.SET_TIME).visible, "not before the activation")
+        assertTrue(DashOverviewAction.SET_TIME.isPrimary)
+    }
+
+    @Test
+    fun `Pod History always shows`() {
+        assertTrue(buttons(DashPodState()).getValue(DashOverviewAction.POD_HISTORY).visible)
+        assertTrue(buttons(running).getValue(DashOverviewAction.POD_HISTORY).visible)
+        assertFalse(DashOverviewAction.POD_HISTORY.isPrimary)
+    }
+
+    @Test
+    fun `the connection quality row has the Android value and colours`() {
+        fun row(worked: Int, failed: Int) = dashOverviewRows(
+            stateManagerWith(running.copy(successfulConnectionAttemptsAfterRetries = worked, failedConnectionsAfterRetries = failed)), NameResolver, PlainFormat, NOW
+        ).single { it.label == "dash_overview_connection_quality" }
+
+        assertEquals("dash_overview_connection_quality_value[3, 4, 75.0]", row(3, 1).value)
+        assertEquals(StatusLevel.NORMAL, row(3, 1).level, "few connections: no colour")
+        assertEquals(StatusLevel.CRITICAL, row(60, 40).level, "below 70 %")
+        assertEquals(StatusLevel.WARNING, row(80, 20).level, "below 90 %")
+        assertEquals(StatusLevel.NORMAL, row(95, 5).level)
+    }
+
+    @Test
+    fun `the time on pod row shows the pod time and is red in another time zone`() {
+        val state = running.copy(activationTime = NOW - 60 * 60_000L)
+        val same = stateManagerWith(state).also { it.updateTimeZone(NOW) }
+        val row = dashOverviewRows(same, NameResolver, PlainFormat, NOW).single { it.label == "dash_overview_time_on_pod" }
+
+        assertEquals("dash_overview_time_with_time_zone[t$NOW, ${same.timeZoneId}]", row.value)
+        assertEquals(StatusLevel.NORMAL, row.level)
+
+        val other = stateManagerWith(state.copy(timeZoneOffsetMs = (same.timeZoneOffsetMs ?: 0) + 3_600_000, timeZoneId = "Other/Zone", timeZoneUpdatedMs = NOW))
+        assertEquals(StatusLevel.CRITICAL, dashOverviewRows(other, NameResolver, PlainFormat, NOW).single { it.label == "dash_overview_time_on_pod" }.level)
+
+        val drifting = stateManagerWith(state.copy(activationTime = NOW - 80 * 60_000L)).also { it.updateTimeZone(NOW) }
+        assertEquals(StatusLevel.WARNING, dashOverviewRows(drifting, NameResolver, PlainFormat, NOW).single { it.label == "dash_overview_time_on_pod" }.level, "pod clock 20 minutes off")
+    }
+
+    @Test
+    fun `a fault with a PDM reference shows the PDM notification as Android`() {
+        val rows = dashOverviewRows(stateManagerWith(running.copy(alarmType = AlarmType.ALARM_OCCLUDED, pdmRef = "17-00006-02251-020")), NameResolver, PlainFormat, NOW)
+
+        assertEquals(
+            "dash_overview_pdm_notification_value[dash_pdm_header_occluded, dash_pdm_text_occluded, dash_pdm_ref[17-00006-02251-020]]",
+            rows.single { it.label == "dash_overview_pdm_notification" }.value
+        )
+        assertTrue(dashOverviewRows(stateManagerWith(running.copy(alarmType = AlarmType.ALARM_OCCLUDED)), NameResolver, PlainFormat, NOW).none { it.label == "dash_overview_pdm_notification" }, "no reference: no row")
     }
 
     /** Writes values plainly, so a test reads which value went where. */

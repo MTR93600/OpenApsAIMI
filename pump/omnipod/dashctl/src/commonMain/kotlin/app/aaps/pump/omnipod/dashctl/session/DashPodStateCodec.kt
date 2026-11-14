@@ -65,6 +65,19 @@ import app.aaps.pump.omnipod.dashctl.pod.util.byValue
  *   as `AlarmType.UNKNOWN`, as a response does). Then u8 [DashPodState.alarmSynced] (0 or 1).
  * - the last reservoir reading below 1023 ([DashPodState.pulsesRemaining]): u8 present (0 or 1); if
  *   so: u32 pulses (signed: an alarm status reads the field as a 16-bit short).
+ * - the step P4 part (added in place to version 4, after test phones had already stored version 4
+ *   without it: a version 4 state that ends right after the reservoir reading is that older state and
+ *   reads with every P4 field at its empty value, so a pod paired on that build keeps its key; a part
+ *   that starts and is cut short still fails): u8 basal correction
+ *   flags: bit0 the active command is a basal correction ([DashActiveCommand.basalCorrection]), bit1
+ *   the last bolus is one ([DashLastBolus.basalCorrection]); a flag without its command or bolus, or
+ *   any other bit, is an error. Then, each as u8 present (0 or 1) and the value if present:
+ *   [DashPodState.bolusPulsesDelivered] u32, [DashPodState.basalExpected] u64 (double bits),
+ *   [DashPodState.lastBasalCorrectionTime] u64, [DashPodState.timeZoneId] u32 + bytes (UTF-8),
+ *   [DashPodState.timeZoneOffsetMs] u32 (signed), [DashPodState.timeZoneUpdatedMs] u64,
+ *   [DashPodState.pdmRef] u32 + bytes (UTF-8). Then u32
+ *   [DashPodState.successfulConnectionAttemptsAfterRetries] and u32
+ *   [DashPodState.failedConnectionsAfterRetries].
  *
  * Versions 1 to 3 are still read, so a pod paired before keeps its key and its open command. They
  * have none of the version 4 fields: the temp basal, the alarm type and the reservoir reading stay null, the alert settings stay null and
@@ -101,6 +114,10 @@ object DashPodStateCodec {
     private const val FLAG_REPORTED_POD_STATUS = 0x100
     private const val FLAG_ACTIVATION_TIME = 0x200
     private const val ACTIVATION_FLAGS_KNOWN = 0x3ff
+
+    private const val FLAG_COMMAND_BASAL_CORRECTION = 0x01
+    private const val FLAG_BOLUS_BASAL_CORRECTION = 0x02
+    private const val BASAL_CORRECTION_FLAGS_KNOWN = 0x03
 
     fun encode(state: DashPodState): ByteArray {
         val out = Writer()
@@ -233,6 +250,20 @@ object DashPodStateCodec {
         val pulsesRemaining = state.pulsesRemaining
         out.u8(if (pulsesRemaining != null) 1 else 0)
         if (pulsesRemaining != null) out.u32(pulsesRemaining)
+
+        var correction = 0
+        if (command?.basalCorrection == true) correction = correction or FLAG_COMMAND_BASAL_CORRECTION
+        if (bolus?.basalCorrection == true) correction = correction or FLAG_BOLUS_BASAL_CORRECTION
+        out.u8(correction)
+        out.optional(state.bolusPulsesDelivered) { out.u32(it) }
+        out.optional(state.basalExpected) { out.u64(it.toRawBits()) }
+        out.optional(state.lastBasalCorrectionTime) { out.u64(it) }
+        out.optional(state.timeZoneId) { out.text(it) }
+        out.optional(state.timeZoneOffsetMs) { out.u32(it) }
+        out.optional(state.timeZoneUpdatedMs) { out.u64(it) }
+        out.optional(state.pdmRef) { out.text(it) }
+        out.u32(state.successfulConnectionAttemptsAfterRetries)
+        out.u32(state.failedConnectionsAfterRetries)
         return out.toByteArray()
     }
 
@@ -305,7 +336,7 @@ object DashPodStateCodec {
                 command = open.copy(createdAtMs = inp.u64())
             }
         }
-        val lastBolus = if (version >= VERSION_4) readLastBolus(inp) else null
+        var lastBolus = if (version >= VERSION_4) readLastBolus(inp) else null
         var basalProgram: BasalProgram? = null
         if (version >= VERSION_4) {
             if (inp.flag("command basal program")) {
@@ -351,6 +382,38 @@ object DashPodStateCodec {
             alarmSynced = inp.flag("alarm synced")
             if (inp.flag("reservoir reading")) pulsesRemaining = inp.u32()
         }
+        var bolusPulsesDelivered: Int? = null
+        var basalExpected: Double? = null
+        var lastBasalCorrectionTime: Long? = null
+        var timeZoneId: String? = null
+        var timeZoneOffsetMs: Int? = null
+        var timeZoneUpdatedMs: Long? = null
+        var pdmRef: String? = null
+        var successfulConnections = 0
+        var failedConnections = 0
+        if (version >= VERSION_4 && !inp.atEnd()) {
+            val correction = inp.u8()
+            require(correction and BASAL_CORRECTION_FLAGS_KNOWN.inv() == 0) { "unknown basal correction flags $correction" }
+            if (correction and FLAG_COMMAND_BASAL_CORRECTION != 0) {
+                val open = command
+                require(open != null) { "basal correction flag without a command" }
+                command = open.copy(basalCorrection = true)
+            }
+            if (correction and FLAG_BOLUS_BASAL_CORRECTION != 0) {
+                val bolus = lastBolus
+                require(bolus != null) { "basal correction flag without a last bolus" }
+                lastBolus = bolus.copy(basalCorrection = true)
+            }
+            if (inp.flag("bolus pulses")) bolusPulsesDelivered = inp.u32()
+            if (inp.flag("basal expected")) basalExpected = Double.fromBits(inp.u64())
+            if (inp.flag("basal correction time")) lastBasalCorrectionTime = inp.u64()
+            if (inp.flag("time zone id")) timeZoneId = inp.text()
+            if (inp.flag("time zone offset")) timeZoneOffsetMs = inp.u32()
+            if (inp.flag("time zone updated")) timeZoneUpdatedMs = inp.u64()
+            if (inp.flag("pdm ref")) pdmRef = inp.text()
+            successfulConnections = inp.u32()
+            failedConnections = inp.u32()
+        }
         require(inp.atEnd()) { "trailing bytes" }
         return DashPodState(
             ltk = ltk,
@@ -384,6 +447,15 @@ object DashPodStateCodec {
             alarmType = alarmType,
             alarmSynced = alarmSynced,
             pulsesRemaining = pulsesRemaining,
+            bolusPulsesDelivered = bolusPulsesDelivered,
+            basalExpected = basalExpected,
+            lastBasalCorrectionTime = lastBasalCorrectionTime,
+            timeZoneId = timeZoneId,
+            timeZoneOffsetMs = timeZoneOffsetMs,
+            timeZoneUpdatedMs = timeZoneUpdatedMs,
+            pdmRef = pdmRef,
+            successfulConnectionAttemptsAfterRetries = successfulConnections,
+            failedConnectionsAfterRetries = failedConnections,
         )
     }
 
@@ -486,6 +558,19 @@ object DashPodStateCodec {
             }
         }
 
+        /** u8 present (0 or 1), then the value if present. */
+        fun <T : Any> optional(value: T?, write: (T) -> Unit) {
+            u8(if (value != null) 1 else 0)
+            if (value != null) write(value)
+        }
+
+        /** u32 length, then the UTF-8 bytes. */
+        fun text(value: String) {
+            val bytes = value.encodeToByteArray()
+            u32(bytes.size)
+            bytes(bytes)
+        }
+
         fun version(v: SoftwareVersion) {
             u16(v.major.toInt())
             u16(v.minor.toInt())
@@ -531,6 +616,13 @@ object DashPodStateCodec {
         fun bytes(n: Int): ByteArray {
             need(n)
             return b.copyOfRange(p, p + n).also { p += n }
+        }
+
+        /** u32 length, then the UTF-8 bytes. */
+        fun text(): String {
+            val length = u32()
+            require(length >= 0) { "bad text length" }
+            return bytes(length).decodeToString()
         }
 
         fun version(): SoftwareVersion =

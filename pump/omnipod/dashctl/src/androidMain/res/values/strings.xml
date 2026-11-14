@@ -20,10 +20,30 @@
     <string name="dash_error_failed_to_silence_alerts">Failed to silence alerts</string>
     <string name="dash_error_failed_to_resume_delivery">Failed to resume delivery</string>
     <string name="dash_error_failed_to_play_test_beep">Failed to play test beep</string>
+    <string name="dash_button_set_time">Set time</string>
+    <string name="dash_button_pod_history">Pod History</string>
+    <string name="dash_error_failed_to_set_time">Failed to set time</string>
     <string name="dash_error_with_reason" comment="%1$s=what failed, %2$s=the reason the driver gave. Example: Failed to resume delivery: No profile active">%1$s: %2$s</string>
 
     <!-- Overview: rows -->
     <string name="dash_overview_bluetooth_address">Bluetooth Address</string>
+    <string name="dash_overview_connection_quality">Connection quality</string>
+    <string name="dash_overview_connection_quality_value" comment="%1$d=connections that worked, %2$d=all connection attempts, %3$.2f=connections that worked in per cent. Example: 95/100 :: 95.00 %">%1$d/%2$d :: %3$.2f %%</string>
+    <string name="dash_overview_time_on_pod">Time on Pod</string>
+    <string name="dash_overview_time_with_time_zone" comment="%1$s=date and time on the pod, %2$s=time zone of the pod. Example: 21.10.2026 18:34 (Europe/Paris)">%1$s (%2$s)</string>
+    <string name="dash_overview_pdm_notification">PDM Notification</string>
+    <string name="dash_overview_pdm_notification_value" comment="%1$s=title of the PDM message, %2$s=text of the PDM message, %3$s=the PDM reference line. Example: Occlusion Detected (new line) Insulin delivery stopped. Change Pod now. Check your BG (empty line) Ref: 17-00003-02251-020">%1$s\n%2$s\n\n%3$s</string>
+    <string name="dash_pdm_ref" comment="%1$s=PDM-style reference code, e.g. 17-01234-05606-020. Shown for support calls, kept in the same format the PDM itself would show.">Ref: %1$s</string>
+    <string name="dash_pdm_header_reservoir_empty">Empty Reservoir</string>
+    <string name="dash_pdm_text_reservoir_empty">Insulin delivery stopped. Change Pod now.</string>
+    <string name="dash_pdm_header_auto_off">Auto-Off</string>
+    <string name="dash_pdm_text_auto_off">Insulin delivery stopped. Your PDM and Pod have not communicated in the last 4 hours. To resume insulin delivery, change Pod now.</string>
+    <string name="dash_pdm_header_pod_expired">Pod Expired</string>
+    <string name="dash_pdm_text_pod_expired">Insulin delivery stopped. Change Pod now.</string>
+    <string name="dash_pdm_header_occluded">Occlusion Detected</string>
+    <string name="dash_pdm_text_occluded">Insulin delivery stopped. Change Pod now. Check your BG</string>
+    <string name="dash_pdm_header_pod_error">Pod error</string>
+    <string name="dash_pdm_text_pod_error">Insulin delivery stopped. Change Pod now.</string>
     <string name="dash_overview_unique_id">Unique ID</string>
     <string name="dash_overview_lot_number">LOT Number</string>
     <string name="dash_overview_sequence_number">Sequence Number</string>
@@ -84,6 +104,8 @@
     <string name="omnipod_dash_ios_no_active_pod">No active pod</string>
     <string name="omnipod_dash_ios_delivery_suspended">Insulin delivery suspended</string>
     <string name="omnipod_dash_ios_pod_fault" comment="%1$s=fault code of the pod, three digits, %2$s=fault name. Example: Pod fault: 020 ALARM_OCCLUDED">Pod fault: %1$s %2$s</string>
+    <string name="omnipod_dash_ios_pod_fault_with_ref" comment="%1$s=fault code of the pod, three digits, %2$s=fault name, %3$s=PDM-style reference code. Example: Pod fault: 020 ALARM_OCCLUDED (new line) Ref: 17-00003-02251-020">Pod fault: %1$s %2$s\nRef: %3$s</string>
+    <string name="omnipod_dash_ios_time_zone_different">The time zone on the pod is not the time zone of the phone. The basal rate is wrong. Switch the profile to fix it.</string>
     <string name="omnipod_dash_ios_suspend_unconfirmed">The pod did not confirm the suspend of insulin delivery. Refresh the pod status on the pump screen, and resume delivery if needed.</string>
     <string name="omnipod_dash_ios_smb_uncertain" comment="%1$s=insulin amount with unit. Example: 0.35 U">The pod did not confirm the SMB (%1$s). Refresh the pod status to confirm or deny it.</string>
     <string name="omnipod_dash_ios_bolus_uncertain">The pod did not confirm the bolus. Refresh the pod status to confirm or deny it.</string>
@@ -95,6 +117,32 @@
     <string name="omnipod_dash_ios_unconfirmed_command" comment="26 characters max for translation">Unconfirmed command</string>
     <string name="omnipod_dash_ios_pod_activated" comment="Reason of a status read, 26 characters max for translation">Pod activated</string>
     <string name="omnipod_dash_ios_error" comment="Title of an alarm window from the Omnipod Dash driver">Error</string>
+
+    <!-- Pod history (the texts of the Android Omnipod pod history screen) -->
+    <string name="dash_history_set_bolus">Set bolus</string>
+    <string name="dash_history_cancel_bolus">Cancel bolus</string>
+    <string name="dash_history_set_temp_basal">Set temporary basal</string>
+    <string name="dash_history_cancel_temp_basal">Cancel temporary basal</string>
+    <string name="dash_history_set_basal_profile">Set basal profile</string>
+    <string name="dash_history_suspend_delivery">Suspend delivery</string>
+    <string name="dash_history_stop_delivery">Stop delivery</string>
+    <string name="dash_history_resume_delivery">Resume delivery</string>
+    <string name="dash_history_acknowledge_alerts">Silence alerts</string>
+    <string name="dash_history_configure_alerts">Configure alerts</string>
+    <string name="dash_history_play_test_beep">Play test beep</string>
+    <string name="dash_history_initialize_pod">Initialize Pod</string>
+    <string name="dash_history_insert_cannula">Insert cannula</string>
+    <string name="dash_history_deactivate_pod">Deactivate Pod</string>
+    <string name="dash_history_discard_pod">Discard Pod</string>
+    <string name="dash_history_empty">No pod history in the last 5 days</string>
+    <string name="dash_history_failed_to_send">Failed to send</string>
+    <string name="dash_history_not_received">Command not received by the Pod</string>
+    <string name="dash_history_not_confirmed">Not confirmed by the Pod yet</string>
+    <string name="dash_history_basal_correction">basal correction</string>
+    <string name="dash_history_smb">SMB</string>
+    <string name="dash_history_labeled_value" comment="%1$s=an amount, %2$s=what kind of bolus it is. Example: 0.05 U (basal correction)">%1$s (%2$s)</string>
+    <string name="dash_history_tbr_value" comment="%1$s=temp basal rate with unit, %2$d=duration in minutes. Example: 1.50 U/h, 30 min">%1$s, %2$d min</string>
+    <string name="dash_history_total_delivered" comment="%1$s=insulin amount with unit. Example: Delivered: 0.35 U">Delivered: %1$s</string>
 
     <!-- Settings (the texts of the Android Omnipod settings screen) -->
     <string name="dash_pref_category_confirmation_beeps">Confirmation beeps</string>

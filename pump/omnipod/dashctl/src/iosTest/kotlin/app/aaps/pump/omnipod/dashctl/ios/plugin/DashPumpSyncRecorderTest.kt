@@ -61,6 +61,18 @@ class DashPumpSyncRecorderTest {
     // ---------------------------------------------------------------- written when sent, as Android
 
     @Test
+    fun `a basal correction is never written as Android never syncs a BASAL_CORRECTION`() = runTest {
+        val correction = command(DashCommandKind.BOLUS, units = 0.05).copy(basalCorrection = true)
+        recorder.recordSent(correction)
+        recorder.record(outcome(correction))
+        recorder.record(outcome(correction, DashCommandConfirmation.DENIED))
+        recorder.record(outcome(command(DashCommandKind.STOP_BOLUS), endedBolus = endedBolus(AT, 0.05, 0.05).copy(basalCorrection = true)))
+        recorder.record(DashBolusEndedByFault(endedBolus(AT, 0.05, 0.05).copy(basalCorrection = true), null, DECIDED_AT))
+
+        assertTrue(pumpSync.calls.isEmpty(), "${pumpSync.calls}")
+    }
+
+    @Test
     fun `a bolus is written when it is sent and its SUCCESS adds nothing`() = runTest {
         val bolus = command(DashCommandKind.BOLUS, units = 0.5)
         send(bolus, bolusType = BS.Type.SMB)

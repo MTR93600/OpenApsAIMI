@@ -474,14 +474,17 @@ The owner asked for it (selectable and usable). Plan and steps P1-P3 in
   writes it then, same pump id. The alert settings and their watch, the status checker, the notices.
 - `connectNewPump`, end of the "4241" temp basal, CANNULA_CHANGE and INSULIN_CHANGE after part 2: P2
   (`DashPluginRules.activatePodPart2`); the screens that call it: P3.
-- Not ported (open): the basal drift correction of this fork (`CommandDeliverBasalCorrection`) and the
-  time zone notice: step P2b (new stored fields, new codec version, pin tests in
-  `IosDashPluginPumpTest`). Also open: the PDM reference in the fault text, and `verifyPumpState` at
-  each status read inside the bolus wait (the fault part already runs at once).
+- The basal drift correction of this fork (`CommandDeliverBasalCorrection`), the pod time zone and
+  its notice, the PDM reference in the fault text and on the pump screen: P4, done (stored in the
+  version 4 codec, step P4 part). `verifyPumpState` at each status read inside the bolus wait stays
+  out on purpose (it needs the command lock the bolus holds; see `DashPluginRules`); the fault part
+  already runs at once.
 - Activation and deactivation screens, the pump screen, the strings table of dashctl: P3, done
   (`ui/` in commonMain, `IosDashWizardPod`, `DashPodEndToEndTest`), with the settings screen
-  (`dashSettingsScreen`). Open: the end-to-end test on the real `CommandQueueImplementation` (needs the
-  simulated pod in a test fixture ios/shell can use).
+  (`dashSettingsScreen`). P4 added the pod history, "Set time", the time on pod, the connection
+  quality and the PDM notification. Open: the end-to-end test on the real `CommandQueueImplementation`
+  (needs the simulated pod in a test-fixture module ios/shell can use and a transport seam in the app
+  graph; see P4 in omnipod-dash-ios.md).
 
 ## Decisions already taken (do not stop to ask)
 

@@ -142,6 +142,39 @@ data class DashPodState(
      * bolus read it, so it must not jump back up to the 75 U default.
      */
     val pulsesRemaining: Int? = null,
+
+    // -- Basal drift, time zone, fault reference, connection counters (step P4) ------------------
+
+    /**
+     * Android `PodState.bolusPulsesDelivered`: the pulses of all the boluses the pod gave since the
+     * first status after the activation (a basal correction does not count). Null until that first
+     * status, then seeded with the total pulses of it. The basal the pod gave is the total minus this.
+     */
+    val bolusPulsesDelivered: Int? = null,
+    /**
+     * Android `PodState.basalExpected`, units: the basal the pod should have given since the first
+     * status after the activation, from the basal program and the temp basal in force between two
+     * statuses (`DashBasalDrift.integrateExpectedDelivery`). Null until that first status, then seeded
+     * with the basal given, so the drift starts at 0.
+     */
+    val basalExpected: Double? = null,
+    /** Android `PodState.lastBasalCorrectionTime`, epoch ms: the last basal correction tried (2 minutes cooldown). */
+    val lastBasalCorrectionTime: Long? = null,
+    /** Android `PodState.timeZone`: the time zone id of the phone when the pod got its last basal program. */
+    val timeZoneId: String? = null,
+    /** Android `PodState.timeZoneOffset`, ms: the offset of [timeZoneId] from UTC at that time. */
+    val timeZoneOffsetMs: Int? = null,
+    /** Android `PodState.timeZoneUpdated`, epoch ms: when the time zone was stored. */
+    val timeZoneUpdatedMs: Long? = null,
+    /**
+     * Android `PodState.pdmRef`: the PDM reference of the first alarm status
+     * (`AlarmStatusResponse.pdmRef`), kept with [alarmType] and in the same write.
+     */
+    val pdmRef: String? = null,
+    /** Android `PodState.successfulConnectionAttemptsAfterRetries`: connections to the pod that worked. */
+    val successfulConnectionAttemptsAfterRetries: Int = 0,
+    /** Android `PodState.failedConnectionsAfterRetries`: connections to the pod that failed after all retries. */
+    val failedConnectionsAfterRetries: Int = 0,
 ) {
 
     init {
@@ -189,7 +222,16 @@ data class DashPodState(
             tempBasal == other.tempBasal &&
             alarmType == other.alarmType &&
             alarmSynced == other.alarmSynced &&
-            pulsesRemaining == other.pulsesRemaining
+            pulsesRemaining == other.pulsesRemaining &&
+            bolusPulsesDelivered == other.bolusPulsesDelivered &&
+            basalExpected == other.basalExpected &&
+            lastBasalCorrectionTime == other.lastBasalCorrectionTime &&
+            timeZoneId == other.timeZoneId &&
+            timeZoneOffsetMs == other.timeZoneOffsetMs &&
+            timeZoneUpdatedMs == other.timeZoneUpdatedMs &&
+            pdmRef == other.pdmRef &&
+            successfulConnectionAttemptsAfterRetries == other.successfulConnectionAttemptsAfterRetries &&
+            failedConnectionsAfterRetries == other.failedConnectionsAfterRetries
     }
 
     override fun hashCode(): Int {
@@ -224,6 +266,15 @@ data class DashPodState(
         result = 31 * result + (alarmType?.hashCode() ?: 0)
         result = 31 * result + (pulsesRemaining ?: 0)
         result = 31 * result + alarmSynced.hashCode()
+        result = 31 * result + (bolusPulsesDelivered ?: 0)
+        result = 31 * result + (basalExpected?.hashCode() ?: 0)
+        result = 31 * result + (lastBasalCorrectionTime?.hashCode() ?: 0)
+        result = 31 * result + (timeZoneId?.hashCode() ?: 0)
+        result = 31 * result + (timeZoneOffsetMs ?: 0)
+        result = 31 * result + (timeZoneUpdatedMs?.hashCode() ?: 0)
+        result = 31 * result + (pdmRef?.hashCode() ?: 0)
+        result = 31 * result + successfulConnectionAttemptsAfterRetries
+        result = 31 * result + failedConnectionsAfterRetries
         return result
     }
 

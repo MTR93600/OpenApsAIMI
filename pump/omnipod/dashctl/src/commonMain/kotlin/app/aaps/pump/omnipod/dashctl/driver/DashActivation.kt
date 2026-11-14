@@ -190,6 +190,9 @@ class DashActivation(
             val sent = BasalProgram(basalProgram.segments)
             val exchange = pod.send({ uid, seq -> basalProgramCommand(sent, uid, seq) })
             exchange.error?.let { throw DashActivationException("Basal program: $it") }
+            // Android `observeSendProgramBasalCommand`, doOnComplete: the pod runs the program in the
+            // time zone of the phone now.
+            state.updateTimeZone(now())
             state.updateActivationProgress(ActivationProgress.PROGRAMMED_BASAL, basalProgram = sent)
         }
         if (isBefore(ActivationProgress.UPDATED_EXPIRATION_ALERTS)) {

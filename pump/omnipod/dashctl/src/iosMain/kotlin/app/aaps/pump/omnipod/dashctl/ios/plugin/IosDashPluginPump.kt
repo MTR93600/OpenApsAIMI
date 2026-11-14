@@ -18,6 +18,7 @@ import app.aaps.core.interfaces.pump.PumpRate
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.interfaces.pump.defs.fillFor
 import app.aaps.core.interfaces.queue.CustomCommand
+import app.aaps.pump.omnipod.dashctl.history.DashPodHistory
 import app.aaps.pump.omnipod.dashctl.ios.pump.DashPumpEnactResult
 import app.aaps.pump.omnipod.dashctl.ios.pump.IosDashPump
 import app.aaps.pump.omnipod.dashctl.session.DashActiveCommand
@@ -58,6 +59,8 @@ class IosDashPluginPump(
     private val rules: DashPluginRules,
     private val aapsLogger: AAPSLogger,
     private val now: () -> Long = { Clock.System.now().toEpochMilliseconds() },
+    /** The pod history, told whether the next bolus is an SMB (Android `BolusType.SMB` in the record). */
+    private val history: DashPodHistory? = null,
 ) : Pump by driver {
 
     override val pumpDescription: PumpDescription = PumpDescription().fillFor(PumpType.OMNIPOD_DASH)
@@ -86,11 +89,13 @@ class IosDashPluginPump(
             return DashPumpEnactResult(success = false, enacted = false, comment = "Bolus refused: insulin must be more than 0 and carbs 0")
         }
         recorder.beginBolus(detailedBolusInfo.bolusType)
+        history?.nextBolusIsSmb = detailedBolusInfo.bolusType == BS.Type.SMB
         val before = stateManager.activeCommand
         val result = try {
             driver.deliverTreatment(detailedBolusInfo)
         } finally {
             recorder.endCommand(commandMadeSince(before))
+            history?.nextBolusIsSmb = false
         }
         rules.afterCommand()
         rules.afterBolus(isSmb = detailedBolusInfo.bolusType == BS.Type.SMB, units = detailedBolusInfo.insulin)

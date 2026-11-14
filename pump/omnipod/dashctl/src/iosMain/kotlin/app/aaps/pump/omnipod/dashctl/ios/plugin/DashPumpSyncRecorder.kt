@@ -155,6 +155,11 @@ class DashPumpSyncRecorder(
      * and for a suspend (0 U/h, `MAX_POD_LIFETIME`, PUMP_SUSPEND). Nothing for any other command.
      */
     suspend fun recordSent(command: DashActiveCommand) {
+        if (command.basalCorrection) {
+            // Android never announces a basal correction to AAPS as a started bolus (no pumpSyncBolusStart).
+            aapsLogger.info(LTag.PUMP, "Dash: basal correction sent, not written to PumpSync: $command")
+            return
+        }
         val at = command.createdAtMs
         if (at == null) {
             aapsLogger.error(LTag.PUMP, "Dash: sent command without its time, not written: $command")
@@ -180,6 +185,11 @@ class DashPumpSyncRecorder(
 
     private suspend fun recordCommand(outcome: DashCommandOutcome) {
         val command = outcome.command
+        if (command.basalCorrection) {
+            // Android: a basal correction has no BS.Type, so neither its denial nor its stop is synced.
+            aapsLogger.info(LTag.PUMP, "Dash: basal correction ${outcome.confirmation}, not written to PumpSync")
+            return
+        }
         val at = command.createdAtMs
         if (at == null) {
             if (command.kind != DashCommandKind.OTHER) aapsLogger.error(LTag.PUMP, "Dash: command without its time (old stored state), not written: $outcome")
@@ -329,6 +339,11 @@ class DashPumpSyncRecorder(
      * is left as it is (null: `PumpSync` keeps the stored type; Android passes the stored type).
      */
     private suspend fun correctBolus(bolus: DashLastBolus, reason: String) {
+        if (bolus.basalCorrection) {
+            // Android `bolusType.toBolusInfoBolusType()` is null for BASAL_CORRECTION: not synced.
+            aapsLogger.info(LTag.PUMP, "Dash: basal correction ended ($reason), not written to PumpSync: $bolus")
+            return
+        }
         val delivered = bolus.deliveredUnits()
         if (delivered == null) {
             aapsLogger.error(LTag.PUMP, "Dash: bolus not ended, no correction ($reason): $bolus")

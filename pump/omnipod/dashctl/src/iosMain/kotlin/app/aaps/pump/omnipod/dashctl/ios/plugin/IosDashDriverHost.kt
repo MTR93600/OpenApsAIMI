@@ -12,7 +12,12 @@ import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.pump.omnipod.dashctl.history.DashPodHistory
 import app.aaps.pump.omnipod.dashctl.ios.ble.IosDashBleHost
+import app.aaps.pump.omnipod.dashctl.ios.pump.DashBolusEndedByFault
+import app.aaps.pump.omnipod.dashctl.ios.pump.DashCommandOutcome
+import app.aaps.pump.omnipod.dashctl.ios.pump.DashPumpOutcome
+import app.aaps.pump.omnipod.dashctl.ios.store.IosDashHistoryStore
 import app.aaps.pump.omnipod.dashctl.registerDashStrings
 import app.aaps.pump.omnipod.dashctl.ios.pump.IosDashPump
 import app.aaps.pump.omnipod.dashctl.ios.store.DashKeychainStateStore
@@ -107,13 +112,20 @@ class IosDashDriverHost(
         serialNumber = { stateManager.uniqueId?.toString() ?: IosDashPluginPump.PUMP_SERIAL_FOR_FAKE_TBR },
     )
 
+    /** The pod history the pump screen shows (Android `DashHistory`), kept in the user defaults. */
+    val history = DashPodHistory(IosDashHistoryStore(), now = { Clock.System.now().toEpochMilliseconds() })
+
     val driver: IosDashPump = IosDashPump(
         aapsLogger = aapsLogger,
         onCommandDecided = { outcome ->
+            recordHistory(history, outcome)
             recorder.onOutcome(outcome)
             rules.onOutcome(outcome)
         },
-        onCommandSent = recorder::onCommandSent,
+        onCommandSent = { command ->
+            history.onCommandSent(command)
+            recorder.onCommandSent(command)
+        },
         stateManager = stateManager,
         bolusProgressData = bolusProgressData,
         beeps = { DashBeepKey.beepSettings { key -> preferences.get(key) } },
@@ -137,13 +149,14 @@ class IosDashDriverHost(
         serialNumber = { stateManager.uniqueId?.toString() ?: IosDashPluginPump.PUMP_SERIAL_FOR_FAKE_TBR },
         launch = { block -> workScope.launch { block() } },
         now = { Clock.System.now().toEpochMilliseconds() },
+        history = history,
     )
 
     /** The pod as the activation and deactivation wizard sees it. */
     val wizardPod = IosDashWizardPod(rules = rules, stateManager = stateManager, commandQueue = commandQueue, openRadio = ::openRadio)
 
     /** What the plugin delegates `Pump` to. */
-    val pump = IosDashPluginPump(driver = driver, stateManager = stateManager, recorder = recorder, rules = rules, aapsLogger = aapsLogger)
+    val pump = IosDashPluginPump(driver = driver, stateManager = stateManager, recorder = recorder, rules = rules, aapsLogger = aapsLogger, history = history)
 
     /** Starts CoreBluetooth. The first call makes iOS ask for the Bluetooth permission. */
     fun openRadio() {
@@ -166,6 +179,21 @@ class IosDashDriverHost(
  * Android `pumpSync.expectedPumpState().temporaryBasal != null`, for `IosDashPump.cancelTempBasal`.
  * When `PumpSync` cannot answer, true: the cancel is then sent (fail closed).
  */
+/**
+ * What the pod history keeps of an outcome of the driver: the decision of a command, and what a bolus
+ * ended early gave (a stop or a fault).
+ */
+internal fun recordHistory(history: DashPodHistory, outcome: DashPumpOutcome) {
+    when (outcome) {
+        is DashCommandOutcome    -> {
+            history.onCommandDecided(outcome.command, outcome.confirmation, outcome.decidedAtMs)
+            outcome.endedBolus?.let { history.onBolusEnded(it) }
+        }
+
+        is DashBolusEndedByFault -> history.onBolusEnded(outcome.bolus)
+    }
+}
+
 internal fun expectedTempBasalRunning(pumpSync: PumpSync, aapsLogger: AAPSLogger): Boolean =
     try {
         runBlocking { pumpSync.expectedPumpState().temporaryBasal != null }

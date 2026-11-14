@@ -53,3 +53,13 @@ class CommandHandleTimeChange(val requestedByUser: Boolean) : CustomCommand {
 
     override val statusDescription = "HANDLE TIME CHANGE"
 }
+
+/**
+ * Android `CommandDeliverBasalCorrection` (this fork, `:pump:omnipod:common`): one 0.05 U pulse that
+ * makes up basal the pod gave too little. Queued after a confirmed temp basal or cancel when the drift
+ * needs it (`DashPluginRules.onOutcome`).
+ */
+class CommandDeliverBasalCorrection : CustomCommand {
+
+    override val statusDescription = "BASAL CORRECTION"
+}

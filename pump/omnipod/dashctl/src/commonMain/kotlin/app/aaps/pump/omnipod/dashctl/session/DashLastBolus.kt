@@ -23,6 +23,8 @@ package app.aaps.pump.omnipod.dashctl.session
  *   bolus stopped early is recorded again with the amount that went in, at this time, as Android
  *   records it at the `createdAt` of the bolus history record. Null when the command came from a
  *   store too old to have the time.
+ * @property basalCorrection a basal correction (Android `BolusType.BASAL_CORRECTION`): one pulse that
+ *   makes up basal the pod gave too little. It is basal, never a bolus in `PumpSync`.
  */
 data class DashLastBolus(
     val startTimeMs: Long,
@@ -31,6 +33,7 @@ data class DashLastBolus(
     val deliveryComplete: Boolean,
     val historyId: Long = 0L,
     val createdAtMs: Long? = null,
+    val basalCorrection: Boolean = false,
 ) {
 
     /**

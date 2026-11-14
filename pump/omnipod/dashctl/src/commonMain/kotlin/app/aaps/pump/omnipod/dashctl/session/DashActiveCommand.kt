@@ -80,6 +80,12 @@ data class DashActiveCommand(
     val tempBasalMinutes: Int? = null,
     val createdAtMs: Long? = null,
     val basalProgram: BasalProgram? = null,
+    /**
+     * A [DashCommandKind.BOLUS] that is a basal correction (Android `BolusRecord` with
+     * `BolusType.BASAL_CORRECTION`): never written to `PumpSync` as a bolus, and its pulses count as
+     * basal (`DashPodStateManager.basalCorrectionInProgress`).
+     */
+    val basalCorrection: Boolean = false,
 )
 
 /** A new delivery command while the last one is still open. Ask the pod for its status first. */

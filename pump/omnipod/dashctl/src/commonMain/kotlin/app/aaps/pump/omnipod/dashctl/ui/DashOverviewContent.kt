@@ -32,6 +32,8 @@ import app.aaps.core.ui.compose.pump.PumpOverviewUiState
 import app.aaps.core.ui.compose.pump.StatusBanner
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.pump.omnipod.dashctl.DashStrings
+import app.aaps.pump.omnipod.dashctl.history.DashHistoryRecord
+import app.aaps.pump.omnipod.dashctl.queue.command.CommandHandleTimeChange
 import app.aaps.pump.omnipod.dashctl.queue.command.CommandPlayTestBeep
 import app.aaps.pump.omnipod.dashctl.queue.command.CommandResumeDelivery
 import app.aaps.pump.omnipod.dashctl.queue.command.CommandSilenceAlerts
@@ -73,17 +75,34 @@ class DashOverviewContent(
      */
     private val wizard: @Composable (request: DashWizardRequest, setToolbarConfig: (ToolbarConfig) -> Unit, onClose: () -> Unit) -> Unit,
     /** Android overview "Discard Pod" after the confirmation: the pod state is cleared, nothing is sent. */
-    private val discardPod: suspend () -> Unit
+    private val discardPod: suspend () -> Unit,
+    /** The pod history of the last 5 days, newest first, for "Pod History" (Android `DashPodHistoryViewModel`). */
+    private val history: () -> List<DashHistoryRecord> = { emptyList() },
 ) : ComposablePluginContent {
 
     @Composable
     override fun Render(setToolbarConfig: (ToolbarConfig) -> Unit, onNavigateBack: () -> Unit, onSettings: (() -> Unit)?) {
         var request by remember { mutableStateOf<DashWizardRequest?>(null) }
+        var showHistory by remember { mutableStateOf(false) }
         // Android `OmnipodComposeHost`: the screen sets its toolbar each time no wizard shows. The
         // wizard takes the toolbar while it runs and clears it when it closes, so it must be set again.
         val showingWizard = request != null
-        LaunchedEffect(showingWizard) {
-            if (!showingWizard) {
+        val historyTitle = stringResource(DashStrings.dash_button_pod_history)
+        LaunchedEffect(showingWizard, showHistory) {
+            if (showHistory) {
+                // Android: the history screen has its own title and a back arrow to the pod screen.
+                setToolbarConfig(
+                    ToolbarConfig(
+                        title = historyTitle,
+                        navigationIcon = {
+                            IconButton(onClick = { showHistory = false }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(CoreUiStrings.back))
+                            }
+                        },
+                        actions = {}
+                    )
+                )
+            } else if (!showingWizard) {
                 setToolbarConfig(
                     ToolbarConfig(
                         title = title,
@@ -105,6 +124,11 @@ class DashOverviewContent(
         }
         request?.let { open ->
             wizard(open, setToolbarConfig) { request = null }
+            return
+        }
+        if (showHistory) {
+            val records = remember { history() }
+            DashPodHistoryScreen(records, rh, format)
             return
         }
         val scope = rememberCoroutineScope()
@@ -131,7 +155,7 @@ class DashOverviewContent(
 
         val actions = remember(tick, queueStatus) {
             val queueEmpty = commandQueue.size() == 0 && commandQueue.performing() == null
-            dashOverviewButtons(stateManager, queueEmpty) { commandQueue.isCustomCommandInQueue(it) }.map { button ->
+            dashOverviewButtons(stateManager, queueEmpty, now()) { commandQueue.isCustomCommandInQueue(it) }.map { button ->
                 button to ScreenAction(
                     label = rh.gs(button.action.label),
                     enabled = button.enabled,
@@ -141,6 +165,8 @@ class DashOverviewContent(
                             DashOverviewAction.REFRESH         -> scope.launch { commandQueue.readStatus(rh.gs(CoreUiStrings.refresh)) }
                             DashOverviewAction.SILENCE_ALERTS  -> runCustomCommand(CommandSilenceAlerts(), DashStrings.dash_error_failed_to_silence_alerts)
                             DashOverviewAction.RESUME_DELIVERY -> runCustomCommand(CommandResumeDelivery(), DashStrings.dash_error_failed_to_resume_delivery)
+                            DashOverviewAction.SET_TIME        -> runCustomCommand(CommandHandleTimeChange(true), DashStrings.dash_error_failed_to_set_time)
+                            DashOverviewAction.POD_HISTORY     -> showHistory = true
                             DashOverviewAction.ACTIVATE_POD    -> request = DashWizardRequest.Activation(dashActivationType(stateManager.activationProgress))
                             DashOverviewAction.DEACTIVATE_POD  -> request = DashWizardRequest.Deactivation
                             DashOverviewAction.PLAY_TEST_BEEP  -> runCustomCommand(CommandPlayTestBeep(), DashStrings.dash_error_failed_to_play_test_beep)

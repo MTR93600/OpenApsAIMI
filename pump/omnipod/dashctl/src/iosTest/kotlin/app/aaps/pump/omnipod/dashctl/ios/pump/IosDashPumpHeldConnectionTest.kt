@@ -383,6 +383,99 @@ class IosDashPumpHeldConnectionTest {
         assertEquals(false, session)
     }
 
+    // -- Connection quality counters (Android `connect`, `stopConnecting`) ----------------------
+
+    @Test
+    fun `the activation counts no connection as Android pairNewPod`() = runTest {
+        activate()
+
+        assertEquals(0, stateManager.successfulConnectionAttemptsAfterRetries)
+        assertEquals(0, stateManager.failedConnectionsAfterRetries)
+    }
+
+    @Test
+    fun `one queue connect counts one success also when the link comes back by itself`() = runTest {
+        activate()
+        pump.disconnect("Queue empty")
+        pump.connect("Connection needed")
+        runWorker()
+        assertTrue(pump.isConnected())
+        assertEquals(1, stateManager.successfulConnectionAttemptsAfterRetries)
+
+        // A drop and a new session inside the same held connect: Android counts one connect.
+        central.podGoesAway()
+        central.podComesInRange()
+        runWorker()
+        assertTrue(pump.isConnected())
+        pump.getPumpStatus("test")
+
+        assertEquals(1, stateManager.successfulConnectionAttemptsAfterRetries)
+    }
+
+    @Test
+    fun `a second queue connect while the first waits counts nothing more`() = runTest {
+        activate()
+        pump.disconnect("Queue empty")
+        pump.connect("Connection needed")
+        pump.connect("Connection needed")
+        runWorker()
+
+        assertEquals(1, stateManager.successfulConnectionAttemptsAfterRetries)
+    }
+
+    @Test
+    fun `a queue connect that finds the session up counts one success as Android AlreadyConnected`() = runTest {
+        activate()
+        assertTrue(pump.isConnected())
+
+        pump.connect("Connection needed")
+        pump.getPumpStatus("test")
+
+        assertEquals(1, stateManager.successfulConnectionAttemptsAfterRetries)
+    }
+
+    @Test
+    fun `stop connecting counts one failure and no success`() = runTest {
+        activate()
+        pump.disconnect("Queue empty")
+        central.podGoesAway()
+        pump.connect("Connection needed")
+        pump.stopConnecting()
+
+        // The pod comes back for the next queue connect: that one is a success, the first one is not.
+        central.podComesInRange()
+        pump.connect("Connection needed")
+        runWorker()
+        assertTrue(pump.isConnected())
+
+        assertEquals(1, stateManager.failedConnectionsAfterRetries)
+        assertEquals(1, stateManager.successfulConnectionAttemptsAfterRetries)
+    }
+
+    /**
+     * [DashPodStateManager] is not thread-safe. The queue calls stopConnecting on its own thread, often
+     * while the held connection sets up a session with the command lock held and writes the EAP SQN.
+     * The failure count must not be written then, or one of the two writes is lost.
+     */
+    @Test
+    fun `stop connecting does not write the state while the command lock is held`() = runTest {
+        activate()
+        val before = stateManager.currentState()
+        assertTrue(pump.tryLockLink())
+        try {
+            pump.stopConnecting()
+            assertEquals(before, stateManager.currentState(), "nothing written while another holds the lock")
+        } finally {
+            pump.unlockLink()
+        }
+
+        pump.connect("Connection needed")
+        runWorker()
+
+        assertEquals(1, stateManager.failedConnectionsAfterRetries, "written with the next session")
+        assertTrue(stateManager.currentState().eapAkaSequenceNumber > before.eapAkaSequenceNumber, "the session SQN is kept")
+    }
+
     private companion object {
 
         const val NOW = 1_700_000_000_000L

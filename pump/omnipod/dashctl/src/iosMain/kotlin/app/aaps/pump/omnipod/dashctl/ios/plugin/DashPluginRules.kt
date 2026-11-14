@@ -25,6 +25,8 @@ import app.aaps.core.keys.interfaces.BooleanNonPreferenceKey
 import app.aaps.core.keys.interfaces.IntNonPreferenceKey
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.keys.interfaces.TextRef.Companion.withArgs
+import app.aaps.pump.omnipod.dashctl.history.DashHistoryType
+import app.aaps.pump.omnipod.dashctl.history.DashPodHistory
 import app.aaps.pump.omnipod.dashctl.ios.pump.DashBolusEndedByFault
 import app.aaps.pump.omnipod.dashctl.ios.pump.DashCommandOutcome
 import app.aaps.pump.omnipod.dashctl.ios.pump.DashPumpEnactResult
@@ -35,6 +37,7 @@ import app.aaps.pump.omnipod.dashctl.keys.DashSoundKey
 import app.aaps.pump.omnipod.dashctl.pod.definition.AlertTrigger
 import app.aaps.pump.omnipod.dashctl.pod.definition.PodConstants
 import app.aaps.pump.omnipod.dashctl.queue.command.CommandDeactivatePod
+import app.aaps.pump.omnipod.dashctl.queue.command.CommandDeliverBasalCorrection
 import app.aaps.pump.omnipod.dashctl.queue.command.CommandDisableSuspendAlerts
 import app.aaps.pump.omnipod.dashctl.queue.command.CommandHandleTimeChange
 import app.aaps.pump.omnipod.dashctl.queue.command.CommandPlayTestBeep
@@ -64,19 +67,20 @@ import kotlinx.coroutines.runBlocking
  * Queue work started from inside a command (Android `pluginScope.launch { commandQueue... }`) goes
  * through [launch], so the command that decided it never waits for the queue it runs in.
  *
- * Known gaps from Android, not ported yet (see the plan, step P2b). Both need new stored fields and a
- * new codec version:
- * - basal drift correction: Android (this fork) queues `CommandDeliverBasalCorrection` after a
- *   confirmed temp basal or cancel when `needsBasalCorrection()` is true, and gives a 0.05 U pulse to
- *   make up basal the pod gave too little. It needs the expected basal and the pod time zone in the
- *   state. Here nothing is queued and the command fails as unsupported, so the drift (at most about
- *   0.1 U before Android resets it) is not made up. Pinned by a test.
- * - time zone notice: Android posts OMNIPOD_TIME_OUT_OF_SYNC in `updatePodWarnings` when the time
- *   zone of the pod is not the time zone of the phone. The iOS state keeps no time zone, so no notice
- *   comes. Pinned by a test.
- * - during the bolus wait, Android runs `verifyPumpState` at each status read. Here it runs after the
- *   bolus call returns: it may stop a temp basal on the pod, which cannot be done while the bolus call
- *   holds the command lock. The fault part (`checkPodKaput`) does run at once, see [onOutcome].
+ * Ported in step P4: the basal drift correction of this fork ([CommandDeliverBasalCorrection], queued
+ * in [onOutcome]), the time zone notice ([updatePodWarnings]) and the PDM reference in the fault text
+ * ([checkPodKaput]).
+ *
+ * Known gap from Android, kept on purpose: during the bolus wait Android runs `verifyPumpState` at
+ * each status read. Here it runs after the bolus call returns ([afterCommand]). Its second branch (AAPS
+ * expects no temp basal, the pod runs one) stops the temp basal on the pod
+ * ([IosDashPump.cancelTempBasalNotExpected]), a command that needs the command lock, and the bolus call
+ * holds that lock for the whole wait. Running it from inside the wait would need a second way into the
+ * pod past the lock, which is exactly what the lock is there to stop (two commands at once, a stop
+ * sent while the bolus is not decided). Its first branch (AAPS expects a temp basal, the pod runs the
+ * program) only writes to `PumpSync`; doing that alone inside the wait would split one Android rule in
+ * two places, for a few seconds at most. What can change insulin counted at once does run at once: the
+ * fault part (`checkPodKaput`), see [onOutcome].
  */
 class DashPluginRules(
     private val driver: IosDashPump,
@@ -96,6 +100,8 @@ class DashPluginRules(
     /** Android `pluginScope.launch`: runs queue work on its own, never inside the caller. */
     private val launch: (suspend () -> Unit) -> Unit,
     private val now: () -> Long,
+    /** The pod history: the wizard parts and the discard are written here (Android INITIALIZE_POD, INSERT_CANNULA, DISCARD_POD). */
+    private val history: DashPodHistory? = null,
 ) {
 
     /** Android `nextPodWarningCheck`: the pod warnings are checked at most every 15 minutes. */
@@ -147,8 +153,24 @@ class DashPluginRules(
         val confirmed = outcome.confirmation == DashCommandConfirmation.SUCCESS
         if (!confirmed && outcome.confirmation != DashCommandConfirmation.DENIED) return
         when (outcome.command.kind) {
-            DashCommandKind.STOP_TEMP_BASAL,
-            DashCommandKind.TEMP_BASAL      -> notificationManager.dismiss(NotificationId.OMNIPOD_TBR_ALERTS)
+            DashCommandKind.STOP_TEMP_BASAL -> {
+                // Android CANCEL_TEMPORARY_BASAL: the drift is checked after a confirmed cancel.
+                if (confirmed && stateManager.needsBasalCorrection(now())) {
+                    launch { commandQueue().customCommand(CommandDeliverBasalCorrection()) }
+                }
+                notificationManager.dismiss(NotificationId.OMNIPOD_TBR_ALERTS)
+            }
+
+            DashCommandKind.TEMP_BASAL      -> {
+                // Android SET_TEMPORARY_BASAL: the drift is checked after a confirmed temp basal, unless
+                // a correction already waits in the queue.
+                if (confirmed && !commandQueue().isCustomCommandInQueue(CommandDeliverBasalCorrection::class) &&
+                    stateManager.needsBasalCorrection(now())
+                ) {
+                    launch { commandQueue().customCommand(CommandDeliverBasalCorrection()) }
+                }
+                notificationManager.dismiss(NotificationId.OMNIPOD_TBR_ALERTS)
+            }
 
             DashCommandKind.BOLUS           -> notificationManager.dismiss(NotificationId.OMNIPOD_UNCERTAIN_SMB)
 
@@ -227,7 +249,8 @@ class DashPluginRules(
      * - once per fault ([DashPodStateManager.alarmSynced]): a fault notice with sound (not while a
      *   deactivation waits in the queue) and an announcement in the treatments.
      *
-     * Android adds the PDM reference of the fault to the text; the iOS state has no such reference yet.
+     * The text has the PDM reference of the fault when the pod gave one ([DashPodStateManager.pdmRef]),
+     * as Android.
      */
     suspend fun checkPodKaput() {
         if (!stateManager.isPodKaput) return
@@ -249,7 +272,7 @@ class DashPluginRules(
         if (stateManager.alarmSynced) return
         val alarm = stateManager.alarmType ?: return
         val code = (alarm.value.toInt() and 0xff).toString().padStart(3, '0')
-        val faultText = DashStrings.omnipod_dash_ios_pod_fault.withArgs(code, alarm.toString())
+        val faultText = dashFaultText(code, alarm.toString(), stateManager.pdmRef)
         if (!commandQueue().isCustomCommandInQueue(CommandDeactivatePod::class)) {
             showNotification(NotificationId.OMNIPOD_POD_FAULT, faultText, AlarmSound.BOLUS_ERROR)
         }
@@ -344,8 +367,10 @@ class DashPluginRules(
 
     /**
      * Android `updatePodWarnings`, at most every 15 minutes: "no active pod", or "delivery suspended"
-     * with sound. Android also warns when the time zone of the pod differs from the phone; the iOS state
-     * keeps no time zone (time zone and DST changes are ignored, as Android `timezoneOrDSTChanged`).
+     * with sound, or, for a running pod that is not suspended, a notice when the time zone of the pod
+     * (stored when it took its last basal program) is not the time zone of the phone now
+     * ([DashPodStateManager.sameTimeZone]). The notice is not dismissed here, as Android; a confirmed
+     * basal program or resume dismisses it ([onOutcome]).
      */
     fun updatePodWarnings() {
         val t = now()
@@ -358,6 +383,9 @@ class DashPluginRules(
                 showNotification(NotificationId.OMNIPOD_POD_SUSPENDED, DashStrings.omnipod_dash_ios_delivery_suspended, AlarmSound.BOLUS_ERROR)
             } else {
                 notificationManager.dismiss(NotificationId.OMNIPOD_POD_SUSPENDED)
+                if (!stateManager.sameTimeZone(t)) {
+                    notificationManager.post(NotificationId.OMNIPOD_TIME_OUT_OF_SYNC, DashStrings.omnipod_dash_ios_time_zone_different, level = NotificationLevel.NORMAL)
+                }
             }
         }
         nextPodWarningCheck = t + POD_WARNING_INTERVAL_MS
@@ -370,7 +398,7 @@ class DashPluginRules(
 
     /**
      * Android `executeCustomCommand`, the same mapping. A command the Dash plugin does not know (also
-     * `CommandSuspendDelivery` and the basal correction, see the plan) is a failure, as Android.
+     * `CommandSuspendDelivery`) is a failure, as Android.
      * Runs on the queue thread, blocking, as Android.
      */
     fun executeCustomCommand(customCommand: CustomCommand): PumpEnactResult = runBlocking {
@@ -382,6 +410,7 @@ class DashPluginRules(
             is CommandUpdateAlertConfiguration -> driver.updateAlertConfiguration(alertSettings())
             is CommandPlayTestBeep             -> driver.playTestBeep()
             is CommandDisableSuspendAlerts     -> driver.disableSuspendAlerts()
+            is CommandDeliverBasalCorrection   -> driver.deliverBasalCorrection()
             else                               -> {
                 aapsLogger.warn(LTag.PUMP, "Unsupported custom command: ${customCommand::class.simpleName}")
                 return@runBlocking DashPumpEnactResult(success = false, enacted = false, comment = "Unsupported custom command: ${customCommand.statusDescription}")
@@ -437,7 +466,9 @@ class DashPluginRules(
     suspend fun activatePodPart1(): PumpEnactResult {
         val low = alertSettings().lowReservoir
         val trigger = if (low.enabled) AlertTrigger.ReservoirVolumeTrigger((low.units * 10).toShort()) else null
-        return driver.activatePodPart1(trigger, low)
+        val result = driver.activatePodPart1(trigger, low)
+        history?.addActivationStep(DashHistoryType.INITIALIZE_POD, result.success)
+        return result
     }
 
     /**
@@ -462,6 +493,7 @@ class DashPluginRules(
             if (expiration.alarmEnabled) expiration.alarmHours.toLong() else null,
             expiration,
         )
+        history?.addActivationStep(DashHistoryType.INSERT_CANNULA, result.success)
         if (!result.success) return result
         val at = now()
         pumpSync.syncStopTemporaryBasalWithPumpId(
@@ -482,6 +514,7 @@ class DashPluginRules(
     /** The Android wizard and overview "Discard pod": the pod state is cleared and the fault notice goes. */
     suspend fun discardPod() {
         driver.discardPod()
+        history?.addActivationStep(DashHistoryType.DISCARD_POD, success = true)
         notificationManager.dismiss(NotificationId.OMNIPOD_POD_FAULT)
     }
 
@@ -491,6 +524,15 @@ class DashPluginRules(
         const val POD_WARNING_INTERVAL_MS = 15 * 60_000L
     }
 }
+
+/**
+ * The fault text of the notice and the announcement: Android
+ * `omnipod_common_pod_status_pod_fault_description`, plus the PDM reference on a new line when there is
+ * one. One template for each case, not two texts joined.
+ */
+internal fun dashFaultText(code: String, name: String, pdmRef: String?): TextRef =
+    if (pdmRef != null) DashStrings.omnipod_dash_ios_pod_fault_with_ref.withArgs(code, name, pdmRef)
+    else DashStrings.omnipod_dash_ios_pod_fault.withArgs(code, name)
 
 /**
  * The open command, only when it is not [before]: a call refused because an earlier command is still

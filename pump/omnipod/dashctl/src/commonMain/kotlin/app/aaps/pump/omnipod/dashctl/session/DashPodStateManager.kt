@@ -15,6 +15,10 @@ import app.aaps.pump.omnipod.dashctl.pod.response.DefaultStatusResponse
 import app.aaps.pump.omnipod.dashctl.pod.response.Response
 import app.aaps.pump.omnipod.dashctl.pod.response.SetUniqueIdResponse
 import app.aaps.pump.omnipod.dashctl.pod.response.VersionResponse
+import kotlin.concurrent.Volatile
+import kotlin.time.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.offsetAt
 
 /**
  * Owns the [DashPodState] and persists it through [DashPodStateStore].
@@ -46,9 +50,24 @@ import app.aaps.pump.omnipod.dashctl.pod.response.VersionResponse
  * Not thread-safe: callers must serialize access (the BLE manager drives all
  * calls from its own sequencing).
  */
-class DashPodStateManager(private val store: DashPodStateStore) {
+class DashPodStateManager(
+    private val store: DashPodStateStore,
+    /**
+     * The time zone of the phone (Android `TimeZone.getDefault()`), read each time: the pod time zone
+     * ([updateTimeZone], [sameTimeZone]) and the basal drift use it. A parameter so tests can set it.
+     */
+    private val deviceTimeZone: () -> TimeZone = { TimeZone.currentSystemDefault() },
+) {
 
     private var state: DashPodState = store.load() ?: DashPodState()
+
+    /**
+     * Android `basalCorrectionInProgress` (transient there too, never stored): true while a basal
+     * correction is delivered, so its pulse is counted as basal and not as a bolus pulse
+     * ([DashPodState.bolusPulsesDelivered]).
+     */
+    @Volatile
+    var basalCorrectionInProgress: Boolean = false
 
     val ltk: ByteArray?
         get() = state.ltk?.copyOf()
@@ -204,6 +223,150 @@ class DashPodStateManager(private val store: DashPodStateStore) {
             return state.lastUpdatedSystemMs - minutes * MS_PER_MINUTE + (podLife - EXPIRY_GRACE_HOURS) * MS_PER_HOUR
         }
 
+    // -- Basal drift (ported from OmnipodDashPodStateManagerImpl, this fork) ---------------------
+
+    /** Android `basalPulsesDelivered`: total pulses minus the bolus pulses, null while one is not known. */
+    private fun basalPulsesDelivered(s: DashPodState): Int? {
+        val total = s.podStatus?.totalPulsesDelivered ?: return null
+        val bolus = s.bolusPulsesDelivered ?: return null
+        return total - bolus
+    }
+
+    /** Android `basalDelivered`, units: 0 while [basalPulsesDelivered] is not known. */
+    private fun basalDelivered(s: DashPodState): Double = (basalPulsesDelivered(s) ?: 0) * PodConstants.POD_PULSE_BOLUS_UNITS
+
+    /** Android `basalDrift`, units: positive the pod gave more basal than expected, negative less. 0 before [DashPodState.basalExpected]. */
+    private fun basalDrift(s: DashPodState): Double {
+        val delivered = basalDelivered(s)
+        return delivered - (s.basalExpected ?: delivered)
+    }
+
+    /** The basal drift now, units (see [needsBasalCorrection]). For the log and the tests. */
+    val basalDrift: Double
+        get() = basalDrift(state)
+
+    /** Android `lastBasalCorrectionTime`: see [DashPodState.lastBasalCorrectionTime]. */
+    val lastBasalCorrectionTime: Long?
+        get() = state.lastBasalCorrectionTime
+
+    /** Android setter `lastBasalCorrectionTime`: the 2 minutes cooldown starts at [timeMs]. Persists. */
+    fun updateLastBasalCorrectionTime(timeMs: Long) {
+        state = state.copy(lastBasalCorrectionTime = timeMs)
+        persist()
+    }
+
+    /**
+     * Android `needsBasalCorrection`, the same rules and limits: true when the pod gave between 0.025 U
+     * and 0.1 U less basal than expected, so one 0.05 U pulse makes it up.
+     * - false while the activation is not completed, the pod is suspended or kaput, or within 2 minutes
+     *   of the last correction ([DashPodState.lastBasalCorrectionTime]);
+     * - a drift of 0.1 U or more either way: the expected basal is reset to the basal given (stored),
+     *   false. A reset is preferred to a wrong correction;
+     * - a drift above -0.025 U: false;
+     * - a zero temp basal (the loop asked for no insulin): false, unless a bolus started less than
+     *   5 minutes ago (the zero temp basal of a bolus).
+     */
+    fun needsBasalCorrection(nowMs: Long): Boolean {
+        val correctionThreshold = -PodConstants.POD_PULSE_BOLUS_UNITS / 2
+        if (!isActivationCompleted) return false
+        if (isSuspended || isPodKaput) return false
+        state.lastBasalCorrectionTime?.let { if (nowMs - it < BASAL_CORRECTION_COOLDOWN_MS) return false }
+        val drift = basalDrift(state)
+        if (drift >= PodConstants.POD_PULSE_BOLUS_UNITS * 2 || drift <= -PodConstants.POD_PULSE_BOLUS_UNITS * 2) {
+            state = state.copy(basalExpected = basalDelivered(state))
+            persist()
+            return false
+        }
+        if (drift > correctionThreshold) return false
+        if (state.tempBasal?.rate == 0.0) {
+            val timeSinceLastBolus = state.lastBolus?.startTimeMs?.let { nowMs - it }
+            if (timeSinceLastBolus == null || timeSinceLastBolus >= RECENT_BOLUS_MS) return false
+        }
+        return true
+    }
+
+    // -- Pod time zone (ported from OmnipodDashPodStateManagerImpl) -------------------------------
+
+    /** Android `timeZoneId`: see [DashPodState.timeZoneId]. */
+    val timeZoneId: String?
+        get() = state.timeZoneId
+
+    /** Android `timeZoneUpdated`: see [DashPodState.timeZoneUpdatedMs]. */
+    val timeZoneUpdatedMs: Long?
+        get() = state.timeZoneUpdatedMs
+
+    /** See [DashPodState.timeZoneOffsetMs]. */
+    val timeZoneOffsetMs: Int?
+        get() = state.timeZoneOffsetMs
+
+    /** The offset of the phone time zone from UTC at [nowMs], ms (Android `TimeZone.getOffset`). */
+    private fun deviceOffsetMs(nowMs: Long): Int =
+        deviceTimeZone().offsetAt(Instant.fromEpochMilliseconds(nowMs)).totalSeconds * 1000
+
+    /**
+     * Android `updateTimeZone`, called when the pod took a basal program: the time zone of the phone
+     * now, its offset now, and now. Persists.
+     */
+    fun updateTimeZone(nowMs: Long) {
+        state = state.copy(timeZoneOffsetMs = deviceOffsetMs(nowMs), timeZoneId = deviceTimeZone().id, timeZoneUpdatedMs = nowMs)
+        persist()
+    }
+
+    /**
+     * Android `sameTimeZone`: the offset of the phone now is the stored pod offset. False when no pod
+     * offset is stored, as Android (an Int compared with null).
+     */
+    fun sameTimeZone(nowMs: Long): Boolean = deviceOffsetMs(nowMs) == state.timeZoneOffsetMs
+
+    /**
+     * Android `time`: the time on the pod, epoch ms: the activation time, plus the minutes since
+     * activation of the last status, plus the time since that status. Null while one is not known
+     * (also the pod offset, as Android).
+     */
+    fun podTimeMs(nowMs: Long): Long? {
+        val activationTime = state.activationTime ?: return null
+        val minutes = state.podStatus?.minutesSinceActivation ?: return null
+        if (state.timeZoneOffsetMs == null) return null
+        return activationTime + minutes * MS_PER_MINUTE + (nowMs - state.lastUpdatedSystemMs)
+    }
+
+    /** Android `timeDrift`: the pod time minus the phone time, ms; null when [podTimeMs] is. */
+    fun timeDriftMs(nowMs: Long): Long? = podTimeMs(nowMs)?.let { it - nowMs }
+
+    // -- Fault reference and connection counters ------------------------------------------------
+
+    /** Android `pdmRef`: see [DashPodState.pdmRef]. */
+    val pdmRef: String?
+        get() = state.pdmRef
+
+    /** Android `successfulConnectionAttemptsAfterRetries`. */
+    val successfulConnectionAttemptsAfterRetries: Int
+        get() = state.successfulConnectionAttemptsAfterRetries
+
+    /** Android `failedConnectionsAfterRetries`. */
+    val failedConnectionsAfterRetries: Int
+        get() = state.failedConnectionsAfterRetries
+
+    /** Android `incrementSuccessfulConnectionAttemptsAfterRetries`. Persists (Android stores it with the next write). */
+    fun incrementSuccessfulConnectionAttemptsAfterRetries() {
+        state = state.copy(successfulConnectionAttemptsAfterRetries = state.successfulConnectionAttemptsAfterRetries + 1)
+        persist()
+    }
+
+    /** Android `incrementFailedConnectionsAfterRetries`. Persists. */
+    fun incrementFailedConnectionsAfterRetries() {
+        state = state.copy(failedConnectionsAfterRetries = state.failedConnectionsAfterRetries + 1)
+        persist()
+    }
+
+    /** Android `connectionSuccessRatio`: worked / (worked + failed), 0 before the first try. */
+    fun connectionSuccessRatio(): Float {
+        val worked = state.successfulConnectionAttemptsAfterRetries
+        val failed = state.failedConnectionsAfterRetries
+        if (worked + failed == 0) return 0.0F
+        return worked.toFloat() / (worked + failed)
+    }
+
     /** Full state snapshot; the LTK is defensively copied. */
     fun currentState(): DashPodState = state.copy(ltk = state.ltk?.copyOf())
 
@@ -349,7 +512,7 @@ class DashPodStateManager(private val store: DashPodStateStore) {
      */
     fun updateFromAlarmStatus(response: AlarmStatusResponse, nowMs: Long) {
         val updated = statusApplied(DashPodStatus.of(response, nowMs))
-        state = if (updated.alarmType == null) updated.copy(alarmType = response.alarmType) else updated
+        state = if (updated.alarmType == null) updated.copy(alarmType = response.alarmType, pdmRef = response.pdmRef) else updated
         persist()
     }
 
@@ -503,6 +666,7 @@ class DashPodStateManager(private val store: DashPodStateStore) {
         tempBasalRate: Double? = null,
         tempBasalMinutes: Int? = null,
         basalProgram: BasalProgram? = null,
+        basalCorrection: Boolean = false,
     ): DashActiveCommand {
         state.activeCommand?.let {
             throw DashCommandNotConfirmedException("Trying to send a command and the last command was not confirmed: $it")
@@ -517,6 +681,7 @@ class DashPodStateManager(private val store: DashPodStateStore) {
             tempBasalMinutes = tempBasalMinutes,
             createdAtMs = createdAtMs,
             basalProgram = basalProgram?.let { BasalProgram(it.segments) },
+            basalCorrection = basalCorrection,
         )
         state = state.copy(activeCommand = command)
         persist()
@@ -602,7 +767,7 @@ class DashPodStateManager(private val store: DashPodStateStore) {
         if (command != null && confirmation == DashCommandConfirmation.SUCCESS) {
             when (command.kind) {
                 DashCommandKind.BOLUS      -> command.requestedBolusUnits?.let {
-                    val created = newLastBolus(it, nowMs, historyId = command.historyId, createdAtMs = command.createdAtMs)
+                    val created = newLastBolus(it, nowMs, historyId = command.historyId, createdAtMs = command.createdAtMs, basalCorrection = command.basalCorrection)
                     val faultStatus = state.podStatus?.takeIf { isPodKaput }
                     lastBolus = if (faultStatus != null) updateLastBolusFromStatus(created, faultStatus.bolusPulsesRemaining) else created
                 }
@@ -672,7 +837,49 @@ class DashPodStateManager(private val store: DashPodStateStore) {
         persist()
     }
 
-    private fun statusApplied(status: DashPodStatus): DashPodState = state.copy(
+    /**
+     * A status applied to the state, with the basal drift tracking of Android `updatePodState`, in the
+     * same order, from the state before this status:
+     * - [DashPodState.basalExpected]: plus the basal expected from the last update to this status
+     *   ([DashBasalDrift.integrateExpectedDelivery]). When that is unknown (no pod time zone, a part
+     *   with no rate), or while it is null, it is seeded again with the basal given, once the
+     *   activation is completed, as Android (the drift starts again from 0);
+     * - [DashPodState.bolusPulsesDelivered]: plus the bolus part of the new pulses while a bolus that is
+     *   not a running basal correction ([basalCorrectionInProgress]) has not ended
+     *   ([DashBasalDrift.calculateBolusPulseIncrease]); null is seeded with the total pulses of this
+     *   status, once the activation is completed.
+     */
+    private fun statusApplied(status: DashPodStatus): DashPodState {
+        val now = status.receivedAtMs
+        val previousBolusPulsesRemaining = state.lastBolus?.let {
+            Round.roundTo(it.bolusUnitsRemaining / PodConstants.POD_PULSE_BOLUS_UNITS, 1.0).toInt()
+        }
+        val basalExpected = state.basalExpected?.let { expected ->
+            DashBasalDrift.integrateExpectedDelivery(
+                startTime = state.lastUpdatedSystemMs,
+                endTime = now,
+                timeZoneOffset = state.timeZoneOffsetMs,
+                tempBasal = state.tempBasal,
+                basalProgram = state.basalProgram,
+                deviceTimeZone = deviceTimeZone(),
+            )?.let { delta -> expected + delta }
+        } ?: basalDelivered(state).takeIf { isActivationCompleted }
+        val bolusPulsesDelivered = state.bolusPulsesDelivered?.let { bolus ->
+            state.podStatus?.totalPulsesDelivered
+                ?.takeIf { state.lastBolus?.deliveryComplete == false && !basalCorrectionInProgress }
+                ?.let { previousTotalPulses ->
+                    bolus + DashBasalDrift.calculateBolusPulseIncrease(
+                        previousTotalPulses,
+                        status.totalPulsesDelivered,
+                        previousBolusPulsesRemaining,
+                        status.bolusPulsesRemaining
+                    )
+                } ?: bolus
+        } ?: status.totalPulsesDelivered.takeIf { isActivationCompleted }
+        return statusOnly(status).copy(basalExpected = basalExpected, bolusPulsesDelivered = bolusPulsesDelivered)
+    }
+
+    private fun statusOnly(status: DashPodStatus): DashPodState = state.copy(
         podStatus = status,
         statusResponseCount = state.statusResponseCount + 1,
         reportedPodStatus = status.podStatus,
@@ -688,8 +895,8 @@ class DashPodStateManager(private val store: DashPodStateStore) {
      * Android `createLastBolus`: the pod took a bolus of [requestedUnits]. Nothing is delivered yet,
      * so all of it is left. Replaces the bolus before.
      */
-    fun createLastBolus(requestedUnits: Double, nowMs: Long, historyId: Long = 0L, createdAtMs: Long? = null): DashLastBolus {
-        val bolus = newLastBolus(requestedUnits, nowMs, historyId, createdAtMs)
+    fun createLastBolus(requestedUnits: Double, nowMs: Long, historyId: Long = 0L, createdAtMs: Long? = null, basalCorrection: Boolean = false): DashLastBolus {
+        val bolus = newLastBolus(requestedUnits, nowMs, historyId, createdAtMs, basalCorrection)
         state = state.copy(lastBolus = bolus)
         persist()
         return bolus
@@ -733,13 +940,14 @@ class DashPodStateManager(private val store: DashPodStateStore) {
     private companion object {
 
         /** A bolus the pod took: nothing delivered yet, so all of it is left. */
-        fun newLastBolus(requestedUnits: Double, nowMs: Long, historyId: Long, createdAtMs: Long?) = DashLastBolus(
+        fun newLastBolus(requestedUnits: Double, nowMs: Long, historyId: Long, createdAtMs: Long?, basalCorrection: Boolean = false) = DashLastBolus(
             startTimeMs = nowMs,
             requestedUnits = requestedUnits,
             bolusUnitsRemaining = requestedUnits,
             deliveryComplete = false,
             historyId = historyId,
             createdAtMs = createdAtMs,
+            basalCorrection = basalCorrection,
         )
 
         /**
@@ -758,6 +966,12 @@ class DashPodStateManager(private val store: DashPodStateStore) {
         }
 
         const val MS_PER_MINUTE = 60_000L
+
+        /** Android: 2 minutes at least between two basal corrections. */
+        const val BASAL_CORRECTION_COOLDOWN_MS = 2 * 60 * 1000L
+
+        /** Android: a zero temp basal does not block a correction within 5 minutes of a bolus. */
+        const val RECENT_BOLUS_MS = 5 * 60 * 1000L
         const val MS_PER_HOUR = 3_600_000L
         const val EXPIRY_GRACE_HOURS = 8
     }
