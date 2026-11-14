@@ -7,6 +7,7 @@ import app.aaps.pump.omnipod.dashctl.pod.definition.AlarmType
 import app.aaps.pump.omnipod.dashctl.pod.definition.AlertType
 import app.aaps.pump.omnipod.dashctl.pod.definition.DeliveryStatus
 import app.aaps.pump.omnipod.dashctl.pod.definition.PodStatus
+import app.aaps.pump.omnipod.dashctl.queue.command.CommandAcknowledgeAlert
 import app.aaps.pump.omnipod.dashctl.queue.command.CommandPlayTestBeep
 import app.aaps.pump.omnipod.dashctl.queue.command.CommandResumeDelivery
 import app.aaps.pump.omnipod.dashctl.session.DashActiveCommand
@@ -91,6 +92,48 @@ class DashOverviewTest {
         assertFalse(b.getValue(DashOverviewAction.SILENCE_ALERTS).enabled)
         assertTrue(b.getValue(DashOverviewAction.RESUME_DELIVERY).visible)
         assertFalse(b.getValue(DashOverviewAction.RESUME_DELIVERY).enabled)
+    }
+
+    // ---------------------------------------------------------------- one alert at a time (OmnipodKit acknowledgeAlert)
+
+    private fun alertButtons(state: DashPodState, queueEmpty: Boolean = true, inQueue: Set<KClass<out CustomCommand>> = emptySet()) =
+        dashAlertSilenceButtons(stateManagerWith(state), queueEmpty) { it in inQueue }
+
+    @Test
+    fun `each active alert has its own silence button next to silence all`() {
+        val state = running.copy(podStatus = status(alerts = setOf(AlertType.LOW_RESERVOIR, AlertType.USER_SET_EXPIRATION)))
+
+        assertEquals(
+            listOf(DashAlertButton(AlertType.USER_SET_EXPIRATION, true), DashAlertButton(AlertType.LOW_RESERVOIR, true)),
+            alertButtons(state)
+        )
+        assertTrue(buttons(state).getValue(DashOverviewAction.SILENCE_ALERTS).visible, "silence all stays as Android")
+    }
+
+    @Test
+    fun `an alert the user already silenced has no button`() {
+        val state = running.copy(
+            podStatus = status(alerts = setOf(AlertType.LOW_RESERVOIR, AlertType.USER_SET_EXPIRATION)),
+            acknowledgedAlerts = setOf(AlertType.LOW_RESERVOIR)
+        )
+
+        assertEquals(listOf(DashAlertButton(AlertType.USER_SET_EXPIRATION, true)), alertButtons(state))
+    }
+
+    @Test
+    fun `the silence buttons are disabled while the queue is busy or a silence waits`() {
+        val state = running.copy(podStatus = status(alerts = setOf(AlertType.LOW_RESERVOIR)))
+
+        assertEquals(listOf(DashAlertButton(AlertType.LOW_RESERVOIR, false)), alertButtons(state, queueEmpty = false))
+        assertEquals(listOf(DashAlertButton(AlertType.LOW_RESERVOIR, false)), alertButtons(state, inQueue = setOf(CommandAcknowledgeAlert::class)))
+    }
+
+    @Test
+    fun `suspend ended has no silence button while delivery is suspended and no pod has none`() {
+        val suspended = running.copy(podStatus = status(delivery = DeliveryStatus.SUSPENDED, alerts = setOf(AlertType.SUSPEND_ENDED, AlertType.LOW_RESERVOIR)))
+
+        assertEquals(listOf(DashAlertButton(AlertType.LOW_RESERVOIR, true)), alertButtons(suspended))
+        assertEquals(emptyList(), alertButtons(DashPodState()))
     }
 
     @Test

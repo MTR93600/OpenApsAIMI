@@ -680,6 +680,58 @@ test vectors and the pinned parity bytes do not change.
   the command (the Android capture in `EnDecryptTest` does), and that every answer carries the command
   sequence plus one (OmnipodKit relies on it for Dash).
 
+### 4c. Pod alerts on the phone, from OmnipodKit (Trio), 2026-11-15
+
+Android shows the active pod alerts only as a row on the pump screen, and can only silence all of
+them at once. OmnipodKit posts each new alert on the phone (`alertsChanged` -> `issueAlert`), silences
+one alert at a time (`acknowledgeAlert`), and keeps an acknowledgement the pod has not taken yet so it
+is sent again (`alertsWithPendingAcknowledgment`, `silenceAcknowledgedAlerts`). Deliberate differences
+from Android, each with a KDoc line (the alert is not seen on the phone, or a silence the user asked
+for is a user action lost):
+
+- [x] **A notice for the active alerts** (`DashPluginRules.updatePodAlerts`). After every command and
+      status read (`afterCommand`) and at each run of the status checker (`statusCheck`, nothing sent
+      from there): the alerts of the last status of a pod that is activated and runs, minus the ones the
+      user silenced, in one notice `OMNIPOD_POD_ALERTS` (the id, level and "no sound" of Android Eros;
+      the pod beeps itself), with Android's alert names (`dashAlertText`, ex `translatedActiveAlert`)
+      and one "Silence <alert>" button each. Posted again only when that list changes, dismissed when
+      it is empty or the pod is gone or in alarm. Notices are in memory, so after a restart the alerts
+      not silenced are shown again. Low reservoir, user expiration reminder, expiration, imminent
+      expiration, suspend ended and shutdown imminent (AUTO_OFF) have their Android names; any other
+      slot (MULTI_COMMAND, slot 1, what OmnipodKit calls `notUsed` / `unexpectedAlert`) is "Unknown
+      Alert". There is no "lump of coal" slot on Dash in Android or here; it would show as that.
+- [x] **Silence one alert** (`IosDashPump.acknowledgeAlert`, queue command `CommandAcknowledgeAlert`,
+      from the notice button or a new "Silence <alert>" button on the pump screen,
+      `dashAlertSilenceButtons`). One `SilenceAlertsCommand` with that slot only, through the active
+      command (SILENCE_ALERTS). "Silence Alerts" (all, Android) stays as it was. As OmnipodKit,
+      "suspend ended" is not silenced alone while delivery is suspended (no button, refused): it beeps
+      until the resume.
+- [x] **The acknowledgement is stored** (`DashPodState.acknowledgedAlerts`), before the wait for the
+      connection. SUCCESS or DENIED removes it (DENIED: the notice shows again, fail closed); a send
+      failure or a lost answer keeps it. It is dropped once the pod no longer reports the alert (also
+      after "Silence Alerts"), and with the pod state on reset. A stored one is not shown again, also
+      after a restart, and is queued again after a status read (one per read, as OmnipodKit) when the
+      last status is at most 2 minutes old, no command is open and none waits in the queue, so a pod
+      out of range does not fill the queue. Not after the single silence itself, so a failing one is
+      not sent in a row.
+- [x] **A tap on the notice** marks the notice as gone (the shared UI closes the whole card without
+      telling the plugin), so a silence the pod refused, or one not sent, posts the notice again at the
+      next read. The tap also stores the silence before the queue: the queue refuses a second
+      `CommandAcknowledgeAlert` while a silence sent again waits, and the tap would be lost. The
+      driver forgets a stored silence it refuses (alert not active, suspend ended while suspended).
+- [x] **Codec**: bit2 of the dose accounting flags (end of version 4) and one alert byte after the
+      other fields, written only when the set is not empty, so older states have the same bytes and
+      still decode (pinned tests unchanged).
+- Tests: `DashPodAlertNoticeTest` (11, simulated pod: notice and button, one slot silenced and the
+  notice keeps the other, a silence lost on the link not shown after a restart and sent at the next
+  read, the 2 minute rule, alert cleared, silence all, status checker, suspend ended, pod in alarm, a refused silence after a
+  tap posts the notice again, a tap while a silence waits in the queue is kept),
+  `IosDashPumpAlertsTest` (6 more: bytes of the single silence, send failure kept, lost link kept,
+  DENIED forgotten, alert not active, suspend ended while suspended), `DashOverviewTest` (4 more),
+  `DashDoseAccountingTest` (2 more, codec).
+- New English strings: `omnipod_dash_ios_pod_alerts`, `omnipod_dash_ios_silence_alert`.
+- To check on a real pod (section 6): that a silence with one slot stops only that alert's beeps.
+
 ### 5. Screens
 
 - [x] Activation and deactivation wizard, overview, in Compose Multiplatform (P3 above).

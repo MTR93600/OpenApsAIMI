@@ -34,6 +34,9 @@ internal class RecordingNotificationManager(private val rh: TextResolver) : Noti
 
     val calls = mutableListOf<String>()
 
+    /** The buttons of the last post of each notice; a dismiss removes them. */
+    val actions = mutableMapOf<NotificationId, List<NotificationAction>>()
+
     override val notifications: StateFlow<List<AapsNotification>> = MutableStateFlow(emptyList())
 
     override fun cleanUp() = Unit
@@ -59,11 +62,13 @@ internal class RecordingNotificationManager(private val rh: TextResolver) : Noti
         sound: AlarmSound?, actions: List<NotificationAction>, validityCheck: (() -> Boolean)?
     ): NotificationHandle {
         calls += "post($id, ${rh.gs(textRef)}, sound=$sound)"
+        this.actions[id] = actions
         return NotificationHandle(calls.size)
     }
 
     override fun dismiss(id: NotificationId) {
         calls += "dismiss($id)"
+        actions.remove(id)
     }
 
     override fun dismiss(handle: NotificationHandle) {

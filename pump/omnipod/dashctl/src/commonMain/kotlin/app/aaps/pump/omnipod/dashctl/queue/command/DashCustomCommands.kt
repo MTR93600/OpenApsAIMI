@@ -1,6 +1,7 @@
 package app.aaps.pump.omnipod.dashctl.queue.command
 
 import app.aaps.core.interfaces.queue.CustomCommand
+import app.aaps.pump.omnipod.dashctl.pod.definition.AlertType
 
 /*
  * The queue commands of the Omnipod driver, the same list and the same status texts as Android
@@ -12,6 +13,15 @@ import app.aaps.core.interfaces.queue.CustomCommand
 class CommandSilenceAlerts : CustomCommand {
 
     override val statusDescription = "ACKNOWLEDGE ALERTS"
+}
+
+/**
+ * Silence one pod alert, [alert], from its notice or the pump screen. Not in Android (it only has
+ * [CommandSilenceAlerts]); from OmnipodKit (Trio) `acknowledgeAlert`, see `IosDashPump.acknowledgeAlert`.
+ */
+class CommandAcknowledgeAlert(val alert: AlertType) : CustomCommand {
+
+    override val statusDescription = "ACKNOWLEDGE ALERT"
 }
 
 /** Android `CommandResumeDelivery`: send the basal program of the running profile to a suspended pod. */

@@ -3,6 +3,7 @@ package app.aaps.pump.omnipod.dashctl.session
 import app.aaps.pump.omnipod.dashctl.parity.parityHex
 import app.aaps.pump.omnipod.dashctl.pod.definition.ActivationProgress
 import app.aaps.pump.omnipod.dashctl.pod.definition.AlarmType
+import app.aaps.pump.omnipod.dashctl.pod.definition.AlertType
 import app.aaps.pump.omnipod.dashctl.pod.definition.BasalProgram
 import app.aaps.pump.omnipod.dashctl.pod.definition.DeliveryStatus
 import app.aaps.pump.omnipod.dashctl.pod.definition.PodStatus
@@ -308,6 +309,32 @@ class DashDoseAccountingTest {
             assertEquals(state, DashPodStateCodec.decode(bytes))
             assertEquals(empty.toList(), bytes.copyOf(empty.size).toList(), "added at the end only")
         }
+    }
+
+    @Test
+    fun `the acknowledged alerts roundtrip at the end and an empty set is not written`() {
+        val empty = DashPodStateCodec.encode(DashPodState())
+        assertEquals(empty.toList(), DashPodStateCodec.encode(DashPodState(acknowledgedAlerts = emptySet())).toList())
+        val states = listOf(
+            DashPodState(acknowledgedAlerts = setOf(AlertType.LOW_RESERVOIR)),
+            DashPodState(acknowledgedAlerts = setOf(AlertType.USER_SET_EXPIRATION, AlertType.EXPIRATION, AlertType.EXPIRATION_IMMINENT)),
+            DashPodState(faultTimeMs = 1L, untrackedBolusToRecordAt = 2L, acknowledgedAlerts = setOf(AlertType.SUSPEND_ENDED)),
+        )
+        for (state in states) {
+            val bytes = DashPodStateCodec.encode(state)
+            assertEquals(state, DashPodStateCodec.decode(bytes))
+            assertEquals(empty.toList(), bytes.copyOf(empty.size).toList(), "added at the end only")
+        }
+        // Flag bit2, then the alert byte (LOW_RESERVOIR is 0x10).
+        assertEquals(listOf<Byte>(0x04, 0x10), DashPodStateCodec.encode(states[0]).drop(empty.size))
+    }
+
+    @Test
+    fun `an acknowledged alert flag with no alert or an unknown flag fails closed`() {
+        val empty = DashPodStateCodec.encode(DashPodState())
+        assertFailsWith<IllegalArgumentException> { DashPodStateCodec.decode(empty + byteArrayOf(0x04, 0x00)) }
+        assertFailsWith<IllegalArgumentException> { DashPodStateCodec.decode(empty + byteArrayOf(0x04)) }
+        assertFailsWith<IllegalArgumentException> { DashPodStateCodec.decode(empty + byteArrayOf(0x08, 0x10)) }
     }
 
     @Test

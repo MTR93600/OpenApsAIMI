@@ -2,6 +2,7 @@ package app.aaps.pump.omnipod.dashctl.session
 
 import app.aaps.pump.omnipod.dashctl.pod.definition.ActivationProgress
 import app.aaps.pump.omnipod.dashctl.pod.definition.AlarmType
+import app.aaps.pump.omnipod.dashctl.pod.definition.AlertType
 import app.aaps.pump.omnipod.dashctl.pod.definition.BasalProgram
 import app.aaps.pump.omnipod.dashctl.pod.definition.PodStatus
 import app.aaps.pump.omnipod.dashctl.pod.definition.SoftwareVersion
@@ -195,6 +196,17 @@ data class DashPodState(
      * same pump id, so `PumpSync` keeps one record). See `DashPodStateManager.updateFromDefaultStatus`.
      */
     val untrackedBolusToRecordAt: Long? = null,
+    /**
+     * The pod alerts the user silenced one by one on the phone (the notice or the pump screen) that the
+     * pod has not silenced yet. Stored before the silence is sent, so it survives a lost link or an app
+     * restart: the notice of such an alert is not shown again, and the silence is sent again at the next
+     * status read. An alert leaves the set when the pod no longer reports it, or when the pod refused to
+     * silence it (the notice then shows again). As OmnipodKit (Trio) `alertsWithPendingAcknowledgment`
+     * and `silenceAcknowledgedAlerts`. Deliberate difference from Android, which has no single alert
+     * silence: without it a silence the pod did not get is a user action lost, and the notice comes back
+     * after every restart while the pod keeps beeping.
+     */
+    val acknowledgedAlerts: Set<AlertType> = emptySet(),
 ) {
 
     init {
@@ -253,7 +265,8 @@ data class DashPodState(
             successfulConnectionAttemptsAfterRetries == other.successfulConnectionAttemptsAfterRetries &&
             failedConnectionsAfterRetries == other.failedConnectionsAfterRetries &&
             faultTimeMs == other.faultTimeMs &&
-            untrackedBolusToRecordAt == other.untrackedBolusToRecordAt
+            untrackedBolusToRecordAt == other.untrackedBolusToRecordAt &&
+            acknowledgedAlerts == other.acknowledgedAlerts
     }
 
     override fun hashCode(): Int {
@@ -299,6 +312,7 @@ data class DashPodState(
         result = 31 * result + failedConnectionsAfterRetries
         result = 31 * result + (faultTimeMs?.hashCode() ?: 0)
         result = 31 * result + (untrackedBolusToRecordAt?.hashCode() ?: 0)
+        result = 31 * result + acknowledgedAlerts.hashCode()
         return result
     }
 

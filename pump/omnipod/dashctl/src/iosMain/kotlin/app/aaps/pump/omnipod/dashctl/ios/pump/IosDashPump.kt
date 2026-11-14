@@ -73,6 +73,7 @@ import app.aaps.pump.omnipod.dashctl.pod.definition.ActivationProgress
 import app.aaps.pump.omnipod.dashctl.pod.definition.AlarmType
 import app.aaps.pump.omnipod.dashctl.pod.definition.AlertConfiguration
 import app.aaps.pump.omnipod.dashctl.pod.definition.AlertTrigger
+import app.aaps.pump.omnipod.dashctl.pod.definition.AlertType
 import app.aaps.pump.omnipod.dashctl.pod.definition.BasalProgram
 import app.aaps.pump.omnipod.dashctl.pod.definition.BeepType
 import app.aaps.pump.omnipod.dashctl.pod.definition.DeliveryStatus
@@ -1746,6 +1747,57 @@ class IosDashPump(
                 .build()
         }
         resultOf(outcome, "Silence alerts")
+    }
+
+    /**
+     * Silences one pod alert, [alert], from its notice or the pump screen: one `SilenceAlertsCommand`
+     * with that slot only, with its own active command (SILENCE_ALERTS), as OmnipodKit (Trio)
+     * `acknowledgeAlert` -> `acknowledgeAlerts(AlertSet(slots: [slot]))`.
+     *
+     * Deliberate difference from Android, which can only silence all alerts at once: the
+     * acknowledgement is stored first ([DashPodStateManager.addAcknowledgedAlert]), before the wait for
+     * the connection, so a silence that does not reach the pod (out of range, app killed during the
+     * wait) is not a user action lost; the next status read sends it again
+     * (`DashPluginRules.updatePodAlerts`). Then:
+     * - SUCCESS: the pod silenced it, it leaves the stored set;
+     * - DENIED: the pod refused, it leaves the stored set so its notice shows again (fail closed);
+     * - not sent or not confirmed: it stays stored, and is sent again later.
+     *
+     * Nothing is stored or sent when the stored pod state cannot be read, when the last status does
+     * not report [alert] (success, not enacted: nothing to do), or for "suspend ended" while delivery
+     * is suspended: as OmnipodKit, that alert keeps beeping until delivery runs again (the resume
+     * turns it off). In the last two cases a silence the notice already stored
+     * (`DashPluginRules.acknowledgeAlert`) is forgotten, so it is not sent again and not hidden. Held back unless the pod is activated and runs. Success only when the pod
+     * confirmed it.
+     */
+    suspend fun acknowledgeAlert(alert: AlertType): PumpEnactResult {
+        refusedStateUnknown("Silence alert")?.let { return it }
+        if (stateManager.activeAlerts?.contains(alert) != true || alert == AlertType.UNKNOWN) {
+            if (alert != AlertType.UNKNOWN) stateManager.forgetAcknowledgedAlert(alert)
+            return DashPumpEnactResult(success = true, enacted = false, comment = "Alert $alert is not active")
+        }
+        if (alert == AlertType.SUSPEND_ENDED && stateManager.isSuspended) {
+            // The notice may have stored it before delivery became suspended: forgotten, so it shows again.
+            stateManager.forgetAcknowledgedAlert(alert)
+            return failure("The suspend ended alert stays on while delivery is suspended. Resume delivery to stop it.")
+        }
+        stateManager.addAcknowledgedAlert(alert)
+        return lockedCommand {
+            val outcome = sendDeliveryCommand(DashCommandKind.SILENCE_ALERTS) { uid, seq ->
+                SilenceAlertsCommand.Builder()
+                    .setSequenceNumber(seq)
+                    .setUniqueId(uid)
+                    .setNonce(NONCE)
+                    .setAlertTypes(setOf(alert))
+                    .build()
+            }
+            when (outcome.confirmation) {
+                DashCommandConfirmation.SUCCESS,
+                DashCommandConfirmation.DENIED -> stateManager.forgetAcknowledgedAlert(alert)
+                else                           -> Unit
+            }
+            resultOf(outcome, "Silence alert")
+        }
     }
 
     /**

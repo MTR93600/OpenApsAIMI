@@ -133,6 +133,97 @@ class IosDashPumpAlertsTest {
         assertNull(f.stateManager.activeCommand)
     }
 
+    // ---------------------------------------------------------------- one alert at a time (OmnipodKit acknowledgeAlert)
+
+    private fun silenceOf(sequence: Int, alerts: Set<AlertType>): String = SilenceAlertsCommand.Builder()
+        .setUniqueId(UNIQUE_ID)
+        .setSequenceNumber(sequence.toShort())
+        .setNonce(IosDashPump.NONCE)
+        .setAlertTypes(alerts)
+        .build().encoded.toParityHex()
+
+    @Test
+    fun `silencing one alert sends only its slot and leaves the other alert on`() = runTest {
+        f.activeAlerts = LOW_RESERVOIR_BIT or USER_EXPIRATION_BIT
+        runningPodWithStatus()
+        val start = f.pod.commands.size
+
+        val result = f.pump.acknowledgeAlert(AlertType.LOW_RESERVOIR)
+
+        assertTrue(result.success, result.comment)
+        assertEquals(listOf(silenceOf(2, setOf(AlertType.LOW_RESERVOIR))), f.pod.commands.drop(start).map { it.toParityHex() })
+        assertEquals(DashCommandKind.SILENCE_ALERTS to DashCommandConfirmation.SUCCESS, f.decided.single().let { it.command.kind to it.confirmation })
+        assertEquals(setOf(AlertType.USER_SET_EXPIRATION), f.stateManager.activeAlerts)
+        assertEquals(emptySet(), f.stateManager.acknowledgedAlerts, "silenced on the pod, nothing left to send")
+    }
+
+    @Test
+    fun `a silence of one alert that never left the phone is kept to be sent again`() = runTest {
+        f.activeAlerts = LOW_RESERVOIR_BIT
+        runningPodWithStatus()
+        f.pod.dropLinkOnPhoneMessage = 9 to Packet.FIRST
+
+        assertFalse(f.pump.acknowledgeAlert(AlertType.LOW_RESERVOIR).success)
+
+        assertEquals(DashCommandConfirmation.SENDING_FAILURE, f.decided.single().confirmation)
+        assertEquals(setOf(AlertType.LOW_RESERVOIR), f.stateManager.acknowledgedAlerts, "the user action is not lost")
+        assertEquals(setOf(AlertType.LOW_RESERVOIR), f.store.saved?.acknowledgedAlerts, "stored, so it survives a restart")
+    }
+
+    @Test
+    fun `a silence of one alert on a lost link is stored to be sent again`() = runTest {
+        f.activeAlerts = LOW_RESERVOIR_BIT
+        runningPodWithStatus()
+        f.dropLink()
+
+        assertFalse(f.pump.acknowledgeAlert(AlertType.LOW_RESERVOIR).success)
+
+        assertEquals(setOf(AlertType.LOW_RESERVOIR), f.store.saved?.acknowledgedAlerts)
+    }
+
+    @Test
+    fun `a silence of one alert the pod refused is forgotten so its notice shows again`() = runTest {
+        f.activeAlerts = LOW_RESERVOIR_BIT
+        runningPodWithStatus()
+        val normal = f.pod.answerFor
+        f.pod.answerFor = { command ->
+            if (command[6] == CommandType.SILENCE_ALERTS.value) podDefaultStatus(f.podStatusCode, f.lastProgrammingSequence) else normal(command)
+        }
+
+        assertFalse(f.pump.acknowledgeAlert(AlertType.LOW_RESERVOIR).success)
+
+        assertEquals(DashCommandConfirmation.DENIED, f.decided.single().confirmation)
+        assertEquals(emptySet(), f.stateManager.acknowledgedAlerts)
+    }
+
+    @Test
+    fun `silencing an alert the last status does not report sends nothing`() = runTest {
+        f.activeAlerts = LOW_RESERVOIR_BIT
+        runningPodWithStatus()
+        val start = f.pod.commands.size
+
+        val result = f.pump.acknowledgeAlert(AlertType.EXPIRATION)
+
+        assertTrue(result.success)
+        assertFalse(result.enacted)
+        assertEquals(start, f.pod.commands.size)
+        assertEquals(emptySet(), f.stateManager.acknowledgedAlerts)
+    }
+
+    @Test
+    fun `the suspend ended alert is not silenced alone while delivery is suspended`() = runTest {
+        f.activeAlerts = SUSPEND_ENDED_BIT
+        f.pairAndConnect(basalOfThisSession = false)
+        f.giveStatusOfThisSession(basal = false)
+        assertTrue(f.stateManager.isSuspended, "fixture")
+        val start = f.pod.commands.size
+
+        assertFalse(f.pump.acknowledgeAlert(AlertType.SUSPEND_ENDED).success)
+
+        assertEquals(start, f.pod.commands.size)
+        assertEquals(emptySet(), f.stateManager.acknowledgedAlerts)
+    }
+
     // ---------------------------------------------------------------- suspend alerts
 
     @Test
@@ -313,6 +404,12 @@ class IosDashPumpAlertsTest {
 
         /** `AlertType.LOW_RESERVOIR` in the alert byte of a status (1 shl 4). */
         const val LOW_RESERVOIR_BIT = 0x10
+
+        /** `AlertType.USER_SET_EXPIRATION` in the status alert byte. */
+        const val USER_EXPIRATION_BIT = 0x08
+
+        /** `AlertType.SUSPEND_ENDED` in the status alert byte. */
+        const val SUSPEND_ENDED_BIT = 0x40
 
         val SETTINGS = DashAlertSettings(
             expiration = DashExpirationAlertSettings(reminderEnabled = true, reminderHours = 9, alarmEnabled = true, alarmHours = 7),

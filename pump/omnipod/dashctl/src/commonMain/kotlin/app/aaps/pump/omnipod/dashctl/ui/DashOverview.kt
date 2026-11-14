@@ -7,6 +7,7 @@ import app.aaps.core.interfaces.pump.defs.determineCorrectBolusSize
 import app.aaps.core.interfaces.queue.CustomCommand
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.core.keys.interfaces.TextRef.Companion.withArgs
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.StatusLevel
 import app.aaps.core.ui.compose.pump.PumpInfoRow
@@ -15,6 +16,7 @@ import app.aaps.pump.omnipod.dashctl.pod.definition.ActivationProgress
 import app.aaps.pump.omnipod.dashctl.pod.definition.AlertType
 import app.aaps.pump.omnipod.dashctl.pod.definition.PdmFaultCategory
 import app.aaps.pump.omnipod.dashctl.pod.definition.PodConstants
+import app.aaps.pump.omnipod.dashctl.queue.command.CommandAcknowledgeAlert
 import app.aaps.pump.omnipod.dashctl.queue.command.CommandPlayTestBeep
 import app.aaps.pump.omnipod.dashctl.queue.command.CommandResumeDelivery
 import app.aaps.pump.omnipod.dashctl.queue.command.CommandSilenceAlerts
@@ -80,6 +82,34 @@ fun dashOverviewButtons(
         DashOverviewButton(DashOverviewAction.POD_HISTORY, visible = true),
         DashOverviewButton(DashOverviewAction.DISCARD_POD, visible = state.uniqueId != null && progress.isBefore(ActivationProgress.SET_UNIQUE_ID))
     )
+}
+
+/** One "Silence <alert>" button of the pod screen ([dashAlertSilenceButtons]). */
+data class DashAlertButton(val alert: AlertType, val enabled: Boolean) {
+
+    /** "Silence Low Reservoir": the name of the alert in a template, never two texts joined. */
+    fun label(rh: TextResolver): String = rh.gs(DashStrings.omnipod_dash_ios_silence_alert.withArgs(rh.gs(dashAlertText(alert))))
+}
+
+/**
+ * The buttons that silence one pod alert at a time, next to "Silence Alerts" (which stays as Android).
+ * Not in Android; from OmnipodKit (Trio) `acknowledgeAlert`, see `IosDashPump.acknowledgeAlert`. One
+ * for each alert of the last status that the user has not silenced yet
+ * ([DashPodStateManager.acknowledgedAlerts]), on a running pod; none for "suspend ended" while
+ * delivery is suspended (it stays on until the resume). Enabled with an empty queue and no single
+ * silence waiting in it.
+ */
+fun dashAlertSilenceButtons(
+    state: DashPodStateManager,
+    queueEmpty: Boolean,
+    inQueue: (KClass<out CustomCommand>) -> Boolean
+): List<DashAlertButton> {
+    if (!state.isPodRunning) return emptyList()
+    val enabled = queueEmpty && !inQueue(CommandAcknowledgeAlert::class)
+    return (state.activeAlerts.orEmpty() - state.acknowledgedAlerts)
+        .filter { it != AlertType.UNKNOWN && !(it == AlertType.SUSPEND_ENDED && state.isSuspended) }
+        .sortedBy { it.ordinal }
+        .map { DashAlertButton(it, enabled) }
 }
 
 /** The buttons of the first row (pod commands), the rest are pod management, as Android. */
@@ -218,7 +248,7 @@ fun dashOverviewRows(state: DashPodStateManager, rh: TextResolver, format: DashO
     add(
         PumpInfoRow(
             label = rh.gs(DashStrings.dash_overview_active_alerts),
-            value = state.activeAlerts?.takeIf { it.isNotEmpty() }?.joinToString("\n") { rh.gs(alertText(it)) } ?: PLACEHOLDER
+            value = state.activeAlerts?.takeIf { it.isNotEmpty() }?.joinToString("\n") { rh.gs(dashAlertText(it)) } ?: PLACEHOLDER
         )
     )
     val alarm = state.alarmType
@@ -343,8 +373,8 @@ private fun reservoirRow(state: DashPodStateManager, rh: TextResolver, format: D
     return PumpInfoRow(label = label, value = format.insulin(units), level = if (low) StatusLevel.CRITICAL else StatusLevel.NORMAL)
 }
 
-/** Android `translatedActiveAlert`. */
-private fun alertText(alert: AlertType) = when (alert) {
+/** Android `translatedActiveAlert`. Also the name of the alert in its notice on the phone. */
+internal fun dashAlertText(alert: AlertType): TextRef = when (alert) {
     AlertType.LOW_RESERVOIR                                -> DashStrings.dash_alert_low_reservoir
     AlertType.EXPIRATION, AlertType.EXPIRATION_IMMINENT,
     AlertType.USER_SET_EXPIRATION                          -> DashStrings.dash_alert_expiration

@@ -213,6 +213,10 @@ class DashPodStateManager(
     val activeAlerts: Set<AlertType>?
         get() = state.podStatus?.activeAlerts
 
+    /** See [DashPodState.acknowledgedAlerts]. */
+    val acknowledgedAlerts: Set<AlertType>
+        get() = state.acknowledgedAlerts
+
     /**
      * Android `isPodKaput`: the pod status of the last answer is ALARM or DEACTIVATED. Such a pod
      * delivers nothing.
@@ -677,6 +681,34 @@ class DashPodStateManager(
     }
 
     // -- Alerts (ported from OmnipodDashPodStateManagerImpl) ----------------------
+
+    /**
+     * The user silenced [alert] on the phone: it is kept in [acknowledgedAlerts] until the pod no
+     * longer reports it ([forgetAcknowledgedAlertsExcept]) or refused to silence it
+     * ([forgetAcknowledgedAlert]). Persists, before anything is sent (see
+     * [DashPodState.acknowledgedAlerts]).
+     */
+    fun addAcknowledgedAlert(alert: AlertType) {
+        require(alert != AlertType.UNKNOWN) { "an unknown alert has no slot to silence" }
+        if (alert in state.acknowledgedAlerts) return
+        state = state.copy(acknowledgedAlerts = state.acknowledgedAlerts + alert)
+        persist()
+    }
+
+    /** [alert] leaves [acknowledgedAlerts]. Persists. */
+    fun forgetAcknowledgedAlert(alert: AlertType) {
+        if (alert !in state.acknowledgedAlerts) return
+        state = state.copy(acknowledgedAlerts = state.acknowledgedAlerts - alert)
+        persist()
+    }
+
+    /** Every alert not in [stillActive] leaves [acknowledgedAlerts]: the pod no longer reports it. Persists. */
+    fun forgetAcknowledgedAlertsExcept(stillActive: Set<AlertType>) {
+        val kept = state.acknowledgedAlerts intersect stillActive
+        if (kept == state.acknowledgedAlerts) return
+        state = state.copy(acknowledgedAlerts = kept)
+        persist()
+    }
 
     /** Android setter `suspendAlertsEnabled`. Persists. */
     fun updateSuspendAlertsEnabled(enabled: Boolean) {

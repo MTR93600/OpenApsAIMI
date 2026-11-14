@@ -7,6 +7,7 @@ import app.aaps.pump.omnipod.dashctl.DashStrings
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.AlarmSound
+import app.aaps.core.interfaces.notifications.NotificationAction
 import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.interfaces.notifications.NotificationLevel
 import app.aaps.core.interfaces.notifications.NotificationManager
@@ -35,7 +36,9 @@ import app.aaps.pump.omnipod.dashctl.ios.pump.IosDashPump
 import app.aaps.pump.omnipod.dashctl.keys.DashAlertIntKey
 import app.aaps.pump.omnipod.dashctl.keys.DashSoundKey
 import app.aaps.pump.omnipod.dashctl.pod.definition.AlertTrigger
+import app.aaps.pump.omnipod.dashctl.pod.definition.AlertType
 import app.aaps.pump.omnipod.dashctl.pod.definition.PodConstants
+import app.aaps.pump.omnipod.dashctl.queue.command.CommandAcknowledgeAlert
 import app.aaps.pump.omnipod.dashctl.queue.command.CommandDeactivatePod
 import app.aaps.pump.omnipod.dashctl.queue.command.CommandDeliverBasalCorrection
 import app.aaps.pump.omnipod.dashctl.queue.command.CommandDisableSuspendAlerts
@@ -49,6 +52,7 @@ import app.aaps.pump.omnipod.dashctl.session.DashAlertSettings
 import app.aaps.pump.omnipod.dashctl.session.DashCommandConfirmation
 import app.aaps.pump.omnipod.dashctl.session.DashCommandKind
 import app.aaps.pump.omnipod.dashctl.session.DashPodStateManager
+import app.aaps.pump.omnipod.dashctl.ui.dashAlertText
 import app.aaps.pump.omnipod.dashctl.util.mapProfileToBasalProgram
 import kotlin.concurrent.Volatile
 import kotlin.coroutines.cancellation.CancellationException
@@ -211,9 +215,11 @@ class DashPluginRules(
     /**
      * What Android runs after every programming command and every status read, after the confirmation:
      * [verifyPumpState], [checkPodKaput], and a refresh of the overview. Errors are logged; a command
-     * result never depends on them.
+     * result never depends on them. Then the pod alerts of the last status ([updatePodAlerts]), which
+     * is not in Android; [silenceAcknowledged] is false after a single alert silence itself, so a
+     * silence that fails is not sent again and again in a row.
      */
-    suspend fun afterCommand() {
+    suspend fun afterCommand(silenceAcknowledged: Boolean = true) {
         try {
             verifyPumpState()
             checkPodKaput()
@@ -222,7 +228,113 @@ class DashPluginRules(
         } catch (e: Exception) {
             aapsLogger.error(LTag.PUMP, "Dash: check after the command failed", e)
         }
+        try {
+            updatePodAlerts(silenceAcknowledged)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.PUMP, "Dash: check of the pod alerts failed", e)
+        }
         rxBus().send(EventRefreshOverview("Dash command", false))
+    }
+
+    // ------------------------------------------------------------------ pod alerts
+
+    /**
+     * The alerts in the pod alert notice now. In memory only: notices do not survive an app restart,
+     * so after one every active alert the user did not silence is shown again.
+     */
+    @Volatile
+    private var alertsInNotice: Set<AlertType> = emptySet()
+
+    /**
+     * The pod alerts of the last status on the phone, at every status read and command ([afterCommand])
+     * and every run of the status checker ([statusCheck]). Not in Android, which shows the active
+     * alerts only on the pump screen (and Eros only as one notice with no way to silence one). From
+     * OmnipodKit (Trio) `alertsChanged` -> `issueAlert`, `acknowledgeAlert` and
+     * `silenceAcknowledgedAlerts`. Deliberate difference from Android: without it an alert the pod
+     * beeps (low reservoir, pod expiry) is not seen on the phone, and a silence of one alert that did
+     * not reach the pod is a user action lost.
+     * - The alerts of a pod that is activated and runs count; none for any other pod (no pod, a pod in
+     *   alarm: the fault notice covers that one).
+     * - An alert the user silenced ([DashPodStateManager.acknowledgedAlerts]) that the pod no longer
+     *   reports is forgotten.
+     * - The other active alerts are in one notice (NotificationId.OMNIPOD_POD_ALERTS, the id Android
+     *   Eros uses for its pod alerts, at its level and with no sound, as Eros: the pod beeps itself),
+     *   with Android's alert names ([dashAlertText]) and one "Silence" button for each alert that can
+     *   be silenced ([acknowledgeAlert]). The notice is posted again only when that list changes, and
+     *   dismissed when it is empty.
+     * - [silenceAcknowledged]: one silenced alert the pod still reports is sent again
+     *   ([silenceOneAcknowledgedAlert]).
+     */
+    fun updatePodAlerts(silenceAcknowledged: Boolean) {
+        val active = if (stateManager.isActivatedAndRunning) stateManager.activeAlerts.orEmpty() - AlertType.UNKNOWN else emptySet()
+        stateManager.forgetAcknowledgedAlertsExcept(active)
+        val acknowledged = stateManager.acknowledgedAlerts
+        val shown = active - acknowledged
+        if (shown != alertsInNotice) {
+            if (shown.isEmpty()) {
+                notificationManager.dismiss(NotificationId.OMNIPOD_POD_ALERTS)
+            } else {
+                val ordered = shown.sortedBy { it.ordinal }
+                aapsLogger.info(LTag.PUMP, "Dash: pod alerts on the phone: $ordered (silenced, not yet on the pod: $acknowledged)")
+                notificationManager.post(
+                    NotificationId.OMNIPOD_POD_ALERTS,
+                    DashStrings.omnipod_dash_ios_pod_alerts.withArgs(ordered.joinToString("\n") { rh.gs(dashAlertText(it)) }),
+                    actions = ordered.filter { canBeSilenced(it) }.map { alert ->
+                        NotificationAction(DashStrings.omnipod_dash_ios_silence_alert.withArgs(rh.gs(dashAlertText(alert)))) { acknowledgeAlert(alert) }
+                    }
+                )
+            }
+            alertsInNotice = shown
+        }
+        if (silenceAcknowledged) silenceOneAcknowledgedAlert(acknowledged)
+    }
+
+    /**
+     * The user silenced [alert] from its notice: [CommandAcknowledgeAlert] is queued (it stores the
+     * silence again before it connects, see `IosDashPump.acknowledgeAlert`). OmnipodKit `acknowledgeAlert`.
+     *
+     * Two steps before the queue, both deliberate, so a user action is not lost:
+     * - The notice is marked as gone (dismissed, and [alertsInNotice] emptied). The shared UI closes the
+     *   whole card on a button tap without telling the plugin, so without this a silence the pod then
+     *   refused, or one not sent at all, would leave the pod beeping with no notice on the phone until
+     *   the list of alerts changes. The next [updatePodAlerts] posts the alerts that are still shown.
+     * - The silence is stored here ([DashPodStateManager.addAcknowledgedAlert]), under the same checks
+     *   as the driver (state readable, the pod runs, the alert is active and can be silenced). The queue
+     *   refuses a [CommandAcknowledgeAlert] while another one waits (a silence sent again by
+     *   [silenceOneAcknowledgedAlert]), and then the driver never sees this tap. Stored, it is sent at a
+     *   later status read.
+     */
+    fun acknowledgeAlert(alert: AlertType) {
+        alertsInNotice = emptySet()
+        notificationManager.dismiss(NotificationId.OMNIPOD_POD_ALERTS)
+        if (alert != AlertType.UNKNOWN && stateManager.reloadIfUnknown() && stateManager.isActivatedAndRunning &&
+            stateManager.activeAlerts?.contains(alert) == true && canBeSilenced(alert)
+        ) {
+            stateManager.addAcknowledgedAlert(alert)
+        }
+        launch { commandQueue().customCommand(CommandAcknowledgeAlert(alert)) }
+    }
+
+    /** As OmnipodKit: "suspend ended" is not silenced while delivery is suspended; it stops with the resume. */
+    private fun canBeSilenced(alert: AlertType): Boolean = !(alert == AlertType.SUSPEND_ENDED && stateManager.isSuspended)
+
+    /**
+     * OmnipodKit `silenceAcknowledgedAlerts`: one silenced alert the pod still reports (more than one
+     * is rare) is queued again, after a status read. Only when the pod answered just now (the last
+     * status is at most [ACKNOWLEDGE_RETRY_WINDOW_MS] old), no command is open and no single silence
+     * already waits in the queue, so a pod out of range does not fill the queue with silences that
+     * cannot reach it.
+     */
+    private fun silenceOneAcknowledgedAlert(acknowledged: Set<AlertType>) {
+        val alert = acknowledged.minByOrNull { it.ordinal } ?: return
+        val status = stateManager.podStatus ?: return
+        if (now() - status.receivedAtMs > ACKNOWLEDGE_RETRY_WINDOW_MS) return
+        if (stateManager.activeCommand != null) return
+        if (commandQueue().isCustomCommandInQueue(CommandAcknowledgeAlert::class)) return
+        aapsLogger.info(LTag.PUMP, "Dash: the silence of $alert did not reach the pod yet, sent again")
+        launch { commandQueue().customCommand(CommandAcknowledgeAlert(alert)) }
     }
 
     /**
@@ -390,11 +502,20 @@ class DashPluginRules(
     /**
      * One run of the Android status checker (every minute): a status read when a command is not
      * confirmed and the queue is idle, the pod warnings, and the zero temp basal while no pod runs.
+     * Also the pod alerts of the stored status ([updatePodAlerts], not in Android), so after an app
+     * restart they are on the phone again before the next status read. Nothing is sent from here.
      */
     suspend fun statusCheck() {
         if (!podStateKnown()) return
         refreshStatusOnUnacknowledgedCommands()
         updatePodWarnings()
+        try {
+            updatePodAlerts(silenceAcknowledged = false)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.PUMP, "Dash: check of the pod alerts failed", e)
+        }
         aapsLogger.info(LTag.PUMP, "statusChecker")
         try {
             writeNoPodTempBasal(stateManager.isPodRunning, pumpSync, now(), aapsLogger)
@@ -477,6 +598,7 @@ class DashPluginRules(
     fun executeCustomCommand(customCommand: CustomCommand): PumpEnactResult = runBlocking {
         val result = when (customCommand) {
             is CommandSilenceAlerts            -> driver.silenceAlerts()
+            is CommandAcknowledgeAlert         -> driver.acknowledgeAlert(customCommand.alert)
             is CommandResumeDelivery           -> resumeDelivery()
             is CommandDeactivatePod            -> deactivatePod()
             is CommandHandleTimeChange         -> handleTimeChange()
@@ -489,7 +611,7 @@ class DashPluginRules(
                 return@runBlocking DashPumpEnactResult(success = false, enacted = false, comment = "Unsupported custom command: ${customCommand.statusDescription}")
             }
         }
-        afterCommand()
+        afterCommand(silenceAcknowledged = customCommand !is CommandAcknowledgeAlert)
         result
     }
 
@@ -610,6 +732,9 @@ class DashPluginRules(
 
         /** Android `DateTimeUtil.getTimeInFutureFromMinutes(15)`. */
         const val POD_WARNING_INTERVAL_MS = 15 * 60_000L
+
+        /** A silenced alert is sent again only when the last status is at most this old: the pod is in reach. */
+        const val ACKNOWLEDGE_RETRY_WINDOW_MS = 2 * 60_000L
     }
 }
 

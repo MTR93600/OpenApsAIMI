@@ -2,6 +2,7 @@ package app.aaps.pump.omnipod.dashctl.session
 
 import app.aaps.pump.omnipod.dashctl.pod.definition.ActivationProgress
 import app.aaps.pump.omnipod.dashctl.pod.definition.AlarmType
+import app.aaps.pump.omnipod.dashctl.pod.definition.AlertType
 import app.aaps.pump.omnipod.dashctl.pod.definition.BasalProgram
 import app.aaps.pump.omnipod.dashctl.pod.definition.DeliveryStatus
 import app.aaps.pump.omnipod.dashctl.pod.definition.PodStatus
@@ -80,9 +81,11 @@ import app.aaps.pump.omnipod.dashctl.pod.util.byValue
  *   [DashPodState.failedConnectionsAfterRetries].
  * - the dose accounting part (added at the end of version 4; written only when one of its fields is
  *   set, so a state without them has the same bytes as before, and every older version 4 state still
- *   reads, with both fields null): u8 flags, bit0 [DashPodState.faultTimeMs], bit1
+ *   reads, with these fields empty): u8 flags, bit0 [DashPodState.faultTimeMs], bit1
  *   [DashPodState.untrackedBolusToRecordAt]; 0 or any other bit is an error. Then the present ones,
- *   in that order, each a u64.
+ *   in that order, each a u64. Bit2 [DashPodState.acknowledgedAlerts] (added later at the end, same
+ *   rule): after the u64 fields, u8 the alert set (`AlertUtil.encodeAlertSet`, never 0 when the bit
+ *   is set).
  *
  * Versions 1 to 3 are still read, so a pod paired before keeps its key and its open command. They
  * have none of the version 4 fields: the temp basal, the alarm type and the reservoir reading stay null, the alert settings stay null and
@@ -126,7 +129,8 @@ object DashPodStateCodec {
 
     private const val FLAG_FAULT_TIME = 0x01
     private const val FLAG_UNTRACKED_BOLUS = 0x02
-    private const val DOSE_FLAGS_KNOWN = 0x03
+    private const val FLAG_ACKNOWLEDGED_ALERTS = 0x04
+    private const val DOSE_FLAGS_KNOWN = 0x07
 
     fun encode(state: DashPodState): ByteArray {
         val out = Writer()
@@ -276,10 +280,13 @@ object DashPodStateCodec {
         var dose = 0
         if (state.faultTimeMs != null) dose = dose or FLAG_FAULT_TIME
         if (state.untrackedBolusToRecordAt != null) dose = dose or FLAG_UNTRACKED_BOLUS
+        val acknowledged = AlertUtil.encodeAlertSet(state.acknowledgedAlerts).toInt() and 0xff
+        if (acknowledged != 0) dose = dose or FLAG_ACKNOWLEDGED_ALERTS
         if (dose != 0) {
             out.u8(dose)
             state.faultTimeMs?.let { out.u64(it) }
             state.untrackedBolusToRecordAt?.let { out.u64(it) }
+            if (acknowledged != 0) out.u8(acknowledged)
         }
         return out.toByteArray()
     }
@@ -433,11 +440,17 @@ object DashPodStateCodec {
         }
         var faultTimeMs: Long? = null
         var untrackedBolusToRecordAt: Long? = null
+        var acknowledgedAlerts: Set<AlertType> = emptySet()
         if (version >= VERSION_4 && !inp.atEnd()) {
             val dose = inp.u8()
             require(dose != 0 && dose and DOSE_FLAGS_KNOWN.inv() == 0) { "bad dose accounting flags $dose" }
             if (dose and FLAG_FAULT_TIME != 0) faultTimeMs = inp.u64()
             if (dose and FLAG_UNTRACKED_BOLUS != 0) untrackedBolusToRecordAt = inp.u64()
+            if (dose and FLAG_ACKNOWLEDGED_ALERTS != 0) {
+                val alerts = inp.u8()
+                require(alerts != 0) { "acknowledged alerts flag with no alert" }
+                acknowledgedAlerts = AlertUtil.decodeAlertSet(alerts.toByte())
+            }
         }
         require(inp.atEnd()) { "trailing bytes" }
         return DashPodState(
@@ -483,6 +496,7 @@ object DashPodStateCodec {
             failedConnectionsAfterRetries = failedConnections,
             faultTimeMs = faultTimeMs,
             untrackedBolusToRecordAt = untrackedBolusToRecordAt,
+            acknowledgedAlerts = acknowledgedAlerts,
         )
     }
 

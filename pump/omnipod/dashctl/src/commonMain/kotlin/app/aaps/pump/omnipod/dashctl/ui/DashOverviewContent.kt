@@ -33,6 +33,7 @@ import app.aaps.core.ui.compose.pump.StatusBanner
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.pump.omnipod.dashctl.DashStrings
 import app.aaps.pump.omnipod.dashctl.history.DashHistoryRecord
+import app.aaps.pump.omnipod.dashctl.queue.command.CommandAcknowledgeAlert
 import app.aaps.pump.omnipod.dashctl.queue.command.CommandHandleTimeChange
 import app.aaps.pump.omnipod.dashctl.queue.command.CommandPlayTestBeep
 import app.aaps.pump.omnipod.dashctl.queue.command.CommandResumeDelivery
@@ -181,6 +182,17 @@ class DashOverviewContent(
                 )
             }
         }
+        val alertButtons = remember(tick, queueStatus) {
+            val queueEmpty = commandQueue.size() == 0 && commandQueue.performing() == null
+            dashAlertSilenceButtons(stateManager, queueEmpty) { commandQueue.isCustomCommandInQueue(it) }.map { button ->
+                ScreenAction(
+                    label = button.label(rh),
+                    enabled = button.enabled,
+                    visible = true,
+                    onClick = { runCustomCommand(CommandAcknowledgeAlert(button.alert), DashStrings.dash_error_failed_to_silence_alerts) }
+                )
+            }
+        }
         val rows = remember(tick) { dashOverviewRows(stateManager, rh, format, now()) }
 
         if (confirmDiscard) {
@@ -210,7 +222,7 @@ class DashOverviewContent(
             state = PumpOverviewUiState(
                 statusBanner = banner ?: StatusBanner(text = cautionText, level = StatusLevel.WARNING),
                 infoRows = rows,
-                primaryActions = actions.filter { it.first.action.isPrimary }.map { it.second },
+                primaryActions = actions.filter { it.first.action.isPrimary }.map { it.second } + alertButtons,
                 managementActions = actions.filterNot { it.first.action.isPrimary }.map { it.second },
                 queueStatus = queueStatus
             )
