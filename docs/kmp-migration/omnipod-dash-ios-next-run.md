@@ -452,8 +452,8 @@ The owner asked for it (selectable and usable). Plan and steps P1-P3 in
 
 - Late outcomes, `podDiscarded` (bolus at the asked amount, temp basal as started, suspend as
   Android), `DashBolusEndedByFault` and `endedBolus` (correct the record keyed by the command time,
-  never a second bolus): P1, `DashPumpSyncRecorder`. Records are written on the confirmed outcome at
-  the command time; the pump id is the command time (no pod history on iOS).
+  never a second bolus): P1, `DashPumpSyncRecorder`. Since P2 records are written when sent (as
+  Android), at the command time; the pump id is the command time (no pod history on iOS).
 - PUMP_SUSPEND temp basal of a suspend and its stop by a confirmed basal program or resume: P1.
 - Beeps from the Android keys and defaults (`DashBeepKey`): P1. Alert settings: P2.
 - `expectedTempBasalRunning` from `PumpSync.expectedPumpState()`: P1.
@@ -466,7 +466,18 @@ The owner asked for it (selectable and usable). Plan and steps P1-P3 in
   time it was decided (P1). P3 still writes the registering therapy events at activation.
 - Queue custom commands, `disableSuspendAlerts` after a confirmed resume or basal program, the
   PUMP_SUSPEND temp basal for a kaput pod, fault notification and announcement
-  (`alarmSynced`), `verifyPumpState`, `EventProfileChangeRequested` after a late program: P2.
+  (`alarmSynced`), `verifyPumpState`, `EventProfileChangeRequested` after a late program: P2, done
+  (`DashPluginRules`). Also P2: `PumpSync` records are written when the command is SENT, as Android
+  (`IosDashPump.onCommandSent`), and the confirmation corrects or takes them back; P1's "written on
+  the confirmed outcome" and its rewrite of a late bolus at the decision time are removed. The one
+  difference left: a SUCCESS whose send record this run did not write (the write threw, or a restart)
+  writes it then, same pump id. The alert settings and their watch, the status checker, the notices.
+- `connectNewPump`, end of the "4241" temp basal, CANNULA_CHANGE and INSULIN_CHANGE after part 2: P2
+  (`DashPluginRules.activatePodPart2`); the screens that call it: P3.
+- Not ported (open): the basal drift correction of this fork (`CommandDeliverBasalCorrection`) and the
+  time zone notice: step P2b (new stored fields, new codec version, pin tests in
+  `IosDashPluginPumpTest`). Also open: the PDM reference in the fault text, and `verifyPumpState` at
+  each status read inside the bolus wait (the fault part already runs at once).
 - Activation and deactivation screens, `connectNewPump` and the therapy events after part 2: P3
   (phase 5).
 

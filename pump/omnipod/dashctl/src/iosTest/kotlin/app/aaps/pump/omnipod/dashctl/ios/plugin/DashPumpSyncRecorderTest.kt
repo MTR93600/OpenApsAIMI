@@ -19,14 +19,14 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 
 /**
- * The rules of [DashPumpSyncRecorder] one by one, on outcomes built by hand: which outcome writes
- * what to `PumpSync`, and which writes nothing. The same rules on the real driver are in
- * `IosDashPluginPumpTest`.
+ * The rules of [DashPumpSyncRecorder] one by one, on commands built by hand: what is written when a
+ * command is sent, and what each outcome adds, corrects or takes back, as Android
+ * `OmnipodDashPumpPlugin`. The same rules on the real driver are in `IosDashPluginPumpTest`.
  */
 class DashPumpSyncRecorderTest {
 
     private val pumpSync = RecordingDashPumpSync()
-    private val recorder = DashPumpSyncRecorder(pumpSync, SilentPodLogger, serialNumber = { SERIAL }, now = { DECIDED_AT })
+    private val recorder = DashPumpSyncRecorder(pumpSync, SilentPodLogger, serialNumber = { SERIAL })
 
     private fun command(kind: DashCommandKind, at: Long? = AT, units: Double? = null, rate: Double? = null, minutes: Int? = null) =
         DashActiveCommand(
@@ -45,12 +45,81 @@ class DashPumpSyncRecorderTest {
     private fun bolusLine(at: Long, units: Double, type: BS.Type?) =
         "bolus(timestamp=$at, amount=$units, type=$type, pumpId=$at, pumpType=OMNIPOD_DASH, serial=$SERIAL)"
 
+    private fun tempBasalLine(at: Long, rate: Double, durationMs: Long, type: PumpSync.TemporaryBasalType?) =
+        "tempBasal(timestamp=$at, rate=$rate, duration=$durationMs, isAbsolute=true, type=$type, pumpId=$at, pumpType=OMNIPOD_DASH, serial=$SERIAL)"
+
     private fun endedBolus(createdAt: Long?, asked: Double, left: Double) =
         DashLastBolus(startTimeMs = DECIDED_AT, requestedUnits = asked, bolusUnitsRemaining = left, deliveryComplete = true, createdAtMs = createdAt)
 
+    /** A command of [kind] sent inside a call of the given types, as `IosDashPluginPump` wraps the driver. */
+    private suspend fun send(command: DashActiveCommand, bolusType: BS.Type? = null, tbrType: PumpSync.TemporaryBasalType? = null) {
+        bolusType?.let { recorder.beginBolus(it) }
+        tbrType?.let { recorder.beginTempBasal(it) }
+        recorder.recordSent(command)
+    }
+
+    // ---------------------------------------------------------------- written when sent, as Android
+
     @Test
-    fun `refused never sent and still open commands write nothing`() = runTest {
-        for (confirmation in listOf(DashCommandConfirmation.DENIED, DashCommandConfirmation.SENDING_FAILURE, DashCommandConfirmation.NOT_CONFIRMED)) {
+    fun `a bolus is written when it is sent and its SUCCESS adds nothing`() = runTest {
+        val bolus = command(DashCommandKind.BOLUS, units = 0.5)
+        send(bolus, bolusType = BS.Type.SMB)
+        recorder.endCommand(null)
+        recorder.record(outcome(bolus))
+
+        assertEquals(listOf(bolusLine(AT, 0.5, BS.Type.SMB)), pumpSync.calls)
+    }
+
+    @Test
+    fun `a temp basal is written when it is sent and a late SUCCESS adds nothing`() = runTest {
+        val tbr = command(DashCommandKind.TEMP_BASAL, rate = 1.2, minutes = 30)
+        send(tbr, tbrType = PumpSync.TemporaryBasalType.SUPERBOLUS)
+        recorder.endCommand(tbr)
+        recorder.record(outcome(tbr, late = true))
+
+        assertEquals(listOf(tempBasalLine(AT, 1.2, 1_800_000L, PumpSync.TemporaryBasalType.SUPERBOLUS)), pumpSync.calls)
+    }
+
+    @Test
+    fun `a suspend is written when it is sent as the PUMP_SUSPEND temp basal of Android`() = runTest {
+        send(command(DashCommandKind.SUSPEND_DELIVERY))
+
+        assertEquals(listOf(tempBasalLine(AT, 0.0, 288_000_000L, PumpSync.TemporaryBasalType.PUMP_SUSPEND)), pumpSync.calls)
+    }
+
+    @Test
+    fun `stops programs and alerts write nothing when sent`() = runTest {
+        for (kind in listOf(
+            DashCommandKind.STOP_TEMP_BASAL, DashCommandKind.STOP_BOLUS, DashCommandKind.BASAL_PROGRAM, DashCommandKind.RESUME_DELIVERY,
+            DashCommandKind.PROGRAM_ALERTS, DashCommandKind.SILENCE_ALERTS, DashCommandKind.DEACTIVATE, DashCommandKind.STOP_ALL
+        )) send(command(kind))
+
+        assertTrue(pumpSync.calls.isEmpty(), pumpSync.calls.toString())
+    }
+
+    // ---------------------------------------------------------------- the confirmation, as Android
+
+    @Test
+    fun `a bolus the pod refused is set to 0 U on the same record`() = runTest {
+        val bolus = command(DashCommandKind.BOLUS, units = 2.0)
+        send(bolus, bolusType = BS.Type.NORMAL)
+        recorder.record(outcome(bolus, DashCommandConfirmation.DENIED))
+
+        assertEquals(listOf(bolusLine(AT, 2.0, BS.Type.NORMAL), bolusLine(AT, 0.0, null)), pumpSync.calls)
+        assertEquals(mapOf(AT to (0.0 to BS.Type.NORMAL)), pumpSync.bolusRecords, "one record, 0 U")
+    }
+
+    @Test
+    fun `a temp basal or suspend the pod refused is invalidated`() = runTest {
+        recorder.record(outcome(command(DashCommandKind.TEMP_BASAL, rate = 1.0, minutes = 30), DashCommandConfirmation.DENIED))
+        recorder.record(outcome(command(DashCommandKind.SUSPEND_DELIVERY, at = AT + 1), DashCommandConfirmation.DENIED))
+
+        assertEquals(listOf("invalidateTemporaryBasalWithPumpId($AT)", "invalidateTemporaryBasalWithPumpId(${AT + 1})"), pumpSync.calls)
+    }
+
+    @Test
+    fun `a send failure and a command still open write nothing more`() = runTest {
+        for (confirmation in listOf(DashCommandConfirmation.SENDING_FAILURE, DashCommandConfirmation.NOT_CONFIRMED)) {
             recorder.record(outcome(command(DashCommandKind.BOLUS, units = 1.0), confirmation))
             recorder.record(outcome(command(DashCommandKind.TEMP_BASAL, rate = 1.0, minutes = 30), confirmation))
             recorder.record(outcome(command(DashCommandKind.SUSPEND_DELIVERY), confirmation))
@@ -62,24 +131,50 @@ class DashPumpSyncRecorderTest {
     }
 
     @Test
-    fun `a bolus decided late after a restart is written as NORMAL with its amount and time`() = runTest {
+    fun `a confirmed stop resume or program ends the temp basal at the command time`() = runTest {
+        recorder.record(outcome(command(DashCommandKind.STOP_TEMP_BASAL)))
+        recorder.record(outcome(command(DashCommandKind.RESUME_DELIVERY, at = AT + 1)))
+        recorder.record(outcome(command(DashCommandKind.BASAL_PROGRAM, at = AT + 2)))
+
+        assertEquals(
+            listOf(AT, AT + 1, AT + 2).map { "stopTempBasal(timestamp=$it, endPumpId=$it, pumpType=OMNIPOD_DASH, serial=$SERIAL)" },
+            pumpSync.calls
+        )
+    }
+
+    // ---------------------------------------------------------------- the deliberate difference
+
+    @Test
+    fun `a SUCCESS whose send was not written in this run writes it once`() = runTest {
+        // The write of the bolus threw (no record at send), or the app stopped after the write.
         recorder.record(outcome(command(DashCommandKind.BOLUS, units = 2.5), late = true))
+        recorder.record(outcome(command(DashCommandKind.TEMP_BASAL, at = AT + 1, rate = 0.5, minutes = 60), late = true))
+        recorder.record(outcome(command(DashCommandKind.SUSPEND_DELIVERY, at = AT + 2), late = true))
 
-        assertEquals(listOf(bolusLine(AT, 2.5, BS.Type.NORMAL)), pumpSync.calls)
+        assertEquals(
+            listOf(
+                bolusLine(AT, 2.5, null),
+                tempBasalLine(AT + 1, 0.5, 3_600_000L, null),
+                tempBasalLine(AT + 2, 0.0, 288_000_000L, PumpSync.TemporaryBasalType.PUMP_SUSPEND)
+            ),
+            pumpSync.calls
+        )
     }
 
     @Test
-    fun `the type given for the call is not taken by an older command decided late inside it`() = runTest {
-        recorder.beginBolus(BS.Type.SMB)
-        recorder.record(outcome(command(DashCommandKind.BOLUS, at = AT - 1, units = 1.0), late = true))
-        recorder.record(outcome(command(DashCommandKind.BOLUS, units = 0.3)))
-        recorder.endCommand(null)
+    fun `a late SUCCESS after a crash is recorded once`() = runTest {
+        // Before the crash the bolus was written when it was sent.
+        val bolus = command(DashCommandKind.BOLUS, units = 1.5)
+        send(bolus, bolusType = BS.Type.SMB)
+        // After the crash: a new recorder, the open bolus decided late by the first status.
+        val afterRestart = DashPumpSyncRecorder(pumpSync, SilentPodLogger, serialNumber = { SERIAL })
+        afterRestart.record(outcome(bolus, late = true))
 
-        assertEquals(listOf(bolusLine(AT - 1, 1.0, BS.Type.NORMAL), bolusLine(AT, 0.3, BS.Type.SMB)), pumpSync.calls)
+        assertEquals(mapOf(AT to (1.5 to BS.Type.SMB)), pumpSync.bolusRecords, "one record, its type kept")
     }
 
     @Test
-    fun `the type of a command left open is kept for its late outcome`() = runTest {
+    fun `the type of a command left open is used when its record must be written late`() = runTest {
         recorder.beginBolus(BS.Type.SMB)
         recorder.endCommand(command(DashCommandKind.BOLUS, units = 0.4))
         recorder.beginTempBasal(PumpSync.TemporaryBasalType.EMULATED_PUMP_SUSPEND)
@@ -89,114 +184,74 @@ class DashPumpSyncRecorderTest {
         recorder.record(outcome(command(DashCommandKind.TEMP_BASAL, at = AT + 1, rate = 0.0, minutes = 30), late = true))
 
         assertEquals(
-            listOf(
-                bolusLine(AT, 0.4, BS.Type.SMB),
-                "tempBasal(timestamp=${AT + 1}, rate=0.0, duration=1800000, isAbsolute=true, type=EMULATED_PUMP_SUSPEND, pumpId=${AT + 1}, pumpType=OMNIPOD_DASH, serial=$SERIAL)"
-            ),
+            listOf(bolusLine(AT, 0.4, BS.Type.SMB), tempBasalLine(AT + 1, 0.0, 1_800_000L, PumpSync.TemporaryBasalType.EMULATED_PUMP_SUSPEND)),
             pumpSync.calls
         )
     }
 
     @Test
     fun `a refused call does not change the type kept for the command still open`() = runTest {
-        // Bolus A (NORMAL) is left open. Then an SMB call is refused, and A is still the open command.
         recorder.beginBolus(BS.Type.NORMAL)
         recorder.endCommand(command(DashCommandKind.BOLUS, units = 3.0))
         recorder.beginBolus(BS.Type.SMB)
         recorder.endCommand(command(DashCommandKind.BOLUS, units = 3.0))
-        recorder.beginTempBasal(PumpSync.TemporaryBasalType.SUPERBOLUS)
-        recorder.endCommand(command(DashCommandKind.TEMP_BASAL, at = AT + 1, rate = 0.0, minutes = 30))
-        recorder.beginTempBasal(PumpSync.TemporaryBasalType.NORMAL)
-        recorder.endCommand(command(DashCommandKind.TEMP_BASAL, at = AT + 1, rate = 0.0, minutes = 30))
 
         recorder.record(outcome(command(DashCommandKind.BOLUS, units = 3.0), late = true))
-        recorder.record(outcome(command(DashCommandKind.TEMP_BASAL, at = AT + 1, rate = 0.0, minutes = 30), late = true))
 
-        assertEquals(
-            listOf(
-                bolusLine(AT, 3.0, BS.Type.NORMAL),
-                "tempBasal(timestamp=${AT + 1}, rate=0.0, duration=1800000, isAbsolute=true, type=SUPERBOLUS, pumpId=${AT + 1}, pumpType=OMNIPOD_DASH, serial=$SERIAL)"
-            ),
-            pumpSync.calls
-        )
+        assertEquals(listOf(bolusLine(AT, 3.0, BS.Type.NORMAL)), pumpSync.calls)
     }
 
     @Test
-    fun `a late bolus older than the pump registration is written at the decision time and corrected there`() = runTest {
-        // PumpSync was told of a new pump (connectNewPump) after the bolus was sent: a bolus at its
-        // send time is refused. It is then written at the time it was decided, under the same pump
-        // id, so it is counted (later than it went in: more insulin on board, never less).
-        pumpSync.bolusAllowedFrom = DECIDED_AT - 60_000L
-
-        recorder.record(outcome(command(DashCommandKind.BOLUS, units = 2.0), late = true))
-        recorder.record(DashBolusEndedByFault(endedBolus(AT, asked = 2.0, left = 0.5), AlarmType.ALARM_OCCLUDED, DECIDED_AT))
-
-        assertEquals(
-            listOf(
-                "bolusRefused(timestamp=$AT, pumpId=$AT)",
-                "bolus(timestamp=$DECIDED_AT, amount=2.0, type=NORMAL, pumpId=$AT, pumpType=OMNIPOD_DASH, serial=$SERIAL)",
-                "bolus(timestamp=$DECIDED_AT, amount=1.5, type=null, pumpId=$AT, pumpType=OMNIPOD_DASH, serial=$SERIAL)"
-            ),
-            pumpSync.calls
-        )
-    }
-
-    @Test
-    fun `a bolus refused for another reason is not written again`() = runTest {
-        // Inside the registration window a false is not the registration rule (no profile, or the
-        // record exists): writing it again at another time would only move it.
-        val at = DECIDED_AT - 30_000L
-        pumpSync.bolusAllowedFrom = DECIDED_AT
-
-        recorder.record(outcome(command(DashCommandKind.BOLUS, at = at, units = 1.0)))
-
-        assertEquals(listOf("bolusRefused(timestamp=$at, pumpId=$at)"), pumpSync.calls)
-    }
-
-    @Test
-    fun `commands left open when the pod is discarded are counted as Android counts them`() = runTest {
+    fun `commands left open when the pod is discarded keep what was written when sent`() = runTest {
         val notConfirmed = DashCommandConfirmation.NOT_CONFIRMED
-        recorder.record(outcome(command(DashCommandKind.BOLUS, units = 3.0), notConfirmed, late = true, discarded = true))
+        val bolus = command(DashCommandKind.BOLUS, units = 3.0)
+        send(bolus, bolusType = BS.Type.NORMAL)
+        recorder.record(outcome(bolus, notConfirmed, late = true, discarded = true))
+        // Never written at send in this run: counted as Android counts it, at the asked amount and as started.
         recorder.record(outcome(command(DashCommandKind.TEMP_BASAL, at = AT + 1, rate = 2.0, minutes = 60), notConfirmed, late = true, discarded = true))
         recorder.record(outcome(command(DashCommandKind.STOP_TEMP_BASAL, at = AT + 2), notConfirmed, late = true, discarded = true))
 
         assertEquals(
-            listOf(
-                bolusLine(AT, 3.0, BS.Type.NORMAL),
-                "tempBasal(timestamp=${AT + 1}, rate=2.0, duration=3600000, isAbsolute=true, type=NORMAL, pumpId=${AT + 1}, pumpType=OMNIPOD_DASH, serial=$SERIAL)"
-            ),
+            listOf(bolusLine(AT, 3.0, BS.Type.NORMAL), tempBasalLine(AT + 1, 2.0, 3_600_000L, null)),
             pumpSync.calls,
             "a stop is never counted on a guess: the temp basal would end early and less insulin would be counted"
         )
     }
 
-    @Test
-    fun `a resume ends the suspend temp basal`() = runTest {
-        recorder.record(outcome(command(DashCommandKind.RESUME_DELIVERY)))
-
-        assertEquals(listOf("stopTempBasal(timestamp=$AT, endPumpId=$AT, pumpType=OMNIPOD_DASH, serial=$SERIAL)"), pumpSync.calls)
-    }
+    // ---------------------------------------------------------------- corrections
 
     @Test
     fun `a bolus ended by a fault corrects the record of its command time`() = runTest {
+        val bolus = command(DashCommandKind.BOLUS, units = 2.0)
+        send(bolus, bolusType = BS.Type.NORMAL)
+        recorder.record(outcome(bolus))
         recorder.record(DashBolusEndedByFault(endedBolus(AT, asked = 2.0, left = 1.25), AlarmType.ALARM_OCCLUDED, DECIDED_AT))
 
-        assertEquals(listOf(bolusLine(AT, 0.75, null)), pumpSync.calls)
+        assertEquals(listOf(bolusLine(AT, 2.0, BS.Type.NORMAL), bolusLine(AT, 0.75, null)), pumpSync.calls)
+        assertEquals(mapOf(AT to (0.75 to BS.Type.NORMAL)), pumpSync.bolusRecords, "one record, never a second bolus")
     }
 
     @Test
-    fun `a correction without the command time goes to the last bolus written`() = runTest {
-        recorder.record(outcome(command(DashCommandKind.BOLUS, units = 1.0)))
-        recorder.record(outcome(command(DashCommandKind.SUSPEND_DELIVERY, at = AT + 5), endedBolus = endedBolus(null, asked = 1.0, left = 0.4)))
+    fun `a stopped bolus corrects the same record`() = runTest {
+        val bolus = command(DashCommandKind.BOLUS, units = 2.0)
+        send(bolus, bolusType = BS.Type.NORMAL)
+        recorder.record(outcome(bolus))
+        recorder.record(outcome(command(DashCommandKind.STOP_BOLUS, at = AT + 10), endedBolus = endedBolus(AT, asked = 2.0, left = 1.5)))
 
-        assertEquals(
-            listOf(
-                bolusLine(AT, 1.0, BS.Type.NORMAL),
-                "tempBasal(timestamp=${AT + 5}, rate=0.0, duration=288000000, isAbsolute=true, type=PUMP_SUSPEND, pumpId=${AT + 5}, pumpType=OMNIPOD_DASH, serial=$SERIAL)",
-                bolusLine(AT, 0.6, null)
-            ),
-            pumpSync.calls
-        )
+        assertEquals(mapOf(AT to (0.5 to BS.Type.NORMAL)), pumpSync.bolusRecords)
+    }
+
+    @Test
+    fun `a correction without the command time never changes another bolus record`() = runTest {
+        // A bolus of this run, sent and then refused: its record is 0 U.
+        val refused = command(DashCommandKind.BOLUS, at = AT + 100, units = 1.0)
+        send(refused, bolusType = BS.Type.NORMAL)
+        recorder.record(outcome(refused, DashCommandConfirmation.DENIED))
+        // The pod then faults; the bolus it ended was stored by codec version 3 (no command time).
+        recorder.record(DashBolusEndedByFault(endedBolus(null, asked = 2.0, left = 1.5), AlarmType.ALARM_OCCLUDED, DECIDED_AT))
+
+        assertEquals(mapOf(AT + 100 to (0.0 to BS.Type.NORMAL)), pumpSync.bolusRecords, "the refused bolus stays at 0 U")
+        assertEquals(2, pumpSync.calls.size, "no correction is written: the old bolus stays counted in full")
     }
 
     @Test
@@ -208,6 +263,7 @@ class DashPumpSyncRecorderTest {
 
     @Test
     fun `a command stored without its time writes nothing`() = runTest {
+        recorder.recordSent(command(DashCommandKind.BOLUS, at = null, units = 1.0))
         recorder.record(outcome(command(DashCommandKind.BOLUS, at = null, units = 1.0)))
         recorder.record(outcome(command(DashCommandKind.TEMP_BASAL, at = null, rate = 1.0, minutes = 30)))
 
@@ -215,7 +271,7 @@ class DashPumpSyncRecorderTest {
     }
 
     @Test
-    fun `a PumpSync error does not break the command that decided it`() {
+    fun `a PumpSync error does not break the command`() {
         val failing = object : PumpSync by pumpSync {
             override suspend fun syncBolusWithPumpId(
                 timestamp: Long, amount: PumpInsulin, type: BS.Type?, pumpId: Long,
@@ -224,6 +280,7 @@ class DashPumpSyncRecorderTest {
         }
         val r = DashPumpSyncRecorder(failing, SilentPodLogger, serialNumber = { SERIAL })
 
+        r.onCommandSent(command(DashCommandKind.BOLUS, units = 1.0))
         r.onOutcome(outcome(command(DashCommandKind.BOLUS, units = 1.0)))
 
         assertTrue(pumpSync.calls.isEmpty())

@@ -172,4 +172,18 @@
     <string name="plugin_start_failed" comment="%1$s=plugin name, for example &quot;Dana-i/RS&quot;. Shown when a plugin threw while starting. It stays switched on, but it may not work.">Plugin %1$s failed to start and may not work. Please restart AAPS.</string>
     <string name="plugin_work_failed" comment="%1$s=plugin name, for example &quot;Dana-i/RS&quot;. Shown when background work the plugin started ended with an error. The plugin is still switched on, but part of it has stopped.">Plugin %1$s hit an error and part of it has stopped. Please restart AAPS.</string>
     <string name="omnipod_dash_ios_caution">Omnipod Dash on iPhone. It is new and not finished: a pod cannot be activated from the iPhone yet, so the loop does not run with this pump. While no pod runs, AAPS counts no basal insulin. This is software behaviour, not medical advice \u2014 talk to your care team before you change how your pump is driven.</string>
+    <string name="omnipod_dash_ios_no_active_pod">No active pod</string>
+    <string name="omnipod_dash_ios_delivery_suspended">Insulin delivery suspended</string>
+    <string name="omnipod_dash_ios_pod_fault" comment="%1$s=fault code of the pod, three digits, %2$s=fault name. Example: Pod fault: 020 ALARM_OCCLUDED">Pod fault: %1$s %2$s</string>
+    <string name="omnipod_dash_ios_suspend_unconfirmed">The pod did not confirm the suspend of insulin delivery. Refresh the pod status on the pump screen, and resume delivery if needed.</string>
+    <string name="omnipod_dash_ios_smb_uncertain" comment="%1$s=insulin amount with unit. Example: 0.35 U">The pod did not confirm the SMB (%1$s). Refresh the pod status to confirm or deny it.</string>
+    <string name="omnipod_dash_ios_bolus_uncertain">The pod did not confirm the bolus. Refresh the pod status to confirm or deny it.</string>
+    <string name="omnipod_dash_ios_tbr_unconfirmed">Setting the temp basal might have failed. If a temp basal was running before, it has been cancelled. Refresh the pod status on the pump screen.</string>
+    <string name="omnipod_dash_ios_cancel_tbr_before_unconfirmed">Cancelling the temp basal might have failed. If a temp basal was running before, it might have been cancelled. Refresh the pod status on the pump screen.</string>
+    <string name="omnipod_dash_ios_cancel_tbr_unconfirmed">The pod did not confirm the cancel of the temp basal</string>
+    <string name="omnipod_dash_ios_resume_unconfirmed">The pod did not confirm the resume of insulin delivery. Refresh the pod status.</string>
+    <string name="omnipod_dash_ios_tbr_out_of_sync">Temp basal status is not as expected. If a temp basal was running before, it has been cancelled. Check the insulin delivered and the pod history.</string>
+    <string name="omnipod_dash_ios_unconfirmed_command" comment="26 characters max for translation">Unconfirmed command</string>
+    <string name="omnipod_dash_ios_pod_activated" comment="Reason of a status read, 26 characters max for translation">Pod activated</string>
+    <string name="omnipod_dash_ios_error" comment="Title of an alarm window from the Omnipod Dash driver">Error</string>
 </resources>

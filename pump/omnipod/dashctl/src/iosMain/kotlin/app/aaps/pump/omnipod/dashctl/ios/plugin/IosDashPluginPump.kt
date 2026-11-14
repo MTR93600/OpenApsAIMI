@@ -1,20 +1,27 @@
 package app.aaps.pump.omnipod.dashctl.ios.plugin
 
+import app.aaps.core.data.model.BS
 import app.aaps.core.data.pump.defs.PumpDescription
 import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.data.pump.defs.TimeChangeType
+import app.aaps.core.interfaces.InterfacesStrings
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.notifications.AlarmSound
+import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.interfaces.profile.Profile
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.Pump
 import app.aaps.core.interfaces.pump.PumpEnactResult
+import app.aaps.core.interfaces.pump.PumpProfile
 import app.aaps.core.interfaces.pump.PumpRate
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.interfaces.pump.defs.fillFor
+import app.aaps.core.interfaces.queue.CustomCommand
 import app.aaps.pump.omnipod.dashctl.ios.pump.DashPumpEnactResult
 import app.aaps.pump.omnipod.dashctl.ios.pump.IosDashPump
 import app.aaps.pump.omnipod.dashctl.session.DashActiveCommand
+import app.aaps.pump.omnipod.dashctl.session.DashCommandKind
 import app.aaps.pump.omnipod.dashctl.session.DashPodStateManager
 import kotlin.time.Clock
 
@@ -35,7 +42,11 @@ import kotlin.time.Clock
  * - [loadTDDs], [setExtendedBolus], [cancelExtendedBolus]: refused, with Android's text;
  * - [timezoneOrDSTChanged]: logged only (the pod keeps its time, a known gap, as Android);
  * - [deliverTreatment] and [setTempBasalAbsolute] also tell the `PumpSync` recorder the type of the
- *   bolus or temp basal, which the driver does not store.
+ *   bolus or temp basal, which the driver does not store;
+ * - after every command and status read, what Android runs in its command chain
+ *   ([DashPluginRules.afterCommand]: `verifyPumpState`, `checkPodKaput`, overview refresh), and the
+ *   notices of a command the pod did not confirm (`notifyOnUnconfirmed`, the bolus alarm);
+ * - [executeCustomCommand]: the queue commands of Android ([DashPluginRules.executeCustomCommand]).
  *
  * Deliberate difference: a bolus with carbs or with no insulin is refused with a failure. Android
  * throws (`require`) out of `deliverTreatment`; nothing is sent in both.
@@ -44,6 +55,7 @@ class IosDashPluginPump(
     private val driver: IosDashPump,
     private val stateManager: DashPodStateManager,
     private val recorder: DashPumpSyncRecorder,
+    private val rules: DashPluginRules,
     private val aapsLogger: AAPSLogger,
     private val now: () -> Long = { Clock.System.now().toEpochMilliseconds() },
 ) : Pump by driver {
@@ -75,11 +87,14 @@ class IosDashPluginPump(
         }
         recorder.beginBolus(detailedBolusInfo.bolusType)
         val before = stateManager.activeCommand
-        try {
-            return driver.deliverTreatment(detailedBolusInfo)
+        val result = try {
+            driver.deliverTreatment(detailedBolusInfo)
         } finally {
             recorder.endCommand(commandMadeSince(before))
         }
+        rules.afterCommand()
+        rules.afterBolus(isSmb = detailedBolusInfo.bolusType == BS.Type.SMB, units = detailedBolusInfo.insulin)
+        return result
     }
 
     override suspend fun setTempBasalAbsolute(
@@ -90,22 +105,67 @@ class IosDashPluginPump(
     ): PumpEnactResult {
         recorder.beginTempBasal(tbrType)
         val before = stateManager.activeCommand
-        try {
-            return driver.setTempBasalAbsolute(absoluteRate, durationInMinutes, enforceNew, tbrType)
+        val result = try {
+            driver.setTempBasalAbsolute(absoluteRate, durationInMinutes, enforceNew, tbrType)
         } finally {
             recorder.endCommand(commandMadeSince(before))
         }
+        // Android: a notice after the cancel before it, or after the temp basal itself, when it stays open.
+        when (commandMadeSince(before)?.kind) {
+            DashCommandKind.STOP_TEMP_BASAL -> rules.notifyOnUnconfirmed(
+                NotificationId.OMNIPOD_TBR_ALERTS, InterfacesStrings.omnipod_dash_ios_cancel_tbr_before_unconfirmed, AlarmSound.BOLUS_ERROR
+            )
+
+            DashCommandKind.TEMP_BASAL      -> rules.notifyOnUnconfirmed(
+                NotificationId.OMNIPOD_TBR_ALERTS, InterfacesStrings.omnipod_dash_ios_tbr_unconfirmed, AlarmSound.BOLUS_ERROR
+            )
+
+            else                            -> Unit
+        }
+        rules.afterCommand()
+        return result
+    }
+
+    /** Android `cancelTempBasal`: a notice when the cancel stays open. */
+    override suspend fun cancelTempBasal(enforceNew: Boolean): PumpEnactResult {
+        val before = stateManager.activeCommand
+        val result = driver.cancelTempBasal(enforceNew)
+        if (commandMadeSince(before)?.kind == DashCommandKind.STOP_TEMP_BASAL) {
+            rules.notifyOnUnconfirmed(NotificationId.OMNIPOD_TBR_ALERTS, InterfacesStrings.omnipod_dash_ios_cancel_tbr_unconfirmed, AlarmSound.BOLUS_ERROR)
+        }
+        rules.afterCommand()
+        return result
+    }
+
+    /** Android `setNewBasalProfile`: a notice when the suspend before the program stays open. */
+    override suspend fun setNewBasalProfile(profile: PumpProfile): PumpEnactResult {
+        val before = stateManager.activeCommand
+        val result = driver.setNewBasalProfile(profile)
+        rules.afterBasalProgram(before)
+        rules.afterCommand()
+        return result
     }
 
     /**
-     * The open command, only when it is not [before]: a call refused because an earlier command is
-     * still not confirmed leaves that earlier command open, and it must keep its own type.
+     * Android `getPumpStatus`: `verifyPumpState` and `checkPodKaput` follow the status read. As Android,
+     * nothing at all runs before the activation is completed, unless the user asked for the read: the
+     * driver reads nothing then, and the checks would compare with an old status (a half activated pod
+     * whose basal runs would fight the zero temp basal of "no pod" at every read).
      */
-    private fun commandMadeSince(before: DashActiveCommand?): DashActiveCommand? {
-        val after = stateManager.activeCommand ?: return null
-        val same = before != null && after.sequence == before.sequence && after.historyId == before.historyId && after.createdAtMs == before.createdAtMs
-        return if (same) null else after
+    override suspend fun getPumpStatus(reason: String) {
+        if (reason != IosDashPump.REQUESTED_BY_USER && !stateManager.isActivationCompleted) {
+            aapsLogger.debug(LTag.PUMP, "getPumpStatus ($reason): pod activation not completed, nothing done")
+            return
+        }
+        driver.getPumpStatus(reason)
+        rules.afterCommand()
     }
+
+    /** Android `executeCustomCommand`, see [DashPluginRules.executeCustomCommand]. */
+    override fun executeCustomCommand(customCommand: CustomCommand): PumpEnactResult = rules.executeCustomCommand(customCommand)
+
+    /** See [commandMadeSince]. */
+    private fun commandMadeSince(before: DashActiveCommand?): DashActiveCommand? = commandMadeSince(stateManager, before)
 
     override suspend fun loadTDDs(): PumpEnactResult =
         DashPumpEnactResult(success = false, enacted = false, comment = "Omnipod Dash driver does not support TDD")

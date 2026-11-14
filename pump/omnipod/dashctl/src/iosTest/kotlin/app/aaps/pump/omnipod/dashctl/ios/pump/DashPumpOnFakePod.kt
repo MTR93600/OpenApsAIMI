@@ -21,6 +21,7 @@ import app.aaps.pump.omnipod.dashctl.pod.command.base.CommandType
 import app.aaps.pump.omnipod.dashctl.pod.definition.ActivationProgress
 import app.aaps.pump.omnipod.dashctl.pod.definition.PodStatus
 import app.aaps.pump.omnipod.dashctl.pod.response.SetUniqueIdResponse
+import app.aaps.pump.omnipod.dashctl.session.DashActiveCommand
 import app.aaps.pump.omnipod.dashctl.session.DashPodState
 import app.aaps.pump.omnipod.dashctl.session.DashPodStateManager
 import app.aaps.pump.omnipod.dashctl.session.DashPodStateStore
@@ -91,6 +92,9 @@ internal class DashPumpOnFakePod(
      */
     var onOutcome: (DashPumpOutcome) -> Unit = {}
 
+    /** Runs inside `onCommandSent`: the plugin tests give the `PumpSync` recorder here, as `IosDashDriverHost` does. */
+    var onSent: (DashActiveCommand) -> Unit = {}
+
     /** A pump that expects AAPS to run a temp basal or not (Android `PumpSync`), read by `cancelTempBasal`. */
     var expectedTempBasalRunning = true
 
@@ -111,6 +115,7 @@ internal class DashPumpOnFakePod(
             }
             onOutcome(it)
         },
+        onCommandSent = { onSent(it) },
         stateManager = stateManager,
         newKeyExchange = {
             DashKeyExchange(IosX25519Dh(), IosAesCmac(), pdmNonce = parityHex(PDM_NONCE), pdmPrivate = parityHex(PDM_PRIVATE))

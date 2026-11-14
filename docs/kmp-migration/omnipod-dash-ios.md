@@ -302,9 +302,9 @@ phone, never AAPSClient. Android keeps `:pump:omnipod:dash` unchanged.
         `expectedTempBasalRunning` from `PumpSync.expectedPumpState()`.
       - Registered in `IosProbeGraph` (graph test `IosOmnipodDashPluginGraphTest`), and through the
         contribution in `IosAppGraph`.
-      Deliberate differences from Android, each with a test: records are written on the confirmed
-      outcome, not when sent (nothing to take back after a refusal; while a command is open every
-      delivery command is refused); the pump id is the command time (no pod history on iOS); after
+      Deliberate differences from Android, each with a test (the first one was removed in P2, on the
+      owner's order: records are now written when sent, as Android): ~~records are written on the
+      confirmed outcome, not when sent~~; the pump id is the command time (no pod history on iOS); after
       an app restart an open bolus or temp basal decided late is written as NORMAL (amount and time
       right); a correction with no record known writes nothing (counted in full, the over-count side);
       a bolus with carbs or no insulin is a failure (Android throws); a stop is never written for a
@@ -338,16 +338,73 @@ phone, never AAPSClient. Android keeps `:pump:omnipod:dash` unchanged.
         need nothing: `PumpSync` starts them at the registration itself. P3 must still write the
         registering therapy events at activation, as Android.
       Now 675 tests on the iOS simulator (1 skipped), 503 on the JVM, ios/shell 111, 0 failures.
-- [ ] **P2. Queue commands, alerts and notices.** The custom commands of Android
-      (`CommandSilenceAlerts`, `CommandResumeDelivery`, `CommandDeactivatePod`,
-      `CommandUpdateAlertConfiguration`, `CommandPlayTestBeep`, `CommandDisableSuspendAlerts`) in
-      dashctl, mapped to the driver calls; `disableSuspendAlerts` queued after a confirmed basal
-      program or resume; the alert settings (the six Android keys) and their watch
-      (`onStart`, `CommandUpdateAlertConfiguration` on a change); the status checker of Android
-      (read a status when a command is open and the queue is empty, the PUMP_SUSPEND temp basal when
-      the pod is kaput (the no-pod one is done in P1), the fault notification and announcement with `alarmSynced`,
-      the "no active pod" and "suspended" notices); `verifyPumpState`; the notifications of a
-      command not confirmed; `EventProfileChangeRequested` after a late confirmed basal program.
+- [x] **P2. What the plugin records, queue commands, alerts and notices.** Done 2026-11-14 (not
+      committed, not on a device, xcodebuild not run by the builder).
+      - `PumpSync` as Android, at the same moments with the same calls (owner order: P1's "write on
+        the confirmed outcome" is removed). `IosDashPump.onCommandSent` (new, Android
+        `isCommandSent()`: after `CommandSendSuccess` or `CommandSendErrorConfirming`, before the answer
+        is read) gives the open command to `DashPumpSyncRecorder.onCommandSent`, which writes the bolus
+        at the asked amount with its type (`pumpSyncBolusStart`), the temp basal with its type
+        (`pumpSyncTempBasal`) and the PUMP_SUSPEND temp basal of a suspend. The confirmation
+        (`onCommandDecided`, at once or late) then: a refused bolus is set to 0 U on the same record
+        (type kept), a refused temp basal or suspend is invalidated, a confirmed stop of the temp
+        basal, basal program or resume ends the temp basal at the command time, a stopped bolus or one
+        a fault ended is corrected on the same record. A late SUCCESS adds nothing. Pump id = command
+        time, pump type and serial as Android. The P1 rewrite of a late bolus at its decision time
+        (registration window) is gone: with the record written at send it is not needed.
+      - One deliberate difference, with tests: a SUCCESS (or a pod discarded while open) of a bolus,
+        temp basal or suspend whose send record was not written in this run (the write threw, or the
+        app stopped between the write and the record) writes it then, same call, time and pump id.
+        Android writes nothing when the write throws and clears the command as a send failure, so a
+        bolus the pod may have taken is never counted. After a restart where the record does exist,
+        `PumpSync` finds it by its pump id and updates it with the same values: still one record.
+      - `DashPluginRules` (iosMain, `ios/plugin`), the rest of Android `OmnipodDashPumpPlugin`:
+        the queue commands in `dashctl/queue/command` (same list and status texts as Android;
+        `CommandDisableSuspendAlerts` has an all caps literal) mapped as Android
+        (`IosDashPluginPump.executeCustomCommand`; `CommandSuspendDelivery` and the basal correction
+        fail as unsupported); `CommandDisableSuspendAlerts` queued after a confirmed resume or basal
+        program, with the notices Android dismisses; `EventProfileChangeRequested` after a basal
+        program confirmed while the queue does not run BASAL_PROFILE (not inside a time change, Android
+        SET_TIME); `verifyPumpState` and the plugin part of `checkPodKaput` (PUMP_SUSPEND temp basal,
+        fault notice with sound unless a deactivation is queued, announcement, `alarmSynced`) after
+        every command and status read; the notices of a command not confirmed (uncertain SMB, bolus
+        alarm, TBR, cancel, suspend, resume) with the four sound settings; the status checker (status
+        read for an open command with an idle queue, "no active pod" / "suspended" every 15 min, the
+        no-pod temp basal); the alert settings (`DashAlertBooleanKey`, `DashAlertIntKey`, Android keys
+        and defaults, kept in the Android limits) watched in `onStart`; what the wizard does around the
+        two activation parts (`activatePodPart1`, `activatePodPart2`: settings in, then the end of the
+        "4241" temp basal, `connectNewPump`, CANNULA_CHANGE and INSULIN_CHANGE with the pod serial, a
+        status read) and `discardPod`, ready for the P3 screens.
+      - Texts (notices, alarm title) are English strings in `:core:interfaces`, next to the caution of
+        P1, until dashctl has its own string table (P3).
+      Tests: `DashPumpSyncRecorderTest` (20), `IosDashPluginPumpTest` (36, fake pod, rules wired),
+      `DashPluginActivationTest` (2, fake pod being activated), `DashAlertKeyTest` (4, JVM and iOS).
+      Fixes after the adversarial review (2026-11-14, each with a test that failed first):
+      - a decided deactivation runs `checkPodKaput` before the driver clears the state, so the
+        PUMP_SUSPEND temp basal is written with the pod serial at once, as Android;
+      - a bolus ended by a fault (`DashBolusEndedByFault`) runs `checkPodKaput` at once, also inside
+        the bolus wait, as Android does at each status read of the wait;
+      - the time change gives the "suspend not confirmed" notice (`DashPluginRules.afterBasalProgram`);
+      - the stop of an unexpected temp basal in `verifyPumpState` gives the "cancelling the temp basal
+        might have failed" notice, as Android `observeNoActiveTempBasal`;
+      - `getPumpStatus` with a reason other than the user's, before the activation is completed, runs
+        no check at all, as Android (no false "TBR out of sync" alarm on a half activated pod);
+      - a bolus correction with no command time (codec version 3) writes nothing: the old fallback to
+        the last bolus written could change the record of another bolus.
+      Tests now: `DashPumpSyncRecorderTest` (20), `IosDashPluginPumpTest` (43).
+      Not ported (pinned by tests, KDoc in `DashPluginRules`): `verifyPumpState` inside the bolus wait
+      (it may stop a temp basal on the pod, not possible while the bolus call holds the lock); the PDM
+      reference in the fault text (no `pdmRef` in the iOS state). Moved to P2b below: basal drift
+      correction and the time zone notice.
+- [ ] **P2b. Basal drift correction and pod time zone.** Both need new stored fields and a new codec
+      version. Port Android `needsBasalCorrection`, `basalExpected`, `bolusPulsesDelivered`,
+      `integrateExpectedDelivery`, `lastBasalCorrectionTime` and `deliverBasalCorrection`
+      (`CommandDeliverBasalCorrection`, queued after a confirmed temp basal or cancel), and the pod
+      time zone offset with the OMNIPOD_TIME_OUT_OF_SYNC notice of `updatePodWarnings`. Until then the
+      iOS loop does not make up basal drift (Android does, in 0.05 U pulses) and gives no notice when
+      the pod time zone differs from the phone. The pin tests `a confirmed temp basal or cancel queues
+      no basal correction because it is not ported yet` and `a running pod gets no time zone notice
+      because the pod time zone is not stored yet` must change with the port.
 - [ ] **P3 (phase 5). Screens.** Activation and deactivation wizards in Compose Multiplatform, with
       what Android does after part 2 (`connectNewPump`, stop of the fake PUMP_SUSPEND temp basal,
       CANNULA_CHANGE and INSULIN_CHANGE therapy events, status read) and after a discard; the

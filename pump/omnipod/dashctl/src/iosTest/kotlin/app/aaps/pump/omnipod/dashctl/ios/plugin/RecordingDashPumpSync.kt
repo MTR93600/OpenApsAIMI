@@ -6,6 +6,7 @@ import app.aaps.core.data.model.TE
 import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.interfaces.pump.PumpInsulin
+import app.aaps.core.interfaces.pump.PumpProfile
 import app.aaps.core.interfaces.pump.PumpRate
 import app.aaps.core.interfaces.pump.PumpSync
 
@@ -18,15 +19,22 @@ internal class RecordingDashPumpSync : PumpSync {
 
     val calls = mutableListOf<String>()
 
-    /** What `expectedPumpState().temporaryBasal` answers. */
+    /**
+     * What `expectedPumpState().temporaryBasal` answers. Follows the temp basal calls as `PumpSync` does
+     * (a new one runs, a stop or an invalidation of it ends it; time is not looked at), and a test may
+     * set it.
+     */
     var expectedTemporaryBasal: PumpSync.PumpState.TemporaryBasal? = null
 
+    /** What `expectedPumpState().profile` answers. */
+    var expectedProfile: PumpProfile? = null
+
     /**
-     * The registration rule of `PumpSyncImplementation.confirmActivePump`, for boluses: a bolus older
-     * than this time is refused (false, nothing written), as a bolus older than the registration of
-     * the pump is. Null: every bolus is taken.
+     * The bolus records as `PumpSyncImplementation.syncBolusWithPumpId` keeps them, by pump id: a new
+     * pump id inserts a record (type NORMAL when none is given), a known one updates its amount and,
+     * when a type is given, its type. So a test can count the records of a bolus, not only the calls.
      */
-    var bolusAllowedFrom: Long? = null
+    val bolusRecords = mutableMapOf<Long, Pair<Double, BS.Type>>()
 
     override fun connectNewPump(endRunning: Boolean) {
         calls += "connectNewPump"
@@ -35,7 +43,7 @@ internal class RecordingDashPumpSync : PumpSync {
     override fun verifyPumpIdentification(type: PumpType, serialNumber: String): Boolean = true
 
     override suspend fun expectedPumpState(): PumpSync.PumpState =
-        PumpSync.PumpState(expectedTemporaryBasal, null, null, null, "")
+        PumpSync.PumpState(expectedTemporaryBasal, null, null, expectedProfile, "")
 
     override suspend fun addBolusWithTempId(timestamp: Long, amount: PumpInsulin, temporaryId: Long, type: BS.Type, pumpType: PumpType, pumpSerial: String): Boolean {
         calls += "addBolusWithTempId"
@@ -48,13 +56,10 @@ internal class RecordingDashPumpSync : PumpSync {
     }
 
     override suspend fun syncBolusWithPumpId(timestamp: Long, amount: PumpInsulin, type: BS.Type?, pumpId: Long, pumpType: PumpType, pumpSerial: String): Boolean {
-        val allowedFrom = bolusAllowedFrom
-        if (allowedFrom != null && timestamp < allowedFrom) {
-            calls += "bolusRefused(timestamp=$timestamp, pumpId=$pumpId)"
-            return false
-        }
         calls += "bolus(timestamp=$timestamp, amount=${amount.cU}, type=$type, pumpId=$pumpId, pumpType=$pumpType, serial=$pumpSerial)"
-        return true
+        val known = bolusRecords[pumpId]
+        bolusRecords[pumpId] = amount.cU to (type ?: known?.second ?: BS.Type.NORMAL)
+        return known == null
     }
 
     override suspend fun syncCarbsWithTimestamp(timestamp: Long, amount: Double, pumpId: Long?, pumpType: PumpType, pumpSerial: String): Boolean {
@@ -63,7 +68,7 @@ internal class RecordingDashPumpSync : PumpSync {
     }
 
     override suspend fun insertTherapyEventIfNewWithTimestamp(timestamp: Long, type: TE.Type, note: String?, pumpId: Long?, pumpType: PumpType, pumpSerial: String): Boolean {
-        calls += "therapyEvent(timestamp=$timestamp, type=$type)"
+        calls += "therapyEvent(timestamp=$timestamp, type=$type, serial=$pumpSerial)"
         return true
     }
 
@@ -78,11 +83,16 @@ internal class RecordingDashPumpSync : PumpSync {
 
     override suspend fun syncTemporaryBasalWithPumpId(timestamp: Long, rate: PumpRate, duration: Long, isAbsolute: Boolean, type: PumpSync.TemporaryBasalType?, pumpId: Long, pumpType: PumpType, pumpSerial: String): Boolean {
         calls += "tempBasal(timestamp=$timestamp, rate=${rate.cU}, duration=$duration, isAbsolute=$isAbsolute, type=$type, pumpId=$pumpId, pumpType=$pumpType, serial=$pumpSerial)"
+        expectedTemporaryBasal = PumpSync.PumpState.TemporaryBasal(
+            timestamp = timestamp, duration = duration, rate = rate.cU, isAbsolute = isAbsolute,
+            type = type ?: PumpSync.TemporaryBasalType.NORMAL, id = pumpId, pumpId = pumpId
+        )
         return true
     }
 
     override suspend fun syncStopTemporaryBasalWithPumpId(timestamp: Long, endPumpId: Long, pumpType: PumpType, pumpSerial: String, ignorePumpIds: Boolean): Boolean {
         calls += "stopTempBasal(timestamp=$timestamp, endPumpId=$endPumpId, pumpType=$pumpType, serial=$pumpSerial)"
+        expectedTemporaryBasal = null
         return true
     }
 
@@ -113,6 +123,7 @@ internal class RecordingDashPumpSync : PumpSync {
 
     override suspend fun invalidateTemporaryBasalWithPumpId(pumpId: Long, pumpType: PumpType, pumpSerial: String): Boolean {
         calls += "invalidateTemporaryBasalWithPumpId($pumpId)"
+        if (expectedTemporaryBasal?.pumpId == pumpId) expectedTemporaryBasal = null
         return true
     }
 

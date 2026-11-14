@@ -16,66 +16,72 @@ import app.aaps.pump.omnipod.dashctl.session.DashCommandConfirmation
 import app.aaps.pump.omnipod.dashctl.session.DashCommandKind
 import app.aaps.pump.omnipod.dashctl.session.DashLastBolus
 import kotlin.concurrent.Volatile
-import kotlin.time.Clock
 import kotlinx.coroutines.runBlocking
 
 /**
- * Writes what the pod did to `PumpSync`: the receiver of `IosDashPump.onCommandDecided`. Port of the
- * `PumpSync` part of Android `OmnipodDashPumpPlugin` (`pumpSyncBolusStart`, `pumpSyncTempBasal`,
- * `suspendDeliveryIfActive`, `handleCommandConfirmation`, `checkPodKaput`).
+ * Writes what the pod was asked and what it did to `PumpSync`. Port of the `PumpSync` part of Android
+ * `OmnipodDashPumpPlugin`: `pumpSyncBolusStart`, `pumpSyncTempBasal` (also from
+ * `suspendDeliveryIfActive`), `handleCommandConfirmation` and the bolus part of `checkPodKaput`.
  *
- * ## When a record is written
+ * ## When a record is written: as Android
  *
- * Android writes a bolus, a temp basal and the PUMP_SUSPEND temp basal of a suspend when the command
- * is SENT, and takes them back (`invalidate...`, a bolus of 0 U) when the pod refuses it. The iOS
- * driver gives only final outcomes, so here they are written when the pod CONFIRMED them (SUCCESS),
- * at once or late, at the time the command was made ([DashActiveCommand.createdAtMs], Android
- * `HistoryRecord.createdAt`). A refused or never sent command writes nothing, so nothing has to be
- * taken back. While a command is not confirmed, the driver refuses every new delivery command, so
- * the loop cannot dose on top of a bolus that is not counted yet (fail closed).
+ * A bolus, a temp basal and the PUMP_SUSPEND temp basal of a suspend are written when the command is
+ * SENT ([onCommandSent], the receiver of `IosDashPump.onCommandSent`, Android `isCommandSent()`),
+ * before the answer of the pod is read. The confirmation then keeps, corrects or takes them back
+ * ([record], the receiver of `IosDashPump.onCommandDecided`), at once or late:
  *
- * | Outcome                                       | Record (all at the command time)                    |
- * |-----------------------------------------------|-----------------------------------------------------|
- * | BOLUS SUCCESS                                 | bolus at the asked amount (`syncBolusWithPumpId`)   |
- * | TEMP_BASAL SUCCESS                            | temp basal (`syncTemporaryBasalWithPumpId`)         |
- * | STOP_TEMP_BASAL SUCCESS                       | stop of the temp basal                              |
- * | SUSPEND_DELIVERY SUCCESS                      | PUMP_SUSPEND temp basal of 0 U/h, 80 h              |
- * | BASAL_PROGRAM, RESUME_DELIVERY SUCCESS        | stop of the temp basal (ends the PUMP_SUSPEND one)  |
- * | an outcome with `endedBolus`                  | the bolus record corrected to what went in          |
- * | [DashBolusEndedByFault]                       | the bolus record corrected to what went in          |
- * | BOLUS / TEMP_BASAL / SUSPEND, pod discarded   | as SUCCESS: Android had written them when sent      |
+ * | Outcome                                  | Record (all at the command time, pump id = command time)   |
+ * |------------------------------------------|------------------------------------------------------------|
+ * | BOLUS sent                               | bolus at the asked amount (`syncBolusWithPumpId`)          |
+ * | TEMP_BASAL sent                          | temp basal (`syncTemporaryBasalWithPumpId`)                |
+ * | SUSPEND_DELIVERY sent                    | PUMP_SUSPEND temp basal of 0 U/h, 80 h                     |
+ * | BOLUS DENIED                             | the bolus record set to 0 U, type kept (Android)           |
+ * | TEMP_BASAL, SUSPEND_DELIVERY DENIED      | `invalidateTemporaryBasalWithPumpId` (Android)             |
+ * | STOP_TEMP_BASAL, BASAL_PROGRAM, RESUME_DELIVERY SUCCESS | `syncStopTemporaryBasalWithPumpId`          |
+ * | an outcome with `endedBolus`             | the bolus record corrected to what went in                 |
+ * | [DashBolusEndedByFault]                  | the bolus record corrected to what went in                 |
  *
- * A bolus that `PumpSync` refuses because it is older than the registration of the pump is written
- * again at the time it was decided (see [recordBolus]). A temp basal needs no such step: `PumpSync`
- * itself starts one that began before the registration at the registration.
+ * A correction always uses the pump id of the bolus record, so `PumpSync` updates that record: one
+ * record per bolus, never a second one. A SUCCESS that is decided late (after the call returned a
+ * failure) writes nothing more: the record of the send is already there, as on Android.
+ *
+ * ## The one deliberate difference: a record that the send did not write
+ *
+ * Android writes nothing when the write of the command threw (no `CommandSent` event) and then
+ * clears the command as a send failure, so a bolus the pod may have taken is never counted. The iOS
+ * driver keeps such a command open until a status decides it (it may have reached the pod). Also, the
+ * app may stop between the write of the command and the write of the record. In both cases the
+ * record of the send is missing, and a later SUCCESS (or a pod discarded while it is open) would
+ * count no insulin that went in. So a SUCCESS, or a `podDiscarded` outcome, of a BOLUS, TEMP_BASAL
+ * or SUSPEND_DELIVERY whose record was not written by this run writes it then, with the same call,
+ * time and pump id as the send would have. When the record does exist (written before an app
+ * restart), `PumpSync` finds it by its pump id and updates it with the same values: still one record.
  *
  * ## The pump id
  *
  * Android uses the id of its pod history record. iOS has no pod history yet, so the pump id is the
- * command time ([DashActiveCommand.createdAtMs]): it is stored with the open command, so the same
- * id comes back after a restart, and a correction finds the record of its bolus by it
+ * command time ([DashActiveCommand.createdAtMs]): it is stored with the open command, so the same id
+ * comes back after a restart, and a correction finds the record of its bolus by it
  * ([DashLastBolus.createdAtMs] is the same time). Pump type and serial are Android's:
  * [PumpType.OMNIPOD_DASH] and the unique id of the pod ([serialNumber]).
  *
  * ## The type of a bolus and of a temp basal
  *
- * The driver does not store them. [beginBolus] and [beginTempBasal] give them for the command that is
- * sent now; [endCommand] keeps the type of a command that is still open after the call, so a late
- * outcome is written with it. After an app restart the type of an open command is lost: the bolus is
- * then written as NORMAL and the temp basal as NORMAL. The amount and the time are right either way,
- * so insulin on board is right; only the label differs.
+ * The driver does not store them. [beginBolus] and [beginTempBasal] give them for the call that sends
+ * now, and the record of the send is written with them, as Android passes `detailedBolusInfo.bolusType`
+ * and `tbrType`. [endCommand] keeps the type of a command the call left open, for the rare record a
+ * late outcome must still write (see above). A correction passes no type (`PumpSync` keeps the stored
+ * one), and a record written after an app restart passes none either (NORMAL when new).
  *
  * Calls come from inside the command lock of the driver, on the queue thread. `PumpSync` is suspend,
- * so [onOutcome] blocks that thread until the record is written, as Android writes inside its
- * command chain.
+ * so [onCommandSent] and [onOutcome] block that thread until the record is written, as Android writes
+ * inside its command chain.
  */
 class DashPumpSyncRecorder(
     private val pumpSync: PumpSync,
     private val aapsLogger: AAPSLogger,
     /** Android `serialNumber()`: the unique id of the pod, "4241" without one. Read when a record is written. */
     private val serialNumber: () -> String,
-    /** The wall clock, for a bolus older than the registration of the pump in `PumpSync`. */
-    private val now: () -> Long = { Clock.System.now().toEpochMilliseconds() },
 ) {
 
     /** The type of the bolus `deliverTreatment` is sending now, null outside it. */
@@ -92,18 +98,8 @@ class DashPumpSyncRecorder(
     /** Temp basal types of commands still open after their call, by command time. In memory only. */
     private val openTempBasalTypes = mutableMapOf<Long, PumpSync.TemporaryBasalType>()
 
-    /**
-     * The pump id and time of the last bolus written, for a correction of a bolus whose command
-     * time is not known (stored by codec version 3 or before), as the KDoc of
-     * [DashBolusEndedByFault] asks.
-     */
-    private var lastBolusRecord: Pair<Long, Long>? = null
-
-    /**
-     * The time a bolus was written at, by pump id, when it is not its command time (see
-     * [recordBolus]), so a correction goes to the same record. In memory only.
-     */
-    private val movedBolusTimes = mutableMapOf<Long, Long>()
+    /** The command times whose record of the send was written in this run and not decided yet. */
+    private val writtenAtSend = mutableSetOf<Long>()
 
     /** `deliverTreatment` starts: a bolus of [type] may be sent. */
     fun beginBolus(type: BS.Type) {
@@ -117,16 +113,14 @@ class DashPumpSyncRecorder(
 
     /**
      * The call that sent a command returned. When [stillOpen] is a bolus or a temp basal that is not
-     * confirmed, its type is kept for the late outcome. The caller passes only a command that this
-     * call made (`IosDashPluginPump`), and a type that is already kept is never replaced: a refused
-     * call must not give its own type to the earlier command that is still open.
+     * confirmed, its type is kept for a late outcome. The caller passes only a command that this call
+     * made (`IosDashPluginPump`), and a type that is already kept is never replaced: a refused call must
+     * not give its own type to the earlier command that is still open.
      */
     fun endCommand(stillOpen: DashActiveCommand?) {
         val at = stillOpen?.createdAtMs
         if (at != null) {
             when (stillOpen.kind) {
-                // Never over an entry that is there: that is a command an earlier call sent, which
-                // was still open when this call was refused.
                 DashCommandKind.BOLUS      -> currentBolusType?.let { if (at !in openBolusTypes) openBolusTypes[at] = it }
                 DashCommandKind.TEMP_BASAL -> currentTempBasalType?.let { if (at !in openTempBasalTypes) openTempBasalTypes[at] = it }
                 else                       -> Unit
@@ -134,6 +128,16 @@ class DashPumpSyncRecorder(
         }
         currentBolusType = null
         currentTempBasalType = null
+    }
+
+    /** The receiver of `IosDashPump.onCommandSent`. Blocks until the record is written. */
+    fun onCommandSent(command: DashActiveCommand) {
+        try {
+            runBlocking { recordSent(command) }
+        } catch (e: Exception) {
+            // Never break the command: it is on its way to the pod. The outcome writes it if it is missing.
+            aapsLogger.error(LTag.PUMP, "Dash: could not write the sent $command to PumpSync", e)
+        }
     }
 
     /** The receiver of `IosDashPump.onCommandDecided`. Blocks until the record is written. */
@@ -146,6 +150,26 @@ class DashPumpSyncRecorder(
         }
     }
 
+    /**
+     * Android `isCommandSent()`: `pumpSyncBolusStart` for a bolus, `pumpSyncTempBasal` for a temp basal
+     * and for a suspend (0 U/h, `MAX_POD_LIFETIME`, PUMP_SUSPEND). Nothing for any other command.
+     */
+    suspend fun recordSent(command: DashActiveCommand) {
+        val at = command.createdAtMs
+        if (at == null) {
+            aapsLogger.error(LTag.PUMP, "Dash: sent command without its time, not written: $command")
+            return
+        }
+        val written = when (command.kind) {
+            DashCommandKind.BOLUS            -> writeBolus(command, at, currentBolusType ?: BS.Type.NORMAL)
+            DashCommandKind.TEMP_BASAL       -> writeTempBasal(command, at, currentTempBasalType ?: PumpSync.TemporaryBasalType.NORMAL)
+            DashCommandKind.SUSPEND_DELIVERY -> writeSuspend(at)
+            else                             -> return
+        }
+        // Tried, whatever PumpSync answered: Android does not write it again either.
+        if (written != null) writtenAtSend += at
+    }
+
     /** Writes one outcome, see the table in the class comment. */
     suspend fun record(outcome: DashPumpOutcome) {
         when (outcome) {
@@ -156,42 +180,67 @@ class DashPumpSyncRecorder(
 
     private suspend fun recordCommand(outcome: DashCommandOutcome) {
         val command = outcome.command
-        val confirmed = outcome.confirmation == DashCommandConfirmation.SUCCESS
-        // Android wrote these when they were sent, so its "Discard pod" keeps them.
-        val discardedOpen = outcome.confirmation == DashCommandConfirmation.NOT_CONFIRMED && outcome.podDiscarded
         val at = command.createdAtMs
-        if (at == null && (confirmed || discardedOpen) && command.kind != DashCommandKind.OTHER) {
-            aapsLogger.error(LTag.PUMP, "Dash: command without its time (old stored state), not written: $outcome")
+        if (at == null) {
+            if (command.kind != DashCommandKind.OTHER) aapsLogger.error(LTag.PUMP, "Dash: command without its time (old stored state), not written: $outcome")
+            outcome.endedBolus?.let { correctBolus(it, "stop ${command.kind}") }
+            return
         }
-        when (command.kind) {
-            DashCommandKind.BOLUS            -> if ((confirmed || discardedOpen) && at != null) recordBolus(command, at, outcome.decidedLate)
+        val discardedOpen = outcome.confirmation == DashCommandConfirmation.NOT_CONFIRMED && outcome.podDiscarded
+        when (outcome.confirmation) {
+            DashCommandConfirmation.SUCCESS -> when (command.kind) {
+                DashCommandKind.BOLUS,
+                DashCommandKind.TEMP_BASAL,
+                DashCommandKind.SUSPEND_DELIVERY -> writeIfNotWrittenAtSend(command, at, "confirmed")
 
-            DashCommandKind.TEMP_BASAL       -> if ((confirmed || discardedOpen) && at != null) recordTempBasal(command, at, outcome.decidedLate)
+                DashCommandKind.STOP_TEMP_BASAL,
+                DashCommandKind.BASAL_PROGRAM,
+                DashCommandKind.RESUME_DELIVERY  -> recordStopTempBasal(at, command.kind)
 
-            DashCommandKind.SUSPEND_DELIVERY -> if ((confirmed || discardedOpen) && at != null) recordSuspend(at)
+                else                             -> Unit
+            }
 
-            DashCommandKind.STOP_TEMP_BASAL,
-            DashCommandKind.BASAL_PROGRAM,
-            DashCommandKind.RESUME_DELIVERY  -> if (confirmed && at != null) recordStopTempBasal(at, command.kind)
+            DashCommandConfirmation.DENIED  -> when (command.kind) {
+                DashCommandKind.BOLUS            -> denyBolus(at)
+                DashCommandKind.TEMP_BASAL,
+                DashCommandKind.SUSPEND_DELIVERY -> invalidateTempBasal(at, command.kind)
 
-            else                             -> Unit
+                else                             -> Unit
+            }
+
+            else                            -> if (discardedOpen && command.kind in RECORDED_AT_SEND) {
+                // Android keeps what it wrote when it sent the command; nothing more for a stop.
+                writeIfNotWrittenAtSend(command, at, "pod discarded")
+            }
         }
-        if (at != null) {
+        if (outcome.confirmation.isFinal || discardedOpen) {
+            writtenAtSend -= at
             openBolusTypes.remove(at)
             openTempBasalTypes.remove(at)
         }
         outcome.endedBolus?.let { correctBolus(it, "stop ${command.kind}") }
     }
 
-    private suspend fun recordBolus(command: DashActiveCommand, at: Long, decidedLate: Boolean) {
+    /** The deliberate difference of the class comment: the record of the send, when this run did not write it. */
+    private suspend fun writeIfNotWrittenAtSend(command: DashActiveCommand, at: Long, why: String) {
+        if (at in writtenAtSend) return
+        aapsLogger.warn(LTag.PUMP, "Dash: $why command has no record of its send in this run, written now: $command")
+        when (command.kind) {
+            DashCommandKind.BOLUS            -> writeBolus(command, at, openBolusTypes[at])
+            DashCommandKind.TEMP_BASAL       -> writeTempBasal(command, at, openTempBasalTypes[at])
+            DashCommandKind.SUSPEND_DELIVERY -> writeSuspend(at)
+            else                             -> Unit
+        }
+    }
+
+    /** Android `pumpSyncBolusStart`. Returns what `PumpSync` answered, null when nothing could be written. */
+    private suspend fun writeBolus(command: DashActiveCommand, at: Long, type: BS.Type?): Boolean? {
         val units = command.requestedBolusUnits
         if (units == null || units <= 0.0) {
             aapsLogger.error(LTag.PUMP, "Dash: bolus without its amount, not written: $command")
-            return
+            return null
         }
-        val type = openBolusTypes[at] ?: (if (decidedLate) null else currentBolusType) ?: BS.Type.NORMAL
-        var recordedAt = at
-        var created = pumpSync.syncBolusWithPumpId(
+        val created = pumpSync.syncBolusWithPumpId(
             timestamp = at,
             amount = PumpInsulin(units),
             type = type,
@@ -199,39 +248,18 @@ class DashPumpSyncRecorder(
             pumpType = PumpType.OMNIPOD_DASH,
             pumpSerial = serialNumber()
         )
-        val decidedAt = now()
-        if (!created && at < decidedAt - REGISTRATION_WINDOW_MS) {
-            // PumpSync takes no bolus older than the registration of the pump (connectNewPump after a
-            // pump change or a settings import; the first record then registers it with one minute
-            // back). Android never meets this, it writes a bolus when it sends it. Here a bolus
-            // confirmed late would be lost and insulin that went in never counted. So it is written
-            // again at the time it was decided, with the same pump id: later than it went in, so
-            // more insulin on board is counted, never less.
-            aapsLogger.error(LTag.PUMP, "Dash: PumpSync refused the bolus at $at, written at $decidedAt instead")
-            recordedAt = decidedAt
-            created = pumpSync.syncBolusWithPumpId(
-                timestamp = decidedAt,
-                amount = PumpInsulin(units),
-                type = type,
-                pumpId = at,
-                pumpType = PumpType.OMNIPOD_DASH,
-                pumpSerial = serialNumber()
-            )
-            if (created) movedBolusTimes[at] = decidedAt
-        }
-        if (!created) aapsLogger.error(LTag.PUMP, "Dash: PumpSync did not write the bolus $units U at $at")
-        lastBolusRecord = at to recordedAt
-        aapsLogger.info(LTag.PUMP, "Dash PumpSync bolus $units U $type at $recordedAt (late=$decidedLate): $created")
+        aapsLogger.info(LTag.PUMP, "Dash PumpSync bolus $units U $type at $at: $created")
+        return created
     }
 
-    private suspend fun recordTempBasal(command: DashActiveCommand, at: Long, decidedLate: Boolean) {
+    /** Android `pumpSyncTempBasal` with the type of the call. */
+    private suspend fun writeTempBasal(command: DashActiveCommand, at: Long, type: PumpSync.TemporaryBasalType?): Boolean? {
         val rate = command.tempBasalRate
         val minutes = command.tempBasalMinutes
         if (rate == null || minutes == null) {
             aapsLogger.error(LTag.PUMP, "Dash: temp basal without its rate or duration, not written: $command")
-            return
+            return null
         }
-        val type = openTempBasalTypes[at] ?: (if (decidedLate) null else currentTempBasalType) ?: PumpSync.TemporaryBasalType.NORMAL
         val created = pumpSync.syncTemporaryBasalWithPumpId(
             timestamp = at,
             rate = PumpRate(rate),
@@ -242,11 +270,12 @@ class DashPumpSyncRecorder(
             pumpType = PumpType.OMNIPOD_DASH,
             pumpSerial = serialNumber()
         )
-        aapsLogger.info(LTag.PUMP, "Dash PumpSync temp basal $rate U/h $minutes min $type at $at (late=$decidedLate): $created")
+        aapsLogger.info(LTag.PUMP, "Dash PumpSync temp basal $rate U/h $minutes min $type at $at: $created")
+        return created
     }
 
     /** Android `suspendDeliveryIfActive`: `pumpSyncTempBasal(0.0, MAX_POD_LIFETIME, PUMP_SUSPEND)`. */
-    private suspend fun recordSuspend(at: Long) {
+    private suspend fun writeSuspend(at: Long): Boolean {
         val created = pumpSync.syncTemporaryBasalWithPumpId(
             timestamp = at,
             rate = PumpRate(0.0),
@@ -258,6 +287,26 @@ class DashPumpSyncRecorder(
             pumpSerial = serialNumber()
         )
         aapsLogger.info(LTag.PUMP, "Dash PumpSync suspend (PUMP_SUSPEND temp basal) at $at: $created")
+        return created
+    }
+
+    /** Android `handleCommandConfirmation` SET_BOLUS denied: the record of the send set to 0 U, type kept. */
+    private suspend fun denyBolus(at: Long) {
+        val result = pumpSync.syncBolusWithPumpId(
+            timestamp = at,
+            amount = PumpInsulin(0.0),
+            type = null,
+            pumpId = at,
+            pumpType = PumpType.OMNIPOD_DASH,
+            pumpSerial = serialNumber()
+        )
+        aapsLogger.info(LTag.PUMP, "Dash PumpSync bolus at $at denied by the pod, set to 0 U: $result")
+    }
+
+    /** Android `handleCommandConfirmation` SET_TEMPORARY_BASAL and SUSPEND_DELIVERY denied. */
+    private suspend fun invalidateTempBasal(at: Long, kind: DashCommandKind) {
+        val result = pumpSync.invalidateTemporaryBasalWithPumpId(at, PumpType.OMNIPOD_DASH, serialNumber())
+        aapsLogger.info(LTag.PUMP, "Dash PumpSync temp basal at $at invalidated ($kind denied by the pod): $result")
     }
 
     /**
@@ -276,8 +325,8 @@ class DashPumpSyncRecorder(
 
     /**
      * Android CANCEL_BOLUS and `checkPodKaput`: `syncBolusWithPumpId` with the delivered units and the
-     * same pump id, which updates the record of the bolus (one record, never a second bolus). The
-     * type is left as it is (null: `PumpSync` keeps the stored type).
+     * same pump id, which updates the record of the bolus (one record, never a second bolus). The type
+     * is left as it is (null: `PumpSync` keeps the stored type; Android passes the stored type).
      */
     private suspend fun correctBolus(bolus: DashLastBolus, reason: String) {
         val delivered = bolus.deliveredUnits()
@@ -285,16 +334,17 @@ class DashPumpSyncRecorder(
             aapsLogger.error(LTag.PUMP, "Dash: bolus not ended, no correction ($reason): $bolus")
             return
         }
-        val key = bolus.createdAtMs?.let { it to (movedBolusTimes[it] ?: it) } ?: lastBolusRecord
-        if (key == null) {
-            // Nothing to correct is known: the bolus stays counted at the asked amount (more than went
-            // in, never less), the side Android also falls on after a crash.
+        val pumpId = bolus.createdAtMs
+        if (pumpId == null) {
+            // A bolus stored by codec version 3 or before: no record of it is known. Every record this
+            // run wrote belongs to a command with a time, so to another bolus, and must not be changed.
+            // The bolus stays counted at the asked amount (more than went in, never less), the side
+            // Android also falls on after a crash.
             aapsLogger.error(LTag.PUMP, "Dash: no record known for the bolus to correct ($reason): $bolus")
             return
         }
-        val (pumpId, timestamp) = key
         val result = pumpSync.syncBolusWithPumpId(
-            timestamp = timestamp,
+            timestamp = pumpId,
             amount = PumpInsulin(delivered),
             type = null,
             pumpId = pumpId,
@@ -308,7 +358,7 @@ class DashPumpSyncRecorder(
 
         const val MS_PER_MINUTE = 60_000L
 
-        /** How far back `PumpSyncImplementation.confirmActivePump` takes records when it registers a pump. */
-        const val REGISTRATION_WINDOW_MS = 60_000L
+        /** The commands Android writes to `PumpSync` when they are sent. */
+        val RECORDED_AT_SEND = setOf(DashCommandKind.BOLUS, DashCommandKind.TEMP_BASAL, DashCommandKind.SUSPEND_DELIVERY)
     }
 }

@@ -1,11 +1,16 @@
 package app.aaps.pump.omnipod.dashctl.ios.plugin
 
+import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
-import app.aaps.core.data.pump.defs.PumpType
+import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.pump.PumpRate
 import app.aaps.core.interfaces.pump.PumpSync
+import app.aaps.core.interfaces.queue.CommandQueue
+import app.aaps.core.interfaces.resources.TextResolver
+import app.aaps.core.interfaces.rx.bus.RxBus
+import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.pump.omnipod.dashctl.ios.ble.IosDashBleHost
 import app.aaps.pump.omnipod.dashctl.ios.pump.IosDashPump
@@ -16,8 +21,12 @@ import app.aaps.pump.omnipod.dashctl.session.DashPodStateManager
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
-import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -39,7 +48,8 @@ import kotlinx.coroutines.runBlocking
  *
  * ## What the driver reads from the app
  *
- * - every outcome goes to the recorder, which writes `PumpSync`;
+ * - every sent command and every outcome go to the recorder, which writes `PumpSync` as Android does;
+ * - every outcome also goes to [rules] (notices, queued commands, profile change asked again);
  * - the beep settings come from the user settings with Android's keys and defaults ([DashBeepKey]),
  *   read for each command;
  * - whether AAPS expects a temp basal to run comes from `PumpSync.expectedPumpState()` (Android
@@ -52,7 +62,23 @@ class IosDashDriverHost(
     private val pumpSync: PumpSync,
     private val preferences: Preferences,
     bolusProgressData: BolusProgressData,
+    notificationManager: NotificationManager,
+    rh: TextResolver,
+    // Providers: the queue, the bus and the alarm window are only needed once a command runs, and
+    // the queue reaches the active pump, which would be a cycle back to this plugin.
+    commandQueue: () -> CommandQueue,
+    rxBus: () -> RxBus,
+    uiInteraction: () -> UiInteraction,
 ) {
+
+    /**
+     * Queue work started from inside a command (Android `pluginScope.launch`). Process lifetime, never
+     * cancelled, as `PluginBase.pluginScope`: a queued command runs anyway, only its answer is waited for.
+     */
+    private val workScope = CoroutineScope(
+        Dispatchers.Default + SupervisorJob() +
+            CoroutineExceptionHandler { _, e -> aapsLogger.error(LTag.PUMP, "Dash: queue work failed", e) }
+    )
 
     /** The pod state, loaded from the Keychain now. */
     val stateManager = DashPodStateManager(DashKeychainStateStore())
@@ -65,9 +91,13 @@ class IosDashDriverHost(
         serialNumber = { stateManager.uniqueId?.toString() ?: IosDashPluginPump.PUMP_SERIAL_FOR_FAKE_TBR },
     )
 
-    val driver = IosDashPump(
+    val driver: IosDashPump = IosDashPump(
         aapsLogger = aapsLogger,
-        onCommandDecided = recorder::onOutcome,
+        onCommandDecided = { outcome ->
+            recorder.onOutcome(outcome)
+            rules.onOutcome(outcome)
+        },
+        onCommandSent = recorder::onCommandSent,
         stateManager = stateManager,
         bolusProgressData = bolusProgressData,
         beeps = { DashBeepKey.beepSettings { key -> preferences.get(key) } },
@@ -75,22 +105,26 @@ class IosDashDriverHost(
         connectorFactory = bleHost.connectorFactory(stateManager.bluetoothAddress),
     )
 
-    /** What the plugin delegates `Pump` to. */
-    val pump = IosDashPluginPump(driver = driver, stateManager = stateManager, recorder = recorder, aapsLogger = aapsLogger)
+    /** The queue commands, notices, status checker and checks of Android, around the driver. */
+    val rules: DashPluginRules = DashPluginRules(
+        driver = driver,
+        stateManager = stateManager,
+        pumpSync = pumpSync,
+        notificationManager = notificationManager,
+        readBoolean = { preferences.get(it) },
+        readInt = { preferences.get(it) },
+        rh = rh,
+        aapsLogger = aapsLogger,
+        commandQueue = commandQueue,
+        rxBus = rxBus,
+        uiInteraction = uiInteraction,
+        serialNumber = { stateManager.uniqueId?.toString() ?: IosDashPluginPump.PUMP_SERIAL_FOR_FAKE_TBR },
+        launch = { block -> workScope.launch { block() } },
+        now = { Clock.System.now().toEpochMilliseconds() },
+    )
 
-    /**
-     * One run of the Android status checker part that is ported now: the zero temp basal while no
-     * pod runs ([writeNoPodTempBasal]). An error is logged and the next run tries again, as Android.
-     */
-    suspend fun checkNoActivePod() {
-        try {
-            writeNoPodTempBasal(stateManager.isPodRunning, pumpSync, Clock.System.now().toEpochMilliseconds(), aapsLogger)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            aapsLogger.warn(LTag.PUMP, "Error on createFakeTBRWhenNoActivePod=$e")
-        }
-    }
+    /** What the plugin delegates `Pump` to. */
+    val pump = IosDashPluginPump(driver = driver, stateManager = stateManager, recorder = recorder, rules = rules, aapsLogger = aapsLogger)
 
     /** Starts CoreBluetooth. The first call makes iOS ask for the Bluetooth permission. */
     fun openRadio() {

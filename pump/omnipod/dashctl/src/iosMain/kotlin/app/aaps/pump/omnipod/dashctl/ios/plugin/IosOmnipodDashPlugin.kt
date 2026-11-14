@@ -12,19 +12,28 @@ import app.aaps.core.interfaces.pump.Pump
 import app.aaps.core.interfaces.pump.PumpPluginBase
 import app.aaps.core.interfaces.queue.CommandQueue
 import app.aaps.core.interfaces.resources.TextResolver
+import app.aaps.core.interfaces.rx.collectResilient
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.pump.omnipod.dashctl.keys.DashAlertBooleanKey
+import app.aaps.pump.omnipod.dashctl.keys.DashAlertIntKey
 import app.aaps.pump.omnipod.dashctl.keys.DashBeepKey
+import app.aaps.pump.omnipod.dashctl.keys.DashSoundKey
+import app.aaps.pump.omnipod.dashctl.queue.command.CommandUpdateAlertConfiguration
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.binding
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import dev.zacsweers.metro.IntKey as MetroIntKey
@@ -35,16 +44,18 @@ import dev.zacsweers.metro.IntKey as MetroIntKey
  * builder. All of [Pump] goes to [IosDashDriverHost.pump] (the driver plus the answers Android gives
  * from its plugin), so this file holds the plugin lifecycle and nothing about therapy.
  *
- * ## What works and what does not yet (phase 4 step P1)
+ * ## What works and what does not yet (phase 4 step P2)
  *
- * The queue can drive a running pod: bolus, temp basal, basal program, status, and every outcome is
- * written to `PumpSync` ([DashPumpSyncRecorder]). What is missing is how a pod gets running on an
- * iPhone: the activation and deactivation screens come with phase 5 (P3), and the queue commands of
- * Android (silence alerts, resume, deactivate, alert settings, test beep) with P2. Until then
- * [isInitialized] is false (no running pod), so the loop does not run on this pump, and the status
- * checker writes the zero temp basal of Android (`IosDashDriverHost.checkNoActivePod`), so no basal
- * is counted while no pod gives it. It is [OmnipodDash], as Android, so the shared setup wizard lets
- * the user pass its pump screen with no pod yet.
+ * The queue can drive a running pod: bolus, temp basal, basal program, status, and the queue
+ * commands of Android (silence alerts, resume, deactivate, alert settings, test beep, disable suspend
+ * alerts, time change). `PumpSync` is written as Android writes it ([DashPumpSyncRecorder]), and the
+ * notices, the status checker and the checks after each command are Android's ([DashPluginRules]).
+ * What is missing is how a pod gets running on an iPhone: the activation and deactivation screens
+ * come with phase 5 (P3); they call [IosDashDriverHost.rules] (`activatePodPart1`, `activatePodPart2`,
+ * `discardPod`). Until then [isInitialized] is false (no running pod), so the loop does not run on
+ * this pump, and the status checker writes the zero temp basal of Android, so no basal is counted
+ * while no pod gives it. It is [OmnipodDash], as Android, so the shared setup wizard lets the user
+ * pass its pump screen with no pod yet.
  *
  * ## Keys and buckets
  *
@@ -68,7 +79,7 @@ class IosOmnipodDashPlugin(
     private val host: IosDashDriverHost,
 ) : PumpPluginBase(
     pluginDescription = omnipodDashIosPluginDescription(),
-    ownPreferences = DashBeepKey.entries,
+    ownPreferences = DashBeepKey.entries + DashAlertBooleanKey.entries + DashAlertIntKey.entries + DashSoundKey.entries,
     aapsLogger = aapsLogger,
     rh = rh,
     preferences = preferences,
@@ -80,8 +91,10 @@ class IosOmnipodDashPlugin(
     private var statusScope: CoroutineScope? = null
 
     /**
-     * Opens the radio once the plugin really runs, as `IosMedtrumPlugin`, and starts the status
-     * checker as Android `onStart`: every minute, first after one minute.
+     * Opens the radio once the plugin really runs, as `IosMedtrumPlugin`, and as Android `onStart`:
+     * the status checker every minute, first after one minute ([DashPluginRules.statusCheck]), and a
+     * changed alert setting sends the alerts to the pod through the queue
+     * ([CommandUpdateAlertConfiguration]).
      */
     override suspend fun onStart() {
         super.onStart()
@@ -92,10 +105,24 @@ class IosOmnipodDashPlugin(
         scope.launch {
             while (isActive) {
                 delay(STATUS_CHECK_INTERVAL_MS)
-                aapsLogger.info(LTag.PUMP, "statusChecker")
-                host.checkNoActivePod()
+                try {
+                    host.rules.statusCheck()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // The next run tries again, as the Android handler posts the next run whatever happened.
+                    aapsLogger.error(LTag.PUMP, "Dash status checker failed", e)
+                }
             }
         }
+        merge(
+            preferences.observe(DashAlertBooleanKey.ExpirationReminder).drop(1).map {},
+            preferences.observe(DashAlertIntKey.ExpirationReminderHours).drop(1).map {},
+            preferences.observe(DashAlertBooleanKey.ExpirationAlarm).drop(1).map {},
+            preferences.observe(DashAlertIntKey.ExpirationAlarmHours).drop(1).map {},
+            preferences.observe(DashAlertBooleanKey.LowReservoirAlert).drop(1).map {},
+            preferences.observe(DashAlertIntKey.LowReservoirAlertUnits).drop(1).map {},
+        ).collectResilient(scope, aapsLogger, LTag.PUMP) { commandQueue.customCommand(CommandUpdateAlertConfiguration()) }
     }
 
     override suspend fun onStop() {

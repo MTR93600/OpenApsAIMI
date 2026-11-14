@@ -7,11 +7,29 @@ import app.aaps.core.data.pump.defs.TimeChangeType
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.interfaces.pump.defs.fillFor
+import app.aaps.core.interfaces.queue.Command
+import app.aaps.core.interfaces.queue.CustomCommand
+import app.aaps.core.interfaces.rx.events.EventProfileChangeRequested
+import app.aaps.core.keys.interfaces.BooleanNonPreferenceKey
+import app.aaps.core.keys.interfaces.IntNonPreferenceKey
 import app.aaps.pump.omnipod.dashctl.comm.connection.DashConnectResult
 import app.aaps.pump.omnipod.dashctl.comm.io.SilentPodLogger
+import app.aaps.pump.omnipod.dashctl.ios.pump.DashBolusEndedByFault
 import app.aaps.pump.omnipod.dashctl.ios.pump.DashPumpOnFakePod
+import app.aaps.pump.omnipod.dashctl.keys.DashAlertIntKey
+import app.aaps.pump.omnipod.dashctl.keys.DashSoundKey
+import app.aaps.pump.omnipod.dashctl.pod.definition.ActivationProgress
 import app.aaps.pump.omnipod.dashctl.pod.definition.AlarmType
+import app.aaps.pump.omnipod.dashctl.pod.definition.PodStatus
+import app.aaps.pump.omnipod.dashctl.queue.command.CommandDeactivatePod
+import app.aaps.pump.omnipod.dashctl.queue.command.CommandHandleTimeChange
+import app.aaps.pump.omnipod.dashctl.queue.command.CommandPlayTestBeep
+import app.aaps.pump.omnipod.dashctl.queue.command.CommandResumeDelivery
+import app.aaps.pump.omnipod.dashctl.queue.command.CommandUpdateAlertConfiguration
+import app.aaps.pump.omnipod.dashctl.session.DashCommandKind
+import app.aaps.pump.omnipod.dashctl.session.DashLastBolus
 import app.aaps.pump.omnipod.dashctl.util.BasalOnlyProfile
+import app.aaps.pump.omnipod.dashctl.util.mapProfileToBasalProgram
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -29,8 +47,9 @@ import kotlinx.datetime.toInstant
 
 /**
  * The [IosDashPluginPump] the iOS plugin gives to the app, on the real driver against the simulated
- * pod, with the `PumpSync` recorder wired as `IosDashDriverHost` wires it. Each case is a rule of
- * Android `OmnipodDashPumpPlugin`: what it answers itself, and what it writes to `PumpSync` and when.
+ * pod, with the `PumpSync` recorder and [DashPluginRules] wired as `IosDashDriverHost` wires them.
+ * Each case is a rule of Android `OmnipodDashPumpPlugin`: what it answers itself, what it writes to
+ * `PumpSync` and when, and what it does around a command.
  *
  * Message numbers after a fresh pairing: 1-4 pairing, 5-6 session, 7 the first command and 8 its ACK.
  */
@@ -39,19 +58,51 @@ class IosDashPluginPumpTest {
 
     private val f = DashPumpOnFakePod()
     private val pumpSync = RecordingDashPumpSync()
+    private val notices = RecordingNotificationManager(NameTextResolver)
+    private val queue = RecordingCommandQueue()
+    private val bus = RecordingRxBus()
+    private val ui = RecordingUiInteraction()
+
+    /** The user settings by key; a key that is not here reads its default, as `Preferences`. */
+    private val settings = mutableMapOf<String, Any>()
+
+    /** Queue work the rules started on their own (Android `pluginScope.launch`); run by [runLaunched]. */
+    private val launched = mutableListOf<suspend () -> Unit>()
+
     private val recorder = DashPumpSyncRecorder(
         pumpSync = pumpSync,
         aapsLogger = SilentPodLogger,
         serialNumber = { f.stateManager.uniqueId?.toString() ?: IosDashPluginPump.PUMP_SERIAL_FOR_FAKE_TBR },
     )
 
+    private val rules = DashPluginRules(
+        driver = f.pump,
+        stateManager = f.stateManager,
+        pumpSync = pumpSync,
+        notificationManager = notices,
+        readBoolean = { key: BooleanNonPreferenceKey -> settings[key.key] as? Boolean ?: key.defaultValue },
+        readInt = { key: IntNonPreferenceKey -> settings[key.key] as? Int ?: key.defaultValue },
+        rh = NameTextResolver,
+        aapsLogger = SilentPodLogger,
+        commandQueue = { queue },
+        rxBus = { bus },
+        uiInteraction = { ui },
+        serialNumber = { f.stateManager.uniqueId?.toString() ?: IosDashPluginPump.PUMP_SERIAL_FOR_FAKE_TBR },
+        launch = { launched += it },
+        now = { f.nowMs },
+    )
+
     /** The wall clock [IosDashPluginPump] reads for the basal rate; the driver reads `f.nowMs`. */
     private var clockMs = SENT_AT
 
-    private val pump = IosDashPluginPump(f.pump, f.stateManager, recorder, SilentPodLogger, now = { clockMs })
+    private val pump = IosDashPluginPump(f.pump, f.stateManager, recorder, rules, SilentPodLogger, now = { clockMs })
 
     init {
-        f.onOutcome = recorder::onOutcome
+        f.onOutcome = {
+            recorder.onOutcome(it)
+            rules.onOutcome(it)
+        }
+        f.onSent = recorder::onCommandSent
         f.nowMs = SENT_AT
     }
 
@@ -59,6 +110,12 @@ class IosDashPluginPumpTest {
     fun closePod() {
         f.pod.close()
         f.pod.assertNoProblems()
+    }
+
+    private suspend fun runLaunched() {
+        val work = launched.toList()
+        launched.clear()
+        work.forEach { it() }
     }
 
     private fun bolus(units: Double, type: BS.Type = BS.Type.NORMAL) = DetailedBolusInfo().apply {
@@ -148,7 +205,7 @@ class IosDashPluginPumpTest {
     @Test
     fun `the base basal rate and the delivered basal come from the confirmed program`() = runTest {
         f.pairAndConnect()
-        f.pump.getPumpStatus("first status")
+        pump.getPumpStatus("first status")
         assertTrue(pump.setNewBasalProfile(PROFILE).success)
         clockMs = LocalDateTime(2026, 11, 14, 13, 10).toInstant(TimeZone.currentSystemDefault()).toEpochMilliseconds()
 
@@ -163,35 +220,37 @@ class IosDashPluginPumpTest {
         assertEquals(0.0, pump.baseBasalRate.cU, "Android: 0 while the pod reports an alarm")
     }
 
-    // ---------------------------------------------------------------- what goes to PumpSync
+    // ---------------------------------------------------------------- PumpSync: bolus
 
     @Test
-    fun `a confirmed SMB is written once at the asked amount with its type`() = runTest {
+    fun `a confirmed SMB is written once when sent at the asked amount with its type`() = runTest {
         f.pairAndConnect()
 
         val result = pump.deliverTreatment(bolus(0.5, BS.Type.SMB))
 
         assertTrue(result.success, result.comment)
         assertEquals(listOf(bolusLine(SENT_AT, 0.5, BS.Type.SMB)), pumpSync.calls)
+        assertEquals(mapOf(SENT_AT to (0.5 to BS.Type.SMB)), pumpSync.bolusRecords)
     }
 
     @Test
-    fun `a bolus the pod refused writes nothing`() = runTest {
+    fun `a bolus the pod refused is written when sent then set to 0 U as Android`() = runTest {
         f.pairAndConnect()
         f.pod.answerFor = { DashPumpOnFakePod.defaultStatus(lastProgrammingSequence = 9) }
 
         assertFalse(pump.deliverTreatment(bolus(2.0)).success)
 
-        assertTrue(pumpSync.calls.isEmpty(), "Android writes 0 U for a sent bolus the pod refused; here nothing was written")
+        assertEquals(listOf(bolusLine(SENT_AT, 2.0, BS.Type.NORMAL), bolusLine(SENT_AT, 0.0, null)), pumpSync.calls)
+        assertEquals(mapOf(SENT_AT to (0.0 to BS.Type.NORMAL)), pumpSync.bolusRecords, "one record, nothing counted")
     }
 
     @Test
-    fun `a bolus decided late is written with the type and the time it was sent with`() = runTest {
+    fun `a bolus not confirmed is counted from its send and its late SUCCESS adds nothing`() = runTest {
         f.pairAndConnect()
         f.pod.dropLinkWhileAnswering = 7 to 0
 
         assertFalse(pump.deliverTreatment(bolus(1.5, BS.Type.SMB)).success)
-        assertTrue(pumpSync.calls.isEmpty(), "not confirmed: nothing written, every delivery command is refused")
+        assertEquals(listOf(bolusLine(SENT_AT, 1.5, BS.Type.SMB)), pumpSync.calls, "Android: written when sent")
 
         f.nowMs = SENT_AT + ONE_HOUR
         f.pod.dropLinkWhileAnswering = null
@@ -202,6 +261,23 @@ class IosDashPluginPumpTest {
     }
 
     @Test
+    fun `a late SUCCESS after a crash is recorded once`() = runTest {
+        f.pairAndConnect()
+        f.pod.dropLinkWhileAnswering = 7 to 0
+        assertFalse(pump.deliverTreatment(bolus(1.5, BS.Type.SMB)).success)
+
+        // The app stops: a new recorder knows nothing of the send. The bolus is decided late after it.
+        val afterRestart = DashPumpSyncRecorder(pumpSync, SilentPodLogger, serialNumber = { SERIAL })
+        f.onOutcome = afterRestart::onOutcome
+        f.nowMs = SENT_AT + ONE_HOUR
+        f.pod.dropLinkWhileAnswering = null
+        assertSame(DashConnectResult.SessionReady, f.reconnect())
+        pump.getPumpStatus("decide the open bolus")
+
+        assertEquals(mapOf(SENT_AT to (1.5 to BS.Type.SMB)), pumpSync.bolusRecords, "one record at the send time, its type kept")
+    }
+
+    @Test
     fun `a refused bolus call does not change the type of the open bolus`() = runTest {
         f.pairAndConnect()
         f.pod.dropLinkWhileAnswering = 7 to 0
@@ -209,15 +285,9 @@ class IosDashPluginPumpTest {
 
         // The open bolus cannot be decided with the link down, so the SMB is refused.
         assertFalse(pump.deliverTreatment(bolus(0.4, BS.Type.SMB)).success)
-        assertTrue(pumpSync.calls.isEmpty())
 
-        f.nowMs = SENT_AT + ONE_HOUR
-        f.pod.dropLinkWhileAnswering = null
-        assertSame(DashConnectResult.SessionReady, f.reconnect())
-        pump.getPumpStatus("decide the open bolus")
-
-        assertEquals(listOf(bolusLine(SENT_AT, 3.0, BS.Type.NORMAL)), pumpSync.calls, "written as it was sent, not as the refused SMB")
-        assertEquals(1, f.bolusCommands(), "the SMB was never sent")
+        assertEquals(listOf(bolusLine(SENT_AT, 3.0, BS.Type.NORMAL)), pumpSync.calls, "the SMB was never sent nor written")
+        assertEquals(1, f.bolusCommands())
     }
 
     @Test
@@ -233,24 +303,50 @@ class IosDashPluginPumpTest {
 
         assertTrue(result.success, result.comment)
         assertEquals(listOf(bolusLine(SENT_AT, 2.0, BS.Type.NORMAL), bolusLine(SENT_AT, 0.5, null)), pumpSync.calls)
+        assertEquals(mapOf(SENT_AT to (0.5 to BS.Type.NORMAL)), pumpSync.bolusRecords)
     }
 
     @Test
-    fun `a pod discarded with an open bolus counts it at the asked amount`() = runTest {
+    fun `a pod discarded with an open bolus keeps it counted at the asked amount`() = runTest {
         f.pairAndConnect()
         f.pod.dropLinkWhileAnswering = 7 to 0
         assertFalse(pump.deliverTreatment(bolus(3.0, BS.Type.SMB)).success)
 
-        f.pump.discardPod()
+        rules.discardPod()
 
         assertEquals(listOf(bolusLine(SENT_AT, 3.0, BS.Type.SMB)), pumpSync.calls, "Android wrote it when it was sent")
         assertEquals("4241", pump.serialNumber(), "the pod is forgotten after the record")
+        assertTrue("dismiss(OMNIPOD_POD_FAULT)" in notices.calls)
     }
 
     @Test
-    fun `a confirmed temp basal is written with its type and a cancel stops it`() = runTest {
+    fun `an SMB not confirmed gets the notice of Android with the sound setting`() = runTest {
         f.pairAndConnect()
-        f.pump.getPumpStatus("first status")
+        f.pod.dropLinkWhileAnswering = 7 to 0
+        settings[DashSoundKey.SoundUncertainSmbNotification.key] = false
+
+        assertFalse(pump.deliverTreatment(bolus(0.35, BS.Type.SMB)).success)
+
+        assertEquals(listOf("post(OMNIPOD_UNCERTAIN_SMB, omnipod_dash_ios_smb_uncertain[format_insulin_units[0.35]], sound=null)"), notices.posts())
+        assertTrue(ui.alarms.isEmpty())
+    }
+
+    @Test
+    fun `a normal bolus not confirmed runs the alarm of Android`() = runTest {
+        f.pairAndConnect()
+        f.pod.dropLinkWhileAnswering = 7 to 0
+
+        assertFalse(pump.deliverTreatment(bolus(1.0)).success)
+
+        assertEquals(listOf("alarm(omnipod_dash_ios_bolus_uncertain, omnipod_dash_ios_error, sound=BOLUS_ERROR)"), ui.alarms)
+    }
+
+    // ---------------------------------------------------------------- PumpSync: temp basal, suspend
+
+    @Test
+    fun `a temp basal is written when sent with its type and a cancel stops it`() = runTest {
+        f.pairAndConnect()
+        pump.getPumpStatus("first status")
 
         assertTrue(pump.setTempBasalAbsolute(1.2, 30, false, PumpSync.TemporaryBasalType.SUPERBOLUS).success)
         f.nowMs = SENT_AT + ONE_HOUR
@@ -263,31 +359,50 @@ class IosDashPluginPumpTest {
             ),
             pumpSync.calls
         )
+        assertTrue(ui.alarms.isEmpty(), "AAPS and the pod agree: verifyPumpState is quiet")
     }
 
     @Test
-    fun `a temp basal decided late is written with its type at the time it was sent`() = runTest {
+    fun `a temp basal the pod refused is invalidated`() = runTest {
         f.pairAndConnect()
-        f.pump.getPumpStatus("first status")
+        pump.getPumpStatus("first status")
+        // The temp basal goes with sequence 2; the pod reports another one as its last programming command.
+        f.pod.answerFor = { DashPumpOnFakePod.defaultStatus(lastProgrammingSequence = 9) }
+
+        assertFalse(pump.setTempBasalAbsolute(1.0, 30, false, PumpSync.TemporaryBasalType.NORMAL).success)
+
+        assertEquals(
+            listOf(tempBasalLine(SENT_AT, 1.0, 30 * 60_000L, PumpSync.TemporaryBasalType.NORMAL), "invalidateTemporaryBasalWithPumpId($SENT_AT)"),
+            pumpSync.calls
+        )
+    }
+
+    @Test
+    fun `a temp basal not confirmed is counted from its send and gets the notice of Android`() = runTest {
+        f.pairAndConnect()
+        pump.getPumpStatus("first status")
         // Status 7-8, then the temp basal is message 9.
         f.pod.dropLinkWhileAnswering = 9 to 0
 
         assertFalse(pump.setTempBasalAbsolute(0.0, 60, false, PumpSync.TemporaryBasalType.EMULATED_PUMP_SUSPEND).success)
-        assertTrue(pumpSync.calls.isEmpty())
+        assertEquals(listOf(tempBasalLine(SENT_AT, 0.0, 60 * 60_000L, PumpSync.TemporaryBasalType.EMULATED_PUMP_SUSPEND)), pumpSync.calls)
+        assertEquals(listOf("post(OMNIPOD_TBR_ALERTS, omnipod_dash_ios_tbr_unconfirmed, sound=BOLUS_ERROR)"), notices.posts())
 
         f.nowMs = SENT_AT + ONE_HOUR
         f.pod.dropLinkWhileAnswering = null
         assertSame(DashConnectResult.SessionReady, f.reconnect())
         pump.getPumpStatus("decide the open temp basal")
 
-        assertEquals(listOf(tempBasalLine(SENT_AT, 0.0, 60 * 60_000L, PumpSync.TemporaryBasalType.EMULATED_PUMP_SUSPEND)), pumpSync.calls)
+        assertEquals(1, pumpSync.calls.size, "the late SUCCESS adds nothing")
+        assertTrue("dismiss(OMNIPOD_TBR_ALERTS)" in notices.calls)
     }
 
     @Test
-    fun `a new basal program writes the suspend and then ends it`() = runTest {
+    fun `a new basal program writes the suspend when sent then ends it and turns the suspend alert off`() = runTest {
         f.pairAndConnect()
         f.basalRunning = true
-        f.pump.getPumpStatus("first status")
+        pump.getPumpStatus("first status")
+        queue.running = Command.CommandType.BASAL_PROFILE
 
         assertTrue(pump.setNewBasalProfile(PROFILE).success)
 
@@ -296,13 +411,32 @@ class IosDashPluginPumpTest {
             pumpSync.calls,
             "Android: PUMP_SUSPEND temp basal for the suspend, stopped by the confirmed program"
         )
+        runLaunched()
+        assertEquals(listOf("customCommand(DISABLE SUSPEND ALERTS)"), queue.queued)
+        assertTrue(bus.events.none { it is EventProfileChangeRequested }, "the queue runs this program: no late confirmation")
+    }
+
+    @Test
+    fun `a basal program confirmed late asks for the profile again`() = runTest {
+        f.pairAndConnect()
+        f.basalRunning = true
+        pump.getPumpStatus("first status")
+        // Status 7-8, suspend 9-10, the program is message 11.
+        f.pod.dropLinkWhileAnswering = 11 to 0
+        assertFalse(pump.setNewBasalProfile(PROFILE).success)
+
+        f.pod.dropLinkWhileAnswering = null
+        assertSame(DashConnectResult.SessionReady, f.reconnect())
+        pump.getPumpStatus("decide the open program")
+
+        assertTrue(bus.events.any { it is EventProfileChangeRequested }, "Android: we are late-confirming this command")
     }
 
     @Test
     fun `a basal program the pod refused leaves the suspend counted`() = runTest {
         f.pairAndConnect()
         f.basalRunning = true
-        f.pump.getPumpStatus("first status")
+        pump.getPumpStatus("first status")
         // The pod takes the suspend (message 9), then reports an old sequence for the program.
         val normal = f.pod.answerFor
         var commands = 0
@@ -318,6 +452,312 @@ class IosDashPluginPumpTest {
             pumpSync.calls,
             "the pod is suspended and runs no basal: the zero temp basal stays"
         )
+        runLaunched()
+        assertTrue(queue.queued.isEmpty(), "no suspend alert to turn off: the program was refused")
+    }
+
+    // ---------------------------------------------------------------- after each command
+
+    @Test
+    fun `a temp basal AAPS expects that the pod does not run is stopped in AAPS`() = runTest {
+        f.pairAndConnect()
+        f.basalRunning = true
+        pumpSync.expectedTemporaryBasal = PumpSync.PumpState.TemporaryBasal(
+            timestamp = SENT_AT - ONE_HOUR, duration = 2 * ONE_HOUR, rate = 2.0, isAbsolute = true,
+            type = PumpSync.TemporaryBasalType.NORMAL, id = 77L, pumpId = 5L
+        )
+
+        pump.getPumpStatus("status")
+
+        assertEquals(listOf("stopTempBasal(timestamp=$SENT_AT, endPumpId=77, pumpType=OMNIPOD_DASH, serial=$SERIAL)"), pumpSync.calls)
+        assertEquals(listOf("alarm(omnipod_dash_ios_tbr_out_of_sync, omnipod_dash_ios_error, sound=BOLUS_ERROR)"), ui.alarms)
+    }
+
+    @Test
+    fun `a temp basal the pod runs that AAPS does not expect is stopped on the pod`() = runTest {
+        f.pairAndConnect()
+        f.tempBasalRunning = true
+
+        pump.getPumpStatus("status")
+
+        assertFalse(f.tempBasalRunning, "Android verifyPumpState cancels it on the pod")
+        assertEquals(listOf("stopTempBasal(timestamp=$SENT_AT, endPumpId=$SENT_AT, pumpType=OMNIPOD_DASH, serial=$SERIAL)"), pumpSync.calls)
+        assertEquals(1, ui.alarms.size)
+    }
+
+    @Test
+    fun `a faulted pod gets the zero temp basal and one fault notice and announcement`() = runTest {
+        f.pairAndConnect()
+        f.faultAlarmType = DashPumpOnFakePod.OCCLUDED
+
+        pump.getPumpStatus("status")
+        f.nowMs = SENT_AT + 60_000L
+        pump.getPumpStatus("status again")
+
+        assertEquals(
+            listOf(
+                "tempBasal(timestamp=$SENT_AT, rate=0.0, duration=288000000, isAbsolute=true, type=PUMP_SUSPEND, pumpId=$SENT_AT, pumpType=OMNIPOD_DASH, serial=$SERIAL)",
+                "announcement(omnipod_dash_ios_pod_fault[020, ALARM_OCCLUDED])"
+            ),
+            pumpSync.calls,
+            "once: the zero temp basal runs, and the fault is synced"
+        )
+        assertEquals(listOf("post(OMNIPOD_POD_FAULT, omnipod_dash_ios_pod_fault[020, ALARM_OCCLUDED], sound=BOLUS_ERROR)"), notices.posts())
+        assertTrue(f.stateManager.alarmSynced)
+    }
+
+    @Test
+    fun `no fault notice while a deactivation waits in the queue`() = runTest {
+        f.pairAndConnect()
+        f.faultAlarmType = DashPumpOnFakePod.OCCLUDED
+        queue.inQueue += CommandDeactivatePod::class
+
+        pump.getPumpStatus("status")
+
+        assertTrue(notices.posts().isEmpty())
+        assertTrue(pumpSync.calls.any { it.startsWith("announcement") }, "the announcement is still written, as Android")
+    }
+
+    @Test
+    fun `a stop of an unexpected temp basal that is not confirmed gets the notice of Android`() = runTest {
+        f.pairAndConnect()
+        f.tempBasalRunning = true
+        // Status 7-8, the stop of the temp basal is message 9: its answer is lost.
+        f.pod.dropLinkWhileAnswering = 9 to 0
+
+        pump.getPumpStatus("status")
+
+        assertTrue(
+            "post(OMNIPOD_TBR_ALERTS, omnipod_dash_ios_cancel_tbr_before_unconfirmed, sound=BOLUS_ERROR)" in notices.posts(),
+            "Android observeNoActiveTempBasal: cancelling the temp basal might have failed. Posts: ${notices.posts()}"
+        )
+    }
+
+    @Test
+    fun `a status read skipped before the activation is completed runs no check as Android`() = runTest {
+        f.pairAndConnect()
+        f.basalRunning = true
+        pump.getPumpStatus("first status")
+        // Part 2 programmed the basal, but the cannula step was not done.
+        f.stateManager.overwriteForTest { it.copy(activationProgress = ActivationProgress.PROGRAMMED_BASAL) }
+        pumpSync.expectedTemporaryBasal = PumpSync.PumpState.TemporaryBasal(
+            timestamp = SENT_AT - ONE_HOUR, duration = 80 * ONE_HOUR, rate = 0.0, isAbsolute = true,
+            type = PumpSync.TemporaryBasalType.PUMP_SUSPEND, id = 12L, pumpId = 5L
+        )
+        val commands = f.pod.commands.size
+
+        pump.getPumpStatus("KeepAlive")
+
+        assertEquals(commands, f.pod.commands.size, "nothing read")
+        assertTrue(ui.alarms.isEmpty(), "Android returns before verifyPumpState: no alarm")
+        assertTrue(pumpSync.calls.isEmpty(), "the zero temp basal of no pod is not ended")
+    }
+
+    @Test
+    fun `a bolus ended by a fault inside the bolus wait gets the zero temp basal and the fault notice at once`() = runTest {
+        f.pairAndConnect()
+        f.stateManager.overwriteForTest { it.copy(reportedPodStatus = PodStatus.ALARM, alarmType = AlarmType.ALARM_OCCLUDED) }
+        val bolus = DashLastBolus(startTimeMs = SENT_AT, requestedUnits = 2.0, bolusUnitsRemaining = 1.5, deliveryComplete = true, createdAtMs = SENT_AT)
+
+        // Android runs checkPodKaput at each status read of waitForBolusDeliveryToComplete.
+        rules.onOutcome(DashBolusEndedByFault(bolus, AlarmType.ALARM_OCCLUDED, SENT_AT))
+
+        assertEquals(
+            listOf(
+                tempBasalLine(SENT_AT, 0.0, 80 * ONE_HOUR, PumpSync.TemporaryBasalType.PUMP_SUSPEND),
+                "announcement(omnipod_dash_ios_pod_fault[020, ALARM_OCCLUDED])"
+            ),
+            pumpSync.calls
+        )
+        assertEquals(listOf("post(OMNIPOD_POD_FAULT, omnipod_dash_ios_pod_fault[020, ALARM_OCCLUDED], sound=BOLUS_ERROR)"), notices.posts())
+    }
+
+    @Test
+    fun `a confirmed temp basal or cancel queues no basal correction because it is not ported yet`() = runTest {
+        f.pairAndConnect()
+        pump.getPumpStatus("status")
+
+        assertTrue(pump.setTempBasalAbsolute(1.0, 30, true, PumpSync.TemporaryBasalType.NORMAL).success)
+        assertTrue(pump.cancelTempBasal(true).success)
+        runLaunched()
+
+        assertTrue(queue.queued.isEmpty(), "known gap: Android CommandDeliverBasalCorrection, see DashPluginRules")
+    }
+
+    @Test
+    fun `a running pod gets no time zone notice because the pod time zone is not stored yet`() = runTest {
+        f.pairAndConnect()
+        f.basalRunning = true
+        pump.getPumpStatus("status")
+
+        rules.updatePodWarnings()
+
+        assertTrue(notices.posts().isEmpty(), "known gap: Android OMNIPOD_TIME_OUT_OF_SYNC, see DashPluginRules")
+    }
+
+    // ---------------------------------------------------------------- queue commands
+
+    @Test
+    fun `a resume confirmed by the pod ends the suspend and turns the suspend alert off`() = runTest {
+        f.pairAndConnect()
+        pump.getPumpStatus("status: delivery suspended")
+        pumpSync.expectedProfile = PROFILE
+
+        val result = pump.executeCustomCommand(CommandResumeDelivery())
+
+        assertTrue(result!!.success, result.comment)
+        assertEquals(listOf(stopLine(SENT_AT)), pumpSync.calls)
+        runLaunched()
+        assertEquals(listOf("customCommand(DISABLE SUSPEND ALERTS)"), queue.queued)
+        assertTrue("dismiss(OMNIPOD_POD_SUSPENDED)" in notices.calls)
+    }
+
+    @Test
+    fun `a resume with no profile fails with nothing sent`() = runTest {
+        f.pairAndConnect()
+        val commands = f.pod.commands.size
+
+        assertFalse(pump.executeCustomCommand(CommandResumeDelivery())!!.success)
+        assertEquals(commands, f.pod.commands.size)
+    }
+
+    @Test
+    fun `a time change sends the program again and asks for no profile change`() = runTest {
+        f.pairAndConnect()
+        f.basalRunning = true
+        pump.getPumpStatus("status")
+        pumpSync.expectedProfile = PROFILE
+
+        assertTrue(pump.executeCustomCommand(CommandHandleTimeChange(requestedByUser = true))!!.success)
+
+        assertEquals(mapProfileToBasalProgram(PROFILE, PumpType.OMNIPOD_DASH), f.stateManager.basalProgram)
+        assertTrue(bus.events.none { it is EventProfileChangeRequested }, "Android SET_TIME")
+    }
+
+    @Test
+    fun `the test beep goes to the pod`() = runTest {
+        f.pairAndConnect()
+        pump.getPumpStatus("status")
+
+        assertTrue(pump.executeCustomCommand(CommandPlayTestBeep())!!.success)
+        assertEquals(DashCommandKind.PROGRAM_BEEPS, f.decided.last().command.kind)
+    }
+
+    @Test
+    fun `the alert configuration reads the Android keys`() = runTest {
+        f.pairAndConnect()
+        f.stateManager.updateExpirationAlertSettings(rules.alertSettings().expiration)
+        f.stateManager.updateLowReservoirAlertSettings(rules.alertSettings().lowReservoir)
+
+        val same = pump.executeCustomCommand(CommandUpdateAlertConfiguration())!!
+        assertTrue(same.success && !same.enacted, "the defaults are what the pod has: nothing sent")
+
+        settings[DashAlertIntKey.LowReservoirAlertUnits.key] = 30
+        val changed = pump.executeCustomCommand(CommandUpdateAlertConfiguration())!!
+        assertFalse(changed.success, "a changed setting must go to the pod; this fixture has no pod expiry, so it fails closed")
+    }
+
+    @Test
+    fun `an unknown queue command fails as Android`() {
+        val result = pump.executeCustomCommand(object : CustomCommand {
+            override val statusDescription = "SUSPEND DELIVERY"
+        })!!
+
+        assertFalse(result.success)
+    }
+
+    @Test
+    fun `a confirmed deactivation dismisses the fault notice`() = runTest {
+        f.pairAndConnect()
+        pump.getPumpStatus("status")
+
+        assertTrue(pump.executeCustomCommand(CommandDeactivatePod())!!.success)
+        assertTrue("dismiss(OMNIPOD_POD_FAULT)" in notices.calls)
+        assertEquals("4241", pump.serialNumber())
+    }
+
+    @Test
+    fun `a confirmed deactivation writes the PUMP_SUSPEND temp basal of the pod before the reset`() = runTest {
+        f.pairAndConnect()
+        f.basalRunning = true
+        pump.getPumpStatus("status")
+
+        assertTrue(pump.executeCustomCommand(CommandDeactivatePod())!!.success)
+
+        assertEquals(
+            listOf(tempBasalLine(SENT_AT, 0.0, 80 * ONE_HOUR, PumpSync.TemporaryBasalType.PUMP_SUSPEND)),
+            pumpSync.calls,
+            "Android checkPodKaput runs before podStateManager.reset(): no basal is counted from the deactivation on"
+        )
+    }
+
+    @Test
+    fun `a time change whose suspend is not confirmed gets the notice of Android`() = runTest {
+        f.pairAndConnect()
+        f.basalRunning = true
+        pump.getPumpStatus("status")
+        pumpSync.expectedProfile = PROFILE
+        // Status 7-8, the suspend is message 9: its answer is lost.
+        f.pod.dropLinkWhileAnswering = 9 to 0
+
+        assertFalse(pump.executeCustomCommand(CommandHandleTimeChange(requestedByUser = true))!!.success)
+
+        assertTrue(
+            "post(FAILED_UPDATE_PROFILE, omnipod_dash_ios_suspend_unconfirmed, sound=BOLUS_ERROR)" in notices.posts(),
+            "Android suspendDeliveryIfActive: suspend delivery is unconfirmed. Posts: ${notices.posts()}"
+        )
+    }
+
+    // ---------------------------------------------------------------- status checker
+
+    @Test
+    fun `an open command with an idle queue gets a status read`() = runTest {
+        f.pairAndConnect()
+        f.pod.dropLinkWhileAnswering = 7 to 0
+        assertFalse(pump.deliverTreatment(bolus(1.0)).success)
+
+        rules.statusCheck()
+        runLaunched()
+
+        assertEquals(listOf("readStatus(omnipod_dash_ios_unconfirmed_command)"), queue.queued)
+    }
+
+    @Test
+    fun `no status read while the queue is busy or no command is open`() = runTest {
+        f.pairAndConnect()
+        rules.refreshStatusOnUnacknowledgedCommands()
+        f.pod.dropLinkWhileAnswering = 7 to 0
+        assertFalse(pump.deliverTreatment(bolus(1.0)).success)
+        queue.size = 1
+        rules.refreshStatusOnUnacknowledgedCommands()
+        runLaunched()
+
+        assertTrue(queue.queued.isEmpty())
+    }
+
+    @Test
+    fun `the pod warnings come at most every 15 minutes`() = runTest {
+        rules.updatePodWarnings()
+        f.nowMs = SENT_AT + 14 * 60_000L
+        rules.updatePodWarnings()
+        f.nowMs = SENT_AT + 16 * 60_000L
+        rules.updatePodWarnings()
+
+        assertEquals(
+            listOf("post(OMNIPOD_POD_NOT_ATTACHED, omnipod_dash_ios_no_active_pod, sound=null)", "post(OMNIPOD_POD_NOT_ATTACHED, omnipod_dash_ios_no_active_pod, sound=null)"),
+            notices.posts()
+        )
+    }
+
+    @Test
+    fun `a suspended pod gets the suspended notice with its sound setting`() = runTest {
+        f.pairAndConnect()
+        pump.getPumpStatus("status: delivery suspended")
+        settings[DashSoundKey.SoundDeliverySuspendedNotification.key] = false
+
+        rules.updatePodWarnings()
+
+        assertEquals(listOf("post(OMNIPOD_POD_SUSPENDED, omnipod_dash_ios_delivery_suspended, sound=null)"), notices.posts())
     }
 
     private companion object {

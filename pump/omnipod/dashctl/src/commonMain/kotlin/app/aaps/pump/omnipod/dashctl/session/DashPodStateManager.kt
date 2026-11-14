@@ -380,6 +380,16 @@ class DashPodStateManager(private val store: DashPodStateStore) {
         return ended
     }
 
+    /**
+     * Android `podStateManager.tempBasal = null` in `verifyPumpState`: AAPS expected a temp basal, the
+     * pod runs its basal program, so the stored temp basal is dropped. Persists.
+     */
+    fun clearTempBasal() {
+        if (state.tempBasal == null) return
+        state = state.copy(tempBasal = null)
+        persist()
+    }
+
     // -- Alerts (ported from OmnipodDashPodStateManagerImpl) ----------------------
 
     /** Android setter `suspendAlertsEnabled`. Persists. */

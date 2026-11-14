@@ -125,13 +125,14 @@ sealed interface DashPumpOutcome {
  *
  * The receiver corrects the record of this bolus to [DashLastBolus.deliveredUnits] (asked - left),
  * the same way as [DashCommandOutcome.endedBolus]. It updates one record, it never adds a second
- * bolus. That record was made from the SUCCESS [DashCommandOutcome] of the bolus, at the asked units
- * (Android `pumpSyncBolusStart`), and that outcome comes first, also when it was decided inside the call
- * and a fault in the bolus wait gives this correction while [IosDashPump.deliverTreatment] still runs.
+ * bolus. That record was made when the bolus was sent (`onCommandSent`, Android `pumpSyncBolusStart`),
+ * at the asked units, so it is there before any correction, also when a fault in the bolus wait gives
+ * this correction while [IosDashPump.deliverTreatment] still runs.
  * The key of the record is the command time: [DashLastBolus.createdAtMs] is
  * [DashActiveCommand.createdAtMs] of that outcome (Android updates the record by its `pumpId`; here
  * [DashLastBolus.historyId] is 0, there is no pod history yet). Null only for a bolus whose command was
- * stored by codec version 3 or before; the receiver then takes the last SUCCESS bolus it recorded.
+ * stored by codec version 3 or before; the receiver then corrects nothing, because any record it wrote
+ * belongs to another bolus, and the bolus stays counted at the asked amount.
  * Without the correction the part the pod never gave would stay in insulin on board.
  *
  * The `bolusDelivered` of the result of [IosDashPump.deliverTreatment] carries the same amount for the
@@ -174,8 +175,9 @@ data class DashBolusEndedByFault(
  * @property podDiscarded true when the pod was discarded (`IosDashPump.discardPod`) while [command]
  *   was still not confirmed. [confirmation] is then NOT_CONFIRMED, and nobody will ever know whether
  *   the pod took it. Android records a bolus and a temp basal as soon as they were sent, so its
- *   "Discard pod" keeps them. The receiver must do the same: count a BOLUS at
- *   [DashActiveCommand.requestedBolusUnits] and a TEMP_BASAL as started, both at
+ *   "Discard pod" keeps them. The receiver must do the same: keep what it wrote when the command was
+ *   sent, and when nothing was written then (the write threw, or the app stopped in between), count
+ *   a BOLUS at [DashActiveCommand.requestedBolusUnits] and a TEMP_BASAL as started, both at
  *   [DashActiveCommand.createdAtMs]. Counting nothing could leave insulin the pod gave out of insulin
  *   on board, and the loop could then dose again on top of it.
  */
@@ -267,6 +269,15 @@ class IosDashPump(
      * decide where a late bolus and a bolus correction are recorded.
      */
     private val onCommandDecided: (DashPumpOutcome) -> Unit,
+    /**
+     * Gets a delivery command (its active command) once it reached the pod: the write was taken
+     * (`CommandSendSuccess`) or may have been (`CommandSendErrorConfirming`), before its answer is read.
+     * Android `podEvent.isCommandSent()`, where the plugin writes a bolus, a temp basal and the
+     * PUMP_SUSPEND temp basal of a suspend to `PumpSync` (`pumpSyncBolusStart`, `pumpSyncTempBasal`).
+     * Called with the command lock held, on the queue thread. Not called for a command that never left
+     * the phone, nor when the write threw (Android has no `CommandSent` event then either).
+     */
+    private val onCommandSent: (DashActiveCommand) -> Unit = {},
     private val stateManager: DashPodStateManager = DashPodStateManager(DashKeychainStateStore()),
     /** A new key pair for each pairing, as Android `LTKExchanger` builds a new `KeyExchange`. */
     private val newKeyExchange: () -> DashKeyExchange = {
@@ -1150,6 +1161,17 @@ class IosDashPump(
         }
     }
 
+    /**
+     * The cancel part of Android `verifyPumpState` (`observeNoActiveTempBasal`, then the confirmation):
+     * the pod runs a temp basal that AAPS does not expect, so it is stopped. Decided on the last status,
+     * as [setTempBasalAbsolute] decides its cancel: nothing is sent when that status shows no temp basal.
+     * Success when nothing had to be sent, or the pod took or refused the stop (Android goes on after a
+     * refused one); a stop that is not confirmed stays open as any other command.
+     */
+    suspend fun cancelTempBasalNotExpected(): PumpEnactResult = lockedCommand {
+        cancelRunningTempBasalFirst() ?: DashPumpEnactResult(success = true, enacted = true, comment = "No temp basal running on the pod")
+    }
+
     override suspend fun setTempBasalPercent(
         percent: Int,
         durationInMinutes: Int,
@@ -1391,8 +1413,8 @@ class IosDashPump(
      *   yes for a profile the pod does not run.
      *
      * Android then turns the "suspend ended" alert off (`CommandDisableSuspendAlerts` on a confirmed
-     * RESUME_DELIVERY or SET_BASAL_PROFILE). That is the plugin's job here (phase 4): on such an
-     * outcome it calls [disableSuspendAlerts].
+     * RESUME_DELIVERY or SET_BASAL_PROFILE). The plugin does the same: on such an outcome it queues the
+     * command, which calls [disableSuspendAlerts] (`DashPluginRules.onOutcome`).
      */
     suspend fun resumeDelivery(profile: PumpProfile): PumpEnactResult {
         val basalProgram = try {
@@ -1650,8 +1672,8 @@ class IosDashPump(
      * ([syncPumpFlows]), also when nothing could be read. Not a programming command, so no active
      * command is opened. Fails closed like everything else; errors are logged.
      *
-     * Not here, for the plugin (phase 4): Android `verifyPumpState` (it compares the temp basal of the
-     * pod with the one `PumpSync` expects) and the history.
+     * Android `verifyPumpState` and the plugin part of `checkPodKaput` follow in the plugin
+     * (`DashPluginRules.afterCommand`). Not here: the pod history.
      *
      * As Android: before the activation is completed, nothing is read unless [reason] is
      * [REQUESTED_BY_USER] (no race on BLE with the activation), and after a status read on a pod whose
@@ -1788,7 +1810,7 @@ class IosDashPump(
                 )
             }
         }
-        val sent = sendCommand(build) { command ->
+        val sent = sendCommand(build, beforeSend = { command ->
             stateManager.createActiveCommand(
                 kind = kind,
                 // No pod history on iOS yet (plan, phase 2).
@@ -1803,7 +1825,9 @@ class IosDashPump(
                 "The active command must take the sequence the command is built with"
             }
             stateManager.markActiveCommandSent()
-        }
+        }, afterSent = {
+            stateManager.activeCommand?.let(onCommandSent)
+        })
         // Only here, never for a status read: a status that could not be sent must not close an
         // open delivery command as "not sent".
         if (!sent.reachedRadio) stateManager.markActiveCommandNotSent()
@@ -1842,9 +1866,8 @@ class IosDashPump(
      * before the outcome is given: a crash between the two loses the correction, and the bolus then
      * stays counted at the asked amount (more than went in, never less), as on Android.
      *
-     * Not here, for the plugin (phase 4): the PUMP_SUSPEND temp basal Android records for a kaput pod,
-     * the fault notification and announcement (with [DashPodStateManager.alarmType] and
-     * [DashPodStateManager.alarmSynced]).
+     * The PUMP_SUSPEND temp basal Android records for a kaput pod and the fault notice and announcement
+     * are the plugin's (`DashPluginRules.checkPodKaput`, after the command).
      */
     private fun checkPodKaput(at: Long) {
         val ended = stateManager.completeBolusOnPodKaput() ?: return
@@ -1899,6 +1922,7 @@ class IosDashPump(
     private fun sendCommand(
         build: (uniqueId: Int, sequence: Short) -> Command,
         beforeSend: (Command) -> Unit = {},
+        afterSent: () -> Unit = {},
     ): SentCommand {
         val s = requireSession()
         val uniqueId = stateManager.uniqueId
@@ -1916,11 +1940,15 @@ class IosDashPump(
             is CommandSendErrorSending    ->
                 return SentCommand(reachedRadio = false, error = "could not send the command: ${sendResult.msg}")
 
-            is CommandSendSuccess         -> stateManager.increaseMessageSequenceNumber()
+            is CommandSendSuccess         -> {
+                stateManager.increaseMessageSequenceNumber()
+                afterSent()
+            }
 
             is CommandSendErrorConfirming -> {
                 aapsLogger.warn(LTag.PUMPBTCOMM, "Command sent but not confirmed: ${sendResult.msg}")
                 stateManager.increaseMessageSequenceNumber()
+                afterSent()
             }
         }
         val readResult = try {
