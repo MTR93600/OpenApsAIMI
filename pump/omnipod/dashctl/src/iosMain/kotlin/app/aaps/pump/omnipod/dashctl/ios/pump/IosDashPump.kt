@@ -158,6 +158,27 @@ data class DashBolusEndedByFault(
 ) : DashPumpOutcome
 
 /**
+ * A bolus the pod reported that the app did not track (`DashPodStateManager.updateFromDefaultStatus`),
+ * as OmnipodKit (Trio) `PodState.updateDeliveryStatus` makes a dose of it. Deliberate difference from
+ * Android, which ignores it, so insulin the pod gives is never counted.
+ *
+ * The receiver writes one bolus record of [DashLastBolus.requestedUnits] (the units left at that
+ * status) at [DashLastBolus.createdAtMs], with that time as the pump id, then calls [onWritten]. Until
+ * then the state keeps its mark and every status gives it again, so a write that failed is tried again
+ * (a cleared mark with nothing written means insulin counted too low). The same pump id makes a second
+ * write update the one record, so the bolus is never counted twice. Its end (a stop, a fault) corrects
+ * that record, as for any other bolus.
+ *
+ * @property onWritten tells the pod state that the record is written (`DashPodStateManager.untrackedBolusWritten`).
+ *   A receiver that does not write it does not call it.
+ */
+data class DashUntrackedBolus(
+    val bolus: DashLastBolus,
+    override val decidedAtMs: Long,
+    val onWritten: () -> Unit = {},
+) : DashPumpOutcome
+
+/**
  * The final outcome of one delivery command, given to `IosDashPump.onCommandDecided`, as Android
  * `OmnipodDashPumpPlugin.handleCommandConfirmation` gets it. The receiver records it (pump history,
  * `PumpSync`).
@@ -1270,7 +1291,7 @@ class IosDashPump(
         busy = true
         try {
             requireSession()
-            cancelRunningTempBasalFirst()?.let { return@connectThenLock it }
+            cancelRunningTempBasalFirst(newTempBasalFollows = true)?.let { return@connectThenLock it }
             val tempBasalBeeps = beeps().tempBasalBeeps
             val outcome = sendDeliveryCommand(
                 DashCommandKind.TEMP_BASAL, tempBasalRate = absoluteRate, tempBasalMinutes = durationInMinutes
@@ -1309,8 +1330,14 @@ class IosDashPump(
      *   yet, the cancel is sent, as Android (`deliveryStatus?.tempBasalActive() == false` is false
      *   for null).
      * - The cancel goes through [sendDeliveryCommand] with its own active command.
-     * - SUCCESS and DENIED: the new temp basal goes next (null is returned). Android goes on after a
-     *   denied cancel too: `updateActiveCommand` emits `CommandConfirmed(success = false)`.
+     * - SUCCESS: the new temp basal goes next (null is returned).
+     * - DENIED: with [newTempBasalFollows], the new temp basal is not sent (a failure is returned), as
+     *   OmnipodKit (Trio) `enactTempBasal` stops on a cancel that failed. Deliberate difference from
+     *   Android, which goes on (`updateActiveCommand` emits `CommandConfirmed(success = false)`): the
+     *   old temp basal still runs, so the pod refuses the new one or runs the old one, and the temp
+     *   basal AAPS then counts is not the one that runs (insulin counted wrong). Without
+     *   [newTempBasalFollows] (the stop of a temp basal not expected) a DENIED stop returns null, as
+     *   Android.
      * - NOT_CONFIRMED: the cancel stays open and the new temp basal is not sent (Android: the
      *   `observeNoActiveCommand` of the set fails).
      * - SENDING_FAILURE: the new temp basal is not sent (Android: `updateActiveCommand` raises the
@@ -1319,7 +1346,7 @@ class IosDashPump(
      * Returns the failure to give back, or null when the new temp basal may be sent. Throws
      * [DashCommandNotConfirmedException] while another command is open: nothing is sent.
      */
-    private fun cancelRunningTempBasalFirst(): PumpEnactResult? {
+    private fun cancelRunningTempBasalFirst(newTempBasalFollows: Boolean): PumpEnactResult? {
         if (stateManager.podStatus?.deliveryStatus?.tempBasalActive() == false) {
             aapsLogger.info(LTag.PUMP, "No temporary basal to cancel")
             return null
@@ -1330,8 +1357,9 @@ class IosDashPump(
             stopCommand(DeliveryType.TEMP_BASAL, uid, seq, beep)
         }
         return when (cancel.confirmation) {
-            DashCommandConfirmation.SUCCESS,
-            DashCommandConfirmation.DENIED          -> null
+            DashCommandConfirmation.SUCCESS         -> null
+            DashCommandConfirmation.DENIED          ->
+                if (newTempBasalFollows) failure("Cancel of the running TBR: ${cancel.describe()}. New TBR not sent") else null
 
             else                                    -> failure("Cancel of the running TBR: ${cancel.describe()}. New TBR not sent")
         }
@@ -1345,7 +1373,7 @@ class IosDashPump(
      * refused one); a stop that is not confirmed stays open as any other command.
      */
     suspend fun cancelTempBasalNotExpected(): PumpEnactResult = lockedCommand {
-        cancelRunningTempBasalFirst() ?: DashPumpEnactResult(success = true, enacted = true, comment = "No temp basal running on the pod")
+        cancelRunningTempBasalFirst(newTempBasalFollows = false) ?: DashPumpEnactResult(success = true, enacted = true, comment = "No temp basal running on the pod")
     }
 
     override suspend fun setTempBasalPercent(
@@ -2063,8 +2091,22 @@ class IosDashPump(
         val at = now()
         val resolved = stateManager.resolveActiveCommand(at)
         handleCommandConfirmation(resolved, decidedLate, at)
+        recordUntrackedBolus(at)
         checkPodKaput(at)
         return resolved
+    }
+
+    /**
+     * Gives a bolus the pod reported and the app did not track to [onCommandDecided] as
+     * [DashUntrackedBolus]. The mark in the state is cleared only by its receiver, once the record is
+     * written ([DashUntrackedBolus.onWritten]); until then each [resolveAndHandle] gives it again.
+     * Before [checkPodKaput], so a fault that ends it corrects a record that is already there.
+     */
+    private fun recordUntrackedBolus(at: Long) {
+        val bolus = stateManager.untrackedBolusToRecord() ?: return
+        aapsLogger.warn(LTag.PUMP, "The pod delivers a bolus the app did not track: ${bolus.requestedUnits} U left, recorded now")
+        val pumpId = bolus.createdAtMs
+        onCommandDecided(DashUntrackedBolus(bolus, at) { stateManager.untrackedBolusWritten(pumpId) })
     }
 
     /**

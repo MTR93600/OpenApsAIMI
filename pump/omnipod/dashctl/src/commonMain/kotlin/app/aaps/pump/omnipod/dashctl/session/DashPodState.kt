@@ -175,6 +175,26 @@ data class DashPodState(
     val successfulConnectionAttemptsAfterRetries: Int = 0,
     /** Android `PodState.failedConnectionsAfterRetries`: connections to the pod that failed after all retries. */
     val failedConnectionsAfterRetries: Int = 0,
+
+    // -- Dose accounting of OmnipodKit (Trio), deliberate differences from Android ----------------
+
+    /**
+     * When the pod stopped delivery because of its fault, epoch ms, from the first alarm status: its
+     * arrival time minus (minutes since activation - minutes since activation of the alarm). Null when
+     * the pod gave no valid alarm time (0 or 0xffff, or later than its own clock), or no fault was seen.
+     * Kept with [alarmType], in the same write. As OmnipodKit `setDeliveryStoppedAt(podTime:
+     * faultEventTimeSinceActivation)`. Deliberate difference from Android, which writes the PUMP_SUSPEND
+     * temp basal of a faulted pod at the time the fault was seen: when the phone sees the fault late, the
+     * basal of all that time is counted as given (insulin counted wrong).
+     */
+    val faultTimeMs: Long? = null,
+    /**
+     * The [DashLastBolus.createdAtMs] of a bolus the pod reported that the app did not track, while it
+     * is not written to `PumpSync` yet. Set in the same write that makes that bolus the [lastBolus],
+     * cleared once its record was given, so a crash in between writes it after the restart (with the
+     * same pump id, so `PumpSync` keeps one record). See `DashPodStateManager.updateFromDefaultStatus`.
+     */
+    val untrackedBolusToRecordAt: Long? = null,
 ) {
 
     init {
@@ -231,7 +251,9 @@ data class DashPodState(
             timeZoneUpdatedMs == other.timeZoneUpdatedMs &&
             pdmRef == other.pdmRef &&
             successfulConnectionAttemptsAfterRetries == other.successfulConnectionAttemptsAfterRetries &&
-            failedConnectionsAfterRetries == other.failedConnectionsAfterRetries
+            failedConnectionsAfterRetries == other.failedConnectionsAfterRetries &&
+            faultTimeMs == other.faultTimeMs &&
+            untrackedBolusToRecordAt == other.untrackedBolusToRecordAt
     }
 
     override fun hashCode(): Int {
@@ -275,6 +297,8 @@ data class DashPodState(
         result = 31 * result + (pdmRef?.hashCode() ?: 0)
         result = 31 * result + successfulConnectionAttemptsAfterRetries
         result = 31 * result + failedConnectionsAfterRetries
+        result = 31 * result + (faultTimeMs?.hashCode() ?: 0)
+        result = 31 * result + (untrackedBolusToRecordAt?.hashCode() ?: 0)
         return result
     }
 

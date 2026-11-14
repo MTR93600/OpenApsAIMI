@@ -225,54 +225,49 @@ class IosDashPumpTempBasalTest {
     }
 
     /**
-     * Android: a denied cancel emits `CommandConfirmed(success = false)` and the set goes on. This test
-     * checks that order of events only. The SUCCESS of the set comes from the fake pod, which takes a
-     * temp basal even while one runs. How a real pod answers a temp basal in that state is not known
-     * here; the next test has the pod refuse it, and both end without a second temp basal.
+     * Deliberate difference from Android (insulin counted wrong), as OmnipodKit (Trio) `enactTempBasal`:
+     * a cancel the pod refused leaves the first temp basal running, so the new one is not sent. Android
+     * goes on (`CommandConfirmed(success = false)`), and AAPS would then count a temp basal that does not
+     * run. Fails before the fix: the new temp basal went out and the call reported success.
      */
     @Test
-    fun `a cancel refused by the pod still lets the new temp basal go as Android does`() = runTest {
+    fun `a cancel refused by the pod stops the new temp basal as OmnipodKit does`() = runTest {
         runningTempBasal()
         val normal = f.pod.answerFor
         f.pod.answerFor = { command ->
-            // The pod does not take the cancel: its status still shows the first temp basal (sequence 2).
+            // The pod does not take the cancel: its status still shows the first temp basal.
             if (isStopOf(command, TEMP_BASAL_BIT)) defaultStatus(f.lastProgrammingSequence, 0, TEMP_BASAL_ACTIVE) else normal(command)
         }
         val start = f.pod.commands.size
 
         val result = tbr(2.0, 60)
 
-        assertEquals(2, f.pod.commands.size - start)
-        assertEquals(
-            listOf(DashCommandConfirmation.DENIED, DashCommandConfirmation.SUCCESS),
-            f.decided.map { it.confirmation }
-        )
-        assertTrue(result.success, result.comment)
+        assertEquals(1, f.pod.commands.size - start, "the cancel only")
+        assertEquals(listOf(DashCommandKind.STOP_TEMP_BASAL to DashCommandConfirmation.DENIED), f.decided.map { it.command.kind to it.confirmation })
+        assertFalse(result.success, result.comment)
+        assertFalse(result.enacted)
+        assertNull(f.stateManager.activeCommand, "DENIED is final: nothing stays open")
     }
 
     /**
-     * The same refused cancel, with a pod that also refuses the new temp basal while the first one
-     * runs. Both are DENIED, the call fails, nothing stays open and the first temp basal still runs.
+     * With a pod that takes nothing, the new temp basal would get another sequence while the status
+     * shows a temp basal running (the first one), and the delivery status check would take it as the
+     * new one. Not sending it after the refused cancel keeps that from happening.
      */
     @Test
-    fun `a refused cancel then a refused temp basal end as two denials and nothing open`() = runTest {
+    fun `a refused cancel sends no new temp basal that the running one could be taken for`() = runTest {
         runningTempBasal()
         val firstSequence = f.lastProgrammingSequence
-        // The pod takes neither: every status still shows the first temp basal.
         f.pod.answerFor = { defaultStatus(firstSequence, 0, TEMP_BASAL_ACTIVE) }
         val start = f.pod.commands.size
 
         val result = tbr(2.0, 60)
 
         assertFalse(result.success, result.comment)
-        assertFalse(result.enacted)
-        assertEquals(2, f.pod.commands.size - start, "the cancel and the new temp basal")
-        assertEquals(
-            listOf(DashCommandKind.STOP_TEMP_BASAL to DashCommandConfirmation.DENIED, DashCommandKind.TEMP_BASAL to DashCommandConfirmation.DENIED),
-            f.decided.map { it.command.kind to it.confirmation }
-        )
-        assertNull(f.stateManager.activeCommand, "DENIED is final: nothing stays open")
+        assertEquals(1, f.pod.commands.size - start, "the cancel only")
+        assertEquals(listOf(DashCommandKind.STOP_TEMP_BASAL to DashCommandConfirmation.DENIED), f.decided.map { it.command.kind to it.confirmation })
         assertTrue(f.stateManager.podStatus?.deliveryStatus?.tempBasalActive() == true, "the first temp basal still runs")
+        assertEquals(1.0, f.stateManager.tempBasal?.rate, "the stored temp basal is still the first one")
     }
 
     // ---------------------------------------------------------------- the time of a command

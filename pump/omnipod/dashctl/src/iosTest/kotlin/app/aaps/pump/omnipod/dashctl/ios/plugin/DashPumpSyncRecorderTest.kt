@@ -7,11 +7,14 @@ import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.pump.omnipod.dashctl.comm.io.SilentPodLogger
 import app.aaps.pump.omnipod.dashctl.ios.pump.DashBolusEndedByFault
 import app.aaps.pump.omnipod.dashctl.ios.pump.DashCommandOutcome
+import app.aaps.pump.omnipod.dashctl.ios.pump.DashUntrackedBolus
 import app.aaps.pump.omnipod.dashctl.pod.definition.AlarmType
 import app.aaps.pump.omnipod.dashctl.session.DashActiveCommand
 import app.aaps.pump.omnipod.dashctl.session.DashCommandConfirmation
 import app.aaps.pump.omnipod.dashctl.session.DashCommandKind
 import app.aaps.pump.omnipod.dashctl.session.DashLastBolus
+import app.aaps.pump.omnipod.dashctl.session.DashTempBasal
+import app.aaps.pump.omnipod.dashctl.session.dashCountAsTakenWhileUnknown
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -26,7 +29,13 @@ import kotlinx.coroutines.test.runTest
 class DashPumpSyncRecorderTest {
 
     private val pumpSync = RecordingDashPumpSync()
-    private val recorder = DashPumpSyncRecorder(pumpSync, SilentPodLogger, serialNumber = { SERIAL })
+
+    /** The temp basal that runs on the pod when a command is made: the one a cancel stops. */
+    private var runningTempBasal: DashTempBasal? = null
+
+    /** The rule of the phone (`DashPodStateManager.countAsTakenWhileUnknown`) with a scheduled basal of [SCHEDULED_RATE]. */
+    private fun countAsTaken(command: DashActiveCommand): Boolean = dashCountAsTakenWhileUnknown(command, SCHEDULED_RATE, runningTempBasal)
+    private val recorder = DashPumpSyncRecorder(pumpSync, SilentPodLogger, ::countAsTaken, serialNumber = { SERIAL })
 
     private fun command(kind: DashCommandKind, at: Long? = AT, units: Double? = null, rate: Double? = null, minutes: Int? = null) =
         DashActiveCommand(
@@ -92,11 +101,95 @@ class DashPumpSyncRecorderTest {
         assertEquals(listOf(tempBasalLine(AT, 1.2, 1_800_000L, PumpSync.TemporaryBasalType.SUPERBOLUS)), pumpSync.calls)
     }
 
+    /**
+     * Deliberate difference from Android (OmnipodKit `resolveAnyPendingCommandWithUncertainty`): a
+     * suspend the pod never got would count the basal it gives as not given. Its SUCCESS writes it.
+     */
     @Test
-    fun `a suspend is written when it is sent as the PUMP_SUSPEND temp basal of Android`() = runTest {
-        send(command(DashCommandKind.SUSPEND_DELIVERY))
+    fun `a suspend is not written when it is sent but when the pod confirms it`() = runTest {
+        val suspend = command(DashCommandKind.SUSPEND_DELIVERY)
+        send(suspend)
+        assertTrue(pumpSync.calls.isEmpty(), pumpSync.calls.toString())
 
+        recorder.record(outcome(suspend))
         assertEquals(listOf(tempBasalLine(AT, 0.0, 288_000_000L, PumpSync.TemporaryBasalType.PUMP_SUSPEND)), pumpSync.calls)
+    }
+
+    @Test
+    fun `a temp basal below the schedule is not written when it is sent but at the command time when confirmed`() = runTest {
+        val low = command(DashCommandKind.TEMP_BASAL, rate = 0.4, minutes = 30)
+        send(low, tbrType = PumpSync.TemporaryBasalType.NORMAL)
+        assertTrue(pumpSync.calls.isEmpty(), pumpSync.calls.toString())
+
+        // Decided inside the call that sent it: the record gets the type of the call.
+        recorder.record(outcome(low))
+        recorder.endCommand(null)
+        assertEquals(listOf(tempBasalLine(AT, 0.4, 1_800_000L, PumpSync.TemporaryBasalType.NORMAL)), pumpSync.calls)
+    }
+
+    @Test
+    fun `a zero temp basal is never written when it is sent and a high one always is`() = runTest {
+        send(command(DashCommandKind.TEMP_BASAL, rate = 0.0, minutes = 30), tbrType = PumpSync.TemporaryBasalType.NORMAL)
+        send(command(DashCommandKind.TEMP_BASAL, at = AT + 1, rate = SCHEDULED_RATE, minutes = 30), tbrType = PumpSync.TemporaryBasalType.NORMAL)
+        send(command(DashCommandKind.TEMP_BASAL, at = AT + 2, rate = 3.0, minutes = 30), tbrType = PumpSync.TemporaryBasalType.NORMAL)
+
+        assertEquals(
+            listOf(
+                tempBasalLine(AT + 1, SCHEDULED_RATE, 1_800_000L, PumpSync.TemporaryBasalType.NORMAL),
+                tempBasalLine(AT + 2, 3.0, 1_800_000L, PumpSync.TemporaryBasalType.NORMAL)
+            ),
+            pumpSync.calls,
+            "the scheduled rate itself is not below the schedule"
+        )
+    }
+
+    @Test
+    fun `a low temp basal and a suspend left open when the pod is discarded are not counted`() = runTest {
+        val notConfirmed = DashCommandConfirmation.NOT_CONFIRMED
+        recorder.record(outcome(command(DashCommandKind.TEMP_BASAL, rate = 0.0, minutes = 120), notConfirmed, late = true, discarded = true))
+        recorder.record(outcome(command(DashCommandKind.TEMP_BASAL, at = AT + 1, rate = 0.5, minutes = 60), notConfirmed, late = true, discarded = true))
+        recorder.record(outcome(command(DashCommandKind.SUSPEND_DELIVERY, at = AT + 2), notConfirmed, late = true, discarded = true))
+
+        assertTrue(pumpSync.calls.isEmpty(), "the basal goes on in AAPS, more insulin counted: ${pumpSync.calls}")
+    }
+
+    @Test
+    fun `a cancel of a low temp basal left open when the pod is discarded ends it at the command time`() = runTest {
+        runningTempBasal = DashTempBasal(startTimeMs = AT - 60_000L, rate = 0.2, durationInMinutes = 60)
+        recorder.record(outcome(command(DashCommandKind.STOP_TEMP_BASAL), DashCommandConfirmation.NOT_CONFIRMED, late = true, discarded = true))
+
+        assertEquals(listOf("stopTempBasal(timestamp=$AT, endPumpId=$AT, pumpType=OMNIPOD_DASH, serial=$SERIAL)"), pumpSync.calls)
+    }
+
+    @Test
+    fun `a cancel of a high temp basal left open when the pod is discarded writes nothing`() = runTest {
+        runningTempBasal = DashTempBasal(startTimeMs = AT - 60_000L, rate = 2.5, durationInMinutes = 60)
+        recorder.record(outcome(command(DashCommandKind.STOP_TEMP_BASAL), DashCommandConfirmation.NOT_CONFIRMED, late = true, discarded = true))
+
+        assertTrue(pumpSync.calls.isEmpty(), "the high temp basal stays counted: ${pumpSync.calls}")
+    }
+
+    @Test
+    fun `a resume or basal program left open when the pod is discarded ends the suspend at the command time`() = runTest {
+        val notConfirmed = DashCommandConfirmation.NOT_CONFIRMED
+        recorder.record(outcome(command(DashCommandKind.RESUME_DELIVERY), notConfirmed, late = true, discarded = true))
+        recorder.record(outcome(command(DashCommandKind.BASAL_PROGRAM, at = AT + 1), notConfirmed, late = true, discarded = true))
+
+        assertEquals(
+            listOf(AT, AT + 1).map { "stopTempBasal(timestamp=$it, endPumpId=$it, pumpType=OMNIPOD_DASH, serial=$SERIAL)" },
+            pumpSync.calls,
+            "the basal may run again: counted from the command time"
+        )
+    }
+
+    @Test
+    fun `an untracked bolus is written once with its time as the pump id`() = runTest {
+        val untracked = DashLastBolus(startTimeMs = AT, requestedUnits = 1.25, bolusUnitsRemaining = 1.25, deliveryComplete = false, createdAtMs = AT)
+        recorder.record(DashUntrackedBolus(untracked, AT))
+        // After a crash before the mark was cleared, the same bolus comes again.
+        recorder.record(DashUntrackedBolus(untracked, AT + 5_000L))
+
+        assertEquals(mapOf(AT to (1.25 to BS.Type.NORMAL)), pumpSync.bolusRecords, "one record, never two")
     }
 
     @Test
@@ -179,7 +272,7 @@ class DashPumpSyncRecorderTest {
         val bolus = command(DashCommandKind.BOLUS, units = 1.5)
         send(bolus, bolusType = BS.Type.SMB)
         // After the crash: a new recorder, the open bolus decided late by the first status.
-        val afterRestart = DashPumpSyncRecorder(pumpSync, SilentPodLogger, serialNumber = { SERIAL })
+        val afterRestart = DashPumpSyncRecorder(pumpSync, SilentPodLogger, ::countAsTaken, serialNumber = { SERIAL })
         afterRestart.record(outcome(bolus, late = true))
 
         assertEquals(mapOf(AT to (1.5 to BS.Type.SMB)), pumpSync.bolusRecords, "one record, its type kept")
@@ -290,7 +383,7 @@ class DashPumpSyncRecorderTest {
                 pumpType: PumpType, pumpSerial: String
             ): Boolean = error("database closed")
         }
-        val r = DashPumpSyncRecorder(failing, SilentPodLogger, serialNumber = { SERIAL })
+        val r = DashPumpSyncRecorder(failing, SilentPodLogger, ::countAsTaken, serialNumber = { SERIAL })
 
         r.onCommandSent(command(DashCommandKind.BOLUS, units = 1.0))
         r.onOutcome(outcome(command(DashCommandKind.BOLUS, units = 1.0)))
@@ -317,5 +410,8 @@ class DashPumpSyncRecorderTest {
         const val AT = 1_794_564_000_000L
         const val DECIDED_AT = AT + 3_600_000L
         const val SERIAL = "37879809"
+
+        /** The rate of the basal program at the command times, U/h. */
+        const val SCHEDULED_RATE = 1.0
     }
 }

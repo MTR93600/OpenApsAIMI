@@ -67,6 +67,7 @@ class DashPodEndToEndTest {
     private val recorder = DashPumpSyncRecorder(
         pumpSync = pumpSync,
         aapsLogger = SilentPodLogger,
+        countAsTakenWhileUnknown = f.stateManager::countAsTakenWhileUnknown,
         serialNumber = { f.stateManager.uniqueId?.toString() ?: IosDashPluginPump.PUMP_SERIAL_FOR_FAKE_TBR },
     )
 

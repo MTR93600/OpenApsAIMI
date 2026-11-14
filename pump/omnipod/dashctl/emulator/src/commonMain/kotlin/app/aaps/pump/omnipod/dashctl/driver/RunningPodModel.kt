@@ -79,12 +79,19 @@ class RunningPodModel {
      */
     var faultAlarmType: Int? = null
 
+    /**
+     * The alarm time the alarm status reports: the minutes since activation when the fault came (the
+     * status reports [ALARM_STATUS_MINUTES] as its own minutes since activation). 0 by default: no
+     * alarm time, as the Android vector.
+     */
+    var faultAlarmMinutes = 0
+
     /** The reservoir pulses the default status reports: 1023 (more than 50 U) by default, as the capture. */
     var reservoirPulses = 0x3ff
 
     /** The answer (response bytes without header and CRC) to [command], and the change of pod state. */
     fun answer(command: ByteArray): ByteArray {
-        faultAlarmType?.let { return podAlarmStatus(it, lastProgrammingSequence, bolusPulsesRemaining) }
+        faultAlarmType?.let { return podAlarmStatus(it, lastProgrammingSequence, bolusPulsesRemaining, faultAlarmMinutes) }
         val sequence = (command[4].toInt() and 0xff shr 2) and 0x0f
         if (command[6] != CommandType.GET_STATUS.value) lastProgrammingSequence = sequence
         if (isTempBasal(command)) tempBasalRunning = true
@@ -152,6 +159,9 @@ class RunningPodModel {
         /** The bolus bit of `StopDeliveryCommand.DeliveryType`. */
         const val BOLUS_BIT = 0x04
 
+        /** The minutes since activation an alarm status of [podAlarmStatus] reports (0x0195). */
+        const val ALARM_STATUS_MINUTES = 0x0195
+
         /** `AlarmType.ALARM_OCCLUDED`. */
         const val OCCLUDED = 0x14
 
@@ -159,15 +169,15 @@ class RunningPodModel {
          * An alarm status (the layout of `AlarmStatusResponse`): the Android vector of
          * `AlarmStatusResponseTest` (`021602080100000501BD00000003FF01950000000000670A`) with pod status
          * ALARM (0x0d), delivery SUSPENDED (0), the bolus pulses left, the last programming sequence and
-         * the alarm type set.
+         * the alarm type set, and the alarm time [alarmMinutes] (0, none, in the vector).
          */
-        fun podAlarmStatus(alarmType: Int, lastProgrammingSequence: Int, bolusPulsesRemaining: Int): ByteArray =
+        fun podAlarmStatus(alarmType: Int, lastProgrammingSequence: Int, bolusPulsesRemaining: Int, alarmMinutes: Int = 0): ByteArray =
             parityHex(
                 "021602" + "0d" + "00" +
                     (bolusPulsesRemaining and 0x7ff).toString(16).padStart(4, '0') +
                     (lastProgrammingSequence and 0x0f).toString(16).padStart(2, '0') +
                     "01bd" + (alarmType and 0xff).toString(16).padStart(2, '0') +
-                    "0000" + "03ff" + "0195" + "00" + "00000000" + "670a"
+                    (alarmMinutes and 0xffff).toString(16).padStart(4, '0') + "03ff" + "0195" + "00" + "00000000" + "670a"
             )
 
         /** A bolus command: 0x1a (program insulin), then 0x17 after the 0x1a part. */

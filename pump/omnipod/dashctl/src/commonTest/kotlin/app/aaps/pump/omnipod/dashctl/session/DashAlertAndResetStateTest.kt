@@ -45,9 +45,10 @@ class DashAlertAndResetStateTest {
         podStatus: PodStatus = PodStatus.RUNNING_ABOVE_MIN_VOLUME,
         bolusPulsesRemaining: Int = 0,
         alerts: Set<AlertType> = emptySet(),
+        deliveryStatus: DeliveryStatus = DeliveryStatus.BASAL_ACTIVE,
     ) = DashPodStatus(
         podStatus = podStatus,
-        deliveryStatus = DeliveryStatus.BASAL_ACTIVE,
+        deliveryStatus = deliveryStatus,
         totalPulsesDelivered = 100,
         reservoirPulsesRemaining = 1000,
         minutesSinceActivation = 60,
@@ -129,7 +130,8 @@ class DashAlertAndResetStateTest {
             basalProgram = BasalProgram(listOf(BasalProgram.Segment(0, 48, 80)))
         )
         manager.markActiveCommandSent()
-        manager.updateFromDefaultStatus(status((command.sequence + 1) and 0x0f))
+        // The pod did not take the resume, so it is still suspended (a basal running would take it, OmnipodKit).
+        manager.updateFromDefaultStatus(status((command.sequence + 1) and 0x0f, deliveryStatus = DeliveryStatus.SUSPENDED))
 
         assertEquals(DashCommandConfirmation.DENIED, manager.resolveActiveCommand(nowMs = 2_000L).confirmation)
         assertEquals(old, manager.basalProgram)

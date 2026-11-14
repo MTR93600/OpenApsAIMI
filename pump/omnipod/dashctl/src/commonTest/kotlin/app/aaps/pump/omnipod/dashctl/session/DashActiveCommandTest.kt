@@ -52,31 +52,31 @@ class DashActiveCommandTest {
 
     @Test
     fun `no command is no active command`() {
-        assertEquals(DashCommandConfirmation.NO_ACTIVE_COMMAND, DashCommandConfirmation.of(null, 3, 5))
+        assertEquals(DashCommandConfirmation.NO_ACTIVE_COMMAND, DashCommandConfirmation.of(null, 3, 5, null, false))
     }
 
     @Test
     fun `a later status with the same sequence is success`() {
         val command = DashActiveCommand(sequence = 5, kind = DashCommandKind.BOLUS, historyId = 1, statusCountAtCreation = 3, sent = true)
-        assertEquals(DashCommandConfirmation.SUCCESS, DashCommandConfirmation.of(command, 4, 5))
+        assertEquals(DashCommandConfirmation.SUCCESS, DashCommandConfirmation.of(command, 4, 5, null, false))
     }
 
     @Test
     fun `a later status with another sequence is denied`() {
         val command = DashActiveCommand(sequence = 5, kind = DashCommandKind.BOLUS, historyId = 1, statusCountAtCreation = 3, sent = true)
-        assertEquals(DashCommandConfirmation.DENIED, DashCommandConfirmation.of(command, 4, 4))
+        assertEquals(DashCommandConfirmation.DENIED, DashCommandConfirmation.of(command, 4, 4, null, false))
     }
 
     @Test
     fun `sent with no later status is not confirmed`() {
         val command = DashActiveCommand(sequence = 5, kind = DashCommandKind.BOLUS, historyId = 1, statusCountAtCreation = 3, sent = true)
-        assertEquals(DashCommandConfirmation.NOT_CONFIRMED, DashCommandConfirmation.of(command, 3, 5))
+        assertEquals(DashCommandConfirmation.NOT_CONFIRMED, DashCommandConfirmation.of(command, 3, 5, null, false))
     }
 
     @Test
     fun `never sent with no later status is a sending failure`() {
         val command = DashActiveCommand(sequence = 5, kind = DashCommandKind.BOLUS, historyId = 1, statusCountAtCreation = 3, sent = false)
-        assertEquals(DashCommandConfirmation.SENDING_FAILURE, DashCommandConfirmation.of(command, 3, 5))
+        assertEquals(DashCommandConfirmation.SENDING_FAILURE, DashCommandConfirmation.of(command, 3, 5, null, false))
     }
 
     /**
@@ -90,14 +90,14 @@ class DashActiveCommandTest {
     fun `the rule cannot tell a new command from an old one with the same sequence`() {
         // The pod never took this bolus; its last programming command is a TBR, also built with 4.
         val bolus = DashActiveCommand(sequence = 4, kind = DashCommandKind.BOLUS, historyId = 1, statusCountAtCreation = 3, sent = true)
-        assertEquals(DashCommandConfirmation.SUCCESS, DashCommandConfirmation.of(bolus, 4, 4))
+        assertEquals(DashCommandConfirmation.SUCCESS, DashCommandConfirmation.of(bolus, 4, 4, null, false))
     }
 
     /** The status before the command shows the same sequence by chance: it says nothing about this command. */
     @Test
     fun `a status from before the command does not confirm it`() {
         val command = DashActiveCommand(sequence = 5, kind = DashCommandKind.BOLUS, historyId = 1, statusCountAtCreation = 3, sent = true)
-        assertEquals(DashCommandConfirmation.NOT_CONFIRMED, DashCommandConfirmation.of(command, 3, 5))
+        assertEquals(DashCommandConfirmation.NOT_CONFIRMED, DashCommandConfirmation.of(command, 3, 5, null, false))
     }
 
     // -- The manager ---------------------------------------------------------------------------

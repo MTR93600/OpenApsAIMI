@@ -83,7 +83,10 @@ internal class DashPumpOnFakePod(
     /** Every bolus a pod fault ended, as the pump gave it to `onCommandDecided`, in order. */
     val endedByFault = mutableListOf<DashBolusEndedByFault>()
 
-    /** Every outcome the pump gave to `onCommandDecided`, of both kinds, in order. */
+    /** Every bolus the pod reported that the pump did not track, as the pump gave it to `onCommandDecided`. */
+    val untracked = mutableListOf<DashUntrackedBolus>()
+
+    /** Every outcome the pump gave to `onCommandDecided`, of every kind, in order. */
     val outcomes = mutableListOf<DashPumpOutcome>()
 
     /**
@@ -112,6 +115,7 @@ internal class DashPumpOnFakePod(
                 }
 
                 is DashBolusEndedByFault -> endedByFault += it
+                is DashUntrackedBolus    -> untracked += it
             }
             onOutcome(it)
         },
@@ -171,6 +175,9 @@ internal class DashPumpOnFakePod(
 
     /** See [RunningPodModel.faultAlarmType]. */
     var faultAlarmType by running::faultAlarmType
+
+    /** See [RunningPodModel.faultAlarmMinutes]. */
+    var faultAlarmMinutes by running::faultAlarmMinutes
 
     /** See [RunningPodModel.reservoirPulses]. */
     var reservoirPulses by running::reservoirPulses

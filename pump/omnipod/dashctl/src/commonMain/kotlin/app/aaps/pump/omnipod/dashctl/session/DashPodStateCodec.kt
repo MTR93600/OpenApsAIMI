@@ -78,6 +78,11 @@ import app.aaps.pump.omnipod.dashctl.pod.util.byValue
  *   [DashPodState.pdmRef] u32 + bytes (UTF-8). Then u32
  *   [DashPodState.successfulConnectionAttemptsAfterRetries] and u32
  *   [DashPodState.failedConnectionsAfterRetries].
+ * - the dose accounting part (added at the end of version 4; written only when one of its fields is
+ *   set, so a state without them has the same bytes as before, and every older version 4 state still
+ *   reads, with both fields null): u8 flags, bit0 [DashPodState.faultTimeMs], bit1
+ *   [DashPodState.untrackedBolusToRecordAt]; 0 or any other bit is an error. Then the present ones,
+ *   in that order, each a u64.
  *
  * Versions 1 to 3 are still read, so a pod paired before keeps its key and its open command. They
  * have none of the version 4 fields: the temp basal, the alarm type and the reservoir reading stay null, the alert settings stay null and
@@ -118,6 +123,10 @@ object DashPodStateCodec {
     private const val FLAG_COMMAND_BASAL_CORRECTION = 0x01
     private const val FLAG_BOLUS_BASAL_CORRECTION = 0x02
     private const val BASAL_CORRECTION_FLAGS_KNOWN = 0x03
+
+    private const val FLAG_FAULT_TIME = 0x01
+    private const val FLAG_UNTRACKED_BOLUS = 0x02
+    private const val DOSE_FLAGS_KNOWN = 0x03
 
     fun encode(state: DashPodState): ByteArray {
         val out = Writer()
@@ -264,6 +273,14 @@ object DashPodStateCodec {
         out.optional(state.pdmRef) { out.text(it) }
         out.u32(state.successfulConnectionAttemptsAfterRetries)
         out.u32(state.failedConnectionsAfterRetries)
+        var dose = 0
+        if (state.faultTimeMs != null) dose = dose or FLAG_FAULT_TIME
+        if (state.untrackedBolusToRecordAt != null) dose = dose or FLAG_UNTRACKED_BOLUS
+        if (dose != 0) {
+            out.u8(dose)
+            state.faultTimeMs?.let { out.u64(it) }
+            state.untrackedBolusToRecordAt?.let { out.u64(it) }
+        }
         return out.toByteArray()
     }
 
@@ -414,6 +431,14 @@ object DashPodStateCodec {
             successfulConnections = inp.u32()
             failedConnections = inp.u32()
         }
+        var faultTimeMs: Long? = null
+        var untrackedBolusToRecordAt: Long? = null
+        if (version >= VERSION_4 && !inp.atEnd()) {
+            val dose = inp.u8()
+            require(dose != 0 && dose and DOSE_FLAGS_KNOWN.inv() == 0) { "bad dose accounting flags $dose" }
+            if (dose and FLAG_FAULT_TIME != 0) faultTimeMs = inp.u64()
+            if (dose and FLAG_UNTRACKED_BOLUS != 0) untrackedBolusToRecordAt = inp.u64()
+        }
         require(inp.atEnd()) { "trailing bytes" }
         return DashPodState(
             ltk = ltk,
@@ -456,6 +481,8 @@ object DashPodStateCodec {
             pdmRef = pdmRef,
             successfulConnectionAttemptsAfterRetries = successfulConnections,
             failedConnectionsAfterRetries = failedConnections,
+            faultTimeMs = faultTimeMs,
+            untrackedBolusToRecordAt = untrackedBolusToRecordAt,
         )
     }
 

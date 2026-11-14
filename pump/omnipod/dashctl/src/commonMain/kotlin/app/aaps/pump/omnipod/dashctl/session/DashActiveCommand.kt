@@ -90,3 +90,60 @@ data class DashActiveCommand(
 
 /** A new delivery command while the last one is still open. Ask the pod for its status first. */
 class DashCommandNotConfirmedException(message: String) : Exception(message)
+
+/**
+ * Whether [command], when nobody knows if the pod took it, is counted as taken. Port of OmnipodKit
+ * (Trio) `PodState.resolveAnyPendingCommandWithUncertainty`: "assume commands failed/succeeded in the
+ * direction of positive net delivery", so insulin on board is never lower than what the pod may give.
+ *
+ * Deliberate difference from Android, which counts a temp basal and a suspend as taken as soon as they
+ * are sent, also a zero temp basal or a suspend the pod never got: the basal it then gives is counted
+ * as not given (insulin counted wrong), and the loop may dose on top of it.
+ *
+ * - BOLUS: taken (more insulin).
+ * - TEMP_BASAL: not taken when its rate is below the scheduled rate ([scheduledBasalRate]); a zero
+ *   temp basal always. Taken otherwise, also when the scheduled rate is not known (Android).
+ * - SUSPEND_DELIVERY: not taken (the basal goes on).
+ * - STOP_TEMP_BASAL: taken only when it stops a temp basal below the scheduled rate (the basal comes
+ *   back). Not taken when it stops a high one (the high rate goes on), nor when the temp basal it stops
+ *   or the scheduled rate is not known: nothing is written, as today.
+ * - RESUME_DELIVERY, BASAL_PROGRAM: taken (OmnipodKit `.resume`: the basal starts again), so a pod
+ *   discarded with one open ends the suspend at the command time. Before this, AAPS kept counting
+ *   0 U/h while the pod may have given the scheduled basal (insulin counted too low). Not taken when
+ *   a temp basal not below the schedule still runs on the pod: ending it would count less (as a stop).
+ * - any other kind: false (nothing is written for it while its outcome is not known).
+ *
+ * @param runningTempBasal the temp basal that runs when the command is made, the one a stop ends.
+ */
+fun dashCountAsTakenWhileUnknown(command: DashActiveCommand, scheduledBasalRate: Double?, runningTempBasal: DashTempBasal?): Boolean =
+    when (command.kind) {
+        DashCommandKind.BOLUS            -> true
+        DashCommandKind.TEMP_BASAL       -> {
+            val rate = command.tempBasalRate
+            when {
+                rate == null               -> true
+                rate == 0.0                -> false
+                scheduledBasalRate == null -> true
+                else                       -> rate >= scheduledBasalRate
+            }
+        }
+
+        DashCommandKind.SUSPEND_DELIVERY -> false
+        DashCommandKind.STOP_TEMP_BASAL  -> stopsLowTempBasal(scheduledBasalRate, runningTempBasal)
+
+        DashCommandKind.RESUME_DELIVERY,
+        DashCommandKind.BASAL_PROGRAM    -> runningTempBasal == null || stopsLowTempBasal(scheduledBasalRate, runningTempBasal)
+
+        else                             -> false
+    }
+
+/** True when [runningTempBasal] is known to be below [scheduledBasalRate] (a zero one always): ending it gives more insulin. */
+private fun stopsLowTempBasal(scheduledBasalRate: Double?, runningTempBasal: DashTempBasal?): Boolean {
+    val running = runningTempBasal?.rate
+    return when {
+        running == null            -> false
+        running == 0.0             -> true
+        scheduledBasalRate == null -> false
+        else                       -> running < scheduledBasalRate
+    }
+}

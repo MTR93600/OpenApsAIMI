@@ -84,7 +84,7 @@ class DashPodStateUnknownPluginTest {
         now = { f.nowMs },
     )
 
-    private val recorder = DashPumpSyncRecorder(pumpSync, SilentPodLogger) { f.stateManager.uniqueId?.toString() ?: IosDashPluginPump.PUMP_SERIAL_FOR_FAKE_TBR }
+    private val recorder = DashPumpSyncRecorder(pumpSync, SilentPodLogger, f.stateManager::countAsTakenWhileUnknown) { f.stateManager.uniqueId?.toString() ?: IosDashPluginPump.PUMP_SERIAL_FOR_FAKE_TBR }
 
     private val pump = IosDashPluginPump(f.pump, f.stateManager, recorder, rules, SilentPodLogger, now = { f.nowMs })
 

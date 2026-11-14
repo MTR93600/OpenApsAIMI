@@ -74,6 +74,7 @@ class IosDashPluginPumpTest {
     private val recorder = DashPumpSyncRecorder(
         pumpSync = pumpSync,
         aapsLogger = SilentPodLogger,
+        countAsTakenWhileUnknown = f.stateManager::countAsTakenWhileUnknown,
         serialNumber = { f.stateManager.uniqueId?.toString() ?: IosDashPluginPump.PUMP_SERIAL_FOR_FAKE_TBR },
     )
 
@@ -269,7 +270,7 @@ class IosDashPluginPumpTest {
         assertTrue(pump.deliverTreatment(bolus(1.5, BS.Type.SMB)).success)
 
         // The app stops: a new recorder knows nothing of the send. The bolus is decided late after it.
-        val afterRestart = DashPumpSyncRecorder(pumpSync, SilentPodLogger, serialNumber = { SERIAL })
+        val afterRestart = DashPumpSyncRecorder(pumpSync, SilentPodLogger, f.stateManager::countAsTakenWhileUnknown, serialNumber = { SERIAL })
         f.onOutcome = afterRestart::onOutcome
         f.nowMs = SENT_AT + ONE_HOUR
         f.pod.dropLinkWhileAnswering = null
@@ -380,14 +381,15 @@ class IosDashPluginPumpTest {
     }
 
     @Test
-    fun `a temp basal not confirmed is counted from its send and gets the notice of Android`() = runTest {
+    fun `a zero temp basal not confirmed is not counted until the pod confirms it at its send time`() = runTest {
         f.pairAndConnect()
         pump.getPumpStatus("first status")
         // Status 7-8, then the temp basal is message 9.
         f.pod.dropLinkWhileAnswering = 9 to 0
 
         assertFalse(pump.setTempBasalAbsolute(0.0, 60, false, PumpSync.TemporaryBasalType.EMULATED_PUMP_SUSPEND).success)
-        assertEquals(listOf(tempBasalLine(SENT_AT, 0.0, 60 * 60_000L, PumpSync.TemporaryBasalType.EMULATED_PUMP_SUSPEND)), pumpSync.calls)
+        // Deliberate difference from Android (OmnipodKit, assume more insulin): not counted while unknown.
+        assertTrue(pumpSync.calls.isEmpty(), pumpSync.calls.toString())
         assertEquals(listOf("post(OMNIPOD_TBR_ALERTS, omnipod_dash_ios_tbr_unconfirmed, sound=BOLUS_ERROR)"), notices.posts())
 
         f.nowMs = SENT_AT + ONE_HOUR
@@ -395,8 +397,29 @@ class IosDashPluginPumpTest {
         assertSame(DashConnectResult.SessionReady, f.reconnect())
         pump.getPumpStatus("decide the open temp basal")
 
-        assertEquals(1, pumpSync.calls.size, "the late SUCCESS adds nothing")
+        assertEquals(
+            listOf(tempBasalLine(SENT_AT, 0.0, 60 * 60_000L, PumpSync.TemporaryBasalType.EMULATED_PUMP_SUSPEND)),
+            pumpSync.calls,
+            "the late SUCCESS writes it at its send time with the type of its call"
+        )
         assertTrue("dismiss(OMNIPOD_TBR_ALERTS)" in notices.calls)
+    }
+
+    /**
+     * Deliberate difference from Android (OmnipodKit `resolveAnyPendingCommandWithUncertainty`): a zero
+     * temp basal left open when the pod is discarded is never counted, so the basal the pod may have
+     * given stays counted. Fails before the fix: the zero temp basal was written when it was sent.
+     */
+    @Test
+    fun `a zero temp basal left open when the pod is discarded is not counted`() = runTest {
+        f.pairAndConnect()
+        pump.getPumpStatus("first status")
+        f.pod.dropLinkWhileAnswering = 9 to 0
+        assertFalse(pump.setTempBasalAbsolute(0.0, 60, false, PumpSync.TemporaryBasalType.NORMAL).success)
+
+        rules.discardPod()
+
+        assertTrue(pumpSync.calls.none { it.startsWith("tempBasal(timestamp=$SENT_AT") }, pumpSync.calls.toString())
     }
 
     @Test
@@ -547,6 +570,92 @@ class IosDashPluginPumpTest {
         )
         assertEquals(listOf("post(OMNIPOD_POD_FAULT, omnipod_dash_ios_pod_fault_with_ref[020, ALARM_OCCLUDED, $OCCLUDED_REF], sound=BOLUS_ERROR)"), notices.posts())
         assertTrue(f.stateManager.alarmSynced)
+    }
+
+    /**
+     * Deliberate difference from Android (insulin counted wrong), as OmnipodKit (Trio)
+     * `setDeliveryStoppedAt(faultEventTimeSinceActivation)`: the phone sees the fault two hours late, so
+     * the zero temp basal starts at the fault time the pod gives, not now. Fails before the fix: it
+     * started now, and two hours of basal the pod never gave were counted.
+     */
+    @Test
+    fun `a fault seen late gets the zero temp basal from the fault time of the pod`() = runTest {
+        f.pairAndConnect()
+        f.faultAlarmType = DashPumpOnFakePod.OCCLUDED
+        // The alarm status reports 0x0195 minutes since activation; the fault came 120 minutes before.
+        f.faultAlarmMinutes = 0x0195 - 120
+        f.nowMs = SENT_AT + 2 * ONE_HOUR
+
+        pump.getPumpStatus("status")
+
+        assertEquals(
+            "tempBasal(timestamp=$SENT_AT, rate=0.0, duration=288000000, isAbsolute=true, type=PUMP_SUSPEND, pumpId=$SENT_AT, pumpType=OMNIPOD_DASH, serial=$SERIAL)",
+            pumpSync.calls.first()
+        )
+    }
+
+    /** `PumpSync` ends a running temp basal only at a later time: the zero one never starts before it. */
+    @Test
+    fun `the zero temp basal of a fault starts after a temp basal AAPS started after the fault`() = runTest {
+        f.pairAndConnect()
+        val tbrStart = SENT_AT + 30 * 60_000L
+        pumpSync.expectedTemporaryBasal = PumpSync.PumpState.TemporaryBasal(
+            timestamp = tbrStart, duration = ONE_HOUR, rate = 2.0, isAbsolute = true, type = PumpSync.TemporaryBasalType.NORMAL, id = 9L, pumpId = tbrStart
+        )
+        f.faultAlarmType = DashPumpOnFakePod.OCCLUDED
+        f.faultAlarmMinutes = 0x0195 - 120
+        f.nowMs = SENT_AT + 2 * ONE_HOUR
+
+        pump.getPumpStatus("status")
+
+        val at = tbrStart + 1
+        assertEquals(
+            "tempBasal(timestamp=$at, rate=0.0, duration=288000000, isAbsolute=true, type=PUMP_SUSPEND, pumpId=$at, pumpType=OMNIPOD_DASH, serial=$SERIAL)",
+            pumpSync.calls.first()
+        )
+    }
+
+    /**
+     * Deliberate difference from Android, as OmnipodKit `PodState.updateDeliveryStatus`: a bolus the pod
+     * delivers that the app does not track is written once, at the units left, and a fault that ends it
+     * corrects that one record. Fails before the fix: no record, the bolus was never counted.
+     */
+    @Test
+    fun `a bolus the pod reports that the app does not track is written once and a fault corrects it`() = runTest {
+        f.pairAndConnect()
+        f.bolusRunning = true
+        f.bolusPulsesRemaining = 30
+
+        pump.getPumpStatus("a bolus the app did not send")
+        pump.getPumpStatus("again")
+        assertEquals(mapOf(SENT_AT to (1.5 to BS.Type.NORMAL)), pumpSync.bolusRecords)
+
+        f.bolusPulsesRemaining = 10
+        f.faultAlarmType = DashPumpOnFakePod.OCCLUDED
+        f.nowMs = SENT_AT + 60_000L
+        pump.getPumpStatus("fault")
+
+        assertEquals(mapOf(SENT_AT to (1.0 to BS.Type.NORMAL)), pumpSync.bolusRecords, "one record, corrected to what went in")
+    }
+
+    /**
+     * As above, but the first write to `PumpSync` fails. The mark of the bolus stays, so the next
+     * status writes it. Fails before the fix: the mark was cleared anyway and the bolus was never counted.
+     */
+    @Test
+    fun `an untracked bolus whose write failed is written at the next status`() = runTest {
+        f.pairAndConnect()
+        f.bolusRunning = true
+        f.bolusPulsesRemaining = 30
+        pumpSync.bolusWritesToFail = 1
+
+        pump.getPumpStatus("a bolus the app did not send, PumpSync fails")
+        assertTrue(pumpSync.bolusRecords.isEmpty())
+        assertEquals(SENT_AT, f.stateManager.untrackedBolusToRecord()?.createdAtMs, "the mark stays")
+
+        pump.getPumpStatus("again")
+        assertEquals(mapOf(SENT_AT to (1.5 to BS.Type.NORMAL)), pumpSync.bolusRecords)
+        assertNull(f.stateManager.untrackedBolusToRecord(), "written: the mark is cleared")
     }
 
     @Test

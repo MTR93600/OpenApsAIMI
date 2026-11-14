@@ -401,6 +401,63 @@ class DashPodStateManager(
     val pdmRef: String?
         get() = state.pdmRef
 
+    /** See [DashPodState.faultTimeMs]: when the fault stopped delivery, null when the pod did not say. */
+    val faultTimeMs: Long?
+        get() = state.faultTimeMs
+
+    // -- Dose accounting of OmnipodKit (Trio) ----------------------------------------------------
+
+    /**
+     * The rate of the running basal program at [atMs], U/h, read in the time zone of the pod as the
+     * basal drift does ([DashBasalDrift.integrateExpectedDelivery]); in the phone time zone while the pod
+     * time zone is not known. Null while no program is known ([basalProgram]).
+     */
+    fun scheduledBasalRateAt(atMs: Long): Double? {
+        val program = state.basalProgram ?: return null
+        val podOffset = state.timeZoneOffsetMs ?: return program.rateAt(atMs, deviceTimeZone())
+        return program.rateAt(atMs + podOffset - deviceOffsetMs(atMs), deviceTimeZone())
+    }
+
+    /**
+     * Whether [command], when nobody knows if the pod took it, is counted as taken: OmnipodKit
+     * `PodState.resolveAnyPendingCommandWithUncertainty`, "assume commands failed/succeeded in the
+     * direction of positive net delivery". See [dashCountAsTakenWhileUnknown]; the scheduled rate is
+     * the one at the command time, the temp basal a cancel stops is the stored [tempBasal] when it
+     * still runs at that time.
+     */
+    fun countAsTakenWhileUnknown(command: DashActiveCommand): Boolean {
+        val at = command.createdAtMs ?: state.lastUpdatedSystemMs
+        return dashCountAsTakenWhileUnknown(command, scheduledBasalRateAt(at), state.tempBasal?.takeIf { it.runsAt(at) })
+    }
+
+    /**
+     * The bolus of [DashPodState.untrackedBolusToRecordAt], while it is not written to `PumpSync`: the
+     * caller writes it, then calls [untrackedBolusWritten]. Null when there is none, or when the
+     * [lastBolus] is not that bolus any more (the mark is then dropped: no record can be written for it).
+     */
+    fun untrackedBolusToRecord(): DashLastBolus? {
+        val at = state.untrackedBolusToRecordAt ?: return null
+        val bolus = state.lastBolus?.takeIf { it.createdAtMs == at }
+        if (bolus == null) clearUntrackedBolusMark()
+        return bolus
+    }
+
+    /**
+     * The record of the untracked bolus with this [pumpId] (its time) is written: the mark is cleared and
+     * persisted. A [pumpId] of another bolus changes nothing, so a late answer about an older bolus
+     * cannot clear the mark of a newer one that is still not counted.
+     */
+    fun untrackedBolusWritten(pumpId: Long?) {
+        if (pumpId == null || state.untrackedBolusToRecordAt != pumpId) return
+        clearUntrackedBolusMark()
+    }
+
+    private fun clearUntrackedBolusMark() {
+        if (state.untrackedBolusToRecordAt == null) return
+        state = state.copy(untrackedBolusToRecordAt = null)
+        persist()
+    }
+
     /** Android `successfulConnectionAttemptsAfterRetries`. */
     val successfulConnectionAttemptsAfterRetries: Int
         get() = state.successfulConnectionAttemptsAfterRetries
@@ -574,7 +631,11 @@ class DashPodStateManager(
      */
     fun updateFromAlarmStatus(response: AlarmStatusResponse, nowMs: Long) {
         val updated = statusApplied(DashPodStatus.of(response, nowMs))
-        state = if (updated.alarmType == null) updated.copy(alarmType = response.alarmType, pdmRef = response.pdmRef) else updated
+        state = if (updated.alarmType == null) {
+            updated.copy(alarmType = response.alarmType, pdmRef = response.pdmRef, faultTimeMs = faultTimeOf(response, nowMs))
+        } else {
+            updated
+        }
         persist()
     }
 
@@ -769,7 +830,13 @@ class DashPodStateManager(
 
     /** What is known now about the active command. */
     fun commandConfirmation(): DashCommandConfirmation =
-        DashCommandConfirmation.of(state.activeCommand, state.statusResponseCount, state.podStatus?.lastProgrammingCommandSequence)
+        DashCommandConfirmation.of(
+            state.activeCommand,
+            state.statusResponseCount,
+            state.podStatus?.lastProgrammingCommandSequence,
+            state.podStatus?.deliveryStatus,
+            trackedBolusRunning = state.lastBolus?.deliveryComplete == false,
+        )
 
     /**
      * Closes the active command when its outcome is known ([DashCommandConfirmation.isFinal]), and
@@ -890,13 +957,37 @@ class DashPodStateManager(
      * activation. An alarm status does not set it, as on Android.
      */
     fun updateFromDefaultStatus(status: DashPodStatus) {
-        val updated = statusApplied(status)
+        val untracked = untrackedBolusIn(status)
+        val applied = statusApplied(status)
+        val updated = if (untracked == null) applied else applied.copy(lastBolus = untracked, untrackedBolusToRecordAt = untracked.createdAtMs)
         state = if (updated.activationTime == null) {
             updated.copy(activationTime = status.receivedAtMs - status.minutesSinceActivation * MS_PER_MINUTE)
         } else {
             updated
         }
         persist()
+    }
+
+    /**
+     * A bolus the pod reports in [status] that the app does not track, as OmnipodKit
+     * `PodState.updateDeliveryStatus` ("active bolus that we aren't tracking"): it makes a dose of the
+     * units still to come. Deliberate difference from Android, which ignores it, so insulin the pod
+     * gives is never counted (a bolus whose answer and status were lost, a bolus from a command closed
+     * as not sent). Returned as a new last bolus of the units left, started and recorded at the arrival
+     * time of [status], so it is counted once and its end (a stop, a fault) corrects that one record.
+     *
+     * Only on a pod whose activation is completed and that runs (the prime and the cannula insertion
+     * are boluses too, OmnipodKit `readyForDelivery`), with pulses left, while no bolus command is open
+     * (its own status decides it) and no last bolus is still running (that one is the bolus). Once it
+     * is the last bolus, a later status does not find it again, also after a restart: it is stored.
+     */
+    private fun untrackedBolusIn(status: DashPodStatus): DashLastBolus? {
+        if (!isActivationCompleted || !status.podStatus.isRunning()) return null
+        if (status.bolusPulsesRemaining <= 0) return null
+        if (state.activeCommand?.kind == DashCommandKind.BOLUS) return null
+        if (state.lastBolus?.deliveryComplete == false) return null
+        val units = Round.roundTo(status.bolusPulsesRemaining * PodConstants.POD_PULSE_BOLUS_UNITS, PodConstants.POD_PULSE_BOLUS_UNITS)
+        return newLastBolus(units, status.receivedAtMs, historyId = 0L, createdAtMs = status.receivedAtMs)
     }
 
     /**
@@ -1030,6 +1121,21 @@ class DashPodStateManager(
         }
 
         const val MS_PER_MINUTE = 60_000L
+
+        /** An alarm time the pod gives when it has none (Android `pdmRef` reads the same two values). */
+        const val NO_ALARM_MINUTES = 0xffff
+
+        /**
+         * [DashPodState.faultTimeMs] from the first alarm status [response], received at [nowMs]: the
+         * minutes since activation of the alarm, on the clock of the pod in that same status. Null when
+         * the alarm time is 0 or 0xffff (none), or later than the clock of the pod.
+         */
+        fun faultTimeOf(response: AlarmStatusResponse, nowMs: Long): Long? {
+            val alarmMinutes = response.alarmTime.toInt() and 0xffff
+            val activeMinutes = response.minutesSinceActivation.toInt() and 0xffff
+            if (alarmMinutes == 0 || alarmMinutes == NO_ALARM_MINUTES || alarmMinutes > activeMinutes) return null
+            return nowMs - (activeMinutes - alarmMinutes) * MS_PER_MINUTE
+        }
 
         /** Android: 2 minutes at least between two basal corrections. */
         const val BASAL_CORRECTION_COOLDOWN_MS = 2 * 60 * 1000L

@@ -36,6 +36,9 @@ internal class RecordingDashPumpSync : PumpSync {
      */
     val bolusRecords = mutableMapOf<Long, Pair<Double, BS.Type>>()
 
+    /** How many of the next `syncBolusWithPumpId` calls throw (a database error), with nothing written. */
+    var bolusWritesToFail = 0
+
     override fun connectNewPump(endRunning: Boolean) {
         calls += "connectNewPump"
     }
@@ -56,6 +59,10 @@ internal class RecordingDashPumpSync : PumpSync {
     }
 
     override suspend fun syncBolusWithPumpId(timestamp: Long, amount: PumpInsulin, type: BS.Type?, pumpId: Long, pumpType: PumpType, pumpSerial: String): Boolean {
+        if (bolusWritesToFail > 0) {
+            bolusWritesToFail--
+            error("database closed")
+        }
         calls += "bolus(timestamp=$timestamp, amount=${amount.cU}, type=$type, pumpId=$pumpId, pumpType=$pumpType, serial=$pumpSerial)"
         val known = bolusRecords[pumpId]
         bolusRecords[pumpId] = amount.cU to (type ?: known?.second ?: BS.Type.NORMAL)

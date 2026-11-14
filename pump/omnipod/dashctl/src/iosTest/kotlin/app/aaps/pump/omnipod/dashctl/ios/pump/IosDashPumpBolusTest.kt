@@ -351,6 +351,68 @@ class IosDashPumpBolusTest {
         assertEquals(1, f.bolusCommands(), "the bolus went once")
     }
 
+    /**
+     * Deliberate difference from Android (insulin counted wrong), as OmnipodKit (Trio)
+     * `checkCommandAgainstStatus`: the status after a lost answer reports another sequence, but the pod
+     * delivers a bolus, so it took this one. Android says DENIED and the bolus is counted as 0 U. Fails
+     * before the fix: the call failed with nothing delivered.
+     */
+    @Test
+    fun `a bolus whose answer is lost is taken when the pod shows it running under another sequence`() = runTest {
+        val f = newFixture()
+        f.pairAndConnect()
+        val normal = f.pod.answerFor
+        var statuses = 0
+        f.pod.answerFor = { command ->
+            normal(command)
+            val otherSequence = (f.lastProgrammingSequence + 5) and 0x0f
+            when {
+                DashPumpOnFakePod.isBolus(command) -> parityHex(NAK)
+                statuses++ == 0                    -> DashPumpOnFakePod.defaultStatus(otherSequence, 20, DashPumpOnFakePod.BOLUS_AND_BASAL_ACTIVE)
+                else                               -> DashPumpOnFakePod.defaultStatus(otherSequence, 0, DashPumpOnFakePod.BASAL_ACTIVE)
+            }
+        }
+
+        val result = f.pump.deliverTreatment(bolus(1.0))
+
+        assertEquals(DashCommandKind.BOLUS to DashCommandConfirmation.SUCCESS, f.decided.first().command.kind to f.decided.first().confirmation)
+        assertTrue(result.success, result.comment)
+        assertEquals(1.0, result.bolusDelivered, 1e-9)
+        assertEquals(1, f.bolusCommands(), "the bolus went once")
+        assertTrue(f.untracked.isEmpty(), "the bolus is the one the app sent, not an untracked one")
+    }
+
+    /**
+     * Deliberate difference from Android, as OmnipodKit `PodState.updateDeliveryStatus`: the pod
+     * delivers a bolus the app does not track. It becomes the last bolus of the units left and is given
+     * to be recorded, again with each status until the receiver says its record was written (here
+     * nobody writes it). Fails before the fix: nothing was given, so it was never counted.
+     */
+    @Test
+    fun `a bolus the pod reports that the app does not track is given until its record is written`() = runTest {
+        val f = newFixture()
+        f.pairAndConnect()
+        f.bolusRunning = true
+        f.bolusPulsesRemaining = 30
+        f.nowMs = 5_000L
+        f.pump.getPumpStatus("a bolus the app did not send")
+        f.bolusPulsesRemaining = 10
+        f.nowMs = 65_000L
+        f.pump.getPumpStatus("the same bolus goes on")
+
+        assertEquals(2, f.untracked.size, "not written yet: given again")
+        assertEquals(1, f.untracked.map { it.bolus.createdAtMs }.distinct().size, "the same bolus, the same pump id")
+        val untracked = f.untracked.first().bolus
+        assertEquals(1.5, untracked.requestedUnits, 1e-9)
+        assertEquals(5_000L, untracked.createdAtMs)
+        assertEquals(5_000L, f.stateManager.untrackedBolusToRecord()?.createdAtMs, "the mark stays until the record is written")
+        assertEquals(0.5, assertNotNull(f.stateManager.lastBolus).bolusUnitsRemaining, 1e-9)
+
+        f.stateManager.untrackedBolusWritten(pumpId = 5_000L)
+        f.pump.getPumpStatus("written")
+        assertEquals(2, f.untracked.size, "not given again once written")
+    }
+
     /** As above, but the pod did not take the bolus: the status says so, and the call is a failure with nothing delivered. */
     @Test
     fun `a bolus whose answer is lost and that the pod did not take is a failure`() = runTest {

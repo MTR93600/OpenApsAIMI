@@ -257,8 +257,9 @@ class DashPluginRules(
     /**
      * The plugin part of Android `checkPodKaput`, for a pod in ALARM or DEACTIVATED (the bolus part is
      * the driver's, [DashBolusEndedByFault]):
-     * - a PUMP_SUSPEND temp basal of 0 U/h for the pod life (80 h) at the time now, unless a zero temp
-     *   basal already runs in AAPS, so no basal is counted while the pod gives none;
+     * - a PUMP_SUSPEND temp basal of 0 U/h for the pod life (80 h), unless a zero temp basal already
+     *   runs in AAPS, so no basal is counted while the pod gives none. It starts at the fault time of the
+     *   pod ([suspendTimeOfFault]) when the pod gave one, else at the time now (Android);
      * - once per fault ([DashPodStateManager.alarmSynced]): a fault notice with sound (not while a
      *   deactivation waits in the queue) and an announcement in the treatments.
      *
@@ -269,7 +270,7 @@ class DashPluginRules(
         if (!stateManager.isPodKaput) return
         val tbr = pumpSync.expectedPumpState().temporaryBasal
         if (tbr == null || tbr.rate != 0.0) {
-            val at = now()
+            val at = suspendTimeOfFault(tbr?.timestamp)
             pumpSync.syncTemporaryBasalWithPumpId(
                 timestamp = at,
                 rate = PumpRate(0.0),
@@ -291,6 +292,23 @@ class DashPluginRules(
         }
         pumpSync.insertAnnouncement(error = rh.gs(faultText), pumpId = now(), pumpType = PumpType.OMNIPOD_DASH, pumpSerial = serialNumber())
         stateManager.updateAlarmSynced(true)
+    }
+
+    /**
+     * When the PUMP_SUSPEND temp basal of a faulted pod starts: the time the fault stopped delivery
+     * ([DashPodStateManager.faultTimeMs]), as OmnipodKit (Trio) `PodCommsSession.setDeliveryStoppedAt`
+     * with `faultEventTimeSinceActivation`. Deliberate difference from Android, which writes it at the
+     * time the phone sees the fault: when that is late (the phone was out of range), all the basal
+     * between the fault and then is counted as given while the pod gave none (insulin counted wrong).
+     *
+     * The time now when the pod gave no fault time, or a fault time later than now. Never at or before
+     * the start of the temp basal running in AAPS ([runningSince]): `PumpSync` ends a running temp basal
+     * only at a later time, and an earlier one would leave both counted at once.
+     */
+    private fun suspendTimeOfFault(runningSince: Long?): Long {
+        val nowMs = now()
+        val fault = stateManager.faultTimeMs?.takeIf { it <= nowMs } ?: return nowMs
+        return if (runningSince != null && fault <= runningSince) minOf(runningSince + 1, nowMs) else fault
     }
 
     // ------------------------------------------------------------------ notices of a call

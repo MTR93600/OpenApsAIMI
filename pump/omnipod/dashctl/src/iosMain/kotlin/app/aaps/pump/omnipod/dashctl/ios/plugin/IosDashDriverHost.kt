@@ -16,6 +16,7 @@ import app.aaps.pump.omnipod.dashctl.history.DashPodHistory
 import app.aaps.pump.omnipod.dashctl.ios.pump.DashBolusEndedByFault
 import app.aaps.pump.omnipod.dashctl.ios.pump.DashCommandOutcome
 import app.aaps.pump.omnipod.dashctl.ios.pump.DashPumpOutcome
+import app.aaps.pump.omnipod.dashctl.ios.pump.DashUntrackedBolus
 import app.aaps.pump.omnipod.dashctl.registerDashStrings
 import app.aaps.pump.omnipod.dashctl.ios.pump.IosDashPump
 import app.aaps.pump.omnipod.dashctl.keys.DashBeepKey
@@ -121,6 +122,7 @@ class IosDashDriverHost(
     val recorder = DashPumpSyncRecorder(
         pumpSync = pumpSync,
         aapsLogger = aapsLogger,
+        countAsTakenWhileUnknown = stateManager::countAsTakenWhileUnknown,
         serialNumber = { stateManager.uniqueId?.toString() ?: IosDashPluginPump.PUMP_SERIAL_FOR_FAKE_TBR },
     )
 
@@ -214,6 +216,9 @@ internal fun recordHistory(history: DashPodHistory, outcome: DashPumpOutcome) {
         }
 
         is DashBolusEndedByFault -> history.onBolusEnded(outcome.bolus)
+
+        // No pod history record: no command of this app gave it (the history keeps commands).
+        is DashUntrackedBolus    -> Unit
     }
 }
 

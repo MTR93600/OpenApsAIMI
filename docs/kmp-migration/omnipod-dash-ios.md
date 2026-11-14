@@ -592,6 +592,58 @@ phone, never AAPSClient. Android keeps `:pump:omnipod:dash` unchanged.
       - **Pod history lock** (minor). `DashPodHistory` holds an `AapsLock` around each change and its
         save. Test in `DashPodHistoryTest` (4 threads at once).
 
+### 4b. Dose accounting taken from OmnipodKit (Trio), 2026-11-14
+
+A comparison with the Swift driver of Trio (`loopandlearn/OmnipodKit`) found places where Android
+counts insulin wrong or loses what the user did. The owner approved these deliberate differences from
+Android. Each one has a KDoc line that says why and tests. Android `:pump:omnipod:dash`, the Android
+test vectors and the pinned parity bytes do not change.
+
+- [x] **Assume more insulin when an outcome is not known** (OmnipodKit
+      `PodState.resolveAnyPendingCommandWithUncertainty`). `dashCountAsTakenWhileUnknown`
+      (`DashActiveCommand.kt`), `DashPodStateManager.countAsTakenWhileUnknown`, used by
+      `DashPumpSyncRecorder`. A temp basal below the scheduled rate (a zero one always) and a suspend
+      are no longer written to `PumpSync` when they are sent, nor when the pod is discarded with them
+      open; their SUCCESS writes them at the command time with the same pump id. A bolus and a temp
+      basal not below the schedule stay written at send, as Android. A cancel of a low temp basal left
+      open when the pod is discarded writes the stop at its command time; a cancel of a high one writes
+      nothing (the high rate stays counted). A resume or a basal program left open when the pod is
+      discarded writes the stop at its command time too (OmnipodKit `.resume`: the basal may run
+      again), unless a temp basal not below the schedule still runs on the pod. With no basal program
+      known, a low temp basal is counted as Android. Tests: `DashDoseAccountingTest`, `DashPumpSyncRecorderTest`, `IosDashPluginPumpTest`.
+- [x] **A lost answer decided by the delivery status** (OmnipodKit `checkCommandAgainstStatus`).
+      `DashCommandConfirmation.of` / `deliveryShowsTaken`: before DENIED on a sequence that does not
+      match, a sent bolus is taken when the status shows a bolus running (and no followed bolus still
+      runs), a temp basal when a temp basal runs, a resume when the basal runs. Stops, suspends and
+      basal programs keep the sequence check only. Tests: `DashDoseAccountingTest`,
+      `IosDashPumpBolusTest`; `DashAlertAndResetStateTest` (a refused resume) now reports a suspended
+      pod, which is what a refused resume leaves.
+- [x] **No new temp basal after a refused cancel** (OmnipodKit `enactTempBasal`).
+      `IosDashPump.cancelRunningTempBasalFirst(newTempBasalFollows = true)` returns a failure on DENIED.
+      The stop of a temp basal not expected (`cancelTempBasalNotExpected`) still goes on as Android.
+      Tests: 2 in `IosDashPumpTempBasalTest` replace the two Android-order tests.
+- [x] **The zero temp basal of a fault at the fault time** (OmnipodKit `setDeliveryStoppedAt` with
+      `faultEventTimeSinceActivation`). `DashPodState.faultTimeMs`, from the first alarm status (alarm
+      minutes on the clock of that same status; 0, 0xffff or later than the pod clock is not valid).
+      `DashPluginRules.checkPodKaput` starts the PUMP_SUSPEND temp basal there, else now; never at or
+      before the start of the temp basal running in AAPS (`PumpSync` would not end it). Tests:
+      `DashDoseAccountingTest`, `IosDashPluginPumpTest`. The emulator alarm status has an alarm time
+      (`RunningPodModel.faultAlarmMinutes`, 0 by default, so its bytes are as before).
+- [x] **A bolus the pod reports that the app does not track** (OmnipodKit `updateDeliveryStatus`).
+      `DashPodStateManager.updateFromDefaultStatus` makes it the last bolus of the units left, with a
+      stored mark (`DashPodState.untrackedBolusToRecordAt`); `IosDashPump` gives it as
+      `DashUntrackedBolus`; the recorder writes one bolus with the status time as the pump id and only
+      then clears the mark (`DashUntrackedBolus.onWritten`, `DashPodStateManager.untrackedBolusWritten`).
+      A write that throws keeps the mark and the next status writes it again; the same pump id makes a
+      second write update the same record. A retry after a fault ended the bolus writes what went in. Only on a running pod
+      whose activation is completed, with pulses left, while no bolus command is open and no followed
+      bolus still runs. Known edge: a bolus running across an upgrade from codec version 3 (no stored
+      last bolus) is counted again at the units left (more insulin, never less). Tests:
+      `DashDoseAccountingTest`, `IosDashPumpBolusTest`, `DashPumpSyncRecorderTest`, `IosDashPluginPumpTest`.
+- [x] **Codec**: one part added at the end of version 4, written only when one of its two fields is
+      set, so a state without them has the same bytes as before and every older version 4 and version
+      3 state still decodes (the pinned tests are unchanged). Tests in `DashDoseAccountingTest`.
+
 ### 5. Screens
 
 - [x] Activation and deactivation wizard, overview, in Compose Multiplatform (P3 above).
