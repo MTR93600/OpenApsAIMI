@@ -245,6 +245,24 @@ class DashPodStateManager(private val store: DashPodStateStore) {
     }
 
     /**
+     * The scan found the pod to pair (Android `pairNewPod`: `podState.bluetoothAddress = podAddress`,
+     * stored before the connect). On iOS this is the CoreBluetooth peripheral identifier. The held
+     * connection connects to it again after every drop and after iOS starts the app again. Persists
+     * immediately. Already part of the stored format (codec flag bit 2), so no new version.
+     *
+     * As the Android setter: the same address again does nothing, and another address while one is
+     * stored throws [IllegalStateException] and keeps the stored one. An activation that failed half
+     * way then never switches to another pod in range; the user discards the pod first ([reset]).
+     */
+    fun updateBluetoothAddress(address: String) {
+        val stored = state.bluetoothAddress
+        if (stored == address) return
+        check(stored == null) { "Trying to set Bluetooth Address to $address, but it is already set to $stored" }
+        state = state.copy(bluetoothAddress = address)
+        persist()
+    }
+
+    /**
      * Records a completed pairing: stores the LTK (defensively copied), the pod
      * unique id and resets the EAP-AKA sequence number to 1. Persists immediately.
      */

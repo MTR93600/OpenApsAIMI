@@ -239,10 +239,31 @@ missing layer. So the layer is ported first, as is, and the rest is rebuilt on i
 
 ### 3. Bluetooth on the iPhone
 
-- [ ] Scan for pairable pods (Dash service UUID), then a connection held open, as OmniBLE does: a
-      `connect` without timeout, made again after every drop, and CoreBluetooth state restoration so
-      iOS starts the app again for the pod. The session is set up once per connection. This is the
-      held connect already used for the Dexcom ONE+ (`holdsPendingConnect`).
+- [x] Code and fakes (2026-11-13, not on a device): scan for pairable pods (`DashPodScanner`, the
+      Android `PodScanner` rules: Dash service filter, 5 s, 9 service UUIDs, pod id ffff fffe, exactly
+      one), then a connection held open as OmniBLE does (`DashHeldConnection`): a `connect` without
+      timeout, made again after every drop while the connection is wanted (from `IosDashPump.connect`
+      to `disconnect` / `stopConnecting`), a new link and session on each connection, set up again
+      after `Busy`, and CoreBluetooth state restoration with its own identifier
+      (`BleRestoreIdentifier.OMNIPOD_DASH`): the restored pod is connected again, other peripherals
+      released. Bluetooth off marks the link lost. After a failed set up the next connect waits 10 s.
+      The activation scans and pairs inside the activation (Android `pairNewPod`); every operation
+      waits for the connection first (Android `observeConnectToPod`). A deactivated pod is forgotten.
+      `IosDashBleHost` (iosMain) is the thin CoreBluetooth glue. Tests: `DashPodScannerTest`,
+      `DashHeldConnectionTest` (JVM and iOS), `IosDashPumpHeldConnectionTest`.
+      After the review (2026-11-14), as Android: `isConnected()` is `!isPodRunning || session`; the
+      pod state is checked before the connect (no BLE contact for a command the state refuses); a
+      failed part 1 before the pairing stops the held connect (Android `disconnect(false)`, so the
+      next scan finds the pod again); the stored pod address is never replaced by another one
+      (Android setter throws); the bolus wait connects again before each status read and each stop
+      (`awaitConnectionHoldingLock`, with the lock the wait holds), so a stop after a drop reaches the
+      pod; the connector is built last in `IosDashPump`, after every other field.
+- [ ] On a device: a recorded pod advertisement, the `didConnect` answer to a connect on a restored
+      peripheral that is still connected, background wake by the pod, the xcodebuild of the app.
+- [ ] Android's connection counters (`incrementSuccessfulConnectionAttemptsAfterRetries`,
+      `incrementFailedConnectionsAfterRetries`, `successfulConnections`): statistics for the Dash
+      overview only, no dosing effect. Not kept; add them with the overview screen (phase 5), in the
+      stored state.
 
 ### 4. The iOS plugin
 

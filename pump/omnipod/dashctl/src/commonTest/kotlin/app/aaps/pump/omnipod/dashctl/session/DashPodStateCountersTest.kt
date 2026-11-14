@@ -5,6 +5,7 @@ import app.aaps.pump.omnipod.dashctl.parity.toParityHex
 import app.aaps.pump.omnipod.dashctl.pod.response.SetUniqueIdResponse
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 
 /**
@@ -129,5 +130,26 @@ class DashPodStateCountersTest {
         assertEquals(0x15eL, store.saved?.eapAkaSequenceNumber, "an increase is stored only by commit")
         manager.commitEapAkaSequenceNumber()
         assertEquals(0x15fL, store.saved?.eapAkaSequenceNumber)
+    }
+
+    /**
+     * Android `OmnipodDashPodStateManagerImpl.bluetoothAddress` setter: the same address again is
+     * accepted, another one while one is stored throws and the stored one stays.
+     */
+    @Test
+    fun `the stored pod address is never replaced by another one as Android`() {
+        val store = MemoryStore()
+        val manager = DashPodStateManager(store)
+
+        manager.updateBluetoothAddress("POD-A")
+        manager.updateBluetoothAddress("POD-A")
+        val error = assertFailsWith<IllegalStateException> { manager.updateBluetoothAddress("POD-B") }
+
+        assertEquals("Trying to set Bluetooth Address to POD-B, but it is already set to POD-A", error.message)
+        assertEquals("POD-A", manager.bluetoothAddress)
+        assertEquals("POD-A", store.saved?.bluetoothAddress)
+        manager.reset()
+        manager.updateBluetoothAddress("POD-B")
+        assertEquals("POD-B", manager.bluetoothAddress, "after a reset another pod can be stored")
     }
 }

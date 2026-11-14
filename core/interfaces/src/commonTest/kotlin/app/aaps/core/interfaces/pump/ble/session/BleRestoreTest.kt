@@ -28,6 +28,7 @@ class BleRestoreTest {
         assertEquals("app.aaps.ble.pump.transport", BleRestoreIdentifier.PUMP_TRANSPORT)
         assertEquals("app.aaps.ble.pump.medtrum", BleRestoreIdentifier.MEDTRUM)
         assertEquals("app.aaps.ble.cgm.dexcom.oneplus", BleRestoreIdentifier.DEXCOM_ONE_PLUS)
+        assertEquals("app.aaps.ble.pump.omnipod.dash", BleRestoreIdentifier.OMNIPOD_DASH)
     }
 
     /** Two centrals on one identifier would be offered the same kept state. */
@@ -36,7 +37,8 @@ class BleRestoreTest {
         val all = listOf(
             BleRestoreIdentifier.PUMP_TRANSPORT,
             BleRestoreIdentifier.MEDTRUM,
-            BleRestoreIdentifier.DEXCOM_ONE_PLUS
+            BleRestoreIdentifier.DEXCOM_ONE_PLUS,
+            BleRestoreIdentifier.OMNIPOD_DASH
         )
         assertEquals(all.size, all.toSet().size)
     }

@@ -123,6 +123,12 @@ sealed class DashConnectResult {
 
     /** The session could not be set up; the BLE connection was cancelled. */
     data class SessionFailed(val reason: String) : DashConnectResult()
+
+    /**
+     * No BLE link to work on: the held connection did not come up in time, Bluetooth is off, or the
+     * scan found no pod to pair (`DashHeldConnection`). Nothing was sent.
+     */
+    data class NotConnected(val reason: String) : DashConnectResult()
 }
 
 /**
@@ -157,7 +163,8 @@ sealed class DashConnectResult {
  * one, and a connect from inside a command can never block for ever.
  *
  * Who connects: [connect] runs on a peripheral that is already connected. Starting the BLE connection
- * (the held `connect` of OmniBLE) is the job of the iOS central owner (plan, step 9).
+ * (the held `connect` of OmniBLE) is the job of [DashHeldConnection], which calls [connect] each time
+ * the link comes up.
  *
  * Threading: [connect] blocks, like [DashBleLink.prepare]. Call it from the worker thread that sends
  * the commands, never from the thread that delivers the events. As on Android, connect before a
@@ -200,6 +207,13 @@ class DashPodConnection(
             client.unlockLink()
         }
     }
+
+    /**
+     * As [connect], for a caller that already holds the link lock of the client (the bolus wait of
+     * the pump, which holds its command lock for the whole bolus). The lock is not taken again and
+     * not given back here. Never call it without that lock: two set ups could then run at once.
+     */
+    fun connectHoldingLock(): DashConnectResult = connectWithLock()
 
     private fun connectWithLock(): DashConnectResult {
         val old = current

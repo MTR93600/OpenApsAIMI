@@ -154,6 +154,9 @@ object BleRestoreIdentifier {
 
     /** The central the Dexcom ONE+ driver owns. */
     const val DEXCOM_ONE_PLUS = "app.aaps.ble.cgm.dexcom.oneplus"
+
+    /** The central the Omnipod Dash driver owns (`pump/omnipod/dashctl`, iOS). */
+    const val OMNIPOD_DASH = "app.aaps.ble.pump.omnipod.dash"
 }
 
 /**

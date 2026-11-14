@@ -80,7 +80,7 @@ class IosDashPumpDeactivationTest {
         assertEquals(DashPodState(), f.stateManager.currentState(), "nothing is kept, as Android PodState()")
         assertEquals(DashPodState(), f.store.saved, "the cleared state is stored: the key is gone")
         assertFalse(f.pump.isPaired())
-        assertFalse(f.pump.isConnected(), "the link of the old pod is closed")
+        assertFalse(f.pump.hasSession(), "the link of the old pod is closed (isConnected is true: no pod runs, as Android)")
     }
 
     @Test
@@ -240,7 +240,8 @@ class IosDashPumpDeactivationTest {
         assertTrue(f.pod.commands.isEmpty())
         assertEquals(DashPodState(), f.stateManager.currentState())
         assertEquals(DashPodState(), f.store.saved)
-        assertFalse(f.pump.isConnected())
+        assertFalse(f.pump.hasSession(), "the link is closed")
+        assertTrue(f.pump.isConnected(), "no pod runs, so the queue sees a connected pump, as Android")
         assertTrue(f.decided.isEmpty())
     }
 

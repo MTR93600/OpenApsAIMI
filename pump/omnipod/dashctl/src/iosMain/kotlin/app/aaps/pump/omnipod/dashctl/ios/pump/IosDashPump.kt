@@ -19,7 +19,10 @@ import app.aaps.core.interfaces.pump.actions.CustomActionType
 import app.aaps.core.interfaces.queue.CustomCommand
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.pump.omnipod.dashctl.comm.Ids
+import app.aaps.pump.omnipod.dashctl.comm.connection.DashConnectResult
+import app.aaps.pump.omnipod.dashctl.comm.connection.DashHeldConnection
 import app.aaps.pump.omnipod.dashctl.comm.connection.DashLinkClient
+import app.aaps.pump.omnipod.dashctl.comm.connection.DashPodConnector
 import app.aaps.pump.omnipod.dashctl.comm.connection.DashPodLink
 import app.aaps.pump.omnipod.dashctl.comm.endecrypt.EnDecrypt
 import app.aaps.pump.omnipod.dashctl.comm.exceptions.SessionEstablishmentException
@@ -238,6 +241,13 @@ data class DashCommandOutcome(
  * refused the same way. [disconnect] closes the link too, except while an activation runs
  * ([runActivation]), as Android.
  *
+ * The BLE connection itself comes from the connector (`connectorFactory`, on the iPhone a
+ * `DashHeldConnection`): [connect] holds a connection to the stored pod that is made again after
+ * every drop, with a new link and session each time, until [disconnect] or [stopConnecting]; each
+ * operation waits for it first when there is no session (Android `observeConnectToPod`, outside the
+ * command lock); part 1 of the activation scans for a new pod and connects to it (Android
+ * `pairNewPod`); a deactivated or discarded pod is forgotten and never connected again.
+ *
  * **Beeps** come from [beeps] (all off until the plugin gives the user settings), and go into the
  * same fields as on Android: the reminders of a bolus, a temp basal and a basal program, and the beep
  * of a stop and of a suspend. The activation commands never beep, as on Android.
@@ -289,6 +299,13 @@ class IosDashPump(
      * answer every cancel is sent (fail closed).
      */
     private val expectedTempBasalRunning: () -> Boolean = { true },
+    /**
+     * Makes the BLE side of this pump: on the iPhone a `DashHeldConnection` on the Dash central
+     * (`IosDashBleHost`). It gets this pump as its [DashLinkClient]. Null: this pump makes no
+     * connection itself ([connect] does nothing, nothing is scanned); the tests that connect a
+     * `DashPodConnection` by hand use that.
+     */
+    connectorFactory: ((DashLinkClient) -> DashPodConnector)? = null,
 ) : Pump, DashLinkClient {
 
     private var session: Session? = null
@@ -521,9 +538,14 @@ class IosDashPump(
      * - refused unless the activation progress is before PHASE_1_COMPLETED (Android
      *   `observePodReadyForActivationPart1`), before anything is sent;
      * - a pod not paired yet is paired on the link of the connection ([pair], with the id Android
-     *   gives) and the session is set up on it ([establishSession]), as Android `pairNewPod`. The
-     *   caller connects first (`DashPodConnection.connect` gives `LinkReady`). A pod already paired
-     *   needs a session, as after a reconnect;
+     *   gives) and the session is set up on it ([establishSession]), as Android `pairNewPod`. With a
+     *   connector and no usable link, the pod is found first, as Android `pairNewPod`: a scan for a
+     *   pod that can be paired ([DashPodConnector.connectNewPod]), its peripheral id stored
+     *   (Android `podState.bluetoothAddress`), then the held connection to it, all inside the
+     *   activation (so a [disconnect] from the queue cannot break it) and outside the command lock.
+     *   Without a connector the caller connects first (`DashPodConnection.connect` gives
+     *   `LinkReady`). A pod already paired needs a session, as after a reconnect: with a connector
+     *   it is awaited first (Android `observeConnectToPod`);
      * - then the steps of [DashActivation.activatePart1], each stored as it is done.
      *
      * The whole call is one activation ([isActivationRunning], [isBusy], a [disconnect] is ignored)
@@ -540,7 +562,11 @@ class IosDashPump(
         lowReservoirAlertTrigger: AlertTrigger.ReservoirVolumeTrigger?,
         lowReservoirAlertSettings: DashLowReservoirAlertSettings? = null,
     ): PumpEnactResult =
-        activationCall("Pod activation part 1") {
+        activationCall(
+            "Pod activation part 1",
+            connectFirst = { connectForActivation(newPod = true) },
+            onFailure = ::releaseUnpairedPod,
+        ) {
             if (!stateManager.activationProgress.isBefore(ActivationProgress.PHASE_1_COMPLETED)) {
                 throw DashActivationException("Pod is in an incorrect state")
             }
@@ -572,16 +598,87 @@ class IosDashPump(
         userConfiguredExpirationAlarmHours: Long?,
         expirationAlertSettings: DashExpirationAlertSettings? = null,
     ): PumpEnactResult =
-        activationCall("Pod activation part 2") {
+        activationCall("Pod activation part 2", connectFirst = { connectForActivation(newPod = false) }) {
             activation().activatePart2(basalProgram, userConfiguredExpirationReminderHours, userConfiguredExpirationAlarmHours)
             expirationAlertSettings?.let { stateManager.updateExpirationAlertSettings(it) }
         }
 
-    /** One activation call: [activationRunning] and [commandMutex] for the whole [block]; errors are a failure result. */
-    private suspend fun activationCall(name: String, block: suspend () -> Unit): PumpEnactResult {
+    /**
+     * The connection an activation step needs, made before the command lock is taken (the set up
+     * needs that lock). Returns null when the step may go on, or the reason it may not. Without a
+     * connector nothing is done here: the step then fails closed without a link or a session.
+     *
+     * [newPod]: part 1. A pod not paired yet and no usable link: scan, store the peripheral id, and
+     * connect to it ([DashPodConnector.connectNewPod], Android `pairNewPod`); the answer must be
+     * `LinkReady`. Android scans again on every part 1 before the pairing, so this does too.
+     * Otherwise (a paired pod, or part 2): the held connection is awaited until a session is ready.
+     */
+    private fun connectForActivation(newPod: Boolean): String? {
+        val c = connector ?: return null
+        // Android checks the activation progress first (`observePodReadyForActivationPart1` and
+        // `observePodReadyForActivationPart2`): the block refuses, with nothing scanned, no
+        // connection and nothing sent.
+        val progress = stateManager.activationProgress
+        if (newPod && !progress.isBefore(ActivationProgress.PHASE_1_COMPLETED)) return null
+        if (!newPod && !(progress.isAtLeast(ActivationProgress.PHASE_1_COMPLETED) && progress.isBefore(ActivationProgress.COMPLETED))) return null
+        if (newPod && stateManager.ltk == null) {
+            if (link?.isUsable == true) return null
+            val result = try {
+                c.connectNewPod(DashHeldConnection.CONNECT_TIMEOUT_MS) { stateManager.updateBluetoothAddress(it) }
+            } catch (e: IllegalStateException) {
+                // Another pod than the one stored by an earlier try (Android: the setter throws and
+                // `pairNewPod` fails). Nothing is connected to it.
+                return "Could not connect to a new pod: ${e.message}"
+            }
+            return if (result is DashConnectResult.LinkReady) null else "Could not connect to a new pod: $result"
+        }
+        if (hasSession()) return null
+        val address = stateManager.bluetoothAddress ?: return "No pod address stored"
+        return when (val result = c.awaitConnection(address, DashHeldConnection.CONNECT_TIMEOUT_MS)) {
+            is DashConnectResult.SessionReady, is DashConnectResult.AlreadyConnected -> null
+            else                                                                     -> "Could not connect to the pod: $result"
+        }
+    }
+
+    /**
+     * Android `pairNewPod` calls `disconnect(false)` on every failure (connect timeout, pairing,
+     * session). Here: when part 1 failed and the pod is still not paired, the held connection to it
+     * stops. Otherwise it would stay connected (or keep connecting) to the new pod, a connected pod
+     * does not advertise, and the scan of the next try would not find it again.
+     */
+    private fun releaseUnpairedPod() {
+        if (stateManager.ltk != null) return
+        connector?.stopHolding("pod activation part 1 failed before the pairing")
+    }
+
+    /**
+     * One activation call: [activationRunning] for the whole call, then [connectFirst] (outside the
+     * lock), then [commandMutex] for [block]; errors are a failure result. On a failure [onFailure]
+     * runs once the lock is given back.
+     */
+    private suspend fun activationCall(
+        name: String,
+        connectFirst: () -> String? = { null },
+        onFailure: () -> Unit = {},
+        block: suspend () -> Unit,
+    ): PumpEnactResult {
+        val result = activationCallInner(name, connectFirst, block)
+        if (!result.success) onFailure()
+        return result
+    }
+
+    private suspend fun activationCallInner(
+        name: String,
+        connectFirst: () -> String?,
+        block: suspend () -> Unit,
+    ): PumpEnactResult {
         val before = activationRunning
         activationRunning = true
         try {
+            connectFirst()?.let {
+                aapsLogger.error(LTag.PUMP, "$name: $it")
+                return failure("$name: $it")
+            }
             return commandMutex.withLock {
                 busy = true
                 try {
@@ -689,31 +786,112 @@ class IosDashPump(
             (progress != ActivationProgress.NOT_STARTED && progress.isBefore(ActivationProgress.COMPLETED))
     }
 
-    /** True while the link of the current connection is usable and has a session. */
-    override fun isConnected(): Boolean = hasSession()
-    override fun isConnecting(): Boolean = false
-    override fun isHandshakeInProgress(): Boolean = false
-
     /**
-     * Does nothing yet: the BLE connection is made by the central owner (plan, step 9) through
-     * `DashPodConnection.connect`, which gives the link to [attachLink]. Until then a command after a
-     * drop is refused (fail closed) until the owner connects again.
+     * Android `isConnected()`: `!podStateManager.isPodRunning || bluetoothConnectionState == CONNECTED`.
+     * With no running pod (none paired, deactivated, discarded, in alarm or half activated) the queue
+     * sees a connected pump and runs the command at once; the command then connects itself when it
+     * needs the pod ([connectBeforeCommand]) or answers without it ("no running pod"). Otherwise true
+     * while the link of the current connection is usable and has a session.
      */
-    override fun connect(reason: String) = Unit
+    override fun isConnected(): Boolean = !stateManager.isPodRunning || hasSession()
+
+    /** True while the held connection is wanted and no session is ready (Android: a connect thread runs). */
+    override fun isConnecting(): Boolean = connector?.isConnecting ?: false
+
+    /** True while the BLE link is up and its session is being set up (Android: connecting and CONNECTED). */
+    override fun isHandshakeInProgress(): Boolean = connector?.isHandshakeInProgress ?: false
 
     /**
-     * Closes the current link for good, as Android `disconnect(false)` disconnects the GATT. Ignored
-     * while an activation runs ([runActivation]), as Android (#5219).
+     * Android `connect(reason)`: starts the connection and returns at once; the queue then waits
+     * for [isConnected]. Here the held connection to the stored pod ([DashPodConnector.hold]): iOS
+     * keeps the connect open with no time limit, and each time the link comes up a new link and a
+     * new session are made (`DashPodConnection.connect`). A drop is made good by itself until
+     * [disconnect] or [stopConnecting].
+     *
+     * Does nothing when no pod address is stored (no pod paired: the activation scans for the pod
+     * and connects itself, see [activatePodPart1]) or when there is no connector.
+     */
+    override fun connect(reason: String) {
+        val address = stateManager.bluetoothAddress
+        if (address == null) {
+            aapsLogger.info(LTag.PUMP, "Dash connect ($reason): no pod address stored, nothing to connect to")
+            return
+        }
+        connector?.hold(address, reason)
+    }
+
+    /**
+     * Closes the current link for good, as Android `disconnect(false)` disconnects the GATT, and the
+     * held connection stops: nothing connects again until [connect]. Ignored while an activation
+     * runs ([runActivation]), as Android (#5219).
      */
     override fun disconnect(reason: String) {
         if (activationRunning) {
             aapsLogger.info(LTag.PUMP, "Dash disconnect ignored, pod activation is running ($reason)")
             return
         }
+        // First stop holding, so the drop that the close makes is not connected again.
+        connector?.stopHolding("disconnect: $reason")
         closeLink("disconnect: $reason")
     }
 
-    override fun stopConnecting() = Unit
+    /**
+     * Android `stopConnecting` (the queue gave up waiting): the connect stops and the link is closed
+     * (`disconnect(true)`). As Android, not held back by a running activation.
+     */
+    override fun stopConnecting() {
+        connector?.stopHolding("stop connecting")
+        closeLink("stop connecting")
+    }
+
+    /**
+     * Android `observeConnectToPod` before an operation: when there is no session, wait until the
+     * held connection is up and set up, at most [DashHeldConnection.CONNECT_TIMEOUT_MS] (Android
+     * `DEFAULT_CONNECT_TIMEOUT_MS`). Outside the command lock, because the set up needs that lock.
+     * The result is only logged: without a session the operation then fails closed by itself, with
+     * nothing sent.
+     *
+     * [stateReady]: the state check Android runs before its connect (`observePodRunning`,
+     * `observeUniqueIdSet`, ...). When it is false nothing is connected: the operation refuses by
+     * itself, with no BLE contact and no new session, as Android.
+     *
+     * The bolus wait holds the command lock, so it connects with [reconnectInsideBolus] instead.
+     */
+    private fun connectBeforeCommand(name: String, stateReady: Boolean) {
+        val c = connector ?: return
+        if (!stateReady) {
+            aapsLogger.info(LTag.PUMPBTCOMM, "Connect before $name skipped: Pod is in an incorrect state")
+            return
+        }
+        if (hasSession()) return
+        val address = stateManager.bluetoothAddress ?: return
+        val result = c.awaitConnection(address, DashHeldConnection.CONNECT_TIMEOUT_MS)
+        aapsLogger.info(LTag.PUMPBTCOMM, "Connect before $name: $result")
+    }
+
+    /** [connectBeforeCommand], then [action] with [commandMutex] held. */
+    private suspend inline fun <T> connectThenLock(name: String, stateReady: Boolean, action: () -> T): T {
+        connectBeforeCommand(name, stateReady)
+        return commandMutex.withLock(action = action)
+    }
+
+    /**
+     * Android connects before each status read and each stop of the bolus wait (`getPodStatus`,
+     * `stopBolus`, both start with `observeConnectToPod`). The wait holds [commandMutex] for the
+     * whole bolus, so the held connection cannot set up a new link on its own then (it gets
+     * `DashConnectResult.Busy`). When there is no session, the connection is made here, with the lock
+     * the wait holds, at most [DashHeldConnection.CONNECT_TIMEOUT_MS]. Without this, a stop asked
+     * after a drop would never reach the pod and the whole bolus would go in.
+     *
+     * [stateReady]: as [connectBeforeCommand] (Android `stopBolus` checks `observePodRunning` first).
+     */
+    private fun reconnectInsideBolus(name: String, stateReady: Boolean = true) {
+        val c = connector ?: return
+        if (!stateReady || hasSession()) return
+        val address = stateManager.bluetoothAddress ?: return
+        val result = c.awaitConnectionHoldingLock(address, DashHeldConnection.CONNECT_TIMEOUT_MS)
+        aapsLogger.info(LTag.PUMPBTCOMM, "Connect before $name (bolus wait): $result")
+    }
 
     // -- Commands -----------------------------------------------------------
 
@@ -742,6 +920,7 @@ class IosDashPump(
      * rate comes first, both refuse with nothing sent.
      */
     override suspend fun deliverTreatment(detailedBolusInfo: DetailedBolusInfo): PumpEnactResult {
+        connectBeforeCommand("bolus", stateReady = stateManager.isActivatedAndRunning)
         bolusDeliveryInProgress = true
         try {
             return commandMutex.withLock {
@@ -819,6 +998,7 @@ class IosDashPump(
      */
     private suspend fun decideBolusBeforeStop(): DashCommandConfirmation {
         repeat(DashBolusWait.BOLUS_RETRIES) {
+            reconnectInsideBolus("status")
             val read = readStatusDeciding(decidedLate = false)
             if (read.read || read.confirmation.isFinal) return read.confirmation
             sleep(DashBolusWait.BOLUS_RETRY_INTERVAL_MS)
@@ -838,7 +1018,10 @@ class IosDashPump(
     private val bolusWaitPod = object : DashBolusWaitPod {
         override fun isCanceled(): Boolean = bolusCanceled
 
-        override fun readStatus(): Boolean = readStatusWithLock()
+        override fun readStatus(): Boolean {
+            reconnectInsideBolus("status")
+            return readStatusWithLock()
+        }
 
         /**
          * Android `cancelBolus`. While a command is still open (a stop whose answer was lost), a
@@ -846,6 +1029,7 @@ class IosDashPump(
          * the last programming command and hide what happened to the first one.
          */
         override fun cancelBolus(): Boolean {
+            reconnectInsideBolus("stop bolus", stateReady = stateManager.isActivatedAndRunning)
             if (stateManager.activeCommand != null) return readStatusWithLock()
             return try {
                 // Android `cancelBolus` takes the bolus beep setting, also for an SMB.
@@ -895,11 +1079,11 @@ class IosDashPump(
         durationInMinutes: Int,
         enforceNew: Boolean,
         tbrType: PumpSync.TemporaryBasalType
-    ): PumpEnactResult = commandMutex.withLock {
+    ): PumpEnactResult = connectThenLock("TBR", stateReady = stateManager.isActivatedAndRunning) {
         busy = true
         try {
             requireSession()
-            cancelRunningTempBasalFirst()?.let { return@withLock it }
+            cancelRunningTempBasalFirst()?.let { return@connectThenLock it }
             val tempBasalBeeps = beeps().tempBasalBeeps
             val outcome = sendDeliveryCommand(
                 DashCommandKind.TEMP_BASAL, tempBasalRate = absoluteRate, tempBasalMinutes = durationInMinutes
@@ -982,12 +1166,12 @@ class IosDashPump(
      * Success only when the pod confirmed it (fail closed, see the class comment).
      */
     override suspend fun cancelTempBasal(enforceNew: Boolean): PumpEnactResult =
-        commandMutex.withLock {
+        connectThenLock("cancel TBR", stateReady = stateManager.isActivatedAndRunning) {
             busy = true
             try {
                 if (!tempBasalActive() && !expectedTempBasalRunning()) {
                     aapsLogger.info(LTag.PUMP, "cancelTempBasal: no temp basal to cancel, nothing sent")
-                    return@withLock DashPumpEnactResult(success = true, enacted = false, comment = "No temp basal to cancel")
+                    return@connectThenLock DashPumpEnactResult(success = true, enacted = false, comment = "No temp basal to cancel")
                 }
                 val beep = beeps().tempBasalBeeps
                 val outcome = sendDeliveryCommand(DashCommandKind.STOP_TEMP_BASAL) { uid, seq ->
@@ -1032,8 +1216,8 @@ class IosDashPump(
      *   `setNewBasalProfile`; nothing is sent there either.
      *
      * The suspend and the program are held back unless the pod is activated and runs, as Android
-     * `observePodRunning` (see [sendDeliveryCommand]). Not here yet: the connect before the commands
-     * (`observeConnectToPod`, step 9). The time zone is the one of the phone when the program is built, as Android; a change of
+     * `observePodRunning` (see [sendDeliveryCommand]). With a connector, the connection is awaited
+     * first ([connectBeforeCommand], Android `observeConnectToPod`). The time zone is the one of the phone when the program is built, as Android; a change of
      * time zone or DST is ignored, as Android (`timezoneOrDSTChanged`).
      */
     override suspend fun setNewBasalProfile(profile: PumpProfile): PumpEnactResult {
@@ -1046,11 +1230,11 @@ class IosDashPump(
         } catch (e: IllegalArgumentException) {
             return failure("Basal program refused: ${e.message}")
         }
-        return commandMutex.withLock {
+        return connectThenLock("basal program", stateReady = stateManager.isActivatedAndRunning) {
             busy = true
             try {
                 requireSession()
-                suspendDeliveryIfActive()?.let { return@withLock it }
+                suspendDeliveryIfActive()?.let { return@connectThenLock it }
                 val beep = beeps().basalBeeps
                 val outcome = sendDeliveryCommand(DashCommandKind.BASAL_PROGRAM, basalProgram = basalProgram) { uid, seq ->
                     basalProgramCommand(basalProgram, uid, seq, beep)
@@ -1127,7 +1311,8 @@ class IosDashPump(
      * session cannot reach the pod, so it fails closed like everything else.
      */
     fun stopDelivery(): PumpEnactResult = runBlocking {
-        commandMutex.withLock {
+        // No Android counterpart and no state check: a stop of all delivery always connects.
+        connectThenLock("stop", stateReady = true) {
             try {
                 // No Android counterpart (the Dash plugin has no stop of all delivery): silent.
                 val outcome = sendDeliveryCommand(DashCommandKind.STOP_ALL) { uid, seq ->
@@ -1369,7 +1554,7 @@ class IosDashPump(
      * status does not clear the state (Android: "Will not sync confirmed command"). The user then
      * deactivates again or discards the pod.
      */
-    suspend fun deactivatePod(): PumpEnactResult = lockedCommand {
+    suspend fun deactivatePod(): PumpEnactResult = lockedCommand(needsRunningPod = false) {
         val outcome = sendDeliveryCommand(DashCommandKind.DEACTIVATE) { uid, seq ->
             DeactivateCommand.Builder()
                 .setSequenceNumber(seq)
@@ -1421,15 +1606,21 @@ class IosDashPump(
     /** Android `podStateManager.reset()`, and the link of the old pod is not used again. */
     private fun resetPodState(reason: String) {
         aapsLogger.info(LTag.PUMP, "Pod state cleared: $reason")
+        // The old pod is not connected again (also not after a drop or an iOS relaunch).
+        connector?.forget(reason)
         stateManager.reset()
         closeLink(reason)
     }
 
     /**
      * One command call: [commandMutex] and [isBusy] for the whole [block]; an open command or a missing
-     * session is a failure result.
+     * session is a failure result. [needsRunningPod]: Android checks `observePodRunning` before it
+     * connects; only the deactivation has no such check (a pod in alarm must still be deactivated).
      */
-    private suspend fun lockedCommand(block: () -> PumpEnactResult): PumpEnactResult = commandMutex.withLock {
+    private suspend fun lockedCommand(
+        needsRunningPod: Boolean = true,
+        block: () -> PumpEnactResult,
+    ): PumpEnactResult = connectThenLock("command", stateReady = !needsRunningPod || stateManager.isActivatedAndRunning) {
         busy = true
         try {
             block()
@@ -1481,7 +1672,7 @@ class IosDashPump(
             aapsLogger.info(LTag.PUMP, "getPumpStatus ($reason): pod activation not completed, nothing read")
             return
         }
-        commandMutex.withLock {
+        connectThenLock("status", stateReady = stateManager.activationProgress.isAtLeast(ActivationProgress.SET_UNIQUE_ID)) {
             busy = true
             try {
                 if (!stateManager.activationProgress.isAtLeast(ActivationProgress.SET_UNIQUE_ID)) {
@@ -1804,6 +1995,14 @@ class IosDashPump(
     override fun getCustomActions(): List<CustomAction>? = null
     override fun executeCustomAction(customActionType: CustomActionType) = Unit
     override fun executeCustomCommand(customCommand: CustomCommand): PumpEnactResult? = null
+
+    /**
+     * The BLE connection side, see `connectorFactory`. Declared last on purpose: the factory may open
+     * the central, and on a state restore iOS can then start a link set up at once, which calls back
+     * into this pump ([tryLockLink], [hasSession], ...) from a worker. Every other field must be set by
+     * then, or that call would find an empty [commandMutex].
+     */
+    private val connector: DashPodConnector? = connectorFactory?.invoke(this)
 
     companion object {
 

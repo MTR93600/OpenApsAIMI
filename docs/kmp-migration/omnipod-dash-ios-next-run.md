@@ -7,7 +7,8 @@ A run that can go on without the owner: every decision it needs is taken below. 
 
 - Phase 1 and phase 2 steps 1 to 4 are done and tested off line: the pod link (`dashctl/comm`),
   pairing, session, commands and their answers, the open command until the pod confirms it.
-  313 tests on the JVM, 307 on the iOS simulator. (After step 4 of this run: 384 and 410.)
+  313 tests on the JVM, 307 on the iOS simulator. (After step 4 of this run: 384 and 410; after
+  step 9: 498 and 630.)
 - `dashctl` is compiled into the iOS framework but nothing registers it: no plugin, no Dash in the
   pump list. The iOS app builds and runs as before.
 - Not tested on a pod. There is no pod and no iPhone in this run: everything is tested against the
@@ -124,8 +125,7 @@ commonMain (`dashctl`), so the JVM tests run them; only CoreBluetooth glue goes 
    it); units left out of range count the whole bolus; a bolus the pod stopped itself with units left
    is ended and counted (Android throws on `deliveredUnits()!!` and reports 0).
    Still open: the reservoir check of Android (done in step 8); a reconnect inside the
-   wait (`observeConnectToPod`, step 9: today a lost link makes the tries fail fast and the asked
-   amount is reported); a stop whose answer is lost (live or after a crash) is decided by a status
+   wait (`observeConnectToPod`, done in step 9: before each read and each stop); a stop whose answer is lost (live or after a crash) is decided by a status
    that shows 0 left, so the whole bolus is counted (more than went in, never less; Android parity,
    pinned); a bolus the pod ended itself with units left (fault) is only in the result, not in an
    outcome, and a fault seen after a crash is not corrected: done in step 8 (`DashBolusEndedByFault`);
@@ -382,12 +382,66 @@ commonMain (`dashctl`), so the JVM tests run them; only CoreBluetooth glue goes 
 
 ### C. Bluetooth on the iPhone (code and fakes only; the device test comes later)
 
-9. A `CoreBluetoothCentral` for Dash with its own restore identifier, `QueuedBleCentral` around it,
-   a scan for pairable pods (Dash service UUID, the pod advertisement as Android `PodScanner`), and
-   the held connection of OmniBLE: `connect` without timeout, made again after every drop. Wire
-   `IosDashPump.connect(reason)` to it, and retry `DashPodConnection.connect` when it returns `Busy`.
-   Pairing goes inside `IosDashPump.runActivation`. Test the
-   scan and reconnect rules with a fake central.
+9. [x] **Bluetooth on the iPhone**, code and fakes only. Done (not committed). The rules are in
+   commonMain, the iOS part is glue:
+   - `BleRestoreIdentifier.OMNIPOD_DASH = "app.aaps.ble.pump.omnipod.dash"` (core/interfaces, the
+     golden `BleRestoreTest` has the value).
+   - `DashPodScanner` / `DashPodAdvertisement` (commonMain, `comm/scan`): Android `PodScanner`,
+     `ScanCollector` and `BleDiscoveredDevice`: scan filtered on `00004024-...`, 5 s, the last
+     advertisement per peripheral, 9 service UUIDs, 4024 first, 000a third, pod id from the 4th and
+     5th (ffff fffe for a pod to pair), lot and sequence; exactly one pod or nothing (too many: none
+     chosen). As Android a platform scan failure is only logged.
+   - `DashHeldConnection` (commonMain, `comm/connection`), the `DashPodConnector` of the pump: the
+     held connection of OmniBLE. `hold` asks one connect with no timeout; each link up runs
+     `DashPodConnection.connect` on a worker (new link, HELLO, session from 1), tried again every 1 s
+     while it is `Busy`; every drop asks a new connect while the connection is wanted; `stopHolding`
+     (queue `disconnect`, `stopConnecting`) and `forget` (deactivation, discard) stop it; Bluetooth off
+     marks the link lost (iOS sends no drop then) and on asks the connect again; a state restore with
+     the pod re-attaches it (connect again, new session), other restored peripherals are released;
+     after a failed set up the next connect has a 10 s start delay; no held connect is asked while a
+     `DashPodConnection.connect` runs (a failure cancels from inside it). `awaitConnection` (blocks,
+     outside the command lock, 30 s as Android `DEFAULT_CONNECT_TIMEOUT_MS`) and `connectNewPod`
+     (scan, store the peripheral, connect; `LinkReady`).
+   - `IosDashPump(connectorFactory = ...)`: `connect(reason)` holds the stored pod
+     (`DashPodStateManager.updateBluetoothAddress`, new; the field was already in the stored format, no
+     codec change), `disconnect` / `stopConnecting` stop holding, `isConnecting` /
+     `isHandshakeInProgress` from the connector, every operation waits for the connection first when
+     there is no session (`connectBeforeCommand`, Android `observeConnectToPod`, outside the lock), part
+     1 of the activation scans, stores the peripheral and connects inside the activation and outside the
+     lock before it pairs (Android `pairNewPod`), part 2 and a paired part 1 await the session; a reset
+     forgets the pod. No connector (all older tests): as before.
+   - `IosDashBleHost` (iosMain): `CoreBluetoothCentral(OMNIPOD_DASH)`, `QueuedBleCentral`, events to the
+     held connection, the set up on a coroutine scope, the pod made known before the central opens (so
+     the restore can find it). Not registered anywhere (phase 4).
+   Tests: `DashPodScannerTest` (commonTest, 14), `DashHeldConnectionTest` (commonTest, 22, on
+   `HeldPodCentral`, a fake central that behaves as CoreBluetooth), `IosDashPumpHeldConnectionTest`
+   (iosTest, 8: scan, pairing and activation inside the activation, connect, new session after a drop,
+   connect before a command and its timeout, no reconnect after a disconnect or a deactivation), 1 more
+   value in `BleRestoreTest`. `RecordingClient` moved out of `DashPodConnectionTest` to share it.
+   498 tests on the JVM, 630 on the iOS simulator (1 skipped, the known pin), 0 failures; core/interfaces
+   135 on the JVM, 154 on the iOS simulator, 0 failures.
+   Review fixes (2026-11-14, each with a test that was red without the fix): `isConnected()` is
+   Android `!isPodRunning || session` (with no running pod the queue no longer loops on `connect`
+   and clears itself); every operation checks the pod state before it connects, as Android
+   (`observePodRunning`, `observeUniqueIdSet`, `observePodReadyForActivationPart2`; deactivation
+   and the stop of all delivery always connect); a failed part 1 before the pairing stops the held
+   connect (Android `pairNewPod` `disconnect(false)`); `updateBluetoothAddress` refuses another
+   address while one is stored (Android setter); the bolus wait connects again before each status
+   read and each stop with the lock it holds (`DashPodConnector.awaitConnectionHoldingLock`,
+   `DashPodConnection.connectHoldingLock`), so a stop after a drop still reaches the pod; the
+   connector is the last field of `IosDashPump`. Now 499 tests on the JVM, 637 on the iOS
+   simulator (1 skipped, the known pin), 0 failures.
+   Moved to phase 5 (the overview screen): Android's connection counters (statistics only).
+   Deliberate differences from Android, with tests: Android has no held connection (it connects with a
+   30 s timeout before each operation and disconnects when the queue is empty); here the connection is
+   held between `connect` and `disconnect`, as OmniBLE, and made good after a drop. The 10 s delay after
+   a failed set up is not in Android (no loop of EAP challenges on a pod that refuses the session). A
+   UUID text too short or not hex is "not this pod" instead of an exception.
+   Still open: the device test (phase 6); the advertisement vectors are built from the Android rules,
+   none is recorded (check one on a real pod); that CoreBluetooth answers a connect on a peripheral that
+   is still connected after a restore with `didConnect` (assumed, as LoopKit does; check on the phone);
+   the xcodebuild of the whole app (not run by this builder,
+   gradle only); `IosDashBleHost` and the pump wired into a plugin (phase 4).
 
 Stop after step 9. The plugin (phase 4) and the screens (phase 5) need the owner.
 
