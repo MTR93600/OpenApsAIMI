@@ -23,11 +23,14 @@ import kotlinx.coroutines.launch
  *   link set up on [scope].
  *
  * Use: give [connectorFactory] to `IosDashPump(connectorFactory = ...)`, with the pod address the
- * store already holds. [connectorFactory] opens the central, so call it once, when the pump is made.
- * The pod is made known before the central opens: iOS gives the restored peripherals during the
- * open, and [DashHeldConnection] keeps (re-attaches) the pod among them and releases the others.
+ * store already holds, then call [open] when the plugin starts. The pod is made known (in
+ * [connectorFactory]) before the central opens: iOS gives the restored peripherals during the open,
+ * and [DashHeldConnection] keeps (re-attaches) the pod among them and releases the others.
  *
- * Not wired into the app yet: the plugin (phase 4) makes the pump and this host.
+ * Building this host and the connector does not touch the radio: `CoreBluetoothCentral` makes its
+ * `CBCentralManager` only in `open()`, and only [open] calls it. So building the app graph does not
+ * make iOS ask for the Bluetooth permission. `IosDashDriverHost` (the plugin) makes this host and
+ * calls [open] from `onStart`.
  */
 class IosDashBleHost(
     private val aapsLogger: AAPSLogger,
@@ -48,7 +51,15 @@ class IosDashBleHost(
         )
         storedPodAddress?.let { held.setPod(it) }
         central.events = held::onEvent
-        central.open()
         held
+    }
+
+    /**
+     * Starts CoreBluetooth. The first call makes iOS ask for the Bluetooth permission and gives the
+     * restored peripherals. Call it after [connectorFactory] ran (the pump is built), so the events
+     * have somewhere to go. A second call is safe: the central keeps the manager it made.
+     */
+    fun open() {
+        central.open()
     }
 }

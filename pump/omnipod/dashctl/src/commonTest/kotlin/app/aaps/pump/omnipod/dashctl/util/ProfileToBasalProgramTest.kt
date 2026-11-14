@@ -71,6 +71,17 @@ class ProfileToBasalProgramTest {
      * The profile of the Android vector `testProgramBasalCommandDifferentInterval`, mapped here, gives
      * the same segments and so the same bytes as Android, at the same time of day.
      */
+    /** Android `hourlyRatesAreTheMeanOfTheHalfHours` (#2454): an hour is the insulin of its two half hours. */
+    @Test
+    fun `hourly rates are the mean of the half hours as Android`() {
+        val hourly = map(0 to 0.5, 1800 to 1.0, 7200 to 0.42).hourlyRates()
+
+        assertEquals(24, hourly.size)
+        assertEquals(0.75, hourly[0])
+        assertEquals(1.0, hourly[1])
+        assertEquals(listOf(0.4), hourly.drop(2).distinct())
+    }
+
     @Test
     fun `a mapped profile gives the bytes of the Android vector`() {
         val program = map(

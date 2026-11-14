@@ -267,8 +267,93 @@ missing layer. So the layer is ported first, as is, and the rest is rebuilt on i
 
 ### 4. The iOS plugin
 
-- [ ] A `Pump` plugin in the iOS graph, the shape of `IosMedtrumPlugin` (driver host, state, actions),
-      selectable like Medtrum.
+The plugin turns `IosDashPump` into a pump the iPhone can choose and the queue can drive. Android
+(`OmnipodDashPumpPlugin`) is the reference for every rule. Three steps, each green on the JVM and the
+iOS simulator before the next one.
+
+Decisions for the whole phase (taken with the owner, do not ask again): parity with Android first;
+fail closed; beeps and alert settings read the same preference keys with the same defaults as
+Android; `PumpSync` records at the same moments with the same pump type and serial as Android; a late
+correction updates the record that exists, never adds a second one; the iPhone is a full master
+phone, never AAPSClient. Android keeps `:pump:omnipod:dash` unchanged.
+
+- [x] **P1. The plugin, selectable in the config builder.** Done 2026-11-14 (not committed, not on a
+      device, xcodebuild not run by the builder). In `dashctl` iosMain
+      (`ios/plugin`), the shape of `IosMedtrumPlugin`:
+      - `IosOmnipodDashPlugin`: `PumpPluginBase`, `@ContributesIntoMap` with key 1080 (the Android
+        Dash key), so it is offered in the pump list like Medtrum. Name "Omnipod Dash" (brand, not
+        translated). `Pump` is delegated to `IosDashPluginPump`.
+      - `IosDashDriverHost`: owns the Keychain state store, `DashPodStateManager`, `IosDashBleHost`,
+        `IosDashPump` and the `PumpSync` recorder, and their lifecycle. Building it does not open the
+        radio (the central opens in `openRadio`, called by `onStart`), so building the graph never
+        asks for the Bluetooth permission.
+      - `IosDashPluginPump`: the `Pump` answers that Android gives from the plugin and not from the
+        manager: `PumpDescription().fillFor(OMNIPOD_DASH)`, `isInitialized` = `isPodRunning`,
+        `isConfigured` true (Android default), `serialNumber` with the Android "4241" fallback,
+        `baseBasalRate` and `deliveredBasal` from the confirmed program, extended bolus, percent temp
+        basal and TDD refused, `timezoneOrDSTChanged` logs only. Everything else is the driver.
+      - `DashPumpSyncRecorder`: every outcome of `onCommandDecided` to `PumpSync` (see the table in
+        the code): a confirmed bolus at the asked amount, a confirmed temp basal, the stop of a temp
+        basal, the PUMP_SUSPEND temp basal of a confirmed suspend and its stop by a confirmed basal
+        program or resume, the correction of a bolus that was stopped or ended by a fault (same
+        record), and the commands left open when a pod is discarded (bolus at the asked amount, temp
+        basal as started).
+      - Beeps from the Android keys (`AAPS.Omnipod.bolus_beeps_enabled`, ...) and defaults;
+        `expectedTempBasalRunning` from `PumpSync.expectedPumpState()`.
+      - Registered in `IosProbeGraph` (graph test `IosOmnipodDashPluginGraphTest`), and through the
+        contribution in `IosAppGraph`.
+      Deliberate differences from Android, each with a test: records are written on the confirmed
+      outcome, not when sent (nothing to take back after a refusal; while a command is open every
+      delivery command is refused); the pump id is the command time (no pod history on iOS); after
+      an app restart an open bolus or temp basal decided late is written as NORMAL (amount and time
+      right); a correction with no record known writes nothing (counted in full, the over-count side);
+      a bolus with carbs or no insulin is a failure (Android throws); a stop is never written for a
+      discarded pod. `IosDashBleHost` no longer opens the central in `connectorFactory`, only in
+      `open()`. Tests: `DashPumpSyncRecorderTest` (12), `IosDashPluginPumpTest` (15, fake pod),
+      `DashBeepKeyTest` (3, JVM and iOS), `ProfileToBasalProgramTest` +1 (`hourlyRates`, Android
+      port), `IosOmnipodDashPluginGraphTest` (6: probe graph, app graph plugin map key 1080 next to
+      Medtrum 1120, not initialized with no pod). 503 tests on the JVM, 668 on the iOS simulator
+      (1 skipped, the known pin), ios/shell 109, 0 failures.
+
+      After review (same day), five findings, all fixed with a test that was red first:
+      - The plugin is `OmnipodDash`, as Android. Without it the shared setup wizard
+        (`SWDefinition.screenPump`, not skippable) kept the user on its pump screen with Dash and no
+        pod, and showed "Read status".
+      - The no-pod temp basal of the Android status checker (`createFakeTBRWhenNoActivePod`) is
+        ported now, not in P2, because the plugin can be chosen now: every minute, with no running
+        pod, a 0 U/h PUMP_SUSPEND temp basal of 80 h with serial "4241", unless a zero one runs
+        (`writeNoPodTempBasal`, `DashNoPodTempBasalTest`). The rest of the status checker stays in P2.
+      - The config builder shows a caution (`omnipod_dash_ios_caution`): a pod cannot be activated
+        from the iPhone yet and the loop does not run. It lives in `:core:interfaces` strings until
+        dashctl has its own string table: making dashctl a string owner now would register it in
+        every shell, so the Android app and desktop would need dashctl. P3 moves it and changes the
+        text once a pod can be activated.
+      - A refused bolus or temp basal call no longer gives its type to the earlier command that is
+        still open (`IosDashPluginPump.commandMadeSince`, and the recorder never replaces a type it
+        keeps).
+      - A late bolus older than the `PumpSync` registration of the pump (`confirmActivePump` takes
+        one minute back after `connectNewPump`) was dropped, and insulin that went in was not counted.
+        It is now written again at the time it was decided, same pump id (counted later than it went
+        in: more insulin on board, never less), and its correction goes to that time. Temp basals
+        need nothing: `PumpSync` starts them at the registration itself. P3 must still write the
+        registering therapy events at activation, as Android.
+      Now 675 tests on the iOS simulator (1 skipped), 503 on the JVM, ios/shell 111, 0 failures.
+- [ ] **P2. Queue commands, alerts and notices.** The custom commands of Android
+      (`CommandSilenceAlerts`, `CommandResumeDelivery`, `CommandDeactivatePod`,
+      `CommandUpdateAlertConfiguration`, `CommandPlayTestBeep`, `CommandDisableSuspendAlerts`) in
+      dashctl, mapped to the driver calls; `disableSuspendAlerts` queued after a confirmed basal
+      program or resume; the alert settings (the six Android keys) and their watch
+      (`onStart`, `CommandUpdateAlertConfiguration` on a change); the status checker of Android
+      (read a status when a command is open and the queue is empty, the PUMP_SUSPEND temp basal when
+      the pod is kaput (the no-pod one is done in P1), the fault notification and announcement with `alarmSynced`,
+      the "no active pod" and "suspended" notices); `verifyPumpState`; the notifications of a
+      command not confirmed; `EventProfileChangeRequested` after a late confirmed basal program.
+- [ ] **P3 (phase 5). Screens.** Activation and deactivation wizards in Compose Multiplatform, with
+      what Android does after part 2 (`connectNewPump`, stop of the fake PUMP_SUSPEND temp basal,
+      CANNULA_CHANGE and INSULIN_CHANGE therapy events, status read) and after a discard; the
+      overview; the settings screen (beeps, alerts, notifications) with English strings in a string
+      table of the module, and the config builder caution moved there from `:core:interfaces` with a
+      text that fits once a pod can be activated.
 
 ### 5. Screens
 

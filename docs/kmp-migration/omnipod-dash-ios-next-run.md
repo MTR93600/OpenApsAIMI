@@ -445,6 +445,31 @@ commonMain (`dashctl`), so the JVM tests run them; only CoreBluetooth glue goes 
 
 Stop after step 9. The plugin (phase 4) and the screens (phase 5) need the owner.
 
+## Phase 4: the plugin (started 2026-11-14)
+
+The owner asked for it (selectable and usable). Plan and steps P1-P3 in
+[omnipod-dash-ios.md](omnipod-dash-ios.md), phase 4. Where each "for the plugin" item above went:
+
+- Late outcomes, `podDiscarded` (bolus at the asked amount, temp basal as started, suspend as
+  Android), `DashBolusEndedByFault` and `endedBolus` (correct the record keyed by the command time,
+  never a second bolus): P1, `DashPumpSyncRecorder`. Records are written on the confirmed outcome at
+  the command time; the pump id is the command time (no pod history on iOS).
+- PUMP_SUSPEND temp basal of a suspend and its stop by a confirmed basal program or resume: P1.
+- Beeps from the Android keys and defaults (`DashBeepKey`): P1. Alert settings: P2.
+- `expectedTempBasalRunning` from `PumpSync.expectedPumpState()`: P1.
+- `isInitialized` = `isPodRunning`, `baseBasalRate`, `deliveredBasal`, `PumpDescription.fillFor`,
+  Android serial fallback "4241": P1, `IosDashPluginPump`.
+- PUMP_SUSPEND temp basal when no pod runs (Android `createFakeTBRWhenNoActivePod`, every minute):
+  P1, because the plugin can be chosen before a pod can be activated. `OmnipodDash` marker (setup
+  wizard) and a config builder caution: P1.
+- A late bolus that `PumpSync` refuses as older than the pump registration: written again at the
+  time it was decided (P1). P3 still writes the registering therapy events at activation.
+- Queue custom commands, `disableSuspendAlerts` after a confirmed resume or basal program, the
+  PUMP_SUSPEND temp basal for a kaput pod, fault notification and announcement
+  (`alarmSynced`), `verifyPumpState`, `EventProfileChangeRequested` after a late program: P2.
+- Activation and deactivation screens, `connectNewPump` and the therapy events after part 2: P3
+  (phase 5).
+
 ## Decisions already taken (do not stop to ask)
 
 - **Parity first.** Same bytes and same dosing decisions as Android. A deliberate difference needs a

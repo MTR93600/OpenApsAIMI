@@ -106,8 +106,9 @@ import kotlinx.coroutines.CoroutineScope
  * `HormonitorStudyExporterProvider` are in `IosAimiPlatformBindings`.
  *
  * The phone is a master (`IosConfig`), so these plugins really reach a pump and a sensor: the iOS
- * Medtrum driver (`IosMedtrumPlugin`) and the Dexcom ONE+ / G7 driver (`DexcomOnePlusPlugin`) are
- * contributed to the plugin map below, beside `VirtualPumpPlugin` and `NSClientSourcePlugin`.
+ * Medtrum driver (`IosMedtrumPlugin`), the Omnipod Dash driver (`IosOmnipodDashPlugin`, from
+ * `:pump:omnipod:dashctl`) and the Dexcom ONE+ / G7 driver (`DexcomOnePlusPlugin`) are contributed to
+ * the plugin map below, beside `VirtualPumpPlugin` and `NSClientSourcePlugin`.
  */
 @DependencyGraph(AppScope::class)
 interface IosAppGraph : MetroViewModelMultibindings {

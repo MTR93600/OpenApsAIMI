@@ -4,6 +4,10 @@ plugins {
     // NOT com.android.library: the multiplatform plugin owns the Android target,
     // same as :pump:virtual and the :core modules.
     alias(libs.plugins.android.kmp.library)
+    // The iOS Dash plugin (iosMain, `ios/plugin`) is contributed to the iOS app graph with
+    // `@ContributesIntoMap`, as `IosMedtrumPlugin` in :pump:medtrum. A build plugin, not a module
+    // dependency. Nothing in commonMain or androidMain is annotated, so Android gets nothing from it.
+    alias(libs.plugins.metro)
 }
 
 kotlin {

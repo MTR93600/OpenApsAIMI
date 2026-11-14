@@ -85,6 +85,12 @@ internal class DashPumpOnFakePod(
     /** Every outcome the pump gave to `onCommandDecided`, of both kinds, in order. */
     val outcomes = mutableListOf<DashPumpOutcome>()
 
+    /**
+     * Runs inside `onCommandDecided` for every outcome of both kinds, after it is kept above. The
+     * plugin tests give the `PumpSync` recorder here, as `IosDashDriverHost` does.
+     */
+    var onOutcome: (DashPumpOutcome) -> Unit = {}
+
     /** A pump that expects AAPS to run a temp basal or not (Android `PumpSync`), read by `cancelTempBasal`. */
     var expectedTempBasalRunning = true
 
@@ -103,6 +109,7 @@ internal class DashPumpOnFakePod(
 
                 is DashBolusEndedByFault -> endedByFault += it
             }
+            onOutcome(it)
         },
         stateManager = stateManager,
         newKeyExchange = {

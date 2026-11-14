@@ -171,4 +171,5 @@
     <string name="carbs_with_time_later" comment="Carbs eaten later. %1$s=carbs with unit, %2$s=minutes from now, with unit. Example: 20 g (+15 min)">%1$s (+%2$s)</string>
     <string name="plugin_start_failed" comment="%1$s=plugin name, for example &quot;Dana-i/RS&quot;. Shown when a plugin threw while starting. It stays switched on, but it may not work.">Plugin %1$s failed to start and may not work. Please restart AAPS.</string>
     <string name="plugin_work_failed" comment="%1$s=plugin name, for example &quot;Dana-i/RS&quot;. Shown when background work the plugin started ended with an error. The plugin is still switched on, but part of it has stopped.">Plugin %1$s hit an error and part of it has stopped. Please restart AAPS.</string>
+    <string name="omnipod_dash_ios_caution">Omnipod Dash on iPhone. It is new and not finished: a pod cannot be activated from the iPhone yet, so the loop does not run with this pump. While no pod runs, AAPS counts no basal insulin. This is software behaviour, not medical advice \u2014 talk to your care team before you change how your pump is driven.</string>
 </resources>

@@ -20,6 +20,7 @@ import app.aaps.plugins.smoothing.ExponentialSmoothingPlugin
 import app.aaps.plugins.smoothing.NoSmoothingPlugin
 import app.aaps.plugins.smoothing.UnscentedKalmanFilterPlugin
 import app.aaps.pump.medtrum.ios.IosMedtrumPlugin
+import app.aaps.pump.omnipod.dashctl.ios.plugin.IosOmnipodDashPlugin
 import app.aaps.shared.clientbindings.ClientGraphBindings
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.DependencyGraph
@@ -83,6 +84,13 @@ interface IosProbeGraph {
      * history writer underneath. Building it does not start Bluetooth - see `IosMedtrumDriverHost`.
      */
     val medtrumPump: IosMedtrumPlugin
+
+    /**
+     * The iOS Omnipod Dash pump plugin, for the same reason as [medtrumPump]: this proves the graph
+     * can hand over the plugin with its driver, its Keychain state and its `PumpSync` recorder.
+     * Building it does not start Bluetooth - see `IosDashDriverHost`.
+     */
+    val omnipodDashPump: IosOmnipodDashPlugin
 
     /** Real AAPS classes, built from the iOS implementations underneath them. */
     val dateUtil: DateUtil
