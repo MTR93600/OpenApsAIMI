@@ -117,7 +117,7 @@ class IosDashPumpBasalProgramTest {
 
     @Test
     fun `no suspend is sent when the last status shows delivery suspended`() = runTest {
-        f.pairAndConnect()
+        f.pairAndConnect(basalOfThisSession = false)
         f.pump.getPumpStatus("status first")
         assertTrue(f.stateManager.isSuspended, "fixture: the capture status is SUSPENDED")
         val start = f.pod.commands.size
@@ -131,7 +131,7 @@ class IosDashPumpBasalProgramTest {
     /** Android: `deliveryStatus == SUSPENDED` is false when no status is known, so it suspends. */
     @Test
     fun `a suspend is sent first when no status is known as Android does`() = runTest {
-        f.pairAndConnect()
+        f.pairAndConnect(basalOfThisSession = false)
         assertNull(f.stateManager.podStatus)
 
         assertTrue(f.pump.setNewBasalProfile(PROFILE).success)

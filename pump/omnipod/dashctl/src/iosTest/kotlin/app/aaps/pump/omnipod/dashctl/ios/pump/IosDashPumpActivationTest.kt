@@ -28,6 +28,7 @@ import app.aaps.pump.omnipod.dashctl.pod.definition.PodStatus
 import app.aaps.pump.omnipod.dashctl.pod.definition.ProgramReminder
 import app.aaps.pump.omnipod.dashctl.pod.response.ResponseType
 import app.aaps.pump.omnipod.dashctl.session.DashAlertSettings
+import app.aaps.pump.omnipod.dashctl.session.DashCommandKind
 import app.aaps.pump.omnipod.dashctl.session.DashExpirationAlertSettings
 import app.aaps.pump.omnipod.dashctl.session.DashLowReservoirAlertSettings
 import kotlin.test.AfterTest
@@ -176,6 +177,11 @@ class IosDashPumpActivationTest {
         } catch (e: SimulatedCrash) {
             // The app stopped here.
         }
+        if (write == 1) {
+            // The mark is stored before the bytes go, so a stop right after it leaves a pod that has not got the bolus.
+            val got = if (step == ActivationProgress.PRIMING) model.primes else model.cannulaInsertions
+            assertEquals(0, got, "the mark must be stored before the bytes go")
+        }
         restart()
         assertIs<DashConnectResult.SessionReady>(f.lastConnect, "a paired pod gets a session at once")
         if (f.stateManager.activationProgress.isBefore(ActivationProgress.PHASE_1_COMPLETED)) {
@@ -240,6 +246,62 @@ class IosDashPumpActivationTest {
         assertEquals(before, f.pod.commands.size)
         assertEquals(1, model.primes)
         assertEquals(0, model.otherBoluses)
+    }
+
+    /**
+     * Deliberate difference from Android: no programming command leaves while a command is open, the
+     * activation too. Here a stop of all delivery was sent during the activation and its answer was
+     * lost. A basal program sent now would move the last programming sequence of the pod, and no
+     * status could then tell whether the stop went in. OmnipodKit `PodCommsSession.send` adds no
+     * beep block while it resolves an unacknowledged command.
+     */
+    @Test
+    fun `no activation command goes while a command is open`() = runTest {
+        newPod()
+        val part1 = f.pump.activatePodPart1(lowReservoir)
+        assertTrue(part1.success, part1.comment)
+        f.stateManager.createActiveCommand(kind = DashCommandKind.STOP_ALL, historyId = 0L, createdAtMs = NOW)
+        f.stateManager.markActiveCommandSent()
+        val programsBefore = model.basalPrograms
+        val typesBefore = model.commandTypes.size
+
+        val part2 = f.pump.activatePodPart2(program, userConfiguredExpirationReminderHours = 4, userConfiguredExpirationAlarmHours = 7)
+
+        assertFalse(part2.success, part2.comment)
+        assertEquals(programsBefore, model.basalPrograms, "no basal program reached the pod")
+        assertTrue(
+            model.commandTypes.drop(typesBefore).all { it == CommandType.GET_STATUS.value },
+            "only status reads: ${model.commandTypes.drop(typesBefore)}"
+        )
+    }
+
+    /**
+     * The same open stop, but a status read inside part 2 decides it (the pod did not take it). The
+     * command is closed, and part 2 goes on: the open command must not block the activation once a
+     * status has decided it. Here the app stopped before the cannula bytes went, so part 2 reads a
+     * status first.
+     */
+    @Test
+    fun `part 2 goes on once a status decided the open command`() = runTest {
+        newPod()
+        assertTrue(f.pump.activatePodPart1(lowReservoir).success)
+        f.store.crashWhen = { it.activationStepInFlight == ActivationProgress.INSERTING_CANNULA }
+        try {
+            f.pump.activatePodPart2(program, 4, 7)
+            fail("no stop")
+        } catch (e: SimulatedCrash) {
+            // The app stopped before the cannula bytes went.
+        }
+        restart()
+        f.stateManager.createActiveCommand(kind = DashCommandKind.STOP_ALL, historyId = 0L, createdAtMs = NOW)
+        f.stateManager.markActiveCommandSent()
+
+        val part2 = f.pump.activatePodPart2(program, 4, 7)
+
+        assertTrue(part2.success, part2.comment)
+        assertEquals(ActivationProgress.COMPLETED, f.stateManager.activationProgress)
+        assertEquals(1, model.cannulaInsertions, "cannula boluses")
+        assertEquals(null, f.stateManager.activeCommand, "the stop was closed by the status")
     }
 
     @Test

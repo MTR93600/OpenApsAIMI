@@ -160,6 +160,16 @@ class FakeDashPod(
      */
     var finalAnswerFor: (messageNumber: Int) -> FakeDashPodCentral.FinalAnswer = { FakeDashPodCentral.FinalAnswer.SUCCESS }
 
+    /**
+     * The 4-bit message sequence the pod puts in its answer, from the sequence of the command. A
+     * real pod answers with the command sequence plus one (OmnipodKit checks it). A test changes it
+     * to send an answer that does not belong to the command.
+     */
+    var answerSequenceFor: (commandSequence: Int) -> Int = { (it + 1) and 0x0f }
+
+    /** The unique id the pod puts in its answer, from the one of the command. A real pod gives the one of the command. */
+    var answerUniqueIdFor: (commandUniqueId: ByteArray) -> ByteArray = { it }
+
     /** Drop the link during phone message number [first], on the packet named by [second]. */
     var dropLinkOnPhoneMessage: Pair<Int, Packet>? = null
 
@@ -445,12 +455,13 @@ class FakeDashPod(
 
     /**
      * The pod message inside `0.0=`: the unique id of the command, 2 bytes with the sequence (the
-     * command sequence plus one, as a pod answers) and the length, the response, and the CRC.
-     * Android does not check any of this (the TODOs in `Session.parseResponse`). The layout is
+     * command sequence plus one, as a pod answers, see [answerSequenceFor]) and the length, the
+     * response, and the CRC. Android does not check any of this (the TODOs in its
+     * `Session.parseResponse`); the iOS `Session` checks the sequence and the unique id. The layout is
      * checked against the Android capture in `DashSessionEndToEndTest`.
      */
     private fun responseData(command: ByteArray, commandSequence: Int): ByteArray =
-        buildResponseData(command.copyOfRange(0, 4), (commandSequence + 1) and 0x0f, answerFor(command))
+        buildResponseData(answerUniqueIdFor(command.copyOfRange(0, 4)), answerSequenceFor(commandSequence), answerFor(command))
 
     private fun clear(type: MessageType, payload: ByteArray): ByteArray = MessagePacket(
         type = type,

@@ -4,6 +4,7 @@ import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.pump.omnipod.dashctl.comm.connection.DashConnectResult
 import app.aaps.pump.omnipod.dashctl.comm.session.FakeDashPod.Packet
+import app.aaps.pump.omnipod.dashctl.driver.DashActivation
 import app.aaps.pump.omnipod.dashctl.ios.pump.DashPumpOnFakePod.Companion.TEMP_BASAL_ACTIVE
 import app.aaps.pump.omnipod.dashctl.ios.pump.DashPumpOnFakePod.Companion.TEMP_BASAL_BIT
 import app.aaps.pump.omnipod.dashctl.ios.pump.DashPumpOnFakePod.Companion.defaultStatus
@@ -130,15 +131,97 @@ class IosDashPumpTempBasalTest {
         assertEquals(DashCommandKind.TEMP_BASAL, f.decided.single().command.kind)
     }
 
-    /** Android: `deliveryStatus?.tempBasalActive() == false` is false when no status is known, so it cancels. */
+    /** The status read the pump does first, with the GetStatus bytes of Android `getPodStatus`. */
+    private fun androidStatus(sequence: Int): String = DashActivation.statusCommand(UNIQUE_ID, sequence.toShort()).encoded.toParityHex()
+
+    /**
+     * Deliberate difference from Android (`deliveryStatus?.tempBasalActive() == false` is false with
+     * no status, so Android sends the cancel blind): with no status known, a status is read first, and
+     * the cancel is decided on it. The pod here runs a temp basal the app does not know about.
+     */
     @Test
-    fun `a cancel is sent first when no status is known as Android does`() = runTest {
-        f.pairAndConnect()
+    fun `with no status known a status is read first and the cancel follows it`() = runTest {
+        f.pairAndConnect(basalOfThisSession = false)
         assertNull(f.stateManager.podStatus)
+        f.basalRunning = true
+        f.tempBasalRunning = true
 
         assertTrue(tbr(1.5, 30).success)
 
-        assertEquals(listOf(androidCancel(0), androidTempBasal(2, 1.5, 30)), f.pod.commands.map { it.toParityHex() })
+        assertEquals(listOf(androidStatus(0), androidCancel(2), androidTempBasal(4, 1.5, 30)), f.pod.commands.map { it.toParityHex() })
+    }
+
+    @Test
+    fun `with no status known and no temp basal on the pod no cancel is sent`() = runTest {
+        f.pairAndConnect(basalOfThisSession = false)
+        f.basalRunning = true
+
+        assertTrue(tbr(1.5, 30).success)
+
+        assertEquals(listOf(androidStatus(0), androidTempBasal(2, 1.5, 30)), f.pod.commands.map { it.toParityHex() })
+    }
+
+    /**
+     * Deliberate difference from Android: a temp basal is never sent to a suspended pod (it faults
+     * with 0x31 and stops all insulin, or refuses it and the temp basal is counted wrong). The
+     * stored status says the basal runs, but it is from before this session; the fresh status shows
+     * the pod suspended, so nothing is sent. OmnipodKit `OmniPumpManager.enactTempBasal` refuses a
+     * suspended pod (`podSuspended`).
+     */
+    @Test
+    fun `a temp basal on a pod that a fresh status shows suspended is refused and nothing is sent`() = runTest {
+        f.pairAndConnect()
+        assertSame(DashConnectResult.SessionReady, f.reconnect())
+        f.basalRunning = false
+        val start = f.pod.commands.size
+
+        val result = tbr(1.5, 30)
+
+        assertFalse(result.success)
+        assertTrue(result.comment.contains("suspended"), result.comment)
+        assertEquals(listOf(CommandType.GET_STATUS.value), f.pod.commands.drop(start).map { it[6] }, "only the status read")
+        assertTrue(f.stateManager.isSuspended)
+        assertTrue(f.decided.isEmpty())
+    }
+
+    /** The stored status shows the pod suspended: a status is read first, and when it still shows it, nothing goes. */
+    @Test
+    fun `a temp basal on a pod the last status shows suspended reads a status and is refused`() = runTest {
+        f.pairAndConnect()
+        f.giveStatusOfThisSession(basal = false)
+        assertTrue(f.stateManager.isSuspended)
+
+        val result = tbr(1.5, 30)
+
+        assertFalse(result.success)
+        assertEquals(listOf(CommandType.GET_STATUS.value), f.pod.commands.map { it[6] })
+    }
+
+    /** No status of this session can be read (the link is lost on the status): refused, nothing else sent. */
+    @Test
+    fun `a temp basal is refused when no status of this session can be read`() = runTest {
+        f.pairAndConnect()
+        assertSame(DashConnectResult.SessionReady, f.reconnect())
+        // After the reconnect: 1-2 session, 3 the status read.
+        f.pod.dropLinkOnPhoneMessage = 3 to Packet.FIRST
+        val start = f.pod.commands.size
+
+        val result = tbr(1.5, 30)
+
+        assertFalse(result.success)
+        assertTrue(result.comment.contains("no pod status"), result.comment)
+        assertTrue(f.pod.commands.drop(start).isEmpty(), "no temp basal and no cancel")
+        assertTrue(f.decided.isEmpty())
+    }
+
+    /** The status of this session shows a running pod: no extra status read before the temp basal. */
+    @Test
+    fun `a temp basal on a status of this session reads no extra status`() = runTest {
+        f.pairAndConnect()
+
+        assertTrue(tbr(1.5, 30).success)
+
+        assertEquals(listOf(androidTempBasal(0, 1.5, 30)), f.pod.commands.map { it.toParityHex() })
     }
 
     // ---------------------------------------------------------------- the cancel is not confirmed

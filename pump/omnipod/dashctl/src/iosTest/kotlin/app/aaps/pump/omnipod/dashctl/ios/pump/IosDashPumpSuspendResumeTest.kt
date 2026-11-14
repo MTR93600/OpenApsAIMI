@@ -69,7 +69,7 @@ class IosDashPumpSuspendResumeTest {
 
     /** Paired, activated, one status read that shows delivery suspended (the capture status). */
     private suspend fun suspendedPod() {
-        f.pairAndConnect()
+        f.pairAndConnect(basalOfThisSession = false)
         f.pump.getPumpStatus("status first")
         assertTrue(f.stateManager.isSuspended, "fixture: the capture status is SUSPENDED")
         f.decided.clear()

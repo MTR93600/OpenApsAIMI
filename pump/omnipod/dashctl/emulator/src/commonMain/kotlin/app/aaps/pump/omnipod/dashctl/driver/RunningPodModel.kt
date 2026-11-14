@@ -119,6 +119,12 @@ class RunningPodModel {
         return answer
     }
 
+    /** The default status the pod would report now, with no change of pod state (no command taken). */
+    fun currentStatus(): ByteArray {
+        faultAlarmType?.let { return podAlarmStatus(it, lastProgrammingSequence, bolusPulsesRemaining, faultAlarmMinutes) }
+        return podDefaultStatus(podStatusCode, lastProgrammingSequence, bolusPulsesRemaining, deliveryStatus(), activeAlerts, reservoirPulses)
+    }
+
     private fun deliveryStatus(): Int = when {
         bolusRunning && tempBasalRunning -> BOLUS_AND_TEMP_BASAL_ACTIVE
         bolusRunning                     -> BOLUS_AND_BASAL_ACTIVE

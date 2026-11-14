@@ -72,12 +72,15 @@ class IosDashPumpReconnectTest {
         // establishSession(1): the session counter starts at 1, so the challenge is 2 and SUCCESS 3.
         assertEquals(listOf(2, 3), f.pod.fromPhone.map { it.sequenceNumber.toInt() })
 
+        val commandsBefore = f.pod.commands.size
         assertTrue(f.pump.deliverTreatment(bolus(2.0)).success)
 
-        assertEquals(4, commandSequence(f.pod.commands.last { DashPumpOnFakePod.isBolus(it) }), "built with the stored sequence")
-        assertEquals(8, f.stateManager.messageSequenceNumber)
-        // Challenge 2, SUCCESS 3, bolus 4, ACK 5, status of the bolus wait 6, ACK 7.
-        assertEquals(listOf(2, 3, 4, 5, 6, 7), f.pod.fromPhone.map { it.sequenceNumber.toInt() })
+        // The stored status is from before this session, so a status is read first, with the stored sequence.
+        assertEquals(4, commandSequence(f.pod.commands[commandsBefore]), "built with the stored sequence")
+        assertEquals(6, commandSequence(f.pod.commands.last { DashPumpOnFakePod.isBolus(it) }))
+        assertEquals(10, f.stateManager.messageSequenceNumber)
+        // Challenge 2, SUCCESS 3, status 4, ACK 5, bolus 6, ACK 7, status of the bolus wait 8, ACK 9.
+        assertEquals(listOf(2, 3, 4, 5, 6, 7, 8, 9), f.pod.fromPhone.map { it.sequenceNumber.toInt() })
     }
 
     @Test
@@ -153,6 +156,7 @@ class IosDashPumpReconnectTest {
             )
             // The bolus needs an activated pod (Android `observePodRunning`); the activation is not run here.
             f.markActivated()
+            f.giveStatusOfThisSession(basal = true)
             assertTrue(f.pump.deliverTreatment(bolus(1.0)).success)
 
             f.pump.disconnect("idle")

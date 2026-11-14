@@ -3,6 +3,7 @@ package app.aaps.pump.omnipod.dashctl.comm.session
 import app.aaps.pump.omnipod.dashctl.comm.Ids
 import app.aaps.pump.omnipod.dashctl.comm.endecrypt.EnDecrypt
 import app.aaps.pump.omnipod.dashctl.comm.exceptions.PairingException
+import app.aaps.pump.omnipod.dashctl.comm.exceptions.PodAnswerMismatchException
 import app.aaps.pump.omnipod.dashctl.comm.exceptions.SessionEstablishmentException
 import app.aaps.pump.omnipod.dashctl.comm.io.DashBleLink
 import app.aaps.pump.omnipod.dashctl.comm.io.DashLinkSetupResult
@@ -24,6 +25,7 @@ import app.aaps.pump.omnipod.dashctl.parity.parityHex
 import app.aaps.pump.omnipod.dashctl.parity.parityX25519
 import app.aaps.pump.omnipod.dashctl.parity.toParityHex
 import app.aaps.pump.omnipod.dashctl.pod.command.GetStatusCommand
+import app.aaps.pump.omnipod.dashctl.pod.command.GetVersionCommand
 import app.aaps.pump.omnipod.dashctl.pod.definition.NakErrorType
 import app.aaps.pump.omnipod.dashctl.pod.response.DefaultStatusResponse
 import app.aaps.pump.omnipod.dashctl.pod.response.NakResponse
@@ -529,5 +531,63 @@ class DashSessionEndToEndTest {
         val received = assertIs<CommandAckError>(session.readAndAckResponse())
         assertIs<DefaultStatusResponse>(received.result)
         assertTrue(pod.acks.isEmpty())
+    }
+
+    // ---------------------------------------------------------------- answer checks (iOS only)
+
+    /**
+     * Deliberate difference from Android (its TODO in `Session.parseResponse`): an answer with the
+     * wrong 4-bit message sequence is a late answer to another command. Read as the answer to this
+     * one, it would decide this command from the wrong status (insulin counted wrong). OmnipodKit
+     * `BleMessageTransport.readAndAckResponse` ACKs it, then throws `invalidSequence`; so does this.
+     */
+    @Test
+    fun `an answer with the wrong message sequence is acknowledged then refused`() {
+        start()
+        val session = pairAndOpenSession()
+        // The command goes with sequence 3, so the pod must answer 4. It answers 3.
+        pod.answerSequenceFor = { it }
+
+        assertEquals(CommandSendSuccess, session.sendCommand(getStatus(sequence = 3)))
+        assertFailsWith<PodAnswerMismatchException> { session.readAndAckResponse() }
+        assertEquals(1, pod.acks.size, "the message was taken on the link, as OmnipodKit")
+    }
+
+    @Test
+    fun `an answer with the next sequence after 15 wraps to 0 and is taken`() {
+        start()
+        val session = pairAndOpenSession()
+
+        assertEquals(CommandSendSuccess, session.sendCommand(getStatus(sequence = 15)))
+        assertIs<CommandReceiveSuccess>(session.readAndAckResponse())
+    }
+
+    /** Same reason as the sequence: an answer for another unique id does not belong to this command. */
+    @Test
+    fun `an answer for another unique id is refused`() {
+        start()
+        val session = pairAndOpenSession()
+        pod.answerUniqueIdFor = { byteArrayOf(0x01, 0x02, 0x03, 0x04) }
+
+        assertEquals(CommandSendSuccess, session.sendCommand(getStatus()))
+        assertFailsWith<PodAnswerMismatchException> { session.readAndAckResponse() }
+    }
+
+    /**
+     * A command to the unique id ffffffff (GetVersion and SetUniqueId of the activation) goes to any
+     * pod, so the unique id of its answer is not checked. The sequence still is.
+     */
+    @Test
+    fun `the answer to a command for any pod is not checked for its unique id`() {
+        start()
+        val session = pairAndOpenSession()
+        pod.answerUniqueIdFor = { byteArrayOf(0x01, 0x02, 0x03, 0x04) }
+        val getVersion = GetVersionCommand.Builder()
+            .setUniqueId(GetVersionCommand.DEFAULT_UNIQUE_ID)
+            .setSequenceNumber(5.toShort())
+            .build()
+
+        assertEquals(CommandSendSuccess, session.sendCommand(getVersion))
+        assertIs<CommandReceiveSuccess>(session.readAndAckResponse())
     }
 }

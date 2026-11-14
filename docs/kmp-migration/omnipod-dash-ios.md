@@ -643,6 +643,42 @@ test vectors and the pinned parity bytes do not change.
 - [x] **Codec**: one part added at the end of version 4, written only when one of its two fields is
       set, so a state without them has the same bytes as before and every older version 4 and version
       3 state still decodes (the pinned tests are unchanged). Tests in `DashDoseAccountingTest`.
+- [x] **An answer must belong to the command** (OmnipodKit `BleMessageTransport.readAndAckResponse`,
+      `MessageError.invalidSequence`). `Session.readAndAckResponse` ACKs the answer as before, then
+      checks its 4-bit message sequence (command sequence plus one, mod 16) and its unique id (the one
+      of the command; not checked for a command to `ffffffff`, the GetVersion and SetUniqueId of the
+      activation). A mismatch throws `PodAnswerMismatchException`; `IosDashPump.sendCommand` treats it
+      as no answer: the link is closed, the answer does not move the sequence and decides nothing, the
+      command stays open until a status. The length and the CRC stay unchecked (Android TODOs; OmnipodKit
+      says the Dash CRC is not understood). The emulator answers as before by default and has two knobs
+      (`FakeDashPod.answerSequenceFor`, `answerUniqueIdFor`). Tests: `DashSessionEndToEndTest` (4),
+      `IosDashPumpCommandTest` (2).
+- [x] **A bolus and a temp basal decided on a status of this session** (OmnipodKit
+      `PodCommsSession.bolus`, `OmniPumpManager.enactTempBasal`, both against 0x31 faults).
+      `IosDashPump.refusedByDeliveryStatus`, called with the command lock before a bolus (after the
+      "stop asked" check) and before the cancel of a temp basal. A status is read first when the stored
+      one is missing, has an unknown delivery status, was stored before the current session
+      (`statusResponseCount` at session set up, in memory, so no codec change) or shows a conflict
+      (suspended; for a bolus a bolus running). Then nothing is sent when no status of this session
+      could be read, the pod is suspended, or (bolus) a bolus runs. An open command not confirmed is
+      still refused first, as before. The cancel of a temp basal is now decided on that fresh status
+      (Android cancels blind when no status is known). Tests: `IosDashPumpBolusTest` (5),
+      `IosDashPumpTempBasalTest` (6, two replace the Android "cancel first when no status is known").
+- [x] **No programming command while a command is open, on every path** (OmnipodKit `send` adds no
+      beep block while it resolves an unacknowledged command). The delivery path already refused it
+      (`createActiveCommand`); `IosDashPump.sendCommand` now refuses any command other than a status
+      read while an active command is open, the activation included. Tests: `IosDashPumpActivationTest`
+      (an open stop blocks part 2), `IosDashPumpCommandTest` (pin: no PROGRAM_BEEPS while a bolus is
+      open; this one passed before too).
+- Test fixture changes for these: `DashPumpOnFakePod.pairAndConnect` now gives an activated pod a
+  running basal and the status it reports, as read in this session, with no message
+  (`basalOfThisSession = true`, `giveStatusOfThisSession`); tests of "no status known" pass false.
+  The emulator `ActivatingPodModel` reports `BASAL_ACTIVE` once it took the basal program (a real pod
+  runs its basal then; before, it reported the capture SUSPENDED all along). A test that reconnects
+  before a bolus now sees the extra status read (wire numbers updated).
+- To check on a real pod (section 6): that the answers to ordinary commands carry the unique id of
+  the command (the Android capture in `EnDecryptTest` does), and that every answer carries the command
+  sequence plus one (OmnipodKit relies on it for Dash).
 
 ### 5. Screens
 

@@ -88,7 +88,9 @@ class ActivatingPodModel {
 
             else                              -> lastProgrammingSequence = sequence
         }
-        return podDefaultStatus(podStatus.value.toInt(), lastProgrammingSequence)
+        // A real pod runs its basal once it took the basal program; before that the capture (SUSPENDED).
+        val delivery = if (basalPrograms > 0) BASAL_ACTIVE_DELIVERY else CAPTURE_DELIVERY
+        return podDefaultStatus(podStatus.value.toInt(), lastProgrammingSequence, deliveryStatus = delivery)
     }
 
     /** The Android Version vector with the pod status of the model in byte 9. */
@@ -114,6 +116,9 @@ class ActivatingPodModel {
 
         /** The delivery status of the Android capture (0, `SUSPENDED`). */
         const val CAPTURE_DELIVERY = 0x0
+
+        /** `DeliveryStatus.BASAL_ACTIVE`: what the pod reports once it took the basal program. */
+        const val BASAL_ACTIVE_DELIVERY = 0x1
 
         /**
          * A default status (the layout of `DefaultStatusResponse`): the Android capture

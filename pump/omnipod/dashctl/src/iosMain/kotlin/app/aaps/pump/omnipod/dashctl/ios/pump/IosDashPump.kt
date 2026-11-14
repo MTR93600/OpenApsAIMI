@@ -58,6 +58,7 @@ import app.aaps.pump.omnipod.dashctl.ios.crypto.IosSecureRandomBytes
 import app.aaps.pump.omnipod.dashctl.ios.crypto.IosX25519Dh
 import app.aaps.pump.omnipod.dashctl.ios.store.DashKeychainStateStore
 import app.aaps.pump.omnipod.dashctl.pod.command.DeactivateCommand
+import app.aaps.pump.omnipod.dashctl.pod.command.GetStatusCommand
 import app.aaps.pump.omnipod.dashctl.pod.command.ProgramAlertsCommand
 import app.aaps.pump.omnipod.dashctl.pod.command.ProgramBasalCommand
 import app.aaps.pump.omnipod.dashctl.pod.command.ProgramBeepsCommand
@@ -259,6 +260,15 @@ data class DashCommandOutcome(
  * read first. Android sends the command, and a later status then decides SUCCESS for it even when
  * the pod never got it (see [DashCommandConfirmation.of]).
  *
+ * Deliberate differences from Android taken from OmnipodKit (Trio), all so that insulin is not
+ * counted wrong:
+ * - an answer whose 4-bit message sequence or unique id does not match the command is no answer
+ *   (`Session.readAndAckResponse`): the command stays open and the link is closed;
+ * - a bolus and a temp basal are decided on a status of this session ([refusedByDeliveryStatus]):
+ *   a status is read first when the stored one is missing, older or shows a conflict, and the
+ *   command is refused with nothing sent on a suspended pod or (bolus) a bolus running;
+ * - no command other than a status read leaves while a command is open, on any path ([sendCommand]).
+ *
  * The link to the pod ([DashPodLink]) belongs to one BLE connection. `DashPodConnection` makes a
  * new one for each connection and gives it to [attachLink]; this pump and its [DashPodStateManager]
  * (counters, open command) live on across drops. As on Android, a session is only set up on a fresh
@@ -347,6 +357,12 @@ class IosDashPump(
 ) : Pump, DashLinkClient {
 
     private var session: Session? = null
+
+    /**
+     * [DashPodStateManager.statusResponseCount] when [session] was set up: a stored status with a
+     * higher count was read in this session. See [refusedByDeliveryStatus].
+     */
+    private var statusCountAtSessionStart: Long = 0L
     private val commandMutex = Mutex()
     private var busy = false
 
@@ -578,6 +594,7 @@ class IosDashPump(
             }
             stateManager.commitEapAkaSequenceNumber()
             val keys = response as SessionKeys
+            statusCountAtSessionStart = stateManager.statusResponseCount
             session = Session(
                 aapsLogger = aapsLogger,
                 msgIO = current.messageIO,
@@ -614,7 +631,10 @@ class IosDashPump(
     /** The exchanges of the activation. Called with [commandMutex] held. */
     private val activationPod = object : DashActivationPod {
         override fun send(build: (uniqueId: Int, sequence: Short) -> Command, beforeSend: () -> Unit): DashExchange {
-            val sent = sendCommand(build) { beforeSend() }
+            // Named: a trailing lambda would be `afterSent`, and the prime or cannula mark would then be
+            // stored only after the bytes went. A stop or a send error in between would leave no mark,
+            // and the next try would give that bolus a second time.
+            val sent = sendCommand(build, beforeSend = { beforeSend() })
             return DashExchange(sent.reachedRadio, sent.error)
         }
 
@@ -1021,7 +1041,9 @@ class IosDashPump(
 
     /**
      * Delivers a bolus as Android `OmnipodDashPumpPlugin.deliverTreatment`:
-     * - refused (nothing sent) while the last status shows a bolus running, as Android;
+     * - refused (nothing sent) while a bolus runs or the pod is suspended, decided on a status of this
+     *   session ([refusedByDeliveryStatus], deliberate difference: Android decides on the stored
+     *   status, which may be old);
      * - a stop asked before the bolus is sent: nothing is sent, the result is a success with nothing
      *   delivered, as Android (`observeDeliveryNotCanceled`, `success(bolusCanceled)`);
      * - the bolus goes through its active command. Only after its SUCCESS the bolus is followed to its
@@ -1154,11 +1176,15 @@ class IosDashPump(
         if (units > reservoirLevel.value.cU) {
             return failure("Bolus refused: not enough insulin in the reservoir (${reservoirLevel.value.cU} U)")
         }
-        if (stateManager.podStatus?.deliveryStatus?.bolusDeliveringActive() == true) {
-            return failure("Bolus refused: a bolus is already in progress")
-        }
         if (bolusCanceled) {
             aapsLogger.info(LTag.PUMP, "Bolus canceled before it was sent")
+            return DashPumpEnactResult(success = true, enacted = false, comment = "Bolus canceled, nothing sent")
+        }
+        refusedByDeliveryStatus(forBolus = true)?.let { return failure("Bolus refused: $it") }
+        // Again, as the check above may have read a status: a stop asked during that read must still
+        // send nothing (a user action lost, and insulin given after the user said stop).
+        if (bolusCanceled) {
+            aapsLogger.info(LTag.PUMP, "Bolus canceled during the status read, before it was sent")
             return DashPumpEnactResult(success = true, enacted = false, comment = "Bolus canceled, nothing sent")
         }
         val outcome = sendDeliveryCommand(DashCommandKind.BOLUS, requestedBolusUnits = units, basalCorrection = basalCorrection) { uid, seq ->
@@ -1281,6 +1307,10 @@ class IosDashPump(
      * Deliberate difference from Android (fail closed, plan decision): a temp basal that is sent but
      * not confirmed is a failure here. Android returns success for it and only shows a notification.
      * The command stays open in both, so the next delivery command is refused until a status.
+     *
+     * Deliberate difference from Android (OmnipodKit): before the cancel, the delivery status is
+     * checked on a status of this session ([refusedByDeliveryStatus]); a suspended pod gets nothing.
+     * So the cancel is also decided on that fresh status.
      */
     override suspend fun setTempBasalAbsolute(
         absoluteRate: Double,
@@ -1291,6 +1321,7 @@ class IosDashPump(
         busy = true
         try {
             requireSession()
+            refusedByDeliveryStatus(forBolus = false)?.let { return@connectThenLock failure("TBR refused: $it") }
             cancelRunningTempBasalFirst(newTempBasalFollows = true)?.let { return@connectThenLock it }
             val tempBasalBeeps = beeps().tempBasalBeeps
             val outcome = sendDeliveryCommand(
@@ -1319,6 +1350,57 @@ class IosDashPump(
             failure(e.message ?: "Not paired")
         } finally {
             busy = false
+        }
+    }
+
+    /**
+     * Deliberate difference from Android, for a bolus ([forBolus]) and a temp basal, called with
+     * [commandMutex] held: the delivery status is checked on a status of this session before the
+     * command is sent. Why: the pod faults (0x31) on a bolus while a bolus runs and on a temp basal or
+     * a bolus while it is suspended, and the pod then stops all insulin; or the command is refused
+     * and insulin is counted wrong. Android decides on the stored status, which can be from an earlier
+     * session or from before an app restart. As OmnipodKit (Trio) `PodCommsSession.bolus` (a
+     * `getStatus` first when `lastDeliveryStatusReceived` is nil or shows a bolus, then refused
+     * `unfinalizedBolus` or `podSuspended`) and `OmniPumpManager.enactTempBasal` (no temp basal on a
+     * suspended pod).
+     *
+     * - A command still not confirmed: [DashCommandNotConfirmedException], nothing sent, as every
+     *   delivery command (Android `observeNoActiveCommand`). No status is read for it here.
+     * - The pod is not activated and running: null, [sendDeliveryCommand] refuses it.
+     * - A status is read first when the stored one is missing, was not read in this session, has an
+     *   unknown delivery status, or shows a conflict (suspended; for a bolus also a bolus running).
+     * - Then the command is refused, with nothing sent, when no status of this session could be read,
+     *   when the pod is suspended, or (bolus) when a bolus runs.
+     *
+     * Returns the reason of the refusal, or null when the command may be sent.
+     */
+    private fun refusedByDeliveryStatus(forBolus: Boolean): String? {
+        requireSession()
+        if (resolveAndHandle(decidedLate = true).confirmation == DashCommandConfirmation.NOT_CONFIRMED) {
+            throw DashCommandNotConfirmedException("Refusing command: the last command is not confirmed by the pod. Read the pod status first.")
+        }
+        if (!stateManager.isActivatedAndRunning) return null
+        if (deliveryConflict(forBolus) != null || !hasDeliveryStatusOfThisSession()) {
+            aapsLogger.info(LTag.PUMP, "Reading a fresh pod status before the ${if (forBolus) "bolus" else "temp basal"}")
+            readStatusWithLock()
+        }
+        if (!hasDeliveryStatusOfThisSession()) return "no pod status could be read in this session, nothing sent"
+        return deliveryConflict(forBolus)?.let { "$it, nothing sent" }
+    }
+
+    /** True when the stored status was read in this session and has a known delivery status. */
+    private fun hasDeliveryStatusOfThisSession(): Boolean {
+        val status = stateManager.podStatus ?: return false
+        return status.deliveryStatus != DeliveryStatus.UNKNOWN && stateManager.statusResponseCount > statusCountAtSessionStart
+    }
+
+    /** What in the stored delivery status would make the pod fault on a bolus ([forBolus]) or a temp basal. Null when nothing. */
+    private fun deliveryConflict(forBolus: Boolean): String? {
+        val delivery = stateManager.podStatus?.deliveryStatus ?: return null
+        return when {
+            delivery.suspended()                           -> "the pod is suspended"
+            forBolus && delivery.bolusDeliveringActive() -> "a bolus is already in progress"
+            else                                           -> null
         }
     }
 
@@ -2161,6 +2243,15 @@ class IosDashPump(
      *
      * - The command is built with the stored unique id and 4-bit sequence; [beforeSend] runs between
      *   build and send (the delivery path opens its active command there).
+     * - Deliberate difference from Android: a command other than a status read is not sent while an
+     *   active command is open (not closed by a status), on every path, the activation included.
+     *   Why: a programming command, a PROGRAM_BEEPS too, moves the last programming sequence of the
+     *   pod, so a later status could no longer tell what happened to the open command (a bolus or a
+     *   temp basal counted wrong). OmnipodKit (Trio) `PodCommsSession.send` adds no beep block while it
+     *   still resolves an unacknowledged command. The delivery path already refuses this earlier
+     *   ([sendDeliveryCommand]); this is the last check before the radio. An open command that a
+     *   status already decided is closed first ([resolveAndHandle]), as the activation reads statuses
+     *   without closing it; only one still NOT_CONFIRMED blocks.
      * - `CommandSendErrorSending`: nothing reached the pod and the sequence stays. Android keeps the
      *   connection.
      * - `CommandSendSuccess` and `CommandSendErrorConfirming`: the sequence goes up by one. In the
@@ -2183,6 +2274,13 @@ class IosDashPump(
         val uniqueId = stateManager.uniqueId
             ?: throw DashPumpNotPairedException("Refusing command: no uniqueId (pod not activated)")
         val command = build(uniqueId.toInt(), stateManager.messageSequenceNumber.toShort())
+        // A status read on the activation path does not close the command it decides, so close it here
+        // first; only a command no status has decided yet blocks.
+        if (command !is GetStatusCommand && stateManager.activeCommand != null) resolveAndHandle(decidedLate = true)
+        if (command !is GetStatusCommand && stateManager.activeCommand != null) {
+            aapsLogger.error(LTag.PUMPBTCOMM, "Command not sent: another command is still open (${stateManager.activeCommand})")
+            return SentCommand(reachedRadio = false, error = "another command is still open, nothing sent")
+        }
         beforeSend(command)
         val sendResult = try {
             s.sendCommand(command)

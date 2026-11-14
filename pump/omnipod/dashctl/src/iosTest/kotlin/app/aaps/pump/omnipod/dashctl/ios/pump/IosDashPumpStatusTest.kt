@@ -174,8 +174,8 @@ class IosDashPumpStatusTest {
     fun `a status from getPumpStatus decides a temp basal whose answer was lost`() = runTest {
         f.pairAndConnect()
         f.nowMs = 10_000L
-        // No status known: a cancel goes first (7-8), then the temp basal (9), whose answer is lost.
-        f.pod.dropLinkWhileAnswering = 9 to 0
+        // The status of this session shows no temp basal: no cancel, the temp basal (7) loses its answer.
+        f.pod.dropLinkWhileAnswering = 7 to 0
 
         val result = f.pump.setTempBasalAbsolute(1.5, 30, true, PumpSync.TemporaryBasalType.NORMAL)
 

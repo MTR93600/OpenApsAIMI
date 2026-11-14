@@ -884,7 +884,7 @@ class IosDashPluginPumpTest {
 
     @Test
     fun `a resume confirmed by the pod ends the suspend and turns the suspend alert off`() = runTest {
-        f.pairAndConnect()
+        f.pairAndConnect(basalOfThisSession = false)
         pump.getPumpStatus("status: delivery suspended")
         pumpSync.expectedProfile = PROFILE
 
@@ -930,7 +930,7 @@ class IosDashPluginPumpTest {
 
     @Test
     fun `the alert configuration reads the Android keys`() = runTest {
-        f.pairAndConnect()
+        f.pairAndConnect(basalOfThisSession = false)
         f.stateManager.updateExpirationAlertSettings(rules.alertSettings().expiration)
         f.stateManager.updateLowReservoirAlertSettings(rules.alertSettings().lowReservoir)
 
@@ -1036,7 +1036,7 @@ class IosDashPluginPumpTest {
 
     @Test
     fun `a suspended pod gets the suspended notice with its sound setting`() = runTest {
-        f.pairAndConnect()
+        f.pairAndConnect(basalOfThisSession = false)
         pump.getPumpStatus("status: delivery suspended")
         settings[DashSoundKey.SoundDeliverySuspendedNotification.key] = false
 

@@ -5,6 +5,7 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.pump.omnipod.dashctl.comm.Ids
 import app.aaps.pump.omnipod.dashctl.comm.endecrypt.EnDecrypt
 import app.aaps.pump.omnipod.dashctl.comm.exceptions.CouldNotParseResponseException
+import app.aaps.pump.omnipod.dashctl.comm.exceptions.PodAnswerMismatchException
 import app.aaps.pump.omnipod.dashctl.comm.message.MessageIO
 import app.aaps.pump.omnipod.dashctl.comm.message.MessagePacket
 import app.aaps.pump.omnipod.dashctl.comm.message.MessageSendErrorConfirming
@@ -28,8 +29,12 @@ import app.aaps.pump.omnipod.dashctl.pod.response.Response
  * - readAndAckResponse also reads up to 5 times. A pod answer that cannot be decrypted or parsed
  *   throws to the caller (DashCryptoException, CouldNotParseResponseException,
  *   UnsupportedOperationException, MessageIOException), and then no ACK is sent;
- * - parseResponse does not check the unique id, the length, the sequence number or the CRC of the
- *   pod answer (the Android TODOs are kept).
+ * - parseResponse does not check the length or the CRC of the pod answer (the Android TODOs are kept;
+ *   OmnipodKit does not check the CRC of a Dash answer either, the pod CRC is not understood).
+ *
+ * Deliberate difference from Android (insulin counted wrong otherwise): readAndAckResponse checks the
+ * 4-bit message sequence number and the unique id of the answer against the command just sent (see
+ * [Session.readAndAckResponse]).
  */
 
 sealed class CommandSendResult
@@ -59,7 +64,11 @@ class Session(
     val enDecrypt: EnDecrypt
 ) {
 
+    /** The unique id and the 4-bit sequence of the last command given to [sendCommand]. Null before the first one. */
+    private var lastCommandHeader: ByteArray? = null
+
     fun sendCommand(cmd: Command): CommandSendResult {
+        lastCommandHeader = cmd.encoded.copyOfRange(0, COMMAND_HEADER_SIZE)
         sessionKeys.msgSequenceNumber++
         aapsLogger.debug(LTag.PUMPBTCOMM, "Sending command: ${cmd.encoded.toCommLogHex()} in packet $cmd")
 
@@ -85,6 +94,18 @@ class Session(
         return CommandSendErrorSending(errMsg)
     }
 
+    /**
+     * Reads the pod answer to the last command and ACKs it, as Android.
+     *
+     * Deliberate difference from Android: after the ACK, the answer must carry the 4-bit message
+     * sequence number of the last command plus one, and the unique id of that command (not checked
+     * for a command to the unique id ffffffff, the GetVersion and SetUniqueId of the activation).
+     * Otherwise [PodAnswerMismatchException] is thrown, so the caller treats it as no answer. Why: a
+     * late answer to an earlier command, read as the answer to this one, would decide this command
+     * (a bolus counted as given, or as not given) from the wrong status, and insulin would be counted
+     * wrong. Android leaves this as a TODO. OmnipodKit (Trio) `BleMessageTransport.readAndAckResponse`
+     * checks the sequence the same way, after its ACK, and throws `MessageError.invalidSequence`.
+     */
     @Suppress("ReturnCount")
     fun readAndAckResponse(): CommandReceiveResult {
         var responseMsgPacket: MessagePacket? = null
@@ -103,7 +124,8 @@ class Session(
         val decrypted = enDecrypt.decrypt(responseMsgPacket)
         aapsLogger.debug(LTag.PUMPBTCOMM, "Received response: $decrypted")
 
-        val response = parseResponse(decrypted)
+        val data = responseData(decrypted)
+        val response = ResponseUtil.parseResponse(data.copyOfRange(COMMAND_HEADER_SIZE, data.size - 2))
 
         /*if (!responseType.isInstance(response)) {
             if (response is AlarmStatusResponse) {
@@ -121,29 +143,48 @@ class Session(
         val ack = getAck(responseMsgPacket)
         aapsLogger.debug(LTag.PUMPBTCOMM, "Sending ACK: ${ack.payload.toCommLogHex()} in packet $ack")
         val sendResult = msgIO.sendMessage(ack)
+        checkAnswerBelongsToLastCommand(data)
         if (sendResult !is MessageSendSuccess) {
             return CommandAckError(response, "Could not ACK the response: $sendResult")
         }
         return CommandReceiveSuccess(response)
     }
 
-    @Throws(CouldNotParseResponseException::class, UnsupportedOperationException::class)
-    private fun parseResponse(decrypted: MessagePacket): Response {
-
+    /** The pod message inside `0.0=`: unique id, sequence and length, response, CRC. */
+    @Throws(CouldNotParseResponseException::class)
+    private fun responseData(decrypted: MessagePacket): ByteArray {
         val data = parseKeys(arrayOf(RESPONSE_PREFIX), decrypted.payload)[0]
         aapsLogger.info(LTag.PUMPBTCOMM, "Received decrypted response: ${data.toCommLogHex()} in packet: $decrypted")
 
-        // TODO verify length
-
-        // val uniqueId = data.copyOfRange(0, 4)
-        // val lenghtAndSequenceNumber = data.copyOfRange(4, 6)
-        val payload = data.copyOfRange(6, data.size - 2)
-        // val crc = data.copyOfRange(data.size - 2, data.size)
-
-        // TODO validate uniqueId, sequenceNumber and crc
-
-        return ResponseUtil.parseResponse(payload)
+        // TODO verify length (Android TODO, kept)
+        // The CRC is not checked: Android leaves it as a TODO, and OmnipodKit says the Dash pod CRC
+        // does not match the known CRC16, so the Dash PDM ignores it too. An answer too short to hold
+        // the header and a response fails in the parse that follows, as on Android.
+        return data
     }
+
+    /** See [readAndAckResponse]. */
+    @Throws(PodAnswerMismatchException::class)
+    private fun checkAnswerBelongsToLastCommand(data: ByteArray) {
+        val command = lastCommandHeader
+            ?: throw PodAnswerMismatchException("Pod answer with no command sent: ${data.toCommLogHex()}")
+        val expectedSequence = (sequenceOf(command) + 1) and 0x0f
+        val sequence = sequenceOf(data)
+        if (sequence != expectedSequence) {
+            aapsLogger.error(LTag.PUMPBTCOMM, "Pod answer with message sequence $sequence, expected $expectedSequence: not used")
+            throw PodAnswerMismatchException("Pod answer with message sequence $sequence, expected $expectedSequence")
+        }
+        val commandId = command.copyOfRange(0, UNIQUE_ID_SIZE)
+        val answerId = data.copyOfRange(0, UNIQUE_ID_SIZE)
+        val toAnyPod = commandId.all { it == 0xff.toByte() }
+        if (!toAnyPod && !answerId.contentEquals(commandId)) {
+            aapsLogger.error(LTag.PUMPBTCOMM, "Pod answer for unique id ${answerId.toCommLogHex()}, expected ${commandId.toCommLogHex()}: not used")
+            throw PodAnswerMismatchException("Pod answer for unique id ${answerId.toCommLogHex()}, expected ${commandId.toCommLogHex()}")
+        }
+    }
+
+    /** The 4-bit message sequence of a pod message header (byte 4, bits 2 to 5), as `HeaderEnabledCommand.encodeHeader`. */
+    private fun sequenceOf(header: ByteArray): Int = (header[UNIQUE_ID_SIZE].toInt() and 0xff shr 2) and 0x0f
 
     private fun getAck(response: MessagePacket): MessagePacket {
         val msg = MessagePacket(
@@ -186,5 +227,10 @@ class Session(
         private const val RESPONSE_PREFIX = "0.0="
 
         private const val MAX_TRIES = 4
+
+        private const val UNIQUE_ID_SIZE = 4
+
+        /** Unique id (4 bytes), then sequence and length (2 bytes). */
+        private const val COMMAND_HEADER_SIZE = 6
     }
 }

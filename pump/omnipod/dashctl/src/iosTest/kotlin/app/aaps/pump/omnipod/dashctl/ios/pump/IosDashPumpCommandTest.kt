@@ -263,9 +263,10 @@ class IosDashPumpCommandTest {
         assertSame(DashConnectResult.SessionReady, f.reconnect(), "the connection sets up the session")
         assertTrue(f.pump.deliverTreatment(bolus(1.0)).success)
 
-        // SharedBleManager.connect: establishSession(1). Challenge 2, SUCCESS 3, command 4, ACK 5,
-        // then the status of the bolus wait 6 and its ACK 7.
-        assertEquals(listOf(2, 3, 4, 5, 6, 7), wireSequences())
+        // SharedBleManager.connect: establishSession(1). Challenge 2, SUCCESS 3. The stored status is
+        // from before this session, so a status is read first: 4, ACK 5. Then the bolus 6, ACK 7, and
+        // the status of the bolus wait 8 and its ACK 9.
+        assertEquals(listOf(2, 3, 4, 5, 6, 7, 8, 9), wireSequences())
         assertEquals(3L, f.stateManager.eapAkaSequenceNumber)
     }
 
@@ -358,9 +359,9 @@ class IosDashPumpCommandTest {
      */
     @Test
     fun `a bolus is never built with the last programming sequence of the pod`() = runTest {
-        f.pairAndConnect()
-        // No status is known yet, so the TBR is preceded by a cancel (Android `observeNoActiveTempBasal`):
-        // the cancel is built with 0, the TBR with 2.
+        f.pairAndConnect(basalOfThisSession = false)
+        f.basalRunning = true
+        // No status is known yet, so a status is read before the TBR, built with 0; the TBR with 2.
         assertTrue(f.pump.setTempBasalAbsolute(1.0, 30, false, PumpSync.TemporaryBasalType.NORMAL).success)
         repeat(7) { f.pump.getPumpStatus("routine") }
         assertEquals(2, f.stateManager.messageSequenceNumber, "the sequence wrapped")
@@ -444,5 +445,74 @@ class IosDashPumpCommandTest {
         f.pump.getPumpStatus("same link")
         assertFalse(f.pump.cancelTempBasal(false).success)
         assertEquals(before, f.writesFromPump().size, "nothing more on a closed link")
+    }
+
+    // ---------------------------------------------------------------- answer checks (iOS only)
+
+    /**
+     * Deliberate difference from Android: the answer to the bolus carries the wrong 4-bit message
+     * sequence (here the one of the bolus itself, a pod answers it plus one), so it is not the answer
+     * to this bolus. Its status would decide the bolus SUCCESS; it is treated as no answer instead,
+     * the link is closed and the bolus stays open until a real status decides it. Android takes any
+     * answer (insulin counted from a status that may belong to another command). OmnipodKit
+     * `BleMessageTransport.readAndAckResponse` throws `invalidSequence` and the bolus stays
+     * unacknowledged.
+     */
+    @Test
+    fun `an answer with the wrong sequence does not decide the bolus`() = runTest {
+        f.pairAndConnect()
+        f.pod.answerSequenceFor = { sequence -> if (sequence == 0) 0 else (sequence + 1) and 0x0f }
+
+        val result = f.pump.deliverTreatment(bolus(2.0))
+
+        assertTrue(f.decided.isEmpty(), "the answer with the wrong sequence decided nothing")
+        assertEquals(DashCommandKind.BOLUS, f.stateManager.activeCommand?.kind, "the bolus stays open")
+        assertFalse(f.pump.isConnected(), "the link was closed")
+        assertTrue(result.success, "not decided: counted as asked, as for a lost answer (${result.comment})")
+        assertEquals(1, f.stateManager.messageSequenceNumber, "the answer did not move the sequence")
+
+        f.pod.answerSequenceFor = { (it + 1) and 0x0f }
+        assertSame(DashConnectResult.SessionReady, f.reconnect())
+        f.pump.getPumpStatus("decide the open bolus")
+
+        assertEquals(DashCommandConfirmation.SUCCESS, f.decided.single().confirmation)
+        assertTrue(f.decided.single().decidedLate)
+    }
+
+    /** Same for an answer that carries another unique id. */
+    @Test
+    fun `an answer for another unique id does not decide the temp basal`() = runTest {
+        f.pairAndConnect()
+        f.pod.answerUniqueIdFor = { parityHex("01020304") }
+
+        val result = f.pump.setTempBasalAbsolute(1.0, 30, false, PumpSync.TemporaryBasalType.NORMAL)
+
+        assertFalse(result.success, result.comment)
+        assertTrue(f.decided.isEmpty())
+        assertEquals(DashCommandKind.TEMP_BASAL, f.stateManager.activeCommand?.kind)
+    }
+
+    /**
+     * No programming command, a PROGRAM_BEEPS neither, goes while a command is open: it would move the
+     * last programming sequence of the pod and hide what happened to the open command. As Android
+     * (`observeNoActiveCommand`) and OmnipodKit (no beep block while it resolves an unacknowledged
+     * command). This pins it for the test beep.
+     */
+    @Test
+    fun `a test beep is not sent while a bolus is open`() = runTest {
+        f.pairAndConnect()
+        f.pod.dropLinkWhileAnswering = 7 to 0
+        f.pump.deliverTreatment(bolus(1.0))
+        assertEquals(DashCommandKind.BOLUS, f.stateManager.activeCommand?.kind)
+        f.pod.dropLinkWhileAnswering = null
+        assertSame(DashConnectResult.SessionReady, f.reconnect())
+        // No status was read since, so the bolus is still not confirmed.
+        val before = f.pod.commands.size
+
+        val result = f.pump.playTestBeep()
+
+        assertFalse(result.success, result.comment)
+        assertTrue(f.pod.commands.drop(before).none { it[6] == CommandType.PROGRAM_BEEPS.value }, "no beep command")
+        assertEquals(DashCommandKind.BOLUS, f.stateManager.activeCommand?.kind, "the bolus is still open")
     }
 }

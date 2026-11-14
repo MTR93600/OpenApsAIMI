@@ -221,8 +221,8 @@ class IosDashPumpDeactivationTest {
     @Test
     fun `an open command is decided by a status first and the pod is then deactivated as Android`() = runTest {
         f.pairAndConnect()
-        // No status yet, so a cancel goes first (message 7); the temp basal is message 9.
-        f.pod.dropLinkWhileAnswering = 9 to 0
+        // The status of this session shows no temp basal, so no cancel: the temp basal is message 7.
+        f.pod.dropLinkWhileAnswering = 7 to 0
         assertFalse(f.pump.setTempBasalAbsolute(0.5, 30, enforceNew = false, tbrType = PumpSync.TemporaryBasalType.NORMAL).success)
         assertEquals(DashCommandKind.TEMP_BASAL, f.stateManager.activeCommand?.kind)
         f.pod.dropLinkWhileAnswering = null
@@ -245,8 +245,8 @@ class IosDashPumpDeactivationTest {
     @Test
     fun `an open command still blocks the deactivation when no status can be read`() = runTest {
         f.pairAndConnect()
-        // No status yet, so a cancel goes first (message 7); the temp basal is message 9.
-        f.pod.dropLinkWhileAnswering = 9 to 0
+        // The status of this session shows no temp basal, so no cancel: the temp basal is message 7.
+        f.pod.dropLinkWhileAnswering = 7 to 0
         assertFalse(f.pump.setTempBasalAbsolute(0.5, 30, enforceNew = false, tbrType = PumpSync.TemporaryBasalType.NORMAL).success)
         f.pod.dropLinkWhileAnswering = null
         val before = f.pod.commands.size

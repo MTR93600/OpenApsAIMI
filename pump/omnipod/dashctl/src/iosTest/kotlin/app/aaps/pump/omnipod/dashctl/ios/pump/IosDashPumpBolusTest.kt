@@ -5,6 +5,7 @@ import app.aaps.core.interfaces.pump.PumpEnactResult
 import app.aaps.pump.omnipod.dashctl.comm.connection.DashConnectResult
 import app.aaps.pump.omnipod.dashctl.comm.session.FakeDashPod.Packet
 import app.aaps.pump.omnipod.dashctl.parity.parityHex
+import app.aaps.pump.omnipod.dashctl.pod.command.base.CommandType
 import app.aaps.pump.omnipod.dashctl.session.DashCommandConfirmation
 import app.aaps.pump.omnipod.dashctl.session.DashCommandKind
 import app.aaps.pump.omnipod.dashctl.session.DashPodStateManager
@@ -539,4 +540,124 @@ class IosDashPumpBolusTest {
         /** Android `NakResponseTest` (ILLEGAL_PARAM): an answer that is not a status. */
         const val NAK = "0603070009"
     }
+
+    // ---------------------------------------------------------------- fresh status before a bolus (iOS only)
+
+    /**
+     * Deliberate difference from Android: the stored status says the pod runs its basal, but it is
+     * from before this session (an app restart or a reconnect). A fresh status shows a bolus running,
+     * so the new bolus is refused with nothing sent. Android decides on the stored status and sends
+     * the bolus; the pod then faults (0x31) and stops all insulin. OmnipodKit `PodCommsSession.bolus`
+     * reads a status first and refuses with `unfinalizedBolus`.
+     */
+    @Test
+    fun `a bolus while a fresh status shows a bolus running is refused and nothing is sent`() = runTest {
+        val f = newFixture()
+        f.pairAndConnect()
+        assertSame(DashConnectResult.SessionReady, f.reconnect())
+        f.bolusRunning = true
+        f.bolusPulsesRemaining = 10
+        val start = f.pod.commands.size
+
+        val result = f.pump.deliverTreatment(bolus(1.0))
+
+        assertFalse(result.success)
+        assertTrue(result.comment.contains("a bolus is already in progress"), result.comment)
+        assertEquals(listOf(CommandType.GET_STATUS.value), f.pod.commands.drop(start).map { it[6] }, "only the status read")
+        assertEquals(0, f.bolusCommands())
+        assertTrue(f.decided.isEmpty())
+    }
+
+    /** Same reason: a bolus on a suspended pod faults it (OmnipodKit refuses with `podSuspended`). */
+    @Test
+    fun `a bolus while a fresh status shows the pod suspended is refused and nothing is sent`() = runTest {
+        val f = newFixture()
+        f.pairAndConnect()
+        assertSame(DashConnectResult.SessionReady, f.reconnect())
+        f.basalRunning = false
+
+        val result = f.pump.deliverTreatment(bolus(1.0))
+
+        assertFalse(result.success)
+        assertTrue(result.comment.contains("suspended"), result.comment)
+        assertEquals(0, f.bolusCommands())
+        assertTrue(f.stateManager.isSuspended)
+    }
+
+    /**
+     * The last status of this session showed a bolus running, but the pod has ended it since: the
+     * status read first shows it ended, so the bolus goes. Android refuses on the old status.
+     */
+    @Test
+    fun `a bolus after a status that showed a bolus running reads a status first and goes when it ended`() = runTest {
+        val f = newFixture()
+        f.pairAndConnect()
+        f.bolusRunning = true
+        f.bolusPulsesRemaining = 10
+        f.giveStatusOfThisSession()
+        f.bolusRunning = false
+        f.bolusPulsesRemaining = 0
+
+        val result = f.pump.deliverTreatment(bolus(1.0))
+
+        assertTrue(result.success, result.comment)
+        assertEquals(CommandType.GET_STATUS.value, f.pod.commands.first()[6], "a status first")
+        assertEquals(1, f.bolusCommands())
+    }
+
+    /** No status of this session can be read (the link is lost on it): refused, no bolus sent (fail closed). */
+    @Test
+    fun `a bolus is refused when no status of this session can be read`() = runTest {
+        val f = newFixture()
+        f.pairAndConnect()
+        assertSame(DashConnectResult.SessionReady, f.reconnect())
+        // After the reconnect: 1-2 session, 3 the status read.
+        f.pod.dropLinkOnPhoneMessage = 3 to Packet.FIRST
+
+        val result = f.pump.deliverTreatment(bolus(1.0))
+
+        assertFalse(result.success)
+        assertFalse(result.enacted)
+        assertTrue(result.comment.contains("no pod status"), result.comment)
+        assertEquals(0, f.bolusCommands())
+        assertNull(f.stateManager.activeCommand, "nothing was opened")
+    }
+
+    /** A status of this session that shows the basal running: the bolus goes with no extra status read. */
+    @Test
+    fun `a bolus on a status of this session reads no extra status`() = runTest {
+        val f = newFixture()
+        f.pairAndConnect()
+
+        assertTrue(f.pump.deliverTreatment(bolus(1.0)).success)
+
+        assertTrue(isBolusCommand(f.pod.commands.first()), "the bolus is the first command")
+    }
+
+    /**
+     * The user asks to stop the bolus while the status read before it runs (the first bolus after a
+     * reconnect). The bolus must not be sent: the stop was asked before anything went to the pod.
+     */
+    @Test
+    fun `a stop asked during the status read before the bolus sends no bolus`() = runTest {
+        val f = newFixture()
+        f.pairAndConnect()
+        assertSame(DashConnectResult.SessionReady, f.reconnect())
+        val start = f.pod.commands.size
+        val normal = f.pod.answerFor
+        f.pod.answerFor = { command ->
+            if (command[6] == CommandType.GET_STATUS.value) f.pump.stopBolusDelivering()
+            normal(command)
+        }
+
+        val result = f.pump.deliverTreatment(bolus(1.0))
+
+        assertTrue(result.success, result.comment)
+        assertFalse(result.enacted)
+        assertEquals(listOf(CommandType.GET_STATUS.value), f.pod.commands.drop(start).map { it[6] }, "only the status read")
+        assertEquals(0, f.bolusCommands())
+        assertNull(f.stateManager.activeCommand, "nothing was opened")
+    }
+
+    private fun isBolusCommand(command: ByteArray): Boolean = DashPumpOnFakePod.isBolus(command)
 }

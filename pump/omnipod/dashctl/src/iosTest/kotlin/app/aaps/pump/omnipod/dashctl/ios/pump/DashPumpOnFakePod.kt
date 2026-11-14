@@ -9,6 +9,7 @@ import app.aaps.pump.omnipod.dashctl.comm.io.SilentPodLogger
 import app.aaps.pump.omnipod.dashctl.comm.session.CountingRandomBytes
 import app.aaps.pump.omnipod.dashctl.comm.session.FakeDashPod
 import app.aaps.pump.omnipod.dashctl.comm.session.FakeDashPod.PodKeys
+import app.aaps.pump.omnipod.dashctl.comm.session.ResponseUtil
 import app.aaps.pump.omnipod.dashctl.crypto.DashKeyExchange
 import app.aaps.pump.omnipod.dashctl.driver.ActivatingPodModel
 import app.aaps.pump.omnipod.dashctl.driver.ActivatingPodModel.Companion.podDefaultStatus
@@ -233,12 +234,20 @@ internal class DashPumpOnFakePod(
      * [pulseRateBeforePairing]: the SetUniqueId answer is given before pairing, so pairing writes
      * the unique id last and the session and the commands use the id pairing stored. For tests that
      * check what pairing stores; the SetUniqueId vector carries 0x02420001 and would hide it.
+     *
+     * [basalOfThisSession] (only with [activated]): the pod runs its basal ([basalRunning]) and the
+     * state holds the status it reports now, as read in this session, without any message (as after
+     * an activation done in this session). So a bolus or a temp basal goes without the status read
+     * that the pump does first on a missing or older status (`IosDashPump.refusedByDeliveryStatus`).
+     * False: no status is known, and the pod reports the delivery status of the Android capture
+     * (SUSPENDED), for the tests of what happens with no status.
      */
     fun pairAndConnect(
         podAddress: ByteArray? = POD_ADDRESS,
         withPulseRate: Boolean = true,
         pulseRateBeforePairing: Boolean = false,
         activated: Boolean = true,
+        basalOfThisSession: Boolean = true,
     ) {
         val setUniqueId = SetUniqueIdResponse(parityHex(SET_UNIQUE_ID_RESPONSE))
         if (withPulseRate && pulseRateBeforePairing) stateManager.updateFromSetUniqueIdResponse(setUniqueId, 0L)
@@ -246,6 +255,16 @@ internal class DashPumpOnFakePod(
         if (withPulseRate && !pulseRateBeforePairing) stateManager.updateFromSetUniqueIdResponse(setUniqueId, 0L)
         pump.establishSession()
         if (activated) markActivated()
+        if (activated && basalOfThisSession) giveStatusOfThisSession(basal = true)
+    }
+
+    /**
+     * The pod runs its basal when [basal], and the state takes the status the pod reports now
+     * ([RunningPodModel.currentStatus]) as if it was read in this session. No message is sent.
+     */
+    fun giveStatusOfThisSession(basal: Boolean = running.basalRunning) {
+        running.basalRunning = basal
+        stateManager.updateFromResponse(ResponseUtil.parseResponse(running.currentStatus()), nowMs)
     }
 
     /** The state of a pod whose activation is completed and that runs, without running the activation. */

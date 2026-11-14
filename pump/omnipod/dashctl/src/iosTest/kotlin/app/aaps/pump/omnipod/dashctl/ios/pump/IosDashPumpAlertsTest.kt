@@ -89,7 +89,7 @@ class IosDashPumpAlertsTest {
 
     @Test
     fun `silence alerts with no status known is refused and nothing is sent`() = runTest {
-        f.pairAndConnect()
+        f.pairAndConnect(basalOfThisSession = false)
 
         val result = f.pump.silenceAlerts()
 

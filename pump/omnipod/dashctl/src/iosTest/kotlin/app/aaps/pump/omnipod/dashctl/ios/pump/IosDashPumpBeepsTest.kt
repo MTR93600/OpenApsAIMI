@@ -87,6 +87,8 @@ class IosDashPumpBeepsTest {
     @Test
     fun `a temp basal and the cancel before it beep with the temp basal beep setting`() = runTest {
         f.pairAndConnect()
+        f.tempBasalRunning = true
+        f.giveStatusOfThisSession()
 
         assertTrue(f.pump.setTempBasalAbsolute(1.0, 30, true, PumpSync.TemporaryBasalType.NORMAL).success)
 
@@ -101,7 +103,7 @@ class IosDashPumpBeepsTest {
         assertEquals(
             listOf(stopBytes(0, DeliveryType.TEMP_BASAL, BeepType.LONG_SINGLE_BEEP), tempBasal),
             f.pod.commands.map { it.toParityHex() },
-            "no status known: the cancel goes first, as Android"
+            "the last status shows a temp basal: the cancel goes first, as Android"
         )
     }
 
