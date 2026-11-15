@@ -82,13 +82,24 @@ internal fun aimiWithDrillInLinks(items: List<PreferenceItem>): List<PreferenceI
     }
 
 /**
+ * A row that opens a page. The page shows the keys of [screen].
+ *
+ * The tree tests follow every such row, so a key on one of these pages counts as reachable.
+ */
+internal interface AimiScreenLink : IntentPreferenceKey {
+
+    /** The keys the opened page shows. */
+    val screen: PreferenceSubScreenDef
+}
+
+/**
  * A row that opens [screen] as its own page.
  *
  * Only [aimiWithDrillInLinks] builds these, so [screen] already has links for its own sub screens.
  * The class is not in any key enum: it is not a stored setting, it is not exported, and search does
  * not list it (search lists the screen itself, from the `PreferenceSubScreenDef` that follows it).
  */
-internal class AimiSubScreenLink(val screen: PreferenceSubScreenDef) : IntentPreferenceKey {
+internal class AimiSubScreenLink(override val screen: PreferenceSubScreenDef) : AimiScreenLink {
 
     override val key: String = linkKeyOf(screen.key)
     override val title: TextRef = screen.title
@@ -101,6 +112,30 @@ internal class AimiSubScreenLink(val screen: PreferenceSubScreenDef) : IntentPre
         /** Key of the link row for the sub screen with key [screenKey]. Never a stored preference key. */
         fun linkKeyOf(screenKey: String): String = "${screenKey}_link"
     }
+}
+
+/**
+ * The row at the top of the AIMI settings that opens the Essentials page ([AimiEssentials]).
+ *
+ * Unlike [AimiSubScreenLink], no `PreferenceSubScreenDef` follows it in the tree: the plugin card
+ * draws its own sub screens as headers, so one there would show the same keys a second time, without
+ * the hint, the value in use and the "?" sheet. Every key of the page keeps its old place in the
+ * tree as well, so search still finds it there.
+ *
+ * Not in any key enum, for the same reasons as [AimiSubScreenLink].
+ *
+ * @param content the Essentials page itself
+ */
+internal class AimiEssentialsLink(
+    override val screen: PreferenceSubScreenDef,
+    content: ComposeScreenContent,
+) : AimiScreenLink {
+
+    override val key: String = AimiSubScreenLink.linkKeyOf(screen.key)
+    override val title: TextRef = screen.title
+    override val summary: TextRef? = screen.summary
+    override val preferenceType: PreferenceType = PreferenceType.CLICK
+    override val composeScreen: Any = content
 }
 
 /**

@@ -2,13 +2,9 @@ package app.aaps.plugins.aps.openAPSAIMI.compose
 
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
-import app.aaps.core.keys.interfaces.PreferenceItem
-import app.aaps.core.keys.interfaces.PreferenceKey
-import app.aaps.core.ui.compose.ComposeScreenContent
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
 import app.aaps.plugins.aps.keys.ApsIntentKey
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiPlatformPreferenceItems
-import app.aaps.plugins.aps.openAPSAIMI.ports.AimiPlatformPreferenceSlot
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -20,39 +16,21 @@ import kotlin.test.assertTrue
  * The shared renderer in core/ui draws only two levels (the plugin card, and its sub screens as
  * headers); a sub screen one level deeper is skipped. The AIMI tree is deeper, so for months most
  * AIMI screens (women cycle, Lab, SOS, Physio, ...) could only be found through search. The walk
- * below follows the renderer's rules, plus the AIMI link rows ([AimiSubScreenLink]), and the tests
+ * below follows the renderer's rules, plus the AIMI link rows ([AimiScreenLink]), and the tests
  * fail when a key is in the tree but no tap path leads to it.
  */
 class AimiPreferenceTreeTest {
 
-    /** Every platform entry present, as on Android. */
-    private val allPlatformItems = object : AimiPlatformPreferenceItems {
-        override fun item(slot: AimiPlatformPreferenceSlot): PreferenceItem = when (slot) {
-            AimiPlatformPreferenceSlot.SUPPORT_PACKAGE            -> ApsIntentKey.AimiSupportPackage
-            AimiPlatformPreferenceSlot.CONTEXT                    -> ApsIntentKey.AimiContext
-            AimiPlatformPreferenceSlot.MEAL_ADVISOR               -> ApsIntentKey.AimiMealAdvisor
-            AimiPlatformPreferenceSlot.MODE_SETTINGS              -> ApsIntentKey.AimiModeSettings
-            AimiPlatformPreferenceSlot.PROFILE_ADVISOR            -> ApsIntentKey.AimiProfileAdvisor
-            AimiPlatformPreferenceSlot.SOS_PERMISSIONS            -> ApsIntentKey.AimiSosPermissions
-            AimiPlatformPreferenceSlot.HEALTH_CONNECT_PERMISSIONS -> ApsIntentKey.AimiHealthConnectPermissions
-            AimiPlatformPreferenceSlot.HORMONITOR_VIEWER          -> ApsIntentKey.HormonitorViewer
-            AimiPlatformPreferenceSlot.PKPD_SETUP                 -> ApsIntentKey.PkpdSetup
-        }
-    }
+    private val allPlatformItems: AimiPlatformPreferenceItems = AimiSettingsTreeWalk.allPlatformItems
 
-    /** No platform entry at all: the smallest tree a platform can produce. */
-    private val noPlatformItems = object : AimiPlatformPreferenceItems {
-        override fun item(slot: AimiPlatformPreferenceSlot): PreferenceItem? = null
-    }
+    private val noPlatformItems: AimiPlatformPreferenceItems = AimiSettingsTreeWalk.noPlatformItems
 
-    private val emptyScreen = ComposeScreenContent { }
-
-    private fun tree(platformItems: AimiPlatformPreferenceItems): PreferenceSubScreenDef =
-        AimiPreferenceTree(platformItems, controlCenter = emptyScreen, settingsAudit = emptyScreen).build(icon = null)
+    private fun tree(platformItems: AimiPlatformPreferenceItems): PreferenceSubScreenDef = AimiSettingsTreeWalk.tree(platformItems)
 
     /** The contents [AimiPreferenceTree] draws. Each one must be reachable inside the tree. */
     private val contentsDrawnByTree: Set<AimiSettingsContentId> = setOf(
         AimiSettingsContentId.PreferencesRoot,
+        AimiSettingsContentId.PreferencesEssentials,
         AimiSettingsContentId.PreferencesAiKeys,
         AimiSettingsContentId.PreferencesTpo,
         AimiSettingsContentId.PreferencesPhysio,
@@ -72,55 +50,21 @@ class AimiPreferenceTreeTest {
         AimiSettingsContentId.PreferencesEmergencySos,
     )
 
-    /** Contents drawn by their own screen, opened from one entry of the tree. */
-    private val contentsDrawnElsewhere: Set<AimiSettingsContentId> = setOf(
-        AimiSettingsContentId.PkpdSimple,
-        AimiSettingsContentId.PkpdAdvanced,
-        AimiSettingsContentId.PkpdExpert,
-        AimiSettingsContentId.ControlCenter,
-        AimiSettingsContentId.ContextEditor,
-        AimiSettingsContentId.SettingsAudit,
-    )
+    /** Contents drawn by their own screen, opened from one entry of the tree. One list, shared with the reachability test. */
+    private val contentsDrawnElsewhere: Set<AimiSettingsContentId> = AimiSettingsTreeWalk.entryOfContentDrawnElsewhere.keys
 
-    /**
-     * Keys a person can reach by tapping, following the rules of the shared renderer:
-     * - the card draws its own keys, and each of its sub screens as a header;
-     * - inside a header, `AdaptivePreferenceList` draws the keys and skips every sub screen;
-     * - a link row opens [AimiPreferenceSubScreen], which draws the linked screen with the same
-     *   `AdaptivePreferenceList` rule.
-     */
-    private fun reachableKeys(root: PreferenceSubScreenDef): Set<String> {
-        val reached = mutableSetOf<String>()
-        fun drawRow(key: PreferenceKey) {
-            if (!reached.add(key.key)) return
-            if (key is AimiSubScreenLink) key.screen.items.filterIsInstance<PreferenceKey>().forEach(::drawRow)
-        }
-        root.items.forEach { item ->
-            when (item) {
-                is PreferenceKey          -> drawRow(item)
-                is PreferenceSubScreenDef -> item.items.filterIsInstance<PreferenceKey>().forEach(::drawRow)
-            }
-        }
-        return reached
-    }
+    /** Keys a person can reach by tapping. See [AimiSettingsTreeWalk.reachableKeys]. */
+    private fun reachableKeys(root: PreferenceSubScreenDef): Set<String> = AimiSettingsTreeWalk.reachableKeys(root)
 
     /** Every key in the tree, at any depth, without the link rows. */
-    private fun keysInTree(screen: PreferenceSubScreenDef): Set<String> =
-        screen.items.flatMap { item ->
-            when (item) {
-                is AimiSubScreenLink      -> emptyList()
-                is PreferenceKey          -> listOf(item.key)
-                is PreferenceSubScreenDef -> keysInTree(item).toList()
-                else                      -> emptyList()
-            }
-        }.toSet()
+    private fun keysInTree(screen: PreferenceSubScreenDef): Set<String> = AimiSettingsTreeWalk.keysInTree(screen)
 
     /** The same tree with every link row removed: what the renderer showed before the links. */
     private fun withoutLinks(screen: PreferenceSubScreenDef): PreferenceSubScreenDef =
         screen.copy(
             items = screen.items.mapNotNull { item ->
                 when (item) {
-                    is AimiSubScreenLink      -> null
+                    is AimiScreenLink         -> null
                     is PreferenceSubScreenDef -> withoutLinks(item)
                     else                      -> item
                 }
@@ -193,7 +137,9 @@ class AimiPreferenceTreeTest {
             screen.items.filterIsInstance<PreferenceSubScreenDef>().forEach(::check)
         }
         check(userPreferences)
-        // The card's own sub screens are drawn as headers already: no link there.
+        // The card's own sub screens are drawn as headers already: no link there. The one link of the
+        // card is the Essentials page, which has no sub screen in the tree.
         assertTrue(root.items.none { it is AimiSubScreenLink })
+        assertEquals(listOf(AimiEssentials.SCREEN_KEY), root.items.filterIsInstance<AimiEssentialsLink>().map { it.screen.key })
     }
 }

@@ -22,6 +22,9 @@ internal enum class AimiSettingsContentId {
     PkpdExpert,
     ControlCenter,
     PreferencesRoot,
+
+    /** The Essentials page, opened by the first row of the AIMI settings. See [AimiEssentials]. */
+    PreferencesEssentials,
     PreferencesAiKeys,
     PreferencesTpo,
     PreferencesPhysio,
@@ -87,6 +90,9 @@ internal enum class AimiSettingsSectionId {
     ControlCenterStabilityLevel,
     ControlCenterAutonomyMode,
     PreferencesRootRemotePin,
+    EssentialsPatient,
+    EssentialsPatientDetails,
+    EssentialsDoseLimits,
     PreferencesAiAdvisorLearning,
     TpoEnable,
     TpoOptions,
@@ -217,6 +223,7 @@ internal object AimiSettingsScreens {
     private val alwaysRoutedContents: Set<AimiSettingsContentId> = setOf(
         AimiSettingsContentId.ControlCenter,
         AimiSettingsContentId.PreferencesRoot,
+        AimiSettingsContentId.PreferencesEssentials,
         AimiSettingsContentId.PreferencesAiKeys,
         AimiSettingsContentId.PreferencesTpo,
         AimiSettingsContentId.PreferencesPhysio,
@@ -475,6 +482,47 @@ internal object AimiSettingsScreens {
             kind = AimiSettingsSectionKind.FIELDS,
             keys = listOf(
                 AimiStringKey.RemoteControlPin,
+            ),
+        ),
+        // The AIMI keys of the Essentials page, in page order. `AimiEssentialsTest` checks that they
+        // are exactly the AIMI keys of `AimiEssentials.rows`; the OpenAPS keys of the page (max basal,
+        // max IOB, LGS threshold, SMB switch) are not AIMI keys and have no manifest entry.
+        AimiSettingsSection(
+            id = AimiSettingsSectionId.EssentialsPatient,
+            content = AimiSettingsContentId.PreferencesEssentials,
+            level = AimiSettingsLevel.SIMPLE,
+            kind = AimiSettingsSectionKind.FIELDS,
+            keys = listOf(
+                DoubleKey.OApsAIMIweight,
+                DoubleKey.OApsAIMITDD7,
+                DoubleKey.OApsAIMICHO,
+                BooleanKey.OApsAIMIhoneymoon,
+                BooleanKey.OApsAIMIpregnancy,
+            ),
+        ),
+        AimiSettingsSection(
+            // Age and due date stay ADVANCED: their other screens (night growth, patient context) are
+            // ADVANCED field lists, and a key has one level.
+            id = AimiSettingsSectionId.EssentialsPatientDetails,
+            content = AimiSettingsContentId.PreferencesEssentials,
+            level = AimiSettingsLevel.ADVANCED,
+            kind = AimiSettingsSectionKind.FIELDS,
+            keys = listOf(
+                IntKey.OApsAIMINightGrowthAgeYears,
+                AimiStringKey.PregnancyDueDateString,
+            ),
+        ),
+        AimiSettingsSection(
+            id = AimiSettingsSectionId.EssentialsDoseLimits,
+            content = AimiSettingsContentId.PreferencesEssentials,
+            level = AimiSettingsLevel.SIMPLE,
+            kind = AimiSettingsSectionKind.FIELDS,
+            keys = listOf(
+                DoubleKey.meal_modes_MaxBasal,
+                DoubleKey.autodriveMaxBasal,
+                DoubleKey.OApsAIMIMaxSMB,
+                DoubleKey.OApsAIMIHighBGMaxSMB,
+                DoubleKey.OApsAIMIMaxMultiplier,
             ),
         ),
         AimiSettingsSection(

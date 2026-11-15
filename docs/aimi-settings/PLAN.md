@@ -155,6 +155,26 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
   held a x0.88 from the Control Center display level, which no longer reaches dosing. The difference
   is at most about 0.003 U per SMB, and only with an ML model loaded.
 
+- **Open for the owner (from step S1 review, not decided):**
+  - *Targets link.* The Essentials page shows the profile targets read only ("change them on the
+    profile screen"). A tap that opens the profile needs a new platform slot (Android and iOS, like
+    `AimiPlatformPreferenceSlot`). Say if S1 or a later step should add it.
+  - *Learner badge.* The page has only the TPO, LIMITED and RAISED badges. The key map lists no learner
+    that writes an Essentials key, so there is nothing to badge yet.
+  - *Which "max basal multiplier".* The page shows `OApsAIMIMaxMultiplier`, which only caps the
+    adaptive basal learner (H channel) while adaptive basal is on; its hint now says so. The real cap
+    of a temp basal against the profile basal is `ApsMaxCurrentBasalMultiplier` (default 4, normal
+    mode only). Say if that one should be on the page too, with its value in use.
+  - *Patient age.* `OApsAIMINightGrowthAgeYears` stays 1-25, default 14 (the NGR default is not
+    decided). The hint says "if 25 or older, set 25", and an age never set is shown as "not set,
+    default used".
+  - *Levels.* Age and `PregnancyDueDateString` are on the Essentials page but stay ADVANCED in the
+    manifest; the key map marks both `[target: SIMPLE]`. Left for the step that sets levels.
+  - *Max SMB and max IOB.* The loop sets these limits again on every decision (SMB limit picked from
+    both SMB keys by glucose and rise, lowered by exercise, physio and trajectory; max IOB moved by
+    night growth support and trajectory). The page claims no value in use for them and says so. A
+    "last decision" value would need a snapshot from the loop.
+
 ## Order of work (one green commit per step)
 
 | Step | What | Dosing |

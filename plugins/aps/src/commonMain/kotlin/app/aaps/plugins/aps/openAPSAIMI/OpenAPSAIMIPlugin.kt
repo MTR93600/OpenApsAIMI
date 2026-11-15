@@ -167,12 +167,16 @@ import kotlin.math.exp
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AiCoachingService
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiSharing
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiControlCenterScreen
+import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBasalLimitMode
+import app.aaps.plugins.aps.openAPSAIMI.compose.AimiEssentialsLive
+import app.aaps.plugins.aps.openAPSAIMI.compose.AimiEssentialsScreen
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiPreferenceTree
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiSettingsAuditScreen
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiPkpdSettingsScreen
 import app.aaps.plugins.aps.openAPSAIMI.physio.AIMIPhysioContextStoreMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextRepository
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoOrchestrator
+import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoSessionStatus
 import app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainer
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
@@ -1893,43 +1897,54 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         return combinedDelta > 3.0f && acceleration > 1.2f
     }
 
-    override fun applyBasalConstraints(
-        absoluteRate: Constraint<Double>,
-        profile: Profile
-    ): Constraint<Double> {
-        // ????????????????????????????????????????????????????
-        // 1?? On d?tecte si l?on est en mode ?meal? ou ?early autodrive?
+    /**
+     * Which max basal key [applyBasalConstraints] uses now: meal mode (a meal therapy event or a meal
+     * from the context), early Autodrive (day time, no meal or sport mode, Autodrive on and engaged),
+     * else the normal one. Null when there is no glucose data: then AIMI sets no max basal of its own.
+     * The Essentials page shows the same choice.
+     */
+    private fun basalLimitModeNow(): AimiBasalLimitMode? {
         val therapy = Therapy(persistenceLayer).also { it.updateStatesBasedOnTherapyEvents() }
-        
-        // ?? Context Integration (Remote/AI)
+
+        // Context integration (remote / AI)
         val contextSnapshot = contextManager.getSnapshot(dateUtil.now())
-        
+
         val isMealMode = therapy.snackTime
             || therapy.highCarbTime
             || therapy.mealTime
             || therapy.lunchTime
             || therapy.dinnerTime
             || therapy.bfastTime
-            || contextSnapshot.hasMealRisk // ?? Remote "Lunch/Meal" triggers this
+            || contextSnapshot.hasMealRisk // a remote "Lunch/Meal" turns this on
 
-        val isSportMode = therapy.sportTime || contextSnapshot.hasActivity // ?? Remote "Sport" triggers this
+        val isSportMode = therapy.sportTime || contextSnapshot.hasActivity // a remote "Sport" turns this on
 
         val hour = aimiLocalHour()
         val night = hour <= 7
         val isAutodriveEnabled = preferences.get(BooleanKey.OApsAIMIautoDriveActive)
-        val smb = glucoseStatusCalculatorAimi.getGlucoseStatusData(false) ?: return absoluteRate
+        glucoseStatusCalculatorAimi.getGlucoseStatusData(false) ?: return null
 
         val isEarlyAutodrive = !night && !isMealMode && !isSportMode && isAutodriveEnabled &&
             determineBasalaimiSMB2.isAutodriveEngaged()
 
-        val isSpecialMode = isMealMode || isEarlyAutodrive || preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
+        return when {
+            isMealMode       -> AimiBasalLimitMode.MEAL
+            isEarlyAutodrive -> AimiBasalLimitMode.AUTODRIVE
+            else             -> AimiBasalLimitMode.NORMAL
+        }
+    }
 
-        // ????????????????????????????????????????????????????
-        // 2?? On choisit la bonne pref en fonction du mode
-        var maxBasal = when {
-            isMealMode       -> preferences.get(DoubleKey.meal_modes_MaxBasal)
-            isEarlyAutodrive -> preferences.get(DoubleKey.autodriveMaxBasal)
-            else             -> preferences.get(DoubleKey.ApsMaxBasal)
+    override fun applyBasalConstraints(
+        absoluteRate: Constraint<Double>,
+        profile: Profile
+    ): Constraint<Double> {
+        // 1 + 2: which max basal key applies now (meal mode, early Autodrive or the normal one)
+        val mode = basalLimitModeNow() ?: return absoluteRate
+        val isSpecialMode = mode != AimiBasalLimitMode.NORMAL || preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
+        var maxBasal = when (mode) {
+            AimiBasalLimitMode.MEAL      -> preferences.get(DoubleKey.meal_modes_MaxBasal)
+            AimiBasalLimitMode.AUTODRIVE -> preferences.get(DoubleKey.autodriveMaxBasal)
+            AimiBasalLimitMode.NORMAL    -> preferences.get(DoubleKey.ApsMaxBasal)
         }
 
         if (isEnabled()) {
@@ -2022,6 +2037,13 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     override fun getPreferenceScreenContent(): PreferenceSubScreenDef =
         AimiPreferenceTree(
             platformItems = platformItems,
+            essentials = ComposeScreenContent { onBack ->
+                AimiEssentialsScreen(
+                    preferences = preferences,
+                    loadLive = ::loadEssentialsLive,
+                    onBack = onBack,
+                )
+            },
             controlCenter = ComposeScreenContent { onBack ->
                 AimiControlCenterScreen(
                     preferences = preferences,
@@ -2037,6 +2059,31 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 )
             },
         ).build(icon = pluginDescription.icon)
+
+    /**
+     * What the loop uses now, for the Essentials page: the active basal mode with the max basal after
+     * the same constraint call `invoke` makes (it belongs to the max basal key of that mode only, so
+     * the result depends on the mode), the profile max daily basal the loop raises every max basal key
+     * to, the SMB switch after the constraint call, the profile target, and the values of an active
+     * TPO session. Max IOB is not read here: AIMI gates on its own value, which it changes on every
+     * decision. It only reads.
+     */
+    private suspend fun loadEssentialsLive(): AimiEssentialsLive = withContext(Dispatchers.Default) {
+        val profile = profileFunction.getProfile()
+        val tpoSession = tpoOrchestrator.currentSession()?.takeIf { it.status == TpoSessionStatus.ACTIVE }
+        // applyBasalConstraints sets no max basal of its own when AIMI is not enabled.
+        val aimiEnabled = isEnabled()
+        AimiEssentialsLive(
+            basalMode = if (aimiEnabled && profile != null) basalLimitModeNow() else null,
+            maxBasalInUse = profile?.let { constraintsChecker.getMaxBasalAllowed(it).value() },
+            profileMaxDailyBasal = profile?.getMaxDailyBasal()?.takeIf { aimiEnabled },
+            smbAllowed = constraintsChecker.isSMBModeEnabled().value(),
+            targetLowMgdl = profile?.getTargetLowMgdl(),
+            targetHighMgdl = profile?.getTargetHighMgdl(),
+            tpoOverlay = tpoSession?.overlay.orEmpty(),
+            tpoBaseline = tpoSession?.baseline.orEmpty(),
+        )
+    }
 
     /**
      * Drops an SMB the loop would refuse for coming too soon after the last bolus.

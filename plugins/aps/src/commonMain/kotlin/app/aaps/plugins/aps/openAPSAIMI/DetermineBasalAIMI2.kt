@@ -9725,7 +9725,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
         )
         // T3C dependency: manual T3C activation implies NGR ON (nocturnal basal support) even if its own toggle is off.
-        val enabled = (enabledPref ?: (age < 18)) || t3cModeEnabled()
+        val enabled = NightGrowthActivation.isEnabledBySwitchOrAge(enabledPref, age) || t3cModeEnabled()
         val slotCap = if (age < 10) 6 else 4
         return NGRConfig(
             enabled = enabled,

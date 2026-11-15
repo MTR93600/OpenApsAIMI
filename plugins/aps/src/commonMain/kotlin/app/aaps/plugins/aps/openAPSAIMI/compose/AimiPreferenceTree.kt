@@ -32,12 +32,17 @@ import app.aaps.plugins.aps.openAPSAIMI.ports.AimiPlatformPreferenceSlot
  * Everything below "User preferences" is reachable by browsing through the link rows added by
  * [aimiWithDrillInLinks]; see that function for why they are needed.
  *
+ * The first row of the card opens the Essentials page ([AimiEssentials]): the person's own data and
+ * the dose limits, each with the value in use now. Its keys also keep their old places below.
+ *
  * @param platformItems entries only the platform can show; a `null` entry is left out of the tree
+ * @param essentials the Essentials page
  * @param controlCenter the AIMI Control Center screen
  * @param settingsAudit the settings audit screen
  */
 internal class AimiPreferenceTree(
     private val platformItems: AimiPlatformPreferenceItems,
+    private val essentials: ComposeScreenContent,
     private val controlCenter: ComposeScreenContent,
     private val settingsAudit: ComposeScreenContent,
 ) {
@@ -51,9 +56,11 @@ internal class AimiPreferenceTree(
         )
 
     /**
-     * OpenAPS/SMB core keys (same order as `OpenAPSSMBPlugin`), then the nested AIMI sections.
+     * The Essentials page link, the OpenAPS/SMB core keys (same order as `OpenAPSSMBPlugin`), then the
+     * nested AIMI sections.
      */
     private fun rootItems(): List<PreferenceItem> = buildList {
+        add(AimiEssentialsLink(screen = AimiEssentials.screenDef(), content = essentials))
         add(DoubleKey.ApsMaxBasal)
         add(DoubleKey.ApsSmbMaxIob)
         add(BooleanKey.ApsUseDynamicSensitivity)

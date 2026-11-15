@@ -2366,4 +2366,59 @@
 <string name="aimi_healthkit_intro">AIMI reads steps, heart rate, heart rate variability, resting heart rate, sleep and temperature from Apple Health. It does not write anything to Apple Health.</string>
 <string name="aimi_healthkit_row_read">Read access to Apple Health</string>
 <string name="aimi_healthkit_note">iOS asks only once. After that, iOS does not tell apps which data you allowed, and data you did not allow simply looks empty. To change your choice, open the Health app, tap your profile picture, then Apps under Privacy, then this app.</string>
+<!-- Essentials page and the AIMI setting row (step S1) -->
+<string name="aimi_essentials_title">Essentials</string>
+<string name="aimi_essentials_summary">Your own data and the dose limits, with the value in use now.</string>
+<string name="aimi_essentials_disclaimer">This is not medical advice. Talk to your care team before you change a dose limit.</string>
+<string name="aimi_essentials_group_patient">About you</string>
+<string name="aimi_essentials_group_limits">Dose limits</string>
+<string name="aimi_essentials_group_targets">Targets</string>
+<string name="aimi_essentials_targets_value" comment="%1$s=low target with unit, %2$s=high target with unit. Example: 100 mg/dL to 110 mg/dL">%1$s to %2$s</string>
+<string name="aimi_essentials_targets_unknown">No profile is running.</string>
+<string name="aimi_essentials_targets_hint">Targets come from your profile. Change them on the profile screen.</string>
+<string name="aimi_essentials_patient_age_title">Patient age</string>
+<string name="aimi_essentials_hint_weight">Body weight. AIMI uses it to size doses.</string>
+<string name="aimi_essentials_hint_tdd7">Your usual total insulin per day, over the last 7 days.</string>
+<string name="aimi_essentials_hint_cho">How many carbs you usually eat in a meal.</string>
+<string name="aimi_essentials_hint_age">Age of the person who wears the pump. If 25 or older, set 25.</string>
+<string name="aimi_essentials_hint_honeymoon">Turn on while the pancreas still makes some insulin.</string>
+<string name="aimi_essentials_hint_pregnancy">Turn on during pregnancy.</string>
+<string name="aimi_essentials_hint_due_date">Expected date of birth. Used only while pregnancy is on.</string>
+<string name="aimi_essentials_hint_max_basal">Highest temporary basal rate the loop may set, when no meal mode is on and Autodrive does not act.</string>
+<string name="aimi_essentials_hint_meal_max_basal">Highest basal rate during a meal mode.</string>
+<string name="aimi_essentials_hint_autodrive_max_basal">Highest basal rate when Autodrive acts.</string>
+<string name="aimi_essentials_hint_max_iob">Most insulin on board the loop may build up.</string>
+<string name="aimi_essentials_hint_max_smb">Largest single small bolus (SMB).</string>
+<string name="aimi_essentials_hint_high_bg_max_smb">Largest single small bolus (SMB) when glucose is high.</string>
+<string name="aimi_essentials_hint_max_multiplier">Highest factor the adaptive basal learner may put on the profile basal. Used only while adaptive basal is on. It is not a limit on every basal rate.</string>
+<string name="aimi_essentials_hint_lgs">The loop gives no extra insulin when glucose, now or predicted, goes below this value or below a value set by your target, whichever is higher.</string>
+<string name="aimi_essentials_hint_use_smb">Allow small automatic boluses (SMB).</string>
+<string name="aimi_essentials_ngr_on_by_switch">Night growth support is on: its own switch is on.</string>
+<string name="aimi_essentials_ngr_off_by_switch">Night growth support is off: its own switch is off.</string>
+<string name="aimi_essentials_ngr_on_by_age">Night growth support is on, because the age is under 18 and its own switch was never set.</string>
+<string name="aimi_essentials_ngr_off_by_age">Night growth support is off, because the age is 18 or more and its own switch was never set.</string>
+<string name="aimi_essentials_ngr_on_by_default_age">Night growth support is on: the age is not set, and the default age is under 18.</string>
+<string name="aimi_essentials_ngr_off_by_default_age">Night growth support is off: the age is not set, and the default age is 18 or more.</string>
+<string name="aimi_essentials_ngr_on_by_t3c">Night growth support is on, because T3C brittle mode is on.</string>
+<string name="aimi_unit_insulin_per_day" comment="Unit label: insulin units per day">U/day</string>
+<string name="aimi_setting_help">Help for this setting</string>
+<string name="aimi_setting_default" comment="%1$s=default value with its unit. Example: Default: 1.00 U">Default: %1$s</string>
+<string name="aimi_setting_value_unit" comment="%1$s=number, %2$s=unit label. Example: 50 kg">%1$s %2$s</string>
+<string name="aimi_setting_on">On</string>
+<string name="aimi_setting_off">Off</string>
+<string name="aimi_setting_not_set">Not set</string>
+<string name="aimi_setting_in_use" comment="%1$s=value with its unit that the loop uses now. Example: In use now: 0.60 U">In use now: %1$s</string>
+<string name="aimi_setting_badge_tpo" comment="%1$s=the value the person set, with its unit. Example: Changed by TPO for a while. Your value: 1.00 U">Changed by TPO for a while. Your value: %1$s</string>
+<string name="aimi_setting_badge_tpo_no_value">Changed by TPO for a while. Your value comes back after.</string>
+<string name="aimi_setting_badge_raised">Raised to the highest basal rate of your profile.</string>
+<string name="aimi_setting_when_active" comment="%1$s=max basal value with its unit, used only when its mode (meal mode or Autodrive or normal) is on. Example: Not in use now. Limit when it applies: 3.00 U/h">Not in use now. Limit when it applies: %1$s</string>
+<string name="aimi_setting_per_decision_smb">For each decision the loop picks its SMB limit from max SMB and max SMB at high glucose, and it can lower it, for example during exercise.</string>
+<string name="aimi_setting_per_decision_iob">The loop starts each decision from this value and can raise or lower it for that decision, for example with night growth support.</string>
+<string name="aimi_unit_times_profile_basal" comment="Unit label after a factor. Example: 1.60 × profile basal">× profile basal</string>
+<string name="aimi_setting_badge_limited">Lowered by a safety limit of the loop.</string>
+<string name="aimi_setting_note_tpo">AIMI can change this value by itself for a short time (TPO). It puts your value back after.</string>
+<string name="aimi_setting_warning_patient_input">AIMI uses this value to size doses. A wrong value can give too much or too little insulin.</string>
+<string name="aimi_setting_warning_dose_limit">This limit sets how much insulin AIMI can give. A higher value can cause low glucose, a lower value can cause high glucose. Talk to your care team before you change it.</string>
+<string name="aimi_setting_warning_lgs">The loop uses this value or a value set by your target (halfway between your target and 40 mg/dL), whichever is higher. A value below the one from your target has no effect. A lower value gives less protection from low glucose. Talk to your care team before you change it.</string>
+<string name="aimi_setting_warning_smb">With SMB off the loop corrects high glucose more slowly. With SMB on AIMI gives small boluses by itself. Talk to your care team before you change it.</string>
 </resources>
