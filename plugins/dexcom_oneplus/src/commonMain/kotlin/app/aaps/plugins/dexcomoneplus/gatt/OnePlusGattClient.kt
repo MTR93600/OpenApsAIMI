@@ -22,6 +22,14 @@ interface OnePlusGattClient {
     fun isConnected(): Boolean
 
     /**
+     * The status the platform gave when the link of the current connect went down, or null if it did
+     * not go down yet or the platform does not say. On Android this is the GATT status of
+     * `STATE_DISCONNECTED`: 19 means the sensor closed the link itself, 8 is a supervision timeout.
+     * The session uses it to tell a sensor that went back to sleep from a lost link.
+     */
+    fun lastLinkDownStatus(): Int? = null
+
+    /**
      * Ask the platform for a slower, or the usual, connection interval on this link.
      *
      * Used while another job on the same radio must not be disturbed — a pump setup, see

@@ -63,6 +63,9 @@ class OnePlusGattClientAndroid(
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val readyLatch = AtomicReferenceLatch()
+
+    /** GATT status of the last STATE_DISCONNECTED of the current link; null after connect() starts. */
+    @Volatile private var lastLinkDownStatus: Int? = null
     /** Tagged Auth/ExtraData frames for KEKS (Ob1 routes by UUID). */
     private val keksQueue = LinkedBlockingQueue<TaggedKeksNotify>(32)
     private val controlQueue = LinkedBlockingQueue<ByteArray>(32)
@@ -153,6 +156,7 @@ class OnePlusGattClientAndroid(
                         OnePlusAudioLinkState.describe(appContext, bluetoothManager.adapter),
                 )
                 connected = false
+                lastLinkDownStatus = status
                 readyLatch.fail("disconnected status=$status")
                 completePendingOp(BluetoothGatt.GATT_FAILURE)
                 poisonNotifyQueues()
@@ -278,6 +282,7 @@ class OnePlusGattClientAndroid(
         controlQueue.clear()
         backfillQueue.clear()
         readyLatch.reset()
+        lastLinkDownStatus = null
         cccdPhase = CccdPhase.NONE
         pendingPostReadyMtu = false
         pendingOpLatch.reset()
@@ -313,7 +318,7 @@ class OnePlusGattClientAndroid(
             remote.connectGatt(appContext, autoConnect, callback)
         }
         val timeout = if (autoConnect) {
-            profile.connectTimeoutMs.coerceAtLeast(60_000L)
+            maxOf(profile.connectTimeoutMs, profile.autoConnectTimeoutMs)
         } else {
             profile.connectTimeoutMs
         }
@@ -338,8 +343,14 @@ class OnePlusGattClientAndroid(
     }
 
     override fun disconnect() {
+        // Ends a connect that is still waiting, so stop() does not hang for the whole autoConnect
+        // wait (up to [OemDeviceProfile.autoConnectTimeoutMs]). connect() resets the latch first,
+        // so this cannot fail a later connect.
+        readyLatch.fail("disconnect requested")
         disconnectInternal(poisonQueues = true)
     }
+
+    override fun lastLinkDownStatus(): Int? = lastLinkDownStatus
 
     override fun isConnected(): Boolean = connected && gatt != null
 

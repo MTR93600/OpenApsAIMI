@@ -92,4 +92,12 @@ class DeviceProfileRegistryTest {
             assertThat(DeviceProfileRegistry.byId(id).holdsPendingConnect).isFalse()
         }
     }
+
+    @Test
+    fun `generic fallback lets an autoConnect wait 150 s, the other Android profiles keep 60 s`() {
+        assertThat(DeviceProfileRegistry.GenericFallback.autoConnectTimeoutMs).isEqualTo(150_000L)
+        assertThat(DeviceProfileRegistry.PixelDefault.autoConnectTimeoutMs).isEqualTo(60_000L)
+        assertThat(DeviceProfileRegistry.SamsungDefault.autoConnectTimeoutMs).isEqualTo(60_000L)
+        assertThat(DeviceProfileRegistry.MotorolaDefault.autoConnectTimeoutMs).isEqualTo(60_000L)
+    }
 }
