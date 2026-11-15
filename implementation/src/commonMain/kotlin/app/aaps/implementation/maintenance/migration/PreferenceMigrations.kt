@@ -15,8 +15,10 @@ import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import app.aaps.core.interfaces.tempTargets.toJson
 import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.core.keys.AimiMealFactorScaleRepair
 import app.aaps.core.keys.BooleanComposedKey
 import app.aaps.core.keys.BooleanKey
+import app.aaps.core.keys.BooleanNonKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.ProfileComposedBooleanKey
 import app.aaps.core.keys.ProfileComposedStringKey
@@ -70,7 +72,8 @@ import kotlin.math.roundToInt
  * So a new migration goes at the END of the list, and writes whatever the build it belongs to wrote.
  *
  * Every function is guarded by its own data - it does nothing when its names are absent - so running
- * the whole list every time is correct and there is nothing to record or skip.
+ * the whole list every time is correct and there is nothing to record or skip. The one exception is
+ * [aimiMealFactorScaleRepaired], which also stops once the store holds its done flag.
  *
  * ## What is NOT here
  *
@@ -122,6 +125,7 @@ class PreferenceMigrations(
         dashboardSkin(sp)
         smsCommunicatorType(sp)
         aimiPkpdKeysRetired(sp)
+        aimiMealFactorScaleRepaired(sp)
     }
 
     /**
@@ -535,6 +539,21 @@ class PreferenceMigrations(
         AIMI_PKPD_RETIRED_KEYS.filter { sp.contains(it) }.forEach(sp::remove)
     }
 
+    /**
+     * AIMI step T2: a meal factor the old TPO wrote on the 1.0 scale (below 2, for example 1.15) goes
+     * back to its default, once. See [repairAimiMealFactorScale].
+     *
+     * The one function here that is not guarded by its data alone: a low value is also a value a
+     * user can type, so it also stops once [sp] holds the done flag. The flag is written by the AIMI
+     * plugin start, not here, and it is exported: an old backup is repaired on import, a backup made
+     * after the repair is not, and a store with no meal factor is left untouched.
+     */
+    private fun aimiMealFactorScaleRepaired(sp: KeyValueStore) {
+        repairAimiMealFactorScale(sp).forEach {
+            aapsLogger.info(LTag.CORE, "AIMI meal factor repaired (old TPO scale): $it")
+        }
+    }
+
     /** Moves a legacy name holding a whole number to [destinationPrefix] + [argument]. */
     private fun moveLong(sp: KeyValueStore, name: String, value: Any?, argument: String?, destinationPrefix: String) {
         if (argument == null) return skip(name, "the name does not say what it belongs to")
@@ -639,3 +658,27 @@ class PreferenceMigrations(
         )
     }
 }
+
+/**
+ * [AimiMealFactorScaleRepair] over a raw store: the live store on Android start-up, or an import
+ * file.
+ *
+ * It repairs only while [sp] does not say the repair ran, and it never writes that flag itself. The
+ * AIMI plugin start sets the flag (`AimiMealFactorScaleRepair.repairOnce(preferences)`), on Android
+ * and iOS. So:
+ * - on the live store it repairs until the AIMI plugin has started once, and a low value the user
+ *   types later is kept;
+ * - a backup made before the repair has no flag and is repaired on import; a backup made after it
+ *   carries the flag (it is exported) and keeps its values;
+ * - a store with no meal factor stays untouched, so an import counts no extra change.
+ *
+ * A file holds every value as text, so values are read with [LegacyPreferenceValue]. A value that is
+ * not a number is left in place.
+ */
+internal fun repairAimiMealFactorScale(sp: KeyValueStore): List<AimiMealFactorScaleRepair.Repair> =
+    AimiMealFactorScaleRepair.repairOnce(
+        alreadyDone = LegacyPreferenceValue.asBoolean(sp.getAll()[BooleanNonKey.OApsAIMIMealFactorScaleRepaired.key]) == true,
+        readStored = { key -> LegacyPreferenceValue.asDouble(sp.getAll()[key.key]) },
+        write = { key, value -> sp.putDouble(key.key, value) },
+        markDone = {},
+    )

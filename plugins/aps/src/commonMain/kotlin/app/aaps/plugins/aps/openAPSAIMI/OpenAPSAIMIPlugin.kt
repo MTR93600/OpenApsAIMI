@@ -90,6 +90,7 @@ import app.aaps.core.interfaces.InterfacesStrings
 import app.aaps.core.interfaces.utils.HardLimits
 import app.aaps.core.interfaces.utils.Round
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
+import app.aaps.core.keys.AimiMealFactorScaleRepair
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.IntKey
@@ -374,6 +375,12 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         // the first run the stored value is above the cutoff, so this does nothing again.
         if (PkpdSmbTailDamping.migrateLegacyStoredPreference(preferences)) {
             aapsLogger.info(LTag.APS, "PKPD_TAIL_TRACE legacy tail floor stored as ${PkpdSmbTailDamping.DAMPING_NEUTRAL}")
+        }
+        // One-shot (step T2): a meal factor the old TPO wrote on the 1.0 scale (below 2, for example
+        // 1.15) goes back to its default. Also done by the Android start-up migration; this one sets
+        // the done flag and covers iOS. Changes dosing only for such a user (default meal SMB back).
+        AimiMealFactorScaleRepair.repairOnce(preferences).forEach {
+            aapsLogger.info(LTag.APS, "AIMI meal factor repaired (old TPO scale): $it")
         }
         tailDampingTraceJob?.cancel()
         tailDampingTraceJob = rxBus.toFlow(EventPreferenceChange::class)

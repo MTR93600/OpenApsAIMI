@@ -76,14 +76,21 @@ class TuningMealFactorScaleTest {
     )
 
     @Test
+    fun theRaiseCeilingIsNeutral() {
+        // Step T2: an automatic suggestion never goes above 100 (neutral). Above that only the user, by hand.
+        assertEquals(100.0, AdvisorMetricRules.LUNCH_FACTOR_RAISE_CEILING, 1e-9)
+    }
+
+    @Test
     fun mealRiseStopsAtTheSameCeilingAsTheAdvisor() {
-        // 115 + 10 would be 125. The raise stops at the ceiling the Advisor rule uses (120).
-        assertEquals(AdvisorMetricRules.LUNCH_FACTOR_RAISE_CEILING, newValue(mealRisePlan(115.0), DoubleKey.OApsAIMILunchFactor), 1e-9)
+        // 95 + 10 would be 105. The raise stops at the ceiling the Advisor rule uses (100).
+        assertEquals(100.0, newValue(mealRisePlan(95.0), DoubleKey.OApsAIMILunchFactor), 1e-9)
     }
 
     @Test
     fun mealRiseProposesNoRaiseAtOrAboveTheCeiling() {
-        assertTrue(mealRisePlan(120.0).changes.none { it.key == DoubleKey.OApsAIMILunchFactor })
+        assertTrue(mealRisePlan(100.0).changes.none { it.key == DoubleKey.OApsAIMILunchFactor })
+        assertTrue(mealRisePlan(115.0).changes.none { it.key == DoubleKey.OApsAIMILunchFactor })
         assertTrue(mealRisePlan(140.0).changes.none { it.key == DoubleKey.OApsAIMILunchFactor })
     }
 }

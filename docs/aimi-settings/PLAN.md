@@ -115,13 +115,6 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
     (0.40, 0.55, 0.70, 0.80, 0.90) acts as 0.5 and shows a value with no effect. C1 did not change
     it (raising the rung changes dosing on that rung).
 - **Open for the owner (from step C1, not decided):**
-  - *ML correction limit when Autodrive is off.* The neutral runtime profile fixes the autonomy
-    mode at controlled authority. Before C1 the autonomy mode came from the real Autodrive
-    switches, not from a display level. A user with Autodrive off (default protection level) had
-    an ML correction limit of 0.484 of its base and now has 1.0: up to about 0.026 U more ML
-    correction room per SMB, only when an ML model is loaded (0.634 to 1.0 with Autodrive on but
-    not authoritative). For a default user the change is 0.88 to 1.0 (about 0.006 U per SMB).
-    Say if the autonomy part should follow the real Autodrive switches again.
   - *Stored values of the new constants.* A user who had changed `OApsAIMIPeakGovernorLearnedWeight`
     (it was on the PK/PD Expert screen) or one of the three hidden switches now gets the old default.
 
@@ -134,21 +127,39 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
   - *Below the ladder a step up first goes to the lowest rung* without using a step, the same size
     as before T1 (tube hypo floor 70 with 2 steps -> 80). Only the old lowering above the top rung
     (90 -> 88) is gone.
-  - *Meal factor raises are now live.* On the 1.0 scale the Advisor raise (ceiling 1.2) and the
-    Tuning meal-rise raise did nothing on real values (default 50). On the percent scale they raise
-    meal SMB by 5 to 15 points per accepted proposal, both stopped at 120 (one shared constant,
-    `AdvisorMetricRules.LUNCH_FACTOR_RAISE_CEILING`). 120 is 2.4 times the default 50, which is
-    itself not decided. Say if the ceiling should be lower (for example the default) or the raises
-    should stay off until the meal factor default is decided.
-  - *Exercise and late fat damping in the poor-sleep pack.* These keys multiply the SMB (higher =
-    more insulin). The old "strengthen" moved up a band and raised the defaults (0.60 -> 0.72,
-    0.70 -> 0.80). T1 makes it never raise: it only lowers a value above 0.85 / 0.90 to that
-    ceiling, so on the defaults it now proposes nothing. Say if it should really lower the values
-    (for example 0.60 -> 0.50), which is a new dosing change.
-  - *Meal factors the old TPO wrote on the 1.0 scale.* A user who accepted a TPO pack before T1 and
-    did not revert may have a lunch or dinner factor of about 1.0 to 1.3 stored (meal SMB almost
-    off). T1 does not raise them (that would change dosing). A one-time notice or migration for
-    meal factor values below about 2 is open.
+
+- **Decided by the owner (from step T1 review, done in step T2, 2026-11-15):**
+  - *Ceiling of automatic meal factor raises: 100 (neutral).* The Advisor raise and the Tuning
+    meal-rise raise (shared constant `AdvisorMetricRules.LUNCH_FACTOR_RAISE_CEILING`) stop at 100
+    instead of 120. A suggestion never proposes a meal factor above 100 (95 -> 100, not 105); a
+    value at or above 100 gets no raise proposal and is not lowered by it. Above 100 only the user,
+    by hand.
+  - *Poor-sleep STRONG pack: no change.* It keeps the T1 behaviour: it only lowers an exercise or
+    late fat damping value above 0.85 / 0.90 to that ceiling, so on the defaults it proposes
+    nothing. It does not lower the defaults (no new dosing change).
+  - *Meal factors the old TPO wrote on the 1.0 scale: one-shot repair.* Every stored meal factor
+    (`OApsAIMIMealFactor`, BF, lunch, dinner, high carb, snack, sleep) below 2 goes back to its key
+    default (50, sleep 60) once; any other value is kept. Done flag `aimi_meal_factor_scale_repaired`
+    (exported). The AIMI plugin start runs it and sets the flag (Android and iOS). The preference
+    migrations run it too, on Android start-up and on every import, but only while the store has no
+    flag, and they never write the flag: an old backup is repaired on import, a backup made after
+    the repair keeps its values. Each repair is logged.
+  - *Autonomy mode follows the Autodrive switches again (C1 follow-up).* The profile dosing uses
+    keeps the neutral display levels of C1, but its autonomy mode comes from the real Autodrive
+    switches, with the same mapping as before C1: Autodrive off gives Observation, on but not
+    authoritative gives Recommendations or Assisted (hyper trajectory release), authoritative or
+    recursive belief authority gives full authority. With the key defaults (all on) nothing changes.
+
+- **Open for the owner (from step T2 review, not decided):**
+  - *ML correction limit with Autodrive off or not authoritative: 0.55 / 0.72 or 0.484 / 0.634?*
+    The step asked for the pre-C1 numbers 0.484 (Autodrive off) and 0.634 (on, not authoritative)
+    and also asked to keep every display level neutral. These two cannot both hold: before C1 the
+    numbers held a x0.88 factor that came from the old default protection level 1, and protection
+    level is a display level that stays neutral (2). T2 therefore gives 0.55 (Observation), 0.72
+    (Recommendations), 0.88 (Assisted) and 1.0 (authoritative), which is a little less prudent than
+    before C1 for users with Autodrive off or not authoritative. Confirm 0.55 / 0.72, or say to add
+    a fixed x0.88 to the autonomy part only for the non-authoritative modes (no display level comes
+    back). The code is not changed until the owner answers.
 
 ## Order of work (one green commit per step)
 
@@ -161,6 +172,7 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
 | P3 | PKPD cleanup: state keys out of settings, dead PKPD keys and constants (the Advisor rules that wrote Initial* were removed in P2 with the keys), exercise damping floor (the dead DIA governor call in `RunT9PhysioEarlyPkpd` was removed in P1), PKPD status card | small (floor) |
 | T1 | TPO: meal factor ladder on the percent scale; a "step down" never raises a value and moves one rung at most; Advisor and Tuning on the percent scale | changes (protective size as designed) |
 | C1 | Control Center disarmed: dose limit keys out of the ladders, manifest writer facts, no write on open; the runtime profile no longer reads the display level (neutral constants) | small |
+| T2 | T1/C1 follow-ups: one-shot repair of meal factors below 2 (old TPO scale), automatic meal factor raises stop at 100, dosing autonomy mode from the real Autodrive switches again | small (repaired users get the default meal SMB back; raises stop lower; ML correction limit lower with Autodrive off or not authoritative) |
 | S1 | Settings row component (hint, "?" sheet with default and warnings, bounded values) and the Essentials page | none |
 | S2 | Feature cards with progressive disclosure, What AIMI learned page, Expert with search; Control Center screen removed | none |
 | S3 | Delete the dead keys (not the protected ones), move internal state out of the settings, prefs schema, migration | none |

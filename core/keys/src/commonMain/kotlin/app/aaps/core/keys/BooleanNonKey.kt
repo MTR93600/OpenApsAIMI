@@ -66,6 +66,15 @@ enum class BooleanNonKey(
     OApsAIMIPkpdPaceMigrated("aimi_pkpd_pace_migrated", false, exportable = false),
 
     /**
+     * One-shot: set after the AIMI meal factor repair ran once (step T2, see
+     * `AimiMealFactorScaleRepair`). Bookkeeping, not a setting. Exported on purpose: a backup made
+     * after the repair carries it, so importing that backup keeps a low meal factor the user set by
+     * hand. A backup made before the repair does not carry it, so its broken values are repaired on
+     * import.
+     */
+    OApsAIMIMealFactorScaleRepaired("aimi_meal_factor_scale_repaired", false),
+
+    /**
      * Set after the guided AIMI PK/PD setup wizard finished or was skipped. Bookkeeping, not a
      * setting: it was a [BooleanKey] until step P3 and keeps its stored name, so the wizard does not
      * come back after the update. Exported, so a restored backup does not show the wizard again.

@@ -236,8 +236,9 @@ interface AimiPhysioSource {
 /**
  * Gives the behaviour profile dosing uses for one tick.
  *
- * The app binds `NeutralAimiBehaviorProfileSource`, which always gives the fixed neutral profile
- * (step C1 of the settings plan). It stays a port so tests can give another profile.
+ * The app binds `NeutralAimiBehaviorProfileSource`, which gives the fixed neutral levels (step C1
+ * of the settings plan) with the autonomy mode from the real Autodrive switches (step T2). It stays
+ * a port so tests can give another profile.
  */
 interface AimiBehaviorProfileSource {
 

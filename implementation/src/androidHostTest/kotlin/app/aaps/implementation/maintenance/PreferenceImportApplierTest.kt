@@ -18,6 +18,7 @@ import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.HardLimits
 import app.aaps.core.keys.BooleanComposedKey
 import app.aaps.core.keys.BooleanKey
+import app.aaps.core.keys.BooleanNonKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.LongComposedKey
@@ -342,6 +343,29 @@ class PreferenceImportApplierTest {
 
         assertThat(outcome.importedInsulins).isEmpty()
         verify(insulinManager, never()).seedFromMigration(any())
+    }
+
+    // ---- AIMI meal factor repair (step T2) ----
+
+    /** An old backup with a meal factor on the 1.0 scale of the old TPO ends at the default in the live store. */
+    @Test fun `an old backup with an AIMI meal factor below 2 is repaired on import`() = runTest {
+        store.putDouble(DoubleKey.OApsAIMILunchFactor.key, 80.0)
+
+        sut().apply(prefs(DoubleKey.OApsAIMILunchFactor.key to "1.15"), keepPumpSettings = false)
+
+        assertThat(store.getDouble(DoubleKey.OApsAIMILunchFactor.key, 0.0)).isEqualTo(50.0)
+    }
+
+    /** A backup made after the repair holds the flag, so a low value set by hand is kept. */
+    @Test fun `a backup with the repair flag keeps its AIMI meal factor`() = runTest {
+        store.putDouble(DoubleKey.OApsAIMILunchFactor.key, 80.0)
+
+        sut().apply(
+            prefs(DoubleKey.OApsAIMILunchFactor.key to "1.5", BooleanNonKey.OApsAIMIMealFactorScaleRepaired.key to "true"),
+            keepPumpSettings = false
+        )
+
+        assertThat(store.getDouble(DoubleKey.OApsAIMILunchFactor.key, 0.0)).isEqualTo(1.5)
     }
 
     // ---- preview ----

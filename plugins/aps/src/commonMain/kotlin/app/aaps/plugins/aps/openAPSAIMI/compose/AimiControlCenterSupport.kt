@@ -65,7 +65,7 @@ internal fun readAimiControlCenterDraft(preferences: Preferences): AimiControlCe
         mealCaptureLevel = fiveStepIndex(snapshot.family(AimiBehaviorFamilyId.MealCapture).normalizedScore),
         stabilityLevel = fiveStepIndex(snapshot.family(AimiBehaviorFamilyId.Stability).normalizedScore),
         physioLevel = threeStepIndex(snapshot.family(AimiBehaviorFamilyId.Physio).normalizedScore),
-        autonomyMode = readAutonomyMode(preferences),
+        autonomyMode = autonomyModeFromAutodrive(preferences),
     )
 }
 
@@ -116,20 +116,6 @@ internal fun projectionStatusSummaryResId(status: AimiProjectionStatus): TextRef
 
 internal fun AimiControlCenterSnapshot.family(id: AimiBehaviorFamilyId): AimiBehaviorFamilySnapshot =
     families.first { it.id == id }
-
-private fun readAutonomyMode(preferences: Preferences): AimiAutonomyMode {
-    // Classic (V1/V2) autodrive removed — autonomy is a gradation of V3 production authority (no shadow tier).
-    val autoDriveActive = preferences.get(BooleanKey.OApsAIMIautoDriveActive)
-    val hyperTrajectory = autoDriveActive && preferences.get(BooleanKey.OApsAIMIHyperTrajectoryRelease)
-    val authoritative = autoDriveActive && preferences.get(BooleanKey.OApsAIMIautoDriveAuthoritative)
-    val recursiveAuthority = autoDriveActive && preferences.get(BooleanKey.OApsAIMIRecursiveBeliefAuthority)
-    return when {
-        !autoDriveActive -> AimiAutonomyMode.Observation
-        recursiveAuthority || authoritative -> AimiAutonomyMode.ControlledAuthority
-        hyperTrajectory -> AimiAutonomyMode.AssistedApplication
-        else -> AimiAutonomyMode.Recommendations
-    }
-}
 
 /**
  * The Protection family writes the PK/PD relief floor and the red carpet restore threshold only.

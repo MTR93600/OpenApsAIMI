@@ -44,14 +44,16 @@ object AdvisorMetricRules {
     const val MAX_SMB_CUT_FLOOR = 1.5
 
     /**
-     * The lunch factor (percent, 100 = neutral) is only raised while it is still below this. The
-     * tuning engine (`TuningContextEngine`, meal rise) uses the same ceiling.
+     * The lunch factor (percent, 100 = neutral) is only raised while it is still below this, and a
+     * raise never goes above it. The tuning engine (`TuningContextEngine`, meal rise) uses the same
+     * ceiling.
      *
-     * Dosing effect since step T1: on the old 1.0 scale this ceiling (1.2) was below every real value
-     * (default 50), so the raise never fired. Now accepting the raise again and again can take the
-     * default 50 up to 120, which is 2.4 times the meal SMB. Each raise needs the user to accept it.
+     * 100 (neutral) since step T2: an automatic suggestion never proposes more than the full meal
+     * SMB. Only the user can set a value above 100, by hand. A value already at or above 100 gets no
+     * raise and is never lowered by this rule. Accepting the raise again and again can take the
+     * default 50 up to 100, twice the meal SMB. Each raise needs the user to accept it.
      */
-    const val LUNCH_FACTOR_RAISE_CEILING = 120.0
+    const val LUNCH_FACTOR_RAISE_CEILING = 100.0
 
     /** Max SMB is cut back to 80% of its current value. */
     const val MAX_SMB_CUT_FACTOR = 0.8
@@ -110,13 +112,15 @@ fun metricRecommendations(
     // 2) High: low time in range while lows are rare -> propose a stronger lunch factor.
     if (tir != null && below70 != null && tir < AdvisorMetricRules.LOW_TIR_FRACTION && below70 <= AdvisorMetricRules.SAFE_HYPO_FRACTION) {
         val action = if (prefs.lunchFactor < AdvisorMetricRules.LUNCH_FACTOR_RAISE_CEILING) {
-            // The lunch factor is percent (100 = neutral). Round the stepped value to one decimal.
-            val newValue = ((prefs.lunchFactor + AdvisorMetricRules.LUNCH_FACTOR_STEP) * 10.0).roundToInt() / 10.0
+            // The lunch factor is percent (100 = neutral). Round the stepped value to one decimal and
+            // never go above the ceiling (95 gives 100, not 105).
+            val stepped = ((prefs.lunchFactor + AdvisorMetricRules.LUNCH_FACTOR_STEP) * 10.0).roundToInt() / 10.0
+            val newValue = stepped.coerceAtMost(AdvisorMetricRules.LUNCH_FACTOR_RAISE_CEILING)
             AimiAction.PreferenceUpdate(
                 key = DoubleKey.OApsAIMILunchFactor,
                 newValue = newValue,
                 reason = rh?.gs(ApsStrings.aimi_adv_rec_control_action_reason)
-                    ?: "Raise the lunch factor by 10 points because time in range is below the goal",
+                    ?: "Raise the lunch factor by up to 10 points, at most to 100, because time in range is below the goal",
                 domain = AimiDomain.Basal,
                 priority = AimiPriority.High,
             )

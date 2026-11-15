@@ -135,19 +135,22 @@ class AdvisorMetricRulesTest : TestBase() {
 
     /** The lunch factor is percent (100 = neutral): one step is 10 points. */
     @Test
-    fun a_neutral_lunch_factor_proposes_one_hundred_ten() {
-        val recs = rules(metrics(tir70_180 = 0.60), prefs(lunchFactor = 100.0))
+    fun a_lunch_factor_of_eighty_proposes_ninety() {
+        val recs = rules(metrics(tir70_180 = 0.60), prefs(lunchFactor = 80.0))
         val action = update(recs[0])
         assertThat(action).isNotNull()
         assertThat(action!!.key).isEqualTo(DoubleKey.OApsAIMILunchFactor)
-        assertThat(action.newValue).isEqualTo(110.0)
+        assertThat(action.newValue).isEqualTo(90.0)
     }
 
+    /** Since step T2 a suggestion never goes above 100 (neutral). */
     @Test
-    fun control_rule_leaves_a_lunch_factor_at_the_ceiling_alone() {
-        val recs = rules(metrics(tir70_180 = 0.60), prefs(lunchFactor = 120.0))
-        assertThat(recs).hasSize(1)
-        assertThat(recs[0].action).isNull()
+    fun control_rule_leaves_a_neutral_or_higher_lunch_factor_alone() {
+        for (lunchFactor in listOf(100.0, 115.0, 120.0)) {
+            val recs = rules(metrics(tir70_180 = 0.60), prefs(lunchFactor = lunchFactor))
+            assertThat(recs).hasSize(1)
+            assertThat(recs[0].action).isNull()
+        }
     }
 
     // ----- rule 3: hypers -----
@@ -212,7 +215,7 @@ class AdvisorMetricRulesTest : TestBase() {
 
     @Test
     fun control_action_takes_its_reason_from_the_resolver() {
-        val action = update(rules(metrics(tir70_180 = 0.60), prefs(lunchFactor = 100.0))[0])
+        val action = update(rules(metrics(tir70_180 = 0.60), prefs(lunchFactor = 50.0))[0])
         assertThat(action!!.reason).isEqualTo("aimi_adv_rec_control_action_reason")
     }
 

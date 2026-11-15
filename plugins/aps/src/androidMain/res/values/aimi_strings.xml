@@ -1206,7 +1206,7 @@
 
 <string name="aimi_adv_rec_hypos_action_reason">Lower Max SMB by 20% because time below 70 mg/dL is high</string>
 
-<string name="aimi_adv_rec_control_action_reason">Raise the lunch factor by 10 points because time in range is below the goal</string>
+<string name="aimi_adv_rec_control_action_reason">Raise the lunch factor by up to 10 points, at most to 100, because time in range is below the goal</string>
 
 <string name="aimi_adv_rec_hypos_title">Hypo risk</string>
 

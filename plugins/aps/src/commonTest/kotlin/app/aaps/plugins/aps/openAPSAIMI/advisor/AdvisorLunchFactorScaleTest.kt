@@ -9,8 +9,8 @@ import kotlin.test.assertNull
 
 /**
  * The lunch factor is percent (100 = neutral, default 50). The control rule must raise it by
- * percent points and stop at a percent ceiling. On the old 1.0 scale the ceiling was 1.2, so the
- * rule never proposed anything for a real stored value.
+ * percent points and stop at a percent ceiling, 100 (neutral) since step T2. On the old 1.0 scale
+ * the ceiling was 1.2, so the rule never proposed anything for a real stored value.
  */
 class AdvisorLunchFactorScaleTest {
 
@@ -54,7 +54,16 @@ class AdvisorLunchFactorScaleTest {
     }
 
     @Test
-    fun aLunchFactorAtTheCeilingIsLeftAlone() {
+    fun aRaiseStopsAtNeutral() {
+        // Step T2: 95 + 10 would be 105, the suggestion stops at 100 (neutral).
+        val update = assertNotNull(action(95.0))
+        assertEquals(100.0, update.newValue)
+    }
+
+    @Test
+    fun aLunchFactorAtOrAboveNeutralIsLeftAlone() {
+        assertNull(action(100.0))
+        assertNull(action(115.0))
         assertNull(action(120.0))
     }
 }

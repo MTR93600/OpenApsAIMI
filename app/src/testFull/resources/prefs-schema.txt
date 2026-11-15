@@ -160,6 +160,7 @@ aimi_isf_fusion_max_factor|DoubleKey|true
 aimi_isf_fusion_min_factor|DoubleKey|true
 aimi_meal_advisor_compose|ApsIntentKey|false
 aimi_meal_advisor_trigger|BooleanKey|true
+aimi_meal_factor_scale_repaired|BooleanNonKey|true
 aimi_mode_settings_compose|ApsIntentKey|false
 aimi_mpc_insulin_u_per_kg_per_5min|DoubleKey|true
 aimi_oura_personal_access_token|AimiStringKey|false

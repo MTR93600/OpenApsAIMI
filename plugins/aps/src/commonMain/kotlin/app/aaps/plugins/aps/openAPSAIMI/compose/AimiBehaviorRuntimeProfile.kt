@@ -1,5 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.compose
 
+import app.aaps.core.keys.BooleanKey
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisTuning
@@ -37,6 +39,28 @@ internal fun AimiAutonomyMode.controlCenterLabel(): TextRef =
         AimiAutonomyMode.AssistedApplication -> ApsStrings.aimi_control_center_autonomy_assisted
         AimiAutonomyMode.ControlledAuthority -> ApsStrings.aimi_control_center_autonomy_controlled
     }
+
+/**
+ * The autonomy mode from the real Autodrive switches. Classic (V1/V2) Autodrive is removed, so
+ * autonomy is a gradation of V3 production authority: Autodrive off gives Observation, the
+ * authoritative or recursive belief authority switch gives ControlledAuthority, the hyper trajectory
+ * release gives AssistedApplication, else Recommendations.
+ *
+ * Used by the Control Center draft and, since step T2, by the profile dosing uses
+ * (`NeutralAimiBehaviorProfileSource`), the same as before step C1.
+ */
+internal fun autonomyModeFromAutodrive(preferences: Preferences): AimiAutonomyMode {
+    val autoDriveActive = preferences.get(BooleanKey.OApsAIMIautoDriveActive)
+    val hyperTrajectory = autoDriveActive && preferences.get(BooleanKey.OApsAIMIHyperTrajectoryRelease)
+    val authoritative = autoDriveActive && preferences.get(BooleanKey.OApsAIMIautoDriveAuthoritative)
+    val recursiveAuthority = autoDriveActive && preferences.get(BooleanKey.OApsAIMIRecursiveBeliefAuthority)
+    return when {
+        !autoDriveActive -> AimiAutonomyMode.Observation
+        recursiveAuthority || authoritative -> AimiAutonomyMode.ControlledAuthority
+        hyperTrajectory -> AimiAutonomyMode.AssistedApplication
+        else -> AimiAutonomyMode.Recommendations
+    }
+}
 
 data class AimiBehaviorRuntimeProfile(
     val protectionLevel: Int,
@@ -125,9 +149,10 @@ data class AimiBehaviorRuntimeProfile(
     companion object {
 
         /**
-         * The profile dosing uses (step C1 of the settings plan): the balanced middle of each
-         * family (protection, meal capture and stability at level 2 of 0-4, physio at level 1 of
-         * 0-2) and controlled authority.
+         * The display-level part of the profile dosing uses (step C1 of the settings plan): the
+         * balanced middle of each family (protection, meal capture and stability at level 2 of 0-4,
+         * physio at level 1 of 0-2). Its autonomy mode is controlled authority; dosing replaces it
+         * with the mode from the real Autodrive switches (`autonomyModeFromAutodrive`, step T2).
          *
          * With these values the PK/PD meal absorption, correction and stability factors are 1.0,
          * the ML correction limit multiplier is 1.0 (the same as no profile), and the meal
@@ -141,13 +166,15 @@ data class AimiBehaviorRuntimeProfile(
          * 0.05 U (`AimiSmbTrainer.correctionClamp`), so the limit grows by at most about 0.006 U
          * per SMB, and only when an ML model is loaded.
          *
-         * The autonomy mode is fixed too. Before C1 it was not a display level: it came from the
-         * real Autodrive switches (Autodrive off gave Observation, 0.55; on but not authoritative
-         * gave Recommendations, 0.72, or Assisted, 0.88). So a user with Autodrive off and the
-         * default protection level had an ML correction limit of 0.484 of its base, and now has
-         * 1.0: up to about 0.026 U more ML correction room per SMB (0.634 to 1.0 with
-         * Recommendations). This is open for the owner in the settings plan: the autonomy part may
-         * have to follow the real Autodrive switches again.
+         * The autonomy mode is not a display level. Before C1 it came from the real Autodrive
+         * switches; C1 fixed it at controlled authority, and step T2 brings the switches back (owner
+         * decision): Autodrive off gives Observation (ML correction limit 0.55 of its base), on but
+         * not authoritative gives Recommendations (0.72) or Assisted (0.88, hyper trajectory
+         * release), authoritative gives 1.0. With the key defaults (all on) it stays controlled
+         * authority, so a default user keeps 1.0. The 0.88 factor of the old default protection
+         * level 1 does not come back, because the protection level stays neutral (so 0.55, not the
+         * 0.484 of before C1). Open for the owner: confirm 0.55 / 0.72, or add a fixed 0.88 to the
+         * autonomy part only (see docs/aimi-settings/PLAN.md, step T2 review).
          */
         val NEUTRAL: AimiBehaviorRuntimeProfile = AimiBehaviorRuntimeProfile(
             protectionLevel = 2,

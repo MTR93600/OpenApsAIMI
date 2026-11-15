@@ -253,12 +253,53 @@ class AimiControlCenterDisarmTest {
     /**
      * A unit check of the profile source that is bound for dosing (`@ContributesBinding`). It does
      * not prove the wiring: it would still pass if a dosing path got its profile some other way.
+     * The display-level parts never move; only the autonomy mode follows the Autodrive switches.
      */
     @Test
-    fun `the neutral profile source gives the same profile for very different stored settings`() {
+    fun `the profile source keeps every display level part neutral for very different stored settings`() {
         val source = NeutralAimiBehaviorProfileSource()
-        val profiles = preferenceStates().map { source.read(it) }.toSet()
+        val profiles = preferenceStates().map { source.read(it).copy(autonomyMode = AimiAutonomyMode.ControlledAuthority) }.toSet()
         assertEquals(setOf(AimiBehaviorRuntimeProfile.NEUTRAL), profiles)
+    }
+
+    private fun autodrive(
+        active: Boolean,
+        authoritative: Boolean = false,
+        hyperTrajectoryRelease: Boolean = false,
+        recursiveBeliefAuthority: Boolean = false,
+    ) = MapPreferences().apply {
+        booleans[BooleanKey.OApsAIMIautoDriveActive] = active
+        booleans[BooleanKey.OApsAIMIautoDriveAuthoritative] = authoritative
+        booleans[BooleanKey.OApsAIMIHyperTrajectoryRelease] = hyperTrajectoryRelease
+        booleans[BooleanKey.OApsAIMIRecursiveBeliefAuthority] = recursiveBeliefAuthority
+    }
+
+    /** Step T2: the autonomy mode comes from the real Autodrive switches again, as before C1. */
+    @Test
+    fun `the autonomy mode follows the real Autodrive switches`() {
+        val source = NeutralAimiBehaviorProfileSource()
+        assertEquals(AimiAutonomyMode.Observation, source.read(autodrive(active = false, authoritative = true)).autonomyMode)
+        assertEquals(AimiAutonomyMode.Recommendations, source.read(autodrive(active = true)).autonomyMode)
+        assertEquals(AimiAutonomyMode.AssistedApplication, source.read(autodrive(active = true, hyperTrajectoryRelease = true)).autonomyMode)
+        assertEquals(AimiAutonomyMode.ControlledAuthority, source.read(autodrive(active = true, authoritative = true)).autonomyMode)
+        assertEquals(AimiAutonomyMode.ControlledAuthority, source.read(autodrive(active = true, recursiveBeliefAuthority = true)).autonomyMode)
+        // The key defaults (all on) give controlled authority, the same as the C1 constant.
+        assertEquals(AimiAutonomyMode.ControlledAuthority, source.read(MapPreferences()).autonomyMode)
+    }
+
+    /**
+     * The ML correction limit with Autodrive off or not authoritative is lower again, as before C1.
+     * The display levels stay neutral (protection 2), so the 0.88 factor of the old default
+     * protection level 1 does not come back: 0.55 and 0.72, not 0.484 and 0.634. These numbers
+     * are still open for the owner (PLAN.md, step T2 review).
+     */
+    @Test
+    fun `the ML correction limit follows the Autodrive switches`() {
+        val source = NeutralAimiBehaviorProfileSource()
+        assertEquals(0.55f, source.read(autodrive(active = false)).mlCorrectionFractionMultiplier(), 1e-6f)
+        assertEquals(0.72f, source.read(autodrive(active = true)).mlCorrectionFractionMultiplier(), 1e-6f)
+        assertEquals(0.88f, source.read(autodrive(active = true, hyperTrajectoryRelease = true)).mlCorrectionFractionMultiplier(), 1e-6f)
+        assertEquals(1.0f, source.read(autodrive(active = true, authoritative = true)).mlCorrectionFractionMultiplier(), 1e-6f)
     }
 
     @Test

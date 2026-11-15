@@ -182,7 +182,8 @@ object TuningContextEngine {
         val maxIobExtraStep = step(cappedTier, micro = 0.25, moderate = 0.50, strong = 1.0)
         // The meal factor keys are percent (100 = neutral), so this step is in percent points.
         // Dosing effect since step T1: on the old 1.0 scale this raise did nothing (50 -> 50.1). Now
-        // each accepted raise gives 5 to 15 % more meal SMB, up to the Advisor ceiling (120 %).
+        // each accepted raise gives 5 to 15 % more meal SMB, up to the Advisor ceiling (100 %, neutral,
+        // since step T2: a suggestion never goes above it, and a value above it gets no proposal).
         val lunchStep = step(cappedTier, micro = 5.0, moderate = 10.0, strong = 15.0)
 
         if (!moderateHypoRisk) {

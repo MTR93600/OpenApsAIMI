@@ -164,6 +164,20 @@ class PreferenceMigrationsTest {
         assertThat(store.getAll()).isEmpty()
     }
 
+    /**
+     * AIMI step T2: [PreferenceMigrations.migrate] runs the meal factor repair. A value from the old
+     * 1.0-scale TPO goes back to the default, and the migration does not write the done flag.
+     */
+    @Test fun `migrate repairs an AIMI meal factor on the old TPO scale`() = runTest {
+        val store = storeOf("key_oaps_aimi_lunch_factor" to "1.15", "key_oaps_aimi_dinner_factor" to "2.5")
+
+        sut().migrate(store)
+
+        assertThat(store.getDouble("key_oaps_aimi_lunch_factor", 0.0)).isEqualTo(50.0)
+        assertThat(store.getAll()["key_oaps_aimi_dinner_factor"]).isEqualTo("2.5")
+        assertThat(store.contains("aimi_meal_factor_scale_repaired")).isFalse()
+    }
+
     /** The learned state, the wizard flag and the governor switches keep their stored names and values. */
     @Test fun `AIMI PK PD values that stay are kept`() = runTest {
         val store = storeOf(
