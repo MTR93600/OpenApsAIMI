@@ -25,33 +25,6 @@ class PkpdSmbTailDampingTest {
     }
 
     @Test
-    fun stabilityFamilyLadderStaysInsidePkpdBandAndIsMonotonic() {
-        val ladder = PkpdSmbTailDamping.STABILITY_FAMILY_FLOOR_LADDER
-        assertEquals(5, ladder.size)
-        assertEquals(PkpdSmbTailDamping.DAMPING_STRONG, ladder.first())
-        assertEquals(PkpdSmbTailDamping.DAMPING_LIGHT, ladder.last())
-        ladder.forEach { floor ->
-            assertTrue(floor >= PkpdSmbTailDamping.DAMPING_STRONG)
-            assertTrue(floor <= PkpdSmbTailDamping.DAMPING_LIGHT)
-            assertTrue(floor > PkpdSmbTailDamping.LEGACY_NEUTRAL_CUTOFF)
-            assertEquals(floor, PkpdSmbTailDamping.effectiveStoredValue(floor))
-        }
-        ladder.zipWithNext().forEach { (a, b) ->
-            assertTrue(b > a, "ladder not rising: $a then $b")
-        }
-    }
-
-    @Test
-    fun stabilityFamilyScoreMapsSmootherLeftAndReactiveRight() {
-        assertEquals(0f, PkpdSmbTailDamping.stabilityFamilyScore(0.70))
-        assertEquals(1f, PkpdSmbTailDamping.stabilityFamilyScore(0.92))
-        // Legacy very low stored values must not read as "very smooth" after the remap to neutral.
-        val legacyScore = PkpdSmbTailDamping.stabilityFamilyScore(0.20)
-        assertTrue(legacyScore > 0.4f, "legacy score $legacyScore")
-        assertTrue(legacyScore < 0.8f, "legacy score $legacyScore")
-    }
-
-    @Test
     fun migrateLegacyStoredPreferenceRewritesCutoffZoneToNeutral() {
         val preferences = MapPreferences()
         preferences.doubles[DoubleKey.OApsAIMISmbTailDamping] = 0.20

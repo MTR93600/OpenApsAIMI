@@ -114,6 +114,8 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
     the late fat damping at 0.5 in the same way, so the 0.40 rung of the Stability ladder
     (0.40, 0.55, 0.70, 0.80, 0.90) acts as 0.5 and shows a value with no effect. C1 did not change
     it (raising the rung changes dosing on that rung).
+  - *Closed by S2:* the Control Center screen and its ladders are gone, so no rung writes 0.30, 0.45
+    or 0.40 any more. A value stored earlier stays and still acts as 0.5 (floor in `SmbDamping`).
 - **Open for the owner (from step C1, not decided):**
   - *Stored values of the new constants.* A user who had changed `OApsAIMIPeakGovernorLearnedWeight`
     (it was on the PK/PD Expert screen) or one of the three hidden switches now gets the old default.
@@ -174,6 +176,36 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
     both SMB keys by glucose and rise, lowered by exercise, physio and trajectory; max IOB moved by
     night growth support and trajectory). The page claims no value in use for them and says so. A
     "last decision" value would need a snapshot from the loop.
+
+- **Open for the owner (from step S2, not decided):**
+  - *xDrip 1-minute switch (`OApsxdriponeminute`), a port regression.* On `dev_OAPSAIMI`,
+    `XdripSourcePlugin` ignored xDrip data that came less than 4 min after the last batch while this
+    switch was off (the default). The KMP port lost that reader, so today every xDrip user gets the
+    1-minute data. S2 hides the row (a switch with no effect) but keeps the key. Bringing the reader
+    back changes the glucose input of every 1-minute xDrip user who never turned the switch on.
+    Say if the reader should come back (then the row comes back), or if the key can be deleted in S3.
+  - *Meal factors: guided screen and mode pages.* The Meals card has one page "Values of each meal
+    mode" (one sub page per mode, all keys, found by search). The guided mode screen next to it
+    starts a mode and also shows and edits the values of its four modes (breakfast, lunch, dinner,
+    high carb) before the start, so the person sees the prebolus before confirming. Both write the
+    same keys. Say if the guided screen should only start a mode and link to the pages.
+  - *Before/after preview.* After S2 every setting row on a card writes only its own key, so the
+    before/after preview of the Control Center has no user in the settings. Add it back when a card
+    gets a control that changes several keys at once.
+  - *Protected-family dead keys.* The rows of `AimiPhysioSleepDataEnable`, `AimiPhysioHRVDataEnable`,
+    `AimiPhysioDebugLogs`, `AimiPhysioLLMProvider`, `AimiEndometriosisFlareDuration`,
+    `AimiEndometriosisHormonalSuppression` and `PregnancyDueDate` are hidden (nothing reads them).
+    The keys stay until the owner decides.
+  - *Contraceptive with the cycle switch off.* `EndometriosisAdjuster` reads the contraceptive with
+    only the endometriosis switch on, so its row stays shown on the women's cycle card while the cycle
+    switch is off. Say if it should also be shown on the illness card, next to endometriosis.
+  - *Levels.* `OApsAIMIActivityBasalCapFactor` got its first row (exercise card) and stays ADVANCED in
+    the manifest; the key map says EXPERT. Left for the step that sets levels.
+  - *What the Advisor and TPO no longer propose.* The Control Center Advisor and the family bridge
+    (the "move Meal capture up one step" style suggestions and their family write-back) are gone, and
+    the AI coach notes no longer use the Control Center display levels. TPO starts a session with the
+    same rule as before, now read from the Autodrive switches. No other Advisor, Tuning or TPO
+    proposal changed.
 
 ## Order of work (one green commit per step)
 

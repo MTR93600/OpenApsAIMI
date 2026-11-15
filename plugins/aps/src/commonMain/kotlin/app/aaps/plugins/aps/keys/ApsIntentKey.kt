@@ -22,10 +22,11 @@ enum class ApsIntentKey(
         urlRef = ApsStrings.openapsama_link_to_preference_json_doc
     ),
 
-    AimiControlCenter(
-        key = "aimi_control_center_compose",
-        title = ApsStrings.pref_title_aimi_control_center,
-        summary = ApsStrings.pref_summary_aimi_control_center,
+    /** The read only "What AIMI learned" page (step S2). It replaced the Control Center row. */
+    AimiLearned(
+        key = "aimi_learned_compose",
+        title = ApsStrings.aimi_learned_title,
+        summary = ApsStrings.aimi_learned_summary,
         preferenceType = PreferenceType.CLICK,
     ),
 

@@ -11,13 +11,8 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeTickRecord
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeTickStatus
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 
-// These two loaders turn a runtime tick record into the pure snapshot types the Control Center
-// renders. They were split out of AimiControlCenterSnapshot.kt when they still had to stay on
-// Android - the readers they call reached the disk through java.io.File back then. The storage sweep
-// removed that, and both they and the readers are shared code now, so the split no longer separates
-// platform from model. It is kept only because the grouping still reads well: see
-// AimiControlCenterSnapshot.kt for the model types (AimiT3cRuntimeSnapshot, AimiControlDetail, ...)
-// these functions build.
+// These two loaders turn the last runtime tick record of T3C and Harmonia into the read only cards
+// of the "What AIMI learned" page. The card types are in AimiRuntimeSnapshots.kt.
 
 internal fun loadLatestT3cRuntimeSnapshot(storage: AimiStorage): AimiT3cRuntimeSnapshot {
     val tick = T3cRuntimeHistoryReader.readLatestTick(storage) ?: return unavailableT3cRuntimeSnapshot()
@@ -37,10 +32,10 @@ internal fun loadLatestT3cRuntimeSnapshot(storage: AimiStorage): AimiT3cRuntimeS
     }
 
     val details = buildList {
-        add(AimiControlDetail(ApsStrings.aimi_control_center_t3c_mode, valueText = tick.mode))
+        add(AimiRuntimeDetail(ApsStrings.aimi_control_center_t3c_mode, valueText = tick.mode))
         tick.basalDemandRateUph?.let {
             add(
-                AimiControlDetail(
+                AimiRuntimeDetail(
                     titleResId = ApsStrings.aimi_control_center_t3c_basal_demand,
                     valueText = formatT3cBasalDemand(tick),
                 ),
@@ -48,7 +43,7 @@ internal fun loadLatestT3cRuntimeSnapshot(storage: AimiStorage): AimiT3cRuntimeS
         }
         tick.appliedRateUph?.let {
             add(
-                AimiControlDetail(
+                AimiRuntimeDetail(
                     titleResId = ApsStrings.aimi_control_center_t3c_applied_rate,
                     valueText = formatT3cAppliedRate(tick),
                 ),
@@ -56,32 +51,32 @@ internal fun loadLatestT3cRuntimeSnapshot(storage: AimiStorage): AimiT3cRuntimeS
         }
         tick.blocker?.let { blocker ->
             add(
-                AimiControlDetail(
+                AimiRuntimeDetail(
                     titleResId = ApsStrings.aimi_control_center_t3c_blocker,
                     valueText = blocker,
                 ),
             )
         }
         add(
-            AimiControlDetail(
+            AimiRuntimeDetail(
                 titleResId = ApsStrings.aimi_control_center_t3c_authority_applied,
                 valueResId = if (tick.authorityApplied) CoreUiStrings.yes else CoreUiStrings.no,
             ),
         )
         add(
-            AimiControlDetail(
+            AimiRuntimeDetail(
                 titleResId = ApsStrings.aimi_control_center_t3c_shadow_only,
                 valueResId = if (tick.shadowOnly) CoreUiStrings.yes else CoreUiStrings.no,
             ),
         )
         add(
-            AimiControlDetail(
+            AimiRuntimeDetail(
                 titleResId = ApsStrings.aimi_control_center_t3c_selected_for_production,
                 valueResId = if (tick.selectedForProduction) CoreUiStrings.yes else CoreUiStrings.no,
             ),
         )
         add(
-            AimiControlDetail(
+            AimiRuntimeDetail(
                 titleResId = ApsStrings.aimi_control_center_t3c_bypass_neutralized,
                 valueResId = if (tick.historicalBypassNeutralized) CoreUiStrings.yes else CoreUiStrings.no,
             ),
@@ -108,16 +103,16 @@ internal fun loadLatestHarmoniaRuntimeSnapshot(storage: AimiStorage): AimiHarmon
         HarmoniaRuntimeTickStatus.UNAVAILABLE -> AimiHarmoniaRuntimeStatus.Unavailable
     }
     val details = buildList {
-        add(AimiControlDetail(ApsStrings.aimi_control_center_harmonia_mode, valueText = tick.productionMode ?: "RBT"))
+        add(AimiRuntimeDetail(ApsStrings.aimi_control_center_harmonia_mode, valueText = tick.productionMode ?: "RBT"))
         tick.sourceAction?.let { action ->
-            add(AimiControlDetail(ApsStrings.aimi_control_center_harmonia_action, valueText = action))
+            add(AimiRuntimeDetail(ApsStrings.aimi_control_center_harmonia_action, valueText = action))
         }
         tick.branch?.let { branch ->
-            add(AimiControlDetail(ApsStrings.aimi_control_center_harmonia_branch, valueText = branch))
+            add(AimiRuntimeDetail(ApsStrings.aimi_control_center_harmonia_branch, valueText = branch))
         }
         tick.basalDemandRateUph?.let {
             add(
-                AimiControlDetail(
+                AimiRuntimeDetail(
                     titleResId = ApsStrings.aimi_control_center_harmonia_basal_demand,
                     valueText = formatHarmoniaBasalDemand(tick),
                 ),
@@ -125,7 +120,7 @@ internal fun loadLatestHarmoniaRuntimeSnapshot(storage: AimiStorage): AimiHarmon
         }
         tick.appliedRateUph?.let {
             add(
-                AimiControlDetail(
+                AimiRuntimeDetail(
                     titleResId = ApsStrings.aimi_control_center_harmonia_applied_rate,
                     valueText = formatHarmoniaAppliedRate(tick),
                 ),
@@ -133,7 +128,7 @@ internal fun loadLatestHarmoniaRuntimeSnapshot(storage: AimiStorage): AimiHarmon
         }
         if (tick.smbEligible || tick.smbAppliedToRbtDemand || tick.targetSmbU != null || tick.smbBlocker != null) {
             add(
-                AimiControlDetail(
+                AimiRuntimeDetail(
                     titleResId = ApsStrings.aimi_control_center_harmonia_smb_channel,
                     valueText = when {
                         tick.smbAppliedToRbtDemand && tick.smbReducesRbtDemand -> "REDUCED_RBT_DEMAND"
@@ -146,30 +141,30 @@ internal fun loadLatestHarmoniaRuntimeSnapshot(storage: AimiStorage): AimiHarmon
             )
             tick.targetSmbU?.let {
                 add(
-                    AimiControlDetail(
+                    AimiRuntimeDetail(
                         titleResId = ApsStrings.aimi_control_center_harmonia_smb_demand,
                         valueText = formatHarmoniaSmbDemand(tick),
                     ),
                 )
             }
             tick.smbBlocker?.let { blocker ->
-                add(AimiControlDetail(ApsStrings.aimi_control_center_harmonia_smb_blocker, valueText = blocker))
+                add(AimiRuntimeDetail(ApsStrings.aimi_control_center_harmonia_smb_blocker, valueText = blocker))
             }
         }
         tick.blocker?.let { blocker ->
-            add(AimiControlDetail(ApsStrings.aimi_control_center_harmonia_blocker, valueText = blocker))
+            add(AimiRuntimeDetail(ApsStrings.aimi_control_center_harmonia_blocker, valueText = blocker))
         }
         tick.basalFirstChannel?.let { channel ->
-            add(AimiControlDetail(ApsStrings.aimi_control_center_harmonia_basal_first_channel, valueText = channel))
+            add(AimiRuntimeDetail(ApsStrings.aimi_control_center_harmonia_basal_first_channel, valueText = channel))
         }
         add(
-            AimiControlDetail(
+            AimiRuntimeDetail(
                 titleResId = ApsStrings.aimi_control_center_harmonia_selected_for_production,
                 valueResId = if (tick.selectedForProduction) CoreUiStrings.yes else CoreUiStrings.no,
             ),
         )
         add(
-            AimiControlDetail(
+            AimiRuntimeDetail(
                 titleResId = ApsStrings.aimi_control_center_harmonia_adds_smb_authority,
                 valueResId = if (tick.addsSmbAuthority) CoreUiStrings.yes else CoreUiStrings.no,
             ),
@@ -188,36 +183,36 @@ internal fun loadLatestHarmoniaRuntimeSnapshot(storage: AimiStorage): AimiHarmon
 }
 
 private fun formatT3cBasalDemand(tick: T3cRuntimeTickRecord): String {
-    val demand = formatControlCenterDoubleValue(tick.basalDemandRateUph ?: 0.0, "U/h")
-    val bounded = formatControlCenterDoubleValue(tick.boundedRateUph ?: tick.basalDemandRateUph ?: 0.0, "U/h")
+    val demand = formatAimiNumber(tick.basalDemandRateUph ?: 0.0, "U/h")
+    val bounded = formatAimiNumber(tick.boundedRateUph ?: tick.basalDemandRateUph ?: 0.0, "U/h")
     return "$demand -> $bounded"
 }
 
 private fun formatT3cAppliedRate(tick: T3cRuntimeTickRecord): String {
     val appliedRate = tick.appliedRateUph ?: return ""
-    val rateText = formatControlCenterDoubleValue(appliedRate, "U/h")
+    val rateText = formatAimiNumber(appliedRate, "U/h")
     val appliedDuration = tick.appliedDurationMin
     return if (appliedDuration != null) "$rateText / ${appliedDuration}m" else rateText
 }
 
 private fun formatHarmoniaBasalDemand(tick: HarmoniaRuntimeTickRecord): String {
-    val demand = formatControlCenterDoubleValue(tick.basalDemandRateUph ?: 0.0, "U/h")
-    val bounded = formatControlCenterDoubleValue(tick.boundedRateUph ?: tick.basalDemandRateUph ?: 0.0, "U/h")
-    val cap = tick.maxBasalCapUph?.let { " cap ${formatControlCenterDoubleValue(it, "U/h")}" }.orEmpty()
+    val demand = formatAimiNumber(tick.basalDemandRateUph ?: 0.0, "U/h")
+    val bounded = formatAimiNumber(tick.boundedRateUph ?: tick.basalDemandRateUph ?: 0.0, "U/h")
+    val cap = tick.maxBasalCapUph?.let { " cap ${formatAimiNumber(it, "U/h")}" }.orEmpty()
     return "$demand -> $bounded$cap"
 }
 
 private fun formatHarmoniaAppliedRate(tick: HarmoniaRuntimeTickRecord): String {
     val appliedRate = tick.appliedRateUph ?: return ""
-    val rateText = formatControlCenterDoubleValue(appliedRate, "U/h")
+    val rateText = formatAimiNumber(appliedRate, "U/h")
     val appliedDuration = tick.appliedDurationMin
     return if (appliedDuration != null) "$rateText / ${appliedDuration}m" else rateText
 }
 
 private fun formatHarmoniaSmbDemand(tick: HarmoniaRuntimeTickRecord): String {
-    val simulated = formatControlCenterDoubleValue(tick.targetSmbU ?: 0.0, "U")
-    val bounded = formatControlCenterDoubleValue(tick.boundedSmbU ?: tick.targetSmbU ?: 0.0, "U")
-    val after = tick.smbDemandAfterU?.let { " RBT ${formatControlCenterDoubleValue(tick.smbDemandBeforeU ?: 0.0, "U")} -> ${formatControlCenterDoubleValue(it, "U")}" }.orEmpty()
-    val cap = tick.maxSmbCapU?.let { " cap ${formatControlCenterDoubleValue(it, "U")}" }.orEmpty()
+    val simulated = formatAimiNumber(tick.targetSmbU ?: 0.0, "U")
+    val bounded = formatAimiNumber(tick.boundedSmbU ?: tick.targetSmbU ?: 0.0, "U")
+    val after = tick.smbDemandAfterU?.let { " RBT ${formatAimiNumber(tick.smbDemandBeforeU ?: 0.0, "U")} -> ${formatAimiNumber(it, "U")}" }.orEmpty()
+    val cap = tick.maxSmbCapU?.let { " cap ${formatAimiNumber(it, "U")}" }.orEmpty()
     return "$simulated -> $bounded$after$cap"
 }

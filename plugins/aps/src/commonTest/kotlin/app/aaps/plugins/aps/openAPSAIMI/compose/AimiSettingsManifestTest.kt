@@ -46,33 +46,16 @@ class AimiSettingsManifestTest {
      * already unreachable: a new key must be reachable on the day it is written.
      */
     private val expectedReachabilityDebt: Set<String> = setOf(
-        DoubleKey.OApsAIMIActivityBasalCapFactor.key,
-        BooleanKey.OApsAIMIAimiSmbComparatorEnabled.key,
-        DoubleKey.OApsAIMIAutodriveAcceleration.key,
-        BooleanKey.OApsAIMIAutodriveV3EnhancedGater.key,
+        // Step S2 took 19 keys out: 11 nothing reads (now in DEAD_KEYS) and 8 that got a row.
         BooleanKey.OApsAIMIEffectiveIobReleaseEnabled.key,
-        BooleanKey.OApsAIMIEnableBasal.key,
         BooleanKey.OApsAIMIEnableStepsFromWatch.key,
         BooleanKey.AimiPhoneStepsSyncEnable.key,
         BooleanKey.AimiHealthConnectStepsEnable.key,
-        DoubleKey.OApsAIMIFCLFactor.key,
-        IntKey.OApsAIMIHighBGinterval.key,
         BooleanKey.OApsAIMIHyperDroppingExemptEnabled.key,
-        BooleanKey.OApsAIMIIntelligenceSnapshotExport.key,
-        IntKey.OApsAIMIIntratickStallSeconds.key,
-        BooleanKey.OApsAIMILoopBlackboxFileEnabled.key,
         BooleanKey.OApsAIMILoopExclusiveInvocationEnabled.key,
         BooleanKey.OApsAIMIMealHyperBypassEnabled.key,
-        DoubleKey.OApsAIMINightGrowthBasalMultiplier.key,
-        DoubleKey.OApsAIMINightGrowthMaxSmbClamp.key,
-        DoubleKey.OApsAIMINightGrowthMinRiseSlope.key,
-        DoubleKey.OApsAIMINightGrowthSmbMultiplier.key,
-        DoubleKey.OApsAIMIPlateauBandAbs.key,
         BooleanKey.OApsAIMIPredictionAuthorityEnabled.key,
-        BooleanKey.OApsAIMIPredictionAuthorityShadow.key,
-        DoubleKey.OApsAIMIR2Confident.key,
         BooleanKey.OApsAIMIT3cPhysioInformedEnabled.key,
-        BooleanKey.OApsAIMIforcelimits.key,
         BooleanKey.AimiCosineGateEnabled.key,
         DoubleKey.AimiCosineGateAlpha.key,
         DoubleKey.AimiCosineGateMinDataQuality.key,
@@ -80,7 +63,6 @@ class AimiSettingsManifestTest {
         DoubleKey.AimiCosineGateMaxSensitivity.key,
         IntKey.AimiCosineGateMaxPeakShift.key,
         DoubleKey.AimiUamConfidence.key,
-        StringKey.AimiPhysioLLMProvider.key,
         StringKey.AimiTuningContextSelection.key,
         // The context module's own settings. They came into scope when `isAimiScoped` was taught to
         // read its named list, and their screen is a standalone activity outside the settings tree

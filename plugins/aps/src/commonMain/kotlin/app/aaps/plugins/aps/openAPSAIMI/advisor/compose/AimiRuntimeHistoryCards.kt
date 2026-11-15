@@ -43,7 +43,7 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeHistorySummary
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeNumericStats
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeOwnershipCategory
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.T3cRuntimeTickStatus
-import app.aaps.plugins.aps.openAPSAIMI.compose.formatControlCenterDoubleValue
+import app.aaps.plugins.aps.openAPSAIMI.compose.formatAimiNumber
 import kotlin.math.roundToInt
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -54,14 +54,14 @@ import kotlinx.serialization.json.jsonPrimitive
  * The three read-only runtime-history cards of the Profile Advisor (sub-lot 3/5): the last
  * Recursive Belief unfold, and the 24h summaries of T3C and Harmonia.
  *
- * All of it is observation only - nothing here writes a preference or reaches the pump. The AIMI
- * Control Center shows the latest tick; these cards show the aggregate of the last 24 hours.
+ * All of it is observation only - nothing here writes a preference or reaches the pump. The "What
+ * AIMI learned" page shows the latest tick; these cards show the aggregate of the last 24 hours.
  */
 
-/** Unit label of a basal rate, as the Control Center writes it. */
+/** Unit label of a basal rate, as the runtime cards write it. */
 private const val UNIT_RATE = "U/h"
 
-/** Unit label of an insulin amount, as the Control Center writes it. */
+/** Unit label of an insulin amount, as the runtime cards write it. */
 private const val UNIT_INSULIN = "U"
 
 /** The dialog shows the export as it was written, so only the indentation is added. */
@@ -422,9 +422,9 @@ private fun formatHarmoniaSmbStats(stats: HarmoniaRuntimeNumericStats): String =
 private fun formatStatsRange(average: Double, min: Double, max: Double, unit: String): String =
     stringResource(
         ApsStrings.aimi_history_stats_range,
-        formatControlCenterDoubleValue(average, unit),
-        formatControlCenterDoubleValue(min, null),
-        formatControlCenterDoubleValue(max, null),
+        formatAimiNumber(average, unit),
+        formatAimiNumber(min, null),
+        formatAimiNumber(max, null),
     )
 
 @Composable

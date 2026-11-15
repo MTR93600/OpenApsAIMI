@@ -115,8 +115,6 @@
     <string name="smb_delivery_settings_title">SMB delivery settings</string>
 
     <!-- AIMI intent preferences (ApsIntentKey). Unique names so lot K aimi_strings.xml can keep freeze ids. -->
-    <string name="pref_title_aimi_control_center">AIMI Control Center</string>
-    <string name="pref_summary_aimi_control_center">See how AIMI interprets your current settings before simplifying them into behavior families.</string>
     <string name="pref_title_aimi_support_package">AIMI support package</string>
     <string name="pref_summary_aimi_support_package">Export a diagnostic ZIP with the training corpus tail and the running profile.</string>
     <string name="pref_title_aimi_sos_permissions">Grant SMS and location permissions</string>

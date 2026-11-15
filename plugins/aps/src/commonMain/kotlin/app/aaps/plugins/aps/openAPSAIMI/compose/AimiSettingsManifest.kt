@@ -38,8 +38,9 @@ internal enum class AimiSettingsLevel { SIMPLE, ADVANCED, EXPERT }
  *
  * - [USER] a settings screen writes it, so the person owns the value. An Advisor proposal the
  *   person accepts also counts as USER: the person decides, on a screen.
- * - [SLIDER] a simplified slider or a Control Center family level writes it (also when the Advisor
- *   proposes a family level and the person accepts it).
+ * - [SLIDER] a simplified slider writes it: one control that drives the key, for example the PK/PD
+ *   prudence sliders and the learning pace chips. The Control Center family levels wrote keys too;
+ *   they were removed in step S2, so no family level writes anything any more.
  * - [LOOP] code writes it during a loop tick, for example the transient preference overlay (TPO,
  *   `tpo/TpoPreferenceKeys.kt`). Read such a value as loop output, not as a choice
  *   the person made.
@@ -108,9 +109,7 @@ internal data class AimiSettingEntry(
 /**
  * The one list of every AIMI setting, with its level, its family and its writer.
  *
- * It extends [AimiBehaviorFamilyRegistry] instead of replacing it: the registry says which keys
- * a family covers for the Control Center, this manifest says what each key is. Where a key is in
- * both, the family here is the family the registry already gave it.
+ * The family of an entry groups the Expert pages (step S2) and tags each row of the audit screen.
  *
  * ## Scope
  * [scopedKeys] is every AIMI owned key: an entry of [BooleanKey], [DoubleKey], [IntKey] or
@@ -198,34 +197,19 @@ internal object AimiSettingsManifest {
      * is exactly the failure this list is here to count.
      */
     val REACHABILITY_DEBT: Set<String> = setOf(
-        DoubleKey.OApsAIMIActivityBasalCapFactor.key,
-        BooleanKey.OApsAIMIAimiSmbComparatorEnabled.key,
-        DoubleKey.OApsAIMIAutodriveAcceleration.key,
-        BooleanKey.OApsAIMIAutodriveV3EnhancedGater.key,
+        // Switches the key map plans to derive or fix in step S3 (verdict AUTO). They are read, but a
+        // row now would only teach the person a switch that is about to go.
         BooleanKey.OApsAIMIEffectiveIobReleaseEnabled.key,
-        BooleanKey.OApsAIMIEnableBasal.key,
         BooleanKey.OApsAIMIEnableStepsFromWatch.key,
         BooleanKey.AimiPhoneStepsSyncEnable.key,
         BooleanKey.AimiHealthConnectStepsEnable.key,
-        DoubleKey.OApsAIMIFCLFactor.key,
-        IntKey.OApsAIMIHighBGinterval.key,
         BooleanKey.OApsAIMIHyperDroppingExemptEnabled.key,
-        BooleanKey.OApsAIMIIntelligenceSnapshotExport.key,
-        IntKey.OApsAIMIIntratickStallSeconds.key,
-        BooleanKey.OApsAIMILoopBlackboxFileEnabled.key,
         BooleanKey.OApsAIMILoopExclusiveInvocationEnabled.key,
         BooleanKey.OApsAIMIMealHyperBypassEnabled.key,
-        DoubleKey.OApsAIMINightGrowthBasalMultiplier.key,
-        DoubleKey.OApsAIMINightGrowthMaxSmbClamp.key,
-        DoubleKey.OApsAIMINightGrowthMinRiseSlope.key,
-        DoubleKey.OApsAIMINightGrowthSmbMultiplier.key,
-        DoubleKey.OApsAIMIPlateauBandAbs.key,
         BooleanKey.OApsAIMIPredictionAuthorityEnabled.key,
-        BooleanKey.OApsAIMIPredictionAuthorityShadow.key,
-        DoubleKey.OApsAIMIR2Confident.key,
         BooleanKey.OApsAIMIT3cPhysioInformedEnabled.key,
-        BooleanKey.OApsAIMIforcelimits.key,
-        // Adaptive Kernel Bank (Cosine Gate): no screen exists for any of its six keys today.
+        // Adaptive Kernel Bank (Cosine Gate): protected family; the key map plans to derive these
+        // (step S3), so no screen is added for them in step S2.
         BooleanKey.AimiCosineGateEnabled.key,
         DoubleKey.AimiCosineGateAlpha.key,
         DoubleKey.AimiCosineGateMinDataQuality.key,
@@ -234,9 +218,6 @@ internal object AimiSettingsManifest {
         IntKey.AimiCosineGateMaxPeakShift.key,
         // Read every loop tick (unannounced-meal confidence), never shown on a screen.
         DoubleKey.AimiUamConfidence.key,
-        // Kept so an existing stored value is not lost; the physio LLM analyzer now follows
-        // StringKey.AimiAdvisorProvider and nothing reads this key any more. Never shown on a screen.
-        StringKey.AimiPhysioLLMProvider.key,
         // Set from `AimiProfileAdvisorActivity`'s button row, which is a standalone activity, not
         // a section of the AIMI settings tree this manifest covers.
         StringKey.AimiTuningContextSelection.key,
@@ -244,6 +225,9 @@ internal object AimiSettingsManifest {
         // manifest models. Naming them here is honest; giving them a section would claim a
         // reachability the tree does not provide.
         StringKey.ContextMode.key,
+        // Nothing reads the four context credentials and the provider; they stay here and not in
+        // DEAD_KEYS so the audit screen still treats a stored credential as a secret. Step S3 deletes
+        // them and wipes the stored value.
         StringKey.ContextLLMProvider.key,
         StringKey.ContextLLMOpenAIKey.key,
         StringKey.ContextLLMGeminiKey.key,
@@ -293,6 +277,31 @@ internal object AimiSettingsManifest {
         IntKey.OApsAIMIAutodriveTarget.key,
         StringKey.OApsAIMIUnstableModeState.key,
         AimiLongKey.PregnancyDueDate.key,
+        // Step S2: nothing reads these, so they have no row any more. The physio, endometriosis and
+        // pregnancy keys belong to protected families: they stay keys until the owner decides.
+        BooleanKey.OApsAIMIEnableBasal.key,
+        BooleanKey.OApsAIMIforcelimits.key,
+        BooleanKey.OApsAIMIAutodriveV3EnhancedGater.key,
+        DoubleKey.OApsAIMIFCLFactor.key,
+        DoubleKey.OApsAIMINightGrowthBasalMultiplier.key,
+        DoubleKey.OApsAIMINightGrowthMaxSmbClamp.key,
+        DoubleKey.OApsAIMINightGrowthMinRiseSlope.key,
+        DoubleKey.OApsAIMINightGrowthSmbMultiplier.key,
+        DoubleKey.OApsAIMIPlateauBandAbs.key,
+        DoubleKey.OApsAIMIR2Confident.key,
+        StringKey.AimiPhysioLLMProvider.key,
+        // Its reader was lost in the KMP port: on dev_OAPSAIMI `XdripSourcePlugin` ignored xDrip data
+        // less than 4 min after the last batch while this switch was off (the default). Today every
+        // user gets 1-minute data, so the row would be a switch with no effect. Bringing the reader
+        // back changes the glucose input of every 1-minute xDrip user, so it waits for the owner
+        // (PLAN.md, "Open for the owner (from S2)"). Do not delete the key before that.
+        BooleanKey.OApsxdriponeminute.key,
+        DoubleKey.OApsAIMIAutodriveDeviation.key,
+        IntKey.OApsAIMIAutodriveBG.key,
+        IntKey.AimiEndometriosisFlareDuration.key,
+        BooleanKey.AimiPhysioSleepDataEnable.key,
+        BooleanKey.AimiPhysioHRVDataEnable.key,
+        BooleanKey.AimiPhysioDebugLogs.key,
     )
 
     /** Every AIMI setting, exactly once. */
@@ -300,23 +309,20 @@ internal object AimiSettingsManifest {
         AimiSettingEntry(BooleanKey.OApsAIMIMLtraining, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMISmbTrainingRelaxedFilter, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMISmbTrainingMinQuality, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
-        AimiSettingEntry(BooleanKey.OApsAIMIEnableBasal, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIEnableStepsFromWatch, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIpregnancy, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
-        AimiSettingEntry(BooleanKey.OApsAIMIforcelimits, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Protection, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMInight, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIhoneymoon, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.Protection, AimiSettingsWriter.USER),
-        AimiSettingEntry(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER, AimiSettingsWriter.SLIDER),
+        AimiSettingEntry(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIT3cPhysioInformedEnabled, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
-        AimiSettingEntry(BooleanKey.OApsAIMIAutodriveV3EnhancedGater, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
-        AimiSettingEntry(BooleanKey.OApsAIMIautoDriveActive, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER, AimiSettingsWriter.SLIDER),
+        AimiSettingEntry(BooleanKey.OApsAIMIautoDriveActive, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIautodriveAggressiveSmbFloor, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIStressIsfFloor, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Protection, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIAnticipBasalFloor, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIAnticipMealEvidence, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIRiseCeilingGuard, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Protection, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIEffortActivityProtection, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
-        AimiSettingEntry(BooleanKey.OApsAIMIautoDriveAuthoritative, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER, AimiSettingsWriter.SLIDER),
+        AimiSettingEntry(BooleanKey.OApsAIMIautoDriveAuthoritative, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIwcycle, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIWCycleShadow, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIWCycleRequireConfirm, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
@@ -341,12 +347,12 @@ internal object AimiSettingsManifest {
         AimiSettingEntry(BooleanKey.OApsAIMIAimiSmbComparatorEnabled, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIIobSurveillanceGuard, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Protection, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIEffectiveIobReleaseEnabled, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Protection, AimiSettingsWriter.USER),
-        AimiSettingEntry(BooleanKey.OApsAIMIHyperTrajectoryRelease, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER, AimiSettingsWriter.SLIDER),
-        AimiSettingEntry(BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER, AimiSettingsWriter.SLIDER),
+        AimiSettingEntry(BooleanKey.OApsAIMIHyperTrajectoryRelease, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
+        AimiSettingEntry(BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIRecursiveBeliefShadow, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
-        AimiSettingEntry(BooleanKey.OApsAIMIRecursiveBeliefAuthority, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER, AimiSettingsWriter.SLIDER),
+        AimiSettingEntry(BooleanKey.OApsAIMIRecursiveBeliefAuthority, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIRecursiveBeliefWavelet, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
-        AimiSettingEntry(BooleanKey.OApsAIMIDynIsfTrajectoryTuningEnabled, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER, AimiSettingsWriter.SLIDER),
+        AimiSettingEntry(BooleanKey.OApsAIMIDynIsfTrajectoryTuningEnabled, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIDynIsfTrajectoryShadowOnly, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIUnifiedReactivityEnabled, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIAuditorProfileFactors, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
@@ -395,7 +401,7 @@ internal object AimiSettingsManifest {
             AimiSettingsWriter.USER, AimiSettingsWriter.LOOP,
         ),
         AimiSettingEntry(DoubleKey.OApsAIMIweight, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
-        AimiSettingEntry(DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER, AimiSettingsWriter.SLIDER),
+        AimiSettingEntry(DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMICHO, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMITDD7, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.SLIDER),
@@ -403,7 +409,7 @@ internal object AimiSettingsManifest {
         AimiSettingEntry(DoubleKey.OApsAIMIIsfFusionMinFactor, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER, AimiSettingsWriter.SLIDER),
         AimiSettingEntry(DoubleKey.OApsAIMIIsfFusionMaxFactor, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER, AimiSettingsWriter.SLIDER),
         AimiSettingEntry(DoubleKey.OApsAIMIIsfFusionMaxChangePerTick, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
-        AimiSettingEntry(DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER, AimiSettingsWriter.SLIDER),
+        AimiSettingEntry(DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMISmbTailThreshold, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
         AimiSettingEntry(
             DoubleKey.OApsAIMISmbTailDamping, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Stability,
@@ -411,19 +417,19 @@ internal object AimiSettingsManifest {
         ),
         AimiSettingEntry(
             DoubleKey.OApsAIMISmbExerciseDamping, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Stability,
-            AimiSettingsWriter.USER, AimiSettingsWriter.SLIDER, AimiSettingsWriter.LOOP,
+            AimiSettingsWriter.USER, AimiSettingsWriter.LOOP,
         ),
         AimiSettingEntry(
             DoubleKey.OApsAIMISmbLateFatDamping, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Stability,
-            AimiSettingsWriter.USER, AimiSettingsWriter.SLIDER, AimiSettingsWriter.LOOP,
+            AimiSettingsWriter.USER, AimiSettingsWriter.LOOP,
         ),
         AimiSettingEntry(
             DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Protection,
-            AimiSettingsWriter.USER, AimiSettingsWriter.SLIDER, AimiSettingsWriter.LOOP,
+            AimiSettingsWriter.USER, AimiSettingsWriter.LOOP,
         ),
         AimiSettingEntry(
             DoubleKey.OApsAIMIRedCarpetRestoreThreshold, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Protection,
-            AimiSettingsWriter.USER, AimiSettingsWriter.SLIDER, AimiSettingsWriter.LOOP,
+            AimiSettingsWriter.USER, AimiSettingsWriter.LOOP,
         ),
         AimiSettingEntry(
             DoubleKey.OApsAIMIPriorityMaxIobFactor, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Protection,
@@ -434,7 +440,6 @@ internal object AimiSettingsManifest {
             AimiSettingsWriter.USER, AimiSettingsWriter.LOOP,
         ),
         AimiSettingEntry(DoubleKey.OApsAIMIMealFactor, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
-        AimiSettingEntry(DoubleKey.OApsAIMIFCLFactor, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMIBFFactor, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMIBFPrebolus, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMIBFPrebolus2, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
@@ -451,10 +456,9 @@ internal object AimiSettingsManifest {
         AimiSettingEntry(DoubleKey.OApsAIMIsleepFactor, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMIAnticipBudgetU, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMIMealPrebolus, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
-        AimiSettingEntry(DoubleKey.OApsAIMIautodrivePrebolus, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER, AimiSettingsWriter.SLIDER),
-        AimiSettingEntry(DoubleKey.OApsAIMIautodrivesmallPrebolus, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER, AimiSettingsWriter.SLIDER),
+        AimiSettingEntry(DoubleKey.OApsAIMIautodrivePrebolus, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
+        AimiSettingEntry(DoubleKey.OApsAIMIautodrivesmallPrebolus, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMIcombinedDelta, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
-        AimiSettingEntry(DoubleKey.OApsAIMIAutodriveDeviation, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMIAutodriveAcceleration, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMILunchPrebolus, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMILunchPrebolus2, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
@@ -466,17 +470,11 @@ internal object AimiSettingsManifest {
         AimiSettingEntry(DoubleKey.OApsAIMIwcycledateday, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMIWCycleClampMin, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMIWCycleClampMax, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
-        AimiSettingEntry(DoubleKey.OApsAIMINightGrowthMinRiseSlope, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
-        AimiSettingEntry(DoubleKey.OApsAIMINightGrowthSmbMultiplier, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
-        AimiSettingEntry(DoubleKey.OApsAIMINightGrowthBasalMultiplier, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
-        AimiSettingEntry(DoubleKey.OApsAIMINightGrowthMaxSmbClamp, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMINightGrowthMaxIobExtra, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMIActivityBasalCapFactor, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMIHighBg, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
-        AimiSettingEntry(DoubleKey.OApsAIMIHyperEstablishedDevMgdl, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER, AimiSettingsWriter.SLIDER),
-        AimiSettingEntry(DoubleKey.OApsAIMIHyperDeepDevMgdl, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER, AimiSettingsWriter.SLIDER),
-        AimiSettingEntry(DoubleKey.OApsAIMIPlateauBandAbs, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
-        AimiSettingEntry(DoubleKey.OApsAIMIR2Confident, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
+        AimiSettingEntry(DoubleKey.OApsAIMIHyperEstablishedDevMgdl, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
+        AimiSettingEntry(DoubleKey.OApsAIMIHyperDeepDevMgdl, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMIMaxMultiplier, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.Protection, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMILastEstimatedCarbs, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.LOOP),
         AimiSettingEntry(DoubleKey.OApsAIMILastEstimatedCarbTime, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.LOOP),
@@ -511,7 +509,6 @@ internal object AimiSettingsManifest {
         AimiSettingEntry(IntKey.OApsAIMISnackinterval, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
         AimiSettingEntry(IntKey.OApsAIMIBFinterval, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
         AimiSettingEntry(IntKey.OApsAIMISleepinterval, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
-        AimiSettingEntry(IntKey.OApsAIMIAutodriveBG, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         AimiSettingEntry(IntKey.OApsAIMIWCycleAvgLength, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(IntKey.OApsAIMINightGrowthAgeYears, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(IntKey.OApsAIMIIntratickStallSeconds, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
@@ -537,22 +534,12 @@ internal object AimiSettingsManifest {
 
         // --- Widened scope batch (2026-10-03): keys outside the OApsAIMI prefix. ---
         // AimiEndometriosisHormonalSuppression is NOT here: see DEAD_KEYS.
-        AimiSettingEntry(BooleanKey.OApsxdriponeminute, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.AimiAuditorEnabled, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         AimiSettingEntry(
             BooleanKey.AimiPhysioAssistantEnable, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio,
-            AimiSettingsWriter.USER, AimiSettingsWriter.SLIDER,
-        ),
-        AimiSettingEntry(
-            BooleanKey.AimiPhysioSleepDataEnable, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio,
-            AimiSettingsWriter.USER, AimiSettingsWriter.SLIDER,
-        ),
-        AimiSettingEntry(
-            BooleanKey.AimiPhysioHRVDataEnable, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio,
-            AimiSettingsWriter.USER, AimiSettingsWriter.SLIDER,
+            AimiSettingsWriter.USER,
         ),
         AimiSettingEntry(BooleanKey.AimiPhysioLLMAnalysisEnable, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
-        AimiSettingEntry(BooleanKey.AimiPhysioDebugLogs, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         // Added during the KMP work and never classified until the manifest tests came back. None has a
         // switch on any screen yet, so all three are in REACHABILITY_DEBT.
         // Off by default, newer path, feeds the HRV insulin multiplier: EXPERT.
@@ -590,7 +577,6 @@ internal object AimiSettingsManifest {
         AimiSettingEntry(IntKey.AimiAuditorMaxPerHour, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         AimiSettingEntry(IntKey.AimiAuditorTimeoutSeconds, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         AimiSettingEntry(IntKey.AimiAuditorMinConfidence, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
-        AimiSettingEntry(IntKey.AimiEndometriosisFlareDuration, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(IntKey.AimiCosineGateMaxPeakShift, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
         AimiSettingEntry(IntKey.AimiEmergencySosThreshold, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.Protection, AimiSettingsWriter.USER),
         AimiSettingEntry(
@@ -602,7 +588,6 @@ internal object AimiSettingsManifest {
         AimiSettingEntry(StringKey.AimiAdvisorProvider, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         AimiSettingEntry(StringKey.AimiTuningContextSelection, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         AimiSettingEntry(StringKey.AimiAuditorMode, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
-        AimiSettingEntry(StringKey.AimiPhysioLLMProvider, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         // Secret: an API key typed once and never shown again. See `AimiSettingEntry.secret`.
         // The two real maximum-basal ceilings. They carry no `OApsAIMI` prefix, which is exactly why
         // they escaped the guarantee until `isAimiScoped` was taught to read its own named list. Both

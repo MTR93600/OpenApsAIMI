@@ -20,29 +20,40 @@ internal enum class AimiSettingsContentId {
     PkpdSimple,
     PkpdAdvanced,
     PkpdExpert,
-    ControlCenter,
     PreferencesRoot,
 
     /** The Essentials page, opened by the first row of the AIMI settings. See [AimiEssentials]. */
     PreferencesEssentials,
     PreferencesAiKeys,
     PreferencesTpo,
-    PreferencesPhysio,
     PreferencesPatientContext,
-    PreferencesWomenCycle,
-    PreferencesInflammatory,
-    PreferencesThyroid,
-    PreferencesNightGrowth,
-    PreferencesLab,
-    PreferencesAdaptiveBasal,
-    PreferencesT3c,
-    PreferencesTrajectory,
+    PreferencesDoseLimits,
+
+    /** The feature cards (step S2). Each card is one page; see [AimiFeatureCard]. */
+    CardMeals,
+    CardActivity,
+    CardNight,
+    CardWomenCycle,
+    CardIllness,
+    CardPkpd,
+    CardPhysio,
+    CardAutodrive,
+    CardSafetyAlarms,
+
+    /** Pages inside a card. */
     PreferencesManualModes,
-    PreferencesAutodrive,
+    PreferencesNightGrowth,
+    PreferencesThyroid,
+    PreferencesEndometriosis,
+    PreferencesT3c,
     PreferencesAutodrivePrebolusVars,
+
+    /** The Expert area: the family pages generated from the manifest, and the technical pages. */
+    ExpertFamilies,
+    PreferencesAdaptiveBasal,
+    PreferencesTrajectory,
     PreferencesAiAuditor,
     ContextEditor,
-    PreferencesEmergencySos,
 
     /**
      * The settings audit screen. Unlike every other content it declares no section and no list of
@@ -85,76 +96,77 @@ internal enum class AimiSettingsSectionId {
     PkpdExpertReliefFactors,
     PkpdExpertIobSurveillance,
     PkpdExpertPriorityMaxIob,
-    ControlCenterProtectionLevel,
-    ControlCenterMealCaptureLevel,
-    ControlCenterStabilityLevel,
-    ControlCenterAutonomyMode,
     PreferencesRootRemotePin,
     EssentialsPatient,
     EssentialsPatientDetails,
     EssentialsDoseLimits,
     PreferencesAiAdvisorLearning,
+    AiAdvisorKeys,
     TpoEnable,
     TpoOptions,
-    PhysioSources,
     PatientBody,
     PatientPregnancyDueDate,
     PatientHoneymoon,
-    PatientNightMode,
-    WomenCycleIntent,
-    WomenCycleExpert,
-    InflammatoryContext,
-    ThyroidModule,
-    ThyroidDebug,
-    NightGrowthIntent,
-    NightGrowthBudget,
-    LabMlTraining,
-    LabDoseLimits,
-    LabUnifiedReactivity,
-    AdaptiveBasalEnable,
-    AdaptiveBasalExpert,
-    T3cMode,
-    T3cAutodriveAuthority,
-    T3cBehaviour,
-    T3cCfrdLgsFloor,
-    T3cCfrdCobDelay,
-    T3cAnticipation,
-    TrajectoryGuards,
-    TrajectoryPredictionGuards,
-    ModeBreakfast,
+    DoseLimits,
     ManualModesMaxBasal,
+    MealsAnticipation,
+    ModeBreakfast,
     ModeLunch,
     ModeDinner,
     ModeHighCarb,
     ModeSnack,
     ModeMeal,
     ModeSleep,
+    ActivityProtection,
+    ActivityBasalCap,
+    NightMode,
+    NightGrowthIntent,
+    NightGrowthBudget,
+    WomenCycleIntent,
+    WomenCycleExpert,
+    InflammatoryContext,
+    ThyroidModule,
+    ThyroidDebug,
+    EndoStatus,
+    EndoTuning,
+    T3cMode,
+    T3cAutodriveAuthority,
+    T3cBehaviour,
+    T3cCfrdLgsFloor,
+    T3cCfrdCobDelay,
+    T3cAnticipation,
+    CardPkpdEnable,
+    PhysioModuleToggles,
+    PhysioSources,
+    PhysioAiAnalysis,
+    PhysioStressFloor,
+    PhysioSensorConfidence,
     AutodriveChannel,
     AutodriveBeliefShadow,
     AutodriveBeliefAuthority,
     AutodriveBeliefWavelet,
     AutodriveMealRise,
-    AutodriveSensorConfidence,
-    AutodriveGestures,
     AutodriveMaxBasal,
+    AutodriveGestures,
     AutodrivePrebolusVariables,
-    AuditorProfileFactors,
-    ContextModuleEnable,
-    ContextIntentStore,
-    // --- Widened scope batch (2026-10-03) ---
-    LabXdripOneMinute,
-    LabParityCapture,
-    AdaptiveBasalLimits,
-    PhysioModuleToggles,
-    PhysioAiAnalysis,
-    EndoStatus,
-    EndoTuning,
-    TubeAdvancedTunables,
-    AuditorSettings,
-    AiAdvisorKeys,
     SosEnable,
     SosThresholds,
     SosContacts,
+    AdaptiveBasalEnable,
+    AdaptiveBasalExpert,
+    AdaptiveBasalLimits,
+    TrajectoryGuards,
+    TrajectoryPredictionGuards,
+    TubeAdvancedTunables,
+    AuditorProfileFactors,
+    AuditorSettings,
+    ContextModuleEnable,
+    ContextIntentStore,
+    ExpertProtection,
+    ExpertMealCapture,
+    ExpertStability,
+    ExpertPhysio,
+    ExpertAutonomy,
 }
 
 /**
@@ -179,19 +191,11 @@ internal data class AimiSettingsSection(
 /**
  * Where every AIMI setting is shown.
  *
- * Some screens read their key list from here directly, through
- * [AimiSettingsScreens.preferenceKeysOf] — for those, a section can never drift from what is
- * really drawn, because it IS what is drawn. The three PK/PD contents and a handful of
- * [AimiPreferenceTree] sub-screens (TPO, adaptive basal, T3C, night growth, the meal mode screens,
- * the autodrive prebolus variables) work this way.
- *
- * Most screens still hold their own hand written `items = buildList { add(...) }`, because that
- * list interleaves AIMI keys with non-AIMI keys, `withEntries(...)` wrappers and `ApsIntentKey`
- * items that this manifest has no room for. For those, a section here is a **declared mirror**:
- * it must list the same AIMI keys, in the same screen, by hand. If you add, remove or move an AIMI
- * key in one of those `AimiPreferenceTree.kt` sub-screens, update the matching section in this file
- * in the same change. `AimiPreferenceTreeTest` fails when a section key is missing from the tree,
- * but nothing catches a key that is in the tree and missing here.
+ * Since step S2 every page of [AimiPreferenceTree] reads its AIMI keys from here, through
+ * [AimiSettingsScreens.preferenceKeysOf], so a section can never drift from what is drawn: it IS
+ * what is drawn. The tree only adds the list labels of a choice key and the rows that are not AIMI
+ * keys (platform screens, info rows). The three PK/PD contents draw their sections the same way.
+ * The Expert family pages are generated from the manifest (see `expertFamilySections`).
  *
  * `AimiSettingsManifestTest` checks three things against this file: every key is in a section of
  * a routed content, a key's level is the lowest level that offers it, and a `FIELDS` section holds
@@ -221,27 +225,32 @@ internal object AimiSettingsScreens {
 
     /** Contents the preference tree and the AIMI activities always reach. */
     private val alwaysRoutedContents: Set<AimiSettingsContentId> = setOf(
-        AimiSettingsContentId.ControlCenter,
         AimiSettingsContentId.PreferencesRoot,
         AimiSettingsContentId.PreferencesEssentials,
         AimiSettingsContentId.PreferencesAiKeys,
         AimiSettingsContentId.PreferencesTpo,
-        AimiSettingsContentId.PreferencesPhysio,
         AimiSettingsContentId.PreferencesPatientContext,
-        AimiSettingsContentId.PreferencesWomenCycle,
-        AimiSettingsContentId.PreferencesInflammatory,
-        AimiSettingsContentId.PreferencesThyroid,
-        AimiSettingsContentId.PreferencesNightGrowth,
-        AimiSettingsContentId.PreferencesLab,
-        AimiSettingsContentId.PreferencesAdaptiveBasal,
-        AimiSettingsContentId.PreferencesT3c,
-        AimiSettingsContentId.PreferencesTrajectory,
+        AimiSettingsContentId.PreferencesDoseLimits,
+        AimiSettingsContentId.CardMeals,
+        AimiSettingsContentId.CardActivity,
+        AimiSettingsContentId.CardNight,
+        AimiSettingsContentId.CardWomenCycle,
+        AimiSettingsContentId.CardIllness,
+        AimiSettingsContentId.CardPkpd,
+        AimiSettingsContentId.CardPhysio,
+        AimiSettingsContentId.CardAutodrive,
+        AimiSettingsContentId.CardSafetyAlarms,
         AimiSettingsContentId.PreferencesManualModes,
-        AimiSettingsContentId.PreferencesAutodrive,
+        AimiSettingsContentId.PreferencesNightGrowth,
+        AimiSettingsContentId.PreferencesThyroid,
+        AimiSettingsContentId.PreferencesEndometriosis,
+        AimiSettingsContentId.PreferencesT3c,
         AimiSettingsContentId.PreferencesAutodrivePrebolusVars,
+        AimiSettingsContentId.ExpertFamilies,
+        AimiSettingsContentId.PreferencesAdaptiveBasal,
+        AimiSettingsContentId.PreferencesTrajectory,
         AimiSettingsContentId.PreferencesAiAuditor,
         AimiSettingsContentId.ContextEditor,
-        AimiSettingsContentId.PreferencesEmergencySos,
     )
 
     /** Every content the navigation really reaches. */
@@ -250,7 +259,8 @@ internal object AimiSettingsScreens {
         pkpdLevels.forEach { level -> pkpdContentByLevel[level]?.let { add(it) } }
     }
 
-    val sections: List<AimiSettingsSection> = listOf(
+    /** Sections written by hand: each one is what a page draws, or mirrors it. */
+    private val handSections: List<AimiSettingsSection> = listOf(
         AimiSettingsSection(
             id = AimiSettingsSectionId.PkpdSimpleEnable,
             content = AimiSettingsContentId.PkpdSimple,
@@ -421,812 +431,286 @@ internal object AimiSettingsScreens {
                 DoubleKey.OApsAIMIPriorityMaxIobExtraU,
             ),
         ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.ControlCenterProtectionLevel,
-            content = AimiSettingsContentId.ControlCenter,
-            level = AimiSettingsLevel.ADVANCED,
-            kind = AimiSettingsSectionKind.CONTROL,
-            // The dose limits (Max SMB, high BG Max SMB, the two priority max IOB values) are not
-            // here: since step C1 no family level writes them. LabDoseLimits and
-            // PkpdExpertPriorityMaxIob still offer them.
-            keys = listOf(
-                DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor,
-                DoubleKey.OApsAIMIRedCarpetRestoreThreshold,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.ControlCenterMealCaptureLevel,
-            content = AimiSettingsContentId.ControlCenter,
-            level = AimiSettingsLevel.ADVANCED,
-            kind = AimiSettingsSectionKind.CONTROL,
-            keys = listOf(
-                BooleanKey.OApsAIMIHyperTrajectoryRelease,
-                BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive,
-                DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep,
-                DoubleKey.OApsAIMIautodrivePrebolus,
-                DoubleKey.OApsAIMIautodrivesmallPrebolus,
-                DoubleKey.OApsAIMIHyperEstablishedDevMgdl,
-                DoubleKey.OApsAIMIHyperDeepDevMgdl,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.ControlCenterStabilityLevel,
-            content = AimiSettingsContentId.ControlCenter,
-            level = AimiSettingsLevel.ADVANCED,
-            kind = AimiSettingsSectionKind.CONTROL,
-            keys = listOf(
-                DoubleKey.OApsAIMISmbTailDamping,
-                DoubleKey.OApsAIMISmbExerciseDamping,
-                DoubleKey.OApsAIMISmbLateFatDamping,
-                BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled,
-                BooleanKey.OApsAIMIDynIsfTrajectoryTuningEnabled,
-                DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.ControlCenterAutonomyMode,
-            content = AimiSettingsContentId.ControlCenter,
-            level = AimiSettingsLevel.ADVANCED,
-            kind = AimiSettingsSectionKind.CONTROL,
-            keys = listOf(
-                BooleanKey.OApsAIMIautoDriveActive,
-                BooleanKey.OApsAIMIHyperTrajectoryRelease,
-                BooleanKey.OApsAIMIRecursiveBeliefAuthority,
-                BooleanKey.OApsAIMIautoDriveAuthoritative,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.PreferencesRootRemotePin,
-            content = AimiSettingsContentId.PreferencesRoot,
-            level = AimiSettingsLevel.ADVANCED,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                AimiStringKey.RemoteControlPin,
-            ),
-        ),
+        fields(AimiSettingsSectionId.PreferencesRootRemotePin, AimiSettingsContentId.PreferencesRoot, AimiSettingsLevel.ADVANCED, AimiStringKey.RemoteControlPin),
         // The AIMI keys of the Essentials page, in page order. `AimiEssentialsTest` checks that they
         // are exactly the AIMI keys of `AimiEssentials.rows`; the OpenAPS keys of the page (max basal,
         // max IOB, LGS threshold, SMB switch) are not AIMI keys and have no manifest entry.
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.EssentialsPatient,
-            content = AimiSettingsContentId.PreferencesEssentials,
-            level = AimiSettingsLevel.SIMPLE,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                DoubleKey.OApsAIMIweight,
-                DoubleKey.OApsAIMITDD7,
-                DoubleKey.OApsAIMICHO,
-                BooleanKey.OApsAIMIhoneymoon,
-                BooleanKey.OApsAIMIpregnancy,
-            ),
-        ),
-        AimiSettingsSection(
-            // Age and due date stay ADVANCED: their other screens (night growth, patient context) are
-            // ADVANCED field lists, and a key has one level.
-            id = AimiSettingsSectionId.EssentialsPatientDetails,
-            content = AimiSettingsContentId.PreferencesEssentials,
-            level = AimiSettingsLevel.ADVANCED,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                IntKey.OApsAIMINightGrowthAgeYears,
-                AimiStringKey.PregnancyDueDateString,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.EssentialsDoseLimits,
-            content = AimiSettingsContentId.PreferencesEssentials,
-            level = AimiSettingsLevel.SIMPLE,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                DoubleKey.meal_modes_MaxBasal,
-                DoubleKey.autodriveMaxBasal,
-                DoubleKey.OApsAIMIMaxSMB,
-                DoubleKey.OApsAIMIHighBGMaxSMB,
-                DoubleKey.OApsAIMIMaxMultiplier,
-            ),
-        ),
-        AimiSettingsSection(
-            // Declared mirror of the top of `aimi_compose_ai_keys` in `AimiPreferenceTree.kt`.
-            id = AimiSettingsSectionId.AiAdvisorKeys,
-            content = AimiSettingsContentId.PreferencesAiKeys,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                StringKey.AimiAdvisorProvider,
-                StringKey.AimiAdvisorOpenAIKey,
-                StringKey.AimiAdvisorGeminiKey,
-                StringKey.AimiAdvisorDeepSeekKey,
-                StringKey.AimiAdvisorClaudeKey,
-                AimiStringKey.AimiAdvisorClaudeModel,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.PreferencesAiAdvisorLearning,
-            content = AimiSettingsContentId.PreferencesAiKeys,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMIAdvisorPersonalOrefMl,
-                BooleanKey.OApsAIMIAdvisorLlmRichOref,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.TpoEnable,
-            content = AimiSettingsContentId.PreferencesTpo,
-            level = AimiSettingsLevel.ADVANCED,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMITpoEnabled,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.TpoOptions,
-            content = AimiSettingsContentId.PreferencesTpo,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMITpoLlmConfirmEnabled,
-                BooleanKey.OApsAIMITpoNotifyOnApply,
-            ),
-        ),
-        AimiSettingsSection(
-            // Declared mirror of the top of `aimi_compose_physio` in `AimiPreferenceTree.kt`.
-            id = AimiSettingsSectionId.PhysioModuleToggles,
-            content = AimiSettingsContentId.PreferencesPhysio,
-            level = AimiSettingsLevel.ADVANCED,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.AimiPhysioAssistantEnable,
-                BooleanKey.AimiPhysioSleepDataEnable,
-                BooleanKey.AimiPhysioHRVDataEnable,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.PhysioSources,
-            content = AimiSettingsContentId.PreferencesPhysio,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                AimiStringKey.ActivitySourceMode,
-                AimiStringKey.OuraPersonalAccessToken,
-            ),
-        ),
-        AimiSettingsSection(
-            // Declared mirror of the bottom of `aimi_compose_physio` in `AimiPreferenceTree.kt`.
-            id = AimiSettingsSectionId.PhysioAiAnalysis,
-            content = AimiSettingsContentId.PreferencesPhysio,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.AimiPhysioLLMAnalysisEnable,
-                // Feeds the HRV insulin multiplier; shown next to the AI analysis switch, as on dev.
-                BooleanKey.AimiHrvBaselinePerNight,
-                // AimiPhysioLLMProvider is NOT here: no `add(...)` in `aimi_compose_physio` shows
-                // it today. It stays in `AimiSettingsManifest.REACHABILITY_DEBT`.
-                BooleanKey.AimiPhysioDebugLogs,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.PatientBody,
-            content = AimiSettingsContentId.PreferencesPatientContext,
-            level = AimiSettingsLevel.SIMPLE,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                DoubleKey.OApsAIMIweight,
-                DoubleKey.OApsAIMICHO,
-                DoubleKey.OApsAIMITDD7,
-                BooleanKey.OApsAIMIpregnancy,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.PatientPregnancyDueDate,
-            content = AimiSettingsContentId.PreferencesPatientContext,
-            level = AimiSettingsLevel.ADVANCED,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                AimiStringKey.PregnancyDueDateString,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.PatientHoneymoon,
-            content = AimiSettingsContentId.PreferencesPatientContext,
-            level = AimiSettingsLevel.SIMPLE,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMIhoneymoon,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.PatientNightMode,
-            content = AimiSettingsContentId.PreferencesPatientContext,
-            level = AimiSettingsLevel.ADVANCED,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMInight,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.WomenCycleIntent,
-            content = AimiSettingsContentId.PreferencesWomenCycle,
-            level = AimiSettingsLevel.ADVANCED,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMIwcycle,
-                StringKey.OApsAIMIWCycleTrackingMode,
-                StringKey.OApsAIMIWCycleContraceptive,
-                DoubleKey.OApsAIMIwcycledateday,
-                IntKey.OApsAIMIWCycleAvgLength,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.WomenCycleExpert,
-            content = AimiSettingsContentId.PreferencesWomenCycle,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMIWCycleShadow,
-                BooleanKey.OApsAIMIWCycleRequireConfirm,
-                DoubleKey.OApsAIMIWCycleClampMin,
-                DoubleKey.OApsAIMIWCycleClampMax,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.InflammatoryContext,
-            content = AimiSettingsContentId.PreferencesInflammatory,
-            level = AimiSettingsLevel.ADVANCED,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                StringKey.OApsAIMIWCycleThyroid,
-                StringKey.OApsAIMIWCycleVerneuil,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.ThyroidModule,
-            content = AimiSettingsContentId.PreferencesThyroid,
-            level = AimiSettingsLevel.ADVANCED,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMIThyroidEnabled,
-                StringKey.OApsAIMIThyroidMode,
-                StringKey.OApsAIMIThyroidManualStatus,
-                StringKey.OApsAIMIThyroidTreatmentPhase,
-                StringKey.OApsAIMIThyroidGuardLevel,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.ThyroidDebug,
-            content = AimiSettingsContentId.PreferencesThyroid,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMIThyroidLogVerbosity,
-            ),
-        ),
-        AimiSettingsSection(
-            // Declared mirror of the top of `aimi_compose_endo` in `AimiPreferenceTree.kt`. A
-            // clinical status, the same way honeymoon and pregnancy are: if a clinician would
-            // recognise "does the person have this condition, is it flaring today", it is SIMPLE.
-            // AimiEndometriosisHormonalSuppression is NOT here: see
-            // `AimiSettingsManifest.DEAD_KEYS`.
-            id = AimiSettingsSectionId.EndoStatus,
-            content = AimiSettingsContentId.PreferencesPatientContext,
-            level = AimiSettingsLevel.SIMPLE,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.AimiEndometriosisEnable,
-                BooleanKey.AimiEndometriosisPainFlare,
-            ),
-        ),
-        AimiSettingsSection(
-            // Declared mirror of the bottom of `aimi_compose_endo`: the tuning gains behind the
-            // status switches above.
-            id = AimiSettingsSectionId.EndoTuning,
-            content = AimiSettingsContentId.PreferencesPatientContext,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                IntKey.AimiEndometriosisFlareDuration,
-                DoubleKey.AimiEndometriosisBasalMult,
-                DoubleKey.AimiEndometriosisSmbDampen,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.NightGrowthIntent,
-            content = AimiSettingsContentId.PreferencesNightGrowth,
-            level = AimiSettingsLevel.ADVANCED,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMINightGrowthEnabled,
-                IntKey.OApsAIMINightGrowthAgeYears,
-                StringKey.OApsAIMINightGrowthStart,
-                StringKey.OApsAIMINightGrowthEnd,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.NightGrowthBudget,
-            content = AimiSettingsContentId.PreferencesNightGrowth,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                DoubleKey.OApsAIMINightGrowthMaxIobExtra,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.LabMlTraining,
-            content = AimiSettingsContentId.PreferencesLab,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMIMLtraining,
-                DoubleKey.OApsAIMISmbTrainingMinQuality,
-                BooleanKey.OApsAIMISmbTrainingRelaxedFilter,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.LabDoseLimits,
-            content = AimiSettingsContentId.PreferencesLab,
-            level = AimiSettingsLevel.SIMPLE,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                DoubleKey.OApsAIMIMaxSMB,
-                DoubleKey.OApsAIMIHighBGMaxSMB,
-                // Added so a clinician-level value read by a dozen dosing paths has a screen home.
-                DoubleKey.OApsAIMIHighBg,
-            ),
-        ),
-        AimiSettingsSection(
-            // Declared mirror of the `OApsxdriponeminute` item in `AimiPreferenceTree` (Lab).
-            id = AimiSettingsSectionId.LabXdripOneMinute,
-            content = AimiSettingsContentId.PreferencesLab,
-            level = AimiSettingsLevel.ADVANCED,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsxdriponeminute,
-            ),
-        ),
-        AimiSettingsSection(
-            // Declared mirror of the `AimiParityCaptureEnable` item in `AimiPreferenceTree` (Lab).
-            id = AimiSettingsSectionId.LabParityCapture,
-            content = AimiSettingsContentId.PreferencesLab,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.AimiParityCaptureEnable,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.LabUnifiedReactivity,
-            content = AimiSettingsContentId.PreferencesLab,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMIUnifiedReactivityEnabled,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.AdaptiveBasalEnable,
-            content = AimiSettingsContentId.PreferencesAdaptiveBasal,
-            level = AimiSettingsLevel.ADVANCED,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.AdaptiveBasalExpert,
-            content = AimiSettingsContentId.PreferencesAdaptiveBasal,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMIBasalSlewLimitEnabled,
-                BooleanKey.OApsAIMIBasalChannelSafetyGuards,
-                BooleanKey.OApsAIMIBasalTerminalInvariants,
-                BooleanKey.OApsAIMITrajBridgeBasalSurvives,
-                BooleanKey.OApsAIMIBasalProjectedError,
-                BooleanKey.OApsAIMIDynamicBasalStackCap,
-                BooleanKey.OApsAIMIForcedTbrRealPredDelta,
-                BooleanKey.OApsAIMIBasalStackTerminalCap,
-                BooleanKey.OApsAIMIEngineHyperRateBound,
-                DoubleKey.OApsAIMIAdaptiveBasalMaxScaling,
-                DoubleKey.OApsAIMIGovernanceHypoRateEnter,
-                DoubleKey.OApsAIMIGovernanceHypoRateExit,
-                DoubleKey.OApsAIMIGovernanceHypoBgMgdl,
-                DoubleKey.OApsAIMIGovernanceSevereHypoBgMgdl,
-                DoubleKey.OApsAIMIGovernanceHoldBasalFloorRate,
-                DoubleKey.OApsAIMIGovernanceHoldBasalDecayRate,
-                DoubleKey.OApsAIMIGovernanceHoldAggFloorRate,
-                DoubleKey.OApsAIMIGovernanceHoldAggDecayRate,
-                DoubleKey.OApsAIMIGovernanceHoldBasalFloorSevere,
-                DoubleKey.OApsAIMIGovernanceHoldBasalDecaySevere,
-                DoubleKey.OApsAIMIGovernanceHoldAggFloorSevere,
-                DoubleKey.OApsAIMIGovernanceHoldAggDecaySevere,
-                DoubleKey.OApsAIMIGovernanceAnticipationLookbackSamples,
-                DoubleKey.OApsAIMIGovernanceAnticipationMarginMgdl,
-                DoubleKey.OApsAIMIGovernanceAnticipationHypoDamp,
-                DoubleKey.OApsAIMIGovernanceAnticipationDecayBlendMax,
-            ),
-        ),
-        AimiSettingsSection(
-            // Added so the adaptive-basal ceiling (a clinician-level safety limit) has a screen
-            // home. Appended after the existing sections so their order is unchanged.
-            id = AimiSettingsSectionId.AdaptiveBasalLimits,
-            content = AimiSettingsContentId.PreferencesAdaptiveBasal,
-            level = AimiSettingsLevel.SIMPLE,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                DoubleKey.OApsAIMIMaxMultiplier,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.T3cMode,
-            content = AimiSettingsContentId.PreferencesT3c,
-            level = AimiSettingsLevel.ADVANCED,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMIT3cBrittleMode,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.T3cAutodriveAuthority,
-            content = AimiSettingsContentId.PreferencesT3c,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMIT3cAutodriveBasalAuthority,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.T3cBehaviour,
-            content = AimiSettingsContentId.PreferencesT3c,
-            level = AimiSettingsLevel.ADVANCED,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMIT3cHyperBasalFloor,
-                BooleanKey.OApsAIMIT3cCfrdMode,
-                BooleanKey.OApsAIMIT3cCfrdExacerbationMode,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.T3cCfrdLgsFloor,
-            content = AimiSettingsContentId.PreferencesT3c,
-            level = AimiSettingsLevel.SIMPLE,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                DoubleKey.OApsAIMIT3cCfrdLgsFloorMgdl,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.T3cCfrdCobDelay,
-            content = AimiSettingsContentId.PreferencesT3c,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                DoubleKey.OApsAIMIT3cCfrdCobDelayMin,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.T3cAnticipation,
-            content = AimiSettingsContentId.PreferencesT3c,
-            level = AimiSettingsLevel.ADVANCED,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                DoubleKey.OApsAIMIT3cActivationThreshold,
-                DoubleKey.OApsAIMIT3cAggressiveness,
-                DoubleKey.OApsAIMIT3cAnticipationStrength,
-                BooleanKey.OApsAIMIUndeclaredCobEnabled,
-                DoubleKey.OApsAIMIUndeclaredCobMaxG,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.TrajectoryGuards,
-            content = AimiSettingsContentId.PreferencesTrajectory,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMITrajectoryGuardEnabled,
-                BooleanKey.OApsAIMIStraightLineTubeAdvisorEnabled,
-                BooleanKey.OApsAIMITubeVetoIgnoreFloorArtefact,
-                BooleanKey.OApsAIMITubeHyperClampPhysicalBound,
-            ),
-        ),
-        // Declared mirror of the nested "aimi_compose_prediction_guards" sub-screen in
-        // `AimiPreferenceTree` (Trajectory). These flags shape the PK/PD prediction curves. They were
-        // on the PK/PD screen (guard B) or on no screen (the two reversions) until step P3.
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.TrajectoryPredictionGuards,
-            content = AimiSettingsContentId.PreferencesTrajectory,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMIPkpdEndogenousReversion,
-                BooleanKey.OApsAIMIPkpdHyperReversion,
-                BooleanKey.OApsAIMIPkpdStackAwareGuardB,
-            ),
-        ),
-        AimiSettingsSection(
-            // Declared mirror of the nested "aimi_compose_tube_mpc" sub-screen in
-            // `AimiPreferenceTree` (Trajectory). AimiTubeHypoFloorMgdl and AimiTubeAggressiveness
-            // are also rewritten by the transient preference overlay: see
-            // `tpo/TpoPreferenceKeys.kt`.
-            id = AimiSettingsSectionId.TubeAdvancedTunables,
-            content = AimiSettingsContentId.PreferencesTrajectory,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                DoubleKey.AimiTubeHypoFloorMgdl,
-                DoubleKey.AimiTubeHyperBandMgdl,
-                DoubleKey.AimiTubeAggressiveness,
-                DoubleKey.AimiTubeBasalTrimMax,
-                DoubleKey.AimiTubeKappaSafetyMargin,
-            ),
-        ),
-        // A ceiling on insulin is the person's own setting, so it is SIMPLE, and a FIELDS list may
-        // hold only one level — hence its own one-key section rather than a line in the mode list.
-        // It mirrors the first item of `AimiPreferenceTree` (manual modes).
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.ManualModesMaxBasal,
-            content = AimiSettingsContentId.PreferencesManualModes,
-            level = AimiSettingsLevel.SIMPLE,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                DoubleKey.meal_modes_MaxBasal,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.ModeBreakfast,
-            content = AimiSettingsContentId.PreferencesManualModes,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                DoubleKey.OApsAIMIBFPrebolus,
-                DoubleKey.OApsAIMIBFPrebolus2,
-                DoubleKey.OApsAIMIBFFactor,
-                IntKey.OApsAIMIBFinterval,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.ModeLunch,
-            content = AimiSettingsContentId.PreferencesManualModes,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                DoubleKey.OApsAIMILunchPrebolus,
-                DoubleKey.OApsAIMILunchPrebolus2,
-                DoubleKey.OApsAIMILunchFactor,
-                IntKey.OApsAIMILunchinterval,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.ModeDinner,
-            content = AimiSettingsContentId.PreferencesManualModes,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                DoubleKey.OApsAIMIDinnerPrebolus,
-                DoubleKey.OApsAIMIDinnerPrebolus2,
-                DoubleKey.OApsAIMIDinnerFactor,
-                IntKey.OApsAIMIDinnerinterval,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.ModeHighCarb,
-            content = AimiSettingsContentId.PreferencesManualModes,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                DoubleKey.OApsAIMIHighCarbPrebolus,
-                DoubleKey.OApsAIMIHighCarbPrebolus2,
-                DoubleKey.OApsAIMIHCFactor,
-                IntKey.OApsAIMIHCinterval,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.ModeSnack,
-            content = AimiSettingsContentId.PreferencesManualModes,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                DoubleKey.OApsAIMISnackPrebolus,
-                DoubleKey.OApsAIMISnackFactor,
-                IntKey.OApsAIMISnackinterval,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.ModeMeal,
-            content = AimiSettingsContentId.PreferencesManualModes,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                DoubleKey.OApsAIMIMealPrebolus,
-                DoubleKey.OApsAIMIMealFactor,
-                IntKey.OApsAIMImealinterval,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.ModeSleep,
-            content = AimiSettingsContentId.PreferencesManualModes,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                DoubleKey.OApsAIMIsleepFactor,
-                IntKey.OApsAIMISleepinterval,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.AutodriveChannel,
-            content = AimiSettingsContentId.PreferencesAutodrive,
-            level = AimiSettingsLevel.ADVANCED,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMIautoDriveActive,
-                BooleanKey.OApsAIMIautoDriveAuthoritative,
-                BooleanKey.OApsAIMIHyperTrajectoryRelease,
-                BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.AutodriveBeliefShadow,
-            content = AimiSettingsContentId.PreferencesAutodrive,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMIRecursiveBeliefShadow,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.AutodriveBeliefAuthority,
-            content = AimiSettingsContentId.PreferencesAutodrive,
-            level = AimiSettingsLevel.ADVANCED,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMIRecursiveBeliefAuthority,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.AutodriveBeliefWavelet,
-            content = AimiSettingsContentId.PreferencesAutodrive,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMIRecursiveBeliefWavelet,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.AutodriveMealRise,
-            content = AimiSettingsContentId.PreferencesAutodrive,
-            level = AimiSettingsLevel.ADVANCED,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMITreeMealRiseFrontLoad,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.AutodriveSensorConfidence,
-            content = AimiSettingsContentId.PreferencesAutodrive,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMISensorConfidenceCgmFirst,
-            ),
-        ),
-        // Same reason as `ManualModesMaxBasal`: the autodrive ceiling is the person's, the gestures
-        // around it are not. It mirrors the `autodriveMaxBasal` line of the autodrive screen.
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.AutodriveMaxBasal,
-            content = AimiSettingsContentId.PreferencesAutodrive,
-            level = AimiSettingsLevel.SIMPLE,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                DoubleKey.autodriveMaxBasal,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.AutodriveGestures,
-            content = AimiSettingsContentId.PreferencesAutodrive,
-            level = AimiSettingsLevel.ADVANCED,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMIMealConfirmedEarlyRelease,
-                DoubleKey.OApsAIMIHyperEstablishedDevMgdl,
-                DoubleKey.OApsAIMIHyperDeepDevMgdl,
-                DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep,
-                BooleanKey.OApsAIMIautodriveAggressiveSmbFloor,
-                BooleanKey.OApsAIMIStressIsfFloor,
-                BooleanKey.OApsAIMIEffortActivityProtection,
-                BooleanKey.OApsAIMIRiseCeilingGuard,
-                BooleanKey.OApsAIMIAnticipBasalFloor,
-                DoubleKey.OApsAIMIAnticipBudgetU,
-                BooleanKey.OApsAIMIAnticipMealEvidence,
-                DoubleKey.OApsAIMIautodrivesmallPrebolus,
-                DoubleKey.OApsAIMIautodrivePrebolus,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.AutodrivePrebolusVariables,
-            content = AimiSettingsContentId.PreferencesAutodrivePrebolusVars,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                IntKey.OApsAIMIAutodriveBG,
-                DoubleKey.OApsAIMIcombinedDelta,
-                DoubleKey.OApsAIMIAutodriveDeviation,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.AuditorProfileFactors,
-            content = AimiSettingsContentId.PreferencesAiAuditor,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMIAuditorProfileFactors,
-            ),
-        ),
-        AimiSettingsSection(
-            // Declared mirror of the rest of `aimi_compose_ai_auditor` in `AimiPreferenceTree.kt`.
-            id = AimiSettingsSectionId.AuditorSettings,
-            content = AimiSettingsContentId.PreferencesAiAuditor,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.AimiAuditorEnabled,
-                StringKey.AimiAuditorMode,
-                IntKey.AimiAuditorMaxPerHour,
-                IntKey.AimiAuditorTimeoutSeconds,
-                IntKey.AimiAuditorMinConfidence,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.ContextModuleEnable,
-            content = AimiSettingsContentId.ContextEditor,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMIContextEnabled,
-                BooleanKey.OApsAIMIContextLLMEnabled,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.ContextIntentStore,
-            content = AimiSettingsContentId.ContextEditor,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.CONTROL,
-            keys = listOf(
-                StringKey.OApsAIMIContextStorage,
-            ),
-        ),
-        AimiSettingsSection(
-            // Declared mirror of the top of `aimi_compose_sos` in `AimiPreferenceTree.kt`.
-            id = AimiSettingsSectionId.SosEnable,
-            content = AimiSettingsContentId.PreferencesEmergencySos,
-            level = AimiSettingsLevel.ADVANCED,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.AimiEmergencySosEnable,
-            ),
-        ),
-        AimiSettingsSection(
-            // The three mg/dL and minute thresholds the person sets for their own hypo safety net.
-            id = AimiSettingsSectionId.SosThresholds,
-            content = AimiSettingsContentId.PreferencesEmergencySos,
-            level = AimiSettingsLevel.SIMPLE,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                IntKey.AimiEmergencySosThreshold,
-                IntKey.AimiEmergencySosImmediateThreshold,
-                IntKey.AimiEmergencySosStaleThreshold,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.SosContacts,
-            content = AimiSettingsContentId.PreferencesEmergencySos,
-            level = AimiSettingsLevel.ADVANCED,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                StringKey.AimiEmergencySosPhone,
-                StringKey.AimiEmergencySosPhone2,
-            ),
-        ),
+        fields(
+            AimiSettingsSectionId.EssentialsPatient, AimiSettingsContentId.PreferencesEssentials, AimiSettingsLevel.SIMPLE,
+            DoubleKey.OApsAIMIweight, DoubleKey.OApsAIMITDD7, DoubleKey.OApsAIMICHO, BooleanKey.OApsAIMIhoneymoon, BooleanKey.OApsAIMIpregnancy,
+        ),
+        // Age and due date stay ADVANCED: their other screens (night growth, patient context) are
+        // ADVANCED field lists, and a key has one level.
+        fields(
+            AimiSettingsSectionId.EssentialsPatientDetails, AimiSettingsContentId.PreferencesEssentials, AimiSettingsLevel.ADVANCED,
+            IntKey.OApsAIMINightGrowthAgeYears, AimiStringKey.PregnancyDueDateString,
+        ),
+        fields(
+            AimiSettingsSectionId.EssentialsDoseLimits, AimiSettingsContentId.PreferencesEssentials, AimiSettingsLevel.SIMPLE,
+            DoubleKey.meal_modes_MaxBasal, DoubleKey.autodriveMaxBasal, DoubleKey.OApsAIMIMaxSMB, DoubleKey.OApsAIMIHighBGMaxSMB, DoubleKey.OApsAIMIMaxMultiplier,
+        ),
+        fields(
+            AimiSettingsSectionId.AiAdvisorKeys, AimiSettingsContentId.PreferencesAiKeys, AimiSettingsLevel.EXPERT,
+            StringKey.AimiAdvisorProvider, StringKey.AimiAdvisorOpenAIKey, StringKey.AimiAdvisorGeminiKey, StringKey.AimiAdvisorDeepSeekKey,
+            StringKey.AimiAdvisorClaudeKey, AimiStringKey.AimiAdvisorClaudeModel,
+        ),
+        fields(
+            AimiSettingsSectionId.PreferencesAiAdvisorLearning, AimiSettingsContentId.PreferencesAiKeys, AimiSettingsLevel.EXPERT,
+            BooleanKey.OApsAIMIAdvisorPersonalOrefMl, BooleanKey.OApsAIMIAdvisorLlmRichOref,
+        ),
+        fields(AimiSettingsSectionId.TpoEnable, AimiSettingsContentId.PreferencesTpo, AimiSettingsLevel.ADVANCED, BooleanKey.OApsAIMITpoEnabled),
+        fields(
+            AimiSettingsSectionId.TpoOptions, AimiSettingsContentId.PreferencesTpo, AimiSettingsLevel.EXPERT,
+            BooleanKey.OApsAIMITpoLlmConfirmEnabled, BooleanKey.OApsAIMITpoNotifyOnApply,
+        ),
+        // "About you": the same person data as the Essentials page, on a page that search can open.
+        fields(
+            AimiSettingsSectionId.PatientBody, AimiSettingsContentId.PreferencesPatientContext, AimiSettingsLevel.SIMPLE,
+            DoubleKey.OApsAIMIweight, DoubleKey.OApsAIMICHO, DoubleKey.OApsAIMITDD7, BooleanKey.OApsAIMIpregnancy,
+        ),
+        fields(AimiSettingsSectionId.PatientPregnancyDueDate, AimiSettingsContentId.PreferencesPatientContext, AimiSettingsLevel.ADVANCED, AimiStringKey.PregnancyDueDateString),
+        fields(AimiSettingsSectionId.PatientHoneymoon, AimiSettingsContentId.PreferencesPatientContext, AimiSettingsLevel.SIMPLE, BooleanKey.OApsAIMIhoneymoon),
+        // The SMB limits, on a page that search can open (the Essentials page shows them too).
+        fields(
+            AimiSettingsSectionId.DoseLimits, AimiSettingsContentId.PreferencesDoseLimits, AimiSettingsLevel.SIMPLE,
+            DoubleKey.OApsAIMIMaxSMB, DoubleKey.OApsAIMIHighBGMaxSMB, DoubleKey.OApsAIMIHighBg,
+        ),
+
+        // ---- Feature card: meals ----
+        fields(AimiSettingsSectionId.ManualModesMaxBasal, AimiSettingsContentId.CardMeals, AimiSettingsLevel.SIMPLE, DoubleKey.meal_modes_MaxBasal),
+        fields(
+            AimiSettingsSectionId.MealsAnticipation, AimiSettingsContentId.CardMeals, AimiSettingsLevel.ADVANCED,
+            BooleanKey.OApsAIMIAnticipBasalFloor, DoubleKey.OApsAIMIAnticipBudgetU, BooleanKey.OApsAIMIAnticipMealEvidence,
+        ),
+        fields(
+            AimiSettingsSectionId.ModeBreakfast, AimiSettingsContentId.PreferencesManualModes, AimiSettingsLevel.EXPERT,
+            DoubleKey.OApsAIMIBFPrebolus, DoubleKey.OApsAIMIBFPrebolus2, DoubleKey.OApsAIMIBFFactor, IntKey.OApsAIMIBFinterval,
+        ),
+        fields(
+            AimiSettingsSectionId.ModeLunch, AimiSettingsContentId.PreferencesManualModes, AimiSettingsLevel.EXPERT,
+            DoubleKey.OApsAIMILunchPrebolus, DoubleKey.OApsAIMILunchPrebolus2, DoubleKey.OApsAIMILunchFactor, IntKey.OApsAIMILunchinterval,
+        ),
+        fields(
+            AimiSettingsSectionId.ModeDinner, AimiSettingsContentId.PreferencesManualModes, AimiSettingsLevel.EXPERT,
+            DoubleKey.OApsAIMIDinnerPrebolus, DoubleKey.OApsAIMIDinnerPrebolus2, DoubleKey.OApsAIMIDinnerFactor, IntKey.OApsAIMIDinnerinterval,
+        ),
+        fields(
+            AimiSettingsSectionId.ModeHighCarb, AimiSettingsContentId.PreferencesManualModes, AimiSettingsLevel.EXPERT,
+            DoubleKey.OApsAIMIHighCarbPrebolus, DoubleKey.OApsAIMIHighCarbPrebolus2, DoubleKey.OApsAIMIHCFactor, IntKey.OApsAIMIHCinterval,
+        ),
+        fields(
+            AimiSettingsSectionId.ModeSnack, AimiSettingsContentId.PreferencesManualModes, AimiSettingsLevel.EXPERT,
+            DoubleKey.OApsAIMISnackPrebolus, DoubleKey.OApsAIMISnackFactor, IntKey.OApsAIMISnackinterval,
+        ),
+        fields(
+            AimiSettingsSectionId.ModeMeal, AimiSettingsContentId.PreferencesManualModes, AimiSettingsLevel.EXPERT,
+            DoubleKey.OApsAIMIMealPrebolus, DoubleKey.OApsAIMIMealFactor, IntKey.OApsAIMImealinterval,
+        ),
+        fields(
+            AimiSettingsSectionId.ModeSleep, AimiSettingsContentId.PreferencesManualModes, AimiSettingsLevel.EXPERT,
+            DoubleKey.OApsAIMIsleepFactor, IntKey.OApsAIMISleepinterval,
+        ),
+
+        // ---- Feature card: exercise and activity ----
+        fields(
+            AimiSettingsSectionId.ActivityProtection, AimiSettingsContentId.CardActivity, AimiSettingsLevel.ADVANCED,
+            BooleanKey.OApsAIMIEffortActivityProtection, DoubleKey.OApsAIMISmbExerciseDamping,
+        ),
+        // Read by the basal cap of the correction path during exercise; it had no screen before step
+        // S2. It keeps its manifest level (ADVANCED); the key map's EXPERT target is for the level step.
+        fields(AimiSettingsSectionId.ActivityBasalCap, AimiSettingsContentId.CardActivity, AimiSettingsLevel.ADVANCED, DoubleKey.OApsAIMIActivityBasalCapFactor),
+
+        // ---- Feature card: night ----
+        fields(AimiSettingsSectionId.NightMode, AimiSettingsContentId.CardNight, AimiSettingsLevel.ADVANCED, BooleanKey.OApsAIMInight),
+        fields(
+            AimiSettingsSectionId.NightGrowthIntent, AimiSettingsContentId.PreferencesNightGrowth, AimiSettingsLevel.ADVANCED,
+            BooleanKey.OApsAIMINightGrowthEnabled, IntKey.OApsAIMINightGrowthAgeYears, StringKey.OApsAIMINightGrowthStart, StringKey.OApsAIMINightGrowthEnd,
+        ),
+        fields(AimiSettingsSectionId.NightGrowthBudget, AimiSettingsContentId.PreferencesNightGrowth, AimiSettingsLevel.EXPERT, DoubleKey.OApsAIMINightGrowthMaxIobExtra),
+
+        // ---- Feature card: women's cycle ----
+        fields(
+            AimiSettingsSectionId.WomenCycleIntent, AimiSettingsContentId.CardWomenCycle, AimiSettingsLevel.ADVANCED,
+            BooleanKey.OApsAIMIwcycle, StringKey.OApsAIMIWCycleTrackingMode, StringKey.OApsAIMIWCycleContraceptive,
+            DoubleKey.OApsAIMIwcycledateday, IntKey.OApsAIMIWCycleAvgLength,
+        ),
+        fields(
+            AimiSettingsSectionId.WomenCycleExpert, AimiSettingsContentId.CardWomenCycle, AimiSettingsLevel.EXPERT,
+            BooleanKey.OApsAIMIWCycleShadow, BooleanKey.OApsAIMIWCycleRequireConfirm, DoubleKey.OApsAIMIWCycleClampMin, DoubleKey.OApsAIMIWCycleClampMax,
+        ),
+
+        // ---- Feature card: illness and inflammation ----
+        fields(
+            AimiSettingsSectionId.InflammatoryContext, AimiSettingsContentId.CardIllness, AimiSettingsLevel.ADVANCED,
+            StringKey.OApsAIMIWCycleThyroid, StringKey.OApsAIMIWCycleVerneuil,
+        ),
+        fields(
+            AimiSettingsSectionId.ThyroidModule, AimiSettingsContentId.PreferencesThyroid, AimiSettingsLevel.ADVANCED,
+            BooleanKey.OApsAIMIThyroidEnabled, StringKey.OApsAIMIThyroidMode, StringKey.OApsAIMIThyroidManualStatus,
+            StringKey.OApsAIMIThyroidTreatmentPhase, StringKey.OApsAIMIThyroidGuardLevel,
+        ),
+        fields(AimiSettingsSectionId.ThyroidDebug, AimiSettingsContentId.PreferencesThyroid, AimiSettingsLevel.EXPERT, BooleanKey.OApsAIMIThyroidLogVerbosity),
+        fields(
+            AimiSettingsSectionId.EndoStatus, AimiSettingsContentId.PreferencesEndometriosis, AimiSettingsLevel.SIMPLE,
+            BooleanKey.AimiEndometriosisEnable, BooleanKey.AimiEndometriosisPainFlare,
+        ),
+        // The flare duration is not here: nothing reads it (see DEAD_KEYS).
+        fields(
+            AimiSettingsSectionId.EndoTuning, AimiSettingsContentId.PreferencesEndometriosis, AimiSettingsLevel.EXPERT,
+            DoubleKey.AimiEndometriosisBasalMult, DoubleKey.AimiEndometriosisSmbDampen,
+        ),
+        fields(AimiSettingsSectionId.T3cMode, AimiSettingsContentId.PreferencesT3c, AimiSettingsLevel.ADVANCED, BooleanKey.OApsAIMIT3cBrittleMode),
+        fields(AimiSettingsSectionId.T3cAutodriveAuthority, AimiSettingsContentId.PreferencesT3c, AimiSettingsLevel.EXPERT, BooleanKey.OApsAIMIT3cAutodriveBasalAuthority),
+        fields(
+            AimiSettingsSectionId.T3cBehaviour, AimiSettingsContentId.PreferencesT3c, AimiSettingsLevel.ADVANCED,
+            BooleanKey.OApsAIMIT3cHyperBasalFloor, BooleanKey.OApsAIMIT3cCfrdMode, BooleanKey.OApsAIMIT3cCfrdExacerbationMode,
+        ),
+        fields(AimiSettingsSectionId.T3cCfrdLgsFloor, AimiSettingsContentId.PreferencesT3c, AimiSettingsLevel.SIMPLE, DoubleKey.OApsAIMIT3cCfrdLgsFloorMgdl),
+        fields(AimiSettingsSectionId.T3cCfrdCobDelay, AimiSettingsContentId.PreferencesT3c, AimiSettingsLevel.EXPERT, DoubleKey.OApsAIMIT3cCfrdCobDelayMin),
+        fields(
+            AimiSettingsSectionId.T3cAnticipation, AimiSettingsContentId.PreferencesT3c, AimiSettingsLevel.ADVANCED,
+            DoubleKey.OApsAIMIT3cActivationThreshold, DoubleKey.OApsAIMIT3cAggressiveness, DoubleKey.OApsAIMIT3cAnticipationStrength,
+            BooleanKey.OApsAIMIUndeclaredCobEnabled, DoubleKey.OApsAIMIUndeclaredCobMaxG,
+        ),
+
+        // ---- Feature card: PK/PD learning (the guided screen draws the rest, see the PK/PD contents) ----
+        fields(AimiSettingsSectionId.CardPkpdEnable, AimiSettingsContentId.CardPkpd, AimiSettingsLevel.ADVANCED, BooleanKey.OApsAIMIPkpdEnabled),
+
+        // ---- Feature card: physio (sources, assistant, tree) ----
+        // The sleep and HRV switches are not here: nothing reads them (see DEAD_KEYS).
+        fields(AimiSettingsSectionId.PhysioModuleToggles, AimiSettingsContentId.CardPhysio, AimiSettingsLevel.ADVANCED, BooleanKey.AimiPhysioAssistantEnable),
+        fields(
+            AimiSettingsSectionId.PhysioSources, AimiSettingsContentId.CardPhysio, AimiSettingsLevel.EXPERT,
+            AimiStringKey.ActivitySourceMode, AimiStringKey.OuraPersonalAccessToken,
+        ),
+        fields(
+            AimiSettingsSectionId.PhysioAiAnalysis, AimiSettingsContentId.CardPhysio, AimiSettingsLevel.EXPERT,
+            BooleanKey.AimiPhysioLLMAnalysisEnable, BooleanKey.AimiHrvBaselinePerNight,
+        ),
+        fields(AimiSettingsSectionId.PhysioStressFloor, AimiSettingsContentId.CardPhysio, AimiSettingsLevel.ADVANCED, BooleanKey.OApsAIMIStressIsfFloor),
+        fields(AimiSettingsSectionId.PhysioSensorConfidence, AimiSettingsContentId.CardPhysio, AimiSettingsLevel.EXPERT, BooleanKey.OApsAIMISensorConfidenceCgmFirst),
+
+        // ---- Feature card: Autodrive ----
+        fields(
+            AimiSettingsSectionId.AutodriveChannel, AimiSettingsContentId.CardAutodrive, AimiSettingsLevel.ADVANCED,
+            BooleanKey.OApsAIMIautoDriveActive, BooleanKey.OApsAIMIautoDriveAuthoritative,
+            BooleanKey.OApsAIMIHyperTrajectoryRelease, BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive,
+        ),
+        fields(AimiSettingsSectionId.AutodriveBeliefShadow, AimiSettingsContentId.CardAutodrive, AimiSettingsLevel.EXPERT, BooleanKey.OApsAIMIRecursiveBeliefShadow),
+        fields(AimiSettingsSectionId.AutodriveBeliefAuthority, AimiSettingsContentId.CardAutodrive, AimiSettingsLevel.ADVANCED, BooleanKey.OApsAIMIRecursiveBeliefAuthority),
+        fields(AimiSettingsSectionId.AutodriveBeliefWavelet, AimiSettingsContentId.CardAutodrive, AimiSettingsLevel.EXPERT, BooleanKey.OApsAIMIRecursiveBeliefWavelet),
+        fields(AimiSettingsSectionId.AutodriveMealRise, AimiSettingsContentId.CardAutodrive, AimiSettingsLevel.ADVANCED, BooleanKey.OApsAIMITreeMealRiseFrontLoad),
+        fields(AimiSettingsSectionId.AutodriveMaxBasal, AimiSettingsContentId.CardAutodrive, AimiSettingsLevel.SIMPLE, DoubleKey.autodriveMaxBasal),
+        fields(
+            AimiSettingsSectionId.AutodriveGestures, AimiSettingsContentId.CardAutodrive, AimiSettingsLevel.ADVANCED,
+            BooleanKey.OApsAIMIMealConfirmedEarlyRelease, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, DoubleKey.OApsAIMIHyperDeepDevMgdl,
+            DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, BooleanKey.OApsAIMIautodriveAggressiveSmbFloor, BooleanKey.OApsAIMIRiseCeilingGuard,
+            DoubleKey.OApsAIMIautodrivesmallPrebolus, DoubleKey.OApsAIMIautodrivePrebolus,
+        ),
+        // The two weights of the glucose delta. The Autodrive BG and deviation keys are not here:
+        // nothing reads them (see DEAD_KEYS).
+        fields(
+            AimiSettingsSectionId.AutodrivePrebolusVariables, AimiSettingsContentId.PreferencesAutodrivePrebolusVars, AimiSettingsLevel.EXPERT,
+            DoubleKey.OApsAIMIcombinedDelta, DoubleKey.OApsAIMIAutodriveAcceleration,
+        ),
+
+        // ---- Feature card: safety alarms (SOS) ----
+        fields(AimiSettingsSectionId.SosEnable, AimiSettingsContentId.CardSafetyAlarms, AimiSettingsLevel.ADVANCED, BooleanKey.AimiEmergencySosEnable),
+        // The three mg/dL and minute thresholds the person sets for their own hypo safety net.
+        fields(
+            AimiSettingsSectionId.SosThresholds, AimiSettingsContentId.CardSafetyAlarms, AimiSettingsLevel.SIMPLE,
+            IntKey.AimiEmergencySosThreshold, IntKey.AimiEmergencySosImmediateThreshold, IntKey.AimiEmergencySosStaleThreshold,
+        ),
+        fields(
+            AimiSettingsSectionId.SosContacts, AimiSettingsContentId.CardSafetyAlarms, AimiSettingsLevel.ADVANCED,
+            StringKey.AimiEmergencySosPhone, StringKey.AimiEmergencySosPhone2,
+        ),
+
+        // ---- Expert area: the technical pages ----
+        fields(AimiSettingsSectionId.AdaptiveBasalEnable, AimiSettingsContentId.PreferencesAdaptiveBasal, AimiSettingsLevel.ADVANCED, BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled),
+        fields(
+            AimiSettingsSectionId.AdaptiveBasalExpert, AimiSettingsContentId.PreferencesAdaptiveBasal, AimiSettingsLevel.EXPERT,
+            BooleanKey.OApsAIMIBasalSlewLimitEnabled, BooleanKey.OApsAIMIBasalChannelSafetyGuards, BooleanKey.OApsAIMIBasalTerminalInvariants,
+            BooleanKey.OApsAIMITrajBridgeBasalSurvives, BooleanKey.OApsAIMIBasalProjectedError, BooleanKey.OApsAIMIDynamicBasalStackCap,
+            BooleanKey.OApsAIMIForcedTbrRealPredDelta, BooleanKey.OApsAIMIBasalStackTerminalCap, BooleanKey.OApsAIMIEngineHyperRateBound,
+            DoubleKey.OApsAIMIAdaptiveBasalMaxScaling, DoubleKey.OApsAIMIGovernanceHypoRateEnter, DoubleKey.OApsAIMIGovernanceHypoRateExit,
+            DoubleKey.OApsAIMIGovernanceHypoBgMgdl, DoubleKey.OApsAIMIGovernanceSevereHypoBgMgdl, DoubleKey.OApsAIMIGovernanceHoldBasalFloorRate,
+            DoubleKey.OApsAIMIGovernanceHoldBasalDecayRate, DoubleKey.OApsAIMIGovernanceHoldAggFloorRate, DoubleKey.OApsAIMIGovernanceHoldAggDecayRate,
+            DoubleKey.OApsAIMIGovernanceHoldBasalFloorSevere, DoubleKey.OApsAIMIGovernanceHoldBasalDecaySevere,
+            DoubleKey.OApsAIMIGovernanceHoldAggFloorSevere, DoubleKey.OApsAIMIGovernanceHoldAggDecaySevere,
+            DoubleKey.OApsAIMIGovernanceAnticipationLookbackSamples, DoubleKey.OApsAIMIGovernanceAnticipationMarginMgdl,
+            DoubleKey.OApsAIMIGovernanceAnticipationHypoDamp, DoubleKey.OApsAIMIGovernanceAnticipationDecayBlendMax,
+        ),
+        fields(AimiSettingsSectionId.AdaptiveBasalLimits, AimiSettingsContentId.PreferencesAdaptiveBasal, AimiSettingsLevel.SIMPLE, DoubleKey.OApsAIMIMaxMultiplier),
+        fields(
+            AimiSettingsSectionId.TrajectoryGuards, AimiSettingsContentId.PreferencesTrajectory, AimiSettingsLevel.EXPERT,
+            BooleanKey.OApsAIMITrajectoryGuardEnabled, BooleanKey.OApsAIMIStraightLineTubeAdvisorEnabled,
+            BooleanKey.OApsAIMITubeVetoIgnoreFloorArtefact, BooleanKey.OApsAIMITubeHyperClampPhysicalBound,
+        ),
+        // Expert flags of the PK/PD prediction curves (step P3: moved off the PK/PD screen).
+        fields(
+            AimiSettingsSectionId.TrajectoryPredictionGuards, AimiSettingsContentId.PreferencesTrajectory, AimiSettingsLevel.EXPERT,
+            BooleanKey.OApsAIMIPkpdEndogenousReversion, BooleanKey.OApsAIMIPkpdHyperReversion, BooleanKey.OApsAIMIPkpdStackAwareGuardB,
+        ),
+        fields(
+            AimiSettingsSectionId.TubeAdvancedTunables, AimiSettingsContentId.PreferencesTrajectory, AimiSettingsLevel.EXPERT,
+            DoubleKey.AimiTubeHypoFloorMgdl, DoubleKey.AimiTubeHyperBandMgdl, DoubleKey.AimiTubeAggressiveness,
+            DoubleKey.AimiTubeBasalTrimMax, DoubleKey.AimiTubeKappaSafetyMargin,
+        ),
+        fields(AimiSettingsSectionId.AuditorProfileFactors, AimiSettingsContentId.PreferencesAiAuditor, AimiSettingsLevel.EXPERT, BooleanKey.OApsAIMIAuditorProfileFactors),
+        fields(
+            AimiSettingsSectionId.AuditorSettings, AimiSettingsContentId.PreferencesAiAuditor, AimiSettingsLevel.EXPERT,
+            BooleanKey.AimiAuditorEnabled, StringKey.AimiAuditorMode, IntKey.AimiAuditorMaxPerHour,
+            IntKey.AimiAuditorTimeoutSeconds, IntKey.AimiAuditorMinConfidence,
+        ),
+
+        // ---- The context screen (its own activity, opened from the tree) ----
+        fields(
+            AimiSettingsSectionId.ContextModuleEnable, AimiSettingsContentId.ContextEditor, AimiSettingsLevel.EXPERT,
+            BooleanKey.OApsAIMIContextEnabled, BooleanKey.OApsAIMIContextLLMEnabled,
+        ),
+        fields(AimiSettingsSectionId.ContextIntentStore, AimiSettingsContentId.ContextEditor, AimiSettingsLevel.EXPERT, StringKey.OApsAIMIContextStorage),
     )
+
+    /**
+     * The Expert family pages, generated from the manifest: every EXPERT key the person owns that no
+     * page above offers, grouped by family. A new EXPERT key lands here on the day it is written.
+     * Keys in [AimiSettingsManifest.REACHABILITY_DEBT] stay out: they have no screen yet, on purpose.
+     */
+    private val expertFamilySections: List<AimiSettingsSection> = run {
+        val onHandPages = handSections.flatMap { it.keys }.map { it.key }.toSet()
+        AimiBehaviorFamilyId.entries.map { family ->
+            AimiSettingsSection(
+                id = expertSectionIdOf(family),
+                content = AimiSettingsContentId.ExpertFamilies,
+                level = AimiSettingsLevel.EXPERT,
+                kind = AimiSettingsSectionKind.FIELDS,
+                keys = AimiSettingsManifest.entries
+                    .filter { it.family == family && it.level == AimiSettingsLevel.EXPERT && it.userOwned && it.key is PreferenceKey }
+                    .map { it.key }
+                    .filterNot { it.key in onHandPages || it.key in AimiSettingsManifest.REACHABILITY_DEBT },
+            )
+        }
+    }
+
+    val sections: List<AimiSettingsSection> = handSections + expertFamilySections
+
+    /** The id of the generated Expert section of [family]. */
+    fun expertSectionIdOf(family: AimiBehaviorFamilyId): AimiSettingsSectionId = when (family) {
+        AimiBehaviorFamilyId.Protection  -> AimiSettingsSectionId.ExpertProtection
+        AimiBehaviorFamilyId.MealCapture -> AimiSettingsSectionId.ExpertMealCapture
+        AimiBehaviorFamilyId.Stability   -> AimiSettingsSectionId.ExpertStability
+        AimiBehaviorFamilyId.Physio      -> AimiSettingsSectionId.ExpertPhysio
+        AimiBehaviorFamilyId.Autonomy    -> AimiSettingsSectionId.ExpertAutonomy
+    }
+
+    /** A FIELDS section: one row per key, every key of [level]. */
+    private fun fields(
+        id: AimiSettingsSectionId,
+        content: AimiSettingsContentId,
+        level: AimiSettingsLevel,
+        vararg keys: NonPreferenceKey,
+    ): AimiSettingsSection = AimiSettingsSection(id, content, level, AimiSettingsSectionKind.FIELDS, keys.toList())
 
     private val sectionById: Map<AimiSettingsSectionId, AimiSettingsSection> =
         sections.associateBy { it.id }

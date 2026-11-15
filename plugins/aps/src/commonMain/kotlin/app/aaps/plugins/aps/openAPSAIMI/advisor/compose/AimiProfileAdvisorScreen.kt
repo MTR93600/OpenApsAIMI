@@ -66,7 +66,6 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiRecommendation
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiSharing
 import app.aaps.plugins.aps.openAPSAIMI.advisor.buildAimiBehaviorCausalInsights
-import app.aaps.plugins.aps.openAPSAIMI.advisor.buildAimiFamilyBridgeSuggestions
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.HarmoniaRuntimeHistoryReader
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.HarmoniaRuntimeHistorySummary
@@ -252,12 +251,10 @@ fun AimiProfileAdvisorScreen(
                 val note = textResolver.gs(ApsStrings.aimi_coach_placeholder, provider.name)
                 textResolver.gs(ApsStrings.aimi_coach_basic_with_note, basicAnalysis, note)
             } else {
-                // familyBridgeSuggestions/causalInsights are prompt input only - never rendered as a
-                // card - and stay inside runCatching like the staged code, since either can throw on
-                // unexpected preference combinations and must not break the coach call.
+                // causalInsights are prompt input only - never rendered as a card - and stay inside
+                // runCatching, so an unexpected preference combination can not break the coach call.
                 val causalInsights = runCatching {
-                    val familyBridgeSuggestions = buildAimiFamilyBridgeSuggestions(preferences, currentReport.metrics)
-                    buildAimiBehaviorCausalInsights(preferences, currentReport.metrics, familyBridgeSuggestions)
+                    buildAimiBehaviorCausalInsights(preferences, currentReport.metrics)
                 }.getOrDefault(emptyList())
                 val history = withContext(aapsIoDispatcher) { historyRepo.getRecentActions(7) }
                 val richOref = preferences.get(BooleanKey.OApsAIMIAdvisorLlmRichOref)

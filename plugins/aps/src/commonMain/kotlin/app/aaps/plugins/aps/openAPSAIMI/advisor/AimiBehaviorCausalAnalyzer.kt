@@ -4,7 +4,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiAutonomyMode
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorFamilyId
 import app.aaps.plugins.aps.openAPSAIMI.compose.authorityRank
-import app.aaps.plugins.aps.openAPSAIMI.compose.readAimiControlCenterDraft
+import app.aaps.plugins.aps.openAPSAIMI.compose.autonomyModeFromAutodrive
 import kotlin.math.roundToInt
 
 internal data class AimiBehaviorCausalInsight(
@@ -13,16 +13,20 @@ internal data class AimiBehaviorCausalInsight(
     val secondaryFamilies: List<AimiBehaviorFamilyId> = emptyList(),
     val confidence: Float,
     val evidence: List<String> = emptyList(),
-    val relatedSuggestionId: String? = null,
 )
 
+/**
+ * Short notes for the AI coach prompt: patterns in the measured numbers, tagged with the family they
+ * touch. They are prompt input only and never change a setting.
+ *
+ * Since step S2 a note stands only on measured numbers and on real switches. The Control Center
+ * display levels (a guess computed from many settings) and its family suggestions are gone, so no
+ * note can point to a family level any more.
+ */
 internal fun buildAimiBehaviorCausalInsights(
     preferences: Preferences,
     metrics: AdvisorMetrics,
-    familyBridgeSuggestions: List<AimiFamilyBridgeSuggestion>,
 ): List<AimiBehaviorCausalInsight> {
-    val draft = readAimiControlCenterDraft(preferences)
-    val availableSuggestionIds = familyBridgeSuggestions.map { it.id }.toSet()
     val insights = mutableListOf<AimiBehaviorCausalInsight>()
     // Insights are read as statements about the user's own period. With no measured numbers we say
     // nothing instead of describing an average patient.
@@ -41,24 +45,23 @@ internal fun buildAimiBehaviorCausalInsights(
                 "CV ${pct(variabilityCv)}% with lows ${pct(timeBelow70)}% and highs ${pct(timeAbove180)}%.",
                 "This pattern usually reflects sequencing issues more than a single isolated threshold.",
             ),
-            relatedSuggestionId = "swing_variability".takeIf { it in availableSuggestionIds },
         )
     }
 
+    val autonomy = autonomyModeFromAutodrive(preferences)
     if (timeAbove180 >= 0.20 &&
         timeBelow70 <= 0.04 &&
-        (draft.mealCaptureLevel <= 2 || draft.autonomyMode.authorityRank() < AimiAutonomyMode.AssistedApplication.authorityRank())
+        autonomy.authorityRank() < AimiAutonomyMode.AssistedApplication.authorityRank()
     ) {
         insights += AimiBehaviorCausalInsight(
             id = "meal_latency",
             primaryFamily = AimiBehaviorFamilyId.MealCapture,
             secondaryFamilies = listOf(AimiBehaviorFamilyId.Autonomy, AimiBehaviorFamilyId.Protection),
-            confidence = if (draft.mealCaptureLevel <= 1) 0.88f else 0.80f,
+            confidence = 0.80f,
             evidence = listOf(
                 "Hyper burden ${pct(timeAbove180)}% with low hypo pressure ${pct(timeBelow70)}%.",
-                "Current meal posture is not strongly assertive enough for late undeclared-meal trajectories.",
+                "Autodrive has neither the hyper trajectory release nor its authority switched on, so late undeclared-meal rises get no extra help.",
             ),
-            relatedSuggestionId = "meal_rise".takeIf { it in availableSuggestionIds },
         )
     }
 
@@ -72,13 +75,11 @@ internal fun buildAimiBehaviorCausalInsights(
                 "Hypo burden ${pct(timeBelow70)}% with ${metrics.severeHypoEvents} severe events.",
                 "The product should reduce overshoot before asking for more correction authority.",
             ),
-            relatedSuggestionId = "hypo_guard".takeIf { it in availableSuggestionIds },
         )
     }
 
     if (timeAbove180 >= 0.28 &&
-        timeBelow70 <= 0.03 &&
-        draft.protectionLevel <= 2
+        timeBelow70 <= 0.03
     ) {
         insights += AimiBehaviorCausalInsight(
             id = "hyper_passive",
@@ -87,26 +88,8 @@ internal fun buildAimiBehaviorCausalInsights(
             confidence = 0.84f,
             evidence = listOf(
                 "Persistent hyperglycemia ${pct(timeAbove180)}% with limited low pressure ${pct(timeBelow70)}%.",
-                "This usually means correction headroom is too conservative for the current profile.",
+                "Highs last long while lows are rare: check the profile ISF, carb ratio and dose limits with the care team.",
             ),
-            relatedSuggestionId = "hyper_stable".takeIf { it in availableSuggestionIds },
-        )
-    }
-
-    if (draft.physioLevel == 0 &&
-        draft.mealCaptureLevel >= 3 &&
-        variabilityCv >= 0.28
-    ) {
-        insights += AimiBehaviorCausalInsight(
-            id = "physio_ambiguity",
-            primaryFamily = AimiBehaviorFamilyId.Physio,
-            secondaryFamilies = listOf(AimiBehaviorFamilyId.MealCapture),
-            confidence = 0.76f,
-            evidence = listOf(
-                "Meal posture is assertive while physio influence remains low.",
-                "In ambiguous rises, this increases the risk of treating endocrine or cortisol-driven signals like meals.",
-            ),
-            relatedSuggestionId = "mixed_balance".takeIf { it in availableSuggestionIds },
         )
     }
 

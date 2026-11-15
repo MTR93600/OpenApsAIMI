@@ -13,7 +13,7 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.AiCoachingService
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiAutonomyMode
 import app.aaps.plugins.aps.openAPSAIMI.compose.authorityRank
-import app.aaps.plugins.aps.openAPSAIMI.compose.readAimiControlCenterDraft
+import app.aaps.plugins.aps.openAPSAIMI.compose.autonomyModeFromAutodrive
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientStateSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiKeyValueCache
@@ -90,7 +90,7 @@ class TpoOrchestrator @Inject constructor(
         nowMs: Long,
     ): Boolean {
         if (!isTpoEnabled()) return false
-        if (!hasRequiredAutonomy()) return false
+        if (!autonomyAllowsSession(preferences)) return false
 
         val input = TpoTickInput(
             nowMs = nowMs,
@@ -219,8 +219,15 @@ class TpoOrchestrator @Inject constructor(
 
     private fun isTpoEnabled(): Boolean = preferences.get(BooleanKey.OApsAIMITpoEnabled)
 
-    private fun hasRequiredAutonomy(): Boolean {
-        val draft = readAimiControlCenterDraft(preferences)
-        return draft.autonomyMode.authorityRank() >= AimiAutonomyMode.AssistedApplication.authorityRank()
+    companion object {
+
+        /**
+         * TPO may start a session only when Autodrive has at least the "assisted" authority: the
+         * hyper trajectory release, the authoritative switch or the recursive belief authority, each
+         * with Autodrive on. It reads the real switches (step S2: the Control Center draft that it
+         * read before is gone; the mapping is the same).
+         */
+        internal fun autonomyAllowsSession(preferences: Preferences): Boolean =
+            autonomyModeFromAutodrive(preferences).authorityRank() >= AimiAutonomyMode.AssistedApplication.authorityRank()
     }
 }

@@ -15,7 +15,7 @@ import kotlin.test.assertTrue
  *
  * The shared renderer in core/ui draws only two levels (the plugin card, and its sub screens as
  * headers); a sub screen one level deeper is skipped. The AIMI tree is deeper, so for months most
- * AIMI screens (women cycle, Lab, SOS, Physio, ...) could only be found through search. The walk
+ * AIMI screens (women cycle, SOS, Physio, ...) could only be found through search. The walk
  * below follows the renderer's rules, plus the AIMI link rows ([AimiScreenLink]), and the tests
  * fail when a key is in the tree but no tap path leads to it.
  */
@@ -33,25 +33,31 @@ class AimiPreferenceTreeTest {
         AimiSettingsContentId.PreferencesEssentials,
         AimiSettingsContentId.PreferencesAiKeys,
         AimiSettingsContentId.PreferencesTpo,
-        AimiSettingsContentId.PreferencesPhysio,
         AimiSettingsContentId.PreferencesPatientContext,
-        AimiSettingsContentId.PreferencesWomenCycle,
-        AimiSettingsContentId.PreferencesInflammatory,
-        AimiSettingsContentId.PreferencesThyroid,
-        AimiSettingsContentId.PreferencesNightGrowth,
-        AimiSettingsContentId.PreferencesLab,
-        AimiSettingsContentId.PreferencesAdaptiveBasal,
-        AimiSettingsContentId.PreferencesT3c,
-        AimiSettingsContentId.PreferencesTrajectory,
+        AimiSettingsContentId.PreferencesDoseLimits,
+        AimiSettingsContentId.CardMeals,
+        AimiSettingsContentId.CardActivity,
+        AimiSettingsContentId.CardNight,
+        AimiSettingsContentId.CardWomenCycle,
+        AimiSettingsContentId.CardIllness,
+        AimiSettingsContentId.CardPkpd,
+        AimiSettingsContentId.CardPhysio,
+        AimiSettingsContentId.CardAutodrive,
+        AimiSettingsContentId.CardSafetyAlarms,
         AimiSettingsContentId.PreferencesManualModes,
-        AimiSettingsContentId.PreferencesAutodrive,
+        AimiSettingsContentId.PreferencesNightGrowth,
+        AimiSettingsContentId.PreferencesThyroid,
+        AimiSettingsContentId.PreferencesEndometriosis,
+        AimiSettingsContentId.PreferencesT3c,
         AimiSettingsContentId.PreferencesAutodrivePrebolusVars,
+        AimiSettingsContentId.ExpertFamilies,
+        AimiSettingsContentId.PreferencesAdaptiveBasal,
+        AimiSettingsContentId.PreferencesTrajectory,
         AimiSettingsContentId.PreferencesAiAuditor,
-        AimiSettingsContentId.PreferencesEmergencySos,
     )
 
     /** Contents drawn by their own screen, opened from one entry of the tree. One list, shared with the reachability test. */
-    private val contentsDrawnElsewhere: Set<AimiSettingsContentId> = AimiSettingsTreeWalk.entryOfContentDrawnElsewhere.keys
+    private val contentsDrawnElsewhere: Set<AimiSettingsContentId> = AimiSettingsSearch.ENTRY_ROW_OF_OWN_SCREEN.keys
 
     /** Keys a person can reach by tapping. See [AimiSettingsTreeWalk.reachableKeys]. */
     private fun reachableKeys(root: PreferenceSubScreenDef): Set<String> = AimiSettingsTreeWalk.reachableKeys(root)

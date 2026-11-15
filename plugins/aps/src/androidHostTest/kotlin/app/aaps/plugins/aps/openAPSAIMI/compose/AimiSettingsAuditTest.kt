@@ -90,8 +90,8 @@ class AimiSettingsAuditTest {
     fun `the writer wording is right for each writer combination including USER plus LOOP`() {
         // LOOP only.
         whenever(preferences.getIfExists(BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled)).thenReturn(false)
-        // SLIDER only.
-        whenever(preferences.getIfExists(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled)).thenReturn(false)
+        // SLIDER only: the PK/PD learning pace chips (step S2 removed the Control Center ladders).
+        whenever(preferences.getIfExists(DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH)).thenReturn(0.5)
         // USER only.
         whenever(preferences.getIfExists(BooleanKey.OApsAIMIMLtraining)).thenReturn(true)
         // USER and LOOP together: LOOP must still win the wording.
@@ -100,7 +100,7 @@ class AimiSettingsAuditTest {
         val rows = build().rows.associateBy { it.keyString }
 
         assertEquals(AimiSettingsAuditChangedBy.LOOP, rows.getValue(BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled.key).changedBy)
-        assertEquals(AimiSettingsAuditChangedBy.SLIDER, rows.getValue(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled.key).changedBy)
+        assertEquals(AimiSettingsAuditChangedBy.SLIDER, rows.getValue(DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH.key).changedBy)
         assertEquals(AimiSettingsAuditChangedBy.USER, rows.getValue(BooleanKey.OApsAIMIMLtraining.key).changedBy)
         assertEquals(AimiSettingsAuditChangedBy.LOOP, rows.getValue(DoubleKey.AimiTubeHypoFloorMgdl.key).changedBy)
     }

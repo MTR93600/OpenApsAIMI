@@ -36,13 +36,10 @@
 
 <string name="oaps_aimi_weight_summary">Weight in kg to calculate basal</string>
 
-<string name="oaps_aimi_weight_title">Weight in kg</string>
 
 <string name="oaps_aimi_tdd7_summary">7-day average TDD</string>
 
-<string name="oaps_aimi_tdd7_title">TDD 7 days</string>
 
-<string name="oaps_aimi_pkpd_section_title">Adaptive PK/PD</string>
 
 <string name="aimi_pkpd_compose_title">PK/PD setup</string>
 
@@ -429,7 +426,6 @@
 
 <string name="oaps_aimi_cho_summary">Average carbohydrates per meal. Estimated value, not exact</string>
 
-<string name="oaps_aimi_cho_title">Average carbohydrate amount lunch/dinner</string>
 
 <string name="aimi_preferences">AIMI Settings</string>
 
@@ -509,7 +505,6 @@
 
 <string name="oaps_aimi_sleep_interval_title">SMB Interval Sleep Mode</string>
 
-<string name="OApsAIMI_Enable_pregnancy">Pregnancy Mode</string>
 
 <string name="OApsAIMI_PregnancyDueDate_title">Due Date (Terme)</string>
 
@@ -521,7 +516,6 @@
 
 <string name="OApsAIMI_Force_Limits">Force AAPS Multiplier Limits</string>
 
-<string name="OApsAIMI_Enable_honeymoon">Child Mode (insulin needs lower than adult)</string>
 
 <string name="oaps_aimi_HIGHBG_interval_summary">High BG SMB Interval</string>
 
@@ -533,7 +527,6 @@
 
 <string name="oaps_aimi_learners_title">🎓 Learners</string>
 
-<string name="aimi_sos_title">Emergency SOS (Hypo)</string>
 
 <string name="aimi_sos_enable_title">Enable Emergency SOS</string>
 
@@ -582,7 +575,6 @@
 <string name="aimi_hc_permission_client_error">Could not reach Health Connect. Open settings to check the app.</string>
 <string name="aimi_hc_permission_granted_message">Health Connect access granted</string>
 
-<string name="aimi_inflammatory_diseases_title">Inflammatory / autoimmune diseases</string>
 
 <string name="aimi_ai_auditor_section_title">AI Decision Auditor</string>
 
@@ -592,7 +584,6 @@
 
 <string name="oaps_aimi_thyroid_title">🦋 Hyperthyroidism (Basedow) Module</string>
 
-<string name="oaps_aimi_thyroid_enabled_title">Enable Thyroid Module</string>
 
 <string name="oaps_aimi_thyroid_enabled_summary">Adapts DIA, ISF, EGP and safety caps based on metabolic hyper-function. Critical during treatment when insulin resistance drops fast.</string>
 
@@ -690,7 +681,6 @@
 
 <string name="oaps_aimi_enableMlautoDrive_title">Enable Auto Drive – automatic meal detection – EXPERIMENTAL</string>
 
-<string name="oaps_aimi_enableMlautoDriveActive_title">Enable Auto Drive V3 – Continuous MPC Engine (DANGER - EXPERIMENTAL)</string>
 
 <string name="oaps_aimi_AutodriveISF_summary">Below this ISF value, the condition to receive the pre-bolus is true</string>
 
@@ -716,13 +706,11 @@
 
 <string name="oaps_aimi_AutodriveAcceleration_title">Minimum BG acceleration for pre-bolus delivery</string>
 
-<string name="aimi_mpc_u_per_kg_title">Autodrive MPC: insulin per kg (5 min)</string>
 
 <string name="aimi_mpc_u_per_kg_summary">Upper bound for each 5-minute MPC dose search: this value × AIMI body weight (kg). Still limited by Max SMB / High BG Max SMB. Default 0.065 U/kg (previously hardcoded 0.05). Increase carefully — hypo risk.</string>
 
 <string name="aimi_preferences_title_menu">AAPS Settings</string>
 
-<string name="wcycle_preferences">Menstrual Cycle Adjustments</string>
 
 <string name="wcycle_preferences_title_menu">Menstrual Cycle Adjustments - Settings</string>
 
@@ -746,7 +734,6 @@
 
 <string name="oaps_aimi_ngr_title">Night growth resistance</string>
 
-<string name="oaps_aimi_ngr_enabled_title">Enable night growth resistance monitor</string>
 
 <string name="oaps_aimi_ngr_enabled_summary">Detect sustained nocturnal rises for pediatric users.</string>
 
@@ -1418,9 +1405,7 @@
 
 <string name="aimi_auditor_indicator_idle">Auditor will activate at the next trigger</string>
 
-<string name="aimi_physio_title">🏥 Physiological Assistant</string>
 
-<string name="aimi_physio_enable_title">Enable Assistant</string>
 
 <string name="aimi_physio_enable_summary">Adjusts insulin using Health Connect vitals and a 28-pattern physiological catalogue (dawn, meals, stress, recovery). Does not enable or disable the physiological tree or Harmonia — those always run. Active patterns export to AIMI_Decisions.jsonl and feed RBT leaves and HTR caps.</string>
 
@@ -1432,11 +1417,9 @@
 
 <string name="aimi_physio_data_sources_title">Data Sources</string>
 
-<string name="aimi_physio_sleep_enable_title">Sync Sleep Data</string>
 
 <string name="aimi_physio_sleep_enable_summary">Use Health Connect to fetch sleep stages and efficiency.</string>
 
-<string name="aimi_physio_hrv_enable_title">Sync HRV &amp; RHR</string>
 
 <string name="aimi_physio_hrv_enable_summary">Use heart rate variability to detect stress/fatigue.</string>
 
@@ -1454,113 +1437,60 @@
 
 <string name="aimi_physio_debug_summary">Log detailed physiological states to the console.</string>
 
-<string name="aimi_control_center_entry_title">AIMI Control Center</string>
 
-<string name="aimi_control_center_entry_summary">See how AIMI interprets your current settings before simplifying them into behavior families.</string>
 
-<string name="aimi_pkpd_guided_title">PKPD assistant</string>
 
-<string name="aimi_patient_context_title">Patient context and body declarations</string>
 
-<string name="aimi_lab_title">AIMI Lab</string>
 
-<string name="aimi_control_center_title">AIMI Control Center</string>
 
-<string name="aimi_control_center_intro_title">Current AIMI behavior, grouped by intention</string>
 
-<string name="aimi_control_center_intro">This screen reads your current AIMI settings and translates them into behavior families. It is a migration view only: no value is changed here.</string>
 
-<string name="aimi_control_center_intro_v2">This screen reads your current AIMI settings, groups them by clinical intention, and lets you prepare family-level changes before applying them. Nothing is written until you confirm.</string>
 
-<string name="aimi_control_center_advisor_title">AIMI family advisor</string>
 
-<string name="aimi_control_center_advisor_summary">These recommendations help align the behavior families when the current draft would create a mismatch between meal handling, autonomy, and physio context.</string>
 
-<string name="aimi_control_center_advisor_none">No family-level adjustment is currently recommended. Your draft already looks coherent from a product behavior point of view.</string>
 
-<string name="aimi_control_center_advisor_load">Load recommendation</string>
 
-<string name="aimi_control_center_advisor_loaded">Recommendation loaded into the draft. Review the impacts before applying.</string>
 
-<string name="aimi_control_center_advisor_meal_physio_guard_title">Add a physio guard before going fully assertive on meals</string>
 
-<string name="aimi_control_center_advisor_meal_physio_guard_body">Very assertive meal capture without any physio influence increases the risk of false meal interpretation during cortisol, dawn, or stress-driven rises. A moderate physio layer is a safer product baseline.</string>
 
-<string name="aimi_control_center_advisor_meal_autonomy_title">Raise autonomy to match this meal strategy</string>
 
-<string name="aimi_control_center_advisor_meal_autonomy_body">Your meal capture draft is already assertive, but AIMI autonomy is still too low to express it consistently. Move autonomy to assisted application so meal logic can act with clearer runtime authority.</string>
 
-<string name="aimi_control_center_advisor_autonomy_meal_title">Raise meal capture to match current autonomy</string>
 
-<string name="aimi_control_center_advisor_autonomy_meal_body">Your autonomy draft gives AIMI enough authority to act, but meal capture remains too prudent for that operating mode. Raising meal capture keeps the product behavior more consistent and easier to understand.</string>
 
-<string name="aimi_control_center_advisor_physio_sources_title">Reduce physio influence until sources are available</string>
 
-<string name="aimi_control_center_advisor_physio_sources_body">A strong physio setting without any active source or Oura connector creates an expectation gap. Moderate physio influence is a cleaner default until the body signals are truly observable.</string>
 
-<string name="aimi_control_center_preserve_note">Legacy values preserved</string>
 
-<string name="aimi_control_center_family_count">%1$d behavior families</string>
 
-<string name="aimi_control_center_expert_count">%1$d expert mixes</string>
 
-<string name="aimi_control_center_equivalent_current">Equivalent current settings</string>
 
-<string name="aimi_control_center_coherent_profile">Coherent profile</string>
 
-<string name="aimi_control_center_mixed_legacy">Mixed legacy profile</string>
 
-<string name="aimi_control_center_expert_personalized">Expert personalized</string>
 
-<string name="aimi_control_center_confidence">Confidence %1$d%%</string>
 
-<string name="aimi_control_center_settings_count">%1$d slider-managed settings</string>
 
-<string name="aimi_control_center_managed_count">%1$d slider-managed keys</string>
 
-<string name="aimi_control_center_expert_setting_count">%1$d expert-layer keys</string>
 
-<string name="aimi_control_center_show_details">Show details</string>
 
-<string name="aimi_control_center_show_current_details">Show current settings</string>
 
-<string name="aimi_control_center_hide_details">Hide details</string>
 
 <string name="aimi_control_center_not_configured">Not configured</string>
 
-<string name="aimi_control_center_unlabeled_preference">Preference</string>
 
-<string name="aimi_control_center_configured">Configured</string>
 
-<string name="aimi_control_center_footer">Raw AIMI settings remain available in the standard preferences and AIMI Lab. This screen is designed to make the current setup understandable before introducing family-level controls.</string>
 
-<string name="aimi_control_center_footer_v2">Changes prepared here are written back into AIMI legacy preferences only after confirmation. Raw AIMI settings and AIMI Lab remain available for audit and expert tuning.</string>
 
-<string name="aimi_control_center_current_profile">Current profile</string>
 
-<string name="aimi_control_center_target_after_apply">Target after apply</string>
 
-<string name="aimi_control_center_preview_impacts">Preview impacts</string>
 
-<string name="aimi_control_center_preview_changes_count">%1$d settings to update</string>
 
-<string name="aimi_control_center_reset_family">Reset family</string>
 
-<string name="aimi_control_center_pending_title">Pending AIMI updates</string>
 
-<string name="aimi_control_center_pending_summary">%1$d families selected, %2$d legacy settings will be updated.</string>
 
-<string name="aimi_control_center_no_pending_changes">No family-level change is pending. Your current AIMI setup remains untouched.</string>
 
-<string name="aimi_control_center_reset_draft">Reset draft</string>
 
-<string name="aimi_control_center_apply_changes">Apply changes</string>
 
-<string name="aimi_control_center_confirm_apply_title">Apply AIMI family changes?</string>
 
-<string name="aimi_control_center_confirm_apply_body">This will write %2$d AIMI legacy settings across %1$d behavior families. The current runtime will only change after these values are saved.</string>
 
-<string name="aimi_control_center_apply_done">AIMI Control Center changes applied.</string>
 
 <string name="aimi_tpo_active_session_title">Temporary protection active</string>
 
@@ -1608,81 +1538,46 @@
 
 <string name="aimi_tpo_notification_ended_superseded">Previous protection replaced by a higher-priority session.</string>
 
-<string name="aimi_control_center_status_coherent_summary">The current managed settings already tell a coherent story. Moving this family will step the owned legacy keys from their current values toward the selected family level.</string>
 
-<string name="aimi_control_center_status_mixed_summary">The current managed settings mix several intentions. A family move will re-center this area gradually while leaving expert-only keys visible for audit.</string>
 
-<string name="aimi_control_center_status_expert_summary">This area looks highly personalized. A family move will still start from the current values, but it will progressively normalize the managed keys toward the selected family level.</string>
 
-<string name="aimi_control_center_context_title">Patient context currently shaping AIMI</string>
 
-<string name="aimi_control_center_context_summary">These items describe the patient context. They should stay explicit even when the behavior UI becomes simpler.</string>
 
-<string name="aimi_control_center_sources_title">Physio sources and connectors</string>
 
-<string name="aimi_control_center_sources_summary">These settings affect how much real-world context AIMI can observe. They stay separate from tuning.</string>
 
-<string name="aimi_control_center_meal_apply_note">This family writes meal-capture thresholds and HTR aggressiveness. Its full effect depends on Autodrive V3 being active in the autonomy family.</string>
 
-<string name="aimi_control_center_physio_apply_note">This family only writes AIMI physio switches. Data sources, permissions, and external connectors remain separate below.</string>
 
-<string name="aimi_control_center_autonomy_apply_note">This family can enable direct AIMI execution and recursive authority. It is intentionally confirmed through the global apply step.</string>
 
-<string name="aimi_control_center_cycle_module_title">Cycle module</string>
 
 <string name="aimi_control_center_protection_title">Protection vs correction</string>
 
-<string name="aimi_control_center_protection_question">When AIMI acts, how much does the current setup lean toward hypo protection versus stronger correction headroom?</string>
 
-<string name="aimi_control_center_protection_left">More hypo protection</string>
 
-<string name="aimi_control_center_protection_right">More correction headroom</string>
 
-<string name="aimi_control_center_protection_level_very_protective">Very protective</string>
 
-<string name="aimi_control_center_protection_level_protective">Protective</string>
 
-<string name="aimi_control_center_protection_level_balanced">Balanced</string>
 
-<string name="aimi_control_center_protection_level_corrective">Corrective</string>
 
-<string name="aimi_control_center_protection_level_very_corrective">Very corrective</string>
 
 <string name="aimi_control_center_meal_title">Meal capture and fast rises</string>
 
-<string name="aimi_control_center_meal_question">How assertively does the current setup treat undeclared-meal trajectories versus endocrine or stress-driven rises?</string>
 
-<string name="aimi_control_center_meal_left">More prudent</string>
 
-<string name="aimi_control_center_meal_right">More assertive</string>
 
-<string name="aimi_control_center_meal_level_prudent">Prudent</string>
 
-<string name="aimi_control_center_meal_level_standard">Standard</string>
 
-<string name="aimi_control_center_meal_level_active">Active</string>
 
-<string name="aimi_control_center_meal_level_assertive">Assertive</string>
 
-<string name="aimi_control_center_meal_level_very_assertive">Very assertive</string>
 
 <string name="aimi_control_center_stability_title">Smoothing and stability</string>
 
-<string name="aimi_control_center_stability_question">Does the current setup aim for a smoother profile or a faster, more reactive control style?</string>
 
-<string name="aimi_control_center_stability_left">Smoother</string>
 
-<string name="aimi_control_center_stability_right">More reactive</string>
 
-<string name="aimi_control_center_stability_level_very_smooth">Very smooth</string>
 
-<string name="aimi_control_center_stability_level_smooth">Smooth</string>
 
-<string name="aimi_control_center_stability_level_balanced">Balanced</string>
 
-<string name="aimi_control_center_stability_level_responsive">Responsive</string>
 
-<string name="aimi_control_center_stability_level_very_responsive">Very responsive</string>
 
 <string name="aimi_control_center_t3c_title">T3C in RBT</string>
 
@@ -1776,17 +1671,11 @@
 
 <string name="aimi_control_center_physio_title">Physiological influence</string>
 
-<string name="aimi_control_center_physio_question">How much real-body context can AIMI currently use when glycemic patterns are ambiguous?</string>
 
-<string name="aimi_control_center_physio_left">Lower physio weight</string>
 
-<string name="aimi_control_center_physio_right">Stronger physio weight</string>
 
-<string name="aimi_control_center_physio_level_low">Low</string>
 
-<string name="aimi_control_center_physio_level_moderate">Moderate</string>
 
-<string name="aimi_control_center_physio_level_strong">Strong</string>
 
 <string name="aimi_behavior_causal_section_title">AIMI causal map</string>
 
@@ -1816,61 +1705,34 @@
 
 <string name="aimi_behavior_causal_physio_body">Variability is %1$d%% with %2$d%% above 180 while meal handling remains assertive. This is a classic product risk for interpreting cortisol, endocrine, or recovery-driven rises too much like meals.</string>
 
-<string name="aimi_family_bridge_section_title">Outcome-to-family bridge</string>
 
-<string name="aimi_family_bridge_section_desc">This block translates observed glycemic results into AIMI behavior families, then previews the exact legacy keys that would move. It uses the same family write-back as AIMI Control Center so product intent stays aligned.</string>
 
-<string name="aimi_family_bridge_none">No family-level bridge action is currently more coherent than your present setup.</string>
 
-<string name="aimi_family_bridge_preview_btn">Preview family move</string>
 
-<string name="aimi_family_bridge_apply_btn">Apply family move</string>
 
-<string name="aimi_family_bridge_preview_title">Preview AIMI family move</string>
 
-<string name="aimi_family_bridge_apply_title">Apply AIMI family move?</string>
 
-<string name="aimi_family_bridge_preview_count">%1$d families, %2$d legacy settings</string>
 
-<string name="aimi_family_bridge_driver_keys">Likely driver keys: %1$s</string>
 
-<string name="aimi_family_bridge_more_changes">%1$d more settings in this family…</string>
 
-<string name="aimi_family_bridge_yoyo_title">Reduce yoyo / correction whiplash</string>
 
-<string name="aimi_family_bridge_yoyo_body">Variability is high (CV %1$d%%) with both %2$d%% below 70 and %3$d%% above 180. This looks more like late or stacked corrections than a single missing meal correction. Start by smoothing Stability, then reduce Protection pressure if lows persist.</string>
 
-<string name="aimi_family_bridge_meal_rise_title">Tighten undeclared-meal capture</string>
 
-<string name="aimi_family_bridge_meal_rise_body">Time above 180 is %1$d%% while time below 70 stays at %2$d%%. The dominant product story is under-captured meal or fast-rise handling, not over-protection. Move Meal capture up one step and keep autonomy aligned so the runtime can express it.</string>
 
-<string name="aimi_family_bridge_hypo_guard_title">Reduce hypo-driven overcorrection</string>
 
-<string name="aimi_family_bridge_hypo_guard_body">Time below 70 is %1$d%%. The main issue is excess correction pressure, not lack of aggression. Move Protection and Stability one step toward safety before touching raw meal or PKPD expert knobs.</string>
 
-<string name="aimi_family_bridge_hyper_stable_title">Add correction headroom for sustained hyper</string>
 
-<string name="aimi_family_bridge_hyper_stable_body">Time above 180 is %1$d%% while time below 70 remains at %2$d%%. The main issue is lack of correction headroom more than instability. Move Protection one step right first, then review autonomy only if execution still stays too passive.</string>
 
-<string name="aimi_family_bridge_mixed_title">Stabilize mixed highs and lows</string>
 
-<string name="aimi_family_bridge_mixed_body">Both highs (%1$d%% above 180) and lows (%2$d%% below 70) are significant. This pattern usually needs smoother execution before stronger correction. Move Stability left first and keep the other families from diverging too far.</string>
 
 <string name="aimi_control_center_autonomy_title">AIMI autonomy</string>
 
-<string name="aimi_control_center_autonomy_question">How far does the current setup let AIMI move from observation toward direct authority?</string>
 
-<string name="aimi_control_center_autonomy_left">More observation</string>
 
-<string name="aimi_control_center_autonomy_right">More authority</string>
 
-<string name="aimi_control_center_autonomy_observation">Observation</string>
 
-<string name="aimi_control_center_autonomy_recommendations">Recommendations</string>
 
-<string name="aimi_control_center_autonomy_assisted">Assisted application</string>
 
-<string name="aimi_control_center_autonomy_controlled">Controlled authority</string>
 
 <string name="aimi_t3c_brittle_mode_title">T3c / Brittle Diabetes Mode</string>
 
@@ -2007,9 +1869,7 @@
 
 <!-- Dump R.string names that were missing from kmp English. Copied from freeze plugins/aps values/strings.xml. -->
 <string name="adjustments_smb">🎛️ Adjustments: %1$.2f → %2$.2f U</string>
-<string name="autodrive_max_basal_title">Fixed basal 30 min if meal detected (U/h)</string>
 <string name="autodrive_prebolus_variables">Prebolus limits and conditions</string>
-<string name="autodrive_preferences">Autodrive</string>
 <string name="autodrive_status">🚗 Autodrive: %1$s |&#160;Snack/prebolus mode: %2$s | </string>
 <string name="autosens_ratio_log">Autosense ratio: %.2f;</string>
 <string name="bg_80_90_fall">BG 80&#8211;90 &amp; free fall → basal to 0.\n</string>
@@ -2158,7 +2018,6 @@
 <string name="aimi_context_patient_state_reasons_label">Reasons</string>
 <string name="dia_base_info">Base DIA: %1$f h = %2$f min\n</string>
 <string name="dia_calculation_details">DIA Calculation Details:</string>
-<string name="endo_enable_title">Enable Endometriosis Logic</string>
 <string name="endo_preferences_title">Endometriosis Settings</string>
 <string name="eventual_bg_over_110_hyper_factor">Eventual BG&gt;110 &amp; hyper → factor adjustment.</string>
 <string name="final_dia_constrained">Final DIA constrained to [180, 720] min: %1$.0fmin</string>
@@ -2186,7 +2045,6 @@
 <string name="fcl_prebolus" comment="%1$.2f = prebolus size in insulin units, for example 1.00. Appended to the loop reason line.">&#160;Microbolusing FCL mode %1$.2fU.</string>
 <string name="meal_dinner_maintain">Dinner mode maintain (%.1f floor)</string>
 <string name="meal_mode_first_30">Manual modes meal 0&#8211;30m [%1$s] → forced basal at %2$.2f U/h (override).\n</string>
-<string name="meal_modes_max_basal_title">Fixed basal 30 min at meal start (U/h)</string>
 <string name="meal_snack_30_60m_rising_basal_delta">Meal/snack 30&#8211;60m &amp; rising → basal Δ.</string>
 <string name="meal_snack_under_30m_basal_10">Meal/snack &lt;30m → basal x10.</string>
 <string name="morning_adjustment">Morning adjustment (6&#8211;10h): DIA reduced by 20%</string>
@@ -2196,8 +2054,6 @@
 <string name="no_conditions_met_2">No conditions met</string>
 <string name="number_of_values">  • Number of values : %1$d\n</string>
 <string name="peak_time">  → 🕒 PeakTime=%1$s min | BG=%2$s Δ%3$s</string>
-<string name="prebolus_autodrive_mode_title">Meal Pre-bolus</string>
-<string name="prebolussmall_autodrive_mode_title">Light snack pre-bolus</string>
 <string name="profile_peak_time">  • Profile peak: %1$.0f\n</string>
 <string name="pump_age_adjustment">Pump age (%1$.0f days): DIA increased by %2$.0f%%</string>
 <string name="reason_activity_cap">Activity SMB Cap (%.2f)</string>
@@ -2289,7 +2145,6 @@
 <string name="training_ml_generic_meal_modes_preferences">Generic Meal</string>
 <string name="training_ml_high_carb_modes_preferences">High Carb</string>
 <string name="training_ml_lunch_modes_preferences">Lunch</string>
-<string name="training_ml_modes_preferences">Manual Mode</string>
 <string name="training_ml_sleep_modes_preferences">Rest</string>
 <string name="training_ml_snack_modes_preferences">Snack</string>
 <string name="user_preferences">Preferences user</string>
@@ -2421,4 +2276,54 @@
 <string name="aimi_setting_warning_dose_limit">This limit sets how much insulin AIMI can give. A higher value can cause low glucose, a lower value can cause high glucose. Talk to your care team before you change it.</string>
 <string name="aimi_setting_warning_lgs">The loop uses this value or a value set by your target (halfway between your target and 40 mg/dL), whichever is higher. A value below the one from your target has no effect. A lower value gives less protection from low glucose. Talk to your care team before you change it.</string>
 <string name="aimi_setting_warning_smb">With SMB off the loop corrects high glucose more slowly. With SMB on AIMI gives small boluses by itself. Talk to your care team before you change it.</string>
+<!-- Step S2: feature cards, Expert area and "What AIMI learned" -->
+<string name="aimi_card_meals_title">Meals</string>
+<string name="aimi_card_meals_sentence">Meal modes give a first bolus when you start a mode, then allow larger automatic boluses for a while.</string>
+<string name="aimi_card_meals_mode_values_title">Values of each meal mode</string>
+<string name="aimi_card_activity_title">Exercise and activity</string>
+<string name="aimi_card_activity_sentence">When AIMI sees exercise or recent effort, it gives smaller automatic boluses and limits how far the basal may go up.</string>
+<string name="aimi_card_night_title">Night</string>
+<string name="aimi_card_night_sentence">Night settings change how often AIMI may give a bolus at night, and how it handles glucose that rises at night in children and teens.</string>
+<string name="aimi_card_wcycle_title">Women\'s cycle</string>
+<string name="aimi_card_wcycle_sentence">When on, AIMI changes the basal and the automatic boluses a little with the phase of the menstrual cycle.</string>
+<string name="aimi_card_illness_title">Illness and inflammation</string>
+<string name="aimi_card_illness_sentence">Thyroid, endometriosis, CFRD, Verneuil and brittle (type 3c) diabetes settings change how much insulin AIMI gives while one of these is active.</string>
+<string name="aimi_card_pkpd_title">Insulin action learning (PK/PD)</string>
+<string name="aimi_card_pkpd_sentence">When on, AIMI learns how long your insulin acts and when it peaks, starting from your profile insulin, and doses with what it learned.</string>
+<string name="aimi_card_physio_title">Body signals (physio)</string>
+<string name="aimi_card_physio_sentence">Heart rate, steps, sleep and other body signals can make AIMI give less or more insulin.</string>
+<string name="aimi_card_autodrive_title">Autodrive</string>
+<string name="aimi_card_autodrive_sentence">When on, AIMI can give extra basal and boluses by itself when glucose rises fast, so it can give more insulin than without it.</string>
+<string name="aimi_card_sos_title">Safety alarms (SOS)</string>
+<string name="aimi_card_sos_sentence">Sends a text message to your contacts when glucose stays very low. It does not change insulin delivery.</string>
+<string name="aimi_card_off_hint">Turn it on to see the settings that only act while it is on.</string>
+<string name="aimi_patient_about_you_title">About you</string>
+<string name="aimi_expert_title">Expert</string>
+<string name="aimi_expert_summary">Technical settings, grouped by family, with a search.</string>
+<string name="aimi_expert_warning">Expert settings change how AIMI doses. Nobody checks a value you set here. Change one only if you know what it does, and talk to your care team first. This is not medical advice.</string>
+<string name="aimi_expert_search_hint">Search AIMI settings</string>
+<string name="aimi_expert_search_none">No setting found.</string>
+<string name="aimi_learned_title">What AIMI learned</string>
+<string name="aimi_learned_summary">Read only: what AIMI learned, and the values it uses now.</string>
+<string name="aimi_learned_intro">This page only shows values. Only the reset buttons change something, and they ask first. This is not medical advice.</string>
+<string name="aimi_learned_pkpd_title">Insulin action (PK/PD)</string>
+<string name="aimi_learned_pkpd_range" comment="%1$s=lowest DIA, %2$s=highest DIA, both in hours, %3$s=earliest peak, %4$s=latest peak, both in minutes. Example: Learner range: DIA 4.5 to 7.5 h, peak 45 to 81 min">Learner range: DIA %1$s to %2$s h, peak %3$s to %4$s min</string>
+<string name="aimi_learned_pkpd_range_unknown">Learner range: no profile is running.</string>
+<string name="aimi_learned_isf_title">Sensitivity (ISF)</string>
+<string name="aimi_learned_isf_percent" comment="%1$d=whole percent. Example: AIMI uses 120 % of your profile ISF now.">AIMI uses %1$d %% of your profile ISF now.</string>
+<string name="aimi_learned_isf_hint">Above 100 % means AIMI treats you as more sensitive than your profile, so a correction gets less insulin.</string>
+<string name="aimi_learned_isf_unknown">Not known yet: the loop has not run with a profile.</string>
+<string name="aimi_learned_models_title">Machine learning models</string>
+<string name="aimi_learned_model_smb" comment="%1$s=state of the model, for example: loaded, the loop may use it">SMB model: %1$s</string>
+<string name="aimi_learned_model_basal" comment="%1$s=state of the model, for example: a model file exists">Basal model: %1$s</string>
+<string name="aimi_learned_model_unknown">not set up yet</string>
+<string name="aimi_learned_model_none">no model, the loop runs without it</string>
+<string name="aimi_learned_model_not_loaded">a model file exists but is not loaded</string>
+<string name="aimi_learned_model_present">a model file exists</string>
+<string name="aimi_learned_model_in_use">loaded, the loop may use it</string>
+<string name="aimi_learned_model_paused">training paused after errors</string>
+<string name="aimi_learned_tpo_title">Temporary protection (TPO)</string>
+<string name="aimi_learned_tpo_none">No temporary protection is active.</string>
+<string name="aimi_learned_runtime_title">Decision engines (T3C and Harmonia)</string>
+<string name="aimi_learned_reset_title">Reset</string>
 </resources>

@@ -128,7 +128,6 @@ aimi_context_llm_openai_key|StringKey|true
 aimi_context_llm_provider|StringKey|true
 aimi_context_mode|StringKey|true
 aimi_context_storage|StringKey|true
-aimi_control_center_compose|ApsIntentKey|false
 aimi_cosine_gate_alpha|DoubleKey|true
 aimi_cosine_gate_enabled|BooleanKey|true
 aimi_cosine_gate_max_sens|DoubleKey|true
@@ -158,6 +157,7 @@ aimi_hypo_risk_alarm_info|ApsIntentKey|false
 aimi_isf_fusion_max_change_per_tick|DoubleKey|true
 aimi_isf_fusion_max_factor|DoubleKey|true
 aimi_isf_fusion_min_factor|DoubleKey|true
+aimi_learned_compose|ApsIntentKey|false
 aimi_meal_advisor_compose|ApsIntentKey|false
 aimi_meal_advisor_trigger|BooleanKey|true
 aimi_meal_factor_scale_repaired|BooleanNonKey|true

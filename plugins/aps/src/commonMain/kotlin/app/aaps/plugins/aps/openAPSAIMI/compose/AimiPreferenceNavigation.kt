@@ -34,6 +34,7 @@ import app.aaps.core.ui.compose.ComposeScreenContent
 import app.aaps.core.ui.compose.MasterOfflineBanner
 import app.aaps.core.ui.compose.masterEditingEnabled
 import app.aaps.core.ui.compose.preference.AdaptivePreferenceList
+import app.aaps.core.ui.compose.preference.LocalHighlightKey
 import app.aaps.core.ui.compose.preference.LocalNavigateToCompose
 import app.aaps.core.ui.compose.preference.LocalVisibilityContext
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
@@ -50,7 +51,7 @@ import kotlinx.coroutines.launch
  * is not drawn at all (`AdaptivePreferenceList` skips every `PreferenceSubScreenDef`). That is how
  * upstream works, and core/ui stays identical to upstream so that merges stay clean.
  *
- * The AIMI tree is deeper than that: User preferences > Lab > Trajectory > Tube MPC, for example.
+ * The AIMI tree is deeper than that: User preferences > Expert > Trajectory > Tube MPC, for example.
  * So AIMI puts a link row in front of each of its deeper sub screens. The link is an
  * [IntentPreferenceKey] with a Compose screen, which the renderer already knows how to draw and open.
  * The screen it opens ([AimiPreferenceSubScreen]) draws the sub screen's own items, again with
@@ -70,12 +71,18 @@ import kotlinx.coroutines.launch
  * Call it on the items of a sub screen that the renderer draws as a header, never on the items of
  * the plugin card itself: the card's own sub screens are drawn already, and a link there would show
  * them twice.
+ *
+ * @param pageFor the page a link opens instead of the plain list of its screen (a feature card, the
+ *   Expert area), or null for the plain list. It gets the screen with its own link rows.
  */
-internal fun aimiWithDrillInLinks(items: List<PreferenceItem>): List<PreferenceItem> =
+internal fun aimiWithDrillInLinks(
+    items: List<PreferenceItem>,
+    pageFor: (PreferenceSubScreenDef) -> ComposeScreenContent? = { null },
+): List<PreferenceItem> =
     items.flatMap { item ->
         if (item is PreferenceSubScreenDef) {
-            val screen = item.copy(items = aimiWithDrillInLinks(item.items))
-            listOf(AimiSubScreenLink(screen), screen)
+            val screen = item.copy(items = aimiWithDrillInLinks(item.items, pageFor))
+            listOf(AimiSubScreenLink(screen, pageFor(screen)), screen)
         } else {
             listOf(item)
         }
@@ -98,14 +105,20 @@ internal interface AimiScreenLink : IntentPreferenceKey {
  * Only [aimiWithDrillInLinks] builds these, so [screen] already has links for its own sub screens.
  * The class is not in any key enum: it is not a stored setting, it is not exported, and search does
  * not list it (search lists the screen itself, from the `PreferenceSubScreenDef` that follows it).
+ *
+ * @param page the page to open, when it is more than the plain list of [screen] (a feature card or
+ *   the Expert area); null opens the plain list
  */
-internal class AimiSubScreenLink(override val screen: PreferenceSubScreenDef) : AimiScreenLink {
+internal class AimiSubScreenLink(
+    override val screen: PreferenceSubScreenDef,
+    page: ComposeScreenContent? = null,
+) : AimiScreenLink {
 
     override val key: String = linkKeyOf(screen.key)
     override val title: TextRef = screen.title
     override val summary: TextRef? = screen.summary
     override val preferenceType: PreferenceType = PreferenceType.CLICK
-    override val composeScreen: Any = ComposeScreenContent { onBack -> AimiPreferenceSubScreen(screen = screen, onBack = onBack) }
+    override val composeScreen: Any = page ?: ComposeScreenContent { onBack -> AimiPreferenceSubScreen(screen = screen, onBack = onBack) }
 
     companion object {
 
@@ -143,11 +156,18 @@ internal class AimiEssentialsLink(
  *
  * A row in here that opens another screen (a deeper sub screen, or a Compose screen such as the
  * PK/PD setup) opens it on top of this page, and back returns here, not to the plugin page.
+ *
+ * @param header drawn above the rows, inside the same navigation, so it may open a page too
+ * @param visibleItems the rows to draw out of the screen items (a feature card hides some)
+ * @param highlightKey the key of a row to highlight and scroll to, after a search
  */
 @Composable
 internal fun AimiPreferenceSubScreen(
     screen: PreferenceSubScreenDef,
     onBack: () -> Unit,
+    header: (@Composable () -> Unit)? = null,
+    visibleItems: @Composable (List<PreferenceItem>) -> List<PreferenceItem> = { it },
+    highlightKey: String? = null,
 ) {
     var openScreen: ComposeScreenContent? by remember(screen.key) { mutableStateOf(null) }
 
@@ -174,6 +194,7 @@ internal fun AimiPreferenceSubScreen(
     ProvidePreferenceTheme {
         CompositionLocalProvider(
             LocalNavigateToCompose provides { child -> openScreen = child },
+            LocalHighlightKey provides (highlightKey ?: LocalHighlightKey.current),
         ) {
             Scaffold(
                 snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -201,11 +222,12 @@ internal fun AimiPreferenceSubScreen(
                     state = listState,
                 ) {
                     item { MasterOfflineBanner(editingEnabled = masterEditingEnabled()) }
+                    header?.let { drawHeader -> item { drawHeader() } }
                     // Draws keys and link rows. The PreferenceSubScreenDef after each link is skipped
                     // here, exactly as in the shared renderer, so nothing shows twice.
                     item {
                         AdaptivePreferenceList(
-                            items = screen.items,
+                            items = visibleItems(screen.items),
                             onShowMessage = onShowMessage,
                             visibilityContext = visibilityContext,
                         )

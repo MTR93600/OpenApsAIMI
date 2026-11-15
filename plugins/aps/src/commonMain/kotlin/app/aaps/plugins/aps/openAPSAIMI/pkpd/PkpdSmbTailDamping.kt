@@ -28,37 +28,8 @@ object PkpdSmbTailDamping {
     /** Pre-simplified UI stored tail damping on 0.0–1.0 scale; values below this are legacy. */
     const val LEGACY_NEUTRAL_CUTOFF = 0.55
 
-    /**
-     * Control Center Stability family writeback ladder (index 0 = Smoother → 4 = More reactive).
-     *
-     * Must stay inside [[DAMPING_STRONG], [DAMPING_LIGHT]] so [effectiveStoredValue] does not rewrite
-     * the value to neutral. Polarity matches PKPD semantics: **lower floor = stronger damping =
-     * smoother / less aggressive tail SMB**.
-     *
-     * Historical bug: Stability wrote `0.20…0.80`; levels ≤0.55 were silently remapped to 0.85,
-     * so "move Stability left toward safety" did not strengthen tail damping at runtime.
-     */
-    val STABILITY_FAMILY_FLOOR_LADDER: List<Double> = listOf(
-        DAMPING_STRONG, // 0.70 — Very smooth
-        0.76,
-        0.81, // near-balanced (maps to five-step index 2 when scored on this band)
-        0.86,
-        DAMPING_LIGHT, // 0.92 — Very responsive
-    )
-
     fun effectiveStoredValue(stored: Double): Double =
         if (stored <= LEGACY_NEUTRAL_CUTOFF) DAMPING_NEUTRAL else stored
-
-    /**
-     * Maps an effective tail-damping floor onto Control Center Stability score polarity
-     * (0 = smoother, 1 = more reactive) using the authoritative PKPD band.
-     */
-    fun stabilityFamilyScore(storedOrEffective: Double): Float {
-        val effective = effectiveStoredValue(storedOrEffective)
-        val span = DAMPING_LIGHT - DAMPING_STRONG
-        if (span <= 0.0) return 0.5f
-        return ((effective - DAMPING_STRONG) / span).toFloat().coerceIn(0f, 1f)
-    }
 
     /**
      * One-shot startup migration (run from `OpenAPSAIMIPlugin.onStart`): store the runtime-effective

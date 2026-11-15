@@ -66,6 +66,7 @@ import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.dashboard.AimiGlassDashboardData
 import app.aaps.core.interfaces.profiling.Profiler
+import app.aaps.plugins.aps.openAPSAIMI.learning.BasalMlTrainingCoordinator
 import app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner
 import app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator
@@ -166,7 +167,8 @@ import kotlin.math.abs
 import kotlin.math.exp
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AiCoachingService
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiSharing
-import app.aaps.plugins.aps.openAPSAIMI.compose.AimiControlCenterScreen
+import app.aaps.plugins.aps.openAPSAIMI.compose.AimiLearnedLive
+import app.aaps.plugins.aps.openAPSAIMI.compose.AimiLearnedScreen
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBasalLimitMode
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiEssentialsLive
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiEssentialsScreen
@@ -369,12 +371,12 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
         // Diagnostic (2026-07-22): trace the simplified PK/PD "tail power" slider key to pin the
         // reported startup reset. The startup snapshot answers "did the value survive the restart?";
-        // each runtime change is fingerprinted by its landing value (Stability ladder 0.76/0.81/0.86;
-        // migrate / applyLevel-centre 0.85; raw key default 0.5). Marker: PKPD_TAIL_TRACE.
+        // each runtime change is fingerprinted by its landing value (the old Stability ladder
+        // 0.76/0.81/0.86, removed in step S2; migrate / applyLevel-centre 0.85; raw key default 0.5). Marker: PKPD_TAIL_TRACE.
         logTailDampingSnapshot("startup")
         // One-shot startup migration: a legacy tail floor (0.55 or lower) is stored as the 0.85 the
         // loop already reads for it, so screens and the Advisor see the value in use. It used to
-        // run when the Control Center opened; a screen must not write when it opens. No dosing
+        // run when the old Control Center opened; a screen must not write when it opens. No dosing
         // change: every dosing reader goes through PkpdSmbTailDamping.effectiveStoredValue. After
         // the first run the stored value is above the cutoff, so this does nothing again.
         if (PkpdSmbTailDamping.migrateLegacyStoredPreference(preferences)) {
@@ -2044,10 +2046,12 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     onBack = onBack,
                 )
             },
-            controlCenter = ComposeScreenContent { onBack ->
-                AimiControlCenterScreen(
+            learned = ComposeScreenContent { onBack ->
+                AimiLearnedScreen(
                     preferences = preferences,
-                    tpoOrchestrator = tpoOrchestrator,
+                    loadLive = ::loadLearnedLive,
+                    currentTpoSession = tpoOrchestrator::currentSession,
+                    revertTpo = tpoOrchestrator::revertNow,
                     storage = storage,
                     onBack = onBack,
                 )
@@ -2082,6 +2086,24 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             targetHighMgdl = profile?.getTargetHighMgdl(),
             tpoOverlay = tpoSession?.overlay.orEmpty(),
             tpoBaseline = tpoSession?.baseline.orEmpty(),
+        )
+    }
+
+    /**
+     * What the loop knows now, for the "What AIMI learned" page: the insulin of the running profile,
+     * the sensitivity the last loop run used against the profile ISF, and the state of the two
+     * machine learning models. It only reads.
+     */
+    private suspend fun loadLearnedLive(): AimiLearnedLive = withContext(Dispatchers.Default) {
+        val profile = profileFunction.getProfile()
+        val insulin = profile?.iCfg?.takeIf { it.isUsable }
+        AimiLearnedLive(
+            profileDiaHours = insulin?.dia,
+            profilePeakMin = insulin?.peak?.toDouble(),
+            isfInUseMgdl = lastAPSResult?.variableSens,
+            profileIsfMgdl = profile?.getProfileIsfMgdl(),
+            smbModel = runCatching { AimiSmbTrainer.dashboardSnapshot(storage, storage.directory()) }.getOrNull(),
+            basalModel = BasalMlTrainingCoordinator.instance?.dashboardSnapshot(),
         )
     }
 

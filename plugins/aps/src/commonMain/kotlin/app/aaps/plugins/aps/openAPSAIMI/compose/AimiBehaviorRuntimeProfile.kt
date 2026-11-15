@@ -2,15 +2,11 @@ package app.aaps.plugins.aps.openAPSAIMI.compose
 
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.core.keys.interfaces.TextRef
-import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.physio.UamHypothesisTuning
 
 /**
  * How much production authority AIMI has been given, from Observation (nothing applied) up to
- * ControlledAuthority. Plain enum in commonMain - the display label used to live on it as a
- * `@StringRes Int`, which is why this type used to be Android-only. The label is now the
- * commonMain [controlCenterLabel] extension below, backed by [TextRef] instead.
+ * ControlledAuthority. It comes from the real Autodrive switches, see [autonomyModeFromAutodrive].
  */
 enum class AimiAutonomyMode {
     Observation,
@@ -28,26 +24,13 @@ internal fun AimiAutonomyMode.authorityRank(): Int =
     }
 
 /**
- * Display label for the autonomy ladder. Replaces the old androidMain-only
- * `AimiAutonomyMode.labelResId()` extension (which returned a bare `@StringRes Int`) now that the
- * type moved to commonMain - same four `ApsStrings.aimi_control_center_autonomy_*` entries.
- */
-internal fun AimiAutonomyMode.controlCenterLabel(): TextRef =
-    when (this) {
-        AimiAutonomyMode.Observation -> ApsStrings.aimi_control_center_autonomy_observation
-        AimiAutonomyMode.Recommendations -> ApsStrings.aimi_control_center_autonomy_recommendations
-        AimiAutonomyMode.AssistedApplication -> ApsStrings.aimi_control_center_autonomy_assisted
-        AimiAutonomyMode.ControlledAuthority -> ApsStrings.aimi_control_center_autonomy_controlled
-    }
-
-/**
  * The autonomy mode from the real Autodrive switches. Classic (V1/V2) Autodrive is removed, so
  * autonomy is a gradation of V3 production authority: Autodrive off gives Observation, the
  * authoritative or recursive belief authority switch gives ControlledAuthority, the hyper trajectory
  * release gives AssistedApplication, else Recommendations.
  *
- * Used by the Control Center draft and, since step T2, by the profile dosing uses
- * (`NeutralAimiBehaviorProfileSource`), the same as before step C1.
+ * Used by the profile dosing uses (`NeutralAimiBehaviorProfileSource`, since step T2, the same as
+ * before step C1), by the TPO gate and by the AI coach notes.
  */
 internal fun autonomyModeFromAutodrive(preferences: Preferences): AimiAutonomyMode {
     val autoDriveActive = preferences.get(BooleanKey.OApsAIMIautoDriveActive)

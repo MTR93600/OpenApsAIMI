@@ -32,6 +32,12 @@ internal enum class AimiSettingsAuditChangedBy {
     USER,
 }
 
+/** A value as the audit screen shows it: a plain text, or a string such as yes / no. */
+internal data class AimiValueDescriptor(
+    val valueText: String? = null,
+    val valueResId: TextRef? = null,
+)
+
 /**
  * One AIMI setting whose stored value is not what the app ships.
  *
@@ -244,8 +250,8 @@ internal object AimiSettingsAudit {
      * audit. When that happens, both columns fall back to full precision.
      */
     private fun doubleText(value: Double, other: Double): String {
-        val formatted = formatControlCenterDoubleValue(value, unit = null)
-        return if (formatted == formatControlCenterDoubleValue(other, unit = null)) value.toString() else formatted
+        val formatted = formatAimiNumber(value, unit = null)
+        return if (formatted == formatAimiNumber(other, unit = null)) value.toString() else formatted
     }
 
     private fun booleanDescriptor(value: Boolean, strings: AimiSettingsAuditStrings): AimiValueDescriptor =

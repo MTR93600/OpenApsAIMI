@@ -44,7 +44,7 @@ internal object AimiSettingsTreeWalk {
         AimiPreferenceTree(
             platformItems = platformItems,
             essentials = emptyScreen,
-            controlCenter = emptyScreen,
+            learned = emptyScreen,
             settingsAudit = emptyScreen,
         ).build(icon = null)
 
@@ -81,26 +81,13 @@ internal object AimiSettingsTreeWalk {
         }.toSet()
 
     /**
-     * The intent row that opens each content drawn by its own screen. Such a content is reachable
-     * when its row is reachable.
-     */
-    val entryOfContentDrawnElsewhere: Map<AimiSettingsContentId, String> = mapOf(
-        AimiSettingsContentId.PkpdSimple to ApsIntentKey.PkpdSetup.key,
-        AimiSettingsContentId.PkpdAdvanced to ApsIntentKey.PkpdSetup.key,
-        AimiSettingsContentId.PkpdExpert to ApsIntentKey.PkpdSetup.key,
-        AimiSettingsContentId.ControlCenter to ApsIntentKey.AimiControlCenter.key,
-        AimiSettingsContentId.ContextEditor to ApsIntentKey.AimiContext.key,
-        AimiSettingsContentId.SettingsAudit to ApsIntentKey.AimiSettingsAudit.key,
-    )
-
-    /**
-     * Keys a person can reach: by browsing the tree, or on a screen of its own (PK/PD, context,
-     * Control Center) whose entry row can be reached by browsing.
+     * Keys a person can reach: by browsing the tree, or on a screen of its own (PK/PD, context)
+     * whose entry row can be reached by browsing.
      */
     fun reachableWithOwnScreens(root: PreferenceSubScreenDef): Set<String> {
         val browsed = reachableKeys(root)
         val onOwnScreens = AimiSettingsScreens.sections
-            .filter { section -> entryOfContentDrawnElsewhere[section.content]?.let { it in browsed } == true }
+            .filter { section -> AimiSettingsSearch.ENTRY_ROW_OF_OWN_SCREEN[section.content]?.let { it in browsed } == true }
             .flatMap { section -> section.keys.map { it.key } }
         return browsed + onOwnScreens
     }
