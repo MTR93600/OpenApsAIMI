@@ -28,6 +28,10 @@ struct AapsApp: App {
     /// target's URL scheme before `startAapsApp` builds the Garmin plugin.
     private static let connectIqCompanion = SwiftConnectIqCompanion()
 
+    /// One Live Activity bridge for the life of the process, installed before the graph builds the
+    /// Live Activity plugin. See LiveActivityBridge.swift.
+    private static let liveActivityCompanion = SwiftLiveActivityCompanion()
+
     init() {
         CrashlyticsCrashReporter.start()
         // Install the Swift AVFoundation implementation before the Kotlin graph can construct an
@@ -36,6 +40,7 @@ struct AapsApp: App {
             factory: SwiftMealAdvisorCameraFactory()
         )
         ConnectIqCompanionKt.installConnectIqCompanion(companion: AapsApp.connectIqCompanion)
+        LiveActivityCompanionKt.installLiveActivityCompanion(companion: AapsApp.liveActivityCompanion)
         // Must happen here. iOS only lets background task handlers be registered before the app
         // finishes launching, and `makeUIViewController` below runs later. This call needs no
         // graph; the Kotlin side queues the tasks once its graph is built.

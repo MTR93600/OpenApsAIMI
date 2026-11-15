@@ -23,6 +23,7 @@ import app.aaps.core.interfaces.overview.IsfStep
 import app.aaps.core.interfaces.overview.LastBgData
 import app.aaps.core.interfaces.overview.SensitivityOverview
 import app.aaps.core.interfaces.overview.SensitivityOverviewData
+import app.aaps.core.interfaces.overview.graph.OverviewDataCache
 import app.aaps.core.interfaces.profile.EffectiveProfile
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
@@ -38,6 +39,7 @@ import app.aaps.core.objects.profile.ProfileSealed
 import app.aaps.ui.widget.state.WidgetBgColorClass
 import app.aaps.ui.widget.state.WidgetStateBuilder
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
@@ -281,6 +283,69 @@ internal class WidgetRenderStateParityTest {
         val expected = runBlocking { legacy.loadState(WIDGET_ID) }
         val actual = runBlocking { current.loadState(WIDGET_ID) }
         assertThat(actual).isEqualTo(expected)
+    }
+
+    /**
+     * The graph widget reads the reading once too. Its strike-through comes from the value it shows,
+     * with the same 9 minute edge as `isActualBg()` had: fresh while strictly younger.
+     */
+    @Test
+    fun bgGraphStrikesOldReadingsWithTheSameEdgeAsBefore() {
+        for ((age, struck) in listOf(2 * min to false, 9 * min - 1 to false, 9 * min to true, 25 * min to true)) {
+            val fixture = Fixture(Case(lastBg = InMemoryGlucoseValue(timestamp = now - age, value = 150.0)))
+            val before = !fixture.lastBgData.isActualBg()
+            val render = runBlocking { bgGraphLoader(fixture).loadState(WIDGET_ID) }
+            assertThat(render.strikeThrough).isEqualTo(struck)
+            assertThat(render.strikeThrough).isEqualTo(before)
+        }
+        val none = runBlocking { bgGraphLoader(Fixture(Case(lastBg = null))).loadState(WIDGET_ID) }
+        assertThat(none.strikeThrough).isTrue()
+        assertThat(none.arrowResId).isNull()
+    }
+
+    @Test
+    fun bgGraphStrikesOldValueEvenWhenANewReadingLandsDuringTheLoad() {
+        val old = InMemoryGlucoseValue(timestamp = now - 25 * min, value = 250.0)
+        val new = InMemoryGlucoseValue(timestamp = now, value = 180.0)
+        val fixture = Fixture(Case(lastBg = old, isHigh = true))
+        whenever(fixture.lastBgData.lastBg()).thenReturn(old, new)
+        whenever(fixture.lastBgData.isActualBg()).thenReturn(true)
+
+        val render = runBlocking { bgGraphLoader(fixture).loadState(WIDGET_ID) }
+        assertThat(render.bgText).isEqualTo("bg:250.0:${GlucoseUnit.MGDL}")
+        assertThat(render.strikeThrough).isTrue()
+    }
+
+    /**
+     * The age is judged at the moment the reading is read, like `isActualBg()` did, not at the start
+     * of the load. The history and graph reads come in between, and a reading can turn old during them.
+     */
+    @Test
+    fun bgGraphJudgesTheAgeWhenTheReadingIsRead() {
+        val reading = InMemoryGlucoseValue(timestamp = now - 8 * min, value = 150.0)
+        val fixture = Fixture(Case(lastBg = reading))
+        // The first clock read is at the start of the load, every later one is 2 minutes on.
+        whenever(fixture.dateUtil.now()).thenReturn(now, now + 2 * min)
+
+        val render = runBlocking { bgGraphLoader(fixture).loadState(WIDGET_ID) }
+        assertThat(render.strikeThrough).isTrue()
+    }
+
+    private fun bgGraphLoader(fixture: Fixture): BgGraphStateLoader {
+        val cache: OverviewDataCache = mock()
+        whenever(cache.bucketedDataFlow).thenReturn(MutableStateFlow(emptyList()))
+        return BgGraphStateLoader(
+            cacheProvider = { cache },
+            profileFunction = fixture.profileFunction,
+            profileUtil = fixture.profileUtil,
+            lastBgData = fixture.lastBgData,
+            trendCalculator = fixture.trendCalculator,
+            iobCobCalculator = fixture.iobCobCalculator,
+            dateUtil = fixture.dateUtil,
+            rh = fixture.rh,
+            preferences = fixture.preferences,
+            config = fixture.config
+        )
     }
 
     private fun builder(fixture: Fixture) = WidgetStateBuilder(

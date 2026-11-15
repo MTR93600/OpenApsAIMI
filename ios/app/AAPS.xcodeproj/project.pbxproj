@@ -23,6 +23,10 @@
 		AA3009900000000000000 /* NsSocketBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1009900000000000000 /* NsSocketBridge.swift */; };
 		AA3010000000000000000 /* MealAdvisorCameraBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1010000000000000000000 /* MealAdvisorCameraBridge.swift */; };
 		C10000050000000000000002 /* ConnectIqBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000040000000000000001 /* ConnectIqBridge.swift */; };
+		D10000050000000000000001 /* LiveActivityBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000040000000000000001 /* LiveActivityBridge.swift */; };
+		D10000050000000000000002 /* LiveActivityBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000040000000000000001 /* LiveActivityBridge.swift */; };
+		D10000050000000000000003 /* AapsActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000040000000000000002 /* AapsActivityAttributes.swift */; };
+		D10000050000000000000004 /* AapsActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000040000000000000002 /* AapsActivityAttributes.swift */; };
 		D32B0F773048851500FAFE85 /* SocketIO in Frameworks */ = {isa = PBXBuildFile; productRef = AA00SP02000000000000001 /* SocketIO */; };
 		D32B0F783048851500FAFE85 /* SocketIO in Frameworks */ = {isa = PBXBuildFile; productRef = AA00SP02000000000000002 /* SocketIO */; };
 		D32B0F793048851500FAFE85 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = AA00SP02000000000000003 /* FirebaseCrashlytics */; };
@@ -41,6 +45,8 @@
 		AA1009900000000000000 /* NsSocketBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NsSocketBridge.swift; path = Shared/NsSocketBridge.swift; sourceTree = "<group>"; };
 		AA1010000000000000000000 /* MealAdvisorCameraBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MealAdvisorCameraBridge.swift; path = Shared/MealAdvisorCameraBridge.swift; sourceTree = "<group>"; };
 		C10000040000000000000001 /* ConnectIqBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ConnectIqBridge.swift; path = Shared/ConnectIqBridge.swift; sourceTree = "<group>"; };
+		D10000040000000000000001 /* LiveActivityBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LiveActivityBridge.swift; path = Shared/LiveActivityBridge.swift; sourceTree = "<group>"; };
+		D10000040000000000000002 /* AapsActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AapsActivityAttributes.swift; path = Shared/LiveActivity/AapsActivityAttributes.swift; sourceTree = "<group>"; };
 		AA2000100000000000000 /* AAPS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AAPS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA2000200000000000000 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = AAPS/Assets.xcassets; sourceTree = "<group>"; };
 		AA3000100000000000000 /* AAPS2.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AAPS2.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -84,6 +90,8 @@
 				AA1009900000000000000 /* NsSocketBridge.swift */,
 				AA1010000000000000000000 /* MealAdvisorCameraBridge.swift */,
 				C10000040000000000000001 /* ConnectIqBridge.swift */,
+				D10000040000000000000001 /* LiveActivityBridge.swift */,
+				D10000040000000000000002 /* AapsActivityAttributes.swift */,
 				AA2001200000000000000 /* AAPS */,
 				AA3001200000000000000 /* AAPS2 */,
 				AA1000300000000000000 /* Signing.xcconfig */,
@@ -301,6 +309,8 @@
 				AA2009900000000000000 /* NsSocketBridge.swift in Sources */,
 				AA2010000000000000000 /* MealAdvisorCameraBridge.swift in Sources */,
 				C10000050000000000000001 /* ConnectIqBridge.swift in Sources */,
+				D10000050000000000000001 /* LiveActivityBridge.swift in Sources */,
+				D10000050000000000000003 /* AapsActivityAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -313,6 +323,8 @@
 				AA3009900000000000000 /* NsSocketBridge.swift in Sources */,
 				AA3010000000000000000 /* MealAdvisorCameraBridge.swift in Sources */,
 				C10000050000000000000002 /* ConnectIqBridge.swift in Sources */,
+				D10000050000000000000002 /* LiveActivityBridge.swift in Sources */,
+				D10000050000000000000004 /* AapsActivityAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

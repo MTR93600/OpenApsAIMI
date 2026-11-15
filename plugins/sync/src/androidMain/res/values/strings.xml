@@ -173,6 +173,16 @@
     <string name="garmin_connect_install_message">AAPS needs Garmin Connect to send glucose to the watch. Open the App Store to install it?</string>
     <string name="garmin_connect_install_accept">Install</string>
     <string name="garmin_connect_install_decline">Not now</string>
+
+    <!-- LiveActivityPlugin (iOS only) -->
+    <string name="live_activity">Live Activity</string>
+    <string name="live_activity_description">Shows glucose on the iPhone lock screen, in the Dynamic Island and on the Apple Watch.</string>
+    <string name="live_activity_enabled">Show Live Activity</string>
+    <string name="live_activity_enabled_summary">Shows the last glucose value, its trend and its age. A value that is too old is struck out and grey. AAPS must run to update it, so after a force quit it stays old until you open AAPS.</string>
+    <string name="live_activity_show_chart">Show chart</string>
+    <string name="live_activity_show_chart_summary">Glucose of the last 3 hours</string>
+    <string name="live_activity_show_iob_cob">Show IOB and COB</string>
+    <string name="live_activity_show_loop">Show last loop run</string>
     <string name="garmin_carbs_not_on_client" comment="%1$s=carbs with unit, example: 20 g. A client is a phone that follows and controls the main AAPS phone (the master).">The Garmin watch sent %1$s of carbs. This phone is a client, so they were not entered. Enter them in AAPS.</string>
     <string name="garmin_pump_not_on_client" comment="A client is a phone that follows and controls the main AAPS phone (the master).">The Garmin watch asked to connect or disconnect the pump. This phone is a client, so nothing was changed. Do it in AAPS.</string>
     <string name="garmin_bolus_not_on_client" comment="%1$s=insulin with unit, example: 1.50 U. A client is a phone that follows and controls the main AAPS phone (the master).">The Garmin watch asked for a bolus of %1$s. This phone is a client, so no bolus was given. Give it in AAPS.</string>

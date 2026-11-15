@@ -147,6 +147,13 @@
 	</array>
 	<key>AAPSConnectIqUrlScheme</key>
 	<string>$(AAPS_CIQ_URL_SCHEME)</string>
+	<!--
+	  The Live Activity (lock screen, Dynamic Island, Apple Watch Smart Stack). Without this key
+	  ActivityKit refuses to start one. Local updates only, so no push entitlement is needed. The
+	  user switches it on in the Live Activity plugin settings; it is off by default.
+	-->
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<!-- Garmin Connect Mobile's scheme. Without this, canOpenURL and the SDK's hand-off fail. -->
 	<key>LSApplicationQueriesSchemes</key>
 	<array>

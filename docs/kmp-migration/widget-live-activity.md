@@ -27,8 +27,9 @@ and those do not belong in a domain model anyway. So we move the rule, not write
      on a new BG.
    - Swift: a bridge like `ConnectIqBridge` (Kotlin decides, Swift moves JSON), an
      `ActivityAttributes` struct shared by the app and the extension, and a Widget Extension target.
-   - Local updates only (no APNs), `staleDate` = BG time + 6 min (+3 min for a 1-min CGM), recreate
-     after 60 min only while the app is active, end unknown activities, a restart App Shortcut.
+   - Local updates only (no APNs), `staleDate` = `WidgetState.staleAt` (BG time + 9 min, the same
+     rule as the rest of the app; one threshold only), recreate after 60 min only while the app is
+     active, end unknown activities, a restart App Shortcut.
    - `NSSupportsLiveActivities = true`. No App Group needed.
    - Reference: Trio `LiveActivity/` and `LiveActivityManager.swift` (MIT). Write our own; do not
      copy files.
@@ -66,9 +67,8 @@ dependency was needed: `:ui` commonMain already had every input.
   range) and `staleAt` (BG time + 9 min). Android keeps its old look on purpose (range colour,
   struck through). iOS paints `STALE` and must not write its own copy of the 9 minutes; the bridge
   sends `staleAt` with the state.
-- Open for the owner: the plan above sets the Live Activity `staleDate` to BG time + 6 min. That is
-  a third threshold next to the 9 min colour rule. Either use `staleAt` for `staleDate` so both
-  agree, or keep 6 min on purpose (an earlier system mark is not less safe) and write down why.
+- Decided in W2: the Live Activity `staleDate` is `staleAt` (9 min), not BG time + 6 min. One
+  threshold everywhere, so the system stale mark and the grey colour can never disagree.
 - Frozen texts: `timeAgoText` and `cobText` are made at build time. The Live Activity shows the age
   from `bgTimestamp` (SwiftUI `Text(date, style: .relative)`) and the carbs from `cob`,
   `carbsRequired` and `carbsRequiredGrams`, never these texts. The carbs line of `cobText` is still
@@ -85,6 +85,61 @@ dependency was needed: `:ui` commonMain already had every input.
 
 Not done in W1: nothing on iOS uses the state yet. The iOS graph does not have to provide the
 builder's inputs until step 2 asks for it.
+
+## Step 2 as built (W2)
+
+Kotlin decides, Swift draws. No new module dependency.
+
+- `core:interfaces` has `WidgetStateExport` (`app.aaps.core.interfaces.widget`): "build the widget
+  state as JSON". `:ui` implements it for iOS only (`IosWidgetStateExport` in iosMain, so the Android
+  graph does not change) with `WidgetStateBuilder` and `WidgetStateJson`. The plugin in
+  `:plugins:sync` sees only the interface, so `:plugins:sync` still does not depend on `:ui`.
+- `WidgetStateJson` (`:ui` commonMain) is the contract with the Swift struct
+  `AapsActivityAttributes.ContentState`; the keys are listed in its KDoc. It sends raw numbers
+  (`bgMgdl`, `bgTime`, `staleAt`, `deltaMgdl`, `iob`, `cob`, `carbsReqGrams`, `lastLoopTime`) and
+  texts made from them with format string resources (`value_with_unit`, `format_insulin_units`,
+  `format_carbs`, `widget_carbs_required`). It never sends `timeAgoText` or `cobText`. A number that
+  is not a real number (NaN, infinity) goes as null with the "no value" text, because it is not valid
+  JSON and Swift would drop the whole update; a NaN reading goes as no reading (stale). The age is drawn by SwiftUI from
+  `bgTime` (`Text(date, style: .relative)`), so it keeps counting while the app is frozen.
+- `LiveActivityPlugin` (`:plugins:sync` iosMain, `liveactivity/`, map key 380, enforced on) with the
+  keys `LiveActivityEnabled` (off by default, the one switch), `LiveActivityShowChart`,
+  `LiveActivityShowIobCob`, `LiveActivityShowLoop`. Not exported, not in the Android schema.
+  Triggers: new GV and `EventAPSCalculationFinished`.
+- `LiveActivityPublisher` has the rules: a new reading (or a reading that disappeared) goes out at
+  once; anything else waits until 30 s after the last send and then goes out once, with a state
+  built fresh at that time (so the loop result a few seconds after a reading is not lost); switching
+  on, a show flag change and a refresh asked by Swift go out at once; switching off ends every
+  activity. `LiveActivityThrottle` is the pure 30 s rule.
+- `LiveActivityCompanion` + `installLiveActivityCompanion` are the bridge, the same pattern as
+  Connect IQ. `ios/app/Shared/LiveActivityBridge.swift` implements it: one activity only, a leftover
+  from an earlier process is adopted once and any other is ended, start only while the app is active
+  (in the background the newest state is kept and the activity starts on `didBecomeActive`),
+  recreate after 60 min only while active, `staleDate` = `staleAt`, `end()` ends all. On
+  `didBecomeActive` and from the "Restart Live Activity" App Shortcut it asks Kotlin for a fresh
+  state. A generation counter raised by `end()` stops a start that was waiting on `activity.end`,
+  so a switch-off during a recreation is never undone.
+- The extension (`ios/app/LiveActivity/`) draws the lock screen, the Dynamic Island (expanded,
+  compact, minimal) and `.small` (Apple Watch Smart Stack). It judges the age itself:
+  `context.isStale || state.isStale(at: now)`, the same edge as Kotlin `isStaleAt`. Stale means
+  struck out, grey, no arrow, no delta; the age is still shown. Colours come from the range class.
+- `BgGraphStateLoader` now strikes through from the one `lastBg()` read too, with a clock read taken
+  next to it (as `isActualBg()` did), not the `now` from the start of the load.
+- **Two changes from the plan above, to be confirmed by the owner:**
+  1. "One update per 30 s" is not a pure drop: an update inside the 30 s waits and goes out once at
+     the end of the window. A drop would lose the loop result that comes a few seconds after each
+     reading, so IOB on the lock screen would stay 5 minutes behind. Cost: at most two updates per
+     reading.
+  2. "Recreate on `didBecomeActive`" recreates only when the activity is no longer running or is
+     60 min old or more. Otherwise it keeps the activity and asks Kotlin for a fresh state, so the
+     activity does not flash each time the app opens. Its content is still replaced at once.
+- Tests: `WidgetStateJsonTest` (commonTest), `LiveActivityPublisherTest` and `LiveActivityThrottleTest`
+  (iosTest, simulator), three `BgGraphStateLoader` cases in `WidgetRenderStateParityTest`.
+- Swift-only English texts: the App Shortcut title and phrase. App Shortcuts are read by iOS at
+  build time, so they cannot come from the Kotlin strings. Everything the activity shows comes from
+  Kotlin.
+- The Xcode steps are in `widget-live-activity-xcode-howto.md`. Until they are done, the app does
+  not build: `AapsApp.swift` already names `SwiftLiveActivityCompanion`.
 
 ## By hand in Xcode
 
