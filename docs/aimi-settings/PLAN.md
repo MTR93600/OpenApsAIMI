@@ -37,6 +37,12 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
   one intensity, dependent settings only when on) - What AIMI learned (read only) - Changes (the
   existing audit) - Expert with search. One setting row everywhere: label, one-line hint, a "?"
   sheet that starts with "Default: X" and ends with warnings, bounded values.
+- **No setting is lost in the reorganisation.** Every key that is kept (not deleted as dead, not
+  turned into internal state) must stay reachable by the user after each step: on a page, in a
+  feature card, or at least in Expert with search. Keys keep their storage names, so stored values
+  survive the update. This is checked by a test (all kept keys reachable from the settings tree;
+  the manifest reachability debt may only shrink), not only by review. The reorganisation is only
+  worth doing where it makes the settings easier to understand.
 - **Protected families**: WCycle, inflammatory diseases (thyroid, endometriosis, CFRD, Verneuil),
   learners and machine learning, physio and the tree. Never delete their keys without the owner.
   Their dead keys (`AimiPhysioSleepDataEnable`, `AimiPhysioHRVDataEnable`, `AimiPhysioDebugLogs`,
