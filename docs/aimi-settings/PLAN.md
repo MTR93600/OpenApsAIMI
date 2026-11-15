@@ -14,6 +14,13 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
   Fix: one resolution, used for dosing and logged. The dosing path takes the causal posterior of the
   **previous tick** (it is computed inside `DetermineBasalAIMI2`, after the plugin resolves the
   kinetics). Changes dosing.
+- **P1 guards (owner approved 2026-11-15, step P1b).** The DIA and peak governor switches are the
+  field off switch of the context shift (switch off = no shift). The dosing DIA may move at most
+  0.25 h per tick and the peak at most 2 min per tick. The stored context is not used after 15 min.
+- **Automatic writers follow every change.** Whenever a key is removed, made a constant, re-scaled
+  or derived, the Advisor, TPO, the tuning engine and the auditor are updated in the same step, so
+  none of them writes or recommends something without effect. A final step (A1) lists what they can
+  still propose.
 - **PKPD, the profile insulin is the source.** The seed, the anchor and the bounds of the PKPD
   learner come from the insulin of the running profile (`iCfg.dia`, `iCfg.peak`), not from AIMI
   keys. Bounds: DIA from 0.75 x to 1.25 x the profile DIA, peak from `max(35, 0.75 x profile peak)`
