@@ -567,8 +567,6 @@
     <string name="pref_summary_aimi_tube_veto_ignore_floor_artefact">The dose feasibility check refuses every bolus when the predicted lowest glucose sits under the hypo floor. That prediction cannot go below 39 mg/dL, so a curve that reached its own limit looks like a coming low. With this on, the bolus limit is released only while glucose is high and flat, never during exercise, never after a low and never while glucose is falling. This is the only setting here that can raise a dose. Off by default; the case is recorded either way, so you can count how often it happens first.</string>
     <string name="pref_title_aimi_tube_hyper_clamp_physical_bound">Bolus channel: judge high glucose with insulin on board</string>
     <string name="pref_summary_aimi_tube_hyper_clamp_physical_bound">Above 160 mg/dL the prediction is held at 80 mg/dL, whatever insulin is on board. With this on, the dose check uses instead the glucose that the insulin on board would reach by itself. With little insulin on board, a rising glucose can get more SMB. With a lot of insulin on board, the SMB is blocked. ON by default; every case is recorded so it can be reviewed.</string>
-    <string name="pref_title_aimi_pkpd_prediction_kinetics">Prediction: learned insulin kinetics</string>
-    <string name="pref_summary_aimi_pkpd_prediction_kinetics">Shape the glucose prediction curves with the adaptive PK/PD learned DIA and peak instead of the fixed insulin profile, so eventual and minPred reflect how your insulin actually acts. Falls back to the profile kinetics when the learner is off or its values are out of range.</string>
     <string name="pref_title_aimi_t3c_autodrive_basal_authority">T3C: Autodrive basal authority</string>
     <string name="pref_summary_aimi_t3c_autodrive_basal_authority">Under T3C brittle mode, fuse Autodrive’s temporary basal demand with the T3C PI controller. SMB from Autodrive is never delivered (basal-only). The physiological tree can unlock a higher basal ceiling and faster ramp on a confirmed rise. Off disables fusion (PI-only + shadow Autodrive).</string>
     <string name="pref_title_aimi_t3c_hyper_basal_floor">T3C: Hyper basal floor</string>
@@ -591,8 +589,6 @@
     <string name="pref_summary_aimi_tpo_llm_confirm_enabled">When on, AIMI applies a TPO session only if the advisor LLM confirms the clinical context (uses the same API keys as AI Coach). When off, algorithm triggers apply directly.</string>
     <string name="pref_title_aimi_tpo_notify_on_apply">TPO: notify on session start</string>
     <string name="pref_summary_aimi_tpo_notify_on_apply">Shows a system notification when a 45 min protection session starts or ends. Tap to open OpenAPS AIMI preferences.</string>
-    <string name="pref_title_aimi_peak_governor_learned_weight">TAP-G learned peak blend weight</string>
-    <string name="pref_summary_aimi_peak_governor_learned_weight">0 = insulin anchor only, 1 = learned PKPD peak only. Default 0.55.</string>
     <string name="pref_title_aimi_dyn_isf_trajectory_max_fraction">DynISF trajectory: max ISF change per tick</string>
     <string name="pref_summary_aimi_dyn_isf_trajectory_max_fraction">Cap on relative ISF adjustment from trajectory (e.g. 0.06 = at most about 6% tighter ISF on a strong rise, or 6% looser on a strong fall). Lower = safer, smaller benefit.</string>
     <string name="pref_title_aimi_hyper_established_dev">HTR established deviation (mg/dL above target)</string>
@@ -675,12 +671,9 @@
     <string name="pref_title_oaps_aimi_w_cycle_require_confirm">AIMI cycle require confirm</string>
     <string name="pref_title_oaps_aimi_night_growth_enabled">AIMI night growth enabled</string>
     <string name="pref_title_oaps_aimi_pkpd_enabled">AIMI PKPD enabled</string>
-    <string name="pref_title_oaps_aimi_pkpd_setup_wizard_completed">AIMI PKPD setup wizard completed</string>
     <string name="pref_title_oaps_aimi_intelligence_snapshot_export">AIMI intelligence snapshot export</string>
-    <string name="pref_title_oaps_aimi_intelligence_single_learn_path">AIMI intelligence single learn path</string>
     <string name="pref_title_oaps_aimi_dia_governor_enabled">AIMI DIA governor enabled</string>
     <string name="pref_summary_oaps_aimi_dia_governor_enabled">When adaptive PK/PD is on, blend the insulin profile DIA with the learned PK/PD DIA. When off, the DIA is the profile DIA: no learned DIA and no shift from the current context (stress, meal, after a hypo).</string>
-    <string name="pref_title_oaps_aimi_intelligence_kinetics_profiler">AIMI intelligence kinetics profiler</string>
     <string name="pref_title_oaps_aimi_prediction_authority_shadow">AIMI prediction authority shadow</string>
     <string name="pref_title_oaps_aimi_prediction_authority_enabled">AIMI prediction authority enabled</string>
     <string name="pref_title_oaps_aimi_meal_hyper_bypass_enabled">AIMI meal hyper bypass enabled</string>
@@ -697,8 +690,10 @@
     <string name="pref_summary_aimi_auditor_profile_factors">Lets the AI auditor change the insulin sensitivity (ISF) and the glucose target used by the loop by at most 15 %, up or down, for 15 to 30 minutes. The loop checks every proposal against the last 30 minutes of data and refuses it if one number is wrong. More insulin is never allowed when glucose is under 120 mg/dL, falling, predicted low, after a low, during exercise or with a noisy sensor. The ISF never goes below its usual floor, and all your limits (max SMB, max IOB, max basal, low glucose suspend) still apply. When this is off, the auditor still makes its proposals and writes them to the log, but nothing in your therapy changes.</string>
     <string name="pref_title_oaps_aimi_trajectory_guard_enabled">AIMI trajectory guard enabled</string>
     <string name="pref_title_oaps_aimi_context_enabled">AIMI context enabled</string>
-    <string name="pref_title_oaps_aimi_pkpd_hyper_reversion">AIMI PKPD hyper reversion</string>
-    <string name="pref_title_oaps_aimi_pkpd_stack_aware_guard_b">AIMI PKPD stack aware guard b</string>
+    <string name="pref_title_oaps_aimi_pkpd_hyper_reversion">Prediction: hyper reversion</string>
+    <string name="pref_summary_oaps_aimi_pkpd_hyper_reversion">ON by default. When glucose is clearly high (160 mg/dL or more), lets the pkpd prediction come off its 39 mg/dL floor even while insulin is still active, so a high glucose is not read as a coming low. Without it, a large insulin stack can predict a false low near 200 mg/dL and give less insulin. The guards for low and falling glucose stay on. Turn OFF only to go back to the old behaviour.</string>
+    <string name="pref_title_oaps_aimi_pkpd_stack_aware_guard_b">Stack-aware hyper floor release</string>
+    <string name="pref_summary_oaps_aimi_pkpd_stack_aware_guard_b">OFF by default. During a descent from a high glucose, releases the prediction floor as soon as the insulin on board can physiologically bring glucose down and glucose is no longer rising, so the basal cuts and holds instead of bouncing on sensor noise. May leave highs a little longer — turn ON only if you see the basal whipsawing with a large insulin stack.</string>
     <string name="pref_title_oaps_aimi_context_llm_enabled">AIMI context LLM enabled</string>
     <string name="pref_title_oaps_aimi_t3c_brittle_mode">AIMI T3C brittle mode</string>
     <string name="pref_title_oaps_aimi_thyroid_enabled">AIMI thyroid enabled</string>
@@ -727,12 +722,6 @@
     <string name="pref_title_oaps_aimi_pkpd_max_peak_change_per_day_min">AIMI PKPD max peak change per day min</string>
     <string name="pref_title_oaps_aimi_pkpd_state_dia_h">AIMI PKPD state DIA h</string>
     <string name="pref_title_oaps_aimi_pkpd_state_peak_min">AIMI PKPD state peak min</string>
-    <string name="pref_title_oaps_aimi_pkpd_state_prior_peak">AIMI PKPD state prior peak</string>
-    <string name="pref_title_oaps_aimi_pkpd_state_physio_peak">AIMI PKPD state physio peak</string>
-    <string name="pref_title_oaps_aimi_pkpd_state_site_peak">AIMI PKPD state site peak</string>
-    <string name="pref_title_oaps_aimi_pkpd_state_trajectory_peak">AIMI PKPD state trajectory peak</string>
-    <string name="pref_title_oaps_aimi_pkpd_state_effective_peak">AIMI PKPD state effective peak</string>
-    <string name="pref_title_oaps_aimi_dia_governor_learned_weight">AIMI DIA governor learned weight</string>
     <string name="pref_title_oaps_aimi_isf_fusion_min_factor">AIMI ISF fusion min factor</string>
     <string name="pref_title_oaps_aimi_isf_fusion_max_factor">AIMI ISF fusion max factor</string>
     <string name="pref_title_oaps_aimi_isf_fusion_max_change_per_tick">AIMI ISF fusion max change per tick</string>

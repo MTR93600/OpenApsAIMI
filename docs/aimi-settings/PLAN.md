@@ -90,6 +90,13 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
     (on by default, they also clamp with PK/PD off) keep the fixed envelope DIA 4-24 h, peak
     30-240 min (the old key defaults; values a preset wrote are no longer read). Moving them to the
     profile bounds would change dosing for every user and needs the owner's yes.
+- **Open for the owner (from step P3, not decided):**
+  - *Exercise damping and the Control Center.* Since P3 `SmbDamping` floors the exercise damping at
+    0.5. The Control Center ladder still writes 0.30 and 0.45 on its two lowest rungs, which now
+    both act as 0.5. P3 did not change the ladder (raising a rung would change dosing on that rung);
+    step C1 takes the ladders apart and should drop or raise these rungs.
+  - *Stored values of the new constants.* A user who had changed `OApsAIMIPeakGovernorLearnedWeight`
+    (it was on the PK/PD Expert screen) or one of the three hidden switches now gets the old default.
 
 ## Order of work (one green commit per step)
 

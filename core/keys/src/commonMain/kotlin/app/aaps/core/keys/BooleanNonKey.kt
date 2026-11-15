@@ -66,6 +66,13 @@ enum class BooleanNonKey(
     OApsAIMIPkpdPaceMigrated("aimi_pkpd_pace_migrated", false, exportable = false),
 
     /**
+     * Set after the guided AIMI PK/PD setup wizard finished or was skipped. Bookkeeping, not a
+     * setting: it was a [BooleanKey] until step P3 and keeps its stored name, so the wizard does not
+     * come back after the update. Exported, so a restored backup does not show the wizard again.
+     */
+    OApsAIMIPkpdSetupWizardCompleted("key_aimi_pkpd_setup_wizard_completed", false),
+
+    /**
      * Shows the IOB chart under the glucose chart on the Glass home (Tools → Personalize). A small phone
      * can turn it off so the home fits on the screen without scrolling. The IOB stays in the status card.
      */

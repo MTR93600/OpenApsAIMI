@@ -26,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -35,6 +36,7 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
 import androidx.compose.ui.Modifier
 import app.aaps.core.keys.BooleanKey
+import app.aaps.core.keys.BooleanNonKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.BooleanPreferenceKey
 import app.aaps.core.keys.interfaces.DoublePreferenceKey
@@ -51,11 +53,16 @@ import app.aaps.core.ui.compose.preference.AdaptiveIntPreferenceItem
 import app.aaps.core.ui.compose.preference.AdaptiveSwitchPreferenceItem
 import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiRecommendation
-import app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiAction
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdIntegration
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdUpdateReason
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdLearningSummary
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdProfileInsulinMemory
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdTickTelemetry
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 enum class PkpdSettingsLevel { SIMPLE, ADVANCED, EXPERT }
@@ -104,7 +111,7 @@ fun PkpdSetupWizardDialog(
                         preferences.put(BooleanKey.OApsAIMIPkpdEnabled, true)
                         step = 1
                     } else {
-                        preferences.put(BooleanKey.OApsAIMIPkpdSetupWizardCompleted, true)
+                        preferences.put(BooleanNonKey.OApsAIMIPkpdSetupWizardCompleted, true)
                         onCompleted()
                         onDismiss()
                     }
@@ -122,7 +129,7 @@ fun PkpdSetupWizardDialog(
                     if (step == 0) {
                         onDismiss()
                     } else {
-                        preferences.put(BooleanKey.OApsAIMIPkpdSetupWizardCompleted, true)
+                        preferences.put(BooleanNonKey.OApsAIMIPkpdSetupWizardCompleted, true)
                         onCompleted()
                         onDismiss()
                     }
@@ -304,6 +311,13 @@ fun PkpdExpertSettingsContent(preferenceRevision: Int) {
     }
 }
 
+/**
+ * The PK/PD status card of the Simple tab (step P3): the DIA and peak that dosed on the last loop
+ * run, the profile insulin, and how learning went over the last 24 h (accepted steps, blocked loop
+ * runs and the main reason). The values come from [PkpdTickTelemetry]. The card reads them again
+ * every [PKPD_STATUS_REFRESH_MS] while it is shown, and it does not show the DIA and peak of a loop
+ * run that is older than [PkpdTickTelemetry.KINETICS_FRESH_MS].
+ */
 @Composable
 fun PkpdSimpleStatusCard(
     preferences: Preferences,
@@ -311,10 +325,24 @@ fun PkpdSimpleStatusCard(
     profilePeakMin: Double?,
 ) {
     var showTechnical by remember { mutableStateOf(false) }
+    var nowMs by remember { mutableLongStateOf(aimiWallClockMs()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(PKPD_STATUS_REFRESH_MS)
+            nowMs = aimiWallClockMs()
+        }
+    }
+    // Telemetry is plain memory, not Compose state: read it again on every refresh.
+    val tick = remember(nowMs) { PkpdTickTelemetry.kinetics }
+    val freshTick = tick?.takeIf { PkpdTickTelemetry.isFresh(it.atMs, nowMs) }
+    val learning = remember(nowMs) { PkpdTickTelemetry.learning.summary(nowMs) }
     val learnedDia = preferences.get(DoubleKey.OApsAIMIPkpdStateDiaH)
     val learnedPeak = preferences.get(DoubleKey.OApsAIMIPkpdStatePeakMin)
-    val profileDia = profileDiaHours ?: learnedDia
-    val profilePeak = profilePeakMin ?: PkpdProfileInsulinMemory.lastSeen(preferences)?.peakMinutes ?: learnedPeak
+    val profileDia = profileDiaHours ?: tick?.profileDiaHours ?: learnedDia
+    val profilePeak = profilePeakMin
+        ?: tick?.profilePeakMinutes
+        ?: PkpdProfileInsulinMemory.lastSeen(preferences)?.peakMinutes
+        ?: learnedPeak
     val pkpdOn = preferences.get(BooleanKey.OApsAIMIPkpdEnabled)
     val fasterInsulin = learnedDia < profileDia - 0.15 || learnedPeak < profilePeak - 8.0
 
@@ -330,11 +358,15 @@ fun PkpdSimpleStatusCard(
                 style = MaterialTheme.typography.titleSmall,
             )
             Text(
-                stringResource(
-                    ApsStrings.aimi_pkpd_status_learned_format,
-                    learnedDia,
-                    learnedPeak,
-                ),
+                when {
+                    freshTick != null -> stringResource(
+                        ApsStrings.aimi_pkpd_status_used_format,
+                        freshTick.effectiveDiaHours,
+                        freshTick.effectivePeakMinutes,
+                    )
+                    tick != null      -> stringResource(ApsStrings.aimi_pkpd_status_no_recent_loop)
+                    else              -> stringResource(ApsStrings.aimi_pkpd_status_no_loop_yet)
+                },
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(top = AapsSpacing.small),
             )
@@ -347,6 +379,25 @@ fun PkpdSimpleStatusCard(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (pkpdOn) {
+                Text(
+                    if (learning.learningTicks > 0) {
+                        stringResource(ApsStrings.aimi_pkpd_status_learning_24h_format, learning.acceptedSteps, learning.blockedPercent)
+                    } else {
+                        stringResource(ApsStrings.aimi_pkpd_status_no_learning_24h)
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = AapsSpacing.small),
+                )
+                learning.topBlockReason?.let { reason ->
+                    val reasonText = pkpdBlockReasonText(reason)?.let { stringResource(it) } ?: reason
+                    Text(
+                        stringResource(ApsStrings.aimi_pkpd_status_top_reason_format, reasonText),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             Text(
                 when {
                     !pkpdOn -> stringResource(ApsStrings.aimi_pkpd_status_learning_off)
@@ -358,7 +409,13 @@ fun PkpdSimpleStatusCard(
                 modifier = Modifier.padding(top = AapsSpacing.small),
             )
             if (showTechnical) {
-                PkpdTechnicalPeakDetails(preferences)
+                Text(
+                    stringResource(ApsStrings.aimi_pkpd_status_learned_format, learnedDia, learnedPeak),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = AapsSpacing.small),
+                )
+                freshTick?.let { PkpdTechnicalPeakDetails(it) }
             } else {
                 Text(
                     stringResource(ApsStrings.aimi_pkpd_tap_for_technical),
@@ -371,24 +428,41 @@ fun PkpdSimpleStatusCard(
     }
 }
 
+/** Plain text for a block reason category of [PkpdLearningSummary.topBlockReason], or null for an unknown one. */
+internal fun pkpdBlockReasonText(category: String): TextRef? = when (category) {
+    PkPdIntegration.LEARN_BLOCKED_CAUSAL_UNCLEAN                                  -> ApsStrings.aimi_pkpd_block_reason_causal_unclean
+    PkpdLearningSummary.reasonCategory(PkPdIntegration.LEARN_BLOCKED_CAUSAL_MODULATOR_PREFIX) -> ApsStrings.aimi_pkpd_block_reason_causal_modulator
+    PkpdLearningSummary.reasonCategory(PkPdIntegration.LEARN_BLOCKED_CURVE_PREFIX) -> ApsStrings.aimi_pkpd_block_reason_curve
+    estimatorReason(PkPdUpdateReason.IOB_TOO_LOW)                                 -> ApsStrings.aimi_pkpd_block_reason_iob_too_low
+    estimatorReason(PkPdUpdateReason.CARBS_ACTIVE)                                -> ApsStrings.aimi_pkpd_block_reason_carbs_active
+    estimatorReason(PkPdUpdateReason.EXERCISE)                                    -> ApsStrings.aimi_pkpd_block_reason_exercise
+    estimatorReason(PkPdUpdateReason.RISE_TOO_FAST),
+    estimatorReason(PkPdUpdateReason.FAST_FALL)                                   -> ApsStrings.aimi_pkpd_block_reason_fast_change
+    estimatorReason(PkPdUpdateReason.HYPO),
+    estimatorReason(PkPdUpdateReason.NEAR_HYPO_FALLING)                           -> ApsStrings.aimi_pkpd_block_reason_low_glucose
+    estimatorReason(PkPdUpdateReason.WINDOW_OUT_OF_RANGE)                         -> ApsStrings.aimi_pkpd_block_reason_window
+    else                                                                          -> null
+}
+
+/** The block reason that [PkPdIntegration.learningTickBlockedBy] writes for [reason]. */
+private fun estimatorReason(reason: PkPdUpdateReason): String =
+    PkPdIntegration.learningTickBlockedBy(gateBlockedBy = null, accepted = false, estimatorReason = reason).orEmpty()
+
+/** How often the PK/PD status card reads the tick telemetry again while it is shown. */
+private const val PKPD_STATUS_REFRESH_MS = 30_000L
+
 @Composable
-private fun PkpdTechnicalPeakDetails(preferences: Preferences) {
-    val peakPrior = preferences.get(DoubleKey.OApsAIMIPkpdStatePriorPeak)
-    val peakEffective = preferences.get(DoubleKey.OApsAIMIPkpdStateEffectivePeak)
-    val peakPhysio = preferences.get(DoubleKey.OApsAIMIPkpdStatePhysioPeak)
-    val peakSite = preferences.get(DoubleKey.OApsAIMIPkpdStateSitePeak)
-    val peakTraj = preferences.get(DoubleKey.OApsAIMIPkpdStateTrajectoryPeak)
-    val dominantBranch = preferences.get(AimiStringKey.OApsAIMIPkpdStateDominantBranch)
-    if (dominantBranch.isNotEmpty()) {
+private fun PkpdTechnicalPeakDetails(tick: PkpdTickTelemetry.Kinetics) {
+    if (tick.dominantBranch.isNotEmpty()) {
         Text(
             text = stringResource(
                 ApsStrings.aimi_pkpd_tap_g_detail,
-                dominantBranch,
-                peakEffective,
-                peakPrior,
-                peakPhysio,
-                peakSite,
-                peakTraj,
+                tick.dominantBranch,
+                tick.effectivePeakMinutes,
+                tick.peakPrior,
+                tick.peakPhysio,
+                tick.peakSite,
+                tick.peakTrajectory,
             ),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.primary,
@@ -494,7 +568,6 @@ internal object PkpdScreenLayout {
 
     /** Advanced tab: sections shown as plain preference items, after the learning pace chips. */
     val advancedFieldSections: List<AimiSettingsSectionId> = listOf(
-        AimiSettingsSectionId.PkpdAdvancedStackAwareGuardB,
         AimiSettingsSectionId.PkpdAdvancedCurveLearningGate,
     )
 
@@ -557,7 +630,6 @@ internal object PkpdScreenLayout {
      * here keeps its own title.
      */
     val titleOverrides: Map<String, TextRef> = mapOf(
-        BooleanKey.OApsAIMIPkpdStackAwareGuardB.key to ApsStrings.oaps_aimi_pkpd_stack_aware_guardb_title,
         BooleanKey.OApsAIMIPkpdCurveLearningGate.key to ApsStrings.oaps_aimi_pkpd_curve_learning_gate_title,
         BooleanKey.OApsAIMIPkpdEnabled.key to ApsStrings.oaps_aimi_pkpd_enabled_title,
         DoubleKey.OApsAIMIIsfFusionMinFactor.key to ApsStrings.oaps_aimi_isf_fusion_min_title,
@@ -578,7 +650,6 @@ internal object PkpdScreenLayout {
     /** Screen summaries that replace the key's own summary on the PK/PD screens. */
     val summaryOverrides: Map<String, TextRef> = mapOf(
         BooleanKey.OApsAIMIPkpdEnabled.key to ApsStrings.aimi_pkpd_enabled_simple_summary,
-        BooleanKey.OApsAIMIPkpdStackAwareGuardB.key to ApsStrings.oaps_aimi_pkpd_stack_aware_guardb_summary,
         BooleanKey.OApsAIMIPkpdCurveLearningGate.key to ApsStrings.oaps_aimi_pkpd_curve_learning_gate_summary,
         BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled.key to ApsStrings.oaps_aimi_pkpd_relief_enabled_summary,
         BooleanKey.OApsAIMIIobSurveillanceGuard.key to ApsStrings.aimi_iob_surveillance_guard_summary,

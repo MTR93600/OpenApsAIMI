@@ -25,6 +25,16 @@ class SmbDamping(
     private val policy: TailAwareSmbPolicy = TailAwareSmbPolicy()
 ) {
 
+    companion object {
+
+        /**
+         * Lowest multiplier the late fat damping and the exercise damping may apply. Both
+         * preferences allow 0.0, which would stop every SMB for hours. A stored value below this
+         * floor acts as the floor.
+         */
+        const val DAMPING_FLOOR = 0.5
+    }
+
     // F6 — single implementation. `damp()` is a thin wrapper over `dampWithAudit()` so both entry points
     // can never diverge again (they previously used two different late-fat rules; see git history).
     fun damp(
@@ -81,7 +91,7 @@ class SmbDamping(
             // caller — the previous reflection into `ModeState.timeSinceMealMin` always threw (no such field)
             // so `elapsed` was pinned at 0 and the whole ladder collapsed to a constant 0.85.
             // The preference range allows 0.0, which would zero the SMB for up to four hours. Floor it.
-            val base = policy.lateFattyMealDamping.coerceIn(0.5, 1.0)
+            val base = policy.lateFattyMealDamping.coerceIn(DAMPING_FLOOR, 1.0)
             val progress = (elapsedSinceMealMin / 240.0).coerceIn(0.0, 1.0)
             lateMult = base + (0.95 - base).coerceAtLeast(0.0) * progress
             out *= lateMult
@@ -89,7 +99,10 @@ class SmbDamping(
         if (tailApplied) out *= tailMult
 
         val exerciseApplied = exercise
-        val exerciseMult = if (exerciseApplied) policy.postExerciseDamping else 1.0
+        // Step P3: same floor as the late fat damping. The preference range of
+        // `OApsAIMISmbExerciseDamping` starts at 0.0, which would stop every SMB while exercise is
+        // detected. A stored value below 0.5 now acts as 0.5; 0.5 to 1.0 is used as it is.
+        val exerciseMult = if (exerciseApplied) policy.postExerciseDamping.coerceIn(DAMPING_FLOOR, 1.0) else 1.0
         if (exerciseApplied) out *= exerciseMult
 
         //val lateApplied = suspectedLateFatMeal

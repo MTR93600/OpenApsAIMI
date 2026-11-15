@@ -121,6 +121,7 @@ class PreferenceMigrations(
         rapidFallDropToMgdl(sp)
         dashboardSkin(sp)
         smsCommunicatorType(sp)
+        aimiPkpdKeysRetired(sp)
     }
 
     /**
@@ -522,6 +523,18 @@ class PreferenceMigrations(
         sp.remove(legacyName)
     }
 
+    /**
+     * AIMI step P3: PK/PD values that are no longer preferences, so their stored names are dead.
+     *
+     * The five peak branch values, the dominant branch and the two peak governor log lines are kept
+     * in memory now (they were written by the loop only). The two governor blend weights and three
+     * switches are constants with the old default values. The learned DIA and peak, the wizard flag
+     * and the two governor switches keep their names and are not touched.
+     */
+    private fun aimiPkpdKeysRetired(sp: KeyValueStore) {
+        AIMI_PKPD_RETIRED_KEYS.filter { sp.contains(it) }.forEach(sp::remove)
+    }
+
     /** Moves a legacy name holding a whole number to [destinationPrefix] + [argument]. */
     private fun moveLong(sp: KeyValueStore, name: String, value: Any?, argument: String?, destinationPrefix: String) {
         if (argument == null) return skip(name, "the name does not say what it belongs to")
@@ -590,6 +603,23 @@ class PreferenceMigrations(
         )
 
         val TEMP_TARGET_PRESETS = StringNonKey.TempTargetPresets.key
+
+        /** Stored names of the AIMI PK/PD keys removed in step P3. See [aimiPkpdKeysRetired]. */
+        val AIMI_PKPD_RETIRED_KEYS = listOf(
+            "aimi_pkpd_state_prior_peak",
+            "aimi_pkpd_state_physio_peak",
+            "aimi_pkpd_state_site_peak",
+            "aimi_pkpd_state_traj_peak",
+            "aimi_pkpd_state_effective_peak",
+            "aimi_pkpd_state_dominant_branch",
+            "aimi_pkpd_state_last_peak_gov_log",
+            "aimi_pkpd_state_last_peak_gov_console_echoed",
+            "aimi_peak_governor_learned_weight",
+            "aimi_dia_governor_learned_weight",
+            "key_aimi_intelligence_single_learn_path",
+            "key_aimi_intelligence_kinetics_profiler",
+            "key_aimi_pkpd_prediction_kinetics"
+        )
 
         /** The three counters the activity monitor kept for each activity. */
         val MONITOR_COUNTERS = listOf("start", "resumed", "total")

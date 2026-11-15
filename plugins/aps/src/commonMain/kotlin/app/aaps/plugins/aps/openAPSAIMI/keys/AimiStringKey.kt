@@ -88,35 +88,6 @@ enum class AimiStringKey(
             "hc_only" to ApsStrings.pref_aimi_steps_source_hc,
             ACTIVITY_SOURCE_MODE_DISABLED to ApsStrings.pref_aimi_steps_source_disabled,
         ),
-    ),
-
-    OApsAIMIPkpdStateDominantBranch(
-        key = "aimi_pkpd_state_dominant_branch",
-        defaultValue = "",
-        title = ApsStrings.aimi_pkpd_state_internal_title,
-        showInApsMode = false,
-        showInNsClientMode = false,
-        showInPumpControlMode = false
-    ),
-
-    /** Last material `PEAK_GOV:` line for APS console / debugging (RFC H.4). */
-    OApsAIMIPkpdLastPeakGovLogLine(
-        key = "aimi_pkpd_state_last_peak_gov_log",
-        defaultValue = "",
-        title = ApsStrings.aimi_pkpd_state_internal_title,
-        showInApsMode = false,
-        showInNsClientMode = false,
-        showInPumpControlMode = false
-    ),
-
-    /** Last `PEAK_GOV` line echoed to APS console (dedup in dump tick). */
-    OApsAIMIPkpdLastPeakGovConsoleEchoed(
-        key = "aimi_pkpd_state_last_peak_gov_console_echoed",
-        defaultValue = "",
-        title = ApsStrings.aimi_pkpd_state_internal_title,
-        showInApsMode = false,
-        showInNsClientMode = false,
-        showInPumpControlMode = false
     );
 
 }

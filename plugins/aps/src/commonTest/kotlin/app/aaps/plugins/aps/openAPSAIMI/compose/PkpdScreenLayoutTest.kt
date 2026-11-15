@@ -69,10 +69,9 @@ class PkpdScreenLayoutTest {
     }
 
     @Test
-    fun `the expert tab draws the expert keys of dev`() {
+    fun `the expert tab draws the expert keys of dev without the blend weight`() {
         val expected = setOf(
             BooleanKey.OApsAIMIPeakGovernorEnabled.key,
-            DoubleKey.OApsAIMIPeakGovernorLearnedWeight.key,
             BooleanKey.OApsAIMIDiaGovernorEnabled.key,
             DoubleKey.OApsAIMIIsfFusionMinFactor.key,
             DoubleKey.OApsAIMIIsfFusionMaxFactor.key,
@@ -92,6 +91,47 @@ class PkpdScreenLayoutTest {
             DoubleKey.OApsAIMIPriorityMaxIobExtraU.key,
         )
         assertEquals(expected, drawnKeysOf(AimiSettingsContentId.PkpdExpert))
+    }
+
+    /**
+     * Step P3: the prediction guards are not PK/PD settings. They left the PK/PD screen and are expert
+     * flags on the trajectory screen, next to the other prediction guards.
+     */
+    @Test
+    fun `no PK PD tab draws a prediction guard`() {
+        val drawn = pkpdContents.flatMap { drawnKeysOf(it) }.toSet()
+        val guards = setOf(
+            BooleanKey.OApsAIMIPkpdEndogenousReversion.key,
+            BooleanKey.OApsAIMIPkpdHyperReversion.key,
+            BooleanKey.OApsAIMIPkpdStackAwareGuardB.key,
+        )
+        assertEquals(emptySet(), drawn.intersect(guards))
+    }
+
+    @Test
+    fun `the prediction guards are expert flags on the trajectory screen`() {
+        val section = AimiSettingsScreens.sections.single { it.id == AimiSettingsSectionId.TrajectoryPredictionGuards }
+        assertEquals(AimiSettingsContentId.PreferencesTrajectory, section.content)
+        assertEquals(AimiSettingsLevel.EXPERT, section.level)
+        assertEquals(AimiSettingsSectionKind.FIELDS, section.kind)
+        assertEquals(
+            listOf(
+                BooleanKey.OApsAIMIPkpdEndogenousReversion.key,
+                BooleanKey.OApsAIMIPkpdHyperReversion.key,
+                BooleanKey.OApsAIMIPkpdStackAwareGuardB.key,
+            ),
+            section.keys.map { it.key },
+        )
+    }
+
+    @Test
+    fun `the PK PD screen keeps the ISF fusion prudence and the trajectory part`() {
+        val drawn = pkpdContents.flatMap { drawnKeysOf(it) }.toSet()
+        assertTrue(DoubleKey.OApsAIMIIsfFusionMinFactor.key in drawn)
+        assertTrue(DoubleKey.OApsAIMIIsfFusionMaxFactor.key in drawn)
+        assertTrue(BooleanKey.OApsAIMIDynIsfTrajectoryTuningEnabled.key in drawn)
+        assertTrue(BooleanKey.OApsAIMIPeakGovernorEnabled.key in drawn)
+        assertTrue(BooleanKey.OApsAIMIDiaGovernorEnabled.key in drawn)
     }
 
     @Test

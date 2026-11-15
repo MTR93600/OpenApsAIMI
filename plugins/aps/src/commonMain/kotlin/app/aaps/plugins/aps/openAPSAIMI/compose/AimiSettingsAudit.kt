@@ -115,10 +115,10 @@ internal data class AimiSettingsAuditReport(
  * Compose, no Android view code. The screen only renders what [build] returns, which is what lets
  * `AimiSettingsAuditTest` cover it without a device.
  *
- * A key the wizard sets for itself and the person never sees ([AimiSettingsWriter.BOOKKEEPING]
- * alone, today only `OApsAIMIPkpdSetupWizardCompleted`) is left out: it needs no screen anywhere,
- * including this one. Every other entry is in scope — including a key no settings screen lets the
- * person reach today ([AimiSettingsManifest.REACHABILITY_DEBT]). The reset button here is the one
+ * Every entry is in scope — including a key no settings screen lets the person reach today
+ * ([AimiSettingsManifest.REACHABILITY_DEBT]). Bookkeeping flags such as "the PK/PD wizard has run"
+ * and the learned PK/PD state ([AimiSettingsManifest.INTERNAL_STATE]) have no entry, so they are
+ * never shown here. The reset button here is the one
  * way to correct such a key from inside the app, which is exactly why it belongs on this screen.
  */
 internal object AimiSettingsAudit {
@@ -127,7 +127,7 @@ internal object AimiSettingsAudit {
     private const val DOUBLE_SAME_VALUE_EPSILON = 0.0001
 
     fun build(preferences: Preferences, strings: AimiSettingsAuditStrings): AimiSettingsAuditReport {
-        val scoped = AimiSettingsManifest.entries.filterNot { it.writers == setOf(AimiSettingsWriter.BOOKKEEPING) }
+        val scoped = AimiSettingsManifest.entries
         val rows = scoped.mapNotNull { entry -> rowFor(preferences, entry, strings) }
         return AimiSettingsAuditReport(rows = rows, scopedCount = scoped.size)
     }

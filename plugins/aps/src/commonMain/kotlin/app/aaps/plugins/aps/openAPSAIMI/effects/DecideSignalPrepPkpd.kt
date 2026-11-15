@@ -7,7 +7,6 @@ import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.MealData
 import app.aaps.core.interfaces.aps.OapsProfileAimi
 import app.aaps.core.interfaces.aps.RT
-import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.AsyncDataState
@@ -275,9 +274,9 @@ internal fun decideSignalPreparationPkpdRuntime(
     var pkpdRuntime = pkpdRuntimeIn
     if (pkpdRuntimeTemp != null) {
         pkpdRuntime = pkpdRuntimeTemp
-        if (preferences.get(BooleanKey.OApsAIMIIntelligenceSingleLearnPath)) {
-            calls.setCachedPkpdRuntime(pkpdRuntimeTemp)
-        }
+        // One learning path per tick: this runtime (the only one that learns) is the one cached for the
+        // rest of the tick. It was the key `OApsAIMIIntelligenceSingleLearnPath` (default on) until step P3.
+        calls.setCachedPkpdRuntime(pkpdRuntimeTemp)
 
         consoleLog.add("📊 PKPD_LEARNER:")
         consoleLog.add("  │ DIA (learned): ${aimiFmt2(pkpdRuntime.params.diaHrs)}h")

@@ -9,9 +9,9 @@ import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt3
 import app.aaps.plugins.aps.openAPSAIMI.inflammatory.InflammationAdjuster
-import app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioMultipliersMTR
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdTickTelemetry
 
 /** `activePlugin.activeBgSource` class name. Throws on failure; the caller logs and treats it as not G6. */
 internal fun interface AimiT9G6Source {
@@ -125,7 +125,7 @@ internal fun decideT9PhysioEarlyPkpd(
     physioDetail.log()
     val earlySens = profile.sens / 1.0
     val pkpdRuntime = try {
-        // Read-only, whatever OApsAIMIIntelligenceSingleLearnPath says: this early call uses a
+        // Read-only: only the signal preparation learns (one learning path per tick). This early call uses a
         // substitute TDD (max basal x 24), so letting it learn would pollute the shared learned
         // state. Same as dev_OAPSAIMI.
         runtime.compute(earlySens, iobTotal, allowLearning = false)
@@ -157,14 +157,9 @@ internal fun decideT9PhysioEarlyPkpd(
         )
     }
     val pumpAgeDays = pumpAge.days()
-    val peakGovLine = preferences.get(AimiStringKey.OApsAIMIPkpdLastPeakGovLogLine)
-    if (peakGovLine.isNotBlank()) {
-        val alreadyEchoed = preferences.get(AimiStringKey.OApsAIMIPkpdLastPeakGovConsoleEchoed)
-        if (peakGovLine != alreadyEchoed) {
-            val clipped = if (peakGovLine.length > 220) peakGovLine.substring(0, 220) + "..." else peakGovLine
-            consoleLog.add(clipped)
-            preferences.put(AimiStringKey.OApsAIMIPkpdLastPeakGovConsoleEchoed, peakGovLine)
-        }
+    PkpdTickTelemetry.peakGovConsole.lineToEcho()?.let { peakGovLine ->
+        val clipped = if (peakGovLine.length > 220) peakGovLine.substring(0, 220) + "..." else peakGovLine
+        consoleLog.add(clipped)
     }
     return AimiT9PhysioPkpdTubeBootstrap(pumpAgeDays, multipliers)
 }

@@ -137,6 +137,54 @@ class PreferenceMigrationsTest {
         assertThat(store.getAll()).isEmpty()
     }
 
+    /**
+     * AIMI step P3: PK/PD values that are no longer preferences. The peak branch values, the dominant
+     * branch and the two peak governor log lines are telemetry in memory now; the blend weights and
+     * three switches are constants. Their stored names are removed.
+     */
+    @Test fun `retired AIMI PK PD keys are removed`() = runTest {
+        val store = storeOf(
+            "aimi_pkpd_state_prior_peak" to 75.0,
+            "aimi_pkpd_state_physio_peak" to 1.0,
+            "aimi_pkpd_state_site_peak" to 2.0,
+            "aimi_pkpd_state_traj_peak" to 3.0,
+            "aimi_pkpd_state_effective_peak" to 70.0,
+            "aimi_pkpd_state_dominant_branch" to "PRIOR",
+            "aimi_pkpd_state_last_peak_gov_log" to "PEAK_GOV: x",
+            "aimi_pkpd_state_last_peak_gov_console_echoed" to "PEAK_GOV: x",
+            "aimi_peak_governor_learned_weight" to 0.55,
+            "aimi_dia_governor_learned_weight" to 0.45,
+            "key_aimi_intelligence_single_learn_path" to true,
+            "key_aimi_intelligence_kinetics_profiler" to true,
+            "key_aimi_pkpd_prediction_kinetics" to true
+        )
+
+        sut().migrate(store)
+
+        assertThat(store.getAll()).isEmpty()
+    }
+
+    /** The learned state, the wizard flag and the governor switches keep their stored names and values. */
+    @Test fun `AIMI PK PD values that stay are kept`() = runTest {
+        val store = storeOf(
+            "aimi_pkpd_state_dia_h" to 6.5,
+            "aimi_pkpd_state_peak_min" to 68.0,
+            "key_aimi_pkpd_setup_wizard_completed" to true,
+            "key_aimi_peak_governor_enabled" to false,
+            "key_aimi_dia_governor_enabled" to false
+        )
+
+        sut().migrate(store)
+
+        assertThat(store.getAll().keys).containsExactly(
+            "aimi_pkpd_state_dia_h",
+            "aimi_pkpd_state_peak_min",
+            "key_aimi_pkpd_setup_wizard_completed",
+            "key_aimi_peak_governor_enabled",
+            "key_aimi_dia_governor_enabled"
+        )
+    }
+
     // ----- A migration may do more than move a key -----
 
     /**

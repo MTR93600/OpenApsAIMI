@@ -23,6 +23,9 @@ internal object TpoLadderSupport {
         PkpdSmbTailDamping.DAMPING_STRONG,
     )
 
+    // 0.45 is only a lookup rung for a low stored value: [stepBand] always moves up by at least one
+    // rung, so TPO never proposes it. That matters since step P3, because `SmbDamping` floors the
+    // exercise damping at 0.5 and a value below it would have no effect of its own.
     private val EXERCISE_DAMPING_BAND = listOf(0.45, 0.60, 0.72, 0.85)
     private val LATE_FAT_DAMPING_BAND = listOf(0.55, 0.70, 0.80, 0.90)
 

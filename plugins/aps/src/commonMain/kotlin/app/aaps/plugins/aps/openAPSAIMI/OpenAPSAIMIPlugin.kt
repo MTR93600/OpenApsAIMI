@@ -150,6 +150,8 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLearnedState
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdCsvLogger
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSmbTailDamping
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.LearnedPredictionKinetics
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdTickTelemetry
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.TapPeakGovernor
 import app.aaps.plugins.aps.openAPSAIMI.compose.PkpdTailPrudence
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.TapSitePeakShift
@@ -629,7 +631,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
      * this patient's insulin actually acts. Reuses the production [IobCobCalculator.calculateIobArrayInDia] with
      * a profile whose [ICfg] carries the learned kinetics ? no parallel IOB math, same treatment iteration.
      *
-     * Fail-safe: returns null (? caller falls back to the static-profile array) when the pref is off, the learner
+     * Always on since step P3 (it was the key `OApsAIMIPkpdPredictionKinetics`, default on).
+     * Fail-safe: returns null (? caller falls back to the static-profile array) when the learner
      * exposes no valid DIA/peak, the exponential model would be numerically invalid (peak must stay < DIA/2), or
      * anything throws. Only the prediction curves consume this array; SMB IOB accounting is untouched.
      */
@@ -638,17 +641,16 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         learnedDiaHrs: Double?,
         learnedPeakMin: Double?,
     ): Array<IobTotal>? {
-        if (!preferences.get(BooleanKey.OApsAIMIPkpdPredictionKinetics)) return null
-        val diaHrs = learnedDiaHrs?.takeIf { it.isFinite() && it in 3.0..12.0 } ?: return null
-        val peakMin = learnedPeakMin?.takeIf { it.isFinite() && it in 20.0..240.0 } ?: return null
+        // The learner clamps DIA and peak independently, so a high-peak / short-DIA combo can break the
+        // exponential model (peak must stay below DIA/2); fromLearned then returns null and we fall back.
+        val kinetics = LearnedPredictionKinetics.fromLearned(learnedDiaHrs, learnedPeakMin) ?: return null
+        val diaHrs = kinetics.insulinEndTimeMs / 3_600_000.0
+        val peakMin = kinetics.insulinPeakTimeMs / 60_000.0
         return try {
             val learnedICfg: ICfg = effectiveProfile.iCfg.copy(
-                insulinEndTime = (diaHrs * 3_600_000.0).toLong(),
-                insulinPeakTime = (peakMin * 60_000.0).toLong(),
+                insulinEndTime = kinetics.insulinEndTimeMs,
+                insulinPeakTime = kinetics.insulinPeakTimeMs,
             )
-            // Exponential insulin model requires peak strictly below DIA/2 (else tau ? 0 ? NaN). The learner
-            // clamps DIA and peak independently, so a high-peak / short-DIA combo can violate this ? fall back.
-            if (learnedICfg.insulinPeakTime * 2 >= learnedICfg.insulinEndTime) return null
             val learnedProfile = object : EffectiveProfile by effectiveProfile { override val iCfg: ICfg = learnedICfg }
             iobCobCalculator.calculateIobArrayInDia(learnedProfile).also {
                 aapsLogger.debug(LTag.APS, "PK/PD prediction kinetics: curves on learned DIA=${aimiFmt1(diaHrs)}h peak=${peakMin.toInt()}m")
@@ -1483,22 +1485,24 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             )
             kineticsView.diaGovernor.logLine?.let { line -> aapsLogger.debug(LTag.APS, line) }
             peakGovernorForActivity.logLine?.let { line -> aapsLogger.debug(LTag.APS, line) }
-            preferences.put(
-                AimiStringKey.OApsAIMIPkpdLastPeakGovLogLine,
-                peakGovernorForActivity.logLine.orEmpty(),
-            )
-            if (peakGovernorForActivity.logLine.isNullOrBlank()) {
-                preferences.put(AimiStringKey.OApsAIMIPkpdLastPeakGovConsoleEchoed, "")
-            }
+            PkpdTickTelemetry.peakGovConsole.record(peakGovernorForActivity.logLine)
 
-            // H.1: Save detailed peak branch data for UI / PKPD Overview
-            preferences.put(DoubleKey.OApsAIMIPkpdStatePriorPeak, peakGovernorForActivity.peakPrior)
-            preferences.put(DoubleKey.OApsAIMIPkpdStatePhysioPeak, peakGovernorForActivity.peakPhysio)
-            preferences.put(DoubleKey.OApsAIMIPkpdStateSitePeak, peakGovernorForActivity.peakSite)
-            preferences.put(DoubleKey.OApsAIMIPkpdStateTrajectoryPeak, peakGovernorForActivity.peakTrajectory)
-            // The peak that doses, after the per-tick rate limit (the governor gives the target).
-            preferences.put(DoubleKey.OApsAIMIPkpdStateEffectivePeak, kineticsView.effective.peakMinutes)
-            preferences.put(AimiStringKey.OApsAIMIPkpdStateDominantBranch, peakGovernorForActivity.dominantBranch)
+            // H.1: peak branch data for the PK/PD status card. In memory since step P3, not preferences.
+            // The DIA and peak are the ones that dose, after the per-tick rate limit.
+            PkpdTickTelemetry.recordKinetics(
+                PkpdTickTelemetry.Kinetics(
+                    effectiveDiaHours = kineticsView.effective.diaHours,
+                    effectivePeakMinutes = kineticsView.effective.peakMinutes,
+                    profileDiaHours = eff.iCfg.dia,
+                    profilePeakMinutes = profile.iCfg.peak.toDouble(),
+                    peakPrior = peakGovernorForActivity.peakPrior,
+                    peakPhysio = peakGovernorForActivity.peakPhysio,
+                    peakSite = peakGovernorForActivity.peakSite,
+                    peakTrajectory = peakGovernorForActivity.peakTrajectory,
+                    dominantBranch = peakGovernorForActivity.dominantBranch,
+                    atMs = nowMsForPkpd,
+                ),
+            )
 
             val peakTimeMinutesForProfile = kineticsView.effective.peakMinutes
             var currentActivity = 0.0

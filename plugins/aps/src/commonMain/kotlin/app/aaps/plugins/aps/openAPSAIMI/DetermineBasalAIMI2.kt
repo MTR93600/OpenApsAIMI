@@ -1667,11 +1667,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             hormonal_cycle_phase = work.wCycleInfoForRun?.let { "${it.phase.name}_Day${it.dayInCycle}" } ?: "Unknown",
             physical_activity_mode = if (snsDominance > 0.6) "Stress/Activity" else "Resting"
         )
-        val iobArrayForProfiler = if (preferences.get(BooleanKey.OApsAIMIIntelligenceKineticsProfiler)) {
-            ctx.pkpdIobDataArray ?: ctx.iobDataArray
-        } else {
-            ctx.iobDataArray
-        }
+        // The profiler reads the prediction IOB array of the kinetics authority. It was the key
+        // `OApsAIMIIntelligenceKineticsProfiler` (default on) until step P3.
+        val iobArrayForProfiler = ctx.pkpdIobDataArray ?: ctx.iobDataArray
         // Effective-IOB "now" (learned kinetics) for the maxIOB release gate — index 0 is the current tick.
         work.tickIobEffectiveU = ctx.pkpdIobDataArray?.firstOrNull()?.iob
         val iobActionProfile = InsulinActionProfiler.calculate(iobArrayForProfiler, ctx.profile, snsDominance)

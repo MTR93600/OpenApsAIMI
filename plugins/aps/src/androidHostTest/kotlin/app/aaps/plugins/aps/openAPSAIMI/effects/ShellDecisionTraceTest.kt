@@ -4887,7 +4887,6 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.AimiAuditorEnabled value=false
             READ key=DoubleKey.OApsAIMIMaxSMB value=0.40
             READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.40
-            READ key=BooleanKey.OApsAIMIIntelligenceKineticsProfiler value=false
             READ key=BooleanKey.AimiPhysioAssistantEnable value=false
             READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
             READ key=DoubleKey.OApsAIMIweight value=0.00
@@ -4901,7 +4900,6 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMIPkpdHyperReversion value=false
             READ key=BooleanKey.OApsAIMIPkpdStackAwareGuardB value=false
             READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
-            READ key=AimiStringKey.OApsAIMIPkpdLastPeakGovLogLine value=
             READ key=BooleanKey.OApsAIMIautoDriveActive value=true
             READ key=BooleanKey.OApsAIMIhoneymoon value=false
             READ key=AimiLongKey.LastPrebolusTime value=0
@@ -5169,7 +5167,6 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.AimiAuditorEnabled value=false
             READ key=DoubleKey.OApsAIMIMaxSMB value=0.40
             READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.40
-            READ key=BooleanKey.OApsAIMIIntelligenceKineticsProfiler value=false
             READ key=BooleanKey.AimiPhysioAssistantEnable value=false
             READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
             READ key=DoubleKey.OApsAIMIweight value=0.00
@@ -5183,7 +5180,6 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMIPkpdHyperReversion value=false
             READ key=BooleanKey.OApsAIMIPkpdStackAwareGuardB value=false
             READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
-            READ key=AimiStringKey.OApsAIMIPkpdLastPeakGovLogLine value=
             READ key=BooleanKey.OApsAIMIautoDriveActive value=true
             READ key=BooleanKey.OApsAIMIhoneymoon value=false
             READ key=AimiLongKey.LastPrebolusTime value=0
@@ -5542,7 +5538,6 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.AimiAuditorEnabled value=false
             READ key=DoubleKey.OApsAIMIMaxSMB value=0.00
             READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.00
-            READ key=BooleanKey.OApsAIMIIntelligenceKineticsProfiler value=false
             READ key=BooleanKey.AimiPhysioAssistantEnable value=false
             READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
             READ key=DoubleKey.OApsAIMIweight value=0.00
@@ -5556,7 +5551,6 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMIPkpdHyperReversion value=false
             READ key=BooleanKey.OApsAIMIPkpdStackAwareGuardB value=false
             READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
-            READ key=AimiStringKey.OApsAIMIPkpdLastPeakGovLogLine value=
             READ key=BooleanKey.OApsAIMIautoDriveActive value=false
             READ key=BooleanKey.OApsAIMIhoneymoon value=false
             READ key=AimiLongKey.LastPrebolusTime value=0
@@ -5728,7 +5722,6 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.AimiAuditorEnabled value=false
             READ key=DoubleKey.OApsAIMIMaxSMB value=0.00
             READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.00
-            READ key=BooleanKey.OApsAIMIIntelligenceKineticsProfiler value=false
             READ key=BooleanKey.AimiPhysioAssistantEnable value=false
             READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
             READ key=DoubleKey.OApsAIMIweight value=0.00
@@ -5742,7 +5735,6 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMIPkpdHyperReversion value=false
             READ key=BooleanKey.OApsAIMIPkpdStackAwareGuardB value=false
             READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
-            READ key=AimiStringKey.OApsAIMIPkpdLastPeakGovLogLine value=
             READ key=BooleanKey.OApsAIMIautoDriveActive value=false
             READ key=BooleanKey.OApsAIMIhoneymoon value=false
             READ key=AimiLongKey.LastPrebolusTime value=0
@@ -5904,7 +5896,6 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.AimiAuditorEnabled value=false
             READ key=DoubleKey.OApsAIMIMaxSMB value=0.00
             READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.00
-            READ key=BooleanKey.OApsAIMIIntelligenceKineticsProfiler value=false
             READ key=BooleanKey.AimiPhysioAssistantEnable value=false
             READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
             READ key=DoubleKey.OApsAIMIweight value=0.00
@@ -5918,7 +5909,6 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMIPkpdHyperReversion value=false
             READ key=BooleanKey.OApsAIMIPkpdStackAwareGuardB value=false
             READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
-            READ key=AimiStringKey.OApsAIMIPkpdLastPeakGovLogLine value=
             READ key=BooleanKey.OApsAIMIautoDriveActive value=false
             READ key=BooleanKey.OApsAIMIhoneymoon value=false
             READ key=AimiLongKey.LastPrebolusTime value=0
@@ -5991,7 +5981,6 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.AimiAuditorEnabled value=false
             READ key=DoubleKey.OApsAIMIMaxSMB value=0.00
             READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.00
-            READ key=BooleanKey.OApsAIMIIntelligenceKineticsProfiler value=false
             READ key=BooleanKey.AimiPhysioAssistantEnable value=false
             READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
             READ key=DoubleKey.OApsAIMIweight value=0.00
@@ -6005,7 +5994,6 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMIPkpdHyperReversion value=false
             READ key=BooleanKey.OApsAIMIPkpdStackAwareGuardB value=false
             READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
-            READ key=AimiStringKey.OApsAIMIPkpdLastPeakGovLogLine value=
             READ key=BooleanKey.OApsAIMIautoDriveActive value=false
             READ key=BooleanKey.OApsAIMIhoneymoon value=false
             READ key=AimiLongKey.LastPrebolusTime value=0
@@ -6669,7 +6657,6 @@ class ShellDecisionTraceTest {
             READ key=AimiLongKey.LastPrebolusTime value=0
             READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
             READ key=DoubleKey.OApsAIMIweight value=0.00
-            READ key=BooleanKey.OApsAIMIIntelligenceSingleLearnPath value=false
             LOG 📊 PKPD_LEARNER:
             LOG   │ DIA (learned): 5.00h
             LOG   │ Peak (learned): 75min
@@ -6804,7 +6791,6 @@ class ShellDecisionTraceTest {
             LOG PKPD_SOFT_FLOOR: raw=160 soft=160 hybT=227 hitFloor=false applied=false endo=false fallSuppressed=false reason=endo_reversion_disabled
             LOG PKPD predictions → eventual=228 mg/dL from 49 steps uamT=231 pathMinRaw=160 pathMinClamp=160
             LOG 🏥 PHYSIO APPLIED: MaxSMB=1.08 MaxBasal=1.00
-            READ key=AimiStringKey.OApsAIMIPkpdLastPeakGovLogLine value=
         """.trimIndent()
 
         private val TICK_CLOCK_RISE_TRACE = """
@@ -6874,7 +6860,6 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
             LOG PKPD_SOFT_FLOOR: raw=110 soft=110 hybT=110 hitFloor=false applied=false endo=false fallSuppressed=false reason=endo_reversion_disabled
             LOG PKPD predictions → eventual=110 mg/dL from 49 steps uamT=110 pathMinRaw=110 pathMinClamp=110
-            READ key=AimiStringKey.OApsAIMIPkpdLastPeakGovLogLine value=
         """.trimIndent()
 
         private val TICK_CLOCK_TRACE = """

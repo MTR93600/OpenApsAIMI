@@ -300,6 +300,14 @@ internal class AimiPreferenceTree(
                 // screen that can raise a dose, which its own summary says in the first person.
                 add(BooleanKey.OApsAIMITubeVetoIgnoreFloorArtefact)
                 add(BooleanKey.OApsAIMITubeHyperClampPhysicalBound)
+                // Expert flags of the PK/PD prediction curves (step P3: moved off the PK/PD screen).
+                add(
+                    PreferenceSubScreenDef(
+                        key = "aimi_compose_prediction_guards",
+                        title = ApsStrings.aimi_prediction_guards_title,
+                        items = AimiSettingsScreens.preferenceKeysOf(AimiSettingsSectionId.TrajectoryPredictionGuards),
+                    )
+                )
                 add(
                     PreferenceSubScreenDef(
                         key = "aimi_compose_tube_mpc",

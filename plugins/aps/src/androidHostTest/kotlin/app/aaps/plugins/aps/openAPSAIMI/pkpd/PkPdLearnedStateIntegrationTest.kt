@@ -324,6 +324,42 @@ class PkPdLearnedStateIntegrationTest : TestBase() {
         assertEquals(0.0, reader.reconstructedIobUnits(), 1e-9)
     }
 
+    @Test
+    fun a_tick_the_estimator_refuses_counts_as_blocked_with_the_estimator_reason() {
+        stubEnabled()
+        stubPkpdDefaults(preferences)
+        whenever(preferences.get(LongNonKey.OApsAIMIPkpdLearnedStateGeneration)).thenReturn(0L)
+        IsfTddProvider.set(50.0)
+        PkpdTickTelemetry.learning.clear()
+
+        // The gates pass, but IOB 0.1 U is below the learning minimum, so the estimator refuses the step.
+        tick(1)
+
+        val summary = PkpdTickTelemetry.learning.summary(nowMs = 5L * 60L * 1000L)
+        assertEquals(1, summary.learningTicks)
+        assertEquals(0, summary.acceptedSteps)
+        assertEquals(1, summary.blockedTicks)
+        assertEquals(PkPdIntegration.LEARN_BLOCKED_ESTIMATOR_PREFIX + "iob_too_low", summary.topBlockReason)
+        PkpdTickTelemetry.learning.clear()
+    }
+
+    @Test
+    fun an_accepted_learning_step_is_not_counted_as_blocked() {
+        stubEnabled()
+        stubPkpdDefaults(preferences)
+        whenever(preferences.get(LongNonKey.OApsAIMIPkpdLearnedStateGeneration)).thenReturn(0L)
+        IsfTddProvider.set(50.0)
+        PkpdTickTelemetry.learning.clear()
+
+        learningTick(1, integration)
+
+        val summary = PkpdTickTelemetry.learning.summary(nowMs = 5L * 60L * 1000L)
+        assertEquals(1, summary.learningTicks)
+        assertEquals(1, summary.acceptedSteps)
+        assertEquals(0, summary.blockedTicks)
+        PkpdTickTelemetry.learning.clear()
+    }
+
     private fun engine(
         prefs: Preferences,
         state: PkPdLearnedState = PkPdLearnedState(),

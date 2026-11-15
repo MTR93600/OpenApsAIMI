@@ -47,6 +47,33 @@ class PkPdIntegration(
          * [PkpdLearningWindowGate] refuses the tick. The gate's own reason is added after it.
          */
         const val LEARN_BLOCKED_CURVE_PREFIX = "curve:"
+
+        /**
+         * PK/PD status card only: start of the value used when the gates passed but
+         * [AdaptivePkPdEstimator.update] refused the step. The [PkPdUpdateReason] follows in lower
+         * case, for example `estimator_iob_too_low`. There is no colon, so each estimator reason
+         * stays its own category in [PkpdLearningSummary.reasonCategory].
+         */
+        const val LEARN_BLOCKED_ESTIMATOR_PREFIX = "estimator_"
+
+        /**
+         * Why one learning tick did not learn, for the PK/PD status card.
+         *
+         * @param gateBlockedBy the gate that blocked the tick before the estimator, or null
+         * @param accepted the estimator accepted a learning step on this tick
+         * @param estimatorReason [AdaptivePkPdStatusSnapshot.latestReason] after the tick
+         * @return the gate, else the estimator reason, else null when a step was accepted
+         */
+        fun learningTickBlockedBy(
+            gateBlockedBy: String?,
+            accepted: Boolean,
+            estimatorReason: PkPdUpdateReason,
+        ): String? = when {
+            gateBlockedBy != null -> gateBlockedBy
+            accepted -> null
+            estimatorReason == PkPdUpdateReason.ACCEPTED || estimatorReason == PkPdUpdateReason.NOT_UPDATED -> null
+            else -> LEARN_BLOCKED_ESTIMATOR_PREFIX + estimatorReason.name.lowercase()
+        }
     }
 
     /**
@@ -260,6 +287,7 @@ class PkPdIntegration(
                 learningContextClean = learningContextClean && causalLearningAllowed,
                 consoleLog = consoleLog,
             )
+            val acceptedBefore = estimator.statusSnapshot().acceptedUpdateCount
             if (allowLearning && learningContextClean && causalLearningAllowed && curveAllowsLearning) {
                 estimator.update(
                     epochMin = epochMin,
@@ -274,6 +302,17 @@ class PkPdIntegration(
                 consoleLog?.add("PKPD_LEARN skip: causal_modulator_learningAllowed=false")
             } else if (allowLearning && learningContextClean && !curveAllowsLearning) {
                 consoleLog?.add("PKPD_LEARN skip: curve_gate=${curveVerdict?.blockedBy}")
+            }
+            if (allowLearning) {
+                // For the PK/PD status card: one entry per learning tick, never on the read-only calls.
+                // A step the estimator refuses after the gates passed counts as blocked too, with its reason.
+                val statusAfter = estimator.statusSnapshot()
+                val accepted = statusAfter.acceptedUpdateCount > acceptedBefore
+                PkpdTickTelemetry.learning.record(
+                    atMs = epochMillis,
+                    accepted = accepted,
+                    blockedBy = learningTickBlockedBy(learnBlockedBy, accepted, statusAfter.latestReason),
+                )
             }
             val params = estimator.params()
             persistStateIfNeeded(params, structural.bounds)

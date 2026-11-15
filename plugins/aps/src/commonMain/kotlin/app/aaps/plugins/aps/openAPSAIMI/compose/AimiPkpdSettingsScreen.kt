@@ -28,7 +28,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
-import app.aaps.core.keys.BooleanKey
+import app.aaps.core.keys.BooleanNonKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.ui.CoreUiStrings
@@ -76,7 +76,7 @@ fun AimiPkpdSettingsScreen(
     }
 
     LaunchedEffect(Unit) {
-        if (!preferences.get(BooleanKey.OApsAIMIPkpdSetupWizardCompleted)) {
+        if (!preferences.get(BooleanNonKey.OApsAIMIPkpdSetupWizardCompleted)) {
             showWizard = true
         }
     }

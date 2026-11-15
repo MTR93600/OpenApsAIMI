@@ -68,7 +68,6 @@ internal enum class AimiSettingsSectionId {
     PkpdSimpleCorrectionPrudence,
     PkpdSimpleTailPrudence,
     PkpdAdvancedLearningPace,
-    PkpdAdvancedStackAwareGuardB,
     PkpdAdvancedCurveLearningGate,
     PkpdExpertPeakGovernor,
     PkpdExpertDiaGovernor,
@@ -115,6 +114,7 @@ internal enum class AimiSettingsSectionId {
     T3cCfrdCobDelay,
     T3cAnticipation,
     TrajectoryGuards,
+    TrajectoryPredictionGuards,
     ModeBreakfast,
     ManualModesMaxBasal,
     ModeLunch,
@@ -283,15 +283,6 @@ internal object AimiSettingsScreens {
             ),
         ),
         AimiSettingsSection(
-            id = AimiSettingsSectionId.PkpdAdvancedStackAwareGuardB,
-            content = AimiSettingsContentId.PkpdAdvanced,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                BooleanKey.OApsAIMIPkpdStackAwareGuardB,
-            ),
-        ),
-        AimiSettingsSection(
             id = AimiSettingsSectionId.PkpdAdvancedCurveLearningGate,
             content = AimiSettingsContentId.PkpdAdvanced,
             level = AimiSettingsLevel.EXPERT,
@@ -307,7 +298,6 @@ internal object AimiSettingsScreens {
             kind = AimiSettingsSectionKind.FIELDS,
             keys = listOf(
                 BooleanKey.OApsAIMIPeakGovernorEnabled,
-                DoubleKey.OApsAIMIPeakGovernorLearnedWeight,
             ),
         ),
         // The field off switch of the causal DIA context (P1b): it must be reachable from the app.
@@ -892,6 +882,20 @@ internal object AimiSettingsScreens {
                 BooleanKey.OApsAIMITubeHyperClampPhysicalBound,
             ),
         ),
+        // Declared mirror of the nested "aimi_compose_prediction_guards" sub-screen in
+        // `AimiPreferenceTree` (Trajectory). These flags shape the PK/PD prediction curves. They were
+        // on the PK/PD screen (guard B) or on no screen (the two reversions) until step P3.
+        AimiSettingsSection(
+            id = AimiSettingsSectionId.TrajectoryPredictionGuards,
+            content = AimiSettingsContentId.PreferencesTrajectory,
+            level = AimiSettingsLevel.EXPERT,
+            kind = AimiSettingsSectionKind.FIELDS,
+            keys = listOf(
+                BooleanKey.OApsAIMIPkpdEndogenousReversion,
+                BooleanKey.OApsAIMIPkpdHyperReversion,
+                BooleanKey.OApsAIMIPkpdStackAwareGuardB,
+            ),
+        ),
         AimiSettingsSection(
             // Declared mirror of the nested "aimi_compose_tube_mpc" sub-screen in
             // `AimiPreferenceTree` (Trajectory). AimiTubeHypoFloorMgdl and AimiTubeAggressiveness
@@ -1143,10 +1147,6 @@ internal object AimiSettingsScreens {
                 StringKey.OApsAIMIContextStorage,
             ),
         ),
-        // `OApsAIMIPkpdSetupWizardCompleted` has no section here: it is BOOKKEEPING, set by the
-        // wizard UI itself when it finishes or is skipped, and the person never sees or sets it.
-        // A BOOKKEEPING-only key is exempt from reachability; see `AimiSettingsManifestTest`'s
-        // `userOwned` filter.
         AimiSettingsSection(
             // Declared mirror of the top of `aimi_compose_sos` in `AimiPreferenceTree.kt`.
             id = AimiSettingsSectionId.SosEnable,

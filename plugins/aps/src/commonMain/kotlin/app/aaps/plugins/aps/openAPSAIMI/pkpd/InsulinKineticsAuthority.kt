@@ -2,7 +2,6 @@ package app.aaps.plugins.aps.openAPSAIMI.pkpd
 
 import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.keys.BooleanKey
-import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.CausalContextView
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.EffectiveKinetics
@@ -39,6 +38,18 @@ object InsulinKineticsAuthority {
     const val GOVERNOR_DIA_MAX_H = 24.0
     const val GOVERNOR_PEAK_MIN_MIN = 30.0
     const val GOVERNOR_PEAK_MAX_MIN = 240.0
+
+    /**
+     * Weight of the learned DIA in the DIA governor blend (0 = profile only, 1 = learned only).
+     * It was the key `OApsAIMIDiaGovernorLearnedWeight` until step P3; this is its old default.
+     */
+    const val DIA_LEARNED_BLEND_WEIGHT = 0.45
+
+    /**
+     * Weight of the learned peak in the peak governor blend (0 = insulin prior only, 1 = learned
+     * only). It was the key `OApsAIMIPeakGovernorLearnedWeight` until step P3; this is its old default.
+     */
+    const val PEAK_LEARNED_BLEND_WEIGHT = 0.55
 
     data class ResolveInput(
         val accountingIobArray: Array<IobTotal>,
@@ -118,7 +129,7 @@ object InsulinKineticsAuthority {
             governorEnabled = preferences.get(BooleanKey.OApsAIMIDiaGovernorEnabled),
             diaMinBound = GOVERNOR_DIA_MIN_H,
             diaMaxBound = GOVERNOR_DIA_MAX_H,
-            learnedBlendWeight = preferences.get(DoubleKey.OApsAIMIDiaGovernorLearnedWeight),
+            learnedBlendWeight = DIA_LEARNED_BLEND_WEIGHT,
         )
         val peak = TapPeakGovernor.resolve(
             insulinPeakMinutes = input.profilePeakMinutes,
@@ -130,7 +141,7 @@ object InsulinKineticsAuthority {
             governorEnabled = preferences.get(BooleanKey.OApsAIMIPeakGovernorEnabled),
             peakMinBound = GOVERNOR_PEAK_MIN_MIN,
             peakMaxBound = GOVERNOR_PEAK_MAX_MIN,
-            learnedBlendWeight = preferences.get(DoubleKey.OApsAIMIPeakGovernorLearnedWeight),
+            learnedBlendWeight = PEAK_LEARNED_BLEND_WEIGHT,
             trajectoryMinutesNudge = input.trajectoryPeakNudgeMinutes,
             contextMinutesShift = peakShiftMinutes,
         )

@@ -50,7 +50,6 @@ class AimiSettingsManifestTest {
         BooleanKey.OApsAIMIAimiSmbComparatorEnabled.key,
         DoubleKey.OApsAIMIAutodriveAcceleration.key,
         BooleanKey.OApsAIMIAutodriveV3EnhancedGater.key,
-        DoubleKey.OApsAIMIDiaGovernorLearnedWeight.key,
         BooleanKey.OApsAIMIEffectiveIobReleaseEnabled.key,
         BooleanKey.OApsAIMIEnableBasal.key,
         BooleanKey.OApsAIMIEnableStepsFromWatch.key,
@@ -59,8 +58,6 @@ class AimiSettingsManifestTest {
         DoubleKey.OApsAIMIFCLFactor.key,
         IntKey.OApsAIMIHighBGinterval.key,
         BooleanKey.OApsAIMIHyperDroppingExemptEnabled.key,
-        BooleanKey.OApsAIMIIntelligenceKineticsProfiler.key,
-        BooleanKey.OApsAIMIIntelligenceSingleLearnPath.key,
         BooleanKey.OApsAIMIIntelligenceSnapshotExport.key,
         IntKey.OApsAIMIIntratickStallSeconds.key,
         BooleanKey.OApsAIMILoopBlackboxFileEnabled.key,
@@ -70,9 +67,6 @@ class AimiSettingsManifestTest {
         DoubleKey.OApsAIMINightGrowthMaxSmbClamp.key,
         DoubleKey.OApsAIMINightGrowthMinRiseSlope.key,
         DoubleKey.OApsAIMINightGrowthSmbMultiplier.key,
-        BooleanKey.OApsAIMIPkpdEndogenousReversion.key,
-        BooleanKey.OApsAIMIPkpdHyperReversion.key,
-        BooleanKey.OApsAIMIPkpdPredictionKinetics.key,
         DoubleKey.OApsAIMIPlateauBandAbs.key,
         BooleanKey.OApsAIMIPredictionAuthorityEnabled.key,
         BooleanKey.OApsAIMIPredictionAuthorityShadow.key,
@@ -109,7 +103,8 @@ class AimiSettingsManifestTest {
 
         assertEquals(declared.size, declared.toSet().size, "duplicates in " + declared)
 
-        val missing = scoped - declared.toSet() - AimiSettingsManifest.UNCLASSIFIED - AimiSettingsManifest.DEAD_KEYS
+        val missing = scoped - declared.toSet() - AimiSettingsManifest.UNCLASSIFIED - AimiSettingsManifest.DEAD_KEYS -
+            AimiSettingsManifest.INTERNAL_STATE
         assertEquals(emptyList<Any>(), missing.toList())
 
         val unknown = declared.toSet() - scoped.toSet()
@@ -267,6 +262,35 @@ class AimiSettingsManifestTest {
     fun `section ids are unique`() {
         val ids = AimiSettingsScreens.sections.map { it.id }
         assertEquals(ids.size, ids.toSet().size, "duplicates in " + ids)
+    }
+
+    // ---------------------------------------------------------------- internal state (step P3)
+
+    /**
+     * The learned PK/PD DIA and peak are what the learner found, not settings. Step P3 took them out
+     * of the settings tiers: they stay keys (so a backup still restores them and the stored value is
+     * kept), but no entry gives them a level and no screen or audit row shows them.
+     */
+    @Test
+    fun `the learned PK PD state is internal and has no settings entry`() {
+        val learned = setOf(DoubleKey.OApsAIMIPkpdStateDiaH.key, DoubleKey.OApsAIMIPkpdStatePeakMin.key)
+        assertEquals(learned, AimiSettingsManifest.INTERNAL_STATE)
+        val declared = AimiSettingsManifest.entries.map { it.key.key }.toSet()
+        assertEquals(emptyList<Any>(), declared.intersect(AimiSettingsManifest.INTERNAL_STATE).toList())
+    }
+
+    @Test
+    fun `internal state is in scope and is on no screen`() {
+        val scoped = AimiSettingsManifest.scopedKeys.map { it.key }.toSet()
+        assertTrue(scoped.containsAll(AimiSettingsManifest.INTERNAL_STATE))
+        val onScreen = AimiSettingsScreens.sections.flatMap { section -> section.keys.map { it.key } }.toSet()
+        assertEquals(emptyList<Any>(), onScreen.intersect(AimiSettingsManifest.INTERNAL_STATE).toList())
+    }
+
+    @Test
+    fun `internal state is neither dead nor unclassified nor debt`() {
+        val other = AimiSettingsManifest.DEAD_KEYS + AimiSettingsManifest.UNCLASSIFIED + AimiSettingsManifest.REACHABILITY_DEBT
+        assertEquals(emptyList<Any>(), other.intersect(AimiSettingsManifest.INTERNAL_STATE).toList())
     }
 
     // ---------------------------------------------------------------- 4. the lists only shrink

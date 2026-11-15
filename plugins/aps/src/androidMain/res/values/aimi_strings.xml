@@ -84,6 +84,36 @@
 
 <string name="aimi_pkpd_status_profile_format">AAPS profile: DIA %1$.1f h · peak %2$.0f min</string>
 
+<string name="aimi_pkpd_status_used_format" comment="%1$.2f=DIA in hours, %2$.0f=insulin peak in minutes. These are the values that dosed on the last loop run. Example: Used on the last loop: DIA 5.20 h · peak 68 min">Used on the last loop: DIA %1$.2f h · peak %2$.0f min</string>
+
+<string name="aimi_pkpd_status_no_loop_yet">No loop run since the app started.</string>
+
+<string name="aimi_pkpd_status_no_recent_loop">No loop run in the last 15 min.</string>
+
+<string name="aimi_pkpd_status_learning_24h_format" comment="%1$d=number of accepted learning steps, %2$d=percent of loop runs where learning was blocked. The count is kept in memory, so it starts again when the app starts. Example: Last 24 h or since the app started: accepted learning steps: 12, loop runs blocked: 40%">Last 24 h or since the app started: accepted learning steps: %1$d, loop runs blocked: %2$d%%</string>
+
+<string name="aimi_pkpd_status_no_learning_24h">The learner did not run in the last 24 h or since the app started.</string>
+
+<string name="aimi_pkpd_status_top_reason_format" comment="%1$s=the most frequent reason why learning was blocked, one of the aimi_pkpd_block_reason_* strings">Main reason: %1$s</string>
+
+<string name="aimi_pkpd_block_reason_causal_unclean">the glucose context was not clean (meal, activity or noise)</string>
+
+<string name="aimi_pkpd_block_reason_causal_modulator">the estimated cause of the glucose change did not allow learning</string>
+
+<string name="aimi_pkpd_block_reason_curve">a recent meal or glucose rise (curve gate)</string>
+
+<string name="aimi_pkpd_block_reason_iob_too_low">too little insulin on board to learn from</string>
+
+<string name="aimi_pkpd_block_reason_carbs_active">carbs were still being absorbed</string>
+
+<string name="aimi_pkpd_block_reason_exercise">recent exercise</string>
+
+<string name="aimi_pkpd_block_reason_fast_change">glucose was rising or falling too fast</string>
+
+<string name="aimi_pkpd_block_reason_low_glucose">glucose was low or close to low</string>
+
+<string name="aimi_pkpd_block_reason_window">the learning time window was out of range</string>
+
 <string name="aimi_pkpd_status_learning_on">Learning active when IOB and conditions allow.</string>
 
 <string name="aimi_pkpd_status_learning_off">PKPD is off — using profile insulin curve only.</string>
@@ -202,10 +232,6 @@
 <string name="oaps_aimi_pkpd_relief_enabled_title">Enable PKPD pragmatic relief</string>
 
 <string name="oaps_aimi_pkpd_relief_enabled_summary">ON by default. Keep ON if SMB intent is often over-reduced in explicit meal/high-rise contexts. Turn OFF only if you observe recurrent over-corrections despite hard caps.</string>
-
-<string name="oaps_aimi_pkpd_stack_aware_guardb_title">Stack-aware hyper floor release</string>
-
-<string name="oaps_aimi_pkpd_stack_aware_guardb_summary">OFF by default. During a descent from a high glucose, releases the prediction floor as soon as the insulin on board can physiologically bring glucose down and glucose is no longer rising, so the basal cuts and holds instead of bouncing on sensor noise. May leave highs a little longer — turn ON only if you see the basal whipsawing with a large insulin stack.</string>
 
 <string name="oaps_aimi_pkpd_relief_factor_title">PKPD relief minimum factor</string>
 
@@ -393,11 +419,11 @@
 
 <string name="oaps_aimi_smb_exercise_damping_title">Exercise damping factor</string>
 
-<string name="oaps_aimi_smb_exercise_damping_summary">Multiplier applied to SMB after recent exercise.</string>
+<string name="oaps_aimi_smb_exercise_damping_summary">Multiplier applied to SMB after recent exercise. Values below 0.5 act as 0.5, so SMB is never cut by more than half.</string>
 
 <string name="oaps_aimi_smb_late_fat_damping_title">Late meal damping factor</string>
 
-<string name="oaps_aimi_smb_late_fat_damping_summary">Multiplier applied to SMB when a late fatty meal is suspected.</string>
+<string name="oaps_aimi_smb_late_fat_damping_summary">Multiplier applied to SMB when a late fatty meal is suspected. Values below 0.5 act as 0.5, so SMB is never cut by more than half.</string>
 
 <string name="oaps_aimi_trajectory_enabled_title">Enable Trajectory Guard</string>
 
@@ -491,8 +517,6 @@
 
 <string name="OApsAIMI_PregnancyDueDate_summary">Enter estimated delivery date (YYYY-MM-DD) to enable gestational autopilot.</string>
 
-<string name="aimi_pkpd_state_internal_title" comment="Hidden preference title. Not shown in UI. Used by internal PKPD state string keys.">PKPD internal state</string>
-
 <string name="OApsAIMI_RemoteControlPin_title">Remote control PIN</string>
 
 <string name="OApsAIMI_RemoteControlPin_summary">PIN for AIMI remote control features.</string>
@@ -567,6 +591,8 @@
 <string name="aimi_ai_auditor_section_title">AI Decision Auditor</string>
 
 <string name="aimi_trajectory_section_title">Trajectory Guard</string>
+
+<string name="aimi_prediction_guards_title">Prediction guards (expert)</string>
 
 <string name="oaps_aimi_thyroid_title">🦋 Hyperthyroidism (Basedow) Module</string>
 

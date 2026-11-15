@@ -463,8 +463,6 @@ enum class BooleanKey(
     OApsAIMIWCycleRequireConfirm("key_use_Aimi_wcycle_require_confirm", false, title = KeysStrings.pref_title_oaps_aimi_w_cycle_require_confirm),
     OApsAIMINightGrowthEnabled("key_oaps_aimi_ngr_enabled", true, title = KeysStrings.pref_title_oaps_aimi_night_growth_enabled),
     OApsAIMIPkpdEnabled("key_aimi_pkpd_enabled", false, title = KeysStrings.pref_title_oaps_aimi_pkpd_enabled),
-    /** Set after the guided PK/PD setup wizard completes (or is skipped). */
-    OApsAIMIPkpdSetupWizardCompleted("key_aimi_pkpd_setup_wizard_completed", false, title = KeysStrings.pref_title_oaps_aimi_pkpd_setup_wizard_completed),
     /**
      * TAP-G: blend the profile insulin peak with the learned PK/PD peak. Also the field off switch of
      * the causal context path for the peak: off = no causal peak shift (and no trajectory nudge).
@@ -478,8 +476,6 @@ enum class BooleanKey(
     ),
     /** Intelligence snapshot export in AIMI_Decisions.jsonl (intelligence_snapshot_v1). */
     OApsAIMIIntelligenceSnapshotExport("key_aimi_intelligence_snapshot_export", true, title = KeysStrings.pref_title_oaps_aimi_intelligence_snapshot_export),
-    /** Single PKPD learning path per tick (signal-prep only; plugin/early are read-only). */
-    OApsAIMIIntelligenceSingleLearnPath("key_aimi_intelligence_single_learn_path", true, title = KeysStrings.pref_title_oaps_aimi_intelligence_single_learn_path),
     /**
      * TAP-D: blend profile DIA with learned structural DIA for effective runtime kinetics. Also the
      * field off switch of the causal context path for the DIA: off = no causal DIA shift. Keep it a
@@ -491,8 +487,6 @@ enum class BooleanKey(
         title = KeysStrings.pref_title_oaps_aimi_dia_governor_enabled,
         summary = KeysStrings.pref_summary_oaps_aimi_dia_governor_enabled,
     ),
-    /** InsulinActionProfiler uses prediction IOB array from kinetics authority. */
-    OApsAIMIIntelligenceKineticsProfiler("key_aimi_intelligence_kinetics_profiler", true, title = KeysStrings.pref_title_oaps_aimi_intelligence_kinetics_profiler),
     /** C1 shadow: log authority vs PKPD deltas without applying to dose path. */
     OApsAIMIPredictionAuthorityShadow("key_aimi_prediction_authority_shadow", true, title = KeysStrings.pref_title_oaps_aimi_prediction_authority_shadow),
     /** C1 prod: apply DecisionPredictionAuthority to eventualBG, predBGs, stacking, SafetyNet. Default ON (harmonized
@@ -713,6 +707,7 @@ enum class BooleanKey(
         defaultValue = true,
         dependency = OApsAIMIPkpdEndogenousReversion,
         title = KeysStrings.pref_title_oaps_aimi_pkpd_hyper_reversion,
+        summary = KeysStrings.pref_summary_oaps_aimi_pkpd_hyper_reversion,
     ),
     /** 🩸 pkpd Guard B — stack-aware floor suspension (F1-B, opt-in). The hyper floor (BG ≥ 160) holds every
      *  prediction curve at ≥ 80; legacy Guard B only releases it on delta ≤ -3, ignoring IOB — so a large
@@ -725,6 +720,7 @@ enum class BooleanKey(
         defaultValue = false,
         dependency = OApsAIMIPkpdHyperReversion,
         title = KeysStrings.pref_title_oaps_aimi_pkpd_stack_aware_guard_b,
+        summary = KeysStrings.pref_summary_oaps_aimi_pkpd_stack_aware_guard_b,
     ),
     /** 🩸 pkpd DIA/peak learning gate read from the glucose curve (opt-in). The causal learning score
      *  rewards a confident meal guess, so on UAM days 65–77 % of the ticks that trained DIA/peak were
@@ -855,12 +851,6 @@ enum class BooleanKey(
         "key_aimi_tube_hyper_clamp_physical_bound", true,
         title = KeysStrings.pref_title_aimi_tube_hyper_clamp_physical_bound,
         summary = KeysStrings.pref_summary_aimi_tube_hyper_clamp_physical_bound,
-    ),
-    // 🩸 pkpd predictions: shape the insulin-activity curves on the LEARNED DIA/peak, not the static profile
-    OApsAIMIPkpdPredictionKinetics(
-        "key_aimi_pkpd_prediction_kinetics", true,
-        title = KeysStrings.pref_title_aimi_pkpd_prediction_kinetics,
-        summary = KeysStrings.pref_summary_aimi_pkpd_prediction_kinetics,
     ),
     OApsAIMIContextLLMEnabled("key_aimi_context_llm_enabled", false, title = KeysStrings.pref_title_oaps_aimi_context_llm_enabled), // 🤖 LLM-powered context parsing
     OApsAIMIT3cBrittleMode("key_aimi_t3c_brittle_mode", false, title = KeysStrings.pref_title_oaps_aimi_t3c_brittle_mode),

@@ -206,7 +206,7 @@ class AimiSettingsAuditTest {
         val report = build()
 
         assertEquals(2, report.changedCount)
-        // Every manifest entry is in scope except the one BOOKKEEPING-only key (the setup wizard flag).
-        assertEquals(AimiSettingsManifest.entries.size - 1, report.scopedCount)
+        // Every manifest entry is in scope. The setup wizard flag is a non-preference key since step P3.
+        assertEquals(AimiSettingsManifest.entries.size, report.scopedCount)
     }
 }

@@ -40,10 +40,11 @@ internal enum class AimiSettingsLevel { SIMPLE, ADVANCED, EXPERT }
  * - [SLIDER] a simplified slider or a family level writes it.
  * - [LOOP] code writes it during a loop tick. Read such a value as loop output, not as a choice
  *   the person made.
- * - [BOOKKEEPING] code stores a flag the person never sets and never sees, like "the setup wizard
- *   has run". It needs no screen.
+ *
+ * A flag the person never sets and never sees, like "the PK/PD setup wizard has run", is not a
+ * setting at all: it is a non-preference key (`BooleanNonKey`) and has no entry here.
  */
-internal enum class AimiSettingsWriter { USER, SLIDER, LOOP, BOOKKEEPING }
+internal enum class AimiSettingsWriter { USER, SLIDER, LOOP }
 
 /**
  * One AIMI setting, with the facts this manifest is allowed to hold.
@@ -131,6 +132,8 @@ internal data class AimiSettingEntry(
  *   value the person can find.
  * - [DEAD_KEYS] keys nothing reads and nothing writes. They are deletion candidates, not
  *   settings, so they need no screen.
+ * - [INTERNAL_STATE] keys only code owns, kept as keys so their value survives (the learned
+ *   PK/PD state). They are not settings, so they have no entry and no screen.
  */
 internal object AimiSettingsManifest {
 
@@ -196,7 +199,6 @@ internal object AimiSettingsManifest {
         BooleanKey.OApsAIMIAimiSmbComparatorEnabled.key,
         DoubleKey.OApsAIMIAutodriveAcceleration.key,
         BooleanKey.OApsAIMIAutodriveV3EnhancedGater.key,
-        DoubleKey.OApsAIMIDiaGovernorLearnedWeight.key,
         BooleanKey.OApsAIMIEffectiveIobReleaseEnabled.key,
         BooleanKey.OApsAIMIEnableBasal.key,
         BooleanKey.OApsAIMIEnableStepsFromWatch.key,
@@ -205,8 +207,6 @@ internal object AimiSettingsManifest {
         DoubleKey.OApsAIMIFCLFactor.key,
         IntKey.OApsAIMIHighBGinterval.key,
         BooleanKey.OApsAIMIHyperDroppingExemptEnabled.key,
-        BooleanKey.OApsAIMIIntelligenceKineticsProfiler.key,
-        BooleanKey.OApsAIMIIntelligenceSingleLearnPath.key,
         BooleanKey.OApsAIMIIntelligenceSnapshotExport.key,
         IntKey.OApsAIMIIntratickStallSeconds.key,
         BooleanKey.OApsAIMILoopBlackboxFileEnabled.key,
@@ -216,9 +216,6 @@ internal object AimiSettingsManifest {
         DoubleKey.OApsAIMINightGrowthMaxSmbClamp.key,
         DoubleKey.OApsAIMINightGrowthMinRiseSlope.key,
         DoubleKey.OApsAIMINightGrowthSmbMultiplier.key,
-        BooleanKey.OApsAIMIPkpdEndogenousReversion.key,
-        BooleanKey.OApsAIMIPkpdHyperReversion.key,
-        BooleanKey.OApsAIMIPkpdPredictionKinetics.key,
         DoubleKey.OApsAIMIPlateauBandAbs.key,
         BooleanKey.OApsAIMIPredictionAuthorityEnabled.key,
         BooleanKey.OApsAIMIPredictionAuthorityShadow.key,
@@ -249,6 +246,19 @@ internal object AimiSettingsManifest {
         StringKey.ContextLLMGeminiKey.key,
         StringKey.ContextLLMDeepSeekKey.key,
         StringKey.ContextLLMClaudeKey.key,
+    )
+
+    /**
+     * Keys in scope that are internal state, not settings: what the PK/PD learner found.
+     *
+     * They stay keys on purpose: the stored value survives the update and a backup restores the
+     * learned DIA and peak. But they are not settings, so they have no [AimiSettingEntry] (no level,
+     * no family, no audit row) and no screen. Step P3 took them out of the settings tiers. The PK/PD
+     * status card shows them read only (a "What AIMI learned" page is planned for step S2).
+     */
+    val INTERNAL_STATE: Set<String> = setOf(
+        DoubleKey.OApsAIMIPkpdStateDiaH.key,
+        DoubleKey.OApsAIMIPkpdStatePeakMin.key,
     )
 
     /**
@@ -309,15 +319,9 @@ internal object AimiSettingsManifest {
         AimiSettingEntry(BooleanKey.OApsAIMIWCycleRequireConfirm, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMINightGrowthEnabled, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIPkpdEnabled, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
-        // BOOKKEEPING, not USER: the wizard UI sets this flag when it finishes or is skipped
-        // (`PkpdSettingsUi.kt`). The person never types it and never sees it, so it needs no
-        // screen; see the BOOKKEEPING KDoc on `AimiSettingsWriter`.
-        AimiSettingEntry(BooleanKey.OApsAIMIPkpdSetupWizardCompleted, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.BOOKKEEPING),
         AimiSettingEntry(BooleanKey.OApsAIMIPeakGovernorEnabled, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIIntelligenceSnapshotExport, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
-        AimiSettingEntry(BooleanKey.OApsAIMIIntelligenceSingleLearnPath, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIDiaGovernorEnabled, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
-        AimiSettingEntry(BooleanKey.OApsAIMIIntelligenceKineticsProfiler, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIPredictionAuthorityShadow, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIPredictionAuthorityEnabled, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIMealHyperBypassEnabled, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
@@ -358,7 +362,6 @@ internal object AimiSettingsManifest {
         AimiSettingEntry(BooleanKey.OApsAIMITrajBridgeBasalSurvives, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Protection, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMITubeVetoIgnoreFloorArtefact, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMITubeHyperClampPhysicalBound, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
-        AimiSettingEntry(BooleanKey.OApsAIMIPkpdPredictionKinetics, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIContextLLMEnabled, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIT3cBrittleMode, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIT3cAutodriveBasalAuthority, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
@@ -382,15 +385,6 @@ internal object AimiSettingsManifest {
         AimiSettingEntry(DoubleKey.OApsAIMITDD7, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.SLIDER),
         AimiSettingEntry(DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.SLIDER),
-        AimiSettingEntry(DoubleKey.OApsAIMIPkpdStateDiaH, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.LOOP),
-        AimiSettingEntry(DoubleKey.OApsAIMIPkpdStatePeakMin, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.LOOP),
-        AimiSettingEntry(DoubleKey.OApsAIMIPkpdStatePriorPeak, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.LOOP),
-        AimiSettingEntry(DoubleKey.OApsAIMIPkpdStatePhysioPeak, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.LOOP),
-        AimiSettingEntry(DoubleKey.OApsAIMIPkpdStateSitePeak, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.LOOP),
-        AimiSettingEntry(DoubleKey.OApsAIMIPkpdStateTrajectoryPeak, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.LOOP),
-        AimiSettingEntry(DoubleKey.OApsAIMIPkpdStateEffectivePeak, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.LOOP),
-        AimiSettingEntry(DoubleKey.OApsAIMIPeakGovernorLearnedWeight, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
-        AimiSettingEntry(DoubleKey.OApsAIMIDiaGovernorLearnedWeight, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMIIsfFusionMinFactor, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.SLIDER),
         AimiSettingEntry(DoubleKey.OApsAIMIIsfFusionMaxFactor, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.SLIDER),
         AimiSettingEntry(DoubleKey.OApsAIMIIsfFusionMaxChangePerTick, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
@@ -494,9 +488,6 @@ internal object AimiSettingsManifest {
         AimiSettingEntry(AimiStringKey.RemoteControlPin, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         AimiSettingEntry(AimiStringKey.OuraPersonalAccessToken, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(AimiStringKey.ActivitySourceMode, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
-        AimiSettingEntry(AimiStringKey.OApsAIMIPkpdStateDominantBranch, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.LOOP),
-        AimiSettingEntry(AimiStringKey.OApsAIMIPkpdLastPeakGovLogLine, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.LOOP),
-        AimiSettingEntry(AimiStringKey.OApsAIMIPkpdLastPeakGovConsoleEchoed, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.LOOP),
         AimiSettingEntry(AimiLongKey.LastPrebolusTime, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.LOOP),
         AimiSettingEntry(AimiLongKey.LastLegacyPrebolusTime, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.LOOP),
         AimiSettingEntry(AimiLongKey.PendingLegacyPrebolusUnitMilli, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.LOOP),
