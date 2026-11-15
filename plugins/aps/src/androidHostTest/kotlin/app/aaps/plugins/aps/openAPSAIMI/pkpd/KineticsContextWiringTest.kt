@@ -131,13 +131,13 @@ class KineticsContextWiringTest {
         }
 
     @Test
-    fun `the dosing path limits the dia step per tick`() {
+    fun `the dosing path limits the dia step over time`() {
         val tick = newTick()
         // First resolution: no context, no limit, 5.0 h doses.
         assertThat(tick.dosingView(t0).effective.diaHours).isWithin(1e-9).of(5.0)
         tick.tick(t0, stress)
         val view = tick.dosingView(t0 + 5 * minute)
-        // Stress asks for 6.0 h; the per-tick limit lets only 0.25 h through.
+        // Stress asks for 6.0 h; 5 minutes after the last tick the limit lets only 0.25 h through.
         assertThat(view.targetEffective.diaHours).isWithin(1e-9).of(6.0)
         assertThat(view.effective.diaHours).isWithin(1e-9).of(5.25)
     }

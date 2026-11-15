@@ -1488,7 +1488,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             PkpdTickTelemetry.peakGovConsole.record(peakGovernorForActivity.logLine)
 
             // H.1: peak branch data for the PK/PD status card. In memory since step P3, not preferences.
-            // The DIA and peak are the ones that dose, after the per-tick rate limit.
+            // The DIA and peak are the ones that dose, after the rate limit.
             PkpdTickTelemetry.recordKinetics(
                 PkpdTickTelemetry.Kinetics(
                     effectiveDiaHours = kineticsView.effective.diaHours,
@@ -1814,7 +1814,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         now = nowMsForPkpd,
                         pkpdEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEnabled),
                         peakGovernorEnabled = preferences.get(BooleanKey.OApsAIMIPeakGovernorEnabled),
-                        // Show the values that dose (after the per-tick limit), not the governor target.
+                        // Show the values that dose (after the rate limit), not the governor target.
                         peakGovernor = peakGovernorForActivity.copy(effectivePeakMinutes = kineticsView.effective.peakMinutes),
                         diaGovernorEnabled = preferences.get(BooleanKey.OApsAIMIDiaGovernorEnabled),
                         diaGovernor = kineticsView.diaGovernor.copy(effectiveDiaHours = kineticsView.effective.diaHours),

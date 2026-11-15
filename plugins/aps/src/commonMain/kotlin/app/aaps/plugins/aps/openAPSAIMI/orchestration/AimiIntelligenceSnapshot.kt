@@ -36,7 +36,7 @@ data class InsulinKineticsView(
      */
     val effective: EffectiveKinetics,
     /**
-     * The DIA and peak the governors asked for this tick, before the per-tick rate limit. The same as
+     * The DIA and peak the governors asked for this tick, before the rate limit. The same as
      * [effective] when nothing was limited. Only for the log, never for dosing.
      */
     val targetEffective: EffectiveKinetics = effective,

@@ -7499,7 +7499,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         put("effective_peak_min", snap.kinetics.effective.peakMinutes)
                         put("effective_dia_no_context_h", snap.kinetics.noContextEffective.diaHours)
                         put("effective_peak_no_context_min", snap.kinetics.noContextEffective.peakMinutes)
-                        // Before the per-tick rate limit; the effective values above are the limited ones.
+                        // Before the rate limit; the effective values above are the limited ones.
                         put("effective_dia_target_h", snap.kinetics.targetEffective.diaHours)
                         put("effective_peak_target_min", snap.kinetics.targetEffective.peakMinutes)
                         // Context that shifted the DIA/peak that dosed: posterior of the previous tick.
@@ -8712,7 +8712,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     /** Causal posterior of the last tick, for the kinetics of the next one. */
     private val kineticsContextMemory = CausalKineticsContextMemory()
 
-    /** DIA and peak that dosed the last tick, so the next tick moves at most one step from them. */
+    /** DIA and peak that dosed the last tick, so the next tick moves at most its share of a step from them. */
     private val dosingKineticsRateLimiter = DosingKineticsRateLimiter()
 
     /**
@@ -8720,9 +8720,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
      * the causal posterior of the previous tick, which is null on the first tick, after a tick that
      * failed or had none, or when it is too old. See [CausalKineticsContextMemory].
      *
-     * The result is then limited per tick by [DosingKineticsRateLimiter] (at most 0.25 h of DIA and
-     * 2 min of peak against the last tick). The view carries both the limited value that doses and
-     * the target.
+     * The result is then limited by [DosingKineticsRateLimiter] (at most 0.25 h of DIA and 2 min of
+     * peak per 5 minutes since the last tick). The view carries both the limited value that doses
+     * and the target.
      */
     fun resolveDosingKinetics(
         nowMs: Long,

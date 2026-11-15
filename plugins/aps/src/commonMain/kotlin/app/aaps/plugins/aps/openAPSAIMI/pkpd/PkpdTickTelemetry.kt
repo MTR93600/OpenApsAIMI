@@ -22,8 +22,8 @@ object PkpdTickTelemetry {
     /**
      * DIA and peak of one tick.
      *
-     * @property effectiveDiaHours DIA that dosed on this tick, after the per-tick limit
-     * @property effectivePeakMinutes peak that dosed on this tick, after the per-tick limit
+     * @property effectiveDiaHours DIA that dosed on this tick, after the rate limit
+     * @property effectivePeakMinutes peak that dosed on this tick, after the rate limit
      * @property profileDiaHours DIA of the insulin in the running profile
      * @property profilePeakMinutes peak of the insulin in the running profile
      * @property peakPrior peak governor: the insulin prior

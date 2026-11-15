@@ -180,7 +180,7 @@ class KineticsSingleSourceTest {
 
     @Test
     fun governorBlocksLogTheLimitedValueThatDosedAndTheTarget() {
-        // Stress target 6.0 h; the per-tick limit let only 5.25 h dose (DosingKineticsRateLimiter).
+        // Stress target 6.0 h; the rate limit let only 5.25 h dose (DosingKineticsRateLimiter).
         val resolved = dosingKinetics(previousTickPosterior = stress)
         val limited = resolved.copy(
             effective = resolved.effective.copy(diaHours = 5.25, peakMinutes = resolved.effective.peakMinutes - 2.0),

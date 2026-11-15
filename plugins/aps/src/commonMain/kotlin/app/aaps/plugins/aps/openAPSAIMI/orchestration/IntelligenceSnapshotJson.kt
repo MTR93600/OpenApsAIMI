@@ -28,7 +28,7 @@ object IntelligenceSnapshotJson {
                 put("effective_peak_min", snapshot.kinetics.effective.peakMinutes)
                 put("effective_dia_no_context_h", snapshot.kinetics.noContextEffective.diaHours)
                 put("effective_peak_no_context_min", snapshot.kinetics.noContextEffective.peakMinutes)
-                // Before the per-tick rate limit (DosingKineticsRateLimiter); effective_* above dosed.
+                // Before the rate limit (DosingKineticsRateLimiter); effective_* above dosed.
                 put("effective_dia_target_h", snapshot.kinetics.targetEffective.diaHours)
                 put("effective_peak_target_min", snapshot.kinetics.targetEffective.peakMinutes)
                 put("kinetics_context_reason", snapshot.kinetics.contextReason)
@@ -50,7 +50,7 @@ object IntelligenceSnapshotJson {
                 })
                 put("governors_dosed", snapshot.kinetics.governorsDosed)
                 // Governor blocks are written only when the governors built the dosing values. The
-                // governor result is the target before the per-tick limit (`*_target_*`); the
+                // governor result is the target before the rate limit (`*_target_*`); the
                 // `effective_*` field holds the limited value that dosed, the same as above.
                 if (snapshot.kinetics.governorsDosed) {
                     val peakGov = snapshot.kinetics.peakGovernor

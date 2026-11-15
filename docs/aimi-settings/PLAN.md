@@ -16,7 +16,8 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
   kinetics). Changes dosing.
 - **P1 guards (owner approved 2026-11-15, step P1b).** The DIA and peak governor switches are the
   field off switch of the context shift (switch off = no shift). The dosing DIA may move at most
-  0.25 h per tick and the peak at most 2 min per tick. The stored context is not used after 15 min.
+  0.25 h per tick and the peak at most 2 min per tick (since P1c: per 5 minutes, see below). The
+  stored context is not used after 15 min.
   Done in P1b:
   - `OApsAIMIDiaGovernorEnabled` and `OApsAIMIPeakGovernorEnabled` stay **real keys** (not
     constants), because they are now the field off switch of the context path. The key map's earlier
@@ -29,12 +30,21 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
     tick. The export logs the target (`effective_dia_target_h`, `effective_peak_target_min`, also in
     the governor blocks) next to the limited value that dosed (`effective_*`); the adaptation status
     shows the limited value.
-  - A tick is one loop run, not a fixed time. With a 5-minute CGM, 16 ticks are about 80 min. With a
-    1-minute CGM (Libre 3, ONE+) the loop can run about every minute, so the same 16 ticks can take
-    about 16 min, and the guard is up to 5 times looser in real time.
-  - *Open for the owner:* (1) skip the limit when the profile insulin itself changes; (2) should the
-    limit be per 5 minutes (step scaled by the time since the last tick, at most one full step)
-    instead of per loop run, so 1-minute CGM users get the same real-time guard?
+  - *Open for the owner:* skip the limit when the profile insulin itself changes.
+- **P1c, the limit counts time, not ticks (owner approved 2026-11-15).** In P1b the step was per
+  loop run, so on a 1-minute CGM (Libre 3, ONE+) or with extra loop runs the guard was up to 5 times
+  looser in real time. Now the allowed step is proportional to the time since the last dosed values:
+  0.25 h of DIA and 2 min of peak per 5 minutes (`step = base x gap / 5 min`). On a 5-minute loop
+  with regular readings the step is about the same as in P1b: exactly one full step for a 5:00
+  gap, a little less or more when the loop run comes early or late (4:50 gives 0.97 of a step, 5:20
+  gives 1.07), the same on average. DIA 5 h to 9 h still takes about 80 min. On a 1-minute loop each
+  tick moves 1/5 of the step, so the same change also takes about 80 min. Two calls close together
+  share one step. After more than 15 min there is still no limit, and none on the first tick. A gap
+  of 0 or less allows no move (after a negative gap the time starts again from that call).
+  **At most one full step per call (owner choice, prudence first):** after 1 or 2 missed readings
+  (a gap of 10 or 15 min) one call still moves at most 0.25 h of DIA and 2 min of peak, as in P1b.
+  Summary: more prudent on 1-minute CGMs; the same as P1b on 5-minute CGMs, also after missed
+  readings.
 - **Automatic writers follow every change.** Whenever a key is removed, made a constant, re-scaled
   or derived, the Advisor, TPO, the tuning engine and the auditor are updated in the same step, so
   none of them writes or recommends something without effect. A final step (A1) lists what they can
@@ -103,7 +113,8 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
 | Step | What | Dosing |
 |---|---|---|
 | P1 | One kinetics resolution for dosing and log, causal posterior of the previous tick | changes |
-| P1b | Guards on the P1 context shift: governor switches are its off switch, per-tick limit of the dosing DIA (0.25 h) and peak (2 min), one-shot move of the old wizard pace to FASTER | changes (more prudent) |
+| P1b | Guards on the P1 context shift: governor switches are its off switch, per-tick limit of the dosing DIA (0.25 h) and peak (2 min) (per 5 minutes since P1c), one-shot move of the old wizard pace to FASTER | changes (more prudent) |
+| P1c | The P1b limit counts time: 0.25 h and 2 min per 5 minutes since the last tick, so 1-minute CGMs get the same real-time guard | changes (more prudent on 1-min CGMs; about the same as P1b on 5-min, at most one step per call) |
 | P2 | Profile insulin as seed/anchor/bounds, re-seed on insulin change, faster pace, remove Initial/Anchor/Bounds keys and presets, migration | changes |
 | P3 | PKPD cleanup: state keys out of settings, dead PKPD keys and constants (the Advisor rules that wrote Initial* were removed in P2 with the keys), exercise damping floor (the dead DIA governor call in `RunT9PhysioEarlyPkpd` was removed in P1), PKPD status card | small (floor) |
 | T1 | TPO: meal factor ladder on the percent scale; a "step down" never raises a value and moves one rung at most; Advisor and Tuning on the percent scale | changes (protective size as designed) |

@@ -22,7 +22,7 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
  * Two guards on the causal context (step P1b):
  * - `OApsAIMIDiaGovernorEnabled` and `OApsAIMIPeakGovernorEnabled` are the field off switch of the
  *   context: switch off = no causal DIA (or peak) shift. See [DiaGovernor] and [TapPeakGovernor].
- * - The dosing path limits the change per tick with [DosingKineticsRateLimiter]. [resolve] itself
+ * - The dosing path limits the change over time with [DosingKineticsRateLimiter]. [resolve] itself
  *   does not limit; it returns the target.
  */
 object InsulinKineticsAuthority {
