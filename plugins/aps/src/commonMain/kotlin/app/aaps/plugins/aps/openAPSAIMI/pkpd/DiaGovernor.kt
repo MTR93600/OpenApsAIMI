@@ -8,6 +8,10 @@ import kotlin.math.abs
 /**
  * TAP-D (Trajectory-Anchored DIA Governor) — symmetric to [TapPeakGovernor].
  * Blends profile DIA anchor with learned structural DIA and optional contextual shift.
+ *
+ * The switch `OApsAIMIDiaGovernorEnabled` (passed as `governorEnabled`) is also the field off switch of
+ * the causal context: when it is off, the contextual DIA shift is 0 and the DIA is the profile DIA
+ * (inside the bounds).
  */
 data class DiaGovernorResult(
     val effectiveDiaHours: Double,
@@ -31,12 +35,14 @@ object DiaGovernor {
         diaMaxBound: Double,
         learnedBlendWeight: Double,
     ): DiaGovernorResult {
-        val anchor = (profileDiaHours + contextualDiaShiftHours).coerceIn(diaMinBound, diaMaxBound)
+        // Switch off = field off switch of the causal context: no shift at all.
+        val diaShiftHours = if (governorEnabled) contextualDiaShiftHours else 0.0
+        val anchor = (profileDiaHours + diaShiftHours).coerceIn(diaMinBound, diaMaxBound)
 
         fun createResult(eff: Double, log: String?, applied: Boolean, dominant: String) = DiaGovernorResult(
             effectiveDiaHours = eff,
             diaPriorHours = profileDiaHours,
-            diaContextualShiftHours = contextualDiaShiftHours,
+            diaContextualShiftHours = diaShiftHours,
             diaLearnedHours = if (pkpdEnabled && governorEnabled) pkpdLearnedDiaHours else null,
             dominantBranch = dominant,
             logLine = log,
@@ -48,7 +54,7 @@ object DiaGovernor {
                 eff = anchor,
                 log = null,
                 applied = false,
-                dominant = if (abs(contextualDiaShiftHours) > 0.01) "CONTEXT" else "PRIOR",
+                dominant = if (abs(diaShiftHours) > 0.01) "CONTEXT" else "PRIOR",
             )
         }
         val w = learnedBlendWeight.coerceIn(0.0, 1.0)
@@ -60,15 +66,15 @@ object DiaGovernor {
         // and the learned part is (learned - profile) * w. The old rule compared |ctx| with
         // |eff - profile|, which already contains the context part, so CONTEXT was almost
         // never reported. This does not change [DiaGovernorResult.effectiveDiaHours].
-        val contextContribution = abs(contextualDiaShiftHours * (1.0 - w))
+        val contextContribution = abs(diaShiftHours * (1.0 - w))
         val learnedContribution = abs((learned - profileDiaHours) * w)
         val dominant = when {
-            abs(contextualDiaShiftHours) > 0.15 && contextContribution > learnedContribution -> "CONTEXT"
-            w > 0.3 && abs(learned - profileDiaHours) > 0.15                                 -> "LEARNED"
-            else                                                                             -> "PRIOR"
+            abs(diaShiftHours) > 0.15 && contextContribution > learnedContribution -> "CONTEXT"
+            w > 0.3 && abs(learned - profileDiaHours) > 0.15                       -> "LEARNED"
+            else                                                                   -> "PRIOR"
         }
         val log = if (abs(eff - anchor) >= 0.05) {
-            "DIA_GOV: prior=${aimiFmt1(profileDiaHours)} ctx=${aimiFmtSigned1(contextualDiaShiftHours)} " +
+            "DIA_GOV: prior=${aimiFmt1(profileDiaHours)} ctx=${aimiFmtSigned1(diaShiftHours)} " +
                 "anchor=${aimiFmt1(anchor)} learned=${aimiFmt1(learned)} w=${aimiFmt2(w)} -> " +
                 "eff=${aimiFmt1(eff)} [$dominant]"
         } else {

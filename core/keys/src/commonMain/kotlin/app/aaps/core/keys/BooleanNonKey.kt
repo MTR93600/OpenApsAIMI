@@ -56,6 +56,16 @@ enum class BooleanNonKey(
     GlassTopGridPillsMigrated("glass_top_grid_pills_migrated", false, exportable = false),
 
     /**
+     * One-shot: set after the AIMI PK/PD learning pace migration ran once. The old PK/PD wizard always
+     * saved the NORMAL pace (0.5 h/day, 5 min/day). The migration moves exactly that stored pair to
+     * the FASTER default (2 h/day, 20 min/day) and keeps any other stored pace. Internal state, not a
+     * setting. Not exportable, and an import never clears it. So restoring an old backup on the same
+     * phone keeps the restored pace (also 0.5/5.0). Only a phone or install that never ran the
+     * migration runs it, and there it also moves a NORMAL pace that the user picked on purpose.
+     */
+    OApsAIMIPkpdPaceMigrated("aimi_pkpd_pace_migrated", false, exportable = false),
+
+    /**
      * Shows the IOB chart under the glucose chart on the Glass home (Tools → Personalize). A small phone
      * can turn it off so the home fits on the screen without scrolling. The IOB stays in the status card.
      */

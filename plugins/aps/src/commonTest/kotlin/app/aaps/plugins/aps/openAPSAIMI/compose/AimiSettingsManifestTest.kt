@@ -50,7 +50,6 @@ class AimiSettingsManifestTest {
         BooleanKey.OApsAIMIAimiSmbComparatorEnabled.key,
         DoubleKey.OApsAIMIAutodriveAcceleration.key,
         BooleanKey.OApsAIMIAutodriveV3EnhancedGater.key,
-        BooleanKey.OApsAIMIDiaGovernorEnabled.key,
         DoubleKey.OApsAIMIDiaGovernorLearnedWeight.key,
         BooleanKey.OApsAIMIEffectiveIobReleaseEnabled.key,
         BooleanKey.OApsAIMIEnableBasal.key,

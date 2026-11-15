@@ -395,6 +395,7 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.IsfTddProvider
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PredictionPhysioModulationResolver
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.CausalKineticsContextMemory
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.DosingKineticsRateLimiter
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinKineticsAuthority
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdLearningDiagnostics
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.ProfileInsulin
@@ -7500,6 +7501,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         put("effective_peak_min", snap.kinetics.effective.peakMinutes)
                         put("effective_dia_no_context_h", snap.kinetics.noContextEffective.diaHours)
                         put("effective_peak_no_context_min", snap.kinetics.noContextEffective.peakMinutes)
+                        // Before the per-tick rate limit; the effective values above are the limited ones.
+                        put("effective_dia_target_h", snap.kinetics.targetEffective.diaHours)
+                        put("effective_peak_target_min", snap.kinetics.targetEffective.peakMinutes)
                         // Context that shifted the DIA/peak that dosed: posterior of the previous tick.
                         put("kinetics_context_reason", snap.kinetics.contextReason)
                         put("structural_dia_h", snap.kinetics.structural.diaHrs)
@@ -8710,15 +8714,25 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     /** Causal posterior of the last tick, for the kinetics of the next one. */
     private val kineticsContextMemory = CausalKineticsContextMemory()
 
+    /** DIA and peak that dosed the last tick, so the next tick moves at most one step from them. */
+    private val dosingKineticsRateLimiter = DosingKineticsRateLimiter()
+
     /**
      * Resolves the DIA and peak that dose the tick at [nowMs]. [inputFor] builds the resolve input from
      * the causal posterior of the previous tick, which is null on the first tick, after a tick that
      * failed or had none, or when it is too old. See [CausalKineticsContextMemory].
+     *
+     * The result is then limited per tick by [DosingKineticsRateLimiter] (at most 0.25 h of DIA and
+     * 2 min of peak against the last tick). The view carries both the limited value that doses and
+     * the target.
      */
     fun resolveDosingKinetics(
         nowMs: Long,
         inputFor: (CausalStatePosterior?) -> InsulinKineticsAuthority.ResolveInput,
-    ): InsulinKineticsView = InsulinKineticsAuthority.resolve(inputFor(kineticsContextMemory.forTickAt(nowMs)))
+    ): InsulinKineticsView = dosingKineticsRateLimiter.limit(
+        nowMs = nowMs,
+        resolved = InsulinKineticsAuthority.resolve(inputFor(kineticsContextMemory.forTickAt(nowMs))),
+    )
 
     /**
      * Runs one tick and keeps the causal posterior of its patient state for the kinetics of the next

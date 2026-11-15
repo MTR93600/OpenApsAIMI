@@ -170,6 +170,10 @@ class PkPdIntegration(
     ): PkPdRuntime? {
         return lock.withLock {
             adoptExternalLearnedStateReset()
+            // One-shot: the old wizard pace (NORMAL) becomes FASTER, before the pace is read below.
+            if (PkpdLearningBounds.migrateOldWizardPaceOnce(preferences)) {
+                consoleLog?.add("PKPD_PACE: old wizard pace 0.5 h/day, 5 min/day moved to FASTER 2 h/day, 20 min/day")
+            }
             // Before the structural compare, for the same reason as the external reset: a new profile
             // insulin also changes the bounds, and the compare would persist the old in-memory value.
             // It also runs with PK/PD off, so an insulin change made while PK/PD is off still starts

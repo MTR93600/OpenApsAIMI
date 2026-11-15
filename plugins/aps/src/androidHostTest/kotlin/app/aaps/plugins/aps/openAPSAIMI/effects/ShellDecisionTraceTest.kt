@@ -4892,6 +4892,10 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
             READ key=DoubleKey.OApsAIMIweight value=0.00
             READ key=LongNonKey.OApsAIMIPkpdLearnedStateGeneration value=0
+            READ key=BooleanNonKey.OApsAIMIPkpdPaceMigrated value=false
+            READ key=DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH value=null
+            READ key=DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin value=null
+            WRITE key=BooleanNonKey.OApsAIMIPkpdPaceMigrated value=true
             READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
             READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
             READ key=BooleanKey.OApsAIMIPkpdHyperReversion value=false
@@ -4933,6 +4937,10 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
             READ key=DoubleKey.OApsAIMIweight value=0.00
             READ key=LongNonKey.OApsAIMIPkpdLearnedStateGeneration value=0
+            READ key=BooleanNonKey.OApsAIMIPkpdPaceMigrated value=false
+            READ key=DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH value=null
+            READ key=DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin value=null
+            WRITE key=BooleanNonKey.OApsAIMIPkpdPaceMigrated value=true
             READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
             READ key=BooleanKey.OApsAIMITrajectoryGuardEnabled value=false
             READ key=BooleanKey.OApsAIMIContextEnabled value=false
@@ -5166,6 +5174,10 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
             READ key=DoubleKey.OApsAIMIweight value=0.00
             READ key=LongNonKey.OApsAIMIPkpdLearnedStateGeneration value=0
+            READ key=BooleanNonKey.OApsAIMIPkpdPaceMigrated value=false
+            READ key=DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH value=null
+            READ key=DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin value=null
+            WRITE key=BooleanNonKey.OApsAIMIPkpdPaceMigrated value=true
             READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
             READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
             READ key=BooleanKey.OApsAIMIPkpdHyperReversion value=false
@@ -5207,6 +5219,10 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
             READ key=DoubleKey.OApsAIMIweight value=0.00
             READ key=LongNonKey.OApsAIMIPkpdLearnedStateGeneration value=0
+            READ key=BooleanNonKey.OApsAIMIPkpdPaceMigrated value=false
+            READ key=DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH value=null
+            READ key=DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin value=null
+            WRITE key=BooleanNonKey.OApsAIMIPkpdPaceMigrated value=true
             READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
             READ key=BooleanKey.OApsAIMITrajectoryGuardEnabled value=false
             READ key=BooleanKey.OApsAIMIContextEnabled value=false
@@ -5531,6 +5547,10 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
             READ key=DoubleKey.OApsAIMIweight value=0.00
             READ key=LongNonKey.OApsAIMIPkpdLearnedStateGeneration value=0
+            READ key=BooleanNonKey.OApsAIMIPkpdPaceMigrated value=false
+            READ key=DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH value=null
+            READ key=DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin value=null
+            WRITE key=BooleanNonKey.OApsAIMIPkpdPaceMigrated value=true
             READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
             READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
             READ key=BooleanKey.OApsAIMIPkpdHyperReversion value=false
@@ -5572,6 +5592,10 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
             READ key=DoubleKey.OApsAIMIweight value=0.00
             READ key=LongNonKey.OApsAIMIPkpdLearnedStateGeneration value=0
+            READ key=BooleanNonKey.OApsAIMIPkpdPaceMigrated value=false
+            READ key=DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH value=null
+            READ key=DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin value=null
+            WRITE key=BooleanNonKey.OApsAIMIPkpdPaceMigrated value=true
             READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
             READ key=BooleanKey.OApsAIMITrajectoryGuardEnabled value=false
             READ key=BooleanKey.OApsAIMIContextEnabled value=false
@@ -5709,6 +5733,10 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
             READ key=DoubleKey.OApsAIMIweight value=0.00
             READ key=LongNonKey.OApsAIMIPkpdLearnedStateGeneration value=0
+            READ key=BooleanNonKey.OApsAIMIPkpdPaceMigrated value=false
+            READ key=DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH value=null
+            READ key=DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin value=null
+            WRITE key=BooleanNonKey.OApsAIMIPkpdPaceMigrated value=true
             READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
             READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
             READ key=BooleanKey.OApsAIMIPkpdHyperReversion value=false
@@ -5750,6 +5778,10 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
             READ key=DoubleKey.OApsAIMIweight value=0.00
             READ key=LongNonKey.OApsAIMIPkpdLearnedStateGeneration value=0
+            READ key=BooleanNonKey.OApsAIMIPkpdPaceMigrated value=false
+            READ key=DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH value=null
+            READ key=DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin value=null
+            WRITE key=BooleanNonKey.OApsAIMIPkpdPaceMigrated value=true
             READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
             READ key=BooleanKey.OApsAIMITrajectoryGuardEnabled value=false
             READ key=BooleanKey.OApsAIMIContextEnabled value=false
@@ -5877,6 +5909,10 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
             READ key=DoubleKey.OApsAIMIweight value=0.00
             READ key=LongNonKey.OApsAIMIPkpdLearnedStateGeneration value=0
+            READ key=BooleanNonKey.OApsAIMIPkpdPaceMigrated value=false
+            READ key=DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH value=null
+            READ key=DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin value=null
+            WRITE key=BooleanNonKey.OApsAIMIPkpdPaceMigrated value=true
             READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
             READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
             READ key=BooleanKey.OApsAIMIPkpdHyperReversion value=false
@@ -5960,6 +5996,10 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
             READ key=DoubleKey.OApsAIMIweight value=0.00
             READ key=LongNonKey.OApsAIMIPkpdLearnedStateGeneration value=0
+            READ key=BooleanNonKey.OApsAIMIPkpdPaceMigrated value=false
+            READ key=DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH value=null
+            READ key=DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin value=null
+            WRITE key=BooleanNonKey.OApsAIMIPkpdPaceMigrated value=true
             READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
             READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
             READ key=BooleanKey.OApsAIMIPkpdHyperReversion value=false
@@ -6735,6 +6775,10 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=5.00
             READ key=DoubleKey.OApsAIMIweight value=70.00
             READ key=LongNonKey.OApsAIMIPkpdLearnedStateGeneration value=0
+            READ key=BooleanNonKey.OApsAIMIPkpdPaceMigrated value=false
+            READ key=DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH value=null
+            READ key=DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin value=null
+            WRITE key=BooleanNonKey.OApsAIMIPkpdPaceMigrated value=true
             READ key=BooleanKey.OApsAIMIPkpdEnabled value=true
             READ key=LongNonKey.OApsAIMIPkpdProfileInsulinDiaMin value=300
             READ key=LongNonKey.OApsAIMIPkpdProfileInsulinPeakMin value=75
@@ -6816,6 +6860,10 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.OApsAIMIPkpdStateDiaH value=0.00
             READ key=DoubleKey.OApsAIMIweight value=0.00
             READ key=LongNonKey.OApsAIMIPkpdLearnedStateGeneration value=0
+            READ key=BooleanNonKey.OApsAIMIPkpdPaceMigrated value=false
+            READ key=DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH value=null
+            READ key=DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin value=null
+            WRITE key=BooleanNonKey.OApsAIMIPkpdPaceMigrated value=true
             READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
             LOG PKPD Debug: Config ENABLED is FALSE. Check OApsAIMIPkpdEnabled preference.
             LOG Debug: computePkpdPredictions called with delta=0.0

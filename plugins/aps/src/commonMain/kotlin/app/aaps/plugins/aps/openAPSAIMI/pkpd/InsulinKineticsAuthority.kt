@@ -19,6 +19,12 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
  * view doses and is written to the log; the snapshot does not resolve again. The causal posterior
  * it uses is the one of the previous tick (see [CausalKineticsContextMemory]), because the posterior
  * of this tick is only computed inside `determine_basal`.
+ *
+ * Two guards on the causal context (step P1b):
+ * - `OApsAIMIDiaGovernorEnabled` and `OApsAIMIPeakGovernorEnabled` are the field off switch of the
+ *   context: switch off = no causal DIA (or peak) shift. See [DiaGovernor] and [TapPeakGovernor].
+ * - The dosing path limits the change per tick with [DosingKineticsRateLimiter]. [resolve] itself
+ *   does not limit; it returns the target.
  */
 object InsulinKineticsAuthority {
 
@@ -150,6 +156,7 @@ object InsulinKineticsAuthority {
         val dosed = resolved.effective.copy(diaHours = diaHours, peakMinutes = peakMinutes)
         return resolved.copy(
             effective = dosed,
+            targetEffective = dosed,
             noContextEffective = dosed,
             contextReason = DOSING_VALUES_ONLY,
             governorsDosed = false,

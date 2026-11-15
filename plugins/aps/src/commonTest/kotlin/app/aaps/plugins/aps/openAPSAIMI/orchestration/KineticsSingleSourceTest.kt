@@ -178,6 +178,23 @@ class KineticsSingleSourceTest {
         assertEquals(4.5, kinetics["effective_dia_h"]!!.jsonPrimitive.double, 1e-9)
     }
 
+    @Test
+    fun governorBlocksLogTheLimitedValueThatDosedAndTheTarget() {
+        // Stress target 6.0 h; the per-tick limit let only 5.25 h dose (DosingKineticsRateLimiter).
+        val resolved = dosingKinetics(previousTickPosterior = stress)
+        val limited = resolved.copy(
+            effective = resolved.effective.copy(diaHours = 5.25, peakMinutes = resolved.effective.peakMinutes - 2.0),
+            targetEffective = resolved.effective,
+        )
+        val kinetics = IntelligenceSnapshotJson.toJsonObject(snapshot(limited, thisTickPosterior = null))["kinetics"] as JsonObject
+        val dia = kinetics["dia_governor"] as JsonObject
+        assertEquals(5.25, dia["effective_dia_h"]!!.jsonPrimitive.double, 1e-9)
+        assertEquals(6.0, dia["effective_dia_target_h"]!!.jsonPrimitive.double, 1e-9)
+        val peak = kinetics["peak_governor"] as JsonObject
+        assertEquals(limited.effective.peakMinutes, peak["effective_peak_min"]!!.jsonPrimitive.double, 1e-9)
+        assertEquals(resolved.peakGovernor.effectivePeakMinutes, peak["effective_peak_target_min"]!!.jsonPrimitive.double, 1e-9)
+    }
+
     private fun runtime(params: PkPdParams) = PkPdRuntime(
         params = params,
         tailFraction = 0.2,

@@ -505,6 +505,10 @@ internal object PkpdScreenLayout {
             sections = listOf(AimiSettingsSectionId.PkpdExpertPeakGovernor),
         ),
         PkpdExpertGroup(
+            title = ApsStrings.aimi_pkpd_expert_dia_governor,
+            sections = listOf(AimiSettingsSectionId.PkpdExpertDiaGovernor),
+        ),
+        PkpdExpertGroup(
             title = ApsStrings.aimi_pkpd_expert_isf_fusion,
             sections = listOf(
                 AimiSettingsSectionId.PkpdExpertIsfFusionBounds,

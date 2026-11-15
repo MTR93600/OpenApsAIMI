@@ -71,6 +71,7 @@ internal enum class AimiSettingsSectionId {
     PkpdAdvancedStackAwareGuardB,
     PkpdAdvancedCurveLearningGate,
     PkpdExpertPeakGovernor,
+    PkpdExpertDiaGovernor,
     PkpdExpertIsfFusionBounds,
     PkpdExpertIsfFusionSlope,
     PkpdExpertDynIsfTuning,
@@ -307,6 +308,16 @@ internal object AimiSettingsScreens {
             keys = listOf(
                 BooleanKey.OApsAIMIPeakGovernorEnabled,
                 DoubleKey.OApsAIMIPeakGovernorLearnedWeight,
+            ),
+        ),
+        // The field off switch of the causal DIA context (P1b): it must be reachable from the app.
+        AimiSettingsSection(
+            id = AimiSettingsSectionId.PkpdExpertDiaGovernor,
+            content = AimiSettingsContentId.PkpdExpert,
+            level = AimiSettingsLevel.EXPERT,
+            kind = AimiSettingsSectionKind.FIELDS,
+            keys = listOf(
+                BooleanKey.OApsAIMIDiaGovernorEnabled,
             ),
         ),
         AimiSettingsSection(

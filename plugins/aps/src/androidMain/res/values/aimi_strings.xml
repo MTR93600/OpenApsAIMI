@@ -117,6 +117,7 @@
 <string name="aimi_pkpd_reset_confirm_ok">Reset</string>
 
 <string name="aimi_pkpd_expert_peak_governor">Peak governor (TAP-G)</string>
+<string name="aimi_pkpd_expert_dia_governor">DIA governor (TAP-D)</string>
 
 <string name="aimi_pkpd_expert_isf_fusion">ISF fusion (raw)</string>
 

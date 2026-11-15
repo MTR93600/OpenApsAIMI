@@ -8,6 +8,7 @@ import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
+import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.AimiTickWorkingState
 import app.aaps.plugins.aps.openAPSAIMI.DetermineBasalaimiSMB2
@@ -49,8 +50,12 @@ class KineticsContextWiringTest {
         learningQuality = 1.0,
     )
 
-    // The governor bounds come from the profile insulin (5.0 h -> 3.75-6.25 h), not from keys.
-    private val preferences: Preferences = mock(Preferences::class.java)
+    // The governor switches are on, as their defaults: switched off they also drop the causal
+    // shift (P1b). The governor bounds are fixed constants (DIA 4-24 h), not keys.
+    private val preferences: Preferences = mock(Preferences::class.java).also { prefs ->
+        whenever(prefs.get(BooleanKey.OApsAIMIDiaGovernorEnabled)).thenReturn(true)
+        whenever(prefs.get(BooleanKey.OApsAIMIPeakGovernorEnabled)).thenReturn(true)
+    }
 
     private fun newTick(): DetermineBasalaimiSMB2 {
         val dateUtil = mock(DateUtil::class.java)
@@ -99,8 +104,13 @@ class KineticsContextWiringTest {
     /** What the plugin does before the next tick: resolve the dosing kinetics. */
     private fun DetermineBasalaimiSMB2.dosingKinetics(nowMs: Long): Pair<CausalStatePosterior?, Double> {
         var seen: CausalStatePosterior? = null
-        val view = resolveDosingKinetics(nowMs) { posterior ->
-            seen = posterior
+        val view = dosingView(nowMs) { seen = it }
+        return seen to view.effective.diaHours
+    }
+
+    private fun DetermineBasalaimiSMB2.dosingView(nowMs: Long, onPosterior: (CausalStatePosterior?) -> Unit = {}) =
+        resolveDosingKinetics(nowMs) { posterior ->
+            onPosterior(posterior)
             InsulinKineticsAuthority.ResolveInput(
                 accountingIobArray = emptyArray<IobTotal>(),
                 profileDiaHours = 5.0,
@@ -119,7 +129,17 @@ class KineticsContextWiringTest {
                 ),
             )
         }
-        return seen to view.effective.diaHours
+
+    @Test
+    fun `the dosing path limits the dia step per tick`() {
+        val tick = newTick()
+        // First resolution: no context, no limit, 5.0 h doses.
+        assertThat(tick.dosingView(t0).effective.diaHours).isWithin(1e-9).of(5.0)
+        tick.tick(t0, stress)
+        val view = tick.dosingView(t0 + 5 * minute)
+        // Stress asks for 6.0 h; the per-tick limit lets only 0.25 h through.
+        assertThat(view.targetEffective.diaHours).isWithin(1e-9).of(6.0)
+        assertThat(view.effective.diaHours).isWithin(1e-9).of(5.25)
     }
 
     @Test

@@ -73,6 +73,7 @@ class PkpdScreenLayoutTest {
         val expected = setOf(
             BooleanKey.OApsAIMIPeakGovernorEnabled.key,
             DoubleKey.OApsAIMIPeakGovernorLearnedWeight.key,
+            BooleanKey.OApsAIMIDiaGovernorEnabled.key,
             DoubleKey.OApsAIMIIsfFusionMinFactor.key,
             DoubleKey.OApsAIMIIsfFusionMaxFactor.key,
             DoubleKey.OApsAIMIIsfFusionMaxChangePerTick.key,

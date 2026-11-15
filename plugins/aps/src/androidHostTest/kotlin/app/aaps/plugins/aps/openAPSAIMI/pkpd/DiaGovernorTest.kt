@@ -29,7 +29,7 @@ class DiaGovernorTest {
     }
 
     @Test
-    fun fallsBackToAnchorWhenDisabled() {
+    fun fallsBackToProfileWhenDisabled() {
         val r = DiaGovernor.resolve(
             profileDiaHours = 6.0,
             contextualDiaShiftHours = 0.2,
@@ -40,7 +40,9 @@ class DiaGovernorTest {
             diaMaxBound = 9.0,
             learnedBlendWeight = 0.5,
         )
-        assertEquals(6.2, r.effectiveDiaHours, 0.01)
+        // The switch is also the off switch of the causal context (P1b): the 0.2 h shift is dropped.
+        assertEquals(6.0, r.effectiveDiaHours, 0.01)
+        assertEquals(0.0, r.diaContextualShiftHours, 1e-9)
         assertEquals(false, r.appliedGovernor)
     }
 

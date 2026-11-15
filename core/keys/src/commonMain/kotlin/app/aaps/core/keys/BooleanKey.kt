@@ -465,6 +465,11 @@ enum class BooleanKey(
     OApsAIMIPkpdEnabled("key_aimi_pkpd_enabled", false, title = KeysStrings.pref_title_oaps_aimi_pkpd_enabled),
     /** Set after the guided PK/PD setup wizard completes (or is skipped). */
     OApsAIMIPkpdSetupWizardCompleted("key_aimi_pkpd_setup_wizard_completed", false, title = KeysStrings.pref_title_oaps_aimi_pkpd_setup_wizard_completed),
+    /**
+     * TAP-G: blend the profile insulin peak with the learned PK/PD peak. Also the field off switch of
+     * the causal context path for the peak: off = no causal peak shift (and no trajectory nudge).
+     * Keep it a real key, not a constant.
+     */
     OApsAIMIPeakGovernorEnabled(
         key = "key_aimi_peak_governor_enabled",
         defaultValue = true,
@@ -475,8 +480,17 @@ enum class BooleanKey(
     OApsAIMIIntelligenceSnapshotExport("key_aimi_intelligence_snapshot_export", true, title = KeysStrings.pref_title_oaps_aimi_intelligence_snapshot_export),
     /** Single PKPD learning path per tick (signal-prep only; plugin/early are read-only). */
     OApsAIMIIntelligenceSingleLearnPath("key_aimi_intelligence_single_learn_path", true, title = KeysStrings.pref_title_oaps_aimi_intelligence_single_learn_path),
-    /** TAP-D: blend profile DIA with learned structural DIA for effective runtime kinetics. */
-    OApsAIMIDiaGovernorEnabled("key_aimi_dia_governor_enabled", true, title = KeysStrings.pref_title_oaps_aimi_dia_governor_enabled),
+    /**
+     * TAP-D: blend profile DIA with learned structural DIA for effective runtime kinetics. Also the
+     * field off switch of the causal context path for the DIA: off = no causal DIA shift. Keep it a
+     * real key, not a constant.
+     */
+    OApsAIMIDiaGovernorEnabled(
+        key = "key_aimi_dia_governor_enabled",
+        defaultValue = true,
+        title = KeysStrings.pref_title_oaps_aimi_dia_governor_enabled,
+        summary = KeysStrings.pref_summary_oaps_aimi_dia_governor_enabled,
+    ),
     /** InsulinActionProfiler uses prediction IOB array from kinetics authority. */
     OApsAIMIIntelligenceKineticsProfiler("key_aimi_intelligence_kinetics_profiler", true, title = KeysStrings.pref_title_oaps_aimi_intelligence_kinetics_profiler),
     /** C1 shadow: log authority vs PKPD deltas without applying to dose path. */

@@ -28,6 +28,9 @@ object IntelligenceSnapshotJson {
                 put("effective_peak_min", snapshot.kinetics.effective.peakMinutes)
                 put("effective_dia_no_context_h", snapshot.kinetics.noContextEffective.diaHours)
                 put("effective_peak_no_context_min", snapshot.kinetics.noContextEffective.peakMinutes)
+                // Before the per-tick rate limit (DosingKineticsRateLimiter); effective_* above dosed.
+                put("effective_dia_target_h", snapshot.kinetics.targetEffective.diaHours)
+                put("effective_peak_target_min", snapshot.kinetics.targetEffective.peakMinutes)
                 put("kinetics_context_reason", snapshot.kinetics.contextReason)
                 put("profile_dia_h", snapshot.kinetics.effective.profileDiaHours)
                 put("profile_peak_min", snapshot.kinetics.effective.profilePeakMinutes)
@@ -46,11 +49,14 @@ object IntelligenceSnapshotJson {
                     put("relative_activity", snapshot.kinetics.activity.relativeActivity)
                 })
                 put("governors_dosed", snapshot.kinetics.governorsDosed)
-                // Governor results are written only when they are what dosed.
+                // Governor blocks are written only when the governors built the dosing values. The
+                // governor result is the target before the per-tick limit (`*_target_*`); the
+                // `effective_*` field holds the limited value that dosed, the same as above.
                 if (snapshot.kinetics.governorsDosed) {
                     val peakGov = snapshot.kinetics.peakGovernor
                     put("peak_governor", buildJsonObject {
-                        put("effective_peak_min", peakGov.effectivePeakMinutes)
+                        put("effective_peak_min", snapshot.kinetics.effective.peakMinutes)
+                        put("effective_peak_target_min", peakGov.effectivePeakMinutes)
                         put("trajectory_min", peakGov.peakTrajectory)
                         put("context_min", peakGov.peakContext)
                         put("dominant_branch", peakGov.dominantBranch)
@@ -59,7 +65,8 @@ object IntelligenceSnapshotJson {
                     })
                     val diaGov = snapshot.kinetics.diaGovernor
                     put("dia_governor", buildJsonObject {
-                        put("effective_dia_h", diaGov.effectiveDiaHours)
+                        put("effective_dia_h", snapshot.kinetics.effective.diaHours)
+                        put("effective_dia_target_h", diaGov.effectiveDiaHours)
                         put("dominant_branch", diaGov.dominantBranch)
                         put("applied", diaGov.appliedGovernor)
                         diaGov.logLine?.let { put("log", it) }

@@ -13,6 +13,9 @@ import kotlin.math.abs
  * `TrajectoryPeakBias` (bounded geometry-based nudge; RFC Phase D v1). [contextMinutesShift] is the peak
  * shift of the causal context (previous tick posterior, see [CausalKineticsModulator]). Both are added in
  * the same way; they are kept apart only so the log and the PK/PD screen can show which is which.
+ * The switch `OApsAIMIPeakGovernorEnabled` (passed as `governorEnabled`) is also the field off switch of
+ * the causal context: when it is off, [contextMinutesShift] is ignored (0). The trajectory nudge is
+ * already 0 then, because the plugin does not compute it with the switch off.
  * The blended result is **always**
  * applied to the loop model when the governor path is active (no shadow-only branch).
  *
@@ -49,7 +52,9 @@ object TapPeakGovernor {
         trajectoryMinutesNudge: Double = 0.0,
         contextMinutesShift: Double = 0.0,
     ): TapPeakGovernorResult {
-        val nudge = trajectoryMinutesNudge + contextMinutesShift
+        // Switch off = field off switch of the causal context: no shift at all.
+        val peakShiftMinutes = if (governorEnabled) contextMinutesShift else 0.0
+        val nudge = trajectoryMinutesNudge + peakShiftMinutes
         val anchor = (insulinPeakMinutes + physioPeakShiftMinutes + sitePeakShiftMinutes).coerceAtLeast(35.0)
 
         fun createResult(eff: Double, log: String?, applied: Boolean, dominant: String) = TapPeakGovernorResult(
@@ -58,7 +63,7 @@ object TapPeakGovernor {
             peakPhysio = physioPeakShiftMinutes.toDouble(),
             peakSite = sitePeakShiftMinutes,
             peakTrajectory = trajectoryMinutesNudge,
-            peakContext = contextMinutesShift,
+            peakContext = peakShiftMinutes,
             peakLearned = if (pkpdEnabled && governorEnabled) pkpdLearnedPeak else null,
             dominantBranch = dominant,
             logLine = log,
@@ -73,7 +78,7 @@ object TapPeakGovernor {
                 dominant = when {
                     physioPeakShiftMinutes != 0          -> "PHYSIO"
                     abs(trajectoryMinutesNudge) > 1.0    -> "TRAJECTORY"
-                    abs(contextMinutesShift) > 1.0       -> "CONTEXT"
+                    abs(peakShiftMinutes) > 1.0       -> "CONTEXT"
                     else                                 -> "PRIOR"
                 },
             )
@@ -85,7 +90,7 @@ object TapPeakGovernor {
 
         val dominant = when {
             abs(trajectoryMinutesNudge) > 10.0 -> "TRAJECTORY"
-            abs(contextMinutesShift) > 5.0 -> "CONTEXT"
+            abs(peakShiftMinutes) > 5.0 -> "CONTEXT"
             physioPeakShiftMinutes != 0 && abs(physioPeakShiftMinutes) > abs(eff - anchor) -> "PHYSIO"
             w > 0.3 && abs(learned - anchor) > 5.0 -> "LEARNED"
             else -> "PRIOR"
@@ -95,7 +100,7 @@ object TapPeakGovernor {
             "PEAK_GOV: prior=$insulinPeakMinutes physio=$physioPeakShiftMinutes " +
                 "site=${aimiFmt1(sitePeakShiftMinutes)} anchor=${aimiFmt1(anchor)} " +
                 "learned=${aimiFmt1(learned)} w=${aimiFmt2(w)} traj=${aimiFmtSigned1(trajectoryMinutesNudge)} " +
-                "ctx=${aimiFmtSigned1(contextMinutesShift)} " +
+                "ctx=${aimiFmtSigned1(peakShiftMinutes)} " +
                 "-> eff=${aimiFmt1(eff)} [$dominant]"
         } else {
             null

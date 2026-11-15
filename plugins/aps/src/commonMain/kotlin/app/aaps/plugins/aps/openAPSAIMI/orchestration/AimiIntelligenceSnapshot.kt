@@ -29,8 +29,17 @@ data class InsulinKineticsView(
      * inside `determine_basal`; in the plugin they are the ones from before that learning.
      */
     val structural: PkPdParams,
-    /** The DIA and peak that dose this tick, with the causal context of the previous tick. */
+    /**
+     * The DIA and peak that dose this tick, with the causal context of the previous tick. After
+     * `DosingKineticsRateLimiter` this is the limited value; the value before the limit is
+     * [targetEffective].
+     */
     val effective: EffectiveKinetics,
+    /**
+     * The DIA and peak the governors asked for this tick, before the per-tick rate limit. The same as
+     * [effective] when nothing was limited. Only for the log, never for dosing.
+     */
+    val targetEffective: EffectiveKinetics = effective,
     /** The same resolution without the causal shifts. Only for the log, never for dosing. */
     val noContextEffective: EffectiveKinetics,
     /**

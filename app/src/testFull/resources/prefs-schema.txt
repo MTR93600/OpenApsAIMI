@@ -165,6 +165,7 @@ aimi_physio_sleep_enable|BooleanKey|true
 aimi_pkpd_learned_state_generation|LongNonKey|true
 aimi_pkpd_max_dia_change_per_day_h|DoubleKey|true
 aimi_pkpd_max_peak_change_per_day_min|DoubleKey|true
+aimi_pkpd_pace_migrated|BooleanNonKey|false
 aimi_pkpd_pragmatic_relief_min_factor|DoubleKey|true
 aimi_pkpd_profile_insulin_dia_min|LongNonKey|true
 aimi_pkpd_profile_insulin_peak_min|LongNonKey|true

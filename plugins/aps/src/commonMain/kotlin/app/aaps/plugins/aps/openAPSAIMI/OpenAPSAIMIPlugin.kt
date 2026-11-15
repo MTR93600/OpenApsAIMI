@@ -1475,6 +1475,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 LTag.APS,
                 "PK/PD kinetics: DIA=${aimiFmt2(kineticsView.effective.diaHours)}h " +
                     "peak=${aimiFmt1(kineticsView.effective.peakMinutes)}m " +
+                    "(target: DIA=${aimiFmt2(kineticsView.targetEffective.diaHours)}h " +
+                    "peak=${aimiFmt1(kineticsView.targetEffective.peakMinutes)}m) " +
                     "(no context: DIA=${aimiFmt2(kineticsView.noContextEffective.diaHours)}h " +
                     "peak=${aimiFmt1(kineticsView.noContextEffective.peakMinutes)}m) " +
                     "context=${kineticsView.contextReason}",
@@ -1494,7 +1496,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             preferences.put(DoubleKey.OApsAIMIPkpdStatePhysioPeak, peakGovernorForActivity.peakPhysio)
             preferences.put(DoubleKey.OApsAIMIPkpdStateSitePeak, peakGovernorForActivity.peakSite)
             preferences.put(DoubleKey.OApsAIMIPkpdStateTrajectoryPeak, peakGovernorForActivity.peakTrajectory)
-            preferences.put(DoubleKey.OApsAIMIPkpdStateEffectivePeak, peakGovernorForActivity.effectivePeakMinutes)
+            // The peak that doses, after the per-tick rate limit (the governor gives the target).
+            preferences.put(DoubleKey.OApsAIMIPkpdStateEffectivePeak, kineticsView.effective.peakMinutes)
             preferences.put(AimiStringKey.OApsAIMIPkpdStateDominantBranch, peakGovernorForActivity.dominantBranch)
 
             val peakTimeMinutesForProfile = kineticsView.effective.peakMinutes
@@ -1807,9 +1810,10 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         now = nowMsForPkpd,
                         pkpdEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEnabled),
                         peakGovernorEnabled = preferences.get(BooleanKey.OApsAIMIPeakGovernorEnabled),
-                        peakGovernor = peakGovernorForActivity,
+                        // Show the values that dose (after the per-tick limit), not the governor target.
+                        peakGovernor = peakGovernorForActivity.copy(effectivePeakMinutes = kineticsView.effective.peakMinutes),
                         diaGovernorEnabled = preferences.get(BooleanKey.OApsAIMIDiaGovernorEnabled),
-                        diaGovernor = kineticsView.diaGovernor,
+                        diaGovernor = kineticsView.diaGovernor.copy(effectiveDiaHours = kineticsView.effective.diaHours),
                     )
                 }
                 holdSmbInsideLoopInterval(it, now)
