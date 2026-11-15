@@ -38,6 +38,54 @@ and those do not belong in a domain model anyway. So we move the rule, not write
 5. **Option: Android 16 Live Updates** (promoted ongoing notification on the lock screen), fed by
    the same state.
 
+## Step 1 as built (W1)
+
+The rule now lives in `:ui` commonMain, package `app.aaps.ui.widget.state`. No new module
+dependency was needed: `:ui` commonMain already had every input.
+
+- `WidgetState` is the neutral state. Texts are finished and translated. Colours are classes
+  (`WidgetBgRange`, `WidgetBgColorClass`, `WidgetTargetChip` with the temp target reason, the
+  `RM.Mode`), icons are kinds (`WidgetTargetIcon`, `WidgetSensitivityIcon`, `WidgetTbrState`,
+  `WidgetLoopIcon`, `IsfStep`, `TrendArrow`). For the Live Activity it also carries raw numbers:
+  BG in mg/dL, units, BG time, delta in mg/dL, IOB, COB, carbs required, last loop time (null on a
+  client) and up to 36 chart points over 3 h (only when asked, `build(withChart = true)`).
+- `WidgetStateRules` holds the decisions as plain functions. `WidgetStateBuilder` (`@Inject`)
+  gathers the inputs and calls them. It is the old `WidgetStateLoader` body with two small
+  differences, both only when something changes during one build: the age comes from the one
+  `lastBg()` read that is shown (before, `isActualBg()` read again and a new reading landing in
+  between could leave an old value not struck through), and the profile is read once, not three
+  times.
+- Android: `WidgetStateLoader` now adds only the widget background and calls
+  `WidgetState.toRenderState()` (`WidgetRenderStateMapper.kt`), which maps the classes back to the
+  same `@ColorInt` and `@DrawableRes` values. `WidgetRenderState` and the Glance widgets did not
+  change. `BgGraphStateLoader` uses the same BG range rule.
+- Stale rule: one shared rule, `WidgetStateRules.isStale(bgTimestamp, now)`, built on
+  `Constants.OLD_BG_MINUTES` (9 min, the same edge as `LastBgData.isActualBg()`). `isStale` is that
+  rule at build time only. A reader that shows the state later must ask again with the time of
+  showing: `isStaleAt(now)`, `bgColorClass(now)` (`STALE` for an old reading or none, whatever the
+  range) and `staleAt` (BG time + 9 min). Android keeps its old look on purpose (range colour,
+  struck through). iOS paints `STALE` and must not write its own copy of the 9 minutes; the bridge
+  sends `staleAt` with the state.
+- Open for the owner: the plan above sets the Live Activity `staleDate` to BG time + 6 min. That is
+  a third threshold next to the 9 min colour rule. Either use `staleAt` for `staleDate` so both
+  agree, or keep 6 min on purpose (an earlier system mark is not less safe) and write down why.
+- Frozen texts: `timeAgoText` and `cobText` are made at build time. The Live Activity shows the age
+  from `bgTimestamp` (SwiftUI `Text(date, style: .relative)`) and the carbs from `cob`,
+  `carbsRequired` and `carbsRequiredGrams`, never these texts. The carbs line of `cobText` is still
+  joined with `"\n" +` as before; move it to a format string resource when the Android look may
+  change (the parity test would see the new key).
+- Chart points are real readings only: values made up to fill a gap, and values that are not
+  finite or not above 0, are left out.
+- Tests: `WidgetStateRulesTest` (commonTest, runs on JVM, Android host and the iOS simulator) and
+  `WidgetRenderStateParityTest` (Android host). The parity test runs a frozen copy of the old
+  loader (`LegacyWidgetStateLoader`, test only) next to the new one for many inputs (both units,
+  stale, no reading, no profile, every running mode, every temp target reason, every arrow, every
+  sensitivity icon, client builds) and asks for an equal `WidgetRenderState`. When the widget look
+  is changed on purpose later, delete the frozen copy and the parity test together.
+
+Not done in W1: nothing on iOS uses the state yet. The iOS graph does not have to provide the
+builder's inputs until step 2 asks for it.
+
 ## By hand in Xcode
 
 Add the Widget Extension target to both apps (AAPS and AAPS2), signing and profiles for each

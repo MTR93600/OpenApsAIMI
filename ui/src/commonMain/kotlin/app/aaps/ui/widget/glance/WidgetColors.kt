@@ -5,7 +5,7 @@ package app.aaps.ui.widget.glance
  * ([app.aaps.core.ui.compose.DarkGeneralColors] / [app.aaps.core.ui.compose.navigation.DarkElementColors]).
  *
  * All state-based chip colors (loop mode, temp target reason, IOB/COB/Sensitivity, inProgress)
- * are read from the theme data classes directly via [WidgetStateLoader] / [AapsGlanceWidget].
+ * are read from the theme data classes directly in `WidgetRenderStateMapper` / `AapsGlanceWidget`.
  */
 
 /** Approximation of Material3 `onSurfaceVariant` in dark mode — widgets can't read MaterialTheme. */

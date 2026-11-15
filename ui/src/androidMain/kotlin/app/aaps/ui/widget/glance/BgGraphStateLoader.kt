@@ -16,6 +16,7 @@ import app.aaps.core.keys.IntComposedKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.ui.widget.directionToDrawableRes
+import app.aaps.ui.widget.state.WidgetStateRules
 import dev.zacsweers.metro.Inject
 
 data class BgGraphRenderState(
@@ -81,15 +82,11 @@ class BgGraphStateLoader(
 
         val colors = BgGraphColors.WIDGET
 
-        // Current BG + trend (same logic as WidgetStateLoader)
+        // Current BG + trend (same rule as WidgetStateBuilder)
         val lastBg = lastBgData.lastBg()
         val bgText = lastBg?.let { profileUtil.fromMgdlToStringInUnits(it.recalculated) }
             ?: rh.gs(CoreUiStrings.value_unavailable_short)
-        val bgColor = when {
-            lastBgData.isLow()  -> colors.low
-            lastBgData.isHigh() -> colors.high
-            else                -> colors.inRange
-        }
+        val bgColor = WidgetStateRules.bgRange(lastBgData.isLow(), lastBgData.isHigh()).toColor()
         val strikeThrough = !lastBgData.isActualBg()
         val trendArrow = trendCalculator.getTrendArrow(iobCobCalculator.ads)
         val arrowResId = lastBg?.let { (trendArrow ?: TrendArrow.FLAT).directionToDrawableRes() }
