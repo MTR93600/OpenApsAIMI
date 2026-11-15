@@ -12,6 +12,8 @@ object IntelligenceSnapshotJson {
             put("version", snapshot.meta.version)
             put("build_tag", snapshot.meta.buildTag)
             put("timestamp_ms", snapshot.meta.timestampMs)
+            // The posterior of THIS tick. It doses only from the next tick on; the shift that dosed
+            // now is `kinetics.kinetics_context_reason` (posterior of the previous tick).
             put("causal", buildJsonObject {
                 put("learning_quality", snapshot.causal.learningQuality)
                 put("learning_gate_pass", snapshot.causal.learningGatePass)
@@ -24,6 +26,9 @@ object IntelligenceSnapshotJson {
                 put("structural_peak_min", snapshot.kinetics.structural.peakMin)
                 put("effective_dia_h", snapshot.kinetics.effective.diaHours)
                 put("effective_peak_min", snapshot.kinetics.effective.peakMinutes)
+                put("effective_dia_no_context_h", snapshot.kinetics.noContextEffective.diaHours)
+                put("effective_peak_no_context_min", snapshot.kinetics.noContextEffective.peakMinutes)
+                put("kinetics_context_reason", snapshot.kinetics.contextReason)
                 put("profile_dia_h", snapshot.kinetics.effective.profileDiaHours)
                 put("profile_peak_min", snapshot.kinetics.effective.profilePeakMinutes)
                 put("prediction_uses_learned_kinetics", snapshot.kinetics.predictionUsesLearnedKinetics)
@@ -40,20 +45,24 @@ object IntelligenceSnapshotJson {
                     put("stage", snapshot.kinetics.activity.stage)
                     put("relative_activity", snapshot.kinetics.activity.relativeActivity)
                 })
-                snapshot.kinetics.peakGovernor?.let { gov ->
+                put("governors_dosed", snapshot.kinetics.governorsDosed)
+                // Governor results are written only when they are what dosed.
+                if (snapshot.kinetics.governorsDosed) {
+                    val peakGov = snapshot.kinetics.peakGovernor
                     put("peak_governor", buildJsonObject {
-                        put("effective_peak_min", gov.effectivePeakMinutes)
-                        put("dominant_branch", gov.dominantBranch)
-                        put("applied", gov.appliedGovernor)
-                        gov.logLine?.let { put("log", it) }
+                        put("effective_peak_min", peakGov.effectivePeakMinutes)
+                        put("trajectory_min", peakGov.peakTrajectory)
+                        put("context_min", peakGov.peakContext)
+                        put("dominant_branch", peakGov.dominantBranch)
+                        put("applied", peakGov.appliedGovernor)
+                        peakGov.logLine?.let { put("log", it) }
                     })
-                }
-                snapshot.kinetics.diaGovernor?.let { gov ->
+                    val diaGov = snapshot.kinetics.diaGovernor
                     put("dia_governor", buildJsonObject {
-                        put("effective_dia_h", gov.effectiveDiaHours)
-                        put("dominant_branch", gov.dominantBranch)
-                        put("applied", gov.appliedGovernor)
-                        gov.logLine?.let { put("log", it) }
+                        put("effective_dia_h", diaGov.effectiveDiaHours)
+                        put("dominant_branch", diaGov.dominantBranch)
+                        put("applied", diaGov.appliedGovernor)
+                        diaGov.logLine?.let { put("log", it) }
                     })
                 }
                 snapshot.kinetics.learningTrace?.let { trace ->

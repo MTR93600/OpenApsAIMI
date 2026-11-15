@@ -1433,33 +1433,21 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 targetBgMgdl = targetBg,
             )
             val sitePeakShiftMinutes = TapSitePeakShift.minutesForSiteAge(computeCannulaSiteAgeDays())
-            val peakGovernorForActivity = TapPeakGovernor.resolve(
-                insulinPeakMinutes = profile.iCfg.peak,
-                physioPeakShiftMinutes = physioMults.peakShiftMinutes,
-                sitePeakShiftMinutes = sitePeakShiftMinutes,
-                pkpdLearnedPeak = pkpdRuntimeForActivity?.params?.peakMin,
-                pkpdEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEnabled),
-                governorEnabled = preferences.get(BooleanKey.OApsAIMIPeakGovernorEnabled),
-                peakMinBound = preferences.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMin),
-                peakMaxBound = preferences.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMax),
-                learnedBlendWeight = preferences.get(DoubleKey.OApsAIMIPeakGovernorLearnedWeight),
-                trajectoryMinutesNudge = trajectoryPeakNudgeMinutes,
-            )
-            val kineticsView = InsulinKineticsAuthority.resolve(
+            // One resolution per tick: this view doses and is the one written to the log. It uses the
+            // causal posterior of the previous tick (null on the first tick or when too old).
+            val resolvedKinetics = determineBasalaimiSMB2.resolveDosingKinetics(nowMsForPkpd) { kineticsContextPosterior ->
                 InsulinKineticsAuthority.ResolveInput(
                     accountingIobArray = iobArray,
                     profileDiaHours = eff.iCfg.dia,
-                    profilePeakMinutes = peakGovernorForActivity.effectivePeakMinutes,
-                    effectiveProfile = profile as EffectiveProfile,
+                    profilePeakMinutes = profile.iCfg.peak,
                     pkpdRuntime = pkpdRuntimeForActivity,
-                    peakGovernor = peakGovernorForActivity,
-                    causalPosterior = null,
+                    causalPosterior = kineticsContextPosterior,
                     physioPeakShiftMinutes = physioMults.peakShiftMinutes,
                     sitePeakShiftMinutes = sitePeakShiftMinutes,
                     trajectoryPeakNudgeMinutes = trajectoryPeakNudgeMinutes,
                     preferences = preferences,
                     learningDiagnostics = PkpdLearningDiagnostics.from(
-                        causalStatePosterior = null,
+                        causalStatePosterior = kineticsContextPosterior,
                         allowLearning = false,
                         exerciseFlag = false,
                         iobU = iobNowForPkpd,
@@ -1467,14 +1455,27 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                         bg = bgNowForPkpd,
                         deltaMgDlPer5 = deltaNowForPkpd,
                     ),
-                ),
-            )
+                )
+            }
             val pkpdIobDataArray: Array<IobTotal>? = buildLearnedKineticsIobArray(
                 effectiveProfile = profile as EffectiveProfile,
-                learnedDiaHrs = kineticsView.effective.diaHours,
-                learnedPeakMin = kineticsView.effective.peakMinutes,
+                learnedDiaHrs = resolvedKinetics.effective.diaHours,
+                learnedPeakMin = resolvedKinetics.effective.peakMinutes,
             )
-            kineticsView.diaGovernor?.logLine?.let { line -> aapsLogger.debug(LTag.APS, line) }
+            val kineticsView = resolvedKinetics.copy(
+                predictionIobArray = pkpdIobDataArray ?: iobArray,
+                predictionUsesLearnedKinetics = pkpdIobDataArray != null,
+            )
+            val peakGovernorForActivity = kineticsView.peakGovernor
+            aapsLogger.debug(
+                LTag.APS,
+                "PK/PD kinetics: DIA=${aimiFmt2(kineticsView.effective.diaHours)}h " +
+                    "peak=${aimiFmt1(kineticsView.effective.peakMinutes)}m " +
+                    "(no context: DIA=${aimiFmt2(kineticsView.noContextEffective.diaHours)}h " +
+                    "peak=${aimiFmt1(kineticsView.noContextEffective.peakMinutes)}m) " +
+                    "context=${kineticsView.contextReason}",
+            )
+            kineticsView.diaGovernor.logLine?.let { line -> aapsLogger.debug(LTag.APS, line) }
             peakGovernorForActivity.logLine?.let { line -> aapsLogger.debug(LTag.APS, line) }
             preferences.put(
                 AimiStringKey.OApsAIMIPkpdLastPeakGovLogLine,
@@ -1773,7 +1774,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 pkpd_iob_data_array = pkpdIobDataArray,
                 effective_dia_hours = kineticsView.effective.diaHours,
                 effective_peak_minutes = kineticsView.effective.peakMinutes,
-                extraDebug = physioMults.detailedReason
+                extraDebug = physioMults.detailedReason,
+                kinetics_view = kineticsView,
             ).also {
                 // Parity capture: records this tick's inputs + RT for byte-for-byte
                 // replay. Off by default: the expert preference AimiParityCaptureEnable is false.

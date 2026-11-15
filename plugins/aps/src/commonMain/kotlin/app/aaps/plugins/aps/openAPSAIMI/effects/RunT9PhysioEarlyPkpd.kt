@@ -4,17 +4,13 @@ import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
 import app.aaps.core.interfaces.aps.OapsProfileAimi
 import app.aaps.core.interfaces.aps.RT
 import app.aaps.core.keys.BooleanKey
-import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt3
 import app.aaps.plugins.aps.openAPSAIMI.inflammatory.InflammationAdjuster
 import app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey
-import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioMultipliersMTR
-import app.aaps.plugins.aps.openAPSAIMI.pkpd.CausalKineticsModulator
-import app.aaps.plugins.aps.openAPSAIMI.pkpd.DiaGovernor
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
 
 /** `activePlugin.activeBgSource` class name. Throws on failure; the caller logs and treats it as not G6. */
@@ -69,7 +65,6 @@ internal interface AimiT9State {
     fun maxSmbHb(): Double
     fun setMaxSmbHb(value: Double)
     fun setInflammation(result: InflammationAdjuster.InflammationResult)
-    fun causalPosterior(): CausalStatePosterior?
 }
 
 internal data class AimiT9PhysioPkpdTubeBootstrap(
@@ -162,22 +157,6 @@ internal fun decideT9PhysioEarlyPkpd(
         )
     }
     val pumpAgeDays = pumpAge.days()
-    val causalMod = CausalKineticsModulator.modulate(state.causalPosterior())
-    val pkpdNow = state.pkpdRuntime()
-    if (preferences.get(BooleanKey.OApsAIMIDiaGovernorEnabled)) {
-        DiaGovernor.resolve(
-            profileDiaHours = profile.dia,
-            contextualDiaShiftHours = causalMod.diaShiftHours,
-            pkpdLearnedDiaHours = pkpdNow?.params?.diaHrs,
-            pkpdEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEnabled),
-            governorEnabled = true,
-            diaMinBound = preferences.get(DoubleKey.OApsAIMIPkpdBoundsDiaMinH),
-            diaMaxBound = preferences.get(DoubleKey.OApsAIMIPkpdBoundsDiaMaxH),
-            learnedBlendWeight = preferences.get(DoubleKey.OApsAIMIDiaGovernorLearnedWeight),
-        )
-    } else {
-        pkpdNow?.params?.diaHrs ?: profile.dia
-    }
     val peakGovLine = preferences.get(AimiStringKey.OApsAIMIPkpdLastPeakGovLogLine)
     if (peakGovLine.isNotBlank()) {
         val alreadyEchoed = preferences.get(AimiStringKey.OApsAIMIPkpdLastPeakGovConsoleEchoed)

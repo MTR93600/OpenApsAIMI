@@ -4909,7 +4909,6 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMIPkpdHyperReversion value=false
             READ key=BooleanKey.OApsAIMIPkpdStackAwareGuardB value=false
             READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
-            READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
             READ key=AimiStringKey.OApsAIMIPkpdLastPeakGovLogLine value=
             READ key=BooleanKey.OApsAIMIautoDriveActive value=true
             READ key=BooleanKey.OApsAIMIhoneymoon value=false
@@ -5214,7 +5213,6 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMIPkpdHyperReversion value=false
             READ key=BooleanKey.OApsAIMIPkpdStackAwareGuardB value=false
             READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
-            READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
             READ key=AimiStringKey.OApsAIMIPkpdLastPeakGovLogLine value=
             READ key=BooleanKey.OApsAIMIautoDriveActive value=true
             READ key=BooleanKey.OApsAIMIhoneymoon value=false
@@ -5610,7 +5608,6 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMIPkpdHyperReversion value=false
             READ key=BooleanKey.OApsAIMIPkpdStackAwareGuardB value=false
             READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
-            READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
             READ key=AimiStringKey.OApsAIMIPkpdLastPeakGovLogLine value=
             READ key=BooleanKey.OApsAIMIautoDriveActive value=false
             READ key=BooleanKey.OApsAIMIhoneymoon value=false
@@ -5819,7 +5816,6 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMIPkpdHyperReversion value=false
             READ key=BooleanKey.OApsAIMIPkpdStackAwareGuardB value=false
             READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
-            READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
             READ key=AimiStringKey.OApsAIMIPkpdLastPeakGovLogLine value=
             READ key=BooleanKey.OApsAIMIautoDriveActive value=false
             READ key=BooleanKey.OApsAIMIhoneymoon value=false
@@ -6018,7 +6014,6 @@ READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
 READ key=BooleanKey.OApsAIMIPkpdHyperReversion value=false
 READ key=BooleanKey.OApsAIMIPkpdStackAwareGuardB value=false
 READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
-READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
 READ key=AimiStringKey.OApsAIMIPkpdLastPeakGovLogLine value=
 READ key=BooleanKey.OApsAIMIautoDriveActive value=false
 READ key=BooleanKey.OApsAIMIhoneymoon value=false
@@ -6117,7 +6112,6 @@ READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
 READ key=BooleanKey.OApsAIMIPkpdHyperReversion value=false
 READ key=BooleanKey.OApsAIMIPkpdStackAwareGuardB value=false
 READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
-READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
 READ key=AimiStringKey.OApsAIMIPkpdLastPeakGovLogLine value=
 READ key=BooleanKey.OApsAIMIautoDriveActive value=false
 READ key=BooleanKey.OApsAIMIhoneymoon value=false
@@ -6917,7 +6911,6 @@ Failed to save AIMI Decision JSON: lateinit property appendCap has not been init
             LOG PKPD_SOFT_FLOOR: raw=160 soft=160 hybT=227 hitFloor=false applied=false endo=false fallSuppressed=false reason=endo_reversion_disabled
             LOG PKPD predictions → eventual=228 mg/dL from 49 steps uamT=231 pathMinRaw=160 pathMinClamp=160
             LOG 🏥 PHYSIO APPLIED: MaxSMB=1.08 MaxBasal=1.00
-            READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
             READ key=AimiStringKey.OApsAIMIPkpdLastPeakGovLogLine value=
         """.trimIndent()
 
@@ -6999,7 +6992,6 @@ Failed to save AIMI Decision JSON: lateinit property appendCap has not been init
             READ key=BooleanKey.OApsAIMIPkpdEndogenousReversion value=false
             LOG PKPD_SOFT_FLOOR: raw=110 soft=110 hybT=110 hitFloor=false applied=false endo=false fallSuppressed=false reason=endo_reversion_disabled
             LOG PKPD predictions → eventual=110 mg/dL from 49 steps uamT=110 pathMinRaw=110 pathMinClamp=110
-            READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
             READ key=AimiStringKey.OApsAIMIPkpdLastPeakGovLogLine value=
         """.trimIndent()
 

@@ -28,6 +28,11 @@ data class AimiTickContext(
     /** TAP-D + TAP-G effective kinetics from [InsulinKineticsAuthority] (plugin invoke). */
     val effectiveDiaHours: Double? = null,
     val effectivePeakMinutes: Double? = null,
+    /**
+     * The whole kinetics view that dosed, resolved once by the plugin. Null for callers that pass
+     * only the numbers above (replay engine, simulator).
+     */
+    val kineticsView: InsulinKineticsView? = null,
     val profile: OapsProfileAimi,
     val autosensData: AutosensResult,
     val mealData: MealData,

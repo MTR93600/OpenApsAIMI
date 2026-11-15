@@ -394,13 +394,13 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLogRow
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.IsfTddProvider
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PredictionPhysioModulationResolver
-import app.aaps.plugins.aps.openAPSAIMI.pkpd.CausalKineticsModulator
-import app.aaps.plugins.aps.openAPSAIMI.pkpd.DiaGovernor
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.CausalKineticsContextMemory
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinKineticsAuthority
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdLearningDiagnostics
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.TapSitePeakShift
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiIntelligenceSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiIntelligenceSnapshotBuilder
+import app.aaps.plugins.aps.openAPSAIMI.orchestration.InsulinKineticsView
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiAdaptationStatusBuilder
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.IntelligenceSnapshotJson
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.DoseTerminalSnapshot
@@ -532,6 +532,7 @@ import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleFacade
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiDetermineBasalTickOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiLoopTickRecovery
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiTickContext
+import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientMode
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientModeOrchestrator
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientEventMemory
@@ -1801,7 +1802,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             override fun setInflammation(result: app.aaps.plugins.aps.openAPSAIMI.inflammatory.InflammationAdjuster.InflammationResult) {
                 work.lastInflammationResult = result
             }
-            override fun causalPosterior() = work.lastPatientState?.causalPosterior
         },
         g6 = AimiT9G6Source {
             val name = activePlugin.activeBgSource::class.simpleName ?: ""
@@ -7045,7 +7045,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         pkpdRuntime: PkPdRuntime?,
     ): AimiIntelligenceSnapshot? {
         val effectiveProfile = effectiveProfileCached(ctx.currentTime) ?: return null
-        val physioMults = work.lastFusedPhysioMultipliers ?: work.lastBasePhysioMultipliers
         val learningDiagnostics = PkpdLearningDiagnostics.from(
             causalStatePosterior = work.lastPatientState?.causalPosterior,
             // Signal-prep is the one learning path of the tick and it always learns, so the
@@ -7061,22 +7060,54 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         return AimiIntelligenceSnapshotBuilder.build(
             AimiIntelligenceSnapshotBuilder.BuildInput(
                 timestampMs = ctx.currentTime,
-                accountingIobArray = ctx.iobDataArray,
+                dosingKinetics = ctx.kineticsView ?: kineticsFromDosingValues(ctx, profile, effectiveProfile.iCfg?.peak, pkpdRuntime),
                 profile = profile,
-                effectiveProfile = effectiveProfile,
                 pkpdRuntime = pkpdRuntime,
-                peakGovernor = null,
                 causalPosterior = work.lastPatientState?.causalPosterior,
-                physioPeakShiftMinutes = physioMults.peakShiftMinutes,
-                // Site branch: the snapshot used to leave this at its 0.0 default, so the peak
-                // governor always reported site=0.0. The cannula age is already cached here.
-                sitePeakShiftMinutes = TapSitePeakShift.minutesForSiteAge(pumpAgeDaysCached()),
-                preferences = preferences,
-                iobCobCalculator = iobCobCalculator,
-                pkpdPredictionIobArray = ctx.pkpdIobDataArray,
                 learningDiagnostics = learningDiagnostics,
                 predictionAuthority = work.lastDecisionPredictionAuthority,
             ),
+        )
+    }
+
+    /**
+     * For callers that pass only the dosing numbers and not the kinetics view (replay engine,
+     * simulator). The log must still show the DIA and peak that dosed, so they are taken from [ctx]
+     * as they are; when [ctx] has none, dosing used the profile values, and so does the log.
+     */
+    private fun kineticsFromDosingValues(
+        ctx: AimiTickContext,
+        profile: OapsProfileAimi,
+        profileInsulinPeakMinutes: Int?,
+        pkpdRuntime: PkPdRuntime?,
+    ): InsulinKineticsView {
+        val physioMults = work.lastFusedPhysioMultipliers ?: work.lastBasePhysioMultipliers
+        val resolved = InsulinKineticsAuthority.resolve(
+            InsulinKineticsAuthority.ResolveInput(
+                accountingIobArray = ctx.iobDataArray,
+                profileDiaHours = profile.dia,
+                profilePeakMinutes = profileInsulinPeakMinutes ?: profile.peakTime.toInt(),
+                pkpdRuntime = pkpdRuntime,
+                causalPosterior = null,
+                physioPeakShiftMinutes = physioMults.peakShiftMinutes,
+                sitePeakShiftMinutes = TapSitePeakShift.minutesForSiteAge(pumpAgeDaysCached()),
+                preferences = preferences,
+                learningDiagnostics = PkpdLearningDiagnostics.from(
+                    causalStatePosterior = null,
+                    allowLearning = false,
+                    exerciseFlag = false,
+                    iobU = 0.0,
+                    carbsActiveG = 0.0,
+                    bg = ctx.glucoseStatus.glucose,
+                    deltaMgDlPer5 = ctx.glucoseStatus.delta,
+                ),
+                predictionIobArray = ctx.pkpdIobDataArray,
+            ),
+        )
+        return InsulinKineticsAuthority.fromDosingValues(
+            resolved = resolved,
+            diaHours = ctx.effectiveDiaHours ?: profile.dia,
+            peakMinutes = ctx.effectivePeakMinutes ?: profile.peakTime,
         )
     }
 
@@ -7454,10 +7485,15 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     put("insulin_kinetics_context", JsonObj().apply {
                         put("effective_dia_h", snap.kinetics.effective.diaHours)
                         put("effective_peak_min", snap.kinetics.effective.peakMinutes)
+                        put("effective_dia_no_context_h", snap.kinetics.noContextEffective.diaHours)
+                        put("effective_peak_no_context_min", snap.kinetics.noContextEffective.peakMinutes)
+                        // Context that shifted the DIA/peak that dosed: posterior of the previous tick.
+                        put("kinetics_context_reason", snap.kinetics.contextReason)
                         put("structural_dia_h", snap.kinetics.structural.diaHrs)
                         put("structural_peak_min", snap.kinetics.structural.peakMin)
                         put("learning_gate_pass", snap.kinetics.learning.learningGatePass)
-                        put("causal_modulation", snap.causal.causalModulationReason)
+                        // Posterior of this tick: it doses only from the next tick on.
+                        put("causal_modulation_this_tick", snap.causal.causalModulationReason)
                     })
                 }
             }.build()
@@ -8656,6 +8692,26 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     /** PKPD vs scenario divergence audit of the current tick (PredictionDivergenceAuditor). */
     private var lastPredDivergenceExport: JsonObject? = null
     private var lastIntelligenceSnapshot: AimiIntelligenceSnapshot? = null
+
+    /** Causal posterior of the last tick, for the kinetics of the next one. */
+    private val kineticsContextMemory = CausalKineticsContextMemory()
+
+    /**
+     * Resolves the DIA and peak that dose the tick at [nowMs]. [inputFor] builds the resolve input from
+     * the causal posterior of the previous tick, which is null on the first tick, after a tick that
+     * failed or had none, or when it is too old. See [CausalKineticsContextMemory].
+     */
+    fun resolveDosingKinetics(
+        nowMs: Long,
+        inputFor: (CausalStatePosterior?) -> InsulinKineticsAuthority.ResolveInput,
+    ): InsulinKineticsView = InsulinKineticsAuthority.resolve(inputFor(kineticsContextMemory.forTickAt(nowMs)))
+
+    /**
+     * Runs one tick and keeps the causal posterior of its patient state for the kinetics of the next
+     * tick. A tick that throws keeps no posterior.
+     */
+    internal fun <T> runTickKeepingKineticsContext(tickTimeMs: Long, tick: () -> T): T =
+        kineticsContextMemory.runTick(tickTimeMs, posteriorAfterTick = { work.lastPatientState?.causalPosterior }, tick = tick)
     /** Cascade D4 / C1 — single dose terminal pair for the tick (post-Authority + thin Clamp). */
     private var lastDoseTerminalSnapshot: DoseTerminalSnapshot? = null
 
@@ -14505,7 +14561,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         pkpd_iob_data_array: Array<IobTotal>? = null,
         effective_dia_hours: Double? = null,
         effective_peak_minutes: Double? = null,
-        extraDebug: String = ""
+        extraDebug: String = "",
+        kinetics_view: InsulinKineticsView? = null,
     ): RT {
         // Sync legacy prebolus latch into causal state for the replay harness.
         // Transitional: the getters below read preferences (shell concern).
@@ -14522,6 +14579,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             pkpdIobDataArray = pkpd_iob_data_array,
             effectiveDiaHours = effective_dia_hours,
             effectivePeakMinutes = effective_peak_minutes,
+            kineticsView = kinetics_view,
             profile = profile,
             autosensData = autosens_data,
             mealData = mealData,
@@ -14577,7 +14635,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             work = AimiTickWorkingState()
             carryOverFromPreviousTick(previousTick, work)
             work.smbSwitchOnThisTick = ctx.microBolusAllowed
-            AimiDetermineBasalTickOrchestrator.run(this, ctx)
+            // The next tick resolves its kinetics with the posterior of this one.
+            runTickKeepingKineticsContext(ctx.currentTime) { AimiDetermineBasalTickOrchestrator.run(this, ctx) }
         }
     }
 

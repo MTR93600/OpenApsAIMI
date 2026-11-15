@@ -216,6 +216,7 @@ class AimiAdaptationStatusBuilderTest {
                 peakPhysio = 2.0,
                 peakSite = 1.0,
                 peakTrajectory = 0.0,
+                peakContext = 0.0,
                 peakLearned = 70.0,
                 dominantBranch = "LEARNED",
                 logLine = null,

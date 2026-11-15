@@ -57,7 +57,7 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
 |---|---|---|
 | P1 | One kinetics resolution for dosing and log, causal posterior of the previous tick | changes |
 | P2 | Profile insulin as seed/anchor/bounds, re-seed on insulin change, faster pace, remove Initial/Anchor/Bounds keys and presets, migration | changes |
-| P3 | PKPD cleanup: state keys out of settings, dead PKPD keys and constants, Advisor rules that wrote Initial*, dead DIA governor call in `RunT9PhysioEarlyPkpd`, exercise damping floor, PKPD status card | small (floor) |
+| P3 | PKPD cleanup: state keys out of settings, dead PKPD keys and constants, Advisor rules that wrote Initial*, exercise damping floor (the dead DIA governor call in `RunT9PhysioEarlyPkpd` was removed in P1), PKPD status card | small (floor) |
 | T1 | TPO: meal factor ladder on the percent scale; a "step down" never raises a value and moves one rung at most; Advisor and Tuning on the percent scale | changes (protective size as designed) |
 | C1 | Control Center disarmed: dose limit keys out of the ladders, manifest writer facts, no write on open; the runtime profile no longer reads the display level (neutral constants) | small |
 | S1 | Settings row component (hint, "?" sheet with default and warnings, bounded values) and the Essentials page | none |
