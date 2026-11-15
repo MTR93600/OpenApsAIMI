@@ -397,6 +397,7 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.PredictionPhysioModulationResolver
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.CausalKineticsContextMemory
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinKineticsAuthority
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdLearningDiagnostics
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.ProfileInsulin
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.TapSitePeakShift
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiIntelligenceSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiIntelligenceSnapshotBuilder
@@ -1872,6 +1873,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 patientEventMemory = work.lastPatientState?.eventMemory,
                 allowLearning = allowLearning,
                 isfRateLimitAuthority = false,
+                profileInsulin = profileInsulinOf(ctx),
             )
         },
         predictions = AimiT9Predictions { earlySens, pkpdRuntime ->
@@ -7037,6 +7039,17 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
     /**
+     * Insulin of the running profile for the PK/PD learner: the values the plugin resolved the kinetics
+     * with, else the profile DIA and the `iCfg` peak. `null` when neither is known; the learner then
+     * uses the last profile insulin it saw.
+     */
+    private fun profileInsulinOf(ctx: AimiTickContext): ProfileInsulin? {
+        ctx.kineticsView?.effective?.let { return ProfileInsulin.of(it.profileDiaHours, it.profilePeakMinutes.toDouble()) }
+        val peak = effectiveProfileCached(ctx.currentTime)?.iCfg?.peak ?: return null
+        return ProfileInsulin.of(ctx.profile.dia, peak.toDouble())
+    }
+
+    /**
      * Builds the unified intelligence snapshot for JSONL export and downstream consumers.
      */
     private fun buildIntelligenceSnapshot(
@@ -8131,6 +8144,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 override fun causalPosterior() = work.lastPatientState?.causalPosterior
                 override fun eventMemory() = work.lastPatientState?.eventMemory
                 override fun declaredMeal() = work.lastDeclaredMeal
+                override fun profileInsulin() = profileInsulinOf(ctx)
                 override fun logPkpdRuntimeFailure(error: Exception) {
                     work.consoleError.add("❌ PKPD runtime failed: ${error.message}")
                     aapsLogger.error(LTag.APS, "PKPD computeRuntime failed", error)
@@ -9567,6 +9581,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 physioLatentState = physioLatentStateProvider(),
                 estimatedRaMgdlPerMin = estimatedRaProvider()?.takeIf { it.isFinite() && it > 0.0 },
                 allowLearning = false,
+                // Read-only: the last profile insulin the loop saw.
+                profileInsulin = null,
             )
             return if (rt != null) {
                 PkpdPort.Snapshot(
@@ -9602,7 +9618,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                                                     patientWeightKg = patientWeightKgProvider(),
                                                     physioLatentState = physioLatentStateProvider(),
                                                     estimatedRaMgdlPerMin = estimatedRaProvider()?.takeIf { it.isFinite() && it > 0.0 },
-                                                    allowLearning = false)
+                                                    allowLearning = false,
+                                                    // Read-only: the last profile insulin the loop saw.
+                                                    profileInsulin = null)
 
             val damping = SmbDampingUsecase.run(
                 rt,

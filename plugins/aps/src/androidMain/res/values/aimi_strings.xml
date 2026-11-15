@@ -60,10 +60,6 @@
 
 <string name="aimi_pkpd_enabled_simple_summary">Learns how fast your insulin works and improves SMB timing. Leave on unless support advises otherwise.</string>
 
-<string name="aimi_pkpd_preset_simple_hint">Pick the insulin you actually use. AIMI sets learning limits automatically.</string>
-
-<string name="aimi_pkpd_custom_use_advanced">Custom tuning is in the Advanced tab.</string>
-
 <string name="aimi_pkpd_prudence_corrections_title">Correction aggressiveness</string>
 
 <string name="aimi_pkpd_prudence_corrections_summary">Left reduces correction strength; right increases it (ISF fusion headroom).</string>
@@ -100,7 +96,7 @@
 
 <string name="aimi_pkpd_advisor_applied">Suggestion applied</string>
 
-<string name="aimi_pkpd_advanced_intro">Adjust starting values and learning speed. Bounds come from your insulin preset unless you use Custom.</string>
+<string name="aimi_pkpd_advanced_intro">Choose how fast AIMI learns. The DIA and peak start from the insulin of your profile and stay close to it.</string>
 
 <string name="aimi_pkpd_learning_pace_title">Learning speed</string>
 
@@ -110,19 +106,13 @@
 
 <string name="aimi_pkpd_pace_fast">Fast</string>
 
-<string name="aimi_pkpd_starting_dia_title">Starting DIA before learning (h)</string>
-
-<string name="aimi_pkpd_starting_peak_title">Starting peak time before learning (min)</string>
-
-<string name="aimi_pkpd_custom_bounds_title">Manual bounds and anchors</string>
-
-<string name="aimi_pkpd_bounds_from_preset">Min/max DIA and peak are set by your insulin preset.</string>
+<string name="aimi_pkpd_pace_faster">Faster</string>
 
 <string name="aimi_pkpd_reset_to_profile_action">Reset learned values to profile</string>
 
 <string name="aimi_pkpd_reset_confirm_title">Reset learned DIA and peak?</string>
 
-<string name="aimi_pkpd_reset_confirm_body">This aligns loop state to your starting values and preset bounds. Use after changing insulin type.</string>
+<string name="aimi_pkpd_reset_confirm_body">The learned DIA and peak start again from the insulin of your profile. This happens on the next loop. AIMI also does this by itself when you change the insulin in your profile.</string>
 
 <string name="aimi_pkpd_reset_confirm_ok">Reset</string>
 
@@ -132,15 +122,11 @@
 
 <string name="aimi_pkpd_expert_smb_tail">SMB tail (raw)</string>
 
-<string name="aimi_pkpd_wizard_step_insulin_title">Step 1 — Your insulin</string>
+<string name="aimi_pkpd_wizard_step_profile_title">Step 1 — Your profile insulin</string>
 
-<string name="aimi_pkpd_wizard_step_insulin_body">Which rapid insulin do you use? AIMI will set safe learning limits for that family.</string>
+<string name="aimi_pkpd_wizard_step_profile_body">Your AAPS profile insulin has a DIA of about %1$.1f h. AIMI starts from your profile insulin and learns from there. It stays close to it: DIA from 0.75 to 1.25 times, peak from 0.75 to 1.35 times (never below 35 min). When you change the insulin in your profile, learning starts again.</string>
 
-<string name="aimi_pkpd_wizard_step_profile_title">Step 2 — Profile vs learning</string>
-
-<string name="aimi_pkpd_wizard_step_profile_body">Your AAPS profile DIA is about %1$.1f h. AIMI may learn a shorter DIA if your real action is faster (common with Lyumjev/Fiasp).</string>
-
-<string name="aimi_pkpd_wizard_step_patience_title">Step 3 — Let it learn</string>
+<string name="aimi_pkpd_wizard_step_patience_title">Step 2 — Let it learn</string>
 
 <string name="aimi_pkpd_wizard_step_patience_body">Keep PKPD on and avoid changing sliders for several days. Check the status card: learned DIA and peak should gradually move toward your real insulin.</string>
 
@@ -168,21 +154,9 @@
 
 <string name="aimi_peak_gov_advice_generic">Advisor: dominant branch %1$s — see numeric breakdown above.</string>
 
-<string name="aimi_pkpd_preset_section_title">Insulin profile preset</string>
-
-<string name="aimi_pkpd_preset_ultra_fast">Ultra-fast (e.g. Fiasp / Lyumjev)</string>
-
-<string name="aimi_pkpd_preset_rapid">Rapid (e.g. Humalog / NovoRapid)</string>
-
-<string name="aimi_pkpd_preset_standard">Standard / slower</string>
-
-<string name="aimi_pkpd_preset_custom">Custom (adjust sliders below)</string>
-
-<string name="aimi_pkpd_preset_applied">Insulin profile applied</string>
-
 <string name="aimi_pkpd_sync_state_action">Align loop state to initial &amp; bounds</string>
 
-<string name="aimi_pkpd_sync_done">Loop DIA and peak aligned to initial values and bounds.</string>
+<string name="aimi_pkpd_sync_done">Learned DIA and peak will start again from your profile insulin on the next loop.</string>
 
 <string name="aimi_dyn_isf_trajectory_section_title">DynISF trajectory (CGM geometry)</string>
 
@@ -196,30 +170,6 @@
 
 <string name="oaps_aimi_pkpd_enabled_summary">Learn DIA and peak time continuously to refine AIMI dosing.</string>
 
-<string name="oaps_aimi_pkpd_initial_dia_title">Initial DIA (h)</string>
-
-<string name="oaps_aimi_pkpd_initial_dia_summary">Starting duration of insulin action used when learning begins.</string>
-
-<string name="oaps_aimi_pkpd_initial_peak_title">Initial peak time (min)</string>
-
-<string name="oaps_aimi_pkpd_initial_peak_summary">Starting peak action time for insulin activity.</string>
-
-<string name="oaps_aimi_pkpd_dia_min_title">Minimum DIA (h)</string>
-
-<string name="oaps_aimi_pkpd_dia_min_summary">Lower bound for the learned duration of insulin action.</string>
-
-<string name="oaps_aimi_pkpd_dia_max_title">Maximum DIA (h)</string>
-
-<string name="oaps_aimi_pkpd_dia_max_summary">Upper bound for the learned duration of insulin action.</string>
-
-<string name="oaps_aimi_pkpd_peak_min_title">Minimum peak time (min)</string>
-
-<string name="oaps_aimi_pkpd_peak_min_summary">Lower bound for the learned insulin peak time.</string>
-
-<string name="oaps_aimi_pkpd_peak_max_title">Maximum peak time (min)</string>
-
-<string name="oaps_aimi_pkpd_peak_max_summary">Upper bound for the learned insulin peak time.</string>
-
 <string name="oaps_aimi_pkpd_max_dia_delta_title">Max DIA change per day (h)</string>
 
 <string name="oaps_aimi_pkpd_max_dia_delta_summary">Limits how quickly the learned DIA can change each day.</string>
@@ -227,14 +177,6 @@
 <string name="oaps_aimi_pkpd_max_peak_delta_title">Max peak change per day (min)</string>
 
 <string name="oaps_aimi_pkpd_max_peak_delta_summary">Limits how quickly the learned peak time can change each day.</string>
-
-<string name="oaps_aimi_pkpd_anchor_dia_title">Learning anchor DIA (h)</string>
-
-<string name="oaps_aimi_pkpd_anchor_dia_summary">Soft target the online learner pulls DIA toward (regularization). Use ~4 h for ultra-fast insulin.</string>
-
-<string name="oaps_aimi_pkpd_anchor_peak_title">Learning anchor peak (min)</string>
-
-<string name="oaps_aimi_pkpd_anchor_peak_summary">Soft target for learned peak time. Match your insulin (e.g. ~55 min for Lyumjev/Fiasp).</string>
 
 <string name="oaps_aimi_isf_fusion_min_title">ISF fusion minimum factor</string>
 
@@ -1314,25 +1256,13 @@
 
 <string name="aimi_pkpd_title_enable">Activation PK/PD</string>
 
-<string name="aimi_pkpd_title_dia">Durée d\'action (DIA)</string>
-
-<string name="aimi_pkpd_title_peak">Pic d\'action</string>
-
 <string name="aimi_pkpd_title_isf">Facteur Sensibilité (ISF)</string>
 
 <string name="aimi_pkpd_title_damping">Amortissement SMB</string>
 
 <string name="aimi_pkpd_advisor_disabled">PKPD désactivé alors que le TIR est faible. Activation recommandée pour apprentissage dynamique.</string>
 
-<string name="aimi_pkpd_hyper_dia">Hyperglycémies persistantes : Réduire la DIA (%1$s -> %2$sh) pour accélérer l\'action.</string>
-
-<string name="aimi_pkpd_hyper_peak">Hyperglycémies post-prandiales : Avancer le pic (%1$s min) pour plus de réactivité.</string>
-
 <string name="aimi_pkpd_hyper_isf">Résistance détectée : Augmenter la fusion ISF (Max x2.0) pour des corrections plus fortes.</string>
-
-<string name="aimi_pkpd_hypo_dia">Hypoglycémies détectées : Allonger la DIA (%1$s -> %2$sh) pour réduire l\'empilement (stacking).</string>
-
-<string name="aimi_pkpd_hypo_peak">Hypoglycémies précoces : Retarder le pic (%1$s min) pour adoucir la courbe.</string>
 
 <string name="aimi_pkpd_hypo_damping">Risque hypo : renforcer l\'amortissement de fin de DIA (plancher SMB abaissé à %1$s) pour réduire les SMB tardifs.</string>
 
@@ -2383,7 +2313,6 @@
 <string name="aimi_settings_audit_row_tags" comment="%1$s=level such as Advanced, %2$s=family such as Protection. Example: Advanced · Protection">%1$s · %2$s</string>
 <string name="aimi_settings_audit_changed_by_loop">Changed by the loop</string>
 <string name="aimi_settings_audit_changed_by_slider">Set by a slider</string>
-<string name="aimi_settings_audit_changed_by_preset">From a preset</string>
 <string name="aimi_settings_audit_changed_by_user">Changed by you</string>
 <string name="aimi_settings_audit_stored_label">Current value</string>
 <string name="aimi_settings_audit_default_label">Shipped default</string>

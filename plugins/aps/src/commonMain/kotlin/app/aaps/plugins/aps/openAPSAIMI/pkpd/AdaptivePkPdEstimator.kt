@@ -16,7 +16,23 @@ data class PkPdLearningConfig(
     val maxWindowMin: Int = 180,
     val minIOBForLearningU: Double = 0.3,
     val maxRateChangeScale: Double = 1.0,
-    val lr: Double = 0.02,
+    /**
+     * Gain of one learning step (hours for DIA, minutes for peak, before the rate cap).
+     *
+     * Raised from 0.02 to 0.04 (2026-11-15). Field data, 24 h and 286 ticks: 12 accepted steps,
+     * each DIA step capped at 0.0017 h by the NORMAL pace (0.5 h/day x 5 min) and pulled back about
+     * 0.0007 h toward an anchor below the learned value, so at most about 0.02 h/day net.
+     * The anchor is now the profile insulin and the default pace is FASTER (2 h/day, 20 min/day,
+     * cap 0.0069 h and 0.069 min per 5 min tick). For DIA the cap still binds on most ticks, so the
+     * gain matters little there. For the peak the gain is the limit, also under FASTER: at most
+     * 0.04 min per accepted step (was 0.02), below the 0.069 min cap.
+     *
+     * Realistic per-day numbers, at the field rate of about 12 accepted steps per day: DIA up to about
+     * 0.08 h/day (12 x 0.0069 h), peak up to about 0.5 min/day (12 x 0.04 min; before about 0.24).
+     * About 11.5 min/day for the peak is only the theoretical limit, if every 5 min tick of the day
+     * were accepted. Judge the daily exports against the realistic numbers.
+     */
+    val lr: Double = 0.04,
     val tailWeight: Double = 1.5,
     /** Soft regularization target for learned DIA (hours). */
     val anchorDiaHrs: Double = 4.0,

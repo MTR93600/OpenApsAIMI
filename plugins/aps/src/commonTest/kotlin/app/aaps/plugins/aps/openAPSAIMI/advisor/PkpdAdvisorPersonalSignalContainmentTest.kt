@@ -61,12 +61,8 @@ class PkpdAdvisorPersonalSignalContainmentTest {
 
     private fun pkpd() = PkpdPrefsSnapshot(
         pkpdEnabled = true,
-        initialDiaH = 7.0,
-        initialPeakMin = 60.0,
-        boundsDiaMinH = 5.0,
-        boundsDiaMaxH = 9.0,
-        boundsPeakMinMin = 45.0,
-        boundsPeakMinMax = 75.0,
+        learnedDiaH = 7.0,
+        learnedPeakMin = 60.0,
         maxDiaChangePerDayH = 0.5,
         maxPeakChangePerDayMin = 5.0,
         isfFusionMinFactor = 0.7,

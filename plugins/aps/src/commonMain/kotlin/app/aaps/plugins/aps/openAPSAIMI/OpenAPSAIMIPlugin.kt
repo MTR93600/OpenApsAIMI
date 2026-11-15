@@ -140,6 +140,7 @@ import kotlin.math.max
 import app.aaps.plugins.aps.openAPSAIMI.ISF.IsfBlender
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.IsfFusion
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.IsfFusionBounds
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.ProfileInsulin
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinActivityStage
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.InsulinKineticsAuthority
@@ -1271,6 +1272,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 // own the slew anchor or the limiter stays inert. Without it the 0.45-1.40 per-tick
                 // ISF limit never applied on this branch (dev_OAPSAIMI parity, 2026-10-26).
                 isfRateLimitAuthority = true,
+                // The running profile insulin: seed, anchor and bounds of the learner. A new insulin
+                // here starts the learned state again from these values.
+                profileInsulin = ProfileInsulin.of(eff.iCfg.dia, profile.iCfg.peak.toDouble()),
             )
             lastPkpdScale = pkpdRuntimeForActivity?.pkpdScale ?: 1.0
 

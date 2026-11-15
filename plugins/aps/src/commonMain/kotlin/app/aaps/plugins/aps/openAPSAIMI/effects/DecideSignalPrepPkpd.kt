@@ -27,6 +27,7 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.MealAggressionContext
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdIntegration
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdBolusSample
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.ProfileInsulin
 import app.aaps.plugins.aps.openAPSAIMI.valueOrNull
 
 /**
@@ -96,6 +97,8 @@ internal interface AimiSignalPrepPkpdCalls {
     fun eventMemory(): PatientEventMemory?
     /** Last declared meal note (up to 5 h back), `null` when none. Feeds the PK/PD curve learning gate only. */
     fun declaredMeal(): Therapy.DeclaredMeal?
+    /** Insulin of the running profile: seed, anchor and bounds of the PK/PD learner. */
+    fun profileInsulin(): ProfileInsulin?
     /** Keeps the original error log and writes the visible decision line. */
     fun logPkpdRuntimeFailure(error: Exception)
     fun setCachedPkpdRuntime(runtime: PkPdRuntime)
@@ -262,6 +265,7 @@ internal fun decideSignalPreparationPkpdRuntime(
             allowLearning = true,
             declaredMealAgeMin = declaredMeal?.ageMin,
             declaredMealHighCarb = declaredMeal?.highCarb == true,
+            profileInsulin = calls.profileInsulin(),
         )
     } catch (e: Exception) {
         calls.logPkpdRuntimeFailure(e)

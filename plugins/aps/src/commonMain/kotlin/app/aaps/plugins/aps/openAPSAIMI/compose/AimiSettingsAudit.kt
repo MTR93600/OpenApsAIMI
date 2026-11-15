@@ -29,7 +29,6 @@ import kotlin.math.abs
 internal enum class AimiSettingsAuditChangedBy {
     LOOP,
     SLIDER,
-    PRESET,
     USER,
 }
 
@@ -158,7 +157,6 @@ internal object AimiSettingsAudit {
     private fun changedByOf(writers: Set<AimiSettingsWriter>): AimiSettingsAuditChangedBy = when {
         AimiSettingsWriter.LOOP in writers   -> AimiSettingsAuditChangedBy.LOOP
         AimiSettingsWriter.SLIDER in writers -> AimiSettingsAuditChangedBy.SLIDER
-        AimiSettingsWriter.PRESET in writers -> AimiSettingsAuditChangedBy.PRESET
         else                                 -> AimiSettingsAuditChangedBy.USER
     }
 

@@ -78,47 +78,9 @@ class PkpdAdvisor {
         // Never run hypo + hyper blocks together: same knob would get contradictory +0.5 / -0.5 DIA recommendations.
         if (mode == PkpdMode.HYPER_DOMINANT) {
 
-            // A) DIA too long? Only suggest if well above the lower bound.
-            if (pkpd.initialDiaH > pkpd.boundsDiaMinH + 1.0) { // was +0.5
-                val newDia = max(pkpd.boundsDiaMinH, pkpd.initialDiaH - 0.5)
-                val explanation = rh.gs(ApsStrings.aimi_pkpd_hyper_dia, pkpd.initialDiaH.toString(), newDia.toString())
-                val action = AimiAction.PreferenceUpdate(
-                    key = app.aaps.core.keys.DoubleKey.OApsAIMIPkpdInitialDiaH,
-                    newValue = newDia,
-                    reason = explanation,
-                    domain = AimiDomain.Pkpd,
-                    priority = AimiPriority.Medium
-                )
-                suggestions += AimiRecommendation(
-                    title = ApsStrings.aimi_pkpd_title_dia,
-                    description = ApsStrings.aimi_pkpd_hyper_dia,
-                    priority = AimiPriority.Medium,
-                    domain = AimiDomain.Pkpd,
-                    action = action,
-                    descriptionArgs = listOf(pkpd.initialDiaH.toString(), newDia.toString())
-                )
-            }
-
-            // B) Peak too late? Only suggest if well above the lower bound.
-            if (pkpd.initialPeakMin > pkpd.boundsPeakMinMin + 10) { // was +5
-                val newPeak = max(pkpd.boundsPeakMinMin, pkpd.initialPeakMin - 5.0)
-                val explanation = rh.gs(ApsStrings.aimi_pkpd_hyper_peak, newPeak.toString())
-                val action = AimiAction.PreferenceUpdate(
-                    key = app.aaps.core.keys.DoubleKey.OApsAIMIPkpdInitialPeakMin,
-                    newValue = newPeak,
-                    reason = explanation,
-                    domain = AimiDomain.Pkpd,
-                    priority = AimiPriority.Medium
-                )
-                suggestions += AimiRecommendation(
-                    title = ApsStrings.aimi_pkpd_title_peak,
-                    description = ApsStrings.aimi_pkpd_hyper_peak,
-                    priority = AimiPriority.Medium,
-                    domain = AimiDomain.Pkpd,
-                    action = action,
-                    descriptionArgs = listOf(newPeak.toString())
-                )
-            }
+            // The DIA and peak rules that wrote OApsAIMIPkpdInitialDiaH / OApsAIMIPkpdInitialPeakMin
+            // were removed: those keys never changed dosing, and the learner now starts from the
+            // profile insulin.
 
             // C) ISF Fusion too restrictive?
             if (pkpd.isfFusionMaxFactor < 1.4) {
@@ -171,47 +133,7 @@ class PkpdAdvisor {
         // Default threshold 7% <70. When OREF marks hypo priority and data are usable, allow ~5.5% + corroboration.
         if (mode == PkpdMode.HYPO_DOMINANT) {
 
-            // A) DIA too short? Only suggest if well below the upper bound.
-            if (pkpd.initialDiaH < pkpd.boundsDiaMaxH - 1.0) { // was -0.5
-                val newDia = min(pkpd.boundsDiaMaxH, pkpd.initialDiaH + 0.5)
-                val explanation = rh.gs(ApsStrings.aimi_pkpd_hypo_dia, pkpd.initialDiaH.toString(), newDia.toString())
-                val action = AimiAction.PreferenceUpdate(
-                    key = app.aaps.core.keys.DoubleKey.OApsAIMIPkpdInitialDiaH,
-                    newValue = newDia,
-                    reason = explanation,
-                    domain = AimiDomain.Pkpd,
-                    priority = AimiPriority.Critical
-                )
-                suggestions += AimiRecommendation(
-                    title = ApsStrings.aimi_pkpd_title_dia,
-                    description = ApsStrings.aimi_pkpd_hypo_dia,
-                    priority = AimiPriority.Critical,
-                    domain = AimiDomain.Pkpd,
-                    action = action,
-                    descriptionArgs = listOf(pkpd.initialDiaH.toString(), newDia.toString())
-                )
-            }
-
-            // B) Peak too early? Only suggest if well below the upper bound.
-            if (pkpd.initialPeakMin < pkpd.boundsPeakMinMax - 10) { // was -5
-                val newPeak = min(pkpd.boundsPeakMinMax, pkpd.initialPeakMin + 5.0)
-                val explanation = rh.gs(ApsStrings.aimi_pkpd_hypo_peak, newPeak.toString())
-                val action = AimiAction.PreferenceUpdate(
-                    key = app.aaps.core.keys.DoubleKey.OApsAIMIPkpdInitialPeakMin,
-                    newValue = newPeak,
-                    reason = explanation,
-                    domain = AimiDomain.Pkpd,
-                    priority = AimiPriority.Critical
-                )
-                suggestions += AimiRecommendation(
-                    title = ApsStrings.aimi_pkpd_title_peak,
-                    description = ApsStrings.aimi_pkpd_hypo_peak,
-                    priority = AimiPriority.Critical,
-                    domain = AimiDomain.Pkpd,
-                    action = action,
-                    descriptionArgs = listOf(newPeak.toString())
-                )
-            }
+            // The DIA and peak rules were removed here too (see the hyper block).
 
             // C) Tail damping too weak for the hypo pattern?
             // Stored pref is a multiplicative FLOOR (lower = stronger damping): strengthening the guard means LOWERING the floor.

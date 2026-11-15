@@ -46,11 +46,18 @@ enum class LongNonKey(
     LastVacuumRun("last_vacuum_run", 0L),
 
     // Bumped whenever the PK/PD learned state (aimi_pkpd_state_dia_h / _peak_min) is written from
-    // outside the loop (reset button, insulin preset). Long-lived PkPdIntegration instances cache
+    // outside the learner (a profile insulin change or reset, a backup restore). Long-lived PkPdIntegration instances cache
     // that state in memory; they compare this counter on each tick to know they must re-seed from
     // prefs. Any change is a signal, up or down. So an overflow or a restore from backup are
     // both safe.
     OApsAIMIPkpdLearnedStateGeneration("aimi_pkpd_learned_state_generation", 0L),
+
+    // DIA (in minutes) and peak (in minutes) of the profile insulin the PK/PD learner last started
+    // from. Internal state, not a setting. When the running profile insulin differs, the learner
+    // starts again from the profile values. 0 = never seen (first start after the update), -1 = the
+    // user asked for a reset.
+    OApsAIMIPkpdProfileInsulinDiaMin("aimi_pkpd_profile_insulin_dia_min", 0L),
+    OApsAIMIPkpdProfileInsulinPeakMin("aimi_pkpd_profile_insulin_peak_min", 0L),
 
     /**
      * When the physiological pipeline last finished a run. Runtime state, not a setting, and not

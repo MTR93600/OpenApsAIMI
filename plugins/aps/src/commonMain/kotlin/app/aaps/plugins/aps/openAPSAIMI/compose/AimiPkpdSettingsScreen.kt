@@ -161,8 +161,6 @@ fun AimiPkpdSettingsScreen(
                             },
                             onOpenAdvanced = { selectedLevel = PkpdSettingsLevel.ADVANCED },
                             onRerunWizard = { showWizard = true },
-                            snackbarHostState = snackbarHostState,
-                            scope = scope,
                         )
                         AimiSettingsContentId.PkpdAdvanced -> PkpdAdvancedSettingsContent(
                             preferences = preferences,

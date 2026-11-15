@@ -1,13 +1,11 @@
 package app.aaps.plugins.aps.openAPSAIMI.compose
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -46,23 +44,17 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.stringResource
-import app.aaps.core.ui.compose.stringResourceOrNull
-import app.aaps.core.ui.compose.unitLabel
-import app.aaps.core.ui.compose.valueFormat
 import app.aaps.core.ui.compose.AapsSpacing
-import app.aaps.core.ui.compose.LocalPreferences
 import app.aaps.core.ui.compose.SliderWithButtons
-import app.aaps.core.data.format.NumberFormat
 import app.aaps.core.ui.compose.preference.AdaptiveDoublePreferenceItem
 import app.aaps.core.ui.compose.preference.AdaptiveIntPreferenceItem
 import app.aaps.core.ui.compose.preference.AdaptiveSwitchPreferenceItem
-import app.aaps.core.ui.compose.preference.sliderDecimalsAndStep
 import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiRecommendation
 import app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiAction
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiDomain
-import kotlin.math.abs
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdProfileInsulinMemory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -75,17 +67,15 @@ fun PkpdSetupWizardDialog(
     onDismiss: () -> Unit,
     onCompleted: () -> Unit,
 ) {
+    // Two steps: the profile insulin (the source of the learner), then patience.
     var step by remember { mutableIntStateOf(0) }
-    var selectedPreset by remember { mutableStateOf(PkpdInsulinPreset.ULTRA_FAST) }
 
     val title = when (step) {
-        0 -> stringResource(ApsStrings.aimi_pkpd_wizard_step_insulin_title)
-        1 -> stringResource(ApsStrings.aimi_pkpd_wizard_step_profile_title)
+        0 -> stringResource(ApsStrings.aimi_pkpd_wizard_step_profile_title)
         else -> stringResource(ApsStrings.aimi_pkpd_wizard_step_patience_title)
     }
     val body = when (step) {
-        0 -> stringResource(ApsStrings.aimi_pkpd_wizard_step_insulin_body)
-        1 -> {
+        0 -> {
             val profileDia = profileDiaHours ?: 6.0
             stringResource(ApsStrings.aimi_pkpd_wizard_step_profile_body, profileDia)
         }
@@ -98,31 +88,21 @@ fun PkpdSetupWizardDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(AapsSpacing.small)) {
                 Text(body, style = MaterialTheme.typography.bodyMedium)
-                if (step == 0) {
-                    PkpdPresetChipRow(
-                        selectedPreset = selectedPreset,
-                        onPresetSelected = { selectedPreset = it },
-                        showCustom = false,
-                        onApplyPreset = { preset -> selectedPreset = preset },
-                    )
-                }
             }
         },
         confirmButton = {
             TextButton(
                 onClick = {
                     if (step == 0) {
-                        applyPkpdInsulinPreset(preferences, selectedPreset)
-                        // First run only: seed the settings the preset does not own, so a new
-                        // user does not start on the raw key defaults. Both prudence sliders
-                        // start at the neutral centre; same polarity, left cautious.
-                        PkpdLearningPace.NORMAL.applyTo(preferences)
+                        // First run only: seed the user settings, so a new user does not start on
+                        // the raw key defaults. The learning pace is the default one (FASTER). Both
+                        // prudence sliders start at the neutral centre; same polarity, left cautious.
+                        // The DIA and peak come from the profile insulin, there is nothing to pick.
+                        PkpdLearningPace.FASTER.applyTo(preferences)
                         PkpdCorrectionPrudence.applyLevel(preferences, 0.5)
                         PkpdTailPrudence.applyLevel(preferences, 0.5)
                         preferences.put(BooleanKey.OApsAIMIPkpdEnabled, true)
                         step = 1
-                    } else if (step == 1) {
-                        step = 2
                     } else {
                         preferences.put(BooleanKey.OApsAIMIPkpdSetupWizardCompleted, true)
                         onCompleted()
@@ -131,7 +111,7 @@ fun PkpdSetupWizardDialog(
                 },
             ) {
                 Text(
-                    if (step < 2) stringResource(ApsStrings.aimi_pkpd_wizard_next)
+                    if (step < 1) stringResource(ApsStrings.aimi_pkpd_wizard_next)
                     else stringResource(ApsStrings.aimi_pkpd_wizard_done),
                 )
             }
@@ -168,15 +148,7 @@ fun PkpdSimpleSettingsContent(
     onApplyRecommendation: (AimiAction.PreferenceUpdate) -> Unit,
     onOpenAdvanced: () -> Unit,
     onRerunWizard: () -> Unit,
-    snackbarHostState: SnackbarHostState,
-    scope: CoroutineScope,
 ) {
-    var selectedPreset by remember(preferenceRevision) {
-        mutableStateOf(detectPkpdInsulinPreset(preferences))
-    }
-    val presetAppliedMessage = stringResource(ApsStrings.aimi_pkpd_preset_applied)
-    val customHintMessage = stringResource(ApsStrings.aimi_pkpd_custom_use_advanced)
-
     PkpdSimpleStatusCard(
         preferences = preferences,
         profileDiaHours = profileDiaHours,
@@ -193,35 +165,6 @@ fun PkpdSimpleSettingsContent(
         }
 
     PkpdScreenLayout.simpleFieldSections.forEach { PkpdDeclaredFields(it) }
-
-    Text(
-        stringResource(ApsStrings.aimi_pkpd_preset_section_title),
-        style = MaterialTheme.typography.titleMedium,
-    )
-    Text(
-        stringResource(ApsStrings.aimi_pkpd_preset_simple_hint),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-
-    PkpdPresetChipRow(
-        selectedPreset = selectedPreset,
-        onPresetSelected = { selectedPreset = it },
-        showCustom = false,
-        onApplyPreset = { preset ->
-            if (preset == PkpdInsulinPreset.CUSTOM) {
-                selectedPreset = PkpdInsulinPreset.CUSTOM
-                scope.launch {
-                    snackbarHostState.showSnackbar(customHintMessage)
-                }
-            } else {
-                applyPkpdInsulinPreset(preferences, preset)
-                selectedPreset = preset
-                onPreferenceRevisionBump()
-                scope.launch { snackbarHostState.showSnackbar(presetAppliedMessage) }
-            }
-        },
-    )
 
     PkpdLabeledSlider(
         title = stringResource(ApsStrings.aimi_pkpd_prudence_corrections_title),
@@ -269,8 +212,7 @@ fun PkpdAdvancedSettingsContent(
 ) {
     var showResetConfirm by remember { mutableStateOf(false) }
     val syncDoneMessage = stringResource(ApsStrings.aimi_pkpd_sync_done)
-    val preset = remember(preferenceRevision) { detectPkpdInsulinPreset(preferences) }
-    var learningPace by remember(preferenceRevision) { mutableStateOf(PkpdLearningPace.NORMAL.readFrom(preferences)) }
+    var learningPace by remember(preferenceRevision) { mutableStateOf(PkpdLearningPace.FASTER.readFrom(preferences)) }
 
     Text(
         stringResource(ApsStrings.aimi_pkpd_advanced_intro),
@@ -307,27 +249,15 @@ fun PkpdAdvancedSettingsContent(
             },
             label = { Text(stringResource(ApsStrings.aimi_pkpd_pace_fast)) },
         )
-    }
-
-    PkpdScreenLayout.advancedSliderSections.forEach { sectionId ->
-        if (sectionId == AimiSettingsSectionId.PkpdAdvancedCustomBounds) {
-            if (preset == PkpdInsulinPreset.CUSTOM) {
-                Text(
-                    stringResource(ApsStrings.aimi_pkpd_custom_bounds_title),
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(top = AapsSpacing.small),
-                )
-                PkpdDeclaredReactiveSliders(sectionId = sectionId, preferenceRevision = preferenceRevision)
-            } else {
-                Text(
-                    stringResource(ApsStrings.aimi_pkpd_bounds_from_preset),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        } else {
-            PkpdDeclaredReactiveSliders(sectionId = sectionId, preferenceRevision = preferenceRevision)
-        }
+        FilterChip(
+            selected = learningPace == PkpdLearningPace.FASTER,
+            onClick = {
+                learningPace = PkpdLearningPace.FASTER
+                PkpdLearningPace.FASTER.applyTo(preferences)
+                onPreferenceRevisionBump()
+            },
+            label = { Text(stringResource(ApsStrings.aimi_pkpd_pace_faster)) },
+        )
     }
 
     PkpdScreenLayout.advancedFieldSections.forEach { PkpdDeclaredFields(it) }
@@ -344,7 +274,7 @@ fun PkpdAdvancedSettingsContent(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        resetPkpdLearnedStateToInitial(preferences)
+                        PkpdProfileInsulinMemory.requestReset(preferences)
                         onPreferenceRevisionBump()
                         showResetConfirm = false
                         scope.launch { snackbarHostState.showSnackbar(syncDoneMessage) }
@@ -364,7 +294,7 @@ fun PkpdAdvancedSettingsContent(
 fun PkpdExpertSettingsContent(preferenceRevision: Int) {
     // The groups and their keys come from PkpdScreenLayout and AimiSettingsScreens, so a key that is
     // declared for this content is always drawn. preferenceRevision makes the items read again after
-    // the wizard or a preset changed a key.
+    // the wizard changed a key.
     key(preferenceRevision) {
         PkpdScreenLayout.expertGroups.forEach { group ->
             ExpandableSection(title = stringResource(group.title), initiallyExpanded = false) {
@@ -384,7 +314,7 @@ fun PkpdSimpleStatusCard(
     val learnedDia = preferences.get(DoubleKey.OApsAIMIPkpdStateDiaH)
     val learnedPeak = preferences.get(DoubleKey.OApsAIMIPkpdStatePeakMin)
     val profileDia = profileDiaHours ?: learnedDia
-    val profilePeak = profilePeakMin ?: preferences.get(DoubleKey.OApsAIMIPkpdInitialPeakMin)
+    val profilePeak = profilePeakMin ?: PkpdProfileInsulinMemory.lastSeen(preferences)?.peakMinutes ?: learnedPeak
     val pkpdOn = preferences.get(BooleanKey.OApsAIMIPkpdEnabled)
     val fasterInsulin = learnedDia < profileDia - 0.15 || learnedPeak < profilePeak - 8.0
 
@@ -467,58 +397,6 @@ private fun PkpdTechnicalPeakDetails(preferences: Preferences) {
     }
 }
 
-
-@Composable
-fun PkpdPresetChipRow(
-    selectedPreset: PkpdInsulinPreset,
-    onPresetSelected: (PkpdInsulinPreset) -> Unit,
-    showCustom: Boolean,
-    onApplyPreset: (PkpdInsulinPreset) -> Unit,
-) {
-    val chipScroll = rememberScrollState()
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(chipScroll),
-        horizontalArrangement = Arrangement.spacedBy(AapsSpacing.small),
-    ) {
-        PresetChip(
-            label = stringResource(ApsStrings.aimi_pkpd_preset_ultra_fast),
-            selected = selectedPreset == PkpdInsulinPreset.ULTRA_FAST,
-            onClick = {
-                onPresetSelected(PkpdInsulinPreset.ULTRA_FAST)
-                onApplyPreset(PkpdInsulinPreset.ULTRA_FAST)
-            },
-        )
-        PresetChip(
-            label = stringResource(ApsStrings.aimi_pkpd_preset_rapid),
-            selected = selectedPreset == PkpdInsulinPreset.RAPID,
-            onClick = {
-                onPresetSelected(PkpdInsulinPreset.RAPID)
-                onApplyPreset(PkpdInsulinPreset.RAPID)
-            },
-        )
-        PresetChip(
-            label = stringResource(ApsStrings.aimi_pkpd_preset_standard),
-            selected = selectedPreset == PkpdInsulinPreset.STANDARD,
-            onClick = {
-                onPresetSelected(PkpdInsulinPreset.STANDARD)
-                onApplyPreset(PkpdInsulinPreset.STANDARD)
-            },
-        )
-        if (showCustom) {
-            PresetChip(
-                label = stringResource(ApsStrings.aimi_pkpd_preset_custom),
-                selected = selectedPreset == PkpdInsulinPreset.CUSTOM,
-                onClick = {
-                    onPresetSelected(PkpdInsulinPreset.CUSTOM)
-                    onApplyPreset(PkpdInsulinPreset.CUSTOM)
-                },
-            )
-        }
-    }
-}
-
 @OptIn(FlowPreview::class)
 @Composable
 fun PkpdLabeledSlider(
@@ -566,11 +444,6 @@ fun PkpdLabeledSlider(
 }
 
 @Composable
-private fun PresetChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    FilterChip(selected = selected, onClick = onClick, label = { Text(label) })
-}
-
-@Composable
 fun ExpandableSection(
     title: String,
     initiallyExpanded: Boolean,
@@ -598,54 +471,6 @@ fun ExpandableSection(
     }
 }
 
-@Composable
-fun PkpdReactiveDoubleSlider(
-    key: DoubleKey,
-    title: TextRef,
-    preferenceRevision: Int,
-) {
-    val preferences = LocalPreferences.current
-    val summaryRes = stringResourceOrNull(key.summary)
-    val unitType = key.unitType
-    // Same step rule as the settings screen, so a factor with no unit does not jump by 1.
-    val (decimalPlaces, step) = sliderDecimalsAndStep(unitType, key.min, key.max)
-    val valueFormatRef = unitType.valueFormat()
-    val valueFormat = NumberFormat.withDecimals(decimalPlaces)
-    val unitLabelRef = unitType.unitLabel()
-
-    var local by remember(key) { mutableDoubleStateOf(preferences.get(key)) }
-    LaunchedEffect(key, preferenceRevision) {
-        local = preferences.get(key)
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = AapsSpacing.extraSmall),
-    ) {
-        Text(stringResource(title), style = MaterialTheme.typography.titleSmall)
-        summaryRes?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        SliderWithButtons(
-            value = local,
-            onValueChange = {
-                val clamped = it.coerceIn(key.min, key.max)
-                local = clamped
-                preferences.put(key, clamped)
-            },
-            valueRange = key.min..key.max,
-            step = step,
-            showValue = true,
-            valueFormatRef = valueFormatRef,
-            valueFormat = valueFormat,
-            unitLabel = unitLabelRef,
-            dialogLabel = stringResource(title),
-            dialogSummary = summaryRes,
-        )
-    }
-}
-
 /** One folding group of the PK/PD expert tab: a title and the declared sections it draws. */
 internal data class PkpdExpertGroup(
     val title: TextRef,
@@ -667,13 +492,7 @@ internal object PkpdScreenLayout {
         AimiSettingsSectionId.PkpdSimpleEnable,
     )
 
-    /** Advanced tab: sections shown as reactive sliders. Custom bounds only show for the custom preset. */
-    val advancedSliderSections: List<AimiSettingsSectionId> = listOf(
-        AimiSettingsSectionId.PkpdAdvancedStartingKinetics,
-        AimiSettingsSectionId.PkpdAdvancedCustomBounds,
-    )
-
-    /** Advanced tab: sections shown as plain preference items, after the sliders. */
+    /** Advanced tab: sections shown as plain preference items, after the learning pace chips. */
     val advancedFieldSections: List<AimiSettingsSectionId> = listOf(
         AimiSettingsSectionId.PkpdAdvancedStackAwareGuardB,
         AimiSettingsSectionId.PkpdAdvancedCurveLearningGate,
@@ -719,10 +538,10 @@ internal object PkpdScreenLayout {
         ),
     )
 
-    /** Sections a PK/PD content draws with [PkpdDeclaredFields] or as reactive sliders. */
+    /** Sections a PK/PD content draws with [PkpdDeclaredFields]. */
     fun drawnSectionsOf(content: AimiSettingsContentId): List<AimiSettingsSectionId> = when (content) {
         AimiSettingsContentId.PkpdSimple   -> simpleFieldSections
-        AimiSettingsContentId.PkpdAdvanced -> advancedSliderSections + advancedFieldSections
+        AimiSettingsContentId.PkpdAdvanced -> advancedFieldSections
         AimiSettingsContentId.PkpdExpert   -> expertGroups.flatMap { it.sections }
         else                               -> emptyList()
     }
@@ -734,14 +553,6 @@ internal object PkpdScreenLayout {
      * here keeps its own title.
      */
     val titleOverrides: Map<String, TextRef> = mapOf(
-        DoubleKey.OApsAIMIPkpdInitialDiaH.key to ApsStrings.aimi_pkpd_starting_dia_title,
-        DoubleKey.OApsAIMIPkpdInitialPeakMin.key to ApsStrings.aimi_pkpd_starting_peak_title,
-        DoubleKey.OApsAIMIPkpdBoundsDiaMinH.key to ApsStrings.oaps_aimi_pkpd_dia_min_title,
-        DoubleKey.OApsAIMIPkpdBoundsDiaMaxH.key to ApsStrings.oaps_aimi_pkpd_dia_max_title,
-        DoubleKey.OApsAIMIPkpdBoundsPeakMinMin.key to ApsStrings.oaps_aimi_pkpd_peak_min_title,
-        DoubleKey.OApsAIMIPkpdBoundsPeakMinMax.key to ApsStrings.oaps_aimi_pkpd_peak_max_title,
-        DoubleKey.OApsAIMIPkpdAnchorDiaH.key to ApsStrings.oaps_aimi_pkpd_anchor_dia_title,
-        DoubleKey.OApsAIMIPkpdAnchorPeakMin.key to ApsStrings.oaps_aimi_pkpd_anchor_peak_title,
         BooleanKey.OApsAIMIPkpdStackAwareGuardB.key to ApsStrings.oaps_aimi_pkpd_stack_aware_guardb_title,
         BooleanKey.OApsAIMIPkpdCurveLearningGate.key to ApsStrings.oaps_aimi_pkpd_curve_learning_gate_title,
         BooleanKey.OApsAIMIPkpdEnabled.key to ApsStrings.oaps_aimi_pkpd_enabled_title,
@@ -803,17 +614,5 @@ private fun PkpdDeclaredFields(sectionId: AimiSettingsSectionId) {
             )
             else                    -> Unit
         }
-    }
-}
-
-/** Shows every double key of a declared section as a reactive slider, in declaration order. */
-@Composable
-private fun PkpdDeclaredReactiveSliders(sectionId: AimiSettingsSectionId, preferenceRevision: Int) {
-    AimiSettingsScreens.keysOf(sectionId).filterIsInstance<DoubleKey>().forEach { doubleKey ->
-        PkpdReactiveDoubleSlider(
-            key = doubleKey,
-            title = PkpdScreenLayout.titleOverrides[doubleKey.key] ?: doubleKey.title,
-            preferenceRevision = preferenceRevision,
-        )
     }
 }

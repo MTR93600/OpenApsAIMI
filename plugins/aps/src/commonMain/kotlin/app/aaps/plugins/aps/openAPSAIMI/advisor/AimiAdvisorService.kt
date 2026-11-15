@@ -230,12 +230,8 @@ class AimiAdvisorService {
         // 4. Snapshot PKPD Preferences
         val pkpdSnapshot = PkpdPrefsSnapshot(
             pkpdEnabled = preferences.get(BooleanKey.OApsAIMIPkpdEnabled),
-            initialDiaH = preferences.get(DoubleKey.OApsAIMIPkpdInitialDiaH),
-            initialPeakMin = preferences.get(DoubleKey.OApsAIMIPkpdInitialPeakMin),
-            boundsDiaMinH = preferences.get(DoubleKey.OApsAIMIPkpdBoundsDiaMinH),
-            boundsDiaMaxH = preferences.get(DoubleKey.OApsAIMIPkpdBoundsDiaMaxH),
-            boundsPeakMinMin = preferences.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMin),
-            boundsPeakMinMax = preferences.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMax),
+            learnedDiaH = preferences.get(DoubleKey.OApsAIMIPkpdStateDiaH),
+            learnedPeakMin = preferences.get(DoubleKey.OApsAIMIPkpdStatePeakMin),
             maxDiaChangePerDayH = preferences.get(DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH),
             maxPeakChangePerDayMin = preferences.get(DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin),
             isfFusionMinFactor = preferences.get(DoubleKey.OApsAIMIIsfFusionMinFactor),
@@ -528,7 +524,7 @@ class AimiAdvisorService {
             ),
             profile = AimiProfileSnapshot(0.0,0.0,0.0,0.0, 5.0, 12.0),
             prefs = AimiPrefsSnapshot(0.0, 0.0, 0.0, 0.0, false, 0.065),
-            pkpdPrefs = PkpdPrefsSnapshot(false,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0),
+            pkpdPrefs = PkpdPrefsSnapshot(false,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0),
             harmoniaDecision = PatientStateRuntimeRepository.getLatest()?.harmoniaDecision,
         )
     }
@@ -1064,8 +1060,8 @@ class AimiAdvisorService {
               },
               "pkpd": {
                 "enabled": ${context.pkpdPrefs.pkpdEnabled},
-                "dia": ${context.pkpdPrefs.initialDiaH},
-                "peak": ${context.pkpdPrefs.initialPeakMin},
+                "dia": ${context.pkpdPrefs.learnedDiaH},
+                "peak": ${context.pkpdPrefs.learnedPeakMin},
                 "isfFusionMax": ${context.pkpdPrefs.isfFusionMaxFactor},
                 "smbTailDamping": ${context.pkpdPrefs.smbTailDamping}
               },

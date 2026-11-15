@@ -65,12 +65,9 @@ internal enum class AimiSettingsSectionKind {
 /** Stable name of a section, so a test can point at one. */
 internal enum class AimiSettingsSectionId {
     PkpdSimpleEnable,
-    PkpdSimpleInsulinPreset,
     PkpdSimpleCorrectionPrudence,
     PkpdSimpleTailPrudence,
     PkpdAdvancedLearningPace,
-    PkpdAdvancedStartingKinetics,
-    PkpdAdvancedCustomBounds,
     PkpdAdvancedStackAwareGuardB,
     PkpdAdvancedCurveLearningGate,
     PkpdExpertPeakGovernor,
@@ -162,7 +159,7 @@ internal enum class AimiSettingsSectionId {
  *   be in it, and a [FIELDS][AimiSettingsSectionKind.FIELDS] group must be level clean.
  *
  * So a group declared `EXPERT` may well be drawn inside the simple tab. That is exactly what the
- * PK/PD insulin preset chips are: a simple control that writes expert kinetics keys.
+ * PK/PD learning pace chips are: a control that writes expert learning keys.
  */
 internal data class AimiSettingsSection(
     val id: AimiSettingsSectionId,
@@ -256,22 +253,6 @@ internal object AimiSettingsScreens {
             ),
         ),
         AimiSettingsSection(
-            id = AimiSettingsSectionId.PkpdSimpleInsulinPreset,
-            content = AimiSettingsContentId.PkpdSimple,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.CONTROL,
-            keys = listOf(
-                DoubleKey.OApsAIMIPkpdInitialDiaH,
-                DoubleKey.OApsAIMIPkpdInitialPeakMin,
-                DoubleKey.OApsAIMIPkpdBoundsDiaMinH,
-                DoubleKey.OApsAIMIPkpdBoundsDiaMaxH,
-                DoubleKey.OApsAIMIPkpdBoundsPeakMinMin,
-                DoubleKey.OApsAIMIPkpdBoundsPeakMinMax,
-                DoubleKey.OApsAIMIPkpdAnchorDiaH,
-                DoubleKey.OApsAIMIPkpdAnchorPeakMin,
-            ),
-        ),
-        AimiSettingsSection(
             id = AimiSettingsSectionId.PkpdSimpleCorrectionPrudence,
             content = AimiSettingsContentId.PkpdSimple,
             level = AimiSettingsLevel.ADVANCED,
@@ -298,30 +279,6 @@ internal object AimiSettingsScreens {
             keys = listOf(
                 DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH,
                 DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.PkpdAdvancedStartingKinetics,
-            content = AimiSettingsContentId.PkpdAdvanced,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                DoubleKey.OApsAIMIPkpdInitialDiaH,
-                DoubleKey.OApsAIMIPkpdInitialPeakMin,
-            ),
-        ),
-        AimiSettingsSection(
-            id = AimiSettingsSectionId.PkpdAdvancedCustomBounds,
-            content = AimiSettingsContentId.PkpdAdvanced,
-            level = AimiSettingsLevel.EXPERT,
-            kind = AimiSettingsSectionKind.FIELDS,
-            keys = listOf(
-                DoubleKey.OApsAIMIPkpdBoundsDiaMinH,
-                DoubleKey.OApsAIMIPkpdBoundsDiaMaxH,
-                DoubleKey.OApsAIMIPkpdBoundsPeakMinMin,
-                DoubleKey.OApsAIMIPkpdBoundsPeakMinMax,
-                DoubleKey.OApsAIMIPkpdAnchorDiaH,
-                DoubleKey.OApsAIMIPkpdAnchorPeakMin,
             ),
         ),
         AimiSettingsSection(

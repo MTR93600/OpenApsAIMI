@@ -64,15 +64,6 @@ class PkpdScreenLayoutTest {
     }
 
     @Test
-    fun `every key of a slider section is a double key`() {
-        PkpdScreenLayout.advancedSliderSections.forEach { sectionId ->
-            AimiSettingsScreens.keysOf(sectionId).forEach { key ->
-                assertTrue(key is DoubleKey, "${key.key} in $sectionId is not a slider")
-            }
-        }
-    }
-
-    @Test
     fun `the advanced tab draws the curve learning gate`() {
         assertTrue(BooleanKey.OApsAIMIPkpdCurveLearningGate.key in drawnKeysOf(AimiSettingsContentId.PkpdAdvanced))
     }

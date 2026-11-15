@@ -55,7 +55,6 @@ class PkPdIntegration(
      * reset the estimator on every successful persist.
      */
     private data class StructuralConfig(
-        val enabled: Boolean,
         val bounds: PkPdBounds,
         val isfBounds: IsfFusionBounds,
         val tailPolicy: TailAwareSmbPolicy,
@@ -162,21 +161,39 @@ class PkPdIntegration(
         declaredMealAgeMin: Long? = null,
         /** That declared meal was high-carb. Learning gate only. */
         declaredMealHighCarb: Boolean = false,
+        /**
+         * Insulin of the running profile (`iCfg.dia`, `iCfg.peak`): seed, anchor and bounds of the
+         * learner. `null` only for read-only callers that do not know it: they use the last one a
+         * caller gave ([PkpdProfileInsulinMemory.lastSeen]). With none at all there is no runtime.
+         */
+        profileInsulin: ProfileInsulin?,
     ): PkPdRuntime? {
         return lock.withLock {
-            val structural = readStructuralConfig()
-            val previousStructural = cachedStructuralConfig
             adoptExternalLearnedStateReset()
-            if (previousStructural != null && previousStructural != structural) {
-                applyStructuralConfigChange(previousStructural, structural)
+            // Before the structural compare, for the same reason as the external reset: a new profile
+            // insulin also changes the bounds, and the compare would persist the old in-memory value.
+            // It also runs with PK/PD off, so an insulin change made while PK/PD is off still starts
+            // the learned state again, and the one-shot migration runs only on the first tick after
+            // the update.
+            if (profileInsulin != null) {
+                adoptProfileInsulin(profileInsulin, readStructuralConfig(profileInsulin).bounds, consoleLog)
             }
-            cachedStructuralConfig = structural
-
-            if (!structural.enabled) {
+            if (!preferences.get(BooleanKey.OApsAIMIPkpdEnabled)) {
                 consoleLog?.add("PKPD Debug: Config ENABLED is FALSE. Check OApsAIMIPkpdEnabled preference.")
                 clearAllCaches()
                 return null
             }
+            val profile = profileInsulin ?: PkpdProfileInsulinMemory.lastSeen(preferences)
+            if (profile == null) {
+                consoleLog?.add("PKPD Debug: no profile insulin known yet, PK/PD skipped this call.")
+                return null
+            }
+            val structural = readStructuralConfig(profile)
+            val previousStructural = cachedStructuralConfig
+            if (previousStructural != null && previousStructural != structural) {
+                applyStructuralConfigChange(previousStructural, structural)
+            }
+            cachedStructuralConfig = structural
 
             if (lastPersisted == null) {
                 lastPersisted = readLearnedSeed(structural.bounds)
@@ -402,12 +419,13 @@ class PkPdIntegration(
     }
 
     /**
-     * Detects a learned-state write done outside the loop (reset button, insulin preset).
+     * Detects a learned-state write done outside this instance (a profile insulin change seen by
+     * the other consumer, a backup restore).
      * Drops the in-memory learner so this tick re-seeds from prefs via [readLearnedSeed].
      * It does not touch the fusion/damping caches on purpose: they hold no learned PK/PD state.
      *
-     * It must run first in the tick, before the structural config is compared. An insulin preset
-     * changes the bounds and writes the learned state in one gesture, and
+     * It must run first in the tick, before the structural config is compared. A profile insulin
+     * change moves the bounds and writes the learned state together, and
      * [applyStructuralConfigChange] persists the old in-memory value when the bounds change. With
      * the learner already dropped here, that persist is a no-op and cannot overwrite the new
      * value. Running it while PK/PD is off is safe too: [clearAllCaches] wipes everything anyway.
@@ -421,6 +439,53 @@ class PkPdIntegration(
         lastBounds = null
         lastLearningCfg = null
         lastPersisted = null
+    }
+
+    /**
+     * Starts the learned state again from the profile insulin when it is not the one the learner
+     * last started from ([PkpdProfileInsulinMemory]):
+     * - same insulin: nothing to do;
+     * - nothing stored yet (first start after the update): one-shot migration. The learned values
+     *   are kept but clamped into the new bounds; with no learned value stored, the profile insulin
+     *   is the seed. Old values of the removed Initial / Anchor / Bounds keys are not read;
+     * - another insulin, or a reset asked by the user: the learned state becomes the profile insulin.
+     *
+     * The write bumps the learned state generation, like every write from outside the learner, so a
+     * reader that caches the state re-seeds. This instance takes the new generation as seen.
+     */
+    private fun adoptProfileInsulin(profile: ProfileInsulin, bounds: PkPdBounds, consoleLog: MutableList<String>?) {
+        val (diaMin, peakMin) = PkpdProfileInsulinMemory.storedMinutes(profile)
+        val storedDiaMin = preferences.get(LongNonKey.OApsAIMIPkpdProfileInsulinDiaMin)
+        val storedPeakMin = preferences.get(LongNonKey.OApsAIMIPkpdProfileInsulinPeakMin)
+        if (storedDiaMin == diaMin && storedPeakMin == peakMin) return
+        val seed = PkpdProfileInsulinBounds.seed(profile)
+        val neverSeen = storedDiaMin == PkpdProfileInsulinMemory.NEVER_SEEN &&
+            storedPeakMin == PkpdProfileInsulinMemory.NEVER_SEEN
+        val start = if (neverSeen) {
+            clampParams(
+                PkPdParams(
+                    diaHrs = preferences.getIfExists(DoubleKey.OApsAIMIPkpdStateDiaH) ?: seed.diaHrs,
+                    peakMin = preferences.getIfExists(DoubleKey.OApsAIMIPkpdStatePeakMin) ?: seed.peakMin,
+                ),
+                bounds,
+            )
+        } else {
+            seed
+        }
+        consoleLog?.add(
+            "PKPD_PROFILE_INSULIN: ${if (neverSeen) "migrate" else "reseed"} " +
+                "profile DIA=${aimiFmt2(profile.diaHours)}h peak=${aimiFmt2(profile.peakMinutes)}m " +
+                "-> learned DIA=${aimiFmt2(start.diaHrs)}h peak=${aimiFmt2(start.peakMin)}m",
+        )
+        preferences.put(DoubleKey.OApsAIMIPkpdStateDiaH, start.diaHrs)
+        preferences.put(DoubleKey.OApsAIMIPkpdStatePeakMin, start.peakMin)
+        preferences.inc(LongNonKey.OApsAIMIPkpdLearnedStateGeneration)
+        seenLearnedStateGeneration = preferences.get(LongNonKey.OApsAIMIPkpdLearnedStateGeneration)
+        PkpdProfileInsulinMemory.remember(preferences, profile)
+        estimator = null
+        lastBounds = null
+        lastLearningCfg = null
+        lastPersisted = start
     }
 
     private fun applyStructuralConfigChange(old: StructuralConfig, new: StructuralConfig) {
@@ -509,20 +574,17 @@ class PkPdIntegration(
         )
     }
 
-    private fun readStructuralConfig(): StructuralConfig {
-        val enabled = preferences.get(BooleanKey.OApsAIMIPkpdEnabled)
-        val bounds = PkPdBounds(
-            diaMinH = preferences.get(DoubleKey.OApsAIMIPkpdBoundsDiaMinH),
-            diaMaxH = preferences.get(DoubleKey.OApsAIMIPkpdBoundsDiaMaxH),
-            peakMinMin = preferences.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMin),
-            peakMinMax = preferences.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMax),
+    private fun readStructuralConfig(profile: ProfileInsulin): StructuralConfig {
+        val bounds = PkpdProfileInsulinBounds.bounds(
+            profile = profile,
             maxDiaChangePerDayH = PkpdLearningBounds.coerceMaxDiaChangePerDayH(
                 preferences.get(DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH),
             ),
             maxPeakChangePerDayMin = PkpdLearningBounds.coerceMaxPeakChangePerDayMin(
                 preferences.get(DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin),
             ),
-        ).normalized()
+        )
+        val anchor = PkpdProfileInsulinBounds.seed(profile)
         val isfBounds = IsfFusionBounds(
             minFactor = preferences.get(DoubleKey.OApsAIMIIsfFusionMinFactor),
             maxFactor = preferences.get(DoubleKey.OApsAIMIIsfFusionMaxFactor),
@@ -538,17 +600,13 @@ class PkPdIntegration(
             lateFattyMealDamping = preferences.get(DoubleKey.OApsAIMISmbLateFatDamping)
         )
         return StructuralConfig(
-            enabled = enabled,
             bounds = bounds,
             isfBounds = isfBounds,
             tailPolicy = tailPolicy,
-            // The anchor is the soft target the learner is pulled back to. An anchor outside the
-            // bounds would pull the learned value onto a bound and keep it there forever, so it is
-            // kept inside the (already normalized) bounds whatever the preset or slider wrote.
-            anchorDiaHrs = preferences.get(DoubleKey.OApsAIMIPkpdAnchorDiaH)
-                .coerceIn(bounds.diaMinH, bounds.diaMaxH),
-            anchorPeakMin = preferences.get(DoubleKey.OApsAIMIPkpdAnchorPeakMin)
-                .coerceIn(bounds.peakMinMin, bounds.peakMinMax),
+            // The anchor is the soft target the learner is pulled back to: the profile insulin. It is
+            // inside the bounds by construction, so it never pulls the learned value onto a bound.
+            anchorDiaHrs = anchor.diaHrs,
+            anchorPeakMin = anchor.peakMin,
         )
     }
 

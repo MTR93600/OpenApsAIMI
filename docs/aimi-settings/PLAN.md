@@ -57,6 +57,15 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
   `PregnancyDueDate`) stay until the owner decides.
 - **Not decided yet, do not change**: the NGR default (unknown age), the meal factor default (50),
   `PkpdEnabled`, `TrajBridgeBasalSurvives` and Cosine gate defaults.
+- **Open for the owner (from step P2 review, not decided):**
+  - *DIA and peak governors.* P2 moves only the learner bounds onto the profile insulin. The governors
+    (on by default, they also clamp with PK/PD off) keep the fixed envelope DIA 4-24 h, peak
+    30-240 min (the old key defaults; values a preset wrote are no longer read). Moving them to the
+    profile bounds would change dosing for every user and needs the owner's yes.
+  - *Pace of existing wizard users.* The old PK/PD wizard always wrote NORMAL (0.5 h/day, 5 min/day).
+    A stored pace at or below FASTER is kept, so these users stay on NORMAL until they tap "Faster".
+    Choose: a one-shot move of exactly the 0.5 / 5.0 pair to FASTER, or keep it and say so in the
+    release notes. The daily-export check must first confirm which pace the field phone is on.
 
 ## Order of work (one green commit per step)
 
@@ -64,7 +73,7 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
 |---|---|---|
 | P1 | One kinetics resolution for dosing and log, causal posterior of the previous tick | changes |
 | P2 | Profile insulin as seed/anchor/bounds, re-seed on insulin change, faster pace, remove Initial/Anchor/Bounds keys and presets, migration | changes |
-| P3 | PKPD cleanup: state keys out of settings, dead PKPD keys and constants, Advisor rules that wrote Initial*, exercise damping floor (the dead DIA governor call in `RunT9PhysioEarlyPkpd` was removed in P1), PKPD status card | small (floor) |
+| P3 | PKPD cleanup: state keys out of settings, dead PKPD keys and constants (the Advisor rules that wrote Initial* were removed in P2 with the keys), exercise damping floor (the dead DIA governor call in `RunT9PhysioEarlyPkpd` was removed in P1), PKPD status card | small (floor) |
 | T1 | TPO: meal factor ladder on the percent scale; a "step down" never raises a value and moves one rung at most; Advisor and Tuning on the percent scale | changes (protective size as designed) |
 | C1 | Control Center disarmed: dose limit keys out of the ladders, manifest writer facts, no write on open; the runtime profile no longer reads the display level (neutral constants) | small |
 | S1 | Settings row component (hint, "?" sheet with default and warnings, bounded values) and the Essentials page | none |

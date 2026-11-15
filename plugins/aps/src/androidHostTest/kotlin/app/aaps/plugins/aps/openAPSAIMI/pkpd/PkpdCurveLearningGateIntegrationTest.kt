@@ -241,6 +241,7 @@ class PkpdCurveLearningGateIntegrationTest : TestBase() {
         allowLearning = allowLearning,
         declaredMealAgeMin = declaredMealAgeMin,
         declaredMealHighCarb = declaredMealHighCarb,
+        profileInsulin = ProfileInsulin(diaHours = 6.0, peakMinutes = 55.0),
     )
 
     private fun acceptedUpdates(target: PkPdIntegration = integration): Long =
@@ -252,14 +253,11 @@ class PkpdCurveLearningGateIntegrationTest : TestBase() {
     private fun stubPkpdDefaults() {
         whenever(preferences.get(DoubleKey.OApsAIMIPkpdStateDiaH)).thenReturn(6.0)
         whenever(preferences.get(DoubleKey.OApsAIMIPkpdStatePeakMin)).thenReturn(55.0)
-        whenever(preferences.get(DoubleKey.OApsAIMIPkpdBoundsDiaMinH)).thenReturn(5.0)
-        whenever(preferences.get(DoubleKey.OApsAIMIPkpdBoundsDiaMaxH)).thenReturn(8.0)
-        whenever(preferences.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMin)).thenReturn(35.0)
-        whenever(preferences.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMax)).thenReturn(95.0)
         whenever(preferences.get(DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH)).thenReturn(0.5)
         whenever(preferences.get(DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin)).thenReturn(5.0)
-        whenever(preferences.get(DoubleKey.OApsAIMIPkpdAnchorDiaH)).thenReturn(4.0)
-        whenever(preferences.get(DoubleKey.OApsAIMIPkpdAnchorPeakMin)).thenReturn(55.0)
+        // The loop already started from this profile insulin, so no tick re-seeds.
+        whenever(preferences.get(LongNonKey.OApsAIMIPkpdProfileInsulinDiaMin)).thenReturn(360L)
+        whenever(preferences.get(LongNonKey.OApsAIMIPkpdProfileInsulinPeakMin)).thenReturn(55L)
         whenever(preferences.get(DoubleKey.OApsAIMIIsfFusionMinFactor)).thenReturn(0.7)
         whenever(preferences.get(DoubleKey.OApsAIMIIsfFusionMaxFactor)).thenReturn(1.5)
         whenever(preferences.get(DoubleKey.OApsAIMIIsfFusionMaxChangePerTick)).thenReturn(0.2)

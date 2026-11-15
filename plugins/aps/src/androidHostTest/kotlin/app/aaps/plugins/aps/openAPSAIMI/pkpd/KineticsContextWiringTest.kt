@@ -8,7 +8,6 @@ import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
-import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.AimiTickWorkingState
 import app.aaps.plugins.aps.openAPSAIMI.DetermineBasalaimiSMB2
@@ -50,12 +49,8 @@ class KineticsContextWiringTest {
         learningQuality = 1.0,
     )
 
-    private val preferences: Preferences = mock(Preferences::class.java).also { prefs ->
-        whenever(prefs.get(DoubleKey.OApsAIMIPkpdBoundsDiaMinH)).thenReturn(4.0)
-        whenever(prefs.get(DoubleKey.OApsAIMIPkpdBoundsDiaMaxH)).thenReturn(24.0)
-        whenever(prefs.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMin)).thenReturn(30.0)
-        whenever(prefs.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMax)).thenReturn(240.0)
-    }
+    // The governor bounds come from the profile insulin (5.0 h -> 3.75-6.25 h), not from keys.
+    private val preferences: Preferences = mock(Preferences::class.java)
 
     private fun newTick(): DetermineBasalaimiSMB2 {
         val dateUtil = mock(DateUtil::class.java)

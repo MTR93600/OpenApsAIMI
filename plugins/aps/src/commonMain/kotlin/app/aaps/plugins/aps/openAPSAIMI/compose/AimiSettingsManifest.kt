@@ -38,13 +38,12 @@ internal enum class AimiSettingsLevel { SIMPLE, ADVANCED, EXPERT }
  *
  * - [USER] a settings screen writes it, so the person owns the value.
  * - [SLIDER] a simplified slider or a family level writes it.
- * - [PRESET] a preset writes it, for example the PK/PD insulin presets.
  * - [LOOP] code writes it during a loop tick. Read such a value as loop output, not as a choice
  *   the person made.
  * - [BOOKKEEPING] code stores a flag the person never sets and never sees, like "the setup wizard
  *   has run". It needs no screen.
  */
-internal enum class AimiSettingsWriter { USER, SLIDER, PRESET, LOOP, BOOKKEEPING }
+internal enum class AimiSettingsWriter { USER, SLIDER, LOOP, BOOKKEEPING }
 
 /**
  * One AIMI setting, with the facts this manifest is allowed to hold.
@@ -91,10 +90,10 @@ internal data class AimiSettingEntry(
         vararg writers: AimiSettingsWriter,
     ) : this(key, level, family, writers.toSet())
 
-    /** True when a settings screen, a slider or a preset may write the value. */
+    /** True when a settings screen or a slider may write the value. */
     val userOwned: Boolean
         get() = writers.any {
-            it == AimiSettingsWriter.USER || it == AimiSettingsWriter.SLIDER || it == AimiSettingsWriter.PRESET
+            it == AimiSettingsWriter.USER || it == AimiSettingsWriter.SLIDER
         }
 
     /** True when code writes the value during a loop tick, whoever else may write it too. */
@@ -382,14 +381,6 @@ internal object AimiSettingsManifest {
         AimiSettingEntry(DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.SLIDER),
         AimiSettingEntry(DoubleKey.OApsAIMICHO, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMITDD7, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
-        AimiSettingEntry(DoubleKey.OApsAIMIPkpdInitialDiaH, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.PRESET),
-        AimiSettingEntry(DoubleKey.OApsAIMIPkpdInitialPeakMin, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.PRESET),
-        AimiSettingEntry(DoubleKey.OApsAIMIPkpdAnchorDiaH, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.PRESET),
-        AimiSettingEntry(DoubleKey.OApsAIMIPkpdAnchorPeakMin, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.PRESET),
-        AimiSettingEntry(DoubleKey.OApsAIMIPkpdBoundsDiaMinH, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.PRESET),
-        AimiSettingEntry(DoubleKey.OApsAIMIPkpdBoundsDiaMaxH, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.PRESET),
-        AimiSettingEntry(DoubleKey.OApsAIMIPkpdBoundsPeakMinMin, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.PRESET),
-        AimiSettingEntry(DoubleKey.OApsAIMIPkpdBoundsPeakMinMax, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.PRESET),
         AimiSettingEntry(DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.SLIDER),
         AimiSettingEntry(DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.SLIDER),
         AimiSettingEntry(DoubleKey.OApsAIMIPkpdStateDiaH, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.LOOP),

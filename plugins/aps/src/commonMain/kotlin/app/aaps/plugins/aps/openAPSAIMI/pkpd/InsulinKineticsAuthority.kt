@@ -22,6 +22,18 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
  */
 object InsulinKineticsAuthority {
 
+    /**
+     * Fixed envelope of the DIA and peak governors: the old defaults of the removed
+     * `OApsAIMIPkpdBounds*` keys. Only the PK/PD learner uses the bounds around the profile insulin
+     * ([PkpdProfileInsulinBounds]); moving the governors too would change dosing with PK/PD off, and
+     * the owner has not decided that. Fixed values also keep a floor when the profile DIA or peak is
+     * zero or not a number.
+     */
+    const val GOVERNOR_DIA_MIN_H = 4.0
+    const val GOVERNOR_DIA_MAX_H = 24.0
+    const val GOVERNOR_PEAK_MIN_MIN = 30.0
+    const val GOVERNOR_PEAK_MAX_MIN = 240.0
+
     data class ResolveInput(
         val accountingIobArray: Array<IobTotal>,
         val profileDiaHours: Double,
@@ -98,8 +110,8 @@ object InsulinKineticsAuthority {
             pkpdLearnedDiaHours = if (pkpdEnabled) structural.diaHrs else null,
             pkpdEnabled = pkpdEnabled,
             governorEnabled = preferences.get(BooleanKey.OApsAIMIDiaGovernorEnabled),
-            diaMinBound = preferences.get(DoubleKey.OApsAIMIPkpdBoundsDiaMinH),
-            diaMaxBound = preferences.get(DoubleKey.OApsAIMIPkpdBoundsDiaMaxH),
+            diaMinBound = GOVERNOR_DIA_MIN_H,
+            diaMaxBound = GOVERNOR_DIA_MAX_H,
             learnedBlendWeight = preferences.get(DoubleKey.OApsAIMIDiaGovernorLearnedWeight),
         )
         val peak = TapPeakGovernor.resolve(
@@ -110,8 +122,8 @@ object InsulinKineticsAuthority {
             pkpdLearnedPeak = if (pkpdEnabled) input.pkpdRuntime?.params?.peakMin else null,
             pkpdEnabled = pkpdEnabled,
             governorEnabled = preferences.get(BooleanKey.OApsAIMIPeakGovernorEnabled),
-            peakMinBound = preferences.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMin),
-            peakMaxBound = preferences.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMax),
+            peakMinBound = GOVERNOR_PEAK_MIN_MIN,
+            peakMaxBound = GOVERNOR_PEAK_MAX_MIN,
             learnedBlendWeight = preferences.get(DoubleKey.OApsAIMIPeakGovernorLearnedWeight),
             trajectoryMinutesNudge = input.trajectoryPeakNudgeMinutes,
             contextMinutesShift = peakShiftMinutes,

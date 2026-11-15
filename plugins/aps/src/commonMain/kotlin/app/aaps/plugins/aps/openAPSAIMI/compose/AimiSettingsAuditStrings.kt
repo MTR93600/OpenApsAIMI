@@ -15,7 +15,6 @@ import app.aaps.plugins.aps.ApsStrings
 internal interface AimiSettingsAuditStrings {
     val changedByLoop: TextRef
     val changedBySlider: TextRef
-    val changedByPreset: TextRef
     val changedByUser: TextRef
     val yes: TextRef
     val no: TextRef
@@ -25,7 +24,6 @@ internal interface AimiSettingsAuditStrings {
 internal object AimiSettingsAuditResourceStrings : AimiSettingsAuditStrings {
     override val changedByLoop: TextRef = ApsStrings.aimi_settings_audit_changed_by_loop
     override val changedBySlider: TextRef = ApsStrings.aimi_settings_audit_changed_by_slider
-    override val changedByPreset: TextRef = ApsStrings.aimi_settings_audit_changed_by_preset
     override val changedByUser: TextRef = ApsStrings.aimi_settings_audit_changed_by_user
     override val yes: TextRef = CoreUiStrings.yes
     override val no: TextRef = CoreUiStrings.no
@@ -35,6 +33,5 @@ internal object AimiSettingsAuditResourceStrings : AimiSettingsAuditStrings {
 internal fun AimiSettingsAuditChangedBy.label(strings: AimiSettingsAuditStrings): TextRef = when (this) {
     AimiSettingsAuditChangedBy.LOOP   -> strings.changedByLoop
     AimiSettingsAuditChangedBy.SLIDER -> strings.changedBySlider
-    AimiSettingsAuditChangedBy.PRESET -> strings.changedByPreset
     AimiSettingsAuditChangedBy.USER   -> strings.changedByUser
 }

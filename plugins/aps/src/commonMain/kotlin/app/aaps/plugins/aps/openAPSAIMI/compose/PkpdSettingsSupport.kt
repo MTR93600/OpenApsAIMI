@@ -10,11 +10,12 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.StringPreferenceKey
 import app.aaps.core.keys.interfaces.UnitDoublePreferenceKey
 import app.aaps.plugins.aps.openAPSAIMI.model.AimiAction
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdLearningBounds
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSmbTailDamping
 import kotlin.math.abs
 
 /**
- * PK/PD settings math: sliders, learning pace, insulin-preset detect, and preference apply.
+ * PK/PD settings math: sliders, learning pace, and preference apply.
  *
  * The prefs snapshot mapper (`pkpdPrefsSnapshotFrom` / `PkpdPrefsSnapshot`) stays dump until
  * `AdvisorModels` is T1-clean. Do not split `AdvisorModels` to extract the snapshot type.
@@ -110,10 +111,15 @@ object PkpdTailPrudence {
         PkpdSmbTailDamping.dampingForSliderLevel(level)
 }
 
+/**
+ * How fast the PK/PD learner may move the DIA and the peak per day. FASTER (2 h/day, 20 min/day) is
+ * the default; the key defaults match it. See `PkpdLearningBounds`.
+ */
 enum class PkpdLearningPace {
     SLOW,
     NORMAL,
     FAST,
+    FASTER,
 }
 
 fun PkpdLearningPace.readFrom(preferences: Preferences): PkpdLearningPace {
@@ -122,7 +128,8 @@ fun PkpdLearningPace.readFrom(preferences: Preferences): PkpdLearningPace {
         dia <= 0.25 -> PkpdLearningPace.SLOW
         dia <= 0.65 -> PkpdLearningPace.NORMAL
         dia <= 1.2 -> PkpdLearningPace.FAST
-        else -> PkpdLearningPace.NORMAL
+        // The loop caps anything above at the FASTER pace.
+        else -> PkpdLearningPace.FASTER
     }
 }
 
@@ -139,6 +146,10 @@ fun PkpdLearningPace.applyTo(preferences: Preferences) {
         PkpdLearningPace.FAST -> {
             preferences.put(DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH, 1.0)
             preferences.put(DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin, 10.0)
+        }
+        PkpdLearningPace.FASTER -> {
+            preferences.put(DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH, PkpdLearningBounds.FASTER_MAX_DIA_CHANGE_PER_DAY_H)
+            preferences.put(DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin, PkpdLearningBounds.FASTER_MAX_PEAK_CHANGE_PER_DAY_MIN)
         }
     }
 }
@@ -203,22 +214,3 @@ fun readPreferenceValueAsString(preferences: Preferences, key: PreferenceKey): S
         is StringPreferenceKey     -> preferences.get(key)
         else                       -> ""
     }
-
-fun detectPkpdInsulinPreset(preferences: Preferences): PkpdInsulinPreset {
-    fun near(a: Double, b: Double, eps: Double = 0.15) = abs(a - b) <= eps
-    val bDiaLo = preferences.get(DoubleKey.OApsAIMIPkpdBoundsDiaMinH)
-    val bDiaHi = preferences.get(DoubleKey.OApsAIMIPkpdBoundsDiaMaxH)
-    val bPeakLo = preferences.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMin)
-    val bPeakHi = preferences.get(DoubleKey.OApsAIMIPkpdBoundsPeakMinMax)
-    val anchorPeak = preferences.get(DoubleKey.OApsAIMIPkpdAnchorPeakMin)
-    if (near(bDiaLo, 5.0) && near(bDiaHi, 8.0) && near(bPeakLo, 35.0) && near(anchorPeak, 55.0)) {
-        return PkpdInsulinPreset.ULTRA_FAST
-    }
-    if (near(bDiaLo, 5.0) && near(bDiaHi, 11.0) && near(bPeakLo, 50.0) && near(anchorPeak, 75.0)) {
-        return PkpdInsulinPreset.RAPID
-    }
-    if (near(bDiaLo, 6.0) && near(bDiaHi, 16.0) && near(bPeakLo, 65.0) && near(anchorPeak, 90.0)) {
-        return PkpdInsulinPreset.STANDARD
-    }
-    return PkpdInsulinPreset.CUSTOM
-}

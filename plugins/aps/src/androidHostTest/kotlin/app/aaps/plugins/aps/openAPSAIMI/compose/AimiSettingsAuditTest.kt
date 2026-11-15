@@ -43,7 +43,6 @@ class AimiSettingsAuditTest {
     private val strings = object : AimiSettingsAuditStrings {
         override val changedByLoop: TextRef = TextRef.AndroidRes(1)
         override val changedBySlider: TextRef = TextRef.AndroidRes(2)
-        override val changedByPreset: TextRef = TextRef.AndroidRes(3)
         override val changedByUser: TextRef = TextRef.AndroidRes(4)
         override val yes: TextRef = TextRef.AndroidRes(5)
         override val no: TextRef = TextRef.AndroidRes(6)
@@ -93,8 +92,6 @@ class AimiSettingsAuditTest {
         whenever(preferences.getIfExists(BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled)).thenReturn(false)
         // SLIDER only.
         whenever(preferences.getIfExists(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled)).thenReturn(false)
-        // PRESET only.
-        whenever(preferences.getIfExists(DoubleKey.OApsAIMIPkpdInitialDiaH)).thenReturn(8.0)
         // USER only.
         whenever(preferences.getIfExists(BooleanKey.OApsAIMIMLtraining)).thenReturn(true)
         // USER and LOOP together: LOOP must still win the wording.
@@ -104,7 +101,6 @@ class AimiSettingsAuditTest {
 
         assertEquals(AimiSettingsAuditChangedBy.LOOP, rows.getValue(BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled.key).changedBy)
         assertEquals(AimiSettingsAuditChangedBy.SLIDER, rows.getValue(BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled.key).changedBy)
-        assertEquals(AimiSettingsAuditChangedBy.PRESET, rows.getValue(DoubleKey.OApsAIMIPkpdInitialDiaH.key).changedBy)
         assertEquals(AimiSettingsAuditChangedBy.USER, rows.getValue(BooleanKey.OApsAIMIMLtraining.key).changedBy)
         assertEquals(AimiSettingsAuditChangedBy.LOOP, rows.getValue(DoubleKey.AimiTubeHypoFloorMgdl.key).changedBy)
     }
@@ -205,7 +201,7 @@ class AimiSettingsAuditTest {
     @Test
     fun `the count line matches the rows`() {
         whenever(preferences.getIfExists(BooleanKey.OApsAIMIMLtraining)).thenReturn(true)
-        whenever(preferences.getIfExists(DoubleKey.OApsAIMIPkpdInitialDiaH)).thenReturn(8.0)
+        whenever(preferences.getIfExists(DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH)).thenReturn(0.5)
 
         val report = build()
 

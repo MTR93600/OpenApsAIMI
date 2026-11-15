@@ -197,12 +197,10 @@ data class AdvisorFlag(
 
 data class PkpdPrefsSnapshot(
     val pkpdEnabled: Boolean,
-    val initialDiaH: Double,
-    val initialPeakMin: Double,
-    val boundsDiaMinH: Double,
-    val boundsDiaMaxH: Double,
-    val boundsPeakMinMin: Double,
-    val boundsPeakMinMax: Double,
+    /** DIA the PK/PD learner holds now, in hours. It starts from the profile insulin. */
+    val learnedDiaH: Double,
+    /** Peak the PK/PD learner holds now, in minutes. It starts from the profile insulin. */
+    val learnedPeakMin: Double,
     val maxDiaChangePerDayH: Double,
     val maxPeakChangePerDayMin: Double,
     val isfFusionMinFactor: Double,

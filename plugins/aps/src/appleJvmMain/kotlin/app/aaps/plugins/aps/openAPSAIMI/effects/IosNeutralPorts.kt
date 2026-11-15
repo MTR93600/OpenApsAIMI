@@ -25,6 +25,7 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdIntegration
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdLearnedState
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdBolusSample
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.ProfileInsulin
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiBehaviorProfileSource
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
@@ -753,6 +754,8 @@ internal fun iosNeutralSensorGapSignal(log: MutableList<String>): AimiSignalPrep
             // Everything below runs after the staleness check; the abort never reaches it.
             override fun declaredMeal(): Therapy.DeclaredMeal? =
                 error("IOS_NEUTRAL sensor-gap: unexpected declaredMeal")
+            override fun profileInsulin(): ProfileInsulin? =
+                error("IOS_NEUTRAL sensor-gap: unexpected profileInsulin")
             override fun internalLastSmbMillis(): Long =
                 error("IOS_NEUTRAL sensor-gap: unexpected internalLastSmbMillis")
             override fun setLastBolusAgeMinutes(minutes: Double) =

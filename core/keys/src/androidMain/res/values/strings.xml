@@ -722,14 +722,6 @@
     <string name="pref_title_oaps_aimi_mpc_insulin_u_per_kg_per_step">AIMI MPC insulin u per kg per step</string>
     <string name="pref_title_oaps_aimi_cho">AIMI CHO</string>
     <string name="pref_title_oaps_aimi_tdd7">AIMI TDD 7</string>
-    <string name="pref_title_oaps_aimi_pkpd_initial_dia_h">AIMI PKPD initial DIA h</string>
-    <string name="pref_title_oaps_aimi_pkpd_initial_peak_min">AIMI PKPD initial peak min</string>
-    <string name="pref_title_oaps_aimi_pkpd_anchor_dia_h">AIMI PKPD anchor DIA h</string>
-    <string name="pref_title_oaps_aimi_pkpd_anchor_peak_min">AIMI PKPD anchor peak min</string>
-    <string name="pref_title_oaps_aimi_pkpd_bounds_dia_min_h">AIMI PKPD bounds DIA min h</string>
-    <string name="pref_title_oaps_aimi_pkpd_bounds_dia_max_h">AIMI PKPD bounds DIA max h</string>
-    <string name="pref_title_oaps_aimi_pkpd_bounds_peak_min_min">AIMI PKPD bounds peak min min</string>
-    <string name="pref_title_oaps_aimi_pkpd_bounds_peak_min_max">AIMI PKPD bounds peak min max</string>
     <string name="pref_title_oaps_aimi_pkpd_max_dia_change_per_day_h">AIMI PKPD max DIA change per day h</string>
     <string name="pref_title_oaps_aimi_pkpd_max_peak_change_per_day_min">AIMI PKPD max peak change per day min</string>
     <string name="pref_title_oaps_aimi_pkpd_state_dia_h">AIMI PKPD state DIA h</string>
