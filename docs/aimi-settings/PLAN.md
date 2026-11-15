@@ -150,16 +150,10 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
     authoritative gives Recommendations or Assisted (hyper trajectory release), authoritative or
     recursive belief authority gives full authority. With the key defaults (all on) nothing changes.
 
-- **Open for the owner (from step T2 review, not decided):**
-  - *ML correction limit with Autodrive off or not authoritative: 0.55 / 0.72 or 0.484 / 0.634?*
-    The step asked for the pre-C1 numbers 0.484 (Autodrive off) and 0.634 (on, not authoritative)
-    and also asked to keep every display level neutral. These two cannot both hold: before C1 the
-    numbers held a x0.88 factor that came from the old default protection level 1, and protection
-    level is a display level that stays neutral (2). T2 therefore gives 0.55 (Observation), 0.72
-    (Recommendations), 0.88 (Assisted) and 1.0 (authoritative), which is a little less prudent than
-    before C1 for users with Autodrive off or not authoritative. Confirm 0.55 / 0.72, or say to add
-    a fixed x0.88 to the autonomy part only for the non-authoritative modes (no display level comes
-    back). The code is not changed until the owner answers.
+- **Decided by the owner (T2 follow-up, 2026-11-15):** the ML correction limit keeps 0.55 (Autodrive
+  off), 0.72 (on, not authoritative), 0.88 (assisted) and 1.0 (authoritative). The old 0.484 / 0.634
+  held a x0.88 from the Control Center display level, which no longer reaches dosing. The difference
+  is at most about 0.003 U per SMB, and only with an ML model loaded.
 
 ## Order of work (one green commit per step)
 
