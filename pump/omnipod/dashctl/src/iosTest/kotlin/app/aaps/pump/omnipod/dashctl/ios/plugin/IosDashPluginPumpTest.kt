@@ -1007,6 +1007,29 @@ class IosDashPluginPumpTest {
         assertEquals(listOf("readStatus(omnipod_dash_ios_unconfirmed_command)"), queue.queued)
     }
 
+    /**
+     * Deliberate difference from Android (insulin counted wrong): a pod fault seen in the advertisement
+     * (the fault watch of `DashHeldConnection`) queues a status read at once, as OmnipodKit
+     * `omnipodDidDetectAlert`, so the alarm is handled now and not at the next loop.
+     */
+    @Test
+    fun `a pod fault seen in the advertisement queues a status read at once`() = runTest {
+        f.pairAndConnect()
+
+        rules.onPodFaultAdvertised()
+        runLaunched()
+
+        assertEquals(listOf("readStatus(omnipod_dash_ios_pod_fault_seen)"), queue.queued)
+    }
+
+    @Test
+    fun `a fault advertisement without an activated pod queues nothing`() = runTest {
+        rules.onPodFaultAdvertised()
+        runLaunched()
+
+        assertTrue(queue.queued.isEmpty())
+    }
+
     @Test
     fun `no status read while the queue is busy or no command is open`() = runTest {
         f.pairAndConnect()

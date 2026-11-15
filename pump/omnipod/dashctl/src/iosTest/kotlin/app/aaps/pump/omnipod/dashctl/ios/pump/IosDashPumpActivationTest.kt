@@ -254,9 +254,13 @@ class IosDashPumpActivationTest {
      * lost. A basal program sent now would move the last programming sequence of the pod, and no
      * status could then tell whether the stop went in. OmnipodKit `PodCommsSession.send` adds no
      * beep block while it resolves an unacknowledged command.
+     *
+     * Part 2 reads a status first (owner decision, see the next test). Here the answer to that status
+     * cannot be read (it does not belong to the command), so the stop stays open and part 2 is
+     * refused as before.
      */
     @Test
-    fun `no activation command goes while a command is open`() = runTest {
+    fun `no activation command goes while a command is open and no status decides it`() = runTest {
         newPod()
         val part1 = f.pump.activatePodPart1(lowReservoir)
         assertTrue(part1.success, part1.comment)
@@ -264,15 +268,49 @@ class IosDashPumpActivationTest {
         f.stateManager.markActiveCommandSent()
         val programsBefore = model.basalPrograms
         val typesBefore = model.commandTypes.size
+        f.pod.answerSequenceFor = { (it + 5) and 0x0f }
 
         val part2 = f.pump.activatePodPart2(program, userConfiguredExpirationReminderHours = 4, userConfiguredExpirationAlarmHours = 7)
 
         assertFalse(part2.success, part2.comment)
         assertEquals(programsBefore, model.basalPrograms, "no basal program reached the pod")
-        assertTrue(
-            model.commandTypes.drop(typesBefore).all { it == CommandType.GET_STATUS.value },
-            "only status reads: ${model.commandTypes.drop(typesBefore)}"
+        assertEquals(
+            listOf(CommandType.GET_STATUS.value),
+            model.commandTypes.drop(typesBefore),
+            "only the status read for the open command"
         )
+        assertEquals(DashCommandKind.STOP_ALL, f.stateManager.activeCommand?.kind, "the stop stays open")
+        assertTrue(f.decided.isEmpty(), "nothing decided")
+        assertEquals(ActivationProgress.PHASE_1_COMPLETED, f.stateManager.activationProgress)
+    }
+
+    /**
+     * Deliberate difference from Android (owner decision): part 2 with an open command that is not
+     * confirmed reads a status first, as the deactivation does. The status decides the open stop, its
+     * outcome is given to the receiver (decided late, so insulin is counted right), and part 2 goes
+     * on. Before, part 2 was refused and the user could not finish the activation.
+     */
+    @Test
+    fun `part 2 reads a status first and goes on when it decides the open command`() = runTest {
+        newPod()
+        val part1 = f.pump.activatePodPart1(lowReservoir)
+        assertTrue(part1.success, part1.comment)
+        f.stateManager.createActiveCommand(kind = DashCommandKind.STOP_ALL, historyId = 0L, createdAtMs = NOW)
+        f.stateManager.markActiveCommandSent()
+        val typesBefore = model.commandTypes.size
+
+        val part2 = f.pump.activatePodPart2(program, userConfiguredExpirationReminderHours = 4, userConfiguredExpirationAlarmHours = 7)
+
+        assertTrue(part2.success, part2.comment)
+        assertEquals(CommandType.GET_STATUS.value, model.commandTypes[typesBefore], "the status read goes first")
+        val outcome = f.decided.single()
+        assertEquals(DashCommandKind.STOP_ALL, outcome.command.kind)
+        assertTrue(outcome.confirmation.isFinal, "decided: ${outcome.confirmation}")
+        assertTrue(outcome.decidedLate)
+        assertEquals(null, f.stateManager.activeCommand)
+        assertEquals(ActivationProgress.COMPLETED, f.stateManager.activationProgress)
+        assertEquals(1, model.cannulaInsertions, "cannula boluses")
+        assertEquals(program, f.stateManager.basalProgram)
     }
 
     /**

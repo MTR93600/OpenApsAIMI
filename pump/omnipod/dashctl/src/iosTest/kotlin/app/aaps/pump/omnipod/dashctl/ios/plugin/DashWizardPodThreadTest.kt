@@ -39,6 +39,8 @@ class DashWizardPodThreadTest {
             scanThread = NSThread.currentThread
             return DashConnectResult.NotConnected("no pod in range")
         }
+
+        override fun setFaultListener(listener: () -> Unit) = Unit
     }
 
     private val stateManager = DashPodStateManager(MemoryDashPodStateStore())

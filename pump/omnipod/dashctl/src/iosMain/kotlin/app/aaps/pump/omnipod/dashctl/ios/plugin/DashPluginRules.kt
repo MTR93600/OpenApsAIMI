@@ -560,6 +560,25 @@ class DashPluginRules(
     }
 
     /**
+     * The pod showed a fault in its advertisement while it was not connected (the fault watch of
+     * `DashHeldConnection`, given by [IosDashPump.setPodFaultListener]): a status read is queued at
+     * once, so the alarm is read and handled now ([checkPodKaput] after the read: the bolus the fault
+     * stopped, the PUMP_SUSPEND temp basal, the fault notice), as OmnipodKit (Trio)
+     * `omnipodDidDetectAlert` reads the pod status. Deliberate difference from Android (insulin counted
+     * wrong): Android learns of the fault only at the next status read, and until then counts basal
+     * the pod does not give. Nothing before the activation is completed: the status read does nothing
+     * then either (`getPumpStatus`).
+     */
+    fun onPodFaultAdvertised() {
+        if (!stateManager.isActivationCompleted) {
+            aapsLogger.info(LTag.PUMP, "Dash fault advertisement ignored: no activated pod")
+            return
+        }
+        aapsLogger.warn(LTag.PUMP, "Dash pod advertises a fault: status read queued")
+        launch { commandQueue().readStatus(rh.gs(DashStrings.omnipod_dash_ios_pod_fault_seen)) }
+    }
+
+    /**
      * Android `updatePodWarnings`, at most every 15 minutes: "no active pod", or "delivery suspended"
      * with sound, or, for a running pod that is not suspended, a notice when the time zone of the pod
      * (stored when it took its last basal program) is not the time zone of the phone now

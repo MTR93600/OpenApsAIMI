@@ -28,6 +28,7 @@ import platform.CoreBluetooth.CBManagerStateUnknown
 import platform.CoreBluetooth.CBManagerStateUnsupported
 import platform.CoreBluetooth.CBPeripheral
 import platform.CoreBluetooth.CBPeripheralDelegateProtocol
+import platform.CoreBluetooth.CBPeripheralStateConnected
 import platform.CoreBluetooth.CBService
 import platform.CoreBluetooth.CBUUID
 import platform.Foundation.NSData
@@ -192,6 +193,13 @@ class CoreBluetoothCentral(
          */
         const val START_DELAY_KEY = "kCBConnectOptionStartDelay"
     }
+
+    /**
+     * True when iOS has the link to [id] up now (`CBPeripheral.state` is connected), also when its
+     * `didConnect` event still waits on the radio queue. A peripheral this central does not know is
+     * not connected. Runs on the radio queue.
+     */
+    fun isPeripheralConnected(id: String): Boolean = syncValue { peripherals[id]?.state == CBPeripheralStateConnected }
 
     override fun cancel(id: String) {
         val peripheral = peripherals[id] ?: return

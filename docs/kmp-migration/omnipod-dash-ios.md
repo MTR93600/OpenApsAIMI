@@ -668,7 +668,8 @@ test vectors and the pinned parity bytes do not change.
       beep block while it resolves an unacknowledged command). The delivery path already refused it
       (`createActiveCommand`); `IosDashPump.sendCommand` now refuses any command other than a status
       read while an active command is open, the activation included. Tests: `IosDashPumpActivationTest`
-      (an open stop blocks part 2), `IosDashPumpCommandTest` (pin: no PROGRAM_BEEPS while a bolus is
+      (an open stop blocks part 2 while no status decides it; since 4d part 2 reads a status first),
+      `IosDashPumpCommandTest` (pin: no PROGRAM_BEEPS while a bolus is
       open; this one passed before too).
 - Test fixture changes for these: `DashPumpOnFakePod.pairAndConnect` now gives an activated pod a
   running basal and the status it reports, as read in this session, with no message
@@ -731,6 +732,88 @@ for is a user action lost):
   `DashDoseAccountingTest` (2 more, codec).
 - New English strings: `omnipod_dash_ios_pod_alerts`, `omnipod_dash_ios_silence_alert`.
 - To check on a real pod (section 6): that a silence with one slot stops only that alert's beeps.
+
+### 4d. BLE robustness and activation part 2, from OmnipodKit (Trio), 2026-11-15
+
+Item 9 of the OmnipodKit comparison. Deliberate differences from Android (Android :pump:omnipod:dash
+does not change), each with a KDoc line. The rules are in commonMain (`DashHeldConnection`), with tests
+on the fake central `HeldPodCentral`; the CoreBluetooth side only gives a timer and turns the two
+features on (`IosDashBleHost`), plus the peripheral state for the watchdog
+(`CoreBluetoothCentral.isPeripheralConnected`).
+
+- [x] **Connect watchdog** (OmnipodKit `BluetoothManager.armConnectWatchdog`,
+      `eagerConnectWatchdogSeconds` 2 s, `eagerConnectTeardownSeconds` 0.2 s,
+      `eagerConnectBudgetSeconds` 40 s). A user action lost otherwise: OmnipodKit found connects that
+      stay wedged with no `didConnect` (InPlay pods, iPhone 16 class), and a command or bolus then waits
+      until the queue gives up. While the connection is wanted, a connect with no link 2 s after it was
+      asked (after its start delay, when it has one) is cancelled, and at once a new one is asked with a
+      start delay of 1 s. For at most 40 s from the first connect; the budget starts again after a link
+      came up, a new `hold` or a restore. After the budget the connect stays held with no limit (the
+      OmniBLE rule, so iOS still wakes the app when the pod comes). The timer is
+      `CoreBluetoothCentral.postAfter` (the radio queue, as OmnipodKit `managerQueue.asyncAfter`), which
+      iOS does not run while the app is suspended. Three choices made after the review of 2026-11-15:
+      - **No pause without a connect.** OmnipodKit waits 0.2 s on a timer between the cancel and the
+        new connect. iOS does not run that timer in a suspended app, so an app suspended in the pause
+        had no connect open and the pod coming back did not wake it. Here the pause is the start delay
+        of the new connect, counted by iOS (CoreBluetooth takes whole seconds only, so 1 s). A cycle is
+        3 s, about 13 cycles in 40 s.
+      - **A link that is already up is not cut.** Before the cancel the watchdog asks the peripheral
+        state, as OmnipodKit (`guard target.state != .connected`): a link that came up just before the
+        timer, whose event still waits on the radio queue, would otherwise be cut, its set up would
+        fail and the next connect would wait 10 s.
+      - **No fault scan while the watchdog runs**, as OmnipodKit `eagerConnect` ("a concurrent scan
+        starves connection completion on iOS"). After the budget the light C00A scan runs beside the
+        held connect, as OmnipodKit keeps it beside its delayed connect (`issueDelayedConnectProbe`).
+      Not taken from OmnipodKit: its gate to InPlay pods on some iPhones (it reads the peripheral name
+      and the phone model); here the watchdog runs for every pod, and a false trip costs one cancel and
+      1 s. Tests: `DashConnectWatchdogTest` (12), `DashFaultWatchTest` "the fault scan stops while the
+      connect watchdog runs and comes back after its budget".
+- [x] **Fault watch scan** (OmnipodKit `startScanning` with `alarmServiceUUIDs` = [C00A],
+      `didDiscover` gated on its own pod, `surfacePodConditionAndQuiet`, `omnipodDidDetectAlert`).
+      Insulin counted wrong otherwise: a pod that faults stops all delivery, and the app learned it only
+      at the next status read. While the paired pod is known and not connected (Bluetooth on, no
+      pairing scan), a scan runs filtered on C00A ONLY with no duplicates (the 2nd service UUID is C001
+      in normal use, C005 with an alert set, C00A in fault; with C005 in the filter iOS reports the
+      change to C00A about 7 minutes late, OmnipodKit measured). An advertisement of THIS pod (the
+      filter is not pod specific) with C00A calls the fault listener on a worker, never on the radio
+      queue (OmnipodKit issue 126), and the scan stops for this pod. The report is used up only when a
+      link to the pod came up after it (the read, or any command, reached the pod), or when a connection
+      was asked after it and stopped with no link (the read never reached the pod); then the scan runs
+      again. So a report the plugin could not use (no activated pod yet) or a status read that failed
+      does not hide the fault until the next regular read; a pod still in fault is reported again at
+      most once for each connection tried. `DashPluginRules.onPodFaultAdvertised`
+      then queues a status read ("Pod fault seen"); the usual `checkPodKaput` rules do the rest. Not
+      taken: the decoding of the status word in the manufacturer data (with a C00A only filter a
+      change there never reaches the app), and alert (C005) detection, which OmnipodKit also dropped.
+      Tests: `DashFaultWatchTest` (12), `IosDashPluginPumpTest` (2), `DashPodFaultWatchPluginTest` (1).
+- [x] **Activation part 2 decides an open command first** (owner decision; insulin counted wrong and a
+      user action lost). With a command open and NOT_CONFIRMED, part 2 reads a status first, with the
+      command lock, as `deactivatePod` does (`IosDashPump.decideOpenCommandBeforePart2`). When the status
+      decides the command, its outcome goes to `onCommandDecided` (decided late) and part 2 goes on;
+      when no status can be read, the command stays open and part 2 is refused as before (only that
+      status read is sent). Tests: `IosDashPumpActivationTest` "part 2 reads a status first and goes on
+      when it decides the open command" (fails before the change) and "no activation command goes while
+      a command is open and no status decides it" (the old test, now with an answer that cannot be read).
+- New English string: `omnipod_dash_ios_pod_fault_seen`. No codec change.
+- To check on a real phone (section 6):
+  - the fault scan: an induced occlusion (or a pod at its end of life) wakes a suspended app within
+    about a minute and a status read follows; the pod advertises C00A in fault (OmnipodKit captured it
+    on its pods, not on ours); the scan keeps running in the background and after an iOS relaunch
+    (state restoration keeps it, and the app starts it again); a nearby pod of someone else in fault
+    does nothing;
+  - the watchdog: a pod in range still connects first time (no false trips in the log), also with the
+    fault scan running before the connect (the scan stops before the connect; check that the connect
+    time in the log is the same as with no scan); with the pod out of range the log shows about 13
+    cancel cycles in 40 s and then the connect stays held, and the app is still woken when the pod
+    comes back in range, also when it was suspended in the middle of the cycles;
+  - that a connect with a 1 s start delay, asked right after the cancel, really tears down a wedged
+    connect (OmnipodKit tested a 0.2 s pause with no connect open, not this);
+  - whether a cancel of a pending connect gives a `didDisconnect` or `didFailToConnect`. If it does, the
+    code asks a connect with no delay at once (no harm, but the pause is then shorter);
+  - the "not cut" check: the log line "is connected, its event is on the way" should be rare;
+  - after a fault report and a status read that failed (pod out of range), the C00A scan runs again
+    and a second report comes when the pod is back;
+  - battery: the C00A scan with no duplicates should cost nothing in normal use (no match).
 
 ### 5. Screens
 

@@ -118,6 +118,7 @@
     <string name="omnipod_dash_ios_tbr_out_of_sync">Temp basal status is not as expected. If a temp basal was running before, it has been cancelled. Check the insulin delivered and the pod history.</string>
     <string name="omnipod_dash_ios_unconfirmed_command" comment="26 characters max for translation">Unconfirmed command</string>
     <string name="omnipod_dash_ios_pod_activated" comment="Reason of a status read, 26 characters max for translation">Pod activated</string>
+    <string name="omnipod_dash_ios_pod_fault_seen" comment="Reason of a status read: the pod signal over Bluetooth shows a pod fault. 26 characters max for translation">Pod fault seen</string>
     <string name="omnipod_dash_ios_error" comment="Title of an alarm window from the Omnipod Dash driver">Error</string>
     <string name="omnipod_dash_ios_pod_alerts" comment="Notice on the phone while the pod beeps. %1$s=the names of the active pod alerts, one per line. Example: Pod alerts: (new line) Low Reservoir">Pod alerts:\n%1$s</string>
     <string name="omnipod_dash_ios_silence_alert" comment="Button that silences one pod alert. %1$s=name of the alert. Example: Silence Low Reservoir">Silence %1$s</string>

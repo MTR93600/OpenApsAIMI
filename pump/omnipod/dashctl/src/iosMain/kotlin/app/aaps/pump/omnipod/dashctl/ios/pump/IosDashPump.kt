@@ -703,6 +703,9 @@ class IosDashPump(
      * Not here yet (phase 4, the plugin): the history record, and the `PumpSync` records after part 2
      * (the end of the fake TBR, `connectNewPump`, the cannula and insulin change events), and a status
      * read once it is done.
+     *
+     * An open command not confirmed is decided first ([decideOpenCommandBeforePart2]), as
+     * [deactivatePod] does.
      */
     suspend fun activatePodPart2(
         basalProgram: BasalProgram,
@@ -711,9 +714,33 @@ class IosDashPump(
         expirationAlertSettings: DashExpirationAlertSettings? = null,
     ): PumpEnactResult =
         activationCall("Pod activation part 2", connectFirst = { connectForActivation(newPod = false) }) {
+            decideOpenCommandBeforePart2()
             activation().activatePart2(basalProgram, userConfiguredExpirationReminderHours, userConfiguredExpirationAlarmHours)
             expirationAlertSettings?.let { stateManager.updateExpirationAlertSettings(it) }
         }
+
+    /**
+     * Deliberate difference from Android (insulin counted wrong, and a user action lost): when a
+     * command is open and NOT_CONFIRMED at the start of part 2, a status is read first, with the
+     * command lock held, as [deactivatePod] does (owner decision). When that status decides the
+     * command, its outcome is given to [onCommandDecided] (so its insulin is counted right) and part 2
+     * goes on. When no status can be read, or it does not decide the command, the command stays open
+     * and part 2 is refused as before, with nothing but that status sent ([sendCommand] sends no
+     * programming command while a command is open). Android sends part 2 at once, and its basal
+     * program then moves the last programming sequence of the pod, so no later status could tell what
+     * happened to the open command; before this change part 2 was refused here until something else
+     * read a status, and the user could not finish the activation from the wizard.
+     *
+     * Only for a part 2 that may run (progress from PHASE_1_COMPLETED and before COMPLETED): a part 2
+     * that is refused for its progress sends nothing, as Android. Called with [commandMutex] held.
+     */
+    private fun decideOpenCommandBeforePart2() {
+        val progress = stateManager.activationProgress
+        if (!progress.isAtLeast(ActivationProgress.PHASE_1_COMPLETED) || !progress.isBefore(ActivationProgress.COMPLETED)) return
+        if (stateManager.activeCommand == null || stateManager.commandConfirmation() != DashCommandConfirmation.NOT_CONFIRMED) return
+        aapsLogger.info(LTag.PUMP, "Activation part 2: the last command is not confirmed, reading a status first")
+        readStatusWithLock()
+    }
 
     /**
      * The connection an activation step needs, made before the command lock is taken (the set up
@@ -2431,6 +2458,15 @@ class IosDashPump(
      * then, or that call would find an empty [commandMutex].
      */
     private val connector: DashPodConnector? = connectorFactory?.invoke(this)
+
+    /**
+     * [listener] runs (on a worker) when the paired pod shows a fault in its advertisement while it
+     * is not connected ([DashPodConnector.setFaultListener]). The plugin queues a status read there,
+     * so the alarm is read at once and not at the next loop. Nothing without a connector.
+     */
+    fun setPodFaultListener(listener: () -> Unit) {
+        connector?.setFaultListener(listener)
+    }
 
     companion object {
 

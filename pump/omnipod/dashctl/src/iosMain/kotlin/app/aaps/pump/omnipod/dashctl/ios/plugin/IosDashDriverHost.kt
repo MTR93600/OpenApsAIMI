@@ -165,7 +165,10 @@ class IosDashDriverHost(
         launch = { block -> workScope.launch { block() } },
         now = { Clock.System.now().toEpochMilliseconds() },
         history = history,
-    )
+    ).also { built ->
+        // A pod fault seen in the advertisement queues a status read at once (OmnipodKit `omnipodDidDetectAlert`).
+        driver.setPodFaultListener(built::onPodFaultAdvertised)
+    }
 
     /** The pod as the activation and deactivation wizard sees it. */
     val wizardPod = IosDashWizardPod(rules = rules, stateManager = stateManager, commandQueue = commandQueue, openRadio = ::openRadio)

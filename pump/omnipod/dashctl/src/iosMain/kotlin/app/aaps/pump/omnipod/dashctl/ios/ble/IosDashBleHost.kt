@@ -20,7 +20,9 @@ import kotlinx.coroutines.launch
  *   so iOS starts the app again for the pod and hands the pod back (state restoration);
  * - [QueuedBleCentral] around it, so the blocking link code runs each call on the radio queue;
  * - one [DashHeldConnection] that gets every event of the central (on the radio queue) and runs the
- *   link set up on [scope].
+ *   link set up on [scope]. It runs the connect watchdog on timers of the radio queue
+ *   (`CoreBluetoothCentral.postAfter`) and the fault watch scan (filtered on C00A, no duplicates, the
+ *   scan iOS keeps running in the background). The rules of both are in [DashHeldConnection].
  *
  * Use: give [connectorFactory] to `IosDashPump(connectorFactory = ...)`, with the pod address the
  * store already holds, then call [open] when the plugin starts. The pod is made known (in
@@ -48,6 +50,13 @@ class IosDashBleHost(
             client = client,
             runOnWorker = { block -> scope.launch { block() } },
             now = { Clock.System.now().toEpochMilliseconds() },
+            // The connect watchdog timer: on the radio queue, as OmnipodKit `managerQueue.asyncAfter`.
+            // iOS does not run it while the app is suspended, so the held connect stays then.
+            schedule = { ms, block -> central.postAfter(ms, block) },
+            watchForFaults = true,
+            // The watchdog does not cut a link iOS has up before its event comes (OmnipodKit checks
+            // the peripheral state the same way).
+            peripheralConnected = { id -> central.isPeripheralConnected(id) },
         )
         storedPodAddress?.let { held.setPod(it) }
         central.events = held::onEvent
