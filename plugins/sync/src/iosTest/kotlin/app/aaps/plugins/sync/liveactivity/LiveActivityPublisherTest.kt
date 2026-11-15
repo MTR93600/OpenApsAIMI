@@ -58,7 +58,7 @@ class LiveActivityPublisherTest {
         var builds = 0
         var lastWithChart: Boolean? = null
 
-        override suspend fun export(withChart: Boolean): WidgetStateSnapshot {
+        override suspend fun export(withChart: Boolean, withDetails: Boolean): WidgetStateSnapshot {
             builds++
             lastWithChart = withChart
             val json = buildJsonObject {

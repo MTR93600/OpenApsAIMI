@@ -82,7 +82,7 @@ private struct LockScreenView: View {
                         DeltaAndAgeView(state: state, stale: stale, alignment: .leading)
                     }
                     Spacer(minLength: 8)
-                    InfoColumn(state: state)
+                    InfoColumn(state: state, stale: stale)
                 }
                 if state.showChart && !state.chart.isEmpty {
                     MiniChart(state: state, stale: stale)
@@ -157,16 +157,19 @@ private struct AgeView: View {
 }
 
 /// IOB, COB, carbs required and the loop, each only when the user asked for it.
+/// When the reading is stale these values are just as old (the app did not run since), so IOB and
+/// COB are struck out and grey, and "carbs required" and the running mode are not shown at all.
 private struct InfoColumn: View {
 
     let state: AapsActivityAttributes.ContentState
+    let stale: Bool
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 2) {
             if state.showIobCob {
-                LabeledValue(label: state.iobLabel, value: state.iobText)
-                LabeledValue(label: state.cobLabel, value: state.cobText)
-                if let carbsReq = state.carbsReqText {
+                LabeledValue(label: state.iobLabel, value: state.iobText, stale: stale)
+                LabeledValue(label: state.cobLabel, value: state.cobText, stale: stale)
+                if !stale, let carbsReq = state.carbsReqText {
                     Text(carbsReq).font(.caption).foregroundStyle(.orange)
                 }
             }
@@ -179,7 +182,7 @@ private struct InfoColumn: View {
                 }
                 .font(.caption)
                 .lineLimit(1)
-                if state.modeActive {
+                if !stale && state.modeActive {
                     Text(state.modeText).font(.caption).foregroundStyle(.orange)
                 }
             }
@@ -191,11 +194,14 @@ private struct LabeledValue: View {
 
     let label: String
     let value: String
+    let stale: Bool
 
     var body: some View {
         HStack(spacing: 4) {
             Text(label).foregroundStyle(.secondary)
             Text(value)
+                .strikethrough(stale)
+                .foregroundStyle(stale ? Color.gray : Color.primary)
         }
         .font(.caption)
         .lineLimit(1)
@@ -211,7 +217,7 @@ private struct DetailsView: View {
     var body: some View {
         VStack(spacing: 4) {
             HStack {
-                InfoColumn(state: state)
+                InfoColumn(state: state, stale: stale)
                 Spacer()
             }
             if state.showChart && !state.chart.isEmpty {
@@ -247,7 +253,8 @@ private struct MiniChart: View {
     }
 }
 
-private struct TrendArrowView: View {
+/// Also used by the home widgets (AapsHomeWidget.swift).
+struct TrendArrowView: View {
 
     let trend: String?
 
@@ -278,7 +285,8 @@ private struct TrendArrowView: View {
     }
 }
 
-private extension AapsActivityAttributes.BgColorClass {
+/// Also used by the home widgets (AapsHomeWidget.swift).
+extension AapsActivityAttributes.BgColorClass {
 
     var color: Color {
         switch self {

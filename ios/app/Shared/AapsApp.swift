@@ -32,6 +32,10 @@ struct AapsApp: App {
     /// Live Activity plugin. See LiveActivityBridge.swift.
     private static let liveActivityCompanion = SwiftLiveActivityCompanion()
 
+    /// One home widget bridge for the life of the process, installed before the graph builds the home
+    /// widget plugin. See LiveActivityBridge.swift.
+    private static let homeWidgetCompanion = SwiftHomeWidgetCompanion()
+
     init() {
         CrashlyticsCrashReporter.start()
         // Install the Swift AVFoundation implementation before the Kotlin graph can construct an
@@ -41,6 +45,7 @@ struct AapsApp: App {
         )
         ConnectIqCompanionKt.installConnectIqCompanion(companion: AapsApp.connectIqCompanion)
         LiveActivityCompanionKt.installLiveActivityCompanion(companion: AapsApp.liveActivityCompanion)
+        HomeWidgetCompanionKt.installHomeWidgetCompanion(companion: AapsApp.homeWidgetCompanion)
         // Must happen here. iOS only lets background task handlers be registered before the app
         // finishes launching, and `makeUIViewController` below runs later. This call needs no
         // graph; the Kotlin side queues the tasks once its graph is built.

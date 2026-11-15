@@ -2,6 +2,7 @@ package app.aaps.ui.widget.state
 
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.RM
+import app.aaps.core.data.model.TT
 import app.aaps.core.data.model.TrendArrow
 import app.aaps.core.interfaces.overview.IsfStep
 import app.aaps.core.interfaces.resources.TextResolver
@@ -174,6 +175,93 @@ class WidgetStateJsonTest {
         val json = WidgetStateJson.encode(state(bgTimestamp = now, isStale = false, chart = points), FakeResolver)
         assertTrue(json.toString().length < 3_000, "size ${json.toString().length}")
     }
+
+    @Test
+    fun liveActivityStateHasNoDetailKeys() {
+        val json = WidgetStateJson.encode(state(bgTimestamp = now, isStale = false), FakeResolver)
+        for (key in detailKeys) assertFalse(json.containsKey(key), key)
+    }
+
+    @Test
+    fun detailsCarryTheAndroidWidgetChipsAsNames() {
+        val json = WidgetStateJson.encode(
+            state(bgTimestamp = now, isStale = false).copy(
+                tempTargetText = "Eating soon 90",
+                targetChip = WidgetTargetChip.TEMP,
+                tempTargetReason = TT.Reason.EATING_SOON,
+                targetIcon = WidgetTargetIcon.EATING_SOON,
+                profileText = "Day (110%)",
+                profileModified = true,
+                runningMode = RM.Mode.OPEN_LOOP,
+                loopIcon = WidgetLoopIcon.OPEN,
+                sensitivityIcon = WidgetSensitivityIcon.OFF_BELOW,
+                sensitivityText = "85%",
+                isfFromText = "40",
+                isfToText = "47",
+                isfStep = IsfStep.UP,
+                isfStepDescription = "ISF up",
+                tbrState = WidgetTbrState.BELOW_PROFILE,
+                tbrDescription = "Temp basal below profile",
+                iobActive = false,
+                cobActive = true
+            ),
+            FakeResolver,
+            withDetails = true
+        )
+
+        for (key in detailKeys) assertTrue(json.containsKey(key), key)
+        assertEquals("Eating soon 90", json.text("targetText"))
+        assertEquals("TEMP", json.text("targetChip"))
+        assertEquals("EATING_SOON", json.text("ttReason"))
+        assertEquals("EATING_SOON", json.text("targetIcon"))
+        assertEquals("Day (110%)", json.text("profileText"))
+        assertTrue(json.bool("profileModified"))
+        assertEquals("OPEN", json.text("loopIcon"))
+        assertEquals("OPEN_LOOP", json.text("mode"))
+        assertEquals("OFF_BELOW", json.text("sensIcon"))
+        assertEquals("85%", json.text("sensText"))
+        assertEquals("40", json.text("isfFromText"))
+        assertEquals("47", json.text("isfToText"))
+        assertEquals("UP", json.text("isfStep"))
+        assertEquals("ISF up", json.text("isfStepText"))
+        assertEquals("BELOW_PROFILE", json.text("tbr"))
+        assertEquals("Temp basal below profile", json.text("tbrText"))
+        assertFalse(json.bool("iobActive"))
+        assertTrue(json.bool("cobActive"))
+    }
+
+    @Test
+    fun detailsWithoutTempTargetOrIsfChangeSendNull() {
+        val json = WidgetStateJson.encode(state(bgTimestamp = now, isStale = false), FakeResolver, withDetails = true)
+
+        assertEquals(JsonNull, json["ttReason"])
+        assertEquals(JsonNull, json["isfStepText"])
+        assertEquals("NONE", json.text("targetChip"))
+        assertEquals("NONE", json.text("tbr"))
+    }
+
+    @Test
+    fun detailsDoNotChangeTheLiveActivityKeys() {
+        // The home widgets read the same base keys as the Live Activity, so both judge the age alike.
+        val base = WidgetStateJson.encode(state(bgTimestamp = now - 20 * min, isStale = true), FakeResolver)
+        val full = WidgetStateJson.encode(state(bgTimestamp = now - 20 * min, isStale = true), FakeResolver, withDetails = true)
+        for ((key, value) in base) assertEquals(value, full[key], key)
+        assertTrue(full.bool("stale"))
+    }
+
+    @Test
+    fun fullStateWithDetailsStaysSmall() {
+        // The widget reads it from a file on every timeline; it must stay a small read.
+        val points = (0 until WidgetStateRules.CHART_MAX_POINTS).map { WidgetChartPoint(now - it * 5 * min, 123.456) }
+        val json = WidgetStateJson.encode(state(bgTimestamp = now, isStale = false, chart = points), FakeResolver, withDetails = true)
+        assertTrue(json.toString().length < 4_000, "size ${json.toString().length}")
+    }
+
+    private val detailKeys = listOf(
+        "targetText", "targetChip", "ttReason", "targetIcon", "profileText", "profileModified", "loopIcon",
+        "sensIcon", "sensText", "isfFromText", "isfToText", "isfStep", "isfStepText", "tbr", "tbrText",
+        "iobActive", "cobActive"
+    )
 
     private fun JsonObject.text(key: String) = getValue(key).jsonPrimitive.content
     private fun JsonObject.int(key: String) = getValue(key).jsonPrimitive.int

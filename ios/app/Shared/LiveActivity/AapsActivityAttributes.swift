@@ -1,5 +1,6 @@
 import ActivityKit
 import Foundation
+import os
 
 /// The Live Activity data, shared by the app (which starts and updates the activity) and the widget
 /// extension (which draws it). Target membership: AAPS, AAPS2 and both Live Activity extensions.
@@ -87,5 +88,80 @@ struct AapsActivityAttributes: ActivityAttributes {
 
     enum BgColorClass {
         case low, inRange, high, stale
+    }
+}
+
+/// The file through which the app hands the widget state to the home and lock screen widgets.
+/// Shared by the app (which writes it) and the widget extension (which reads it), so the place of the
+/// file is written down only here.
+///
+/// The file lives in the App Group container. The group id comes from the build setting
+/// `AAPS_APP_GROUP_ID` through the Info.plist key `AapsAppGroupId`; nothing is hardcoded here. Without
+/// the build setting, or without the App Group entitlement (the Xcode steps are not done yet), there is
+/// no container: writing and reading then do nothing and log it once. It never crashes.
+///
+/// AAPS and AAPS2 may share one App Group (one entitlements file serves both), so the file name holds
+/// the bundle id of the app. The widget of AAPS2 can never show the data of AAPS.
+///
+/// The content is `WidgetStateJson` from Kotlin with the chart and the details: health data. It is
+/// written with file protection "until first unlock", the strongest level a lock screen widget can
+/// still read.
+enum AapsWidgetStore {
+
+    /// The `kind` of the home screen widget. The app reloads timelines of this kind after a write.
+    static let kind = "AapsHomeWidget"
+
+    /// The JSON version this code understands (`WidgetStateJson.VERSION`). Another version is shown as
+    /// no data, never guessed.
+    static let supportedVersion = 1
+
+    static let log = Logger(subsystem: "app.aaps", category: "HomeWidget")
+
+    private static let groupIdKey = "AapsAppGroupId"
+
+    /// The App Group id, or nil when the build setting is not set.
+    static var groupId: String? {
+        guard let id = Bundle.main.object(forInfoDictionaryKey: groupIdKey) as? String,
+              !id.isEmpty, !id.contains("$(")
+        else { return nil }
+        return id
+    }
+
+    /// The bundle id of the app that owns the data. In the extension (`<app id>.LiveActivity`) it is the
+    /// id of the app the extension is embedded in.
+    static var appBundleId: String? {
+        guard let id = Bundle.main.bundleIdentifier else { return nil }
+        guard Bundle.main.bundleURL.pathExtension == "appex" else { return id }
+        var parts = id.split(separator: ".")
+        guard parts.count > 1 else { return nil }
+        parts.removeLast()
+        return parts.joined(separator: ".")
+    }
+
+    /// The file, or nil without an App Group container.
+    static var fileURL: URL? {
+        guard let groupId, let app = appBundleId,
+              let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupId)
+        else { return nil }
+        return container.appendingPathComponent("widget-state.\(app).json", isDirectory: false)
+    }
+
+    /// Writes the state. Returns false, and writes nothing, without a container or on an error.
+    static func write(_ json: String) -> Bool {
+        guard let url = fileURL else { return false }
+        guard let data = json.data(using: .utf8) else { return false }
+        do {
+            try data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            return true
+        } catch {
+            log.error("Widget state could not be written: \(error.localizedDescription, privacy: .public)")
+            return false
+        }
+    }
+
+    /// The last saved file, or nil when there is none or no container. The widget extension decodes it.
+    static func readData() -> Data? {
+        guard let url = fileURL else { return nil }
+        return try? Data(contentsOf: url)
     }
 }

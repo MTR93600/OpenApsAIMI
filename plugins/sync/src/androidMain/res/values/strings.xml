@@ -183,6 +183,8 @@
     <string name="live_activity_show_chart_summary">Glucose of the last 3 hours</string>
     <string name="live_activity_show_iob_cob">Show IOB and COB</string>
     <string name="live_activity_show_loop">Show last loop run</string>
+    <string name="home_widgets">iPhone widgets</string>
+    <string name="home_widgets_description">Shows glucose in widgets on the iPhone home screen and lock screen.</string>
     <string name="garmin_carbs_not_on_client" comment="%1$s=carbs with unit, example: 20 g. A client is a phone that follows and controls the main AAPS phone (the master).">The Garmin watch sent %1$s of carbs. This phone is a client, so they were not entered. Enter them in AAPS.</string>
     <string name="garmin_pump_not_on_client" comment="A client is a phone that follows and controls the main AAPS phone (the master).">The Garmin watch asked to connect or disconnect the pump. This phone is a client, so nothing was changed. Do it in AAPS.</string>
     <string name="garmin_bolus_not_on_client" comment="%1$s=insulin with unit, example: 1.50 U. A client is a phone that follows and controls the main AAPS phone (the master).">The Garmin watch asked for a bolus of %1$s. This phone is a client, so no bolus was given. Give it in AAPS.</string>

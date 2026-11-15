@@ -3,10 +3,13 @@
 <plist version="1.0">
 <dict>
 	<!--
-	  The Live Activity widget extension. GENERATE_INFOPLIST_FILE stays on for this target too, so
+	  The widget extension: the Live Activity and the home and lock screen widgets. GENERATE_INFOPLIST_FILE stays on for this target too, so
 	  Xcode merges the bundle name, version and id into this file. Only the extension point needs
 	  to be written here.
 	-->
+	<!-- The App Group the home widgets read from. The same build setting as the app. -->
+	<key>AapsAppGroupId</key>
+	<string>$(AAPS_APP_GROUP_ID)</string>
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionPointIdentifier</key>

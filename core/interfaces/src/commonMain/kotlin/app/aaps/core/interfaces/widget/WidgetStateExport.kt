@@ -4,7 +4,7 @@ import kotlinx.serialization.json.JsonObject
 
 /**
  * The shared widget state as JSON, for a widget that is drawn outside Kotlin: the iOS Live Activity
- * today, the iOS widgets later.
+ * and the iOS home and lock screen widgets.
  *
  * The state and its rules live in `:ui` (`WidgetStateBuilder`). A plugin in another module reaches it
  * through this interface, so it does not need a dependency on `:ui`.
@@ -19,8 +19,10 @@ interface WidgetStateExport {
      *
      * @param withChart also add the readings of the last 3 hours. Leave it off when the chart is not
      * shown, so the state stays small.
+     * @param withDetails also add what only the home screen widgets show: target, profile, loop
+     * picture, sensitivity, ISF and temp basal. The Live Activity leaves it off.
      */
-    suspend fun export(withChart: Boolean): WidgetStateSnapshot
+    suspend fun export(withChart: Boolean, withDetails: Boolean = false): WidgetStateSnapshot
 }
 
 /**

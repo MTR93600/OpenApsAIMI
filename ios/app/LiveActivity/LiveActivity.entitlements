@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The widget extension (AapsLiveActivity and AapsLiveActivity2). Only the App Group, so the
+	     home widgets can read the file the app writes. AAPS_APP_GROUP_ID is in Signing.xcconfig.
+	     Point CODE_SIGN_ENTITLEMENTS of both extensions here; see
+	     docs/kmp-migration/widget-live-activity-xcode-howto.md. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>$(AAPS_APP_GROUP_ID)</string>
+	</array>
+</dict>
+</plist>

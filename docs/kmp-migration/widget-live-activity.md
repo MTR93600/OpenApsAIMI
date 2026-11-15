@@ -34,7 +34,7 @@ and those do not belong in a domain model anyway. So we move the rule, not write
    - Reference: Trio `LiveActivity/` and `LiveActivityManager.swift` (MIT). Write our own; do not
      copy files.
 3. **iOS home and lock screen widgets** (WidgetKit) with the same content as the Android widgets.
-   These need an App Group (the widget reads the last state itself).
+   These need an App Group (the widget reads the last state itself). Built, see "Step 3 as built (W3)".
 4. **Both sides get the improvements**: a small chart, clear stale rules.
 5. **Option: Android 16 Live Updates** (promoted ongoing notification on the lock screen), fed by
    the same state.
@@ -141,11 +141,68 @@ Kotlin decides, Swift draws. No new module dependency.
 - The Xcode steps are in `widget-live-activity-xcode-howto.md`. Until they are done, the app does
   not build: `AapsApp.swift` already names `SwiftLiveActivityCompanion`.
 
+## Step 3 as built (W3)
+
+iOS home and lock screen widgets (WidgetKit), the same content as the Android widgets, from the same
+state. Kotlin decides, Swift saves, the extension draws. No new module dependency.
+
+- `WidgetStateJson.encode(state, rh, withDetails = true)` adds the chips of the Android widget as
+  names and texts: `targetText`, `targetChip`, `ttReason`, `targetIcon`, `profileText`,
+  `profileModified`, `loopIcon`, `sensIcon`, `sensText`, `isfFromText`, `isfToText`, `isfStep`,
+  `isfStepText`, `tbr`, `tbrText`, `iobActive`, `cobActive`. Without `withDetails` (the Live
+  Activity) the JSON is exactly as in W2. `WidgetStateExport.export` got the same flag (default off).
+  The base keys and the stale rule are shared, so the widget and the Live Activity judge the age alike.
+- `HomeWidgetPlugin` (`:plugins:sync` iosMain, `homewidget/`, map key 381): always on, not in the
+  plugin list, no settings, like the Android widgets (the user chooses by adding a widget). Triggers:
+  new GV and `EventAPSCalculationFinished`. `HomeWidgetPublisher` uses the same 30 s rule as the Live
+  Activity (`LiveActivityThrottle`): a new reading at once, anything else once at the end of the window,
+  built fresh. On top of that a state with the same text as the last save is not saved again, because
+  iOS gives an app only a small number of background widget reloads per day. For the same reason
+  saving and reloading are separate: every state is written, but WidgetKit is asked to reload only on
+  the first save and on a new reading, at most once in 3.5 min (`MIN_RELOAD_INTERVAL_MS`). A loop
+  result alone is only written. 3.5 min plus a 5 min CGM interval stays below the 9 min stale edge.
+  The file also carries the three show flags of `LiveActivityPayload` (all true), because the widget
+  decodes it with `ContentState`, which requires them.
+- `HomeWidgetCompanion` + `installHomeWidgetCompanion`: the bridge, the same pattern as Connect IQ.
+  `SwiftHomeWidgetCompanion` (in `ios/app/Shared/LiveActivityBridge.swift`, already compiled by both
+  apps) writes the JSON with `AapsWidgetStore` and, when Kotlin asks for it, calls
+  `WidgetCenter.reloadTimelines`.
+- `AapsWidgetStore` (in `AapsActivityAttributes.swift`, compiled by the apps and the extension) is the
+  one place that knows the file: App Group id from the build setting `AAPS_APP_GROUP_ID` through the
+  Info.plist key `AapsAppGroupId` (no hardcoded id), file `widget-state.<app bundle id>.json` so AAPS
+  and AAPS2 never read each other's data even with one shared group, written atomically with file
+  protection "until first unlock". No container (setting missing, entitlement not added yet) is a
+  logged no-op, never a crash.
+- The extension (`ios/app/LiveActivity/AapsHomeWidget.swift`, a second widget in the Live Activity
+  bundle): small (glucose, delta, age, IOB, COB), medium (plus the chips: running mode, profile,
+  target, IOB, COB, sensitivity/ISF, temp basal), large (plus the 3 h chart), and the lock screen
+  circular, rectangular and inline families.
+- Stale: the timeline has an entry now and a second one at `staleAt`, so the widget turns stale on time
+  even when nobody reloads it, and asks WidgetKit to read the file again after 15 min. Each entry judges
+  the age at its own date with `ContentState.isStale(at:)` (the Kotlin `isStaleAt` edge, 9 min). Stale
+  means struck out, grey, a warning sign, no arrow, no delta; the age keeps counting
+  (`Text(date, style: .relative)`). The sign and the strike also show on the lock screen, where iOS
+  draws without colours. IOB, COB and every chip come from the same old file, so when stale they are
+  struck out and grey too, and "carbs required" is hidden. No file, a file that cannot be read, or another JSON version shows "---"
+  with the warning sign, never numbers.
+- Swift-only English texts: the widget gallery name and description (read by iOS at install time,
+  like the App Shortcut texts). Everything the widget shows comes from Kotlin.
+- Tests: `WidgetStateJsonTest` (5 new: no detail keys without the flag, every detail key and value,
+  nulls, base keys unchanged, size) and `HomeWidgetPublisherTest` (iosTest, 13: timing, the three
+  flags Swift requires, and the reload rule).
+- Known limit: in the background iOS refuses most widget reloads (a budget of a few dozen per day).
+  Even with the reload rule a 5 min CGM asks for up to 288 a day. The
+  widget then shows the last saved value and greys it out after 9 min, so it can look stale while the
+  app has a fresh value. That is the safe side; the Live Activity is the fresh view.
+- A free Personal Team gets no App Group (HOWTO section 8, step 3): the widgets then show "---".
+- The Xcode steps (App Group entitlement for both apps and the extensions, target membership of
+  `AapsHomeWidget.swift`) are in `widget-live-activity-xcode-howto.md`, sections "The files" and 8.
+
 ## By hand in Xcode
 
 Add the Widget Extension target to both apps (AAPS and AAPS2), signing and profiles for each
 extension id (a Personal Team has a small app id limit), target membership of the attributes file,
-the embed phase, and later the App Group for step 3.
+the embed phase, and the App Group for step 3 (section 8 of the HOWTO).
 
 ## Risks
 

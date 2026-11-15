@@ -154,6 +154,14 @@
 	-->
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<!--
+	  The App Group the home and lock screen widgets read the last state from (AapsWidgetStore in
+	  Shared/LiveActivity/AapsActivityAttributes.swift). From the build setting AAPS_APP_GROUP_ID in
+	  Signing.xcconfig. Until the App Group entitlement is added in Xcode there is no container, and
+	  the app simply does not write the file.
+	-->
+	<key>AapsAppGroupId</key>
+	<string>$(AAPS_APP_GROUP_ID)</string>
 	<!-- Garmin Connect Mobile's scheme. Without this, canOpenURL and the SDK's hand-off fail. -->
 	<key>LSApplicationQueriesSchemes</key>
 	<array>

@@ -2,6 +2,7 @@ import ActivityKit
 import AppIntents
 import Foundation
 import UIKit
+import WidgetKit
 import os
 import AapsShared
 
@@ -59,6 +60,39 @@ final class SwiftLiveActivityCompanion: NSObject, LiveActivityCompanion {
         let current = callback
         lock.unlock()
         current?.refreshRequested()
+    }
+}
+
+/// The iOS home and lock screen widgets. The Kotlin plugin (`HomeWidgetPlugin`) decides when; this
+/// class writes the JSON to the App Group file (`AapsWidgetStore`) and asks WidgetKit to draw the
+/// widgets again.
+///
+/// Without an App Group container (the Xcode steps are not done yet) nothing is written and nothing
+/// is reloaded. That is logged once, never a crash.
+///
+/// iOS gives an app only a small number of widget reloads per day while it is in the background, so
+/// Kotlin (`HomeWidgetPublisher`) asks for a reload only now and then and otherwise only writes the
+/// file. A reload that iOS refuses leaves the old file on screen; the widget then turns it grey and
+/// struck out at `staleAt` by itself, so it never shows an old value as fresh.
+final class SwiftHomeWidgetCompanion: NSObject, HomeWidgetCompanion {
+
+    /// Writes one after the other, off the caller's thread.
+    private let queue = DispatchQueue(label: "app.aaps.homewidget", qos: .utility)
+    private var reportedNoContainer = false
+
+    func save(stateJson: String, reload: Bool) {
+        queue.async { [self] in
+            guard AapsWidgetStore.write(stateJson) else {
+                if !reportedNoContainer {
+                    reportedNoContainer = true
+                    AapsWidgetStore.log.info("No App Group container, the home widgets are not updated")
+                }
+                return
+            }
+            if reload {
+                WidgetCenter.shared.reloadTimelines(ofKind: AapsWidgetStore.kind)
+            }
+        }
     }
 }
 

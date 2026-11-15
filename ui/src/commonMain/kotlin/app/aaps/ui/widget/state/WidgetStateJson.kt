@@ -14,9 +14,9 @@ import kotlinx.serialization.json.put
 import kotlin.math.roundToInt
 
 /**
- * [WidgetState] as JSON, for a widget that Kotlin does not draw: the iOS Live Activity. The Swift
- * struct `AapsActivityAttributes.ContentState` decodes exactly these keys. Change both together and
- * raise [VERSION] when a key changes meaning.
+ * [WidgetState] as JSON, for a widget that Kotlin does not draw: the iOS Live Activity and the iOS
+ * home and lock screen widgets. The Swift struct `AapsActivityAttributes.ContentState` decodes
+ * exactly these keys. Change both together and raise [VERSION] when a key changes meaning.
  *
  * The JSON carries raw numbers and texts. A text that depends on the time of showing is never sent:
  * there is no "3 min ago" (`timeAgoText` stops counting when the app stops). The reader shows the age
@@ -44,12 +44,27 @@ import kotlin.math.roundToInt
  * - `mode` (a `RM.Mode` name), `modeText`, `modeActive` (any mode other than closed loop).
  * - `staleText`: the word added for a screen reader when the value is old.
  * - `chart`: `[[time, mgdl], ...]`, oldest first, empty unless the state was built with the chart.
+ *
+ * Details, only with `withDetails` (the iOS home and lock screen widgets, which show what the Android
+ * widget shows; the Live Activity leaves them out to stay small). The Swift struct `AapsWidgetDetails`
+ * decodes them. Enum values are Kotlin names; the reader maps them to its own colours and pictures.
+ * - `targetText`, `targetChip` (a [WidgetTargetChip] name), `ttReason` (a `TT.Reason` name, null when
+ *   no temp target runs), `targetIcon` (a [WidgetTargetIcon] name).
+ * - `profileText`, `profileModified`.
+ * - `loopIcon` (a [WidgetLoopIcon] name).
+ * - `sensIcon` (a [WidgetSensitivityIcon] name), `sensText`, `isfFromText`, `isfToText`, `isfStep`
+ *   (an `IsfStep` name), `isfStepText` (null when the two values are the same).
+ * - `tbr` (a [WidgetTbrState] name), `tbrText`.
+ * - `iobActive`, `cobActive`: the chip asks for attention.
  */
 object WidgetStateJson {
 
     const val VERSION = 1
 
-    fun encode(state: WidgetState, rh: TextResolver): JsonObject {
+    /**
+     * @param withDetails also add the detail keys listed above, for the iOS home screen widgets.
+     */
+    fun encode(state: WidgetState, rh: TextResolver, withDetails: Boolean = false): JsonObject {
         val unavailable = rh.gs(CoreUiStrings.value_unavailable_short)
         val unitText = rh.gs(if (state.units == GlucoseUnit.MGDL) CoreUiStrings.mgdl else CoreUiStrings.mmol)
         // A reading that is not a real number (NaN) is sent as no reading: no value, no time, always
@@ -96,6 +111,25 @@ object WidgetStateJson {
             put("modeActive", state.runningModeActive)
             put("staleText", rh.gs(UiStrings.a11y_bg_old_reading))
             put("chart", chart(state.chartPoints))
+            if (withDetails) {
+                put("targetText", state.tempTargetText)
+                put("targetChip", state.targetChip.name)
+                put("ttReason", state.tempTargetReason?.name)
+                put("targetIcon", state.targetIcon.name)
+                put("profileText", state.profileText)
+                put("profileModified", state.profileModified)
+                put("loopIcon", state.loopIcon.name)
+                put("sensIcon", state.sensitivityIcon.name)
+                put("sensText", state.sensitivityText)
+                put("isfFromText", state.isfFromText)
+                put("isfToText", state.isfToText)
+                put("isfStep", state.isfStep.name)
+                put("isfStepText", state.isfStepDescription)
+                put("tbr", state.tbrState.name)
+                put("tbrText", state.tbrDescription)
+                put("iobActive", state.iobActive)
+                put("cobActive", state.cobActive)
+            }
         }
     }
 

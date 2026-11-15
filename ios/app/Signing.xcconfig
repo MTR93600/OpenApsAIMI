@@ -38,6 +38,13 @@
 AAPS_ENTITLEMENTS = Device.entitlements
 AAPS_BUNDLE_ID = app.aaps.client
 
+// The App Group through which the app hands the last glucose state to the home screen widgets
+// (docs/kmp-migration/widget-live-activity-xcode-howto.md). AAPS, AAPS2 and both extensions use this
+// one id: the entitlements file is shared by both apps, and the file name in the group holds the app's
+// bundle id, so the two apps never read each other's data. It follows AAPS_BUNDLE_ID, so a Personal
+// Team with its own bundle id gets its own group. Until the entitlement is added nothing uses it.
+AAPS_APP_GROUP_ID = group.$(AAPS_BUNDLE_ID)
+
 #include? "Signing.local.xcconfig"
 
 // The generated version numbers, from :ios:shell:generateIosVersionXcconfig. Optional for the same
