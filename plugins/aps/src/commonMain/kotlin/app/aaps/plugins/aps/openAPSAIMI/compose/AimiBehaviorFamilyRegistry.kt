@@ -12,15 +12,18 @@ internal data class AimiBehaviorFamilyCoverage(
     val expertKeys: Set<String> = emptySet(),
 )
 
+/**
+ * Which keys each Control Center family writes ([AimiBehaviorFamilyCoverage.managedKeys]) and which
+ * related keys it leaves to the Expert screens.
+ *
+ * A family writes tuning keys only. The dose limits (Max SMB, high BG Max SMB, the two priority max
+ * IOB values, the Autodrive and meal modes max basal) are not in any family: the person sets them.
+ */
 internal object AimiBehaviorFamilyRegistry {
 
     private val coverageByFamily: Map<AimiBehaviorFamilyId, AimiBehaviorFamilyCoverage> = mapOf(
         AimiBehaviorFamilyId.Protection to AimiBehaviorFamilyCoverage(
             managedKeys = setOf(
-                DoubleKey.OApsAIMIMaxSMB.key,
-                DoubleKey.OApsAIMIHighBGMaxSMB.key,
-                DoubleKey.OApsAIMIPriorityMaxIobFactor.key,
-                DoubleKey.OApsAIMIPriorityMaxIobExtraU.key,
                 DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor.key,
                 DoubleKey.OApsAIMIRedCarpetRestoreThreshold.key,
             ),
@@ -33,8 +36,6 @@ internal object AimiBehaviorFamilyRegistry {
             managedKeys = setOf(
                 BooleanKey.OApsAIMIHyperTrajectoryRelease.key,
                 BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive.key,
-                DoubleKey.autodriveMaxBasal.key,
-                DoubleKey.meal_modes_MaxBasal.key,
                 DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep.key,
                 DoubleKey.OApsAIMIautodrivePrebolus.key,
                 DoubleKey.OApsAIMIautodrivesmallPrebolus.key,
@@ -154,6 +155,10 @@ internal object AimiBehaviorFamilyRegistry {
 
     fun expertCount(familyId: AimiBehaviorFamilyId): Int =
         coverageByFamily[familyId]?.expertKeys?.size ?: 0
+
+    /** True when a level of [familyId] writes the stored key [key]. */
+    fun isManagedBy(familyId: AimiBehaviorFamilyId, key: String): Boolean =
+        coverageByFamily[familyId]?.managedKeys?.contains(key) == true
 
     fun totalManagedCount(): Int =
         coverageByFamily.values.sumOf { it.managedKeys.size }

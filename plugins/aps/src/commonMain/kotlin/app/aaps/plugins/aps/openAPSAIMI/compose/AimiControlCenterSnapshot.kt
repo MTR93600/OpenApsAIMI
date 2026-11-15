@@ -123,12 +123,10 @@ internal fun buildAimiControlCenterSnapshot(
         sourceSection = buildSourceSection(preferences),
     )
 
+// The level of a family is read from the keys that family writes, so the level read back is the
+// level a family plan applies. The dose limits are not in any family (step C1).
 private fun buildProtectionFamily(preferences: Preferences): AimiBehaviorFamilySnapshot {
     val scores = listOf(
-        normalize(preferences.get(DoubleKey.OApsAIMIMaxSMB), DoubleKey.OApsAIMIMaxSMB),
-        normalize(preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB), DoubleKey.OApsAIMIHighBGMaxSMB),
-        normalize(preferences.get(DoubleKey.OApsAIMIPriorityMaxIobFactor), DoubleKey.OApsAIMIPriorityMaxIobFactor),
-        normalize(preferences.get(DoubleKey.OApsAIMIPriorityMaxIobExtraU), DoubleKey.OApsAIMIPriorityMaxIobExtraU),
         normalize(preferences.get(DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor), DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor),
         normalize(preferences.get(DoubleKey.OApsAIMIRedCarpetRestoreThreshold), DoubleKey.OApsAIMIRedCarpetRestoreThreshold),
     )
@@ -146,10 +144,6 @@ private fun buildProtectionFamily(preferences: Preferences): AimiBehaviorFamilyS
         expertPreferenceCount = AimiBehaviorFamilyRegistry.expertCount(AimiBehaviorFamilyId.Protection),
         status = projection.status,
         details = listOf(
-            detail(ApsStrings.openapsaimi_maxsmb_title, preferences.get(DoubleKey.OApsAIMIMaxSMB), "U"),
-            detail(ApsStrings.openapsaimi_highBG_maxsmb_title, preferences.get(DoubleKey.OApsAIMIHighBGMaxSMB), "U"),
-            detail(ApsStrings.oaps_aimi_priority_max_iob_factor_title, preferences.get(DoubleKey.OApsAIMIPriorityMaxIobFactor), "x"),
-            detail(ApsStrings.oaps_aimi_priority_max_iob_extra_title, preferences.get(DoubleKey.OApsAIMIPriorityMaxIobExtraU), "U"),
             detail(ApsStrings.oaps_aimi_pkpd_relief_factor_title, preferences.get(DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor), null),
             detail(ApsStrings.oaps_aimi_redcarpet_restore_title, preferences.get(DoubleKey.OApsAIMIRedCarpetRestoreThreshold), null),
         ),
@@ -159,14 +153,10 @@ private fun buildProtectionFamily(preferences: Preferences): AimiBehaviorFamilyS
 private fun buildMealCaptureFamily(preferences: Preferences): AimiBehaviorFamilySnapshot {
     val hyperTrajectory = preferences.get(BooleanKey.OApsAIMIHyperTrajectoryRelease)
     val aggressiveTrajectory = hyperTrajectory && preferences.get(BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive)
-    val autodriveMaxBasal = preferences.get(DoubleKey.autodriveMaxBasal)
-    val mealModesMaxBasal = preferences.get(DoubleKey.meal_modes_MaxBasal)
 
     val scores = mutableListOf<Float>()
     scores += boolScore(hyperTrajectory, whenFalse = 0.28f, whenTrue = 0.68f)
     scores += boolScore(aggressiveTrajectory, whenFalse = 0.46f, whenTrue = 0.88f)
-    scores += mealBasalCapScore(autodriveMaxBasal)
-    scores += mealBasalCapScore(mealModesMaxBasal)
     scores += normalize(preferences.get(DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep), DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep)
     scores += normalize(preferences.get(DoubleKey.OApsAIMIautodrivePrebolus), DoubleKey.OApsAIMIautodrivePrebolus)
     scores += normalize(preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus), DoubleKey.OApsAIMIautodrivesmallPrebolus)
@@ -189,8 +179,6 @@ private fun buildMealCaptureFamily(preferences: Preferences): AimiBehaviorFamily
         details = listOf(
             boolDetail(BooleanKey.OApsAIMIHyperTrajectoryRelease, hyperTrajectory),
             boolDetail(BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive, aggressiveTrajectory),
-            detail(DoubleKey.autodriveMaxBasal, autodriveMaxBasal, "U/h"),
-            detail(DoubleKey.meal_modes_MaxBasal, mealModesMaxBasal, "U/h"),
             detail(ApsStrings.aimi_mpc_u_per_kg_title, preferences.get(DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep), "U/kg/5m"),
             detail(ApsStrings.prebolus_autodrive_mode_title, preferences.get(DoubleKey.OApsAIMIautodrivePrebolus), "U"),
             detail(ApsStrings.prebolussmall_autodrive_mode_title, preferences.get(DoubleKey.OApsAIMIautodrivesmallPrebolus), "U"),
@@ -434,9 +422,6 @@ private fun project(scores: List<Float>): AimiScoreProjection {
 
 private fun normalize(value: Double, key: DoublePreferenceKey): Float =
     normalize(value = value, min = key.min, max = key.max)
-
-private fun mealBasalCapScore(value: Double): Float =
-    normalize(value = value, min = 3.0, max = 10.0)
 
 private fun normalize(value: Double, min: Double, max: Double): Float {
     if (max <= min) return 0.5f

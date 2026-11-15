@@ -9,6 +9,7 @@ import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSmbTailDamping
+import app.aaps.plugins.aps.openAPSAIMI.pkpd.SmbDamping
 import kotlin.math.abs
 
 // AimiAutonomyMode.labelResId() used to live here as a plain androidMain extension function
@@ -130,53 +131,22 @@ private fun readAutonomyMode(preferences: Preferences): AimiAutonomyMode {
     }
 }
 
+/**
+ * The Protection family writes the PK/PD relief floor and the red carpet restore threshold only.
+ *
+ * It used to write Max SMB, the high BG Max SMB and the two priority max IOB values too. Those are
+ * dose limits: the person sets them on the Essentials page, and a family level must not move them
+ * (step C1 of the settings plan).
+ */
 private fun buildProtectionPlan(
     preferences: Preferences,
     currentLevel: Int,
     targetLevel: Int,
 ): AimiFamilyWritebackPlan {
-    val changes = when (targetLevel.coerceIn(0, 4)) {
-        0 -> listOfNotNull(
-            ladderChange(preferences, DoubleKey.OApsAIMIMaxSMB, listOf(0.80, 1.00, 1.30, 1.80, 2.40), currentLevel, targetLevel, ApsStrings.openapsaimi_maxsmb_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIHighBGMaxSMB, listOf(1.00, 1.25, 1.60, 2.20, 3.00), currentLevel, targetLevel, ApsStrings.openapsaimi_highBG_maxsmb_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobFactor, listOf(1.05, 1.10, 1.20, 1.35, 1.50), currentLevel, targetLevel, ApsStrings.oaps_aimi_priority_max_iob_factor_title, "x"),
-            ladderChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobExtraU, listOf(0.50, 1.00, 2.00, 3.00, 4.00), currentLevel, targetLevel, ApsStrings.oaps_aimi_priority_max_iob_extra_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, listOf(0.60, 0.68, 0.75, 0.82, 0.90), currentLevel, targetLevel, ApsStrings.oaps_aimi_pkpd_relief_factor_title, null),
-            ladderChange(preferences, DoubleKey.OApsAIMIRedCarpetRestoreThreshold, listOf(0.60, 0.68, 0.75, 0.82, 0.90), currentLevel, targetLevel, ApsStrings.oaps_aimi_redcarpet_restore_title, null),
-        )
-        1 -> listOfNotNull(
-            ladderChange(preferences, DoubleKey.OApsAIMIMaxSMB, listOf(0.80, 1.00, 1.30, 1.80, 2.40), currentLevel, targetLevel, ApsStrings.openapsaimi_maxsmb_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIHighBGMaxSMB, listOf(1.00, 1.25, 1.60, 2.20, 3.00), currentLevel, targetLevel, ApsStrings.openapsaimi_highBG_maxsmb_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobFactor, listOf(1.05, 1.10, 1.20, 1.35, 1.50), currentLevel, targetLevel, ApsStrings.oaps_aimi_priority_max_iob_factor_title, "x"),
-            ladderChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobExtraU, listOf(0.50, 1.00, 2.00, 3.00, 4.00), currentLevel, targetLevel, ApsStrings.oaps_aimi_priority_max_iob_extra_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, listOf(0.60, 0.68, 0.75, 0.82, 0.90), currentLevel, targetLevel, ApsStrings.oaps_aimi_pkpd_relief_factor_title, null),
-            ladderChange(preferences, DoubleKey.OApsAIMIRedCarpetRestoreThreshold, listOf(0.60, 0.68, 0.75, 0.82, 0.90), currentLevel, targetLevel, ApsStrings.oaps_aimi_redcarpet_restore_title, null),
-        )
-        2 -> listOfNotNull(
-            ladderChange(preferences, DoubleKey.OApsAIMIMaxSMB, listOf(0.80, 1.00, 1.30, 1.80, 2.40), currentLevel, targetLevel, ApsStrings.openapsaimi_maxsmb_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIHighBGMaxSMB, listOf(1.00, 1.25, 1.60, 2.20, 3.00), currentLevel, targetLevel, ApsStrings.openapsaimi_highBG_maxsmb_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobFactor, listOf(1.05, 1.10, 1.20, 1.35, 1.50), currentLevel, targetLevel, ApsStrings.oaps_aimi_priority_max_iob_factor_title, "x"),
-            ladderChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobExtraU, listOf(0.50, 1.00, 2.00, 3.00, 4.00), currentLevel, targetLevel, ApsStrings.oaps_aimi_priority_max_iob_extra_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, listOf(0.60, 0.68, 0.75, 0.82, 0.90), currentLevel, targetLevel, ApsStrings.oaps_aimi_pkpd_relief_factor_title, null),
-            ladderChange(preferences, DoubleKey.OApsAIMIRedCarpetRestoreThreshold, listOf(0.60, 0.68, 0.75, 0.82, 0.90), currentLevel, targetLevel, ApsStrings.oaps_aimi_redcarpet_restore_title, null),
-        )
-        3 -> listOfNotNull(
-            ladderChange(preferences, DoubleKey.OApsAIMIMaxSMB, listOf(0.80, 1.00, 1.30, 1.80, 2.40), currentLevel, targetLevel, ApsStrings.openapsaimi_maxsmb_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIHighBGMaxSMB, listOf(1.00, 1.25, 1.60, 2.20, 3.00), currentLevel, targetLevel, ApsStrings.openapsaimi_highBG_maxsmb_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobFactor, listOf(1.05, 1.10, 1.20, 1.35, 1.50), currentLevel, targetLevel, ApsStrings.oaps_aimi_priority_max_iob_factor_title, "x"),
-            ladderChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobExtraU, listOf(0.50, 1.00, 2.00, 3.00, 4.00), currentLevel, targetLevel, ApsStrings.oaps_aimi_priority_max_iob_extra_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, listOf(0.60, 0.68, 0.75, 0.82, 0.90), currentLevel, targetLevel, ApsStrings.oaps_aimi_pkpd_relief_factor_title, null),
-            ladderChange(preferences, DoubleKey.OApsAIMIRedCarpetRestoreThreshold, listOf(0.60, 0.68, 0.75, 0.82, 0.90), currentLevel, targetLevel, ApsStrings.oaps_aimi_redcarpet_restore_title, null),
-        )
-        else -> listOfNotNull(
-            ladderChange(preferences, DoubleKey.OApsAIMIMaxSMB, listOf(0.80, 1.00, 1.30, 1.80, 2.40), currentLevel, targetLevel, ApsStrings.openapsaimi_maxsmb_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIHighBGMaxSMB, listOf(1.00, 1.25, 1.60, 2.20, 3.00), currentLevel, targetLevel, ApsStrings.openapsaimi_highBG_maxsmb_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobFactor, listOf(1.05, 1.10, 1.20, 1.35, 1.50), currentLevel, targetLevel, ApsStrings.oaps_aimi_priority_max_iob_factor_title, "x"),
-            ladderChange(preferences, DoubleKey.OApsAIMIPriorityMaxIobExtraU, listOf(0.50, 1.00, 2.00, 3.00, 4.00), currentLevel, targetLevel, ApsStrings.oaps_aimi_priority_max_iob_extra_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, listOf(0.60, 0.68, 0.75, 0.82, 0.90), currentLevel, targetLevel, ApsStrings.oaps_aimi_pkpd_relief_factor_title, null),
-            ladderChange(preferences, DoubleKey.OApsAIMIRedCarpetRestoreThreshold, listOf(0.60, 0.68, 0.75, 0.82, 0.90), currentLevel, targetLevel, ApsStrings.oaps_aimi_redcarpet_restore_title, null),
-        )
-    }
+    val changes = listOfNotNull(
+        ladderChange(preferences, DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, listOf(0.60, 0.68, 0.75, 0.82, 0.90), currentLevel, targetLevel, ApsStrings.oaps_aimi_pkpd_relief_factor_title, null),
+        ladderChange(preferences, DoubleKey.OApsAIMIRedCarpetRestoreThreshold, listOf(0.60, 0.68, 0.75, 0.82, 0.90), currentLevel, targetLevel, ApsStrings.oaps_aimi_redcarpet_restore_title, null),
+    )
     return AimiFamilyWritebackPlan(
         familyId = AimiBehaviorFamilyId.Protection,
         currentLabelResId = protectionLevelLabelForIndex(currentLevel),
@@ -185,68 +155,27 @@ private fun buildProtectionPlan(
     )
 }
 
+/**
+ * The Meal capture family writes the hyper trajectory switches and the meal tuning values.
+ *
+ * It used to write the Autodrive max basal and the meal modes max basal too. Those are dose limits
+ * the person sets, so a family level no longer moves them (step C1 of the settings plan).
+ */
 private fun buildMealCapturePlan(
     preferences: Preferences,
     currentLevel: Int,
     targetLevel: Int,
 ): AimiFamilyWritebackPlan {
-    val changes = when (targetLevel.coerceIn(0, 4)) {
-        0 -> listOfNotNull(
-            booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryRelease, false),
-            booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive, false),
-            ladderChange(preferences, DoubleKey.autodriveMaxBasal, listOf(3.0, 4.5, 6.0, 7.5, 9.0), currentLevel, targetLevel, unit = "U/h"),
-            ladderChange(preferences, DoubleKey.meal_modes_MaxBasal, listOf(4.0, 5.5, 7.0, 8.5, 10.0), currentLevel, targetLevel, unit = "U/h"),
-            ladderChange(preferences, DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, listOf(0.045, 0.060, 0.075, 0.090, 0.105), currentLevel, targetLevel, ApsStrings.aimi_mpc_u_per_kg_title, "U/kg/5m"),
-            ladderChange(preferences, DoubleKey.OApsAIMIautodrivePrebolus, listOf(0.50, 0.80, 1.20, 1.80, 2.80), currentLevel, targetLevel, ApsStrings.prebolus_autodrive_mode_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIautodrivesmallPrebolus, listOf(0.05, 0.10, 0.20, 0.35, 0.60), currentLevel, targetLevel, ApsStrings.prebolussmall_autodrive_mode_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, listOf(22.0, 18.0, 15.0, 12.0, 10.0), currentLevel, targetLevel, unit = "mg/dL", increasingSliderLevelRaisesValue = false),
-            ladderChange(preferences, DoubleKey.OApsAIMIHyperDeepDevMgdl, listOf(38.0, 32.0, 28.0, 24.0, 20.0), currentLevel, targetLevel, unit = "mg/dL", increasingSliderLevelRaisesValue = false),
-        )
-        1 -> listOfNotNull(
-            booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryRelease, true),
-            booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive, false),
-            ladderChange(preferences, DoubleKey.autodriveMaxBasal, listOf(3.0, 4.5, 6.0, 7.5, 9.0), currentLevel, targetLevel, unit = "U/h"),
-            ladderChange(preferences, DoubleKey.meal_modes_MaxBasal, listOf(4.0, 5.5, 7.0, 8.5, 10.0), currentLevel, targetLevel, unit = "U/h"),
-            ladderChange(preferences, DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, listOf(0.045, 0.060, 0.075, 0.090, 0.105), currentLevel, targetLevel, ApsStrings.aimi_mpc_u_per_kg_title, "U/kg/5m"),
-            ladderChange(preferences, DoubleKey.OApsAIMIautodrivePrebolus, listOf(0.50, 0.80, 1.20, 1.80, 2.80), currentLevel, targetLevel, ApsStrings.prebolus_autodrive_mode_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIautodrivesmallPrebolus, listOf(0.05, 0.10, 0.20, 0.35, 0.60), currentLevel, targetLevel, ApsStrings.prebolussmall_autodrive_mode_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, listOf(22.0, 18.0, 15.0, 12.0, 10.0), currentLevel, targetLevel, unit = "mg/dL", increasingSliderLevelRaisesValue = false),
-            ladderChange(preferences, DoubleKey.OApsAIMIHyperDeepDevMgdl, listOf(38.0, 32.0, 28.0, 24.0, 20.0), currentLevel, targetLevel, unit = "mg/dL", increasingSliderLevelRaisesValue = false),
-        )
-        2 -> listOfNotNull(
-            booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryRelease, true),
-            booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive, false),
-            ladderChange(preferences, DoubleKey.autodriveMaxBasal, listOf(3.0, 4.5, 6.0, 7.5, 9.0), currentLevel, targetLevel, unit = "U/h"),
-            ladderChange(preferences, DoubleKey.meal_modes_MaxBasal, listOf(4.0, 5.5, 7.0, 8.5, 10.0), currentLevel, targetLevel, unit = "U/h"),
-            ladderChange(preferences, DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, listOf(0.045, 0.060, 0.075, 0.090, 0.105), currentLevel, targetLevel, ApsStrings.aimi_mpc_u_per_kg_title, "U/kg/5m"),
-            ladderChange(preferences, DoubleKey.OApsAIMIautodrivePrebolus, listOf(0.50, 0.80, 1.20, 1.80, 2.80), currentLevel, targetLevel, ApsStrings.prebolus_autodrive_mode_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIautodrivesmallPrebolus, listOf(0.05, 0.10, 0.20, 0.35, 0.60), currentLevel, targetLevel, ApsStrings.prebolussmall_autodrive_mode_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, listOf(22.0, 18.0, 15.0, 12.0, 10.0), currentLevel, targetLevel, unit = "mg/dL", increasingSliderLevelRaisesValue = false),
-            ladderChange(preferences, DoubleKey.OApsAIMIHyperDeepDevMgdl, listOf(38.0, 32.0, 28.0, 24.0, 20.0), currentLevel, targetLevel, unit = "mg/dL", increasingSliderLevelRaisesValue = false),
-        )
-        3 -> listOfNotNull(
-            booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryRelease, true),
-            booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive, true),
-            ladderChange(preferences, DoubleKey.autodriveMaxBasal, listOf(3.0, 4.5, 6.0, 7.5, 9.0), currentLevel, targetLevel, unit = "U/h"),
-            ladderChange(preferences, DoubleKey.meal_modes_MaxBasal, listOf(4.0, 5.5, 7.0, 8.5, 10.0), currentLevel, targetLevel, unit = "U/h"),
-            ladderChange(preferences, DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, listOf(0.045, 0.060, 0.075, 0.090, 0.105), currentLevel, targetLevel, ApsStrings.aimi_mpc_u_per_kg_title, "U/kg/5m"),
-            ladderChange(preferences, DoubleKey.OApsAIMIautodrivePrebolus, listOf(0.50, 0.80, 1.20, 1.80, 2.80), currentLevel, targetLevel, ApsStrings.prebolus_autodrive_mode_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIautodrivesmallPrebolus, listOf(0.05, 0.10, 0.20, 0.35, 0.60), currentLevel, targetLevel, ApsStrings.prebolussmall_autodrive_mode_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, listOf(22.0, 18.0, 15.0, 12.0, 10.0), currentLevel, targetLevel, unit = "mg/dL", increasingSliderLevelRaisesValue = false),
-            ladderChange(preferences, DoubleKey.OApsAIMIHyperDeepDevMgdl, listOf(38.0, 32.0, 28.0, 24.0, 20.0), currentLevel, targetLevel, unit = "mg/dL", increasingSliderLevelRaisesValue = false),
-        )
-        else -> listOfNotNull(
-            booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryRelease, true),
-            booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive, true),
-            ladderChange(preferences, DoubleKey.autodriveMaxBasal, listOf(3.0, 4.5, 6.0, 7.5, 9.0), currentLevel, targetLevel, unit = "U/h"),
-            ladderChange(preferences, DoubleKey.meal_modes_MaxBasal, listOf(4.0, 5.5, 7.0, 8.5, 10.0), currentLevel, targetLevel, unit = "U/h"),
-            ladderChange(preferences, DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, listOf(0.045, 0.060, 0.075, 0.090, 0.105), currentLevel, targetLevel, ApsStrings.aimi_mpc_u_per_kg_title, "U/kg/5m"),
-            ladderChange(preferences, DoubleKey.OApsAIMIautodrivePrebolus, listOf(0.50, 0.80, 1.20, 1.80, 2.80), currentLevel, targetLevel, ApsStrings.prebolus_autodrive_mode_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIautodrivesmallPrebolus, listOf(0.05, 0.10, 0.20, 0.35, 0.60), currentLevel, targetLevel, ApsStrings.prebolussmall_autodrive_mode_title, "U"),
-            ladderChange(preferences, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, listOf(22.0, 18.0, 15.0, 12.0, 10.0), currentLevel, targetLevel, unit = "mg/dL", increasingSliderLevelRaisesValue = false),
-            ladderChange(preferences, DoubleKey.OApsAIMIHyperDeepDevMgdl, listOf(38.0, 32.0, 28.0, 24.0, 20.0), currentLevel, targetLevel, unit = "mg/dL", increasingSliderLevelRaisesValue = false),
-        )
-    }
+    val level = targetLevel.coerceIn(0, 4)
+    val changes = listOfNotNull(
+        booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryRelease, level >= 1),
+        booleanChange(preferences, BooleanKey.OApsAIMIHyperTrajectoryReleaseAggressive, level >= 3),
+        ladderChange(preferences, DoubleKey.OApsAIMIMpcInsulinUPerKgPerStep, listOf(0.045, 0.060, 0.075, 0.090, 0.105), currentLevel, targetLevel, ApsStrings.aimi_mpc_u_per_kg_title, "U/kg/5m"),
+        ladderChange(preferences, DoubleKey.OApsAIMIautodrivePrebolus, listOf(0.50, 0.80, 1.20, 1.80, 2.80), currentLevel, targetLevel, ApsStrings.prebolus_autodrive_mode_title, "U"),
+        ladderChange(preferences, DoubleKey.OApsAIMIautodrivesmallPrebolus, listOf(0.05, 0.10, 0.20, 0.35, 0.60), currentLevel, targetLevel, ApsStrings.prebolussmall_autodrive_mode_title, "U"),
+        ladderChange(preferences, DoubleKey.OApsAIMIHyperEstablishedDevMgdl, listOf(22.0, 18.0, 15.0, 12.0, 10.0), currentLevel, targetLevel, unit = "mg/dL", increasingSliderLevelRaisesValue = false),
+        ladderChange(preferences, DoubleKey.OApsAIMIHyperDeepDevMgdl, listOf(38.0, 32.0, 28.0, 24.0, 20.0), currentLevel, targetLevel, unit = "mg/dL", increasingSliderLevelRaisesValue = false),
+    )
     return AimiFamilyWritebackPlan(
         familyId = AimiBehaviorFamilyId.MealCapture,
         currentLabelResId = mealLevelLabelForIndex(currentLevel),
@@ -256,55 +185,43 @@ private fun buildMealCapturePlan(
     )
 }
 
+/**
+ * Exercise damping rungs. The loop reads a value below [SmbDamping.DAMPING_FLOOR] as the floor
+ * (since step P3), so the two lowest rungs (0.30 and 0.45) both act as 0.5.
+ *
+ * The ladder keeps its five old positions, so a stored value finds the same rung as before and a
+ * step moves the same number of rungs. Only the written value changes: the step passes
+ * `minValue = DAMPING_FLOOR`, so the two lowest rungs both write 0.5. The effective damping after
+ * every step is therefore the same as before step C1, also from an old stored 0.30 (one step up
+ * acts as 0.5, two steps give 0.60).
+ */
+private val EXERCISE_DAMPING_LADDER: List<Double> = listOf(0.30, 0.45, 0.60, 0.72, 0.85)
+
 private fun buildStabilityPlan(
     preferences: Preferences,
     currentLevel: Int,
     targetLevel: Int,
 ): AimiFamilyWritebackPlan {
+    val level = targetLevel.coerceIn(0, 4)
     // Tail floor ladder is shared: left/smoother = stronger damping (lower floor inside PKPD band).
     val tailFloorLadder = PkpdSmbTailDamping.STABILITY_FAMILY_FLOOR_LADDER
-    val changes = when (targetLevel.coerceIn(0, 4)) {
-        0 -> listOfNotNull(
-            ladderChange(preferences, DoubleKey.OApsAIMISmbTailDamping, tailFloorLadder, currentLevel, targetLevel, ApsStrings.oaps_aimi_smb_tail_damping_title, null),
-            ladderChange(preferences, DoubleKey.OApsAIMISmbExerciseDamping, listOf(0.30, 0.45, 0.60, 0.72, 0.85), currentLevel, targetLevel, ApsStrings.oaps_aimi_smb_exercise_damping_title, null),
-            ladderChange(preferences, DoubleKey.OApsAIMISmbLateFatDamping, listOf(0.40, 0.55, 0.70, 0.80, 0.90), currentLevel, targetLevel, ApsStrings.oaps_aimi_smb_late_fat_damping_title, null),
-            booleanChange(preferences, BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled, true, ApsStrings.oaps_aimi_adaptive_basal_title),
-            booleanChange(preferences, BooleanKey.OApsAIMIDynIsfTrajectoryTuningEnabled, false),
-            ladderChange(preferences, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction, listOf(0.02, 0.04, 0.06, 0.08, 0.10), currentLevel, targetLevel, unit = null),
-        )
-        1 -> listOfNotNull(
-            ladderChange(preferences, DoubleKey.OApsAIMISmbTailDamping, tailFloorLadder, currentLevel, targetLevel, ApsStrings.oaps_aimi_smb_tail_damping_title, null),
-            ladderChange(preferences, DoubleKey.OApsAIMISmbExerciseDamping, listOf(0.30, 0.45, 0.60, 0.72, 0.85), currentLevel, targetLevel, ApsStrings.oaps_aimi_smb_exercise_damping_title, null),
-            ladderChange(preferences, DoubleKey.OApsAIMISmbLateFatDamping, listOf(0.40, 0.55, 0.70, 0.80, 0.90), currentLevel, targetLevel, ApsStrings.oaps_aimi_smb_late_fat_damping_title, null),
-            booleanChange(preferences, BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled, true, ApsStrings.oaps_aimi_adaptive_basal_title),
-            booleanChange(preferences, BooleanKey.OApsAIMIDynIsfTrajectoryTuningEnabled, false),
-            ladderChange(preferences, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction, listOf(0.02, 0.04, 0.06, 0.08, 0.10), currentLevel, targetLevel, unit = null),
-        )
-        2 -> listOfNotNull(
-            ladderChange(preferences, DoubleKey.OApsAIMISmbTailDamping, tailFloorLadder, currentLevel, targetLevel, ApsStrings.oaps_aimi_smb_tail_damping_title, null),
-            ladderChange(preferences, DoubleKey.OApsAIMISmbExerciseDamping, listOf(0.30, 0.45, 0.60, 0.72, 0.85), currentLevel, targetLevel, ApsStrings.oaps_aimi_smb_exercise_damping_title, null),
-            ladderChange(preferences, DoubleKey.OApsAIMISmbLateFatDamping, listOf(0.40, 0.55, 0.70, 0.80, 0.90), currentLevel, targetLevel, ApsStrings.oaps_aimi_smb_late_fat_damping_title, null),
-            booleanChange(preferences, BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled, true, ApsStrings.oaps_aimi_adaptive_basal_title),
-            booleanChange(preferences, BooleanKey.OApsAIMIDynIsfTrajectoryTuningEnabled, false),
-            ladderChange(preferences, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction, listOf(0.02, 0.04, 0.06, 0.08, 0.10), currentLevel, targetLevel, unit = null),
-        )
-        3 -> listOfNotNull(
-            ladderChange(preferences, DoubleKey.OApsAIMISmbTailDamping, tailFloorLadder, currentLevel, targetLevel, ApsStrings.oaps_aimi_smb_tail_damping_title, null),
-            ladderChange(preferences, DoubleKey.OApsAIMISmbExerciseDamping, listOf(0.30, 0.45, 0.60, 0.72, 0.85), currentLevel, targetLevel, ApsStrings.oaps_aimi_smb_exercise_damping_title, null),
-            ladderChange(preferences, DoubleKey.OApsAIMISmbLateFatDamping, listOf(0.40, 0.55, 0.70, 0.80, 0.90), currentLevel, targetLevel, ApsStrings.oaps_aimi_smb_late_fat_damping_title, null),
-            booleanChange(preferences, BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled, true, ApsStrings.oaps_aimi_adaptive_basal_title),
-            booleanChange(preferences, BooleanKey.OApsAIMIDynIsfTrajectoryTuningEnabled, true),
-            ladderChange(preferences, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction, listOf(0.02, 0.04, 0.06, 0.08, 0.10), currentLevel, targetLevel, unit = null),
-        )
-        else -> listOfNotNull(
-            ladderChange(preferences, DoubleKey.OApsAIMISmbTailDamping, tailFloorLadder, currentLevel, targetLevel, ApsStrings.oaps_aimi_smb_tail_damping_title, null),
-            ladderChange(preferences, DoubleKey.OApsAIMISmbExerciseDamping, listOf(0.30, 0.45, 0.60, 0.72, 0.85), currentLevel, targetLevel, ApsStrings.oaps_aimi_smb_exercise_damping_title, null),
-            ladderChange(preferences, DoubleKey.OApsAIMISmbLateFatDamping, listOf(0.40, 0.55, 0.70, 0.80, 0.90), currentLevel, targetLevel, ApsStrings.oaps_aimi_smb_late_fat_damping_title, null),
-            booleanChange(preferences, BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled, true, ApsStrings.oaps_aimi_adaptive_basal_title),
-            booleanChange(preferences, BooleanKey.OApsAIMIDynIsfTrajectoryTuningEnabled, true),
-            ladderChange(preferences, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction, listOf(0.02, 0.04, 0.06, 0.08, 0.10), currentLevel, targetLevel, unit = null),
-        )
-    }
+    val changes = listOfNotNull(
+        // A stored value in the legacy zone (0.55 or lower) acts as 0.85, so the step starts from
+        // the value in use. The start migration stores 0.85 once, but a TPO revert or an import
+        // can bring a legacy value back while the app runs.
+        ladderChange(
+            preferences, DoubleKey.OApsAIMISmbTailDamping, tailFloorLadder, currentLevel, targetLevel,
+            ApsStrings.oaps_aimi_smb_tail_damping_title, null, valueInUse = PkpdSmbTailDamping::effectiveStoredValue,
+        ),
+        ladderChange(
+            preferences, DoubleKey.OApsAIMISmbExerciseDamping, EXERCISE_DAMPING_LADDER, currentLevel, targetLevel,
+            ApsStrings.oaps_aimi_smb_exercise_damping_title, null, minValue = SmbDamping.DAMPING_FLOOR,
+        ),
+        ladderChange(preferences, DoubleKey.OApsAIMISmbLateFatDamping, listOf(0.40, 0.55, 0.70, 0.80, 0.90), currentLevel, targetLevel, ApsStrings.oaps_aimi_smb_late_fat_damping_title, null),
+        booleanChange(preferences, BooleanKey.OApsAIMIT3cAdaptiveBasalEnabled, true, ApsStrings.oaps_aimi_adaptive_basal_title),
+        booleanChange(preferences, BooleanKey.OApsAIMIDynIsfTrajectoryTuningEnabled, level >= 3),
+        ladderChange(preferences, DoubleKey.OApsAIMIDynIsfTrajectoryMaxFraction, listOf(0.02, 0.04, 0.06, 0.08, 0.10), currentLevel, targetLevel, unit = null),
+    )
     return AimiFamilyWritebackPlan(
         familyId = AimiBehaviorFamilyId.Stability,
         currentLabelResId = stabilityLevelLabelForIndex(currentLevel),
@@ -410,11 +327,14 @@ private fun ladderChange(
     titleResId: TextRef = key.controlCenterTitleResId(),
     unit: String?,
     increasingSliderLevelRaisesValue: Boolean = true,
+    minValue: Double = key.min,
+    valueInUse: (Double) -> Double = { it },
 ): AimiPreferenceChange? {
     if (ladder.isEmpty()) return null
     val delta = targetLevel - currentLevel
     if (delta == 0) return null
-    val currentValue = preferences.get(key)
+    // The step starts from the value the loop uses, which is not always the stored value.
+    val currentValue = valueInUse(preferences.get(key))
     val currentIndex = ladder.indices.minByOrNull { index -> abs(ladder[index] - currentValue) } ?: 0
     val targetIndex = (currentIndex + delta).coerceIn(0, ladder.lastIndex)
     val valueShouldIncrease = if (increasingSliderLevelRaisesValue) delta > 0 else delta < 0
@@ -424,7 +344,11 @@ private fun ladderChange(
         currentValue = currentValue,
         ladderTargetValue = ladder[targetIndex],
         valueShouldIncrease = valueShouldIncrease,
-    )
+    ).coerceIn(minValue, key.max)
+    // A step never moves the wrong way. This can only happen when the stored value is already
+    // outside [minValue, key.max], for example an old exercise damping of 0.30 and a step down.
+    val movesWrongWay = if (valueShouldIncrease) targetValue < currentValue else targetValue > currentValue
+    if (movesWrongWay) return null
     return doubleChange(preferences, key, targetValue, titleResId, unit)
 }
 

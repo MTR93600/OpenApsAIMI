@@ -367,6 +367,14 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         // each runtime change is fingerprinted by its landing value (Stability ladder 0.76/0.81/0.86;
         // migrate / applyLevel-centre 0.85; raw key default 0.5). Marker: PKPD_TAIL_TRACE.
         logTailDampingSnapshot("startup")
+        // One-shot startup migration: a legacy tail floor (0.55 or lower) is stored as the 0.85 the
+        // loop already reads for it, so screens and the Advisor see the value in use. It used to
+        // run when the Control Center opened; a screen must not write when it opens. No dosing
+        // change: every dosing reader goes through PkpdSmbTailDamping.effectiveStoredValue. After
+        // the first run the stored value is above the cutoff, so this does nothing again.
+        if (PkpdSmbTailDamping.migrateLegacyStoredPreference(preferences)) {
+            aapsLogger.info(LTag.APS, "PKPD_TAIL_TRACE legacy tail floor stored as ${PkpdSmbTailDamping.DAMPING_NEUTRAL}")
+        }
         tailDampingTraceJob?.cancel()
         tailDampingTraceJob = rxBus.toFlow(EventPreferenceChange::class)
             .onEach { event ->

@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import app.aaps.core.interfaces.resources.TextRefIdRegistry
+import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.LocalPreferences
 import app.aaps.plugins.aps.ApsStringIds
@@ -22,6 +23,7 @@ import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoSessionDocument
 import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoSessionStatus
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -196,5 +198,17 @@ class AimiControlCenterScreenTest {
 
         compose.onAllNodesWithText(hideDetails).assertCountEquals(1)
         compose.onAllNodesWithText(showDetails).assertCountEquals(closedCount - 1)
+    }
+
+    @Test
+    fun openingTheScreen_writesNoPreference() {
+        // A legacy tail floor (0.55 or lower) is read as 0.85 by the loop. The screen used to store
+        // 0.85 the moment it opened; that one-shot migration now runs at plugin start instead.
+        preferences.put(DoubleKey.OApsAIMISmbTailDamping, 0.20)
+
+        setScreen(orchestratorWith(null))
+        compose.waitForIdle()
+
+        assertEquals(0.20, preferences.get(DoubleKey.OApsAIMISmbTailDamping), 1e-9)
     }
 }

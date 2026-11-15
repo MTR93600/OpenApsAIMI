@@ -16,8 +16,6 @@
 
 <string name="openapsaimi_maxsmb_summary">Max SMB value when BG is below 120</string>
 
-<string name="openapsaimi_maxsmb_title">Max SMB LOW BG</string>
-
 <string name="description_openapsaimi">AIMI loop: adaptive PK/PD, Autodrive V3, physiological assistant (Health Connect + 28-pattern catalogue), optional Recursive Belief Tree (RBT/HTR), and unified hypo-risk alarms. Native Eversense E3/365 and standard CGM sources supported.</string>
 
 <string name="oaps_aimi_mealAdjFact_summary">DynISF adjustment factor for Meal Mode</string>
@@ -530,8 +528,6 @@
 <string name="oaps_aimi_HIGHBG_interval_title">High BG SMB Interval</string>
 
 <string name="openapsaimi_highBG_maxsmb_summary">Max SMB value when BG is above 120</string>
-
-<string name="openapsaimi_highBG_maxsmb_title">Max SMB High BG</string>
 
 <string name="OApsAIMI_Enable_night_title">Night Mode (SMB/2)</string>
 

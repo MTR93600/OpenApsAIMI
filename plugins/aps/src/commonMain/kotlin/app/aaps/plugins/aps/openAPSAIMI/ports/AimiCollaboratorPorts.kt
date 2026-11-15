@@ -38,8 +38,9 @@ import app.aaps.plugins.aps.openAPSAIMI.safety.CorrectionAggressionGate
  *
  * Each port has exactly one Android implementation in `androidMain` (AuditorOrchestrator,
  * TpoOrchestrator, AimiSmbComparator, AndroidAimiEmergencySos, ContextLLMClient,
- * HealthContextRepository, AIMIPhysioDataRepositoryMTR, AndroidAimiBehaviorProfileSource).
- * iOS has no implementations yet.
+ * HealthContextRepository, AIMIPhysioDataRepositoryMTR). iOS has no implementations yet.
+ * `AimiBehaviorProfileSource` is the exception: its one implementation,
+ * `NeutralAimiBehaviorProfileSource`, is in commonMain and serves both platforms.
  */
 
 /**
@@ -233,11 +234,10 @@ interface AimiPhysioSource {
 
 
 /**
- * Reads the AIMI Control Center's resolved authority profile for one tick.
+ * Gives the behaviour profile dosing uses for one tick.
  *
- * The read path - preferences to draft to snapshot, with two runtime history readers along the way -
- * stays in androidMain, so this is a port rather than a moved function. `AimiBehaviorRuntimeProfile`
- * and `AimiAutonomyMode` are plain data in commonMain; only how they get built from disk is Android.
+ * The app binds `NeutralAimiBehaviorProfileSource`, which always gives the fixed neutral profile
+ * (step C1 of the settings plan). It stays a port so tests can give another profile.
  */
 interface AimiBehaviorProfileSource {
 

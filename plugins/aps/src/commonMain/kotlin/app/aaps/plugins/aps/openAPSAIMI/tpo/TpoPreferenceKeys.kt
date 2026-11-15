@@ -25,5 +25,8 @@ internal object TpoPreferenceKeys {
 
     fun fromKey(key: String): PreferenceKey? = byKey[key]
 
+    /** Every key TPO may write. */
+    fun allKeys(): Collection<PreferenceKey> = byKey.values
+
     fun isWhitelisted(key: String): Boolean = key in byKey
 }

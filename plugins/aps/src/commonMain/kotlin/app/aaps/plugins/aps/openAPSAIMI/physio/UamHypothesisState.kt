@@ -21,7 +21,7 @@ enum class UamHypothesisId {
  * Compact UAM hypothesis scores for the tick.
  *
  * Built by [UamHypothesisStateBuilder], which reads its five thresholds through
- * [UamHypothesisTuning] because `AimiBehaviorRuntimeProfile` is still on the Android side.
+ * [UamHypothesisTuning].
  */
 data class UamHypothesisState(
     val mealProb: Double = 0.0,

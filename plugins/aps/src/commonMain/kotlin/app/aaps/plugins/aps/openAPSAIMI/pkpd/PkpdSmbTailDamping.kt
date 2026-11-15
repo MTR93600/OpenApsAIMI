@@ -61,9 +61,9 @@ object PkpdSmbTailDamping {
     }
 
     /**
-     * One-shot Control Center / settings hygiene: persist the runtime-effective floor when the
-     * stored preference is still in the legacy zone (≤ [LEGACY_NEUTRAL_CUTOFF]). Returns true if
-     * a write occurred so the UI can refresh.
+     * One-shot startup migration (run from `OpenAPSAIMIPlugin.onStart`): store the runtime-effective
+     * floor when the stored preference is still in the legacy zone (≤ [LEGACY_NEUTRAL_CUTOFF]).
+     * Returns true if a write occurred. No screen calls this: a screen must not write when it opens.
      */
     fun migrateLegacyStoredPreference(preferences: Preferences): Boolean {
         val stored = preferences.get(DoubleKey.OApsAIMISmbTailDamping)

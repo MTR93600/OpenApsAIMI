@@ -3,11 +3,9 @@ package app.aaps.plugins.aps.openAPSAIMI.physio
 /**
  * The five tunables `UamHypothesisStateBuilder` reads from the user's behaviour settings.
  *
- * `AimiBehaviorRuntimeProfile` is the only implementation. It lives in the `compose` package, where
- * it is built from `Preferences`, and it cannot be named from `commonMain` yet: it needs
- * `AimiAutonomyMode`, whose constructor carries `@StringRes`. This interface is the shared half, so
- * the hypothesis maths can be common while the settings half stays on the Android side until the
- * compose lot moves it.
+ * `AimiBehaviorRuntimeProfile` is the only implementation. It lives in the `compose` package. Since
+ * step C1 of the settings plan dosing always gets its fixed `NEUTRAL` profile, whose five values
+ * are the same as the builder's fallbacks.
  *
  * **This interface holds no numbers.** Each implementation decides its own values, and the builder
  * keeps its own `?:` fallback for the case where no profile was supplied. Do not add default bodies

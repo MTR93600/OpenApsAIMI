@@ -419,11 +419,10 @@ internal object AimiSettingsScreens {
             content = AimiSettingsContentId.ControlCenter,
             level = AimiSettingsLevel.ADVANCED,
             kind = AimiSettingsSectionKind.CONTROL,
+            // The dose limits (Max SMB, high BG Max SMB, the two priority max IOB values) are not
+            // here: since step C1 no family level writes them. LabDoseLimits and
+            // PkpdExpertPriorityMaxIob still offer them.
             keys = listOf(
-                DoubleKey.OApsAIMIMaxSMB,
-                DoubleKey.OApsAIMIHighBGMaxSMB,
-                DoubleKey.OApsAIMIPriorityMaxIobFactor,
-                DoubleKey.OApsAIMIPriorityMaxIobExtraU,
                 DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor,
                 DoubleKey.OApsAIMIRedCarpetRestoreThreshold,
             ),

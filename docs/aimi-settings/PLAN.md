@@ -105,6 +105,23 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
     0.5. The Control Center ladder still writes 0.30 and 0.45 on its two lowest rungs, which now
     both act as 0.5. P3 did not change the ladder (raising a rung would change dosing on that rung);
     step C1 takes the ladders apart and should drop or raise these rungs.
+    *Done in C1:* the ladder keeps its five positions (0.30, 0.45, 0.60, 0.72, 0.85), so a stored
+    value finds the same rung and a step moves the same number of rungs as before, but a step never
+    writes less than 0.5: the two lowest rungs both write 0.5. The effective damping after every
+    step is the same as before C1, also from an old stored 0.30 (one step up acts as 0.5, two give
+    0.60).
+  - *Late fat damping and the Control Center (from C1 review, not decided).* `SmbDamping` floors
+    the late fat damping at 0.5 in the same way, so the 0.40 rung of the Stability ladder
+    (0.40, 0.55, 0.70, 0.80, 0.90) acts as 0.5 and shows a value with no effect. C1 did not change
+    it (raising the rung changes dosing on that rung).
+- **Open for the owner (from step C1, not decided):**
+  - *ML correction limit when Autodrive is off.* The neutral runtime profile fixes the autonomy
+    mode at controlled authority. Before C1 the autonomy mode came from the real Autodrive
+    switches, not from a display level. A user with Autodrive off (default protection level) had
+    an ML correction limit of 0.484 of its base and now has 1.0: up to about 0.026 U more ML
+    correction room per SMB, only when an ML model is loaded (0.634 to 1.0 with Autodrive on but
+    not authoritative). For a default user the change is 0.88 to 1.0 (about 0.006 U per SMB).
+    Say if the autonomy part should follow the real Autodrive switches again.
   - *Stored values of the new constants.* A user who had changed `OApsAIMIPeakGovernorLearnedWeight`
     (it was on the PK/PD Expert screen) or one of the three hidden switches now gets the old default.
 

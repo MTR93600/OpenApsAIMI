@@ -122,6 +122,42 @@ data class AimiBehaviorRuntimeProfile(
             1.0
         }
 
+    companion object {
+
+        /**
+         * The profile dosing uses (step C1 of the settings plan): the balanced middle of each
+         * family (protection, meal capture and stability at level 2 of 0-4, physio at level 1 of
+         * 0-2) and controlled authority.
+         *
+         * With these values the PK/PD meal absorption, correction and stability factors are 1.0,
+         * the ML correction limit multiplier is 1.0 (the same as no profile), and the meal
+         * hypothesis uses the same margins as with no profile (0.32, 0.10, 0.60, 0.08, 0.60). The
+         * PK/PD physio blend is 0.725: half of the physio signal is pulled toward neutral.
+         *
+         * Before C1 the levels were read from the settings. With default settings that gave
+         * protection level 1, so for a default user C1 changes two values: the PK/PD correction
+         * factor goes from 0.98 to 1.0 (the fused ISF is up to 2 % higher, a little less insulin),
+         * and the ML correction limit goes from 0.88 to 1.0 of its base. The base is at most
+         * 0.05 U (`AimiSmbTrainer.correctionClamp`), so the limit grows by at most about 0.006 U
+         * per SMB, and only when an ML model is loaded.
+         *
+         * The autonomy mode is fixed too. Before C1 it was not a display level: it came from the
+         * real Autodrive switches (Autodrive off gave Observation, 0.55; on but not authoritative
+         * gave Recommendations, 0.72, or Assisted, 0.88). So a user with Autodrive off and the
+         * default protection level had an ML correction limit of 0.484 of its base, and now has
+         * 1.0: up to about 0.026 U more ML correction room per SMB (0.634 to 1.0 with
+         * Recommendations). This is open for the owner in the settings plan: the autonomy part may
+         * have to follow the real Autodrive switches again.
+         */
+        val NEUTRAL: AimiBehaviorRuntimeProfile = AimiBehaviorRuntimeProfile(
+            protectionLevel = 2,
+            mealCaptureLevel = 2,
+            stabilityLevel = 2,
+            physioLevel = 1,
+            autonomyMode = AimiAutonomyMode.ControlledAuthority,
+        )
+    }
+
     fun mlCorrectionFractionMultiplier(): Float {
         var multiplier = when (autonomyMode) {
             AimiAutonomyMode.Observation -> 0.55f
