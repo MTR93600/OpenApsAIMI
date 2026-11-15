@@ -1,10 +1,21 @@
 package app.aaps.keys
 
+import app.aaps.core.keys.interfaces.BooleanNonPreferenceKey
 import app.aaps.core.keys.interfaces.ComposedKey
+import app.aaps.core.keys.interfaces.IntNonPreferenceKey
+import app.aaps.core.keys.interfaces.IntPreferenceKey
 import app.aaps.core.keys.interfaces.NonPreferenceKey
 import app.aaps.di.metro.AppRootGraph
+import app.aaps.pump.omnipod.common.keys.DashBooleanPreferenceKey
+import app.aaps.pump.omnipod.common.keys.OmnipodBooleanPreferenceKey
+import app.aaps.pump.omnipod.common.keys.OmnipodIntPreferenceKey
+import app.aaps.pump.omnipod.dashctl.keys.DashAlertBooleanKey
+import app.aaps.pump.omnipod.dashctl.keys.DashAlertIntKey
+import app.aaps.pump.omnipod.dashctl.keys.DashBeepKey
+import app.aaps.pump.omnipod.dashctl.keys.DashSoundKey
 import app.aaps.shared.tests.aapsClassesOnClasspath
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.jupiter.api.Test
 import java.io.File
 
@@ -59,9 +70,8 @@ class PreferenceKeySnapshotTest {
         keys.map { key ->
             // A composed key stores many values under one prefix, so record the format it composes
             // with - the prefix alone would not say which stored strings belong to it.
-            val stored = if (key is ComposedKey) key.key + key.format else key.key
             val type = key::class.java.simpleName
-            "$stored|$type|${key.exportable}"
+            "${stored(key)}|$type|${key.exportable}"
         }.distinct().sorted().joinToString("\n")
 
     @Test
@@ -90,15 +100,97 @@ class PreferenceKeySnapshotTest {
     /**
      * The stored key is the only thing connecting a user's saved value to the code that reads it, so
      * two keys sharing one string means one of them reads the other's value.
+     *
+     * The only exception is [SHARED_STORED_KEYS]: a group of keys that share a string passes only when
+     * it is exactly one pair of that list.
      */
     @Test
     fun `no two keys share a stored key string`() {
+        val allowed = SHARED_STORED_KEYS.map { (android, ios) -> setOf(id(android), id(ios)) }.toSet()
         val duplicates = allKeys()
-            .groupBy { if (it is ComposedKey) it.key + it.format else it.key }
-            .filter { (_, sharing) -> sharing.map { it::class.java.name + "." + it }.distinct().size > 1 }
+            .groupBy(::stored)
+            .filter { (_, sharing) ->
+                val ids = sharing.map(::id).toSet()
+                ids.size > 1 && ids !in allowed
+            }
             .keys
 
         assertThat(duplicates).isEmpty()
+    }
+
+    /**
+     * Each pair of [SHARED_STORED_KEYS] must really share its stored string, and both sides must read
+     * the saved value the same way: same value type, same default, same limits, same export flag.
+     * Otherwise an iPhone and an Android phone would see a different setting under the same name.
+     * A pair whose keys no longer share a string is a stale entry and must be removed from the list.
+     */
+    @Test
+    fun `every allowed shared key pair shares its string and reads the value the same way`() {
+        val scanned = allKeys().map(::id).toSet()
+        SHARED_STORED_KEYS.forEach { (android, ios) ->
+            val pair = "${id(android)} / ${id(ios)}"
+            assertWithMessage("$pair: both keys must be found by the classpath scan")
+                .that(scanned).containsAtLeast(id(android), id(ios))
+            assertWithMessage("$pair: stored key").that(stored(ios)).isEqualTo(stored(android))
+            assertWithMessage("$pair: exportable").that(ios.exportable).isEqualTo(android.exportable)
+            assertWithMessage("$pair: default value").that(defaultValue(ios)).isEqualTo(defaultValue(android))
+            if (android is IntPreferenceKey || ios is IntPreferenceKey) {
+                assertWithMessage("$pair: both must be int preference keys")
+                    .that(android is IntPreferenceKey && ios is IntPreferenceKey).isTrue()
+                android as IntPreferenceKey
+                ios as IntPreferenceKey
+                assertWithMessage("$pair: min").that(ios.min).isEqualTo(android.min)
+                assertWithMessage("$pair: max").that(ios.max).isEqualTo(android.max)
+            }
+        }
+    }
+
+    private fun stored(key: NonPreferenceKey): String = if (key is ComposedKey) key.key + key.format else key.key
+
+    private fun id(key: NonPreferenceKey): String = key::class.java.name + "." + key
+
+    /** The value type and the default together, so a Boolean `true` never equals an Int `1`. */
+    private fun defaultValue(key: NonPreferenceKey): Pair<String, Any> = when (key) {
+        is BooleanNonPreferenceKey -> "Boolean" to key.defaultValue
+        is IntNonPreferenceKey     -> "Int" to key.defaultValue
+        else                       -> error("${id(key)}: add its value type here before it can be a shared key")
+    }
+
+    private companion object {
+
+        /**
+         * Keys that share a stored string on purpose. This is the one place where sharing is allowed.
+         *
+         * Each pair is an Android key and its iPhone copy. The iPhone Omnipod Dash driver
+         * (`:pump:omnipod:dashctl`, its plugin lives in iosMain only) reads and writes the same
+         * settings as the Android Omnipod Dash driver (`:pump:omnipod:dash` with
+         * `:pump:omnipod:common`): same stored string, same default, same limits. So a settings export
+         * from an Android phone keeps its beeps and alerts when it is imported on an iPhone, and the
+         * other way round (see `docs/kmp-migration/omnipod-dash-ios.md`, phase 4 decisions).
+         *
+         * Both copies are never registered in one app graph: Android registers only the Android keys
+         * and the iPhone only the `dashctl` keys. They only meet here, because the Android test
+         * classpath holds the compiled `dashctl` classes too.
+         *
+         * Add a pair only when two keys must be one setting on two platforms. The test above then
+         * checks that both sides read the saved value the same way.
+         */
+        val SHARED_STORED_KEYS: List<Pair<NonPreferenceKey, NonPreferenceKey>> = listOf(
+            OmnipodBooleanPreferenceKey.BolusBeepsEnabled to DashBeepKey.BolusBeepsEnabled,
+            OmnipodBooleanPreferenceKey.SmbBeepsEnabled to DashBeepKey.SmbBeepsEnabled,
+            OmnipodBooleanPreferenceKey.BasalBeepsEnabled to DashBeepKey.BasalBeepsEnabled,
+            OmnipodBooleanPreferenceKey.TbrBeepsEnabled to DashBeepKey.TbrBeepsEnabled,
+            OmnipodBooleanPreferenceKey.ExpirationReminder to DashAlertBooleanKey.ExpirationReminder,
+            OmnipodBooleanPreferenceKey.ExpirationAlarm to DashAlertBooleanKey.ExpirationAlarm,
+            OmnipodBooleanPreferenceKey.LowReservoirAlert to DashAlertBooleanKey.LowReservoirAlert,
+            OmnipodIntPreferenceKey.ExpirationReminderHours to DashAlertIntKey.ExpirationReminderHours,
+            OmnipodIntPreferenceKey.ExpirationAlarmHours to DashAlertIntKey.ExpirationAlarmHours,
+            OmnipodIntPreferenceKey.LowReservoirAlertUnits to DashAlertIntKey.LowReservoirAlertUnits,
+            OmnipodBooleanPreferenceKey.SoundUncertainTbrNotification to DashSoundKey.SoundUncertainTbrNotification,
+            OmnipodBooleanPreferenceKey.SoundUncertainSmbNotification to DashSoundKey.SoundUncertainSmbNotification,
+            OmnipodBooleanPreferenceKey.SoundUncertainBolusNotification to DashSoundKey.SoundUncertainBolusNotification,
+            DashBooleanPreferenceKey.SoundDeliverySuspendedNotification to DashSoundKey.SoundDeliverySuspendedNotification,
+        )
     }
 
     private fun repoRoot(): File {
