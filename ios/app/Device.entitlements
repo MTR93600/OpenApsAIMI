@@ -35,5 +35,12 @@
 	     entitlement that Apple grants on request only. -->
 	<key>com.apple.developer.usernotifications.time-sensitive</key>
 	<true/>
+	<!-- The App Group the home screen widgets read from (widget-live-activity-xcode-howto.md, section 8).
+	     AAPS_APP_GROUP_ID is in Signing.xcconfig. Not in Personal.entitlements: a free account has no
+	     App Groups. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>$(AAPS_APP_GROUP_ID)</string>
+	</array>
 </dict>
 </plist>

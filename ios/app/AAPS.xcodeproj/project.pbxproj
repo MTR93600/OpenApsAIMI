@@ -33,7 +33,59 @@
 		D32B0F7A3048851500FAFE85 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = AA00SP02000000000000004 /* FirebaseCrashlytics */; };
 		C10000030000000000000001 /* ConnectIQ in Frameworks */ = {isa = PBXBuildFile; productRef = C10000020000000000000001 /* ConnectIQ */; };
 		C10000030000000000000002 /* ConnectIQ in Frameworks */ = {isa = PBXBuildFile; productRef = C10000020000000000000002 /* ConnectIQ */; };
+		E11000000000000000000001 /* AapsLiveActivityBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000010000000000000001 /* AapsLiveActivityBundle.swift */; };
+		E11000000000000000000002 /* AapsLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000010000000000000002 /* AapsLiveActivityWidget.swift */; };
+		E11000000000000000000003 /* AapsHomeWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000010000000000000003 /* AapsHomeWidget.swift */; };
+		E11000000000000000000004 /* AapsActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000040000000000000002 /* AapsActivityAttributes.swift */; };
+		E11000000000000000000005 /* AapsLiveActivity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E10000010000000000000011 /* AapsLiveActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		E12000000000000000000001 /* AapsLiveActivityBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000010000000000000001 /* AapsLiveActivityBundle.swift */; };
+		E12000000000000000000002 /* AapsLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000010000000000000002 /* AapsLiveActivityWidget.swift */; };
+		E12000000000000000000003 /* AapsHomeWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000010000000000000003 /* AapsHomeWidget.swift */; };
+		E12000000000000000000004 /* AapsActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000040000000000000002 /* AapsActivityAttributes.swift */; };
+		E12000000000000000000005 /* AapsLiveActivity2.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E10000010000000000000012 /* AapsLiveActivity2.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		E11000000000000000000020 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA1001000000000000000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E11000000000000000000022;
+			remoteInfo = AapsLiveActivity;
+		};
+		E12000000000000000000020 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA1001000000000000000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E12000000000000000000022;
+			remoteInfo = AapsLiveActivity2;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		E11000000000000000000013 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				E11000000000000000000005 /* AapsLiveActivity.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E12000000000000000000013 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				E12000000000000000000005 /* AapsLiveActivity2.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		AA1000100000000000000 /* AapsApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AapsApp.swift; path = Shared/AapsApp.swift; sourceTree = "<group>"; };
@@ -52,6 +104,13 @@
 		AA3000100000000000000 /* AAPS2.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AAPS2.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA3000200000000000000 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = AAPS2/Assets.xcassets; sourceTree = "<group>"; };
 		AA1005000000000000000 /* libre3 */ = {isa = PBXFileReference; lastKnownFileType = folder; name = libre3; path = ../../plugins/libre3/src/commonMain/resources/libre3; sourceTree = "<group>"; };
+		E10000010000000000000001 /* AapsLiveActivityBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AapsLiveActivityBundle.swift; sourceTree = "<group>"; };
+		E10000010000000000000002 /* AapsLiveActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AapsLiveActivityWidget.swift; sourceTree = "<group>"; };
+		E10000010000000000000003 /* AapsHomeWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AapsHomeWidget.swift; sourceTree = "<group>"; };
+		E10000010000000000000004 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		E10000010000000000000005 /* LiveActivity.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LiveActivity.entitlements; sourceTree = "<group>"; };
+		E10000010000000000000011 /* AapsLiveActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = AapsLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		E10000010000000000000012 /* AapsLiveActivity2.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = AapsLiveActivity2.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -77,6 +136,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E11000000000000000000011 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E12000000000000000000011 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -92,6 +165,7 @@
 				C10000040000000000000001 /* ConnectIqBridge.swift */,
 				D10000040000000000000001 /* LiveActivityBridge.swift */,
 				D10000040000000000000002 /* AapsActivityAttributes.swift */,
+				E10000020000000000000001 /* LiveActivity */,
 				AA2001200000000000000 /* AAPS */,
 				AA3001200000000000000 /* AAPS2 */,
 				AA1000300000000000000 /* Signing.xcconfig */,
@@ -106,6 +180,8 @@
 			children = (
 				AA2000100000000000000 /* AAPS.app */,
 				AA3000100000000000000 /* AAPS2.app */,
+				E10000010000000000000011 /* AapsLiveActivity.appex */,
+				E10000010000000000000012 /* AapsLiveActivity2.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -126,6 +202,18 @@
 			name = AAPS2;
 			sourceTree = "<group>";
 		};
+		E10000020000000000000001 /* LiveActivity */ = {
+			isa = PBXGroup;
+			children = (
+				E10000010000000000000001 /* AapsLiveActivityBundle.swift */,
+				E10000010000000000000002 /* AapsLiveActivityWidget.swift */,
+				E10000010000000000000003 /* AapsHomeWidget.swift */,
+				E10000010000000000000004 /* Info.plist */,
+				E10000010000000000000005 /* LiveActivity.entitlements */,
+			);
+			path = LiveActivity;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -137,11 +225,13 @@
 				AA2000600000000000000 /* Sources */,
 				AA2000700000000000000 /* Frameworks */,
 				AA2000800000000000000 /* Resources */,
+				E11000000000000000000013 /* Embed Foundation Extensions */,
 				AA2009500000000000000 /* Copy the Firebase config */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				E11000000000000000000021 /* PBXTargetDependency */,
 			);
 			name = AAPS;
 			packageProductDependencies = (
@@ -161,11 +251,13 @@
 				AA3000600000000000000 /* Sources */,
 				AA3000700000000000000 /* Frameworks */,
 				AA3000800000000000000 /* Resources */,
+				E12000000000000000000013 /* Embed Foundation Extensions */,
 				AA3009500000000000000 /* Copy the Firebase config */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				E12000000000000000000021 /* PBXTargetDependency */,
 			);
 			name = AAPS2;
 			packageProductDependencies = (
@@ -176,6 +268,40 @@
 			productName = AAPS2;
 			productReference = AA3000100000000000000 /* AAPS2.app */;
 			productType = "com.apple.product-type.application";
+		};
+		E11000000000000000000022 /* AapsLiveActivity */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E11000000000000000000023 /* Build configuration list for PBXNativeTarget "AapsLiveActivity" */;
+			buildPhases = (
+				E11000000000000000000010 /* Sources */,
+				E11000000000000000000011 /* Frameworks */,
+				E11000000000000000000012 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AapsLiveActivity;
+			productName = AapsLiveActivity;
+			productReference = E10000010000000000000011 /* AapsLiveActivity.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		E12000000000000000000022 /* AapsLiveActivity2 */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E12000000000000000000023 /* Build configuration list for PBXNativeTarget "AapsLiveActivity2" */;
+			buildPhases = (
+				E12000000000000000000010 /* Sources */,
+				E12000000000000000000011 /* Frameworks */,
+				E12000000000000000000012 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AapsLiveActivity2;
+			productName = AapsLiveActivity2;
+			productReference = E10000010000000000000012 /* AapsLiveActivity2.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -207,6 +333,8 @@
 			targets = (
 				AA2001300000000000000 /* AAPS */,
 				AA3001300000000000000 /* AAPS2 */,
+				E11000000000000000000022 /* AapsLiveActivity */,
+				E12000000000000000000022 /* AapsLiveActivity2 */,
 			);
 		};
 /* End PBXProject section */
@@ -227,6 +355,20 @@
 			files = (
 				AA3000400000000000000 /* Assets.xcassets in Resources */,
 				AA3005000000000000000 /* libre3 in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E11000000000000000000012 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E12000000000000000000012 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -328,7 +470,42 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E11000000000000000000010 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E11000000000000000000001 /* AapsLiveActivityBundle.swift in Sources */,
+				E11000000000000000000002 /* AapsLiveActivityWidget.swift in Sources */,
+				E11000000000000000000003 /* AapsHomeWidget.swift in Sources */,
+				E11000000000000000000004 /* AapsActivityAttributes.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E12000000000000000000010 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E12000000000000000000001 /* AapsLiveActivityBundle.swift in Sources */,
+				E12000000000000000000002 /* AapsLiveActivityWidget.swift in Sources */,
+				E12000000000000000000003 /* AapsHomeWidget.swift in Sources */,
+				E12000000000000000000004 /* AapsActivityAttributes.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		E11000000000000000000021 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E11000000000000000000022 /* AapsLiveActivity */;
+			targetProxy = E11000000000000000000020 /* PBXContainerItemProxy */;
+		};
+		E12000000000000000000021 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E12000000000000000000022 /* AapsLiveActivity2 */;
+			targetProxy = E12000000000000000000020 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		AA1001100000000000000 /* Debug */ = {
@@ -716,6 +893,142 @@
 			};
 			name = Release;
 		};
+		E11000000000000000000024 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = AA1000300000000000000 /* Signing.xcconfig */;
+			buildSettings = {
+				// The widget extension: the Live Activity and the home and lock screen widgets.
+				// It does not link AapsShared (the Kotlin framework): an extension has a small memory
+				// limit. It only reads the state the app hands over. See
+				// docs/kmp-migration/widget-live-activity-xcode-howto.md.
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				// Only the App Group. AAPS_WIDGET_ENTITLEMENTS is in Signing.xcconfig, so a free
+				// Personal Team can set it empty in Signing.local.xcconfig.
+				CODE_SIGN_ENTITLEMENTS = "$(AAPS_WIDGET_ENTITLEMENTS)";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				// The same numbers as the app, or iOS refuses the install.
+				CURRENT_PROJECT_VERSION = "$(AAPS_BUILD_NUMBER:default=1)";
+				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = LiveActivity/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = AAPS;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				// An extension id must start with the id of its app.
+				PRODUCT_BUNDLE_IDENTIFIER = "$(AAPS_BUNDLE_ID).LiveActivity";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		E11000000000000000000025 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = AA1000300000000000000 /* Signing.xcconfig */;
+			buildSettings = {
+				// The widget extension: the Live Activity and the home and lock screen widgets.
+				// It does not link AapsShared (the Kotlin framework): an extension has a small memory
+				// limit. It only reads the state the app hands over. See
+				// docs/kmp-migration/widget-live-activity-xcode-howto.md.
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				// Only the App Group. AAPS_WIDGET_ENTITLEMENTS is in Signing.xcconfig, so a free
+				// Personal Team can set it empty in Signing.local.xcconfig.
+				CODE_SIGN_ENTITLEMENTS = "$(AAPS_WIDGET_ENTITLEMENTS)";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				// The same numbers as the app, or iOS refuses the install.
+				CURRENT_PROJECT_VERSION = "$(AAPS_BUILD_NUMBER:default=1)";
+				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = LiveActivity/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = AAPS;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				// An extension id must start with the id of its app.
+				PRODUCT_BUNDLE_IDENTIFIER = "$(AAPS_BUNDLE_ID).LiveActivity";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		E12000000000000000000024 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = AA1000300000000000000 /* Signing.xcconfig */;
+			buildSettings = {
+				// The widget extension: the Live Activity and the home and lock screen widgets.
+				// It does not link AapsShared (the Kotlin framework): an extension has a small memory
+				// limit. It only reads the state the app hands over. See
+				// docs/kmp-migration/widget-live-activity-xcode-howto.md.
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				// Only the App Group. AAPS_WIDGET_ENTITLEMENTS is in Signing.xcconfig, so a free
+				// Personal Team can set it empty in Signing.local.xcconfig.
+				CODE_SIGN_ENTITLEMENTS = "$(AAPS_WIDGET_ENTITLEMENTS)";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				// The same numbers as the app, or iOS refuses the install.
+				CURRENT_PROJECT_VERSION = "$(AAPS_BUILD_NUMBER:default=1)";
+				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = LiveActivity/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = AAPS2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				// An extension id must start with the id of its app.
+				PRODUCT_BUNDLE_IDENTIFIER = "$(AAPS_BUNDLE_ID)2.LiveActivity";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		E12000000000000000000025 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = AA1000300000000000000 /* Signing.xcconfig */;
+			buildSettings = {
+				// The widget extension: the Live Activity and the home and lock screen widgets.
+				// It does not link AapsShared (the Kotlin framework): an extension has a small memory
+				// limit. It only reads the state the app hands over. See
+				// docs/kmp-migration/widget-live-activity-xcode-howto.md.
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				// Only the App Group. AAPS_WIDGET_ENTITLEMENTS is in Signing.xcconfig, so a free
+				// Personal Team can set it empty in Signing.local.xcconfig.
+				CODE_SIGN_ENTITLEMENTS = "$(AAPS_WIDGET_ENTITLEMENTS)";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				// The same numbers as the app, or iOS refuses the install.
+				CURRENT_PROJECT_VERSION = "$(AAPS_BUILD_NUMBER:default=1)";
+				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = LiveActivity/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = AAPS2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				// An extension id must start with the id of its app.
+				PRODUCT_BUNDLE_IDENTIFIER = "$(AAPS_BUNDLE_ID)2.LiveActivity";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -742,6 +1055,24 @@
 			buildConfigurations = (
 				AA3001000000000000000 /* Debug */,
 				D32B0F7B304886E000FAFE85 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		E11000000000000000000023 /* Build configuration list for PBXNativeTarget "AapsLiveActivity" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E11000000000000000000024 /* Debug */,
+				E11000000000000000000025 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		E12000000000000000000023 /* Build configuration list for PBXNativeTarget "AapsLiveActivity2" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E12000000000000000000024 /* Debug */,
+				E12000000000000000000025 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
