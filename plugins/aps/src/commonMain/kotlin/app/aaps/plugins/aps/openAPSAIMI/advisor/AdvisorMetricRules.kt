@@ -43,14 +43,21 @@ object AdvisorMetricRules {
     /** Max SMB is only cut back when it is above this, so an already small value is left alone. */
     const val MAX_SMB_CUT_FLOOR = 1.5
 
-    /** The lunch factor is only raised while it is still below this. */
-    const val LUNCH_FACTOR_RAISE_CEILING = 1.2
+    /**
+     * The lunch factor (percent, 100 = neutral) is only raised while it is still below this. The
+     * tuning engine (`TuningContextEngine`, meal rise) uses the same ceiling.
+     *
+     * Dosing effect since step T1: on the old 1.0 scale this ceiling (1.2) was below every real value
+     * (default 50), so the raise never fired. Now accepting the raise again and again can take the
+     * default 50 up to 120, which is 2.4 times the meal SMB. Each raise needs the user to accept it.
+     */
+    const val LUNCH_FACTOR_RAISE_CEILING = 120.0
 
     /** Max SMB is cut back to 80% of its current value. */
     const val MAX_SMB_CUT_FACTOR = 0.8
 
-    /** The lunch factor is raised one step of 0.1. */
-    const val LUNCH_FACTOR_STEP = 0.1
+    /** The lunch factor is raised one step of 10 percent points. */
+    const val LUNCH_FACTOR_STEP = 10.0
 }
 
 /**
@@ -103,15 +110,13 @@ fun metricRecommendations(
     // 2) High: low time in range while lows are rare -> propose a stronger lunch factor.
     if (tir != null && below70 != null && tir < AdvisorMetricRules.LOW_TIR_FRACTION && below70 <= AdvisorMetricRules.SAFE_HYPO_FRACTION) {
         val action = if (prefs.lunchFactor < AdvisorMetricRules.LUNCH_FACTOR_RAISE_CEILING) {
-            // The brackets matter. The original line was `(prefs.lunchFactor + 0.1 * 10.0).roundToInt() / 10.0`,
-            // which by operator precedence is `lunchFactor + 1.0` and then `/ 10`, so a lunch factor of
-            // 1.0 proposed 0.2 instead of 1.1. Round the stepped value, not the un-stepped one.
+            // The lunch factor is percent (100 = neutral). Round the stepped value to one decimal.
             val newValue = ((prefs.lunchFactor + AdvisorMetricRules.LUNCH_FACTOR_STEP) * 10.0).roundToInt() / 10.0
             AimiAction.PreferenceUpdate(
                 key = DoubleKey.OApsAIMILunchFactor,
                 newValue = newValue,
                 reason = rh?.gs(ApsStrings.aimi_adv_rec_control_action_reason)
-                    ?: "Raise the lunch factor by 0.1 because time in range is below the goal",
+                    ?: "Raise the lunch factor by 10 points because time in range is below the goal",
                 domain = AimiDomain.Basal,
                 priority = AimiPriority.High,
             )

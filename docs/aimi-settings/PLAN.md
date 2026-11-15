@@ -108,6 +108,31 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
   - *Stored values of the new constants.* A user who had changed `OApsAIMIPeakGovernorLearnedWeight`
     (it was on the PK/PD Expert screen) or one of the three hidden switches now gets the old default.
 
+- **Open for the owner (from step T1 review, not decided):**
+  - *"One rung at most" is read per step.* A TPO pack that asks for 2 steps (post-hypo STRONG,
+    exhausted MODERATE/STRONG, exhausted hypo floor) still moves 2 rungs (Max SMB 1.80 -> 1.00), as
+    before T1. Capping at 1 per pack would make TPO less protective. Say if it should be per pack.
+  - *Above the ladder a step down goes to the top rung* (Max SMB 3.0 or 5.0 -> 2.40; before T1 it
+    snapped to the top rung and went one more, 1.80). Below the ladder it cuts 15 % (0.30 -> 0.255).
+  - *Below the ladder a step up first goes to the lowest rung* without using a step, the same size
+    as before T1 (tube hypo floor 70 with 2 steps -> 80). Only the old lowering above the top rung
+    (90 -> 88) is gone.
+  - *Meal factor raises are now live.* On the 1.0 scale the Advisor raise (ceiling 1.2) and the
+    Tuning meal-rise raise did nothing on real values (default 50). On the percent scale they raise
+    meal SMB by 5 to 15 points per accepted proposal, both stopped at 120 (one shared constant,
+    `AdvisorMetricRules.LUNCH_FACTOR_RAISE_CEILING`). 120 is 2.4 times the default 50, which is
+    itself not decided. Say if the ceiling should be lower (for example the default) or the raises
+    should stay off until the meal factor default is decided.
+  - *Exercise and late fat damping in the poor-sleep pack.* These keys multiply the SMB (higher =
+    more insulin). The old "strengthen" moved up a band and raised the defaults (0.60 -> 0.72,
+    0.70 -> 0.80). T1 makes it never raise: it only lowers a value above 0.85 / 0.90 to that
+    ceiling, so on the defaults it now proposes nothing. Say if it should really lower the values
+    (for example 0.60 -> 0.50), which is a new dosing change.
+  - *Meal factors the old TPO wrote on the 1.0 scale.* A user who accepted a TPO pack before T1 and
+    did not revert may have a lunch or dinner factor of about 1.0 to 1.3 stored (meal SMB almost
+    off). T1 does not raise them (that would change dosing). A one-time notice or migration for
+    meal factor values below about 2 is open.
+
 ## Order of work (one green commit per step)
 
 | Step | What | Dosing |

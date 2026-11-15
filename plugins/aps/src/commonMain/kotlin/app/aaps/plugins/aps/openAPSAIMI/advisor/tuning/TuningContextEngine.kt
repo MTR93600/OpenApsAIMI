@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.advisor.tuning
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.aps.openAPSAIMI.advisor.AdvisorMetricRules
 import app.aaps.plugins.aps.openAPSAIMI.advisor.AdvisorMetrics
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdSmbTailDamping
 import kotlin.math.abs
@@ -179,7 +180,10 @@ object TuningContextEngine {
         val reliefStep = step(cappedTier, micro = 0.03, moderate = 0.05, strong = 0.08)
         val maxIobFactorStep = step(cappedTier, micro = 0.04, moderate = 0.08, strong = 0.12)
         val maxIobExtraStep = step(cappedTier, micro = 0.25, moderate = 0.50, strong = 1.0)
-        val lunchStep = step(cappedTier, micro = 0.05, moderate = 0.10, strong = 0.15)
+        // The meal factor keys are percent (100 = neutral), so this step is in percent points.
+        // Dosing effect since step T1: on the old 1.0 scale this raise did nothing (50 -> 50.1). Now
+        // each accepted raise gives 5 to 15 % more meal SMB, up to the Advisor ceiling (120 %).
+        val lunchStep = step(cappedTier, micro = 5.0, moderate = 10.0, strong = 15.0)
 
         if (!moderateHypoRisk) {
             proposeBoolean(
@@ -203,6 +207,7 @@ object TuningContextEngine {
             proposeDoubleIncrease(
                 out, preferences, DoubleKey.OApsAIMILunchFactor, lunchStep, cappedTier,
                 "Increase lunch mode factor for midday rises.",
+                ceiling = AdvisorMetricRules.LUNCH_FACTOR_RAISE_CEILING,
             )
             proposeDoubleIncrease(
                 out, preferences, DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor, reliefStep, cappedTier,
@@ -388,7 +393,8 @@ object TuningContextEngine {
         preferences: Preferences,
         tier: TuningStepTier,
     ) {
-        val mealStep = step(tier, micro = 0.05, moderate = 0.10, strong = 0.20)
+        // The meal factor keys are percent (100 = neutral), so this step is in percent points.
+        val mealStep = step(tier, micro = 5.0, moderate = 10.0, strong = 20.0)
         proposeDoubleDecrease(
             out, preferences, DoubleKey.OApsAIMILunchFactor, mealStep, tier,
             "Lower lunch mode factor — hypos often follow post-prandial corrections.",
@@ -446,9 +452,10 @@ object TuningContextEngine {
         delta: Double,
         tier: TuningStepTier,
         reason: String,
+        ceiling: Double = key.max,
     ) {
         val current = preferences.get(key)
-        val proposed = round3((current + delta).coerceIn(key.min, key.max))
+        val proposed = round3((current + delta).coerceIn(key.min, minOf(key.max, ceiling)))
         if (abs(proposed - current) < EPS) return
         if (proposed <= current + EPS) return
         out += TuningChange(key, key.key, current, proposed, reason, tier)

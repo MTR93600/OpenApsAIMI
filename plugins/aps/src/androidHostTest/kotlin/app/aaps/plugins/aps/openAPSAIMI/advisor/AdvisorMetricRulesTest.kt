@@ -43,7 +43,7 @@ class AdvisorMetricRulesTest : TestBase() {
         todayTdd = null,
     )
 
-    private fun prefs(maxSmb: Double = 2.0, lunchFactor: Double = 1.0) = AimiPrefsSnapshot(
+    private fun prefs(maxSmb: Double = 2.0, lunchFactor: Double = 100.0) = AimiPrefsSnapshot(
         maxSmb = maxSmb,
         lunchFactor = lunchFactor,
         unifiedReactivityFactor = 1.0,
@@ -133,22 +133,19 @@ class AdvisorMetricRulesTest : TestBase() {
         assertThat(recs[0].title).isEqualTo(ApsStrings.aimi_adv_rec_control_title)
     }
 
-    /**
-     * Pins the bracket fix. The original line was `(lunchFactor + 0.1 * 10.0).roundToInt() / 10.0`,
-     * which proposed 0.2 for a lunch factor of 1.0.
-     */
+    /** The lunch factor is percent (100 = neutral): one step is 10 points. */
     @Test
-    fun a_lunch_factor_of_one_proposes_one_point_one() {
-        val recs = rules(metrics(tir70_180 = 0.60), prefs(lunchFactor = 1.0))
+    fun a_neutral_lunch_factor_proposes_one_hundred_ten() {
+        val recs = rules(metrics(tir70_180 = 0.60), prefs(lunchFactor = 100.0))
         val action = update(recs[0])
         assertThat(action).isNotNull()
         assertThat(action!!.key).isEqualTo(DoubleKey.OApsAIMILunchFactor)
-        assertThat(action.newValue).isEqualTo(1.1)
+        assertThat(action.newValue).isEqualTo(110.0)
     }
 
     @Test
     fun control_rule_leaves_a_lunch_factor_at_the_ceiling_alone() {
-        val recs = rules(metrics(tir70_180 = 0.60), prefs(lunchFactor = 1.2))
+        val recs = rules(metrics(tir70_180 = 0.60), prefs(lunchFactor = 120.0))
         assertThat(recs).hasSize(1)
         assertThat(recs[0].action).isNull()
     }
@@ -215,7 +212,7 @@ class AdvisorMetricRulesTest : TestBase() {
 
     @Test
     fun control_action_takes_its_reason_from_the_resolver() {
-        val action = update(rules(metrics(tir70_180 = 0.60), prefs(lunchFactor = 1.0))[0])
+        val action = update(rules(metrics(tir70_180 = 0.60), prefs(lunchFactor = 100.0))[0])
         assertThat(action!!.reason).isEqualTo("aimi_adv_rec_control_action_reason")
     }
 

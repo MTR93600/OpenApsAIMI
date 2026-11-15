@@ -176,7 +176,7 @@ data class AimiProfileSnapshot(
 
 data class AimiPrefsSnapshot(
     val maxSmb: Double,                     // U
-    val lunchFactor: Double,                // multiplier
+    val lunchFactor: Double,                // percent, 100 = neutral
     val unifiedReactivityFactor: Double,    // multiplier
     val autodriveMaxBasal: Double,          // U/h
     val autodriveEnabled: Boolean = false,
