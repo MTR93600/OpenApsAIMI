@@ -484,8 +484,18 @@ enum class BooleanKey(
         title = KeysStrings.pref_title_oaps_aimi_dia_governor_enabled,
         summary = KeysStrings.pref_summary_oaps_aimi_dia_governor_enabled,
     ),
-    /** C1 shadow: log authority vs PKPD deltas without applying to dose path. */
-    OApsAIMIPredictionAuthorityShadow("key_aimi_prediction_authority_shadow", true, title = KeysStrings.pref_title_oaps_aimi_prediction_authority_shadow),
+    /**
+     * C1 shadow: log authority vs PKPD deltas without applying to dose path. It only acts while
+     * [OApsAIMIPredictionAuthorityEnabled] is off (`shadowOnly = shadow && !enabled`), so the row is shown
+     * only then: shown next to the enabled switch it read as "the authority is only a test".
+     */
+    OApsAIMIPredictionAuthorityShadow(
+        key = "key_aimi_prediction_authority_shadow",
+        defaultValue = true,
+        title = KeysStrings.pref_title_oaps_aimi_prediction_authority_shadow,
+        summary = KeysStrings.pref_summary_oaps_aimi_prediction_authority_shadow,
+        visibility = ElementVisibility { !it.preferences.get(OApsAIMIPredictionAuthorityEnabled) },
+    ),
     /** C1 prod: apply DecisionPredictionAuthority to eventualBG, predBGs, stacking, SafetyNet. Default ON (harmonized
      *  in production 2026-07-12): one authoritative, physio-enriched prediction feeds the tree/Harmonia/SMB/UI/safety.
      *  Fail-safe in PredictionAuthorityApplier falls back to raw PKPD if the authority terminal is invalid. */

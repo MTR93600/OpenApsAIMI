@@ -672,6 +672,7 @@
     <string name="pref_title_oaps_aimi_dia_governor_enabled">AIMI DIA governor enabled</string>
     <string name="pref_summary_oaps_aimi_dia_governor_enabled">When adaptive PK/PD is on, blend the insulin profile DIA with the learned PK/PD DIA. When off, the DIA is the profile DIA: no learned DIA and no shift from the current context (stress, meal, after a hypo).</string>
     <string name="pref_title_oaps_aimi_prediction_authority_shadow">AIMI prediction authority shadow</string>
+    <string name="pref_summary_oaps_aimi_prediction_authority_shadow">Used only when AIMI prediction authority is off: AIMI computes the prediction and writes it in the log, but does not use it for dosing.</string>
     <string name="pref_title_oaps_aimi_prediction_authority_enabled">AIMI prediction authority enabled</string>
     <string name="pref_title_oaps_aimi_meal_hyper_bypass_enabled">AIMI meal hyper bypass enabled</string>
     <string name="pref_title_oaps_aimi_hyper_dropping_exempt_enabled">AIMI hyper dropping exempt enabled</string>
