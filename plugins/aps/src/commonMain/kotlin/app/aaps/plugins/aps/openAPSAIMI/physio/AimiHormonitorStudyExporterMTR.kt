@@ -1,13 +1,11 @@
 package app.aaps.plugins.aps.openAPSAIMI.physio
 
-import android.content.Context
-import android.os.Environment
-import android.os.SystemClock
-import android.provider.Settings
 import app.aaps.core.data.json.OrgJsonCompat.optIntCompat
 import app.aaps.core.data.json.OrgJsonCompat.optJsonObjectCompat
 import app.aaps.core.data.json.OrgJsonCompat.optLongCompat
+import app.aaps.core.interfaces.concurrent.AapsLock
 import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
+import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.keys.BooleanKey
@@ -19,15 +17,8 @@ import app.aaps.plugins.aps.openAPSAIMI.retention.AimiAppendGuard
 import app.aaps.plugins.aps.openAPSAIMI.retention.AimiAppendOutcome
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
-import java.io.File
-import java.security.MessageDigest
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.LinkedHashMap
-import java.util.Locale
-import java.util.TimeZone
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicLong
+import kotlin.concurrent.Volatile
+import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.BufferOverflow
@@ -35,17 +26,34 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.format
+import kotlinx.datetime.format.char
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 
+/**
+ * Writes the Hormonitor study files: the decision event stream, the shadow contributions, the
+ * daily outcomes and QA report, and the loop black box.
+ *
+ * Shared by Android and iOS (moved from androidMain on 2026-11-16, so an iPhone writes the same
+ * files as an Android phone; before, iOS had no exporter at all). Only [HormonitorStudyPlatform] is
+ * per platform: the clock since boot, the app version, the dataset id seed, SHA-256 and the two
+ * folders. The lines, file names and folders on Android are the same as before the move.
+ *
+ * Telemetry only: nothing here feeds a dose. A write that fails on the primary place goes to the
+ * fallback place, and a write that fails there too is logged and dropped, never thrown.
+ */
 class AimiHormonitorStudyExporterMTR(
-    private val context: Context,
+    private val platform: HormonitorStudyPlatform,
     private val aapsLogger: AAPSLogger,
     private val preferences: Preferences,
-    /** Only used for the append guard, which works on [AimiPath] and needs the platform storage. */
+    /** All file reads and writes, and the append guard. */
     private val storage: AimiStorage,
 ) : HormonitorStudyExporter {
     companion object {
@@ -99,18 +107,24 @@ class AimiHormonitorStudyExporterMTR(
     private var lastIntratickStallWarningWallMs: Long = 0L
 
     private val writeScope = CoroutineScope(SupervisorJob() + aapsIoDispatcher)
-    private val droppedWrites = AtomicLong(0)
+    /** Guards [droppedWrites], [appendGuardLoggedPaths] and the day counters (was `@Synchronized`). */
+    private val lock = AapsLock()
+    private var droppedWrites = 0L
 
     /** Paths already warned about for [AimiAppendOutcome.ROTATED] / [AimiAppendOutcome.OVERFLOW_ALREADY_PRESENT],
      *  so a stuck overflow file cannot flood the log: at most one warning per file per process. */
-    private val appendGuardLoggedPaths: MutableSet<String> = ConcurrentHashMap.newKeySet()
+    private val appendGuardLoggedPaths: MutableSet<String> = mutableSetOf()
     private val writeQueue = Channel<WriteTask>(
         capacity = WRITE_QUEUE_CAPACITY,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
 
-    private val sharedDir = File(Environment.getExternalStorageDirectory().absolutePath + "/Documents/AAPS")
-    private val appScopedDir = File(context.getExternalFilesDir(null), "AAPS")
+    private val isoUtcFormat = LocalDateTime.Format {
+        year(); char('-'); monthNumber(); char('-'); day(); char('T')
+        hour(); char(':'); minute(); char(':'); second(); char('.'); secondFraction(3)
+    }
+    private val dayKeyFormat = LocalDateTime.Format { year(); char('-'); monthNumber(); char('-'); day() }
+
     private val dailyCounters = LinkedHashMap<String, DailyDecisionCounters>()
     private val qaCounters = LinkedHashMap<String, DailyQaCounters>()
 
@@ -130,8 +144,8 @@ class AimiHormonitorStudyExporterMTR(
 
     private fun appendLoopBlackboxLine(line: String) {
         if (!isLoopBlackboxFileEnabled()) return
-        val target = File(sharedDir, BLACKBOX_FILE_NAME)
-        val fallback = File(appScopedDir, BLACKBOX_FILE_NAME)
+        val target = platform.primaryFile(BLACKBOX_FILE_NAME)
+        val fallback = platform.fallbackFile(BLACKBOX_FILE_NAME)
         appendJsonlSafely(target, fallback, line)
     }
 
@@ -149,7 +163,7 @@ class AimiHormonitorStudyExporterMTR(
             put("type", "loop_pulse")
             put("wall_ms", wallClockMs)
             if (tickId > 0L) put("tick_id", tickId)
-            put("uptime_ms", SystemClock.uptimeMillis())
+            put("uptime_ms", platform.uptimeMs())
         }.toString()
         appendLoopBlackboxLine(line)
     }
@@ -170,7 +184,7 @@ class AimiHormonitorStudyExporterMTR(
             put("wall_ms", wallClockMs)
             msSinceTickStart?.let { put("ms_since_tick_start", it) }
             msSincePrevPhase?.let { put("ms_since_prev_phase", it) }
-            put("uptime_ms", SystemClock.uptimeMillis())
+            put("uptime_ms", platform.uptimeMs())
         }.toString()
         appendLoopBlackboxLine(line)
     }
@@ -205,7 +219,7 @@ class AimiHormonitorStudyExporterMTR(
             put("error_class", errorClass)
             put("error_message", safeMessage)
             if (!lastPhaseName.isNullOrEmpty()) put("last_phase", lastPhaseName)
-            put("uptime_ms", SystemClock.uptimeMillis())
+            put("uptime_ms", platform.uptimeMs())
         }.toString()
         appendLoopBlackboxLine(line)
     }
@@ -228,7 +242,7 @@ class AimiHormonitorStudyExporterMTR(
             put("ended_wall_ms", endedWallMs)
             put("duration_ms", (endedWallMs - startedWallMs).coerceAtLeast(0L))
             if (!lastPhaseName.isNullOrEmpty()) put("last_phase", lastPhaseName)
-            put("uptime_ms", SystemClock.uptimeMillis())
+            put("uptime_ms", platform.uptimeMs())
         }.toString()
         appendLoopBlackboxLine(line)
     }
@@ -244,8 +258,8 @@ class AimiHormonitorStudyExporterMTR(
             )
             .toString()
 
-        val target = File(sharedDir, FILE_NAME)
-        val fallback = File(appScopedDir, FILE_NAME)
+        val target = platform.primaryFile(FILE_NAME)
+        val fallback = platform.fallbackFile(FILE_NAME)
         appendJsonlSafely(target, fallback, payload)
     }
 
@@ -279,13 +293,25 @@ class AimiHormonitorStudyExporterMTR(
             put("source", trace.source)
         }.toString()
 
-        val target = File(sharedDir, SHADOW_FILE_NAME)
-        val fallback = File(appScopedDir, SHADOW_FILE_NAME)
+        val target = platform.primaryFile(SHADOW_FILE_NAME)
+        val fallback = platform.fallbackFile(SHADOW_FILE_NAME)
         appendJsonlSafely(target, fallback, payload)
     }
 
-    @Synchronized
     override fun exportDailyOutcomes(
+        event: HormonitorDecisionEventMTR,
+        tirLowPct: Double?,
+        tirInRangePct: Double?,
+        tirAbovePct: Double?,
+        tdd24hTotalU: Double?,
+        snapshotSource: String?,
+        snapshotAgeSeconds: Long?,
+        snapshotConfidence: Double?
+    ) = lock.withLock {
+        exportDailyOutcomesLocked(event, tirLowPct, tirInRangePct, tirAbovePct, tdd24hTotalU, snapshotSource, snapshotAgeSeconds, snapshotConfidence)
+    }
+
+    private fun exportDailyOutcomesLocked(
         event: HormonitorDecisionEventMTR,
         tirLowPct: Double?,
         tirInRangePct: Double?,
@@ -362,13 +388,13 @@ class AimiHormonitorStudyExporterMTR(
             put("decision_count_physio_veto", counters.vetoCount)
         }.toString()
 
-        val target = File(sharedDir, DAILY_FILE_NAME)
-        val fallback = File(appScopedDir, DAILY_FILE_NAME)
+        val target = platform.primaryFile(DAILY_FILE_NAME)
+        val fallback = platform.fallbackFile(DAILY_FILE_NAME)
         appendJsonlSafely(target, fallback, payload)
         maybeEmitQaReport(dayKey, generatedAt, qa, snapshotAgeSeconds)
     }
 
-    private fun appendJsonlSafely(primary: File, fallback: File, line: String) {
+    private fun appendJsonlSafely(primary: AimiPath, fallback: AimiPath, line: String) {
         enqueueWrite(
             WriteTask(
                 primary = primary,
@@ -379,40 +405,18 @@ class AimiHormonitorStudyExporterMTR(
         )
     }
 
-    private fun appVersion(): String {
-        return try {
-            val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-            packageInfo.versionName ?: "unknown"
-        } catch (_: Exception) {
-            "unknown"
-        }
-    }
+    private fun appVersion(): String = platform.appVersion()
 
-    private fun stableDatasetId(): String {
-        val androidId = try {
-            Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID).orEmpty()
-        } catch (_: Exception) {
-            ""
-        }
-        val raw = "${context.packageName}|$androidId|hormonitor_v1"
-        return sha256Hex(raw).take(24)
-    }
+    private fun stableDatasetId(): String =
+        platform.sha256Hex("${platform.datasetIdSeed()}|hormonitor_v1").take(24)
 
-    private fun sha256Hex(input: String): String {
-        val digest = MessageDigest.getInstance("SHA-256").digest(input.toByteArray())
-        return digest.joinToString(separator = "") { eachByte -> (eachByte.toInt() and 0xff).toString(16).padStart(2, '0') }
-    }
+    /** `yyyy-MM-dd'T'HH:mm:ss.SSS'Z'` in UTC, as `SimpleDateFormat` wrote it before the move. */
+    private fun isoUtcNow(): String =
+        Instant.fromEpochMilliseconds(aimiWallClockMs()).toLocalDateTime(TimeZone.UTC).format(isoUtcFormat) + "Z"
 
-    private fun isoUtcNow(): String {
-        val formatter = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
-        formatter.timeZone = TimeZone.getTimeZone("UTC")
-        return formatter.format(Date(aimiWallClockMs()))
-    }
-
-    private fun localDayKey(timestamp: Long): String {
-        val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        return formatter.format(Date(timestamp))
-    }
+    /** `yyyy-MM-dd` in the device time zone, the `day_local` key the viewer reads. */
+    private fun localDayKey(timestamp: Long): String =
+        Instant.fromEpochMilliseconds(timestamp).toLocalDateTime(TimeZone.currentSystemDefault()).format(dayKeyFormat)
 
     private fun computeSourceReliabilityScore(snapshotAgeSeconds: Long?, snapshotConfidence: Double?): Double {
         val confidence = (snapshotConfidence ?: 0.0).coerceIn(0.0, 1.0)
@@ -430,7 +434,7 @@ class AimiHormonitorStudyExporterMTR(
         if (now - lastStatePersistMs < STATE_PERSIST_INTERVAL_MS) return
         lastStatePersistMs = now
 
-        val stateFile = File(appScopedDir, STATE_FILE_NAME)
+        val stateFile = platform.fallbackFile(STATE_FILE_NAME)
         try {
             val countersJson = buildJsonObject {
                 dailyCounters.forEach { (day, counters) ->
@@ -505,7 +509,7 @@ class AimiHormonitorStudyExporterMTR(
                             put("gap_ms", intratickGap)
                             put("threshold_ms", intraThreshold)
                             put("last_phase", lastReportedPhaseName)
-                            put("uptime_ms", SystemClock.uptimeMillis())
+                            put("uptime_ms", platform.uptimeMs())
                         }.toString()
                         appendLoopBlackboxLine(line)
                         aapsLogger.warn(
@@ -528,7 +532,7 @@ class AimiHormonitorStudyExporterMTR(
                     put("last_loop_pulse_wall_ms", last)
                     put("gap_ms", gap)
                     put("threshold_ms", LOOP_STALL_THRESHOLD_MS)
-                    put("uptime_ms", SystemClock.uptimeMillis())
+                    put("uptime_ms", platform.uptimeMs())
                 }.toString()
                 appendLoopBlackboxLine(line)
                 aapsLogger.warn(
@@ -542,7 +546,7 @@ class AimiHormonitorStudyExporterMTR(
     private fun enqueueWrite(task: WriteTask) {
         val accepted = writeQueue.trySend(task).isSuccess
         if (!accepted) {
-            val dropped = droppedWrites.incrementAndGet()
+            val dropped = lock.withLock { ++droppedWrites }
             if (dropped == 1L || dropped % 100L == 0L) {
                 aapsLogger.warn(
                     LTag.AIMI,
@@ -553,57 +557,50 @@ class AimiHormonitorStudyExporterMTR(
     }
 
     private fun tryWrite(task: WriteTask) {
-        try {
-            writeToFile(task.primary, task.line, task.mode)
-        } catch (primaryError: Exception) {
-            if (!sharedStorageDeniedLogged && task.primary != task.fallback) {
-                sharedStorageDeniedLogged = true
-                aapsLogger.warn(
-                    LTag.AIMI,
-                    "[$TAG] Study export denied on shared storage (${task.primary.absolutePath}). " +
-                        "Switching to app-scoped fallback (${task.fallback.absolutePath}). reason=${primaryError.message}"
-                )
-            }
-            try {
-                writeToFile(task.fallback, task.line, task.mode)
-            } catch (fallbackError: Exception) {
-                aapsLogger.error(
-                    LTag.AIMI,
-                    "[$TAG] Study export failed on both primary and fallback paths.",
-                    fallbackError
-                )
-            }
+        if (writeToFile(task.primary, task.line, task.mode)) return
+        if (!sharedStorageDeniedLogged && task.primary != task.fallback) {
+            sharedStorageDeniedLogged = true
+            aapsLogger.warn(
+                LTag.AIMI,
+                "[$TAG] Study export denied on shared storage (${task.primary.value}). " +
+                    "Switching to app-scoped fallback (${task.fallback.value})."
+            )
         }
+        if (task.primary != task.fallback && writeToFile(task.fallback, task.line, task.mode)) return
+        aapsLogger.error(LTag.AIMI, "[$TAG] Study export failed on both primary and fallback paths (${task.fallback.value}).")
     }
 
-    private fun writeToFile(file: File, payload: String, mode: WriteMode) {
-        if (!file.exists()) {
-            file.parentFile?.mkdirs()
-            file.createNewFile()
+    /** True when the line or text was written. Never throws: storage answers false on failure. */
+    private fun writeToFile(path: AimiPath, payload: String, mode: WriteMode): Boolean {
+        if (!storage.exists(path)) {
+            storage.createParentDirectories(path)
+            if (!storage.createFile(path)) return false
         }
-        when (mode) {
+        return when (mode) {
             WriteMode.APPEND_LINE -> {
                 // Without this the study files grow without limit between retention passes.
-                val outcome = AimiAppendGuard.beforeAppend(storage, AimiPath(file.absolutePath), file.name, payload.length + 1)
-                logAppendGuardOutcomeOnce(file, outcome)
-                file.appendText("$payload\n")
+                val outcome = AimiAppendGuard.beforeAppend(storage, path, fileNameOf(path), payload.length + 1)
+                logAppendGuardOutcomeOnce(path, outcome)
+                storage.appendText(path, "$payload\n")
             }
 
-            WriteMode.OVERWRITE   -> file.writeText(payload)
+            WriteMode.OVERWRITE   -> storage.writeText(path, payload)
         }
     }
+
+    private fun fileNameOf(path: AimiPath): String = path.value.substringAfterLast('/')
 
     /** Logs a ROTATED or OVERFLOW_ALREADY_PRESENT outcome once per file per process. A file stuck
      *  at OVERFLOW_ALREADY_PRESENT would otherwise warn on every write forever. */
-    private fun logAppendGuardOutcomeOnce(file: File, outcome: AimiAppendOutcome) {
+    private fun logAppendGuardOutcomeOnce(path: AimiPath, outcome: AimiAppendOutcome) {
         if (outcome != AimiAppendOutcome.ROTATED && outcome != AimiAppendOutcome.OVERFLOW_ALREADY_PRESENT) return
-        if (!appendGuardLoggedPaths.add(file.absolutePath)) return
-        aapsLogger.warn(LTag.AIMI, "[$TAG] Append guard: $outcome for ${file.absolutePath}")
+        if (!lock.withLock { appendGuardLoggedPaths.add(path.value) }) return
+        aapsLogger.warn(LTag.AIMI, "[$TAG] Append guard: $outcome for ${path.value}")
     }
 
     private data class WriteTask(
-        val primary: File,
-        val fallback: File,
+        val primary: AimiPath,
+        val fallback: AimiPath,
         val line: String,
         val mode: WriteMode,
     )
@@ -614,10 +611,11 @@ class AimiHormonitorStudyExporterMTR(
     }
 
     private fun restoreDailyState() {
-        val stateFile = File(appScopedDir, STATE_FILE_NAME)
-        if (!stateFile.exists()) return
+        val stateFile = platform.fallbackFile(STATE_FILE_NAME)
+        if (!storage.exists(stateFile)) return
         try {
-            val root = Json.parseToJsonElement(stateFile.readText()).jsonObject
+            val text = storage.readText(stateFile) ?: return
+            val root = Json.parseToJsonElement(text).jsonObject
             lastDailyEmitMs = root.optLongCompat("last_daily_emit_ms", 0L)
             lastQaEmitMs = root.optLongCompat("last_qa_emit_ms", 0L)
             val counters = root.optJsonObjectCompat("daily_counters") ?: return
@@ -714,8 +712,8 @@ class AimiHormonitorStudyExporterMTR(
             put("qa_invalid_timestamp_count", qa.invalidTimestampCount)
         }.toString()
 
-        val target = File(sharedDir, QA_FILE_NAME)
-        val fallback = File(appScopedDir, QA_FILE_NAME)
+        val target = platform.primaryFile(QA_FILE_NAME)
+        val fallback = platform.fallbackFile(QA_FILE_NAME)
         appendJsonlSafely(target, fallback, payload)
         logQaStatusLine(
             dayKey = dayKey,

@@ -40,7 +40,7 @@ class AndroidHormonitorStudyExporterProvider @Inject constructor(
 ) : HormonitorStudyExporterProvider {
 
     private val exporter: HormonitorStudyExporter? by lazy {
-        runCatching { AimiHormonitorStudyExporterMTR(context, aapsLogger, preferences, storage) }
+        runCatching { AimiHormonitorStudyExporterMTR(AndroidHormonitorStudyPlatform(context), aapsLogger, preferences, storage) }
             .onFailure { aapsLogger.error(LTag.APS, "Hormonitor exporter init failed — telemetry disabled this session", it) }
             .getOrNull()
     }

@@ -1,7 +1,9 @@
 package app.aaps.plugins.aps.openAPSAIMI.di
 
-import app.aaps.plugins.aps.openAPSAIMI.physio.HormonitorStudyExporter
+import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.physio.HormonitorStudyExporterProvider
+import app.aaps.plugins.aps.openAPSAIMI.physio.IosHormonitorStudyExporterProvider
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import app.aaps.plugins.aps.openAPSAIMI.utils.iosAimiStorage
 import dev.zacsweers.metro.AppScope
@@ -32,13 +34,14 @@ object IosAimiPlatformBindings {
     fun aimiStorage(): AimiStorage = iosAimiStorage()
 
     /**
-     * Study telemetry is unavailable on iOS. `null` is a normal answer by
-     * design: the interface documents that a platform with no implementation
-     * returns null, and the engine treats it as "telemetry off".
+     * The Hormonitor study files, written to the AIMI storage folder as on Android (they used to be
+     * absent on iOS: this returned null). Single, because the exporter keeps day counters.
      */
     @Provides
-    fun hormonitorStudyExporterProvider(): HormonitorStudyExporterProvider =
-        object : HormonitorStudyExporterProvider {
-            override fun exporter(): HormonitorStudyExporter? = null
-        }
+    @SingleIn(AppScope::class)
+    fun hormonitorStudyExporterProvider(
+        aapsLogger: AAPSLogger,
+        preferences: Preferences,
+        storage: AimiStorage,
+    ): HormonitorStudyExporterProvider = IosHormonitorStudyExporterProvider(aapsLogger, preferences, storage)
 }
