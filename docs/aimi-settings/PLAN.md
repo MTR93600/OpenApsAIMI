@@ -90,9 +90,13 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
   worth doing where it makes the settings easier to understand.
 - **Protected families**: WCycle, inflammatory diseases (thyroid, endometriosis, CFRD, Verneuil),
   learners and machine learning, physio and the tree. Never delete their keys without the owner.
-  Their dead keys (`AimiPhysioSleepDataEnable`, `AimiPhysioHRVDataEnable`, `AimiPhysioDebugLogs`,
-  `AimiPhysioLLMProvider`, `AimiEndometriosisHormonalSuppression`, `AimiEndometriosisFlareDuration`,
-  `PregnancyDueDate`) stay until the owner decides.
+  Owner decisions of 2026-11-15 on their seven dead keys (done in step S3b):
+  - *Wire* `AimiPhysioSleepDataEnable` and `AimiPhysioHRVDataEnable` (default on, no change): off,
+    the reading is ignored by every dosing path. Wire `AimiEndometriosisFlareDuration` (default 4 h):
+    a declared pain flare ends by itself after that many hours.
+  - *Delete* `AimiPhysioDebugLogs`, `AimiPhysioLLMProvider`, `AimiEndometriosisHormonalSuppression`
+    and `PregnancyDueDate` (the Long key), with a migration; a stored old due date is first copied
+    into `PregnancyDueDateString` when that text is empty.
 - **Not decided yet, do not change**: the NGR default (unknown age), the meal factor default (50),
   `PkpdEnabled`, `TrajBridgeBasalSurvives` and Cosine gate defaults.
 - **Open for the owner (from step P2 review, not decided):**
@@ -203,10 +207,7 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
   - *Before/after preview.* After S2 every setting row on a card writes only its own key, so the
     before/after preview of the Control Center has no user in the settings. Add it back when a card
     gets a control that changes several keys at once.
-  - *Protected-family dead keys.* The rows of `AimiPhysioSleepDataEnable`, `AimiPhysioHRVDataEnable`,
-    `AimiPhysioDebugLogs`, `AimiPhysioLLMProvider`, `AimiEndometriosisFlareDuration`,
-    `AimiEndometriosisHormonalSuppression` and `PregnancyDueDate` are hidden (nothing reads them).
-    The keys stay until the owner decides.
+  - *Protected-family dead keys.* Decided 2026-11-15, done in step S3b (see "Protected families").
   - *Contraceptive with the cycle switch off.* `EndometriosisAdjuster` reads the contraceptive with
     only the endometriosis switch on, so its row stays shown on the women's cycle card while the cycle
     switch is off. Say if it should also be shown on the illness card, next to endometriosis.
@@ -233,6 +234,7 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
 | S1 | Settings row component (hint, "?" sheet with default and warnings, bounded values) and the Essentials page | none |
 | S2 | Feature cards with progressive disclosure, What AIMI learned page, Expert with search; Control Center screen removed | none |
 | S3 | Delete the dead keys (not the protected ones), move internal state out of the settings, prefs schema, migration | none |
+| S3b | Protected-family dead keys (owner decision 2026-11-15): wire sleep, HRV and the flare duration; delete four keys with a migration (the old due date is copied first) | only when a person turns sleep or HRV off, or forgets to switch a flare off |
 
 ## Step S3 (done 2026-11-15, no dosing change)
 
@@ -261,3 +263,52 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
 - **Reachability:** every manifest entry is now a setting the person owns, and a test walks the
   settings tree and fails if any of them loses its page, card or Expert row. The debt went from 23
   to 18 (the five context keys were deleted).
+
+## Step S3b (2026-11-15, protected-family dead keys, owner decisions)
+
+- **Sleep and HRV switches wired** (`PhysioDataSwitches`). Off, the reading is absent, never a
+  stand-in number, at every place it enters AIMI: the raw read of the physio run (so the features,
+  the rolling baseline, the context and the language model step never see it), the inputs and the
+  result of the live health snapshot (no warm-up or merge carries an older value forward; with a
+  switch off the merge also takes the fresh thermal belief, because the last one was built from the
+  old sleep debt and HRV depression and the latent state reads it), the stored
+  context each time a dosing path reads it (a context stored before the switch was turned off is
+  valid for 20 hours; a poor sleep or low HRV verdict is removed and the state and recommendations are
+  classified again with the engine's own rule, `AIMIPhysioContextEngineMTR.classify`), and the HRV of
+  the thermal recovery proxy on both platforms. So sleep debt, poor sleep, the latent sleep debt score,
+  the patient mode POOR_SLEEP_DAY, the TPO poor-sleep pack trigger, HRV depression, the stress and
+  pattern readings and the RBT leaves all see "no data". Both default on: no change for anyone who
+  does not touch them. The therapy "sleep" event (a declaration, not watch data) is not affected.
+  Rows: a new section on the physio card (ADVANCED), with a hint.
+- **Pain flare ends by itself** (`EndometriosisFlareClock`). The start time is internal state
+  (`AimiLongKey.EndometriosisFlareStartedAt`): set when the flare is switched on, by a watcher the
+  AIMI plugin runs on the live value of the switch (`EndometriosisFlareSwitchWatcher`, so it does not
+  wait for a loop run and works while endometriosis is off), or by the loop when a flare is on with no
+  start (switched on before this build, or by an import); cleared when it is switched off, by the
+  watcher (also when endometriosis is off) or by the loop. (A first version listened to
+  `EventPreferenceChange`, which nothing in the app sends, so a fast off and on kept the old start.)
+  The switch is read as a `StateFlow`, which can merge an off and an on that come very close together;
+  then the old start stays and the flare is shorter, never longer, which is the safe side. After `AimiEndometriosisFlareDuration` hours the flare
+  no longer changes insulin (reason `PainFlare(Ended)`). The loop does not switch the setting off
+  (no setting is written by the loop alone); the illness card shows the time left, or that the flare
+  ended and how to start a new one. The duration row is on the endometriosis page of the illness card
+  (EXPERT, as in the key map), with a hint; the pain flare switch got a hint too.
+- **Deleted, with their stored values** (`AimiRetiredSettings`, same migration as S3, on Android
+  start-up, on every import, and at the AIMI plugin start on both platforms): `AimiPhysioDebugLogs`,
+  `AimiPhysioLLMProvider`, `AimiEndometriosisHormonalSuppression` and the Long `PregnancyDueDate`.
+  Before the old due date is removed it is copied into `PregnancyDueDateString` when that text is
+  empty (a text the person typed is kept). The day is the UTC day nearest to the stored milliseconds,
+  which is the right day for a midnight stored in UTC or in any local time zone from UTC-12 to UTC+12;
+  a value before 2000 is not copied. Nothing in the code history ever wrote this key, so only a
+  hand-edited backup can hold one. Their titles and four unused strings (the two old sleep and HRV
+  summaries, and the physio debug title and summary) went too.
+- **DEAD_KEYS** now holds only `OApsxdriponeminute` (owner decision of S2 still open).
+- **Advisor, TPO, tuning, auditor:** none of them reads, writes or proposes any of the seven keys or
+  the new start time, so none of their proposals changed and nothing they can propose lost or gained
+  an effect. TPO revert and session data do not hold these keys.
+- **Dosing:** none with the defaults. A person who turns sleep (or HRV) off loses every sleep (or
+  HRV) based adjustment; these are mostly protective (less insulin after a poor night or with low
+  HRV), so turning one off can mean slightly more insulin in those situations. A pain flare left on
+  now stops raising the basal and damping the SMBs after the duration (default 4 h). A person whose
+  backup held only the old due date with pregnancy mode on gets the gestation factors back.
+

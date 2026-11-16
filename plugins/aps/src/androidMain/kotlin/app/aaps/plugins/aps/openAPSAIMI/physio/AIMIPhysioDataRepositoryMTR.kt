@@ -841,7 +841,8 @@ class AIMIPhysioDataRepositoryMTR @Inject constructor(
 
                     val vitalsDays = daysBack.coerceAtLeast(7)
                     val rhr = fetchMorningRHR(vitalsDays)
-                    val hrv = fetchHRVData(vitalsDays)
+                    // The HRV switch of the physio card also keeps HRV out of this proxy.
+                    val hrv = PhysioDataSwitches.read(preferences).hrvOrEmpty(fetchHRVData(vitalsDays))
                     val proxySamples = HcRecoveryProxyThermalSource.build(
                         rhrPoints = rhr,
                         hrvPoints = hrv,

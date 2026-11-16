@@ -203,8 +203,10 @@ class PhysioPipeline @Inject constructor(
 
             // Step 1: Fetch raw data (HC) + optional enrichment from unified DB (Wear / HC sync rows)
             val t0 = aimiWallClockMs()
+            // The sleep and HRV switches of the physio card take their reading out here, before the
+            // features, the baseline and the context see it (see PhysioDataSwitches).
             val rawData = try {
-                enrichRawFromUnifiedIfNeeded(dataSource.fetchAllData(daysBack = daysBack))
+                enrichRawFromUnifiedIfNeeded(PhysioDataSwitches.read(preferences).applyTo(dataSource.fetchAllData(daysBack = daysBack)))
             } catch (e: PhysioDataLockedException) {
                 // Not "no data": nothing is stored, so the last context and the baseline stay as
                 // they were. The caller decides when to try again.

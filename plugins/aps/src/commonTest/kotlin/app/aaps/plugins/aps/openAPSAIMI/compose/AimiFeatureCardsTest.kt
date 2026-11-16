@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.compose
 
 import app.aaps.core.keys.BooleanKey
+import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.PreferenceItem
 import app.aaps.core.keys.interfaces.PreferenceKey
@@ -146,6 +147,21 @@ class AimiFeatureCardsTest {
             BooleanKey.OApsAIMIT3cCfrdMode.key,
             StringKey.OApsAIMIWCycleVerneuil.key,
         ).forEach { assertTrue(it in illness, it) }
+    }
+
+    @Test
+    fun `the sleep and HRV switches are on the physio card and the flare duration on the illness card`() {
+        // Step S3b: these three keys were dead and hidden. They now act, so they are shown.
+        val physio = keysOf(cardScreen(AimiFeatureCardId.Physio))
+        assertTrue(BooleanKey.AimiPhysioSleepDataEnable.key in physio)
+        assertTrue(BooleanKey.AimiPhysioHRVDataEnable.key in physio)
+        assertTrue(IntKey.AimiEndometriosisFlareDuration.key in keysOf(cardScreen(AimiFeatureCardId.Illness)))
+    }
+
+    @Test
+    fun `the wired keys have a hint`() {
+        listOf(BooleanKey.AimiPhysioSleepDataEnable, BooleanKey.AimiPhysioHRVDataEnable, IntKey.AimiEndometriosisFlareDuration, BooleanKey.AimiEndometriosisPainFlare)
+            .forEach { assertNotNull(it.summary, it.key) }
     }
 
     @Test

@@ -52,4 +52,67 @@ class AimiRetiredSettingsStoreTest {
         assertTrue(removeRetiredAimiSettings(store).isEmpty())
         assertEquals(mapOf<String, Any?>(lunch to "60.0"), store.getAll())
     }
+
+    // ---------------------------------------------------------------- step S3b
+
+    private val dueDateMs = "oa_aimi_pregnancy_due_date_ms"
+    private val dueDateText = "aimi_pregnancy_due_date_string"
+
+    /** 2026-01-01T00:00:00Z. */
+    private val newYear2026Utc = 1_767_225_600_000L
+
+    @Test
+    fun theProtectedKeysTheOwnerRetiredAreRemoved() {
+        val names = listOf("aimi_physio_debug_logs", "aimi_physio_llm_provider", "aimi_endo_suppression")
+        assertTrue(AimiRetiredSettings.storageNames.containsAll(names + dueDateMs))
+        val store = FileKeyValueStore(names.associateWith { "1" } + mapOf(lunch to "60.0"))
+
+        removeRetiredAimiSettings(store)
+
+        assertEquals(mapOf<String, Any?>(lunch to "60.0"), store.getAll())
+    }
+
+    @Test
+    fun theOldDueDateIsCopiedIntoTheDueDateTextThenRemoved() {
+        val store = FileKeyValueStore(mapOf(dueDateMs to newYear2026Utc))
+
+        val removed = removeRetiredAimiSettings(store)
+
+        assertEquals("2026-01-01", store.getAll()[dueDateText])
+        assertFalse(store.contains(dueDateMs))
+        assertEquals(listOf(dueDateMs), removed)
+    }
+
+    @Test
+    fun aDueDateInABackupFileIsCopiedToo() {
+        // A file holds every value as text.
+        val file = FileKeyValueStore(mapOf(dueDateMs to newYear2026Utc.toString(), dueDateText to ""))
+        removeRetiredAimiSettings(file)
+        assertEquals("2026-01-01", file.getAll()[dueDateText])
+        assertFalse(file.contains(dueDateMs))
+    }
+
+    @Test
+    fun aLocalMidnightGivesTheSameDayInEveryTimeZone() {
+        // Midnight of 1 January in Paris in winter (UTC+1) and in New York (UTC-5).
+        assertEquals("2026-01-01", AimiRetiredSettings.dueDateText(newYear2026Utc - 1 * 3_600_000L))
+        assertEquals("2026-01-01", AimiRetiredSettings.dueDateText(newYear2026Utc + 5 * 3_600_000L))
+        assertEquals("2024-02-29", AimiRetiredSettings.dueDateText(1_709_164_800_000L))
+    }
+
+    @Test
+    fun aDueDateTextThePersonTypedIsKept() {
+        val store = FileKeyValueStore(mapOf(dueDateMs to newYear2026Utc, dueDateText to "2026-03-15"))
+        removeRetiredAimiSettings(store)
+        assertEquals("2026-03-15", store.getAll()[dueDateText])
+        assertFalse(store.contains(dueDateMs))
+    }
+
+    @Test
+    fun anEmptyOldDueDateCopiesNothing() {
+        val store = FileKeyValueStore(mapOf(dueDateMs to 0L))
+        removeRetiredAimiSettings(store)
+        assertFalse(store.contains(dueDateText))
+        assertFalse(store.contains(dueDateMs))
+    }
 }

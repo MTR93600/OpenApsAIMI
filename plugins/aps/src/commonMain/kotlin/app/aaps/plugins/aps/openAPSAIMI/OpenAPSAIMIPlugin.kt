@@ -14,6 +14,7 @@ import app.aaps.plugins.aps.ApsStrings
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.plugins.aps.compose.OpenAPSComposeContent
 import app.aaps.plugins.aps.openAPSAIMI.keys.AimiLongKey
+import app.aaps.plugins.aps.openAPSAIMI.wcycle.EndometriosisFlareSwitchWatcher
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiPlatformPreferenceItems
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiPlatformPreferenceSlot
 import kotlin.concurrent.atomics.AtomicBoolean
@@ -393,7 +394,12 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         // One-shot (step S3): the stored values of the deleted AIMI settings go, four of which could
         // hold an API key. Also done by the Android start-up migration; this one covers iOS, which
         // runs the preference migrations only on an import. Only the names are logged, never a value.
-        AimiRetiredSettings.removeStored(contains = sp::contains, remove = sp::remove).takeIf { it.isNotEmpty() }?.let {
+        AimiRetiredSettings.removeStored(
+            contains = sp::contains,
+            read = { name -> sp.getAll()[name] },
+            putString = sp::putString,
+            remove = sp::remove,
+        ).takeIf { it.isNotEmpty() }?.let {
             aapsLogger.info(LTag.APS, "AIMI deleted settings removed: $it")
         }
         tailDampingTraceJob?.cancel()
@@ -402,6 +408,13 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 if (event.isChanged(DoubleKey.OApsAIMISmbTailDamping.key)) logTailDampingSnapshot("change")
             }
             .catch { t -> aapsLogger.error(LTag.APS, "PKPD_TAIL_TRACE subscription error", t) }
+            .launchIn(aimiPluginIoScope)
+        // A pain flare starts when it is switched on, so switching it off and on again starts a new
+        // one (step S3b). Watches the setting itself, not a loop run. See EndometriosisFlareSwitchWatcher.
+        endoFlareStartJob?.cancel()
+        endoFlareStartJob = EndometriosisFlareSwitchWatcher
+            .storeStarts(preferences.observe(BooleanKey.AimiEndometriosisPainFlare), preferences)
+            .catch { t -> aapsLogger.error(LTag.APS, "AIMI pain flare start watcher error", t) }
             .launchIn(aimiPluginIoScope)
         // See [auditorNotifyJob]. showInsightAvailable decides for itself whether this state is
         // worth a notification and never posts the same verdict twice, so collecting every state
@@ -526,6 +539,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         physioPreferenceJob = null
         tailDampingTraceJob?.cancel()
         tailDampingTraceJob = null
+        endoFlareStartJob?.cancel()
+        endoFlareStartJob = null
         auditorNotifyJob?.cancel()
         auditorNotifyJob = null
 
@@ -575,6 +590,7 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
 
     /** Diagnostic: rx subscription tracing writes to `OApsAIMISmbTailDamping` (PKPD_TAIL_TRACE). */
     private var tailDampingTraceJob: Job? = null
+    private var endoFlareStartJob: Job? = null
 
     /**
      * Raises the auditor notification when a new verdict arrives.

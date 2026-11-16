@@ -657,7 +657,13 @@ enum class IntKey(
     AimiAuditorTimeoutSeconds("aimi_auditor_timeout_seconds", 120, 30, 300, title = KeysStrings.pref_title_aimi_auditor_timeout_seconds), // API timeout (seconds)
     AimiAuditorMinConfidence("aimi_auditor_min_confidence", 65, 50, 95, title = KeysStrings.pref_title_aimi_auditor_min_confidence), // Min confidence % to apply modulation
     // 🌸 Endometriosis & Cycle Management (MTR)
-    AimiEndometriosisFlareDuration("aimi_endo_flare_duration", 4, 1, 24, title = KeysStrings.pref_title_aimi_endometriosis_flare_duration),
+    /** How long a declared pain flare acts before it ends by itself (`EndometriosisFlareClock`). */
+    AimiEndometriosisFlareDuration(
+        "aimi_endo_flare_duration", 4, 1, 24,
+        title = KeysStrings.pref_title_aimi_endometriosis_flare_duration,
+        summary = KeysStrings.pref_summary_aimi_endometriosis_flare_duration,
+        unitType = UnitType.HOURS,
+    ),
     // 🌀 Adaptive Kernel Bank (Cosine Gate)
     AimiCosineGateMaxPeakShift("aimi_cosine_gate_max_shift", 15, 0, 60, title = KeysStrings.pref_title_aimi_cosine_gate_max_peak_shift),
     // Emergency SOS (Hypo) — SMS-only advanced manager

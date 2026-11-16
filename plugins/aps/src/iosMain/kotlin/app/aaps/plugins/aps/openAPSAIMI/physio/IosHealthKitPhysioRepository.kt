@@ -764,7 +764,8 @@ class IosHealthKitPhysioRepository @Inject constructor(
         val vitalsDays = daysBack.coerceAtLeast(7)
         val proxySamples = HcRecoveryProxyThermalSource.build(
             rhrPoints = fetchMorningRHR(vitalsDays),
-            hrvPoints = fetchHRVData(vitalsDays),
+            // The HRV switch of the physio card also keeps HRV out of this proxy.
+            hrvPoints = PhysioDataSwitches.read(preferences).hrvOrEmpty(fetchHRVData(vitalsDays)),
             daysBack = daysBack,
             nowMs = fetchedAtMs,
         )

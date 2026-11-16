@@ -137,6 +137,7 @@ internal enum class AimiSettingsSectionId {
     T3cAnticipation,
     CardPkpdEnable,
     PhysioModuleToggles,
+    PhysioDataUse,
     PhysioSources,
     PhysioAiAnalysis,
     PhysioStressFloor,
@@ -551,10 +552,9 @@ internal object AimiSettingsScreens {
             AimiSettingsSectionId.EndoStatus, AimiSettingsContentId.PreferencesEndometriosis, AimiSettingsLevel.SIMPLE,
             BooleanKey.AimiEndometriosisEnable, BooleanKey.AimiEndometriosisPainFlare,
         ),
-        // The flare duration is not here: nothing reads it (see DEAD_KEYS).
         fields(
             AimiSettingsSectionId.EndoTuning, AimiSettingsContentId.PreferencesEndometriosis, AimiSettingsLevel.EXPERT,
-            DoubleKey.AimiEndometriosisBasalMult, DoubleKey.AimiEndometriosisSmbDampen,
+            DoubleKey.AimiEndometriosisBasalMult, DoubleKey.AimiEndometriosisSmbDampen, IntKey.AimiEndometriosisFlareDuration,
         ),
         fields(AimiSettingsSectionId.T3cMode, AimiSettingsContentId.PreferencesT3c, AimiSettingsLevel.ADVANCED, BooleanKey.OApsAIMIT3cBrittleMode),
         fields(AimiSettingsSectionId.T3cAutodriveAuthority, AimiSettingsContentId.PreferencesT3c, AimiSettingsLevel.EXPERT, BooleanKey.OApsAIMIT3cAutodriveBasalAuthority),
@@ -574,8 +574,12 @@ internal object AimiSettingsScreens {
         fields(AimiSettingsSectionId.CardPkpdEnable, AimiSettingsContentId.CardPkpd, AimiSettingsLevel.ADVANCED, BooleanKey.OApsAIMIPkpdEnabled),
 
         // ---- Feature card: physio (sources, assistant, tree) ----
-        // The sleep and HRV switches are not here: nothing reads them (see DEAD_KEYS).
         fields(AimiSettingsSectionId.PhysioModuleToggles, AimiSettingsContentId.CardPhysio, AimiSettingsLevel.ADVANCED, BooleanKey.AimiPhysioAssistantEnable),
+        // Step S3b: they act with the assistant off too (the tree and the snapshot read the readings).
+        fields(
+            AimiSettingsSectionId.PhysioDataUse, AimiSettingsContentId.CardPhysio, AimiSettingsLevel.ADVANCED,
+            BooleanKey.AimiPhysioSleepDataEnable, BooleanKey.AimiPhysioHRVDataEnable,
+        ),
         fields(
             AimiSettingsSectionId.PhysioSources, AimiSettingsContentId.CardPhysio, AimiSettingsLevel.EXPERT,
             AimiStringKey.ActivitySourceMode, AimiStringKey.OuraPersonalAccessToken,

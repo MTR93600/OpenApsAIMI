@@ -24,7 +24,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * [Preferences] that answers each key's default, except for the values a test puts in [doubles],
+ * [Preferences] that answers each key's default, except for the values a test puts in [doubles], [ints],
  * [booleans] or [longs]. A `put` of a double is recorded in [doublePuts] and, for a preference key,
  * also stored so the next `get` reads it back. Longs and the booleans of keys that are not
  * preferences ([nonPreferenceBooleans]) are stored too. Everything else is ignored.
@@ -38,6 +38,9 @@ internal class MapPreferences : Preferences {
 
     /** Every double written through [put], in order. */
     val doublePuts: MutableList<Pair<DoubleNonPreferenceKey, Double>> = mutableListOf()
+
+    /** Int values a test sets for preference keys. */
+    val ints: MutableMap<IntPreferenceKey, Int> = mutableMapOf()
 
     /** Long values, kept by key so a `put` or `inc` can be read back. */
     val longs: MutableMap<LongNonPreferenceKey, Long> = mutableMapOf()
@@ -103,7 +106,7 @@ internal class MapPreferences : Preferences {
     override fun get(key: IntComposedNonPreferenceKey, vararg arguments: Any): Int = key.defaultValue
     override fun observe(key: IntComposedNonPreferenceKey, vararg arguments: Any): StateFlow<Int> =
         MutableStateFlow(key.defaultValue)
-    override fun get(key: IntPreferenceKey): Int = key.defaultValue
+    override fun get(key: IntPreferenceKey): Int = ints[key] ?: key.defaultValue
     override fun get(key: LongNonPreferenceKey): Long = longs[key] ?: key.defaultValue
     override fun getIfExists(key: LongNonPreferenceKey): Long? = longs[key]
     override fun put(key: LongNonPreferenceKey, value: Long) {

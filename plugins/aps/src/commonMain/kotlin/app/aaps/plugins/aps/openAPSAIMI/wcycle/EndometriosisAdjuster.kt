@@ -3,8 +3,10 @@ package app.aaps.plugins.aps.openAPSAIMI.wcycle
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
+import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.interfaces.Preferences
-
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
+import app.aaps.plugins.aps.openAPSAIMI.keys.AimiLongKey
 import app.aaps.plugins.aps.openAPSAIMI.physio.AimiPhysioInputs
 
 /**
@@ -13,6 +15,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.AimiPhysioInputs
  * Physiopathology Model:
  * 1. Hormonal Suppression (Continuous) -> Steady state inflammation -> Mild Basal Boost (+5%), SMB Neutral.
  * 2. Pain Flare (Acute) -> High Stress/Cortisol -> Ramp up Basal (up to limits), Dampen SMB (prevent stacking).
+ *    A flare ends by itself after the flare duration setting (see [EndometriosisFlareClock]).
  * 3. Recovery (NSAID) -> Rapid drop in resistance -> Taper down.
  *
  * Safety:
@@ -31,10 +34,21 @@ class EndometriosisAdjuster(
         val reason: String = ""
     )
 
-    fun calculateFactors(bg: Double, delta: Double, inputs: AimiPhysioInputs? = null): EndoFactors {
+    fun calculateFactors(bg: Double, delta: Double, inputs: AimiPhysioInputs? = null, nowMs: Long = aimiWallClockMs()): EndoFactors {
         if (!preferences.get(BooleanKey.AimiEndometriosisEnable)) {
             return EndoFactors()
         }
+
+        // The switch itself stores and clears the start when it changes, also while endometriosis is
+        // off (EndometriosisFlareSwitchWatcher). This only fills a missing start (a flare switched on
+        // before this build, or by an import) and clears a left-over one. It runs before the safety
+        // returns, so a flare keeps its start time while the BG is low. Only a change is written: this
+        // runs on every loop tick.
+        val flareOn = preferences.get(BooleanKey.AimiEndometriosisPainFlare)
+        val storedStart = preferences.get(AimiLongKey.EndometriosisFlareStartedAt)
+        val flareStart = EndometriosisFlareClock.startToStore(flareOn, storedStart, nowMs)
+        if (flareStart != storedStart) preferences.put(AimiLongKey.EndometriosisFlareStartedAt, flareStart)
+        val flare = EndometriosisFlareClock.status(flareOn, flareStart, preferences.get(IntKey.AimiEndometriosisFlareDuration), nowMs)
 
         // 1. GLOBAL SAFETY (Hypo protection)
         // If we are touching hypo territory, kill all boosts immediately regardless of inflammation.
@@ -71,8 +85,11 @@ class EndometriosisAdjuster(
         }
 
         // 3. DYNAMIC CONTEXT (Pain Flare - Acute)
-        // Only active if clearly safe (BG > 110) to avoid crashing a recovery
-        if (preferences.get(BooleanKey.AimiEndometriosisPainFlare)) {
+        // Only active if clearly safe (BG > 110) to avoid crashing a recovery, and only until the
+        // flare duration has passed.
+        if (flare == EndometriosisFlareClock.Status.Ended) {
+            reasons.add("PainFlare(Ended)")
+        } else if (flare is EndometriosisFlareClock.Status.Active) {
             if (bg > 110.0) {
                 val maxBasalMult = preferences.get(DoubleKey.AimiEndometriosisBasalMult)
                 val dampening = preferences.get(DoubleKey.AimiEndometriosisSmbDampen)

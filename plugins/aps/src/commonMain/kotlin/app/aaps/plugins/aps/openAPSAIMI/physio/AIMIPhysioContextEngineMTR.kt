@@ -50,7 +50,56 @@ class AIMIPhysioContextEngineMTR @Inject constructor(
         private const val MIN_DATA_QUALITY_FOR_CONFIDENCE = 0.4
         // 🚀 CHANGED: Activate immediately to show data (Absolute thresholds apply even without baseline)
         private const val MIN_BASELINE_VALIDITY_DAYS = 0
+
+        /**
+         * The state and the recommendations that follow from the four anomaly flags and two z-scores.
+         *
+         * Pure, so a stored context can be classified again from its own fields when a reading is taken
+         * out of it (see [PhysioDataSwitches.applyTo]). The number of anomalies is the number of flags
+         * that are true, exactly as `analyze` counts them.
+         */
+        internal fun classify(
+            poorSleep: Boolean,
+            hrvDepressed: Boolean,
+            rhrElevated: Boolean,
+            activityReduced: Boolean,
+            hrvZ: Double,
+            rhrZ: Double,
+        ): Classification {
+            val anomalyCount = listOf(poorSleep, hrvDepressed, rhrElevated, activityReduced).count { it }
+            val state = when {
+                // INFECTION_RISK: Multiple severe anomalies
+                anomalyCount >= 3 || (rhrElevated && hrvDepressed && abs(rhrZ) > SEVERE_DEVIATION_Z) -> PhysioStateMTR.INFECTION_RISK
+                // STRESS_DETECTED: Elevated RHR + Low HRV
+                rhrElevated && hrvDepressed                                                              -> PhysioStateMTR.STRESS_DETECTED
+                // RECOVERY_NEEDED: Poor sleep or significant HRV drop
+                poorSleep || (hrvDepressed && abs(hrvZ) > SIGNIFICANT_DEVIATION_Z)                       -> PhysioStateMTR.RECOVERY_NEEDED
+                // OPTIMAL: No significant anomalies
+                anomalyCount == 0                                                                        -> PhysioStateMTR.OPTIMAL
+                // Default: Minor anomaly but not classified
+                else                                                                                     -> PhysioStateMTR.UNKNOWN
+            }
+            return when (state) {
+                // Very protective: increase ISF (less aggressive corrections)
+                PhysioStateMTR.INFECTION_RISK  -> Classification(state, reduceBasal = true, reduceSMB = true, increaseISF = true)
+                // Moderately protective: reduce SMB aggression
+                PhysioStateMTR.STRESS_DETECTED -> Classification(state, reduceBasal = false, reduceSMB = true, increaseISF = true)
+                // Slightly protective: reduce SMB only if sleep was really bad
+                PhysioStateMTR.RECOVERY_NEEDED -> Classification(state, reduceBasal = false, reduceSMB = poorSleep, increaseISF = hrvDepressed)
+                // No changes needed, or neutral
+                PhysioStateMTR.OPTIMAL,
+                PhysioStateMTR.UNKNOWN         -> Classification(state, reduceBasal = false, reduceSMB = false, increaseISF = false)
+            }
+        }
     }
+
+    /** What [classify] answers: the state and its three recommendations. */
+    internal data class Classification(
+        val state: PhysioStateMTR,
+        val reduceBasal: Boolean,
+        val reduceSMB: Boolean,
+        val increaseISF: Boolean,
+    )
     
     /**
      * Analyzes features and baseline to produce physiological context
@@ -89,11 +138,16 @@ class AIMIPhysioContextEngineMTR @Inject constructor(
         // Detect anomaly flags
         val flags = detectAnomalyFlags(features, baseline, deviations)
         
-        // Determine physiological state
-        val state = determinePhysiologicalState(flags, deviations)
-        
-        // Generate recommendations
-        val recommendations = generateRecommendations(state, flags, deviations)
+        // Determine physiological state and recommendations
+        val classification = classify(
+            poorSleep = flags.poorSleep,
+            hrvDepressed = flags.hrvDepressed,
+            rhrElevated = flags.rhrElevated,
+            activityReduced = flags.activityReduced,
+            hrvZ = deviations.hrvZ,
+            rhrZ = deviations.rhrZ,
+        )
+        val state = classification.state
         
         // Calculate confidence
         val confidence = calculateConfidence(features, baseline, flags)
@@ -109,9 +163,9 @@ class AIMIPhysioContextEngineMTR @Inject constructor(
             sleepDeviationZ = deviations.sleepZ,
             hrvDeviationZ = deviations.hrvZ,
             rhrDeviationZ = deviations.rhrZ,
-            recommendReduceBasal = recommendations.reduceBasal,
-            recommendReduceSMB = recommendations.reduceSMB,
-            recommendIncreaseISF = recommendations.increaseISF,
+            recommendReduceBasal = classification.reduceBasal,
+            recommendReduceSMB = classification.reduceSMB,
+            recommendIncreaseISF = classification.increaseISF,
             timestamp = aimiWallClockMs(),
             features = features
         )
@@ -207,104 +261,6 @@ class AIMIPhysioContextEngineMTR @Inject constructor(
             activityReduced = activityReduced,
             anomalyCount = anomalyCount
         )
-    }
-    
-    // ═══════════════════════════════════════════════════════════════════════
-    // STATE DETERMINATION
-    // ═══════════════════════════════════════════════════════════════════════
-    
-    private fun determinePhysiologicalState(
-        flags: AnomalyFlags,
-        deviations: Deviations
-    ): PhysioStateMTR {
-        
-        // INFECTION_RISK: Multiple severe anomalies
-        if (flags.anomalyCount >= 3 || 
-            (flags.rhrElevated && flags.hrvDepressed && abs(deviations.rhrZ) > SEVERE_DEVIATION_Z)) {
-            return PhysioStateMTR.INFECTION_RISK
-        }
-        
-        // STRESS_DETECTED: Elevated RHR + Low HRV
-        if (flags.rhrElevated && flags.hrvDepressed) {
-            return PhysioStateMTR.STRESS_DETECTED
-        }
-        
-        // RECOVERY_NEEDED: Poor sleep or significant HRV drop
-        if (flags.poorSleep || (flags.hrvDepressed && abs(deviations.hrvZ) > SIGNIFICANT_DEVIATION_Z)) {
-            return PhysioStateMTR.RECOVERY_NEEDED
-        }
-        
-        // OPTIMAL: No significant anomalies
-        if (flags.anomalyCount == 0) {
-            return PhysioStateMTR.OPTIMAL
-        }
-        
-        // Default: Minor anomaly but not classified
-        return PhysioStateMTR.UNKNOWN
-    }
-    
-    // ═══════════════════════════════════════════════════════════════════════
-    // RECOMMENDATIONS
-    // ═══════════════════════════════════════════════════════════════════════
-    
-    private data class Recommendations(
-        val reduceBasal: Boolean,
-        val reduceSMB: Boolean,
-        val increaseISF: Boolean
-    )
-    
-    private fun generateRecommendations(
-        state: PhysioStateMTR,
-        flags: AnomalyFlags,
-        deviations: Deviations
-    ): Recommendations {
-        
-        return when (state) {
-            PhysioStateMTR.INFECTION_RISK -> {
-                // Very protective: increase ISF (less aggressive corrections)
-                Recommendations(
-                    reduceBasal = true,
-                    reduceSMB = true,
-                    increaseISF = true
-                )
-            }
-            
-            PhysioStateMTR.STRESS_DETECTED -> {
-                // Moderately protective: reduce SMB aggression
-                Recommendations(
-                    reduceBasal = false,
-                    reduceSMB = true,
-                    increaseISF = true
-                )
-            }
-            
-            PhysioStateMTR.RECOVERY_NEEDED -> {
-                // Slightly protective: reduce SMB if significant
-                Recommendations(
-                    reduceBasal = false,
-                    reduceSMB = flags.poorSleep, // Only if sleep was really bad
-                    increaseISF = flags.hrvDepressed
-                )
-            }
-            
-            PhysioStateMTR.OPTIMAL -> {
-                // No changes needed
-                Recommendations(
-                    reduceBasal = false,
-                    reduceSMB = false,
-                    increaseISF = false
-                )
-            }
-            
-            PhysioStateMTR.UNKNOWN -> {
-                // Neutral/conservative
-                Recommendations(
-                    reduceBasal = false,
-                    reduceSMB = false,
-                    increaseISF = false
-                )
-            }
-        }
     }
     
     // ═══════════════════════════════════════════════════════════════════════

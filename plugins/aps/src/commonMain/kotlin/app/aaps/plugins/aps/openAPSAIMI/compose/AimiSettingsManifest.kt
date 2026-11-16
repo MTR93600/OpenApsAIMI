@@ -248,6 +248,8 @@ internal object AimiSettingsManifest {
         AimiLongKey.PendingLegacyPrebolusUnitMilli.key,
         AimiLongKey.PendingLegacyPrebolusExpiry.key,
         StringKey.OApsAIMIContextStorage.key,
+        // Step S3b: when the declared pain flare started, so it ends by itself (EndometriosisFlareClock).
+        AimiLongKey.EndometriosisFlareStartedAt.key,
     )
 
     /**
@@ -260,26 +262,18 @@ internal object AimiSettingsManifest {
      * from its key enum, at which point the completeness test's scope no longer mentions it either.
      *
      * Step S3 deleted every dead key that waited for nothing, and the migrations remove their stored
-     * values (`AimiRetiredSettings`). What is left waits for the owner (`docs/aimi-settings/PLAN.md`):
-     * the dead keys of the protected families, and the xDrip one minute switch.
+     * values (`AimiRetiredSettings`). Step S3b did the same for the dead keys of the protected
+     * families, by owner decision: the sleep, HRV and flare duration keys now act, the other four are
+     * deleted. What is left waits for the owner (`docs/aimi-settings/PLAN.md`): the xDrip one minute
+     * switch.
      */
     val DEAD_KEYS: Set<String> = setOf(
-        // Protected families: they stay keys until the owner decides.
-        // Superseded by inference from the WCycle contraceptive setting; see
-        // `wcycle/EndometriosisAdjuster.kt`'s "HARMONIZATION" comment.
-        BooleanKey.AimiEndometriosisHormonalSuppression.key,
-        AimiLongKey.PregnancyDueDate.key,
-        StringKey.AimiPhysioLLMProvider.key,
         // Its reader was lost in the KMP port: on dev_OAPSAIMI `XdripSourcePlugin` ignored xDrip data
         // less than 4 min after the last batch while this switch was off (the default). Today every
         // user gets 1-minute data, so the row would be a switch with no effect. Bringing the reader
         // back changes the glucose input of every 1-minute xDrip user, so it waits for the owner
         // (PLAN.md, "Open for the owner (from S2)"). Do not delete the key before that.
         BooleanKey.OApsxdriponeminute.key,
-        IntKey.AimiEndometriosisFlareDuration.key,
-        BooleanKey.AimiPhysioSleepDataEnable.key,
-        BooleanKey.AimiPhysioHRVDataEnable.key,
-        BooleanKey.AimiPhysioDebugLogs.key,
     )
 
     /** Every AIMI setting, exactly once. */
@@ -503,13 +497,15 @@ internal object AimiSettingsManifest {
         AimiSettingEntry(AimiStringKey.ActivitySourceMode, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
 
         // --- Widened scope batch (2026-10-03): keys outside the OApsAIMI prefix. ---
-        // AimiEndometriosisHormonalSuppression is NOT here: see DEAD_KEYS.
         AimiSettingEntry(BooleanKey.AimiAuditorEnabled, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         AimiSettingEntry(
             BooleanKey.AimiPhysioAssistantEnable, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio,
             AimiSettingsWriter.USER,
         ),
         AimiSettingEntry(BooleanKey.AimiPhysioLLMAnalysisEnable, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
+        // Step S3b: wired (owner decision 2026-11-15). On by default; off keeps the reading out of AIMI.
+        AimiSettingEntry(BooleanKey.AimiPhysioSleepDataEnable, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
+        AimiSettingEntry(BooleanKey.AimiPhysioHRVDataEnable, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         // Added during the KMP work and never classified until the manifest tests came back. None has a
         // switch on any screen yet, so all three are in REACHABILITY_DEBT.
         // Off by default, newer path, feeds the HRV insulin multiplier: EXPERT.
@@ -527,6 +523,8 @@ internal object AimiSettingsManifest {
         AimiSettingEntry(DoubleKey.AimiUamConfidence, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.AimiEndometriosisBasalMult, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.AimiEndometriosisSmbDampen, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
+        // Step S3b: a declared pain flare ends by itself after this many hours.
+        AimiSettingEntry(IntKey.AimiEndometriosisFlareDuration, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.AimiCosineGateAlpha, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.AimiCosineGateMinDataQuality, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.AimiCosineGateMinSensitivity, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),

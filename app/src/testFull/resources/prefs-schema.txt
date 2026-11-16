@@ -132,7 +132,6 @@ aimi_endo_enable|BooleanKey|true
 aimi_endo_flare_duration|IntKey|true
 aimi_endo_flare|BooleanKey|true
 aimi_endo_smb_dampen|DoubleKey|true
-aimi_endo_suppression|BooleanKey|true
 aimi_health_connect_last_sync_ms|LongNonKey|false
 aimi_health_connect_steps_enable|BooleanKey|true
 aimi_hormonitor_viewer_compose|ApsIntentKey|false
@@ -151,12 +150,10 @@ aimi_oura_personal_access_token|AimiStringKey|false
 aimi_parity_capture_enable|BooleanKey|true
 aimi_phone_steps_sync_enable|BooleanKey|true
 aimi_physio_assistant_enable|BooleanKey|true
-aimi_physio_debug_logs|BooleanKey|true
 aimi_physio_hc_permissions_compose|ApsIntentKey|false
 aimi_physio_hrv_enable|BooleanKey|true
 aimi_physio_last_update_ms|LongNonKey|false
 aimi_physio_llm_enable|BooleanKey|true
-aimi_physio_llm_provider|StringKey|true
 aimi_physio_pattern_catalog_info|ApsIntentKey|false
 aimi_physio_sleep_enable|BooleanKey|true
 aimi_pkpd_learned_state_generation|LongNonKey|true
@@ -721,11 +718,11 @@ nsclient_control_signing_public|StringNonKey|false
 nsclient_token|StringKey|true
 nsclientinternal_api_secret|StringKey|true
 nsclientinternal_url|StringKey|true
+oa_aimi_endo_flare_started_at_ms|AimiLongKey|true
 oa_aimi_last_legacy_prebolus_time_ms|AimiLongKey|true
 oa_aimi_last_prebolus_time_ms|AimiLongKey|true
 oa_aimi_pending_legacy_prebolus_expiry_ms|AimiLongKey|true
 oa_aimi_pending_legacy_prebolus_unit_milli|AimiLongKey|true
-oa_aimi_pregnancy_due_date_ms|AimiLongKey|true
 oh_charging_only|BooleanKey|true
 oh_wifi_only|BooleanKey|true
 openaps_smb_min_5m_carbimpact|DoubleKey|true

@@ -10,6 +10,7 @@ import app.aaps.plugins.aps.openAPSAIMI.ports.AimiPhysioSource
 import app.aaps.plugins.aps.openAPSAIMI.aimiIsMainThread
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.data.model.TE
 import app.aaps.plugins.aps.openAPSAIMI.physio.gate.CosineTrajectoryGate
@@ -57,6 +58,7 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
     private val dataRepository: AimiPhysioSource,
     private val contextStore: AIMIPhysioContextStoreMTR,
     private val relevanceGate: CosineTrajectoryGate, // 🌀 Relevance Gate (Trajectory Filter)
+    private val preferences: Preferences,
     private val aapsLogger: AAPSLogger
 ) {
     private val inflammationEstimator = InflammationLatentEstimatorMTR()
@@ -96,9 +98,15 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
         return repo.getLastSnapshot()
     }
 
-    /** Semantic physio context (sleep/HRV/state) for RBT pattern catalog and meta leaves. */
+    /**
+     * Semantic physio context (sleep/HRV/state) for RBT pattern catalog and meta leaves.
+     *
+     * Every dosing read of the stored context goes through here, so the sleep and HRV switches are
+     * applied here too: a context stored before a switch was turned off is valid for 20 hours and
+     * must not keep acting on the reading the person turned off. See [PhysioDataSwitches].
+     */
     fun getEffectiveContext(minConfidence: Double = 0.3): PhysioContextMTR =
-        contextStore.getEffectiveContext(minConfidence) ?: PhysioContextMTR.NEUTRAL
+        PhysioDataSwitches.read(preferences).applyTo(contextStore.getEffectiveContext(minConfidence) ?: PhysioContextMTR.NEUTRAL)
 
     fun getLastDecisionTrace(): PhysioDecisionTraceMTR? = lastDecisionTrace
 
@@ -191,7 +199,7 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
         // Get formulated Physio Context (Semantic Brain)
         // We accept lower confidence (0.3) because we default to 1.0 (Neutral) anyway
         // This ensures availability even during "building baseline" phase
-        val physioContext = contextStore.getEffectiveContext(0.3) ?: PhysioContextMTR.NEUTRAL
+        val physioContext = getEffectiveContext(0.3)
 
         if (!snapshot.isValid) {
             //aapsLogger.debug(LTag.APS, "[$TAG] No valid snapshot - returning NEUTRAL")

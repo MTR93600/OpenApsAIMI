@@ -196,12 +196,12 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
     /**
      * Turns the provider the user picked on the AI keys screen into the name used inside this class.
      *
-     * There are two settings in the code. `StringKey.AimiPhysioLLMProvider` is the one this class
-     * used to read, and it is on no preference screen at all, so it could only ever hold its default
-     * and the user could not change it. `StringKey.AimiAdvisorProvider` is the one the AI keys
-     * screen writes, and the Auditor, the coach, the meal advisor and food recognition all follow
-     * it. The two hold the same four providers under different spellings, so they map one to one and
-     * this class now follows the setting the user actually fills in, next to the four keys it reads.
+     * This class used to read its own provider setting (`aimi_physio_llm_provider`), which was on no
+     * preference screen, so it could only ever hold its default. That setting was deleted in step S3b.
+     * `StringKey.AimiAdvisorProvider` is the one the AI keys screen writes, and the Auditor, the coach,
+     * the meal advisor and food recognition all follow it. The old setting held the same four
+     * providers under different spellings, so they map one to one and this class follows the setting
+     * the user actually fills in, next to the four keys it reads.
      *
      * An unknown value falls back to OpenAI, which is what the advisor setting's own default and the
      * other readers of it do. The fallback cannot send anything on its own: without an OpenAI key

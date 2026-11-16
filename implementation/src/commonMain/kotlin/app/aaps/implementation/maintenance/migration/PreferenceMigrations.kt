@@ -712,4 +712,9 @@ internal fun repairAimiMealFactorScale(sp: KeyValueStore): List<AimiMealFactorSc
  * @return the names it removed
  */
 internal fun removeRetiredAimiSettings(sp: KeyValueStore): List<String> =
-    AimiRetiredSettings.removeStored(contains = sp::contains, remove = sp::remove)
+    AimiRetiredSettings.removeStored(
+        contains = sp::contains,
+        read = { name -> sp.getAll()[name] },
+        putString = sp::putString,
+        remove = sp::remove,
+    )

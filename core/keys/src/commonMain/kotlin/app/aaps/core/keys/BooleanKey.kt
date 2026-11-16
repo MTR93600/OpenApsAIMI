@@ -912,8 +912,18 @@ enum class BooleanKey(
     // 🏥 AIMI Physiological Assistant (MTR) — vitals multipliers / assistant extras only.
     // Does NOT gate PhysiologicalTree / Harmonia (cascade native always-on since 2026-07-18).
     AimiPhysioAssistantEnable("aimi_physio_assistant_enable", false, title = KeysStrings.pref_title_aimi_physio_assistant_enable),
-    AimiPhysioSleepDataEnable("aimi_physio_sleep_enable", true, title = KeysStrings.pref_title_aimi_physio_sleep_data_enable),
-    AimiPhysioHRVDataEnable("aimi_physio_hrv_enable", true, title = KeysStrings.pref_title_aimi_physio_hrv_data_enable),
+    /** Off: AIMI ignores sleep data everywhere (physio run, live snapshot, stored context). See `PhysioDataSwitches`. */
+    AimiPhysioSleepDataEnable(
+        "aimi_physio_sleep_enable", true,
+        title = KeysStrings.pref_title_aimi_physio_sleep_data_enable,
+        summary = KeysStrings.pref_summary_aimi_physio_sleep_data_enable,
+    ),
+    /** Off: AIMI ignores heart rate variability everywhere. See `PhysioDataSwitches`. */
+    AimiPhysioHRVDataEnable(
+        "aimi_physio_hrv_enable", true,
+        title = KeysStrings.pref_title_aimi_physio_hrv_data_enable,
+        summary = KeysStrings.pref_summary_aimi_physio_hrv_data_enable,
+    ),
     AimiPhysioLLMAnalysisEnable("aimi_physio_llm_enable", false, title = KeysStrings.pref_title_aimi_physio_llm_analysis_enable),
 
     /**
@@ -939,11 +949,14 @@ enum class BooleanKey(
 
     /** Sync step counts from Health Connect. */
     AimiHealthConnectStepsEnable("aimi_health_connect_steps_enable", true, title = KeysStrings.pref_title_aimi_health_connect_steps_enable),
-    AimiPhysioDebugLogs("aimi_physio_debug_logs", false, title = KeysStrings.pref_title_aimi_physio_debug_logs),
     // 🌸 Endometriosis & Cycle Management (MTR)
     AimiEndometriosisEnable("aimi_endo_enable", false, title = KeysStrings.pref_title_aimi_endometriosis_enable),
-    AimiEndometriosisHormonalSuppression("aimi_endo_suppression", false, title = KeysStrings.pref_title_aimi_endometriosis_hormonal_suppression),
-    AimiEndometriosisPainFlare("aimi_endo_flare", false, title = KeysStrings.pref_title_aimi_endometriosis_pain_flare),
+    /** Ends by itself after [IntKey.AimiEndometriosisFlareDuration] hours (`EndometriosisFlareClock`). */
+    AimiEndometriosisPainFlare(
+        "aimi_endo_flare", false,
+        title = KeysStrings.pref_title_aimi_endometriosis_pain_flare,
+        summary = KeysStrings.pref_summary_aimi_endometriosis_pain_flare,
+    ),
     OApsAIMIMealAdvisorTrigger("aimi_meal_advisor_trigger", false, title = KeysStrings.pref_title_oaps_aimi_meal_advisor_trigger), // Trigger for one-shot MAX-SMB bypass
     // 🌀 Adaptive Kernel Bank (Cosine Gate)
     AimiCosineGateEnabled("aimi_cosine_gate_enabled", true, title = KeysStrings.pref_title_aimi_cosine_gate_enabled),

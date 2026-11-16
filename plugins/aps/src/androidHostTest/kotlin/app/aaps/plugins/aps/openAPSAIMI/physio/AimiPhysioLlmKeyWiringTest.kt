@@ -32,8 +32,8 @@ import org.mockito.kotlin.whenever
  *
  * The provider itself now comes from `StringKey.AimiAdvisorProvider`, the setting on the same AI
  * keys screen as the four keys, so the tests below store the names that screen writes
- * (`OPENAI`, `GEMINI`, `CLAUDE`, `DEEPSEEK`). The old `StringKey.AimiPhysioLLMProvider` was on no
- * screen at all and could only ever hold its default.
+ * (`OPENAI`, `GEMINI`, `CLAUDE`, `DEEPSEEK`). The old physio provider setting was on no screen at
+ * all and could only ever hold its default; it was deleted in step S3b.
  */
 class AimiPhysioLlmKeyWiringTest {
 

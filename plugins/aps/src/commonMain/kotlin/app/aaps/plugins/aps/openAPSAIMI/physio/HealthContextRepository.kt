@@ -7,6 +7,7 @@ import app.aaps.core.data.model.SC
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.aimiLocalHour
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiHealthContext
@@ -52,6 +53,8 @@ class HealthContextRepository @Inject constructor(
     // The platform's one owner of the physio run. It does nothing on Android, where WorkManager
     // owns it. See PhysioPipelineFeed.
     private val pipelineFeed: PhysioPipelineFeed,
+    // The sleep and HRV switches of the physio card. See PhysioDataSwitches.
+    private val preferences: Preferences,
     private val aapsLogger: AAPSLogger
 ) : AimiHealthContext {
 
@@ -77,6 +80,51 @@ class HealthContextRepository @Inject constructor(
          * but "the steps of that moment" should mean what it says.
          */
         private const val STEPS_MATCH_WINDOW_MS = 5 * 60 * 1000L
+
+        /**
+         * The snapshot given when the fresh read is not valid but the last one is: the last one, with
+         * the fresh steps, activity and sleep-live values, and its heart rate carried forward with its
+         * own age. A reading whose switch is off is removed ([PhysioDataSwitches.applyTo]).
+         *
+         * With a switch off, the thermal belief is the fresh one, built this tick from the readings the
+         * switches let through. The last belief was built from the old sleep debt and HRV depression,
+         * and the latent state reads it (`recoveryBurden`, `inflammationIndex`), so keeping it would let
+         * a reading the person turned off keep acting, with no time limit. With both on, nothing changes.
+         */
+        internal fun carryForward(
+            last: HealthContextSnapshot,
+            fresh: HealthContextSnapshot,
+            switches: PhysioDataSwitches,
+        ): HealthContextSnapshot {
+            val carriedHeartRate = HeartRateCarryForward.resolve(
+                freshHrNow = fresh.hrNow,
+                freshHrAvg15m = fresh.hrAvg15m,
+                nowMs = fresh.timestamp,
+                previousHrNow = last.hrNow,
+                previousHrAvg15m = last.hrAvg15m,
+                previousMeasuredAtMs = last.hrMeasuredAtMs,
+            )
+            return last.copy(
+                stepsLast5m = fresh.stepsLast5m,
+                stepsLast15m = fresh.stepsLast15m,
+                stepsLast60m = fresh.stepsLast60m,
+                activityState = fresh.activityState,
+                hcSleepSessionActive = fresh.hcSleepSessionActive,
+                asleepLiveConfidence = fresh.asleepLiveConfidence,
+                asleepLiveSource = fresh.asleepLiveSource,
+                // The heart rate keeps its OWN age — see [HeartRateCarryForward]. Before this, a
+                // carried reading was stamped with the new snapshot's timestamp and stored as the
+                // new previous one, so the re-dating compounded and an hours-old value was presented
+                // as current for ever. Past the provider's own 15-minute lookback the reading is
+                // dropped to 0, which every consumer already reads as missing.
+                hrNow = carriedHeartRate.hrNow,
+                hrAvg15m = carriedHeartRate.hrAvg15m,
+                hrMeasuredAtMs = carriedHeartRate.measuredAtMs,
+                thermalBelief = if (switches.allOn) last.thermalBelief else fresh.thermalBelief,
+                timestamp = fresh.timestamp,
+                source = fresh.source,
+            ).let(switches::applyTo)
+        }
     }
 
     // In-memory cache of the last valid snapshot
@@ -111,10 +159,13 @@ class HealthContextRepository @Inject constructor(
     private fun fetchSnapshotInternal(): HealthContextSnapshot {
         // 1. Fetch Basic Data (HC)
         refreshCoreDataAsync()
+        // A switch that is off makes its reading absent, here at the input and on the snapshot
+        // given back (the warm-up and the merge below can carry an older value forward).
+        val switches = PhysioDataSwitches.read(preferences)
         @Suppress("UNCHECKED_CAST")
-        val sleepData = sleepRef.load() as? SleepDataMTR
+        val sleepData = switches.sleepOrNull(sleepRef.load() as? SleepDataMTR)
         @Suppress("UNCHECKED_CAST")
-        val hrvList = hrvRef.load() as List<HRVDataMTR> // Last 24h
+        val hrvList = switches.hrvOrEmpty(hrvRef.load() as List<HRVDataMTR>) // Last 24h
         @Suppress("UNCHECKED_CAST")
         val rhrList = rhrRef.load() as List<RHRDataMTR>
 
@@ -122,6 +173,9 @@ class HealthContextRepository @Inject constructor(
         // Reuse last valid HC-derived fields only so confidence/merge stay stable until refs fill.
         val warmupHcPending =
             sleepData == null && hrvList.isEmpty() && rhrList.isEmpty() && lastSnapshot.isValid
+        // A reading whose switch is off is never carried forward from the last snapshot.
+        val sleepWarmup = warmupHcPending && switches.sleep
+        val hrvWarmup = warmupHcPending && switches.hrv
 
         // 2. Fetch Real-Time Data (Unified Provider: Watch > Phone > HC)
         val steps5Result = unifiedProvider.getStepsTotalSince(aimiWallClockMs() - 5 * 60 * 1000)
@@ -148,13 +202,13 @@ class HealthContextRepository @Inject constructor(
                     hrvList.lastOrNull()?.value ?: 0.0
                 }
             }
-            warmupHcPending -> lastSnapshot.hrvRmssd
+            hrvWarmup -> lastSnapshot.hrvRmssd
             else -> 0.0
         }
         // Carried forward with the value when a warm-up tick reuses the last snapshot, so the two
         // never disagree about what the number means.
         val hrvMetric = hrvList.lastOrNull()?.metric
-            ?: if (warmupHcPending) lastSnapshot.hrvMetric else HrvMetric.RMSSD
+            ?: if (hrvWarmup) lastSnapshot.hrvMetric else HrvMetric.RMSSD
         val hrvBaseline = baselineModel.getCurrentBaseline().hrvRMSSD
         val hrvDepression = HrvDepression.of(hrv, hrvBaseline)
 
@@ -168,13 +222,13 @@ class HealthContextRepository @Inject constructor(
         val sleepDebt = when {
             sleepData != null && sleepData.hasValidData() ->
                 ((7.5 - sleepData.durationHours) * 60).toInt().coerceAtLeast(0)
-            warmupHcPending -> lastSnapshot.sleepDebtMinutes
+            sleepWarmup -> lastSnapshot.sleepDebtMinutes
             else -> 0
         }
 
         val sleepEfficiency = when {
             sleepData != null -> sleepData.efficiency
-            warmupHcPending -> lastSnapshot.sleepEfficiency
+            sleepWarmup -> lastSnapshot.sleepEfficiency
             else -> 0.0
         }
 
@@ -184,7 +238,7 @@ class HealthContextRepository @Inject constructor(
         if (currentHR > 0) confidence += 0.3
         if (sleepData != null) {
             confidence += 0.3
-        } else if (warmupHcPending && lastSnapshot.sleepDebtMinutes > 0) {
+        } else if (sleepWarmup && lastSnapshot.sleepDebtMinutes > 0) {
             confidence += 0.3
         }
 
@@ -250,33 +304,7 @@ class HealthContextRepository @Inject constructor(
         )
         // Do not freeze steps/FC when Unified refreshed but HC-only confidence is low (e.g. no HRV/sleep yet).
         if (!snapshot.isValid && lastSnapshot.isValid) {
-            val carriedHeartRate = HeartRateCarryForward.resolve(
-                freshHrNow = snapshot.hrNow,
-                freshHrAvg15m = snapshot.hrAvg15m,
-                nowMs = snapshot.timestamp,
-                previousHrNow = lastSnapshot.hrNow,
-                previousHrAvg15m = lastSnapshot.hrAvg15m,
-                previousMeasuredAtMs = lastSnapshot.hrMeasuredAtMs,
-            )
-            val merged = lastSnapshot.copy(
-                stepsLast5m = snapshot.stepsLast5m,
-                stepsLast15m = snapshot.stepsLast15m,
-                stepsLast60m = snapshot.stepsLast60m,
-                activityState = snapshot.activityState,
-                hcSleepSessionActive = snapshot.hcSleepSessionActive,
-                asleepLiveConfidence = snapshot.asleepLiveConfidence,
-                asleepLiveSource = snapshot.asleepLiveSource,
-                // The heart rate keeps its OWN age — see [HeartRateCarryForward]. Before this, a
-                // carried reading was stamped with the new snapshot's timestamp and stored as the
-                // new previous one, so the re-dating compounded and an hours-old value was presented
-                // as current for ever. Past the provider's own 15-minute lookback the reading is
-                // dropped to 0, which every consumer already reads as missing.
-                hrNow = carriedHeartRate.hrNow,
-                hrAvg15m = carriedHeartRate.hrAvg15m,
-                hrMeasuredAtMs = carriedHeartRate.measuredAtMs,
-                timestamp = snapshot.timestamp,
-                source = snapshot.source,
-            )
+            val merged = carryForward(lastSnapshot, snapshot, switches)
             lastSnapshot = merged
             maybeRefreshPatientStateFromPhysio(merged)
             return merged

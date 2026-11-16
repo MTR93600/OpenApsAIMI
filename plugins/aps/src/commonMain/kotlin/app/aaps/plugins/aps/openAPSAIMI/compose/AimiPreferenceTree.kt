@@ -390,6 +390,7 @@ internal class AimiPreferenceTree(
                         platform(AimiPlatformPreferenceSlot.HEALTH_CONNECT_PERMISSIONS)?.let(::add)
                         addAll(
                             shown(
+                                AimiSettingsSectionId.PhysioDataUse,
                                 AimiSettingsSectionId.PhysioSources,
                                 AimiSettingsSectionId.PhysioAiAnalysis,
                                 AimiSettingsSectionId.PhysioStressFloor,

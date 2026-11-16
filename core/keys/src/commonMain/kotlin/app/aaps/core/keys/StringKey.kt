@@ -291,8 +291,6 @@ enum class StringKey(
     // Context module (its AI provider and API keys were deleted in AIMI step S3: the AI Advisor keys are used)
     ContextMode("aimi_context_mode", "BALANCED", title = KeysStrings.pref_title_context_mode), // CONSERVATIVE, BALANCED, AGGRESSIVE
     OApsAIMIContextStorage("aimi_context_storage", "", title = KeysStrings.pref_title_oaps_aimi_context_storage),
-    // 🏥 AIMI Physiological Assistant (MTR)
-    AimiPhysioLLMProvider("aimi_physio_llm_provider", "gpt4", title = KeysStrings.pref_title_aimi_physio_llm_provider),
     // 🦋 Thyroid / Basedow Module (MTR)
     OApsAIMIThyroidMode("key_aimi_thyroid_mode", "MANUAL", preferenceType = PreferenceType.LIST, title = KeysStrings.pref_title_oaps_aimi_thyroid_mode),
     OApsAIMIThyroidManualStatus("key_aimi_thyroid_manual_status", "EUTHYROID", preferenceType = PreferenceType.LIST, title = KeysStrings.pref_title_oaps_aimi_thyroid_manual_status),

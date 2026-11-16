@@ -278,6 +278,7 @@ class AimiSettingsManifestTest {
                 AimiLongKey.PendingLegacyPrebolusUnitMilli.key,
                 AimiLongKey.PendingLegacyPrebolusExpiry.key,
                 StringKey.OApsAIMIContextStorage.key,
+                AimiLongKey.EndometriosisFlareStartedAt.key,
             ),
             AimiSettingsManifest.INTERNAL_STATE,
         )
@@ -294,22 +295,31 @@ class AimiSettingsManifestTest {
     // ---------------------------------------------------------------- dead keys (step S3)
 
     @Test
-    fun `only the protected dead keys and the xDrip switch are left as dead keys`() {
-        // Step S3 deleted every other dead key. These wait for the owner (PLAN.md): the protected
-        // families, and the xDrip one minute switch whose reader the port lost.
-        assertEquals(
-            setOf(
-                BooleanKey.AimiEndometriosisHormonalSuppression.key,
-                IntKey.AimiEndometriosisFlareDuration.key,
-                BooleanKey.AimiPhysioSleepDataEnable.key,
-                BooleanKey.AimiPhysioHRVDataEnable.key,
-                BooleanKey.AimiPhysioDebugLogs.key,
-                StringKey.AimiPhysioLLMProvider.key,
-                AimiLongKey.PregnancyDueDate.key,
-                BooleanKey.OApsxdriponeminute.key,
-            ),
-            AimiSettingsManifest.DEAD_KEYS,
-        )
+    fun `only the xDrip switch is left as a dead key`() {
+        // Step S3 deleted every other dead key, and step S3b wired or deleted the seven of the protected
+        // families (owner decision 2026-11-15). The xDrip one minute switch, whose reader the port
+        // lost, still waits for the owner (PLAN.md).
+        assertEquals(setOf(BooleanKey.OApsxdriponeminute.key), AimiSettingsManifest.DEAD_KEYS)
+    }
+
+    @Test
+    fun `the wired protected keys are user settings`() {
+        listOf(BooleanKey.AimiPhysioSleepDataEnable, BooleanKey.AimiPhysioHRVDataEnable, IntKey.AimiEndometriosisFlareDuration).forEach {
+            assertEquals(setOf(AimiSettingsWriter.USER), AimiSettingsManifest.entries.single { entry -> entry.key.key == it.key }.writers, it.key)
+        }
+    }
+
+    @Test
+    fun `the flare start time is internal state`() {
+        assertTrue(AimiLongKey.EndometriosisFlareStartedAt.key in AimiSettingsManifest.INTERNAL_STATE)
+    }
+
+    @Test
+    fun `the deleted protected keys are retired under their storage names`() {
+        listOf("aimi_physio_debug_logs", "aimi_physio_llm_provider", "aimi_endo_suppression", "oa_aimi_pregnancy_due_date_ms")
+            .forEach { assertTrue(it in AimiRetiredSettings.storageNames, it) }
+        // The copy of the old due date writes this name: it must stay the due date text key.
+        assertEquals(AimiStringKey.PregnancyDueDateString.key, AimiRetiredSettings.PREGNANCY_DUE_DATE_TEXT)
     }
 
     @Test

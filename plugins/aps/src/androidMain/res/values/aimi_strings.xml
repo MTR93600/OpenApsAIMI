@@ -1369,12 +1369,6 @@
 
 <string name="aimi_physio_data_sources_title">Data Sources</string>
 
-
-<string name="aimi_physio_sleep_enable_summary">Use Health Connect to fetch sleep stages and efficiency.</string>
-
-
-<string name="aimi_physio_hrv_enable_summary">Use heart rate variability to detect stress/fatigue.</string>
-
 <string name="aimi_oura_pat_title">Oura temperature API token (optional)</string>
 
 <string name="aimi_oura_pat_summary">Personal access token from cloud.ouraring.com — enables measured skin temperature deviation when Oura does not export it to Health Connect. Garmin users rely on inferred recovery rhythm from HC sleep/RHR.</string>
@@ -1385,9 +1379,7 @@
 
 <string name="aimi_physio_llm_enable_summary">Send physio data to LLM for daily health summaries (Optional).</string>
 
-<string name="aimi_physio_debug_title">Debug Logging</string>
 
-<string name="aimi_physio_debug_summary">Log detailed physiological states to the console.</string>
 
 
 
@@ -2240,6 +2232,8 @@
 <string name="aimi_card_wcycle_sentence">When on, AIMI changes the basal and the automatic boluses a little with the phase of the menstrual cycle.</string>
 <string name="aimi_card_illness_title">Illness and inflammation</string>
 <string name="aimi_card_illness_sentence">Thyroid, endometriosis, CFRD, Verneuil and brittle (type 3c) diabetes settings change how much insulin AIMI gives while one of these is active.</string>
+<string name="aimi_endo_flare_time_left" comment="%1$d=hours, %2$d=minutes. Example: Pain flare on: it stops changing insulin in 3 h 20 min.">Pain flare on: it stops changing insulin in %1$d h %2$d min.</string>
+<string name="aimi_endo_flare_ended">The pain flare duration has passed: the flare no longer changes insulin. Switch the pain flare off, then on again for a new flare.</string>
 <string name="aimi_card_pkpd_title">Insulin action learning (PK/PD)</string>
 <string name="aimi_card_pkpd_sentence">When on, AIMI learns how long your insulin acts and when it peaks, starting from your profile insulin, and doses with what it learned.</string>
 <string name="aimi_card_physio_title">Body signals (physio)</string>
