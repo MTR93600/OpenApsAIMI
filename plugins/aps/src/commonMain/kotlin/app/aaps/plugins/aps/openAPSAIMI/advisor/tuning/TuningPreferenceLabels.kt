@@ -12,8 +12,8 @@ object TuningPreferenceLabels {
         when (key) {
             DoubleKey.OApsAIMIMaxSMB -> "Max SMB"
             DoubleKey.OApsAIMIHighBGMaxSMB -> "High BG Max SMB"
-            DoubleKey.OApsAIMILunchFactor -> "Lunch factor"
-            DoubleKey.OApsAIMIDinnerFactor -> "Dinner factor"
+            DoubleKey.OApsAIMILunchFactor -> "Lunch mode: SMB size (percent)"
+            DoubleKey.OApsAIMIDinnerFactor -> "Dinner mode: SMB size (percent)"
             DoubleKey.OApsAIMIPkpdPragmaticReliefMinFactor -> "PKPD relief min factor"
             DoubleKey.OApsAIMIRedCarpetRestoreThreshold -> "Red Carpet restore"
             DoubleKey.OApsAIMIPriorityMaxIobFactor -> "Priority MaxIOB factor"

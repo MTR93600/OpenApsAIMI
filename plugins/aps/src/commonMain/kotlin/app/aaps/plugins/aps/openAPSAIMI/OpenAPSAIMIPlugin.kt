@@ -177,6 +177,7 @@ import app.aaps.plugins.aps.openAPSAIMI.compose.AimiEssentialsLive
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiEssentialsScreen
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiPreferenceTree
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiSettingsAuditScreen
+import app.aaps.plugins.aps.openAPSAIMI.compose.AimiNightGrowthStateScreen
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiPkpdSettingsScreen
 import app.aaps.plugins.aps.openAPSAIMI.physio.AIMIPhysioContextStoreMTR
 import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextRepository
@@ -2089,6 +2090,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                     preferences = preferences,
                     onBack = onBack,
                 )
+            },
+            nightGrowthState = ComposeScreenContent { onBack ->
+                AimiNightGrowthStateScreen(preferences = preferences, onBack = onBack)
             },
         ).build(icon = pluginDescription.icon)
 

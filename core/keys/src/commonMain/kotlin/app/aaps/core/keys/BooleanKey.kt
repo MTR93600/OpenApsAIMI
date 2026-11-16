@@ -1004,9 +1004,6 @@ enum class BooleanKey(
         KeysStrings.pref_summary_aimi_tpo_notify_on_apply,
         dependency = OApsAIMITpoEnabled,
     ),
-    // Nothing reads it today: the KMP port lost its reader in the xDrip source. Kept on purpose, it waits
-    // for an owner decision (docs/aimi-settings/PLAN.md, open item of step S2). Do not delete it.
-    OApsxdriponeminute(key = "key_use_Aimi_xdripOM", defaultValue = false, title = KeysStrings.pref_title_oapsxdriponeminute),
 
     ;
 

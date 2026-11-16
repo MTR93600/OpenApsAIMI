@@ -149,7 +149,8 @@ class GlucoseStatusCalculatorAimi @Inject constructor(
         )
 
         // 5) Heuristique Night-Growth
-        val pediatricAge = runCatching { preferences.get(IntKey.OApsAIMINightGrowthAgeYears) }.getOrNull() ?: 12
+        // Step D1: an age never stored means an adult. Same threshold as the old key default 14.
+        val pediatricAge = NightGrowthActivation.nightSlopeAgeYears(runCatching { preferences.getIfExists(IntKey.OApsAIMINightGrowthAgeYears) }.getOrNull())
         val ngrSlopeMin = deriveNightSlopeThreshold(pediatricAge, minutesDur)
         val isNg = (fit?.deltaPl ?: 0.0) >= ngrSlopeMin || (fit?.accel ?: 0.0) > 0.0
 

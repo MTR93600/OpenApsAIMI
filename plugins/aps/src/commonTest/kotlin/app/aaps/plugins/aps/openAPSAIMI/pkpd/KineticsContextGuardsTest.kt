@@ -288,4 +288,17 @@ class KineticsContextGuardsTest {
         assertTrue(preferences.doublePuts.isEmpty())
         assertTrue(preferences.get(BooleanNonKey.OApsAIMIPkpdPaceMigrated))
     }
+
+    @Test
+    fun aBackupMadeAfterTheUpdateKeepsADeliberateNormalPace() {
+        // Owner decision of step D1: the flag is exported, so a backup made after the update carries
+        // it. Restored on a new phone, the flag arrives with the pace and the NORMAL pace stays.
+        assertTrue(BooleanNonKey.OApsAIMIPkpdPaceMigrated.exportable)
+        preferences.put(BooleanNonKey.OApsAIMIPkpdPaceMigrated, true)
+        preferences.doubles[DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH] = 0.5
+        preferences.doubles[DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin] = 5.0
+        assertFalse(PkpdLearningBounds.migrateOldWizardPaceOnce(preferences))
+        assertEquals(0.5, preferences.get(DoubleKey.OApsAIMIPkpdMaxDiaChangePerDayH), 1e-9)
+        assertEquals(5.0, preferences.get(DoubleKey.OApsAIMIPkpdMaxPeakChangePerDayMin), 1e-9)
+    }
 }

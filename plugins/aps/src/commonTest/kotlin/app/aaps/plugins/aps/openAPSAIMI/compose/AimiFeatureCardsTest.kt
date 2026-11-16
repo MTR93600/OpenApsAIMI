@@ -5,6 +5,7 @@ import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.PreferenceItem
 import app.aaps.core.keys.interfaces.PreferenceKey
+import app.aaps.core.ui.compose.ComposeScreenContent
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
 import app.aaps.plugins.aps.keys.ApsIntentKey
 import kotlin.test.Test
@@ -20,6 +21,8 @@ import kotlin.test.assertTrue
  * switch is on are hidden while it is off.
  */
 class AimiFeatureCardsTest {
+
+    private val noScreen = ComposeScreenContent { }
 
     private fun root(): PreferenceSubScreenDef = AimiSettingsTreeWalk.tree(AimiSettingsTreeWalk.allPlatformItems)
 
@@ -41,7 +44,7 @@ class AimiFeatureCardsTest {
     @Test
     fun `each card has one plain sentence and opens its own page`() {
         for (platformItems in listOf(AimiSettingsTreeWalk.allPlatformItems, AimiSettingsTreeWalk.noPlatformItems)) {
-            val cards = AimiPreferenceTree.featureCards(platformItems)
+            val cards = AimiPreferenceTree.featureCards(platformItems, noScreen)
             assertEquals(AimiFeatureCardId.entries.toList(), cards.map { it.id })
             cards.forEach { card ->
                 assertNotNull(card.screen.summary, "${card.id} has no sentence")
@@ -52,14 +55,14 @@ class AimiFeatureCardsTest {
 
     @Test
     fun `a card master switch is the first row of its page`() {
-        AimiPreferenceTree.featureCards(AimiSettingsTreeWalk.allPlatformItems).filter { it.master != null }.forEach { card ->
+        AimiPreferenceTree.featureCards(AimiSettingsTreeWalk.allPlatformItems, noScreen).filter { it.master != null }.forEach { card ->
             assertEquals(card.master!!.key, (card.screen.items.first() as PreferenceKey).key, "${card.id}")
         }
     }
 
     @Test
     fun `settings that only act while the switch is on are hidden while it is off`() {
-        val card = AimiPreferenceTree.featureCards(AimiSettingsTreeWalk.allPlatformItems).single { it.id == AimiFeatureCardId.WomenCycle }
+        val card = AimiPreferenceTree.featureCards(AimiSettingsTreeWalk.allPlatformItems, noScreen).single { it.id == AimiFeatureCardId.WomenCycle }
         val items = aimiWithDrillInLinks(card.screen.items)
         val off = card.visibleItems(items, masterOn = false).keys()
         val on = card.visibleItems(items, masterOn = true).keys()
@@ -72,19 +75,45 @@ class AimiFeatureCardsTest {
     fun `the contraceptive row stays shown while the cycle switch is off`() {
         // `EndometriosisAdjuster.calculateFactors` reads the contraceptive with only the endometriosis
         // switch on, so it changes insulin also while the cycle switch is off.
-        val card = AimiPreferenceTree.featureCards(AimiSettingsTreeWalk.allPlatformItems).single { it.id == AimiFeatureCardId.WomenCycle }
+        val card = AimiPreferenceTree.featureCards(AimiSettingsTreeWalk.allPlatformItems, noScreen).single { it.id == AimiFeatureCardId.WomenCycle }
         val off = card.visibleItems(aimiWithDrillInLinks(card.screen.items), masterOn = false).keys()
         assertTrue(StringKey.OApsAIMIWCycleContraceptive.key in off, "visible: $off")
         assertEquals(StringKey.OApsAIMIWCycleContraceptive.key, card.highlightFor(StringKey.OApsAIMIWCycleContraceptive.key, masterOn = false))
     }
 
     @Test
+    fun `the contraceptive is also on the endometriosis page of the illness card`() {
+        // Owner decision of step D1: the same key gets one more row next to endometriosis, because
+        // `EndometriosisAdjuster` reads it with only the endometriosis switch on. It stays on the
+        // women's cycle card too.
+        val endometriosis = cardScreen(AimiFeatureCardId.Illness).items.filterIsInstance<PreferenceSubScreenDef>()
+            .single { it.key == "aimi_compose_endo" }
+        val keys = endometriosis.items.filterIsInstance<PreferenceKey>().map { it.key }
+        assertTrue(StringKey.OApsAIMIWCycleContraceptive.key in keys, "endometriosis page: $keys")
+        assertEquals(keys.indexOf(BooleanKey.AimiEndometriosisPainFlare.key) + 1, keys.indexOf(StringKey.OApsAIMIWCycleContraceptive.key))
+        val cycle = cardScreen(AimiFeatureCardId.WomenCycle).items.filterIsInstance<PreferenceKey>().map { it.key }
+        assertTrue(StringKey.OApsAIMIWCycleContraceptive.key in cycle, "women's cycle card: $cycle")
+    }
+
+    @Test
+    fun `the night growth page starts with the read only state row`() {
+        // Step D1: with nothing stored the switch row shows on and the age row 14 (key defaults),
+        // while the loop keeps NGR off. The first row of the page says what the loop really does.
+        val ngr = cardScreen(AimiFeatureCardId.Night).items.filterIsInstance<PreferenceSubScreenDef>()
+            .single { it.key == "aimi_compose_ngr" }
+        val keys = ngr.items.filterIsInstance<PreferenceKey>().map { it.key }
+        assertEquals(ApsIntentKey.AimiNightGrowthState.key, keys.first(), "night growth page: $keys")
+        assertTrue(IntKey.OApsAIMINightGrowthAgeYears.key in keys)
+        assertTrue(BooleanKey.OApsAIMINightGrowthEnabled.key in keys)
+    }
+
+    @Test
     fun `search on a hidden card row highlights the card switch`() {
-        val card = AimiPreferenceTree.featureCards(AimiSettingsTreeWalk.allPlatformItems).single { it.id == AimiFeatureCardId.WomenCycle }
+        val card = AimiPreferenceTree.featureCards(AimiSettingsTreeWalk.allPlatformItems, noScreen).single { it.id == AimiFeatureCardId.WomenCycle }
         val tracking = StringKey.OApsAIMIWCycleTrackingMode.key
         assertEquals(BooleanKey.OApsAIMIwcycle.key, card.highlightFor(tracking, masterOn = false))
         assertEquals(tracking, card.highlightFor(tracking, masterOn = true))
-        val noSwitch = AimiPreferenceTree.featureCards(AimiSettingsTreeWalk.allPlatformItems).single { it.id == AimiFeatureCardId.Night }
+        val noSwitch = AimiPreferenceTree.featureCards(AimiSettingsTreeWalk.allPlatformItems, noScreen).single { it.id == AimiFeatureCardId.Night }
         assertEquals(BooleanKey.OApsAIMInight.key, noSwitch.highlightFor(BooleanKey.OApsAIMInight.key, masterOn = false))
     }
 
@@ -92,7 +121,7 @@ class AimiFeatureCardsTest {
     fun `a search result on a card resolves to the card page`() {
         // The tree opens `AimiFeatureCardPage` for a result whose page is a card, found by its key.
         val index = AimiSettingsSearch.index(root())
-        val cardKeys = AimiPreferenceTree.featureCards(AimiSettingsTreeWalk.allPlatformItems).map { it.id.screenKey }.toSet()
+        val cardKeys = AimiPreferenceTree.featureCards(AimiSettingsTreeWalk.allPlatformItems, noScreen).map { it.id.screenKey }.toSet()
         val tracking = index.single { it.key.key == StringKey.OApsAIMIWCycleTrackingMode.key }
         assertEquals(AimiFeatureCardId.WomenCycle.screenKey, tracking.screen.key)
         assertTrue(tracking.screen.key in cardKeys)
@@ -102,7 +131,7 @@ class AimiFeatureCardsTest {
 
     @Test
     fun `a dependent row is always a row of the same card`() {
-        AimiPreferenceTree.featureCards(AimiSettingsTreeWalk.allPlatformItems).forEach { card ->
+        AimiPreferenceTree.featureCards(AimiSettingsTreeWalk.allPlatformItems, noScreen).forEach { card ->
             val rowKeys = card.screen.items.map { it.itemKey() }.toSet()
             assertTrue(rowKeys.containsAll(card.dependents), "${card.id}: ${card.dependents - rowKeys}")
             if (card.master == null) assertEquals(emptySet(), card.dependents, "${card.id} hides rows without a switch")
@@ -111,7 +140,7 @@ class AimiFeatureCardsTest {
 
     @Test
     fun `a card without a switch shows everything`() {
-        val card = AimiPreferenceTree.featureCards(AimiSettingsTreeWalk.allPlatformItems).single { it.id == AimiFeatureCardId.Illness }
+        val card = AimiPreferenceTree.featureCards(AimiSettingsTreeWalk.allPlatformItems, noScreen).single { it.id == AimiFeatureCardId.Illness }
         val items = aimiWithDrillInLinks(card.screen.items)
         assertEquals(items, card.visibleItems(items, masterOn = false))
     }

@@ -295,11 +295,17 @@ class AimiSettingsManifestTest {
     // ---------------------------------------------------------------- dead keys (step S3)
 
     @Test
-    fun `only the xDrip switch is left as a dead key`() {
-        // Step S3 deleted every other dead key, and step S3b wired or deleted the seven of the protected
-        // families (owner decision 2026-11-15). The xDrip one minute switch, whose reader the port
-        // lost, still waits for the owner (PLAN.md).
-        assertEquals(setOf(BooleanKey.OApsxdriponeminute.key), AimiSettingsManifest.DEAD_KEYS)
+    fun `no dead key is left`() {
+        // Step S3 deleted every other dead key, step S3b wired or deleted the seven of the protected
+        // families, and step D1 deleted the xDrip one minute switch (owner decisions 2026-11-15).
+        assertEquals(emptySet<String>(), AimiSettingsManifest.DEAD_KEYS)
+    }
+
+    @Test
+    fun `the xDrip one minute switch is retired under its storage name`() {
+        // Owner decision of step D1: its reader was lost in the port and every xDrip user keeps all
+        // readings, so the key is deleted and its stored value is removed.
+        assertTrue("key_use_Aimi_xdripOM" in AimiRetiredSettings.storageNames)
     }
 
     @Test

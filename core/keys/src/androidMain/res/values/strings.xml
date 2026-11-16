@@ -735,15 +735,17 @@
     <string name="pref_summary_aimi_smb_training_min_quality">Rows with a quality value below this limit are not used to train the SMB model. A lower limit gives more rows, but rougher data. A higher limit gives cleaner data, but fewer rows. Standard: 0.40. Changing it starts a new training at the next loop run.</string>
     <string name="pref_title_aimi_smb_training_relaxed_filter">SMB training: relaxed row filter</string>
     <string name="pref_summary_aimi_smb_training_relaxed_filter">On: rows that only have the harmless dual delivery flag (SMB and temp basal in the same loop run) are kept, and check rows are taken from every period. Off: the old filter, any flag removes the row, so the model may get almost no SMB rows.</string>
-    <string name="pref_title_oaps_aimi_meal_factor">AIMI meal factor</string>
-    <string name="pref_title_oaps_aimi_bf_factor">AIMI BF factor</string>
+    <string name="pref_title_oaps_aimi_meal_factor">Meal mode: SMB size (percent)</string>
+    <string name="pref_title_oaps_aimi_bf_factor">Breakfast mode: SMB size (percent)</string>
     <string name="pref_title_oaps_aimi_bf_prebolus">AIMI BF prebolus</string>
     <string name="pref_title_oaps_aimi_bf_prebolus2">AIMI BF prebolus2</string>
-    <string name="pref_title_oaps_aimi_lunch_factor">AIMI lunch factor</string>
-    <string name="pref_title_oaps_aimi_dinner_factor">AIMI dinner factor</string>
-    <string name="pref_title_oaps_aimi_hc_factor">AIMI HC factor</string>
-    <string name="pref_title_oaps_aimi_snack_factor">AIMI snack factor</string>
-    <string name="pref_title_oaps_aimi_sleep_factor">AIMI sleep factor</string>
+    <string name="pref_title_oaps_aimi_lunch_factor">Lunch mode: SMB size (percent)</string>
+    <string name="pref_title_oaps_aimi_dinner_factor">Dinner mode: SMB size (percent)</string>
+    <string name="pref_title_oaps_aimi_hc_factor">High carb mode: SMB size (percent)</string>
+    <string name="pref_title_oaps_aimi_snack_factor">Snack mode: SMB size (percent)</string>
+    <string name="pref_title_oaps_aimi_sleep_factor">Sleep mode: SMB size (percent)</string>
+    <string name="pref_summary_oaps_aimi_meal_factor_percent">Percent of the SMB that AIMI calculates while this mode is on. 100 = the full SMB, 50 (the default) = half. What AIMI learned about your reactivity is applied on top, and the max SMB limits still apply.</string>
+    <string name="pref_summary_oaps_aimi_sleep_factor_percent">Percent of the SMB that AIMI calculates while sleep mode is on. 100 = the full SMB, 60 (the default) = a little more than half, 50 = half. What AIMI learned about your reactivity is applied on top, and the max SMB limits still apply.</string>
     <string name="pref_title_oaps_aimi_meal_prebolus">AIMI meal prebolus</string>
     <string name="pref_title_oaps_aimi_autodrive_prebolus">AIMI autodrive prebolus</string>
     <string name="pref_title_oaps_aimi_autodrivesmall_prebolus">AIMI autodrive small prebolus</string>
@@ -814,6 +816,5 @@
     <string name="pref_title_oaps_aimi_thyroid_guard_level">AIMI thyroid guard level</string>
     <string name="pref_title_autodrive_max_basal">Fixed basal 30 min if meal detected (U/h)</string>
     <string name="pref_title_meal_modes_max_basal">Fixed basal 30 min at meal start (U/h)</string>
-    <string name="pref_title_oapsxdriponeminute">Libre3 1-minute readings</string>
 
 </resources>

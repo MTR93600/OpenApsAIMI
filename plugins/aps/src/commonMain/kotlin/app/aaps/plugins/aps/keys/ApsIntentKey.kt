@@ -86,6 +86,17 @@ enum class ApsIntentKey(
         preferenceType = PreferenceType.CLICK,
     ),
 
+    /**
+     * Read only: night growth support on or off now, and why (step D1). Its page uses the same rule
+     * as the loop, because the switch and age rows show their key defaults also when nothing is stored.
+     */
+    AimiNightGrowthState(
+        key = "aimi_ngr_state_info",
+        title = ApsStrings.aimi_ngr_state_title,
+        summary = ApsStrings.aimi_ngr_state_summary,
+        preferenceType = PreferenceType.CLICK,
+    ),
+
     AimiPhysioPatternCatalogInfo(
         key = "aimi_physio_pattern_catalog_info",
         title = ApsStrings.pref_title_aimi_physio_pattern_catalog_info,

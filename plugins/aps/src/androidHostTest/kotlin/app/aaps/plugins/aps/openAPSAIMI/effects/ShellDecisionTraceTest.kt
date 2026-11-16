@@ -28,7 +28,9 @@ import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
+import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.LongNonKey
+import app.aaps.core.keys.interfaces.NonPreferenceKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
 import app.aaps.plugins.aps.openAPSAIMI.AIMIAdaptiveBasal
@@ -43,6 +45,8 @@ import app.aaps.plugins.aps.openAPSAIMI.AimiUamHandler
 import app.aaps.plugins.aps.openAPSAIMI.DetermineBasalaimiSMB2
 import app.aaps.plugins.aps.openAPSAIMI.TherapyNotePersistence
 import app.aaps.plugins.aps.openAPSAIMI.NGRConfig
+import app.aaps.plugins.aps.openAPSAIMI.DefaultNightGrowthResistanceMonitor
+import app.aaps.plugins.aps.openAPSAIMI.NGRState
 import app.aaps.plugins.aps.openAPSAIMI.GlucoseStatusCalculatorAimi
 import app.aaps.plugins.aps.openAPSAIMI.advisor.gestation.GestationalAutopilot
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
@@ -152,10 +156,13 @@ import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleFacade
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleLearner
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCyclePreferences
 import kotlin.coroutines.CoroutineContext
+import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalTime
+import kotlinx.datetime.TimeZone
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.int
@@ -294,6 +301,66 @@ class ShellDecisionTraceTest {
             )
         }.replace(Regex("ts=\\d+"), "ts=<clock>")
         assertEquals(MEAL_RISE_TRACE, trace)
+    }
+
+    /**
+     * The NGR config the loop builds, and the NGR monitor state after one hour of a steady night rise
+     * (23:00 to 00:00, BG 160 to 280, +10 mg/dL per 5 minutes) with that config.
+     */
+    private fun ngrConfigAndMonitorState(stored: Map<NonPreferenceKey, Any>): Pair<NGRConfig, NGRState> {
+        tick = newTick(recordingPreferences(emptyMap(), stored = stored))
+        armShell()
+        val config = tick.buildNightGrowthResistanceConfig(
+            profile = profileStub(),
+            autosens = mock(AutosensResult::class.java),
+            glucoseStatus = null,
+            targetBg = 100.0,
+        )
+        val monitor = DefaultNightGrowthResistanceMonitor(TimeZone.UTC)
+        val start = Instant.parse("2026-01-01T23:00:00Z")
+        var state = NGRState.INACTIVE
+        for (step in 0..12) {
+            val bg = 160.0 + step * 10.0
+            state = monitor.evaluate(
+                now = start + (step * 5).minutes,
+                bg = bg,
+                delta = 10.0,
+                shortAvgDelta = 10.0,
+                longAvgDelta = 10.0,
+                eventualBG = bg + 100.0,
+                targetBG = 100.0,
+                iob = 0.5,
+                cob = 0.0,
+                react = 0.0,
+                isMealActive = false,
+                config = config,
+            ).state
+        }
+        return config to state
+    }
+
+    @Test
+    fun nightGrowthIsOffAtTheLoopWhenNoAgeAndNoSwitchWereStored() {
+        // Step D1: an age never stored means an adult. Before D1 the key default 14 turned NGR on.
+        val (config, state) = ngrConfigAndMonitorState(stored = emptyMap())
+        assertFalse(config.enabled)
+        assertEquals(NGRState.INACTIVE, state)
+    }
+
+    @Test
+    fun nightGrowthRunsAtTheLoopWhenTheSwitchIsStoredOnWithoutAnAge() {
+        // A stored switch keeps the behaviour of before D1: on, with the age 14 for the learner, the
+        // monitor (which stops at 18) and the slot cap. The same night rise now wakes the monitor.
+        val (config, state) = ngrConfigAndMonitorState(stored = mapOf(BooleanKey.OApsAIMINightGrowthEnabled to true))
+        assertTrue(config.enabled)
+        assertEquals(14, config.pediatricAgeYears)
+        assertTrue("monitor state $state", state != NGRState.INACTIVE)
+    }
+
+    @Test
+    fun nightGrowthFollowsAStoredAgeAtTheLoop() {
+        assertTrue(ngrConfigAndMonitorState(stored = mapOf(IntKey.OApsAIMINightGrowthAgeYears to 12)).first.enabled)
+        assertFalse(ngrConfigAndMonitorState(stored = mapOf(IntKey.OApsAIMINightGrowthAgeYears to 30)).first.enabled)
     }
 
     @Test
@@ -4452,6 +4519,7 @@ class ShellDecisionTraceTest {
         doubles: Map<DoubleKey, Double>,
         bools: Map<BooleanKey, Boolean> = emptyMap(),
         longs: Map<LongNonKey, Long> = emptyMap(),
+        stored: Map<NonPreferenceKey, Any> = emptyMap(),
     ): Preferences = mock(Preferences::class.java, Answer { inv ->
         val key = inv.arguments.firstOrNull()
         val label = when (key) {
@@ -4475,8 +4543,10 @@ class ShellDecisionTraceTest {
                 null
             }
             "getIfExists" -> {
-                AimiEffectProbe.add(aimiTraceRead(label, "null"))
-                null
+                // Only the values in [stored] exist; every other key reads as never stored.
+                val value = stored[key]
+                AimiEffectProbe.add(aimiTraceRead(label, traceValue(value)))
+                value
             }
             else -> zeroFor(inv)
         }
@@ -4910,11 +4980,12 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.40
             READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.40
             READ key=DoubleKey.OApsAIMIMaxSMB value=0.40
-            READ key=IntKey.OApsAIMINightGrowthAgeYears value=0
+            READ key=IntKey.OApsAIMINightGrowthAgeYears value=null
             READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
             READ key=StringKey.OApsAIMINightGrowthStart value=
             READ key=StringKey.OApsAIMINightGrowthEnd value=
             READ key=DoubleKey.OApsAIMINightGrowthMaxIobExtra value=0.00
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
             READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
             READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=<clock>
             READ key=BooleanKey.OApsAIMIContextEnabled value=false
@@ -5072,6 +5143,8 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
             READ key=BooleanKey.OApsAIMIautoDriveActive value=true
             READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
+            READ key=IntKey.OApsAIMINightGrowthAgeYears value=null
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
             READ key=BooleanKey.OApsAIMIPeakGovernorEnabled value=false
             READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
             --
@@ -5190,11 +5263,12 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.40
             READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.40
             READ key=DoubleKey.OApsAIMIMaxSMB value=0.40
-            READ key=IntKey.OApsAIMINightGrowthAgeYears value=0
+            READ key=IntKey.OApsAIMINightGrowthAgeYears value=null
             READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
             READ key=StringKey.OApsAIMINightGrowthStart value=
             READ key=StringKey.OApsAIMINightGrowthEnd value=
             READ key=DoubleKey.OApsAIMINightGrowthMaxIobExtra value=0.00
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
             READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
             READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=<clock>
             READ key=BooleanKey.OApsAIMIContextEnabled value=false
@@ -5386,6 +5460,8 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
             READ key=BooleanKey.OApsAIMIautoDriveActive value=true
             READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
+            READ key=IntKey.OApsAIMINightGrowthAgeYears value=null
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
             READ key=BooleanKey.OApsAIMIPeakGovernorEnabled value=false
             READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
             READ key=BooleanKey.OApsAIMIBasalChannelSafetyGuards value=false
@@ -5561,11 +5637,12 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.00
             READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.00
             READ key=DoubleKey.OApsAIMIMaxSMB value=0.00
-            READ key=IntKey.OApsAIMINightGrowthAgeYears value=0
+            READ key=IntKey.OApsAIMINightGrowthAgeYears value=null
             READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
             READ key=StringKey.OApsAIMINightGrowthStart value=
             READ key=StringKey.OApsAIMINightGrowthEnd value=
             READ key=DoubleKey.OApsAIMINightGrowthMaxIobExtra value=0.00
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
             READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=40.00
             READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=<clock>
             READ key=BooleanKey.OApsAIMIContextEnabled value=false
@@ -5645,6 +5722,8 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMIautoDriveActive value=false
             READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
             READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
+            READ key=IntKey.OApsAIMINightGrowthAgeYears value=null
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
             READ key=BooleanKey.OApsAIMIPeakGovernorEnabled value=false
             READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
             --
@@ -5745,11 +5824,12 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.00
             READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.00
             READ key=DoubleKey.OApsAIMIMaxSMB value=0.00
-            READ key=IntKey.OApsAIMINightGrowthAgeYears value=0
+            READ key=IntKey.OApsAIMINightGrowthAgeYears value=null
             READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
             READ key=StringKey.OApsAIMINightGrowthStart value=
             READ key=StringKey.OApsAIMINightGrowthEnd value=
             READ key=DoubleKey.OApsAIMINightGrowthMaxIobExtra value=0.00
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
             READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
             READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=<clock>
             READ key=BooleanKey.OApsAIMIContextEnabled value=false
@@ -5826,6 +5906,8 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMIautoDriveActive value=false
             READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
             READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
+            READ key=IntKey.OApsAIMINightGrowthAgeYears value=null
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
             READ key=BooleanKey.OApsAIMIPeakGovernorEnabled value=false
             READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
             --
@@ -5919,11 +6001,12 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.00
             READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.00
             READ key=DoubleKey.OApsAIMIMaxSMB value=0.00
-            READ key=IntKey.OApsAIMINightGrowthAgeYears value=0
+            READ key=IntKey.OApsAIMINightGrowthAgeYears value=null
             READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
             READ key=StringKey.OApsAIMINightGrowthStart value=
             READ key=StringKey.OApsAIMINightGrowthEnd value=
             READ key=DoubleKey.OApsAIMINightGrowthMaxIobExtra value=0.00
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
             READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
             READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
             READ key=BooleanKey.OApsAIMIContextEnabled value=false
@@ -6004,11 +6087,12 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.00
             READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=0.00
             READ key=DoubleKey.OApsAIMIMaxSMB value=0.00
-            READ key=IntKey.OApsAIMINightGrowthAgeYears value=0
+            READ key=IntKey.OApsAIMINightGrowthAgeYears value=null
             READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
             READ key=StringKey.OApsAIMINightGrowthStart value=
             READ key=StringKey.OApsAIMINightGrowthEnd value=
             READ key=DoubleKey.OApsAIMINightGrowthMaxIobExtra value=0.00
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=true
             READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
             READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
             READ key=BooleanKey.OApsAIMIContextEnabled value=false
@@ -6082,6 +6166,8 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMIautoDriveActive value=false
             READ key=BooleanKey.OApsAIMIT3cBrittleMode value=true
             READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
+            READ key=IntKey.OApsAIMINightGrowthAgeYears value=null
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=true
             READ key=BooleanKey.OApsAIMIPeakGovernorEnabled value=false
             READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
             READ key=BooleanKey.OApsAIMIBasalChannelSafetyGuards value=false
@@ -6209,6 +6295,8 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMIautoDriveActive value=false
             READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
             READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
+            READ key=IntKey.OApsAIMINightGrowthAgeYears value=null
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
             READ key=BooleanKey.OApsAIMIPeakGovernorEnabled value=false
             READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
         """.trimIndent()
@@ -6562,6 +6650,8 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMIautoDriveActive value=false
             READ key=BooleanKey.OApsAIMIT3cBrittleMode value=true
             READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
+            READ key=IntKey.OApsAIMINightGrowthAgeYears value=null
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=true
             READ key=BooleanKey.OApsAIMIPeakGovernorEnabled value=false
             READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
         """.trimIndent()
@@ -6594,11 +6684,12 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
             READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
             READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
-            READ key=IntKey.OApsAIMINightGrowthAgeYears value=0
+            READ key=IntKey.OApsAIMINightGrowthAgeYears value=null
             READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
             READ key=StringKey.OApsAIMINightGrowthStart value=
             READ key=StringKey.OApsAIMINightGrowthEnd value=
             READ key=DoubleKey.OApsAIMINightGrowthMaxIobExtra value=0.00
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
             READ key=BooleanKey.AimiEndometriosisEnable value=false
             LOG 😴 SLEEP_LIVE: wearable steps15=0 hr=72/rhr=60 conf=0.57 conf=0.57
             READ key=DoubleKey.OApsAIMISmbTailDamping value=0.00
@@ -6805,11 +6896,12 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=1.20
             LOG MAXSMB_SLOPE_HIGH BG=180 slope=2.00 Δ=3.0 -> maxSMBHB=1.20U (confirmed rise)
             READ key=DoubleKey.OApsAIMIMaxSMB value=0.50
-            READ key=IntKey.OApsAIMINightGrowthAgeYears value=0
+            READ key=IntKey.OApsAIMINightGrowthAgeYears value=null
             READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
             READ key=StringKey.OApsAIMINightGrowthStart value=
             READ key=StringKey.OApsAIMINightGrowthEnd value=
             READ key=DoubleKey.OApsAIMINightGrowthMaxIobExtra value=0.00
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
         """.trimIndent()
 
         private val PKPD_GUARD_ACTIVE_TRACE = """
@@ -6874,11 +6966,12 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.OApsAIMIHighBGMaxSMB value=1.20
             LOG MAXSMB_STANDARD BG=110 -> 0.50U
             READ key=DoubleKey.OApsAIMIMaxSMB value=0.50
-            READ key=IntKey.OApsAIMINightGrowthAgeYears value=0
+            READ key=IntKey.OApsAIMINightGrowthAgeYears value=null
             READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
             READ key=StringKey.OApsAIMINightGrowthStart value=
             READ key=StringKey.OApsAIMINightGrowthEnd value=
             READ key=DoubleKey.OApsAIMINightGrowthMaxIobExtra value=0.00
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
         """.trimIndent()
 
         private val MEAL_HYPER_FASTING_TRACE = "READ key=DoubleKey.meal_modes_MaxBasal value=0.00"
@@ -6899,11 +6992,12 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
             READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
             READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
-            READ key=IntKey.OApsAIMINightGrowthAgeYears value=0
+            READ key=IntKey.OApsAIMINightGrowthAgeYears value=null
             READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
             READ key=StringKey.OApsAIMINightGrowthStart value=
             READ key=StringKey.OApsAIMINightGrowthEnd value=
             READ key=DoubleKey.OApsAIMINightGrowthMaxIobExtra value=0.00
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
             READ key=BooleanKey.AimiEndometriosisEnable value=false
             READ key=DoubleKey.OApsAIMISmbTailDamping value=0.00
             READ key=StringKey.AimiTuningContextSelection value=
@@ -6942,11 +7036,12 @@ READ key=DoubleKey.OApsAIMIT3cAnticipationStrength value=0.00
 READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
 READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
 READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
-READ key=IntKey.OApsAIMINightGrowthAgeYears value=0
+READ key=IntKey.OApsAIMINightGrowthAgeYears value=null
 READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
 READ key=StringKey.OApsAIMINightGrowthStart value=
 READ key=StringKey.OApsAIMINightGrowthEnd value=
 READ key=DoubleKey.OApsAIMINightGrowthMaxIobExtra value=0.00
+READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
 READ key=BooleanKey.AimiEndometriosisEnable value=false
 LOG 😴 SLEEP_LIVE: wearable steps15=0 hr=72/rhr=60 conf=0.57 conf=0.57
 READ key=DoubleKey.OApsAIMISmbTailDamping value=0.00
@@ -7033,6 +7128,8 @@ READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
 READ key=BooleanKey.OApsAIMIautoDriveActive value=false
 READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
 READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
+READ key=IntKey.OApsAIMINightGrowthAgeYears value=null
+READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
 READ key=BooleanKey.OApsAIMIPeakGovernorEnabled value=false
 READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
 """.trimIndent()
@@ -7056,6 +7153,8 @@ READ key=BooleanKey.OApsAIMIPkpdEnabled value=false
 READ key=BooleanKey.OApsAIMIautoDriveActive value=false
 READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
 READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
+READ key=IntKey.OApsAIMINightGrowthAgeYears value=null
+READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
 READ key=BooleanKey.OApsAIMIPeakGovernorEnabled value=false
 READ key=BooleanKey.OApsAIMIDiaGovernorEnabled value=false
 """.trimIndent()
@@ -7257,11 +7356,12 @@ READ key=DoubleKey.OApsAIMIT3cAnticipationStrength value=0.40
 READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
 READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=5.00
 READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
-READ key=IntKey.OApsAIMINightGrowthAgeYears value=0
+READ key=IntKey.OApsAIMINightGrowthAgeYears value=null
 READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
 READ key=StringKey.OApsAIMINightGrowthStart value=
 READ key=StringKey.OApsAIMINightGrowthEnd value=
 READ key=DoubleKey.OApsAIMINightGrowthMaxIobExtra value=0.00
+READ key=BooleanKey.OApsAIMIT3cBrittleMode value=false
 READ key=BooleanKey.AimiEndometriosisEnable value=false
 LOG 😴 SLEEP_LIVE: wearable steps15=0 hr=72/rhr=60 conf=0.57 conf=0.57
 READ key=DoubleKey.OApsAIMISmbTailDamping value=0.25
@@ -7283,11 +7383,12 @@ SIGNAL ngrMember=1.00
             READ key=BooleanKey.OApsAIMIT3cBrittleMode value=true
             READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=5.00
             READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
-            READ key=IntKey.OApsAIMINightGrowthAgeYears value=0
+            READ key=IntKey.OApsAIMINightGrowthAgeYears value=null
             READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
             READ key=StringKey.OApsAIMINightGrowthStart value=
             READ key=StringKey.OApsAIMINightGrowthEnd value=
             READ key=DoubleKey.OApsAIMINightGrowthMaxIobExtra value=0.00
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=true
             READ key=BooleanKey.AimiEndometriosisEnable value=false
             LOG 😴 SLEEP_LIVE: wearable steps15=0 hr=72/rhr=60 conf=0.57 conf=0.57
             READ key=DoubleKey.OApsAIMIT3cActivationThreshold value=140.00
@@ -7310,11 +7411,12 @@ SIGNAL ngrMember=1.00
             READ key=BooleanKey.OApsAIMIT3cBrittleMode value=true
             READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=5.00
             READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=0.00
-            READ key=IntKey.OApsAIMINightGrowthAgeYears value=0
+            READ key=IntKey.OApsAIMINightGrowthAgeYears value=null
             READ key=BooleanKey.OApsAIMINightGrowthEnabled value=null
             READ key=StringKey.OApsAIMINightGrowthStart value=
             READ key=StringKey.OApsAIMINightGrowthEnd value=
             READ key=DoubleKey.OApsAIMINightGrowthMaxIobExtra value=0.00
+            READ key=BooleanKey.OApsAIMIT3cBrittleMode value=true
             READ key=BooleanKey.AimiEndometriosisEnable value=false
             LOG 😴 SLEEP_LIVE: wearable steps15=0 hr=72/rhr=60 conf=0.57 conf=0.57
             READ key=DoubleKey.OApsAIMIT3cActivationThreshold value=140.00

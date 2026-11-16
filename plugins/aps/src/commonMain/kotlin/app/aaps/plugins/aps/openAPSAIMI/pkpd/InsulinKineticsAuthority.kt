@@ -30,9 +30,9 @@ object InsulinKineticsAuthority {
     /**
      * Fixed envelope of the DIA and peak governors: the old defaults of the removed
      * `OApsAIMIPkpdBounds*` keys. Only the PK/PD learner uses the bounds around the profile insulin
-     * ([PkpdProfileInsulinBounds]); moving the governors too would change dosing with PK/PD off, and
-     * the owner has not decided that. Fixed values also keep a floor when the profile DIA or peak is
-     * zero or not a number.
+     * ([PkpdProfileInsulinBounds]); moving the governors too would change dosing with PK/PD off, so
+     * the owner decided to keep this fixed envelope (PLAN.md, step D1). Fixed values also keep a floor
+     * when the profile DIA or peak is zero or not a number.
      */
     const val GOVERNOR_DIA_MIN_H = 4.0
     const val GOVERNOR_DIA_MAX_H = 24.0

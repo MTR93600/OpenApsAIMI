@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.compose
 
 import app.aaps.core.keys.BooleanKey
+import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.PreferenceKey
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
 import app.aaps.plugins.aps.keys.ApsIntentKey
@@ -131,6 +132,14 @@ class AimiSettingsReachabilityTest {
         val reachable = AimiSettingsTreeWalk.reachableWithOwnScreens(withoutCard)
         val lost = keptKeys - AimiSettingsManifest.REACHABILITY_DEBT - reachable
         assertTrue(BooleanKey.OApsAIMIwcycle.key in lost, "lost: $lost")
+    }
+
+    @Test
+    fun `the contraceptive stays reachable without the women cycle card`() {
+        // Step D1: it has a second row on the endometriosis page of the illness card.
+        val root = AimiSettingsTreeWalk.tree(AimiSettingsTreeWalk.allPlatformItems)
+        val reachable = AimiSettingsTreeWalk.reachableWithOwnScreens(withoutScreen(root, AimiFeatureCardId.WomenCycle.screenKey))
+        assertTrue(StringKey.OApsAIMIWCycleContraceptive.key in reachable)
     }
 
     @Test

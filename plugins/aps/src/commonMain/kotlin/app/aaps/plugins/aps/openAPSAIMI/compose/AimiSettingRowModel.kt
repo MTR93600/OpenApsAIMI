@@ -281,15 +281,16 @@ private fun maxBasalInUse(rowMode: AimiBasalLimitMode, stored: Any, live: AimiEs
 }
 
 /**
- * The night growth line of the age row. When the age was never stored ([ageStored] false), the loop
- * uses the key default, and the line says so instead of reading as if the person had set that age.
+ * The night growth line of the age row. Since step D1 an age never stored turns NGR off (AIMI takes
+ * the person for an adult), and the line says that the age is not set.
  */
-internal fun aimiNightGrowthText(state: NightGrowthState, ageStored: Boolean): TextRef =
+internal fun aimiNightGrowthText(state: NightGrowthState): TextRef =
     when (state) {
         NightGrowthState.ON_BY_SWITCH  -> ApsStrings.aimi_essentials_ngr_on_by_switch
         NightGrowthState.OFF_BY_SWITCH -> ApsStrings.aimi_essentials_ngr_off_by_switch
-        NightGrowthState.ON_BY_AGE     -> if (ageStored) ApsStrings.aimi_essentials_ngr_on_by_age else ApsStrings.aimi_essentials_ngr_on_by_default_age
-        NightGrowthState.OFF_BY_AGE    -> if (ageStored) ApsStrings.aimi_essentials_ngr_off_by_age else ApsStrings.aimi_essentials_ngr_off_by_default_age
+        NightGrowthState.ON_BY_AGE     -> ApsStrings.aimi_essentials_ngr_on_by_age
+        NightGrowthState.OFF_BY_AGE    -> ApsStrings.aimi_essentials_ngr_off_by_age
+        NightGrowthState.OFF_NO_AGE    -> ApsStrings.aimi_essentials_ngr_off_no_age
         NightGrowthState.ON_BY_T3C     -> ApsStrings.aimi_essentials_ngr_on_by_t3c
     }
 

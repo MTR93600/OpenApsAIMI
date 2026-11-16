@@ -43,7 +43,6 @@ import app.aaps.core.ui.compose.preference.ProvidePreferenceTheme
 import app.aaps.core.ui.compose.preference.verticalScrollIndicators
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.plugins.aps.ApsStrings
-import app.aaps.plugins.aps.openAPSAIMI.NightGrowthActivation
 import app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey
 
 /**
@@ -158,15 +157,11 @@ private fun rememberStoredValue(preferences: Preferences, key: PreferenceKey): A
 @Composable
 private fun AimiNightGrowthState(preferences: Preferences) {
     val theme = LocalPreferenceTheme.current
-    val age by remember { preferences.observe(IntKey.OApsAIMINightGrowthAgeYears) }.collectAsState()
-    val t3c by remember { preferences.observe(BooleanKey.OApsAIMIT3cBrittleMode) }.collectAsState()
-    // Read once per change of the age or T3C: getIfExists says whether the switch (or the age) was
-    // ever set. An age never set means the loop uses the key default.
-    val switch = remember(age, t3c) { preferences.getIfExists(BooleanKey.OApsAIMINightGrowthEnabled) }
-    val ageStored = remember(age) { preferences.getIfExists(IntKey.OApsAIMINightGrowthAgeYears) != null }
-    val state = NightGrowthActivation.resolve(enabledPref = switch, ageYears = age.coerceAtLeast(0), t3cBrittleMode = t3c)
+    // An age never set means an adult, so NGR is off unless its switch or T3C turns it on. See
+    // rememberNightGrowthState for why the stored state is read again while the page is open.
+    val state by rememberNightGrowthState(preferences)
     Text(
-        text = stringResource(aimiNightGrowthText(state, ageStored)),
+        text = stringResource(aimiNightGrowthText(state)),
         style = theme.summaryTextStyle,
         color = theme.titleColor,
     )

@@ -140,12 +140,8 @@ internal data class AimiSettingEntry(
  */
 internal object AimiSettingsManifest {
 
-    /**
-     * Name prefixes of the AIMI keys that live in the shared key enums.
-     *
-     * `OApsxdrip` is in the list for one key, the AIMI one minute xDrip switch on the lab screen.
-     */
-    private val AIMI_NAME_PREFIXES = listOf("OApsAIMI", "Aimi", "OApsxdrip")
+    /** Name prefixes of the AIMI keys that live in the shared key enums. */
+    private val AIMI_NAME_PREFIXES = listOf("OApsAIMI", "Aimi")
 
     /**
      * AIMI keys of the shared enums whose name follows no AIMI prefix, named one by one.
@@ -264,17 +260,10 @@ internal object AimiSettingsManifest {
      * Step S3 deleted every dead key that waited for nothing, and the migrations remove their stored
      * values (`AimiRetiredSettings`). Step S3b did the same for the dead keys of the protected
      * families, by owner decision: the sleep, HRV and flare duration keys now act, the other four are
-     * deleted. What is left waits for the owner (`docs/aimi-settings/PLAN.md`): the xDrip one minute
-     * switch.
+     * deleted. Step D1 deleted the last one, the xDrip one minute switch (owner decision: every xDrip
+     * user keeps all readings). The set is empty; it stays so that the tests catch the next dead key.
      */
-    val DEAD_KEYS: Set<String> = setOf(
-        // Its reader was lost in the KMP port: on dev_OAPSAIMI `XdripSourcePlugin` ignored xDrip data
-        // less than 4 min after the last batch while this switch was off (the default). Today every
-        // user gets 1-minute data, so the row would be a switch with no effect. Bringing the reader
-        // back changes the glucose input of every 1-minute xDrip user, so it waits for the owner
-        // (PLAN.md, "Open for the owner (from S2)"). Do not delete the key before that.
-        BooleanKey.OApsxdriponeminute.key,
-    )
+    val DEAD_KEYS: Set<String> = emptySet()
 
     /** Every AIMI setting, exactly once. */
     val entries: List<AimiSettingEntry> = listOf(

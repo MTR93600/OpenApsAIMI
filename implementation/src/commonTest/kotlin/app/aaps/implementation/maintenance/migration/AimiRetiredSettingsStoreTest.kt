@@ -115,4 +115,19 @@ class AimiRetiredSettingsStoreTest {
         assertFalse(store.contains(dueDateText))
         assertFalse(store.contains(dueDateMs))
     }
+
+    // ---------------------------------------------------------------- step D1
+
+    @Test
+    fun theXdripOneMinuteSwitchIsRemoved() {
+        // Owner decision of step D1: the switch had no reader since the port, and every xDrip user keeps
+        // all readings. Its stored value goes, the other values stay.
+        val xdripOneMinute = "key_use_Aimi_xdripOM"
+        val store = FileKeyValueStore(mapOf(xdripOneMinute to "true", lunch to "60.0"))
+
+        val removed = removeRetiredAimiSettings(store)
+
+        assertEquals(listOf(xdripOneMinute), removed)
+        assertEquals(mapOf<String, Any?>(lunch to "60.0"), store.getAll())
+    }
 }

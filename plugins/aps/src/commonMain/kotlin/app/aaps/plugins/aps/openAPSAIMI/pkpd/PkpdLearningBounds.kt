@@ -35,11 +35,13 @@ object PkpdLearningBounds {
      * stored means the defaults (FASTER) are in use, so nothing is written.
      *
      * After the first run `BooleanNonKey.OApsAIMIPkpdPaceMigrated` is set and this never looks again,
-     * so a user who picks NORMAL after the update keeps it. That flag is not exported and an import
+     * so a user who picks NORMAL after the update keeps it. The flag is exported (step D1) and an import
      * never clears it (import merges into the store). So:
      * - restoring an old backup on the same phone keeps the restored pace, also 0.5/5.0;
-     * - on a new phone or a fresh install the flag starts false, so the first tick moves 0.5/5.0 to
-     *   FASTER, also when the user picked NORMAL on purpose after the update and exported it.
+     * - a backup made after the update carries the flag, so a NORMAL pace picked on purpose stays
+     *   NORMAL also on a new phone or a fresh install;
+     * - a backup made before the update has no flag, so on a new phone the first tick moves its
+     *   0.5/5.0 to FASTER.
      *
      * Changes dosing for the users it moves (the learner may move the DIA and peak four times faster).
      *

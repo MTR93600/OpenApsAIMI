@@ -58,12 +58,16 @@ enum class BooleanNonKey(
     /**
      * One-shot: set after the AIMI PK/PD learning pace migration ran once. The old PK/PD wizard always
      * saved the NORMAL pace (0.5 h/day, 5 min/day). The migration moves exactly that stored pair to
-     * the FASTER default (2 h/day, 20 min/day) and keeps any other stored pace. Internal state, not a
-     * setting. Not exportable, and an import never clears it. So restoring an old backup on the same
-     * phone keeps the restored pace (also 0.5/5.0). Only a phone or install that never ran the
-     * migration runs it, and there it also moves a NORMAL pace that the user picked on purpose.
+     * the FASTER default (2 h/day, 20 min/day) and keeps any other stored pace. Bookkeeping, not a
+     * setting.
+     *
+     * Exported on purpose (owner decision, step D1 of the AIMI settings plan): a backup made after the
+     * migration carries it, so restoring that backup on a new phone or a fresh install keeps a NORMAL
+     * pace the user picked on purpose. A backup made before the update does not carry it: on a new
+     * phone its old wizard pace 0.5/5.0 is moved to FASTER once, as intended. An import never clears
+     * the flag, so restoring an old backup on a phone that already ran the migration keeps its pace.
      */
-    OApsAIMIPkpdPaceMigrated("aimi_pkpd_pace_migrated", false, exportable = false),
+    OApsAIMIPkpdPaceMigrated("aimi_pkpd_pace_migrated", false),
 
     /**
      * One-shot: set after the AIMI meal factor repair ran once (step T2, see

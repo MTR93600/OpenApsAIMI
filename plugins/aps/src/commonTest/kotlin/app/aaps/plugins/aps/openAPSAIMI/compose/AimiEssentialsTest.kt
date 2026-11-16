@@ -258,33 +258,70 @@ class AimiEssentialsTest {
 
     // ------------------------------------------------------------------ night growth state
 
+    // Owner decision of step D1 (2026-11-15): an age never stored means an adult, so NGR is off. A
+    // stored age or a stored switch keeps the behaviour of before.
+
     @Test
-    fun `night growth follows its switch or else the age and T3C turns it on`() {
-        assertEquals(NightGrowthState.ON_BY_AGE, NightGrowthActivation.resolve(enabledPref = null, ageYears = 14, t3cBrittleMode = false))
-        assertEquals(NightGrowthState.OFF_BY_AGE, NightGrowthActivation.resolve(enabledPref = null, ageYears = 18, t3cBrittleMode = false))
-        assertEquals(NightGrowthState.ON_BY_SWITCH, NightGrowthActivation.resolve(enabledPref = true, ageYears = 40, t3cBrittleMode = false))
-        assertEquals(NightGrowthState.OFF_BY_SWITCH, NightGrowthActivation.resolve(enabledPref = false, ageYears = 10, t3cBrittleMode = false))
-        assertEquals(NightGrowthState.ON_BY_T3C, NightGrowthActivation.resolve(enabledPref = false, ageYears = 10, t3cBrittleMode = true))
-        assertEquals(NightGrowthState.ON_BY_T3C, NightGrowthActivation.resolve(enabledPref = null, ageYears = 30, t3cBrittleMode = true))
+    fun `no age stored and no switch stored turns night growth off`() {
+        assertEquals(NightGrowthState.OFF_NO_AGE, NightGrowthActivation.resolve(enabledPref = null, storedAgeYears = null, t3cBrittleMode = false))
+        assertFalse(NightGrowthActivation.isEnabledBySwitchOrAge(enabledPref = null, storedAgeYears = null))
     }
 
     @Test
-    fun `the state is on exactly when the loop formula says on`() {
-        for (pref in listOf(null, true, false)) for (age in listOf(0, 9, 17, 18, 25)) for (t3c in listOf(true, false)) {
-            val loopFormula = (pref ?: (age < 18)) || t3c
-            assertEquals(loopFormula, NightGrowthActivation.resolve(pref, age, t3c).enabled, "pref=$pref age=$age t3c=$t3c")
-            assertEquals(pref ?: (age < 18), NightGrowthActivation.isEnabledBySwitchOrAge(pref, age))
+    fun `a stored age of 12 turns night growth on`() {
+        assertEquals(NightGrowthState.ON_BY_AGE, NightGrowthActivation.resolve(enabledPref = null, storedAgeYears = 12, t3cBrittleMode = false))
+    }
+
+    @Test
+    fun `a stored age of 30 turns night growth off`() {
+        assertEquals(NightGrowthState.OFF_BY_AGE, NightGrowthActivation.resolve(enabledPref = null, storedAgeYears = 30, t3cBrittleMode = false))
+    }
+
+    @Test
+    fun `a stored switch wins over the age also when no age is stored`() {
+        for (age in listOf(null, 12, 30)) {
+            assertEquals(NightGrowthState.ON_BY_SWITCH, NightGrowthActivation.resolve(enabledPref = true, storedAgeYears = age, t3cBrittleMode = false), "age=$age")
+            assertEquals(NightGrowthState.OFF_BY_SWITCH, NightGrowthActivation.resolve(enabledPref = false, storedAgeYears = age, t3cBrittleMode = false), "age=$age")
         }
     }
 
     @Test
-    fun `an age never set says the default is used and not that the person is under 18`() {
-        assertEquals(ApsStrings.aimi_essentials_ngr_on_by_default_age, aimiNightGrowthText(NightGrowthState.ON_BY_AGE, ageStored = false))
-        assertEquals(ApsStrings.aimi_essentials_ngr_on_by_age, aimiNightGrowthText(NightGrowthState.ON_BY_AGE, ageStored = true))
-        assertEquals(ApsStrings.aimi_essentials_ngr_off_by_default_age, aimiNightGrowthText(NightGrowthState.OFF_BY_AGE, ageStored = false))
-        assertEquals(ApsStrings.aimi_essentials_ngr_off_by_age, aimiNightGrowthText(NightGrowthState.OFF_BY_AGE, ageStored = true))
-        // The switch and T3C do not depend on the age.
-        assertEquals(ApsStrings.aimi_essentials_ngr_on_by_switch, aimiNightGrowthText(NightGrowthState.ON_BY_SWITCH, ageStored = false))
-        assertEquals(ApsStrings.aimi_essentials_ngr_on_by_t3c, aimiNightGrowthText(NightGrowthState.ON_BY_T3C, ageStored = false))
+    fun `T3C brittle mode still turns night growth on`() {
+        assertEquals(NightGrowthState.ON_BY_T3C, NightGrowthActivation.resolve(enabledPref = false, storedAgeYears = 10, t3cBrittleMode = true))
+        assertEquals(NightGrowthState.ON_BY_T3C, NightGrowthActivation.resolve(enabledPref = null, storedAgeYears = 30, t3cBrittleMode = true))
+        assertEquals(NightGrowthState.ON_BY_T3C, NightGrowthActivation.resolve(enabledPref = null, storedAgeYears = null, t3cBrittleMode = true))
+    }
+
+    @Test
+    fun `the state is on exactly when the loop formula says on`() {
+        for (pref in listOf(null, true, false)) for (age in listOf(null, 0, 9, 17, 18, 25)) for (t3c in listOf(true, false)) {
+            val bySwitchOrAge = pref ?: (age != null && age < 18)
+            assertEquals(bySwitchOrAge || t3c, NightGrowthActivation.resolve(pref, age, t3c).enabled, "pref=$pref age=$age t3c=$t3c")
+            assertEquals(bySwitchOrAge, NightGrowthActivation.isEnabledBySwitchOrAge(pref, age))
+        }
+    }
+
+    @Test
+    fun `an age never stored says night growth support is off because the age is not set`() {
+        assertEquals(ApsStrings.aimi_essentials_ngr_off_no_age, aimiNightGrowthText(NightGrowthState.OFF_NO_AGE))
+        assertEquals(ApsStrings.aimi_essentials_ngr_on_by_age, aimiNightGrowthText(NightGrowthState.ON_BY_AGE))
+        assertEquals(ApsStrings.aimi_essentials_ngr_off_by_age, aimiNightGrowthText(NightGrowthState.OFF_BY_AGE))
+        assertEquals(ApsStrings.aimi_essentials_ngr_on_by_switch, aimiNightGrowthText(NightGrowthState.ON_BY_SWITCH))
+        assertEquals(ApsStrings.aimi_essentials_ngr_off_by_switch, aimiNightGrowthText(NightGrowthState.OFF_BY_SWITCH))
+        assertEquals(ApsStrings.aimi_essentials_ngr_on_by_t3c, aimiNightGrowthText(NightGrowthState.ON_BY_T3C))
+    }
+
+    @Test
+    fun `the night slope threshold takes the adult age when no age is stored`() {
+        assertEquals(NightGrowthActivation.AGE_LIMIT_YEARS, NightGrowthActivation.nightSlopeAgeYears(storedAgeYears = null))
+        assertEquals(9, NightGrowthActivation.nightSlopeAgeYears(storedAgeYears = 9))
+    }
+
+    @Test
+    fun `the night growth config keeps the key default age when no age is stored`() {
+        // Only a stored switch or T3C can turn NGR on without a stored age. Both must work as before,
+        // and the NGR monitor stops at age 18, so the config keeps the key default (14) for them.
+        assertEquals(IntKey.OApsAIMINightGrowthAgeYears.defaultValue, NightGrowthActivation.configAgeYears(storedAgeYears = null))
+        assertEquals(30, NightGrowthActivation.configAgeYears(storedAgeYears = 30))
     }
 }

@@ -18,6 +18,9 @@ internal interface AimiSettingsAuditStrings {
     val changedByUser: TextRef
     val yes: TextRef
     val no: TextRef
+
+    /** The default column of a key where "never stored" is its own state (night growth age and switch). */
+    val notSet: TextRef
 }
 
 /** The app strings for the settings audit. Plain string references, so they work on Android and iOS. */
@@ -27,6 +30,7 @@ internal object AimiSettingsAuditResourceStrings : AimiSettingsAuditStrings {
     override val changedByUser: TextRef = ApsStrings.aimi_settings_audit_changed_by_user
     override val yes: TextRef = CoreUiStrings.yes
     override val no: TextRef = CoreUiStrings.no
+    override val notSet: TextRef = ApsStrings.aimi_setting_not_set
 }
 
 /** Resolves the display label for who changed a setting. */

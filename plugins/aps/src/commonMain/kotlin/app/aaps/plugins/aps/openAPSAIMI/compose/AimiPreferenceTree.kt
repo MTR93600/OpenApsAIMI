@@ -43,12 +43,14 @@ import app.aaps.plugins.aps.openAPSAIMI.ports.AimiPlatformPreferenceSlot
  * @param essentials the Essentials page
  * @param learned the "What AIMI learned" page
  * @param settingsAudit the settings audit screen
+ * @param nightGrowthState the read only "Night growth support now" page of the night growth settings
  */
 internal class AimiPreferenceTree(
     private val platformItems: AimiPlatformPreferenceItems,
     private val essentials: ComposeScreenContent,
     private val learned: ComposeScreenContent,
     private val settingsAudit: ComposeScreenContent,
+    private val nightGrowthState: ComposeScreenContent,
 ) {
 
     /** The tree of the last [build], for the search of the Expert page. */
@@ -101,7 +103,7 @@ internal class AimiPreferenceTree(
             )
         )
         // Drawn as a header inside the plugin card, so its own sub screens need link rows.
-        val cards = featureCards(platformItems).associateBy { it.id.screenKey }
+        val cards = featureCards(platformItems, nightGrowthState).associateBy { it.id.screenKey }
         add(
             PreferenceSubScreenDef(
                 key = USER_PREFERENCES_KEY,
@@ -148,7 +150,7 @@ internal class AimiPreferenceTree(
     private fun platformItem(slot: AimiPlatformPreferenceSlot): PreferenceItem? = platformItems.item(slot)
 
     private fun userPreferenceItems(): List<PreferenceItem> = buildList {
-        featureCards(platformItems).forEach { add(it.screen) }
+        featureCards(platformItems, nightGrowthState).forEach { add(it.screen) }
         add(ApsIntentKey.AimiLearned.withCompose(learned))
         add(ApsIntentKey.AimiSettingsAudit.withCompose(settingsAudit))
         add(
@@ -273,8 +275,10 @@ internal class AimiPreferenceTree(
         /**
          * The nine feature cards, in screen order. A platform entry that is `null` is left out of
          * its card. The keys come from the card sections of [AimiSettingsScreens].
+         *
+         * @param nightGrowthState the read only "Night growth support now" page of the night card
          */
-        fun featureCards(platformItems: AimiPlatformPreferenceItems): List<AimiFeatureCard> {
+        fun featureCards(platformItems: AimiPlatformPreferenceItems, nightGrowthState: ComposeScreenContent): List<AimiFeatureCard> {
             fun platform(slot: AimiPlatformPreferenceSlot): PreferenceItem? = platformItems.item(slot)
             return listOf(
                 AimiFeatureCard(
@@ -285,8 +289,8 @@ internal class AimiPreferenceTree(
                     // One page holds the values of every meal mode (one sub page per mode), so search
                     // can open a value and highlight it. The guided mode screen next to it starts a
                     // mode; it also shows and edits the values of its four modes before the start, so
-                    // the person sees the prebolus before confirming. Whether it should only start a
-                    // mode is open for the owner (PLAN.md, "Open for the owner (from S2)").
+                    // the person sees the prebolus before confirming. The owner decided to keep it so
+                    // (PLAN.md, step D1).
                     items = buildList {
                         addAll(shown(AimiSettingsSectionId.ManualModesMaxBasal))
                         platform(AimiPlatformPreferenceSlot.MODE_SETTINGS)?.let(::add)
@@ -325,7 +329,10 @@ internal class AimiPreferenceTree(
                     items = shown(AimiSettingsSectionId.NightMode) + PreferenceSubScreenDef(
                         key = "aimi_compose_ngr",
                         title = ApsStrings.oaps_aimi_ngr_title,
-                        items = shown(AimiSettingsSectionId.NightGrowthAge, AimiSettingsSectionId.NightGrowthIntent, AimiSettingsSectionId.NightGrowthBudget),
+                        // The state row first: the switch and age rows show their key defaults also
+                        // when nothing is stored, so only this row says what the loop really does.
+                        items = listOf(ApsIntentKey.AimiNightGrowthState.withCompose(nightGrowthState)) +
+                            shown(AimiSettingsSectionId.NightGrowthAge, AimiSettingsSectionId.NightGrowthIntent, AimiSettingsSectionId.NightGrowthBudget),
                     ),
                 ),
                 womenCycleCard(),
@@ -343,7 +350,13 @@ internal class AimiPreferenceTree(
                         PreferenceSubScreenDef(
                             key = "aimi_compose_endo",
                             title = ApsStrings.endo_preferences_title,
-                            items = shown(AimiSettingsSectionId.EndoStatus, AimiSettingsSectionId.EndoTuning),
+                            // Owner decision of step D1: the contraceptive gets one more row here, after
+                            // the endometriosis switches, because `EndometriosisAdjuster` reads it with
+                            // only the endometriosis switch on. Same key; its home section stays on the
+                            // women's cycle card, so the search still opens that card.
+                            items = shown(AimiSettingsSectionId.EndoStatus) +
+                                withChoiceLabels(StringKey.OApsAIMIWCycleContraceptive) +
+                                shown(AimiSettingsSectionId.EndoTuning),
                         ),
                         // Brittle (type 3c) mode, with the CFRD settings.
                         PreferenceSubScreenDef(

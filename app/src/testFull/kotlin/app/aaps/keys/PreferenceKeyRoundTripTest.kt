@@ -50,7 +50,7 @@ class PreferenceKeyRoundTripTest {
                         null                     -> "'$stored' (${name(key)}) resolves to nothing"
                         !is ResolvedKey.Composed -> "'$stored' (${name(key)}) resolved as ${resolved::class.simpleName}, expected Composed"
                         else                     ->
-                            if (resolved.key !== key) "'$stored' (${name(key)}) resolved to ${name(resolved.key)}"
+                            if (resolved.key !== key && !isSharedOnPurpose(key, resolved.key)) "'$stored' (${name(key)}) resolved to ${name(resolved.key)}"
                             else if (resolved.argument != argument.toString()) "'$stored' (${name(key)}) gave back argument '${resolved.argument}', expected '$argument'"
                             else null
                     }
@@ -60,7 +60,10 @@ class PreferenceKeyRoundTripTest {
                     when (val resolved = sut.resolve(key.key)) {
                         null                  -> "'${key.key}' (${name(key)}) resolves to nothing"
                         !is ResolvedKey.Plain -> "'${key.key}' (${name(key)}) resolved as ${resolved::class.simpleName}, expected Plain"
-                        else                  -> if (resolved.key !== key) "'${key.key}' (${name(key)}) resolved to ${name(resolved.key)}" else null
+                        // A name that two keys share on purpose (`SHARED_STORED_KEYS`) may resolve to
+                        // either key of its pair: both read the same value the same way. Any other
+                        // clash still fails.
+                        else                  -> if (resolved.key !== key && !isSharedOnPurpose(key, resolved.key)) "'${key.key}' (${name(key)}) resolved to ${name(resolved.key)}" else null
                     }
                 )
         }
@@ -86,5 +89,16 @@ class PreferenceKeyRoundTripTest {
             }
 
         assertThat(unresolvable).isEmpty()
+    }
+
+    /** The allow list is narrow: a pair passes, two keys of different pairs or a key and itself do not count as a pair. */
+    @Test
+    fun `only an allowed pair may share a resolved name`() {
+        val (android, ios) = SHARED_STORED_KEYS.first()
+        val (otherAndroid, _) = SHARED_STORED_KEYS.last()
+        assertThat(isSharedOnPurpose(android, ios)).isTrue()
+        assertThat(isSharedOnPurpose(ios, android)).isTrue()
+        assertThat(isSharedOnPurpose(android, otherAndroid)).isFalse()
+        assertThat(isSharedOnPurpose(otherAndroid, ios)).isFalse()
     }
 }

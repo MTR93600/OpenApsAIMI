@@ -8,6 +8,7 @@ import app.aaps.core.keys.interfaces.PreferenceKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.StringPreferenceKey
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.plugins.aps.openAPSAIMI.NightGrowthActivation
 import kotlin.math.abs
 
 /**
@@ -79,7 +80,10 @@ internal data class AimiSettingsAuditRow(
      * tells the truth about what is running.
      */
     val storedValueIgnored: Boolean,
-    /** Writes the key's own shipped default back to [Preferences]. */
+    /**
+     * Writes the key's own shipped default back to [Preferences]. For the night growth age and switch
+     * it removes the stored value instead, because for them "never stored" is the default behaviour.
+     */
     val resetToDefault: (Preferences) -> Unit,
 ) {
     init {
@@ -156,7 +160,10 @@ internal object AimiSettingsAudit {
         else                                 -> AimiSettingsAuditChangedBy.USER
     }
 
-    /** One key's comparison result. Never built for a key whose stored value matches its default. */
+    /**
+     * One key's comparison result. Never built for a key whose stored value matches its default, except
+     * the keys of [NightGrowthActivation.STORED_OR_NOT_KEYS] (see `storedOrNotDiff`).
+     */
     private class Diff(
         val stored: AimiValueDescriptor,
         val default: AimiValueDescriptor,
@@ -173,7 +180,15 @@ internal object AimiSettingsAudit {
     ): Diff? = when (key) {
         is BooleanPreferenceKey -> {
             val stored = preferences.getIfExists(key)
-            if (stored == null || stored == key.defaultValue) null
+            if (key in NightGrowthActivation.STORED_OR_NOT_KEYS) {
+                storedOrNotDiff(
+                    stored = stored,
+                    storedDescriptor = booleanDescriptor(stored ?: false, strings),
+                    key = key,
+                    ignored = preferences.get(key) != stored,
+                    strings = strings,
+                )
+            } else if (stored == null || stored == key.defaultValue) null
             else Diff(
                 stored = booleanDescriptor(stored, strings),
                 default = booleanDescriptor(key.defaultValue, strings),
@@ -197,7 +212,15 @@ internal object AimiSettingsAudit {
 
         is IntPreferenceKey     -> {
             val stored = preferences.getIfExists(key)
-            if (stored == null || stored == key.defaultValue) null
+            if (key in NightGrowthActivation.STORED_OR_NOT_KEYS) {
+                storedOrNotDiff(
+                    stored = stored,
+                    storedDescriptor = AimiValueDescriptor(valueText = stored.toString()),
+                    key = key,
+                    ignored = preferences.get(key) != stored,
+                    strings = strings,
+                )
+            } else if (stored == null || stored == key.defaultValue) null
             else Diff(
                 stored = AimiValueDescriptor(valueText = stored.toString()),
                 default = AimiValueDescriptor(valueText = key.defaultValue.toString()),
@@ -221,6 +244,29 @@ internal object AimiSettingsAudit {
 
         else                    -> null
     }
+
+    /**
+     * The row of a key where "never stored" is its own state ([NightGrowthActivation.STORED_OR_NOT_KEYS]).
+     * A stored value equal to the key default still changes what the loop does (a stored age 14 turns
+     * night growth support on, nothing stored means an adult and off). So the row shows for any stored
+     * value, the default column says "not set", and the reset removes the stored value instead of
+     * writing the key default.
+     */
+    private fun storedOrNotDiff(
+        stored: Any?,
+        storedDescriptor: AimiValueDescriptor,
+        key: NonPreferenceKey,
+        ignored: Boolean,
+        strings: AimiSettingsAuditStrings,
+    ): Diff? =
+        if (stored == null) null
+        else Diff(
+            stored = storedDescriptor,
+            default = AimiValueDescriptor(valueResId = strings.notSet),
+            isSet = true,
+            ignored = ignored,
+            reset = { prefs -> prefs.remove(key) },
+        )
 
     /**
      * Two values differ by more than [DOUBLE_SAME_VALUE_EPSILON] but the shared formatter rounds to

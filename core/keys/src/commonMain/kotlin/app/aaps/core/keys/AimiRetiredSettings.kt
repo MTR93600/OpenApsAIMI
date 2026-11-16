@@ -1,7 +1,7 @@
 package app.aaps.core.keys
 
 /**
- * Stored names of the AIMI settings deleted in steps S3 and S3b of the AIMI settings plan, because
+ * Stored names of the AIMI settings deleted in steps S3, S3b and D1 of the AIMI settings plan, because
  * nothing read them: no dosing path, no screen, no Advisor, TPO or tuning proposal.
  *
  * The keys are gone from the key enums. Their old values can still sit in the store of a phone that
@@ -15,8 +15,8 @@ package app.aaps.core.keys
  * the old due date in milliseconds, is first copied into the due date text when that text is empty,
  * so no pregnancy loses its date ([removeStored]).
  *
- * Not here on purpose (it waits for the owner, see `docs/aimi-settings/PLAN.md`): the xDrip one minute
- * switch.
+ * Step D1 (owner decision 2026-11-15) added the xDrip one minute switch: the KMP port lost its reader,
+ * and the owner keeps all readings for every xDrip user, so the switch had no effect.
  *
  * A test checks that no current key uses one of these names, so a name is never reused by mistake.
  */
@@ -76,6 +76,8 @@ object AimiRetiredSettings {
         "aimi_physio_llm_provider",
         "aimi_endo_suppression",
         PREGNANCY_DUE_DATE_MS,
+        // Step D1 (owner decision 2026-11-15): the xDrip one minute switch, no reader since the port.
+        "key_use_Aimi_xdripOM",
     )
 
     /**

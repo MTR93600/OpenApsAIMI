@@ -460,9 +460,7 @@
 
 <string name="oaps_aimi_enableMlTraining_title">Enable A.I. Training</string>
 
-<string name="OApsAIMI_MealFactor_summary">% of insulin required by AI for Meal Mode</string>
 
-<string name="OApsAIMI_MealFactor_title">Reactivity</string>
 
 <string name="oaps_aimi_meal_interval_summary">Interval between SMB for Generic Meal Mode</string>
 
@@ -472,9 +470,7 @@
 
 <string name="oaps_aimi_highcarbAdjFact_title">High Carb Mode DynISF Factor</string>
 
-<string name="OApsAIMI_HC_Factor_summary">% of insulin required by AI for High Carb Mode</string>
 
-<string name="OApsAIMI_HC_Factor_title">Reactivity</string>
 
 <string name="oaps_aimi_HC_interval_summary">Interval between SMB for High Carb Mode</string>
 
@@ -484,9 +480,7 @@
 
 <string name="oaps_aimi_snackAdjFact_title">Snack Mode DynISF Factor</string>
 
-<string name="OApsAIMI_snack_Factor_summary">% of insulin required by AI for Snack Mode</string>
 
-<string name="OApsAIMI_snack_Factor_title">Reactivity</string>
 
 <string name="oaps_aimi_snack_interval_summary">Interval between SMB for Snack Mode</string>
 
@@ -496,9 +490,7 @@
 
 <string name="oaps_aimi_sleepAdjFact_title">Sleep Mode DynISF Factor</string>
 
-<string name="OApsAIMI_sleep_Factor_summary">% of insulin required by AI for Sleep Mode</string>
 
-<string name="OApsAIMI_sleep_Factor_title">Reactivity</string>
 
 <string name="oaps_aimi_sleep_interval_summary">Interval between SMB for Sleep Mode</string>
 
@@ -625,9 +617,7 @@
 
 <string name="oaps_aimi_LunchAdjFact_title">Lunch Mode DynISF</string>
 
-<string name="OApsAIMI_LunchFactor_summary">Lunch Mode Reactivity is % of insulin required for one SMB</string>
 
-<string name="OApsAIMI_lunchFactor_title">Reactivity</string>
 
 <string name="oaps_aimi_lunch_interval_summary">Lunch Mode SMB Interval</string>
 
@@ -637,9 +627,7 @@
 
 <string name="oaps_aimi_DinnerAdjFact_title">Dinner Mode DynISF</string>
 
-<string name="OApsAIMI_DinnerFactor_summary">Dinner Mode Reactivity % of insulin required for one SMB</string>
 
-<string name="OApsAIMI_DinnerFactor_title">Reactivity</string>
 
 <string name="oaps_aimi_Dinner_interval_summary">Dinner Mode Interval</string>
 
@@ -663,9 +651,7 @@
 
 <string name="oaps_aimi_BFAdjFact_title">DynISF Breakfast Mode</string>
 
-<string name="OApsAIMI_BFFactor_summary">% of insulin required for one SMB</string>
 
-<string name="OApsAIMI_BFFactor_title">Reactivity</string>
 
 <string name="oaps_aimi_BF_interval_summary">Interval between 2 SMB Breakfast Mode</string>
 
@@ -1878,7 +1864,7 @@
 <string name="pref_summary_aimi_meal_advisor">Take a photo of your meal and let AIMI estimate the carbs before you log them.</string>
 
 <string name="pref_title_aimi_mode_settings">AIMI Mode Settings</string>
-<string name="pref_summary_aimi_mode_settings">Set the prebolus doses, reactivity and timing for lunch, dinner, breakfast and high-carb meals, and turn a mode on right now.</string>
+<string name="pref_summary_aimi_mode_settings">Set the prebolus doses, the SMB size in percent (100 = full, 50 = half) and the timing for lunch, dinner, breakfast and high-carb meals, and turn a mode on right now.</string>
 
 <string name="pref_title_aimi_profile_advisor">AIMI Profile Advisor</string>
 <string name="pref_summary_aimi_profile_advisor">Review your 7-day metrics and apply a graduated tuning adjustment for the pattern you are seeing now.</string>
@@ -1890,7 +1876,7 @@
 <string name="aimi_mode_settings_tab_highcarb">High Carb</string>
 <string name="aimi_mode_settings_prebolus1_label">Prebolus 1 (U)</string>
 <string name="aimi_mode_settings_prebolus2_label">Prebolus 2 (U)</string>
-<string name="aimi_mode_settings_reactivity_label">Reactivity (%)</string>
+<string name="aimi_mode_settings_reactivity_label">SMB size in percent (100 = full, 50 = half)</string>
 <string name="aimi_mode_settings_duration_label">Duration (min)</string>
 <string name="aimi_mode_settings_interval_label">Interval (min)</string>
 <string name="aimi_mode_settings_prebolus1_hint">2.5</string>
@@ -2196,9 +2182,10 @@
 <string name="aimi_essentials_ngr_off_by_switch">Night growth support is off: its own switch is off.</string>
 <string name="aimi_essentials_ngr_on_by_age">Night growth support is on, because the age is under 18 and its own switch was never set.</string>
 <string name="aimi_essentials_ngr_off_by_age">Night growth support is off, because the age is 18 or more and its own switch was never set.</string>
-<string name="aimi_essentials_ngr_on_by_default_age">Night growth support is on: the age is not set, and the default age is under 18.</string>
-<string name="aimi_essentials_ngr_off_by_default_age">Night growth support is off: the age is not set, and the default age is 18 or more.</string>
+<string name="aimi_essentials_ngr_off_no_age">Age not set: night growth support is off. Set the age if the person is under 18.</string>
 <string name="aimi_essentials_ngr_on_by_t3c">Night growth support is on, because T3C brittle mode is on.</string>
+<string name="aimi_ngr_state_title">Night growth support now</string>
+<string name="aimi_ngr_state_summary">See if night growth support is on or off now, and why. When the age was never set, AIMI takes the person for an adult and night growth support is off, even if the switch on this page shows on.</string>
 <string name="aimi_unit_insulin_per_day" comment="Unit label: insulin units per day">U/day</string>
 <string name="aimi_setting_help">Help for this setting</string>
 <string name="aimi_setting_default" comment="%1$s=default value with its unit. Example: Default: 1.00 U">Default: %1$s</string>

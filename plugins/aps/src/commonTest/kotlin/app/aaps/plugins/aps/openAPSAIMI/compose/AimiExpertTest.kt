@@ -2,6 +2,7 @@ package app.aaps.plugins.aps.openAPSAIMI.compose
 
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
+import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.PreferenceKey
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
 import kotlin.test.Test
@@ -82,6 +83,15 @@ class AimiExpertTest {
             val entry = AimiSettingsManifest.entryForKeyString(key)
             assertTrue(entry != null && entry.userOwned, key)
         }
+    }
+
+    @Test
+    fun `the contraceptive is found once and opens the women cycle card`() {
+        // Step D1 gave it a second row on the illness card; the search keeps the first page in tree
+        // order, so it is listed once.
+        val index = AimiSettingsSearch.index(root())
+        val contraceptive = index.single { it.key.key == StringKey.OApsAIMIWCycleContraceptive.key }
+        assertEquals(AimiFeatureCardId.WomenCycle.screenKey, contraceptive.screen.key)
     }
 
     @Test

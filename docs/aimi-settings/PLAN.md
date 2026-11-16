@@ -30,7 +30,7 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
     tick. The export logs the target (`effective_dia_target_h`, `effective_peak_target_min`, also in
     the governor blocks) next to the limited value that dosed (`effective_*`); the adaptation status
     shows the limited value.
-  - *Open for the owner:* skip the limit when the profile insulin itself changes.
+  - *Decided by the owner (step D1):* the limit also holds when the profile insulin itself changes.
 - **P1c, the limit counts time, not ticks (owner approved 2026-11-15).** In P1b the step was per
   loop run, so on a 1-minute CGM (Libre 3, ONE+) or with extra loop runs the guard was up to 5 times
   looser in real time. Now the allowed step is proportional to the time since the last dosed values:
@@ -70,8 +70,8 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
   update keeps it. Changes dosing for the users it moves. Restore cases: an import never clears the
   flag, so restoring an old backup (0.5 / 5.0) on the same phone keeps that pace; on a new phone or
   fresh install the flag starts false, so a NORMAL pace picked on purpose after the update and
-  restored there is moved to FASTER without telling the user. *Open for the owner:* make the flag
-  exportable, so a backup made after the update keeps a deliberate NORMAL.
+  restored there is moved to FASTER without telling the user. *Done in step D1 (owner decision):* the
+  flag is exported, so a backup made after the update keeps a deliberate NORMAL.
 - **PKPD keeps** the ISF fusion (one prudence control) and the trajectory part (peak trajectory
   nudge, `DynIsfTrajectory*`). Everything else is derived, internal, a constant, or deleted.
 - **Control Center: replace.** Its family levels write fixed ladders into dose limits, the level read
@@ -97,13 +97,8 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
   - *Delete* `AimiPhysioDebugLogs`, `AimiPhysioLLMProvider`, `AimiEndometriosisHormonalSuppression`
     and `PregnancyDueDate` (the Long key), with a migration; a stored old due date is first copied
     into `PregnancyDueDateString` when that text is empty.
-- **Not decided yet, do not change**: the NGR default (unknown age), the meal factor default (50),
-  `PkpdEnabled`, `TrajBridgeBasalSurvives` and Cosine gate defaults.
-- **Open for the owner (from step P2 review, not decided):**
-  - *DIA and peak governors.* P2 moves only the learner bounds onto the profile insulin. The governors
-    (on by default, they also clamp with PK/PD off) keep the fixed envelope DIA 4-24 h, peak
-    30-240 min (the old key defaults; values a preset wrote are no longer read). Moving them to the
-    profile bounds would change dosing for every user and needs the owner's yes.
+- **Not decided yet, do not change**: `PkpdEnabled`, `TrajBridgeBasalSurvives` and Cosine gate
+  defaults. (The NGR default for an unknown age and the meal factor default were decided in step D1.)
 - **Open for the owner (from step P3, not decided):**
   - *Exercise damping and the Control Center.* Since P3 `SmbDamping` floors the exercise damping at
     0.5. The Control Center ladder still writes 0.30 and 0.45 on its two lowest rungs, which now
@@ -124,10 +119,7 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
   - *Stored values of the new constants.* A user who had changed `OApsAIMIPeakGovernorLearnedWeight`
     (it was on the PK/PD Expert screen) or one of the three hidden switches now gets the old default.
 
-- **Open for the owner (from step T1 review, not decided):**
-  - *"One rung at most" is read per step.* A TPO pack that asks for 2 steps (post-hypo STRONG,
-    exhausted MODERATE/STRONG, exhausted hypo floor) still moves 2 rungs (Max SMB 1.80 -> 1.00), as
-    before T1. Capping at 1 per pack would make TPO less protective. Say if it should be per pack.
+- **Notes from step T1 review (behaviour as built):**
   - *Above the ladder a step down goes to the top rung* (Max SMB 3.0 or 5.0 -> 2.40; before T1 it
     snapped to the top rung and went one more, 1.80). Below the ladder it cuts 15 % (0.30 -> 0.255).
   - *Below the ladder a step up first goes to the lowest rung* without using a step, the same size
@@ -167,9 +159,9 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
     `AimiPlatformPreferenceSlot`). Say if S1 or a later step should add it.
   - *Learner badge.* The page has only the TPO, LIMITED and RAISED badges. The key map lists no learner
     that writes an Essentials key, so there is nothing to badge yet.
-  - *Patient age.* `OApsAIMINightGrowthAgeYears` stays 1-25, default 14 (the NGR default is not
-    decided). The hint says "if 25 or older, set 25", and an age never set is shown as "not set,
-    default used".
+  - *Patient age.* `OApsAIMINightGrowthAgeYears` stays 1-25, default 14. The hint says "if 25 or
+    older, set 25". Since step D1 an age never set means an adult (see "Decided by the owner (step
+    D1)").
   - *Max SMB and max IOB.* The loop sets these limits again on every decision (SMB limit picked from
     both SMB keys by glucose and rise, lowered by exercise, physio and trajectory; max IOB moved by
     night growth support and trajectory). The page claims no value in use for them and says so. A
@@ -192,32 +184,38 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
     old place in the OpenAPS advanced settings. `OApsAIMIMaxMultiplier` stays on the page with its
     adaptive basal hint.
 
-- **Open for the owner (from step S2, not decided):**
-  - *xDrip 1-minute switch (`OApsxdriponeminute`), a port regression.* On `dev_OAPSAIMI`,
-    `XdripSourcePlugin` ignored xDrip data that came less than 4 min after the last batch while this
-    switch was off (the default). The KMP port lost that reader, so today every xDrip user gets the
-    1-minute data. S2 hides the row (a switch with no effect) but keeps the key. Bringing the reader
-    back changes the glucose input of every 1-minute xDrip user who never turned the switch on.
-    Say if the reader should come back (then the row comes back), or if the key can be deleted in S3.
-  - *Meal factors: guided screen and mode pages.* The Meals card has one page "Values of each meal
-    mode" (one sub page per mode, all keys, found by search). The guided mode screen next to it
-    starts a mode and also shows and edits the values of its four modes (breakfast, lunch, dinner,
-    high carb) before the start, so the person sees the prebolus before confirming. Both write the
-    same keys. Say if the guided screen should only start a mode and link to the pages.
+- **Notes from step S2:**
   - *Before/after preview.* After S2 every setting row on a card writes only its own key, so the
     before/after preview of the Control Center has no user in the settings. Add it back when a card
     gets a control that changes several keys at once.
   - *Protected-family dead keys.* Decided 2026-11-15, done in step S3b (see "Protected families").
-  - *Contraceptive with the cycle switch off.* `EndometriosisAdjuster` reads the contraceptive with
-    only the endometriosis switch on, so its row stays shown on the women's cycle card while the cycle
-    switch is off. Say if it should also be shown on the illness card, next to endometriosis.
-  - *Levels.* `OApsAIMIActivityBasalCapFactor` got its first row (exercise card) and stays ADVANCED in
-    the manifest; the key map says EXPERT. Left for the step that sets levels.
   - *What the Advisor and TPO no longer propose.* The Control Center Advisor and the family bridge
     (the "move Meal capture up one step" style suggestions and their family write-back) are gone, and
     the AI coach notes no longer use the Control Center display levels. TPO starts a session with the
     same rule as before, now read from the Autodrive switches. No other Advisor, Tuning or TPO
     proposal changed.
+
+- **Decided by the owner (step D1, 2026-11-15).** These were the open items of steps P1b, P2, T1 and
+  S2. Done in step D1 (see below):
+  1. *xDrip 1-minute switch:* deleted. The reader was lost in the port and the owner keeps "all
+     readings" for every xDrip user, so the switch had no effect. Its stored value is removed.
+  2. *Night growth support (NGR) with an age never stored:* treated as an adult, so NGR is off. The
+     rule (`NightGrowthActivation`, used by the loop and the Essentials page): the NGR switch if it was
+     stored, else (age stored and age under 18), else off; T3C brittle mode still turns NGR on. A stored
+     age or a stored switch keeps the behaviour of before. Changes dosing.
+  3. *Meal factors:* the default stays 50 (= 50 %, sleep 60) and the person can change it. The labels
+     now say that the value is a percent of the SMB. No code or default change.
+  4. *DIA and peak governors:* keep the fixed envelope DIA 4-24 h, peak 30-240 min. Moving them onto
+     the profile bounds would change dosing for every user.
+  5. *TPO "one rung at most" is read per step:* kept. A pack that asks for 2 steps still moves 2 rungs.
+  6. *Guided meal mode screen:* keeps showing and editing the values of its four modes before the start.
+  7. *Contraceptive:* also shown on the illness card, on the endometriosis page (same key, one more
+     row). It stays on the women's cycle card, and search still opens that card.
+  8. *Dosing DIA and peak limit:* also holds when the profile insulin itself changes (as built in P1b).
+  9. *PK/PD pace flag:* exported, so a backup made after the update keeps a deliberate NORMAL pace.
+  10. *`OApsAIMIActivityBasalCapFactor`:* stays ADVANCED.
+  11. *Test repair:* `PreferenceKeyRoundTripTest` accepts the 14 Omnipod stored names that the iPhone
+      Dash keys share on purpose with the Android keys, from the one allow list `SHARED_STORED_KEYS`.
 
 ## Order of work (one green commit per step)
 
@@ -235,6 +233,7 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
 | S2 | Feature cards with progressive disclosure, What AIMI learned page, Expert with search; Control Center screen removed | none |
 | S3 | Delete the dead keys (not the protected ones), move internal state out of the settings, prefs schema, migration | none |
 | S3b | Protected-family dead keys (owner decision 2026-11-15): wire sleep, HRV and the flare duration; delete four keys with a migration (the old due date is copied first) | only when a person turns sleep or HRV off, or forgets to switch a flare off |
+| D1 | Owner decisions on the open items: delete the xDrip 1-minute switch, NGR off when no age was ever stored, meal factor labels in percent, contraceptive also on the illness card, PK/PD pace flag exported, key round trip test repaired | changes for people who never stored an age nor the NGR switch (NGR off, before on) |
 
 ## Step S3 (done 2026-11-15, no dosing change)
 
@@ -255,8 +254,9 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
   four legacy prebolus values and the context intents JSON are `INTERNAL_STATE` (no entry, no row, no
   audit row, no reset); storage names kept. No setting is written by the loop alone any more, so the
   audit screen lost its "runtime state" row kind.
-- **Left on purpose:** `DEAD_KEYS` holds only the seven protected-family keys and
-  `OApsxdriponeminute` (marked on the key; owner decision of S2 still open).
+- **Left on purpose:** `DEAD_KEYS` held only the seven protected-family keys and
+  `OApsxdriponeminute` (marked on the key). The owner decided both later: the seven keys in step S3b,
+  the xDrip switch in step D1 (deleted).
 - **Advisor, TPO, tuning, auditor:** none of them wrote or proposed a deleted key or an internal state
   key, so none of their proposals changed. The user manual no longer tells the person to change the
   kicker step, the zero resume delay or the night growth basal multiplier (keys with no effect).
@@ -302,7 +302,8 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
   a value before 2000 is not copied. Nothing in the code history ever wrote this key, so only a
   hand-edited backup can hold one. Their titles and four unused strings (the two old sleep and HRV
   summaries, and the physio debug title and summary) went too.
-- **DEAD_KEYS** now holds only `OApsxdriponeminute` (owner decision of S2 still open).
+- **DEAD_KEYS:** after S3b it held only `OApsxdriponeminute`; step D1 deleted that key, so the set is
+  now empty.
 - **Advisor, TPO, tuning, auditor:** none of them reads, writes or proposes any of the seven keys or
   the new start time, so none of their proposals changed and nothing they can propose lost or gained
   an effect. TPO revert and session data do not hold these keys.
@@ -312,3 +313,62 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
   now stops raising the basal and damping the SMBs after the duration (default 4 h). A person whose
   backup held only the old due date with pregnancy mode on gets the gestation factors back.
 
+## Step D1 (2026-11-15, owner decisions on the open items)
+
+- **xDrip 1-minute switch deleted** (`BooleanKey.OApsxdriponeminute`, storage `key_use_Aimi_xdripOM`,
+  and its title). Its stored value is removed like the S3 keys (`AimiRetiredSettings`: on Android
+  start-up, on every import, and at the AIMI plugin start on both platforms). `DEAD_KEYS` is now
+  empty, and the manifest no longer scopes the `OApsxdrip` name prefix.
+- **NGR without a stored age.** `NightGrowthActivation.resolve` and `isEnabledBySwitchOrAge` take the
+  stored age (null when never stored). New state `OFF_NO_AGE`; the Essentials page says "Age not set:
+  night growth support is off. Set the age if the person is under 18." The two "default age" texts
+  are gone. Other readers of the age:
+  - `GlucoseStatusCalculatorAimi` (night slope threshold): the adult age (18) without a stored age.
+    It gives the same threshold as the old default 14 (both above 12), and its result
+    (`isNightGrowthCandidate` of the AIMI features) has no reader today.
+  - The NGR config (learner, monitor, slot cap) keeps the key default 14 without a stored age. Without
+    a stored age NGR only runs when its switch is stored on or with T3C brittle mode, and both must
+    work as before; the monitor stops at age 18, so an adult age there would switch them off.
+  - The "What AIMI learned" status (`ngrEnabled`) now uses the same rule (`NightGrowthActivation.read`).
+    Before it showed only a stored switch, so NGR running by age (or by T3C) was shown as off.
+- **NGR pages follow the loop (review of D1).**
+  - The settings audit: for the age and the switch, "never stored" is a state of its own, so a stored
+    14 or a stored `true` (equal to the key default) still gets a row, its default column says "Not
+    set", and "Reset" removes the stored value. Before, the reset wrote 14 (or `true`) and turned NGR
+    on for an adult.
+  - The Essentials line and a new read only row "Night growth support now" (first row of the night
+    growth page, `ApsIntentKey.AimiNightGrowthState`, prefs schema updated) read the state again every
+    second while open. Observing the values was not enough: storing 14 when nothing was stored sends
+    no new value, but turns NGR on.
+  - A loop-level test (`ShellDecisionTraceTest`) checks the NGR config: off with nothing stored, on
+    with a stored switch (age 14, the monitor active), on with a stored age 12, off with 30.
+- **Open for the owner (from the D1 review, not decided):** with nothing stored, the night growth page
+  shows the switch ON and the age 14 (the key defaults), and the age "?" sheet says "default 14",
+  while the loop keeps NGR off. The state row and the Essentials line now say the real state, but the
+  two rows still show the key defaults. Options: show "not set" on the two rows, or change the key
+  defaults (switch off, or no default age). Not changed, because it changes what the keys mean.
+- **Meal factor labels.** The seven meal factor keys (meal, breakfast, lunch, dinner, high carb, snack,
+  sleep) are titled "<mode> mode: SMB size (percent)" and got a help text: percent of the SMB that AIMI
+  calculates while the mode is on, 100 = the full SMB, 50 (the default) = half (sleep: 60), the learned
+  reactivity is applied on top and the max SMB limits still apply. Note: the code multiplies the SMB it
+  calculates (`SmbInstructionExecutor`), not the max SMB limit, so the text says "of the SMB". The
+  guided mode screen label reads "SMB size in percent (100 = full, 50 = half)". Fourteen old unused
+  "Reactivity" strings went. The Advisor/Tuning proposal labels (`TuningPreferenceLabels`) now read
+  "Lunch mode: SMB size (percent)" and "Dinner mode: SMB size (percent)", and the guided mode screen
+  summary no longer says "reactivity". No default and no code path changed.
+- **Contraceptive** has one more row on the endometriosis page of the illness card, after the
+  endometriosis switches.
+- **PK/PD pace flag** (`BooleanNonKey.OApsAIMIPkpdPaceMigrated`) is exported (prefs schema updated).
+- **Key round trip test.** `SHARED_STORED_KEYS` moved from `PreferenceKeySnapshotTest` to a shared test
+  file (`SharedStoredKeys.kt`); `PreferenceKeyRoundTripTest` accepts a shared name that resolves to
+  the other key of its pair. Any other clash still fails.
+- **Advisor, TPO, tuning, auditor:** none of them reads, writes or proposes the xDrip switch, the NGR
+  age or the NGR switch, so nothing they propose changed. The meal factor proposals (Advisor and Tuning
+  raise, TPO step down) keep working on the same keys and scale. They can no longer propose anything
+  about the xDrip switch (they never did).
+- **Dosing:** a person who never stored an age and never stored the NGR switch had NGR on (default age
+  14) and now has it off: no extra night-time max IOB, SMB and basal boosts from NGR. Anyone with a
+  stored age or switch, or with T3C brittle mode, is not affected.
+- **Release notes line:** "Night growth support (for children and teens) is now off when no age was
+  set in AIMI. If the person is under 18, set the age on the AIMI Essentials page to turn it back on.
+  Not medical advice; talk with your care team before changing these settings."

@@ -146,6 +146,7 @@ aimi_meal_advisor_trigger|BooleanKey|true
 aimi_meal_factor_scale_repaired|BooleanNonKey|true
 aimi_mode_settings_compose|ApsIntentKey|false
 aimi_mpc_insulin_u_per_kg_per_5min|DoubleKey|true
+aimi_ngr_state_info|ApsIntentKey|false
 aimi_oura_personal_access_token|AimiStringKey|false
 aimi_parity_capture_enable|BooleanKey|true
 aimi_phone_steps_sync_enable|BooleanKey|true
@@ -159,7 +160,7 @@ aimi_physio_sleep_enable|BooleanKey|true
 aimi_pkpd_learned_state_generation|LongNonKey|true
 aimi_pkpd_max_dia_change_per_day_h|DoubleKey|true
 aimi_pkpd_max_peak_change_per_day_min|DoubleKey|true
-aimi_pkpd_pace_migrated|BooleanNonKey|false
+aimi_pkpd_pace_migrated|BooleanNonKey|true
 aimi_pkpd_pragmatic_relief_min_factor|DoubleKey|true
 aimi_pkpd_profile_insulin_dia_min|LongNonKey|true
 aimi_pkpd_profile_insulin_peak_min|LongNonKey|true
@@ -596,7 +597,6 @@ key_use_Aimi_honeymoon|BooleanKey|true
 key_use_Aimi_wcycle_require_confirm|BooleanKey|true
 key_use_Aimi_wcycle_shadow|BooleanKey|true
 key_use_Aimi_wcycle|BooleanKey|true
-key_use_Aimi_xdripOM|BooleanKey|true
 key_use_aimi_autodrive_active|BooleanKey|true
 key_use_aimi_t3c_adaptive_basal|BooleanKey|true
 key_use_unified_reactivity|BooleanKey|true

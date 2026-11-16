@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.never
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -46,6 +47,7 @@ class AimiSettingsAuditTest {
         override val changedByUser: TextRef = TextRef.AndroidRes(4)
         override val yes: TextRef = TextRef.AndroidRes(5)
         override val no: TextRef = TextRef.AndroidRes(6)
+        override val notSet: TextRef = TextRef.AndroidRes(7)
     }
 
     init {
@@ -126,6 +128,35 @@ class AimiSettingsAuditTest {
         verify(preferences).put(DoubleKey.OApsAIMIweight, DoubleKey.OApsAIMIweight.defaultValue)
         verify(preferences).put(IntKey.OApsAIMILunchinterval, IntKey.OApsAIMILunchinterval.defaultValue)
         verify(preferences).put(StringKey.OApsAIMIWCycleTrackingMode, StringKey.OApsAIMIWCycleTrackingMode.defaultValue)
+    }
+
+    @Test
+    fun `the reset of the night growth age and switch removes the stored value`() {
+        // Step D1: an age or a switch never stored means an adult, NGR off. Writing the key default
+        // (14, or true) would turn NGR on, the opposite of the default behaviour.
+        whenever(preferences.getIfExists(IntKey.OApsAIMINightGrowthAgeYears)).thenReturn(30)
+        whenever(preferences.getIfExists(BooleanKey.OApsAIMINightGrowthEnabled)).thenReturn(false)
+
+        val rows = build().rows.associateBy { it.keyString }
+        rows.getValue(IntKey.OApsAIMINightGrowthAgeYears.key).resetToDefault(preferences)
+        rows.getValue(BooleanKey.OApsAIMINightGrowthEnabled.key).resetToDefault(preferences)
+
+        verify(preferences).remove(IntKey.OApsAIMINightGrowthAgeYears)
+        verify(preferences).remove(BooleanKey.OApsAIMINightGrowthEnabled)
+        verify(preferences, never()).put(IntKey.OApsAIMINightGrowthAgeYears, IntKey.OApsAIMINightGrowthAgeYears.defaultValue)
+        verify(preferences, never()).put(BooleanKey.OApsAIMINightGrowthEnabled, BooleanKey.OApsAIMINightGrowthEnabled.defaultValue)
+    }
+
+    @Test
+    fun `a stored night growth age or switch equal to the key default still gets a row with not set as default`() {
+        // A stored 14 or a stored true turns NGR on, nothing stored keeps it off: not the same value.
+        whenever(preferences.getIfExists(IntKey.OApsAIMINightGrowthAgeYears)).thenReturn(IntKey.OApsAIMINightGrowthAgeYears.defaultValue)
+        whenever(preferences.getIfExists(BooleanKey.OApsAIMINightGrowthEnabled)).thenReturn(BooleanKey.OApsAIMINightGrowthEnabled.defaultValue)
+
+        val rows = build().rows.associateBy { it.keyString }
+
+        assertEquals(AimiValueDescriptor(valueResId = strings.notSet), rows.getValue(IntKey.OApsAIMINightGrowthAgeYears.key).defaultValue)
+        assertEquals(AimiValueDescriptor(valueResId = strings.notSet), rows.getValue(BooleanKey.OApsAIMINightGrowthEnabled.key).defaultValue)
     }
 
     @Test

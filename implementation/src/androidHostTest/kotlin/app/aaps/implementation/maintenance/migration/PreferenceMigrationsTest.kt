@@ -165,8 +165,8 @@ class PreferenceMigrationsTest {
     }
 
     /**
-     * AIMI step S3: the keys nothing read were deleted. Their stored values go, the context API keys
-     * among them; the xDrip one minute switch (open owner decision) and the kept keys stay.
+     * AIMI steps S3 and D1: the keys nothing read were deleted. Their stored values go, the context API
+     * keys and the xDrip one minute switch among them; the kept keys stay.
      */
     @Test fun `deleted AIMI keys are removed and the kept ones stay`() = runTest {
         val store = storeOf(
@@ -180,7 +180,7 @@ class PreferenceMigrationsTest {
 
         sut().migrate(store)
 
-        assertThat(store.getAll()).containsExactly("key_use_Aimi_xdripOM", true, "OApsAIMILastEstimatedCarbs", 40.0)
+        assertThat(store.getAll()).containsExactly("OApsAIMILastEstimatedCarbs", 40.0)
     }
 
     /**

@@ -9698,13 +9698,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
     private val nightGrowthLearner = NightGrowthResistanceLearner()
 
-    private fun buildNightGrowthResistanceConfig(
+    /** Internal, not private, so a test can check the NGR on/off rule at the loop level. */
+    internal fun buildNightGrowthResistanceConfig(
         profile: OapsProfileAimi,
         autosens: AutosensResult,
         glucoseStatus: GlucoseStatusAIMI?,
         targetBg: Double
     ): NGRConfig {
-        val age = preferences.get(IntKey.OApsAIMINightGrowthAgeYears).coerceAtLeast(0)
+        // Step D1: an age never stored means an adult (NGR off unless its switch or T3C turns it on).
+        val storedAge = preferences.getIfExists(IntKey.OApsAIMINightGrowthAgeYears)
+        val age = NightGrowthActivation.configAgeYears(storedAge)
         val enabledPref = preferences.getIfExists(BooleanKey.OApsAIMINightGrowthEnabled)
         val nightStart = parseNgrTime(preferences.get(StringKey.OApsAIMINightGrowthStart), KxLocalTime(22, 0))
         val nightEnd = parseNgrTime(preferences.get(StringKey.OApsAIMINightGrowthEnd), KxLocalTime(6, 0))
@@ -9725,7 +9728,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             )
         )
         // T3C dependency: manual T3C activation implies NGR ON (nocturnal basal support) even if its own toggle is off.
-        val enabled = NightGrowthActivation.isEnabledBySwitchOrAge(enabledPref, age) || t3cModeEnabled()
+        val enabled = NightGrowthActivation.isEnabledBySwitchOrAge(enabledPref, storedAge) || t3cModeEnabled()
         val slotCap = if (age < 10) 6 else 4
         return NGRConfig(
             enabled = enabled,
@@ -10404,7 +10407,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 onlineLearnerEnabled = preferences.get(BooleanKey.OApsAIMIautoDriveActive) ||
                     preferences.get(BooleanKey.OApsAIMIT3cBrittleMode),
                 onlineLearner = autodriveEngine.onlineLearnerStatus(),
-                ngrEnabled = preferences.getIfExists(BooleanKey.OApsAIMINightGrowthEnabled) == true,
+                // The same rule the loop doses with (switch, stored age, T3C), not the switch alone.
+                ngrEnabled = NightGrowthActivation.read(preferences).enabled,
                 ngr = nightGrowthResistanceMode.latestResult(),
                 wCycleEnabled = wCyclePreferences.enabled(),
                 wCycle = work.wCycleInfoForRun,

@@ -46,6 +46,7 @@ internal object AimiSettingsTreeWalk {
             essentials = emptyScreen,
             learned = emptyScreen,
             settingsAudit = emptyScreen,
+            nightGrowthState = emptyScreen,
         ).build(icon = null)
 
     /** Keys a person can reach by tapping, from the root of [root]. */

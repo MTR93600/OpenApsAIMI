@@ -609,7 +609,7 @@ internal object AimiSettingsScreens {
             DoubleKey.OApsAIMIautodrivesmallPrebolus, DoubleKey.OApsAIMIautodrivePrebolus,
         ),
         // The two weights of the glucose delta. The Autodrive BG and deviation keys are not here:
-        // nothing reads them (see DEAD_KEYS).
+        // nothing read them, step S3 deleted them.
         fields(
             AimiSettingsSectionId.AutodrivePrebolusVariables, AimiSettingsContentId.PreferencesAutodrivePrebolusVars, AimiSettingsLevel.EXPERT,
             DoubleKey.OApsAIMIcombinedDelta, DoubleKey.OApsAIMIAutodriveAcceleration,

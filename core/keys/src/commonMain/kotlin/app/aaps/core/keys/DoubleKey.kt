@@ -396,17 +396,20 @@ enum class DoubleKey(
     ),
     // ❌ TIME-BASED REACTIVITY REMOVED - replaced by UnifiedReactivityLearner.globalFactor
     // Previously: OApsAIMIMorningFactor, OApsAIMIAfternoonFactor, OApsAIMIEveningFactor
-    OApsAIMIMealFactor("key_oaps_aimi_meal_factor", 50.0, 1.0, 150.0, title = KeysStrings.pref_title_oaps_aimi_meal_factor),
-    OApsAIMIBFFactor("key_oaps_aimi_BF_factor", 50.0, 1.0, 150.0, title = KeysStrings.pref_title_oaps_aimi_bf_factor),
+    // Meal mode factors: percent of the SMB AIMI calculates while the mode is on (100 = full, 50 = half).
+    // `SmbInstructionExecutor` divides them by 100. Owner decision (AIMI settings step D1): the default
+    // stays 50 (sleep 60); the labels say it is a percent.
+    OApsAIMIMealFactor("key_oaps_aimi_meal_factor", 50.0, 1.0, 150.0, title = KeysStrings.pref_title_oaps_aimi_meal_factor, summary = KeysStrings.pref_summary_oaps_aimi_meal_factor_percent),
+    OApsAIMIBFFactor("key_oaps_aimi_BF_factor", 50.0, 1.0, 150.0, title = KeysStrings.pref_title_oaps_aimi_bf_factor, summary = KeysStrings.pref_summary_oaps_aimi_meal_factor_percent),
     OApsAIMIBFPrebolus("key_prebolus_BF_mode", 2.5, 0.1, 10.0, title = KeysStrings.pref_title_oaps_aimi_bf_prebolus),
     OApsAIMIBFPrebolus2("key_prebolus2_BF_mode", 2.0, 0.1, 10.0, title = KeysStrings.pref_title_oaps_aimi_bf_prebolus2),
-    OApsAIMILunchFactor("key_oaps_aimi_lunch_factor", 50.0, 1.0, 150.0, title = KeysStrings.pref_title_oaps_aimi_lunch_factor),
-    OApsAIMIDinnerFactor("key_oaps_aimi_dinner_factor", 50.0, 1.0, 150.0, title = KeysStrings.pref_title_oaps_aimi_dinner_factor),
-    OApsAIMIHCFactor("key_oaps_aimi_HC_factor", 50.0, 1.0, 150.0, title = KeysStrings.pref_title_oaps_aimi_hc_factor),
-    OApsAIMISnackFactor("key_oaps_aimi_snack_factor", 50.0, 1.0, 150.0, title = KeysStrings.pref_title_oaps_aimi_snack_factor),
+    OApsAIMILunchFactor("key_oaps_aimi_lunch_factor", 50.0, 1.0, 150.0, title = KeysStrings.pref_title_oaps_aimi_lunch_factor, summary = KeysStrings.pref_summary_oaps_aimi_meal_factor_percent),
+    OApsAIMIDinnerFactor("key_oaps_aimi_dinner_factor", 50.0, 1.0, 150.0, title = KeysStrings.pref_title_oaps_aimi_dinner_factor, summary = KeysStrings.pref_summary_oaps_aimi_meal_factor_percent),
+    OApsAIMIHCFactor("key_oaps_aimi_HC_factor", 50.0, 1.0, 150.0, title = KeysStrings.pref_title_oaps_aimi_hc_factor, summary = KeysStrings.pref_summary_oaps_aimi_meal_factor_percent),
+    OApsAIMISnackFactor("key_oaps_aimi_snack_factor", 50.0, 1.0, 150.0, title = KeysStrings.pref_title_oaps_aimi_snack_factor, summary = KeysStrings.pref_summary_oaps_aimi_meal_factor_percent),
     // ❌ HYPER REACTIVITY REMOVED - replaced by UnifiedReactivityLearner.globalFactor
     // Previously: OApsAIMIHyperFactor
-    OApsAIMIsleepFactor("key_oaps_aimi_sleep_factor", 60.0, 1.0, 150.0, title = KeysStrings.pref_title_oaps_aimi_sleep_factor),
+    OApsAIMIsleepFactor("key_oaps_aimi_sleep_factor", 60.0, 1.0, 150.0, title = KeysStrings.pref_title_oaps_aimi_sleep_factor, summary = KeysStrings.pref_summary_oaps_aimi_sleep_factor_percent),
     /**
      * Insulin spent above profile over the declared-meal window, in units. 0 disarms the gesture even
      * when its key is on. Min is 0 on purpose, unlike the prebolus keys whose min is 0.1.
