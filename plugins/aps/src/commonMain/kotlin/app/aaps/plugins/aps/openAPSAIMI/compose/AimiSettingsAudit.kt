@@ -3,7 +3,6 @@ package app.aaps.plugins.aps.openAPSAIMI.compose
 import app.aaps.core.keys.interfaces.BooleanPreferenceKey
 import app.aaps.core.keys.interfaces.DoublePreferenceKey
 import app.aaps.core.keys.interfaces.IntPreferenceKey
-import app.aaps.core.keys.interfaces.LongNonPreferenceKey
 import app.aaps.core.keys.interfaces.NonPreferenceKey
 import app.aaps.core.keys.interfaces.PreferenceKey
 import app.aaps.core.keys.interfaces.Preferences
@@ -80,15 +79,6 @@ internal data class AimiSettingsAuditRow(
      * tells the truth about what is running.
      */
     val storedValueIgnored: Boolean,
-    /**
-     * True when the loop is the only writer, so the stored value is runtime state, not a setting.
-     *
-     * Such a row is shown, because seeing it is the point of this screen, but it offers no reset:
-     * the loop would write it again on the next tick, and for `AimiLongKey.LastPrebolusTime` the
-     * reset would be harmful — that stored time is the half of the 20-minute SMB spacing that
-     * survives a restart, and zeroing it tells the next tick no SMB was ever given.
-     */
-    val runtimeState: Boolean,
     /** Writes the key's own shipped default back to [Preferences]. */
     val resetToDefault: (Preferences) -> Unit,
 ) {
@@ -123,7 +113,8 @@ internal data class AimiSettingsAuditReport(
  *
  * Every entry is in scope — including a key no settings screen lets the person reach today
  * ([AimiSettingsManifest.REACHABILITY_DEBT]). Bookkeeping flags such as "the PK/PD wizard has run"
- * and the learned PK/PD state ([AimiSettingsManifest.INTERNAL_STATE]) have no entry, so they are
+ * and every internal state key ([AimiSettingsManifest.INTERNAL_STATE]: the learned PK/PD state, the
+ * loop and meal advisor state) have no entry, so they are
  * never shown here. The reset button here is the one
  * way to correct such a key from inside the app, which is exactly why it belongs on this screen.
  */
@@ -155,7 +146,6 @@ internal object AimiSettingsAudit {
             defaultValue = if (entry.secret) null else diff.default,
             isSet = diff.isSet,
             storedValueIgnored = diff.ignored,
-            runtimeState = entry.writers == setOf(AimiSettingsWriter.LOOP),
             resetToDefault = diff.reset,
         )
     }
@@ -224,18 +214,6 @@ internal object AimiSettingsAudit {
                 stored = AimiValueDescriptor(valueText = stored),
                 default = AimiValueDescriptor(valueText = key.defaultValue),
                 isSet = stored.isNotBlank(),
-                ignored = preferences.get(key) != stored,
-                reset = { prefs -> prefs.put(key, key.defaultValue) },
-            )
-        }
-
-        is LongNonPreferenceKey -> {
-            val stored = preferences.getIfExists(key)
-            if (stored == null || stored == key.defaultValue) null
-            else Diff(
-                stored = AimiValueDescriptor(valueText = stored.toString()),
-                default = AimiValueDescriptor(valueText = key.defaultValue.toString()),
-                isSet = true,
                 ignored = preferences.get(key) != stored,
                 reset = { prefs -> prefs.put(key, key.defaultValue) },
             )

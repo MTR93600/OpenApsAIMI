@@ -1,11 +1,13 @@
 package app.aaps.plugins.aps.openAPSAIMI.compose
 
+import app.aaps.core.keys.AimiRetiredSettings
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.PreferenceKey
 import app.aaps.core.keys.interfaces.StringPreferenceKey
+import app.aaps.plugins.aps.openAPSAIMI.keys.AimiLongKey
 import app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -64,16 +66,12 @@ class AimiSettingsManifestTest {
         IntKey.AimiCosineGateMaxPeakShift.key,
         DoubleKey.AimiUamConfidence.key,
         StringKey.AimiTuningContextSelection.key,
-        // The context module's own settings. They came into scope when `isAimiScoped` was taught to
-        // read its named list, and their screen is a standalone activity outside the settings tree
-        // this manifest models. Listed here on purpose: the debt is pinned name by name, so nothing
-        // joins it without being written down.
+        // The context module's own setting. It came into scope when `isAimiScoped` was taught to read
+        // its named list, and its screen is a standalone activity outside the settings tree this
+        // manifest models. Listed here on purpose: the debt is pinned name by name, so nothing joins
+        // it without being written down. Step S3 deleted the five context credential keys that were
+        // here too (nothing read them).
         StringKey.ContextMode.key,
-        StringKey.ContextLLMProvider.key,
-        StringKey.ContextLLMOpenAIKey.key,
-        StringKey.ContextLLMGeminiKey.key,
-        StringKey.ContextLLMDeepSeekKey.key,
-        StringKey.ContextLLMClaudeKey.key,
     )
 
     // ---------------------------------------------------------------- 1. completeness
@@ -256,9 +254,78 @@ class AimiSettingsManifestTest {
     @Test
     fun `the learned PK PD state is internal and has no settings entry`() {
         val learned = setOf(DoubleKey.OApsAIMIPkpdStateDiaH.key, DoubleKey.OApsAIMIPkpdStatePeakMin.key)
-        assertEquals(learned, AimiSettingsManifest.INTERNAL_STATE)
+        assertTrue(AimiSettingsManifest.INTERNAL_STATE.containsAll(learned))
         val declared = AimiSettingsManifest.entries.map { it.key.key }.toSet()
         assertEquals(emptyList<Any>(), declared.intersect(AimiSettingsManifest.INTERNAL_STATE).toList())
+    }
+
+    /**
+     * Step S3: the values the loop and the meal advisor keep for themselves are internal state too. They
+     * keep their storage names (the 20-minute SMB spacing and the carry-forward prebolus survive a
+     * restart), but no settings page, no Expert page and no audit row shows them.
+     */
+    @Test
+    fun `the runtime state of the loop and the meal advisor is internal state`() {
+        assertEquals(
+            setOf(
+                DoubleKey.OApsAIMIPkpdStateDiaH.key,
+                DoubleKey.OApsAIMIPkpdStatePeakMin.key,
+                BooleanKey.OApsAIMIMealAdvisorTrigger.key,
+                DoubleKey.OApsAIMILastEstimatedCarbs.key,
+                DoubleKey.OApsAIMILastEstimatedCarbTime.key,
+                AimiLongKey.LastPrebolusTime.key,
+                AimiLongKey.LastLegacyPrebolusTime.key,
+                AimiLongKey.PendingLegacyPrebolusUnitMilli.key,
+                AimiLongKey.PendingLegacyPrebolusExpiry.key,
+                StringKey.OApsAIMIContextStorage.key,
+            ),
+            AimiSettingsManifest.INTERNAL_STATE,
+        )
+    }
+
+    @Test
+    fun `no setting is written by the loop alone`() {
+        // A value only code writes is internal state, not a setting: it belongs in INTERNAL_STATE, with
+        // no entry, so it can never get a row or a reset button.
+        val loopOnly = AimiSettingsManifest.entries.filter { it.writers == setOf(AimiSettingsWriter.LOOP) }.map { it.key.key }
+        assertEquals(emptyList<Any>(), loopOnly)
+    }
+
+    // ---------------------------------------------------------------- dead keys (step S3)
+
+    @Test
+    fun `only the protected dead keys and the xDrip switch are left as dead keys`() {
+        // Step S3 deleted every other dead key. These wait for the owner (PLAN.md): the protected
+        // families, and the xDrip one minute switch whose reader the port lost.
+        assertEquals(
+            setOf(
+                BooleanKey.AimiEndometriosisHormonalSuppression.key,
+                IntKey.AimiEndometriosisFlareDuration.key,
+                BooleanKey.AimiPhysioSleepDataEnable.key,
+                BooleanKey.AimiPhysioHRVDataEnable.key,
+                BooleanKey.AimiPhysioDebugLogs.key,
+                StringKey.AimiPhysioLLMProvider.key,
+                AimiLongKey.PregnancyDueDate.key,
+                BooleanKey.OApsxdriponeminute.key,
+            ),
+            AimiSettingsManifest.DEAD_KEYS,
+        )
+    }
+
+    @Test
+    fun `a deleted key does not come back under its storage name`() {
+        val current = (BooleanKey.entries + DoubleKey.entries + IntKey.entries + StringKey.entries).map { it.key }.toSet() +
+            AimiStringKey.entries.map { it.key } + AimiLongKey.entries.map { it.key }
+        assertEquals(emptyList<Any>(), AimiRetiredSettings.storageNames.filter { it in current })
+        assertEquals(AimiRetiredSettings.storageNames.size, AimiRetiredSettings.storageNames.toSet().size)
+    }
+
+    // ---------------------------------------------------------------- levels (owner decision, S1 review)
+
+    @Test
+    fun `age and due date are SIMPLE because they are on the Essentials page`() {
+        assertEquals(AimiSettingsLevel.SIMPLE, AimiSettingsManifest.levelOf(IntKey.OApsAIMINightGrowthAgeYears))
+        assertEquals(AimiSettingsLevel.SIMPLE, AimiSettingsManifest.levelOf(AimiStringKey.PregnancyDueDateString))
     }
 
     @Test
@@ -332,11 +399,6 @@ class AimiSettingsManifestTest {
             StringKey.AimiAdvisorClaudeKey.key,
             StringKey.AimiEmergencySosPhone.key,
             StringKey.AimiEmergencySosPhone2.key,
-            // The context module keeps its own provider credentials, separate from the advisor's.
-            StringKey.ContextLLMOpenAIKey.key,
-            StringKey.ContextLLMGeminiKey.key,
-            StringKey.ContextLLMDeepSeekKey.key,
-            StringKey.ContextLLMClaudeKey.key,
             // Declared by the keys themselves (`isPin` / `isPassword`), not by the manifest.
             AimiStringKey.RemoteControlPin.key,
             AimiStringKey.OuraPersonalAccessToken.key,

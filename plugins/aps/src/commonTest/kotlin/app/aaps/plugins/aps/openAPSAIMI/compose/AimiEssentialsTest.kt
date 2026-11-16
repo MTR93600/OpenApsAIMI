@@ -13,6 +13,7 @@ import app.aaps.plugins.aps.openAPSAIMI.NightGrowthState
 import app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -35,6 +36,7 @@ class AimiEssentialsTest {
                 DoubleKey.ApsMaxBasal.key,
                 DoubleKey.meal_modes_MaxBasal.key,
                 DoubleKey.autodriveMaxBasal.key,
+                DoubleKey.ApsMaxCurrentBasalMultiplier.key,
                 DoubleKey.ApsSmbMaxIob.key,
                 DoubleKey.OApsAIMIMaxSMB.key,
                 DoubleKey.OApsAIMIHighBGMaxSMB.key,
@@ -124,6 +126,35 @@ class AimiEssentialsTest {
     fun `the max multiplier row says it is a factor on the profile basal`() {
         val row = AimiEssentials.rows.single { it.key == DoubleKey.OApsAIMIMaxMultiplier }
         assertEquals(ApsStrings.aimi_unit_times_profile_basal, row.unit)
+    }
+
+    @Test
+    fun `the current basal multiplier row is a dose limit with its own hint and unit`() {
+        // Owner decision (S1 review): the real cap of a temp basal against the profile basal is on the page.
+        val row = AimiEssentials.rows.single { it.key == DoubleKey.ApsMaxCurrentBasalMultiplier }
+        assertEquals(AimiEssentialsGroup.DOSE_LIMITS, row.group)
+        assertEquals(ApsStrings.aimi_essentials_hint_current_basal_multiplier, row.hint)
+        assertEquals(ApsStrings.aimi_unit_times_profile_basal, row.unit)
+        assertEquals(listOf(ApsStrings.aimi_setting_warning_dose_limit), row.warnings)
+    }
+
+    @Test
+    fun `the current basal multiplier row shows in use or not in use from the flag`() {
+        // Only the display mapping; the rule that sets the flag is tested below.
+        val key = DoubleKey.ApsMaxCurrentBasalMultiplier
+        assertEquals(AimiInUse(4.0, null, null), aimiInUse(key, 4.0, AimiEssentialsLive(currentBasalMultiplierApplies = true)))
+        assertEquals(AimiInUse(4.0, null, null, AimiInUseKind.WHEN_ACTIVE), aimiInUse(key, 4.0, AimiEssentialsLive(currentBasalMultiplierApplies = false)))
+        assertEquals(AimiInUse(4.0, null, null), aimiInUse(key, 4.0, AimiEssentialsLive()))
+    }
+
+    @Test
+    fun `the basal constraint and the page use the multipliers only in the normal mode without T3C brittle mode`() {
+        // `applyBasalConstraints` and the Essentials flag both call this rule.
+        assertFalse(isSpecialBasalMode(AimiBasalLimitMode.NORMAL, t3cBrittleMode = false))
+        assertTrue(isSpecialBasalMode(AimiBasalLimitMode.NORMAL, t3cBrittleMode = true))
+        assertTrue(isSpecialBasalMode(AimiBasalLimitMode.MEAL, t3cBrittleMode = false))
+        assertTrue(isSpecialBasalMode(AimiBasalLimitMode.AUTODRIVE, t3cBrittleMode = false))
+        assertTrue(isSpecialBasalMode(AimiBasalLimitMode.MEAL, t3cBrittleMode = true))
     }
 
     @Test

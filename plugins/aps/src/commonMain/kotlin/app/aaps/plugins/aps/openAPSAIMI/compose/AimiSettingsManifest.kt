@@ -135,7 +135,8 @@ internal data class AimiSettingEntry(
  * - [DEAD_KEYS] keys nothing reads and nothing writes. They are deletion candidates, not
  *   settings, so they need no screen.
  * - [INTERNAL_STATE] keys only code owns, kept as keys so their value survives (the learned
- *   PK/PD state). They are not settings, so they have no entry and no screen.
+ *   PK/PD state, the loop and meal advisor state, the stored context intents). They are not
+ *   settings, so they have no entry and no screen.
  */
 internal object AimiSettingsManifest {
 
@@ -150,18 +151,13 @@ internal object AimiSettingsManifest {
      * AIMI keys of the shared enums whose name follows no AIMI prefix, named one by one.
      *
      * The two max basal values belong to AIMI alone and are read in the AIMI dosing paths only.
-     * The six context keys carry `aimi_context_*` storage keys and belong to the AIMI context
-     * module.
+     * The context mode carries an `aimi_context_*` storage key and belongs to the AIMI context
+     * module (its five provider keys were deleted in step S3).
      */
     private val EXTRA_SCOPED_KEY_NAMES = setOf(
         "autodriveMaxBasal",
         "meal_modes_MaxBasal",
         "ContextMode",
-        "ContextLLMProvider",
-        "ContextLLMOpenAIKey",
-        "ContextLLMGeminiKey",
-        "ContextLLMDeepSeekKey",
-        "ContextLLMClaudeKey",
     )
 
     /**
@@ -223,29 +219,35 @@ internal object AimiSettingsManifest {
         StringKey.AimiTuningContextSelection.key,
         // The context module's settings live in their own activity, not in the settings tree this
         // manifest models. Naming them here is honest; giving them a section would claim a
-        // reachability the tree does not provide.
+        // reachability the tree does not provide. (Step S3 deleted the context provider and its four
+        // API keys, which nothing read, and removes their stored values: `AimiRetiredSettings`.)
         StringKey.ContextMode.key,
-        // Nothing reads the four context credentials and the provider; they stay here and not in
-        // DEAD_KEYS so the audit screen still treats a stored credential as a secret. Step S3 deletes
-        // them and wipes the stored value.
-        StringKey.ContextLLMProvider.key,
-        StringKey.ContextLLMOpenAIKey.key,
-        StringKey.ContextLLMGeminiKey.key,
-        StringKey.ContextLLMDeepSeekKey.key,
-        StringKey.ContextLLMClaudeKey.key,
     )
 
     /**
-     * Keys in scope that are internal state, not settings: what the PK/PD learner found.
+     * Keys in scope that are internal state, not settings: values only code writes.
      *
-     * They stay keys on purpose: the stored value survives the update and a backup restores the
-     * learned DIA and peak. But they are not settings, so they have no [AimiSettingEntry] (no level,
-     * no family, no audit row) and no screen. Step P3 took them out of the settings tiers. The PK/PD
-     * status card shows them read only (a "What AIMI learned" page is planned for step S2).
+     * They stay keys on purpose, with their storage names: the stored value survives the update and
+     * a restart. But they are not settings, so they have no [AimiSettingEntry] (no level, no family,
+     * no audit row, no reset) and no screen.
+     * - What the PK/PD learner found (step P3). The PK/PD status card and the "What AIMI learned"
+     *   page show them read only.
+     * - Since step S3, the state of the loop and of the meal advisor: the one-shot meal advisor
+     *   trigger and its carbs estimate, the prebolus times and the carry-forward prebolus (the stored
+     *   prebolus time is half of the 20-minute SMB spacing that survives a restart, so a reset would be
+     *   harmful), and the context intents the context module stores as JSON.
      */
     val INTERNAL_STATE: Set<String> = setOf(
         DoubleKey.OApsAIMIPkpdStateDiaH.key,
         DoubleKey.OApsAIMIPkpdStatePeakMin.key,
+        BooleanKey.OApsAIMIMealAdvisorTrigger.key,
+        DoubleKey.OApsAIMILastEstimatedCarbs.key,
+        DoubleKey.OApsAIMILastEstimatedCarbTime.key,
+        AimiLongKey.LastPrebolusTime.key,
+        AimiLongKey.LastLegacyPrebolusTime.key,
+        AimiLongKey.PendingLegacyPrebolusUnitMilli.key,
+        AimiLongKey.PendingLegacyPrebolusExpiry.key,
+        StringKey.OApsAIMIContextStorage.key,
     )
 
     /**
@@ -256,39 +258,17 @@ internal object AimiSettingsManifest {
      * They are deletion candidates, not settings, so they need no screen and no [AimiSettingEntry].
      * This set does not shrink by re-classifying a key: it shrinks only when the key is deleted
      * from its key enum, at which point the completeness test's scope no longer mentions it either.
+     *
+     * Step S3 deleted every dead key that waited for nothing, and the migrations remove their stored
+     * values (`AimiRetiredSettings`). What is left waits for the owner (`docs/aimi-settings/PLAN.md`):
+     * the dead keys of the protected families, and the xDrip one minute switch.
      */
     val DEAD_KEYS: Set<String> = setOf(
+        // Protected families: they stay keys until the owner decides.
         // Superseded by inference from the WCycle contraceptive setting; see
         // `wcycle/EndometriosisAdjuster.kt`'s "HARMONIZATION" comment.
         BooleanKey.AimiEndometriosisHormonalSuppression.key,
-        DoubleKey.OApsAIMIKickerStep.key,
-        DoubleKey.OApsAIMIKickerMinUph.key,
-        DoubleKey.OApsAIMIZeroResumeFrac.key,
-        DoubleKey.OApsAIMIAntiStallBias.key,
-        DoubleKey.OApsAIMIDeltaPosRelease.key,
-        IntKey.OApsAIMIKickerStartMin.key,
-        IntKey.OApsAIMIKickerMaxMin.key,
-        IntKey.OApsAIMIZeroResumeMin.key,
-        IntKey.OApsAIMIZeroResumeMax.key,
-        IntKey.OApsAIMINightGrowthMinDurationMin.key,
-        IntKey.OApsAIMINightGrowthMinEventualOverTarget.key,
-        IntKey.OApsAIMINightGrowthDecayMinutes.key,
-        IntKey.OApsAIMIlogsize.key,
-        IntKey.OApsAIMIAutodriveTarget.key,
-        StringKey.OApsAIMIUnstableModeState.key,
         AimiLongKey.PregnancyDueDate.key,
-        // Step S2: nothing reads these, so they have no row any more. The physio, endometriosis and
-        // pregnancy keys belong to protected families: they stay keys until the owner decides.
-        BooleanKey.OApsAIMIEnableBasal.key,
-        BooleanKey.OApsAIMIforcelimits.key,
-        BooleanKey.OApsAIMIAutodriveV3EnhancedGater.key,
-        DoubleKey.OApsAIMIFCLFactor.key,
-        DoubleKey.OApsAIMINightGrowthBasalMultiplier.key,
-        DoubleKey.OApsAIMINightGrowthMaxSmbClamp.key,
-        DoubleKey.OApsAIMINightGrowthMinRiseSlope.key,
-        DoubleKey.OApsAIMINightGrowthSmbMultiplier.key,
-        DoubleKey.OApsAIMIPlateauBandAbs.key,
-        DoubleKey.OApsAIMIR2Confident.key,
         StringKey.AimiPhysioLLMProvider.key,
         // Its reader was lost in the KMP port: on dev_OAPSAIMI `XdripSourcePlugin` ignored xDrip data
         // less than 4 min after the last batch while this switch was off (the default). Today every
@@ -296,8 +276,6 @@ internal object AimiSettingsManifest {
         // back changes the glucose input of every 1-minute xDrip user, so it waits for the owner
         // (PLAN.md, "Open for the owner (from S2)"). Do not delete the key before that.
         BooleanKey.OApsxdriponeminute.key,
-        DoubleKey.OApsAIMIAutodriveDeviation.key,
-        IntKey.OApsAIMIAutodriveBG.key,
         IntKey.AimiEndometriosisFlareDuration.key,
         BooleanKey.AimiPhysioSleepDataEnable.key,
         BooleanKey.AimiPhysioHRVDataEnable.key,
@@ -386,7 +364,6 @@ internal object AimiSettingsManifest {
         AimiSettingEntry(BooleanKey.OApsAIMIUndeclaredCobEnabled, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIThyroidEnabled, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIThyroidLogVerbosity, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
-        AimiSettingEntry(BooleanKey.OApsAIMIMealAdvisorTrigger, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.LOOP),
         AimiSettingEntry(BooleanKey.OApsAIMIAdvisorPersonalOrefMl, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMIAdvisorLlmRichOref, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.OApsAIMITpoEnabled, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Protection, AimiSettingsWriter.USER),
@@ -476,8 +453,6 @@ internal object AimiSettingsManifest {
         AimiSettingEntry(DoubleKey.OApsAIMIHyperEstablishedDevMgdl, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMIHyperDeepDevMgdl, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMIMaxMultiplier, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.Protection, AimiSettingsWriter.USER),
-        AimiSettingEntry(DoubleKey.OApsAIMILastEstimatedCarbs, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.LOOP),
-        AimiSettingEntry(DoubleKey.OApsAIMILastEstimatedCarbTime, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.LOOP),
         AimiSettingEntry(DoubleKey.OApsAIMIT3cActivationThreshold, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMIT3cAnticipationStrength, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.OApsAIMIT3cAggressiveness, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
@@ -510,7 +485,7 @@ internal object AimiSettingsManifest {
         AimiSettingEntry(IntKey.OApsAIMIBFinterval, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.USER),
         AimiSettingEntry(IntKey.OApsAIMISleepinterval, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Stability, AimiSettingsWriter.USER),
         AimiSettingEntry(IntKey.OApsAIMIWCycleAvgLength, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
-        AimiSettingEntry(IntKey.OApsAIMINightGrowthAgeYears, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
+        AimiSettingEntry(IntKey.OApsAIMINightGrowthAgeYears, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(IntKey.OApsAIMIIntratickStallSeconds, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         AimiSettingEntry(StringKey.OApsAIMIWCycleTrackingMode, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(StringKey.OApsAIMIWCycleContraceptive, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
@@ -518,19 +493,14 @@ internal object AimiSettingsManifest {
         AimiSettingEntry(StringKey.OApsAIMIWCycleVerneuil, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(StringKey.OApsAIMINightGrowthStart, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(StringKey.OApsAIMINightGrowthEnd, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
-        AimiSettingEntry(StringKey.OApsAIMIContextStorage, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(StringKey.OApsAIMIThyroidMode, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(StringKey.OApsAIMIThyroidManualStatus, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(StringKey.OApsAIMIThyroidTreatmentPhase, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(StringKey.OApsAIMIThyroidGuardLevel, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
-        AimiSettingEntry(AimiStringKey.PregnancyDueDateString, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
+        AimiSettingEntry(AimiStringKey.PregnancyDueDateString, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(AimiStringKey.RemoteControlPin, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Autonomy, AimiSettingsWriter.USER),
         AimiSettingEntry(AimiStringKey.OuraPersonalAccessToken, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(AimiStringKey.ActivitySourceMode, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
-        AimiSettingEntry(AimiLongKey.LastPrebolusTime, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.LOOP),
-        AimiSettingEntry(AimiLongKey.LastLegacyPrebolusTime, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.LOOP),
-        AimiSettingEntry(AimiLongKey.PendingLegacyPrebolusUnitMilli, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.LOOP),
-        AimiSettingEntry(AimiLongKey.PendingLegacyPrebolusExpiry, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.MealCapture, AimiSettingsWriter.LOOP),
 
         // --- Widened scope batch (2026-10-03): keys outside the OApsAIMI prefix. ---
         // AimiEndometriosisHormonalSuppression is NOT here: see DEAD_KEYS.
@@ -595,15 +565,10 @@ internal object AimiSettingsManifest {
         // on insulin is the person's to set.
         AimiSettingEntry(DoubleKey.autodriveMaxBasal, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.Protection, setOf(AimiSettingsWriter.USER)),
         AimiSettingEntry(DoubleKey.meal_modes_MaxBasal, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.Protection, setOf(AimiSettingsWriter.USER)),
-        // The context module's own provider settings. Their screen is a standalone activity outside
-        // the settings tree this manifest models, so they sit in the reachability debt rather than
-        // claim a home they do not have.
+        // The context module's own mode. Its screen is a standalone activity outside the settings tree
+        // this manifest models, so it sits in the reachability debt rather than claim a home it does
+        // not have.
         AimiSettingEntry(StringKey.ContextMode, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Autonomy, setOf(AimiSettingsWriter.USER)),
-        AimiSettingEntry(StringKey.ContextLLMProvider, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Autonomy, setOf(AimiSettingsWriter.USER)),
-        AimiSettingEntry(StringKey.ContextLLMOpenAIKey, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, setOf(AimiSettingsWriter.USER)),
-        AimiSettingEntry(StringKey.ContextLLMGeminiKey, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, setOf(AimiSettingsWriter.USER)),
-        AimiSettingEntry(StringKey.ContextLLMDeepSeekKey, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, setOf(AimiSettingsWriter.USER)),
-        AimiSettingEntry(StringKey.ContextLLMClaudeKey, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, setOf(AimiSettingsWriter.USER)),
         AimiSettingEntry(StringKey.AimiAdvisorOpenAIKey, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, setOf(AimiSettingsWriter.USER)),
         AimiSettingEntry(StringKey.AimiAdvisorGeminiKey, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, setOf(AimiSettingsWriter.USER)),
         AimiSettingEntry(StringKey.AimiAdvisorDeepSeekKey, AimiSettingsLevel.EXPERT, AimiBehaviorFamilyId.Autonomy, setOf(AimiSettingsWriter.USER)),

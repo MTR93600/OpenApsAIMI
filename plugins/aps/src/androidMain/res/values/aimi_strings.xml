@@ -10,7 +10,6 @@
 
 <string name="key_openapsaimi_fixed_tbr_rise">key_openapsaimi_fixed_tbr_rise</string>
 
-<string name="key_use_AimiForceLimits">key_use_AimiForceLimits</string>
 
 <string name="openapsaimi">"AIMI 3.3"</string>
 
@@ -514,7 +513,6 @@
 
 <string name="OApsAIMI_RemoteControlPin_summary">PIN for AIMI remote control features.</string>
 
-<string name="OApsAIMI_Force_Limits">Force AAPS Multiplier Limits</string>
 
 
 <string name="oaps_aimi_HIGHBG_interval_summary">High BG SMB Interval</string>
@@ -655,9 +653,7 @@
 
 <string name="oaps_aimi_FCLAdjFact_summary">DynISF Full Closed Loop via automatic detection</string>
 
-<string name="OApsAIMI_FCLFactor_title">FCL Reactivity</string>
 
-<string name="OApsAIMI_FCLFactor_summary">% of insulin required for SMB in FCL Mode</string>
 
 <string name="oaps_aimi_FCL_interval_summary">FCL SMB Interval</string>
 
@@ -675,9 +671,7 @@
 
 <string name="oaps_aimi_BF_interval_title">SMB Interval Breakfast Mode</string>
 
-<string name="oaps_aimi_logsize_summary">Number of AIMI analysis table lines in plugin and Loop tabs</string>
 
-<string name="oaps_aimi_logsize_title">Number of AIMI plugin/Loop table lines</string>
 
 <string name="oaps_aimi_enableMlautoDrive_title">Enable Auto Drive – automatic meal detection – EXPERIMENTAL</string>
 
@@ -690,17 +684,11 @@
 
 <string name="OApsAIMI_CombinedDelta_title">Combined BG delta for pre-bolus</string>
 
-<string name="oaps_aimi_AutodriveTarget_summary">Below this target, the condition is true to receive the autodrive pre-bolus</string>
 
-<string name="oaps_aimi_AutodriveTarget_title">Minimum target for pre-bolus delivery</string>
 
-<string name="oaps_aimi_AutodriveBG_summary">Above this BG value, the condition is true to receive the autodrive pre-bolus</string>
 
-<string name="oaps_aimi_AutodriveBG_title">Minimum BG for pre-bolus delivery</string>
 
-<string name="oaps_aimi_AutodriveDeviation_summary">Above this value, the condition is true to receive the autodrive pre-bolus</string>
 
-<string name="oaps_aimi_AutodriveDeviation_title">Minimum BG deviation for pre-bolus delivery</string>
 
 <string name="oaps_aimi_AutodriveAcceleration_summary">BG acceleration: if it is above this value, the condition for autodrive pre-bolus is true</string>
 
@@ -749,37 +737,23 @@
 
 <string name="oaps_aimi_ngr_night_end_summary">End of the resistance detection window (next day if before start).</string>
 
-<string name="oaps_aimi_ngr_min_rise_title">Minimum rise slope (mg/dL/5&#160;min)</string>
 
-<string name="oaps_aimi_ngr_min_rise_summary">Minimum 5-minute rise required to suspect hormonal resistance.</string>
 
-<string name="oaps_aimi_ngr_min_duration_title">Minimum duration (minutes)</string>
 
-<string name="oaps_aimi_ngr_min_duration_summary">Minutes of continuous rise required before activation.</string>
 
-<string name="oaps_aimi_ngr_min_eventual_title">Minimum eventual above target (mg/dL)</string>
 
-<string name="oaps_aimi_ngr_min_eventual_summary">Required eventual BG margin above target.</string>
 
-<string name="oaps_aimi_ngr_smb_multiplier_title">SMB boost multiplier</string>
 
-<string name="oaps_aimi_ngr_smb_multiplier_summary">Multiplier applied to SMB suggestions while resistance is active.</string>
 
-<string name="oaps_aimi_ngr_basal_multiplier_title">Basal boost multiplier</string>
 
-<string name="oaps_aimi_ngr_basal_multiplier_summary">Multiplier applied to basal adjustments while resistance is active.</string>
 
-<string name="oaps_aimi_ngr_max_smb_title">Maximum boosted SMB (U)</string>
 
-<string name="oaps_aimi_ngr_max_smb_summary">Upper clamp applied to boosted SMB values.</string>
 
 <string name="oaps_aimi_ngr_max_iob_title">Extra IOB per 30 min slot (U)</string>
 
 <string name="oaps_aimi_ngr_max_iob_summary">Amount of additional IOB granted for each 30‑minute block while NGR is active.</string>
 
-<string name="oaps_aimi_ngr_decay_title">Decay duration (minutes)</string>
 
-<string name="oaps_aimi_ngr_decay_summary">Minutes used to smoothly return multipliers to baseline.</string>
 
 <string name="oaps_aimi_ngr_headroom">NGR headroom: +%1$.2fU (limit %2$.2fU).</string>
 
@@ -803,53 +777,31 @@
 
 <string name="oaps_aimi_highbg_summary">Above this BG, the “plateau” logic may intensify basal.</string>
 
-<string name="oaps_aimi_plateau_band_title">Plateau band ± (mg/dL/5 min)</string>
 
-<string name="oaps_aimi_plateau_band_summary">If |Δ| ≤ this value while BG is high, it’s treated as a plateau.</string>
 
-<string name="oaps_aimi_r2_conf_title">R² confidence threshold</string>
 
-<string name="oaps_aimi_r2_conf_summary">Quadratic-fit confidence required to trigger/strengthen plateau logic.</string>
 
 <string name="oaps_aimi_max_multiplier_title">Max basal multiplier (×)</string>
 
 <string name="oaps_aimi_max_multiplier_summary">Upper limit for basal during plateau (× profile basal).</string>
 
-<string name="oaps_aimi_kicker_step_title">Kicker increment (×)</string>
 
-<string name="oaps_aimi_kicker_step_summary">Step increase of the multiplier at each “kick”.</string>
 
-<string name="oaps_aimi_kicker_minuph_title">Kicker floor (U/h)</string>
 
-<string name="oaps_aimi_kicker_minuph_summary">Minimum absolute rate when the kicker is applied.</string>
 
-<string name="oaps_aimi_kicker_startmin_title">Initial kicker duration (min)</string>
 
-<string name="oaps_aimi_kicker_startmin_summary">Duration of the first intensification stage.</string>
 
-<string name="oaps_aimi_kicker_maxmin_title">Max kicker duration (min)</string>
 
-<string name="oaps_aimi_kicker_maxmin_summary">Total maximum time under “kicker” intensification.</string>
 
-<string name="oaps_aimi_zero_resume_min_title">Delay before micro-resume (min)</string>
 
-<string name="oaps_aimi_zero_resume_min_summary">After setting 0 U/h, wait this long before a safety micro-resume.</string>
 
-<string name="oaps_aimi_zero_resume_frac_title">Micro-resume (× profile)</string>
 
-<string name="oaps_aimi_zero_resume_frac_summary">Basal fraction to resume after 0 U/h (relative to profile basal).</string>
 
-<string name="oaps_aimi_zero_resume_max_title">Max micro-resume duration (min)</string>
 
-<string name="oaps_aimi_zero_resume_max_summary">Upper limit for micro-resume before re-evaluation.</string>
 
-<string name="oaps_aimi_antistall_bias_title">Anti-stall bias (+×)</string>
 
-<string name="oaps_aimi_antistall_bias_summary">Small bonus to the multiplier to “unstick” when plateauing.</string>
 
-<string name="oaps_aimi_delta_pos_release_title">Positive Δ to release (mg/dL/5 min)</string>
 
-<string name="oaps_aimi_delta_pos_release_summary">If Δ exceeds this value, reduce/relax the intensification.</string>
 
 <string name="aimi_hypo_risk_alarm_summary">AIMI posts a unified URGENT alarm (NotificationId.HYPO_RISK_ALARM) with AAPS alarm sound. Snooze or dismiss from the notification list or dashboard dialog.</string>
 
@@ -2198,7 +2150,6 @@
 <string name="aimi_settings_audit_reset_button">Reset to default</string>
 <string name="aimi_settings_audit_reset_done">Setting reset to its shipped default.</string>
 <string name="aimi_settings_audit_stored_ignored">Stored, but not used: the loop is running on the shipped default. Turn off simple mode to make this value count.</string>
-<string name="aimi_settings_audit_runtime_state">The loop keeps this value itself. It is shown here so you can see it, and cannot be reset by hand.</string>
 <string name="aimi_settings_audit_reset_confirm_title">Reset this setting?</string>
 <string name="aimi_settings_audit_reset_confirm_message" comment="%1$s=setting name, %2$s=the value that will be written. Example: Body weight will be set back to 50.">%1$s will be set back to %2$s. This changes how the loop doses.</string>
 <string name="aimi_settings_audit_reset_confirm_message_secret" comment="%1$s=setting name. Example: Oura access token will be cleared.">%1$s will be cleared. You will have to enter it again.</string>
@@ -2245,6 +2196,7 @@
 <string name="aimi_essentials_hint_max_iob">Most insulin on board the loop may build up.</string>
 <string name="aimi_essentials_hint_max_smb">Largest single small bolus (SMB).</string>
 <string name="aimi_essentials_hint_high_bg_max_smb">Largest single small bolus (SMB) when glucose is high.</string>
+<string name="aimi_essentials_hint_current_basal_multiplier">Highest temporary basal rate, as a factor of the profile basal of the current hour. When no meal mode is on, Autodrive does not act and T3C brittle mode is off, a temporary basal is never higher than this factor times the profile basal. The loop can make this limit lower for a while, for example from heart rate or sleep data. Otherwise the max basal of the active mode is the limit.</string>
 <string name="aimi_essentials_hint_max_multiplier">Highest factor the adaptive basal learner may put on the profile basal. Used only while adaptive basal is on. It is not a limit on every basal rate.</string>
 <string name="aimi_essentials_hint_lgs">The loop gives no extra insulin when glucose, now or predicted, goes below this value or below a value set by your target, whichever is higher.</string>
 <string name="aimi_essentials_hint_use_smb">Allow small automatic boluses (SMB).</string>
@@ -2266,7 +2218,7 @@
 <string name="aimi_setting_badge_tpo" comment="%1$s=the value the person set, with its unit. Example: Changed by TPO for a while. Your value: 1.00 U">Changed by TPO for a while. Your value: %1$s</string>
 <string name="aimi_setting_badge_tpo_no_value">Changed by TPO for a while. Your value comes back after.</string>
 <string name="aimi_setting_badge_raised">Raised to the highest basal rate of your profile.</string>
-<string name="aimi_setting_when_active" comment="%1$s=max basal value with its unit, used only when its mode (meal mode or Autodrive or normal) is on. Example: Not in use now. Limit when it applies: 3.00 U/h">Not in use now. Limit when it applies: %1$s</string>
+<string name="aimi_setting_when_active" comment="%1$s=limit value with its unit (a max basal, or the current basal multiplier), used only when its mode (meal mode or Autodrive or normal) is on. Example: Not in use now. Limit when it applies: 3.00 U/h">Not in use now. Limit when it applies: %1$s</string>
 <string name="aimi_setting_per_decision_smb">For each decision the loop picks its SMB limit from max SMB and max SMB at high glucose, and it can lower it, for example during exercise.</string>
 <string name="aimi_setting_per_decision_iob">The loop starts each decision from this value and can raise or lower it for that decision, for example with night growth support.</string>
 <string name="aimi_unit_times_profile_basal" comment="Unit label after a factor. Example: 1.60 × profile basal">× profile basal</string>

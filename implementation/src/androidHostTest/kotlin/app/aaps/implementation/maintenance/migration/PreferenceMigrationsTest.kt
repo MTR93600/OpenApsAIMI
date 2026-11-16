@@ -165,6 +165,25 @@ class PreferenceMigrationsTest {
     }
 
     /**
+     * AIMI step S3: the keys nothing read were deleted. Their stored values go, the context API keys
+     * among them; the xDrip one minute switch (open owner decision) and the kept keys stay.
+     */
+    @Test fun `deleted AIMI keys are removed and the kept ones stay`() = runTest {
+        val store = storeOf(
+            "aimi_context_llm_openai_key" to "sk-secret",
+            "aimi_context_llm_provider" to "OPENAI",
+            "key_oaps_aimi_logsize" to 25,
+            "key_use_AimiForceLimits" to true,
+            "key_use_Aimi_xdripOM" to true,
+            "OApsAIMILastEstimatedCarbs" to 40.0
+        )
+
+        sut().migrate(store)
+
+        assertThat(store.getAll()).containsExactly("key_use_Aimi_xdripOM", true, "OApsAIMILastEstimatedCarbs", 40.0)
+    }
+
+    /**
      * AIMI step T2: [PreferenceMigrations.migrate] runs the meal factor repair. A value from the old
      * 1.0-scale TPO goes back to the default, and the migration does not write the done flag.
      */

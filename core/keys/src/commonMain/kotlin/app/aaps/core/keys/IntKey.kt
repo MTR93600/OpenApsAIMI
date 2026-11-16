@@ -647,19 +647,9 @@ enum class IntKey(
     OApsAIMIBFinterval("key_oaps_aimi_BF_interval", 3, 1, 20, defaultedBySM = true, title = KeysStrings.pref_title_oaps_aimi_b_finterval),
     OApsAIMISleepinterval("key_oaps_aimi_sleep_interval", 3, 1, 20, defaultedBySM = true, title = KeysStrings.pref_title_oaps_aimi_sleepinterval),
     //OApsAIMIautodriveISF("key_oaps_aimi_autodriveISF",5,1,500),
-    OApsAIMIAutodriveTarget("key_oaps_aimi_autodriveTarget",70,1,160, title = KeysStrings.pref_title_oaps_aimi_autodrive_target),
-    OApsAIMIAutodriveBG("key_oaps_aimi_autodriveBG",90,1,160, title = KeysStrings.pref_title_oaps_aimi_autodrive_bg),
     OApsAIMIWCycleAvgLength("key_wcycle_avg_length", 28, 20, 90, title = KeysStrings.pref_title_oaps_aimi_w_cycle_avg_length),
     OApsAIMINightGrowthAgeYears("key_oaps_aimi_ngr_age_years", 14, 1, 25, title = KeysStrings.pref_title_oaps_aimi_night_growth_age_years),
-    OApsAIMINightGrowthMinDurationMin("key_oaps_aimi_ngr_min_duration", 30, 5, 240, title = KeysStrings.pref_title_oaps_aimi_night_growth_min_duration_min),
-    OApsAIMINightGrowthMinEventualOverTarget("key_oaps_aimi_ngr_min_eventual_over_target", 15, 0, 120, title = KeysStrings.pref_title_oaps_aimi_night_growth_min_eventual_over_target),
-    OApsAIMINightGrowthDecayMinutes("key_oaps_aimi_ngr_decay_minutes", 20, 0, 120, title = KeysStrings.pref_title_oaps_aimi_night_growth_decay_minutes),
-    OApsAIMIlogsize("key_oaps_aimi_logsize",25,1,50, title = KeysStrings.pref_title_oaps_aimi_logsize),
     // --- AIMI Adaptive Basal ---
-    OApsAIMIKickerStartMin(key = "OApsAIMIKickerStartMin", defaultValue = 10, min = 5, max = 30, title = KeysStrings.pref_title_oaps_aimi_kicker_start_min), // first plateau kick length (min)
-    OApsAIMIKickerMaxMin(key = "OApsAIMIKickerMaxMin", defaultValue = 30, min = 10, max = 60, title = KeysStrings.pref_title_oaps_aimi_kicker_max_min), // max plateau kick length (min)
-    OApsAIMIZeroResumeMin(key = "OApsAIMIZeroResumeMin", defaultValue = 10, min = 5, max = 30, title = KeysStrings.pref_title_oaps_aimi_zero_resume_min), // delay before micro resume (minutes at 0)
-    OApsAIMIZeroResumeMax(key = "OApsAIMIZeroResumeMax", defaultValue = 30, min = 10, max = 60, title = KeysStrings.pref_title_oaps_aimi_zero_resume_max), // max micro resume length
     /** Seconds without loop_tick_end after a tick pulse; used by the loop blackbox watchdog (60–600). */
     OApsAIMIIntratickStallSeconds("key_aimi_intratick_stall_seconds", 180, 60, 600, title = KeysStrings.pref_title_oaps_aimi_intratick_stall_seconds),
     // --- AI Decision Auditor ---

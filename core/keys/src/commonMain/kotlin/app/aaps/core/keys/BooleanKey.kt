@@ -339,10 +339,8 @@ enum class BooleanKey(
         title = KeysStrings.pref_title_aimi_smb_training_relaxed_filter,
         summary = KeysStrings.pref_summary_aimi_smb_training_relaxed_filter,
     ),
-    OApsAIMIEnableBasal("key_enable_basal", false, title = KeysStrings.pref_title_oaps_aimi_enable_basal),
     OApsAIMIEnableStepsFromWatch("count_steps_watch", false, title = KeysStrings.pref_title_oaps_aimi_enable_steps_from_watch),
     OApsAIMIpregnancy("key_use_AimiPregnancy",false, title = KeysStrings.pref_title_oaps_aimi_pregnancy),
-    OApsAIMIforcelimits("key_use_AimiForceLimits",false, title = KeysStrings.pref_title_oaps_aimi_forcelimits),
     OApsAIMInight("OApsAIMI_Enable_night",false, title = KeysStrings.pref_title_oaps_aimi_night),
     OApsAIMIhoneymoon("key_use_Aimi_honeymoon",false, title = KeysStrings.pref_title_oaps_aimi_honeymoon),
     OApsAIMIT3cAdaptiveBasalEnabled("key_use_aimi_t3c_adaptive_basal", true, title = KeysStrings.pref_title_oaps_aimi_t3c_adaptive_basal_enabled),
@@ -350,7 +348,6 @@ enum class BooleanKey(
      *  Raises the aggressiveness ceiling toward the configured value only when the tree says risk is LOW/MODERATE
      *  and BG is clearly high; reduces (bounded) on exertion. Never enables SMB. Fail-safe when tree unavailable. */
     OApsAIMIT3cPhysioInformedEnabled("key_aimi_t3c_physio_informed", true, title = KeysStrings.pref_title_oaps_aimi_t3c_physio_informed_enabled),
-    OApsAIMIAutodriveV3EnhancedGater("key_use_aimi_autodrive_v3_enhanced_gater", false, title = KeysStrings.pref_title_oaps_aimi_autodrive_v3_enhanced_gater),
     OApsAIMIautoDriveActive(key = "key_use_aimi_autodrive_active", defaultValue = true, title = KeysStrings.pref_title_oaps_aimi_auto_drive_active),
     /**
      * Opt-in: on an aggressive rise, let Autodrive V3 deliver at least the user-defined prebolus
@@ -994,6 +991,8 @@ enum class BooleanKey(
         KeysStrings.pref_summary_aimi_tpo_notify_on_apply,
         dependency = OApsAIMITpoEnabled,
     ),
+    // Nothing reads it today: the KMP port lost its reader in the xDrip source. Kept on purpose, it waits
+    // for an owner decision (docs/aimi-settings/PLAN.md, open item of step S2). Do not delete it.
     OApsxdriponeminute(key = "key_use_Aimi_xdripOM", defaultValue = false, title = KeysStrings.pref_title_oapsxdriponeminute),
 
     ;

@@ -16,6 +16,7 @@ import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import app.aaps.core.interfaces.tempTargets.toJson
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.AimiMealFactorScaleRepair
+import app.aaps.core.keys.AimiRetiredSettings
 import app.aaps.core.keys.BooleanComposedKey
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.BooleanNonKey
@@ -75,6 +76,11 @@ import kotlin.math.roundToInt
  * the whole list every time is correct and there is nothing to record or skip. The one exception is
  * [aimiMealFactorScaleRepaired], which also stops once the store holds its done flag.
  *
+ * These run on Android only at start-up (`MainApp`); iOS runs them on an import. On iOS a value of a
+ * deleted key that is already stored stays in the store, unread, as it did after step P3. The AIMI
+ * settings deleted in step S3 are the exception: the AIMI plugin start also removes them, on both
+ * platforms (`AimiRetiredSettings.removeStored`), because four of them could hold an API key.
+ *
  * ## What is NOT here
  *
  * What stays in `MainApp` is only what would misbehave against a file, and the line is always the same
@@ -126,6 +132,7 @@ class PreferenceMigrations(
         smsCommunicatorType(sp)
         aimiPkpdKeysRetired(sp)
         aimiMealFactorScaleRepaired(sp)
+        aimiDeadKeysRetired(sp)
     }
 
     /**
@@ -554,6 +561,17 @@ class PreferenceMigrations(
         }
     }
 
+    /**
+     * AIMI step S3: settings nothing read were deleted (basal kicker, night growth multipliers, the
+     * context provider and its API keys, and more). Their stored values go, so an old backup writes
+     * none of them and a stored API key does not stay. Only the names are logged, never a value.
+     * See [removeRetiredAimiSettings].
+     */
+    private fun aimiDeadKeysRetired(sp: KeyValueStore) {
+        val removed = removeRetiredAimiSettings(sp)
+        if (removed.isNotEmpty()) aapsLogger.info(LTag.CORE, "AIMI deleted settings removed: $removed")
+    }
+
     /** Moves a legacy name holding a whole number to [destinationPrefix] + [argument]. */
     private fun moveLong(sp: KeyValueStore, name: String, value: Any?, argument: String?, destinationPrefix: String) {
         if (argument == null) return skip(name, "the name does not say what it belongs to")
@@ -682,3 +700,16 @@ internal fun repairAimiMealFactorScale(sp: KeyValueStore): List<AimiMealFactorSc
         write = { key, value -> sp.putDouble(key.key, value) },
         markDone = {},
     )
+
+/**
+ * Removes the stored values of the AIMI settings deleted in step S3 ([AimiRetiredSettings]) from [sp]:
+ * the live store on Android start-up, or an import file before it is applied.
+ *
+ * Guarded by its data alone: it removes only names that are present, so running it again does
+ * nothing. Four of the names could hold an API key, which is why the value is removed and not left
+ * as an unknown name.
+ *
+ * @return the names it removed
+ */
+internal fun removeRetiredAimiSettings(sp: KeyValueStore): List<String> =
+    AimiRetiredSettings.removeStored(contains = sp::contains, remove = sp::remove)

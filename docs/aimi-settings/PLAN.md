@@ -163,19 +163,30 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
     `AimiPlatformPreferenceSlot`). Say if S1 or a later step should add it.
   - *Learner badge.* The page has only the TPO, LIMITED and RAISED badges. The key map lists no learner
     that writes an Essentials key, so there is nothing to badge yet.
-  - *Which "max basal multiplier".* The page shows `OApsAIMIMaxMultiplier`, which only caps the
-    adaptive basal learner (H channel) while adaptive basal is on; its hint now says so. The real cap
-    of a temp basal against the profile basal is `ApsMaxCurrentBasalMultiplier` (default 4, normal
-    mode only). Say if that one should be on the page too, with its value in use.
   - *Patient age.* `OApsAIMINightGrowthAgeYears` stays 1-25, default 14 (the NGR default is not
     decided). The hint says "if 25 or older, set 25", and an age never set is shown as "not set,
     default used".
-  - *Levels.* Age and `PregnancyDueDateString` are on the Essentials page but stay ADVANCED in the
-    manifest; the key map marks both `[target: SIMPLE]`. Left for the step that sets levels.
   - *Max SMB and max IOB.* The loop sets these limits again on every decision (SMB limit picked from
     both SMB keys by glucose and rise, lowered by exercise, physio and trajectory; max IOB moved by
     night growth support and trajectory). The page claims no value in use for them and says so. A
     "last decision" value would need a snapshot from the loop.
+
+- **Decided by the owner (from step S1 review, done in step S3, 2026-11-15):**
+  - *Levels of age and due date.* `OApsAIMINightGrowthAgeYears` and `PregnancyDueDateString` are SIMPLE
+    in the manifest (they are on the Essentials page). On the night growth page the age is its own
+    SIMPLE group, above the switch and the night window.
+  - *The real temp basal cap on Essentials.* `ApsMaxCurrentBasalMultiplier` (default 4, storage name
+    unchanged) is a dose limit row on the Essentials page, after the three max basal rows, with the
+    unit "x profile basal". Its value is shown in use only when `applyBasalConstraints` caps with it
+    (no meal mode, Autodrive does not act, T3C brittle mode off; one rule, `isSpecialBasalMode`, used
+    by both and tested); otherwise it says "not in use now". The hint says: when no meal mode is on,
+    Autodrive does not act and T3C brittle mode is off, a temporary basal is never higher than this
+    factor times the profile basal; the loop can make this limit lower for a while; otherwise the max
+    basal of the active mode is the limit. Known limit: the page shows the stored factor (the outer
+    cap). Inside the decision the loop multiplies it by the physio basal factor, so the cap of one
+    decision can be lower than the value shown; no dosing change in S3. It keeps its
+    old place in the OpenAPS advanced settings. `OApsAIMIMaxMultiplier` stays on the page with its
+    adaptive basal hint.
 
 - **Open for the owner (from step S2, not decided):**
   - *xDrip 1-minute switch (`OApsxdriponeminute`), a port regression.* On `dev_OAPSAIMI`,
@@ -222,3 +233,31 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
 | S1 | Settings row component (hint, "?" sheet with default and warnings, bounded values) and the Essentials page | none |
 | S2 | Feature cards with progressive disclosure, What AIMI learned page, Expert with search; Control Center screen removed | none |
 | S3 | Delete the dead keys (not the protected ones), move internal state out of the settings, prefs schema, migration | none |
+
+## Step S3 (done 2026-11-15, no dosing change)
+
+- **32 dead keys deleted** from the key enums, each checked first by a repo-wide search of its enum
+  name and its storage name (no reader, no writer, no screen): basal kicker, zero resume, anti stall,
+  positive delta release, plateau band, R2 confident, `EnableBasal`; the night growth multipliers,
+  clamp, rise slope, duration, eventual margin and decay; `FCLFactor`, Autodrive target, BG,
+  deviation and V3 enhanced gater; force limits, log size, unstable mode state; the context provider
+  and its four API keys. Their title strings and the old XML titles went too.
+- **Stored values are removed** by a new preference migration (`aimiDeadKeysRetired`, names in
+  `AimiRetiredSettings`): on Android start-up and on every import (an old backup writes none of them
+  and lists none as unknown). The four context API keys are wiped this way. Only names are logged.
+  iOS runs the migrations on an import only, so the AIMI plugin start also removes these names, on
+  both platforms (`AimiRetiredSettings.removeStored`): an iPhone that imported an Android backup with
+  a context API key before this build loses it too. The import already ignored names it does not know
+  (it never writes them).
+- **Internal state out of the settings:** the meal advisor trigger, its carbs estimate and time, the
+  four legacy prebolus values and the context intents JSON are `INTERNAL_STATE` (no entry, no row, no
+  audit row, no reset); storage names kept. No setting is written by the loop alone any more, so the
+  audit screen lost its "runtime state" row kind.
+- **Left on purpose:** `DEAD_KEYS` holds only the seven protected-family keys and
+  `OApsxdriponeminute` (marked on the key; owner decision of S2 still open).
+- **Advisor, TPO, tuning, auditor:** none of them wrote or proposed a deleted key or an internal state
+  key, so none of their proposals changed. The user manual no longer tells the person to change the
+  kicker step, the zero resume delay or the night growth basal multiplier (keys with no effect).
+- **Reachability:** every manifest entry is now a setting the person owns, and a test walks the
+  settings tree and fails if any of them loses its page, card or Expert row. The debt went from 23
+  to 18 (the five context keys were deleted).

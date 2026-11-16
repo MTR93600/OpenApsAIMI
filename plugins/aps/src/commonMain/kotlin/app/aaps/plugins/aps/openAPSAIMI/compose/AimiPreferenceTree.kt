@@ -325,7 +325,7 @@ internal class AimiPreferenceTree(
                     items = shown(AimiSettingsSectionId.NightMode) + PreferenceSubScreenDef(
                         key = "aimi_compose_ngr",
                         title = ApsStrings.oaps_aimi_ngr_title,
-                        items = shown(AimiSettingsSectionId.NightGrowthIntent, AimiSettingsSectionId.NightGrowthBudget),
+                        items = shown(AimiSettingsSectionId.NightGrowthAge, AimiSettingsSectionId.NightGrowthIntent, AimiSettingsSectionId.NightGrowthBudget),
                     ),
                 ),
                 womenCycleCard(),

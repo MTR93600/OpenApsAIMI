@@ -139,6 +139,15 @@ internal enum class AimiBasalLimitMode {
 }
 
 /**
+ * True in a meal mode, with Autodrive engaged, or in T3C brittle mode. Then the AIMI basal constraint
+ * (`OpenAPSAIMIPlugin.applyBasalConstraints`) caps with the max basal of [mode] only, not with the
+ * current or daily basal multipliers. The Essentials page uses the same rule to say whether
+ * [DoubleKey.ApsMaxCurrentBasalMultiplier] is in use now, so the two cannot disagree.
+ */
+internal fun isSpecialBasalMode(mode: AimiBasalLimitMode, t3cBrittleMode: Boolean): Boolean =
+    mode != AimiBasalLimitMode.NORMAL || t3cBrittleMode
+
+/**
  * What the loop uses right now, read once when the Essentials page opens.
  *
  * Every field is optional: null means "not known", and the page then shows the stored value.
@@ -149,6 +158,12 @@ internal enum class AimiBasalLimitMode {
  *   key of [basalMode] only, so the result depends on the mode
  * @param profileMaxDailyBasal the highest basal rate of the profile: the loop never uses a lower max
  *   basal key value than this, in every mode
+ * @param currentBasalMultiplierApplies true when the loop caps a temporary basal with
+ *   [DoubleKey.ApsMaxCurrentBasalMultiplier] now (normal basal mode, no T3C brittle mode); false when
+ *   it does not (meal mode, Autodrive engaged, T3C brittle mode); null when not known. See
+ *   [isSpecialBasalMode]. When true, the page shows the stored factor: that is the outer cap. Inside
+ *   the decision the loop also multiplies it by the physio basal factor, so with a factor below 1 the
+ *   real cap of that decision is lower than the value shown (the hint says the loop can lower it)
  * @param smbAllowed false when a constraint keeps SMB off (open loop, objectives, the SMB switch)
  * @param targetLowMgdl low end of the profile target now
  * @param targetHighMgdl high end of the profile target now
@@ -159,6 +174,7 @@ internal data class AimiEssentialsLive(
     val basalMode: AimiBasalLimitMode? = null,
     val maxBasalInUse: Double? = null,
     val profileMaxDailyBasal: Double? = null,
+    val currentBasalMultiplierApplies: Boolean? = null,
     val smbAllowed: Boolean? = null,
     val targetLowMgdl: Double? = null,
     val targetHighMgdl: Double? = null,
@@ -211,6 +227,7 @@ internal data class AimiInUse(val value: Any, val badge: AimiInUseBadge?, val us
  * - the three max basal keys: only the key of the active basal mode is in use now, with the result of
  *   the same constraint call the loop makes. Each of them is raised to the highest basal rate of the
  *   profile when it is lower, also when its mode is not on now;
+ * - the current basal multiplier: in use only when the loop caps a temporary basal with it now;
  * - the SMB switch after the same constraint call the loop makes;
  * - max SMB, max SMB at high glucose and max IOB: the loop changes them on every decision, so no value
  *   is claimed as in use ([AimiInUseKind.PER_DECISION]).
@@ -226,15 +243,19 @@ internal fun aimiInUse(key: PreferenceKey, stored: Any, live: AimiEssentialsLive
     }
     if (byTpo) return AimiInUse(stored, AimiInUseBadge.TPO, live.tpoBaseline[key.key])
     return when (key) {
-        DoubleKey.ApsMaxBasal         -> maxBasalInUse(AimiBasalLimitMode.NORMAL, stored, live)
-        DoubleKey.meal_modes_MaxBasal -> maxBasalInUse(AimiBasalLimitMode.MEAL, stored, live)
-        DoubleKey.autodriveMaxBasal   -> maxBasalInUse(AimiBasalLimitMode.AUTODRIVE, stored, live)
-        BooleanKey.ApsUseSmb          -> live.smbAllowed?.let { allowed ->
+        DoubleKey.ApsMaxBasal                  -> maxBasalInUse(AimiBasalLimitMode.NORMAL, stored, live)
+        DoubleKey.meal_modes_MaxBasal          -> maxBasalInUse(AimiBasalLimitMode.MEAL, stored, live)
+        DoubleKey.autodriveMaxBasal            -> maxBasalInUse(AimiBasalLimitMode.AUTODRIVE, stored, live)
+        DoubleKey.ApsMaxCurrentBasalMultiplier -> live.currentBasalMultiplierApplies?.let { applies ->
+            AimiInUse(stored, null, null, if (applies) AimiInUseKind.NOW else AimiInUseKind.WHEN_ACTIVE)
+        }
+
+        BooleanKey.ApsUseSmb                   -> live.smbAllowed?.let { allowed ->
             val on = stored as Boolean
             if (on && !allowed) AimiInUse(false, AimiInUseBadge.LIMITED, null) else AimiInUse(on, null, null)
         }
 
-        else                          -> null
+        else                                   -> null
     } ?: AimiInUse(stored, null, null)
 }
 

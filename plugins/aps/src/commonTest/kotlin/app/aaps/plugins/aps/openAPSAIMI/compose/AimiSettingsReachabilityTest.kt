@@ -42,8 +42,41 @@ class AimiSettingsReachabilityTest {
     @Test
     fun `the reachability debt does not grow`() {
         // 42 when step S1 landed, 23 after step S2 (dead keys left the debt, keys with a reader got an
-        // Expert or card row). Lower it when a key gets a screen, never raise it.
-        assertTrue(AimiSettingsManifest.REACHABILITY_DEBT.size <= 23, "debt grew: ${AimiSettingsManifest.REACHABILITY_DEBT.size}")
+        // Expert or card row), 18 after step S3 (the five context credential keys were deleted). Lower
+        // it when a key gets a screen, never raise it.
+        assertTrue(AimiSettingsManifest.REACHABILITY_DEBT.size <= 18, "debt grew: ${AimiSettingsManifest.REACHABILITY_DEBT.size}")
+    }
+
+    @Test
+    fun `every AIMI key is kept or dead or internal state and every kept key is owned by the person`() {
+        // Step S3: after the dead keys were deleted and the runtime state left the settings, every entry
+        // of the manifest is a setting the person owns, so every one of them must be reachable.
+        val scoped = AimiSettingsManifest.scopedKeys.map { it.key }.toSet()
+        val entries = AimiSettingsManifest.entries.map { it.key.key }.toSet()
+        assertEquals(scoped, entries + AimiSettingsManifest.DEAD_KEYS + AimiSettingsManifest.INTERNAL_STATE)
+        assertEquals(entries, keptKeys)
+    }
+
+    @Test
+    fun `internal state has no row anywhere in the settings`() {
+        for (platformItems in listOf(AimiSettingsTreeWalk.allPlatformItems, AimiSettingsTreeWalk.noPlatformItems)) {
+            val root = AimiSettingsTreeWalk.tree(platformItems)
+            assertEquals(emptySet(), AimiSettingsTreeWalk.keysInTree(root).intersect(AimiSettingsManifest.INTERNAL_STATE))
+            assertEquals(emptySet(), AimiSettingsTreeWalk.reachableWithOwnScreens(root).intersect(AimiSettingsManifest.INTERNAL_STATE))
+        }
+        val inSections = AimiSettingsScreens.sections.flatMap { section -> section.keys.map { it.key } }.toSet()
+        assertEquals(emptySet(), inSections.intersect(AimiSettingsManifest.INTERNAL_STATE))
+    }
+
+    @Test
+    fun `a key that loses its only screen is detected`() {
+        // Proves the walk fails for a page row too: without the night growth page, the night growth
+        // switch (on no other page) is reported lost.
+        val root = AimiSettingsTreeWalk.tree(AimiSettingsTreeWalk.allPlatformItems)
+        val nightGrowthPage = AimiSettingsSearch.index(root).first { it.key.key == BooleanKey.OApsAIMINightGrowthEnabled.key }.screen.key
+        val reachable = AimiSettingsTreeWalk.reachableWithOwnScreens(withoutScreen(root, nightGrowthPage))
+        val lost = keptKeys - AimiSettingsManifest.REACHABILITY_DEBT - reachable
+        assertTrue(BooleanKey.OApsAIMINightGrowthEnabled.key in lost, "lost: $lost")
     }
 
     @Test
@@ -139,6 +172,8 @@ class AimiSettingsReachabilityTest {
             items = screen.items.mapNotNull { item ->
                 when {
                     item is AimiSubScreenLink && item.screen.key == key -> null
+                    // A link holds its own copy of the screen it opens, so the page must go there too.
+                    item is AimiSubScreenLink                           -> AimiSubScreenLink(withoutScreen(item.screen, key))
                     item is PreferenceSubScreenDef && item.key == key   -> null
                     item is PreferenceSubScreenDef                      -> withoutScreen(item, key)
                     else                                                -> item

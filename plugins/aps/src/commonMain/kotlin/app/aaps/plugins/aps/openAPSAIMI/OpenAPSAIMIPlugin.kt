@@ -92,6 +92,7 @@ import app.aaps.core.interfaces.utils.HardLimits
 import app.aaps.core.interfaces.utils.Round
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.keys.AimiMealFactorScaleRepair
+import app.aaps.core.keys.AimiRetiredSettings
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.IntKey
@@ -170,6 +171,7 @@ import app.aaps.plugins.aps.openAPSAIMI.advisor.AimiSharing
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiLearnedLive
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiLearnedScreen
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBasalLimitMode
+import app.aaps.plugins.aps.openAPSAIMI.compose.isSpecialBasalMode
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiEssentialsLive
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiEssentialsScreen
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiPreferenceTree
@@ -387,6 +389,12 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         // the done flag and covers iOS. Changes dosing only for such a user (default meal SMB back).
         AimiMealFactorScaleRepair.repairOnce(preferences).forEach {
             aapsLogger.info(LTag.APS, "AIMI meal factor repaired (old TPO scale): $it")
+        }
+        // One-shot (step S3): the stored values of the deleted AIMI settings go, four of which could
+        // hold an API key. Also done by the Android start-up migration; this one covers iOS, which
+        // runs the preference migrations only on an import. Only the names are logged, never a value.
+        AimiRetiredSettings.removeStored(contains = sp::contains, remove = sp::remove).takeIf { it.isNotEmpty() }?.let {
+            aapsLogger.info(LTag.APS, "AIMI deleted settings removed: $it")
         }
         tailDampingTraceJob?.cancel()
         tailDampingTraceJob = rxBus.toFlow(EventPreferenceChange::class)
@@ -1936,13 +1944,17 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         }
     }
 
+    /** See [isSpecialBasalMode]; the Essentials page uses the same rule. */
+    private fun isSpecialBasalModeNow(mode: AimiBasalLimitMode): Boolean =
+        isSpecialBasalMode(mode, t3cBrittleMode = preferences.get(BooleanKey.OApsAIMIT3cBrittleMode))
+
     override fun applyBasalConstraints(
         absoluteRate: Constraint<Double>,
         profile: Profile
     ): Constraint<Double> {
         // 1 + 2: which max basal key applies now (meal mode, early Autodrive or the normal one)
         val mode = basalLimitModeNow() ?: return absoluteRate
-        val isSpecialMode = mode != AimiBasalLimitMode.NORMAL || preferences.get(BooleanKey.OApsAIMIT3cBrittleMode)
+        val isSpecialMode = isSpecialBasalModeNow(mode)
         var maxBasal = when (mode) {
             AimiBasalLimitMode.MEAL      -> preferences.get(DoubleKey.meal_modes_MaxBasal)
             AimiBasalLimitMode.AUTODRIVE -> preferences.get(DoubleKey.autodriveMaxBasal)
@@ -2068,7 +2080,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
      * What the loop uses now, for the Essentials page: the active basal mode with the max basal after
      * the same constraint call `invoke` makes (it belongs to the max basal key of that mode only, so
      * the result depends on the mode), the profile max daily basal the loop raises every max basal key
-     * to, the SMB switch after the constraint call, the profile target, and the values of an active
+     * to, whether the current basal multiplier caps now, the SMB switch after the constraint call,
+     * the profile target, and the values of an active
      * TPO session. Max IOB is not read here: AIMI gates on its own value, which it changes on every
      * decision. It only reads.
      */
@@ -2077,10 +2090,12 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         val tpoSession = tpoOrchestrator.currentSession()?.takeIf { it.status == TpoSessionStatus.ACTIVE }
         // applyBasalConstraints sets no max basal of its own when AIMI is not enabled.
         val aimiEnabled = isEnabled()
+        val basalMode = if (aimiEnabled && profile != null) basalLimitModeNow() else null
         AimiEssentialsLive(
-            basalMode = if (aimiEnabled && profile != null) basalLimitModeNow() else null,
+            basalMode = basalMode,
             maxBasalInUse = profile?.let { constraintsChecker.getMaxBasalAllowed(it).value() },
             profileMaxDailyBasal = profile?.getMaxDailyBasal()?.takeIf { aimiEnabled },
+            currentBasalMultiplierApplies = basalMode?.let { !isSpecialBasalModeNow(it) },
             smbAllowed = constraintsChecker.isSMBModeEnabled().value(),
             targetLowMgdl = profile?.getTargetLowMgdl(),
             targetHighMgdl = profile?.getTargetHighMgdl(),

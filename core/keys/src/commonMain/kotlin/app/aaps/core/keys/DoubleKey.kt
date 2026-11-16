@@ -397,7 +397,6 @@ enum class DoubleKey(
     // ❌ TIME-BASED REACTIVITY REMOVED - replaced by UnifiedReactivityLearner.globalFactor
     // Previously: OApsAIMIMorningFactor, OApsAIMIAfternoonFactor, OApsAIMIEveningFactor
     OApsAIMIMealFactor("key_oaps_aimi_meal_factor", 50.0, 1.0, 150.0, title = KeysStrings.pref_title_oaps_aimi_meal_factor),
-    OApsAIMIFCLFactor("key_oaps_aimi_FCL_factor", 50.0, 1.0, 150.0, title = KeysStrings.pref_title_oaps_aimi_fcl_factor),
     OApsAIMIBFFactor("key_oaps_aimi_BF_factor", 50.0, 1.0, 150.0, title = KeysStrings.pref_title_oaps_aimi_bf_factor),
     OApsAIMIBFPrebolus("key_prebolus_BF_mode", 2.5, 0.1, 10.0, title = KeysStrings.pref_title_oaps_aimi_bf_prebolus),
     OApsAIMIBFPrebolus2("key_prebolus2_BF_mode", 2.0, 0.1, 10.0, title = KeysStrings.pref_title_oaps_aimi_bf_prebolus2),
@@ -424,7 +423,6 @@ enum class DoubleKey(
     OApsAIMIautodrivePrebolus("key_prebolus_autodrive_mode", 1.0, 0.1, 10.0, title = KeysStrings.pref_title_oaps_aimi_autodrive_prebolus),
     OApsAIMIautodrivesmallPrebolus("key_prebolussmall_autodrive_mode", 0.1, 0.05, 2.0, title = KeysStrings.pref_title_oaps_aimi_autodrivesmall_prebolus),
     OApsAIMIcombinedDelta("key_combinedDelta_autodrive_mode", 1.0, 0.1, 20.0, title = KeysStrings.pref_title_oaps_aimi_combined_delta),
-    OApsAIMIAutodriveDeviation("key_mindeviation_autodrive_mode", 1.0, 0.1, 5.0, title = KeysStrings.pref_title_oaps_aimi_autodrive_deviation),
     OApsAIMIAutodriveAcceleration("key_Acceleration_autodrive_mode", 1.0, 0.1, 5.0, title = KeysStrings.pref_title_oaps_aimi_autodrive_acceleration),
     OApsAIMILunchPrebolus("key_prebolus_lunch_mode", 2.5, 0.1, 10.0, title = KeysStrings.pref_title_oaps_aimi_lunch_prebolus),
     OApsAIMILunchPrebolus2("key_prebolus2_lunch_mode", 2.0, 0.1, 10.0, title = KeysStrings.pref_title_oaps_aimi_lunch_prebolus2),
@@ -436,10 +434,6 @@ enum class DoubleKey(
     OApsAIMIwcycledateday("key_wcycledateday", 1.0, 1.0, 31.0, title = KeysStrings.pref_title_oaps_aimi_wcycledateday),
     OApsAIMIWCycleClampMin("key_wcycle_clamp_min", 0.8, 0.5, 1.0, title = KeysStrings.pref_title_oaps_aimi_w_cycle_clamp_min),
     OApsAIMIWCycleClampMax("key_wcycle_clamp_max", 1.25, 1.0, 2.0, title = KeysStrings.pref_title_oaps_aimi_w_cycle_clamp_max),
-    OApsAIMINightGrowthMinRiseSlope("key_oaps_aimi_ngr_min_rise_slope", 5.0, 0.5, 30.0, title = KeysStrings.pref_title_oaps_aimi_night_growth_min_rise_slope),
-    OApsAIMINightGrowthSmbMultiplier("key_oaps_aimi_ngr_smb_multiplier", 1.2, 1.0, 1.5, title = KeysStrings.pref_title_oaps_aimi_night_growth_smb_multiplier),
-    OApsAIMINightGrowthBasalMultiplier("key_oaps_aimi_ngr_basal_multiplier", 1.1, 1.0, 1.5, title = KeysStrings.pref_title_oaps_aimi_night_growth_basal_multiplier),
-    OApsAIMINightGrowthMaxSmbClamp("key_oaps_aimi_ngr_max_smb_clamp", 1.2, 0.1, 5.0, title = KeysStrings.pref_title_oaps_aimi_night_growth_max_smb_clamp),
     OApsAIMINightGrowthMaxIobExtra("key_oaps_aimi_ngr_max_iob_extra", 0.5, 0.0, 3.0, title = KeysStrings.pref_title_oaps_aimi_night_growth_max_iob_extra),
     OApsAIMIActivityBasalCapFactor("key_aimi_activity_basal_cap_factor", 1.3, 0.5, 3.0, title = KeysStrings.pref_title_oaps_aimi_activity_basal_cap_factor),
     // --- AIMI Adaptive Basal ---
@@ -462,14 +456,7 @@ enum class DoubleKey(
         summary = KeysStrings.pref_summary_aimi_hyper_deep_dev,
         dependency = BooleanKey.OApsAIMIHyperTrajectoryRelease,
     ),
-    OApsAIMIPlateauBandAbs(key = "OApsAIMIPlateauBandAbs", defaultValue = 2.5, min = 0.5, max = 6.0, title = KeysStrings.pref_title_oaps_aimi_plateau_band_abs), // plateau band (|delta| <= X mg/dL per 5 min)
-    OApsAIMIR2Confident(key = "OApsAIMIR2Confident", defaultValue = 0.7, min = 0.3, max = 0.95, title = KeysStrings.pref_title_oaps_aimi_r2_confident), // quadratic fit confidence
     OApsAIMIMaxMultiplier(key = "OApsAIMIMaxMultiplier", defaultValue = 1.6, min = 1.0, max = 2.5, title = KeysStrings.pref_title_oaps_aimi_max_multiplier), // max basal multiplier vs profile
-    OApsAIMIKickerStep(key = "OApsAIMIKickerStep", defaultValue = 0.15, min = 0.05, max = 0.5, title = KeysStrings.pref_title_oaps_aimi_kicker_step), // plateau kicker step (multiply increment)
-    OApsAIMIKickerMinUph(key = "OApsAIMIKickerMinUph", defaultValue = 0.2, min = 0.05, max = 1.0, title = KeysStrings.pref_title_oaps_aimi_kicker_min_uph), // plancher absolu U/h pour les kicks très bas
-    OApsAIMIZeroResumeFrac(key = "OApsAIMIZeroResumeFrac", defaultValue = 0.25, min = 0.05, max = 0.8, title = KeysStrings.pref_title_oaps_aimi_zero_resume_frac), // profile basal fraction for micro resume
-    OApsAIMIAntiStallBias(key = "OApsAIMIAntiStallBias", defaultValue = 0.10, min = 0.0, max = 0.5, title = KeysStrings.pref_title_oaps_aimi_anti_stall_bias), // anti-stall lift bias (+%)
-    OApsAIMIDeltaPosRelease(key = "OApsAIMIDeltaPosRelease", defaultValue = 1.0, min = 0.5, max = 3.0, title = KeysStrings.pref_title_oaps_aimi_delta_pos_release), // positive delta that stops intensification
     AimiUamConfidence(key = "AIMI_UAM_CONFIDENCE", defaultValue = 0.5, min = 0.0, max = 1.0, title = KeysStrings.pref_title_aimi_uam_confidence),
     OApsAIMILastEstimatedCarbs(key = "OApsAIMILastEstimatedCarbs", defaultValue = 0.0, min = 0.0, max = 300.0, title = KeysStrings.pref_title_oaps_aimi_last_estimated_carbs), // Meal Advisor Estimate
     OApsAIMILastEstimatedCarbTime(key = "OApsAIMILastEstimatedCarbTime", defaultValue = 0.0, min = 0.0, max = 20000000000000.0, title = KeysStrings.pref_title_oaps_aimi_last_estimated_carb_time), // Timestamp as Double

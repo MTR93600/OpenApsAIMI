@@ -368,6 +368,30 @@ class PreferenceImportApplierTest {
         assertThat(store.getDouble(DoubleKey.OApsAIMILunchFactor.key, 0.0)).isEqualTo(1.5)
     }
 
+    // ---- AIMI keys deleted in step S3 ----
+
+    /**
+     * An old backup still carries the deleted AIMI keys, one of them an API key. The import removes
+     * them from the file first, so they are neither written nor listed as names this build does not know.
+     */
+    @Test fun `an old backup with deleted AIMI keys writes none of them`() = runTest {
+        store.putDouble(DoubleKey.OApsAIMILunchFactor.key, 80.0)
+
+        val outcome = sut().apply(
+            prefs(
+                "aimi_context_llm_openai_key" to "sk-secret",
+                "OApsAIMIKickerStep" to "0.2",
+                DoubleKey.OApsAIMILunchFactor.key to "60.0",
+            ),
+            keepPumpSettings = false
+        )
+
+        assertThat(store.contains("aimi_context_llm_openai_key")).isFalse()
+        assertThat(store.contains("OApsAIMIKickerStep")).isFalse()
+        assertThat(outcome.unresolved).isEmpty()
+        assertThat(store.getDouble(DoubleKey.OApsAIMILunchFactor.key, 0.0)).isEqualTo(60.0)
+    }
+
     // ---- preview ----
 
     @Test fun `preview reports the same counts and writes nothing`() = runTest {

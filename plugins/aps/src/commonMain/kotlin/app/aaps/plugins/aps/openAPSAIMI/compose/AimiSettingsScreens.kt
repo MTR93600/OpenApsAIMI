@@ -98,7 +98,6 @@ internal enum class AimiSettingsSectionId {
     PkpdExpertPriorityMaxIob,
     PreferencesRootRemotePin,
     EssentialsPatient,
-    EssentialsPatientDetails,
     EssentialsDoseLimits,
     PreferencesAiAdvisorLearning,
     AiAdvisorKeys,
@@ -120,6 +119,7 @@ internal enum class AimiSettingsSectionId {
     ActivityProtection,
     ActivityBasalCap,
     NightMode,
+    NightGrowthAge,
     NightGrowthIntent,
     NightGrowthBudget,
     WomenCycleIntent,
@@ -161,7 +161,6 @@ internal enum class AimiSettingsSectionId {
     AuditorProfileFactors,
     AuditorSettings,
     ContextModuleEnable,
-    ContextIntentStore,
     ExpertProtection,
     ExpertMealCapture,
     ExpertStability,
@@ -435,15 +434,11 @@ internal object AimiSettingsScreens {
         // The AIMI keys of the Essentials page, in page order. `AimiEssentialsTest` checks that they
         // are exactly the AIMI keys of `AimiEssentials.rows`; the OpenAPS keys of the page (max basal,
         // max IOB, LGS threshold, SMB switch) are not AIMI keys and have no manifest entry.
+        // Age and due date are SIMPLE since step S3 (owner decision): they are the person's own data.
         fields(
             AimiSettingsSectionId.EssentialsPatient, AimiSettingsContentId.PreferencesEssentials, AimiSettingsLevel.SIMPLE,
-            DoubleKey.OApsAIMIweight, DoubleKey.OApsAIMITDD7, DoubleKey.OApsAIMICHO, BooleanKey.OApsAIMIhoneymoon, BooleanKey.OApsAIMIpregnancy,
-        ),
-        // Age and due date stay ADVANCED: their other screens (night growth, patient context) are
-        // ADVANCED field lists, and a key has one level.
-        fields(
-            AimiSettingsSectionId.EssentialsPatientDetails, AimiSettingsContentId.PreferencesEssentials, AimiSettingsLevel.ADVANCED,
-            IntKey.OApsAIMINightGrowthAgeYears, AimiStringKey.PregnancyDueDateString,
+            DoubleKey.OApsAIMIweight, DoubleKey.OApsAIMITDD7, DoubleKey.OApsAIMICHO, IntKey.OApsAIMINightGrowthAgeYears,
+            BooleanKey.OApsAIMIhoneymoon, BooleanKey.OApsAIMIpregnancy, AimiStringKey.PregnancyDueDateString,
         ),
         fields(
             AimiSettingsSectionId.EssentialsDoseLimits, AimiSettingsContentId.PreferencesEssentials, AimiSettingsLevel.SIMPLE,
@@ -468,7 +463,7 @@ internal object AimiSettingsScreens {
             AimiSettingsSectionId.PatientBody, AimiSettingsContentId.PreferencesPatientContext, AimiSettingsLevel.SIMPLE,
             DoubleKey.OApsAIMIweight, DoubleKey.OApsAIMICHO, DoubleKey.OApsAIMITDD7, BooleanKey.OApsAIMIpregnancy,
         ),
-        fields(AimiSettingsSectionId.PatientPregnancyDueDate, AimiSettingsContentId.PreferencesPatientContext, AimiSettingsLevel.ADVANCED, AimiStringKey.PregnancyDueDateString),
+        fields(AimiSettingsSectionId.PatientPregnancyDueDate, AimiSettingsContentId.PreferencesPatientContext, AimiSettingsLevel.SIMPLE, AimiStringKey.PregnancyDueDateString),
         fields(AimiSettingsSectionId.PatientHoneymoon, AimiSettingsContentId.PreferencesPatientContext, AimiSettingsLevel.SIMPLE, BooleanKey.OApsAIMIhoneymoon),
         // The SMB limits, on a page that search can open (the Essentials page shows them too).
         fields(
@@ -522,9 +517,11 @@ internal object AimiSettingsScreens {
 
         // ---- Feature card: night ----
         fields(AimiSettingsSectionId.NightMode, AimiSettingsContentId.CardNight, AimiSettingsLevel.ADVANCED, BooleanKey.OApsAIMInight),
+        // The age decides whether night growth support is on when its own switch was never set.
+        fields(AimiSettingsSectionId.NightGrowthAge, AimiSettingsContentId.PreferencesNightGrowth, AimiSettingsLevel.SIMPLE, IntKey.OApsAIMINightGrowthAgeYears),
         fields(
             AimiSettingsSectionId.NightGrowthIntent, AimiSettingsContentId.PreferencesNightGrowth, AimiSettingsLevel.ADVANCED,
-            BooleanKey.OApsAIMINightGrowthEnabled, IntKey.OApsAIMINightGrowthAgeYears, StringKey.OApsAIMINightGrowthStart, StringKey.OApsAIMINightGrowthEnd,
+            BooleanKey.OApsAIMINightGrowthEnabled, StringKey.OApsAIMINightGrowthStart, StringKey.OApsAIMINightGrowthEnd,
         ),
         fields(AimiSettingsSectionId.NightGrowthBudget, AimiSettingsContentId.PreferencesNightGrowth, AimiSettingsLevel.EXPERT, DoubleKey.OApsAIMINightGrowthMaxIobExtra),
 
@@ -665,11 +662,12 @@ internal object AimiSettingsScreens {
         ),
 
         // ---- The context screen (its own activity, opened from the tree) ----
+        // The stored context intents (`OApsAIMIContextStorage`) are not here: the context module writes
+        // them itself, so they are internal state (step S3), not a setting.
         fields(
             AimiSettingsSectionId.ContextModuleEnable, AimiSettingsContentId.ContextEditor, AimiSettingsLevel.EXPERT,
             BooleanKey.OApsAIMIContextEnabled, BooleanKey.OApsAIMIContextLLMEnabled,
         ),
-        fields(AimiSettingsSectionId.ContextIntentStore, AimiSettingsContentId.ContextEditor, AimiSettingsLevel.EXPERT, StringKey.OApsAIMIContextStorage),
     )
 
     /**

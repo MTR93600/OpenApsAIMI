@@ -56,7 +56,8 @@ import kotlinx.coroutines.launch
  * Two rules protect the reset button, because this list holds real therapy values by construction —
  * body weight, 7-day TDD and the maximum SMB are all on it:
  * - every reset asks first, naming the setting and the value it is about to write;
- * - a row the loop alone writes ([AimiSettingsAuditRow.runtimeState]) offers no reset at all.
+ * - a value the loop alone writes is internal state ([AimiSettingsManifest.INTERNAL_STATE]): it has
+ *   no row here at all, so it can never be reset from this screen.
  *
  * Shared code: the same screen runs on Android and iOS.
  */
@@ -216,15 +217,8 @@ private fun AimiSettingsAuditRowCard(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-            if (row.runtimeState) {
-                Text(
-                    text = stringResource(ApsStrings.aimi_settings_audit_runtime_state),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            } else {
-                TextButton(onClick = onResetRequested) {
-                    Text(stringResource(ApsStrings.aimi_settings_audit_reset_button))
-                }
+            TextButton(onClick = onResetRequested) {
+                Text(stringResource(ApsStrings.aimi_settings_audit_reset_button))
             }
         }
     }

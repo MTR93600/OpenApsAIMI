@@ -113,7 +113,6 @@ class AimiSettingsAuditTest {
         whenever(preferences.getIfExists(DoubleKey.OApsAIMIweight)).thenReturn(83.0)
         whenever(preferences.getIfExists(IntKey.OApsAIMILunchinterval)).thenReturn(99)
         whenever(preferences.getIfExists(StringKey.OApsAIMIWCycleTrackingMode)).thenReturn("something")
-        whenever(preferences.getIfExists(AimiLongKey.LastPrebolusTime)).thenReturn(1_700_000_000_000L)
 
         val rows = build().rows.associateBy { it.keyString }
         listOf(
@@ -121,14 +120,12 @@ class AimiSettingsAuditTest {
             DoubleKey.OApsAIMIweight.key,
             IntKey.OApsAIMILunchinterval.key,
             StringKey.OApsAIMIWCycleTrackingMode.key,
-            AimiLongKey.LastPrebolusTime.key,
         ).forEach { rows.getValue(it).resetToDefault(preferences) }
 
         verify(preferences).put(BooleanKey.OApsAIMIMLtraining, BooleanKey.OApsAIMIMLtraining.defaultValue)
         verify(preferences).put(DoubleKey.OApsAIMIweight, DoubleKey.OApsAIMIweight.defaultValue)
         verify(preferences).put(IntKey.OApsAIMILunchinterval, IntKey.OApsAIMILunchinterval.defaultValue)
         verify(preferences).put(StringKey.OApsAIMIWCycleTrackingMode, StringKey.OApsAIMIWCycleTrackingMode.defaultValue)
-        verify(preferences).put(AimiLongKey.LastPrebolusTime, AimiLongKey.LastPrebolusTime.defaultValue)
     }
 
     @Test
@@ -188,14 +185,19 @@ class AimiSettingsAuditTest {
     }
 
     @Test
-    fun `a key only the loop writes is shown but offers no reset`() {
+    fun `internal state of the loop gets no row and so no reset`() {
+        // Step S3: the stored prebolus time is half of the 20-minute SMB spacing that survives a restart.
+        // A reset would tell the next tick no SMB was ever given, so it is internal state with no row.
         whenever(preferences.getIfExists(AimiLongKey.LastPrebolusTime)).thenReturn(1_700_000_000_000L)
-        whenever(preferences.getIfExists(BooleanKey.OApsAIMIMLtraining)).thenReturn(true)
+        whenever(preferences.getIfExists(DoubleKey.OApsAIMILastEstimatedCarbs)).thenReturn(45.0)
+        whenever(preferences.getIfExists(BooleanKey.OApsAIMIMealAdvisorTrigger)).thenReturn(true)
+        whenever(preferences.getIfExists(StringKey.OApsAIMIContextStorage)).thenReturn("[{}]")
 
-        val rows = build().rows.associateBy { it.keyString }
+        val keys = build().rows.map { it.keyString }.toSet()
 
-        assertTrue(rows.getValue(AimiLongKey.LastPrebolusTime.key).runtimeState)
-        assertFalse(rows.getValue(BooleanKey.OApsAIMIMLtraining.key).runtimeState)
+        listOf(AimiLongKey.LastPrebolusTime, DoubleKey.OApsAIMILastEstimatedCarbs, BooleanKey.OApsAIMIMealAdvisorTrigger, StringKey.OApsAIMIContextStorage)
+            .forEach { assertFalse(it.key in keys, "internal state shown: ${it.key}") }
+        assertTrue(keys.intersect(AimiSettingsManifest.INTERNAL_STATE).isEmpty(), "internal state shown: $keys")
     }
 
     @Test

@@ -74,6 +74,12 @@ internal object AimiEssentials {
         AimiEssentialsRow(DoubleKey.ApsMaxBasal, AimiEssentialsGroup.DOSE_LIMITS, ApsStrings.aimi_essentials_hint_max_basal, limitWarning),
         AimiEssentialsRow(DoubleKey.meal_modes_MaxBasal, AimiEssentialsGroup.DOSE_LIMITS, ApsStrings.aimi_essentials_hint_meal_max_basal, limitWarning, unit = CoreUiStrings.units_insulin_rate),
         AimiEssentialsRow(DoubleKey.autodriveMaxBasal, AimiEssentialsGroup.DOSE_LIMITS, ApsStrings.aimi_essentials_hint_autodrive_max_basal, limitWarning, unit = CoreUiStrings.units_insulin_rate),
+        // The real cap of a temporary basal against the profile basal (owner decision, S1 review). It
+        // keeps its old place in the OpenAPS advanced settings too.
+        AimiEssentialsRow(
+            DoubleKey.ApsMaxCurrentBasalMultiplier, AimiEssentialsGroup.DOSE_LIMITS, ApsStrings.aimi_essentials_hint_current_basal_multiplier, limitWarning,
+            unit = ApsStrings.aimi_unit_times_profile_basal,
+        ),
         AimiEssentialsRow(DoubleKey.ApsSmbMaxIob, AimiEssentialsGroup.DOSE_LIMITS, ApsStrings.aimi_essentials_hint_max_iob, limitWarning),
         AimiEssentialsRow(DoubleKey.OApsAIMIMaxSMB, AimiEssentialsGroup.DOSE_LIMITS, ApsStrings.aimi_essentials_hint_max_smb, limitWarning),
         AimiEssentialsRow(DoubleKey.OApsAIMIHighBGMaxSMB, AimiEssentialsGroup.DOSE_LIMITS, ApsStrings.aimi_essentials_hint_high_bg_max_smb, limitWarning),

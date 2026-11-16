@@ -288,14 +288,8 @@ enum class StringKey(
     /** Last tuning context selected in AIMI Profile Advisor (AimiTuningContext enum name). */
     AimiTuningContextSelection("aimi_tuning_context_selection", "AUTO_BALANCE", title = KeysStrings.pref_title_aimi_tuning_context_selection),
     AimiAuditorMode("aimi_auditor_mode", "AUDIT_ONLY", preferenceType = PreferenceType.LIST, title = KeysStrings.pref_title_aimi_auditor_mode), // resolved via withEntries in plugin
-    // Context Module (dedicated provider for flexibility)
-    ContextLLMProvider("aimi_context_llm_provider", "OPENAI", title = KeysStrings.pref_title_context_llm_provider),
-    ContextLLMOpenAIKey("aimi_context_llm_openai_key", "", isPassword = true, title = KeysStrings.pref_title_context_llm_open_ai_key),
-    ContextLLMGeminiKey("aimi_context_llm_gemini_key", "", isPassword = true, title = KeysStrings.pref_title_context_llm_gemini_key),
-    ContextLLMDeepSeekKey("aimi_context_llm_deepseek_key", "", isPassword = true, title = KeysStrings.pref_title_context_llm_deep_seek_key),
-    ContextLLMClaudeKey("aimi_context_llm_claude_key", "", isPassword = true, title = KeysStrings.pref_title_context_llm_claude_key),
+    // Context module (its AI provider and API keys were deleted in AIMI step S3: the AI Advisor keys are used)
     ContextMode("aimi_context_mode", "BALANCED", title = KeysStrings.pref_title_context_mode), // CONSERVATIVE, BALANCED, AGGRESSIVE
-    OApsAIMIUnstableModeState("key_oaps_aimi_mode_state", "", title = KeysStrings.pref_title_oaps_aimi_unstable_mode_state),
     OApsAIMIContextStorage("aimi_context_storage", "", title = KeysStrings.pref_title_oaps_aimi_context_storage),
     // 🏥 AIMI Physiological Assistant (MTR)
     AimiPhysioLLMProvider("aimi_physio_llm_provider", "gpt4", title = KeysStrings.pref_title_aimi_physio_llm_provider),
