@@ -34,9 +34,10 @@ internal fun rememberNightGrowthState(preferences: Preferences): State<NightGrow
     }
 
 /**
- * The page behind the "Night growth support now" row of the night growth settings. That page shows
- * the switch and the age with their key defaults (on, 14) also when nothing is stored, while the loop
- * then takes the person for an adult and keeps NGR off. This page says what the loop really does.
+ * The page behind the "Night growth support now" row of the night growth settings. It says in full
+ * what the loop does and why. The switch row of that page shows the same state since step A1
+ * ([AimiNightGrowthSwitch]); the age row still shows the key default (14) when no age is stored,
+ * while the loop then takes the person for an adult and keeps NGR off.
  */
 @Composable
 internal fun AimiNightGrowthStateScreen(preferences: Preferences, onBack: () -> Unit) {

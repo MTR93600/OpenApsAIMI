@@ -329,8 +329,9 @@ internal class AimiPreferenceTree(
                     items = shown(AimiSettingsSectionId.NightMode) + PreferenceSubScreenDef(
                         key = "aimi_compose_ngr",
                         title = ApsStrings.oaps_aimi_ngr_title,
-                        // The state row first: the switch and age rows show their key defaults also
-                        // when nothing is stored, so only this row says what the loop really does.
+                        // The state row first: it says in full what the loop does and why. The switch
+                        // row shows the same state since step A1 (`AimiNightGrowthSwitch.row`, on every
+                        // renderer), but the age row shows its key default (14) also when no age is stored.
                         items = listOf(ApsIntentKey.AimiNightGrowthState.withCompose(nightGrowthState)) +
                             shown(AimiSettingsSectionId.NightGrowthAge, AimiSettingsSectionId.NightGrowthIntent, AimiSettingsSectionId.NightGrowthBudget),
                     ),
@@ -495,12 +496,19 @@ internal class AimiPreferenceTree(
         private fun modeScreen(key: String, title: TextRef, section: AimiSettingsSectionId): PreferenceSubScreenDef =
             PreferenceSubScreenDef(key = key, title = title, items = shown(section))
 
-        /** The keys of these sections as rows, a choice key with the labels of its choices. */
+        /**
+         * The keys of these sections as rows: a choice key with the labels of its choices, the night
+         * growth switch with its own row ([AimiNightGrowthSwitch.row]).
+         */
         private fun shown(vararg ids: AimiSettingsSectionId): List<PreferenceItem> =
             AimiSettingsScreens.preferenceKeysOf(*ids).map(::withChoiceLabels)
 
-        /** [key] with the labels of its choices, or [key] itself when it has no list of choices. */
+        /**
+         * [key] with the labels of its choices, the night growth switch with its own row, or [key]
+         * itself.
+         */
         private fun withChoiceLabels(key: PreferenceKey): PreferenceItem = when (key) {
+            BooleanKey.OApsAIMINightGrowthEnabled -> AimiNightGrowthSwitch.row(BooleanKey.OApsAIMINightGrowthEnabled)
             StringKey.AimiAdvisorProvider -> StringKey.AimiAdvisorProvider.withEntries(
                 mapOf(
                     "OPENAI" to ApsStrings.aimi_prefs_provider_openai,

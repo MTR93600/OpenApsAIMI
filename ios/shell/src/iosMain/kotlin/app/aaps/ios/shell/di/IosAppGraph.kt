@@ -100,10 +100,14 @@ import kotlinx.coroutines.CoroutineScope
  * honour its ports, because a plugin that is wired up and half fed would dose an iPhone
  * differently from an Android phone.
  *
- * All eight ports now have a real iOS side: `AimiStepsLifecycle` over HealthKit,
- * `AimiPhysioLifecycle`, `AimiTrainingScheduler`, `AimiStorageStatusSource`, `AimiAuditorNotifier`,
- * `AimiPlatformPreferenceItems`, `AimiPlatformActions` and `AimiTickCaptureHook`. `AimiStorage` and
- * `HormonitorStudyExporterProvider` are in `IosAimiPlatformBindings`.
+ * Every platform port of the plugin has a real iOS side, contributed to `AppScope` by its own
+ * `Ios*` class: `AimiStepsLifecycle` (HealthKit), `AimiPhysioLifecycle`, `AimiTrainingScheduler`,
+ * `AimiStorageStatusSource`, `AimiAuditorNotifier`, `AimiPlatformPreferenceItems`,
+ * `AimiPlatformActions` (since step S4: the profile screen link of the Essentials page, through
+ * `PendingNavigation`, which `AapsAppHost` collects) and `AimiTickCaptureHook`. The same eight are the
+ * `PLATFORM_PORT_FIELDS` of the Android `AimiPlatformPortsWiredTest`; add a new port to both.
+ * `AimiStorage` and `HormonitorStudyExporterProvider` are in `IosAimiPlatformBindings`; the HealthKit
+ * physio sources in `IosAimiPhysioBindings`; `AimiKeyValueCache` is `IosAimiKeyValueCache`.
  *
  * The phone is a master (`IosConfig`), so these plugins really reach a pump and a sensor: the iOS
  * Medtrum driver (`IosMedtrumPlugin`), the Omnipod Dash driver (`IosOmnipodDashPlugin`, from

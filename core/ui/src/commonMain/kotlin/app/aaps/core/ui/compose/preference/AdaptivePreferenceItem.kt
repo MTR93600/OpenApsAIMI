@@ -43,6 +43,9 @@ fun AdaptivePreferenceItem(
     intentUrl: String? = null
 ) {
     when (key) {
+        // Its owner draws the row (for example a switch whose state also depends on other settings).
+        is BooleanKeyWithRow            -> key.row.Content(visibilityContext)
+
         is BooleanPreferenceKey         -> {
             AdaptiveSwitchPreferenceItem(
 

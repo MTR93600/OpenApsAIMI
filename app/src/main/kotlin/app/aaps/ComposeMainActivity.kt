@@ -370,8 +370,15 @@ class ComposeMainActivity : MetroAppCompatActivity() {
             // The Activity keeps a reference so an incoming intent can route without the composition.
             onNavControllerReady = { navController = it },
             onClose = { finish() },
-            // Where a tapped notification ends up. It goes through the navigator, so opening
-            // settings still asks for authorization first.
+            // Where a tapped notification, or an in-app link such as the AIMI Essentials profile
+            // link, ends up. It goes through the navigator, so opening settings still asks for
+            // authorization first.
+            //
+            // `navController` is never null here, so no request is lost: `AapsAppRoot` calls
+            // `onNavControllerReady` while it composes, before its collector of `PendingNavigation`
+            // starts, and nothing sets the field back to null. A new activity gets a new composition,
+            // which sets the field again before its own collector runs. The `?.let` only keeps the
+            // compiler happy; checked in step A1 (S4 review).
             onPendingNavigation = { request ->
                 navController?.let { handleNavigationRequest(request, it) }
             },

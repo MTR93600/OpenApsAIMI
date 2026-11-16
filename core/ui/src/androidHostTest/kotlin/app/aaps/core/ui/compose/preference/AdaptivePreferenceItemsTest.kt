@@ -1,9 +1,12 @@
 package app.aaps.core.ui.compose.preference
 
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
@@ -47,6 +50,13 @@ class AdaptivePreferenceItemsTest {
     fun switchItemRenders() {
         render { AdaptiveSwitchPreferenceItem(booleanKey = BooleanKey.OverviewKeepScreenOn) }
         compose.onRoot().assertIsDisplayed()
+    }
+
+    @Test
+    fun aSwitchKeyWithItsOwnRowIsDrawnByThatRowNotByTheSharedSwitch() {
+        render { AdaptivePreferenceItem(key = BooleanKey.OverviewKeepScreenOn.withRow { Text("own row") }, onShowMessage = {}) }
+        compose.onNodeWithText("own row").assertExists()
+        compose.onNode(isToggleable()).assertDoesNotExist()
     }
 
     @Test

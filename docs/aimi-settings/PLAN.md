@@ -231,8 +231,9 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
 | S3 | Delete the dead keys (not the protected ones), move internal state out of the settings, prefs schema, migration | none |
 | S3b | Protected-family dead keys (owner decision 2026-11-15): wire sleep, HRV and the flare duration; delete four keys with a migration (the old due date is copied first) | only when a person turns sleep or HRV off, or forgets to switch a flare off |
 | D1 | Owner decisions on the open items: delete the xDrip 1-minute switch, NGR off when no age was ever stored, meal factor labels in percent, contraceptive also on the illness card, PK/PD pace flag exported, key round trip test repaired | changes for people who never stored an age nor the NGR switch (NGR off, before on) |
-| D2 | NGR switch key default off, so the switch row shows what the loop does when neither the switch nor the age is stored (with a stored age under 18 and no stored switch the row shows off while NGR is on: open item) | none |
+| D2 | NGR switch key default off, so the switch row shows what the loop does when neither the switch nor the age is stored (the case "stored age under 18, no stored switch" was fixed in A1) | none |
 | S4 | Targets link: a tap on the Essentials targets opens the profile screen (new platform action slot, Android and iOS) | none |
+| A1 | Final audit of the automatic writers (Advisor, TPO, tuning, auditor, learners); NGR switch row shows the state the loop uses; S4 review leftovers | none |
 
 ## Step S3 (done 2026-11-15, no dosing change)
 
@@ -341,10 +342,9 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
     no new value, but turns NGR on.
   - A loop-level test (`ShellDecisionTraceTest`) checks the NGR config: off with nothing stored, on
     with a stored switch (age 14, the monitor active), on with a stored age 12, off with 30.
-- **Display mismatch of the switch (from the D1 review): decided in step D2 for "nothing stored".**
-  The switch key default is now off, so with neither the switch nor the age stored the switch row
-  shows off, like the loop. See "Step D2". The case "age stored, switch never stored" is still open
-  (see "Step D2").
+- **Display mismatch of the switch (from the D1 review): decided in step D2 for "nothing stored",
+  and in step A1 for every case.** Since A1 the switch row shows the state the loop uses. See
+  "Step D2" and "Step A1".
 - **Still open for the owner (not decided):** with nothing stored, the age row shows 14 (the key
   default) and the age "?" sheet on the Essentials page says "Default: 14 years", while the loop takes
   the person for an adult. The state row and the Essentials line say the real state. Options: show
@@ -381,8 +381,8 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
 - **NGR switch default off.** `BooleanKey.OApsAIMINightGrowthEnabled` (storage `key_oaps_aimi_ngr_enabled`)
   now has the default `false` (was `true`). With neither the switch nor the age stored, the switch
   row on the night growth page shows off, which is what the loop does since D1. With a stored age
-  under 18 and no stored switch the row also shows off, but the loop runs NGR: see the open item at
-  the end of this step. The storage name, the title and the level did
+  under 18 and no stored switch the row also showed off, but the loop runs NGR: fixed in step A1 (the
+  row now shows the state the loop uses). The storage name, the title and the level did
   not change; a stored value (on or off) keeps its meaning.
 - **Readers checked (all modules, Android and iOS, Advisor, TPO, tuning, auditor, export, Essentials,
   audit).** Only two read the switch for a decision, and both use `getIfExists`, so the key default is
@@ -411,17 +411,10 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
 - **Advisor, TPO, tuning, auditor:** none of them reads, writes or proposes the NGR switch, so nothing
   they propose changed, and there is nothing they can no longer propose.
 - **Dosing:** none. For every stored or unstored combination the loop decides as before.
-- **Still open for the owner (not decided, from the D2 review):** with a stored age under 18 and no
-  stored switch, the loop runs NGR (`ON_BY_AGE`, it can add night-time max IOB, SMB and basal), but
-  the switch row now shows off (before D2 it showed on, which was right for this case). Since D1
-  every family that sets an age on the Essentials page and never opens the night growth page is in
-  this case. A parent who wants NGR off sees the switch already "off" and may do nothing; to really
-  turn it off they have to switch it on and then off again. The state row ("Night growth support
-  now") and the Essentials line show the real state, and the state row help says so, but the switch
-  row does not. No dosing change either way. Options: (a) the switch row shows the effective state
-  from `NightGrowthActivation.read` (a tap then stores the opposite of what is shown), or (b) the
-  switch row shows "not set" while nothing is stored. Not changed, because the owner did not decide
-  it and it changes how the switch row works.
+- **Decided by the owner (from the D2 review, done in step A1, 2026-11-15):** with a stored age under
+  18 and no stored switch the loop runs NGR, but after D2 the switch row showed off. The owner chose
+  option (a): the switch row shows the state from `NightGrowthActivation.read`, with a line that says
+  why, and a tap stores the opposite of what it shows. See "Step A1".
 
 ## Step S4 (2026-11-15, owner decision, no dosing change)
 
@@ -447,3 +440,161 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
 - **Advisor, TPO, tuning, auditor:** no key added, removed or changed, so nothing they read, write or
   propose changed.
 - **Dosing:** none.
+
+## Step A1 (2026-11-15, final audit of the automatic writers, no dosing change)
+
+### Night growth switch row shows the state the loop uses (owner decision, display only)
+
+- The NGR switch row on the night growth page (`BooleanKey.OApsAIMINightGrowthEnabled`) shows the
+  state from `NightGrowthActivation.read`, not the stored switch: on when the switch is stored on,
+  when the switch was never set and the stored age is under 18, or when T3C brittle mode is on; off
+  in every other case. A line under it says why: "Set by hand", "Set by the age (the switch was never
+  set)", "Age not set: off", or "Set by T3C brittle mode: it stays on while T3C brittle mode is on".
+- A tap stores the opposite of what the row shows on screen, as an explicit value (the state that
+  was drawn, not a fresh read: the row reads the state again only once a second and the age row is
+  on the same page). A stored switch wins over the age, as before. With T3C brittle mode on, a tap stores off but the row stays on (T3C keeps NGR
+  on), and the line says so.
+- The audit reset still removes the stored switch, so the age decides again.
+- How: `AimiNightGrowthSwitch` (rule, tap, reason) and `AimiNightGrowthSwitchRow`. The night growth
+  page lists the switch as `AimiNightGrowthSwitch.row(key)`, a `BooleanKeyWithRow` (new in core/ui):
+  the same key, drawn by its own row. The shared `AdaptivePreferenceItem` honours it, so the row is
+  the same on the AIMI page and on the page that the app search opens (`PreferenceScreenView`, shared
+  appshell code, Android and iOS). The key string, title and rules are unchanged, so search, the
+  manifest and the reachability test see it as before. The state is read again every second while the
+  row is shown and right after a tap.
+- Tests: `AimiNightGrowthSwitchRowTest` (commonTest, also on iOS): for all 18 combinations of switch
+  (stored on / off / never) x age (stored 12 / 30 / never) x T3C (on / off) the row shows exactly what
+  the loop rule gives, and a tap stores the opposite of the shown state; a tap after the store changed
+  (age entered, row not read again yet) still stores the opposite of what was on screen; the child
+  case of the D2 review; the audit reset; the night growth page lists the switch as its own row and no
+  other key of the tree is. `AimiNightGrowthSwitchContentTest` (Compose): the row draws the state and
+  the reason, and a tap passes the state on screen; the child case (age 12, switch never set) shows
+  on and "Set by the age" both on the AIMI page (`AimiPreferenceSubScreen`) and through the shared
+  renderer of the app search (`addPreferenceContent`). `AdaptivePreferenceItemsTest` (core/ui): a
+  `BooleanKeyWithRow` is drawn by its own row, not by the shared switch.
+- Dosing: none. The loop reads the same keys in the same way. What is new is only what the row shows,
+  and that a tap from a shown "on" stores off (before A1, with a stored age under 18 and no stored
+  switch, the row showed off and a tap stored on, which changed nothing for the loop).
+
+### Audit of the automatic writers
+
+Every preference write and every recommendation of the Advisor, TPO, the tuning engine, the auditor
+and the learners, after the whole reorganisation. "Screen" is where the person sees and undoes the
+value. Every user setting below also has a row in "Changes" (the settings audit) with its writer and a
+reset. The two PK/PD learner values (`OApsAIMIPkpdStateDiaH`, `OApsAIMIPkpdStatePeakMin`) are internal
+state: no Changes row and no reset, by design (steps P3 and S3).
+`AimiAutomaticWritersAuditTest` (commonTest) runs the proposal code over many stored states and
+periods and checks for every key and value it produces: the key is a setting the person owns (manifest
+entry with the USER writer), it is reachable in the settings tree and not in the reachability debt,
+the Changes page shows it and its reset restores the default, the value is inside the key bounds, a
+meal factor is on the percent scale and an automatic raise stops at 100, the tail damping stays in
+0.70 to 0.92 (never in the legacy zone the loop rewrites), and an exercise or late fat damping is
+never proposed below the 0.5 floor. TPO keys must be on the TPO white list.
+
+| Writer | Key | Still a reader? | Scale | Screen |
+|---|---|---|---|---|
+| Advisor metric rule (hypos) | `OApsAIMIMaxSMB` (x0.8 when above 1.5) | loop SMB limit | U | Essentials |
+| Advisor metric rule (low TIR) | `OApsAIMILunchFactor` (+10, at most 100) | `SmbInstructionExecutor` | percent of the SMB | Meals card, lunch mode |
+| PK/PD advisor | `OApsAIMIPkpdEnabled` (on) | PK/PD | switch | PK/PD card |
+| PK/PD advisor | `OApsAIMIIsfFusionMaxFactor` (+/-0.1) | ISF fusion | factor 1.0-2.0 | PK/PD screen |
+| PK/PD advisor, tuning, TPO | `OApsAIMISmbTailDamping` | `PkPdIntegration` | floor 0.70-0.92 | PK/PD screen |
+| Advisor service | `OApsAIMIRecursiveBeliefShadow`, `OApsAIMIRecursiveBeliefAuthority` | RBT | switch | Autodrive card |
+| Advisor service | `OApsAIMIHyperTrajectoryRelease` | HTR | switch | Autodrive card |
+| Advisor service, tuning, TPO | `OApsAIMIPkpdPragmaticReliefEnabled`, `OApsAIMIPkpdPragmaticReliefMinFactor`, `OApsAIMIRedCarpetRestoreThreshold`, `OApsAIMIPriorityMaxIobFactor`, `OApsAIMIPriorityMaxIobExtraU` | PK/PD guard, red carpet, priority max IOB | switch, factors, U | PK/PD Expert screen |
+| Tuning, TPO | `OApsAIMIHighBGMaxSMB` | loop SMB limit at high BG | U | Essentials |
+| Tuning, TPO | `OApsAIMIDinnerFactor` | `SmbInstructionExecutor` | percent of the SMB | Meals card, dinner mode |
+| Tuning, TPO | `OApsAIMIStraightLineTubeAdvisorEnabled`, `AimiTubeAggressiveness`, `AimiTubeHypoFloorMgdl` | tube advisor | switch, factor, mg/dL | Expert, trajectory |
+| TPO | `OApsAIMISmbExerciseDamping`, `OApsAIMISmbLateFatDamping` (only lowered to 0.85 / 0.90) | `SmbDamping` (floor 0.5) | SMB multiplier | Activity card (exercise), PK/PD Expert screen (late fat) |
+| Tuning apply | `AimiTuningContextSelection` (the chosen context) | loop (`hypoGuardActive`), RBT signals | text | Profile Advisor screen (in the reachability debt of the settings tree) |
+| PK/PD learner | `OApsAIMIPkpdStateDiaH`, `OApsAIMIPkpdStatePeakMin` | PK/PD | h, min | internal state, read only on the PK/PD status card |
+| PK/PD one-shot migrations | pace keys (0.5/5 -> FASTER once), tail damping (stored 0.55 or less -> 0.85 once) | PK/PD | h/day, min/day, floor | PK/PD screen |
+| Plugin start (one-shot) | `OApsAIMIautoDriveActive` on, when the old classic Autodrive key was on | Autodrive | switch | Autodrive card |
+| T2 one-shot repair | meal factors below 2 -> default | `SmbInstructionExecutor` | percent | Meals card |
+
+- **Auditor:** writes no preference. Its ISF and target factors (plus or minus 15 %) are applied in
+  memory under its own switches; it proposes no key change.
+- **AI coach (`AiCoachingService`):** writes nothing. Its prompt lists only values that still exist
+  (Max SMB, profile, the unified reactivity learner, Autodrive max basal and MPC step, PK/PD learned
+  values, ISF fusion max, effective tail damping). The Control Center levels left it in S2.
+- **Fixed in A1:** the OREF "PKPD: DIA, peak, damping" card told the person to use "the advisor cards
+  above as a checklist" for DIA and peak. Those cards were removed in P2 (DIA and peak come from the
+  profile insulin). The text now says to review the insulin of the profile (its DIA and peak, where
+  the PK/PD learning starts) and the SMB damping together. Text only.
+- **Fixed in A1 (from the A1 review), PK/PD advisor texts:** the ISF fusion card said "raise the ISF
+  fusion (Max x2.0)" while it writes one step of 0.1; it now says "one small step, to 1.2" (the value
+  it writes). The tail damping reason was built without its value, so the stored reason showed a raw
+  placeholder; it now shows the new floor. Values in these texts are rounded to two decimals (text
+  only; the written value is unchanged). The PK/PD advisor titles and texts, the Advisor score labels
+  and the "profile looks good" card were French in the English strings file; they are now plain
+  English. 19 French Advisor strings that no code used any more were deleted (English file only).
+  Test: `PkpdAdvisorReasonTextTest`.
+- **Checked, left as is (no wrong write, no dead key):**
+  - The tuning engine's hypo plan lowers the four pragmatic relief values (min factor, red carpet
+    restore, priority max IOB factor and extra) also while pragmatic relief is off, and the TPO
+    protective packs lower them in the same plan that switches relief off. These values only act while
+    relief is on, so the change has no effect until relief is on again. It is a protective value kept
+    for later, not a dead key; skipping it would change dosing later, so A1 does not change it. TPO
+    reverts both together at the end of a session.
+  - `SafetyAggressionPlugin` (Max SMB x0.7 on a low) is never registered with `AimiPluginManager`, so
+    it never proposes anything. It is dead code; deleting it is a separate cleanup.
+- **Advisor, TPO, tuning, auditor:** A1 removed, re-scaled or re-derived no key, so nothing they can
+  propose changed in A1.
+
+### Tests of step A1
+
+- The full CI suite (`testFullDebugUnitTest testDebugUnitTest jvmTest testAndroidHostTest
+  :desktop:shell:test`) and `:plugins:aps:iosSimulatorArm64Test` pass, except 5 tests in two modules
+  that A1 does not touch: `:pump:dana:danar` `MsgHistoryBolusTest` (2) and `:shared:impl`
+  `DateUtilImplOldTest` (3). They fail the same way on a clean HEAD (`dc62795584`, run on 2026-11-16
+  with the A1 work stashed), so they existed before A1. They read dates and times, so they likely
+  depend on the time zone or the date of the run.
+
+### S4 review leftovers
+
+- `PendingNavigation` KDoc now says it carries in-app taps too (the AIMI Essentials profile link), not
+  only notification taps.
+- The port list above `IosAppGraph` names the eight platform ports and points to the Android
+  `AimiPlatformPortsWiredTest`, which lists the same eight; that test no longer says the ports are
+  absent on iOS.
+- New test (`AimiPlatformPortsWiredTest`, Android root graph): the Essentials page that the AIMI
+  settings tree opens gets a non-null profile link from the graph's `AimiPlatformActions`, and a tap
+  on it parks the profile management request for the navigator.
+- Android, `navController` null at the moment of a tap: checked, a request cannot be lost.
+  `AapsAppRoot` calls `onNavControllerReady` while it composes, before its collector of
+  `PendingNavigation` starts, and nothing sets the field back to null. Written as a comment at
+  `ComposeMainActivity` (`onPendingNavigation`). iOS uses its own relay and is not affected.
+- The ML correction limit comments (`AimiBehaviorRuntimeProfile.NEUTRAL`,
+  `AimiControlCenterDisarmTest`) now say the owner kept 0.55 / 0.72 / 0.88 / 1.0.
+
+### What the Advisor and TPO can propose now
+
+Plain English, after all steps up to A1. Every proposal of the Advisor and of the tuning engine is
+shown first and changes nothing until the person accepts it. TPO changes values by itself for a
+while, shows a badge, and puts them back at the end of its session.
+
+- **The Advisor can propose:**
+  - a smaller Max SMB (80 % of it) when there are too many lows and Max SMB is above 1.5 U;
+  - a larger lunch mode SMB (10 points more), never above 100 %, when time in range is low and lows
+    are rare;
+  - to turn PK/PD learning on when it is off and time in range is below 70 %;
+  - a little more or less ISF fusion headroom (max factor), and a stronger or weaker SMB tail damping,
+    inside the slider band, depending on whether highs or lows dominate;
+  - to turn on the RBT shadow export, RBT authority or hyper trajectory release when Autodrive is on
+    and they are off;
+  - to turn pragmatic relief on, or to move its four values (min factor, red carpet restore, priority
+    max IOB factor and extra units) up when highs dominate or down when lows are frequent, only while
+    relief is on;
+  - review cards with no action (basal share, carb ratio, ISF, insulin and damping, MPC step).
+- **The tuning engine (Profile Advisor, one bundle the person accepts) can propose:** small steps of
+  Max SMB, high BG Max SMB, lunch and dinner mode SMB size (raise at most to 100 %), the pragmatic
+  relief switch and values, the straight-line tube switch, its aggressiveness and hypo floor, and the
+  SMB tail damping, in the direction of the chosen context (meal rise, hyper, hypo guard, mixed).
+- **TPO can change for a while (and put back):** Max SMB and high BG Max SMB (one rung down per step),
+  the priority max IOB factor and extra units, the pragmatic relief min factor and red carpet restore,
+  stronger SMB tail damping, lunch and dinner mode SMB size (down only), switching pragmatic relief and
+  the tube advisor off, a weaker tube and a higher tube hypo floor, and, after a poor night, the
+  exercise and late fat damping lowered to 0.85 / 0.90 when they are above that.
+- **They can no longer propose (removed in earlier steps):** the Control Center "move a family up or
+  down" suggestions and their writes (S2); the PK/PD start DIA and peak (P2, they come from the
+  profile insulin); a meal factor raise above 100 (T2); a TPO "step down" that raises a value, or a
+  poor-sleep pack that raises the damping (T1); anything about the keys deleted in S3, S3b and D1.

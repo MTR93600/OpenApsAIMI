@@ -156,8 +156,9 @@ data class AimiBehaviorRuntimeProfile(
          * release), authoritative gives 1.0. With the key defaults (all on) it stays controlled
          * authority, so a default user keeps 1.0. The 0.88 factor of the old default protection
          * level 1 does not come back, because the protection level stays neutral (so 0.55, not the
-         * 0.484 of before C1). Open for the owner: confirm 0.55 / 0.72, or add a fixed 0.88 to the
-         * autonomy part only (see docs/aimi-settings/PLAN.md, step T2 review).
+         * 0.484 of before C1). The owner decided to keep 0.55 / 0.72 / 0.88 / 1.0 (T2 follow-up,
+         * docs/aimi-settings/PLAN.md): the difference to the old 0.484 / 0.634 is at most about
+         * 0.003 U per SMB, and only with an ML model loaded.
          */
         val NEUTRAL: AimiBehaviorRuntimeProfile = AimiBehaviorRuntimeProfile(
             protectionLevel = 2,

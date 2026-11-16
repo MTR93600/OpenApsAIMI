@@ -31,16 +31,20 @@ internal enum class NightGrowthState(val enabled: Boolean) {
  * The one rule that says whether night growth support runs.
  *
  * `DetermineBasalAIMI2.buildNightGrowthResistanceConfig` uses it to dose. The Essentials page, the
- * night growth page and the "What AIMI learned" status use [read] to show the state read only, so a
- * page can never show a state the loop does not use.
+ * night growth page (its state row and its switch row) and the "What AIMI learned" status use [read]
+ * to show the state, so a page can never show a state the loop does not use.
  *
  * Owner decision of step D1 (2026-11-15): an age that was never stored means an adult, so NGR is off.
  * Before D1 the key default (14) was used, so NGR ran for every person who never set an age or the
  * switch. A stored switch or a stored age keeps the behaviour of before.
  *
- * Owner decision of step D2 (2026-11-15): the switch key default is off, so the switch row shows off
- * when nothing was stored, like the loop. This changes no decision: the rule reads the switch with
- * `getIfExists` only and never uses its key default. Any new reader must do the same (use [read]).
+ * Owner decision of step D2 (2026-11-15): the switch key default is off. This changes no decision:
+ * the rule reads the switch with `getIfExists` only and never uses its key default. Any new reader
+ * must do the same (use [read]).
+ *
+ * Owner decision of step A1 (2026-11-15, display only): the switch row of the night growth page shows
+ * [read] too (`AimiNightGrowthSwitch`), not the stored switch, so it is right also with a stored age
+ * under 18 and no stored switch. A tap there stores the opposite of what it shows.
  */
 internal object NightGrowthActivation {
 

@@ -791,33 +791,24 @@
 
 <string name="aimi_hypo_risk_alarm_summary">AIMI posts a unified URGENT alarm (NotificationId.HYPO_RISK_ALARM) with AAPS alarm sound. Snooze or dismiss from the notification list or dashboard dialog.</string>
 
-<string name="aimi_advisor_summary">Analyse les performances glycémiques et propose des ajustements de profil</string>
 
-<string name="aimi_advisor_section">Outils et Analyses</string>
 
 <string name="aimi_advisor_score_label_excellent">Excellent</string>
 
-<string name="aimi_advisor_score_label_good">Bon</string>
+<string name="aimi_advisor_score_label_good">Good</string>
 
-<string name="aimi_advisor_score_label_warning">À améliorer</string>
+<string name="aimi_advisor_score_label_warning">Can be better</string>
 
-<string name="aimi_advisor_score_label_attention">Attention requise</string>
+<string name="aimi_advisor_score_label_attention">Needs attention</string>
 
-<string name="aimi_advisor_score_label_critical">Action urgente</string>
+<string name="aimi_advisor_score_label_critical">Needs action now</string>
 
-<string name="aimi_advisor_period_label">Période : %1$s</string>
 
-<string name="aimi_advisor_metric_tir_70_180">TIR 70–180 : %1$d %%</string>
 
-<string name="aimi_advisor_metric_tir_70_140">TIR 70–140 : %1$d %%</string>
 
-<string name="aimi_advisor_metric_time_below_70">Temps &lt;70 : %1$d %%</string>
 
-<string name="aimi_advisor_metric_time_above_180">Temps &gt;180 : %1$d %%</string>
 
-<string name="aimi_advisor_metric_mean_bg">Glycémie moyenne : %1$d mg/dL</string>
 
-<string name="aimi_advisor_metric_tdd">TDD : %1$.1f U (basal %2$d %%)</string>
 
 <string name="aimi_advisor_recommendations_title">Recommendations</string>
 
@@ -827,26 +818,16 @@
 
 
 
-<string name="aimi_adv_rec_hypers_action_ratios">Vérifier les ratios glucides/insuline</string>
-
-<string name="aimi_adv_rec_hypers_action_autodrive">Activer/ajuster AutoDrive</string>
-
-<string name="aimi_adv_rec_hypers_action_factors">Augmenter les facteurs des modes repas</string>
-
-<string name="aimi_adv_rec_basal_action_night">Revoir les basales nocturnes</string>
-
-<string name="aimi_adv_rec_basal_action_carbs">Améliorer le comptage des glucides</string>
-
-<string name="aimi_adv_rec_profile_ok_action_doc">Documenter cette configuration</string>
-
-<string name="aimi_adv_rec_profile_ok_action_tune">Ajuster uniquement les tranches problématiques</string>
-
-<string name="aimi_action_increase_night_basal">Augmenter la basale de 00h-06h : %.2f → %.2f U/h (+10%%)</string>
-
-<string name="aimi_action_reduce_max_smb">Réduire MaxSMB : %.1f → %.1f U</string>
 
 
-<string name="aimi_pref_openai_key_title">Clé API OpenAI</string>
+
+
+
+
+
+
+
+
 
 <string name="aimi_pref_openai_key_summary">Saisissez votre clé (sk-...) pour activer le Coach AIMI.</string>
 
@@ -1149,9 +1130,9 @@
 
 <string name="aimi_adv_rec_basal_desc" comment="%1$d=basal share of the total daily dose in percent. Example: Basal is 60%% of the total daily dose.">Basal is %1$d%% of the total daily dose. Check that your basal rates are right.</string>
 
-<string name="aimi_adv_rec_profile_ok_title">Profil Excellent</string>
+<string name="aimi_adv_rec_profile_ok_title">Profile looks good</string>
 
-<string name="aimi_adv_rec_profile_ok_desc">Aucun ajustement majeur nécessaire.</string>
+<string name="aimi_adv_rec_profile_ok_desc">No big change is needed.</string>
 
 <string name="aimi_adv_rec_oref_isf_hypo_title">Hypo pattern: discuss ISF with your care team</string>
 
@@ -1175,7 +1156,7 @@
 
 <string name="aimi_adv_rec_oref_pkpd_review_title">PKPD: DIA, peak, damping</string>
 
-<string name="aimi_adv_rec_oref_pkpd_review_desc">PKPD is enabled and OREF flags an imbalance. With your clinician, review DIA, peak time, and SMB damping together—not in isolation—using the advisor cards above as a checklist.</string>
+<string name="aimi_adv_rec_oref_pkpd_review_desc">PKPD is enabled and OREF flags an imbalance. With your care team, review the insulin of your profile (its DIA and peak time, where the PK/PD learning starts) and the SMB damping together, not one at a time.</string>
 
 <string name="aimi_adv_rec_oref_autodrive_mpc_title">AutoDrive: MPC aggressiveness</string>
 
@@ -1201,17 +1182,17 @@
 
 <string name="aimi_adv_rec_priority_maxiob_extra_reduce_desc">Priority MaxIOB extra is %1$sU while lows are elevated. A step toward ~%2$sU may be safer than pushing headroom higher.</string>
 
-<string name="aimi_pkpd_title_enable">Activation PK/PD</string>
+<string name="aimi_pkpd_title_enable">Turn on PK/PD learning</string>
 
-<string name="aimi_pkpd_title_isf">Facteur Sensibilité (ISF)</string>
+<string name="aimi_pkpd_title_isf">ISF fusion limit</string>
 
-<string name="aimi_pkpd_title_damping">Amortissement SMB</string>
+<string name="aimi_pkpd_title_damping">SMB tail damping</string>
 
-<string name="aimi_pkpd_advisor_disabled">PKPD désactivé alors que le TIR est faible. Activation recommandée pour apprentissage dynamique.</string>
+<string name="aimi_pkpd_advisor_disabled">PK/PD learning is off and time in range is low. Turn it on so AIMI can learn how fast your insulin works.</string>
 
-<string name="aimi_pkpd_hyper_isf">Résistance détectée : Augmenter la fusion ISF (Max x2.0) pour des corrections plus fortes.</string>
+<string name="aimi_pkpd_hyper_isf" comment="%1$s=the new ISF fusion max factor, one step of 0.1 above the current value. Example: Frequent highs: raise the ISF fusion max factor by one small step, to 1.2, for stronger corrections.">Frequent highs: raise the ISF fusion max factor by one small step, to %1$s, for stronger corrections.</string>
 
-<string name="aimi_pkpd_hypo_damping">Risque hypo : renforcer l\'amortissement de fin de DIA (plancher SMB abaissé à %1$s) pour réduire les SMB tardifs.</string>
+<string name="aimi_pkpd_hypo_damping" comment="%1$s=the new SMB tail floor (a factor, lower means stronger damping). Example: Risk of lows: lower the SMB tail floor to 0.75 to give fewer late SMBs.">Risk of lows: lower the SMB tail floor to %1$s to give fewer late SMBs.</string>
 
 <string name="aimi_pkpd_hypo_isf_reduce">Frequent lows with high ISF-fusion headroom: consider lowering max fusion from %1$sx to ~%2$sx with your clinician to cap aggressive corrections.</string>
 
@@ -2187,7 +2168,11 @@
 <string name="aimi_essentials_ngr_off_no_age">Age not set: night growth support is off. Set the age if the person is under 18.</string>
 <string name="aimi_essentials_ngr_on_by_t3c">Night growth support is on, because T3C brittle mode is on.</string>
 <string name="aimi_ngr_state_title">Night growth support now</string>
-<string name="aimi_ngr_state_summary">See if night growth support is on or off now, and why. When its switch was never set, the age decides: under 18 it is on, even if the switch on this page shows off. When the age was never set either, AIMI takes the person for an adult and night growth support is off.</string>
+<string name="aimi_ngr_state_summary">See if night growth support is on or off now, and why. When its switch was never set, the age decides: under 18 it is on. When the age was never set either, AIMI takes the person for an adult and night growth support is off.</string>
+<string name="aimi_ngr_switch_reason_hand">Set by hand</string>
+<string name="aimi_ngr_switch_reason_age">Set by the age (the switch was never set)</string>
+<string name="aimi_ngr_switch_reason_no_age">Age not set: off</string>
+<string name="aimi_ngr_switch_reason_t3c">Set by T3C brittle mode: it stays on while T3C brittle mode is on</string>
 <string name="aimi_unit_insulin_per_day" comment="Unit label: insulin units per day">U/day</string>
 <string name="aimi_setting_help">Help for this setting</string>
 <string name="aimi_setting_default" comment="%1$s=default value with its unit. Example: Default: 1.00 U">Default: %1$s</string>

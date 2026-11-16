@@ -16,7 +16,9 @@ import kotlin.test.assertFalse
 
 /**
  * Step D2 (owner decision 2026-11-15): the default of the night growth (NGR) switch is now off, so
- * the switch row shows what the loop does when nothing was stored. This must not change dosing:
+ * a plain `get` of the switch answers what the loop does when nothing was stored. (Since step A1 the
+ * switch row no longer shows `get`: it shows the state, see `AimiNightGrowthSwitchRowTest`.) This
+ * must not change dosing:
  * every reader that decides about NGR reads the switch with `getIfExists`, so the key default is
  * never used for the decision.
  *
@@ -104,7 +106,8 @@ class AimiNightGrowthSwitchDefaultTest {
 
     @Test
     fun withNothingStoredTheSwitchRowShowsWhatTheLoopDoes() {
-        // The switch row shows `get` of the key, so the key default. Before D2 it showed on while
+        // A plain `get` of the key answers the key default (the switch row showed this until step A1,
+        // which made it show the state instead). Before D2 it answered on while
         // the loop kept NGR off.
         val preferences = Store(switch = null, age = null, t3c = false, switchDefault = BooleanKey.OApsAIMINightGrowthEnabled.defaultValue)
         assertEquals(NightGrowthState.OFF_NO_AGE, NightGrowthActivation.read(preferences))

@@ -1,5 +1,9 @@
 package app.aaps.di.metro
 
+import app.aaps.core.interfaces.navigation.ElementType
+import app.aaps.core.keys.interfaces.IntentPreferenceKey
+import app.aaps.core.ui.compose.navigation.NavigationRequest
+import app.aaps.core.ui.compose.navigation.PendingNavigation
 import app.aaps.plugins.aps.openAPSAIMI.OpenAPSAIMIPlugin
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
@@ -21,6 +25,9 @@ import org.junit.jupiter.api.Test
  *
  * Read through the real root graph, not through a hand-built plugin, because only the graph can
  * show what a phone would get.
+ *
+ * The same ports are bound on iOS too (`IosAppGraph`, checked by the iOS tests of each port), so
+ * "Android-only" here means the helper behind the port, not that iOS lacks the port.
  */
 class AimiPlatformPortsWiredTest {
 
@@ -41,14 +48,37 @@ class AimiPlatformPortsWiredTest {
         }
     }
 
+    /**
+     * Step A1 (S4 review): the Essentials page that the AIMI settings tree opens gets a real profile
+     * link from the graph's `AimiPlatformActions`, and a tap on it asks the navigator for the profile
+     * screen. Without the link the targets would show no tap at all, and nothing else would fail.
+     *
+     * The Essentials link is the first row of the AIMI settings (`AimiPreferenceTree.rootItems`). Its
+     * page class is internal to the plugin module, so its `onOpenProfile` is read by reflection.
+     */
+    @Test
+    fun `android graph gives the AIMI Essentials page a working profile link`() {
+        val plugin = testRoot().contributedPlugins[AIMI_PLUGIN_ORDER] as OpenAPSAIMIPlugin
+        val essentialsLink = plugin.getPreferenceScreenContent().items.first() as IntentPreferenceKey
+        val page = requireNotNull(essentialsLink.composeScreen) { "the Essentials link opens no page" }
+
+        @Suppress("UNCHECKED_CAST")
+        val openProfile = page.javaClass.getMethod("getOnOpenProfile").invoke(page) as (() -> Unit)?
+        assertWithMessage("the Essentials page got no profile link from AimiPlatformActions").that(openProfile).isNotNull()
+
+        PendingNavigation.consume()
+        openProfile?.invoke()
+        assertThat(PendingNavigation.consume()).isEqualTo(NavigationRequest.Element(ElementType.PROFILE_MANAGEMENT))
+    }
+
     companion object {
 
         /** `@MetroIntKey(250)` on `OpenAPSAIMIPlugin`. */
         private const val AIMI_PLUGIN_ORDER = 250
 
         /**
-         * The constructor parameters that are ports onto an Android-only helper. Each one is bound
-         * in `androidMain` and absent on iOS by design.
+         * The constructor parameters that are ports onto a platform helper. Each one is bound in
+         * `androidMain` here; the iOS side binds its own class for each (`IosAppGraph`).
          */
         private val PLATFORM_PORT_FIELDS = listOf(
             "physioManager",

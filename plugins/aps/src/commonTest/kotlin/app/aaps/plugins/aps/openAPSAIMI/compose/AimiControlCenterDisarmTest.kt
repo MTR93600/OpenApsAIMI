@@ -152,8 +152,8 @@ class AimiControlCenterDisarmTest {
     /**
      * The ML correction limit with Autodrive off or not authoritative is lower again, as before C1.
      * The display levels stay neutral (protection 2), so the 0.88 factor of the old default
-     * protection level 1 does not come back: 0.55 and 0.72, not 0.484 and 0.634. These numbers
-     * are still open for the owner (PLAN.md, step T2 review).
+     * protection level 1 does not come back: 0.55 and 0.72, not 0.484 and 0.634. The owner decided
+     * to keep these numbers (PLAN.md, "Decided by the owner (T2 follow-up)").
      */
     @Test
     fun `the ML correction limit follows the Autodrive switches`() {

@@ -6,7 +6,19 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.getAndUpdate
 
 /**
- * Where a tapped notification parks the screen it wants, until the UI is ready to go there.
+ * Where a request to open a screen waits until the app navigator takes it: a tapped notification, or
+ * an in-app link from shared code that cannot reach the navigator itself.
+ *
+ * Two kinds of writers use it:
+ * - a tapped notification (Android intent, iOS notification delegate), which can come before the UI
+ *   exists;
+ * - an in-app tap in shared code: the AIMI Essentials page parks
+ *   `NavigationRequest.Element(ElementType.PROFILE_MANAGEMENT)` here when the person taps the profile
+ *   targets (`requestProfileScreen` in the AIMI plugin). The UI is open then, so the request is taken
+ *   at once.
+ *
+ * Either way the navigator handles the request, so its protection check runs first, as for the
+ * drawer entry.
  *
  * A notification is tapped while the app may not be running. The nav graph does not exist yet at
  * that moment, so the tap cannot navigate - it can only say where it wanted to go. This object
@@ -17,11 +29,9 @@ import kotlinx.coroutines.flow.getAndUpdate
  * notification delegate. Making it an injected dependency would mean building a graph inside those
  * entry points just to park a string.
  *
- * Shared code uses it too, for an in-app link to a screen it cannot reach itself: the AIMI
- * Essentials page parks the profile management screen here when the person taps the targets. The
- * shared app root (`AapsAppRoot`, used by the Android activity and by the iOS `AapsAppHost`) collects
- * it while the app is open. So do not clear it at start up, and do not accept only some request
- * types, or that link breaks.
+ * The shared app root (`AapsAppRoot`, used by the Android activity and by the iOS `AapsAppHost`)
+ * collects it while the app is open. So do not clear it at start up, and do not accept only some
+ * request types, or the in-app link breaks.
  *
  * Only one request is kept. A second tap before the host has taken the first replaces it, which is
  * what a user means by tapping twice: they want the last thing they tapped.
