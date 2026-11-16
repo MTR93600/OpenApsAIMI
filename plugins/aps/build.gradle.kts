@@ -81,6 +81,8 @@ kotlin {
                 // phones share. Not a new module edge for the module: it already depends on this
                 // module in appleJvmMain and androidMain. The same build, now seen by commonMain.
                 implementation(project(":plugins:aimi-contracts"))
+                // The profile viewer of the Autotune screen. Was on androidMain until Autotune moved here.
+                implementation(project(":core:graph"))
 
                 implementation(libs.androidx.collection)
                 implementation(libs.jetbrains.lifecycle.runtime.compose)
@@ -88,6 +90,7 @@ kotlin {
                 implementation(libs.kotlinx.coroutines.core)
                 implementation(libs.kotlinx.datetime)
                 implementation(libs.jetbrains.compose.runtime)
+                implementation(libs.jetbrains.compose.ui.tooling.preview)
                 api(kotlin("reflect"))
             }
         }
@@ -100,7 +103,6 @@ kotlin {
                 // :plugins:aimi-contracts has no Android target and does not need one: an Android
                 // consumer resolves its jvm variant, the same way :core:data is consumed here.
                 implementation(project(":plugins:aimi-contracts"))
-                implementation(project(":core:graph"))
                 // TensorFlow Lite for AimiModelHandler's UAM inference. Dropped when upstream rewrote
                 // this module for KMP. The model stays: modelUAM.tflite has its own architecture, so
                 // re-expressing it would change behaviour on an SMB path. Android only.
@@ -123,7 +125,6 @@ kotlin {
                 implementation("androidx.health.connect:connect-client:1.1.0")
                 implementation(libs.androidx.compose.ui.tooling.preview)
                 implementation(libs.androidx.work.runtime)
-                implementation(libs.org.slf4j.api)
                 // APS (it should be androidTestImplementation but it doesn't work)
                 runtimeOnly(libs.org.mozilla.rhino)
             }
@@ -147,6 +148,9 @@ kotlin {
             dependencies {
                 implementation(kotlin("test"))
                 implementation(project(":shared:tests"))
+                // AndroidAutotuneFileStore, which AutotuneFSTest runs for real. Already on the test runtime
+                // classpath through :shared:tests.
+                implementation(project(":implementation"))
                 implementation(project(":pump:virtual"))
                 implementation(libs.org.junit.jupiter)
                 implementation(libs.org.junit.jupiter.api)
