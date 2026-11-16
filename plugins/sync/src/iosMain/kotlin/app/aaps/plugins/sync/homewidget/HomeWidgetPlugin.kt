@@ -2,6 +2,8 @@ package app.aaps.plugins.sync.homewidget
 
 import app.aaps.core.data.model.GV
 import app.aaps.core.data.plugin.PluginType
+import app.aaps.core.interfaces.configuration.Config
+import app.aaps.core.interfaces.configuration.appInitializedFlow
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
@@ -53,6 +55,7 @@ class HomeWidgetPlugin(
     private val rxBus: RxBus,
     private val widgetStateExport: WidgetStateExport,
     private val dateUtil: DateUtil,
+    private val config: Config,
 ) : PluginBase(
     pluginDescription = PluginDescription()
         .mainType(PluginType.GENERAL)
@@ -72,6 +75,7 @@ class HomeWidgetPlugin(
         val publisher = HomeWidgetPublisher(
             scope = scope,
             export = widgetStateExport,
+            appInitialized = config.appInitializedFlow,
             nowMs = { dateUtil.now() },
             log = { aapsLogger.info(LTag.WIDGET, it) },
         ).also { publisher = it }

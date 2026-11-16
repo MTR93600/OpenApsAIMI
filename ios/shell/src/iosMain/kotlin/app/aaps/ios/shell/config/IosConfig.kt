@@ -114,7 +114,17 @@ class IosConfig(
             ?: "AAPS"
     )
 
-    private val _initProgressFlow = MutableStateFlow(InitProgress(done = true))
+    /**
+     * Not done at the start. `IosAppStartup` calls [initCompleted] once `ConfigBuilder.initialize` has
+     * elected a plugin in each category. Before that, a fresh install has no pump at all, and reading
+     * the active pump throws "No pump selected". `appInitialized` is what background work waits on, as
+     * on Android. This used to start at `done = true`, so nothing waited: the home widget calculated
+     * the IOB during the election and the app died on its very first launch.
+     *
+     * The first screen is composed only after the election, so it never sees `done = false` and no
+     * splash is shown.
+     */
+    private val _initProgressFlow = MutableStateFlow(InitProgress(done = false))
     override val initProgressFlow: StateFlow<InitProgress> = _initProgressFlow.asStateFlow()
 
     private val _initSnackbarFlow = MutableSharedFlow<String>(extraBufferCapacity = 8)
@@ -124,8 +134,8 @@ class IosConfig(
     // and what the start-up progress wants. The one field that must survive is the reconfigure depth:
     // it belongs to whoever opened the window, not to init progress, and clobbering it here would
     // close a window that `whileReconfiguring` still believes is open - reopening the app to readers
-    // in the middle of an import. It matters more on iOS than anywhere else, because iOS starts at
-    // `done = true` and has no start-up sequence that would put the state right again afterwards.
+    // in the middle of an import. It matters more on iOS than anywhere else, because iOS marks start
+    // up done only once, early, and has no later start-up step that would put the state right again.
     override fun updateInitProgress(step: String, current: Int, total: Int) {
         _initProgressFlow.update { InitProgress(step = step, current = current, total = total, reconfiguringDepth = it.reconfiguringDepth) }
     }

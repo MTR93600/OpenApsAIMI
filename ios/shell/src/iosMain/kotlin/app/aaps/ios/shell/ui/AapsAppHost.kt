@@ -268,6 +268,9 @@ private fun startedOnce(nsSocketFactory: NsSocketFactory, crashReporter: CrashRe
             graph.localAlertUtils.preSnoozeAlarms()
             graph.periodicMaintenance.start(graph.appScope)
         },
+        // Right after the plugins are elected. Until then the home widget and the rest of the
+        // background work wait, because a fresh install has no pump to read yet.
+        markInitialized = { graph.config.initCompleted() },
         startMasterServices = {
             graph.runningModeReconciler.start()
             graph.runningModeExpiryScheduler.start()

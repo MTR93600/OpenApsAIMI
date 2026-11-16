@@ -3,6 +3,7 @@ package app.aaps.plugins.sync.liveactivity
 import app.aaps.core.interfaces.widget.WidgetStateExport
 import app.aaps.core.interfaces.widget.WidgetStateSnapshot
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -76,13 +77,16 @@ class LiveActivityPublisherTest {
         startBg: Long?,
         var settings: LiveActivitySettings = LiveActivitySettings(enabled = true, showChart = true, showIobCob = true, showLoop = true),
         withCompanion: Boolean = true,
+        initialized: Boolean = true,
     ) {
         val companion = FakeCompanion()
         val export = FakeExport(startBg)
         val logs = mutableListOf<String>()
+        val appInitialized = MutableStateFlow(initialized)
         val publisher = LiveActivityPublisher(
             scope = scope,
             export = export,
+            appInitialized = appInitialized,
             settings = { settings },
             nowMs = { scope.testScheduler.currentTime },
             log = { logs.add(it) },
@@ -100,6 +104,20 @@ class LiveActivityPublisherTest {
         assertTrue(h.companion.callback != null)
         assertEquals(1, h.companion.updates.size)
         assertEquals(0, h.companion.ends)
+    }
+
+    /** Building the state reads the active pump, which does not exist while the plugins are elected. */
+    @Test
+    fun nothingIsBuiltBeforeTheAppIsInitialized() = runTest {
+        val h = Harness(this, startBg = 1_000L, initialized = false)
+        h.publisher.start()
+        runCurrent()
+        assertEquals(0, h.export.builds)
+        assertEquals(0, h.companion.updates.size)
+
+        h.appInitialized.value = true
+        runCurrent()
+        assertEquals(1, h.companion.updates.size)
     }
 
     @Test

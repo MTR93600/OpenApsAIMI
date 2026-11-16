@@ -51,8 +51,20 @@ import kotlin.time.Duration.Companion.seconds
  * ## What Android also does here, and this does not
  *
  * `MainApp` also migrates preferences, vacuums the database and runs data migrations. Those move
- * data written by older Android versions; an iOS install has none. `IosConfig` reports
- * initialization done from the start, so the splash does not appear at all.
+ * data written by older Android versions; an iOS install has none.
+ *
+ * ## When the app counts as initialized
+ *
+ * [markInitialized] runs as soon as [PluginRegistry.initializeConfig] returns: at that point a plugin
+ * is elected in each category, so the active pump can be read. Background work that reads plugin
+ * state waits for `Config.appInitialized` (the home widget, the queue, the profile). Android sets it
+ * later, after the start jobs, behind its splash screen; iOS has no splash, and the first screen is
+ * composed only after [run] returns, so it never sees the app as not initialized.
+ *
+ * It must not be earlier. Enabling a plugin starts its `onStart` at once on another thread, while
+ * the election is still running. On a fresh install no pump is stored, so until the default one is
+ * elected (the last category) reading the active pump throws "No pump selected". The home widget did
+ * that from its `onStart`, and the app died on its very first launch.
  */
 internal class IosAppStartup(
     private val aapsLogger: AAPSLogger,
@@ -63,6 +75,11 @@ internal class IosAppStartup(
     private val mergeApsPlugins: Boolean = false,
     /** Starts the shared periodic housekeeping. A lambda so a test can run this without building it. */
     private val startPeriodicWork: () -> Unit,
+    /**
+     * Marks the app initialized (`Config.initCompleted`). No default on purpose: without it, work that
+     * waits for the app to be initialized never starts.
+     */
+    private val markInitialized: () -> Unit,
     /** Starts the services a master phone runs. A lambda for the same reason. */
     private val startMasterServices: () -> Unit = {},
     /** Runs after the plugins are registered and before they start. */
@@ -99,6 +116,9 @@ internal class IosAppStartup(
         // category check - which is what this did before - left every enabled plugin unstarted.
         beforePluginsStart()
         val started = registry.initializeConfig()
+
+        // Only now is a plugin elected in every category - see "When the app counts as initialized".
+        markInitialized()
 
         // The periodic housekeeping Android gets from KeepAliveWorker: the missed-reading alarm,
         // snooze shortening, and log and database trimming. The work is shared; only the trigger is

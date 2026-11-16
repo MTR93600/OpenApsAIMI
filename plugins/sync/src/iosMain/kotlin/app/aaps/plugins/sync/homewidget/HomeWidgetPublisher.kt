@@ -7,6 +7,8 @@ import app.aaps.plugins.sync.liveactivity.LiveActivityThrottle
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -35,11 +37,18 @@ import kotlinx.coroutines.sync.withLock
  * reload). The JSON carries `bgTime` and `staleAt`, and the widget judges the age again at the time
  * it draws, so an old reading turns grey and struck out by itself.
  *
+ * Nothing is built before [appInitialized] says true. Building the state reads the active pump (for
+ * the IOB), and on a fresh install there is no pump until start up has elected the default one. The
+ * first save at start used to run during that election and took the app down on its first launch
+ * ("No pump selected"). The same wait covers a settings import, which has the same window.
+ *
  * All state is changed under [lock]. Calls come from the plugin's collectors.
  */
 class HomeWidgetPublisher(
     private val scope: CoroutineScope,
     private val export: WidgetStateExport,
+    /** `Config.appInitializedFlow`: true once plugin state may be read. */
+    private val appInitialized: Flow<Boolean>,
     private val nowMs: () -> Long,
     private val log: (String) -> Unit,
     private val companion: () -> HomeWidgetCompanion? = { HomeWidgetRegistry.companion },
@@ -72,7 +81,13 @@ class HomeWidgetPublisher(
         scope.launch { publish(reason, force, trailing = false) }
     }
 
-    internal suspend fun publish(reason: String, force: Boolean, trailing: Boolean): Unit = lock.withLock {
+    internal suspend fun publish(reason: String, force: Boolean, trailing: Boolean) {
+        // Outside the lock, so that stop() is not held up while start up is still running.
+        appInitialized.first { it }
+        publishLocked(reason, force, trailing)
+    }
+
+    private suspend fun publishLocked(reason: String, force: Boolean, trailing: Boolean): Unit = lock.withLock {
         if (trailing) pending = null
         val bridge = companion()
         if (bridge == null) {

@@ -3,6 +3,7 @@ package app.aaps.plugins.sync.homewidget
 import app.aaps.core.interfaces.widget.WidgetStateExport
 import app.aaps.core.interfaces.widget.WidgetStateSnapshot
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -59,13 +60,15 @@ class HomeWidgetPublisherTest {
         }
     }
 
-    private class Harness(val scope: TestScope, startBg: Long?, withCompanion: Boolean = true) {
+    private class Harness(val scope: TestScope, startBg: Long?, withCompanion: Boolean = true, initialized: Boolean = true) {
         val companion = FakeCompanion()
         val export = FakeExport(startBg)
         val logs = mutableListOf<String>()
+        val appInitialized = MutableStateFlow(initialized)
         val publisher = HomeWidgetPublisher(
             scope = scope,
             export = export,
+            appInitialized = appInitialized,
             nowMs = { scope.testScheduler.currentTime },
             log = { logs.add(it) },
             companion = { if (withCompanion) companion else null },
@@ -82,6 +85,25 @@ class HomeWidgetPublisherTest {
         assertEquals(1, h.companion.saves.size)
         assertEquals(true, h.export.lastWithChart)
         assertEquals(true, h.export.lastWithDetails)
+    }
+
+    /**
+     * The first launch of a fresh install: the plugin starts while the plugins are still being elected,
+     * and building the state then reads a pump that does not exist yet ("No pump selected", which took
+     * the app down). The first save waits until the app is initialized, and then goes out.
+     */
+    @Test
+    fun nothingIsBuiltBeforeTheAppIsInitialized() = runTest {
+        val h = Harness(this, startBg = 1_000L, initialized = false)
+        h.publisher.start()
+        h.publisher.request("bg")
+        runCurrent()
+        assertEquals(0, h.export.builds)
+        assertEquals(0, h.companion.saves.size)
+
+        h.appInitialized.value = true
+        runCurrent()
+        assertEquals(1, h.companion.saves.size)
     }
 
     @Test

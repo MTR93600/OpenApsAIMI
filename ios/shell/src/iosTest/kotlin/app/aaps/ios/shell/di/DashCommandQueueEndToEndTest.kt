@@ -233,6 +233,7 @@ class DashCommandQueueEndToEndTest {
             apsPlugins = graph.contributedApsPlugins,
             mergeApsPlugins = graph.config.APS,
             startPeriodicWork = {},
+            markInitialized = { graph.config.initCompleted() },
         ).run()
         val dash = graph.omnipodDashPump
         graph.configBuilder.confirmPumpPluginSwitch(dash, true, PluginType.PUMP)

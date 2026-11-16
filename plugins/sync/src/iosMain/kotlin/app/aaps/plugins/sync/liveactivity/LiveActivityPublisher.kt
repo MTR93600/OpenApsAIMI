@@ -4,6 +4,8 @@ import app.aaps.core.interfaces.widget.WidgetStateExport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -20,11 +22,17 @@ import kotlinx.coroutines.sync.withLock
  *
  * The state is built fresh at each send, so the age it carries is always the real one.
  *
+ * Nothing is built before [appInitialized] says true: building the state reads the active pump, and
+ * there is none while start up (or a settings import) is still electing the plugins. See
+ * `HomeWidgetPublisher`, where this crashed the first launch of a fresh install.
+ *
  * All state is changed under [lock]. Calls come from the plugin's collectors and from Swift.
  */
 class LiveActivityPublisher(
     private val scope: CoroutineScope,
     private val export: WidgetStateExport,
+    /** `Config.appInitializedFlow`: true once plugin state may be read. */
+    private val appInitialized: Flow<Boolean>,
     private val settings: () -> LiveActivitySettings,
     private val nowMs: () -> Long,
     private val log: (String) -> Unit,
@@ -79,7 +87,13 @@ class LiveActivityPublisher(
         scope.launch { publish(reason, force, trailing = false) }
     }
 
-    internal suspend fun publish(reason: String, force: Boolean, trailing: Boolean): Unit = lock.withLock {
+    internal suspend fun publish(reason: String, force: Boolean, trailing: Boolean) {
+        // Outside the lock, so that stop() and switching off are not held up while start up runs.
+        appInitialized.first { it }
+        publishLocked(reason, force, trailing)
+    }
+
+    private suspend fun publishLocked(reason: String, force: Boolean, trailing: Boolean): Unit = lock.withLock {
         if (trailing) pending = null
         val current = settings()
         if (!current.enabled) return@withLock

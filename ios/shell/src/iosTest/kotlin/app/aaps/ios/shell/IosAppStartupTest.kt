@@ -14,6 +14,7 @@ import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.ios.shell.config.IosConfig
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,6 +22,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -110,7 +112,7 @@ class IosAppStartupTest {
 
     private fun run(plugins: Map<Int, PluginBase>): RecordingRegistry {
         val registry = RecordingRegistry()
-        IosAppStartup(SilentLogger, registry, plugins, startPeriodicWork = {}).run()
+        IosAppStartup(SilentLogger, registry, plugins, startPeriodicWork = {}, markInitialized = {}).run()
         return registry
     }
 
@@ -123,6 +125,46 @@ class IosAppStartupTest {
         val registry = run(mapOf(1 to NamedPlugin("a")))
 
         assertEquals(listOf("register", "initialize"), registry.calls)
+    }
+
+    /**
+     * A fresh install has no pump stored. Until `ConfigBuilder.initialize` has elected the default one,
+     * reading the active pump throws "No pump selected". `Config.appInitialized` is what background
+     * work (the home widget, the queue, the profile) waits on before it reads plugin state, as on
+     * Android. iOS used to say "initialized" from the start, so nothing waited: the home widget's first
+     * save calculated the IOB during the election and the app died on its first launch.
+     */
+    @Test
+    fun `the app is not initialized before the plugins are elected`() {
+        val config = IosConfig()
+        var initializedDuringElection: Boolean? = null
+        val registry = object : PluginRegistry {
+            override fun register(plugins: List<PluginBase>) {}
+            override fun initializeConfig(): List<Job> {
+                initializedDuringElection = config.appInitialized
+                return emptyList()
+            }
+        }
+        assertFalse(config.appInitialized, "nothing may read plugin state before start up has elected the plugins")
+
+        IosAppStartup(SilentLogger, registry, emptyMap(), startPeriodicWork = {}, markInitialized = { config.initCompleted() }).run()
+
+        assertEquals(false, initializedDuringElection, "the election itself runs before the app counts as initialized")
+        assertTrue(config.appInitialized, "once the plugins are elected, the waiting work may start")
+    }
+
+    /** Marked right after the election and before anything else that runs on its own (the housekeeping). */
+    @Test
+    fun `the app is marked initialized right after the election`() {
+        val registry = RecordingRegistry()
+        IosAppStartup(
+            SilentLogger, registry, mapOf(1 to NamedPlugin("a")),
+            startPeriodicWork = { registry.calls.add("periodic") },
+            markInitialized = { registry.calls.add("initialized") },
+            startMasterServices = { registry.calls.add("master") }
+        ).run()
+
+        assertEquals(listOf("register", "initialize", "initialized", "periodic", "master"), registry.calls)
     }
 
     /** The order key decides the plugin list order and which default is picked. */
@@ -160,9 +202,9 @@ class IosAppStartupTest {
         val aps = mapOf(840 to NamedPlugin("objectives"))
 
         val notMerged = RecordingRegistry()
-        IosAppStartup(SilentLogger, notMerged, plugins, apsPlugins = aps, mergeApsPlugins = false, startPeriodicWork = {}).run()
+        IosAppStartup(SilentLogger, notMerged, plugins, apsPlugins = aps, mergeApsPlugins = false, startPeriodicWork = {}, markInitialized = {}).run()
         val merged = RecordingRegistry()
-        IosAppStartup(SilentLogger, merged, plugins, apsPlugins = aps, mergeApsPlugins = true, startPeriodicWork = {}).run()
+        IosAppStartup(SilentLogger, merged, plugins, apsPlugins = aps, mergeApsPlugins = true, startPeriodicWork = {}, markInitialized = {}).run()
 
         assertEquals(listOf("iob"), notMerged.registered.map { (it as NamedPlugin).id })
         assertEquals(listOf("iob", "objectives"), merged.registered.map { (it as NamedPlugin).id })
@@ -175,6 +217,7 @@ class IosAppStartupTest {
         IosAppStartup(
             SilentLogger, registry, mapOf(1 to NamedPlugin("a")),
             startPeriodicWork = { registry.calls.add("periodic") },
+            markInitialized = {},
             startMasterServices = { registry.calls.add("master") }
         ).run()
 
@@ -191,6 +234,7 @@ class IosAppStartupTest {
         IosAppStartup(
             SilentLogger, registry, mapOf(1 to NamedPlugin("a")),
             startPeriodicWork = {},
+            markInitialized = {},
             beforePluginsStart = { registry.calls.add("before") }
         ).run()
 
@@ -204,6 +248,7 @@ class IosAppStartupTest {
         IosAppStartup(
             SilentLogger, registry, mapOf(1 to NamedPlugin("a")),
             startPeriodicWork = {},
+            markInitialized = {},
             startMasterServices = { registry.calls.add("master") },
             afterStart = { registry.calls.add("after") }
         ).run()
@@ -218,6 +263,7 @@ class IosAppStartupTest {
         IosAppStartup(
             SilentLogger, registry, emptyMap(),
             startPeriodicWork = {},
+            markInitialized = {},
             afterStart = { throw IllegalStateException("database not ready") }
         ).run()
 
@@ -245,6 +291,7 @@ class IosAppStartupTest {
         IosAppStartup(
             SilentLogger, registry, emptyMap(),
             startPeriodicWork = {},
+            markInitialized = {},
             startMasterServices = { registry.calls.add("master") },
             startupScope = this
         ).run()

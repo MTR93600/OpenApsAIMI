@@ -4,6 +4,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Widgets
 import app.aaps.core.data.model.GV
 import app.aaps.core.data.plugin.PluginType
+import app.aaps.core.interfaces.configuration.Config
+import app.aaps.core.interfaces.configuration.appInitializedFlow
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
@@ -66,6 +68,7 @@ class LiveActivityPlugin(
     private val rxBus: RxBus,
     private val widgetStateExport: WidgetStateExport,
     private val dateUtil: DateUtil,
+    private val config: Config,
 ) : PluginBaseWithPreferences(
     pluginDescription = PluginDescription()
         .mainType(PluginType.SYNC)
@@ -86,6 +89,7 @@ class LiveActivityPlugin(
         val publisher = LiveActivityPublisher(
             scope = scope,
             export = widgetStateExport,
+            appInitialized = config.appInitializedFlow,
             settings = ::readSettings,
             nowMs = { dateUtil.now() },
             log = { aapsLogger.info(LTag.WIDGET, it) },
