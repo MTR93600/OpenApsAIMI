@@ -6,6 +6,7 @@ import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import app.aaps.core.interfaces.logging.LoggerUtils
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventMobileToWear
+import app.aaps.core.interfaces.source.SensorSlot
 import app.aaps.core.keys.interfaces.PreferenceItem
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.keys.interfaces.withClick
@@ -117,8 +118,8 @@ class DexcomOnePlusAndroidHost(
     override val installedApps: OnePlusInstalledApps by lazy { OnePlusInstalledAppsAndroid(appContext) }
 
     /**
-     * Start and Warm-up stay in the settings, as before. Status is not here any more: it is the
-     * sensor button of the plugin tab, and the status Activity is still what the notification and
+     * Start and Warm-up stay in the settings, as before. Status is not here any more: it is the first
+     * tab of the plugin, and the status Activity is still what the notification and
      * the start and warm-up screens open.
      */
     override fun screenItems(plugin: DexcomOnePlusPlugin): List<PreferenceItem> = listOf(
@@ -130,8 +131,13 @@ class DexcomOnePlusAndroidHost(
 
     /** Activities on this phone, so [navigate] is not needed. */
     override fun openScreen(screen: DexcomOnePlusHost.Screen, navigate: (NavigationRequest) -> Unit) = when (screen) {
-        DexcomOnePlusHost.Screen.START  -> open(DexcomOnePlusStartActivity::class.java)
-        DexcomOnePlusHost.Screen.WARMUP -> open(DexcomOnePlusWarmupActivity::class.java)
+        DexcomOnePlusHost.Screen.START         -> appContext.startActivity(
+            DexcomOnePlusStartActivity.intent(appContext, SensorSlot.PRODUCTION).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+        DexcomOnePlusHost.Screen.START_PRESOAK -> appContext.startActivity(
+            DexcomOnePlusStartActivity.intent(appContext, SensorSlot.STAGING).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+        DexcomOnePlusHost.Screen.WARMUP        -> open(DexcomOnePlusWarmupActivity::class.java)
     }
 
     /** The ONE+ lines of `AndroidAPS.log`, as the driver log Activity reads them. */

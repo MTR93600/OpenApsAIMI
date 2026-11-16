@@ -12,11 +12,9 @@ import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.notifications.NotificationManager
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.resources.ResourceHelper
-import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
 import app.aaps.plugins.source.DexcomOnePlusSensorStartCorrection.Verdict
-import app.aaps.plugins.source.keys.DexcomOnePlusBooleanKey
 import app.aaps.shared.tests.SharedPreferencesMock
 import app.aaps.shared.tests.TestBase
 import com.google.common.truth.Truth.assertThat
@@ -75,25 +73,7 @@ class DexcomOnePlusInsertionDateTest : TestBase() {
     }
 
     @Test
-    fun `the correction switch is on by default`() {
-        assertThat(DexcomOnePlusBooleanKey.CorrectSensorStart.defaultValue).isTrue()
-    }
-
-    @Test
-    fun `a correction while the switch is off writes nothing`() = runTest {
-        whenever(preferences.get(DexcomOnePlusBooleanKey.CorrectSensorStart)).thenReturn(false)
-        val current = System.currentTimeMillis() - 2 * HOUR_MS
-        OnePlusSensorStore(context).startSessionForSensor(MAC, current, null)
-
-        val verdict = plugin.correctProductionSensorStart(current - 6 * HOUR_MS)
-
-        assertThat(verdict).isEqualTo(Verdict.Disabled)
-        assertNothingWritten(current)
-    }
-
-    @Test
     fun `InFuture invalidates nothing`() = runTest {
-        enableCorrection()
         val current = System.currentTimeMillis() - 2 * HOUR_MS
         OnePlusSensorStore(context).startSessionForSensor(MAC, current, null)
 
@@ -105,7 +85,6 @@ class DexcomOnePlusInsertionDateTest : TestBase() {
 
     @Test
     fun `TooOld invalidates nothing`() = runTest {
-        enableCorrection()
         val current = System.currentTimeMillis() - 2 * HOUR_MS
         OnePlusSensorStore(context).startSessionForSensor(MAC, current, null)
 
@@ -117,7 +96,6 @@ class DexcomOnePlusInsertionDateTest : TestBase() {
 
     @Test
     fun `NoSession invalidates nothing`() = runTest {
-        enableCorrection()
 
         val verdict = plugin.correctProductionSensorStart(System.currentTimeMillis() - HOUR_MS)
 
@@ -130,7 +108,6 @@ class DexcomOnePlusInsertionDateTest : TestBase() {
 
     @Test
     fun `Accepted invalidates the sensor change then rewrites it`() = runTest {
-        enableCorrection()
         val now = System.currentTimeMillis()
         val current = now - 2 * HOUR_MS
         val asked = now - 8 * HOUR_MS
@@ -153,7 +130,6 @@ class DexcomOnePlusInsertionDateTest : TestBase() {
 
     @Test
     fun `an occupied timestamp moves one second and not further`() = runTest {
-        enableCorrection()
         val now = System.currentTimeMillis()
         val current = now - 2 * HOUR_MS
         val asked = now - 8 * HOUR_MS
@@ -182,11 +158,6 @@ class DexcomOnePlusInsertionDateTest : TestBase() {
         assertThat(prefs.getLong(KEY_SESSION_START, 0L)).isEqualTo(current)
         store.overwriteSessionStart(current - HOUR_MS)
         assertThat(prefs.getLong(KEY_SESSION_START, 0L)).isEqualTo(current - HOUR_MS)
-    }
-
-    private fun enableCorrection() {
-        whenever(preferences.get(DexcomOnePlusBooleanKey.CorrectSensorStart)).thenReturn(true)
-        whenever(preferences.get(BooleanKey.BgSourceCreateSensorChange)).thenReturn(true)
     }
 
     private suspend fun assertNothingWritten(currentStart: Long) {

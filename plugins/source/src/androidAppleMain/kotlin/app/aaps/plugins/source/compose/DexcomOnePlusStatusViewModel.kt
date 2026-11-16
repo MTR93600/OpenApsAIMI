@@ -71,7 +71,6 @@ class DexcomOnePlusStatusViewModel(
         val calibrationOutcome: OnePlusCalibrationOutcome?,
         val calibrationWaiting: Boolean,
         val sendCalibrationToSensor: Boolean,
-        val correctSensorStartEnabled: Boolean,
         val nowMs: Long,
         val sensor: DexcomOnePlusSensorFacts,
     )
@@ -94,7 +93,6 @@ class DexcomOnePlusStatusViewModel(
                     calibrationOutcome = driver.lastCalibrationOutcome(),
                     calibrationWaiting = driver.calibrationPending(),
                     sendCalibrationToSensor = preferences.get(DexcomOnePlusBooleanKey.SendCalibrationToSensor),
-                    correctSensorStartEnabled = preferences.get(DexcomOnePlusBooleanKey.CorrectSensorStart),
                     nowMs = dateUtil.now(),
                     sensor = plugin.sensorFacts(),
                 ),
@@ -135,7 +133,6 @@ class DexcomOnePlusStatusViewModel(
                 calibrationOutcome = driver.calibrationOutcome,
                 calibrationWaiting = driver.calibrationWaiting,
                 sendCalibrationToSensor = driver.sendCalibrationToSensor,
-                correctSensorStartEnabled = driver.correctSensorStartEnabled,
                 stagingSupported = false,
                 stagingState = stagingState,
                 stagingEvidence = stagingEvidence,

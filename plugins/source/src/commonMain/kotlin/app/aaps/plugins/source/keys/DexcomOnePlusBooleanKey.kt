@@ -41,55 +41,6 @@ enum class DexcomOnePlusBooleanKey(
     ),
 
     /**
-     * Put a missing SENSOR_CHANGE back for the running ONE+ session.
-     *
-     * Parity with dev_OAPSAIMI: the reference writes the missing event whenever
-     * "create sensor change" is on, so this defaults to true. When the repair is
-     * on but "create sensor change" is off, the refresh still writes nothing.
-     */
-    RepairMissingSensorChange(
-        key = "dexcom_oneplus_repair_missing_sensor_change",
-        defaultValue = true,
-        title = SourceStrings.dexcom_oneplus_repair_missing_sensor_change,
-        summary = SourceStrings.dexcom_oneplus_repair_missing_sensor_change_summary,
-        engineeringModeOnly = true,
-        exportable = false,
-    ),
-
-    /**
-     * Let the Status screen move the insertion time of the sensor that feeds the loop.
-     *
-     * Parity with dev_OAPSAIMI: the reference exposes the correction without a gate,
-     * so this defaults to true. Invalidating SENSOR_CHANGE events rewrites the sensor
-     * start; calibration rows are never removed.
-     */
-    CorrectSensorStart(
-        key = "dexcom_oneplus_correct_sensor_start",
-        defaultValue = true,
-        title = SourceStrings.dexcom_oneplus_correct_sensor_start,
-        summary = SourceStrings.dexcom_oneplus_correct_sensor_start_summary,
-        engineeringModeOnly = true,
-        exportable = false,
-    ),
-
-    /**
-     * Replace the automatic session start with a SENSOR_CHANGE the user already logged.
-     *
-     * The reference does this on every start and on the first accepted reading. That rolls
-     * the stored start back by up to 24 hours. On by default, as the reference: a sensor inserted
-     * (and logged) before it is paired, or soaked before it is promoted, keeps its real age. The
-     * switch stays, in engineering mode only, to go back to the plain automatic time.
-     */
-    AnchorSessionToManualSensorChange(
-        key = "dexcom_oneplus_anchor_session_to_manual_sensor_change",
-        defaultValue = true,
-        title = SourceStrings.dexcom_oneplus_anchor_session_to_manual_sensor_change,
-        summary = SourceStrings.dexcom_oneplus_anchor_session_to_manual_sensor_change_summary,
-        engineeringModeOnly = true,
-        exportable = false,
-    ),
-
-    /**
      * Switches the pre-soak sensor to production by itself, [DexcomOnePlusIntKey.AutoPromoteHours]
      * after the pre-soak start, when its readings are recent and real. The promote button still works.
      *

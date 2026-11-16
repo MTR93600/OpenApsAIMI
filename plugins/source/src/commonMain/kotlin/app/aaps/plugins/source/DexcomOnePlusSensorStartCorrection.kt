@@ -11,8 +11,6 @@ package app.aaps.plugins.source
  * "last sensor change" any more, so the dashboard ignores it too.
  *
  * Ref `dev_OAPSAIMI` `3dd0ca64772`, commits `1b81e356c8` and `57c6e0cc30`.
- * [Verdict.Disabled] is not in the ref. Owner decision 6 is not settled, so the plugin returns it
- * while the engineering switch is off and writes nothing.
  */
 object DexcomOnePlusSensorStartCorrection {
 
@@ -29,9 +27,6 @@ object DexcomOnePlusSensorStartCorrection {
 
         /** No sensor session is stored, so there is no age to correct. */
         data object NoSession : Verdict
-
-        /** The engineering switch is off. Nothing was read and nothing was written. */
-        data object Disabled : Verdict
     }
 
     /**

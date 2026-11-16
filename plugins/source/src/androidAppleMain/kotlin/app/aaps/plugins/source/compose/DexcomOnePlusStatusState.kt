@@ -41,8 +41,6 @@ data class DexcomOnePlusStatusInput(
     val calibrationWaiting: Boolean,
     /** `DexcomOnePlusBooleanKey.SendCalibrationToSensor`. */
     val sendCalibrationToSensor: Boolean,
-    /** `DexcomOnePlusBooleanKey.CorrectSensorStart`. */
-    val correctSensorStartEnabled: Boolean,
     /** False on a phone with one sensor slot: the pre-soak card is then absent. */
     val stagingSupported: Boolean,
     val stagingState: StagingState,
@@ -78,9 +76,12 @@ class DexcomOnePlusStatusFormat(
     val dateTime: (Long) -> String = time,
 )
 
-/** What the three buttons at the bottom of the status screen do. */
+/** What the buttons of the status screen do. */
 class DexcomOnePlusStatusActions(
+    /** Start the sensor that feeds the loop (the Start screen locked on production). */
     val onOpenStart: () -> Unit,
+    /** Start a pre-soak sensor (the Start screen locked on pre-soak). */
+    val onOpenPresoak: () -> Unit,
     val onOpenWarmup: () -> Unit,
     val onOpenLog: () -> Unit,
 )
@@ -136,7 +137,11 @@ data class DexcomOnePlusStatusView(
     val overview: PumpOverviewUiState,
     val calibration: DexcomOnePlusCalibrationCard?,
     val endOfLifePrompt: Boolean,
-    /** Null on a phone with one sensor slot, so the card is absent rather than empty. */
+    /**
+     * Null on a phone with one sensor slot, so the card is absent rather than empty. Null too while no
+     * sensor feeds the loop and the pre-soak slot is empty: a second sensor only makes sense when
+     * there is a first one.
+     */
     val staging: DexcomOnePlusStagingCard?,
     /** Start time the "correct insertion date" action works on, or null when the action is hidden. */
     val correctInsertionStartMs: Long?,
@@ -162,7 +167,8 @@ object DexcomOnePlusStatusState {
                 ScreenAction(label = rh.gs(SourceStrings.cgm_driver_log_open), onClick = actions.onOpenLog),
             ),
         )
-        val staging = if (input.stagingSupported) stagingCard(input) else null
+        val stagingOffered = input.lifecycle != null || input.stagingState != StagingState.ABSENT
+        val staging = if (input.stagingSupported && stagingOffered) stagingCard(input) else null
         return DexcomOnePlusStatusView(
             overview = overview,
             calibration = if (input.sendCalibrationToSensor) calibrationCard(input) else null,
@@ -172,8 +178,8 @@ object DexcomOnePlusStatusState {
                 input.lifecycle?.endOfLife == true &&
                 input.stagingState == StagingState.ABSENT,
             staging = staging,
-            // Hidden while the engineering switch is off. The plugin also refuses before any write.
-            correctInsertionStartMs = input.lifecycle?.startedAtEpochMs?.takeIf { input.correctSensorStartEnabled },
+            // Offered whenever a sensor runs: it asks for a date first, so no setting hides it.
+            correctInsertionStartMs = input.lifecycle?.startedAtEpochMs,
         )
     }
 

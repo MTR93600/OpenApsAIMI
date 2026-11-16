@@ -1,5 +1,6 @@
 package app.aaps.plugins.source
 
+import androidx.compose.runtime.remember
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.interfaces.concurrent.AapsLock
 import app.aaps.core.interfaces.concurrent.withLock
@@ -41,6 +42,7 @@ import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.binding
+import kotlin.concurrent.Volatile
 import kotlin.time.Clock
 
 /**
@@ -324,8 +326,12 @@ class DexcomOnePlusIosHost(
             ComposeScreenContent { onBack ->
                 val navigate = LocalPluginNavigationRequest.current
                 val preSoak = iosPreSoakEnabled()
+                // The slot the opening button asked for, read once: the settings entry asks for none,
+                // so it starts production, as before.
+                val initialSlot = remember { takeRequestedStartSlot() }
                 DexcomOnePlusStartScreen(
                     host = this@DexcomOnePlusIosHost,
+                    initialSlot = initialSlot,
                     // iOS has no permission to check before a scan: CoreBluetooth prompts on the
                     // first one.
                     permissions = OnePlusBlePermissionGate.NoSeparateStep,
@@ -395,11 +401,29 @@ class DexcomOnePlusIosHost(
     /** The switch lives in this plugin's settings on iPhone only. Android does not show it. */
     override val offersIosPreSoakSwitch: Boolean = true
 
+    /**
+     * The slot the next Start screen opens locked on. The Start screen is one entry of the settings
+     * tree for both buttons of the status screen, so the button says which slot it wants here and
+     * the screen takes it once ([takeRequestedStartSlot]). Android passes it in the Intent instead.
+     */
+    @Volatile private var requestedStartSlot: SensorSlot? = null
+
+    /** The slot asked for by the last [openScreen], or production; cleared, so it is used once. */
+    private fun takeRequestedStartSlot(): SensorSlot =
+        (requestedStartSlot ?: SensorSlot.PRODUCTION).also { requestedStartSlot = null }
+
     /** The setup screens live in the settings tree on this phone, see [screenItems]. */
     override fun openScreen(screen: DexcomOnePlusHost.Screen, navigate: (NavigationRequest) -> Unit) {
         val key = when (screen) {
-            DexcomOnePlusHost.Screen.START  -> DexcomOnePlusIntentKey.Start.key
-            DexcomOnePlusHost.Screen.WARMUP -> DexcomOnePlusIntentKey.Warmup.key
+            DexcomOnePlusHost.Screen.START         -> {
+                requestedStartSlot = SensorSlot.PRODUCTION
+                DexcomOnePlusIntentKey.Start.key
+            }
+            DexcomOnePlusHost.Screen.START_PRESOAK -> {
+                requestedStartSlot = SensorSlot.STAGING
+                DexcomOnePlusIntentKey.Start.key
+            }
+            DexcomOnePlusHost.Screen.WARMUP        -> DexcomOnePlusIntentKey.Warmup.key
         }
         navigate(
             NavigationRequest.PluginPreferences(

@@ -14,7 +14,6 @@ import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.source.PromotionRejectReason
 import app.aaps.core.interfaces.source.PromotionResult
 import app.aaps.core.interfaces.source.StagingState
-import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.dexcomoneplus.OnePlusAndroidPlatform
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriverReal
@@ -37,7 +36,6 @@ import org.mockito.Mock
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
-import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.timeout
@@ -82,6 +80,8 @@ class DexcomOnePlusPromotionOrderTest : TestBase() {
         whenever(context.applicationContext).thenReturn(context)
         whenever(context.getSharedPreferences(PRODUCTION_PREFS_NAME, Context.MODE_PRIVATE)).thenReturn(productionPrefs)
         whenever(context.getSharedPreferences(STAGING_PREFS_NAME, Context.MODE_PRIVATE)).thenReturn(stagingPrefs)
+        whenever(persistenceLayer.getTherapyEventDataFromToTime(any(), any())).thenReturn(emptyList())
+        whenever(persistenceLayer.getTherapyEventDataIncludingInvalidFromTime(any(), any())).thenReturn(emptyList())
         whenever(persistenceLayer.insertCgmSourceData(any(), any(), any(), anyOrNull()))
             .thenReturn(PersistenceLayer.TransactionResult())
         plugin = DexcomOnePlusPlugin(
@@ -181,7 +181,6 @@ class DexcomOnePlusPromotionOrderTest : TestBase() {
 
     @Test
     fun `the bound runs after the exchange and before select`() = runTest {
-        whenever(preferences.get(BooleanKey.BgSourceCreateSensorChange)).thenReturn(true)
         val startMs = System.currentTimeMillis() - 60_000L
         readyStaging(mac = "AA:BB:CC:DD:EE:24", ageMs = 60_000L, startMs = startMs)
         val soak = OnePlusCgmDrivers.staging()
@@ -202,9 +201,7 @@ class DexcomOnePlusPromotionOrderTest : TestBase() {
         assertThat(identityAdoptedAtBound).isTrue()
         assertThat(stagingClearedAtBound).isTrue()
         assertThat(productionWasSoakAtBound).isTrue()
-        val order = inOrder(preferences, activeCalibration)
-        order.verify(preferences).get(BooleanKey.BgSourceCreateSensorChange)
-        order.verify(activeCalibration).ignoreEntriesBefore(any())
+        verify(activeCalibration).ignoreEntriesBefore(any())
         assertThat(OnePlusCgmDrivers.default()).isSameInstanceAs(soak)
         verify(persistenceLayer, timeout(2_000L)).insertCgmSourceData(any(), any(), any(), eq(startMs))
     }
