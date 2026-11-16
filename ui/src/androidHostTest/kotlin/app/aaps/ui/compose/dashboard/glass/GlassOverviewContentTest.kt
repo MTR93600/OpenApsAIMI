@@ -8,23 +8,32 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import app.aaps.core.interfaces.notifications.AapsNotification
+import app.aaps.core.interfaces.notifications.NotificationId
+import app.aaps.core.interfaces.notifications.NotificationLevel
 import app.aaps.core.interfaces.resources.TextRefIdRegistry
+import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.core.ui.compose.LocalDateUtil
 import app.aaps.ui.UiStringIds
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mockito.kotlin.any
+import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.mock
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * The Glass home body: the status card renders, the glucose opens the loop, and Tools then a tile runs
- * that tile. The view models are not involved; [GlassOverviewContent] is stateless.
+ * The Glass home body: the status card renders, the glucose opens the loop, Tools then a tile runs
+ * that tile, and the notifications are behind the floating bell. The view models are not involved; [GlassOverviewContent] is stateless.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -55,6 +64,17 @@ class GlassOverviewContentTest {
     private val toolActions = mutableListOf<DashboardV2ToolAction>()
     private var showIobChart by mutableStateOf(true)
     private val iobChartChanges = mutableListOf<Boolean>()
+    /** The notification sheet shows the time of each notification; the app provides this. */
+    private val dateUtil: DateUtil = mock { on { timeString(any<Long>()) } doReturn "14:05" }
+    private var notifications by mutableStateOf<List<AapsNotification>>(emptyList())
+
+    private val urgent = AapsNotification(
+        id = NotificationId.entries.first(),
+        instanceKey = 0,
+        text = "Pump not reachable",
+        level = NotificationLevel.URGENT,
+        date = 0L,
+    )
 
     @Before
     fun setUp() {
@@ -65,7 +85,7 @@ class GlassOverviewContentTest {
     private fun setContent() {
         compose.setContent {
             MaterialTheme {
-                CompositionLocalProvider(LocalGlassHeroCommands provides commands) {
+                CompositionLocalProvider(LocalGlassHeroCommands provides commands, LocalDateUtil provides dateUtil) {
                     GlassOverviewContent(
                         state = GlassUiState(currentBg = "123", deltaText = "Δ +2", loopStatusText = "Closed Loop", stepsText = "4200", hrText = "72"),
                         chartState = GlassChartState(),
@@ -81,13 +101,41 @@ class GlassOverviewContentTest {
                         availablePluginClassNames = emptySet(),
                         onToolAction = { toolActions += it },
                         formatBgValue = { it.toInt().toString() },
-                        notifications = emptyList(),
+                        notifications = notifications,
                         onDismissNotification = {},
                         onNotificationActionClick = {},
                     )
                 }
             }
         }
+    }
+
+    /** The bell replaces the old list at the bottom of the page, which was off screen on every phone. */
+    @Test
+    fun noNotificationShowsNoBell() {
+        setContent()
+        compose.onNodeWithContentDescription("Notifications: 0").assertDoesNotExist()
+        compose.onNodeWithText("Pump not reachable").assertDoesNotExist()
+    }
+
+    @Test
+    fun aNotificationShowsTheBellAndATapOpensTheList() {
+        notifications = listOf(urgent)
+        setContent()
+        // Not on the page itself any more: only in the sheet the bell opens.
+        compose.onNodeWithText("Pump not reachable").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Notifications: 1").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Pump not reachable").assertIsDisplayed()
+    }
+
+    @Test
+    fun theBellGoesAwayWhenTheLastNotificationIsGone() {
+        notifications = listOf(urgent)
+        setContent()
+        compose.onNodeWithContentDescription("Notifications: 1").assertIsDisplayed()
+        notifications = emptyList()
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Notifications: 1").assertDoesNotExist()
     }
 
     @Test

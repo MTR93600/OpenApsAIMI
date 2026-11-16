@@ -116,10 +116,6 @@
     <string name="dashboard_glass_personalize_section_tools">Tools screen</string>
     <string name="dashboard_glass_personalize_section_charts">Charts</string>
     <string name="dashboard_glass_personalize_iob_chart">IOB chart</string>
-    <string name="dashboard_glass_notification_alert" comment="Short level label on a notification card, upper case">ALERT</string>
-    <string name="dashboard_glass_notification_notice" comment="Short level label on a notification card, upper case">NOTICE</string>
-    <string name="dashboard_glass_notification_info" comment="Short level label on a notification card, upper case">INFO</string>
-    <string name="dashboard_glass_notification_text" comment="Notification card text. %1$s=time of the notification e.g. 14:05, %2$s=notification message">%1$s %2$s</string>
     <string name="dashboard_v2_tools_title">Tools</string>
     <string name="dashboard_v2_tools_aimi_section">AIMI</string>
     <string name="dashboard_v2_tools_unavailable">Unavailable in this build</string>

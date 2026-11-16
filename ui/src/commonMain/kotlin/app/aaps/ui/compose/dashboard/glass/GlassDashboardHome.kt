@@ -1,6 +1,11 @@
 package app.aaps.ui.compose.dashboard.glass
 
 import androidx.compose.foundation.background
+import app.aaps.ui.compose.notificationsSheet.NotificationFab
+import app.aaps.ui.compose.notificationsSheet.NotificationBottomSheet
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -63,8 +68,18 @@ import kotlinx.coroutines.flow.StateFlow
 private const val DEFAULT_RANGE_HOURS = 6
 
 /**
+ * Gap between the bottom of the home and the notification bell, as on the classic overview. On a full
+ * page the bell then floats over the right edge of the IOB chart, above the Stats / range / Treatment
+ * bar, so it covers no button.
+ */
+private val NOTIFICATION_FAB_BOTTOM = 72.dp
+
+/** Space under the last row while the bell is shown, so every row can scroll clear of it: gap + bell (56 dp) + margin. */
+private val NOTIFICATION_FAB_CLEARANCE = 136.dp
+
+/**
  * The Glass home: status card, glucose and IOB charts, time filter, pump status line and the in-app
- * notifications, with the Tools and Personalize overlays. Port of `GlassOverviewComposeEmbedded` on
+ * notifications (floating bell and sheet, as on the classic overview), with the Tools and Personalize overlays. Port of `GlassOverviewComposeEmbedded` on
  * `dev_OAPSAIMI`.
  *
  * It replaces only the home content of `MainScreen`; the shell top bar, drawer and bottom bar stay. As on
@@ -251,6 +266,7 @@ internal fun GlassOverviewContent(
     val commands = LocalGlassHeroCommands.current
     var showTools by remember { mutableStateOf(false) }
     var showPersonalize by remember { mutableStateOf(false) }
+    var showNotificationSheet by remember { mutableStateOf(false) }
     LaunchedEffect(showTools) { if (!showTools) showPersonalize = false }
 
     // Back closes Personalize first, then Tools; with neither open it is left to the shell.
@@ -314,15 +330,21 @@ internal fun GlassOverviewContent(
                 isDark = isDark,
             )
             pumpStatus?.let { PumpStatusNotification(status = it, isDark = isDark) }
-            if (notifications.isNotEmpty()) {
-                NotificationsSection(
-                    notifications = notifications,
-                    isDark = isDark,
-                    onDismiss = onDismissNotification,
-                    onActionClick = onNotificationActionClick,
-                )
-            }
+            // Room to scroll the last row clear of the floating bell below.
+            if (notifications.isNotEmpty()) Spacer(modifier = Modifier.height(NOTIFICATION_FAB_CLEARANCE))
         }
+        // The in-app notifications: the same floating bell and sheet as the classic overview. They used
+        // to be a list at the very bottom of this page, under the charts, so on any phone they were off
+        // screen until the person scrolled (reported 2026-11-16). The bell is seen at once, its colour
+        // gives the most urgent level, and a tap opens the full list with its buttons.
+        NotificationFab(
+            notificationCount = notifications.size,
+            highestLevel = notifications.minByOrNull { it.level.ordinal }?.level,
+            onClick = { showNotificationSheet = true },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 16.dp, bottom = NOTIFICATION_FAB_BOTTOM),
+        )
         if (showTools) {
             GlassToolsOverlay(
                 isDark = isDark,
@@ -341,6 +363,15 @@ internal fun GlassOverviewContent(
                 },
             )
         }
+    }
+
+    if (showNotificationSheet && notifications.isNotEmpty()) {
+        NotificationBottomSheet(
+            notifications = notifications,
+            onDismissSheet = { showNotificationSheet = false },
+            onDismissNotification = onDismissNotification,
+            onNotificationActionClick = onNotificationActionClick,
+        )
     }
 }
 
