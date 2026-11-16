@@ -2187,7 +2187,7 @@
 <string name="aimi_essentials_ngr_off_no_age">Age not set: night growth support is off. Set the age if the person is under 18.</string>
 <string name="aimi_essentials_ngr_on_by_t3c">Night growth support is on, because T3C brittle mode is on.</string>
 <string name="aimi_ngr_state_title">Night growth support now</string>
-<string name="aimi_ngr_state_summary">See if night growth support is on or off now, and why. When the age was never set, AIMI takes the person for an adult and night growth support is off, even if the switch on this page shows on.</string>
+<string name="aimi_ngr_state_summary">See if night growth support is on or off now, and why. When its switch was never set, the age decides: under 18 it is on, even if the switch on this page shows off. When the age was never set either, AIMI takes the person for an adult and night growth support is off.</string>
 <string name="aimi_unit_insulin_per_day" comment="Unit label: insulin units per day">U/day</string>
 <string name="aimi_setting_help">Help for this setting</string>
 <string name="aimi_setting_default" comment="%1$s=default value with its unit. Example: Default: 1.00 U">Default: %1$s</string>

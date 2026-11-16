@@ -132,8 +132,10 @@ class AimiSettingsAuditTest {
 
     @Test
     fun `the reset of the night growth age and switch removes the stored value`() {
-        // Step D1: an age or a switch never stored means an adult, NGR off. Writing the key default
-        // (14, or true) would turn NGR on, the opposite of the default behaviour.
+        // Step D1: an age or a switch never stored means an adult, NGR off. Writing the age key
+        // default 14 would turn NGR on. Writing the switch key default (false since step D2) would
+        // keep NGR off later, even after a stored age under 18, while a switch never stored lets
+        // that age decide.
         whenever(preferences.getIfExists(IntKey.OApsAIMINightGrowthAgeYears)).thenReturn(30)
         whenever(preferences.getIfExists(BooleanKey.OApsAIMINightGrowthEnabled)).thenReturn(false)
 
@@ -149,7 +151,9 @@ class AimiSettingsAuditTest {
 
     @Test
     fun `a stored night growth age or switch equal to the key default still gets a row with not set as default`() {
-        // A stored 14 or a stored true turns NGR on, nothing stored keeps it off: not the same value.
+        // A stored 14 turns NGR on, nothing stored keeps it off. A stored false (the switch default
+        // since step D2) keeps NGR off with an age under 18, nothing stored lets the age turn it on.
+        // So a stored value equal to the key default is not the same as nothing stored.
         whenever(preferences.getIfExists(IntKey.OApsAIMINightGrowthAgeYears)).thenReturn(IntKey.OApsAIMINightGrowthAgeYears.defaultValue)
         whenever(preferences.getIfExists(BooleanKey.OApsAIMINightGrowthEnabled)).thenReturn(BooleanKey.OApsAIMINightGrowthEnabled.defaultValue)
 

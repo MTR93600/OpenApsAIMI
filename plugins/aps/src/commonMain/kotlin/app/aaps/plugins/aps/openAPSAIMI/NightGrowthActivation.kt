@@ -37,6 +37,10 @@ internal enum class NightGrowthState(val enabled: Boolean) {
  * Owner decision of step D1 (2026-11-15): an age that was never stored means an adult, so NGR is off.
  * Before D1 the key default (14) was used, so NGR ran for every person who never set an age or the
  * switch. A stored switch or a stored age keeps the behaviour of before.
+ *
+ * Owner decision of step D2 (2026-11-15): the switch key default is off, so the switch row shows off
+ * when nothing was stored, like the loop. This changes no decision: the rule reads the switch with
+ * `getIfExists` only and never uses its key default. Any new reader must do the same (use [read]).
  */
 internal object NightGrowthActivation {
 
@@ -44,9 +48,11 @@ internal object NightGrowthActivation {
     const val AGE_LIMIT_YEARS: Int = 18
 
     /**
-     * The two keys where "never stored" is a state of its own, not the key default. A stored 14 or a
-     * stored `true` turns NGR on, while nothing stored means an adult (off). So a reset of these keys
-     * must remove the stored value, and must not write the key default.
+     * The two keys where "never stored" is a state of its own, not the key default. A stored 14 turns
+     * NGR on, while nothing stored means an adult (off). A stored `false` (the switch key default since
+     * step D2) keeps NGR off even with a stored age under 18, while a switch never stored lets that age
+     * turn it on. So a reset of these keys must remove the stored value, and must not write the key
+     * default.
      */
     val STORED_OR_NOT_KEYS: Set<NonPreferenceKey> =
         setOf(IntKey.OApsAIMINightGrowthAgeYears, BooleanKey.OApsAIMINightGrowthEnabled)

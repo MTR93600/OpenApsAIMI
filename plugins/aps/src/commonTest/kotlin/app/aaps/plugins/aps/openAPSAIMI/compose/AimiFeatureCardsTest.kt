@@ -97,8 +97,9 @@ class AimiFeatureCardsTest {
 
     @Test
     fun `the night growth page starts with the read only state row`() {
-        // Step D1: with nothing stored the switch row shows on and the age row 14 (key defaults),
-        // while the loop keeps NGR off. The first row of the page says what the loop really does.
+        // The switch and age rows show their key defaults when nothing is stored (off since step D2,
+        // and 14), but a stored age or T3C can turn NGR on while the switch row shows off. The first
+        // row of the page says what the loop really does.
         val ngr = cardScreen(AimiFeatureCardId.Night).items.filterIsInstance<PreferenceSubScreenDef>()
             .single { it.key == "aimi_compose_ngr" }
         val keys = ngr.items.filterIsInstance<PreferenceKey>().map { it.key }

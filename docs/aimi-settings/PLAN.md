@@ -231,6 +231,7 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
 | S3 | Delete the dead keys (not the protected ones), move internal state out of the settings, prefs schema, migration | none |
 | S3b | Protected-family dead keys (owner decision 2026-11-15): wire sleep, HRV and the flare duration; delete four keys with a migration (the old due date is copied first) | only when a person turns sleep or HRV off, or forgets to switch a flare off |
 | D1 | Owner decisions on the open items: delete the xDrip 1-minute switch, NGR off when no age was ever stored, meal factor labels in percent, contraceptive also on the illness card, PK/PD pace flag exported, key round trip test repaired | changes for people who never stored an age nor the NGR switch (NGR off, before on) |
+| D2 | NGR switch key default off, so the switch row shows what the loop does when neither the switch nor the age is stored (with a stored age under 18 and no stored switch the row shows off while NGR is on: open item) | none |
 | S4 | Targets link: a tap on the Essentials targets opens the profile screen (new platform action slot, Android and iOS) | none |
 
 ## Step S3 (done 2026-11-15, no dosing change)
@@ -340,11 +341,15 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
     no new value, but turns NGR on.
   - A loop-level test (`ShellDecisionTraceTest`) checks the NGR config: off with nothing stored, on
     with a stored switch (age 14, the monitor active), on with a stored age 12, off with 30.
-- **Open for the owner (from the D1 review, not decided):** with nothing stored, the night growth page
-  shows the switch ON and the age 14 (the key defaults), and the age "?" sheet says "default 14",
-  while the loop keeps NGR off. The state row and the Essentials line now say the real state, but the
-  two rows still show the key defaults. Options: show "not set" on the two rows, or change the key
-  defaults (switch off, or no default age). Not changed, because it changes what the keys mean.
+- **Display mismatch of the switch (from the D1 review): decided in step D2 for "nothing stored".**
+  The switch key default is now off, so with neither the switch nor the age stored the switch row
+  shows off, like the loop. See "Step D2". The case "age stored, switch never stored" is still open
+  (see "Step D2").
+- **Still open for the owner (not decided):** with nothing stored, the age row shows 14 (the key
+  default) and the age "?" sheet on the Essentials page says "Default: 14 years", while the loop takes
+  the person for an adult. The state row and the Essentials line say the real state. Options: show
+  "not set" on the age row, or give the age no default. Not changed, because it changes what the key
+  means.
 - **Meal factor labels.** The seven meal factor keys (meal, breakfast, lunch, dinner, high carb, snack,
   sleep) are titled "<mode> mode: SMB size (percent)" and got a help text: percent of the SMB that AIMI
   calculates while the mode is on, 100 = the full SMB, 50 (the default) = half (sleep: 60), the learned
@@ -370,6 +375,53 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
 - **Release notes line:** "Night growth support (for children and teens) is now off when no age was
   set in AIMI. If the person is under 18, set the age on the AIMI Essentials page to turn it back on.
   Not medical advice; talk with your care team before changing these settings."
+
+## Step D2 (2026-11-15, owner decision, no dosing change)
+
+- **NGR switch default off.** `BooleanKey.OApsAIMINightGrowthEnabled` (storage `key_oaps_aimi_ngr_enabled`)
+  now has the default `false` (was `true`). With neither the switch nor the age stored, the switch
+  row on the night growth page shows off, which is what the loop does since D1. With a stored age
+  under 18 and no stored switch the row also shows off, but the loop runs NGR: see the open item at
+  the end of this step. The storage name, the title and the level did
+  not change; a stored value (on or off) keeps its meaning.
+- **Readers checked (all modules, Android and iOS, Advisor, TPO, tuning, auditor, export, Essentials,
+  audit).** Only two read the switch for a decision, and both use `getIfExists`, so the key default is
+  never used: `NightGrowthActivation.read` (Essentials line, night growth state row, "What AIMI
+  learned" status) and `DetermineBasalAIMI2.buildNightGrowthResistanceConfig` (the loop). The export
+  writes only stored values (`PrefsTransfer`), so it is not affected. No Advisor, TPO, tuning or
+  auditor code reads, writes or proposes the switch. The only `get` of the switch is the switch row
+  itself, which is the display this step fixes. No reader had to change.
+- **Audit.** Unchanged: the switch stays one of `NightGrowthActivation.STORED_OR_NOT_KEYS`. A stored
+  `false` (now equal to the key default) still gets a row with "Not set" as its default, because a
+  stored `false` keeps NGR off with a stored age under 18 while a switch never stored lets that age
+  turn it on. "Reset" still removes the stored value.
+- **Texts.** The state row help (`aimi_ngr_state_summary`) now says that with the switch never set the
+  age decides, even when the switch row shows off. The switch has no "?" sheet (only Essentials rows
+  have one, and the switch is not on the Essentials page). Comments and KDoc that said "stored `true`
+  equal to the key default" were updated.
+- **Tests.** `AimiNightGrowthSwitchDefaultTest` (commonTest, so it also runs on iOS): the key default
+  is off; for all 18 combinations of switch (stored on / off / never) x age (stored 12 / 30 / never) x
+  T3C brittle mode (on / off) the state is the same with the old and the new switch default, and equal
+  to the D1 rule written out by hand; the loop rule agrees with the state; with nothing stored the
+  switch row shows what the loop does. `ShellDecisionTraceTest` (loop level): the NGR config of the
+  loop for the same 18 combinations, with a store whose `get` of the switch answers on and then off,
+  gives the D1 rule each time.
+- **prefs schema:** not changed. It records the stored name, the type and the export flag, not the
+  default.
+- **Advisor, TPO, tuning, auditor:** none of them reads, writes or proposes the NGR switch, so nothing
+  they propose changed, and there is nothing they can no longer propose.
+- **Dosing:** none. For every stored or unstored combination the loop decides as before.
+- **Still open for the owner (not decided, from the D2 review):** with a stored age under 18 and no
+  stored switch, the loop runs NGR (`ON_BY_AGE`, it can add night-time max IOB, SMB and basal), but
+  the switch row now shows off (before D2 it showed on, which was right for this case). Since D1
+  every family that sets an age on the Essentials page and never opens the night growth page is in
+  this case. A parent who wants NGR off sees the switch already "off" and may do nothing; to really
+  turn it off they have to switch it on and then off again. The state row ("Night growth support
+  now") and the Essentials line show the real state, and the state row help says so, but the switch
+  row does not. No dosing change either way. Options: (a) the switch row shows the effective state
+  from `NightGrowthActivation.read` (a tap then stores the opposite of what is shown), or (b) the
+  switch row shows "not set" while nothing is stored. Not changed, because the owner did not decide
+  it and it changes how the switch row works.
 
 ## Step S4 (2026-11-15, owner decision, no dosing change)
 

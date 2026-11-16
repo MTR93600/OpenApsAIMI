@@ -458,7 +458,7 @@ enum class BooleanKey(
     OApsAIMIwcycle(key = "key_use_Aimi_wcycle",defaultValue = false, title = KeysStrings.pref_title_oaps_aimi_wcycle),
     OApsAIMIWCycleShadow("key_use_Aimi_wcycle_shadow", false, title = KeysStrings.pref_title_oaps_aimi_w_cycle_shadow),
     OApsAIMIWCycleRequireConfirm("key_use_Aimi_wcycle_require_confirm", false, title = KeysStrings.pref_title_oaps_aimi_w_cycle_require_confirm),
-    OApsAIMINightGrowthEnabled("key_oaps_aimi_ngr_enabled", true, title = KeysStrings.pref_title_oaps_aimi_night_growth_enabled),
+    OApsAIMINightGrowthEnabled("key_oaps_aimi_ngr_enabled", false, title = KeysStrings.pref_title_oaps_aimi_night_growth_enabled),
     OApsAIMIPkpdEnabled("key_aimi_pkpd_enabled", false, title = KeysStrings.pref_title_oaps_aimi_pkpd_enabled),
     /**
      * TAP-G: blend the profile insulin peak with the learned PK/PD peak. Also the field off switch of

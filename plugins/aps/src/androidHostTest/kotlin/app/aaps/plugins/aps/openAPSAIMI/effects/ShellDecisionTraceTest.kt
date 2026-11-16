@@ -364,6 +364,38 @@ class ShellDecisionTraceTest {
     }
 
     @Test
+    fun nightGrowthAtTheLoopForEveryStoredCombinationIgnoresTheSwitchDefault() {
+        // Step D2 turned the switch default off. The loop reads the switch with getIfExists, so a
+        // `get` of the switch (which would answer the key default) must never be part of the
+        // decision. For each case the store answers `get` of the switch first with true and then
+        // with false, so any use of the key default makes one of the two runs fail.
+        for (switch in listOf(true, false, null)) for (age in listOf(12, 30, null)) for (t3c in listOf(true, false)) {
+            val stored = buildMap<NonPreferenceKey, Any> {
+                switch?.let { put(BooleanKey.OApsAIMINightGrowthEnabled, it) }
+                age?.let { put(IntKey.OApsAIMINightGrowthAgeYears, it) }
+            }
+            val expected = (switch ?: (age == 12)) || t3c
+            for (switchGet in listOf(true, false)) {
+                tick = newTick(
+                    recordingPreferences(
+                        emptyMap(),
+                        bools = mapOf(BooleanKey.OApsAIMIT3cBrittleMode to t3c, BooleanKey.OApsAIMINightGrowthEnabled to switchGet),
+                        stored = stored,
+                    )
+                )
+                armShell()
+                val config = tick.buildNightGrowthResistanceConfig(
+                    profile = profileStub(),
+                    autosens = mock(AutosensResult::class.java),
+                    glucoseStatus = null,
+                    targetBg = 100.0,
+                )
+                assertEquals("switch=$switch age=$age t3c=$t3c get=$switchGet", expected, config.enabled)
+            }
+        }
+    }
+
+    @Test
     fun autodriveOnWithTheGateClosedEmitsNoDose() {
         val (trace, applied) = autodriveTrace(glucose = 110.0, delta = 0.2f, shortAvg = 0.1f, meal = false)
         assertFalse(applied)
