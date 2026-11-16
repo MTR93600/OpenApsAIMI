@@ -55,6 +55,8 @@ internal interface AimiPhysioLatentCalls {
     fun delta(): Double
     fun cob(): Double
     fun minBgLookback(): Double
+    /** A meal was declared recently (mode or note active, or meal note younger than 3 h). */
+    fun declaredMealEpisode(): Boolean
     fun writeMaxSmb(value: Double)
     fun maxSmb(): Double
     fun writeMaxSmbHb(value: Double)
@@ -129,6 +131,7 @@ internal fun decideUpdatePhysioLatentState(
                 deltaMgdl5m = calls.delta(),
                 cobGrams = calls.cob(),
                 minBgLookback75m = calls.minBgLookback(),
+                declaredMealEpisode = calls.declaredMealEpisode(),
                 nowMs = calls.nowMs(),
             )
             if (tpo.consumePrefsChangedThisTick()) {

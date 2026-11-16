@@ -76,6 +76,8 @@ data class TpoTickInput(
     val eventMemory: app.aaps.plugins.aps.openAPSAIMI.patient.PatientEventMemory,
     val reboundGuardActive: Boolean,
     val dawnEndogenousDrive: Double,
+    /** A meal was declared recently: mode or note active, or meal note younger than 3 h (4 h high-carb). */
+    val declaredMealEpisode: Boolean = false,
 )
 
 data class TpoSessionDocument(

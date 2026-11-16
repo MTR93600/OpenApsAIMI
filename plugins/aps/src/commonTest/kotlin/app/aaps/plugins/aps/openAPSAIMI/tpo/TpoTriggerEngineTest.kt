@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.tpo
 
+import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningStepTier
 import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStateId
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientEventMemory
 import app.aaps.plugins.aps.openAPSAIMI.patient.PatientMode
@@ -133,6 +134,70 @@ class TpoTriggerEngineTest {
         )
         val withCrash = TpoTriggerEngine.evaluate(input, ledger, null, emptyMap())
         assertEquals(TpoPackId.EXHAUSTED_RECOVERY, withCrash.proposal?.packId)
+    }
+
+    /**
+     * The 14:14 tick of 2026-11-16, as it reached the TPO: FCL had ended 25 min earlier (COB 0, no
+     * carbs entered), glucose 158 and falling after the meal peak, and one tick of rebound guard
+     * echoed into all four post-hypo reasons at confidence 1.0.
+     */
+    private fun tick1414(declaredMealEpisode: Boolean) = baseInput().copy(
+        bgMgdl = 158.5,
+        deltaMgdl5m = -9.4,
+        cobGrams = 0.0,
+        minBgLookback75m = 74.3,
+        mealProb = 0.35,
+        postHypoReboundProb = 0.93,
+        patientModeName = PatientMode.POST_HYPO_RECOVERY.name,
+        patientModeConfidence = 1.0,
+        causalDominantName = CausalStateId.POST_HYPO_RECOVERY.name,
+        causalDominantConfidence = 0.98,
+        reboundGuardActive = true,
+        declaredMealEpisode = declaredMealEpisode,
+    )
+
+    @Test
+    fun case_20261116_declared_meal_blocks_post_hypo() {
+        val evaluation = TpoTriggerEngine.evaluate(tick1414(declaredMealEpisode = true), TpoEpisodeLedger(), null, emptyMap())
+        assertNull(evaluation.proposal)
+        assertEquals("meal_guard", evaluation.blockedReason)
+    }
+
+    @Test
+    fun case_20261116_without_meal_is_moderate_not_strong() {
+        // 74.3 is under the 75 rebound line but not a real hypo: four echoed reasons do not make STRONG.
+        val evaluation = TpoTriggerEngine.evaluate(tick1414(declaredMealEpisode = false), TpoEpisodeLedger(), null, emptyMap())
+        assertEquals(TpoPackId.POST_HYPO_RECOVERY, evaluation.proposal?.packId)
+        assertEquals(TuningStepTier.MODERATE, evaluation.proposal?.tier)
+    }
+
+    @Test
+    fun real_hypo_still_gives_strong() {
+        val input = tick1414(declaredMealEpisode = false).copy(minBgLookback75m = 66.0)
+        val evaluation = TpoTriggerEngine.evaluate(input, TpoEpisodeLedger(), null, emptyMap())
+        assertEquals(TuningStepTier.STRONG, evaluation.proposal?.tier)
+    }
+
+    @Test
+    fun hypo_now_passes_the_meal_guard() {
+        val input = tick1414(declaredMealEpisode = true).copy(bgMgdl = 64.0, deltaMgdl5m = -3.0, minBgLookback75m = 64.0)
+        val evaluation = TpoTriggerEngine.evaluate(input, TpoEpisodeLedger(), null, emptyMap())
+        assertEquals(TpoPackId.POST_HYPO_RECOVERY, evaluation.proposal?.packId)
+    }
+
+    @Test
+    fun declared_meal_blocks_every_pack() {
+        val sleepy = baseInput().copy(
+            patientModeName = PatientMode.POOR_SLEEP_DAY.name,
+            patientModeConfidence = 0.80,
+            sleepDebtScore = 0.80,
+            minBgLookback75m = 98.0,
+            postHypoReboundProb = 0.0,
+        )
+        assertEquals(TpoPackId.POOR_SLEEP_WINDOW, TpoTriggerEngine.evaluate(sleepy, TpoEpisodeLedger(), null, emptyMap()).proposal?.packId)
+        val duringMeal = TpoTriggerEngine.evaluate(sleepy.copy(declaredMealEpisode = true), TpoEpisodeLedger(), null, emptyMap())
+        assertNull(duringMeal.proposal)
+        assertEquals("meal_guard", duringMeal.blockedReason)
     }
 
     private fun baseInput() = TpoTickInput(

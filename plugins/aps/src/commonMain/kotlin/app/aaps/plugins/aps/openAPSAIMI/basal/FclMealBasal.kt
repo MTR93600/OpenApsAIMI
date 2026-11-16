@@ -9,9 +9,9 @@ package app.aaps.plugins.aps.openAPSAIMI.basal
  * they force the meal basal ceiling for thirty minutes **and** they send a prebolus whose size cannot
  * be set to zero. Someone who wants the basal without the bolus has no way to ask for it.
  *
- * FCL is that way. An "fcl" note plus a low temp target ask for the meal ceiling, and the prebolus
- * path is never touched, because the prebolus is keyed on the meal-mode keywords and "fcl" is not one
- * of them.
+ * FCL is that way. An "fcl" note plus a low temp target ask for the meal ceiling. FCL also has its
+ * own one-shot prebolus (`FCL_P1`, sized by the Autodrive prebolus setting), which obeys the same
+ * stand-downs as the basal, see [standsDown].
  *
  * ## Why the temp target is part of the gate
  *
@@ -75,6 +75,21 @@ internal object FclMealBasal {
 
     /** At this fall or faster the mode stands down: the declaration has stopped being true. */
     const val MAX_FALL_MGDL_PER_5MIN: Double = -3.0
+
+    /**
+     * True when FCL must not add insulin this tick: glucose under [MIN_GLUCOSE_MGDL], a fall of
+     * [MAX_FALL_MGDL_PER_5MIN] or faster, or an input that is not a usable number.
+     *
+     * One rule for both channels, the basal floor ([rateUph]) and the one-shot prebolus. Before
+     * 2026-11-16 only the basal had it, so the slow, reversible channel stood down on a fall while
+     * the fast, irreversible one delivered. Field case: a prebolus at 95 mg/dL falling -4 per 5 min
+     * reached 70 mg/dL 18 min later, before the carbs arrived.
+     *
+     * Pure: it reads no clock and keeps no state.
+     */
+    fun standsDown(bgMgdl: Double, deltaMgdl5m: Double): Boolean =
+        !bgMgdl.isFinite() || !deltaMgdl5m.isFinite() ||
+            bgMgdl < MIN_GLUCOSE_MGDL || deltaMgdl5m <= MAX_FALL_MGDL_PER_5MIN
 
     /**
      * Is an FCL meal declared right now: an "fcl" note, a low temp target, and no sport note.
@@ -141,13 +156,10 @@ internal object FclMealBasal {
         deltaMgdl5m: Double,
     ): Double? {
         if (!declared(fclNoteActive, sportNoteActive, tempTargetSet, targetBgMgdl)) return null
-        if (!mealModesMaxBasalUph.isFinite() || !profileMaxBasalUph.isFinite() ||
-            !profileBasalUph.isFinite() || !bgMgdl.isFinite() || !deltaMgdl5m.isFinite()
-        ) {
+        if (!mealModesMaxBasalUph.isFinite() || !profileMaxBasalUph.isFinite() || !profileBasalUph.isFinite()) {
             return null
         }
-        if (bgMgdl < MIN_GLUCOSE_MGDL) return null
-        if (deltaMgdl5m <= MAX_FALL_MGDL_PER_5MIN) return null
+        if (standsDown(bgMgdl, deltaMgdl5m)) return null
 
         // The meal ceiling is the number the person set for exactly this purpose. When it is unset the
         // profile maximum is the next honest bound.

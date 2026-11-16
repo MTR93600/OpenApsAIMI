@@ -11,6 +11,13 @@ internal object TpoTriggerEngine {
     private const val RECENT_HYPO_LEDGER_WINDOW_MS = 6L * 60L * 60L * 1000L
     private const val RECENT_HYPO_MIN_BG_LOOKBACK_MGDL = 85.0
 
+    /**
+     * Under this glucose, now or in the 75 min window, the low is a real hypo (the usual 70 mg/dL
+     * line). Only a real hypo may give a STRONG post-hypo session, and only a hypo happening now may
+     * pass the meal guard.
+     */
+    private const val REAL_HYPO_MGDL = 70.0
+
     data class Evaluation(
         val proposal: TpoProposal?,
         val blockedReason: String? = null,
@@ -42,7 +49,7 @@ internal object TpoTriggerEngine {
             return Evaluation(proposal = null, blockedReason = "cooldown")
         }
 
-        if (best.packId == TpoPackId.POST_HYPO_RECOVERY && isMealGuardBlocked(input)) {
+        if (isMealGuardBlocked(best.packId, input)) {
             return Evaluation(proposal = null, blockedReason = "meal_guard")
         }
         if (best.packId == TpoPackId.POOR_SLEEP_WINDOW && isDawnGuardBlocked(input)) {
@@ -77,9 +84,14 @@ internal object TpoTriggerEngine {
         }
         if (confidence < 0.65 || reasons.isEmpty()) return null
         if (!hasActionableHypoContext(input, ledger)) return null
+        // The four reasons above are not independent. The rebound guard alone gives the UAM post-hypo
+        // hypothesis 0.74, which lifts the latent rebound probability, which lifts the causal state,
+        // which lifts the patient mode: one gate decision shows up as four reasons at confidence 1.0.
+        // So the confidence cannot say how bad the low was. The depth of the low can: only a real
+        // hypo gives STRONG.
+        val realHypo = input.minBgLookback75m < REAL_HYPO_MGDL || input.bgMgdl < REAL_HYPO_MGDL
         val tier = when {
-            input.reboundGuardActive && input.minBgLookback75m < 75.0 -> TuningStepTier.STRONG
-            confidence >= 0.85 -> TuningStepTier.STRONG
+            realHypo && (input.reboundGuardActive || confidence >= 0.85) -> TuningStepTier.STRONG
             confidence >= 0.75 -> TuningStepTier.MODERATE
             else -> TuningStepTier.MICRO
         }
@@ -156,10 +168,19 @@ internal object TpoTriggerEngine {
     }
 
     /**
-     * Blocks POST_HYPO overlay during meal absorption / rise even when patient mode is still
-     * POST_HYPO_RECOVERY (orchestrator ranks post-hypo above FAST_MEAL).
+     * Blocks every pack during a meal. All three packs lower the aggressiveness for up to 45 min, and
+     * inside a meal that is the wrong moment: the second half hour of a meal still needs insulin.
+     *
+     * POST_HYPO_RECOVERY ranks above FAST_MEAL in the orchestrator, so the patient mode can still say
+     * post-hypo during a meal. A declared meal counts even with no carbs entered (FCL enters none,
+     * so COB is 0), and for 3 h after the note.
+     *
+     * One exception: a post-hypo session may still start when glucose is under 70 right now. Then
+     * the person is low, whatever was eaten.
      */
-    private fun isMealGuardBlocked(input: TpoTickInput): Boolean {
+    private fun isMealGuardBlocked(packId: TpoPackId, input: TpoTickInput): Boolean {
+        if (packId == TpoPackId.POST_HYPO_RECOVERY && input.bgMgdl < REAL_HYPO_MGDL) return false
+        if (input.declaredMealEpisode) return true
         if (isExplicitMealPatientMode(input)) return true
         return isActiveMealRise(input)
     }

@@ -2535,7 +2535,7 @@ class ShellDecisionTraceTest {
         whenever(tpo.consumePrefsChangedThisTick()).thenReturn(true)
         whenever(
             tpo.onPatientStateReady(
-                any(), any(), any(), anyOrNull(), any(), any(), any(), any(), any(),
+                any(), any(), any(), anyOrNull(), any(), any(), any(), any(), any(), any(),
             ),
         ).thenReturn(true)
         setField(tick, "tpoOrchestrator", tpo)

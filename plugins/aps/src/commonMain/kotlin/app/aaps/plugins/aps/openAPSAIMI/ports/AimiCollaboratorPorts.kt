@@ -130,6 +130,7 @@ interface AimiTpo {
         deltaMgdl5m: Double,
         cobGrams: Double,
         minBgLookback75m: Double,
+        declaredMealEpisode: Boolean,
         nowMs: Long,
     ): Boolean
 }

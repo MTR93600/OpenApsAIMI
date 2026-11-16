@@ -2812,6 +2812,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             override fun delta() = this@DetermineBasalaimiSMB2.delta.toDouble()
             override fun cob() = work.cob.toDouble()
             override fun minBgLookback() = minBgInLastMinutes(AUTODRIVE_POST_HYPO_MIN_BG_LOOKBACK_MINUTES)
+            override fun declaredMealEpisode() = declaredMealWindowActive()
             override fun writeMaxSmb(value: Double) {
                 work.maxSMB = value
             }
@@ -9972,6 +9973,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             hasRecentMealEstimate = hasRecentMealEstimate,
             isConfirmedHighRise = work.isConfirmedHighRiseThisTick,
             postHypoHint = postHypoHint,
+            declaredMealEpisode = declaredMealWindowActive(),
         )
     }
 
@@ -12909,6 +12911,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             iob = work.iob,
             maxIob = work.maxIob,
             bg = bg,
+            delta = delta.toDouble(),
             hasHypoRecovery = work.lastContextSnapshot?.hasHypoRecovery == true,
             postHypo = work.lastPostHypoDeliveryAuthority,
             lastBolusSmbUnit = work.lastBolusSMBUnit,

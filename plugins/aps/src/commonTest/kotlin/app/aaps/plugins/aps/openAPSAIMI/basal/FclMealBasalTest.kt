@@ -7,7 +7,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * The FCL mode: an "fcl" note plus a low temp target force the meal basal ceiling, with no prebolus.
+ * The FCL mode: an "fcl" note plus a low temp target force the meal basal ceiling. Its one-shot
+ * prebolus obeys the same stand-downs, see [FclMealBasal.standsDown].
  *
  * The note alone must not be enough and the temp target alone must not be enough. Both are manual
  * acts, and the temp target is what ends the mode, so the pair is the whole gate.
@@ -217,6 +218,37 @@ class FclMealBasalTest {
                     val r = rate(mealModesMaxBasalUph = ceiling, bgMgdl = bg, deltaMgdl5m = d)
                     if (r != null) assertTrue(r > 0.0)
                 }
+            }
+        }
+    }
+
+    @Test
+    fun `standsDown blocks the 2026-11-16 prebolus case falling at 95 mg per dL`() {
+        // The prebolus went at 95 mg/dL falling -3.9 per 5 min and reached 70 mg/dL 18 min later.
+        assertTrue(FclMealBasal.standsDown(bgMgdl = 95.1, deltaMgdl5m = -3.94))
+    }
+
+    @Test
+    fun `standsDown lets a steady or rising glucose through`() {
+        assertFalse(FclMealBasal.standsDown(bgMgdl = 95.0, deltaMgdl5m = -2.9))
+        assertFalse(FclMealBasal.standsDown(bgMgdl = 80.0, deltaMgdl5m = 0.0))
+        assertFalse(FclMealBasal.standsDown(bgMgdl = 140.0, deltaMgdl5m = 5.0))
+    }
+
+    @Test
+    fun `standsDown under 80 mg per dL or on bad input`() {
+        assertTrue(FclMealBasal.standsDown(bgMgdl = 79.9, deltaMgdl5m = 2.0))
+        assertTrue(FclMealBasal.standsDown(bgMgdl = 120.0, deltaMgdl5m = -3.0))
+        assertTrue(FclMealBasal.standsDown(bgMgdl = Double.NaN, deltaMgdl5m = 2.0))
+        assertTrue(FclMealBasal.standsDown(bgMgdl = 120.0, deltaMgdl5m = Double.NaN))
+    }
+
+    @Test
+    fun `basal and prebolus use one rule`() {
+        // Where the basal floor stands down, the prebolus must too, and the other way round.
+        for (bg in listOf(60.0, 79.0, 80.0, 95.0, 150.0)) {
+            for (delta in listOf(-6.0, -3.0, -2.9, 0.0, 4.0)) {
+                assertEquals(FclMealBasal.standsDown(bg, delta), rate(bgMgdl = bg, deltaMgdl5m = delta) == null)
             }
         }
     }

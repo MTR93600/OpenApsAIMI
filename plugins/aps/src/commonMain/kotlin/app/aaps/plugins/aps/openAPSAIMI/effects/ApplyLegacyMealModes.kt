@@ -39,6 +39,8 @@ internal class LegacyMealTickState(
     val iob: Float,
     val maxIob: Double,
     val bg: Double,
+    /** Glucose change over the last 5 min, mg/dL. Used by the FCL stand-down. */
+    val delta: Double,
     val hasHypoRecovery: Boolean,
     val postHypo: PostHypoDeliveryAuthority.Decision,
     var lastBolusSmbUnit: Float,
@@ -159,7 +161,14 @@ internal fun applyLegacyMealModes(
             fclDeclared -> state.fclRuntimeMin
             else -> null
         }
-        if (activeModeRuntime != null) {
+        // The carry belongs to FCL when FCL is the mode the `when` above picked: no other meal mode is on.
+        val carryIsFcl = fclDeclared && !state.mealTime && !state.bfastTime && !state.lunchTime &&
+            !state.dinnerTime && !state.highCarbTime && !state.snackTime
+        val fclCarryStandsDown = carryIsFcl && FclMealBasal.standsDown(state.bg, state.delta)
+        if (fclCarryStandsDown) {
+            log.add("🛡️ FCL_STAND_DOWN: carry of the FCL prebolus held, bg=${aimiFmt2(state.bg)} delta=${aimiFmt2(state.delta)}")
+        }
+        if (activeModeRuntime != null && !fclCarryStandsDown) {
             manualMealModeTbr(activeModeRuntime, "MAINT_PB1_PRIORITY", overrideSafetyLimits = false)
             if (state.iob > state.maxIob) {
                 log.add("🛡️ LEGACY_PB1_PRIORITY_CARRY: IOB ${aimiFmt2(state.iob)}U > MaxIOB — TBR seul")
@@ -273,7 +282,14 @@ internal fun applyLegacyMealModes(
         markLegacyMealDecision()
         return rT
     }
-    if (fclDeclared && state.fclRuntimeMin in 0..7 && !prebolusAlreadyFiredThisActivation("FCL_P1", state.fclRuntimeMin)) {
+    val fclPrebolusDue = fclDeclared && state.fclRuntimeMin in 0..7 &&
+        !prebolusAlreadyFiredThisActivation("FCL_P1", state.fclRuntimeMin)
+    // Same stand-down as the FCL basal. Nothing is latched, so the prebolus can still go on a later
+    // tick of its 0..7 min window if the fall stops. Past the window the meal is left to SMB.
+    if (fclPrebolusDue && FclMealBasal.standsDown(state.bg, state.delta)) {
+        log.add("🛡️ FCL_STAND_DOWN: prebolus held, bg=${aimiFmt2(state.bg)} delta=${aimiFmt2(state.delta)} rt=${state.fclRuntimeMin}m")
+    }
+    if (fclPrebolusDue && !FclMealBasal.standsDown(state.bg, state.delta)) {
         manualMealModeTbr(state.fclRuntimeMin, "FCL_P1", overrideSafetyLimits = false)
         setLegacyPrebolusUnits(rbf(DoubleKey.OApsAIMIautodrivePrebolus), "FCL_P1", state.fclRuntimeMin) { u ->
             rT.reason.append(texts.gs(ApsStrings.fcl_prebolus, u))

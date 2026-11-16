@@ -51,6 +51,10 @@ class TpoOrchestrator @Inject constructor(
     @Volatile
     private var llmValidationInFlight: Boolean = false
 
+    /** How long the current proposal has lasted. A session starts only once it is confirmed. */
+    @Volatile
+    private var signalStreak = TpoSignalStreak()
+
     override fun consumePrefsChangedThisTick(): Boolean {
         val changed = prefsChangedThisTick
         prefsChangedThisTick = false
@@ -87,6 +91,7 @@ class TpoOrchestrator @Inject constructor(
         deltaMgdl5m: Double,
         cobGrams: Double,
         minBgLookback75m: Double,
+        declaredMealEpisode: Boolean,
         nowMs: Long,
     ): Boolean {
         if (!isTpoEnabled()) return false
@@ -109,6 +114,7 @@ class TpoOrchestrator @Inject constructor(
             eventMemory = patientState.eventMemory,
             reboundGuardActive = correctionAggressionDecision?.tier == CorrectionAggressionGate.Tier.REBOUND_GUARD,
             dawnEndogenousDrive = patientState.endogenousGlucoseDrive,
+            declaredMealEpisode = declaredMealEpisode,
         )
 
         val ledger = TpoEpisodeLedger.update(persistence.loadLedger(), input)
@@ -123,10 +129,15 @@ class TpoOrchestrator @Inject constructor(
             }?.packId,
             lastRevertAtMsByPack = persistence.loadLastRevertAtMsByPack(),
         )
+        signalStreak = signalStreak.observe(evaluation.proposal?.packId, nowMs)
         val proposal = evaluation.proposal ?: run {
             if (evaluation.blockedReason != null && evaluation.blockedReason != "no_trigger") {
                 aapsLogger.debug(LTag.APS, "TPO blocked: ${evaluation.blockedReason}")
             }
+            return false
+        }
+        if (!signalStreak.isConfirmed(nowMs)) {
+            aapsLogger.debug(LTag.APS, "TPO waiting: ${proposal.packId.name} seen for ${(nowMs - signalStreak.firstSeenMs) / 60_000L} min")
             return false
         }
 
