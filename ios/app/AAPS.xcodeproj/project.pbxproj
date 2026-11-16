@@ -9,19 +9,21 @@
 /* Begin PBXBuildFile section */
 		AA2000300000000000000 /* AapsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000100000000000000 /* AapsApp.swift */; };
 		AA2000400000000000000 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA2000200000000000000 /* Assets.xcassets */; };
-		AA2005000000000000000 /* libre3 in Resources */ = {isa = PBXBuildFile; fileRef = AA1005000000000000000 /* libre3 */; };
 		AA2000500000000000000 /* AapsShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA1000200000000000000 /* AapsShared.framework */; };
+		AA2005000000000000000 /* libre3 in Resources */ = {isa = PBXBuildFile; fileRef = AA1005000000000000000 /* libre3 */; };
 		AA2009800000000000000 /* CrashlyticsCrashReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1009800000000000000 /* CrashlyticsCrashReporter.swift */; };
 		AA2009900000000000000 /* NsSocketBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1009900000000000000 /* NsSocketBridge.swift */; };
 		AA2010000000000000000 /* MealAdvisorCameraBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1010000000000000000000 /* MealAdvisorCameraBridge.swift */; };
-		C10000050000000000000001 /* ConnectIqBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000040000000000000001 /* ConnectIqBridge.swift */; };
 		AA3000300000000000000 /* AapsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000100000000000000 /* AapsApp.swift */; };
 		AA3000400000000000000 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA3000200000000000000 /* Assets.xcassets */; };
-		AA3005000000000000000 /* libre3 in Resources */ = {isa = PBXBuildFile; fileRef = AA1005000000000000000 /* libre3 */; };
 		AA3000500000000000000 /* AapsShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA1000200000000000000 /* AapsShared.framework */; };
+		AA3005000000000000000 /* libre3 in Resources */ = {isa = PBXBuildFile; fileRef = AA1005000000000000000 /* libre3 */; };
 		AA3009800000000000000 /* CrashlyticsCrashReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1009800000000000000 /* CrashlyticsCrashReporter.swift */; };
 		AA3009900000000000000 /* NsSocketBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1009900000000000000 /* NsSocketBridge.swift */; };
 		AA3010000000000000000 /* MealAdvisorCameraBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1010000000000000000000 /* MealAdvisorCameraBridge.swift */; };
+		C10000030000000000000001 /* ConnectIQ in Frameworks */ = {isa = PBXBuildFile; productRef = C10000020000000000000001 /* ConnectIQ */; };
+		C10000030000000000000002 /* ConnectIQ in Frameworks */ = {isa = PBXBuildFile; productRef = C10000020000000000000002 /* ConnectIQ */; };
+		C10000050000000000000001 /* ConnectIqBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000040000000000000001 /* ConnectIqBridge.swift */; };
 		C10000050000000000000002 /* ConnectIqBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000040000000000000001 /* ConnectIqBridge.swift */; };
 		D10000050000000000000001 /* LiveActivityBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000040000000000000001 /* LiveActivityBridge.swift */; };
 		D10000050000000000000002 /* LiveActivityBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000040000000000000001 /* LiveActivityBridge.swift */; };
@@ -31,8 +33,6 @@
 		D32B0F783048851500FAFE85 /* SocketIO in Frameworks */ = {isa = PBXBuildFile; productRef = AA00SP02000000000000002 /* SocketIO */; };
 		D32B0F793048851500FAFE85 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = AA00SP02000000000000003 /* FirebaseCrashlytics */; };
 		D32B0F7A3048851500FAFE85 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = AA00SP02000000000000004 /* FirebaseCrashlytics */; };
-		C10000030000000000000001 /* ConnectIQ in Frameworks */ = {isa = PBXBuildFile; productRef = C10000020000000000000001 /* ConnectIQ */; };
-		C10000030000000000000002 /* ConnectIQ in Frameworks */ = {isa = PBXBuildFile; productRef = C10000020000000000000002 /* ConnectIQ */; };
 		E11000000000000000000001 /* AapsLiveActivityBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000010000000000000001 /* AapsLiveActivityBundle.swift */; };
 		E11000000000000000000002 /* AapsLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000010000000000000002 /* AapsLiveActivityWidget.swift */; };
 		E11000000000000000000003 /* AapsHomeWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000010000000000000003 /* AapsHomeWidget.swift */; };
@@ -91,19 +91,19 @@
 		AA1000100000000000000 /* AapsApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AapsApp.swift; path = Shared/AapsApp.swift; sourceTree = "<group>"; };
 		AA1000200000000000000 /* AapsShared.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AapsShared.framework; path = ../shell/build/bin/iosSimulatorArm64/debugFramework/AapsShared.framework; sourceTree = "<group>"; };
 		AA1000300000000000000 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
+		AA1005000000000000000 /* libre3 */ = {isa = PBXFileReference; lastKnownFileType = folder; name = libre3; path = ../../plugins/libre3/src/commonMain/resources/libre3; sourceTree = "<group>"; };
 		AA1009600000000000000 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "GoogleService-Info.plist"; path = "AAPS/GoogleService-Info.plist"; sourceTree = "<group>"; };
 		AA1009700000000000000 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "GoogleService-Info.plist"; path = "AAPS2/GoogleService-Info.plist"; sourceTree = "<group>"; };
 		AA1009800000000000000 /* CrashlyticsCrashReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CrashlyticsCrashReporter.swift; path = Shared/CrashlyticsCrashReporter.swift; sourceTree = "<group>"; };
 		AA1009900000000000000 /* NsSocketBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NsSocketBridge.swift; path = Shared/NsSocketBridge.swift; sourceTree = "<group>"; };
 		AA1010000000000000000000 /* MealAdvisorCameraBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MealAdvisorCameraBridge.swift; path = Shared/MealAdvisorCameraBridge.swift; sourceTree = "<group>"; };
-		C10000040000000000000001 /* ConnectIqBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ConnectIqBridge.swift; path = Shared/ConnectIqBridge.swift; sourceTree = "<group>"; };
-		D10000040000000000000001 /* LiveActivityBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LiveActivityBridge.swift; path = Shared/LiveActivityBridge.swift; sourceTree = "<group>"; };
-		D10000040000000000000002 /* AapsActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AapsActivityAttributes.swift; path = Shared/LiveActivity/AapsActivityAttributes.swift; sourceTree = "<group>"; };
 		AA2000100000000000000 /* AAPS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AAPS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA2000200000000000000 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = AAPS/Assets.xcassets; sourceTree = "<group>"; };
 		AA3000100000000000000 /* AAPS2.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AAPS2.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA3000200000000000000 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = AAPS2/Assets.xcassets; sourceTree = "<group>"; };
-		AA1005000000000000000 /* libre3 */ = {isa = PBXFileReference; lastKnownFileType = folder; name = libre3; path = ../../plugins/libre3/src/commonMain/resources/libre3; sourceTree = "<group>"; };
+		C10000040000000000000001 /* ConnectIqBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ConnectIqBridge.swift; path = Shared/ConnectIqBridge.swift; sourceTree = "<group>"; };
+		D10000040000000000000001 /* LiveActivityBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LiveActivityBridge.swift; path = Shared/LiveActivityBridge.swift; sourceTree = "<group>"; };
+		D10000040000000000000002 /* AapsActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AapsActivityAttributes.swift; path = Shared/LiveActivity/AapsActivityAttributes.swift; sourceTree = "<group>"; };
 		E10000010000000000000001 /* AapsLiveActivityBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AapsLiveActivityBundle.swift; sourceTree = "<group>"; };
 		E10000010000000000000002 /* AapsLiveActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AapsLiveActivityWidget.swift; sourceTree = "<group>"; };
 		E10000010000000000000003 /* AapsHomeWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AapsHomeWidget.swift; sourceTree = "<group>"; };
@@ -391,22 +391,6 @@
 			shellPath = /bin/sh;
 			shellScript = "set -e\n# Without this the phase cannot fail. Xcode runs it with /bin/sh, and the gradle call below\n# is not the last command - the alarm-sound copy follows it - so the phase used to exit with\n# the copy's status. A failing gradle was invisible and Xcode linked whatever framework was\n# already on disk, which means a build could ship a stale Kotlin engine while looking fresh.\n# Keep the framework in step with the Kotlin sources.\n# The simulator and a real phone are different architectures, so the Gradle target follows\n# whatever Xcode is building rather than being fixed to one of them.\ncase \"$PLATFORM_NAME\" in\n  iphonesimulator) KOTLIN_TARGET=IosSimulatorArm64 ;;\n  iphoneos)        KOTLIN_TARGET=IosArm64 ;;\n  *) echo \"error: unsupported platform $PLATFORM_NAME\" >&2; exit 1 ;;\nesac\n# TensorFlow Lite C for the UAM model: the app links this archive (OTHER_LDFLAGS). It is not in git,\n# so it is built once, from the pinned TensorFlow 2.4 source, when it is not there yet.\ncase \"$PLATFORM_NAME\" in\n  iphonesimulator) TFLITE_KIND=sim ;;\n  *)               TFLITE_KIND=device ;;\nesac\nif [ ! -f \"$SRCROOT/../../plugins/aps/build/tflite-24-$TFLITE_KIND-arm64/libtensorflow-lite.a\" ]; then\n  \"$SRCROOT/../../plugins/aps/src/tfliteParity/build-uam24-$TFLITE_KIND-arm64.sh\"\nfi\n# Xcode does not inherit a login shell, so JAVA_HOME is set here rather than assumed.\nexport JAVA_HOME=\"$(/usr/libexec/java_home -v 21)\"\n# Debug or Release Kotlin, following what Xcode is building. Pinned to Debug before, which meant an\n# archive for TestFlight shipped unoptimised Kotlin - the whole app logic - while everything\n# around it was built as a release.\ncase \"$CONFIGURATION\" in\n  Release) KOTLIN_BUILD=Release ;;\n  *)       KOTLIN_BUILD=Debug ;;\nesac\n# A fresh clone has no Version.xcconfig, so Xcode falls back to the project defaults and the app\n# calls itself 1.0 (1). Crashlytics sorts everything by version, so every self-builder would\n# land in one bucket and one person building 200 times would look like 200 users.\n# Written only when it is missing, not on every build: an xcconfig that changes each time\n# invalidates the build settings and forces a full rebuild. CI runs the task itself before\n# archiving, which is what keeps the TestFlight build number going up.\nif [ ! -f \"$SRCROOT/Version.xcconfig\" ]; then\n  \"$SRCROOT/../../gradlew\" -p \"$SRCROOT/../..\" :ios:shell:generateIosVersionXcconfig --no-daemon\nfi\n# The Release link of the Kotlin framework (an archive) needs more heap than the 8 GB of\n# gradle.properties: it failed with \"Java heap space\" in linkReleaseFrameworkIosArm64.\n# Only the Release link gets more; Debug keeps the project setting.\nif [ \"$KOTLIN_BUILD\" = Release ]; then\n  \"$SRCROOT/../../gradlew\" -p \"$SRCROOT/../..\" \":ios:shell:link${KOTLIN_BUILD}Framework$KOTLIN_TARGET\" --no-daemon \"-Dorg.gradle.jvmargs=-Xmx14g -XX:+UseParallelGC -Xss4m\"\nelse\n  \"$SRCROOT/../../gradlew\" -p \"$SRCROOT/../..\" \":ios:shell:link${KOTLIN_BUILD}Framework$KOTLIN_TARGET\" --no-daemon\nfi\n\n# The alarm sounds live once, in :core:ui's Android resources. Copying them at build time rather\n# than keeping a second set under ios/ means the two cannot drift - a replaced alarm tone stays one\n# edit, not two.\nSOUNDS=\"$SRCROOT/../../core/ui/src/androidMain/res/raw\"\nDEST=\"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nmkdir -p \"$DEST\"\nfor s in alarm urgentalarm error boluserror eatreminder; do\n  if [ ! -f \"$SOUNDS/$s.mp3\" ]; then\n    echo \"error: alarm sound $s.mp3 missing from $SOUNDS\" >&2; exit 1\n  fi\n  cp \"$SOUNDS/$s.mp3\" \"$DEST/\"\ndone\n# The Trio sounds of the CGM alarms (see core/ui/SOUNDS.md). AlarmSound names each one, so a\n# missing file would make that alarm fall back to the iOS sound without a word.\nset -- \"$SOUNDS\"/trio_*.m4a\nif [ ! -f \"$1\" ]; then\n  echo \"error: Trio alarm sounds missing from $SOUNDS\" >&2; exit 1\nfi\ncp \"$@\" \"$DEST/\"\n";
 		};
-		AA3000900000000000000 /* Build shared framework */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-			);
-			name = "Build shared framework";
-			outputPaths = (
-				"$(SRCROOT)/../../plugins/aps/build/tflite-24-$(AAPS_TFLITE_KIND)-arm64/libtensorflow-lite.a",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "set -e\n# Without this the phase cannot fail. Xcode runs it with /bin/sh, and the gradle call below\n# is not the last command - the alarm-sound copy follows it - so the phase used to exit with\n# the copy's status. A failing gradle was invisible and Xcode linked whatever framework was\n# already on disk, which means a build could ship a stale Kotlin engine while looking fresh.\n# Keep the framework in step with the Kotlin sources.\n# The simulator and a real phone are different architectures, so the Gradle target follows\n# whatever Xcode is building rather than being fixed to one of them.\ncase \"$PLATFORM_NAME\" in\n  iphonesimulator) KOTLIN_TARGET=IosSimulatorArm64 ;;\n  iphoneos)        KOTLIN_TARGET=IosArm64 ;;\n  *) echo \"error: unsupported platform $PLATFORM_NAME\" >&2; exit 1 ;;\nesac\n# TensorFlow Lite C for the UAM model: the app links this archive (OTHER_LDFLAGS). It is not in git,\n# so it is built once, from the pinned TensorFlow 2.4 source, when it is not there yet.\ncase \"$PLATFORM_NAME\" in\n  iphonesimulator) TFLITE_KIND=sim ;;\n  *)               TFLITE_KIND=device ;;\nesac\nif [ ! -f \"$SRCROOT/../../plugins/aps/build/tflite-24-$TFLITE_KIND-arm64/libtensorflow-lite.a\" ]; then\n  \"$SRCROOT/../../plugins/aps/src/tfliteParity/build-uam24-$TFLITE_KIND-arm64.sh\"\nfi\n# Xcode does not inherit a login shell, so JAVA_HOME is set here rather than assumed.\nexport JAVA_HOME=\"$(/usr/libexec/java_home -v 21)\"\n# Debug or Release Kotlin, following what Xcode is building. Pinned to Debug before, which meant an\n# archive for TestFlight shipped unoptimised Kotlin - the whole app logic - while everything\n# around it was built as a release.\ncase \"$CONFIGURATION\" in\n  Release) KOTLIN_BUILD=Release ;;\n  *)       KOTLIN_BUILD=Debug ;;\nesac\n# A fresh clone has no Version.xcconfig, so Xcode falls back to the project defaults and the app\n# calls itself 1.0 (1). Crashlytics sorts everything by version, so every self-builder would\n# land in one bucket and one person building 200 times would look like 200 users.\n# Written only when it is missing, not on every build: an xcconfig that changes each time\n# invalidates the build settings and forces a full rebuild. CI runs the task itself before\n# archiving, which is what keeps the TestFlight build number going up.\nif [ ! -f \"$SRCROOT/Version.xcconfig\" ]; then\n  \"$SRCROOT/../../gradlew\" -p \"$SRCROOT/../..\" :ios:shell:generateIosVersionXcconfig --no-daemon\nfi\n# The Release link of the Kotlin framework (an archive) needs more heap than the 8 GB of\n# gradle.properties: it failed with \"Java heap space\" in linkReleaseFrameworkIosArm64.\n# Only the Release link gets more; Debug keeps the project setting.\nif [ \"$KOTLIN_BUILD\" = Release ]; then\n  \"$SRCROOT/../../gradlew\" -p \"$SRCROOT/../..\" \":ios:shell:link${KOTLIN_BUILD}Framework$KOTLIN_TARGET\" --no-daemon \"-Dorg.gradle.jvmargs=-Xmx14g -XX:+UseParallelGC -Xss4m\"\nelse\n  \"$SRCROOT/../../gradlew\" -p \"$SRCROOT/../..\" \":ios:shell:link${KOTLIN_BUILD}Framework$KOTLIN_TARGET\" --no-daemon\nfi\n\n# The alarm sounds live once, in :core:ui's Android resources. Copying them at build time rather\n# than keeping a second set under ios/ means the two cannot drift - a replaced alarm tone stays one\n# edit, not two.\nSOUNDS=\"$SRCROOT/../../core/ui/src/androidMain/res/raw\"\nDEST=\"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nmkdir -p \"$DEST\"\nfor s in alarm urgentalarm error boluserror eatreminder; do\n  if [ ! -f \"$SOUNDS/$s.mp3\" ]; then\n    echo \"error: alarm sound $s.mp3 missing from $SOUNDS\" >&2; exit 1\n  fi\n  cp \"$SOUNDS/$s.mp3\" \"$DEST/\"\ndone\n# The Trio sounds of the CGM alarms (see core/ui/SOUNDS.md). AlarmSound names each one, so a\n# missing file would make that alarm fall back to the iOS sound without a word.\nset -- \"$SOUNDS\"/trio_*.m4a\nif [ ! -f \"$1\" ]; then\n  echo \"error: Trio alarm sounds missing from $SOUNDS\" >&2; exit 1\nfi\ncp \"$@\" \"$DEST/\"\n";
-		};
 		AA2009500000000000000 /* Copy the Firebase config */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -422,6 +406,22 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "# Each target gets the plist from its own folder, keyed on TARGET_NAME.\n# A missing file is a warning, not an error: a clone without the config must still build and\n# simply not report, which is what CrashlyticsCrashReporter.start() is written to do.\nSRC=\"$SRCROOT/$TARGET_NAME/GoogleService-Info.plist\"\nDST=\"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/GoogleService-Info.plist\"\nif [ -f \"$SRC\" ]; then\n  cp \"$SRC\" \"$DST\"\nelse\n  # Remove a copy an earlier build left behind. Without this, deleting the config does\n  # not stop reporting: the stale plist stays in the bundle and the warning below lies.\n  rm -f \"$DST\"\n  echo \"warning: no $TARGET_NAME/GoogleService-Info.plist, so this build has no crash reporting\"\nfi\n";
+		};
+		AA3000900000000000000 /* Build shared framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Build shared framework";
+			outputPaths = (
+				"$(SRCROOT)/../../plugins/aps/build/tflite-24-$(AAPS_TFLITE_KIND)-arm64/libtensorflow-lite.a",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\n# Without this the phase cannot fail. Xcode runs it with /bin/sh, and the gradle call below\n# is not the last command - the alarm-sound copy follows it - so the phase used to exit with\n# the copy's status. A failing gradle was invisible and Xcode linked whatever framework was\n# already on disk, which means a build could ship a stale Kotlin engine while looking fresh.\n# Keep the framework in step with the Kotlin sources.\n# The simulator and a real phone are different architectures, so the Gradle target follows\n# whatever Xcode is building rather than being fixed to one of them.\ncase \"$PLATFORM_NAME\" in\n  iphonesimulator) KOTLIN_TARGET=IosSimulatorArm64 ;;\n  iphoneos)        KOTLIN_TARGET=IosArm64 ;;\n  *) echo \"error: unsupported platform $PLATFORM_NAME\" >&2; exit 1 ;;\nesac\n# TensorFlow Lite C for the UAM model: the app links this archive (OTHER_LDFLAGS). It is not in git,\n# so it is built once, from the pinned TensorFlow 2.4 source, when it is not there yet.\ncase \"$PLATFORM_NAME\" in\n  iphonesimulator) TFLITE_KIND=sim ;;\n  *)               TFLITE_KIND=device ;;\nesac\nif [ ! -f \"$SRCROOT/../../plugins/aps/build/tflite-24-$TFLITE_KIND-arm64/libtensorflow-lite.a\" ]; then\n  \"$SRCROOT/../../plugins/aps/src/tfliteParity/build-uam24-$TFLITE_KIND-arm64.sh\"\nfi\n# Xcode does not inherit a login shell, so JAVA_HOME is set here rather than assumed.\nexport JAVA_HOME=\"$(/usr/libexec/java_home -v 21)\"\n# Debug or Release Kotlin, following what Xcode is building. Pinned to Debug before, which meant an\n# archive for TestFlight shipped unoptimised Kotlin - the whole app logic - while everything\n# around it was built as a release.\ncase \"$CONFIGURATION\" in\n  Release) KOTLIN_BUILD=Release ;;\n  *)       KOTLIN_BUILD=Debug ;;\nesac\n# A fresh clone has no Version.xcconfig, so Xcode falls back to the project defaults and the app\n# calls itself 1.0 (1). Crashlytics sorts everything by version, so every self-builder would\n# land in one bucket and one person building 200 times would look like 200 users.\n# Written only when it is missing, not on every build: an xcconfig that changes each time\n# invalidates the build settings and forces a full rebuild. CI runs the task itself before\n# archiving, which is what keeps the TestFlight build number going up.\nif [ ! -f \"$SRCROOT/Version.xcconfig\" ]; then\n  \"$SRCROOT/../../gradlew\" -p \"$SRCROOT/../..\" :ios:shell:generateIosVersionXcconfig --no-daemon\nfi\n# The Release link of the Kotlin framework (an archive) needs more heap than the 8 GB of\n# gradle.properties: it failed with \"Java heap space\" in linkReleaseFrameworkIosArm64.\n# Only the Release link gets more; Debug keeps the project setting.\nif [ \"$KOTLIN_BUILD\" = Release ]; then\n  \"$SRCROOT/../../gradlew\" -p \"$SRCROOT/../..\" \":ios:shell:link${KOTLIN_BUILD}Framework$KOTLIN_TARGET\" --no-daemon \"-Dorg.gradle.jvmargs=-Xmx14g -XX:+UseParallelGC -Xss4m\"\nelse\n  \"$SRCROOT/../../gradlew\" -p \"$SRCROOT/../..\" \":ios:shell:link${KOTLIN_BUILD}Framework$KOTLIN_TARGET\" --no-daemon\nfi\n\n# The alarm sounds live once, in :core:ui's Android resources. Copying them at build time rather\n# than keeping a second set under ios/ means the two cannot drift - a replaced alarm tone stays one\n# edit, not two.\nSOUNDS=\"$SRCROOT/../../core/ui/src/androidMain/res/raw\"\nDEST=\"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nmkdir -p \"$DEST\"\nfor s in alarm urgentalarm error boluserror eatreminder; do\n  if [ ! -f \"$SOUNDS/$s.mp3\" ]; then\n    echo \"error: alarm sound $s.mp3 missing from $SOUNDS\" >&2; exit 1\n  fi\n  cp \"$SOUNDS/$s.mp3\" \"$DEST/\"\ndone\n# The Trio sounds of the CGM alarms (see core/ui/SOUNDS.md). AlarmSound names each one, so a\n# missing file would make that alarm fall back to the iOS sound without a word.\nset -- \"$SOUNDS\"/trio_*.m4a\nif [ ! -f \"$1\" ]; then\n  echo \"error: Trio alarm sounds missing from $SOUNDS\" >&2; exit 1\nfi\ncp \"$@\" \"$DEST/\"\n";
 		};
 		AA3009500000000000000 /* Copy the Firebase config */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -532,26 +532,16 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = AA1000300000000000000 /* Signing.xcconfig */;
 			buildSettings = {
+				AAPS_CIQ_URL_SCHEME = "aaps-ciq";
+				"AAPS_TFLITE_KIND[sdk=iphoneos*]" = device;
+				"AAPS_TFLITE_KIND[sdk=iphonesimulator*]" = sim;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				// The HealthKit capability, which AIMI needs to read steps, heart rate and sleep.
-				// Set here rather than by ticking the box in Xcode's Signing & Capabilities tab:
-				// the box writes the same two things, but names the file after the target, so
-				// the two targets would get two copies that drift apart. Automatic signing adds
-				// HealthKit to the App ID by itself. Shared/Info.plist must carry
-				// NSHealthShareUsageDescription as well, or iOS terminates the app on first use.
 				CODE_SIGN_ENTITLEMENTS = "$(AAPS_ENTITLEMENTS)";
-				// The simulator keeps its own file, which REPLACES the one above rather than
-				// adding to it, so that file repeats the HealthKit keys. Simulator.entitlements
-				// says why a simulator build needs a file of its own at all.
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = Simulator.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(AAPS_BUILD_NUMBER:default=1)";
 				ENABLE_PREVIEWS = YES;
-				// Which Kotlin/Native output to look in. `linkDebugFramework` and
-				// `linkReleaseFramework` write to different folders, so a path that named one of
-				// them worked in that configuration only - a Release archive found no Kotlin at all.
-				KOTLIN_FRAMEWORK_KIND = debug;
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
 					"$(inherited)",
 					"$(SRCROOT)/../shell/build/bin/iosArm64/$(KOTLIN_FRAMEWORK_KIND)Framework",
@@ -560,15 +550,29 @@
 					"$(inherited)",
 					"$(SRCROOT)/../shell/build/bin/iosSimulatorArm64/$(KOTLIN_FRAMEWORK_KIND)Framework",
 				);
-				// TensorFlow Lite C 2.4 for the UAM model (IosUamPredictor). AapsShared is a static
-				// framework, so its TfLite symbols are resolved here, with the same flags as the
-				// Kotlin test link in plugins/aps/build.gradle.kts. The Kotlin build phase builds the
-				// archive with plugins/aps/src/tfliteParity/build-uam24-*.sh when it is missing.
-				// Which TensorFlow Lite archive this SDK links. The "Build shared framework" phase lists
-				// it as an output, so Xcode knows the phase makes it. Without that, the first device
-				// build fails with "Build input file cannot be found", although the phase built it.
-				"AAPS_TFLITE_KIND[sdk=iphoneos*]" = device;
-				"AAPS_TFLITE_KIND[sdk=iphonesimulator*]" = sim;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Shared/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = AAPS;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.medical";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "AAPS connects over Bluetooth to your glucose sensor and your insulin pump. It needs this to read your glucose and to send insulin commands, including while the app is in the background.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "AAPS uses the camera only to read the set-up QR code shown by your master phone, and to take a meal photo when you ask Meal Advisor to estimate its carbohydrates.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "AAPS uses Face ID only to unlock the app and its protected settings, when you have switched that protection on.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "AAPS reads your steps, heart rate, resting heart rate, heart rate variability and sleep from Health. It uses them to tell when you are active, asleep or unwell, and takes that into account when it decides how much insulin to give. AAPS only reads from Health. It never writes to it.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "AAPS reads your steps, heart rate, resting heart rate, heart rate variability and sleep from Health. It uses them to tell when you are active, asleep or unwell, and takes that into account when it decides how much insulin to give. AAPS only reads from Health. It never writes to it.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "AAPS uses your location only to evaluate automation rules you set up yourself, such as starting a temporary target when you arrive somewhere.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				KOTLIN_FRAMEWORK_KIND = debug;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
 				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
 					"$(inherited)",
 					"-ObjC",
@@ -587,26 +591,6 @@
 					"-framework",
 					CoreFoundation,
 				);
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Shared/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = AAPS;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.medical";
-				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				// iPhone stays portrait. iPad must declare all four or the App Store rejects the
-				// upload as an invalid bundle: an app in the iPad device family takes part in
-				// multitasking, and a multitasking app has to survive being any shape.
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				// ConnectIQ is a dynamic framework, the first one in the app. Without this path dyld
-				// cannot find it in AAPS.app/Frameworks and stops the app before it starts.
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
-				AAPS_CIQ_URL_SCHEME = "aaps-ciq";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(AAPS_BUNDLE_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -618,26 +602,16 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = AA1000300000000000000 /* Signing.xcconfig */;
 			buildSettings = {
+				AAPS_CIQ_URL_SCHEME = "aaps2-ciq";
+				"AAPS_TFLITE_KIND[sdk=iphoneos*]" = device;
+				"AAPS_TFLITE_KIND[sdk=iphonesimulator*]" = sim;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				// The HealthKit capability, which AIMI needs to read steps, heart rate and sleep.
-				// Set here rather than by ticking the box in Xcode's Signing & Capabilities tab:
-				// the box writes the same two things, but names the file after the target, so
-				// the two targets would get two copies that drift apart. Automatic signing adds
-				// HealthKit to the App ID by itself. Shared/Info.plist must carry
-				// NSHealthShareUsageDescription as well, or iOS terminates the app on first use.
 				CODE_SIGN_ENTITLEMENTS = "$(AAPS_ENTITLEMENTS)";
-				// The simulator keeps its own file, which REPLACES the one above rather than
-				// adding to it, so that file repeats the HealthKit keys. Simulator.entitlements
-				// says why a simulator build needs a file of its own at all.
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = Simulator.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(AAPS_BUILD_NUMBER:default=1)";
 				ENABLE_PREVIEWS = YES;
-				// Which Kotlin/Native output to look in. `linkDebugFramework` and
-				// `linkReleaseFramework` write to different folders, so a path that named one of
-				// them worked in that configuration only - a Release archive found no Kotlin at all.
-				KOTLIN_FRAMEWORK_KIND = debug;
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
 					"$(inherited)",
 					"$(SRCROOT)/../shell/build/bin/iosArm64/$(KOTLIN_FRAMEWORK_KIND)Framework",
@@ -646,15 +620,21 @@
 					"$(inherited)",
 					"$(SRCROOT)/../shell/build/bin/iosSimulatorArm64/$(KOTLIN_FRAMEWORK_KIND)Framework",
 				);
-				// TensorFlow Lite C 2.4 for the UAM model (IosUamPredictor). AapsShared is a static
-				// framework, so its TfLite symbols are resolved here, with the same flags as the
-				// Kotlin test link in plugins/aps/build.gradle.kts. The Kotlin build phase builds the
-				// archive with plugins/aps/src/tfliteParity/build-uam24-*.sh when it is missing.
-				// Which TensorFlow Lite archive this SDK links. The "Build shared framework" phase lists
-				// it as an output, so Xcode knows the phase makes it. Without that, the first device
-				// build fails with "Build input file cannot be found", although the phase built it.
-				"AAPS_TFLITE_KIND[sdk=iphoneos*]" = device;
-				"AAPS_TFLITE_KIND[sdk=iphonesimulator*]" = sim;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Shared/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = AAPS2;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.medical";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				KOTLIN_FRAMEWORK_KIND = debug;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
 				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
 					"$(inherited)",
 					"-ObjC",
@@ -673,26 +653,6 @@
 					"-framework",
 					CoreFoundation,
 				);
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Shared/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = AAPS2;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.medical";
-				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				// iPhone stays portrait. iPad must declare all four or the App Store rejects the
-				// upload as an invalid bundle: an app in the iPad device family takes part in
-				// multitasking, and a multitasking app has to survive being any shape.
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				// ConnectIQ is a dynamic framework, the first one in the app. Without this path dyld
-				// cannot find it in AAPS.app/Frameworks and stops the app before it starts.
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
-				AAPS_CIQ_URL_SCHEME = "aaps2-ciq";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(AAPS_BUNDLE_ID)2";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -707,7 +667,6 @@
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				COPY_PHASE_STRIP = NO;
-				VALIDATE_PRODUCT = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = NO;
@@ -718,6 +677,7 @@
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
 		};
@@ -725,26 +685,16 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = AA1000300000000000000 /* Signing.xcconfig */;
 			buildSettings = {
+				AAPS_CIQ_URL_SCHEME = "aaps-ciq";
+				"AAPS_TFLITE_KIND[sdk=iphoneos*]" = device;
+				"AAPS_TFLITE_KIND[sdk=iphonesimulator*]" = sim;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				// The HealthKit capability, which AIMI needs to read steps, heart rate and sleep.
-				// Set here rather than by ticking the box in Xcode's Signing & Capabilities tab:
-				// the box writes the same two things, but names the file after the target, so
-				// the two targets would get two copies that drift apart. Automatic signing adds
-				// HealthKit to the App ID by itself. Shared/Info.plist must carry
-				// NSHealthShareUsageDescription as well, or iOS terminates the app on first use.
 				CODE_SIGN_ENTITLEMENTS = "$(AAPS_ENTITLEMENTS)";
-				// The simulator keeps its own file, which REPLACES the one above rather than
-				// adding to it, so that file repeats the HealthKit keys. Simulator.entitlements
-				// says why a simulator build needs a file of its own at all.
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = Simulator.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(AAPS_BUILD_NUMBER:default=1)";
 				ENABLE_PREVIEWS = YES;
-				// Which Kotlin/Native output to look in. `linkDebugFramework` and
-				// `linkReleaseFramework` write to different folders, so a path that named one of
-				// them worked in that configuration only - a Release archive found no Kotlin at all.
-				KOTLIN_FRAMEWORK_KIND = release;
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
 					"$(inherited)",
 					"$(SRCROOT)/../shell/build/bin/iosArm64/$(KOTLIN_FRAMEWORK_KIND)Framework",
@@ -753,15 +703,29 @@
 					"$(inherited)",
 					"$(SRCROOT)/../shell/build/bin/iosSimulatorArm64/$(KOTLIN_FRAMEWORK_KIND)Framework",
 				);
-				// TensorFlow Lite C 2.4 for the UAM model (IosUamPredictor). AapsShared is a static
-				// framework, so its TfLite symbols are resolved here, with the same flags as the
-				// Kotlin test link in plugins/aps/build.gradle.kts. The Kotlin build phase builds the
-				// archive with plugins/aps/src/tfliteParity/build-uam24-*.sh when it is missing.
-				// Which TensorFlow Lite archive this SDK links. The "Build shared framework" phase lists
-				// it as an output, so Xcode knows the phase makes it. Without that, the first device
-				// build fails with "Build input file cannot be found", although the phase built it.
-				"AAPS_TFLITE_KIND[sdk=iphoneos*]" = device;
-				"AAPS_TFLITE_KIND[sdk=iphonesimulator*]" = sim;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Shared/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = AAPS;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.medical";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "AAPS connects over Bluetooth to your glucose sensor and your insulin pump. It needs this to read your glucose and to send insulin commands, including while the app is in the background.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "AAPS uses the camera only to read the set-up QR code shown by your master phone, and to take a meal photo when you ask Meal Advisor to estimate its carbohydrates.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "AAPS uses Face ID only to unlock the app and its protected settings, when you have switched that protection on.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "AAPS reads your steps, heart rate, resting heart rate, heart rate variability and sleep from Health. It uses them to tell when you are active, asleep or unwell, and takes that into account when it decides how much insulin to give. AAPS only reads from Health. It never writes to it.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "AAPS reads your steps, heart rate, resting heart rate, heart rate variability and sleep from Health. It uses them to tell when you are active, asleep or unwell, and takes that into account when it decides how much insulin to give. AAPS only reads from Health. It never writes to it.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "AAPS uses your location only to evaluate automation rules you set up yourself, such as starting a temporary target when you arrive somewhere.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				KOTLIN_FRAMEWORK_KIND = release;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
 				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
 					"$(inherited)",
 					"-ObjC",
@@ -780,26 +744,6 @@
 					"-framework",
 					CoreFoundation,
 				);
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Shared/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = AAPS;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.medical";
-				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				// iPhone stays portrait. iPad must declare all four or the App Store rejects the
-				// upload as an invalid bundle: an app in the iPad device family takes part in
-				// multitasking, and a multitasking app has to survive being any shape.
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				// ConnectIQ is a dynamic framework, the first one in the app. Without this path dyld
-				// cannot find it in AAPS.app/Frameworks and stops the app before it starts.
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
-				AAPS_CIQ_URL_SCHEME = "aaps-ciq";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(AAPS_BUNDLE_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -811,26 +755,16 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = AA1000300000000000000 /* Signing.xcconfig */;
 			buildSettings = {
+				AAPS_CIQ_URL_SCHEME = "aaps2-ciq";
+				"AAPS_TFLITE_KIND[sdk=iphoneos*]" = device;
+				"AAPS_TFLITE_KIND[sdk=iphonesimulator*]" = sim;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				// The HealthKit capability, which AIMI needs to read steps, heart rate and sleep.
-				// Set here rather than by ticking the box in Xcode's Signing & Capabilities tab:
-				// the box writes the same two things, but names the file after the target, so
-				// the two targets would get two copies that drift apart. Automatic signing adds
-				// HealthKit to the App ID by itself. Shared/Info.plist must carry
-				// NSHealthShareUsageDescription as well, or iOS terminates the app on first use.
 				CODE_SIGN_ENTITLEMENTS = "$(AAPS_ENTITLEMENTS)";
-				// The simulator keeps its own file, which REPLACES the one above rather than
-				// adding to it, so that file repeats the HealthKit keys. Simulator.entitlements
-				// says why a simulator build needs a file of its own at all.
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = Simulator.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(AAPS_BUILD_NUMBER:default=1)";
 				ENABLE_PREVIEWS = YES;
-				// Which Kotlin/Native output to look in. `linkDebugFramework` and
-				// `linkReleaseFramework` write to different folders, so a path that named one of
-				// them worked in that configuration only - a Release archive found no Kotlin at all.
-				KOTLIN_FRAMEWORK_KIND = release;
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
 					"$(inherited)",
 					"$(SRCROOT)/../shell/build/bin/iosArm64/$(KOTLIN_FRAMEWORK_KIND)Framework",
@@ -839,15 +773,21 @@
 					"$(inherited)",
 					"$(SRCROOT)/../shell/build/bin/iosSimulatorArm64/$(KOTLIN_FRAMEWORK_KIND)Framework",
 				);
-				// TensorFlow Lite C 2.4 for the UAM model (IosUamPredictor). AapsShared is a static
-				// framework, so its TfLite symbols are resolved here, with the same flags as the
-				// Kotlin test link in plugins/aps/build.gradle.kts. The Kotlin build phase builds the
-				// archive with plugins/aps/src/tfliteParity/build-uam24-*.sh when it is missing.
-				// Which TensorFlow Lite archive this SDK links. The "Build shared framework" phase lists
-				// it as an output, so Xcode knows the phase makes it. Without that, the first device
-				// build fails with "Build input file cannot be found", although the phase built it.
-				"AAPS_TFLITE_KIND[sdk=iphoneos*]" = device;
-				"AAPS_TFLITE_KIND[sdk=iphonesimulator*]" = sim;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Shared/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = AAPS2;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.medical";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				KOTLIN_FRAMEWORK_KIND = release;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
 				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
 					"$(inherited)",
 					"-ObjC",
@@ -866,26 +806,6 @@
 					"-framework",
 					CoreFoundation,
 				);
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Shared/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = AAPS2;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.medical";
-				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				// iPhone stays portrait. iPad must declare all four or the App Store rejects the
-				// upload as an invalid bundle: an app in the iPad device family takes part in
-				// multitasking, and a multitasking app has to survive being any shape.
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				// ConnectIQ is a dynamic framework, the first one in the app. Without this path dyld
-				// cannot find it in AAPS.app/Frameworks and stops the app before it starts.
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
-				AAPS_CIQ_URL_SCHEME = "aaps2-ciq";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(AAPS_BUNDLE_ID)2";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -897,19 +817,11 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = AA1000300000000000000 /* Signing.xcconfig */;
 			buildSettings = {
-				// The widget extension: the Live Activity and the home and lock screen widgets.
-				// It does not link AapsShared (the Kotlin framework): an extension has a small memory
-				// limit. It only reads the state the app hands over. See
-				// docs/kmp-migration/widget-live-activity-xcode-howto.md.
 				APPLICATION_EXTENSION_API_ONLY = YES;
-				// Only the App Group. AAPS_WIDGET_ENTITLEMENTS is in Signing.xcconfig, so a free
-				// Personal Team can set it empty in Signing.local.xcconfig.
 				CODE_SIGN_ENTITLEMENTS = "$(AAPS_WIDGET_ENTITLEMENTS)";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				// The same numbers as the app, or iOS refuses the install.
 				CURRENT_PROJECT_VERSION = "$(AAPS_BUILD_NUMBER:default=1)";
-				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = LiveActivity/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = AAPS;
@@ -918,7 +830,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				// An extension id must start with the id of its app.
+				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(AAPS_BUNDLE_ID).LiveActivity";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -931,19 +843,11 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = AA1000300000000000000 /* Signing.xcconfig */;
 			buildSettings = {
-				// The widget extension: the Live Activity and the home and lock screen widgets.
-				// It does not link AapsShared (the Kotlin framework): an extension has a small memory
-				// limit. It only reads the state the app hands over. See
-				// docs/kmp-migration/widget-live-activity-xcode-howto.md.
 				APPLICATION_EXTENSION_API_ONLY = YES;
-				// Only the App Group. AAPS_WIDGET_ENTITLEMENTS is in Signing.xcconfig, so a free
-				// Personal Team can set it empty in Signing.local.xcconfig.
 				CODE_SIGN_ENTITLEMENTS = "$(AAPS_WIDGET_ENTITLEMENTS)";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				// The same numbers as the app, or iOS refuses the install.
 				CURRENT_PROJECT_VERSION = "$(AAPS_BUILD_NUMBER:default=1)";
-				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = LiveActivity/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = AAPS;
@@ -952,7 +856,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				// An extension id must start with the id of its app.
+				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(AAPS_BUNDLE_ID).LiveActivity";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -965,19 +869,11 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = AA1000300000000000000 /* Signing.xcconfig */;
 			buildSettings = {
-				// The widget extension: the Live Activity and the home and lock screen widgets.
-				// It does not link AapsShared (the Kotlin framework): an extension has a small memory
-				// limit. It only reads the state the app hands over. See
-				// docs/kmp-migration/widget-live-activity-xcode-howto.md.
 				APPLICATION_EXTENSION_API_ONLY = YES;
-				// Only the App Group. AAPS_WIDGET_ENTITLEMENTS is in Signing.xcconfig, so a free
-				// Personal Team can set it empty in Signing.local.xcconfig.
 				CODE_SIGN_ENTITLEMENTS = "$(AAPS_WIDGET_ENTITLEMENTS)";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				// The same numbers as the app, or iOS refuses the install.
 				CURRENT_PROJECT_VERSION = "$(AAPS_BUILD_NUMBER:default=1)";
-				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = LiveActivity/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = AAPS2;
@@ -986,7 +882,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				// An extension id must start with the id of its app.
+				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(AAPS_BUNDLE_ID)2.LiveActivity";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -999,19 +895,11 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = AA1000300000000000000 /* Signing.xcconfig */;
 			buildSettings = {
-				// The widget extension: the Live Activity and the home and lock screen widgets.
-				// It does not link AapsShared (the Kotlin framework): an extension has a small memory
-				// limit. It only reads the state the app hands over. See
-				// docs/kmp-migration/widget-live-activity-xcode-howto.md.
 				APPLICATION_EXTENSION_API_ONLY = YES;
-				// Only the App Group. AAPS_WIDGET_ENTITLEMENTS is in Signing.xcconfig, so a free
-				// Personal Team can set it empty in Signing.local.xcconfig.
 				CODE_SIGN_ENTITLEMENTS = "$(AAPS_WIDGET_ENTITLEMENTS)";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				// The same numbers as the app, or iOS refuses the install.
 				CURRENT_PROJECT_VERSION = "$(AAPS_BUILD_NUMBER:default=1)";
-				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = LiveActivity/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = AAPS2;
@@ -1020,7 +908,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				// An extension id must start with the id of its app.
+				MARKETING_VERSION = "$(AAPS_MARKETING_VERSION:default=4.0.0)";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(AAPS_BUNDLE_ID)2.LiveActivity";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
