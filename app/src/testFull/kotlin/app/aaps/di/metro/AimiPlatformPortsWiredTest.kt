@@ -57,6 +57,7 @@ class AimiPlatformPortsWiredTest {
             "storageHelper",
             "auditorNotificationManager",
             "platformItems",
+            "platformActions",
             "tickCaptureHook",
         )
     }

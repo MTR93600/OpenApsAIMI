@@ -15,6 +15,7 @@ import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.plugins.aps.compose.OpenAPSComposeContent
 import app.aaps.plugins.aps.openAPSAIMI.keys.AimiLongKey
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.EndometriosisFlareSwitchWatcher
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiPlatformActions
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiPlatformPreferenceItems
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiPlatformPreferenceSlot
 import kotlin.concurrent.atomics.AtomicBoolean
@@ -174,7 +175,7 @@ import app.aaps.plugins.aps.openAPSAIMI.compose.AimiLearnedScreen
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBasalLimitMode
 import app.aaps.plugins.aps.openAPSAIMI.compose.isSpecialBasalMode
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiEssentialsLive
-import app.aaps.plugins.aps.openAPSAIMI.compose.AimiEssentialsScreen
+import app.aaps.plugins.aps.openAPSAIMI.compose.AimiEssentialsContent
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiPreferenceTree
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiSettingsAuditScreen
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiNightGrowthStateScreen
@@ -238,6 +239,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     // The settings entries that only the platform can build. Android also builds the cloud backup
     // manager through this port, see `AndroidAimiPlatformPreferenceItems`.
     private val platformItems: AimiPlatformPreferenceItems,
+    // The settings actions that only the platform host can do, such as opening the profile screen
+    // from the Essentials targets.
+    private val platformActions: AimiPlatformActions,
     // Not nullable, and no default value, on purpose. This was written as
     // `AimiTickCaptureHook? = null` first, on the idea that Metro would inject the binding where a
     // platform has one and leave null where none does. It does not: it took the default even on
@@ -2068,13 +2072,11 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
     override fun getPreferenceScreenContent(): PreferenceSubScreenDef =
         AimiPreferenceTree(
             platformItems = platformItems,
-            essentials = ComposeScreenContent { onBack ->
-                AimiEssentialsScreen(
-                    preferences = preferences,
-                    loadLive = ::loadEssentialsLive,
-                    onBack = onBack,
-                )
-            },
+            essentials = AimiEssentialsContent(
+                preferences = preferences,
+                loadLive = ::loadEssentialsLive,
+                platformActions = platformActions,
+            ),
             learned = ComposeScreenContent { onBack ->
                 AimiLearnedScreen(
                     preferences = preferences,

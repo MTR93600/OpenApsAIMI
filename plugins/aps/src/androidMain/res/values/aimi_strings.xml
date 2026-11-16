@@ -2160,6 +2160,8 @@
 <string name="aimi_essentials_targets_value" comment="%1$s=low target with unit, %2$s=high target with unit. Example: 100 mg/dL to 110 mg/dL">%1$s to %2$s</string>
 <string name="aimi_essentials_targets_unknown">No profile is running.</string>
 <string name="aimi_essentials_targets_hint">Targets come from your profile. Change them on the profile screen.</string>
+<string name="aimi_essentials_targets_hint_open">Targets come from your profile. Tap here to open the profile screen and change them.</string>
+<string name="aimi_essentials_targets_open">Open the profile screen</string>
 <string name="aimi_essentials_patient_age_title">Patient age</string>
 <string name="aimi_essentials_hint_weight">Body weight. AIMI uses it to size doses.</string>
 <string name="aimi_essentials_hint_tdd7">Your usual total insulin per day, over the last 7 days.</string>

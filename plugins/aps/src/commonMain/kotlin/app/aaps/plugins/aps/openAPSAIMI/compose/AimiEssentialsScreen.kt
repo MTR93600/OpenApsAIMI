@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.compose
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.interfaces.BooleanPreferenceKey
@@ -35,6 +37,7 @@ import app.aaps.core.keys.interfaces.UnitDoublePreferenceKey
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTopAppBar
+import app.aaps.core.ui.compose.ComposeScreenContent
 import app.aaps.core.ui.compose.LocalProfileUtil
 import app.aaps.core.ui.compose.MasterOfflineBanner
 import app.aaps.core.ui.compose.masterEditingEnabled
@@ -44,10 +47,44 @@ import app.aaps.core.ui.compose.preference.verticalScrollIndicators
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiPlatformActionSlot
+import app.aaps.plugins.aps.openAPSAIMI.ports.AimiPlatformActions
+
+/**
+ * The content of the Essentials page, as the settings tree opens it.
+ *
+ * It asks [platformActions] for the profile screen link once, here, and hands it to
+ * [AimiEssentialsScreen]. A class and not a lambda in the plugin, so a test can check that the link
+ * really reaches the page ([onOpenProfile]) without building the plugin.
+ *
+ * @param preferences the store every row reads and writes
+ * @param loadLive reads what the loop uses now
+ * @param platformActions the platform host, which may or may not open the profile screen
+ */
+internal class AimiEssentialsContent(
+    private val preferences: Preferences,
+    private val loadLive: suspend () -> AimiEssentialsLive,
+    platformActions: AimiPlatformActions,
+) : ComposeScreenContent {
+
+    /** Opens the profile screen, or null when this platform cannot. Passed to the page as is. */
+    val onOpenProfile: (() -> Unit)? = platformActions.action(AimiPlatformActionSlot.PROFILE_SCREEN)
+
+    @Composable
+    override fun Content(onBack: () -> Unit) {
+        AimiEssentialsScreen(
+            preferences = preferences,
+            loadLive = loadLive,
+            onOpenProfile = onOpenProfile,
+            onBack = onBack,
+        )
+    }
+}
 
 /**
  * The Essentials page ([AimiEssentials]): the person's own data and the dose limits, each with the
- * value in use now, and the profile targets read only.
+ * value in use now, and the profile targets read only. A tap on the targets opens the profile screen
+ * when the platform can open it ([onOpenProfile]).
  *
  * It writes only what the person sets in a row, exactly as the other settings screens do. Opening it
  * writes nothing. [loadLive] is called once when the page opens; until it answers, or when it fails,
@@ -59,12 +96,15 @@ import app.aaps.plugins.aps.openAPSAIMI.keys.AimiStringKey
  *
  * @param preferences the store every row reads and writes
  * @param loadLive reads what the loop uses now (constraints, profile targets, active TPO session)
+ * @param onOpenProfile opens the profile screen, or null when this platform cannot. With null the
+ *   targets have no link and their hint does not say "tap".
  * @param onBack closes the page
  */
 @Composable
 internal fun AimiEssentialsScreen(
     preferences: Preferences,
     loadLive: suspend () -> AimiEssentialsLive,
+    onOpenProfile: (() -> Unit)?,
     onBack: () -> Unit,
 ) {
     val live by produceState(initialValue = AimiEssentialsLive()) {
@@ -108,7 +148,7 @@ internal fun AimiEssentialsScreen(
                         AimiEssentialsRowItem(preferences = preferences, row = row, live = live)
                     }
                 }
-                item(key = "targets") { AimiEssentialsTargets(live) }
+                item(key = "targets") { AimiEssentialsTargets(live, onOpenProfile) }
             }
         }
     }
@@ -200,9 +240,12 @@ private fun AimiEssentialsHeader(group: AimiEssentialsGroup) {
     )
 }
 
-/** The profile targets, read only: they are set in the profile, not here. */
+/**
+ * The profile targets, read only: they are set in the profile, not here. With [onOpenProfile] a tap
+ * opens the profile screen; without it there is no link. Internal so its test can show it alone.
+ */
 @Composable
-private fun AimiEssentialsTargets(live: AimiEssentialsLive) {
+internal fun AimiEssentialsTargets(live: AimiEssentialsLive, onOpenProfile: (() -> Unit)?) {
     val theme = LocalPreferenceTheme.current
     val profileUtil = LocalProfileUtil.current
     Column(verticalArrangement = Arrangement.spacedBy(AapsSpacing.extraSmall)) {
@@ -212,7 +255,11 @@ private fun AimiEssentialsTargets(live: AimiEssentialsLive) {
             color = theme.categoryColor,
             modifier = Modifier.padding(theme.categoryPadding),
         )
-        Column(modifier = Modifier.padding(theme.padding), verticalArrangement = Arrangement.spacedBy(AapsSpacing.extraSmall)) {
+        val openLabel = stringResource(ApsStrings.aimi_essentials_targets_open)
+        val link = if (onOpenProfile != null) {
+            Modifier.clickable(onClickLabel = openLabel, role = Role.Button, onClick = onOpenProfile)
+        } else Modifier
+        Column(modifier = Modifier.fillMaxWidth().then(link).padding(theme.padding), verticalArrangement = Arrangement.spacedBy(AapsSpacing.extraSmall)) {
             val low = live.targetLowMgdl
             val high = live.targetHighMgdl
             Text(
@@ -226,7 +273,7 @@ private fun AimiEssentialsTargets(live: AimiEssentialsLive) {
                 style = theme.titleTextStyle,
                 color = theme.titleColor,
             )
-            Text(text = stringResource(ApsStrings.aimi_essentials_targets_hint), style = theme.summaryTextStyle, color = theme.summaryColor)
+            Text(text = stringResource(aimiTargetsHint(canOpenProfile = onOpenProfile != null)), style = theme.summaryTextStyle, color = theme.summaryColor)
         }
     }
 }

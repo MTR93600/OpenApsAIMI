@@ -100,9 +100,9 @@ import kotlinx.coroutines.CoroutineScope
  * honour its ports, because a plugin that is wired up and half fed would dose an iPhone
  * differently from an Android phone.
  *
- * All seven ports now have a real iOS side: `AimiStepsLifecycle` over HealthKit,
+ * All eight ports now have a real iOS side: `AimiStepsLifecycle` over HealthKit,
  * `AimiPhysioLifecycle`, `AimiTrainingScheduler`, `AimiStorageStatusSource`, `AimiAuditorNotifier`,
- * `AimiPlatformPreferenceItems` and `AimiTickCaptureHook`. `AimiStorage` and
+ * `AimiPlatformPreferenceItems`, `AimiPlatformActions` and `AimiTickCaptureHook`. `AimiStorage` and
  * `HormonitorStudyExporterProvider` are in `IosAimiPlatformBindings`.
  *
  * The phone is a master (`IosConfig`), so these plugins really reach a pump and a sensor: the iOS

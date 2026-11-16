@@ -154,9 +154,6 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
   is at most about 0.003 U per SMB, and only with an ML model loaded.
 
 - **Open for the owner (from step S1 review, not decided):**
-  - *Targets link.* The Essentials page shows the profile targets read only ("change them on the
-    profile screen"). A tap that opens the profile needs a new platform slot (Android and iOS, like
-    `AimiPlatformPreferenceSlot`). Say if S1 or a later step should add it.
   - *Learner badge.* The page has only the TPO, LIMITED and RAISED badges. The key map lists no learner
     that writes an Essentials key, so there is nothing to badge yet.
   - *Patient age.* `OApsAIMINightGrowthAgeYears` stays 1-25, default 14. The hint says "if 25 or
@@ -234,6 +231,7 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
 | S3 | Delete the dead keys (not the protected ones), move internal state out of the settings, prefs schema, migration | none |
 | S3b | Protected-family dead keys (owner decision 2026-11-15): wire sleep, HRV and the flare duration; delete four keys with a migration (the old due date is copied first) | only when a person turns sleep or HRV off, or forgets to switch a flare off |
 | D1 | Owner decisions on the open items: delete the xDrip 1-minute switch, NGR off when no age was ever stored, meal factor labels in percent, contraceptive also on the illness card, PK/PD pace flag exported, key round trip test repaired | changes for people who never stored an age nor the NGR switch (NGR off, before on) |
+| S4 | Targets link: a tap on the Essentials targets opens the profile screen (new platform action slot, Android and iOS) | none |
 
 ## Step S3 (done 2026-11-15, no dosing change)
 
@@ -372,3 +370,28 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
 - **Release notes line:** "Night growth support (for children and teens) is now off when no age was
   set in AIMI. If the person is under 18, set the age on the AIMI Essentials page to turn it back on.
   Not medical advice; talk with your care team before changing these settings."
+
+## Step S4 (2026-11-15, owner decision, no dosing change)
+
+- **Targets link.** A tap on the profile targets of the Essentials page opens the profile screen (the
+  profile management screen of the drawer). The hint then says "Tap here to open the profile screen
+  and change them." The targets themselves stay read only on the page.
+- **New platform slot.** `AimiPlatformActions` with `AimiPlatformActionSlot.PROFILE_SCREEN`
+  (commonMain, `ports/`), in the style of `AimiPlatformPreferenceSlot`: a platform that cannot open
+  the screen returns null, and the page then shows no link and the old hint ("Change them on the
+  profile screen"), never a dead link. Android (`AndroidAimiPlatformActions`) and iOS
+  (`IosAimiPlatformActions`) both answer it. Both hand the request to the app navigator through
+  `PendingNavigation`, which `ComposeMainActivity` and the iOS `AapsAppHost` collect, so the drawer's
+  protection check (BOLUS, edit mode only with the settings level) is asked first. The desktop host
+  does not collect it and has no AIMI plugin, so it has no binding.
+- **Known limit.** The profile screen opens on top of the settings route. Back returns to the AIMI
+  settings, not to the Essentials page, because the open AIMI page is kept with `remember`, not as
+  saved state of the route (read from the code, not checked on a device yet). For the owner to accept
+  or not; check it on a device before a release. Keeping the open page with
+  `rememberSaveable` would fix it in a later step.
+- **Tests.** `AimiEssentialsContent` asks the slot once and hands the action to the page as is
+  (commonTest, so it also runs on iOS); a Compose test taps the targets block and checks the action
+  runs, and that without a link the block has no click action and the hint does not say "tap".
+- **Advisor, TPO, tuning, auditor:** no key added, removed or changed, so nothing they read, write or
+  propose changed.
+- **Dosing:** none.

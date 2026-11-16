@@ -17,6 +17,12 @@ import kotlinx.coroutines.flow.getAndUpdate
  * notification delegate. Making it an injected dependency would mean building a graph inside those
  * entry points just to park a string.
  *
+ * Shared code uses it too, for an in-app link to a screen it cannot reach itself: the AIMI
+ * Essentials page parks the profile management screen here when the person taps the targets. The
+ * shared app root (`AapsAppRoot`, used by the Android activity and by the iOS `AapsAppHost`) collects
+ * it while the app is open. So do not clear it at start up, and do not accept only some request
+ * types, or that link breaks.
+ *
  * Only one request is kept. A second tap before the host has taken the first replaces it, which is
  * what a user means by tapping twice: they want the last thing they tapped.
  */

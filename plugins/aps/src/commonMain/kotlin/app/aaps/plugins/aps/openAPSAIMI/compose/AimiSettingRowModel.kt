@@ -294,6 +294,13 @@ internal fun aimiNightGrowthText(state: NightGrowthState): TextRef =
         NightGrowthState.ON_BY_T3C     -> ApsStrings.aimi_essentials_ngr_on_by_t3c
     }
 
+/**
+ * The hint under the profile targets on the Essentials page. It says "tap" only when the platform
+ * can open the profile screen ([canOpenProfile]); otherwise the targets are shown read only.
+ */
+internal fun aimiTargetsHint(canOpenProfile: Boolean): TextRef =
+    if (canOpenProfile) ApsStrings.aimi_essentials_targets_hint_open else ApsStrings.aimi_essentials_targets_hint
+
 private fun sameValue(a: Any, b: Any): Boolean =
     if (a is Number && b is Number) abs(a.toDouble() - b.toDouble()) < VALUE_EPSILON else a == b
 
