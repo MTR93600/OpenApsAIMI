@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.tpo
 
 import app.aaps.core.ui.compose.navigation.PendingNavigation
+import app.aaps.plugins.aps.keys.ApsIntentKey
 
 /**
  * Puts a ready-made TPO notification in the system tray, and takes it away again.
@@ -67,10 +68,14 @@ enum class TpoEndReason {
 }
 
 /**
- * Where tapping a TPO notification goes: the AIMI plugin's own settings.
+ * Where tapping a TPO notification goes: the "What AIMI learned" page of the AIMI settings.
  *
- * Shared between the two posters on purpose. It used to be a private constant in each of them, so
- * the same string was written twice and one could have been corrected without the other. The key is
- * the plugin's class simple name, because that is what the destination matches on.
+ * That page shows the running session (the values it changed, the time left) and the button that
+ * ends it now. The top of the AIMI settings shows none of this, so a tap that opened it led nowhere
+ * useful (reported 2026-11-16).
+ *
+ * Shared between the two posters on purpose, so the same string is not written twice. The plugin key
+ * is the plugin's class simple name, because that is what the destination matches on.
  */
-val OPENAPS_AIMI_PLUGIN_ROUTE: String = PendingNavigation.pluginPreferencesRoute("OpenAPSAIMIPlugin")
+val TPO_NOTIFICATION_ROUTE: String =
+    PendingNavigation.pluginPreferencesRoute("OpenAPSAIMIPlugin", composeScreenKey = ApsIntentKey.AimiLearned.key)

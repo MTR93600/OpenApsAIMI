@@ -63,7 +63,8 @@ object PendingNavigation {
     fun consume(): NavigationRequest? = _pending.getAndUpdate { null }
 
     /**
-     * Reads a route string as a request: `plugin_preferences/<pluginKey>`, or [AUDITOR_REPORT_ROUTE].
+     * Reads a route string as a request: `plugin_preferences/<pluginKey>`, the same with
+     * `?composeScreenKey=<screenKey>` after it, or [AUDITOR_REPORT_ROUTE].
      *
      * Android carries the wanted screen through an intent extra, which is a string, so the string
      * has to become a request again on this side. `AppRoute.PluginPreferences.createRoute` builds
@@ -73,25 +74,29 @@ object PendingNavigation {
     fun parseRoute(route: String?): NavigationRequest? {
         val value = route ?: return null
         if (value == AUDITOR_REPORT_ROUTE) return NavigationRequest.AuditorReport
-        val key = value.substringAfter(PLUGIN_PREFERENCES_PREFIX, missingDelimiterValue = "")
-        return if (value.startsWith(PLUGIN_PREFERENCES_PREFIX) && key.isNotEmpty()) {
-            NavigationRequest.PluginPreferences(key)
-        } else {
-            null
-        }
+        if (!value.startsWith(PLUGIN_PREFERENCES_PREFIX)) return null
+        val rest = value.removePrefix(PLUGIN_PREFERENCES_PREFIX)
+        val key = rest.substringBefore(COMPOSE_SCREEN_KEY_PARAM)
+        if (key.isEmpty()) return null
+        val screenKey = rest.substringAfter(COMPOSE_SCREEN_KEY_PARAM, missingDelimiterValue = "")
+        return NavigationRequest.PluginPreferences(key, composeScreenKey = screenKey.ifEmpty { null })
     }
 
     /**
-     * Builds the route a notification carries so a tap opens [pluginKey]'s settings.
+     * Builds the route a notification carries so a tap opens [pluginKey]'s settings, or one of its
+     * sub screens when [composeScreenKey] is given.
      *
      * The inverse of [parseRoute], and kept beside it so the two cannot drift. Every poster calls
      * this instead of writing the string: Android puts it in an intent extra, iOS puts it in
      * `userInfo`, and one of them changing the spelling would break the other silently.
      *
      * [pluginKey] is the plugin's class simple name, because that is what the
-     * `plugin_preferences/{pluginKey}` destination matches on.
+     * `plugin_preferences/{pluginKey}` destination matches on. [composeScreenKey] is the key of a
+     * sub screen with its own Compose content in that plugin's settings tree.
      */
-    fun pluginPreferencesRoute(pluginKey: String): String = PLUGIN_PREFERENCES_PREFIX + pluginKey
+    fun pluginPreferencesRoute(pluginKey: String, composeScreenKey: String? = null): String =
+        if (composeScreenKey == null) PLUGIN_PREFERENCES_PREFIX + pluginKey
+        else PLUGIN_PREFERENCES_PREFIX + pluginKey + COMPOSE_SCREEN_KEY_PARAM + composeScreenKey
 
     /**
      * The route a notification carries so a tap opens the AIMI auditor report.
@@ -106,4 +111,7 @@ object PendingNavigation {
     const val EXTRA_NAVIGATE_ROUTE: String = "extra_navigate_route"
 
     private const val PLUGIN_PREFERENCES_PREFIX = "plugin_preferences/"
+
+    /** Same spelling as `AppRoute.PluginPreferences`, so the route also works as a nav graph route. */
+    private const val COMPOSE_SCREEN_KEY_PARAM = "?composeScreenKey="
 }

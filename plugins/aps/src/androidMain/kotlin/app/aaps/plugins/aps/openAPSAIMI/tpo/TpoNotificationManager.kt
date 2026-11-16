@@ -24,7 +24,7 @@ import dev.zacsweers.metro.AppScope
  * Nothing here decides anything. The words arrive already built by [TpoNotificationText], and
  * [TpoOrchestrator] has already checked whether the user wants these notifications at all. What is
  * left is pure Android: two channels, `NotificationCompat`, and the `PendingIntent` that opens the
- * AIMI screen.
+ * "What AIMI learned" page, where the session and its revert button are ([TPO_NOTIFICATION_ROUTE]).
  *
  * [TpoNotificationKind] says how loud each one should be; the two channels are how Android carries
  * that out. The started channel is `IMPORTANCE_DEFAULT` with its sound and vibration switched off,
@@ -69,7 +69,7 @@ class TpoNotificationManager @Inject constructor(
             // The start notification is reposted as the session runs; only the end one should alert
             // again each time it is shown.
             .setOnlyAlertOnce(started)
-            .setContentIntent(createOpenAimiPrefsIntent())
+            .setContentIntent(createOpenTpoSessionIntent())
         try {
             NotificationManagerCompat.from(context).notify(idOf(notification.kind), builder.build())
         } catch (_: SecurityException) {
@@ -91,10 +91,10 @@ class TpoNotificationManager @Inject constructor(
         TpoNotificationKind.SESSION_ENDED   -> CHANNEL_ID_ENDED
     }
 
-    private fun createOpenAimiPrefsIntent(): PendingIntent {
+    private fun createOpenTpoSessionIntent(): PendingIntent {
         val intent = Intent(context, uiInteraction.mainActivity.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra(PendingNavigation.EXTRA_NAVIGATE_ROUTE, OPENAPS_AIMI_PLUGIN_ROUTE)
+            putExtra(PendingNavigation.EXTRA_NAVIGATE_ROUTE, TPO_NOTIFICATION_ROUTE)
         }
         // The request code must be ours alone. Android decides whether two PendingIntents are the
         // same with `Intent.filterEquals`, which compares the component, action, data and

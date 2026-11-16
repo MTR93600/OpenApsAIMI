@@ -41,7 +41,7 @@ import platform.UserNotifications.UNUserNotificationCenter
  *
  * Reposting the same identifier replaces the delivered notification instead of stacking a second
  * one, which is what reusing one Android notification id does. Tapping removes it, which is
- * `setAutoCancel(true)` on Android, and it opens the AIMI preference screen: the route travels in
+ * `setAutoCancel(true)` on Android, and it opens the "What AIMI learned" page ([TPO_NOTIFICATION_ROUTE]): the route travels in
  * `userInfo` through `setNavigationRoute` instead of in an intent extra, under the same key and in
  * the same form, so both phones land on the same screen.
  *
@@ -84,7 +84,7 @@ class IosTpoNotifications @Inject constructor(
             if (notification.kind == TpoNotificationKind.SESSION_ENDED) {
                 setSound(UNNotificationSound.defaultSound())
             }
-            setNavigationRoute(OPENAPS_AIMI_PLUGIN_ROUTE)
+            setNavigationRoute(TPO_NOTIFICATION_ROUTE)
         }
         val request = UNNotificationRequest.requestWithIdentifier(
             identifier = identifierOf(notification.kind),
@@ -103,14 +103,6 @@ class IosTpoNotifications @Inject constructor(
     }
 
     internal companion object {
-
-        /**
-         * Where tapping this notification goes - the same screen the Android notification opens.
-         *
-         * Written out here because the Android side keeps its own private copy of the string and
-         * the shared prefix in `PendingNavigation` is private too, so there is no one constant to
-         * share yet. The two must stay equal; the key and the parser already are.
-         */
 
         /**
          * One stable identifier per kind, so a repost replaces the old one and `cancel` finds it.

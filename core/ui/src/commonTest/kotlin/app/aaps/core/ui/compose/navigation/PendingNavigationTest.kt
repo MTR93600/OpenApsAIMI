@@ -46,6 +46,33 @@ class PendingNavigationTest {
         assertEquals(NavigationRequest.PluginPreferences("OpenAPSAIMIPlugin"), PendingNavigation.parseRoute(route))
     }
 
+    /** A notification can open a sub screen of the plugin settings, such as the AIMI "learned" page. */
+    @Test
+    fun aRouteWithASubScreenRoundTrips() {
+        val route = PendingNavigation.pluginPreferencesRoute("OpenAPSAIMIPlugin", composeScreenKey = "aimi_learned_compose")
+
+        assertEquals("plugin_preferences/OpenAPSAIMIPlugin?composeScreenKey=aimi_learned_compose", route)
+        assertEquals(
+            NavigationRequest.PluginPreferences("OpenAPSAIMIPlugin", composeScreenKey = "aimi_learned_compose"),
+            PendingNavigation.parseRoute(route)
+        )
+    }
+
+    /** The sub screen part must not end up in the plugin key, or the plugin is not found. */
+    @Test
+    fun aSubScreenWithoutAPluginKeyIsNotADestination() {
+        assertNull(PendingNavigation.parseRoute("plugin_preferences/?composeScreenKey=aimi_learned_compose"))
+    }
+
+    /** An empty sub screen part opens the plugin settings themselves. */
+    @Test
+    fun anEmptySubScreenOpensThePluginSettings() {
+        assertEquals(
+            NavigationRequest.PluginPreferences("OpenAPSAIMIPlugin"),
+            PendingNavigation.parseRoute("plugin_preferences/OpenAPSAIMIPlugin?composeScreenKey=")
+        )
+    }
+
     @Test
     fun theAuditorReportRouteOpensTheReport() {
         assertEquals(NavigationRequest.AuditorReport, PendingNavigation.parseRoute(PendingNavigation.AUDITOR_REPORT_ROUTE))
