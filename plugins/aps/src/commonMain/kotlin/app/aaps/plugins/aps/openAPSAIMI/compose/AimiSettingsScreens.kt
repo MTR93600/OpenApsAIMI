@@ -443,7 +443,7 @@ internal object AimiSettingsScreens {
         ),
         fields(
             AimiSettingsSectionId.EssentialsDoseLimits, AimiSettingsContentId.PreferencesEssentials, AimiSettingsLevel.SIMPLE,
-            DoubleKey.meal_modes_MaxBasal, DoubleKey.autodriveMaxBasal, DoubleKey.OApsAIMIMaxSMB, DoubleKey.OApsAIMIHighBGMaxSMB, DoubleKey.OApsAIMIMaxMultiplier,
+            DoubleKey.ApsMaxBasal, DoubleKey.meal_modes_MaxBasal, DoubleKey.autodriveMaxBasal, DoubleKey.OApsAIMIMaxSMB, DoubleKey.OApsAIMIHighBGMaxSMB, DoubleKey.OApsAIMIMaxMultiplier,
         ),
         fields(
             AimiSettingsSectionId.AiAdvisorKeys, AimiSettingsContentId.PreferencesAiKeys, AimiSettingsLevel.EXPERT,

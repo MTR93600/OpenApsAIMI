@@ -829,4 +829,61 @@
     <string name="overview_second_sensor_switch_refused_no_recent_reading">The new sensor has not sent a reading in the last minutes. Nothing was changed. Wait for its next reading and try again.</string>
     <string name="overview_second_sensor_switch_error">Something went wrong during the switch. Open the sensor status screen and check which sensor is in use.</string>
 
+    <!-- Dashboard skin Essential -->
+    <string name="essential_prediction_60">In 60 min</string>
+    <string name="essential_iob">IOB</string>
+    <string name="essential_basal_temp">Basal</string>
+    <string name="essential_target">Target</string>
+    <string name="essential_tir" comment="%1$s=percent of time in range, already formatted. Example: 90">TIR %1$s %%</string>
+    <string name="essential_tir_delta" comment="%1$s=signed change in points against yesterday. Example: -9">%1$s vs yesterday</string>
+    <string name="essential_activity" comment="%1$s=steps today, %2$s=heart rate with unit. Example: 7632 · 71 bpm">%1$s · %2$s</string>
+    <string name="essential_no_glucose">No recent glucose</string>
+    <string name="essential_boost_pull_up">Pull the shape up to boost</string>
+    <string name="essential_boost_release_start">Release to start the boost</string>
+    <string name="essential_boost_pull_down">Pull the shape down to cancel the boost</string>
+    <string name="essential_boost_release_cancel">Release to cancel the boost</string>
+    <string name="essential_boost_active" comment="%1$d=minutes left. Example: Boost on, 42 min left">Boost on, %1$d min left</string>
+    <string name="essential_boost_title">Boost</string>
+    <string name="essential_boost_explain">Raises max SMB in hyper, max basal and the Autodrive max basal by 20 percent of your values at most, for 60 minutes. Your values come back by themselves.</string>
+    <string name="essential_boost_start">Start boost</string>
+    <string name="essential_boost_cancel">Cancel boost</string>
+    <string name="essential_boost_started" comment="%1$d=minutes. Example: Boost started for 60 min">Boost started for %1$d min</string>
+    <string name="essential_boost_cancelled">Boost cancelled</string>
+    <string name="essential_boost_not_started">Boost not started</string>
+    <string name="essential_boost_reason_not_aimi">Boost unavailable: AIMI is not the active algorithm.</string>
+    <string name="essential_boost_reason_loop">Boost unavailable: the loop is not closed.</string>
+    <string name="essential_boost_reason_no_tick">Boost unavailable: AIMI has not run in the last 10 minutes.</string>
+    <string name="essential_boost_reason_below_target">Boost unavailable: glucose is under the target.</string>
+    <string name="essential_boost_reason_falling">Boost unavailable: glucose is falling.</string>
+    <string name="essential_boost_reason_recent_low">Boost unavailable: there was a low in the last 75 minutes.</string>
+    <string name="essential_boost_reason_rebound">Boost unavailable: AIMI is protecting a rebound after a low.</string>
+    <string name="essential_boost_reason_other_session">Boost unavailable: a protection session is running.</string>
+    <string name="essential_boost_reason_already">A boost is already running.</string>
+    <string name="essential_boost_reason_at_limit">Boost unavailable: your max values are already at their limits.</string>
+    <string name="essential_scrub_hint">Slide your finger on the curve</string>
+    <string name="essential_readout_time">Time</string>
+    <string name="essential_readout_bg">Glucose</string>
+    <string name="essential_readout_basal">Basal</string>
+    <string name="essential_readout_smb">SMB</string>
+    <string name="essential_no_smb">no SMB</string>
+    <string name="essential_readout_description" comment="Screen reader text for the chart cursor. %1$s=time, %2$s=glucose with unit, %3$s=basal rate with unit, %4$s=SMB with unit or no SMB. Example: 14:30, glucose 112 mg/dL, basal 0.85 U/h, no SMB">%1$s, glucose %2$s, basal %3$s, %4$s</string>
+    <string name="essential_recent_decisions">Recent decisions</string>
+    <string name="essential_insulin_on_board">Insulin on board</string>
+    <string name="essential_ages">Ages</string>
+    <string name="essential_age_insulin">Insulin</string>
+    <string name="essential_age_cannula">Patch or cannula</string>
+    <string name="essential_age_sensor">Sensor</string>
+    <string name="essential_age_battery">Battery</string>
+    <string name="essential_mood_stable">In range and stable</string>
+    <string name="essential_mood_rising">Rising</string>
+    <string name="essential_mood_falling">Falling</string>
+    <string name="essential_mood_hyper">Above range</string>
+    <string name="essential_mood_hypo">Below range, act now</string>
+    <string name="essential_mood_trajectory_hyper">Heading above range</string>
+    <string name="essential_mood_trajectory_hypo">Heading below range</string>
+    <string name="essential_mood_no_data">No recent glucose</string>
+    <string name="essential_shape_description" comment="Screen reader text. %1$s=glucose with unit, %2$s=situation. Example: Glucose 168 mg/dL, Rising">Glucose %1$s, %2$s</string>
+    <string name="essential_previous_step">Earlier</string>
+    <string name="essential_next_step">Later</string>
+
 </resources>

@@ -27,6 +27,7 @@ class DashboardHomeSelectionTest {
         assertEquals("aimi_dashboard", DashboardHomeSelection.AIMI_DASHBOARD.preferenceValue)
         assertEquals("dashboard_v2", DashboardHomeSelection.DASHBOARD_V2.preferenceValue)
         assertEquals("glass", DashboardHomeSelection.GLASS.preferenceValue)
+        assertEquals("essential", DashboardHomeSelection.ESSENTIAL.preferenceValue)
         // The settings list offers exactly the choices the home can draw.
         assertEquals(
             DashboardHomeSelection.entries.map { it.preferenceValue }.toSet(),

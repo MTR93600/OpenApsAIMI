@@ -1424,6 +1424,7 @@
 <string name="aimi_tpo_pack_poor_sleep">Poor sleep window</string>
 
 <string name="aimi_tpo_pack_exhausted">Exhausted recovery</string>
+    <string name="aimi_tpo_pack_manual_boost">Manual boost</string>
 
 <string name="aimi_tpo_prefs_subscreen_title">Transient protection (TPO)</string>
 

@@ -34,6 +34,8 @@ internal object TpoDeltaBuilder {
                 tier = proposal.tier,
                 t3cBrittle = t3cBrittle,
             )
+            // Never proposed by the trigger engine; its plan is TpoBoostPlan.build
+            TpoPackId.MANUAL_BOOST -> emptyList()
         }
         return TpoApplyPlan(proposal = proposal, changes = changes)
     }

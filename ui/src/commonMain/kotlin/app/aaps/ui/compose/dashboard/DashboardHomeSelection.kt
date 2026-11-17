@@ -10,7 +10,10 @@ enum class DashboardHomeSelection(val preferenceValue: String) {
     OVERVIEW("overview"),
     AIMI_DASHBOARD("aimi_dashboard"),
     DASHBOARD_V2("dashboard_v2"),
-    GLASS("glass");
+    GLASS("glass"),
+
+    /** One living glucose shape, details on touch, gestures for the manual Boost (`dashboard/essential`). */
+    ESSENTIAL("essential");
 
     companion object {
         fun resolve(value: String): DashboardHomeSelection =

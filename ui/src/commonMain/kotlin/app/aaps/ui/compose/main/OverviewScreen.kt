@@ -33,6 +33,7 @@ import app.aaps.ui.compose.loopSheet.LoopActionViewModel
 import app.aaps.ui.compose.dashboard.DashboardHomeSelection
 import app.aaps.ui.compose.dashboard.DashboardV2GraphScreen
 import app.aaps.ui.compose.dashboard.aimi.AimiDashboardHome
+import app.aaps.ui.compose.dashboard.essential.EssentialDashboardHome
 import app.aaps.ui.compose.dashboard.glass.GlassDashboardHome
 import app.aaps.ui.compose.maintenance.ImportSource
 import app.aaps.ui.compose.maintenance.MaintenanceViewModel
@@ -298,6 +299,16 @@ fun OverviewScreen(
                     onNavigate = onNavigate,
                     onOpenActions = { manageSheetState.show() },
                     aimiDashboardData = aimiGlassDashboardData,
+                    cgmWarmupStatus = (activePlugin.activeBgSource as? CgmWarmupProvider)?.warmupStatus,
+                )
+            }
+            DashboardHomeSelection.ESSENTIAL -> { commandsAllowed ->
+                EssentialDashboardHome(
+                    graphViewModel = graphViewModel,
+                    chipsViewModel = chipsViewModel,
+                    statusViewModel = statusViewModel,
+                    aimiDashboardData = aimiGlassDashboardData,
+                    commandsAllowed = commandsAllowed,
                     cgmWarmupStatus = (activePlugin.activeBgSource as? CgmWarmupProvider)?.warmupStatus,
                 )
             }

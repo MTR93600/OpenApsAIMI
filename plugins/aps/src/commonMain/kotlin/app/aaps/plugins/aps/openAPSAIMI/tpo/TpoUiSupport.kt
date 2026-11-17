@@ -58,5 +58,6 @@ internal object TpoUiSupport {
             TpoPackId.POST_HYPO_RECOVERY -> ApsStrings.aimi_tpo_pack_post_hypo
             TpoPackId.POOR_SLEEP_WINDOW -> ApsStrings.aimi_tpo_pack_poor_sleep
             TpoPackId.EXHAUSTED_RECOVERY -> ApsStrings.aimi_tpo_pack_exhausted
+            TpoPackId.MANUAL_BOOST -> ApsStrings.aimi_tpo_pack_manual_boost
         }
 }

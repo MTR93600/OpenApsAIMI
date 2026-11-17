@@ -121,6 +121,7 @@ enum class StringKey(
             "aimi_dashboard" to KeysStrings.pref_dashboard_home_aimi,
             "dashboard_v2" to KeysStrings.pref_dashboard_home_v2,
             "glass" to KeysStrings.pref_dashboard_home_glass,
+            "essential" to KeysStrings.pref_dashboard_home_essential,
         ),
     ),
 

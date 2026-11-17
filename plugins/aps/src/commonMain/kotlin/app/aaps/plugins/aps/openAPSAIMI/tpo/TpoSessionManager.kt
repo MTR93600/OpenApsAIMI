@@ -86,6 +86,7 @@ internal class TpoSessionManager(
         nowMs: Long,
         llmResult: TpoLlmResult?,
         historyRepo: AdvisorHistoryRepository?,
+        ttlMs: Long = TTL_MS,
     ): TpoSessionDocument {
         val baseline = linkedMapOf<String, Any>()
         plan.changes.forEach { change ->
@@ -105,7 +106,7 @@ internal class TpoSessionManager(
             tier = plan.proposal.tier,
             status = TpoSessionStatus.ACTIVE,
             startedAtMs = nowMs,
-            expiresAtMs = nowMs + TTL_MS,
+            expiresAtMs = nowMs + ttlMs,
             triggerAlgoConfidence = plan.proposal.algoConfidence,
             triggerReasonCodes = plan.proposal.reasonCodes,
             baseline = baseline,

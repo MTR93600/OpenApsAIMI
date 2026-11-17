@@ -8,6 +8,7 @@
     <string name="pref_dashboard_home_aimi">New skin dashboard</string>
     <string name="pref_dashboard_home_v2">Dashboard V2</string>
     <string name="pref_dashboard_home_glass">GLASS</string>
+    <string name="pref_dashboard_home_essential">Essential</string>
     <string name="pref_title_insulin_concentration">Insulin concentration support</string>
     <string name="pref_summary_insulin_concentration">Enable support for different insulin concentrations (U50, U200, etc.)</string>
 

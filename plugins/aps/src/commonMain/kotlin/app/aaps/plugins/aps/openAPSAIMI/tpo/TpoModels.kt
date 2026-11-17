@@ -22,6 +22,12 @@ enum class TpoPackId(val priority: Int) {
     EXHAUSTED_RECOVERY(priority = 3),
     POST_HYPO_RECOVERY(priority = 2),
     POOR_SLEEP_WINDOW(priority = 1),
+
+    /**
+     * The manual Boost, started only by the user (see `TpoBoostPlan`). The only pack that raises
+     * aggressiveness, so it has the lowest priority: any protective pack supersedes it.
+     */
+    MANUAL_BOOST(priority = 0),
     ;
 
     companion object {

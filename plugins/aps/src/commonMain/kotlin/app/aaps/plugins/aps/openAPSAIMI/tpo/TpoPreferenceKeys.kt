@@ -21,6 +21,9 @@ internal object TpoPreferenceKeys {
         put(DoubleKey.AimiTubeHypoFloorMgdl.key, DoubleKey.AimiTubeHypoFloorMgdl)
         put(BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled.key, BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled)
         put(BooleanKey.OApsAIMIStraightLineTubeAdvisorEnabled.key, BooleanKey.OApsAIMIStraightLineTubeAdvisorEnabled)
+        // The manual Boost only (TpoBoostPlan): max SMB in hyper is already above, these two are its basal ceilings.
+        put(DoubleKey.ApsMaxBasal.key, DoubleKey.ApsMaxBasal)
+        put(DoubleKey.autodriveMaxBasal.key, DoubleKey.autodriveMaxBasal)
     }
 
     fun fromKey(key: String): PreferenceKey? = byKey[key]

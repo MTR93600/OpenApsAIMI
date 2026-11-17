@@ -153,6 +153,8 @@ internal object AimiSettingsManifest {
     private val EXTRA_SCOPED_KEY_NAMES = setOf(
         "autodriveMaxBasal",
         "meal_modes_MaxBasal",
+        // Shared with the other algorithms, but AIMI shows it and its manual Boost writes it
+        "ApsMaxBasal",
         "ContextMode",
     )
 
@@ -550,7 +552,12 @@ internal object AimiSettingsManifest {
         // they escaped the guarantee until `isAimiScoped` was taught to read its own named list. Both
         // are already on a running screen, so SIMPLE costs nothing here and says the truth: a ceiling
         // on insulin is the person's to set.
-        AimiSettingEntry(DoubleKey.autodriveMaxBasal, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.Protection, setOf(AimiSettingsWriter.USER)),
+        // LOOP: the manual Boost (TPO pack MANUAL_BOOST) raises this one and max basal by 20 % at most for
+        // 60 minutes, then gives the user's value back. It is the only automatic writer of both.
+        AimiSettingEntry(DoubleKey.autodriveMaxBasal, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.Protection, setOf(AimiSettingsWriter.USER, AimiSettingsWriter.LOOP)),
+        // The shared max basal of the loop. Not an AIMI key, but AIMI shows it (Essentials, dose limits)
+        // and the manual Boost writes it, so its writers are declared here like any AIMI ceiling.
+        AimiSettingEntry(DoubleKey.ApsMaxBasal, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.Protection, setOf(AimiSettingsWriter.USER, AimiSettingsWriter.LOOP)),
         AimiSettingEntry(DoubleKey.meal_modes_MaxBasal, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.Protection, setOf(AimiSettingsWriter.USER)),
         // The context module's own mode. Its screen is a standalone activity outside the settings tree
         // this manifest models, so it sits in the reachability debt rather than claim a home it does

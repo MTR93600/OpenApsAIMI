@@ -1,5 +1,9 @@
 package app.aaps.desktop.shell.platform
 
+import app.aaps.core.interfaces.aps.AimiBoostControl
+import app.aaps.core.interfaces.aps.AimiBoostStartResult
+import app.aaps.core.interfaces.aps.AimiBoostState
+import app.aaps.core.interfaces.aps.AimiBoostUnavailableReason
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.AlarmSound
@@ -15,6 +19,9 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlin.reflect.KClass
 
 /**
@@ -143,4 +150,24 @@ class DesktopUiInteraction(
         aapsLogger.debug(LTag.CORE, "Alarm stopped: $reason")
         notificationManager.dismiss(NotificationId.TOAST_ALARM)
     }
+}
+
+/**
+ * No AIMI Boost on a desktop: AIMI itself is excluded from this graph (see `DesktopAppGraph`).
+ *
+ * The Essential skin can still be chosen here, so its Boost must answer. It answers the truth, "AIMI is
+ * not the active algorithm", which the skin shows in its detail sheet; nothing starts, and [start]
+ * refuses with the same reason rather than pretending.
+ */
+@ContributesBinding(AppScope::class)
+@SingleIn(AppScope::class)
+@Inject
+class DesktopAimiBoostControl : AimiBoostControl {
+
+    override val state: StateFlow<AimiBoostState> =
+        MutableStateFlow(AimiBoostState(available = false, unavailableReason = AimiBoostUnavailableReason.NOT_AIMI)).asStateFlow()
+
+    override suspend fun start(): AimiBoostStartResult = AimiBoostStartResult.Refused(AimiBoostUnavailableReason.NOT_AIMI)
+
+    override fun cancel(): Boolean = false
 }

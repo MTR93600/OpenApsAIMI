@@ -54,6 +54,7 @@ import app.aaps.plugins.automation.AutomationRuntime
 import app.aaps.plugins.configuration.setupwizard.SWDefinition
 import app.aaps.plugins.sync.nsclientV3.remotecontrol.RemoteControlPlugin
 import app.aaps.plugins.sync.nsclientV3.remotecontrol.RemoteControlViewModel
+import app.aaps.plugins.aps.openAPSAIMI.tpo.TpoBoostController
 import app.aaps.plugins.sync.tidepool.compose.TidepoolViewModel
 import app.aaps.shared.clientbindings.ClientGraphBindings
 import app.aaps.shared.clientbindings.ClientHistoryWindowGraph
@@ -126,6 +127,10 @@ import java.io.File
  * and its screen model contributes itself here, but the login needs a browser API that each platform
  * brings (AppAuth on Android, `ASWebAuthenticationSession` on iOS). Desktop has none, and does not
  * register the Tidepool plugin, so it has no Tidepool screen rather than one whose login does nothing.
+ *
+ * `TpoBoostController` (the manual AIMI Boost) is excluded too: it is built on the AIMI TPO sessions,
+ * which need the AIMI storage and network ports above. `DesktopAimiBoostControl` takes its place and
+ * says "AIMI is not the active algorithm", so the Essential skin shows the Boost as unavailable.
  */
 @DependencyGraph(
     AppScope::class,
@@ -136,7 +141,8 @@ import java.io.File
         AimiRemoteContextOptionalBinding::class,
         RemoteControlPlugin::class,
         RemoteControlViewModel::class,
-        TidepoolViewModel::class
+        TidepoolViewModel::class,
+        TpoBoostController::class
     ]
 )
 interface DesktopAppGraph : MetroViewModelMultibindings {
