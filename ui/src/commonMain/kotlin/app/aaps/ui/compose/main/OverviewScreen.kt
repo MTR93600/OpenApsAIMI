@@ -300,6 +300,8 @@ fun OverviewScreen(
                     onOpenActions = { manageSheetState.show() },
                     aimiDashboardData = aimiGlassDashboardData,
                     cgmWarmupStatus = (activePlugin.activeBgSource as? CgmWarmupProvider)?.warmupStatus,
+                    autoShowNotificationSheet = autoShowNotificationSheet,
+                    onAutoShowConsumed = onAutoShowConsumed,
                 )
             }
             DashboardHomeSelection.ESSENTIAL -> { commandsAllowed ->
@@ -310,6 +312,11 @@ fun OverviewScreen(
                     aimiDashboardData = aimiGlassDashboardData,
                     commandsAllowed = commandsAllowed,
                     onNavigate = onNavigate,
+                    notifications = notifications,
+                    onDismissNotification = { notification -> notificationManager.dismiss(NotificationHandle(notification.instanceKey)) },
+                    onNotificationActionClick = onNotificationActionClick,
+                    autoShowNotificationSheet = autoShowNotificationSheet,
+                    onAutoShowConsumed = onAutoShowConsumed,
                     cgmWarmupStatus = (activePlugin.activeBgSource as? CgmWarmupProvider)?.warmupStatus,
                 )
             }

@@ -45,6 +45,7 @@ import app.aaps.core.interfaces.InterfacesStrings
 import app.aaps.core.interfaces.aps.AimiBoostUnavailableReason
 import app.aaps.core.interfaces.dashboard.AimiGlassDashboardData
 import app.aaps.core.interfaces.navigation.ElementType
+import app.aaps.core.interfaces.notifications.AapsNotification
 import app.aaps.core.interfaces.overview.graph.BolusType
 import app.aaps.core.interfaces.source.CgmWarmupStatus
 import app.aaps.core.ui.CoreUiStrings
@@ -59,6 +60,9 @@ import app.aaps.core.ui.compose.stringResource
 import app.aaps.ui.UiStrings
 import app.aaps.ui.compose.dashboard.glass.GlassHomeViewModel
 import app.aaps.ui.compose.dashboard.glass.buildGlassUiState
+import app.aaps.ui.compose.notificationsSheet.NotificationBottomSheet
+import app.aaps.ui.compose.notificationsSheet.NotificationFab
+import app.aaps.ui.compose.notificationsSheet.mostUrgentLevel
 import app.aaps.ui.compose.overview.chips.ChipsViewModel
 import app.aaps.ui.compose.overview.graphs.GraphViewModel
 import app.aaps.ui.compose.overview.statusLights.StatusViewModel
@@ -75,6 +79,9 @@ private val LOOP_DOT = 8.dp
 private val LOOP_CHEVRON = 16.dp
 private const val RECENT_DECISIONS = 6
 
+/** Gap above the notification bell: it sits under the header row (loop pill and mood label), right of the shape. */
+private val NOTIFICATION_BELL_TOP = 56.dp
+
 /** The vertical axis of the chart always shows at least this range, in mg/dL. */
 private const val CHART_FLOOR_MGDL = 40.0
 private const val CHART_CEILING_MGDL = 250.0
@@ -88,6 +95,11 @@ private const val CHART_CEILING_MGDL = 250.0
  *
  * @param commandsAllowed false on a phone that may not send commands (a client): no Boost from here
  * @param onNavigate opens another screen; the loop pill uses it for the running mode screen
+ * @param notifications in-app notifications. `MainScreen` does not show them when a skin replaces the
+ *   overview, so this home shows them: a bell that appears only while there is one, and the same sheet as
+ *   the other homes, where an alarm is acknowledged.
+ * @param autoShowNotificationSheet true when the app comes back with an important notification waiting:
+ *   the sheet then opens by itself, as on the classic overview, and [onAutoShowConsumed] is called
  */
 @Composable
 fun EssentialDashboardHome(
@@ -97,6 +109,11 @@ fun EssentialDashboardHome(
     aimiDashboardData: Flow<AimiGlassDashboardData>,
     commandsAllowed: Boolean,
     onNavigate: (NavigationRequest) -> Unit,
+    notifications: List<AapsNotification>,
+    onDismissNotification: (AapsNotification) -> Unit,
+    onNotificationActionClick: (AapsNotification) -> Unit,
+    autoShowNotificationSheet: Boolean,
+    onAutoShowConsumed: () -> Unit,
     modifier: Modifier = Modifier,
     cgmWarmupStatus: StateFlow<CgmWarmupStatus?>? = null,
     homeViewModel: GlassHomeViewModel = metroViewModel(),
@@ -128,6 +145,13 @@ fun EssentialDashboardHome(
     var rangeHours by remember { mutableIntStateOf(ESSENTIAL_RANGES.first()) }
     var pullProgress by remember { mutableFloatStateOf(0f) }
     var detailOpen by remember { mutableStateOf(false) }
+    var notificationSheetOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(autoShowNotificationSheet) {
+        if (autoShowNotificationSheet) {
+            notificationSheetOpen = true
+            onAutoShowConsumed()
+        }
+    }
     var message by remember { mutableStateOf<EssentialMessage?>(null) }
     LaunchedEffect(essentialViewModel) { essentialViewModel.messages.collect { message = it } }
     LaunchedEffect(message) { if (message != null) { delay(MESSAGE_MS); message = null } }
@@ -313,7 +337,27 @@ fun EssentialDashboardHome(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
+        // The bell floats in the empty space right of the shape, under the mood label, so it covers no
+        // button (the pull gauge and the chart arrows are lower down). It is drawn only while there is a
+        // notification, so the skin stays quiet when all is well.
+        NotificationFab(
+            notificationCount = notifications.size,
+            highestLevel = notifications.mostUrgentLevel(),
+            onClick = { notificationSheetOpen = true },
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = NOTIFICATION_BELL_TOP, end = AapsTheme.spacing.large),
+        )
         }
+    }
+
+    if (notificationSheetOpen && notifications.isNotEmpty()) {
+        NotificationBottomSheet(
+            notifications = notifications,
+            onDismissSheet = { notificationSheetOpen = false },
+            onDismissNotification = onDismissNotification,
+            onNotificationActionClick = onNotificationActionClick,
+        )
     }
 
     if (detailOpen) {
