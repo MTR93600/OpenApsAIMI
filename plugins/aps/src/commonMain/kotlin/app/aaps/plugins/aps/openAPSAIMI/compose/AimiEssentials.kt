@@ -88,6 +88,8 @@ internal object AimiEssentials {
             DoubleKey.OApsAIMIMaxMultiplier, AimiEssentialsGroup.DOSE_LIMITS, ApsStrings.aimi_essentials_hint_max_multiplier, limitWarning,
             unit = ApsStrings.aimi_unit_times_profile_basal,
         ),
+        // Read only when the user starts a manual Boost from the Essential skin
+        AimiEssentialsRow(IntKey.OApsAIMIManualBoostPercent, AimiEssentialsGroup.DOSE_LIMITS, ApsStrings.aimi_essentials_hint_manual_boost, limitWarning),
         AimiEssentialsRow(UnitDoubleKey.ApsLgsThreshold, AimiEssentialsGroup.DOSE_LIMITS, ApsStrings.aimi_essentials_hint_lgs, listOf(ApsStrings.aimi_setting_warning_lgs)),
         AimiEssentialsRow(BooleanKey.ApsUseSmb, AimiEssentialsGroup.DOSE_LIMITS, ApsStrings.aimi_essentials_hint_use_smb, listOf(ApsStrings.aimi_setting_warning_smb)),
     )

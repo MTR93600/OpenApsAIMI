@@ -8,16 +8,23 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.aaps.core.interfaces.aps.AimiBoostState
 import app.aaps.core.interfaces.aps.AimiBoostUnavailableReason
@@ -29,6 +36,9 @@ import app.aaps.ui.compose.dashboard.glass.GlassUiState
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+
+/** One tap on − or + moves the Boost strength by this many percent. */
+private const val BOOST_PERCENT_STEP = 5
 
 /** One past decision, formatted: when, and what was delivered. */
 data class EssentialDecision(val time: String, val what: String)
@@ -42,6 +52,8 @@ data class EssentialDecision(val time: String, val what: String)
 fun EssentialDetailSheet(
     state: GlassUiState,
     boost: AimiBoostState,
+    boostPercent: Int,
+    onBoostPercentStep: (Int) -> Unit,
     commandsAllowed: Boolean,
     decisions: List<EssentialDecision>,
     iob: List<GraphDataPoint>,
@@ -54,11 +66,22 @@ fun EssentialDetailSheet(
             // Boost
             Text(stringResource(UiStrings.essential_boost_title), style = MaterialTheme.typography.titleMedium)
             Text(
-                stringResource(UiStrings.essential_boost_explain),
+                stringResource(UiStrings.essential_boost_explain, boostPercent),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.height(AapsTheme.spacing.medium))
+            // The strength of the next Boost; a running one keeps the strength it started with
+            Row(Modifier.fillMaxWidth().padding(top = AapsTheme.spacing.small), verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(UiStrings.essential_boost_strength), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                IconButton(onClick = { onBoostPercentStep(-BOOST_PERCENT_STEP) }, enabled = commandsAllowed) {
+                    Icon(Icons.Filled.Remove, contentDescription = stringResource(UiStrings.essential_boost_less))
+                }
+                Text(stringResource(UiStrings.essential_boost_percent, boostPercent), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                IconButton(onClick = { onBoostPercentStep(BOOST_PERCENT_STEP) }, enabled = commandsAllowed) {
+                    Icon(Icons.Filled.Add, contentDescription = stringResource(UiStrings.essential_boost_more))
+                }
+            }
+            Spacer(Modifier.height(AapsTheme.spacing.small))
             when {
                 boost.active -> {
                     Text(stringResource(UiStrings.essential_boost_active, boost.remainingMinutes), style = MaterialTheme.typography.bodyMedium)

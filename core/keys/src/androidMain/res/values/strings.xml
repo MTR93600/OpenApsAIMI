@@ -590,6 +590,8 @@
     <string name="pref_title_aimi_tpo_llm_confirm_enabled">TPO: require LLM confirmation</string>
     <string name="pref_summary_aimi_tpo_llm_confirm_enabled">When on, AIMI applies a TPO session only if the advisor LLM confirms the clinical context (uses the same API keys as AI Coach). When off, algorithm triggers apply directly.</string>
     <string name="pref_title_aimi_tpo_notify_on_apply">TPO: notify on session start</string>
+    <string name="pref_title_aimi_manual_boost_percent">Manual boost strength</string>
+    <string name="pref_summary_aimi_manual_boost_percent">How much a manual boost raises max SMB in hyper, max basal and the Autodrive max basal, in percent of your values, for 60 minutes. The values never pass their own maximum or the age limit.</string>
     <string name="pref_summary_aimi_tpo_notify_on_apply">Shows a system notification when a 45 min protection session starts or ends. Tap to open OpenAPS AIMI preferences.</string>
     <string name="pref_title_aimi_dyn_isf_trajectory_max_fraction">DynISF trajectory: max ISF change per tick</string>
     <string name="pref_summary_aimi_dyn_isf_trajectory_max_fraction">Cap on relative ISF adjustment from trajectory (e.g. 0.06 = at most about 6% tighter ISF on a strong rise, or 6% looser on a strong fall). Lower = safer, smaller benefit.</string>

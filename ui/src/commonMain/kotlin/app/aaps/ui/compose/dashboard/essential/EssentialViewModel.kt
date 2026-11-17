@@ -7,15 +7,19 @@ import app.aaps.core.interfaces.aps.AimiBoostControl
 import app.aaps.core.interfaces.aps.AimiBoostStartResult
 import app.aaps.core.interfaces.aps.AimiBoostState
 import app.aaps.core.interfaces.aps.AimiBoostUnavailableReason
+import app.aaps.core.keys.IntKey
+import app.aaps.core.keys.interfaces.Preferences
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /** A short message after a Boost action, shown for a few seconds under the shape. */
@@ -38,9 +42,23 @@ sealed interface EssentialMessage {
 @Inject
 class EssentialViewModel(
     private val boostControl: AimiBoostControl,
+    private val preferences: Preferences,
 ) : ViewModel() {
 
     val boost: StateFlow<AimiBoostState> = boostControl.state
+
+    private val _boostPercent = MutableStateFlow(preferences.get(IntKey.OApsAIMIManualBoostPercent))
+
+    /** The strength of the next Boost, in percent. A Boost that runs keeps the strength it started with. */
+    val boostPercent: StateFlow<Int> = _boostPercent.asStateFlow()
+
+    /** Moves the strength by [step] percent, kept inside the setting's own range. */
+    fun changeBoostPercent(step: Int) {
+        val key = IntKey.OApsAIMIManualBoostPercent
+        val next = (preferences.get(key) + step).coerceIn(key.min, key.max)
+        preferences.put(key, next)
+        _boostPercent.value = next
+    }
 
     private val _messages = MutableSharedFlow<EssentialMessage>(extraBufferCapacity = 1)
     val messages: SharedFlow<EssentialMessage> = _messages.asSharedFlow()

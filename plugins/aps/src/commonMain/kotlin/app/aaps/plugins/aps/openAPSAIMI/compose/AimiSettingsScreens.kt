@@ -444,6 +444,7 @@ internal object AimiSettingsScreens {
         fields(
             AimiSettingsSectionId.EssentialsDoseLimits, AimiSettingsContentId.PreferencesEssentials, AimiSettingsLevel.SIMPLE,
             DoubleKey.ApsMaxBasal, DoubleKey.meal_modes_MaxBasal, DoubleKey.autodriveMaxBasal, DoubleKey.OApsAIMIMaxSMB, DoubleKey.OApsAIMIHighBGMaxSMB, DoubleKey.OApsAIMIMaxMultiplier,
+            IntKey.OApsAIMIManualBoostPercent,
         ),
         fields(
             AimiSettingsSectionId.AiAdvisorKeys, AimiSettingsContentId.PreferencesAiKeys, AimiSettingsLevel.EXPERT,
@@ -469,7 +470,7 @@ internal object AimiSettingsScreens {
         // The SMB limits, on a page that search can open (the Essentials page shows them too).
         fields(
             AimiSettingsSectionId.DoseLimits, AimiSettingsContentId.PreferencesDoseLimits, AimiSettingsLevel.SIMPLE,
-            DoubleKey.OApsAIMIMaxSMB, DoubleKey.OApsAIMIHighBGMaxSMB, DoubleKey.OApsAIMIHighBg,
+            DoubleKey.OApsAIMIMaxSMB, DoubleKey.OApsAIMIHighBGMaxSMB, DoubleKey.OApsAIMIHighBg, IntKey.OApsAIMIManualBoostPercent,
         ),
 
         // ---- Feature card: meals ----

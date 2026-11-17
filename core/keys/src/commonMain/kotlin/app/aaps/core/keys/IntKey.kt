@@ -678,6 +678,19 @@ enum class IntKey(
         dependency = BooleanKey.AimiEmergencySosEnable,
         unitType = UnitType.MGDL,
     ),
+    /**
+     * How much the manual Boost of the Essential skin raises its three ceilings, in percent of the user's
+     * own values. The ceilings never pass their own maximum or the age limit, whatever this says.
+     */
+    OApsAIMIManualBoostPercent(
+        key = "key_aimi_manual_boost_percent",
+        defaultValue = 30,
+        min = 10,
+        max = 100,
+        title = KeysStrings.pref_title_aimi_manual_boost_percent,
+        summary = KeysStrings.pref_summary_aimi_manual_boost_percent,
+        unitType = UnitType.PERCENT,
+    ),
     /** Immediate SMS when BG falls below this (or delta ≤ −10). */
     AimiEmergencySosImmediateThreshold(
         key = "aimi_emergency_sos_immediate_threshold",

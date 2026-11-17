@@ -844,7 +844,11 @@
     <string name="essential_boost_release_cancel">Release to cancel the boost</string>
     <string name="essential_boost_active" comment="%1$d=minutes left. Example: Boost on, 42 min left">Boost on, %1$d min left</string>
     <string name="essential_boost_title">Boost</string>
-    <string name="essential_boost_explain">For 60 minutes: raises max SMB in hyper, max basal and the Autodrive max basal by 30 percent of your values at most, and keeps the AIMI target at 80 mg/dL at most. Your values come back by themselves. It stops early if glucose goes under 65 mg/dL.</string>
+    <string name="essential_boost_explain" comment="%1$d=the boost strength in percent. Example: 30">For 60 minutes: raises max SMB in hyper, max basal and the Autodrive max basal by %1$d percent of your values at most, and keeps the AIMI target at 80 mg/dL at most. Your values come back by themselves. It stops early if glucose goes under 65 mg/dL.</string>
+    <string name="essential_boost_strength">Strength of the next boost</string>
+    <string name="essential_boost_percent" comment="%1$d=the boost strength in percent. Example: 30 %">%1$d %%</string>
+    <string name="essential_boost_less">Less</string>
+    <string name="essential_boost_more">More</string>
     <string name="essential_boost_start">Start boost</string>
     <string name="essential_boost_cancel">Cancel boost</string>
     <string name="essential_boost_started" comment="%1$d=minutes. Example: Boost started for 60 min">Boost started for %1$d min</string>
@@ -891,5 +895,6 @@
     <string name="essential_hint_going_down">Glucose is low or going down: no boost.</string>
     <string name="essential_hint_boost_later">A boost is offered when glucose heads high.</string>
     <string name="essential_activity_title">Activity</string>
+    <string name="essential_maintenance_label" comment="Shown when the user taps the small maintenance dot by the glucose shape. %1$s=what is due (Sensor, Patch or cannula, Insulin, Battery), %2$s=its age as the status lights show it. Example: Sensor: 9d 18h">%1$s: %2$s</string>
 
 </resources>

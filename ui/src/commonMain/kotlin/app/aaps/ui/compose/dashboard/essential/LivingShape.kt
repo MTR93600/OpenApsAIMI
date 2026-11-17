@@ -56,6 +56,21 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.aaps.core.ui.compose.AapsTheme
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import app.aaps.core.ui.compose.StatusLevel
+import app.aaps.core.ui.compose.icons.IcGlycoBattery
+import app.aaps.core.ui.compose.icons.IcGlycoCannula
+import app.aaps.core.ui.compose.icons.IcGlycoInsulin
+import app.aaps.core.ui.compose.icons.IcGlycoSensor
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.abs
@@ -94,7 +109,20 @@ internal object EssentialShapeDimens {
     /** Distance of the attractor centre from the top of the box. */
     val attractorTop = 12.dp
     val satellite = 8.dp
+
+    /** The visible dot of the maintenance satellite, and its glyph. */
+    val maintenanceDot = 20.dp
+    val maintenanceGlyph = 12.dp
+
+    /** The touch area of the maintenance satellite: the dot is small, a finger needs 48 dp. */
+    val maintenanceTouch = 48.dp
+
+    /** Where the maintenance satellite sits, from the centre, as a part of the box (down and to the end). */
+    const val MAINTENANCE_OFFSET_RATIO = 0.30f
 }
+
+/** How long the maintenance label stays after a tap. */
+private const val MAINTENANCE_LABEL_MS = 3_000L
 
 /**
  * The living glucose shape: a closed path drawn from a few numbers ([ShapeParams]) that animate from
@@ -106,6 +134,8 @@ internal object EssentialShapeDimens {
  *
  * @param onPullProgress 0..1 while pulling in the direction that acts, for the gauge under the shape
  * @param boxSize the square the shape is drawn in; the shape and its digits scale with it
+ * @param maintenance the most urgent item that is due, or null: then no maintenance satellite at all
+ * @param maintenanceLabel what a tap on the maintenance satellite shows, and what a screen reader reads
  */
 @Composable
 fun LivingShape(
@@ -121,6 +151,8 @@ fun LivingShape(
     onTap: () -> Unit,
     modifier: Modifier = Modifier,
     boxSize: Dp = EssentialShapeDimens.box,
+    maintenance: EssentialMaintenance? = null,
+    maintenanceLabel: String = "",
 ) {
     val params = mood.shapeParams()
     val sizeFactor = boxSize / EssentialShapeDimens.box
@@ -232,6 +264,69 @@ fun LivingShape(
                 Text(deltaText, color = onShape.copy(alpha = 0.9f), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.offset(x = 6.dp))
             }
         }
+        if (maintenance != null) {
+            var labelShown by remember { mutableStateOf(false) }
+            LaunchedEffect(labelShown) {
+                if (labelShown) {
+                    delay(MAINTENANCE_LABEL_MS)
+                    labelShown = false
+                }
+            }
+            val offset = boxSize * EssentialShapeDimens.MAINTENANCE_OFFSET_RATIO
+            MaintenanceSatellite(
+                item = maintenance,
+                label = maintenanceLabel,
+                onTap = { labelShown = true },
+                modifier = Modifier.align(Alignment.Center).offset(x = offset, y = offset),
+            )
+            if (labelShown) {
+                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHighest, modifier = Modifier.align(Alignment.BottomCenter)) {
+                    Text(
+                        maintenanceLabel,
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(horizontal = AapsTheme.spacing.large, vertical = AapsTheme.spacing.small),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The maintenance satellite: a small dot in the warning or critical colour of the theme with the glyph of
+ * what is due. It never pulses and never moves (pulsing means a low in this skin, and a moving dot is hard
+ * to touch). A tap shows [label]; a screen reader reads it as a button.
+ */
+@Composable
+private fun MaintenanceSatellite(item: EssentialMaintenance, label: String, onTap: () -> Unit, modifier: Modifier) {
+    val general = AapsTheme.generalColors
+    val color = (if (item.level == StatusLevel.CRITICAL) general.statusCritical else general.statusWarning).soften()
+    Box(
+        modifier = modifier
+            .size(EssentialShapeDimens.maintenanceTouch)
+            .semantics {
+                contentDescription = label
+                role = Role.Button
+            }
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onTap),
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.size(EssentialShapeDimens.maintenanceDot * 1.8f)) {
+            val dot = EssentialShapeDimens.maintenanceDot.toPx() / 2f
+            drawCircle(Brush.radialGradient(listOf(color.copy(alpha = 0.35f), Color.Transparent), radius = size.minDimension / 2f))
+            drawCircle(color, radius = dot)
+        }
+        Icon(
+            imageVector = when (item.kind) {
+                MaintenanceKind.SENSOR  -> IcGlycoSensor
+                MaintenanceKind.CANNULA -> IcGlycoCannula
+                MaintenanceKind.INSULIN -> IcGlycoInsulin
+                MaintenanceKind.BATTERY -> IcGlycoBattery
+            },
+            contentDescription = null,
+            tint = general.onBadge,
+            modifier = Modifier.size(EssentialShapeDimens.maintenanceGlyph),
+        )
     }
 }
 

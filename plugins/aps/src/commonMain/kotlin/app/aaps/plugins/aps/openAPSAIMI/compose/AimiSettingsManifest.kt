@@ -558,6 +558,8 @@ internal object AimiSettingsManifest {
         // The shared max basal of the loop. Not an AIMI key, but AIMI shows it (Essentials, dose limits)
         // and the manual Boost writes it, so its writers are declared here like any AIMI ceiling.
         AimiSettingEntry(DoubleKey.ApsMaxBasal, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.Protection, setOf(AimiSettingsWriter.USER, AimiSettingsWriter.LOOP)),
+        // Read only when the user starts a manual Boost; set from the Boost panel or here
+        AimiSettingEntry(IntKey.OApsAIMIManualBoostPercent, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.Protection, AimiSettingsWriter.USER),
         AimiSettingEntry(DoubleKey.meal_modes_MaxBasal, AimiSettingsLevel.SIMPLE, AimiBehaviorFamilyId.Protection, setOf(AimiSettingsWriter.USER)),
         // The context module's own mode. Its screen is a standalone activity outside the settings tree
         // this manifest models, so it sits in the reachability debt rather than claim a home it does

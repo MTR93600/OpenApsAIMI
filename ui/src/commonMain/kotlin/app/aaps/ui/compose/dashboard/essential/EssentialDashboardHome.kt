@@ -1,6 +1,8 @@
 package app.aaps.ui.compose.dashboard.essential
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,9 +11,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -33,18 +39,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.aaps.core.interfaces.InterfacesStrings
 import app.aaps.core.interfaces.aps.AimiBoostUnavailableReason
 import app.aaps.core.interfaces.dashboard.AimiGlassDashboardData
+import app.aaps.core.interfaces.navigation.ElementType
 import app.aaps.core.interfaces.overview.graph.BolusType
 import app.aaps.core.interfaces.source.CgmWarmupStatus
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.AapsTheme
+import app.aaps.core.ui.compose.LocalClientRole
 import app.aaps.core.ui.compose.LocalDateUtil
 import app.aaps.core.ui.compose.LocalDecimalFormatter
 import app.aaps.core.ui.compose.LocalProfileUtil
 import app.aaps.core.ui.compose.metroViewModel
+import app.aaps.core.ui.compose.navigation.NavigationRequest
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.ui.UiStrings
 import app.aaps.ui.compose.dashboard.glass.GlassHomeViewModel
@@ -59,6 +69,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.abs
 
 private const val MESSAGE_MS = 4_000L
+
+/** The loop pill's dot and chevron. Local to this skin, like the shape sizes. */
+private val LOOP_DOT = 8.dp
+private val LOOP_CHEVRON = 16.dp
 private const val RECENT_DECISIONS = 6
 
 /** The vertical axis of the chart always shows at least this range, in mg/dL. */
@@ -73,6 +87,7 @@ private const val CHART_CEILING_MGDL = 250.0
  * numbers at the same moment. COB is never read.
  *
  * @param commandsAllowed false on a phone that may not send commands (a client): no Boost from here
+ * @param onNavigate opens another screen; the loop pill uses it for the running mode screen
  */
 @Composable
 fun EssentialDashboardHome(
@@ -81,6 +96,7 @@ fun EssentialDashboardHome(
     statusViewModel: StatusViewModel,
     aimiDashboardData: Flow<AimiGlassDashboardData>,
     commandsAllowed: Boolean,
+    onNavigate: (NavigationRequest) -> Unit,
     modifier: Modifier = Modifier,
     cgmWarmupStatus: StateFlow<CgmWarmupStatus?>? = null,
     homeViewModel: GlassHomeViewModel = metroViewModel(),
@@ -107,6 +123,7 @@ fun EssentialDashboardHome(
     val chartConfig by graphViewModel.chartConfigFlow.collectAsStateWithLifecycle()
     val predictions by graphViewModel.predictionsFlow.collectAsStateWithLifecycle()
     val boost by essentialViewModel.boost.collectAsStateWithLifecycle()
+    val boostPercent by essentialViewModel.boostPercent.collectAsStateWithLifecycle()
 
     var rangeHours by remember { mutableIntStateOf(ESSENTIAL_RANGES.first()) }
     var pullProgress by remember { mutableFloatStateOf(0f) }
@@ -181,15 +198,16 @@ fun EssentialDashboardHome(
             // Loop state on the left, the situation in words on the right: the shape is never the only
             // place a low is told (colour alone is not enough)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    state.loopStatusText ?: "",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
+                Box(Modifier.weight(1f)) {
+                    state.loopStatusText?.let { loopText ->
+                        LoopPill(
+                            text = loopText,
+                            running = state.loopIsRunning,
+                            enabled = commandsAllowed && LocalClientRole.current.allows(ElementType.RUNNING_MODE.role),
+                            onClick = { onNavigate(NavigationRequest.Element(ElementType.RUNNING_MODE)) },
+                        )
+                    }
+                }
                 Text(mood.label(), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = moodColors.core, maxLines = 1)
             }
             if (boost.active) {
@@ -200,6 +218,27 @@ fun EssentialDashboardHome(
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
+
+            // One maintenance satellite, only when something is due by the user's own status light thresholds
+            val maintenance = EssentialMaintenanceRule.mostUrgent(
+                listOf(
+                    EssentialMaintenance(MaintenanceKind.SENSOR, state.sensorAgeStatus, state.sensorAge),
+                    EssentialMaintenance(MaintenanceKind.CANNULA, state.cannulaAgeStatus, state.cannulaAge),
+                    EssentialMaintenance(MaintenanceKind.INSULIN, state.insulinAgeStatus, state.insulinAge),
+                    EssentialMaintenance(MaintenanceKind.BATTERY, state.batteryAgeStatus, state.batteryAge),
+                ),
+            )
+            val maintenanceLabel = maintenance?.let {
+                val what = stringResource(
+                    when (it.kind) {
+                        MaintenanceKind.SENSOR  -> UiStrings.essential_age_sensor
+                        MaintenanceKind.CANNULA -> UiStrings.essential_age_cannula
+                        MaintenanceKind.INSULIN -> UiStrings.essential_age_insulin
+                        MaintenanceKind.BATTERY -> UiStrings.essential_age_battery
+                    }
+                )
+                stringResource(UiStrings.essential_maintenance_label, what, it.age)
+            } ?: ""
 
             val bgText = if (mood == EssentialMood.NO_DATA) unavailable else state.currentBg
             val bgWithUnit = bgInfo?.bgValue?.let { profileUtil.fromMgdlToStringWithUnits(toMgdl(it)) } ?: unavailable
@@ -215,6 +254,8 @@ fun EssentialDashboardHome(
                 onPullProgress = { pullProgress = it },
                 onTap = { detailOpen = true },
                 boxSize = shapeBox,
+                maintenance = maintenance,
+                maintenanceLabel = maintenanceLabel,
             )
 
             // The gauge under the shape. Hidden on a phone that may not send commands and when AIMI is not the algorithm.
@@ -284,6 +325,8 @@ fun EssentialDashboardHome(
         EssentialDetailSheet(
             state = state,
             boost = boost,
+            boostPercent = boostPercent,
+            onBoostPercentStep = essentialViewModel::changeBoostPercent,
             commandsAllowed = commandsAllowed,
             decisions = decisions,
             iob = iobData.iob,
@@ -343,6 +386,34 @@ private fun PullGauge(gesture: ShapeGesture, progress: Float, color: Color, hint
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth().padding(top = AapsTheme.spacing.small),
         )
+    }
+}
+
+/**
+ * The loop state as a quiet pill: a dot (in-range colour while the loop runs, warning colour when it
+ * does not), the mode in words, and a small chevron that says it opens something. A tap opens the
+ * running mode screen, as the loop chip of the classic overview does.
+ */
+@Composable
+private fun LoopPill(text: String, running: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    val general = AapsTheme.generalColors
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(AapsTheme.spacing.small),
+            modifier = Modifier.padding(start = AapsTheme.spacing.medium, end = AapsTheme.spacing.small, top = AapsTheme.spacing.small, bottom = AapsTheme.spacing.small),
+        ) {
+            val dot = (if (running) general.bgInRange else general.statusWarning).soften()
+            Canvas(Modifier.size(LOOP_DOT)) { drawCircle(dot) }
+            Text(text, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (enabled) Icon(Icons.Filled.ExpandMore, contentDescription = null, tint = muted, modifier = Modifier.size(LOOP_CHEVRON))
+        }
     }
 }
 

@@ -2160,6 +2160,7 @@
 <string name="aimi_essentials_hint_max_smb">Largest single small bolus (SMB).</string>
 <string name="aimi_essentials_hint_high_bg_max_smb">Largest single small bolus (SMB) when glucose is high.</string>
 <string name="aimi_essentials_hint_current_basal_multiplier">Highest temporary basal rate, as a factor of the profile basal of the current hour. When no meal mode is on, Autodrive does not act and T3C brittle mode is off, a temporary basal is never higher than this factor times the profile basal. The loop can make this limit lower for a while, for example from heart rate or sleep data. Otherwise the max basal of the active mode is the limit.</string>
+<string name="aimi_essentials_hint_manual_boost">How much a manual boost from the Essential home raises max SMB in hyper and both max basals, for 60 minutes. The limits above and the age limit still apply.</string>
 <string name="aimi_essentials_hint_max_multiplier">Highest factor the adaptive basal learner may put on the profile basal. Used only while adaptive basal is on. It is not a limit on every basal rate.</string>
 <string name="aimi_essentials_hint_lgs">The loop gives no extra insulin when glucose, now or predicted, goes below this value or below a value set by your target, whichever is higher.</string>
 <string name="aimi_essentials_hint_use_smb">Allow small automatic boluses (SMB).</string>

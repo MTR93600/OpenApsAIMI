@@ -41,6 +41,7 @@ class AimiEssentialsTest {
                 DoubleKey.OApsAIMIMaxSMB.key,
                 DoubleKey.OApsAIMIHighBGMaxSMB.key,
                 DoubleKey.OApsAIMIMaxMultiplier.key,
+                IntKey.OApsAIMIManualBoostPercent.key,
                 UnitDoubleKey.ApsLgsThreshold.key,
                 BooleanKey.ApsUseSmb.key,
             ),

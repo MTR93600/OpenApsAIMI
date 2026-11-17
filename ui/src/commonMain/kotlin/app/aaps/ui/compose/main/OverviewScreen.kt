@@ -309,6 +309,7 @@ fun OverviewScreen(
                     statusViewModel = statusViewModel,
                     aimiDashboardData = aimiGlassDashboardData,
                     commandsAllowed = commandsAllowed,
+                    onNavigate = onNavigate,
                     cgmWarmupStatus = (activePlugin.activeBgSource as? CgmWarmupProvider)?.warmupStatus,
                 )
             }

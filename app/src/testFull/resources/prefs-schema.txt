@@ -476,6 +476,7 @@ key_aimi_intratick_stall_seconds|IntKey|true
 key_aimi_iob_surveillance_guard|BooleanKey|true
 key_aimi_loop_blackbox_file_enabled|BooleanKey|true
 key_aimi_loop_exclusive_invocation|BooleanKey|true
+key_aimi_manual_boost_percent|IntKey|true
 key_aimi_meal_confirmed_early_release|BooleanKey|true
 key_aimi_meal_hyper_bypass_enabled|BooleanKey|true
 key_aimi_peak_governor_enabled|BooleanKey|true
