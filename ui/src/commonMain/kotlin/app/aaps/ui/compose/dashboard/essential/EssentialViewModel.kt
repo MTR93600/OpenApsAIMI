@@ -7,6 +7,7 @@ import app.aaps.core.interfaces.aps.AimiBoostControl
 import app.aaps.core.interfaces.aps.AimiBoostStartResult
 import app.aaps.core.interfaces.aps.AimiBoostState
 import app.aaps.core.interfaces.aps.AimiBoostUnavailableReason
+import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.interfaces.Preferences
 import dev.zacsweers.metro.AppScope
@@ -43,7 +44,19 @@ sealed interface EssentialMessage {
 class EssentialViewModel(
     private val boostControl: AimiBoostControl,
     private val preferences: Preferences,
+    private val activePlugin: ActivePlugin,
 ) : ViewModel() {
+
+    /**
+     * The target the loop really used in its last run, in mg/dL, or null when that run is older than
+     * [LOOP_TARGET_MAX_AGE_MS] or there is none. It can differ from the profile target: AIMI lowers it on a
+     * rise (70 to 90) and a Boost keeps it at 80 at most, without a temp target.
+     */
+    fun loopTargetMgdl(nowMs: Long): Double? {
+        val result = activePlugin.activeAPS?.lastAPSResult ?: return null
+        if (nowMs - result.date > LOOP_TARGET_MAX_AGE_MS) return null
+        return result.targetBG.takeIf { it.isFinite() && it > 0.0 }
+    }
 
     val boost: StateFlow<AimiBoostState> = boostControl.state
 
@@ -75,5 +88,11 @@ class EssentialViewModel(
 
     fun cancelBoost() {
         if (boostControl.cancel()) _messages.tryEmit(EssentialMessage.Cancelled)
+    }
+
+    private companion object {
+
+        /** Two missed loop runs: an older target is not shown, it may no longer be the one in use. */
+        const val LOOP_TARGET_MAX_AGE_MS = 15L * 60L * 1000L
     }
 }

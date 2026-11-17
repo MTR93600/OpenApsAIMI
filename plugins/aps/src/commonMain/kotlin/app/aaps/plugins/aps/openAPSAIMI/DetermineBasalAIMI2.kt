@@ -1375,6 +1375,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     work.aimiContextActivityActive = false
                     work.pkpdAbsorptionGuardAppliedThisTick = false
                     work.criticalSafetyZeroedThisTick = false
+                    work.sportHalvedForBoostThisTick = false
                     cachedRiskEnvelopeEarly = null
                     cachedRiskEnvelopeDecision = null
                     lastSafetyRiskExport = null
@@ -3838,6 +3839,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 // 7 ticks out of 93 (Part A-bis correction 1).
                 b.effort_smb_factor_requested = work.lastEffortSmbFactorRaw
                 b.effort_smb_factor_applied = work.lastEffortSmbFactorApplied
+                b.manual_boost_active = work.manualBoostActive
                 b.effort_smb_before_u = work.lastEffortSmbBeforeU
                 b.effort_smb_after_u = work.lastEffortSmbAfterU
                 b.effort_smb_floored_by_meal = work.lastEffortSmbFactorRaw?.let { raw ->
@@ -4263,7 +4265,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 override fun setTargetBg(value: Float) { targetBg = value }
                 override fun targetBg() = this@DetermineBasalaimiSMB2.targetBg
             },
-            manualBoostActive = ::tpoOrchestrator.isInitialized && tpoOrchestrator.manualBoostActive(ctx.currentTime),
+            manualBoostActive = (::tpoOrchestrator.isInitialized && tpoOrchestrator.manualBoostActive(ctx.currentTime))
+                .also { work.manualBoostActive = it },
         )
         return GlobalAimiBasalScheduleBootstrap(
             pumpCaps = schedule.pumpCaps,
@@ -11311,6 +11314,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             iobActivityNow = work.iobActivityNow,
             cob = work.cob,
             effort = work.lastEffortAssessment,
+            manualBoostActive = work.manualBoostActive,
+            sportHalvedForBoost = { work.sportHalvedForBoostThisTick },
             mealCertainty = work.lastMealCertainty,
             physiologicalPhase = work.lastPhysiologicalPhaseOutput,
             slowCarbBudgetU = slowCarbEarlyBudgetU,
@@ -11561,7 +11566,11 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 override fun markCriticalSafetyZeroed() {
                     work.criticalSafetyZeroedThisTick = true
                 }
-                override fun sportSafety() = isSportSafetyCondition()
+                override fun sportGuard() = sportGuardThisTick()
+                override fun manualBoostActive() = work.manualBoostActive
+                override fun markSportHalvedForBoost() {
+                    work.sportHalvedForBoostThisTick = true
+                }
                 override fun ensureWCycleInfo() = this@DetermineBasalaimiSMB2.ensureWCycleInfo()
                 override fun wCycleBelief() = causalState.lastWCycleBelief
                 override fun updateWCycleLearner(needSmbScale: Double?) {
@@ -11979,7 +11988,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
 
-    private fun isSportSafetyCondition(): Boolean = AimiHypoSmbSafety.sportSafety(
+    private fun sportGuardThisTick(): AimiHypoSmbSafety.SportGuard = AimiHypoSmbSafety.sportGuard(
         AimiHypoSmbSafety.SportSafetyInput(
             recentSteps5 = recentSteps5Minutes ?: 0,
             recentSteps10 = recentSteps10Minutes ?: 0,

@@ -246,16 +246,36 @@ internal object AimiHypoSmbSafety {
         return SmbIntervalOutcome(finalInterval, logs)
     }
 
-    fun sportSafety(input: SportSafetyInput): Boolean {
-        if (input.recentSteps5 == 0 && !input.sportTime && !input.activityActive) return false
+    fun sportSafety(input: SportSafetyInput): Boolean = sportGuard(input).kind != SportGuardKind.NONE
+
+    /**
+     * The sport guard, with what fired it. The rule is the one [sportSafety] always had; it only also says
+     * whether the activity is going on now or is only in the 60 and 180 minute step totals.
+     *
+     * The difference matters for a manual Boost: on 2026-11-17 the user sat down after a walk, glucose rose
+     * from 250 to 282 after a meal, and the 180 minute total (over 4500 steps, a walk earlier that morning)
+     * kept every SMB at zero.
+     */
+    fun sportGuard(input: SportSafetyInput): SportGuard {
+        if (input.recentSteps5 == 0 && !input.sportTime && !input.activityActive) return SportGuard(SportGuardKind.NONE, "")
         val manualSport = input.sportTime || input.activityActive
         val recentBurst = input.recentSteps5 >= 400 && input.recentSteps10 >= 800
-        val sustainedActivity = input.recentSteps30 >= 1200 || input.recentSteps60 >= 3000 || input.recentSteps180 >= 4500
+        val activeLast30 = input.recentSteps30 >= 1200
+        val activeEarlier = input.recentSteps60 >= 3000 || input.recentSteps180 >= 4500
         val baselineHr = if (input.averageHr10 > 0.0) input.averageHr10 else input.averageHr
         val elevatedHeartRate = baselineHr > 0 && input.averageHr > baselineHr * 1.15
         val shortActivityWithHr = (input.recentSteps5 >= 400 || input.recentSteps10 >= 600) && elevatedHeartRate
-        val highTargetExercise = input.targetBg >= 140 && (shortActivityWithHr || sustainedActivity)
-        return manualSport || recentBurst || sustainedActivity || highTargetExercise
+        val highTarget = input.targetBg >= 140
+        val now = manualSport || recentBurst || activeLast30 || (highTarget && shortActivityWithHr)
+        val signals = "manual=$manualSport burst=$recentBurst steps5=${input.recentSteps5} steps10=${input.recentSteps10} " +
+            "steps30=${input.recentSteps30} steps60=${input.recentSteps60} steps180=${input.recentSteps180} " +
+            "hr=${input.averageHr.roundToInt()} hr10=${input.averageHr10.roundToInt()} target=${input.targetBg.roundToInt()}"
+        val kind = when {
+            now           -> SportGuardKind.ACTIVITY_NOW
+            activeEarlier -> SportGuardKind.PAST_ACTIVITY_ONLY
+            else          -> SportGuardKind.NONE
+        }
+        return SportGuard(kind, signals)
     }
 
     fun specificAdjustment(input: SpecificAdjustmentInput): Float {
@@ -554,6 +574,21 @@ internal object AimiHypoSmbSafety {
         val lastSmbTime: Int,
     )
     data class SmbIntervalOutcome(val minutes: Int, val logs: List<String>)
+    /** Why the sport guard holds the SMB back, if it does. */
+    enum class SportGuardKind {
+
+        NONE,
+
+        /** Manual sport mode, or steps in the last 5 to 30 minutes. */
+        ACTIVITY_NOW,
+
+        /** Only the 60 or 180 minute step totals: the person was active earlier and has stopped. */
+        PAST_ACTIVITY_ONLY,
+    }
+
+    /** @property signals the inputs, for the log, so a later analysis can tell which one fired */
+    data class SportGuard(val kind: SportGuardKind, val signals: String)
+
     data class SportSafetyInput(
         val recentSteps5: Int,
         val recentSteps10: Int,

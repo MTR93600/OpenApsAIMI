@@ -6544,6 +6544,7 @@ class ShellDecisionTraceTest {
         private val SPORT_MEAL_SMB_TRACE = """
             READ key=BooleanKey.OApsAIMIhoneymoon value=false
             READ key=BooleanKey.OApsAIMIHyperDroppingExemptEnabled value=false
+            LOG SPORT_GUARD ACTIVITY_NOW manual=true burst=false steps5=0 steps10=0 steps30=0 steps60=0 steps180=0 hr=0 hr10=0 target=100
             READ key=BooleanKey.OApsAIMIhoneymoon value=false
             READ key=BooleanKey.OApsAIMIMealAdvisorTrigger value=false
             READ key=BooleanKey.OApsAIMIPkpdPragmaticReliefEnabled value=false

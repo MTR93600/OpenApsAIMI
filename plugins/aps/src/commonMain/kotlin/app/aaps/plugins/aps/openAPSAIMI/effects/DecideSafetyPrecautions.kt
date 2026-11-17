@@ -8,6 +8,7 @@ import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdRuntime
 import app.aaps.plugins.aps.openAPSAIMI.safety.AimiHypoSmbSafety
 import app.aaps.plugins.aps.openAPSAIMI.safety.clampSmbToMaxSmbAndMaxIob
+import app.aaps.plugins.aps.openAPSAIMI.tpo.ManualBoostSafety
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.EndocrineAmpAxis
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.EndocrineAmplitudeGovernor
 import app.aaps.plugins.aps.openAPSAIMI.wcycle.WCycleBelief
@@ -26,7 +27,13 @@ internal interface AimiSafetyPrecautionsCalls {
     fun mealWeights(mealData: MealData, hypoThreshold: Double): AimiHypoSmbSafety.MealAggressionWeights
     fun critical(mealData: MealData, hypoThreshold: Double): Pair<Boolean, String>
     fun markCriticalSafetyZeroed()
-    fun sportSafety(): Boolean
+    fun sportGuard(): AimiHypoSmbSafety.SportGuard
+
+    /** A manual Boost runs: the sport guard halves the SMB on past activity instead of stopping it. */
+    fun manualBoostActive(): Boolean
+
+    /** The sport guard halved the SMB this tick because a Boost runs: the effort factor is then not applied. */
+    fun markSportHalvedForBoost()
     fun ensureWCycleInfo(): WCycleInfo?
     fun wCycleBelief(): WCycleBelief?
     fun updateWCycleLearner(needSmbScale: Double?)
@@ -88,13 +95,25 @@ internal fun decideSafetyPrecautions(
         return 0f
     }
 
-    if (calls.sportSafety()) {
+    val sport = calls.sportGuard()
+    if (sport.kind != AimiHypoSmbSafety.SportGuardKind.NONE) {
+        consoleLog.add("SPORT_GUARD ${sport.kind} ${sport.signals}")
+        val boostFactor = ManualBoostSafety.sportSmbFactor(sport.kind, calls.manualBoostActive())
         if (mealWeights.guardScale > 0.0 && smbToGive > 0f) {
             val before = smbToGive
             smbToGive = (smbToGive * mealWeights.guardScale.toFloat()).coerceAtLeast(0f)
             reason?.appendLine(
                 texts.gs(ApsStrings.reason_safety_sport_meal_reduction, before, smbToGive)
             )
+        } else if (boostFactor > 0.0) {
+            // A manual Boost after past activity only: half, not zero. The flag stops Red Carpet and
+            // the finalize floor from giving the other half back, as for the zero below.
+            val before = smbToGive
+            smbToGive = (smbToGive * boostFactor.toFloat()).coerceAtLeast(0f)
+            calls.markCriticalSafetyZeroed()
+            calls.markSportHalvedForBoost()
+            reason?.appendLine(texts.gs(ApsStrings.reason_safety_sport_boost_half, before, smbToGive))
+            consoleLog.add("SMB halved by sport safety guard during a manual boost (past activity only)")
         } else {
             // Sport is a vital safety, not a minor one, so Red Carpet must not put this back.
             // Without this flag the zero below counted as a minor cut: measured 2026-08-18, the

@@ -53,6 +53,7 @@ fun EssentialDetailSheet(
     state: GlassUiState,
     boost: AimiBoostState,
     boostPercent: Int,
+    loopTargetText: String?,
     onBoostPercentStep: (Int) -> Unit,
     commandsAllowed: Boolean,
     decisions: List<EssentialDecision>,
@@ -84,7 +85,11 @@ fun EssentialDetailSheet(
             Spacer(Modifier.height(AapsTheme.spacing.small))
             when {
                 boost.active -> {
-                    Text(stringResource(UiStrings.essential_boost_active, boost.remainingMinutes), style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        loopTargetText?.let { stringResource(UiStrings.essential_boost_active_target, boost.remainingMinutes, it) }
+                            ?: stringResource(UiStrings.essential_boost_active, boost.remainingMinutes),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
                     Spacer(Modifier.height(AapsTheme.spacing.small))
                     OutlinedButton(onClick = onCancelBoost, enabled = commandsAllowed, modifier = Modifier.fillMaxWidth()) {
                         Text(stringResource(UiStrings.essential_boost_cancel))
@@ -114,7 +119,14 @@ fun EssentialDetailSheet(
             SectionDivider()
             Text(stringResource(UiStrings.essential_insulin_on_board), style = MaterialTheme.typography.titleSmall)
             IobLine(iob)
-            AgeRow(stringResource(UiStrings.essential_target), state.targetText)
+            AgeRow(
+                stringResource(UiStrings.essential_target),
+                if (loopTargetText != null && loopTargetText != state.targetText) {
+                    stringResource(UiStrings.essential_target_loop, state.targetText, loopTargetText)
+                } else {
+                    state.targetText
+                },
+            )
             AgeRow(stringResource(UiStrings.essential_activity_title), stringResource(UiStrings.essential_activity, state.stepsText, state.hrText))
             state.tir?.let { tir ->
                 val vsYesterday = tir.deltaVsYesterday?.let { delta ->

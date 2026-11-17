@@ -3,8 +3,9 @@ package app.aaps.core.interfaces.aps
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * The manual AIMI Boost: a short TPO session the user starts by hand, which raises max SMB in hyper,
- * max basal and the Autodrive max basal by at most 20 % of the user's own values, for 60 minutes.
+ * The manual AIMI Boost: a short TPO session the user starts by hand after eating, for 60 minutes. It
+ * raises max SMB in hyper, max basal and the Autodrive max basal by the strength the user set (30 % by
+ * default, 100 % at most), keeps the loop target at 80 mg/dL at most, and ends early under 65 mg/dL.
  *
  * The screen only asks; the AIMI plugin decides. Every guard is checked again in [start], so a screen
  * that shows a stale state can never start a Boost the plugin would refuse.

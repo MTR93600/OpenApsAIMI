@@ -141,6 +141,9 @@ fun EssentialDashboardHome(
     val predictions by graphViewModel.predictionsFlow.collectAsStateWithLifecycle()
     val boost by essentialViewModel.boost.collectAsStateWithLifecycle()
     val boostPercent by essentialViewModel.boostPercent.collectAsStateWithLifecycle()
+    // The target the loop really uses, which the profile target does not show (AIMI's own rise target, the
+    // Boost cap at 80). Read again at each minute tick.
+    val loopTargetText = essentialViewModel.loopTargetMgdl(nowMs)?.let { profileUtil.fromMgdlToStringWithUnits(it) }
 
     var rangeHours by remember { mutableIntStateOf(ESSENTIAL_RANGES.first()) }
     var pullProgress by remember { mutableFloatStateOf(0f) }
@@ -237,7 +240,8 @@ fun EssentialDashboardHome(
             if (boost.active) {
                 Spacer(Modifier.height(AapsTheme.spacing.small))
                 Text(
-                    stringResource(UiStrings.essential_boost_active, boost.remainingMinutes),
+                    loopTargetText?.let { stringResource(UiStrings.essential_boost_active_target, boost.remainingMinutes, it) }
+                        ?: stringResource(UiStrings.essential_boost_active, boost.remainingMinutes),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -370,6 +374,7 @@ fun EssentialDashboardHome(
             state = state,
             boost = boost,
             boostPercent = boostPercent,
+            loopTargetText = loopTargetText,
             onBoostPercentStep = essentialViewModel::changeBoostPercent,
             commandsAllowed = commandsAllowed,
             decisions = decisions,

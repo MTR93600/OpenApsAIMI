@@ -412,6 +412,8 @@ internal data class AimiDecisionContext(
         var effort_smb_after_u: Double? = null,
         /** True when the confirmed-meal floor raised the multiplier this tick. */
         var effort_smb_floored_by_meal: Boolean? = null,
+        /** True while the user's manual Boost runs (target 80 at most, wider SMB and basal ceilings). */
+        var manual_boost_active: Boolean? = null,
         /**
          * Aggressive-rise floor budget state. The episode budget is out of the dose path, but its
          * accounting still runs, and its absence from the export is why the 2026-08-10 diagnosis
@@ -788,6 +790,7 @@ internal data class AimiDecisionContext(
             base.put("effort_smb_before_u", baseline_state.effort_smb_before_u ?: AimiJson.NULL)
             base.put("effort_smb_after_u", baseline_state.effort_smb_after_u ?: AimiJson.NULL)
             base.put("effort_smb_floored_by_meal", baseline_state.effort_smb_floored_by_meal ?: AimiJson.NULL)
+            base.put("manual_boost_active", baseline_state.manual_boost_active ?: AimiJson.NULL)
             base.put("rise_floor_spent_u", baseline_state.rise_floor_spent_u ?: AimiJson.NULL)
             base.put("variable_sens_mgdl", baseline_state.variable_sens_mgdl ?: AimiJson.NULL)
             base.put(

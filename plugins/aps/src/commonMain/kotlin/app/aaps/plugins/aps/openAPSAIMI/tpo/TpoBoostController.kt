@@ -19,6 +19,7 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
@@ -60,7 +61,7 @@ class TpoBoostController(
     }
 
     override val state: StateFlow<AimiBoostState> = merge(ticker, refresh)
-        .map { compute() }
+        .map { computeSafely() }
         .stateIn(scope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), AimiBoostState())
 
     override suspend fun start(): AimiBoostStartResult {
@@ -85,14 +86,33 @@ class TpoBoostController(
         return reverted
     }
 
+    /**
+     * [compute], which never throws. A throw inside the state flow would end it, and the screen would keep
+     * the last state for good: a Boost that ended still showing "Cancel boost" (reported 2026-11-17). On a
+     * failure the state comes from the session file alone, and the next refresh tries again.
+     */
+    private suspend fun computeSafely(): AimiBoostState = try {
+        compute()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        aapsLogger.error(LTag.APS, "TPO manual boost state failed", e)
+        val nowMs = aimiWallClockMs()
+        runningBoostState(nowMs) ?: AimiBoostState()
+    }
+
     private suspend fun compute(): AimiBoostState {
         val nowMs = aimiWallClockMs()
-        val session = tpo.currentSession()
-        if (session != null && session.packId == TpoPackId.MANUAL_BOOST && session.isRunning() && session.expiresAtMs > nowMs) {
-            return AimiBoostState(available = false, active = true, remainingMinutes = remainingMinutes(session.expiresAtMs, nowMs))
-        }
+        runningBoostState(nowMs)?.let { return it }
         val reason = reason(nowMs)
         return AimiBoostState(available = reason == null, unavailableReason = reason)
+    }
+
+    /** The state of a Boost that runs now, or null. Past its end time a session is not running, whatever its status. */
+    private fun runningBoostState(nowMs: Long): AimiBoostState? {
+        val session = tpo.currentSession() ?: return null
+        if (session.packId != TpoPackId.MANUAL_BOOST || !session.isRunning() || session.expiresAtMs <= nowMs) return null
+        return AimiBoostState(available = false, active = true, remainingMinutes = remainingMinutes(session.expiresAtMs, nowMs))
     }
 
     private suspend fun reason(nowMs: Long): AimiBoostUnavailableReason? = TpoBoostEligibility.check(

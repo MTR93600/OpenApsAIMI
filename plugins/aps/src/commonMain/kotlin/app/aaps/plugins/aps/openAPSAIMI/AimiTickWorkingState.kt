@@ -162,6 +162,12 @@ internal class AimiTickWorkingState {
     var pkpdAbsorptionGuardAppliedThisTick: Boolean = false
     var isConfirmedHighRiseThisTick: Boolean = false
     var criticalSafetyZeroedThisTick: Boolean = false
+
+    /** A manual Boost runs this tick. Read once, when the basal schedule is built. */
+    var manualBoostActive: Boolean = false
+
+    /** The sport guard halved the SMB for a Boost this tick (set by safety precautions, read by the finalize). */
+    var sportHalvedForBoostThisTick: Boolean = false
     var tickCobGrams: Double = Double.NaN
     var aimiDecisionExportedThisTick: Boolean = false
     var pendingDecisionCtxForExport: AimiDecisionContext? = null

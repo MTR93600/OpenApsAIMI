@@ -16,6 +16,7 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaDecision
 import app.aaps.plugins.aps.openAPSAIMI.patient.HarmoniaHarmonizer
 import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertainty
 import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertaintyBuilder
+import app.aaps.plugins.aps.openAPSAIMI.tpo.ManualBoostSafety
 import app.aaps.plugins.aps.openAPSAIMI.patient.MealCertaintyLevel
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
@@ -241,6 +242,9 @@ internal fun decideFinalizeAndCapSmb(
     iobActivityNow: Double,
     cob: Float,
     effort: EffortActivityBelief.Assessment?,
+    manualBoostActive: Boolean,
+    /** Read after the safety precautions below, which set it. */
+    sportHalvedForBoost: () -> Boolean,
     mealCertainty: MealCertainty?,
     physiologicalPhase: PhysiologicalPhaseClassifier.Output?,
     slowCarbBudgetU: Double,
@@ -445,7 +449,13 @@ internal fun decideFinalizeAndCapSmb(
         slowCarbWindowMs = slowCarbWindowMs,
         slowCarbDeliveredU = slowCarbDeliveredU,
         effortFactorRaw = rawEffortFactor,
-        effortFactorApplied = MealCertaintyBuilder.effortSmbFactorFor(mealCertainty, rawEffortFactor),
+        // During a manual Boost the effort factor is not applied on top of the sport half, and never cuts
+        // below half otherwise, see ManualBoostSafety.
+        effortFactorApplied = ManualBoostSafety.effortFactor(
+            MealCertaintyBuilder.effortSmbFactorFor(mealCertainty, rawEffortFactor),
+            manualBoostActive,
+            sportHalvedForBoost(),
+        ),
         confirmedMeal = mealCertainty?.level == MealCertaintyLevel.HIGH,
         effortStateName = "${effort?.state?.name}",
         effortPostureName = "${effort?.posture?.name}",

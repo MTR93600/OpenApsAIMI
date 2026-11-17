@@ -834,6 +834,7 @@
     <string name="essential_iob">IOB</string>
     <string name="essential_basal_temp">Basal</string>
     <string name="essential_target">Target</string>
+    <string name="essential_target_loop" comment="%1$s=target of the profile or temp target, %2$s=target the loop really uses now, both with unit. Example: 100 mg/dL (loop uses 70 mg/dL)">%1$s (loop uses %2$s)</string>
     <string name="essential_tir" comment="%1$s=percent of time in range, already formatted. Example: 90">TIR %1$s %%</string>
     <string name="essential_tir_delta" comment="%1$s=signed change in points against yesterday. Example: -9">%1$s vs yesterday</string>
     <string name="essential_activity" comment="%1$s=steps today, %2$s=heart rate with unit. Example: 7632 · 71 bpm">%1$s · %2$s</string>
@@ -843,6 +844,7 @@
     <string name="essential_boost_pull_down">Pull the shape down to cancel the boost</string>
     <string name="essential_boost_release_cancel">Release to cancel the boost</string>
     <string name="essential_boost_active" comment="%1$d=minutes left. Example: Boost on, 42 min left">Boost on, %1$d min left</string>
+    <string name="essential_boost_active_target" comment="%1$d=minutes left, %2$s=target the loop uses now, with unit. Example: Boost on, 42 min left · target 80 mg/dL">Boost on, %1$d min left · target %2$s</string>
     <string name="essential_boost_title">Boost</string>
     <string name="essential_boost_explain" comment="%1$d=the boost strength in percent. Example: 30">For 60 minutes: raises max SMB in hyper, max basal and the Autodrive max basal by %1$d percent of your values at most, and keeps the AIMI target at 80 mg/dL at most. Your values come back by themselves. It stops early if glucose goes under 65 mg/dL.</string>
     <string name="essential_boost_strength">Strength of the next boost</string>

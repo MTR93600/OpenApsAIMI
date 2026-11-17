@@ -2012,6 +2012,7 @@
 <string name="reason_prebolus_lunch2">&#160;Microbolusing 2/2 Lunch Mode %.2fU.</string>
 <string name="reason_prebolus_snack">&#160;Microbolusing Snack Mode %.2fU.</string>
 <string name="reason_safety_sport_meal_reduction">🏃‍♂️ Sport safety softened by meal: %1$.2fU → %2$.2fU</string>
+<string name="reason_safety_sport_boost_half" comment="%1$.2f=SMB before, %2$.2f=SMB after, in units. Example: 🏃‍♂️ Activity earlier, Boost running: SMB halved 4.40U → 2.20U">🏃‍♂️ Activity earlier, Boost running: SMB halved %1$.2fU → %2$.2fU</string>
 <string name="reason_sensor_lag">  • SensorLag > Historic ➝ x0.85\n</string>
 <string name="reason_sensor_lag_lower">  • SensorLag &lt; Historic ➝ x1.2\n</string>
 <string name="reason_set_temp_basal">; setting current basal of %1$.2f as temp.</string>
