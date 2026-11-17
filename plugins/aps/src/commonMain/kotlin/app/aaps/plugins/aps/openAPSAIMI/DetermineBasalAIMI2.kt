@@ -4263,6 +4263,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 override fun setTargetBg(value: Float) { targetBg = value }
                 override fun targetBg() = this@DetermineBasalaimiSMB2.targetBg
             },
+            manualBoostActive = ::tpoOrchestrator.isInitialized && tpoOrchestrator.manualBoostActive(ctx.currentTime),
         )
         return GlobalAimiBasalScheduleBootstrap(
             pumpCaps = schedule.pumpCaps,

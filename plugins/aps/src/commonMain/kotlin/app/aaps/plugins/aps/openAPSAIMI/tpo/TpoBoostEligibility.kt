@@ -34,6 +34,15 @@ internal object TpoBoostEligibility {
     /** At this fall per 5 minutes or faster, glucose is going down. */
     const val FALLING_DELTA_MGDL = -2.0
 
+    /**
+     * A running Boost ends when glucose goes under this. The user chose 65 and not 70: just after a meal
+     * a dip to the high 60s usually comes back up by itself, and ending the Boost there would waste it.
+     */
+    const val END_BELOW_MGDL = 65.0
+
+    /** True when a running Boost must end now: glucose is known and under [END_BELOW_MGDL]. */
+    fun shouldEndForLow(bgMgdl: Double): Boolean = bgMgdl.isFinite() && bgMgdl < END_BELOW_MGDL
+
     fun check(
         isAimi: Boolean,
         loopClosed: Boolean,
@@ -44,9 +53,9 @@ internal object TpoBoostEligibility {
     ): AimiBoostUnavailableReason? {
         if (!isAimi) return AimiBoostUnavailableReason.NOT_AIMI
         if (!loopClosed) return AimiBoostUnavailableReason.LOOP_NOT_CLOSED
-        if (activeSession != null && activeSession.isRunning()) {
-            return if (activeSession.packId == TpoPackId.MANUAL_BOOST) AimiBoostUnavailableReason.ALREADY_ACTIVE
-            else AimiBoostUnavailableReason.OTHER_SESSION
+        // A running protective session does not block: the Boost replaces it
+        if (activeSession != null && activeSession.isRunning() && activeSession.packId == TpoPackId.MANUAL_BOOST) {
+            return AimiBoostUnavailableReason.ALREADY_ACTIVE
         }
         if (tick == null || nowMs - tick.nowMs !in 0..MAX_TICK_AGE_MS) return AimiBoostUnavailableReason.NO_RECENT_TICK
         if (!tick.bgMgdl.isFinite() || !tick.deltaMgdl5m.isFinite()) return AimiBoostUnavailableReason.NO_RECENT_TICK

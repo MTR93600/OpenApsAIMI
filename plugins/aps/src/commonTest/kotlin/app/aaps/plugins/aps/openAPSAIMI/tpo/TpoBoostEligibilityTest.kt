@@ -4,7 +4,9 @@ import app.aaps.core.interfaces.aps.AimiBoostUnavailableReason
 import app.aaps.plugins.aps.openAPSAIMI.advisor.tuning.TuningStepTier
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** Every guard of the manual Boost must block on its own. */
 class TpoBoostEligibilityTest {
@@ -45,11 +47,20 @@ class TpoBoostEligibilityTest {
     }
 
     @Test
-    fun a_running_session_blocks() {
+    fun only_a_running_boost_blocks_a_second_one() {
         assertEquals(AimiBoostUnavailableReason.ALREADY_ACTIVE, check(session = session(TpoPackId.MANUAL_BOOST)))
-        assertEquals(AimiBoostUnavailableReason.OTHER_SESSION, check(session = session(TpoPackId.POST_HYPO_RECOVERY)))
-        assertEquals(AimiBoostUnavailableReason.OTHER_SESSION, check(session = session(TpoPackId.POOR_SLEEP_WINDOW, TpoSessionStatus.PENDING_LLM)))
-        assertNull(check(session = session(TpoPackId.POST_HYPO_RECOVERY, TpoSessionStatus.REVERTED)))
+        // A protective session does not block: the Boost replaces it
+        assertNull(check(session = session(TpoPackId.POST_HYPO_RECOVERY)))
+        assertNull(check(session = session(TpoPackId.POOR_SLEEP_WINDOW, TpoSessionStatus.PENDING_LLM)))
+        assertNull(check(session = session(TpoPackId.MANUAL_BOOST, TpoSessionStatus.REVERTED)))
+    }
+
+    @Test
+    fun a_running_boost_ends_only_under_65() {
+        assertTrue(TpoBoostEligibility.shouldEndForLow(64.0))
+        assertFalse(TpoBoostEligibility.shouldEndForLow(65.0))
+        assertFalse(TpoBoostEligibility.shouldEndForLow(68.0))
+        assertFalse(TpoBoostEligibility.shouldEndForLow(Double.NaN))
     }
 
     @Test

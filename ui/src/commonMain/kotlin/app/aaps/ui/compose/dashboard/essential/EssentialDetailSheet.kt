@@ -28,6 +28,7 @@ import app.aaps.ui.UiStrings
 import app.aaps.ui.compose.dashboard.glass.GlassUiState
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 /** One past decision, formatted: when, and what was delivered. */
 data class EssentialDecision(val time: String, val what: String)
@@ -90,6 +91,14 @@ fun EssentialDetailSheet(
             SectionDivider()
             Text(stringResource(UiStrings.essential_insulin_on_board), style = MaterialTheme.typography.titleSmall)
             IobLine(iob)
+            AgeRow(stringResource(UiStrings.essential_target), state.targetText)
+            AgeRow(stringResource(UiStrings.essential_activity_title), stringResource(UiStrings.essential_activity, state.stepsText, state.hrText))
+            state.tir?.let { tir ->
+                val vsYesterday = tir.deltaVsYesterday?.let { delta ->
+                    stringResource(UiStrings.essential_tir_delta, if (delta > 0) "+$delta" else delta.toString())
+                } ?: ""
+                AgeRow(stringResource(UiStrings.essential_tir, tir.inRangePct.roundToInt().toString()), vsYesterday)
+            }
 
             SectionDivider()
             Text(stringResource(UiStrings.essential_ages), style = MaterialTheme.typography.titleSmall)
@@ -147,7 +156,6 @@ fun AimiBoostUnavailableReason.text(): String = stringResource(
         AimiBoostUnavailableReason.FALLING         -> UiStrings.essential_boost_reason_falling
         AimiBoostUnavailableReason.RECENT_LOW      -> UiStrings.essential_boost_reason_recent_low
         AimiBoostUnavailableReason.REBOUND_GUARD   -> UiStrings.essential_boost_reason_rebound
-        AimiBoostUnavailableReason.OTHER_SESSION   -> UiStrings.essential_boost_reason_other_session
         AimiBoostUnavailableReason.ALREADY_ACTIVE  -> UiStrings.essential_boost_reason_already
         AimiBoostUnavailableReason.AT_LIMIT        -> UiStrings.essential_boost_reason_at_limit
     }

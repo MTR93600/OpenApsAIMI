@@ -120,6 +120,9 @@ interface AimiTpo {
     /** Expires or reverts an active session. Runs even when the TPO master switch is off. */
     fun onTickStart(nowMs: Long): Boolean
 
+    /** True while the user's manual Boost runs: the dosing then keeps its target at 80 mg/dL at most. */
+    fun manualBoostActive(nowMs: Long): Boolean
+
     /** Offers the tick's patient state to the session logic. `true` when something changed. */
     fun onPatientStateReady(
         patientState: PatientStateSnapshot,

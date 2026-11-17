@@ -9,22 +9,24 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * The plan of the manual Boost: three ceilings raised by at most 20 % of the user's own values.
+ * The plan of the manual Boost: three ceilings raised by at most 30 % of the user's own values.
  *
  * - max SMB in hyper ([DoubleKey.OApsAIMIHighBGMaxSMB])
  * - max basal ([DoubleKey.ApsMaxBasal])
  * - the Autodrive max basal ([DoubleKey.autodriveMaxBasal])
  *
  * Both basal ceilings also stay under the age hard limit. The result is rounded **down** to 0.01, so
- * rounding can never pass +20 %. Max SMB, max IOB and the target are not touched: the hard safety limits
- * stay where the user set them.
+ * rounding can never pass +30 %. Max SMB and max IOB are not touched: those hard safety limits stay where
+ * the user set them. The target is not a preference here: during a Boost AIMI keeps its own target at
+ * 80 mg/dL at most (`decideBasalSchedule`).
  *
- * The plan reads the values in force now. A Boost never starts while another session runs
- * (`TpoBoostEligibility`), so these are the user's own values, and two Boosts can never stack.
+ * The plan reads the values in force now. `TpoOrchestrator.startManualBoost` first gives back the
+ * values of a protective session that is running, so these are the user's own values, and two Boosts
+ * can never stack.
  */
 internal object TpoBoostPlan {
 
-    const val FACTOR = 1.20
+    const val FACTOR = 1.30
     const val TTL_MS = 60L * 60L * 1000L
 
     /** [value] raised by [FACTOR], capped by [keyMax] and [hardMax], rounded down to 0.01, never lowered. */

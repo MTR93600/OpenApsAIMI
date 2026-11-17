@@ -844,7 +844,7 @@
     <string name="essential_boost_release_cancel">Release to cancel the boost</string>
     <string name="essential_boost_active" comment="%1$d=minutes left. Example: Boost on, 42 min left">Boost on, %1$d min left</string>
     <string name="essential_boost_title">Boost</string>
-    <string name="essential_boost_explain">Raises max SMB in hyper, max basal and the Autodrive max basal by 20 percent of your values at most, for 60 minutes. Your values come back by themselves.</string>
+    <string name="essential_boost_explain">For 60 minutes: raises max SMB in hyper, max basal and the Autodrive max basal by 30 percent of your values at most, and keeps the AIMI target at 80 mg/dL at most. Your values come back by themselves. It stops early if glucose goes under 65 mg/dL.</string>
     <string name="essential_boost_start">Start boost</string>
     <string name="essential_boost_cancel">Cancel boost</string>
     <string name="essential_boost_started" comment="%1$d=minutes. Example: Boost started for 60 min">Boost started for %1$d min</string>
@@ -857,10 +857,8 @@
     <string name="essential_boost_reason_falling">Boost unavailable: glucose is falling.</string>
     <string name="essential_boost_reason_recent_low">Boost unavailable: there was a low in the last 75 minutes.</string>
     <string name="essential_boost_reason_rebound">Boost unavailable: AIMI is protecting a rebound after a low.</string>
-    <string name="essential_boost_reason_other_session">Boost unavailable: a protection session is running.</string>
     <string name="essential_boost_reason_already">A boost is already running.</string>
     <string name="essential_boost_reason_at_limit">Boost unavailable: your max values are already at their limits.</string>
-    <string name="essential_scrub_hint">Slide your finger on the curve</string>
     <string name="essential_readout_time">Time</string>
     <string name="essential_readout_bg">Glucose</string>
     <string name="essential_readout_basal">Basal</string>
@@ -885,5 +883,13 @@
     <string name="essential_shape_description" comment="Screen reader text. %1$s=glucose with unit, %2$s=situation. Example: Glucose 168 mg/dL, Rising">Glucose %1$s, %2$s</string>
     <string name="essential_previous_step">Earlier</string>
     <string name="essential_next_step">Later</string>
+    <string name="essential_delta_per_5min" comment="%1$s=glucose change with its sign, average per 5 minutes. Example: +1 in 5 min">%1$s in 5 min</string>
+    <string name="essential_chart_title" comment="Title of the chart card. %1$d=number of hours shown. Example: Last 3 h">Last %1$d h</string>
+    <string name="essential_gauge_title" comment="Label of the gauge under the glucose shape, which fills while the user pulls the shape">Pull the shape</string>
+    <string name="essential_gauge_boost" comment="Short label: pulling the shape up starts the boost">↑ Boost</string>
+    <string name="essential_gauge_cancel" comment="Short label: pulling the shape down cancels the running boost">↓ Cancel boost</string>
+    <string name="essential_hint_going_down">Glucose is low or going down: no boost.</string>
+    <string name="essential_hint_boost_later">A boost is offered when glucose heads high.</string>
+    <string name="essential_activity_title">Activity</string>
 
 </resources>

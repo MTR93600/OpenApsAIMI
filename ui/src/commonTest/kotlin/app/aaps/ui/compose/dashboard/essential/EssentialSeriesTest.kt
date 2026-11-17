@@ -56,4 +56,22 @@ class EssentialSeriesTest {
         assertNull(EssentialSeries.smbAt(boluses, now - 5 * minute))
         assertNull(EssentialSeries.smbAt(boluses, now - 40 * minute))
     }
+
+    @Test
+    fun chart_scale_keeps_room_around_a_day_in_range() {
+        assertEquals(40.0..250.0, EssentialSeries.chartScale(listOf(95.0, 140.0, 170.0), 40.0, 250.0))
+    }
+
+    @Test
+    fun chart_scale_widens_only_for_values_outside() {
+        assertEquals(35.0..310.0, EssentialSeries.chartScale(listOf(35.0, 120.0, 310.0), 40.0, 250.0))
+        assertEquals(40.0..250.0, EssentialSeries.chartScale(emptyList(), 40.0, 250.0))
+    }
+
+    @Test
+    fun basal_bars_take_the_rate_at_the_start_of_each_slot() {
+        val basal = listOf(GraphDataPoint(now - 30 * minute, 0.8), GraphDataPoint(now - 10 * minute, 1.4))
+        val bars = EssentialSeries.basalBars(basal, now - 40 * minute, now, 4)
+        assertEquals(listOf(null, 0.8, 0.8, 1.4), bars)
+    }
 }

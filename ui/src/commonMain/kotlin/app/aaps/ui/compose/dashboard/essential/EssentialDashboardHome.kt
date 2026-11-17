@@ -1,13 +1,16 @@
 package app.aaps.ui.compose.dashboard.essential
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -23,11 +26,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.aaps.core.interfaces.InterfacesStrings
+import app.aaps.core.interfaces.aps.AimiBoostUnavailableReason
 import app.aaps.core.interfaces.dashboard.AimiGlassDashboardData
 import app.aaps.core.interfaces.overview.graph.BolusType
 import app.aaps.core.interfaces.source.CgmWarmupStatus
@@ -36,7 +44,6 @@ import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.LocalDateUtil
 import app.aaps.core.ui.compose.LocalDecimalFormatter
 import app.aaps.core.ui.compose.LocalProfileUtil
-import app.aaps.core.ui.compose.StatusLevel
 import app.aaps.core.ui.compose.metroViewModel
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.ui.UiStrings
@@ -50,15 +57,17 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.abs
-import kotlin.math.roundToInt
 
-private const val DEFAULT_RANGE_HOURS = 6
 private const val MESSAGE_MS = 4_000L
 private const val RECENT_DECISIONS = 6
 
+/** The vertical axis of the chart always shows at least this range, in mg/dL. */
+private const val CHART_FLOOR_MGDL = 40.0
+private const val CHART_CEILING_MGDL = 250.0
+
 /**
- * The Essential home: one living glucose shape, three quiet values under it, a scrub chart, and one
- * quiet status line. Details open on a tap of the shape.
+ * The Essential home: one living glucose shape with its pull gauge, three quiet values under it, and a
+ * scrub chart in a card. Details (target, ages, activity, recent decisions) open on a tap of the shape.
  *
  * Every value comes from the same view models and builders as Glass, so both skins show the same
  * numbers at the same moment. COB is never read.
@@ -99,7 +108,7 @@ fun EssentialDashboardHome(
     val predictions by graphViewModel.predictionsFlow.collectAsStateWithLifecycle()
     val boost by essentialViewModel.boost.collectAsStateWithLifecycle()
 
-    var rangeHours by remember { mutableIntStateOf(DEFAULT_RANGE_HOURS) }
+    var rangeHours by remember { mutableIntStateOf(ESSENTIAL_RANGES.first()) }
     var pullProgress by remember { mutableFloatStateOf(0f) }
     var detailOpen by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<EssentialMessage?>(null) }
@@ -153,15 +162,36 @@ fun EssentialDashboardHome(
     }
     val unavailable = stringResource(CoreUiStrings.value_unavailable_short)
 
+    // The page should fit the screen without scrolling: the shape takes what the other rows leave, between
+    // its smallest and largest size. On a very small screen it stops at its smallest size and the page scrolls.
+    val density = LocalDensity.current
+    var restHeight by remember { mutableStateOf<Dp?>(null) }
     Surface(modifier = modifier, color = MaterialTheme.colorScheme.background) {
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+        val shapeBox = restHeight?.let { (maxHeight - it).coerceIn(EssentialShapeDimens.minBox, EssentialShapeDimens.box) } ?: EssentialShapeDimens.minBox
         Column(
             Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
+                .onSizeChanged { restHeight = with(density) { it.height.toDp() } - shapeBox }
                 .padding(horizontal = AapsTheme.spacing.extraLarge, vertical = AapsTheme.spacing.medium),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(mood.label(), style = MaterialTheme.typography.labelLarge, color = mood.colors().core)
+            val moodColors = mood.colors()
+            // Loop state on the left, the situation in words on the right: the shape is never the only
+            // place a low is told (colour alone is not enough)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    state.loopStatusText ?: "",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(mood.label(), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = moodColors.core, maxLines = 1)
+            }
             if (boost.active) {
                 Spacer(Modifier.height(AapsTheme.spacing.small))
                 Text(
@@ -178,37 +208,42 @@ fun EssentialDashboardHome(
                 bgText = bgText,
                 unitText = state.unit,
                 trendSymbol = state.trendArrow?.symbol ?: "",
-                deltaText = state.deltaText,
+                deltaText = if (state.deltaText == unavailable) unavailable else stringResource(UiStrings.essential_delta_per_5min, state.deltaText),
                 description = stringResource(UiStrings.essential_shape_description, bgWithUnit, mood.label()),
                 gesture = gesture,
                 onPull = { if (gesture == ShapeGesture.START) essentialViewModel.startBoost() else if (gesture == ShapeGesture.CANCEL) essentialViewModel.cancelBoost() },
                 onPullProgress = { pullProgress = it },
                 onTap = { detailOpen = true },
+                boxSize = shapeBox,
             )
 
-            if (gesture != ShapeGesture.NONE) {
-                LinearProgressIndicator(progress = { pullProgress }, modifier = Modifier.fillMaxWidth().padding(horizontal = AapsTheme.spacing.xxLarge))
-                Text(
-                    gesture.hint(pullProgress >= 1f),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = AapsTheme.spacing.small),
+            // The gauge under the shape. Hidden on a phone that may not send commands and when AIMI is not the algorithm.
+            if (commandsAllowed && boost.unavailableReason != AimiBoostUnavailableReason.NOT_AIMI) {
+                PullGauge(
+                    gesture = gesture,
+                    progress = pullProgress,
+                    color = moodColors.accent,
+                    hint = when {
+                        gesture != ShapeGesture.NONE -> gesture.hint(pullProgress >= 1f)
+                        mood.isGoingDown()           -> stringResource(UiStrings.essential_hint_going_down)
+                        else                         -> boost.unavailableReason?.text() ?: stringResource(UiStrings.essential_hint_boost_later)
+                    },
+                    showBoostLabel = !mood.isGoingDown(),
                 )
             }
             message?.let { Text(it.text(), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = AapsTheme.spacing.small)) }
 
-            Spacer(Modifier.height(AapsTheme.spacing.large))
+            Spacer(Modifier.height(AapsTheme.spacing.medium))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                MiniValue(state.iobText, stringResource(UiStrings.essential_iob))
+                MiniValue(homeStatus.effectiveBasalText ?: unavailable, stringResource(UiStrings.essential_basal_temp))
                 MiniValue(
                     prediction60?.let { profileUtil.fromMgdlToStringWithUnits(toMgdl(it.value)) } ?: unavailable,
                     stringResource(UiStrings.essential_prediction_60),
                 )
-                MiniValue(state.iobText, stringResource(UiStrings.essential_iob))
-                MiniValue(homeStatus.effectiveBasalText ?: unavailable, stringResource(UiStrings.essential_basal_temp))
-                MiniValue(state.targetText, stringResource(UiStrings.essential_target))
             }
 
-            Spacer(Modifier.height(AapsTheme.spacing.large))
+            Spacer(Modifier.height(AapsTheme.spacing.medium))
             EssentialChart(
                 data = EssentialChartData(
                     bg = bgReadings,
@@ -217,10 +252,13 @@ fun EssentialDashboardHome(
                     boluses = treatmentData.boluses,
                     lowMark = chartConfig.lowMark,
                     highMark = chartConfig.highMark,
+                    scaleFloor = profileUtil.fromMgdlToUnits(CHART_FLOOR_MGDL),
+                    scaleCeiling = profileUtil.fromMgdlToUnits(CHART_CEILING_MGDL),
                 ),
                 nowMs = nowMs,
                 rangeHours = rangeHours,
                 onRangeChange = { rangeHours = it },
+                tint = moodColors.core,
                 readoutAt = { time ->
                     EssentialReadout(
                         time = dateUtil.timeString(time),
@@ -233,28 +271,7 @@ fun EssentialDashboardHome(
                 timeLabel = { dateUtil.timeString(it) },
                 modifier = Modifier.fillMaxWidth(),
             )
-
-            state.tir?.let { tir ->
-                Spacer(Modifier.height(AapsTheme.spacing.medium))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AapsTheme.spacing.medium)) {
-                    Text(stringResource(UiStrings.essential_tir, tir.inRangePct.roundToInt().toString()), style = MaterialTheme.typography.labelMedium)
-                    tir.deltaVsYesterday?.let { delta ->
-                        val signed = if (delta > 0) "+$delta" else delta.toString()
-                        Text(stringResource(UiStrings.essential_tir_delta, signed), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(AapsTheme.spacing.medium))
-            StatusLine(
-                listOfNotNull(
-                    state.insulinAge to state.insulinAgeStatus,
-                    state.cannulaAge to state.cannulaAgeStatus,
-                    state.sensorAge to state.sensorAgeStatus,
-                    state.loopStatusText?.let { it to (if (state.loopIsRunning) StatusLevel.NORMAL else StatusLevel.WARNING) },
-                    stringResource(UiStrings.essential_activity, state.stepsText, state.hrText) to StatusLevel.NORMAL,
-                ),
-            )
+        }
         }
     }
 
@@ -280,36 +297,58 @@ fun EssentialDashboardHome(
 @Composable
 private fun MiniValue(value: String, label: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1)
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 /**
- * The quiet line at the bottom: each item its own text, never glued together in code. An age that is
- * due or past due stands out in the theme's warning or critical colour; the shape does not change for it.
+ * The gauge under the shape: what a pull would do, how far the pull is, and one line of advice. In a
+ * situation where glucose is low or going down it offers nothing to pull and says so.
+ *
+ * @param showBoostLabel false when glucose is low or going down: no Boost label at all, not even grey
  */
 @Composable
-private fun StatusLine(items: List<Pair<String, StatusLevel>>) {
-    val general = AapsTheme.generalColors
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AapsTheme.spacing.medium, Alignment.CenterHorizontally)) {
-        items.forEach { (item, level) ->
-            Text(
-                item,
-                style = MaterialTheme.typography.labelSmall,
-                color = when (level) {
-                    StatusLevel.CRITICAL -> general.statusCritical
-                    StatusLevel.WARNING  -> general.statusWarning
-                    else                 -> MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.weight(1f, fill = false),
-            )
+private fun PullGauge(gesture: ShapeGesture, progress: Float, color: Color, hint: String, showBoostLabel: Boolean) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(Modifier.fillMaxWidth().padding(top = AapsTheme.spacing.small)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(UiStrings.essential_gauge_title), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = muted, modifier = Modifier.weight(1f))
+            when {
+                gesture == ShapeGesture.START  -> Surface(shape = CircleShape, color = color) {
+                    Text(
+                        stringResource(UiStrings.essential_gauge_boost),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = AapsTheme.generalColors.onBadge,
+                        modifier = Modifier.padding(horizontal = AapsTheme.spacing.large, vertical = AapsTheme.spacing.small),
+                    )
+                }
+
+                gesture == ShapeGesture.CANCEL -> Text(stringResource(UiStrings.essential_gauge_cancel), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = color)
+                showBoostLabel                 -> Text(stringResource(UiStrings.essential_gauge_boost), style = MaterialTheme.typography.labelLarge, color = muted.copy(alpha = 0.6f))
+            }
         }
+        LinearProgressIndicator(
+            progress = { progress },
+            color = color,
+            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            drawStopIndicator = {},
+            modifier = Modifier.fillMaxWidth().padding(top = AapsTheme.spacing.small),
+        )
+        Text(
+            hint,
+            style = MaterialTheme.typography.labelSmall,
+            color = muted,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(top = AapsTheme.spacing.small),
+        )
     }
 }
+
+/** Glucose is low or heading down: the skin never invites a pull for more insulin then. */
+private fun EssentialMood.isGoingDown(): Boolean =
+    this == EssentialMood.HYPO || this == EssentialMood.FALLING || this == EssentialMood.TRAJECTORY_HYPO
 
 @Composable
 private fun EssentialMood.label(): String = stringResource(

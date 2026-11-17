@@ -66,10 +66,11 @@ class TpoBoostController(
     override suspend fun start(): AimiBoostStartResult {
         val nowMs = aimiWallClockMs()
         reason(nowMs)?.let { return AimiBoostStartResult.Refused(it) }
-        val plan = TpoBoostPlan.build(preferences, hardLimits.maxBasal())
-        if (plan.changes.isEmpty()) return AimiBoostStartResult.Refused(AimiBoostUnavailableReason.AT_LIMIT)
-        val session = tpo.startManualBoost(plan, nowMs)
-            ?: return AimiBoostStartResult.Refused(AimiBoostUnavailableReason.OTHER_SESSION)
+        val hardMaxBasal = hardLimits.maxBasal()
+        val session = tpo.startManualBoost(nowMs) { TpoBoostPlan.build(preferences, hardMaxBasal) }
+            ?: return AimiBoostStartResult.Refused(
+                if (tpo.manualBoostActive(nowMs)) AimiBoostUnavailableReason.ALREADY_ACTIVE else AimiBoostUnavailableReason.AT_LIMIT
+            )
         refresh.tryEmit(Unit)
         return AimiBoostStartResult.Started(remainingMinutes(session.expiresAtMs, nowMs))
     }

@@ -1449,6 +1449,7 @@
 <string name="aimi_tpo_notification_ended_manual">Protection reverted — your saved preferences were restored.</string>
 
 <string name="aimi_tpo_notification_ended_superseded">Previous protection replaced by a higher-priority session.</string>
+<string name="aimi_tpo_notification_ended_low">Boost stopped because glucose went low. Your values are back.</string>
 
 
 

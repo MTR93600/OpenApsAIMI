@@ -77,20 +77,35 @@ class TpoOrchestrator @Inject constructor(
     fun currentSession(): TpoSessionDocument? = sessionManager.currentSession()
 
     /**
-     * Start the manual Boost with [plan]. The caller (`TpoBoostController`) has checked the guards; they
-     * are checked again here under the lock, so a session that started in between is never overwritten.
+     * Start the manual Boost. The caller (`TpoBoostController`) has checked the guards.
      *
-     * @return the session, or null when another session runs or there is nothing to change
+     * A protective session that is running ends first and gives its values back, so [buildPlan] reads the
+     * user's own values. A Boost that is already running is never started twice.
+     *
+     * @return the session, or null when a Boost already runs or there is nothing to change
      */
-    internal fun startManualBoost(plan: TpoApplyPlan, nowMs: Long): TpoSessionDocument? = sessionLock.withLock {
+    internal fun startManualBoost(nowMs: Long, buildPlan: () -> TpoApplyPlan): TpoSessionDocument? = sessionLock.withLock {
         val active = sessionManager.currentSession()
-        if (active != null && (active.status == TpoSessionStatus.ACTIVE || active.status == TpoSessionStatus.PENDING_LLM)) return null
+        if (active != null && (active.status == TpoSessionStatus.ACTIVE || active.status == TpoSessionStatus.PENDING_LLM)) {
+            if (active.packId == TpoPackId.MANUAL_BOOST) return null
+            sessionManager.supersedeActiveSession(preferences, historyRepo, nowMs)
+            prefsChangedThisTick = true
+            notifySessionEnded(TpoEndReason.SUPERSEDED)
+            aapsLogger.info(LTag.APS, "TPO ${active.packId.name} replaced by a manual boost")
+        }
+        val plan = buildPlan()
         if (plan.changes.isEmpty()) return null
         val session = sessionManager.startSession(plan, preferences, nowMs, llmResult = null, historyRepo = historyRepo, ttlMs = TpoBoostPlan.TTL_MS)
         prefsChangedThisTick = true
         notifySessionStarted(session)
         aapsLogger.info(LTag.APS, "TPO manual boost started, ${plan.changes.size} keys")
         session
+    }
+
+    /** True while a manual Boost runs, so the dosing keeps the target at 80 mg/dL at most. */
+    override fun manualBoostActive(nowMs: Long): Boolean {
+        val session = sessionManager.currentSession() ?: return false
+        return session.packId == TpoPackId.MANUAL_BOOST && session.status == TpoSessionStatus.ACTIVE && session.expiresAtMs > nowMs
     }
 
     fun revertNow(): Boolean = sessionLock.withLock {
@@ -131,6 +146,15 @@ class TpoOrchestrator @Inject constructor(
             minBgLookback75m = minBgLookback75m,
             reboundGuardActive = correctionAggressionDecision?.tier == CorrectionAggressionGate.Tier.REBOUND_GUARD,
         )
+        // A real low ends a running Boost, whatever the automatic TPO switch says. Nothing else does.
+        if (manualBoostActive(nowMs) && TpoBoostEligibility.shouldEndForLow(bgMgdl)) {
+            if (sessionManager.revertNow(preferences, historyRepo, nowMs)) {
+                prefsChangedThisTick = true
+                notifySessionEnded(TpoEndReason.LOW_GLUCOSE)
+                aapsLogger.info(LTag.APS, "TPO manual boost ended: glucose $bgMgdl mg/dL")
+                return true
+            }
+        }
         if (!isTpoEnabled()) return false
         if (!autonomyAllowsSession(preferences)) return false
 

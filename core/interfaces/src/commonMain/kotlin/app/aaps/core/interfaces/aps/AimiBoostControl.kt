@@ -58,9 +58,6 @@ enum class AimiBoostUnavailableReason {
     /** AIMI is protecting a rebound after a low. */
     REBOUND_GUARD,
 
-    /** Another TPO session (a protection) is running. */
-    OTHER_SESSION,
-
     /** A Boost is already running. */
     ALREADY_ACTIVE,
 

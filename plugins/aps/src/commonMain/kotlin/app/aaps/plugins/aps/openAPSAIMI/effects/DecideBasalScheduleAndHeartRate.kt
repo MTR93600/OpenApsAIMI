@@ -79,6 +79,7 @@ internal fun decideBasalSchedule(
     texts: TextResolver,
     consoleLog: MutableList<String>,
     calls: AimiBasalScheduleCalls,
+    manualBoostActive: Boolean,
 ): AimiBasalSchedule {
     rT.reason.append(texts.gs(ApsStrings.reason_maxsmb, calls.maxSmb()))
     var nowMinutes = calls.hourOfDay() + circadianMinute / 60.0 + circadianSecond / 3600.0
@@ -204,6 +205,17 @@ internal fun decideBasalSchedule(
         }
     }
 
+    // The user's manual Boost: they have eaten and asked for more action, so the target stays at 80 at
+    // most for its 60 minutes. It is the same kind of change as AIMI's own target when rising above: no
+    // temp target is declared, so that branch and the meal IOB headroom (NGR) stay on. min_bg is not
+    // lowered, so the low-side checks keep the user's own line.
+    val boostTarget = manualBoostTarget(targetBgLocal, manualBoostActive)
+    if (boostTarget != targetBgLocal) {
+        consoleLog.add(texts.gs(ApsStrings.console_target_bg_changed, targetBgLocal, boostTarget))
+        targetBgLocal = boostTarget
+        calls.setTargetBg(boostTarget.toFloat())
+    }
+
     return AimiBasalSchedule(
         pumpCaps = pumpCaps,
         profileCurrentBasal = profileCurrentBasal,
@@ -216,6 +228,13 @@ internal fun decideBasalSchedule(
         maxIobLimit = maxIobLimit,
     )
 }
+
+/** The highest target during a manual Boost, mg/dL. */
+internal const val MANUAL_BOOST_TARGET_MGDL = 80.0
+
+/** The target during a manual Boost: [target] when it is already at 80 mg/dL or lower, else 80. Unchanged without a Boost. */
+internal fun manualBoostTarget(target: Double, manualBoostActive: Boolean): Double =
+    if (manualBoostActive) minOf(target, MANUAL_BOOST_TARGET_MGDL) else target
 
 /**
  * The step counts of one tick, for the last 5, 10, 15, 30, 60 and 180 minutes.

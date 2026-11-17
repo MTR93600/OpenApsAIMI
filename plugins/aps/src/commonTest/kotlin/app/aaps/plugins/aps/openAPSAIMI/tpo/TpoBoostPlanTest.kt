@@ -6,22 +6,22 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** The manual Boost may raise each of its three ceilings by 20 % at most, never more. */
+/** The manual Boost may raise each of its three ceilings by 30 % at most, never more. */
 class TpoBoostPlanTest {
 
     @Test
-    fun raises_by_twenty_percent() {
-        assertEquals(1.2, TpoBoostPlan.boosted(1.0, keyMax = 15.0), 1e-9)
-        assertEquals(3.0, TpoBoostPlan.boosted(2.5, keyMax = 25.0), 1e-9)
+    fun raises_by_thirty_percent() {
+        assertEquals(1.3, TpoBoostPlan.boosted(1.0, keyMax = 15.0), 1e-9)
+        assertEquals(3.25, TpoBoostPlan.boosted(2.5, keyMax = 25.0), 1e-9)
     }
 
     @Test
     fun rounds_down_so_the_cap_is_never_passed() {
-        // 1.37 x 1.2 = 1.644 -> 1.64, never 1.65
-        assertEquals(1.64, TpoBoostPlan.boosted(1.37, keyMax = 15.0), 1e-9)
+        // 1.37 x 1.3 = 1.781 -> 1.78, never 1.79
+        assertEquals(1.78, TpoBoostPlan.boosted(1.37, keyMax = 15.0), 1e-9)
         for (cents in 5..2500) {
             val value = cents / 100.0
-            assertTrue(TpoBoostPlan.boosted(value, keyMax = 25.0) <= value * 1.2 + 1e-9)
+            assertTrue(TpoBoostPlan.boosted(value, keyMax = 25.0) <= value * 1.3 + 1e-9)
         }
     }
 
@@ -47,7 +47,7 @@ class TpoBoostPlanTest {
 
         assertEquals(TpoPackId.MANUAL_BOOST, plan.proposal.packId)
         assertEquals(
-            mapOf(DoubleKey.OApsAIMIHighBGMaxSMB.key to 2.4, DoubleKey.ApsMaxBasal.key to 3.6, DoubleKey.autodriveMaxBasal.key to 3.0),
+            mapOf(DoubleKey.OApsAIMIHighBGMaxSMB.key to 2.6, DoubleKey.ApsMaxBasal.key to 3.9, DoubleKey.autodriveMaxBasal.key to 3.25),
             plan.changes.associate { it.key.key to (it.newValue as Double) },
         )
     }

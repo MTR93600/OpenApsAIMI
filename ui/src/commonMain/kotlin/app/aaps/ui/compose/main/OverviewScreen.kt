@@ -314,6 +314,6 @@ fun OverviewScreen(
             }
             DashboardHomeSelection.OVERVIEW -> null
         },
-        isGlassSkin = homeSelection == DashboardHomeSelection.GLASS,
+        useGlassChrome = homeSelection == DashboardHomeSelection.GLASS || homeSelection == DashboardHomeSelection.ESSENTIAL,
     )
 }

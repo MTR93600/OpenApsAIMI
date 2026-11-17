@@ -24,10 +24,12 @@ enum class TpoPackId(val priority: Int) {
     POOR_SLEEP_WINDOW(priority = 1),
 
     /**
-     * The manual Boost, started only by the user (see `TpoBoostPlan`). The only pack that raises
-     * aggressiveness, so it has the lowest priority: any protective pack supersedes it.
+     * The manual Boost, started only by the user (see `TpoBoostPlan`) because they have eaten and want
+     * more action. It has the highest priority: no automatic pack can supersede it, and it replaces a
+     * protective pack that is running when it starts. Only a real low ends it early
+     * (`TpoBoostEligibility.shouldEndForLow`); the dosing safety (low suspend, max IOB) stays on all along.
      */
-    MANUAL_BOOST(priority = 0),
+    MANUAL_BOOST(priority = 4),
     ;
 
     companion object {

@@ -62,6 +62,7 @@ internal object TpoNotificationText {
             TpoEndReason.EXPIRED       -> rh.gs(ApsStrings.aimi_tpo_notification_ended_expired)
             TpoEndReason.MANUAL_REVERT -> rh.gs(ApsStrings.aimi_tpo_notification_ended_manual)
             TpoEndReason.SUPERSEDED    -> rh.gs(ApsStrings.aimi_tpo_notification_ended_superseded)
+            TpoEndReason.LOW_GLUCOSE   -> rh.gs(ApsStrings.aimi_tpo_notification_ended_low)
         }
         return TpoNotification(
             kind = TpoNotificationKind.SESSION_ENDED,

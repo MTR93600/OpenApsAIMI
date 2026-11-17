@@ -65,6 +65,9 @@ enum class TpoEndReason {
     EXPIRED,
     MANUAL_REVERT,
     SUPERSEDED,
+
+    /** A manual Boost ended early because glucose went low. */
+    LOW_GLUCOSE,
 }
 
 /**
