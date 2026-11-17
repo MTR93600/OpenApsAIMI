@@ -1,15 +1,18 @@
 package app.aaps.plugins.sync.tidepool.elements
 
 import app.aaps.core.interfaces.utils.DateUtil
-import app.aaps.plugins.sync.tidepool.utils.GsonInstance
+import app.aaps.plugins.sync.tidepool.utils.TidepoolTestJson
 import com.google.common.truth.Truth.assertThat
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.junit.jupiter.MockitoSettings
+import org.mockito.kotlin.any
+import org.mockito.kotlin.whenever
 import org.mockito.quality.Strictness
 
 /**
@@ -25,8 +28,14 @@ class BasalElementTest {
 
     @Mock lateinit var dateUtil: DateUtil
 
+    @BeforeEach
+    fun realDates() {
+        whenever(dateUtil.toISONoZone(any())).thenReturn("2026-08-05T12:00:00")
+        whenever(dateUtil.toISOAsUTC(any())).thenReturn("2026-08-05T10:00:00.000Z")
+    }
+
     private fun json(element: Any): JsonObject =
-        JsonParser.parseString(GsonInstance.defaultGsonInstance().toJson(element)).asJsonObject
+        TidepoolTestJson.of(element).asJsonObject
 
     private fun originId(element: Any): String =
         json(element).getAsJsonObject("origin").get("id").asString

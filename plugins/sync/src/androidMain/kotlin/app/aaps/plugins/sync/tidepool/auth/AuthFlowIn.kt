@@ -30,6 +30,7 @@ class AuthFlowIn : MetroAppCompatActivity() {
 
     @Inject lateinit var aapsLogger: AAPSLogger
     @Inject lateinit var authFlowOut: AuthFlowOut
+    @Inject lateinit var appAuth: AppAuthTidepoolOAuth
     @Inject lateinit var preferences: Preferences
     @Inject lateinit var tidepoolUploader: TidepoolUploader
     @Inject lateinit var tidepoolRepository: TidepoolRepository
@@ -52,7 +53,7 @@ class AuthFlowIn : MetroAppCompatActivity() {
             aapsLogger.error(LTag.TIDEPOOL, "Authentication not received")
             return
         }
-        authFlowOut.authState.update(authorizationResponse, authorizationException)
+        appAuth.authState.update(authorizationResponse, authorizationException)
         if (authorizationException != null) {
             aapsLogger.error("Got authorization error - resetting state: $authorizationException")
             authFlowOut.eraseAuthState(authorizationException.message)
@@ -61,9 +62,9 @@ class AuthFlowIn : MetroAppCompatActivity() {
             // authorization completed
             authFlowOut.saveAuthState()
 
-            authFlowOut.authService.performTokenRequest(authorizationResponse.createTokenExchangeRequest()) { tokenResponse, exception ->
+            appAuth.authService.performTokenRequest(authorizationResponse.createTokenExchangeRequest()) { tokenResponse, exception ->
                 coroutineScope.launch {
-                    authFlowOut.authState.update(tokenResponse, exception)
+                    appAuth.authState.update(tokenResponse, exception)
                     if (exception != null) {
                         aapsLogger.error(LTag.TIDEPOOL, "Token request exception: $exception")
                         authFlowOut.eraseAuthState(exception.message)
@@ -72,7 +73,7 @@ class AuthFlowIn : MetroAppCompatActivity() {
                         aapsLogger.debug(LTag.TIDEPOOL, "Got first token")
                         authFlowOut.saveAuthState()
 
-                        val configuration = authFlowOut.authState.getAuthorizationServiceConfiguration()
+                        val configuration = appAuth.authState.getAuthorizationServiceConfiguration()
                         if (configuration == null) {
                             aapsLogger.error(LTag.TIDEPOOL, "Got null for authorization service configuration")
                             return@launch
@@ -96,7 +97,7 @@ class AuthFlowIn : MetroAppCompatActivity() {
                             // Not the response itself: it holds the user's name and e-mail (#5206)
                             aapsLogger.debug(LTag.TIDEPOOL, "UserInfo received")
 
-                            authFlowOut.authState.performActionWithFreshTokens(authFlowOut.authService) { accessToken, idToken, authorizationException ->
+                            appAuth.authState.performActionWithFreshTokens(appAuth.authService) { accessToken, idToken, authorizationException ->
                                 coroutineScope.launch {
                                     if (authorizationException != null) {
                                         aapsLogger.error(LTag.TIDEPOOL, "Got fresh token exception: $authorizationException")

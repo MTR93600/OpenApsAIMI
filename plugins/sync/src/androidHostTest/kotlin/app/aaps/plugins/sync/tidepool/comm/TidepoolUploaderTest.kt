@@ -6,23 +6,20 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.L
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.sync.tidepool.TidepoolDevice
 import app.aaps.plugins.sync.tidepool.auth.AuthFlowOut
+import app.aaps.plugins.sync.tidepool.auth.TidepoolToken
 import app.aaps.plugins.sync.tidepool.compose.TidepoolRepository
 import app.aaps.plugins.sync.tidepool.messages.AuthReplyMessage
 import app.aaps.plugins.sync.tidepool.messages.DatasetReplyMessage
-import app.aaps.plugins.sync.tidepool.messages.UploadReplyMessage
+import app.aaps.plugins.sync.tidepool.messages.OpenDatasetRequestMessage
 import app.aaps.plugins.sync.tidepool.utils.RateLimit
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.runBlocking
-import net.openid.appauth.AuthState
-import net.openid.appauth.AuthorizationException
-import net.openid.appauth.AuthorizationService
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.mockito.Mockito.after
 import org.mockito.Mockito.timeout
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
@@ -33,21 +30,23 @@ import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.whenever
+import org.mockito.kotlin.wheneverBlocking
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
-import java.io.IOException
 import org.robolectric.annotation.Config as RobolectricConfig
+import java.io.IOException
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Tests the state handling of [TidepoolUploader]: when it may talk to Tidepool, when it starts a new
  * login and what it does without an open dataset. The calls to the Tidepool API itself need a server
  * and stay out of scope; [TidepoolUploaderAuthTest] covers the token refresh.
  *
- * Runs under Robolectric because the uploader takes a wake lock from the real [Context].
+ * Runs under Robolectric because the uploader takes a wake lock from the real [Context]. Token answers
+ * come from a stub of [AuthFlowOut.freshToken]; how AppAuth answers map to them is in `AppAuthTokenMappingTest`.
  */
 @RunWith(RobolectricTestRunner::class)
 @RobolectricConfig(sdk = [35])
@@ -63,22 +62,23 @@ class TidepoolUploaderTest {
     private val config: Config = mock()
     private val l: L = mock()
     private val authFlowOut: AuthFlowOut = mock()
-    private val authState: AuthState = mock()
-    private val authService: AuthorizationService = mock()
 
     private val now = 1_700_000_000_000L
 
     private lateinit var sut: TidepoolUploader
 
+    /** What a token request answers. Until a test says otherwise it never finishes, like a login still in the browser. */
+    @Volatile private var tokenAnswer: suspend () -> TidepoolToken = { awaitCancellation() }
+
     @Before
     fun setUp() {
-        whenever(authFlowOut.authState).thenReturn(authState)
-        whenever(authFlowOut.authService).thenReturn(authService)
+        // Stubbed once: stubbing again would call the stub, and the default one never returns
+        wheneverBlocking { authFlowOut.freshToken() }.doSuspendableAnswer { tokenAnswer() }
         whenever(dateUtil.now()).thenReturn(now)
         whenever(config.APPLICATION_ID).thenReturn("info.nightscout.androidaps")
         whenever(config.VERSION_NAME).thenReturn("4.0.0") // client.version of a new dataset
         sut = TidepoolUploader(
-            aapsLogger, tidepoolRepository, context, preferences, uploadChunk, dateUtil,
+            aapsLogger, tidepoolRepository, AndroidTidepoolWakeLock(context, aapsLogger), preferences, uploadChunk, dateUtil,
             receiverDelegate, config, l, authFlowOut, RateLimit(dateUtil)
         )
     }
@@ -95,102 +95,102 @@ class TidepoolUploaderTest {
 
     /** Open a session without a service, so the uploader has one but makes no network call. */
     private fun startSessionWithUser(userId: String? = "user-1") {
-        val session = Session(SESSION_TOKEN_HEADER, null)
+        val session = Session(null)
         session.authReply = AuthReplyMessage().apply { userid = userId }
         sut.startSession(session, doUpload = false, from = "test")
     }
 
-    /** Let AppAuth report a network problem instead of a token, so the login cannot finish. */
+    /** Let the platform report a network problem instead of a token, so the login cannot finish. */
     private fun failTokenRefresh() {
-        val networkError = AuthorizationException.fromTemplate(AuthorizationException.GeneralErrors.NETWORK_ERROR, IOException("no route to host"))
-        doAnswer { invocation ->
-            invocation.getArgument<AuthState.AuthStateAction>(1).execute(null, null, networkError)
-            null
-        }.whenever(authState).performActionWithFreshTokens(any<AuthorizationService>(), any<AuthState.AuthStateAction>())
+        tokenAnswer = { TidepoolToken.Unavailable(TidepoolToken.Kind.TRANSIENT, "no route to host") }
     }
 
     /**
-     * A fake Tidepool server for the dataset calls. It holds `dataSets` as upload id to device id, newest
-     * first. Like the real server, a list filters by `deviceId` (when given) and returns at most `size`;
-     * opening adds a new [TidepoolUploader.DEVICE_NAME] dataset; a successful delete removes the dataset.
-     * Every call answers at once on the calling thread.
+     * A fake Tidepool server. It holds `dataSets` as upload id to device id, newest first. Like the real
+     * server, a list filters by `deviceId` (when given) and returns at most `size`; opening adds a new
+     * [TidepoolDevice.NAME] dataset; a successful delete removes the dataset. It records every call.
      */
-    private class FakeTidepool(vararg initialDataSets: Pair<String, String?>) {
+    private class FakeTidepool(vararg initialDataSets: Pair<String, String?>) : TidepoolApi {
 
-        val dataSets = mutableListOf(*initialDataSets)
-        val deleted = mutableListOf<String>()
-        val service: TidepoolApiService = mock()
+        data class ListCall(val token: String, val userId: String, val clientName: String, val deviceId: String?, val size: Int)
 
-        /** Uploads received so far, and the number (1, 2, …) of the one that answers with an error. */
-        @Volatile var uploads = 0
+        val dataSets = CopyOnWriteArrayList(listOf(*initialDataSets))
+        val deleted = CopyOnWriteArrayList<String>()
+        val listCalls = CopyOnWriteArrayList<ListCall>()
+        val openCalls = CopyOnWriteArrayList<String>()
+
+        /** Token and upload id of every upload, and the number (1, 2, …) of the one that answers with an error. */
+        val uploadCalls = CopyOnWriteArrayList<Pair<String, String>>()
         var failUpload: Int? = null
+        val uploads get() = uploadCalls.size
 
-        /** How a delete answers. The default is what Tidepool does: 200 with an empty body. */
-        var deleteAnswer: (Call<DatasetReplyMessage>, Callback<DatasetReplyMessage>) -> Unit =
-            { call, callback -> callback.onResponse(call, Response.success<DatasetReplyMessage>(null)) }
+        /** Answer uploads with 200 and nothing to read. */
+        var emptyUploadReply = false
 
-        init {
-            whenever(service.getDataSets(any(), any(), any(), anyOrNull(), any())).thenAnswer { list ->
-                val deviceId = list.getArgument<String?>(3)
-                val replies = dataSets
-                    .filter { deviceId == null || it.second == deviceId }
-                    .take(list.getArgument<Int>(4))
-                    .map { DatasetReplyMessage().apply { uploadId = it.first } }
-                answerWith<List<DatasetReplyMessage>> { call, callback -> callback.onResponse(call, Response.success(replies)) }
-            }
-            whenever(service.doUpload(any(), any(), any())).thenAnswer {
-                val number = ++uploads
-                answerWith<UploadReplyMessage> { call, callback ->
-                    if (number == failUpload) callback.onResponse(call, Response.error(500, "down".toResponseBody("text/plain".toMediaTypeOrNull())))
-                    else callback.onResponse(call, Response.success(UploadReplyMessage()))
-                }
-            }
-            whenever(service.openDataSet(any(), any(), any())).thenAnswer {
-                dataSets.add(0, "new-1" to TidepoolUploader.DEVICE_NAME)
-                val reply = DatasetReplyMessage().apply { uploadId = "new-1" }
-                answerWith<DatasetReplyMessage> { call, callback -> callback.onResponse(call, Response.success(reply)) }
-            }
-            whenever(service.deleteDataSet(any(), any())).thenAnswer { delete ->
-                val id = delete.getArgument<String>(1)
-                answerWith<DatasetReplyMessage> { call, callback ->
-                    deleteAnswer(call, object : Callback<DatasetReplyMessage> {
-                        override fun onResponse(call: Call<DatasetReplyMessage>, response: Response<DatasetReplyMessage>) {
-                            if (response.isSuccessful) {
-                                dataSets.removeAll { it.first == id }
-                                deleted.add(id)
-                            }
-                            callback.onResponse(call, response)
-                        }
+        /** Token and upload id of every delete. */
+        val deleteCalls = CopyOnWriteArrayList<Pair<String, String>>()
 
-                        override fun onFailure(call: Call<DatasetReplyMessage>, t: Throwable) = callback.onFailure(call, t)
-                    })
-                }
+        /** How a delete answers, or throws. The default is what Tidepool does: 200 with an empty body. */
+        var deleteAnswer: (String) -> TidepoolResponse<Unit> = { TidepoolResponse(200, "OK", null) }
+
+        override suspend fun getDataSets(token: String, userId: String, clientName: String, deviceId: String?, size: Int): TidepoolResponse<List<DatasetReplyMessage>> {
+            listCalls += ListCall(token, userId, clientName, deviceId, size)
+            val replies = dataSets
+                .filter { deviceId == null || it.second == deviceId }
+                .take(size)
+                .map { DatasetReplyMessage().apply { uploadId = it.first } }
+            return TidepoolResponse(200, "OK", replies)
+        }
+
+        override suspend fun openDataSet(token: String, userId: String, request: OpenDatasetRequestMessage): TidepoolResponse<DatasetReplyMessage> {
+            openCalls += userId
+            dataSets.add(0, "new-1" to TidepoolDevice.NAME)
+            return TidepoolResponse(200, "OK", DatasetReplyMessage().apply { uploadId = "new-1" })
+        }
+
+        override suspend fun doUpload(token: String, uploadId: String, records: String): TidepoolResponse<Unit> {
+            uploadCalls += token to uploadId
+            return when {
+                uploadCalls.size == failUpload -> TidepoolResponse(500, "down", null)
+                emptyUploadReply               -> TidepoolResponse(200, "OK", null)
+                else                           -> TidepoolResponse(200, "OK", Unit)
             }
         }
 
-        /** A call whose enqueue() runs [answer] at once. */
-        private fun <T> answerWith(answer: (Call<T>, Callback<T>) -> Unit): Call<T> {
-            val call: Call<T> = mock()
-            doAnswer { invocation ->
-                answer(call, invocation.getArgument(0))
-                null
-            }.whenever(call).enqueue(any())
-            return call
+        override suspend fun deleteDataSet(token: String, uploadId: String): TidepoolResponse<Unit> {
+            deleteCalls += token to uploadId
+            val answer = deleteAnswer(uploadId)
+            if (answer.isSuccessful) {
+                dataSets.removeAll { it.first == uploadId }
+                deleted.add(uploadId)
+            }
+            return answer
+        }
+    }
+
+    /** A purge runs in the background: retry [assertion] until it holds, for up to 3 s. */
+    private fun eventually(assertion: () -> Unit) {
+        val end = System.currentTimeMillis() + 3000
+        while (true) {
+            try {
+                assertion()
+                return
+            } catch (e: AssertionError) {
+                if (System.currentTimeMillis() > end) throw e
+                Thread.sleep(20)
+            }
         }
     }
 
     /**
-     * Let AppAuth answer every token request at once. [tokenFor] gets the number of the request (1, 2, …)
-     * and returns the token, or null for a failed refresh.
+     * Let the platform answer every token request at once. [tokenFor] gets the number of the request
+     * (1, 2, …) and returns the token, or null for a failed refresh.
      */
     private fun answerTokens(tokenFor: (Int) -> String? = { "token-1" }) {
-        var requests = 0
-        doAnswer { invocation ->
-            val token = tokenFor(++requests)
-            val error = if (token == null) AuthorizationException.fromTemplate(AuthorizationException.GeneralErrors.NETWORK_ERROR, IOException("no route to host")) else null
-            invocation.getArgument<AuthState.AuthStateAction>(1).execute(token, null, error)
-            null
-        }.whenever(authState).performActionWithFreshTokens(any<AuthorizationService>(), any<AuthState.AuthStateAction>())
+        val requests = AtomicInteger()
+        tokenAnswer = {
+            tokenFor(requests.incrementAndGet())?.let { TidepoolToken.Valid(it) } ?: TidepoolToken.Unavailable(TidepoolToken.Kind.TRANSIENT, "no route to host")
+        }
     }
 
     /**
@@ -199,7 +199,7 @@ class TidepoolUploaderTest {
      */
     private fun startSession(server: FakeTidepool): Session {
         answerTokens()
-        val session = Session(SESSION_TOKEN_HEADER, server.service)
+        val session = Session(server)
         session.authReply = AuthReplyMessage().apply { userid = "user-1" }
         session.token = "token-1"
         sut.startSession(session, doUpload = false, from = "test")
@@ -296,13 +296,13 @@ class TidepoolUploaderTest {
         whenever(receiverDelegate.allowed).thenReturn(true)
         whenever(uploadChunk.getLastEnd()).thenReturn(now) // up to date, so no follow-up upload
         runBlocking { whenever(uploadChunk.getNext(anyOrNull())).thenReturn(listOf("""[{"type":"cbg"}]""")) }
-        val server = FakeTidepool("aaps-1" to TidepoolUploader.DEVICE_NAME)
+        val server = FakeTidepool("aaps-1" to TidepoolDevice.NAME)
         val session = startSessionAndWait(server) // the session started with "token-1"
         answerTokens { "fresh-$it" } // and AppAuth has refreshed it since
 
         runBlocking { sut.doUpload("test") }
 
-        verify(server.service).doUpload(eq("fresh-1"), eq("aaps-1"), any())
+        assertThat(server.uploadCalls).containsExactly("fresh-1" to "aaps-1")
         assertThat(session.token).isEqualTo("fresh-1")
         verify(uploadChunk, timeout(2000)).setLastEnd(any())
     }
@@ -312,18 +312,18 @@ class TidepoolUploaderTest {
         whenever(receiverDelegate.allowed).thenReturn(true)
         whenever(uploadChunk.getLastEnd()).thenReturn(now)
         runBlocking { whenever(uploadChunk.getNext(anyOrNull())).thenReturn(listOf("""[{"type":"cbg"}]""")) }
-        val server = FakeTidepool("aaps-1" to TidepoolUploader.DEVICE_NAME)
+        val server = FakeTidepool("aaps-1" to TidepoolDevice.NAME)
         startSessionAndWait(server)
         answerTokens { null }
 
         runBlocking { sut.doUpload("test") }
 
-        verify(server.service, never()).doUpload(any(), any(), any())
+        assertThat(server.uploadCalls).isEmpty()
         verify(authFlowOut).updateConnectionStatus(AuthFlowOut.ConnectionStatus.FAILED, "Upload FAILED - no valid token")
         // The lock is free again: the next upload is not skipped as "already in progress"
         answerTokens { "fresh-$it" }
         runBlocking { sut.doUpload("test") }
-        verify(server.service).doUpload(eq("fresh-1"), eq("aaps-1"), any())
+        assertThat(server.uploadCalls).containsExactly("fresh-1" to "aaps-1")
     }
 
     @Test
@@ -331,7 +331,7 @@ class TidepoolUploaderTest {
         whenever(receiverDelegate.allowed).thenReturn(true)
         whenever(uploadChunk.getLastEnd()).thenReturn(now)
         runBlocking { whenever(uploadChunk.getNext(anyOrNull())).thenReturn(listOf("[1]", "[2]", "[3]")) }
-        val server = FakeTidepool("aaps-1" to TidepoolUploader.DEVICE_NAME)
+        val server = FakeTidepool("aaps-1" to TidepoolDevice.NAME)
         startSessionAndWait(server)
 
         runBlocking { sut.doUpload("test") }
@@ -346,7 +346,7 @@ class TidepoolUploaderTest {
         whenever(receiverDelegate.allowed).thenReturn(true)
         whenever(uploadChunk.getLastEnd()).thenReturn(now)
         runBlocking { whenever(uploadChunk.getNext(anyOrNull())).thenReturn(listOf("[1]", "[2]", "[3]")) }
-        val server = FakeTidepool("aaps-1" to TidepoolUploader.DEVICE_NAME)
+        val server = FakeTidepool("aaps-1" to TidepoolDevice.NAME)
         server.failUpload = 2
         startSessionAndWait(server)
 
@@ -358,6 +358,22 @@ class TidepoolUploaderTest {
         // The lock is free again: the next trigger reads a new window instead of being skipped
         runBlocking { sut.doUpload("test") }
         runBlocking { verify(uploadChunk, timeout(2000).times(2)).getNext(anyOrNull()) }
+    }
+
+    @Test
+    fun `an upload answered with success but no body counts as failed`() {
+        whenever(receiverDelegate.allowed).thenReturn(true)
+        whenever(uploadChunk.getLastEnd()).thenReturn(now)
+        runBlocking { whenever(uploadChunk.getNext(anyOrNull())).thenReturn(listOf("[1]")) }
+        val server = FakeTidepool("aaps-1" to TidepoolDevice.NAME)
+        server.emptyUploadReply = true
+        startSessionAndWait(server)
+
+        runBlocking { sut.doUpload("test") }
+
+        verify(authFlowOut).updateConnectionStatus(AuthFlowOut.ConnectionStatus.FAILED, "Upload FAILED")
+        verify(uploadChunk, never()).setLastEnd(any())
+        assertThat(statusMessages().any { it.startsWith("Data Upload test was not successful: 200") }).isTrue()
     }
 
     @Test
@@ -384,12 +400,13 @@ class TidepoolUploaderTest {
     @Test
     fun `session reuses only a dataset with the AAPS device id`() {
         whenever(receiverDelegate.allowed).thenReturn(true)
-        val server = FakeTidepool("aaps-1" to TidepoolUploader.DEVICE_NAME)
+        val server = FakeTidepool("aaps-1" to TidepoolDevice.NAME)
 
         startSessionAndWait(server)
 
-        verify(server.service).getDataSets(any(), eq("user-1"), eq("info.nightscout.androidaps"), eq("AAPS"), eq(1))
-        verify(server.service, never()).openDataSet(any(), any(), any())
+        assertThat(server.listCalls.map { listOf(it.userId, it.clientName, it.deviceId, it.size) })
+            .containsExactly(listOf("user-1", "info.nightscout.androidaps", "AAPS", 1))
+        assertThat(server.openCalls).isEmpty()
     }
 
     @Test
@@ -400,35 +417,39 @@ class TidepoolUploaderTest {
 
         startSessionAndWait(server)
 
-        verify(server.service).openDataSet(any(), any(), any())
+        assertThat(server.openCalls).containsExactly("user-1")
         assertThat(server.dataSets.map { it.first }).containsExactly("new-1", "tandem-1").inOrder()
     }
 
     @Test
     fun `purge deletes the dataset and drops the session`() {
         whenever(receiverDelegate.allowed).thenReturn(true)
-        val server = FakeTidepool("aaps-1" to TidepoolUploader.DEVICE_NAME)
+        val server = FakeTidepool("aaps-1" to TidepoolDevice.NAME)
         startSessionAndWait(server)
 
         sut.purge()
 
-        assertThat(server.deleted).containsExactly("aaps-1")
-        assertThat(statusMessages()).contains("All Tidepool data purged (deleted datasets: 1)")
-        // resetInstance(), so the next upload opens a fresh dataset
-        verify(authFlowOut).updateConnectionStatus(eq(AuthFlowOut.ConnectionStatus.NONE), isNull())
+        eventually {
+            assertThat(server.deleted).containsExactly("aaps-1")
+            assertThat(statusMessages()).contains("All Tidepool data purged (deleted datasets: 1)")
+            // resetInstance(), so the next upload opens a fresh dataset
+            verify(authFlowOut).updateConnectionStatus(eq(AuthFlowOut.ConnectionStatus.NONE), isNull())
+        }
     }
 
     @Test
     fun `purge deletes older datasets too and the one in use last`() {
         whenever(receiverDelegate.allowed).thenReturn(true)
-        val server = FakeTidepool("aaps-1" to TidepoolUploader.DEVICE_NAME, "tandem-2" to null, "tandem-1" to null)
+        val server = FakeTidepool("aaps-1" to TidepoolDevice.NAME, "tandem-2" to null, "tandem-1" to null)
         startSessionAndWait(server)
 
         sut.purge()
 
-        assertThat(server.deleted).containsExactly("tandem-2", "tandem-1", "aaps-1").inOrder()
-        assertThat(server.dataSets).isEmpty()
-        assertThat(statusMessages()).contains("All Tidepool data purged (deleted datasets: 3)")
+        eventually {
+            assertThat(server.deleted).containsExactly("tandem-2", "tandem-1", "aaps-1").inOrder()
+            assertThat(server.dataSets).isEmpty()
+            assertThat(statusMessages()).contains("All Tidepool data purged (deleted datasets: 3)")
+        }
     }
 
     @Test
@@ -436,78 +457,77 @@ class TidepoolUploaderTest {
         whenever(receiverDelegate.allowed).thenReturn(true)
         // Old versions opened a new dataset on every session, so there can be many
         val old = (1..TidepoolUploader.PURGE_PAGE_SIZE + 20).map { "old-$it" to null }
-        val server = FakeTidepool("aaps-1" to TidepoolUploader.DEVICE_NAME, *old.toTypedArray())
+        val server = FakeTidepool("aaps-1" to TidepoolDevice.NAME, *old.toTypedArray())
         startSessionAndWait(server)
 
         sut.purge()
 
-        assertThat(server.dataSets).isEmpty()
-        assertThat(server.deleted.last()).isEqualTo("aaps-1")
-        // A long purge shows progress, then the total
-        val messages = statusMessages()
-        assertThat(messages.filter { it.startsWith("Purge: ") }).containsExactly("Purge: 100 datasets deleted")
-        assertThat(messages).contains("All Tidepool data purged (deleted datasets: ${TidepoolUploader.PURGE_PAGE_SIZE + 21})")
+        eventually {
+            assertThat(server.dataSets).isEmpty()
+            assertThat(server.deleted.last()).isEqualTo("aaps-1")
+            // A long purge shows progress, then the total
+            val messages = statusMessages()
+            assertThat(messages.filter { it.startsWith("Purge: ") }).containsExactly("Purge: 100 datasets deleted")
+            assertThat(messages).contains("All Tidepool data purged (deleted datasets: ${TidepoolUploader.PURGE_PAGE_SIZE + 21})")
+        }
     }
 
     @Test
     fun `purge asks for a valid token before every call`() {
         whenever(receiverDelegate.allowed).thenReturn(true)
-        val server = FakeTidepool("aaps-1" to TidepoolUploader.DEVICE_NAME, "tandem-1" to null)
+        val server = FakeTidepool("aaps-1" to TidepoolDevice.NAME, "tandem-1" to null)
         val session = startSessionAndWait(server)
         // A long purge outlives the access token, so AppAuth hands out a new one on the way
         answerTokens { "fresh-$it" }
 
         sut.purge()
 
-        verify(server.service).getDataSets(eq("fresh-1"), any(), any(), isNull(), any())
-        verify(server.service).deleteDataSet("fresh-2", "tandem-1")
-        verify(server.service).getDataSets(eq("fresh-3"), any(), any(), isNull(), any())
-        verify(server.service).deleteDataSet("fresh-4", "aaps-1")
+        eventually { assertThat(statusMessages()).contains("All Tidepool data purged (deleted datasets: 2)") }
+        // The session start listed with "token-1"; the purge lists without a device id
+        assertThat(server.listCalls.filter { it.deviceId == null }.map { it.token }).containsExactly("fresh-1", "fresh-3").inOrder()
+        assertThat(server.deleteCalls).containsExactly("fresh-2" to "tandem-1", "fresh-4" to "aaps-1").inOrder()
         assertThat(session.token).isEqualTo("fresh-4")
-        verify(authFlowOut, atLeastOnce()).saveAuthState()
-        assertThat(statusMessages()).contains("All Tidepool data purged (deleted datasets: 2)")
     }
 
     @Test
     fun `purge stops when the token cannot be refreshed and keeps the dataset in use`() {
         whenever(receiverDelegate.allowed).thenReturn(true)
-        val server = FakeTidepool("aaps-1" to TidepoolUploader.DEVICE_NAME, "tandem-1" to null)
+        val server = FakeTidepool("aaps-1" to TidepoolDevice.NAME, "tandem-1" to null)
         startSessionAndWait(server)
         answerTokens { if (it == 1) "fresh-1" else null } // the list works, then the refresh fails
 
         sut.purge()
 
-        verify(server.service, never()).deleteDataSet(any(), any())
+        eventually { assertThat(statusMessages()).contains("Purge failed - not connected") }
+        assertThat(server.deleteCalls).isEmpty()
         assertThat(server.dataSets).hasSize(2)
-        assertThat(statusMessages()).contains("Purge failed - not connected")
         verify(authFlowOut, never()).updateConnectionStatus(eq(AuthFlowOut.ConnectionStatus.NONE), isNull())
     }
 
     @Test
     fun `purge keeps the session when the server refuses`() {
         whenever(receiverDelegate.allowed).thenReturn(true)
-        val server = FakeTidepool("aaps-1" to TidepoolUploader.DEVICE_NAME)
-        server.deleteAnswer = { call, callback ->
-            callback.onResponse(call, Response.error(403, "no".toResponseBody("text/plain".toMediaTypeOrNull())))
-        }
+        val server = FakeTidepool("aaps-1" to TidepoolDevice.NAME)
+        server.deleteAnswer = { TidepoolResponse(403, "Forbidden", null) }
         startSessionAndWait(server)
 
         sut.purge()
 
-        assertThat(statusMessages().any { it.startsWith("Purge FAILED: 403") }).isTrue()
+        eventually { assertThat(statusMessages().any { it.startsWith("Purge FAILED: 403") }).isTrue() }
         verify(authFlowOut, never()).updateConnectionStatus(eq(AuthFlowOut.ConnectionStatus.NONE), isNull())
     }
 
     @Test
     fun `purge stops at the first failure and keeps the dataset in use`() {
         whenever(receiverDelegate.allowed).thenReturn(true)
-        val server = FakeTidepool("aaps-1" to TidepoolUploader.DEVICE_NAME, "tandem-1" to null)
-        server.deleteAnswer = { call, callback -> callback.onFailure(call, IOException("no route to host")) }
+        val server = FakeTidepool("aaps-1" to TidepoolDevice.NAME, "tandem-1" to null)
+        server.deleteAnswer = { throw IOException("no route to host") }
         startSessionAndWait(server)
 
         sut.purge()
 
-        verify(server.service, never()).deleteDataSet(any(), eq("aaps-1"))
+        eventually { assertThat(statusMessages().any { it.startsWith("Purge FAILED") }).isTrue() }
+        assertThat(server.deleteCalls.map { it.second }).doesNotContain("aaps-1")
         assertThat(server.dataSets).hasSize(2)
         verify(authFlowOut, never()).updateConnectionStatus(eq(AuthFlowOut.ConnectionStatus.NONE), isNull())
     }
@@ -516,12 +536,12 @@ class TidepoolUploaderTest {
     fun `purge waits for the dataset and deletes it once the session is open`() {
         whenever(receiverDelegate.allowed).thenReturn(true)
         whenever(authFlowOut.connectionStatus).thenReturn(AuthFlowOut.ConnectionStatus.NO_SESSION)
-        val server = FakeTidepool("aaps-1" to TidepoolUploader.DEVICE_NAME)
+        val server = FakeTidepool("aaps-1" to TidepoolDevice.NAME)
 
         sut.purge() // no session yet, so the purge waits and a login is started
         startSession(server)
 
-        verify(server.service, timeout(2000)).deleteDataSet(any(), eq("aaps-1"))
+        eventually { assertThat(server.deleteCalls.map { it.second }).contains("aaps-1") }
     }
 
     @Test
@@ -547,22 +567,24 @@ class TidepoolUploaderTest {
 
         sut.purge()
 
-        assertThat(statusMessages()).contains("Purge failed - not connected")
+        eventually { assertThat(statusMessages()).contains("Purge failed - not connected") }
         // A later upload opens a session, but the old purge must not delete anything now
-        val server = FakeTidepool("aaps-1" to TidepoolUploader.DEVICE_NAME)
+        val server = FakeTidepool("aaps-1" to TidepoolDevice.NAME)
         startSession(server)
-        verify(server.service, after(500).never()).deleteDataSet(any(), any())
+        verify(authFlowOut, timeout(2000)).updateConnectionStatus(eq(AuthFlowOut.ConnectionStatus.SESSION_ESTABLISHED), any())
+        Thread.sleep(300)
+        assertThat(server.deleteCalls).isEmpty()
     }
 
     @Test
     fun `purge reports a network failure`() {
         whenever(receiverDelegate.allowed).thenReturn(true)
-        val server = FakeTidepool("aaps-1" to TidepoolUploader.DEVICE_NAME)
-        server.deleteAnswer = { call, callback -> callback.onFailure(call, IOException("no route to host")) }
+        val server = FakeTidepool("aaps-1" to TidepoolDevice.NAME)
+        server.deleteAnswer = { throw IOException("no route to host") }
         startSessionAndWait(server)
 
         sut.purge()
 
-        assertThat(statusMessages().any { it.contains("no route to host") }).isTrue()
+        eventually { assertThat(statusMessages().any { it.contains("no route to host") }).isTrue() }
     }
 }

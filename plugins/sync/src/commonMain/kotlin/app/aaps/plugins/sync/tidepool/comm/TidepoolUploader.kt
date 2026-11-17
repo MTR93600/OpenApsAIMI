@@ -1,49 +1,42 @@
 package app.aaps.plugins.sync.tidepool.comm
 
-import android.content.Context
-import android.os.PowerManager
-import android.os.SystemClock
 import app.aaps.core.data.time.T
+import app.aaps.core.interfaces.concurrent.AapsLock
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
+import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.L
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.sync.tidepool.TidepoolDevice
 import app.aaps.plugins.sync.tidepool.auth.AuthFlowOut
+import app.aaps.plugins.sync.tidepool.auth.TidepoolToken
 import app.aaps.plugins.sync.tidepool.comm.TidepoolUploader.Companion.RETRY_LOGIN_INTERVAL_SECONDS
 import app.aaps.plugins.sync.tidepool.compose.TidepoolRepository
 import app.aaps.plugins.sync.tidepool.keys.TidepoolBooleanKey
 import app.aaps.plugins.sync.tidepool.keys.TidepoolStringNonKey
 import app.aaps.plugins.sync.tidepool.messages.AuthReplyMessage
-import app.aaps.plugins.sync.tidepool.messages.DatasetReplyMessage
 import app.aaps.plugins.sync.tidepool.messages.OpenDatasetRequestMessage
-import app.aaps.plugins.sync.tidepool.messages.UploadReplyMessage
 import app.aaps.plugins.sync.tidepool.utils.RateLimit
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import okhttp3.OkHttpClient
-import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.logging.HttpLoggingInterceptor
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
+import kotlin.concurrent.Volatile
+import kotlin.coroutines.cancellation.CancellationException
 
 @SingleIn(AppScope::class)
 @Inject
 class TidepoolUploader(
     private val aapsLogger: AAPSLogger,
     private val tidepoolRepository: TidepoolRepository,
-    private val ctx: Context,
+    private val wakeLock: TidepoolWakeLock,
     private val preferences: Preferences,
     private val uploadChunk: UploadChunk,
     private val dateUtil: DateUtil,
@@ -55,22 +48,15 @@ class TidepoolUploader(
 ) {
 
     private val isAllowed get() = receiverDelegate.allowed
-    private var wl: PowerManager.WakeLock? = null
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + aapsIoDispatcher)
+
+    // doLogin checks the status and then sets it: two triggers at once must not both start a login
+    private val loginLock = AapsLock()
 
     companion object {
 
         private const val INTEGRATION_BASE_URL = "https://int-api.tidepool.org"
         private const val PRODUCTION_BASE_URL = "https://api.tidepool.org"
-
-        /**
-         * How AAPS names itself to Tidepool: dataset `deviceManufacturers`, `deviceModel` and `deviceId`,
-         * and the prefix of every record's `deviceId` (`AAPS:<pump serial>`). Tidepool shows the device and picks the pump
-         * settings layout by this exact string, so NEVER change it.
-         * Before 4.0 this was "Tandem". Those old datasets have no `deviceId`, so [startSession] does not
-         * find them any more and opens a new dataset. The old data stays in Tidepool under the old name.
-         */
-        const val DEVICE_NAME = "AAPS"
 
         // Datasets per request when purge lists them. Old versions opened a new dataset on every
         // session, so a user can have many more than this; purge asks again until all are gone.
@@ -83,7 +69,7 @@ class TidepoolUploader(
         internal val RETRY_LOGIN_INTERVAL_SECONDS = T.mins(10).secs().toInt()
     }
 
-    private var retrofit: Retrofit? = null
+    private var api: TidepoolApi? = null
 
     private var session: Session? = null
 
@@ -96,42 +82,21 @@ class TidepoolUploader(
     // Set when a purge was requested but no dataset was open yet; consumed once the session/dataset is ready.
     @Volatile private var pendingPurge = false
 
-    private fun getRetrofitInstance(): Retrofit? {
-        if (retrofit == null) {
+    private fun getApi(): TidepoolApi =
+        api ?: KtorTidepoolApi.create(
+            baseUrl = if (preferences.get(TidepoolBooleanKey.UseTestServers)) INTEGRATION_BASE_URL else PRODUCTION_BASE_URL,
+            applicationId = config.APPLICATION_ID,
+            versionName = config.VERSION_NAME,
+            aapsLogger = aapsLogger,
+            // The bodies only in a debug build with the TIDEPOOL log on. The token is never logged (#5206).
+            logBodies = l.findByName(LTag.TIDEPOOL.tag).enabled && (config.isEngineeringMode() || config.isDev())
+        ).also { api = it }
 
-            val httpLoggingInterceptor = HttpLoggingInterceptor()
-            httpLoggingInterceptor.level = HttpLoggingInterceptor.Level.BODY
-            // The session token gives full access to the user's Tidepool data, keep it out of the log (#5206)
-            httpLoggingInterceptor.redactHeader(SESSION_TOKEN_HEADER)
-
-            val client = OkHttpClient.Builder()
-                .also {
-                    // First, so the body log below shows the headers as they are sent
-                    it.addInterceptor(ClientHeadersInterceptor(config))
-                    if (l.findByName(LTag.TIDEPOOL.tag).enabled && (config.isEngineeringMode() || config.isDev()))
-                        it.addInterceptor(httpLoggingInterceptor)
-                    it.addInterceptor(InfoInterceptor(aapsLogger))
-                    it.addInterceptor(DeleteTimeoutInterceptor())
-                }.build()
-
-            retrofit = Retrofit.Builder()
-                .baseUrl(if (preferences.get(TidepoolBooleanKey.UseTestServers)) INTEGRATION_BASE_URL else PRODUCTION_BASE_URL)
-                .client(client)
-                .addConverterFactory(GsonConverterFactory.create())
-                .build()
-        }
-        return retrofit
-    }
-
-    fun createSession(): Session {
-        //aapsLogger.debug(LTag.TIDEPOOL, "createSession")
-        val service = getRetrofitInstance()?.create(TidepoolApiService::class.java)
-        return Session(SESSION_TOKEN_HEADER, service)
-    }
+    fun createSession(): Session = Session(getApi())
 
     fun resetInstance() {
         aapsLogger.debug(LTag.TIDEPOOL, "Instance reset")
-        retrofit = null
+        api = null
         session = null
         // Reset connection status so the next doUpload() triggers a fresh login
         // instead of trying to use the now-null session
@@ -153,8 +118,7 @@ class TidepoolUploader(
      *   - Only handles authentication state transitions
      *   - No BLOCKED state to get stuck in
      */
-    @Synchronized
-    fun doLogin(doUpload: Boolean = false, from: String?) {
+    fun doLogin(doUpload: Boolean = false, from: String?) = loginLock.withLock {
         aapsLogger.debug(LTag.TIDEPOOL, "doLogin from=$from doUpload=$doUpload currentStatus=${authFlowOut.connectionStatus}")
 
         // IMPROVEMENT: Removed connectivity check - caller's responsibility
@@ -172,7 +136,7 @@ class TidepoolUploader(
             authFlowOut.connectionStatus == AuthFlowOut.ConnectionStatus.FETCHING_TOKEN
         ) {
             aapsLogger.debug(LTag.TIDEPOOL, "Already connected or connecting")
-            return
+            return@withLock
         }
 
         // Proceed with authentication
@@ -182,40 +146,40 @@ class TidepoolUploader(
     fun handleTokenLoginAndStartSession(doUpload: Boolean, from: String?) {
         //aapsLogger.debug(LTag.TIDEPOOL, "handleTokenLoginAndStartSession")
         authFlowOut.updateConnectionStatus(AuthFlowOut.ConnectionStatus.FETCHING_TOKEN, "Connecting")
-        authFlowOut.authState.performActionWithFreshTokens(authFlowOut.authService) { accessToken, _, tokenException ->
-            val lastTokenResponse = authFlowOut.authState.lastTokenResponse
-            when {
-                // Only the network or the server failed. Keep the saved credentials and try the silent
-                // refresh again on the next upload instead of opening the login page in the browser.
-                accessToken == null && AuthFlowOut.isTransientTokenError(tokenException) -> {
-                    aapsLogger.debug(LTag.TIDEPOOL, "Token refresh failed for now, keeping login: $tokenException")
-                    // NO_SESSION makes the next doUpload() call doLogin() again.
-                    authFlowOut.updateConnectionStatus(AuthFlowOut.ConnectionStatus.NO_SESSION, "Network problem, will try again later")
-                    cancelPendingPurge()
-                }
-
-                accessToken == null                                                      -> {
-                    aapsLogger.error(LTag.TIDEPOOL, "Failing to use access token - trying initial login again: $tokenException")
-                    tidepoolRepository.addLog("Got exception token: $tokenException")
-                    authFlowOut.updateConnectionStatus(AuthFlowOut.ConnectionStatus.NOT_LOGGED_IN, "Failed to use token")
-                    cancelPendingPurge()
-                    retryInitialLogin("handleTokenLoginAndStartSession accessToken == null")
-                }
-
-                lastTokenResponse == null                                                -> {
-                    aapsLogger.error(LTag.TIDEPOOL, "Failing to get response / token type - trying initial login again")
-                    authFlowOut.updateConnectionStatus(AuthFlowOut.ConnectionStatus.NOT_LOGGED_IN, "Failed to get token")
-                    cancelPendingPurge()
-                    retryInitialLogin("handleTokenLoginAndStartSession lastTokenResponse == null")
-                }
-
-                else                                                                     -> {
+        scope.launch {
+            when (val token = authFlowOut.freshToken()) {
+                is TidepoolToken.Valid       -> {
                     val session = createSession().also {
                         it.authReply = AuthReplyMessage().apply { userid = preferences.get(TidepoolStringNonKey.SubscriptionId) }
-                        it.token = accessToken
+                        it.token = token.accessToken
                     }
-                    authFlowOut.saveAuthState()
                     startSession(session, doUpload, from)
+                }
+
+                is TidepoolToken.Unavailable -> when (token.kind) {
+                    // Only the network or the server failed. Keep the saved credentials and try the silent
+                    // refresh again on the next upload instead of opening the login page in the browser.
+                    TidepoolToken.Kind.TRANSIENT         -> {
+                        aapsLogger.debug(LTag.TIDEPOOL, "Token refresh failed for now, keeping login: ${token.reason}")
+                        // NO_SESSION makes the next doUpload() call doLogin() again.
+                        authFlowOut.updateConnectionStatus(AuthFlowOut.ConnectionStatus.NO_SESSION, "Network problem, will try again later")
+                        cancelPendingPurge()
+                    }
+
+                    TidepoolToken.Kind.REFUSED           -> {
+                        aapsLogger.error(LTag.TIDEPOOL, "Failing to use access token - trying initial login again: ${token.reason}")
+                        tidepoolRepository.addLog("Got exception token: ${token.reason}")
+                        authFlowOut.updateConnectionStatus(AuthFlowOut.ConnectionStatus.NOT_LOGGED_IN, "Failed to use token")
+                        cancelPendingPurge()
+                        retryInitialLogin("handleTokenLoginAndStartSession accessToken == null")
+                    }
+
+                    TidepoolToken.Kind.NO_TOKEN_RESPONSE -> {
+                        aapsLogger.error(LTag.TIDEPOOL, "Failing to get response / token type - trying initial login again")
+                        authFlowOut.updateConnectionStatus(AuthFlowOut.ConnectionStatus.NOT_LOGGED_IN, "Failed to get token")
+                        cancelPendingPurge()
+                        retryInitialLogin("handleTokenLoginAndStartSession lastTokenResponse == null")
+                    }
                 }
             }
         }
@@ -238,67 +202,81 @@ class TidepoolUploader(
         //aapsLogger.debug(LTag.TIDEPOOL, "startSession $from")
         extendWakeLock(30000)
         session = newSession
-        session?.let { session ->
-            if (session.authReply?.userid != null) {
-                // See if we already have an open data set to write to
-                // Must match the client.name the dataset is CREATED with (OpenDatasetRequestMessage -> ClientInfo(config.APPLICATION_ID)).
-                // A hardcoded "AAPS" here never matched config.APPLICATION_ID ("info.nightscout.androidaps"), so the existing open
-                // dataset was never found and a new dataset (new uploadId) was opened on every session. Because the Tidepool
-                // dataset.delete.origin deduplicator is scoped to a single uploadId, prior syncs' data could never be replaced,
-                // so every full sync duplicated all data. Reusing one dataset lets the per-uploadId origin dedup collapse re-uploads.
-                // The deviceId filter skips datasets from before 4.0 (named "Tandem", no deviceId), see DEVICE_NAME.
-                val datasetCall = session.service?.getDataSets(
-                    session.token!!,
-                    session.authReply!!.userid!!, config.APPLICATION_ID, DEVICE_NAME, 1
-                )
-                datasetCall?.enqueue(
-                    TidepoolCallback<List<DatasetReplyMessage>>(
-                        aapsLogger, tidepoolRepository, session, "Get Open Datasets",
-                        onSuccess = {
-                            if (session.datasetReply == null) {
-                                tidepoolRepository.addLog("Creating new dataset")
-                                val call = session.service.openDataSet(session.token!!, session.authReply!!.userid!!, OpenDatasetRequestMessage(config, dateUtil).getBody())
-                                call.enqueue(
-                                    TidepoolCallback<DatasetReplyMessage>(
-                                        aapsLogger, tidepoolRepository, session, "Open New Dataset",
-                                        {
-                                            authFlowOut.updateConnectionStatus(AuthFlowOut.ConnectionStatus.SESSION_ESTABLISHED, "New dataset OK")
-                                            when {
-                                                // The new dataset is empty, but older datasets (e.g. from before 4.0) can still hold data.
-                                                pendingPurge -> executePurge()
-                                                doUpload     -> scope.launch { doUpload("startSession openDataset") }
-                                                else         -> releaseWakeLock()
-                                            }
-                                        }, {
-                                            authFlowOut.updateConnectionStatus(AuthFlowOut.ConnectionStatus.FAILED, "New dataset FAILED")
-                                            cancelPendingPurge()
-                                            releaseWakeLock()
-                                        })
-                                )
-                            } else {
-                                aapsLogger.debug(LTag.TIDEPOOL, "Existing Dataset: " + session.datasetReply!!.getUploadId())
-                                // TODO: Wouldn't need to do this if we could block on the above `call.enqueue`.
-                                // ie, do the openDataSet conditionally, and then do `doUpload` either way.
-                                authFlowOut.updateConnectionStatus(AuthFlowOut.ConnectionStatus.SESSION_ESTABLISHED, "Appending to existing dataset")
-                                when {
-                                    pendingPurge -> executePurge()
-                                    doUpload     -> scope.launch { doUpload("startSession existing dataset") }
-                                    else         -> releaseWakeLock()
-                                }
-                            }
-                        }, onFail = {
-                            authFlowOut.updateConnectionStatus(AuthFlowOut.ConnectionStatus.FAILED, "Open dataset FAILED")
-                            cancelPendingPurge()
-                            releaseWakeLock()
-                        })
-                )
-            } else {
-                aapsLogger.error("Got login response but cannot determine userId - cannot proceed")
-                authFlowOut.updateConnectionStatus(AuthFlowOut.ConnectionStatus.FAILED, "Error userId")
+        val userId = newSession.authReply?.userid
+        if (userId == null) {
+            aapsLogger.error("Got login response but cannot determine userId - cannot proceed")
+            authFlowOut.updateConnectionStatus(AuthFlowOut.ConnectionStatus.FAILED, "Error userId")
+            cancelPendingPurge()
+            releaseWakeLock()
+            return
+        }
+        val service = newSession.service ?: return
+        scope.launch { findOrOpenDataset(newSession, service, userId, doUpload) }
+    }
+
+    /**
+     * Find the dataset to write to, or open a new one, then run what waits for it: a purge, an upload, or nothing.
+     *
+     * The search must match the client.name the dataset is CREATED with (OpenDatasetRequestMessage -> ClientInfo(config.APPLICATION_ID)).
+     * A hardcoded "AAPS" here never matched config.APPLICATION_ID ("info.nightscout.androidaps"), so the existing open
+     * dataset was never found and a new dataset (new uploadId) was opened on every session. Because the Tidepool
+     * dataset.delete.origin deduplicator is scoped to a single uploadId, prior syncs' data could never be replaced,
+     * so every full sync duplicated all data. Reusing one dataset lets the per-uploadId origin dedup collapse re-uploads.
+     * The deviceId filter skips datasets from before 4.0 (named "Tandem", no deviceId), see TidepoolDevice.NAME.
+     */
+    private suspend fun findOrOpenDataset(session: Session, service: TidepoolApi, userId: String, doUpload: Boolean) {
+        val dataSets = call("Get Open Datasets") { service.getDataSets(session.token!!, userId, config.APPLICATION_ID, TidepoolDevice.NAME, 1) }
+        if (dataSets == null) {
+            authFlowOut.updateConnectionStatus(AuthFlowOut.ConnectionStatus.FAILED, "Open dataset FAILED")
+            cancelPendingPurge()
+            releaseWakeLock()
+            return
+        }
+        dataSets.firstOrNull()?.let { session.datasetReply = it }
+        if (session.datasetReply == null) {
+            tidepoolRepository.addLog("Creating new dataset")
+            val reply = call("Open New Dataset") { service.openDataSet(session.token!!, userId, OpenDatasetRequestMessage(config, dateUtil)) }
+            if (reply == null) {
+                authFlowOut.updateConnectionStatus(AuthFlowOut.ConnectionStatus.FAILED, "New dataset FAILED")
                 cancelPendingPurge()
                 releaseWakeLock()
+                return
             }
+            session.datasetReply = reply
+            authFlowOut.updateConnectionStatus(AuthFlowOut.ConnectionStatus.SESSION_ESTABLISHED, "New dataset OK")
+        } else {
+            aapsLogger.debug(LTag.TIDEPOOL, "Existing Dataset: " + session.datasetReply!!.getUploadId())
+            authFlowOut.updateConnectionStatus(AuthFlowOut.ConnectionStatus.SESSION_ESTABLISHED, "Appending to existing dataset")
         }
+        when {
+            // A new dataset is empty, but older datasets (e.g. from before 4.0) can still hold data.
+            pendingPurge -> executePurge()
+            doUpload     -> doUpload("startSession")
+            else         -> releaseWakeLock()
+        }
+    }
+
+    /**
+     * Run one call that must return a body. Network errors, refused calls and replies without a body all
+     * give null, after writing why to the log and to the Tidepool screen.
+     */
+    private suspend fun <T> call(name: String, request: suspend () -> TidepoolResponse<T>): T? {
+        val msg = try {
+            val response = request()
+            val body = response.body
+            if (response.isSuccessful && body != null) {
+                aapsLogger.debug(LTag.TIDEPOOL, "$name success")
+                return body
+            }
+            name + " was not successful: " + response.code + " " + response.message
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            "$name Failed: $e"
+        }
+        aapsLogger.debug(LTag.TIDEPOOL, msg)
+        tidepoolRepository.addLog(msg)
+        return null
     }
 
     suspend fun doUpload(from: String?) {
@@ -320,7 +298,7 @@ class TidepoolUploader(
             aapsLogger.debug(LTag.TIDEPOOL, "Upload already in progress, skipping trigger from $from")
             return
         }
-        var locked = true
+        var uploadMore = false
         try {
             extendWakeLock(60000)
             session.iterations++
@@ -335,69 +313,48 @@ class TidepoolUploader(
                     aapsLogger.debug(LTag.TIDEPOOL, "Empty dataset - marking as succeeded")
                     tidepoolRepository.addLog("No data to upload")
                     releaseWakeLock()
-                    locked = false
-                    uploadMutex.unlock()
-                    uploadNext()
+                    uploadMore = true
                 }
 
                 else              -> {
                     tidepoolRepository.addLog("Uploading")
                     val service = session.service
                     val uploadId = session.datasetReply?.getUploadId()
-                    if (service != null && uploadId != null) {
-                        // Ownership of the lock passes to uploadBatch, which releases it in every branch.
-                        uploadBatch(session, service, uploadId, batches, 0, from)
-                        locked = false
-                    }
+                    if (service != null && uploadId != null) uploadMore = uploadBatches(session, service, uploadId, batches, from)
                 }
             }
         } finally {
-            // Release for every synchronous exit path (null/empty chunk, missing service, or a getNext throw).
-            if (locked) uploadMutex.unlock()
+            // The lock is held for the whole upload, so it is released here on every path
+            uploadMutex.unlock()
         }
+        if (uploadMore) uploadNext()
     }
 
     /**
-     * Send [batches] one after another, starting with [index]. `LastEnd` moves only after the last one, so
-     * when one fails the whole time window is sent again later; the deduplicator then replaces the records
-     * that arrived already, by their origin id, instead of adding them a second time.
+     * Send [batches] one after another. `LastEnd` moves only after the last one, so when one fails the
+     * whole time window is sent again later; the deduplicator then replaces the records that arrived
+     * already, by their origin id, instead of adding them a second time.
      *
-     * Owns the upload lock: every branch either releases it or passes it on to the next batch.
+     * @return true when every batch arrived
      */
-    private fun uploadBatch(session: Session, service: TidepoolApiService, uploadId: String, batches: List<String>, index: Int, from: String?) {
-        if (batches.size > 1) tidepoolRepository.addLog("Uploading part ${index + 1} of ${batches.size}")
-        extendWakeLock(60000)
-        withFreshToken(
-            session,
+    private suspend fun uploadBatches(session: Session, service: TidepoolApi, uploadId: String, batches: List<String>, from: String?): Boolean {
+        for (index in batches.indices) {
+            if (batches.size > 1) tidepoolRepository.addLog("Uploading part ${index + 1} of ${batches.size}")
+            extendWakeLock(60000)
             // FAILED makes the next upload log in again, which tells a network problem from a lost login
-            onFailure = { uploadFailed("Upload FAILED - no valid token") }
-        ) { token ->
-            try {
-                service.doUpload(token, uploadId, batches[index].toRequestBody("application/json".toMediaTypeOrNull())).enqueue(
-                    TidepoolCallback<UploadReplyMessage>(
-                        aapsLogger, tidepoolRepository, session, "Data Upload $from",
-                        {
-                            if (index + 1 < batches.size) uploadBatch(session, service, uploadId, batches, index + 1, from)
-                            else {
-                                uploadChunk.setLastEnd(session.end)
-                                authFlowOut.updateConnectionStatus(AuthFlowOut.ConnectionStatus.SESSION_ESTABLISHED, "Upload completed OK")
-                                releaseWakeLock()
-                                uploadMutex.unlock()
-                                uploadNext()
-                            }
-                        }, { uploadFailed("Upload FAILED") })
-                )
-            } catch (e: Exception) {
-                aapsLogger.error(LTag.TIDEPOOL, "Upload could not start", e)
-                uploadFailed("Upload FAILED")
-            }
+            val token = freshToken(session) ?: return uploadFailed("Upload FAILED - no valid token")
+            call("Data Upload $from") { service.doUpload(token, uploadId, batches[index]) } ?: return uploadFailed("Upload FAILED")
         }
+        uploadChunk.setLastEnd(session.end)
+        authFlowOut.updateConnectionStatus(AuthFlowOut.ConnectionStatus.SESSION_ESTABLISHED, "Upload completed OK")
+        releaseWakeLock()
+        return true
     }
 
-    private fun uploadFailed(message: String) {
+    private fun uploadFailed(message: String): Boolean {
         authFlowOut.updateConnectionStatus(AuthFlowOut.ConnectionStatus.FAILED, message)
         releaseWakeLock()
-        uploadMutex.unlock()
+        return false
     }
 
     /**
@@ -422,7 +379,7 @@ class TidepoolUploader(
         }
         pendingPurge = true
         extendWakeLock(30000)
-        if (session?.datasetReply?.getUploadId() != null) executePurge()
+        if (session?.datasetReply?.getUploadId() != null) scope.launch { executePurge() }
         else {
             tidepoolRepository.addLog("Purge: connecting…")
             doLogin(doUpload = false, from = "purge")
@@ -443,7 +400,7 @@ class TidepoolUploader(
         }
     }
 
-    private fun executePurge() {
+    private suspend fun executePurge() {
         pendingPurge = false
         val session = this.session
         val service = session?.service
@@ -456,31 +413,25 @@ class TidepoolUploader(
             return
         }
         tidepoolRepository.addLog("Purging all Tidepool data…")
-        purgeNextPage(session, service, userId, currentId, mutableSetOf())
+        purgeAll(session, service, userId, currentId)
     }
 
     /**
-     * Run [action] with an access token that is still valid, or [onFailure] when there is none.
+     * An access token that is still valid, or null when there is none.
      *
      * A session lives much longer than its access token (about 10 minutes), so the token from the session
      * start is not enough: with it, the first upload after the token expired failed with 401, and a long
-     * purge stopped half way. AppAuth refreshes only when the token is about to expire, so this costs
+     * purge stopped half way. The platform refreshes only when the token is about to expire, so this costs
      * nothing most of the time. The new token goes into [session] as well.
-     *
-     * [action] or [onFailure] runs either right away on this thread, or later on the thread of the refresh.
      */
-    private fun withFreshToken(session: Session, onFailure: () -> Unit, action: (String) -> Unit) {
-        authFlowOut.authState.performActionWithFreshTokens(authFlowOut.authService) { accessToken, _, tokenException ->
-            if (accessToken == null) {
-                aapsLogger.warn(LTag.TIDEPOOL, "No valid token: $tokenException")
-                onFailure()
-            } else {
-                session.token = accessToken
-                authFlowOut.saveAuthState() // a refresh can also bring a new refresh token
-                action(accessToken)
+    private suspend fun freshToken(session: Session): String? =
+        when (val token = authFlowOut.freshToken()) {
+            is TidepoolToken.Valid       -> token.accessToken.also { session.token = it }
+            is TidepoolToken.Unavailable -> {
+                aapsLogger.warn(LTag.TIDEPOOL, "No valid token: ${token.reason}")
+                null
             }
         }
-    }
 
     private fun purgeWithoutToken() {
         tidepoolRepository.addLog("Purge failed - not connected")
@@ -493,56 +444,53 @@ class TidepoolUploader(
      * if a delete fails before, the session still has a working dataset to upload to.
      * [deleted] guards against a loop if the server still lists a dataset right after deleting it.
      */
-    private fun purgeNextPage(session: Session, service: TidepoolApiService, userId: String, currentId: String, deleted: MutableSet<String>) {
-        withFreshToken(session, ::purgeWithoutToken) { token -> listAndDelete(session, service, token, userId, currentId, deleted) }
-    }
-
-    private fun listAndDelete(session: Session, service: TidepoolApiService, token: String, userId: String, currentId: String, deleted: MutableSet<String>) {
-        service.getDataSets(token, userId, config.APPLICATION_ID, null, PURGE_PAGE_SIZE).enqueue(object : Callback<List<DatasetReplyMessage>> {
-            override fun onResponse(call: Call<List<DatasetReplyMessage>>, response: Response<List<DatasetReplyMessage>>) {
-                val dataSets = response.body()
-                if (!response.isSuccessful || dataSets == null) {
-                    purgeFailed("${response.code()} ${response.message()}")
-                    return
-                }
-                val others = dataSets.mapNotNull { it.getUploadId() }.filter { it != currentId && it !in deleted }
-                if (others.isEmpty())
-                    deleteDataSets(session, service, listOf(currentId), deleted) {
-                        tidepoolRepository.addLog("All Tidepool data purged (deleted datasets: ${deleted.size})")
-                        resetInstance() // drop the deleted dataset; the next upload opens a fresh one
-                        releaseWakeLock()
-                    }
-                else
-                    deleteDataSets(session, service, others, deleted) { purgeNextPage(session, service, userId, currentId, deleted) }
+    private suspend fun purgeAll(session: Session, service: TidepoolApi, userId: String, currentId: String) {
+        val deleted = mutableSetOf<String>()
+        while (true) {
+            val token = freshToken(session) ?: return purgeWithoutToken()
+            val response = try {
+                service.getDataSets(token, userId, config.APPLICATION_ID, null, PURGE_PAGE_SIZE)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                return purgeFailed(e.toString())
             }
-
-            override fun onFailure(call: Call<List<DatasetReplyMessage>>, t: Throwable) = purgeFailed(t.toString())
-        })
+            val dataSets = response.body
+            if (!response.isSuccessful || dataSets == null) return purgeFailed("${response.code} ${response.message}")
+            val others = dataSets.mapNotNull { it.getUploadId() }.filter { it != currentId && it !in deleted }
+            if (others.isEmpty()) {
+                if (!deleteDataSets(session, service, listOf(currentId), deleted)) return
+                tidepoolRepository.addLog("All Tidepool data purged (deleted datasets: ${deleted.size})")
+                resetInstance() // drop the deleted dataset; the next upload opens a fresh one
+                releaseWakeLock()
+                return
+            }
+            if (!deleteDataSets(session, service, others, deleted)) return
+        }
     }
 
-    /** Delete [ids] one after another, then run [onDone]. Stops at the first failure. */
-    private fun deleteDataSets(session: Session, service: TidepoolApiService, ids: List<String>, deleted: MutableSet<String>, onDone: () -> Unit) {
-        val id = ids.firstOrNull() ?: return onDone()
-        // A big dataset can take up to the DELETE read timeout, keep the phone awake that long
-        extendWakeLock(T.mins(DeleteTimeoutInterceptor.DELETE_READ_TIMEOUT_MINUTES + 1L).msecs())
-        withFreshToken(session, ::purgeWithoutToken) { token ->
-            // A dedicated body-agnostic callback: DELETE returns 200 with an empty body, which TidepoolCallback
-            // would treat as a failure (it requires a non-null parsed body).
-            service.deleteDataSet(token, id).enqueue(object : Callback<DatasetReplyMessage> {
-                override fun onResponse(call: Call<DatasetReplyMessage>, response: Response<DatasetReplyMessage>) {
-                    if (response.isSuccessful) {
-                        aapsLogger.debug(LTag.TIDEPOOL, "Purged Tidepool dataset $id")
-                        deleted.add(id)
-                        // An account from old versions can hold thousands of datasets, and purge then runs for
-                        // many minutes. Show that it moves.
-                        if (deleted.size % PURGE_PROGRESS_STEP == 0) tidepoolRepository.addLog("Purge: ${deleted.size} datasets deleted")
-                        deleteDataSets(session, service, ids.drop(1), deleted, onDone)
-                    } else purgeFailed("${response.code()} ${response.message()}")
-                }
-
-                override fun onFailure(call: Call<DatasetReplyMessage>, t: Throwable) = purgeFailed(t.toString())
-            })
+    /** Delete [ids] one after another. Stops at the first failure; returns true when all are gone. */
+    private suspend fun deleteDataSets(session: Session, service: TidepoolApi, ids: List<String>, deleted: MutableSet<String>): Boolean {
+        for (id in ids) {
+            // A big dataset can take up to the DELETE read timeout, keep the phone awake that long
+            extendWakeLock(T.mins(KtorTidepoolApi.DELETE_READ_TIMEOUT_MINUTES + 1L).msecs())
+            val token = freshToken(session) ?: return purgeWithoutToken().let { false }
+            // Not through call(): DELETE returns 200 with an empty body, which call() would treat as a failure
+            val response = try {
+                service.deleteDataSet(token, id)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                return purgeFailed(e.toString()).let { false }
+            }
+            if (!response.isSuccessful) return purgeFailed("${response.code} ${response.message}").let { false }
+            aapsLogger.debug(LTag.TIDEPOOL, "Purged Tidepool dataset $id")
+            deleted.add(id)
+            // An account from old versions can hold thousands of datasets, and purge then runs for
+            // many minutes. Show that it moves.
+            if (deleted.size % PURGE_PROGRESS_STEP == 0) tidepoolRepository.addLog("Purge: ${deleted.size} datasets deleted")
         }
+        return true
     }
 
     private fun purgeFailed(reason: String) {
@@ -559,34 +507,15 @@ class TidepoolUploader(
             return
         }
         if (uploadChunk.getLastEnd() < dateUtil.now() - T.hours(3).msecs() - T.mins(1).msecs()) {
-            SystemClock.sleep(3000)
             aapsLogger.debug(LTag.TIDEPOOL, "Restarting doUpload. Last: " + dateUtil.dateAndTimeString(uploadChunk.getLastEnd()))
-            scope.launch { doUpload("uploadNext") }
+            scope.launch {
+                delay(3000)
+                doUpload("uploadNext")
+            }
         }
     }
 
-    @Synchronized
-    private fun extendWakeLock(ms: Long) {
-        if (wl == null) {
-            val pm = ctx.getSystemService(Context.POWER_SERVICE) as PowerManager
-            wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AndroidAPS:TidepoolUploader")
-            wl?.acquire(ms)
-        } else {
-            releaseWakeLock() // lets not get too messy
-            wl?.acquire(ms)
-        }
-    }
+    private fun extendWakeLock(ms: Long) = wakeLock.extend(ms)
 
-    @Synchronized
-    private fun releaseWakeLock() {
-        wl?.let {
-            if (it.isHeld)
-                try {
-                    it.release()
-                } catch (e: Exception) {
-                    aapsLogger.error("Error releasing wakelock: $e")
-                }
-        }
-    }
-
+    private fun releaseWakeLock() = wakeLock.release()
 }

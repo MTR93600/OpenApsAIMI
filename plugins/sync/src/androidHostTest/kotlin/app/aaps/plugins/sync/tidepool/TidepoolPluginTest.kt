@@ -6,6 +6,7 @@ import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.plugins.sync.nsclientV3.ConnectivityGate.ConnectivityStatus
 import app.aaps.plugins.sync.tidepool.auth.AuthFlowOut
 import app.aaps.plugins.sync.tidepool.comm.TidepoolReceiverDelegate
+import app.aaps.plugins.sync.tidepool.comm.AndroidTidepoolWakeLock
 import app.aaps.plugins.sync.tidepool.comm.TidepoolUploader
 import app.aaps.plugins.sync.tidepool.comm.UploadChunk
 import app.aaps.plugins.sync.tidepool.compose.TidepoolRepository
@@ -16,7 +17,6 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.runBlocking
-import net.openid.appauth.AuthState
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mock
@@ -27,6 +27,9 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import kotlinx.coroutines.awaitCancellation
+import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.wheneverBlocking
 import kotlin.reflect.KClass
 
 class TidepoolPluginTest : TestBaseWithProfile() {
@@ -39,7 +42,6 @@ class TidepoolPluginTest : TestBaseWithProfile() {
     @Mock lateinit var tidepoolRepository: TidepoolRepository
     @Mock lateinit var persistenceLayer: PersistenceLayer
     @Mock lateinit var l: L
-    @Mock lateinit var authState: AuthState
 
     private lateinit var tidepoolPlugin: TidepoolPlugin
     private lateinit var rateLimit: RateLimit
@@ -50,6 +52,10 @@ class TidepoolPluginTest : TestBaseWithProfile() {
         whenever(receiverDelegate.connectivityStatusFlow).thenReturn(connectivityFlow)
         whenever(persistenceLayer.observeChanges(anyOrNull<KClass<*>>())).thenReturn(emptyFlow())
         whenever(tidepoolRepository.uploadRequests).thenReturn(MutableSharedFlow())
+        whenever(authFlowOut.logins).thenReturn(emptyFlow())
+        // A token request never finishes, like a login still in the browser. Without an answer the mock
+        // returns null in the uploader's login coroutine, and that throws into a later test.
+        wheneverBlocking { authFlowOut.freshToken() }.doSuspendableAnswer { awaitCancellation() }
         tidepoolPlugin = TidepoolPlugin(
             aapsLogger, rh, preferences, tidepoolUploader, uploadChunk, rateLimit, receiverDelegate, authFlowOut, tidepoolRepository, dateUtil, persistenceLayer,
             mock()
@@ -88,12 +94,11 @@ class TidepoolPluginTest : TestBaseWithProfile() {
 
     @Test
     fun notLoggedInStateTriggersLoginWhenConnectivityRestored() {
-        whenever(authFlowOut.authState).thenReturn(authState)
         whenever(receiverDelegate.allowed).thenReturn(true)
         whenever(authFlowOut.connectionStatus).thenReturn(AuthFlowOut.ConnectionStatus.NOT_LOGGED_IN)
 
         val realUploader = TidepoolUploader(
-            aapsLogger, tidepoolRepository, context, preferences, uploadChunk,
+            aapsLogger, tidepoolRepository, AndroidTidepoolWakeLock(context, aapsLogger), preferences, uploadChunk,
             dateUtil, receiverDelegate, config, l, authFlowOut, rateLimit
         )
         val plugin = TidepoolPlugin(
@@ -112,12 +117,11 @@ class TidepoolPluginTest : TestBaseWithProfile() {
 
     @Test
     fun uploadSkippedWhenConnectivityNotAllowed() {
-        whenever(authFlowOut.authState).thenReturn(authState)
         whenever(receiverDelegate.allowed).thenReturn(false)
         whenever(authFlowOut.connectionStatus).thenReturn(AuthFlowOut.ConnectionStatus.NOT_LOGGED_IN)
 
         val realUploader = TidepoolUploader(
-            aapsLogger, tidepoolRepository, context, preferences, uploadChunk,
+            aapsLogger, tidepoolRepository, AndroidTidepoolWakeLock(context, aapsLogger), preferences, uploadChunk,
             dateUtil, receiverDelegate, config, l, authFlowOut, rateLimit
         )
         val plugin = TidepoolPlugin(

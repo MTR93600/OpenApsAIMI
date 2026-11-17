@@ -3,7 +3,7 @@ package app.aaps.plugins.sync.tidepool.elements
 import app.aaps.core.data.model.BS
 import app.aaps.core.data.model.ICfg
 import app.aaps.core.interfaces.utils.DateUtil
-import app.aaps.plugins.sync.tidepool.utils.GsonInstance
+import app.aaps.plugins.sync.tidepool.utils.TidepoolTestJson
 import com.google.common.truth.Truth.assertThat
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -43,7 +43,7 @@ class BolusElementTest {
         TimeZone.setDefault(savedTimeZone)
     }
 
-    private fun json(e: Any): JsonObject = JsonParser.parseString(GsonInstance.defaultGsonInstance().toJson(e)).asJsonObject
+    private fun json(e: Any): JsonObject = TidepoolTestJson.of(e).asJsonObject
 
     private fun bolus(timestamp: Long, amount: Double, type: BS.Type): BS =
         BS(timestamp = timestamp, amount = amount, type = type, iCfg = iCfg)

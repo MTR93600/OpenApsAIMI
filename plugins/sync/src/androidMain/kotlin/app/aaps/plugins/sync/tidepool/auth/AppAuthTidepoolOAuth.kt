@@ -11,11 +11,12 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.objects.crypto.CryptoUtil
 import app.aaps.plugins.sync.tidepool.compose.TidepoolRepository
-import app.aaps.plugins.sync.tidepool.keys.TidepoolBooleanKey
 import app.aaps.plugins.sync.tidepool.keys.TidepoolStringNonKey
 import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import kotlinx.coroutines.suspendCancellableCoroutine
 import net.openid.appauth.AppAuthConfiguration
 import net.openid.appauth.AuthState
 import net.openid.appauth.AuthorizationException
@@ -27,22 +28,23 @@ import net.openid.appauth.browser.BrowserAllowList
 import net.openid.appauth.browser.VersionedBrowserMatcher
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
+import kotlin.coroutines.resume
 
 /**
  * JamOrHam
  *
- *
- * Handler for new style Tidepool openid auth
+ * The Tidepool OpenID login on Android: AppAuth with a Custom Tab. [AuthFlowIn] receives the redirect.
  */
 @SingleIn(AppScope::class)
+@ContributesBinding(AppScope::class)
 @Inject
-class AuthFlowOut(
+class AppAuthTidepoolOAuth(
     private val aapsLogger: AAPSLogger,
     private val preferences: Preferences,
     private val context: Context,
     private val cryptoUtil: CryptoUtil,
     private val tidepoolRepository: TidepoolRepository
-) {
+) : TidepoolOAuth {
 
     companion object {
 
@@ -63,6 +65,14 @@ class AuthFlowOut(
          * - JSON error, which is what we get when the answer is not JSON at all. A hotel login page or
          *   an HTML error page of a proxy looks like this, so it is a connection problem as well.
          */
+        /** What AppAuth's answer to a token request means for the uploader. */
+        internal fun tokenFrom(accessToken: String?, ex: AuthorizationException?, hasTokenResponse: Boolean): TidepoolToken = when {
+            accessToken == null && isTransientTokenError(ex) -> TidepoolToken.Unavailable(TidepoolToken.Kind.TRANSIENT, "$ex")
+            accessToken == null                              -> TidepoolToken.Unavailable(TidepoolToken.Kind.REFUSED, "$ex")
+            !hasTokenResponse                                -> TidepoolToken.Unavailable(TidepoolToken.Kind.NO_TOKEN_RESPONSE, "no token response")
+            else                                             -> TidepoolToken.Valid(accessToken)
+        }
+
         fun isTransientTokenError(ex: AuthorizationException?): Boolean =
             ex != null && ex.type == AuthorizationException.TYPE_GENERAL_ERROR &&
                 (ex.code == AuthorizationException.GeneralErrors.NETWORK_ERROR.code ||
@@ -92,43 +102,31 @@ class AuthFlowOut(
         )
     }
 
-    enum class ConnectionStatus {
-        NONE, BLOCKED, NOT_LOGGED_IN, NO_SESSION, FETCHING_TOKEN, SESSION_ESTABLISHED, FAILED
-    }
+    @Volatile var authState = AuthState()
 
-    var connectionStatus: ConnectionStatus = ConnectionStatus.NONE
-        private set
-        get() =
-            if (field == ConnectionStatus.NONE) {
-                if (hasSavedLogin) ConnectionStatus.NO_SESSION
-                else ConnectionStatus.NOT_LOGGED_IN
-            } else field
+    override val hasSavedLogin: Boolean get() = authState.lastTokenResponse != null
 
-    var authState = AuthState()
-
-    /** A token from an earlier login is saved. It does not say that the token still works. */
-    val hasSavedLogin: Boolean get() = authState.lastTokenResponse != null
-
-    fun updateConnectionStatus(newStatus: ConnectionStatus? = null, message: String? = null) {
-        aapsLogger.debug(LTag.TIDEPOOL, "updateConnectionStatus: $newStatus $message")
-        newStatus?.let { connectionStatus = it }
-        message?.let { tidepoolRepository.addLog(it) }
-        // The derived value, so a reset to NONE shows as NOT_LOGGED_IN or NO_SESSION
-        tidepoolRepository.updateConnectionStatus(connectionStatus)
-    }
-
-    fun saveAuthState() {
+    override fun save() {
         preferences.put(TidepoolStringNonKey.AuthState, authState.jsonSerializeString())
     }
 
-    fun eraseAuthState(message: String?) {
-        //aapsLogger.debug(LTag.TIDEPOOL, "eraseAuthState")
+    @Synchronized
+    override fun erase(includingServerConfiguration: Boolean) {
+        if (includingServerConfiguration) preferences.put(TidepoolStringNonKey.ServiceConfiguration, "")
         preferences.put(TidepoolStringNonKey.AuthState, "")
-        initAuthState()
-        updateConnectionStatus(ConnectionStatus.NONE, message)
+        restore()
     }
 
-    @Synchronized fun initAuthState() {
+    override suspend fun freshToken(): TidepoolToken = suspendCancellableCoroutine { continuation ->
+        authState.performActionWithFreshTokens(authService) { accessToken, _, tokenException ->
+            val token = tokenFrom(accessToken, tokenException, hasTokenResponse = authState.lastTokenResponse != null)
+            if (token is TidepoolToken.Valid) save() // a refresh can also bring a new refresh token
+            if (continuation.isActive) continuation.resume(token)
+        }
+    }
+
+    @Synchronized
+    override fun restore() {
         authState = AuthState()
         try {
             // Set from configuration if exists
@@ -150,18 +148,9 @@ class AuthFlowOut(
         aapsLogger.debug(LTag.TIDEPOOL, "Using auth state: authorized=${authState.isAuthorized} needsTokenRefresh=${authState.needsTokenRefresh}")
     }
 
-    @Synchronized
-    fun clearAllSavedData() {
-        //aapsLogger.debug(LTag.TIDEPOOL, "clearAllSavedData")
-        preferences.put(TidepoolStringNonKey.ServiceConfiguration, "")
-        eraseAuthState("Credentials cleared")
-    }
-
-    fun doTidePoolInitialLogin(@Suppress("unused") from: String) {
-        //aapsLogger.debug(LTag.TIDEPOOL, "doTidePoolInitialLogin $from")
-        tidepoolRepository.addLog("Opening login screen")
+    override fun startLogin(useTestServers: Boolean) {
         AuthorizationServiceConfiguration.fetchFromIssuer(
-            if (preferences.get(TidepoolBooleanKey.UseTestServers)) INTEGRATION_BASE_URL.toUri()
+            if (useTestServers) INTEGRATION_BASE_URL.toUri()
             else PRODUCTION_BASE_URL.toUri(),
             AuthorizationServiceConfiguration.RetrieveConfigurationCallback { serviceConfiguration, exception ->
                 if (exception != null || serviceConfiguration == null) {
@@ -169,7 +158,7 @@ class AuthFlowOut(
                     return@RetrieveConfigurationCallback
                 }
                 preferences.put(TidepoolStringNonKey.ServiceConfiguration, serviceConfiguration.toJsonString())
-                initAuthState()
+                restore()
 
                 val codeVerifierChallengeMethod = "S256"
                 val encoding = Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP

@@ -4,7 +4,7 @@ import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.TE
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.utils.DateUtil
-import app.aaps.plugins.sync.tidepool.utils.GsonInstance
+import app.aaps.plugins.sync.tidepool.utils.TidepoolTestJson
 import com.google.common.truth.Truth.assertThat
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -62,10 +62,10 @@ class BloodGlucoseElementTest {
     )
 
     private fun json(e: Any): JsonObject =
-        JsonParser.parseString(GsonInstance.defaultGsonInstance().toJson(e)).asJsonObject
+        TidepoolTestJson.of(e).asJsonObject
 
     private fun jsonArray(e: Any) =
-        JsonParser.parseString(GsonInstance.defaultGsonInstance().toJson(e)).asJsonArray
+        TidepoolTestJson.of(e).asJsonArray
 
     @Test
     fun `fromCareportalEvents emits one element per blood-glucose event`() {

@@ -4,14 +4,13 @@ import app.aaps.core.data.model.GV
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.db.PersistenceLayer
-import app.aaps.core.interfaces.di.NotNSClient
+import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.NotificationManager
-import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginBaseWithPreferences
 import app.aaps.core.interfaces.plugin.PluginDescription
-import app.aaps.core.interfaces.resources.ResourceHelper
+import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.rx.collectResilient
 import app.aaps.core.interfaces.sync.Sync
 import app.aaps.core.interfaces.sync.Tidepool
@@ -33,27 +32,27 @@ import app.aaps.plugins.sync.tidepool.keys.TidepoolStringKey
 import app.aaps.plugins.sync.tidepool.keys.TidepoolStringNonKey
 import app.aaps.plugins.sync.tidepool.utils.RateLimit
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.IntKey
 import dev.zacsweers.metro.SingleIn
-import dev.zacsweers.metro.binding
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
-@ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
-@NotNSClient
-@IntKey(320)
+/**
+ * Uploads to Tidepool, the same on Android and iOS.
+ *
+ * It enters the plugin list from a platform file, not from here: on Android with the `@NotNSClient`
+ * qualifier, so an AAPSClient build never shows it (`TidepoolPluginRegistration`); on iOS, which is
+ * always a master, in the plain bucket (`IosTidepoolPluginRegistration`). Key 320 on both.
+ */
 @SingleIn(AppScope::class)
 @Inject
 class TidepoolPlugin(
     aapsLogger: AAPSLogger,
-    rh: ResourceHelper,
+    rh: TextResolver,
     preferences: Preferences,
     private val tidepoolUploader: TidepoolUploader,
     private val uploadChunk: UploadChunk,
@@ -88,13 +87,13 @@ class TidepoolPlugin(
     aapsLogger, rh, preferences, notificationManager
 ) {
 
-    private var scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var scope = CoroutineScope(SupervisorJob() + aapsIoDispatcher)
 
     private val isAllowed get() = receiverDelegate.allowed
 
     override suspend fun onStart() {
         super.onStart()
-        scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        scope = CoroutineScope(SupervisorJob() + aapsIoDispatcher)
         receiverDelegate.connectivityStatusFlow
             .drop(1) // skip initial value
             .collectResilient(scope, aapsLogger, LTag.TIDEPOOL) { ev ->
@@ -116,6 +115,11 @@ class TidepoolPlugin(
         preferences.observe(TidepoolBooleanKey.UseTestServers).drop(1).collectResilient(scope, aapsLogger, LTag.TIDEPOOL) {
             authFlowOut.clearAllSavedData()
             tidepoolUploader.resetInstance()
+        }
+        // A login that finished on this phone (iOS): open the session now instead of at the next glucose value
+        authFlowOut.logins.collectResilient(scope, aapsLogger, LTag.TIDEPOOL) {
+            tidepoolUploader.resetInstance()
+            doUpload("Login")
         }
         authFlowOut.initAuthState()
     }

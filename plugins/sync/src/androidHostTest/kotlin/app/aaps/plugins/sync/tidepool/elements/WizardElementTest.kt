@@ -3,7 +3,7 @@ package app.aaps.plugins.sync.tidepool.elements
 import app.aaps.core.data.model.CA
 import app.aaps.core.data.model.ICfg
 import app.aaps.core.interfaces.utils.DateUtil
-import app.aaps.plugins.sync.tidepool.utils.GsonInstance
+import app.aaps.plugins.sync.tidepool.utils.TidepoolTestJson
 import com.google.common.truth.Truth.assertThat
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -45,7 +45,7 @@ class WizardElementTest {
         TimeZone.setDefault(originalTimeZone)
     }
 
-    private fun json(e: Any): JsonObject = JsonParser.parseString(GsonInstance.defaultGsonInstance().toJson(e)).asJsonObject
+    private fun json(e: Any): JsonObject = TidepoolTestJson.of(e).asJsonObject
 
     private fun carbs(timestamp: Long = 1_000_000L, amount: Double = 57.0, duration: Long = 0L): CA =
         CA(timestamp = timestamp, duration = duration, amount = amount)

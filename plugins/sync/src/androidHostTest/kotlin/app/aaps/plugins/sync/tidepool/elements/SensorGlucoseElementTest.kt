@@ -4,7 +4,7 @@ import app.aaps.core.data.model.GV
 import app.aaps.core.data.model.SourceSensor
 import app.aaps.core.data.model.TrendArrow
 import app.aaps.core.interfaces.utils.DateUtil
-import app.aaps.plugins.sync.tidepool.utils.GsonInstance
+import app.aaps.plugins.sync.tidepool.utils.TidepoolTestJson
 import com.google.common.truth.Truth.assertThat
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -42,7 +42,7 @@ class SensorGlucoseElementTest {
         TimeZone.setDefault(savedTimeZone)
     }
 
-    private fun json(e: Any): JsonObject = JsonParser.parseString(GsonInstance.defaultGsonInstance().toJson(e)).asJsonObject
+    private fun json(e: Any): JsonObject = TidepoolTestJson.of(e).asJsonObject
 
     private fun bgReading(timestamp: Long, value: Double): GV =
         GV(
@@ -181,7 +181,7 @@ class SensorGlucoseElementTest {
         )
 
         val elements = SensorGlucoseElement.fromBgReadings(readings, dateUtil)
-        val arrayJson = GsonInstance.defaultGsonInstance().toJson(elements)
+        val arrayJson = TidepoolTestJson.of(elements).toString()
         val array = JsonParser.parseString(arrayJson).asJsonArray
 
         assertThat(array.size()).isEqualTo(2)
@@ -205,7 +205,7 @@ class SensorGlucoseElementTest {
 
         assertThat(elements).isEmpty()
 
-        val array = JsonParser.parseString(GsonInstance.defaultGsonInstance().toJson(elements)).asJsonArray
+        val array = TidepoolTestJson.of(elements).asJsonArray
         assertThat(array.size()).isEqualTo(0)
     }
 }

@@ -17,6 +17,7 @@ import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.objects.extensions.convertedToAbsolute
 import app.aaps.core.ui.CoreUiStrings
+import app.aaps.plugins.sync.tidepool.TidepoolDevice
 import app.aaps.plugins.sync.tidepool.compose.TidepoolRepository
 import app.aaps.plugins.sync.tidepool.elements.BasalElement
 import app.aaps.plugins.sync.tidepool.elements.BaseElement
@@ -27,7 +28,6 @@ import app.aaps.plugins.sync.tidepool.elements.ProfileElement
 import app.aaps.plugins.sync.tidepool.elements.SensorGlucoseElement
 import app.aaps.plugins.sync.tidepool.elements.WizardElement
 import app.aaps.plugins.sync.tidepool.keys.TidepoolLongNonKey
-import app.aaps.plugins.sync.tidepool.utils.GsonInstance
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
@@ -39,7 +39,7 @@ import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.plus
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
-import java.util.LinkedList
+import kotlinx.serialization.json.JsonArray
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -117,11 +117,13 @@ class UploadChunk(
 
     /** The records between [start] and [end] as JSON batches of at most [MAX_RECORDS_PER_UPLOAD] records. */
     internal suspend fun getBatches(start: Long, end: Long): List<String> =
-        records(start, end).orEmpty().chunked(MAX_RECORDS_PER_UPLOAD).map { GsonInstance.defaultGsonInstance().toJson(it) }
+        records(start, end).orEmpty().chunked(MAX_RECORDS_PER_UPLOAD).map { it.toJsonArray() }
 
     /** All records between [start] and [end] as one JSON array, or "" for a window that is not valid. */
     suspend fun get(start: Long, end: Long): String =
-        records(start, end)?.let { GsonInstance.defaultGsonInstance().toJson(it) } ?: ""
+        records(start, end)?.toJsonArray() ?: ""
+
+    private fun List<BaseElement>.toJsonArray(): String = JsonArray(map { it.toJson() }).toString()
 
     private suspend fun records(start: Long, end: Long): List<BaseElement>? {
 
@@ -135,7 +137,7 @@ class UploadChunk(
             return null
         }
 
-        val records = LinkedList<BaseElement>()
+        val records = ArrayList<BaseElement>()
 
         records.addAll(getTreatments(start, end))
         records.addAll(getNotes(start, end))
@@ -146,7 +148,7 @@ class UploadChunk(
 
         // One device for all records: Tidepool groups data by deviceId, and the pump settings used this id
         // already. Before, only they had one, so Tidepool could not tie them to the rest of the data.
-        val deviceId = "${TidepoolUploader.DEVICE_NAME}:${activePlugin.activePump.serialNumber()}"
+        val deviceId = "${TidepoolDevice.NAME}:${activePlugin.activePump.serialNumber()}"
         // Tidepool asks for name and type next to the origin id, and it recognises the sending app by
         // origin.name, as it does for Loop and Trio. The deduplicator uses only the id.
         records.forEach { record ->
@@ -178,7 +180,7 @@ class UploadChunk(
     }
 
     private suspend fun getTreatments(start: Long, end: Long): List<BaseElement> {
-        val result = LinkedList<BaseElement>()
+        val result = ArrayList<BaseElement>()
         persistenceLayer.getBolusesFromTimeToTime(start, end, true)
             .forEach { bolus ->
                 result.add(BolusElement(bolus, dateUtil))
@@ -317,7 +319,7 @@ class UploadChunk(
             .filter { it in (anchor + 1) until end }
             .sorted()
 
-        val results = LinkedList<BasalElement>()
+        val results = ArrayList<BasalElement>()
         var cursor = anchor
         while (cursor < end) {
             val profile = profileFunction.getProfile(cursor)
@@ -374,7 +376,7 @@ class UploadChunk(
 
     private suspend fun getProfiles(start: Long, end: Long): List<ProfileElement> {
         val pss = persistenceLayer.getEffectiveProfileSwitchesFromTimeToTime(start, end, true)
-        val selection = LinkedList<ProfileElement>()
+        val selection = ArrayList<ProfileElement>()
         for (ps in pss) {
             newInstanceOrNull(ps)?.let {
                 selection.add(it)

@@ -7,7 +7,7 @@ import app.aaps.core.data.model.data.Block
 import app.aaps.core.data.model.data.TargetBlock
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.utils.DateUtil
-import app.aaps.plugins.sync.tidepool.utils.GsonInstance
+import app.aaps.plugins.sync.tidepool.utils.TidepoolTestJson
 import com.google.common.truth.Truth.assertThat
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -63,7 +63,7 @@ class ProfileElementTest {
         )
 
     private fun json(e: Any): JsonObject =
-        JsonParser.parseString(GsonInstance.defaultGsonInstance().toJson(e)).asJsonObject
+        TidepoolTestJson.of(e).asJsonObject
 
     @BeforeEach
     fun setup() {

@@ -42,6 +42,8 @@ kotlin {
             // The client set-up QR code on the master (and the SMS Communicator OTP code on Android). Plain Java, so
             // the same on a desktop.
             implementation(libs.com.google.zxing.core)
+            // Tidepool: the Ktor engine
+            implementation(libs.io.ktor.client.okhttp)
         }
 
         // Tests of shared code belong here, not in a per-target set: NsWsPayloadTest lived in
@@ -50,6 +52,9 @@ kotlin {
         commonTest {
             dependencies {
                 implementation(kotlin("test"))
+                implementation(libs.kotlinx.coroutines.test)
+                // Tidepool: a fake server for KtorTidepoolApi
+                implementation(libs.io.ktor.client.mock)
             }
         }
 
@@ -74,6 +79,8 @@ kotlin {
                 api(libs.jetbrains.lifecycle.runtime.compose)
                 implementation(libs.jetbrains.compose.ui.tooling.preview)
                 implementation(libs.kotlinx.datetime)
+                // Tidepool
+                implementation(libs.io.ktor.client.core)
             }
         }
 
@@ -83,6 +90,13 @@ kotlin {
             dependencies {
                 implementation(kotlin("test"))
                 implementation(libs.kotlinx.coroutines.test)
+            }
+        }
+
+        iosMain {
+            dependencies {
+                // Tidepool: the Ktor engine on NSURLSession
+                implementation(libs.io.ktor.client.darwin)
             }
         }
 

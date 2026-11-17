@@ -24,8 +24,8 @@ import org.robolectric.annotation.Config
 import java.io.IOException
 
 /**
- * Robolectric test for [AuthFlowOut]: the AppAuth [net.openid.appauth.AuthorizationService] is built
- * in the constructor and needs a real Android [Context] + org.json, so this runs under Robolectric.
+ * Robolectric test for [AuthFlowOut] with the Android [AppAuthTidepoolOAuth]: AppAuth needs a real
+ * Android [Context] + org.json, so this runs under Robolectric.
  * Covers the derived connection-status logic and the auth-state persistence paths (save / erase /
  * init / clearAllSavedData); the browser-launch + token-exchange paths are Android-interactive and
  * remain out of unit-test scope.
@@ -47,7 +47,7 @@ class AuthFlowOutTest {
         // initAuthState() reads these; default to "no stored state".
         whenever(preferences.get(TidepoolStringNonKey.ServiceConfiguration)).thenReturn("")
         whenever(preferences.get(TidepoolStringNonKey.AuthState)).thenReturn("")
-        sut = AuthFlowOut(aapsLogger, preferences, context, cryptoUtil, tidepoolRepository)
+        sut = AuthFlowOut(aapsLogger, preferences, tidepoolRepository, AppAuthTidepoolOAuth(aapsLogger, preferences, context, cryptoUtil, tidepoolRepository))
     }
 
     /** What the Tidepool screen shows in its log */
@@ -138,42 +138,42 @@ class AuthFlowOutTest {
     fun `network error is transient`() {
         // What AppAuth reports when the silent refresh cannot reach the server: {"type":0,"code":3}
         val networkError = AuthorizationException.fromTemplate(AuthorizationException.GeneralErrors.NETWORK_ERROR, IOException("timeout"))
-        assertThat(AuthFlowOut.isTransientTokenError(networkError)).isTrue()
+        assertThat(AppAuthTidepoolOAuth.isTransientTokenError(networkError)).isTrue()
     }
 
     @Test
     fun `server error is transient`() {
         val serverError = AuthorizationException.fromTemplate(AuthorizationException.GeneralErrors.SERVER_ERROR, IOException("503"))
-        assertThat(AuthFlowOut.isTransientTokenError(serverError)).isTrue()
+        assertThat(AppAuthTidepoolOAuth.isTransientTokenError(serverError)).isTrue()
     }
 
     @Test
     fun `refused credentials are not transient`() {
-        assertThat(AuthFlowOut.isTransientTokenError(AuthorizationException.TokenRequestErrors.INVALID_GRANT)).isFalse()
+        assertThat(AppAuthTidepoolOAuth.isTransientTokenError(AuthorizationException.TokenRequestErrors.INVALID_GRANT)).isFalse()
     }
 
     @Test
     fun `missing refresh token is not transient`() {
         // AppAuth reports this when there is nothing to refresh with, so a new login is really needed
-        assertThat(AuthFlowOut.isTransientTokenError(AuthorizationException.AuthorizationRequestErrors.CLIENT_ERROR)).isFalse()
+        assertThat(AppAuthTidepoolOAuth.isTransientTokenError(AuthorizationException.AuthorizationRequestErrors.CLIENT_ERROR)).isFalse()
     }
 
     @Test
     fun `answer that is not JSON is transient`() {
         // What AppAuth reports when the answer is not JSON, for example a hotel login page or an HTML
         // error page of a proxy. The connection is bad, the saved login is not.
-        assertThat(AuthFlowOut.isTransientTokenError(AuthorizationException.GeneralErrors.JSON_DESERIALIZATION_ERROR)).isTrue()
+        assertThat(AppAuthTidepoolOAuth.isTransientTokenError(AuthorizationException.GeneralErrors.JSON_DESERIALIZATION_ERROR)).isTrue()
     }
 
     @Test
     fun `other general errors are not transient`() {
         // A general error that is not about the connection (here: bad ID token, type 0 code 9) must still
         // ask for a new login, otherwise the code check would do nothing
-        assertThat(AuthFlowOut.isTransientTokenError(AuthorizationException.GeneralErrors.ID_TOKEN_VALIDATION_ERROR)).isFalse()
+        assertThat(AppAuthTidepoolOAuth.isTransientTokenError(AuthorizationException.GeneralErrors.ID_TOKEN_VALIDATION_ERROR)).isFalse()
     }
 
     @Test
     fun `no error is not transient`() {
-        assertThat(AuthFlowOut.isTransientTokenError(null)).isFalse()
+        assertThat(AppAuthTidepoolOAuth.isTransientTokenError(null)).isFalse()
     }
 }

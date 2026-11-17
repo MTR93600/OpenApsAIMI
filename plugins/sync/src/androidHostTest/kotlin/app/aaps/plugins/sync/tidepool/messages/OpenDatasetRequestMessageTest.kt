@@ -2,10 +2,9 @@ package app.aaps.plugins.sync.tidepool.messages
 
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.utils.DateUtil
-import app.aaps.plugins.sync.tidepool.comm.TidepoolUploader
+import app.aaps.plugins.sync.tidepool.TidepoolDevice
 import com.google.common.truth.Truth.assertThat
 import com.google.gson.JsonParser
-import okio.Buffer
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
@@ -13,7 +12,7 @@ import org.mockito.kotlin.whenever
 
 /**
  * Tests the JSON that opens a Tidepool dataset. Some values in it are load bearing:
- * `client.name` must be the application id and `deviceId` must be [TidepoolUploader.DEVICE_NAME],
+ * `client.name` must be the application id and `deviceId` must be [TidepoolDevice.NAME],
  * because [TidepoolUploader.startSession] looks up the open dataset by both to reuse it. The device
  * names must never change, because Tidepool shows the device by them. The deduplicator name must stay
  * `org.tidepool.deduplicator.dataset.delete.origin`, because that is what lets a re-upload replace
@@ -24,10 +23,7 @@ class OpenDatasetRequestMessageTest {
     private val config: Config = mock()
     private val dateUtil: DateUtil = mock()
 
-    private fun bodyAsJson() = Buffer().let { buffer ->
-        OpenDatasetRequestMessage(config, dateUtil).getBody().writeTo(buffer)
-        JsonParser.parseString(buffer.readUtf8()).asJsonObject
-    }
+    private fun bodyAsJson() = JsonParser.parseString(OpenDatasetRequestMessage(config, dateUtil).toJson().toString()).asJsonObject
 
     @Test
     fun `open dataset request holds the values Tidepool needs`() {

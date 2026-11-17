@@ -2,10 +2,12 @@ package app.aaps.plugins.sync.tidepool.comm
 
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.plugins.sync.tidepool.elements.NoteElement
-import app.aaps.plugins.sync.tidepool.utils.GsonInstance
+import app.aaps.plugins.sync.tidepool.utils.TidepoolTestJson
 import com.google.common.truth.Truth.assertThat
 import com.google.gson.JsonParser
 import org.junit.jupiter.api.Test
+import org.mockito.kotlin.any
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 
 /**
@@ -52,8 +54,11 @@ class UploadChunkNotesTest {
 
     @Test
     fun `a note is a reportedState record with a stable origin id`() {
-        val dateUtil: DateUtil = mock()
-        val json = JsonParser.parseString(GsonInstance.defaultGsonInstance().toJson(NoteElement(1000L, " pizza ", "bolus", dateUtil))).asJsonObject
+        val dateUtil: DateUtil = mock {
+            on { toISONoZone(any()) } doReturn "2026-08-05T12:00:00"
+            on { toISOAsUTC(any()) } doReturn "2026-08-05T10:00:00.000Z"
+        }
+        val json = TidepoolTestJson.of(NoteElement(1000L, " pizza ", "bolus", dateUtil)).asJsonObject
 
         // Only reportedState records show their notes in Tidepool
         assertThat(json["type"].asString).isEqualTo("reportedState")

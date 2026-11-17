@@ -18,10 +18,9 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.plugins.sync.tidepool.compose.TidepoolRepository
 import app.aaps.plugins.sync.tidepool.elements.BolusElement
-import app.aaps.plugins.sync.tidepool.utils.GsonInstance
 import com.google.common.truth.Truth.assertThat
+import com.google.gson.JsonObject
 import com.google.gson.JsonParser
-import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -86,10 +85,10 @@ class UploadChunkTest {
 
         // then
         val resultBolusElements = convertResultJsonToBolusElements(resultJson)
-        assertThat(resultBolusElements[0].subType).isEqualTo("normal")
-        assertThat(resultBolusElements[0].normal).isEqualTo(7.5)
-        assertThat(resultBolusElements[1].subType).isEqualTo("automated")
-        assertThat(resultBolusElements[1].normal).isEqualTo(0.5)
+        assertThat(resultBolusElements[0]["subType"].asString).isEqualTo("normal")
+        assertThat(resultBolusElements[0]["normal"].asDouble).isEqualTo(7.5)
+        assertThat(resultBolusElements[1]["subType"].asString).isEqualTo("automated")
+        assertThat(resultBolusElements[1]["normal"].asDouble).isEqualTo(0.5)
     }
 
     @Test
@@ -168,8 +167,6 @@ class UploadChunkTest {
         assertThat(notes.all { it["deviceId"].asString == "AAPS:SN-1" }).isTrue()
     }
 
-    private fun convertResultJsonToBolusElements(json: String): List<BolusElement> {
-        val itemType = object : TypeToken<List<BolusElement>>() {}.type
-        return GsonInstance.defaultGsonInstance().fromJson(json, itemType)
-    }
+    private fun convertResultJsonToBolusElements(json: String): List<JsonObject> =
+        JsonParser.parseString(json).asJsonArray.map { it.asJsonObject }
 }

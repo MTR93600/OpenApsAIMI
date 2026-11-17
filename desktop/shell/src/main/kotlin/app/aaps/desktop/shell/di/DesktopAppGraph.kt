@@ -54,6 +54,7 @@ import app.aaps.plugins.automation.AutomationRuntime
 import app.aaps.plugins.configuration.setupwizard.SWDefinition
 import app.aaps.plugins.sync.nsclientV3.remotecontrol.RemoteControlPlugin
 import app.aaps.plugins.sync.nsclientV3.remotecontrol.RemoteControlViewModel
+import app.aaps.plugins.sync.tidepool.compose.TidepoolViewModel
 import app.aaps.shared.clientbindings.ClientGraphBindings
 import app.aaps.shared.clientbindings.ClientHistoryWindowGraph
 import app.aaps.ui.compose.history.HistoryScope
@@ -120,6 +121,11 @@ import java.io.File
  * has no Remote Control entry, rather than one whose context buttons do nothing.
  * `NsIncomingDataProcessor` then gets no context system and does not apply `AIMI_CONTEXT:` notes,
  * which is right for a phone that runs no AIMI.
+ *
+ * `TidepoolViewModel` is excluded for the same reason. Tidepool is shared code since it came to iOS,
+ * and its screen model contributes itself here, but the login needs a browser API that each platform
+ * brings (AppAuth on Android, `ASWebAuthenticationSession` on iOS). Desktop has none, and does not
+ * register the Tidepool plugin, so it has no Tidepool screen rather than one whose login does nothing.
  */
 @DependencyGraph(
     AppScope::class,
@@ -129,7 +135,8 @@ import java.io.File
         AimiRemoteContextImpl::class,
         AimiRemoteContextOptionalBinding::class,
         RemoteControlPlugin::class,
-        RemoteControlViewModel::class
+        RemoteControlViewModel::class,
+        TidepoolViewModel::class
     ]
 )
 interface DesktopAppGraph : MetroViewModelMultibindings {
