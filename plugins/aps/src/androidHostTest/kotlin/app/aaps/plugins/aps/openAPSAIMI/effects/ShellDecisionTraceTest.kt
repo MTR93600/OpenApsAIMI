@@ -2601,6 +2601,48 @@ class ShellDecisionTraceTest {
         assertEquals(TUBE_ADVISOR_HALF_CAP_TRACE, trace)
     }
 
+    @Test
+    fun duringAManualBoostTheTubeGradedCapIsNotApplied() {
+        val scene = runTubeScene(
+            bg = 168.0,
+            delta = 15.0f,
+            iob = 0.3f,
+            snapshotMinPred = 168.0,
+            advisorOutcome = StraightLineTubeAdvisor.Outcome(
+                smbCapScale = 0.7,
+                basalCapScale = 0.955,
+                feasible = true,
+                chosenCost = 0.0,
+                reason = "graded",
+            ),
+            bools = emptyMap(),
+            manualBoost = true,
+        )
+        assertEquals(2.0, scene.maxSmb, 1e-9)
+        assertEquals(2.0, scene.maxSmbHb, 1e-9)
+    }
+
+    @Test
+    fun duringAManualBoostTheTubeVetoStays() {
+        val scene = runTubeScene(
+            bg = 90.0,
+            delta = -4.0f,
+            iob = 3.0f,
+            snapshotMinPred = 60.0,
+            advisorOutcome = StraightLineTubeAdvisor.Outcome(
+                smbCapScale = 0.0,
+                basalCapScale = 0.5,
+                feasible = false,
+                chosenCost = Double.POSITIVE_INFINITY,
+                reason = "VETO",
+            ),
+            bools = emptyMap(),
+            manualBoost = true,
+        )
+        assertEquals(0.05, scene.maxSmb, 1e-9)
+        assertEquals(0.05, scene.maxSmbHb, 1e-9)
+    }
+
     // --- Tube safety rules wired into the shell: HyperClampTubeBound and TubeFloorArtefactRule ---
 
     /** What the tube advisor was handed and what the shell did with the answer. */
@@ -2618,6 +2660,7 @@ class ShellDecisionTraceTest {
         snapshotMinPred: Double,
         advisorOutcome: StraightLineTubeAdvisor.Outcome,
         bools: Map<BooleanKey, Boolean>,
+        manualBoost: Boolean = false,
     ): TubeSceneResult {
         val prefs = recordingPreferences(
             doubles = mapOf(DoubleKey.AimiTubeHypoFloorMgdl to 72.0),
@@ -2632,6 +2675,7 @@ class ShellDecisionTraceTest {
         setField(tick, "maxSMBHB", 2.0)
         setField(tick, "variableSensitivity", 50.0f)
         setField(tick, "tickEffectiveDiaHours", 5.0)
+        setField(tick, "manualBoostActive", manualBoost)
         setField(
             tick,
             "lastDoseTerminalSnapshot",

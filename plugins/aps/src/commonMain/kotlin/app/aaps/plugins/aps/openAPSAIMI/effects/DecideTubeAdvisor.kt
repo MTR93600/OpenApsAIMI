@@ -45,6 +45,9 @@ internal interface AimiTubeAdvisorCalls {
     fun sportActive(): Boolean
     fun postHypoActive(): Boolean
 
+    /** A manual Boost runs: the graded SMB cap and basal trim are not applied, see [decideApplyTubeAdvisorFromDoseSnapshot]. */
+    fun manualBoostActive(): Boolean
+
     /** Keeps this tick's hyper-clamp verdict so the trace can export it. */
     fun writeHyperClamp(verdict: HyperClampTubeBound.Verdict)
 
@@ -160,6 +163,17 @@ internal fun decideApplyTubeAdvisorFromDoseSnapshot(
                 profile.max_daily_basal = baseline.maxDailyBasal * tubeOut.basalCapScale
             }
             consoleLog.add("📐 TUBE-LINE-D4[$stageTag]: infeasible ${tubeOut.reason}")
+            calls.noteTrace(tubeOut, snap, stageTag, baseline)
+        } else if (calls.manualBoostActive() && (tubeOut.smbCapScale < 0.999 || tubeOut.basalCapScale < 0.999)) {
+            // A manual Boost means the user has eaten (maintainer, 2026-11-17). The tube removes the full
+            // effect of the SMB from the lowest prediction and counts no carbs against it, so on a meal
+            // rise it cut the Boost ceiling to 70 % at 147-190 mg/dL. During a Boost the graded cut is
+            // not applied. The veto above stays: it fires when the prediction is under the hypo floor
+            // even with no SMB at all, which does not depend on the size of the dose.
+            consoleLog.add(
+                "📐 TUBE-LINE-D4[$stageTag]: manual boost, cap not applied " +
+                    "(advised smb×${aimiFmt2(tubeOut.smbCapScale)} basal×${aimiFmt3(tubeOut.basalCapScale)}) | ${tubeOut.reason}",
+            )
             calls.noteTrace(tubeOut, snap, stageTag, baseline)
         } else {
             if (tubeOut.smbCapScale < 0.999) {

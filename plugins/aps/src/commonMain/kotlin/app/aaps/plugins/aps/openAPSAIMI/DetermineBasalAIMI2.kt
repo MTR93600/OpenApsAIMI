@@ -2761,6 +2761,8 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         if (::tpoOrchestrator.isInitialized) {
             tpoOrchestrator.onTickStart(nowMs)
         }
+        // Read once per tick, after an expired Boost was reverted, so every stage sees the same answer
+        work.manualBoostActive = ::tpoOrchestrator.isInitialized && tpoOrchestrator.manualBoostActive(nowMs)
         val ceiling = tpoTickSmbCeiling(preferences)
         work.maxSMB = ceiling.maxSmb
         work.maxSMBHB = ceiling.maxSmbHb
@@ -4265,8 +4267,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 override fun setTargetBg(value: Float) { targetBg = value }
                 override fun targetBg() = this@DetermineBasalaimiSMB2.targetBg
             },
-            manualBoostActive = (::tpoOrchestrator.isInitialized && tpoOrchestrator.manualBoostActive(ctx.currentTime))
-                .also { work.manualBoostActive = it },
+            manualBoostActive = work.manualBoostActive,
         )
         return GlobalAimiBasalScheduleBootstrap(
             pumpCaps = schedule.pumpCaps,
@@ -8818,6 +8819,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         consoleLog = work.consoleLog,
         calls = object : AimiTubeAdvisorCalls {
             override fun snapshot() = lastDoseTerminalSnapshot
+            override fun manualBoostActive() = work.manualBoostActive
             override fun diaHours() = work.tickEffectiveDiaHours
             override fun isf() = variableSensitivity.toDouble()
             override fun baseline() = work.tubeDoseBaseline?.let {

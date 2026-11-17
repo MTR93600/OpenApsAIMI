@@ -163,7 +163,7 @@ internal class AimiTickWorkingState {
     var isConfirmedHighRiseThisTick: Boolean = false
     var criticalSafetyZeroedThisTick: Boolean = false
 
-    /** A manual Boost runs this tick. Read once, when the basal schedule is built. */
+    /** A manual Boost runs this tick. Read once, at tick start (`applyTpoTickSmbCeiling`). */
     var manualBoostActive: Boolean = false
 
     /** The sport guard halved the SMB for a Boost this tick (set by safety precautions, read by the finalize). */
