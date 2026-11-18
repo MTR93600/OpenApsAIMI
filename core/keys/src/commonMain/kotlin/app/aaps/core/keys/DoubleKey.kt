@@ -449,7 +449,7 @@ enum class DoubleKey(
     OApsAIMINightGrowthMaxIobExtra("key_oaps_aimi_ngr_max_iob_extra", 0.5, 0.0, 3.0, title = KeysStrings.pref_title_oaps_aimi_night_growth_max_iob_extra),
     OApsAIMIActivityBasalCapFactor("key_aimi_activity_basal_cap_factor", 1.3, 0.5, 3.0, title = KeysStrings.pref_title_oaps_aimi_activity_basal_cap_factor),
     // --- AIMI Adaptive Basal ---
-    OApsAIMIHighBg(key = "OApsAIMIHighBg", defaultValue = 180.0, min = 140.0, max = 250.0, title = KeysStrings.pref_title_oaps_aimi_high_bg), // high BG that starts plateau corrections
+    OApsAIMIHighBg(key = "OApsAIMIHighBg", defaultValue = 180.0, min = 120.0, max = 250.0, title = KeysStrings.pref_title_oaps_aimi_high_bg), // high BG that starts plateau corrections. Min 120 (owner 2026-11-18, dev_OAPSAIMI has 140)
     OApsAIMIHyperEstablishedDevMgdl(
         key = "key_aimi_hyper_established_dev_mgdl",
         defaultValue = 0.0,
