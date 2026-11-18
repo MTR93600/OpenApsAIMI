@@ -555,4 +555,18 @@ class MedtrumPumpSyncHistoryTest {
         assertEquals(6, seen?.basalSequence)
         assertEquals(7L, seen?.basalPatchId)
     }
+
+    @Test
+    fun alarmsAreDroppedInTheSameStatesAsOnAndroid() {
+        val clearing = setOf(
+            MedtrumPumpState.NONE, MedtrumPumpState.STOPPED,
+            MedtrumPumpState.IDLE, MedtrumPumpState.FILLED,
+            MedtrumPumpState.PRIMING, MedtrumPumpState.PRIMED,
+            MedtrumPumpState.EJECTING, MedtrumPumpState.EJECTED,
+            MedtrumPumpState.ACTIVE, MedtrumPumpState.ACTIVE_ALT,
+        )
+        for (s in MedtrumPumpState.entries) assertEquals(s in clearing, MedtrumPumpSyncHistory.clearsAlarms(s), "$s")
+        // A state that raises an alarm never drops the alarms in the same step
+        for (s in MedtrumPumpState.entries) assertFalse(MedtrumPumpSyncHistory.alarmFor(s) != null && MedtrumPumpSyncHistory.clearsAlarms(s), "$s")
+    }
 }

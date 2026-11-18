@@ -34,7 +34,8 @@ import kotlinx.coroutines.flow.asStateFlow
  * start()                 -> PROFILE_GATE (no basal profile) | BLE_SCAN (no serial) | PREPARE_PATCH
  * pumpChosen()            BLE_SCAN      -> PREPARE_PATCH
  * connectForPatch()       PREPARE_PATCH -> PREPARE_PATCH_CONNECT
- * awaitPatchFilled()      PREPARE_PATCH_CONNECT -> PRIME   (the pump says the patch is filled)
+ * awaitPatchFilled()      PREPARE_PATCH_CONNECT           (stays: the pump says the patch is filled)
+ * confirmFilled()         PREPARE_PATCH_CONNECT -> PRIME   (the person says they finished filling)
  * prime()                 PRIME         -> PRIMING         (sends the prime command)
  * awaitPrimingFinished()  PRIMING       -> PRIME_COMPLETE  (the pump says it is primed)
  * attachPatch()           PRIME_COMPLETE-> ATTACH_PATCH    (the person puts the patch on the body)
@@ -194,6 +195,11 @@ class MedtrumPatchSession(
     /**
      * Waits until the pump says the patch is filled with insulin. Only then may it be primed.
      *
+     * The step does not move. The pump says FILLED as soon as the reservoir holds the minimum (about
+     * 70 U), while the person may still be filling up to 200 or 300 U. Moving on here took the Next
+     * page away in the middle of filling. As on Android, the person says when they are done:
+     * [confirmFilled].
+     *
      * A timeout is not a failure: nothing was sent, the step does not move, and the caller can
      * wait again while the person keeps filling.
      */
@@ -210,15 +216,26 @@ class MedtrumPatchSession(
                 else                                                      -> Progress.UNEXPECTED
             }
         }) {
-            Progress.DONE         -> {
-                moveTo(PatchStep.PRIME)
-                PatchResult.Ok
-            }
+            Progress.DONE         -> PatchResult.Ok
 
             Progress.KEEP_WAITING -> refuse("the patch is not filled yet (${state.pumpState})")
             Progress.UNEXPECTED,
             Progress.LINK_LOST    -> fail(outcome.toReason("waiting for a filled patch"))
         }
+    }
+
+    /**
+     * The person finished filling and pressed Next: go on to priming.
+     *
+     * Checked again here, not trusted from the wait: the pump must still say FILLED and the patch must
+     * not be primed already.
+     */
+    fun confirmFilled(): PatchResult {
+        if (_step.value != PatchStep.PREPARE_PATCH_CONNECT) return refuse("not waiting for a filled patch")
+        _failure.value?.let { return refuse("the sequence stopped: $it") }
+        if (state.pumpState != MedtrumPumpState.FILLED || state.patchPrimed) return refuse("the patch is not filled (${state.pumpState})")
+        moveTo(PatchStep.PRIME)
+        return PatchResult.Ok
     }
 
     /**

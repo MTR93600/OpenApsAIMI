@@ -19,6 +19,7 @@ import app.aaps.core.ui.compose.ToolbarConfig
 import app.aaps.core.ui.compose.dialogs.OkCancelDialog
 import app.aaps.core.ui.compose.dialogs.OkDialog
 import app.aaps.core.ui.compose.insulin.SelectInsulin
+import app.aaps.core.ui.compose.pump.KeepScreenOnEffect
 import app.aaps.core.ui.compose.pump.ProfileGateWizardStep
 import app.aaps.core.ui.compose.pump.WizardButton
 import app.aaps.core.ui.compose.pump.WizardScreen
@@ -64,6 +65,9 @@ fun MedtrumPatchWizardScreen(
     val progress by model.progress.collectAsStateWithLifecycle()
     var confirmDeactivation by remember { mutableStateOf(false) }
 
+    // Filling, priming and activating take minutes, and the person's hands are busy with the patch
+    KeepScreenOnEffect()
+
     LaunchedEffect(step) {
         if (step == PatchStep.COMPLETE || step == PatchStep.CANCEL) onClose()
     }
@@ -91,14 +95,18 @@ fun MedtrumPatchWizardScreen(
                     onCancel = onCancel
                 )
 
-                // The session moves on by itself once the pump says the patch is filled, so there is
-                // no FILLED page here: the page waits, or shows why it stopped.
+                // The pump says FILLED from about 70 U on, while the person may still be filling. As on
+                // Android, the page then offers Next and waits: the person says when they are done.
                 PatchStep.PREPARE_PATCH_CONNECT    -> PrepareStepContent(
-                    state = if (failure != null) PrepareState.ERROR else PrepareState.CONNECTING,
+                    state = when {
+                        failure != null -> PrepareState.ERROR
+                        pump.filled     -> PrepareState.FILLED
+                        else            -> PrepareState.CONNECTING
+                    },
                     reservoirLevel = pump.reservoir,
                     pumpState = failure ?: pump.pumpState,
                     onNext = {},
-                    onFilled = {},
+                    onFilled = model::confirmFilled,
                     onRetry = model::connectAndWaitForFill,
                     onCancel = onCancel
                 )

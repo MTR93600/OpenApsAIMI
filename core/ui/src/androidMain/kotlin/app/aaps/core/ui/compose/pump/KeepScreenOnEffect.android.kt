@@ -13,7 +13,7 @@ import androidx.compose.runtime.DisposableEffect
  * Use in pump wizard workflows to prevent screen timeout during activation.
  */
 @Composable
-fun KeepScreenOnEffect() {
+actual fun KeepScreenOnEffect() {
     // LocalActivity, not a cast of LocalContext: that context is usually a ContextWrapper, where
     // `as? Activity` is null and the screen would quietly time out mid pump activation.
     val activity = LocalActivity.current

@@ -24,6 +24,7 @@ import app.aaps.core.ui.compose.pump.switchToWizardInsulin
 import app.aaps.core.ui.compose.siteRotation.BodyType
 import app.aaps.core.ui.compose.siteRotation.SiteLocationStepHost
 import app.aaps.pump.medtrum.code.PatchStep
+import app.aaps.pump.medtrum.comm.enums.MedtrumPumpState
 import app.aaps.pump.medtrum.session.MedtrumPatchSession
 import app.aaps.pump.medtrum.session.MedtrumPatchSession.PatchResult
 import app.aaps.pump.medtrum.session.MedtrumSessionState
@@ -75,7 +76,11 @@ class MedtrumPatchWizardModel(
 ) : ProfileGateStepHost, SiteLocationStepHost {
 
     /** What the pump reports, refreshed while the screen is open. */
-    data class PumpReadout(val primeProgress: Int, val reservoir: Double, val pumpState: String)
+    /**
+     * @property filled the pump says the patch holds the minimum, so the Next button may be offered.
+     *   The person may keep filling: the wizard waits for Next.
+     */
+    data class PumpReadout(val primeProgress: Int, val reservoir: Double, val pumpState: String, val filled: Boolean = false)
 
     /** The wizard pages, for the progress indicator. */
     private enum class Page { PROFILE_GATE, BLE_SCAN, PREPARE, SELECT_INSULIN, PRIME, SITE_LOCATION, ATTACH, ACTIVATE, COMPLETE, CONFIRM_DEACTIVATE, DEACTIVATING, DEACTIVATE_COMPLETE, RETRY }
@@ -232,6 +237,11 @@ class MedtrumPatchWizardModel(
     fun connectAndWaitForFill() = waitingAction {
         if (report(patch.connectForPatch()) != PatchResult.Ok) return@waitingAction
         waitWhileNotYet(PatchStep.PREPARE_PATCH_CONNECT) { patch.awaitPatchFilled() }
+    }
+
+    /** Next on the fill page: the person finished filling. */
+    fun confirmFilled() = action {
+        report(patch.confirmFilled())
     }
 
     /** Sends the prime command and waits until priming is finished. */
@@ -451,7 +461,8 @@ class MedtrumPatchWizardModel(
     private fun readPump() = PumpReadout(
         primeProgress = state.primeProgress,
         reservoir = state.reservoir,
-        pumpState = state.pumpState.toString()
+        pumpState = state.pumpState.toString(),
+        filled = state.pumpState == MedtrumPumpState.FILLED && !state.patchPrimed,
     )
 
     private suspend fun activationPages(): List<Page> {

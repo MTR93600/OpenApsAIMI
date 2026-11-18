@@ -97,6 +97,19 @@ class MedtrumPumpSyncHistory(
             MedtrumPumpState.NO_CALIBRATION       -> AlarmState.NO_CALIBRATION
             else                                  -> null
         }
+
+        /**
+         * The states in which Android `handlePumpStateUpdate` drops every active alarm: no patch, a patch
+         * being set up, or a patch that runs normally. A suspension or a fault keeps them.
+         */
+        fun clearsAlarms(state: MedtrumPumpState): Boolean = when (state) {
+            MedtrumPumpState.NONE, MedtrumPumpState.STOPPED,
+            MedtrumPumpState.IDLE, MedtrumPumpState.FILLED,
+            MedtrumPumpState.PRIMING, MedtrumPumpState.PRIMED,
+            MedtrumPumpState.EJECTING, MedtrumPumpState.EJECTED,
+            MedtrumPumpState.ACTIVE, MedtrumPumpState.ACTIVE_ALT -> true
+            else                                                 -> false
+        }
     }
 
     private fun pumpType(): PumpType = pumpTypeFor(ModelType.fromValue(deviceType()))

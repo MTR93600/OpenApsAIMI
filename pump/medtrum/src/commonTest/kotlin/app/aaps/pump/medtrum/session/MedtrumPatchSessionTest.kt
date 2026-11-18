@@ -112,6 +112,7 @@ class MedtrumPatchSessionTest {
         assertEquals(PatchStep.PREPARE_PATCH, patch.step.value)
         assertOk(patch.connectForPatch())
         assertOk(patch.awaitPatchFilled())
+        assertOk(patch.confirmFilled())
         assertEquals(PatchStep.PRIME, patch.step.value)
     }
 
@@ -181,6 +182,31 @@ class MedtrumPatchSessionTest {
         assertRefused(patch.forceDeactivate())
         assertNull(patch.step.value)
         assertTrue(fake.sentMessages.isEmpty())
+    }
+
+    @Test
+    fun aFilledPatchWaitsForThePersonToSayTheyAreDone() = runBlocking {
+        scriptAuth(MedtrumPumpState.FILLED)
+        scriptPatchCommands()
+        assertOk(patch.start())
+        assertOk(patch.connectForPatch())
+        // The pump says FILLED at about 70 U; the person may still be filling, so nothing moves
+        assertOk(patch.awaitPatchFilled())
+        assertEquals(PatchStep.PREPARE_PATCH_CONNECT, patch.step.value)
+        assertRefused(patch.prime())
+        assertFalse(sent(CommandType.PRIME))
+        assertOk(patch.confirmFilled())
+        assertEquals(PatchStep.PRIME, patch.step.value)
+    }
+
+    @Test
+    fun nextIsRefusedWhileThePumpDoesNotSayFilled() = runBlocking {
+        scriptAuth(MedtrumPumpState.IDLE)
+        scriptPatchCommands()
+        assertOk(patch.start())
+        assertOk(patch.connectForPatch())
+        assertRefused(patch.confirmFilled())
+        assertEquals(PatchStep.PREPARE_PATCH_CONNECT, patch.step.value)
     }
 
     @Test
@@ -418,6 +444,7 @@ class MedtrumPatchSessionTest {
         assertOk(patch.connectForPatch())
         assertNull(patch.failure.value)
         assertOk(patch.awaitPatchFilled())
+        assertOk(patch.confirmFilled())
         assertEquals(PatchStep.PRIME, patch.step.value)
     }
 
