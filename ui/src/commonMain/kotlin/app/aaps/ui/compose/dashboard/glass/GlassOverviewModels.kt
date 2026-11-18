@@ -23,12 +23,20 @@ data class GlassUiState(
     val insulinAge: String = "--",
     val insulinAgeStatus: StatusLevel = StatusLevel.UNSPECIFIED,
     val insulinLabel: String? = null,
+    /** Insulin left in the reservoir with its unit ("42 U", "50+ U"). Null when the pump does not report it. */
+    val reservoirLevel: String? = null,
+    /** From the user's reservoir warning and critical thresholds, the same as the status lights. */
+    val reservoirLevelStatus: StatusLevel = StatusLevel.UNSPECIFIED,
     val cannulaAge: String = "--",
     val cannulaAgeStatus: StatusLevel = StatusLevel.UNSPECIFIED,
     val cannulaLabel: String? = null,
     val batteryAge: String = "--",
     val batteryAgeStatus: StatusLevel = StatusLevel.UNSPECIFIED,
     val batteryLabel: String? = null,
+    /** Pump battery charge with its unit ("80 %"). Null when the pump does not report it. */
+    val batteryLevel: String? = null,
+    /** From the user's battery warning and critical thresholds, the same as the status lights. */
+    val batteryLevelStatus: StatusLevel = StatusLevel.UNSPECIFIED,
     val sensorAge: String = "--",
     val sensorAgeStatus: StatusLevel = StatusLevel.UNSPECIFIED,
     val sensorLabel: String? = null,

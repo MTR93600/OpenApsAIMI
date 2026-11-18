@@ -18,7 +18,28 @@ data class AimiGlassDashboardData(
     val keyFactors: KeyFactors? = null,
     val safety: Safety? = null,
     val contextScreenAvailable: Boolean = false,
+    /** The AIMI context the user declared (sport, illness, ...), null when none is active. */
+    val activeContext: ActiveContext? = null,
 ) {
+
+    /**
+     * The context that leads now, when one or more are active.
+     *
+     * @property kind the most important active context (see the plugin for the order)
+     * @property count how many contexts are active, [kind] included
+     * @property endsAtMs when [kind] ends, epoch ms
+     * @property usedByLoop true only when the loop really takes it into account: the context module is on,
+     *   AIMI is the active algorithm and it has run since the context started, recently. False means the
+     *   context is only declared, and a screen must not show it as if the loop knew it.
+     */
+    data class ActiveContext(
+        val kind: ContextKind,
+        val count: Int,
+        val endsAtMs: Long,
+        val usedByLoop: Boolean,
+    )
+
+    enum class ContextKind { HYPO_RECOVERY, ILLNESS, ACTIVITY, ALCOHOL, STRESS, MEAL_RISK, SLOW_CARB_MEAL, TRAVEL, CYCLE, CUSTOM }
 
     data class KeyFactors(
         val targetBgMgdl: Double?,

@@ -873,11 +873,26 @@
     <string name="essential_readout_description" comment="Screen reader text for the chart cursor. %1$s=time, %2$s=glucose with unit, %3$s=basal rate with unit, %4$s=SMB with unit or no SMB. Example: 14:30, glucose 112 mg/dL, basal 0.85 U/h, no SMB">%1$s, glucose %2$s, basal %3$s, %4$s</string>
     <string name="essential_recent_decisions">Recent decisions</string>
     <string name="essential_insulin_on_board">Insulin on board</string>
-    <string name="essential_ages">Ages</string>
+    <string name="essential_devices">Pump and sensor</string>
     <string name="essential_age_insulin">Insulin</string>
     <string name="essential_age_cannula">Patch or cannula</string>
     <string name="essential_age_sensor">Sensor</string>
     <string name="essential_age_battery">Battery</string>
+    <string name="essential_reservoir">Reservoir</string>
+    <string name="essential_pump_battery">Pump battery</string>
+    <string name="essential_context_used" comment="Screen reader text of the small context dot by the glucose shape. %1$s=the declared context, %2$s=the time it ends. Example: Sport, used by the loop until 18:30">%1$s, used by the loop until %2$s</string>
+    <string name="essential_context_declared" comment="Screen reader text of the small context dot by the glucose shape, when the loop does not use the context. %1$s=the declared context. Example: Travel, not used by the loop now">%1$s, not used by the loop now</string>
+    <string name="essential_context_more" comment="%1$s=the main declared context, %2$d=how many other contexts are active. Example: Sport +1">%1$s +%2$d</string>
+    <string name="essential_context_hypo_recovery">Hypo recovery</string>
+    <string name="essential_context_illness">Illness</string>
+    <string name="essential_context_activity">Sport</string>
+    <string name="essential_context_alcohol">Alcohol</string>
+    <string name="essential_context_stress">Stress</string>
+    <string name="essential_context_meal_risk">Meal risk</string>
+    <string name="essential_context_slow_carb_meal">Slow carb meal</string>
+    <string name="essential_context_travel">Travel</string>
+    <string name="essential_context_cycle">Cycle</string>
+    <string name="essential_context_custom">Custom context</string>
     <string name="essential_mood_stable">In range and stable</string>
     <string name="essential_mood_rising">Rising</string>
     <string name="essential_mood_falling">Falling</string>
@@ -897,6 +912,6 @@
     <string name="essential_hint_going_down">Glucose is low or going down: no boost.</string>
     <string name="essential_hint_boost_later">A boost is offered when glucose heads high.</string>
     <string name="essential_activity_title">Activity</string>
-    <string name="essential_maintenance_label" comment="Shown when the user taps the small maintenance dot by the glucose shape. %1$s=what is due (Sensor, Patch or cannula, Insulin, Battery), %2$s=its age as the status lights show it. Example: Sensor: 9d 18h">%1$s: %2$s</string>
+    <string name="essential_maintenance_label" comment="Shown when the user taps the small maintenance dot by the glucose shape. %1$s=what is due (Sensor, Patch or cannula, Insulin, Reservoir, Battery), %2$s=its age, or what is left (insulin in the reservoir, battery charge), as the status lights show it. Examples: Sensor: 9d 18h, Reservoir: 12 U">%1$s: %2$s</string>
 
 </resources>

@@ -72,6 +72,7 @@ import app.aaps.plugins.aps.openAPSAIMI.learning.BasalMlTrainingCoordinator
 import app.aaps.plugins.aps.openAPSAIMI.learning.UnifiedReactivityLearner
 import app.aaps.plugins.aps.openAPSAIMI.physio.AIMIInsulinDecisionAdapterMTR
 import app.aaps.plugins.aps.openAPSAIMI.advisor.auditor.AuditorOrchestrator
+import app.aaps.plugins.aps.openAPSAIMI.context.ActiveContextSummary
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextManager
 import app.aaps.plugins.aps.openAPSAIMI.dashboard.AimiGlassDashboardSnapshotFeed
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiAuditorNotifier
@@ -323,6 +324,16 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         AimiGlassDashboardSnapshotFeed.configureContextScreenAvailable(
             platformItems.item(AimiPlatformPreferenceSlot.CONTEXT) != null,
         )
+        AimiGlassDashboardSnapshotFeed.configureActiveContextProvider {
+            val aimiActive = activePlugin.activeAPS === this
+            ActiveContextSummary.summarize(
+                intents = contextManager.getAllIntents().values,
+                moduleOn = contextManager.isEnabled(),
+                aimiActive = aimiActive,
+                lastTickMs = if (aimiActive) lastAPSResult?.date else null,
+                nowMs = dateUtil.now(),
+            )
+        }
         AimiGlassDashboardSnapshotFeed.configureKeyFactorsProvider {
             val result = activePlugin.activeAPS?.lastAPSResult
             val profile = result?.oapsProfileAimi

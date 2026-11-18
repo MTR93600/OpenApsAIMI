@@ -86,6 +86,7 @@ data class AimiGlassDashboardSnapshot(
         keyFactors: AimiGlassDashboardData.KeyFactors? = null,
         safety: AimiGlassDashboardData.Safety? = null,
         contextScreenAvailable: Boolean = false,
+        activeContext: AimiGlassDashboardData.ActiveContext? = null,
     ): AimiGlassDashboardData =
         AimiGlassDashboardData(
             trajectory = if (
@@ -183,6 +184,7 @@ data class AimiGlassDashboardSnapshot(
             keyFactors = keyFactors,
             safety = safety,
             contextScreenAvailable = contextScreenAvailable,
+            activeContext = activeContext,
         )
 
     private fun TrainingOutcome.toSharedOutcome(): AimiGlassDashboardData.SmbOutcome = when (this) {
@@ -215,6 +217,8 @@ object AimiGlassDashboardSnapshotFeed {
         MutableStateFlow<(suspend () -> AimiGlassDashboardData.Safety)?>(null)
     private val safetyMetrics = MutableStateFlow<AimiGlassDashboardData.Safety?>(null)
     private val contextScreenAvailable = MutableStateFlow(false)
+    private val activeContextProvider =
+        MutableStateFlow<(() -> AimiGlassDashboardData.ActiveContext?)?>(null)
 
     /** Called by the AIMI plugin at startup with the exact storage location used by its SMB trainer. */
     fun configureTrainingStorage(storage: AimiStorage, directory: AimiPath) {
@@ -233,6 +237,14 @@ object AimiGlassDashboardSnapshotFeed {
 
     fun configureContextScreenAvailable(available: Boolean) {
         contextScreenAvailable.value = available
+    }
+
+    /**
+     * Supplies the active AIMI context. Read on every update of this feed: a context change refreshes the
+     * patient state, which sends one, and the minute timer catches the end of a context and a new tick.
+     */
+    fun configureActiveContextProvider(provider: () -> AimiGlassDashboardData.ActiveContext?) {
+        activeContextProvider.value = provider
     }
 
     fun observe(): Flow<AimiGlassDashboardData> = channelFlow {
@@ -321,6 +333,14 @@ object AimiGlassDashboardSnapshotFeed {
             keyFactors = keyFactorsProvider.value?.invoke(),
             safety = safetyMetrics.value,
             contextScreenAvailable = contextScreenAvailable.value,
+            // A failing read shows no context rather than ending the feed
+            activeContext = try {
+                activeContextProvider.value?.invoke()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            },
         )
     }
 }

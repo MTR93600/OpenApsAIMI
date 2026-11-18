@@ -168,4 +168,23 @@ class GlassUiStateBuilderTest {
         assertEquals("--", state.insulinAge)
         assertNull(state.insulinLabel)
     }
+
+    @Test
+    fun `reservoir and pump battery levels reach the state with their status`() {
+        val insulin = StatusItem(label = "Insulin", age = "1d", level = "12 U", levelStatus = StatusLevel.CRITICAL, icon = IcCgmInsert)
+        val battery = StatusItem(label = "Battery", age = "5d", level = "80 %", levelStatus = StatusLevel.NORMAL, icon = IcCgmInsert)
+        val state = build(lights = StatusUiState(insulinStatus = insulin, batteryStatus = battery))
+        assertEquals("12 U", state.reservoirLevel)
+        assertEquals(StatusLevel.CRITICAL, state.reservoirLevelStatus)
+        assertEquals("80 %", state.batteryLevel)
+        assertEquals(StatusLevel.NORMAL, state.batteryLevelStatus)
+    }
+
+    @Test
+    fun `a pump that reports no level leaves both levels empty`() {
+        val state = build(lights = StatusUiState(insulinStatus = StatusItem(label = "Insulin", age = "1d", icon = IcCgmInsert)))
+        assertNull(state.reservoirLevel)
+        assertEquals(StatusLevel.UNSPECIFIED, state.reservoirLevelStatus)
+        assertNull(state.batteryLevel)
+    }
 }

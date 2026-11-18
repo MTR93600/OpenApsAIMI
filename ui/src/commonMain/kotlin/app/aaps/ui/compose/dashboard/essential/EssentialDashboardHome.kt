@@ -58,7 +58,10 @@ import app.aaps.core.ui.compose.metroViewModel
 import app.aaps.core.ui.compose.navigation.NavigationRequest
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.ui.UiStrings
+import app.aaps.ui.compose.dashboard.glass.DashboardV2ToolAction
+import app.aaps.ui.compose.dashboard.glass.aimiContextNavigationRequest
 import app.aaps.ui.compose.dashboard.glass.GlassHomeViewModel
+import app.aaps.ui.compose.dashboard.glass.dispatchGlassToolAction
 import app.aaps.ui.compose.dashboard.glass.buildGlassUiState
 import app.aaps.ui.compose.notificationsSheet.NotificationBottomSheet
 import app.aaps.ui.compose.notificationsSheet.NotificationFab
@@ -148,6 +151,15 @@ fun EssentialDashboardHome(
     var rangeHours by remember { mutableIntStateOf(ESSENTIAL_RANGES.first()) }
     var pullProgress by remember { mutableFloatStateOf(0f) }
     var detailOpen by remember { mutableStateOf(false) }
+    // The AIMI screens of the detail sheet, the same destinations as the Glass tools. AIMI must be the active
+    // algorithm (the Boost state already knows), Context must exist on this platform, and the Meal Advisor
+    // can start a bolus, so a phone that may not send commands does not get it.
+    val aimiActive = boost.unavailableReason != AimiBoostUnavailableReason.NOT_AIMI
+    val aimiTools = buildList {
+        if (aimiActive && aimiData.contextScreenAvailable) add(DashboardV2ToolAction.AIMI_CONTEXT)
+        if (aimiActive) add(DashboardV2ToolAction.ADVISOR)
+        if (aimiActive && commandsAllowed) add(DashboardV2ToolAction.MEAL_ADVISOR)
+    }
     var notificationSheetOpen by remember { mutableStateOf(false) }
     LaunchedEffect(autoShowNotificationSheet) {
         if (autoShowNotificationSheet) {
@@ -250,22 +262,30 @@ fun EssentialDashboardHome(
             // One maintenance satellite, only when something is due by the user's own status light thresholds
             val maintenance = EssentialMaintenanceRule.mostUrgent(
                 listOf(
-                    EssentialMaintenance(MaintenanceKind.SENSOR, state.sensorAgeStatus, state.sensorAge),
-                    EssentialMaintenance(MaintenanceKind.CANNULA, state.cannulaAgeStatus, state.cannulaAge),
-                    EssentialMaintenance(MaintenanceKind.INSULIN, state.insulinAgeStatus, state.insulinAge),
-                    EssentialMaintenance(MaintenanceKind.BATTERY, state.batteryAgeStatus, state.batteryAge),
+                    EssentialMaintenance.of(MaintenanceKind.SENSOR, state.sensorAgeStatus, state.sensorAge),
+                    EssentialMaintenance.of(MaintenanceKind.CANNULA, state.cannulaAgeStatus, state.cannulaAge),
+                    // Insulin left counts too: a reservoir can be nearly empty long before it is old
+                    EssentialMaintenance.of(MaintenanceKind.INSULIN, state.insulinAgeStatus, state.insulinAge, state.reservoirLevelStatus, state.reservoirLevel),
+                    EssentialMaintenance.of(MaintenanceKind.BATTERY, state.batteryAgeStatus, state.batteryAge, state.batteryLevelStatus, state.batteryLevel),
                 ),
             )
+            // The declared context, filled when the loop really uses it, only outlined when it does not
+            val activeContext = aimiData.activeContext
+            val contextLabel = activeContext?.let { ctx ->
+                val name = if (ctx.count > 1) stringResource(UiStrings.essential_context_more, ctx.kind.label(), ctx.count - 1) else ctx.kind.label()
+                if (ctx.usedByLoop) stringResource(UiStrings.essential_context_used, name, dateUtil.timeString(ctx.endsAtMs))
+                else stringResource(UiStrings.essential_context_declared, name)
+            } ?: ""
             val maintenanceLabel = maintenance?.let {
                 val what = stringResource(
                     when (it.kind) {
                         MaintenanceKind.SENSOR  -> UiStrings.essential_age_sensor
                         MaintenanceKind.CANNULA -> UiStrings.essential_age_cannula
-                        MaintenanceKind.INSULIN -> UiStrings.essential_age_insulin
+                        MaintenanceKind.INSULIN -> if (it.byLevel) UiStrings.essential_reservoir else UiStrings.essential_age_insulin
                         MaintenanceKind.BATTERY -> UiStrings.essential_age_battery
                     }
                 )
-                stringResource(UiStrings.essential_maintenance_label, what, it.age)
+                stringResource(UiStrings.essential_maintenance_label, what, it.value)
             } ?: ""
 
             val bgText = if (mood == EssentialMood.NO_DATA) unavailable else state.currentBg
@@ -284,6 +304,14 @@ fun EssentialDashboardHome(
                 boxSize = shapeBox,
                 maintenance = maintenance,
                 maintenanceLabel = maintenanceLabel,
+                context = activeContext?.kind,
+                contextUsedByLoop = activeContext?.usedByLoop == true,
+                contextLabel = contextLabel,
+                // One tap to change or stop it. Without the context screen, the sheet holds what there is.
+                onContextTap = {
+                    if (aimiTools.contains(DashboardV2ToolAction.AIMI_CONTEXT)) onNavigate(aimiContextNavigationRequest())
+                    else detailOpen = true
+                },
             )
 
             // The gauge under the shape. Hidden on a phone that may not send commands and when AIMI is not the algorithm.
@@ -382,6 +410,11 @@ fun EssentialDashboardHome(
             onStartBoost = { essentialViewModel.startBoost() },
             onCancelBoost = { essentialViewModel.cancelBoost() },
             onDismiss = { detailOpen = false },
+            aimiTools = aimiTools,
+            onOpenTool = { tool ->
+                detailOpen = false
+                dispatchGlassToolAction(tool, onNavigate, onOpenActions = {}, bgSourcePluginClassName = null)
+            },
         )
     }
 }

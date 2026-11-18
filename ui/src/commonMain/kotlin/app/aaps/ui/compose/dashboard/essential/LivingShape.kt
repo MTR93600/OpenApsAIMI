@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.aaps.core.interfaces.dashboard.AimiGlassDashboardData.ContextKind
 import app.aaps.core.ui.compose.AapsTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -119,6 +120,9 @@ internal object EssentialShapeDimens {
 
     /** Where the maintenance satellite sits, from the centre, as a part of the box (down and to the end). */
     const val MAINTENANCE_OFFSET_RATIO = 0.30f
+
+    /** The ring of a context satellite that is declared but not used by the loop. */
+    val contextOutline = 1.5.dp
 }
 
 /** How long the maintenance label stays after a tap. */
@@ -153,6 +157,10 @@ fun LivingShape(
     boxSize: Dp = EssentialShapeDimens.box,
     maintenance: EssentialMaintenance? = null,
     maintenanceLabel: String = "",
+    context: ContextKind? = null,
+    contextUsedByLoop: Boolean = false,
+    contextLabel: String = "",
+    onContextTap: () -> Unit = {},
 ) {
     val params = mood.shapeParams()
     val sizeFactor = boxSize / EssentialShapeDimens.box
@@ -263,6 +271,17 @@ fun LivingShape(
                 Text(trendSymbol, color = onShape, style = MaterialTheme.typography.titleMedium)
                 Text(deltaText, color = onShape.copy(alpha = 0.9f), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.offset(x = 6.dp))
             }
+        }
+        if (context != null) {
+            // Up and to the start: the opposite corner of the maintenance satellite, away from the pull gauge
+            val offset = boxSize * EssentialShapeDimens.MAINTENANCE_OFFSET_RATIO
+            ContextSatellite(
+                kind = context,
+                usedByLoop = contextUsedByLoop,
+                label = contextLabel,
+                onTap = onContextTap,
+                modifier = Modifier.align(Alignment.Center).offset(x = -offset, y = -offset),
+            )
         }
         if (maintenance != null) {
             var labelShown by remember { mutableStateOf(false) }
