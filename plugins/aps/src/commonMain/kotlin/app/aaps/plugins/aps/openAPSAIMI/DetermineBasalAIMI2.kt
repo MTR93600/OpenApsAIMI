@@ -336,6 +336,7 @@ import app.aaps.plugins.aps.openAPSAIMI.basal.BasalStackTerminalCap
 import app.aaps.plugins.aps.openAPSAIMI.basal.BasalTerminalInvariants
 import app.aaps.plugins.aps.openAPSAIMI.basal.CoffeeRiseMode
 import app.aaps.plugins.aps.openAPSAIMI.basal.TerminalRateGuards
+import app.aaps.plugins.aps.openAPSAIMI.basal.ActivityBasalCap
 import app.aaps.plugins.aps.openAPSAIMI.basal.AnticipationBasalFloor
 import app.aaps.plugins.aps.openAPSAIMI.basal.FclMealBasal
 import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController
@@ -10023,18 +10024,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // REBOUND_GUARD TBR bridge or the meal boost concentrate the (SMB-suppressed) correction into a
         // runaway TBR (observed 8–9× profile). Ceiling only (coerceAtMost): never raises a rate, never
         // affects a 0/suspend command. Factor is user-tunable via [DoubleKey.OApsAIMIActivityBasalCapFactor].
-        var finalRateUph = cap.cappedRateUph
-        if (work.exerciseInsulinLockoutActive && profileBasalUph > 0.0) {
-            val activityFactor = preferences.get(DoubleKey.OApsAIMIActivityBasalCapFactor)
-            val activityCapUph = profileBasalUph * activityFactor
-            if (finalRateUph > activityCapUph) {
-                work.consoleLog.add(
-                    "🏃 ACTIVITY_BASAL_CAP[$source]: ${aimiFmt2(finalRateUph)}→${aimiFmt2(activityCapUph)} U/h (≤ ${aimiFmt2(activityFactor)}× profile ${aimiFmt2(profileBasalUph)})"
-                )
-                finalRateUph = activityCapUph
-            }
+        // The same ceiling is applied again at the end of setTempBasal, after the dynamic multiplier.
+        // The factor is read only during a declared activity, as before: the decision trace lists every read.
+        val activityFactor = if (work.exerciseInsulinLockoutActive) preferences.get(DoubleKey.OApsAIMIActivityBasalCapFactor) else 0.0
+        val activity = ActivityBasalCap.apply(cap.cappedRateUph, profileBasalUph, work.exerciseInsulinLockoutActive, activityFactor)
+        if (activity.applied) {
+            work.consoleLog.add(
+                "🏃 ACTIVITY_BASAL_CAP[$source]: ${aimiFmt2(cap.cappedRateUph)}→${aimiFmt2(activity.rateUph)} U/h (≤ ${aimiFmt2(activityFactor)}× profile ${aimiFmt2(profileBasalUph)})"
+            )
         }
-        return finalRateUph
+        return activity.rateUph
     }
 
     private fun evaluateAndLogCorrectionAggression(
@@ -10691,7 +10690,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
         // 🚀 PKPD TBR Boost: Augmenter TBR si preferTbr (sauf modes repas)
         // Note: pkpdPreferTbrBoost est déjà à 1.0 pour les modes repas (via reset dans finalizeAndCapSMB)
-        if (work.pkpdPreferTbrBoost > 1.0 && !isMealMode) {
+        // Not when the stack cap just held the multiplier at ×1.0: the insulin on board can already take
+        // BG to 70, and a boost after the cap gave back what the cap removed (field report: 3.85 → 4.0 U/h).
+        if (work.pkpdPreferTbrBoost > 1.0 && !isMealMode && !setTempStackCap.applied) {
             val originalRate = rateAdjustment
             rateAdjustment = (rateAdjustment * work.pkpdPreferTbrBoost).coerceAtLeast(0.0)
             work.consoleLog.add("PKPD_TBR_BOOST original=${aimiFmt2(originalRate)} boost=${aimiFmt2(work.pkpdPreferTbrBoost)} → ${aimiFmt2(rateAdjustment)}U/h")
@@ -10899,6 +10900,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             rT.reason.append(" [STACK_CAP_TERMINAL ${aimiFmt2(stackTerminal.rateInUph)}→${aimiFmt2(stackTerminal.rateOutUph)}U/h]")
             rate = stackTerminal.rateOutUph
         }
+        // 🏃 The activity ceiling, last of all: everything that can raise the rate (the dynamic multiplier,
+        // the PKPD boost, AdaptiveBasal, the endocrine amp, the coffee floor) has run. Placed only at the
+        // merge point, it was a ceiling before a multiplier and bounded nothing. Lowers only.
+        val activityFactorFinal = if (work.exerciseInsulinLockoutActive) preferences.get(DoubleKey.OApsAIMIActivityBasalCapFactor) else 0.0
+        val activityFinal = ActivityBasalCap.apply(rate, profile.current_basal, work.exerciseInsulinLockoutActive, activityFactorFinal)
+        if (activityFinal.applied) {
+            work.consoleLog.add(
+                "🏃 ACTIVITY_BASAL_CAP[FINAL]: ${aimiFmt2(rate)}→${aimiFmt2(activityFinal.rateUph)} U/h (≤ ${aimiFmt2(activityFactorFinal)}× profile ${aimiFmt2(profile.current_basal)})"
+            )
+            rT.reason.append(" [ACTIVITY_CAP ${aimiFmt2(rate)}→${aimiFmt2(activityFinal.rateUph)}U/h]")
+            rate = activityFinal.rateUph
+        }
+
         coffee.basalCeilingUph?.let { ceilingUph ->
             if (rate > ceilingUph) {
                 work.lastCoffeeBasalChange = "ceiling ${aimiFmt2(rate)}→${aimiFmt2(ceilingUph)}"
