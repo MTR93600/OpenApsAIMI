@@ -26,6 +26,15 @@ val eversenseClientSecret: String = System.getenv("EVERSENSE_CLIENT_SECRET")
     }
     ?: ""
 
+// Said at build time too, not only on the phone: an APK built here without the secret cannot pair an
+// Eversense 365. Only the presence is checked, the value is never printed.
+if (eversenseClientSecret.isEmpty()) {
+    logger.warn(
+        "w: Eversense: no cloud client secret (EVERSENSE_CLIENT_SECRET, or eversense.clientSecret in local.properties). " +
+            "This build cannot pair an Eversense 365 and cannot upload to the Eversense cloud. See README.md, \"Eversense\"."
+    )
+}
+
 android {
     namespace = "app.aaps.plugins.eversense"
 
