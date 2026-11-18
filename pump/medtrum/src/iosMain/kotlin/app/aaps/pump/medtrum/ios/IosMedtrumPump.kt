@@ -392,6 +392,11 @@ class IosMedtrumPump(
                 // Resume suspended pump
                 if (result) result = session.resumePump()
                 if (result) state.clearAlarmState()
+            } else if (result && state.activeAlarms.isNotEmpty()) {
+                // Not suspended: only the list on the phone is left, for example the low reservoir of
+                // the last patch. The button is enabled for it, so it must clear it. Nothing is hidden:
+                // a warning the pump still has comes back with its next notification.
+                state.clearAlarmState()
             }
             enactResult(success = result, enacted = result)
         } finally {

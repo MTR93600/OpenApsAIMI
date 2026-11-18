@@ -269,6 +269,21 @@ class IosMedtrumPumpTest {
         assertEquals(0.0, rig.pump.baseBasalRate.cU)
     }
 
+    // -- Reset alarms on a running patch --------------------------------------------
+
+    @Test
+    fun resetAlarmsClearsALeftOverWarningOfARunningPatch() = runBlocking {
+        val rig = readyRig()
+        // The low reservoir of the last patch, still in the list of a new full one
+        rig.state.addAlarm(AlarmState.PUMP_LOW_RESERVOIR)
+        val result = rig.pump.clearAlarms()
+        assertTrue(result.success, "reset alarms should succeed")
+        assertTrue(rig.state.activeAlarms.isEmpty(), "the list should be empty")
+        // The pump runs, so nothing is resumed and no limit alarm is cleared on it
+        assertFalse(rig.sent(CommandType.RESUME_PUMP))
+        assertFalse(rig.sent(CommandType.CLEAR_ALARM))
+    }
+
     // -- Items 4 and 5: suspended and initialized --------------------------------
 
     @Test
