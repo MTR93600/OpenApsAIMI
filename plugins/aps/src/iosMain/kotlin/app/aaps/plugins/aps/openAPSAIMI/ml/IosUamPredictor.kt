@@ -79,7 +79,7 @@ internal object IosUamPredictor : AimiUamHandler.AimiUamPredictor {
     }
 
     @OptIn(ExperimentalForeignApi::class)
-    private fun modelPath(): String? {
+    internal fun modelPath(): String? {
         val documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true).firstOrNull() as? String
             ?: return null
         return "$documents/${AimiUamInference.MODEL_RELATIVE_PATH}"

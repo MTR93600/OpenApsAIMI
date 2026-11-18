@@ -496,7 +496,16 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
         // it. Nothing is lost by dropping it: the handler keeps no cache to clear, the detector
         // pushes a fresh runtime confidence every tick, and the supplier is re-installed just below.
         // The UAM model, on Android and on iOS together (aimiPlatformUamPredictor). Without a model
-        // file the predictor answers 0f, the same as before it was installed.
+        // file the predictor answers 0f, the same as before it was installed. The file comes first:
+        // the KMP port had lost the copy dev makes in MainApp, so a phone that never ran dev had none.
+        val uamModel = try {
+            installBundledUamModel()
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.APS, "AIMI UAM model install failed", e)
+            AimiUamModelInstall.Outcome.FAILED
+        }
+        if (uamModel == AimiUamModelInstall.Outcome.FAILED) aapsLogger.error(LTag.APS, "AIMI UAM model could not be installed, the UAM model stays unavailable")
+        else aapsLogger.info(LTag.APS, "AIMI UAM model: $uamModel")
         AimiUamHandler.installPredictor(aimiPlatformUamPredictor())
         AimiUamHandler.installConfidenceSupplier {
             // retourne null si tu veux "laisser la main" au runtime

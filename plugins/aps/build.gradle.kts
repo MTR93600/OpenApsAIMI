@@ -10,6 +10,13 @@ plugins {
 
 registerKeyStrings("aps")
 
+// The UAM model ships in the Android app as a Java resource (aimi/modelUAM.tflite), read without a Context
+// by AimiUamModelInstall. Copied from its one copy in git, which the parity tests and the iOS build use too.
+val bundledUamModel = tasks.register<Copy>("copyBundledUamModel") {
+    from("src/tfliteParity/modelUAM.tflite") { into("aimi") }
+    into(layout.buildDirectory.dir("generated/aimiUamModel"))
+}
+
 kotlin {
     android {
         namespace = "app.aaps.plugins.aps"
@@ -96,6 +103,7 @@ kotlin {
         }
 
         androidMain {
+            resources.srcDir(bundledUamModel)
             dependencies {
                 // AimiParityCaptureHook turns the real Android tick into contract types so the run
                 // can be replayed against the shared engine. That hook is the thing that proves the
