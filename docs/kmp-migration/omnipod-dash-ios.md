@@ -445,10 +445,10 @@ phone, never AAPSClient. Android keeps `:pump:omnipod:dash` unchanged.
       arrow while it runs, as Android) and the pump screen sets its toolbar again after it; Finish on
       "Pod Activated" closes only after the insulin switch and the site save are done; the profile
       gate Activate runs once at a time; the iPhone does not lock during the wizard
-      (`DashKeepScreenOn`, `idleTimerDisabled`, the value from before put back); the settings screen
+      (`KeepScreenOnEffect` of `:core:ui`, shared with Medtrum since 2026-11-18: `idleTimerDisabled`, the value from before put back); the settings screen
       (`dashSettingsScreen`: beeps, alerts, notification sounds; the keys are now preference keys with
       the same keys, defaults, limits and switches as Android). Tests: `DashSettingsTest`,
-      `DashScreenAwakeTest`, three more in `DashPodWizardModelTest`, the settings check in
+      `ScreenAwakeTest` (now in `:core:ui`), three more in `DashPodWizardModelTest`, the settings check in
       `IosOmnipodDashPluginGraphTest`.
       The e2e test on the real `CommandQueueImplementation` is written (P4, item 6, below). Still open:
       a real pod.

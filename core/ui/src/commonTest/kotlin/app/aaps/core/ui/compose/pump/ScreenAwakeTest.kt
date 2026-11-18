@@ -1,18 +1,18 @@
-package app.aaps.pump.omnipod.dashctl.ios.plugin
+package app.aaps.core.ui.compose.pump
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** The iPhone does not lock during the pod wizard, and leaving the wizard puts back what was there. */
-class DashScreenAwakeTest {
+/** The phone does not lock during a pump wizard, and leaving the wizard puts back what was there. */
+class ScreenAwakeTest {
 
     private var idleTimerDisabled = false
-    private val awake = DashScreenAwake(read = { idleTimerDisabled }, write = { idleTimerDisabled = it })
+    private val awake = ScreenAwake(read = { idleTimerDisabled }, write = { idleTimerDisabled = it })
 
     @Test
-    fun `the wizard keeps the phone awake and gives the auto lock back when it closes`() {
+    fun theWizardKeepsThePhoneAwakeAndGivesTheAutoLockBackWhenItCloses() {
         awake.hold()
         assertTrue(idleTimerDisabled)
 
@@ -21,7 +21,7 @@ class DashScreenAwakeTest {
     }
 
     @Test
-    fun `leaving the wizard does not switch off the keep screen on setting`() {
+    fun leavingTheWizardDoesNotSwitchOffTheKeepScreenOnSetting() {
         idleTimerDisabled = true
 
         awake.hold()
@@ -31,9 +31,9 @@ class DashScreenAwakeTest {
     }
 
     @Test
-    fun `a second hold keeps the first value from before`() {
+    fun aSecondHoldKeepsTheFirstValueFromBefore() {
         val writes = mutableListOf<Boolean>()
-        val counted = DashScreenAwake(read = { idleTimerDisabled }, write = { idleTimerDisabled = it; writes += it })
+        val counted = ScreenAwake(read = { idleTimerDisabled }, write = { idleTimerDisabled = it; writes += it })
 
         counted.hold()
         counted.hold()

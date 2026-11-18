@@ -14,6 +14,7 @@ import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.ui.compose.ToolbarConfig
 import app.aaps.core.ui.compose.icons.IcPluginOmnipod
+import app.aaps.core.ui.compose.pump.KeepScreenOnEffect
 import app.aaps.pump.omnipod.dashctl.DashStrings
 import app.aaps.pump.omnipod.dashctl.ui.DashOverviewContent
 import app.aaps.pump.omnipod.dashctl.ui.DashPodWizardModel
@@ -149,11 +150,11 @@ class IosOmnipodDashPlugin(
      * One wizard per opened screen. Its work runs on [IosDashDriverHost.wizardScope], not on the scope
      * of the screen, so leaving the screen cannot stop a part in the middle or skip the records after
      * it. The toolbar is the wizard's while it shows (no back arrow), and the iPhone does not lock
-     * during the wizard ([DashKeepScreenOn]), as Android `KeepScreenOnEffect`.
+     * during the wizard ([KeepScreenOnEffect], shared with Android).
      */
     @Composable
     private fun PodWizard(request: DashWizardRequest, setToolbarConfig: (ToolbarConfig) -> Unit, onClose: () -> Unit) {
-        DashKeepScreenOn()
+        KeepScreenOnEffect()
         val model = remember(request) {
             DashPodWizardModel(
                 pod = host.wizardPod,
