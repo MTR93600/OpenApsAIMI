@@ -893,6 +893,7 @@
     <string name="essential_context_travel">Travel</string>
     <string name="essential_context_cycle">Cycle</string>
     <string name="essential_context_custom">Custom context</string>
+    <string name="essential_tools_long_press_hint">Tip: a long press on the glucose shape opens these tools too.</string>
     <string name="essential_mood_stable">In range and stable</string>
     <string name="essential_mood_rising">Rising</string>
     <string name="essential_mood_falling">Falling</string>

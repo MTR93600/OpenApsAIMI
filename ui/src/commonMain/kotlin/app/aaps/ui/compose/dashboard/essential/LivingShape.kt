@@ -30,6 +30,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -48,7 +49,9 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -161,6 +164,7 @@ fun LivingShape(
     contextUsedByLoop: Boolean = false,
     contextLabel: String = "",
     onContextTap: () -> Unit = {},
+    tools: List<EssentialOrbitItem> = emptyList(),
 ) {
     val params = mood.shapeParams()
     val sizeFactor = boxSize / EssentialShapeDimens.box
@@ -186,6 +190,13 @@ fun LivingShape(
     val maxPullPx = with(density) { EssentialShapeDimens.pullMax.toPx() }
     val pull = remember { Animatable(0f) }
     var crossed by remember { mutableStateOf(false) }
+
+    // The tool orbit opens on a long press, and only while no Boost gesture is armed: a press that waits
+    // before a pull must never open anything over the gesture that sends insulin.
+    val longPressOffered = tools.isNotEmpty() && gesture == ShapeGesture.NONE
+    var orbitOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(longPressOffered) { if (!longPressOffered) orbitOpen = false }
+    val currentOnTap by rememberUpdatedState(onTap)
 
     // The pull counts only in the direction that acts: up to start, down to cancel
     fun actingProgress(offset: Float): Float = when (gesture) {
@@ -226,7 +237,11 @@ fun LivingShape(
     Box(
         modifier = modifier
             .size(boxSize)
-            .semantics { contentDescription = description }
+            .semantics {
+                contentDescription = description
+                // The same tools for a screen reader, without the long press
+                if (tools.isNotEmpty()) customActions = tools.map { tool -> CustomAccessibilityAction(tool.label) { tool.onClick(); true } }
+            }
             .focusable()
             .onKeyEvent { event ->
                 // Keyboard path to the same actions, never the only one: the sheet has buttons too
@@ -238,7 +253,18 @@ fun LivingShape(
                 }
             }
             .then(dragModifier)
-            .pointerInput(Unit) { detectTapGestures(onTap = { onTap() }) },
+            .pointerInput(longPressOffered) {
+                detectTapGestures(
+                    // With the orbit open, a tap on the shape only closes it
+                    onTap = { if (orbitOpen) orbitOpen = false else currentOnTap() },
+                    onLongPress = if (longPressOffered) {
+                        {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            orbitOpen = true
+                        }
+                    } else null,
+                )
+            },
         contentAlignment = Alignment.Center,
     ) {
         val pullPx = pull.value
@@ -282,6 +308,9 @@ fun LivingShape(
                 onTap = onContextTap,
                 modifier = Modifier.align(Alignment.Center).offset(x = -offset, y = -offset),
             )
+        }
+        if (orbitOpen) {
+            ToolOrbit(items = tools, boxSize = boxSize, onDismiss = { orbitOpen = false }, modifier = Modifier.align(Alignment.Center))
         }
         if (maintenance != null) {
             var labelShown by remember { mutableStateOf(false) }

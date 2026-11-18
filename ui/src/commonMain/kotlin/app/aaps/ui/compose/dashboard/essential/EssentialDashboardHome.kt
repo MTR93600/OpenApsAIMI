@@ -62,6 +62,7 @@ import app.aaps.ui.compose.dashboard.glass.DashboardV2ToolAction
 import app.aaps.ui.compose.dashboard.glass.aimiContextNavigationRequest
 import app.aaps.ui.compose.dashboard.glass.GlassHomeViewModel
 import app.aaps.ui.compose.dashboard.glass.dispatchGlassToolAction
+import app.aaps.ui.compose.dashboard.glass.icon
 import app.aaps.ui.compose.dashboard.glass.buildGlassUiState
 import app.aaps.ui.compose.notificationsSheet.NotificationBottomSheet
 import app.aaps.ui.compose.notificationsSheet.NotificationFab
@@ -269,6 +270,12 @@ fun EssentialDashboardHome(
                     EssentialMaintenance.of(MaintenanceKind.BATTERY, state.batteryAgeStatus, state.batteryAge, state.batteryLevelStatus, state.batteryLevel),
                 ),
             )
+            // The same AIMI screens as the detail sheet, on a long press of the shape
+            val orbitTools = aimiTools.map { tool ->
+                EssentialOrbitItem(icon = tool.icon(), label = stringResource(tool.label)) {
+                    dispatchGlassToolAction(tool, onNavigate, onOpenActions = {}, bgSourcePluginClassName = null)
+                }
+            }
             // The declared context, filled when the loop really uses it, only outlined when it does not
             val activeContext = aimiData.activeContext
             val contextLabel = activeContext?.let { ctx ->
@@ -304,6 +311,7 @@ fun EssentialDashboardHome(
                 boxSize = shapeBox,
                 maintenance = maintenance,
                 maintenanceLabel = maintenanceLabel,
+                tools = orbitTools,
                 context = activeContext?.kind,
                 contextUsedByLoop = activeContext?.usedByLoop == true,
                 contextLabel = contextLabel,

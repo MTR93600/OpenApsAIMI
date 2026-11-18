@@ -134,6 +134,12 @@ fun EssentialDetailSheet(
                         AimiToolButton(tool, onClick = { onOpenTool(tool) }, modifier = Modifier.weight(1f))
                     }
                 }
+                Text(
+                    stringResource(UiStrings.essential_tools_long_press_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = AapsTheme.spacing.small),
+                )
             }
 
             SectionDivider()
