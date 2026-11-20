@@ -19,9 +19,13 @@ import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
  * it uses is the one of the previous tick (see [CausalKineticsContextMemory]), because the posterior
  * of this tick is only computed inside `determine_basal`.
  *
- * Two guards on the causal context (step P1b):
+ * Guards on the causal context:
+ * - The causal shift moves the dosing DIA and peak only when PK/PD (`OApsAIMIPkpdEnabled`) is on
+ *   (step P1d). dev_OAPSAIMI resolved with no posterior, so with PK/PD off (the default) the shift is
+ *   0, as on dev. The posterior is still read, and [InsulinKineticsView.contextReason] names it with
+ *   the prefix [CONTEXT_PKPD_OFF_PREFIX].
  * - `OApsAIMIDiaGovernorEnabled` and `OApsAIMIPeakGovernorEnabled` are the field off switch of the
- *   context: switch off = no causal DIA (or peak) shift. See [DiaGovernor] and [TapPeakGovernor].
+ *   context (step P1b): switch off = no causal DIA (or peak) shift. See [DiaGovernor] and [TapPeakGovernor].
  * - The dosing path limits the change over time with [DosingKineticsRateLimiter]. [resolve] itself
  *   does not limit; it returns the target.
  */
@@ -76,7 +80,15 @@ object InsulinKineticsAuthority {
                 peakMin = input.profilePeakMinutes.toDouble(),
             )
         val causalMod = CausalKineticsModulator.modulate(input.causalPosterior)
-        val withContext = governors(input, structural, pkpdEnabled, causalMod.diaShiftHours, causalMod.peakShiftMinutes)
+        // The causal context moves the dosing DIA and peak only when PK/PD is on (step P1d).
+        val contextApplied = pkpdEnabled
+        val withContext = governors(
+            input,
+            structural,
+            pkpdEnabled,
+            diaShiftHours = if (contextApplied) causalMod.diaShiftHours else 0.0,
+            peakShiftMinutes = if (contextApplied) causalMod.peakShiftMinutes else 0.0,
+        )
         // Same resolution without the causal shifts, only for the log, so the owner can compare.
         val noContext = governors(input, structural, pkpdEnabled, diaShiftHours = 0.0, peakShiftMinutes = 0.0)
         val predictionIobArray = input.predictionIobArray ?: input.accountingIobArray
@@ -96,7 +108,11 @@ object InsulinKineticsAuthority {
             structural = structural,
             effective = withContext.effective,
             noContextEffective = noContext.effective,
-            contextReason = causalMod.reason,
+            contextReason = if (contextApplied || input.causalPosterior == null) {
+                causalMod.reason
+            } else {
+                CONTEXT_PKPD_OFF_PREFIX + causalMod.reason
+            },
             learning = input.learningDiagnostics,
             activity = activityView,
             peakGovernor = withContext.peak,
@@ -176,6 +192,9 @@ object InsulinKineticsAuthority {
 
     /** `contextReason` of a view built by [fromDosingValues]. */
     const val DOSING_VALUES_ONLY = "dosing_values_only"
+
+    /** `contextReason` prefix: a posterior was seen, but PK/PD is off, so no causal shift was applied. */
+    const val CONTEXT_PKPD_OFF_PREFIX = "pkpd_off:"
 
     fun buildCausalContext(causalPosterior: CausalStatePosterior?): CausalContextView {
         val mod = CausalKineticsModulator.modulate(causalPosterior)

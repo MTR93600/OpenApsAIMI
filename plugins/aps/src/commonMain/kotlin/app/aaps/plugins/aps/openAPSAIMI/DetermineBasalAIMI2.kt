@@ -387,6 +387,7 @@ import app.aaps.plugins.aps.openAPSAIMI.smb.RiseCeilingGuard
 import app.aaps.plugins.aps.openAPSAIMI.smb.MaxSmbLadder
 import app.aaps.plugins.aps.openAPSAIMI.smb.SmbIntervalPolicy
 import app.aaps.plugins.aps.openAPSAIMI.advisor.oref.OrefPredictionReasonSuffix
+import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryAnalysis
 import app.aaps.plugins.aps.openAPSAIMI.trajectory.TrajectoryType
 import app.aaps.plugins.aps.openAPSAIMI.model.PumpCaps
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkPdCsvLogger
@@ -7584,7 +7585,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                         put("structural_dia_h", snap.kinetics.structural.diaHrs)
                         put("structural_peak_min", snap.kinetics.structural.peakMin)
                         put("learning_gate_pass", snap.kinetics.learning.learningGatePass)
-                        // Posterior of this tick: it doses only from the next tick on.
+                        // Posterior of this tick: it doses only from the next tick on, and only with PK/PD on.
                         put("causal_modulation_this_tick", snap.causal.causalModulationReason)
                     })
                 }
@@ -13418,6 +13419,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     history: List<app.aaps.plugins.aps.openAPSAIMI.trajectory.PhaseSpaceState>,
                     orbit: app.aaps.plugins.aps.openAPSAIMI.trajectory.StableOrbit,
                 ) = trajectoryGuard.analyzeTrajectory(history, orbit)
+                override fun recordAnalysis(analysis: TrajectoryAnalysis?) {
+                    trajectoryGuard.recordTickAnalysis(analysis)
+                }
                 override fun uamConfidence() = AimiUamHandler.confidenceOrZero()
                 override fun maxSmb() = work.maxSMB
                 override fun setMaxSmb(value: Double) {

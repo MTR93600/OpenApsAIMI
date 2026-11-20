@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.orchestration
 
 import app.aaps.core.interfaces.aps.IobTotal
+import app.aaps.core.keys.BooleanKey
 import app.aaps.plugins.aps.openAPSAIMI.MapPreferences
 import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStateId
 import app.aaps.plugins.aps.openAPSAIMI.patient.CausalStatePosterior
@@ -28,10 +29,15 @@ import kotlin.test.assertNull
  *
  * Before the fix the plugin resolved the kinetics with no causal context and the snapshot resolved
  * them again with the context of the tick, so under stress the log said DIA 6.0 h while 5.0 h dosed.
+ *
+ * The causal context moves the dosing kinetics only with PK/PD on (step P1d), so these tests run with
+ * PK/PD on. With no runtime the learned DIA is the profile DIA, so a context DIA is blended:
+ * stress gives (5.0 + 1.0) x 0.55 + 5.0 x 0.45 = 5.55 h. The peak has no learned value to blend, so it
+ * keeps the whole shift: 75 + 8 = 83 min.
  */
 class KineticsSingleSourceTest {
 
-    private val preferences = MapPreferences()
+    private val preferences = MapPreferences().apply { booleans[BooleanKey.OApsAIMIPkpdEnabled] = true }
 
     private val stress = CausalStatePosterior(
         stressResistanceProb = 1.0,
@@ -96,8 +102,8 @@ class KineticsSingleSourceTest {
     @Test
     fun dosingDiaAndPeakFollowTheCausalShiftOfThePreviousTick() {
         val dosing = dosingKinetics(previousTickPosterior = stress)
-        // Stress at full confidence: DIA +1.0 h, peak +8 min. PK/PD is off by default.
-        assertEquals(6.0, dosing.effective.diaHours, 1e-9)
+        // Stress at full confidence: DIA +1.0 h (blended to 5.55 h), peak +8 min. PK/PD is on.
+        assertEquals(5.55, dosing.effective.diaHours, 1e-9)
         assertEquals(83.0, dosing.effective.peakMinutes, 1e-9)
         assertEquals(5.0, dosing.noContextEffective.diaHours, 1e-9)
         assertEquals(75.0, dosing.noContextEffective.peakMinutes, 1e-9)
@@ -116,7 +122,7 @@ class KineticsSingleSourceTest {
     fun exportShowsDosingAndNoContextValues() {
         val json = IntelligenceSnapshotJson.toJsonObject(snapshot(dosingKinetics(stress), thisTickPosterior = null))
         val kinetics = json["kinetics"] as JsonObject
-        assertEquals(6.0, kinetics["effective_dia_h"]!!.jsonPrimitive.double, 1e-9)
+        assertEquals(5.55, kinetics["effective_dia_h"]!!.jsonPrimitive.double, 1e-9)
         assertEquals(5.0, kinetics["effective_dia_no_context_h"]!!.jsonPrimitive.double, 1e-9)
         assertEquals(83.0, kinetics["effective_peak_min"]!!.jsonPrimitive.double, 1e-9)
         assertEquals(75.0, kinetics["effective_peak_no_context_min"]!!.jsonPrimitive.double, 1e-9)
@@ -180,7 +186,7 @@ class KineticsSingleSourceTest {
 
     @Test
     fun governorBlocksLogTheLimitedValueThatDosedAndTheTarget() {
-        // Stress target 6.0 h; the rate limit let only 5.25 h dose (DosingKineticsRateLimiter).
+        // Stress target 5.55 h; the rate limit let only 5.25 h dose (DosingKineticsRateLimiter).
         val resolved = dosingKinetics(previousTickPosterior = stress)
         val limited = resolved.copy(
             effective = resolved.effective.copy(diaHours = 5.25, peakMinutes = resolved.effective.peakMinutes - 2.0),
@@ -189,7 +195,7 @@ class KineticsSingleSourceTest {
         val kinetics = IntelligenceSnapshotJson.toJsonObject(snapshot(limited, thisTickPosterior = null))["kinetics"] as JsonObject
         val dia = kinetics["dia_governor"] as JsonObject
         assertEquals(5.25, dia["effective_dia_h"]!!.jsonPrimitive.double, 1e-9)
-        assertEquals(6.0, dia["effective_dia_target_h"]!!.jsonPrimitive.double, 1e-9)
+        assertEquals(5.55, dia["effective_dia_target_h"]!!.jsonPrimitive.double, 1e-9)
         val peak = kinetics["peak_governor"] as JsonObject
         assertEquals(limited.effective.peakMinutes, peak["effective_peak_min"]!!.jsonPrimitive.double, 1e-9)
         assertEquals(resolved.peakGovernor.effectivePeakMinutes, peak["effective_peak_target_min"]!!.jsonPrimitive.double, 1e-9)

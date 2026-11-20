@@ -21,7 +21,8 @@ import kotlin.test.assertTrue
 
 /**
  * Step P1b: two guards on the causal context shift of the DIA and peak that dose.
- * - The DIA and peak governor switches are the field off switch of the context shift.
+ * - The DIA and peak governor switches are the field off switch of the context shift. Since step P1d
+ *   the shift also needs PK/PD on (see `KineticsContextPkpdGateTest`).
  * - The dosing DIA moves at most 0.25 h and the peak at most 2 min per 5 minutes (step P1c: the step
  *   counts time, not loop runs).
  * And the one-shot move of the old wizard pace (NORMAL) to the FASTER default.
@@ -56,7 +57,7 @@ class KineticsContextGuardsTest {
         deltaMgDlPer5 = 0.0,
     )
 
-    /** Profile DIA 5 h, peak 75 min, PK/PD off (default). */
+    /** Profile DIA 5 h, peak 75 min. PK/PD is off unless a test turns it on. */
     private fun resolve(previousTickPosterior: CausalStatePosterior?): InsulinKineticsView =
         InsulinKineticsAuthority.resolve(
             InsulinKineticsAuthority.ResolveInput(
@@ -70,10 +71,26 @@ class KineticsContextGuardsTest {
             ),
         )
 
-    // --- Off switch ---
+    /**
+     * A resolved view with a fixed dosing DIA and peak, for the rate limit tests. The limit does not care
+     * where the target comes from, so these tests do not depend on the causal context (step P1d).
+     */
+    private fun target(diaHours: Double, peakMinutes: Double): InsulinKineticsView {
+        val base = resolve(previousTickPosterior = null)
+        return base.copy(effective = base.effective.copy(diaHours = diaHours, peakMinutes = peakMinutes))
+    }
+
+    /** The old stress target with PK/PD off before step P1d: DIA 5 + 1.0 h, peak 75 + 8 min. */
+    private fun stressTarget() = target(6.0, 83.0)
+
+    /** The old meal target with PK/PD off before step P1d: DIA 5 - 0.8 h, peak 75 - 3 min. */
+    private fun mealTarget() = target(4.2, 72.0)
+
+    // --- Off switch (the context shift needs PK/PD on, step P1d) ---
 
     @Test
     fun diaGovernorOffGivesNoDiaContextShift() {
+        preferences.booleans[BooleanKey.OApsAIMIPkpdEnabled] = true
         preferences.booleans[BooleanKey.OApsAIMIDiaGovernorEnabled] = false
         val view = resolve(previousTickPosterior = stress)
         // Stress would add 1.0 h. With the DIA switch off the DIA stays the profile DIA.
@@ -85,12 +102,14 @@ class KineticsContextGuardsTest {
 
     @Test
     fun peakGovernorOffGivesNoPeakContextShift() {
+        preferences.booleans[BooleanKey.OApsAIMIPkpdEnabled] = true
         preferences.booleans[BooleanKey.OApsAIMIPeakGovernorEnabled] = false
         val view = resolve(previousTickPosterior = stress)
         assertEquals(75.0, view.effective.peakMinutes, 1e-9)
         assertEquals(0.0, view.peakGovernor.peakContext, 1e-9)
-        // The DIA switch is still on, so the DIA keeps its stress shift.
-        assertEquals(6.0, view.effective.diaHours, 1e-9)
+        // The DIA switch is still on, so the DIA keeps its stress shift, blended with the learned DIA
+        // (here the profile DIA, no runtime): 6.0 x 0.55 + 5.0 x 0.45 = 5.55 h.
+        assertEquals(5.55, view.effective.diaHours, 1e-9)
     }
 
     @Test
@@ -106,7 +125,7 @@ class KineticsContextGuardsTest {
     @Test
     fun firstTickIsNotLimited() {
         val limiter = DosingKineticsRateLimiter()
-        val view = limiter.limit(nowMs = 0L, resolved = resolve(previousTickPosterior = stress))
+        val view = limiter.limit(nowMs = 0L, resolved = stressTarget())
         assertEquals(6.0, view.effective.diaHours, 1e-9)
         assertEquals(83.0, view.effective.peakMinutes, 1e-9)
         assertEquals(view.targetEffective, view.effective)
@@ -115,13 +134,13 @@ class KineticsContextGuardsTest {
     @Test
     fun stressToMealFlipMovesAtMostOneStepPerTickAndReachesTheTarget() {
         val limiter = DosingKineticsRateLimiter()
-        var previous = limiter.limit(nowMs = 0L, resolved = resolve(previousTickPosterior = stress)).effective
+        var previous = limiter.limit(nowMs = 0L, resolved = stressTarget()).effective
         assertEquals(6.0, previous.diaHours, 1e-9)
         assertEquals(83.0, previous.peakMinutes, 1e-9)
         // Meal at full confidence: DIA 5 - 0.8 = 4.2 h, peak 75 - 3 = 72 min. Distance 1.8 h and 11 min.
         var reachedAt = -1
         for (i in 1..12) {
-            val view = limiter.limit(nowMs = i * tick, resolved = resolve(previousTickPosterior = meal))
+            val view = limiter.limit(nowMs = i * tick, resolved = mealTarget())
             assertEquals(4.2, view.targetEffective.diaHours, 1e-9)
             assertEquals(72.0, view.targetEffective.peakMinutes, 1e-9)
             val diaStep = abs(view.effective.diaHours - previous.diaHours)
@@ -144,8 +163,8 @@ class KineticsContextGuardsTest {
     @Test
     fun afterMoreThanFifteenMinutesWithoutATickThereIsNoLimit() {
         val limiter = DosingKineticsRateLimiter()
-        limiter.limit(nowMs = 0L, resolved = resolve(previousTickPosterior = stress))
-        val view = limiter.limit(nowMs = 15 * minute + 1L, resolved = resolve(previousTickPosterior = meal))
+        limiter.limit(nowMs = 0L, resolved = stressTarget())
+        val view = limiter.limit(nowMs = 15 * minute + 1L, resolved = mealTarget())
         assertEquals(4.2, view.effective.diaHours, 1e-9)
         assertEquals(72.0, view.effective.peakMinutes, 1e-9)
     }
@@ -153,8 +172,8 @@ class KineticsContextGuardsTest {
     @Test
     fun atFifteenMinutesTheLimitStillHolds() {
         val limiter = DosingKineticsRateLimiter()
-        limiter.limit(nowMs = 0L, resolved = resolve(previousTickPosterior = stress))
-        val view = limiter.limit(nowMs = 15 * minute, resolved = resolve(previousTickPosterior = meal))
+        limiter.limit(nowMs = 0L, resolved = stressTarget())
+        val view = limiter.limit(nowMs = 15 * minute, resolved = mealTarget())
         // At most one full step per call, whatever the gap: 6.0 - 0.25 = 5.75 h, 83 - 2 = 81 min.
         assertEquals(5.75, view.effective.diaHours, 1e-9)
         assertEquals(81.0, view.effective.peakMinutes, 1e-9)
@@ -165,14 +184,14 @@ class KineticsContextGuardsTest {
     @Test
     fun oneMinuteTicksMoveOneFifthOfTheStep() {
         val limiter = DosingKineticsRateLimiter()
-        limiter.limit(nowMs = 0L, resolved = resolve(previousTickPosterior = stress))
-        val first = limiter.limit(nowMs = minute, resolved = resolve(previousTickPosterior = meal))
+        limiter.limit(nowMs = 0L, resolved = stressTarget())
+        val first = limiter.limit(nowMs = minute, resolved = mealTarget())
         assertEquals(5.95, first.effective.diaHours, 1e-9)
         assertEquals(82.6, first.effective.peakMinutes, 1e-9)
         assertEquals(4.2, first.targetEffective.diaHours, 1e-9)
         // Five 1-minute ticks move as far as one 5-minute tick.
         var view = first
-        for (i in 2..5) view = limiter.limit(nowMs = i * minute, resolved = resolve(previousTickPosterior = meal))
+        for (i in 2..5) view = limiter.limit(nowMs = i * minute, resolved = mealTarget())
         assertEquals(5.75, view.effective.diaHours, 1e-9)
         assertEquals(81.0, view.effective.peakMinutes, 1e-9)
     }
@@ -180,9 +199,9 @@ class KineticsContextGuardsTest {
     @Test
     fun twoCallsInTheSameMinuteDoNotDoubleTheStep() {
         val limiter = DosingKineticsRateLimiter()
-        limiter.limit(nowMs = 0L, resolved = resolve(previousTickPosterior = stress))
-        limiter.limit(nowMs = 30_000L, resolved = resolve(previousTickPosterior = meal))
-        val view = limiter.limit(nowMs = minute, resolved = resolve(previousTickPosterior = meal))
+        limiter.limit(nowMs = 0L, resolved = stressTarget())
+        limiter.limit(nowMs = 30_000L, resolved = mealTarget())
+        val view = limiter.limit(nowMs = minute, resolved = mealTarget())
         // Together the two calls get the step of 1 minute, not 2 steps of 1 minute.
         assertEquals(5.95, view.effective.diaHours, 1e-9)
         assertEquals(82.6, view.effective.peakMinutes, 1e-9)
@@ -191,8 +210,8 @@ class KineticsContextGuardsTest {
     @Test
     fun tenMinuteGapStillMovesOneStepAtMost() {
         val limiter = DosingKineticsRateLimiter()
-        limiter.limit(nowMs = 0L, resolved = resolve(previousTickPosterior = stress))
-        val view = limiter.limit(nowMs = 10 * minute, resolved = resolve(previousTickPosterior = meal))
+        limiter.limit(nowMs = 0L, resolved = stressTarget())
+        val view = limiter.limit(nowMs = 10 * minute, resolved = mealTarget())
         assertEquals(5.75, view.effective.diaHours, 1e-9)
         assertEquals(81.0, view.effective.peakMinutes, 1e-9)
     }
@@ -200,10 +219,10 @@ class KineticsContextGuardsTest {
     @Test
     fun earlyFiveMinuteTickGetsItsShareOfTheStep() {
         val limiter = DosingKineticsRateLimiter()
-        limiter.limit(nowMs = 0L, resolved = resolve(previousTickPosterior = stress))
+        limiter.limit(nowMs = 0L, resolved = stressTarget())
         // The loop runs on the wall clock, so a 5-minute loop jitters: a gap of 4 min 50 s
         // allows 290 / 300 = 0.967 of a step, not a full step.
-        val view = limiter.limit(nowMs = 290_000L, resolved = resolve(previousTickPosterior = meal))
+        val view = limiter.limit(nowMs = 290_000L, resolved = mealTarget())
         assertEquals(6.0 - 0.25 * 290.0 / 300.0, view.effective.diaHours, 1e-9)
         assertEquals(83.0 - 2.0 * 290.0 / 300.0, view.effective.peakMinutes, 1e-9)
     }
@@ -211,8 +230,8 @@ class KineticsContextGuardsTest {
     @Test
     fun gapOfZeroAllowsNoMove() {
         val limiter = DosingKineticsRateLimiter()
-        limiter.limit(nowMs = tick, resolved = resolve(previousTickPosterior = stress))
-        val view = limiter.limit(nowMs = tick, resolved = resolve(previousTickPosterior = meal))
+        limiter.limit(nowMs = tick, resolved = stressTarget())
+        val view = limiter.limit(nowMs = tick, resolved = mealTarget())
         assertEquals(6.0, view.effective.diaHours, 1e-9)
         assertEquals(83.0, view.effective.peakMinutes, 1e-9)
         assertEquals(4.2, view.targetEffective.diaHours, 1e-9)
@@ -221,20 +240,20 @@ class KineticsContextGuardsTest {
     @Test
     fun negativeGapAllowsNoMove() {
         val limiter = DosingKineticsRateLimiter()
-        limiter.limit(nowMs = tick, resolved = resolve(previousTickPosterior = stress))
-        val view = limiter.limit(nowMs = tick - minute, resolved = resolve(previousTickPosterior = meal))
+        limiter.limit(nowMs = tick, resolved = stressTarget())
+        val view = limiter.limit(nowMs = tick - minute, resolved = mealTarget())
         assertEquals(6.0, view.effective.diaHours, 1e-9)
         assertEquals(83.0, view.effective.peakMinutes, 1e-9)
         // The clock starts again from the earlier time: one minute later the step is 1/5 again.
-        val next = limiter.limit(nowMs = tick, resolved = resolve(previousTickPosterior = meal))
+        val next = limiter.limit(nowMs = tick, resolved = mealTarget())
         assertEquals(5.95, next.effective.diaHours, 1e-9)
     }
 
     @Test
     fun exportLogsTheTargetAndTheLimitedValue() {
         val limiter = DosingKineticsRateLimiter()
-        limiter.limit(nowMs = 0L, resolved = resolve(previousTickPosterior = stress))
-        val dosing = limiter.limit(nowMs = tick, resolved = resolve(previousTickPosterior = meal))
+        limiter.limit(nowMs = 0L, resolved = stressTarget())
+        val dosing = limiter.limit(nowMs = tick, resolved = mealTarget())
         val snapshot = AimiIntelligenceSnapshotBuilder.build(
             AimiIntelligenceSnapshotBuilder.BuildInput(
                 timestampMs = tick,

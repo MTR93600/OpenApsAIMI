@@ -50,11 +50,16 @@ class KineticsContextWiringTest {
         learningQuality = 1.0,
     )
 
+    /** PK/PD switch read by the mock. The causal shift doses only with PK/PD on (P1d). */
+    private var pkpdEnabled = true
+
     // The governor switches are on, as their defaults: switched off they also drop the causal
-    // shift (P1b). The governor bounds are fixed constants (DIA 4-24 h), not keys.
+    // shift (P1b). PK/PD is on unless a test turns it off: with PK/PD off there is no causal shift
+    // (P1d). The governor bounds are fixed constants (DIA 4-24 h), not keys.
     private val preferences: Preferences = mock(Preferences::class.java).also { prefs ->
         whenever(prefs.get(BooleanKey.OApsAIMIDiaGovernorEnabled)).thenReturn(true)
         whenever(prefs.get(BooleanKey.OApsAIMIPeakGovernorEnabled)).thenReturn(true)
+        whenever(prefs.get(BooleanKey.OApsAIMIPkpdEnabled)).thenAnswer { pkpdEnabled }
     }
 
     private fun newTick(): DetermineBasalaimiSMB2 {
@@ -137,8 +142,9 @@ class KineticsContextWiringTest {
         assertThat(tick.dosingView(t0).effective.diaHours).isWithin(1e-9).of(5.0)
         tick.tick(t0, stress)
         val view = tick.dosingView(t0 + 5 * minute)
-        // Stress asks for 6.0 h; 5 minutes after the last tick the limit lets only 0.25 h through.
-        assertThat(view.targetEffective.diaHours).isWithin(1e-9).of(6.0)
+        // Stress asks for 5.55 h (6.0 h blended with the profile DIA as learned DIA); 5 minutes after
+        // the last tick the limit lets only 0.25 h through.
+        assertThat(view.targetEffective.diaHours).isWithin(1e-9).of(5.55)
         assertThat(view.effective.diaHours).isWithin(1e-9).of(5.25)
     }
 
@@ -148,8 +154,22 @@ class KineticsContextWiringTest {
         tick.tick(t0, stress)
         val (posterior, diaHours) = tick.dosingKinetics(t0 + 5 * minute)
         assertThat(posterior).isEqualTo(stress)
-        // Stress at full confidence: profile 5.0 h + 1.0 h.
-        assertThat(diaHours).isWithin(1e-9).of(6.0)
+        // Stress at full confidence: (5.0 h + 1.0 h) x 0.55 + 5.0 h x 0.45.
+        assertThat(diaHours).isWithin(1e-9).of(5.55)
+    }
+
+    @Test
+    fun `with pkpd off the next tick sees the posterior but doses the profile dia`() {
+        pkpdEnabled = false
+        val tick = newTick()
+        tick.tick(t0, stress)
+        val view = tick.dosingView(t0 + 5 * minute)
+        val (posterior, diaHours) = tick.dosingKinetics(t0 + 10 * minute)
+        // The memory still carries the stress posterior, but with PK/PD off it does not shift the DIA.
+        assertThat(posterior).isEqualTo(stress)
+        assertThat(diaHours).isWithin(1e-9).of(5.0)
+        assertThat(view.targetEffective.diaHours).isWithin(1e-9).of(5.0)
+        assertThat(view.contextReason).startsWith(InsulinKineticsAuthority.CONTEXT_PKPD_OFF_PREFIX)
     }
 
     @Test

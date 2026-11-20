@@ -35,6 +35,9 @@ internal interface AimiTrajectoryCalls {
         profile: OapsProfileAimi,
     ): List<PhaseSpaceState>
     fun analyze(history: List<PhaseSpaceState>, orbit: StableOrbit): TrajectoryAnalysis?
+
+    /** Stores the analysis of this loop run for the later readers, or null to clear the old one. */
+    fun recordAnalysis(analysis: TrajectoryAnalysis?)
     fun uamConfidence(): Double
     fun maxSmb(): Double
     fun setMaxSmb(value: Double)
@@ -95,6 +98,8 @@ internal fun decideTrajectoryAnalysis(
 
             val stableOrbit = StableOrbit.fromProfile(targetBg, profile.current_basal)
             val traj = calls.analyze(trajectoryHistory, stableOrbit)
+            // This run's result replaces the old one, also when it is null (warming up).
+            calls.recordAnalysis(traj)
 
             if (traj == null) {
                 consoleLog.add("🌀 Trajectory: ⏳ Warming up (${trajectoryHistory.size}/4 states, need 20min)")
@@ -193,10 +198,13 @@ internal fun decideTrajectoryAnalysis(
         } catch (e: Exception) {
             consoleLog.add("🌀 Trajectory: ❌ Error (${e.message})")
             calls.logTrajectoryFailure(e)
+            calls.recordAnalysis(null)
             rT.trajectoryEnabled = false
         }
     } else {
         consoleLog.add("🌀 Trajectory: ⏸ Disabled")
+        // An analysis from before the switch went off must not act any more.
+        calls.recordAnalysis(null)
         rT.trajectoryEnabled = false
     }
 }

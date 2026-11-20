@@ -15,7 +15,8 @@ import kotlin.math.abs
  * the same way; they are kept apart only so the log and the PK/PD screen can show which is which.
  * The switch `OApsAIMIPeakGovernorEnabled` (passed as `governorEnabled`) is also the field off switch of
  * the causal context: when it is off, [contextMinutesShift] is ignored (0). The trajectory nudge is
- * already 0 then, because the plugin does not compute it with the switch off.
+ * already 0 then, because the plugin does not compute it with the switch off. The caller
+ * ([InsulinKineticsAuthority]) also passes a context shift of 0 when PK/PD is off (step P1d).
  * The blended result is **always**
  * applied to the loop model when the governor path is active (no shadow-only branch).
  *

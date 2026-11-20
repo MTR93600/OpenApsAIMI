@@ -318,6 +318,7 @@ internal object AimiSettingsScreens {
             ),
         ),
         // The field off switch of the causal DIA context (P1b): it must be reachable from the app.
+        // The context shift also needs PK/PD on (P1d).
         AimiSettingsSection(
             id = AimiSettingsSectionId.PkpdExpertDiaGovernor,
             content = AimiSettingsContentId.PkpdExpert,

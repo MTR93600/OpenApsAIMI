@@ -44,6 +44,7 @@ data class InsulinKineticsView(
     val noContextEffective: EffectiveKinetics,
     /**
      * Why the causal context of the PREVIOUS tick shifted the kinetics that dosed, or `no_posterior`.
+     * Starts with `pkpd_off:` when a posterior was seen but PK/PD is off, so no shift was applied.
      * Not the same as [CausalContextView.causalModulationReason], which is about this tick.
      */
     val contextReason: String,

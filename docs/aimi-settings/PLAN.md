@@ -45,6 +45,15 @@ Not medical advice. Steps marked "changes dosing" must be reviewed and watched a
   (a gap of 10 or 15 min) one call still moves at most 0.25 h of DIA and 2 min of peak, as in P1b.
   Summary: more prudent on 1-minute CGMs; the same as P1b on 5-minute CGMs, also after missed
   readings.
+- **P1d, the context shift needs PK/PD on (owner approved 2026-11-20).** Step P1 applied the causal
+  DIA and peak shift to every user, also with PK/PD off. dev_OAPSAIMI never did: it resolved the
+  dosing kinetics with no posterior. With the governors on by default and PK/PD off by default, the
+  default setup therefore dosed differently from dev (DIA up to +1 h, peak up to +8 min), and the
+  direction was not shown to be safe (after a hypo or exercise the longer DIA makes the prediction
+  less pessimistic). Now the shift is applied only when PK/PD is on; with PK/PD off it is 0. The
+  posterior is still read, and the log reason starts with `pkpd_off:`. With PK/PD on nothing changes.
+  Not exact parity with dev: the time limit of P1c still smooths every other change of the dosing
+  DIA and peak (profile insulin, physio, site), which dev applied at once. Changes dosing.
 - **Automatic writers follow every change.** Whenever a key is removed, made a constant, re-scaled
   or derived, the Advisor, TPO, the tuning engine and the auditor are updated in the same step, so
   none of them writes or recommends something without effect. A final step (A1) lists what they can

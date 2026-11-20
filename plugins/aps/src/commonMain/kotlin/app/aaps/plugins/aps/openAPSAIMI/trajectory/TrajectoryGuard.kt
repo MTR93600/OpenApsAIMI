@@ -6,6 +6,7 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt0
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
+import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.ActivityStage
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
@@ -34,12 +35,38 @@ class TrajectoryGuard @Inject constructor(
     private val aapsLogger: AAPSLogger
 ) {
     
-    // Store last analysis for UI display
+    /**
+     * The analysis of the last loop run, read by the spiral bridge, RBT, the prediction authority, the
+     * scenario engine and the traces. Only the loop run writes it, with [recordTickAnalysis]: the
+     * Auditor and the peak nudge call [analyzeTrajectory] too, but that does not store anything.
+     */
     private var lastAnalysis: TrajectoryAnalysis? = null
+    private var lastAnalysisAtMs: Long = 0L
 
-    fun getLastAnalysis(): TrajectoryAnalysis? = lastAnalysis
-    
+    /**
+     * The analysis of the last loop run, or null when that run had none (guard off, not enough
+     * history, error) or when it is older than [MAX_ANALYSIS_AGE_MS]. The age uses the wall clock,
+     * as [recordTickAnalysis] does.
+     */
+    fun getLastAnalysis(): TrajectoryAnalysis? {
+        val analysis = lastAnalysis ?: return null
+        val ageMs = aimiWallClockMs() - lastAnalysisAtMs
+        return if (ageMs in 0..MAX_ANALYSIS_AGE_MS) analysis else null
+    }
+
+    /**
+     * Stores what the loop run decided: its analysis, or null to clear the old one. Called by the loop
+     * run only, also when the guard is off, so an old analysis can never act after the switch is off.
+     */
+    fun recordTickAnalysis(analysis: TrajectoryAnalysis?) {
+        lastAnalysis = analysis
+        lastAnalysisAtMs = aimiWallClockMs()
+    }
+
     companion object {
+        /** An analysis older than this is not used: 3 missed 5-minute loop runs. */
+        const val MAX_ANALYSIS_AGE_MS = 15L * 60_000L
+
         // Metric thresholds for classification
         const val CURVATURE_HIGH = 0.3          // Tight spiral warning
         const val CONVERGENCE_SLOW = -0.5       // Diverging threshold
@@ -58,6 +85,9 @@ class TrajectoryGuard @Inject constructor(
      * @param history Phase-space history (ideally 60-90 minutes)
      * @param stableOrbit Target orbit definition
      * @return Complete trajectory analysis with modulation factors
+     *
+     * Only computes: it does not change [getLastAnalysis]. The loop run stores its own result with
+     * [recordTickAnalysis].
      */
     fun analyzeTrajectory(
         history: List<PhaseSpaceState>,
@@ -117,7 +147,7 @@ class TrajectoryGuard @Inject constructor(
             }
         }
         
-        return analysis.also { lastAnalysis = it }
+        return analysis
     }
     
     /**

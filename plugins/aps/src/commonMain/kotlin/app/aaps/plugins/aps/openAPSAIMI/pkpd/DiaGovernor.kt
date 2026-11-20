@@ -11,7 +11,8 @@ import kotlin.math.abs
  *
  * The switch `OApsAIMIDiaGovernorEnabled` (passed as `governorEnabled`) is also the field off switch of
  * the causal context: when it is off, the contextual DIA shift is 0 and the DIA is the profile DIA
- * (inside the bounds).
+ * (inside the bounds). The caller ([InsulinKineticsAuthority]) also passes a shift of 0 when PK/PD is
+ * off (step P1d).
  */
 data class DiaGovernorResult(
     val effectiveDiaHours: Double,

@@ -522,7 +522,7 @@
     <string name="pref_title_aimi_autodrive_v3_authoritative">Autodrive V3 authoritative SMB</string>
     <string name="pref_summary_aimi_autodrive_v3_authoritative">When Autodrive V3 is active and issues a safe SMB/TBR, do not recompute SMB with the legacy MPC/PI blender (prevents post-hypo overshoot). Disable only for debugging.</string>
     <string name="pref_title_aimi_peak_governor_enabled">TAP-G peak governor</string>
-    <string name="pref_summary_aimi_peak_governor_enabled">When adaptive PK/PD is on, blend the insulin profile peak with the learned PKPD peak for loop peakTime (see research doc TAP_G_PEAK_GOVERNOR_RFC). When off, the peak also gets no shift from the current context (stress, meal, after a hypo).</string>
+    <string name="pref_summary_aimi_peak_governor_enabled">When adaptive PK/PD is on, blend the insulin profile peak with the learned PKPD peak for loop peakTime (see research doc TAP_G_PEAK_GOVERNOR_RFC). The peak gets a shift from the current context (stress, meal, after a hypo) only when this switch and adaptive PK/PD are both on.</string>
     <string name="pref_title_aimi_tree_meal_rise_frontload">Meal-rise front-loader (early SMB)</string>
     <string name="pref_summary_aimi_tree_meal_rise_frontload">On a corroborated meal rise (tree = NEED_MORE_INSULIN, BG above target, rising), let Harmonia apply the early SMB lift even when sensor confidence is low — instead of waiting for established hyper. Only ever softens the authority (never a hard bolus); real hypo, free-fall and safety blocks are never overridden. Off by default: it overrides the sensor-confidence gate. Fix the sensor source first if you can.</string>
     <string name="pref_title_aimi_sensor_confidence_cgm_first">Sensor confidence: CGM-first</string>
@@ -674,7 +674,7 @@
     <string name="pref_title_oaps_aimi_pkpd_enabled">AIMI PKPD enabled</string>
     <string name="pref_title_oaps_aimi_intelligence_snapshot_export">AIMI intelligence snapshot export</string>
     <string name="pref_title_oaps_aimi_dia_governor_enabled">AIMI DIA governor enabled</string>
-    <string name="pref_summary_oaps_aimi_dia_governor_enabled">When adaptive PK/PD is on, blend the insulin profile DIA with the learned PK/PD DIA. When off, the DIA is the profile DIA: no learned DIA and no shift from the current context (stress, meal, after a hypo).</string>
+    <string name="pref_summary_oaps_aimi_dia_governor_enabled">When adaptive PK/PD is on, blend the insulin profile DIA with the learned PK/PD DIA. When off, the DIA is the profile DIA: no learned DIA and no shift from the current context. The DIA gets a shift from the current context (stress, meal, after a hypo) only when this switch and adaptive PK/PD are both on.</string>
     <string name="pref_title_oaps_aimi_prediction_authority_shadow">AIMI prediction authority shadow</string>
     <string name="pref_summary_oaps_aimi_prediction_authority_shadow">Used only when AIMI prediction authority is off: AIMI computes the prediction and writes it in the log, but does not use it for dosing.</string>
     <string name="pref_title_oaps_aimi_prediction_authority_enabled">AIMI prediction authority enabled</string>
